@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAGRA - E-mail e Serviços</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="lib/select2.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div id="login-overlay" style="display: flex;">
+        <div class="login-box">
+            <h3>Identificação</h3>
+            <input type="text" id="login-ponto-input" class="form-control" placeholder="Ponto">
+            <button id="btn-login-confirm" class="btn-primary">ENTRAR</button>
+        </div>
+    </div>
+
+    <header>
+        <div class="header-left">
+            <div class="app-title">SAGRA (v6.9)</div>
+        </div>
+        <div class="header-right">
+            <div class="user-info">
+                <div class="user-id" id="header-user-id">ID: ---</div>
+            </div>
+            <div class="header-icons">
+                <button class="icon-btn"><i class="fas fa-cog"></i></button>
+            </div>
+        </div>
+    </header>
+
+    <div class="app-body">
+        <aside class="sidebar">
+            <nav class="sidebar-nav">
+                <a href="index.html" class="nav-item"><i class="fas fa-home"></i> Início</a>
+                <a href="gerencia.html" class="nav-item"><i class="fas fa-briefcase"></i> Gerência</a>
+                <a href="#" class="nav-item active"><i class="fas fa-envelope"></i> Email</a>
+                <a href="#" class="nav-item"><i class="fas fa-user"></i> Usuário</a>
+                <a href="settings.html" class="nav-item"><i class="fas fa-cog"></i> Configurações</a>
+            </nav>
+        </aside>
+
+        <main style="padding: 0; display: flex; overflow: hidden; background-color: #fff;">
+            <div class="email-app-container">
+
+                <div class="email-nav">
+                    <div class="email-nav-logo">
+                        <i class="fas fa-envelope"></i>
+                    </div>
+
+                    <button class="email-nav-item active" id="tab-inbox" title="Caixa de Entrada">
+                        <i class="fas fa-inbox"></i>
+                    </button>
+
+                    <button class="email-nav-item" id="tab-os" title="Ordens de Serviço">
+                        <div style="position: relative;">
+                            <i class="fas fa-file-alt"></i>
+                            <span class="notification-dot"></span>
+                        </div>
+                    </button>
+                </div>
+
+                <div class="email-list-col">
+                    <div class="email-list-header">
+                        <h2 id="list-title">Caixa de Entrada</h2>
+                        <div class="email-search-box">
+                            <i class="fas fa-search"></i>
+                            <input type="text" placeholder="Pesquisar...">
+                        </div>
+                    </div>
+                    <div class="email-list-content" id="email-list-container">
+                    </div>
+                </div>
+
+                <div class="email-detail-col">
+                    <div id="email-detail-content" style="height: 100%; display: flex; flex-direction: column;">
+                        <div class="empty-state">
+                            <div class="empty-icon"><i class="fas fa-envelope-open-text"></i></div>
+                            <p>Selecione um item para visualizar</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <div id="toast-container" class="toast-hidden">
+        <div class="toast-content">
+            <i class="fas fa-check-circle"></i>
+            <span id="toast-message">Mensagem enviada!</span>
+        </div>
+    </div>
+
+    <script src="lib/jquery.min.js"></script>
+    <script src="email.js"></script>
+</body>
+
+</html>

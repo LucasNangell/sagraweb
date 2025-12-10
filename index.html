@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAGRA - Sistema de Acompanhamento Gráfico</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="lib/select2.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+    <div id="login-overlay" style="display: flex;">
+        <div class="login-box">
+            <h3 style="color: var(--primary-green); margin-bottom: 15px;">Identificação</h3>
+            <p style="margin-bottom: 15px; color: #666;">Informe seu número de ponto para acessar.</p>
+            <input type="text" id="login-ponto-input" class="form-control" placeholder="Ex: 918713"
+                style="height: 40px; font-size: 16px; text-align: center; margin-bottom: 15px;">
+            <button id="btn-login-confirm" class="btn-primary"
+                style="width: 100%; padding: 10px; background-color: var(--primary-green); color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">
+                ENTRAR
+            </button>
+        </div>
+    </div>
+
+    <header>
+        <div class="header-left">
+            <div class="app-title">SAGRA - Sistema de Acompanhamento Gráfico</div>
+            <div class="app-version">(v6.9)</div>
+        </div>
+        <div class="header-right">
+            <div class="user-info">
+                <div class="user-name">Usuário Logado</div>
+                <div class="user-id" id="header-user-id">ID: ---</div>
+            </div>
+            <div class="header-icons">
+                <button class="icon-btn" title="Sair / Trocar Ponto" id="btn-logout"><i
+                        class="fas fa-sign-out-alt"></i></button>
+                <button class="icon-btn" title="Configurações"><i class="fas fa-cog"></i></button>
+            </div>
+        </div>
+    </header>
+
+    <div class="app-body">
+        <aside class="sidebar">
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active"><i class="fas fa-home"></i> Início</a>
+                <a href="gerencia.html" class="nav-item" id="link-gerencia"><i class="fas fa-briefcase"></i>
+                    Gerência</a>
+                <a href="email.html" class="nav-item"><i class="fas fa-envelope"></i> Email</a>
+
+                <a href="#" id="nav-analise" class="nav-item"><i class="fas fa-magnifying-glass"></i> Análise</a>
+                <a href="papelaria.html" class="nav-item"><i class="fas fa-copy"></i> Papelaria</a>
+                <a href="#" class="nav-item"><i class="fas fa-user"></i> Usuário</a>
+                <a href="settings.html" class="nav-item"><i class="fas fa-cog"></i> Configurações</a>
+            </nav>
+        </aside>
+
+        <main>
+            <div class="top-section">
+                <section class="filters-card">
+                    <div class="section-title-bar">
+                        <span>Filtros de Pesquisa</span>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <input type="checkbox" id="chk-show-finished" style="cursor: pointer;">
+                            <label for="chk-show-finished"
+                                style="font-size: 0.8rem; font-weight: normal; cursor: pointer; color: #555; margin-bottom: 0;">
+                                Exibir entregues e canceladas
+                            </label>
+                        </div>
+                    </div>
+                    <div class="filters-grid">
+                        <div class="filter-group" style="flex: 0 0 80px;">
+                            <label>Nr OS</label>
+                            <input type="text" id="nr-os" class="filter-input" placeholder="Ex: 2244">
+                        </div>
+                        <div class="filter-group" style="flex: 0 0 60px;">
+                            <label>Ano</label>
+                            <input type="text" id="ano" class="filter-input" value="2025">
+                        </div>
+                        <div class="filter-group">
+                            <label>Produto</label>
+                            <input type="text" id="produto" class="filter-input">
+                        </div>
+                        <div class="filter-group" style="flex: 2;">
+                            <label>Título</label>
+                            <input type="text" id="titulo" class="filter-input">
+                        </div>
+                        <div class="filter-group">
+                            <label>Solicitante</label>
+                            <input type="text" id="solicitante" class="filter-input">
+                        </div>
+
+                        <div class="filter-group" style="min-width: 110px; flex: 1;">
+                            <label>Situação</label>
+                            <select id="situacao" class="filter-input select2-filter" multiple="multiple">
+                            </select>
+                        </div>
+
+                        <div class="filter-group" style="min-width: 110px; flex: 1;">
+                            <label>Setor</label>
+                            <select id="setor" class="filter-input select2-filter" multiple="multiple">
+                            </select>
+                        </div>
+
+                        <div class="filter-group" style="min-width: 110px; flex: 1;">
+                            <label>Prioridade</label>
+                            <select id="prioridade" class="filter-input select2-filter" multiple="multiple">
+                                <option value="Normal">Normal</option>
+                                <option value="Solicitado p/">Solicitado p/</option>
+                                <option value="Prometido p/">Prometido p/</option>
+                            </select>
+                        </div>
+
+                        <div class="filter-actions">
+                            <button class="btn-clear" id="btn-clear-filters" title="Limpar Filtros">
+                                <i class="fas fa-eraser"></i>
+                            </button>
+                            <button class="btn-update"><i class="fas fa-sync"></i> Atualizar</button>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="data-table-container">
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Nr OS</th>
+                                    <th>Ano</th>
+                                    <th>Produto</th>
+                                    <th>Solicitante</th>
+                                    <th>Título</th>
+                                    <th>Situação</th>
+                                    <th>Setor</th>
+                                    <th>Prioridade</th>
+                                    <th>Data</th>
+                                </tr>
+                            </thead>
+                            <tbody id="orders-table-body">
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="pagination-controls">
+                        <span id="pagination-info">Mostrando 0-0 de 0</span>
+                        <div class="pagination-buttons">
+                            <button id="btn-prev" class="btn-page" disabled><i class="fas fa-chevron-left"></i></button>
+                            <span id="current-page-display">1</span>
+                            <button id="btn-next" class="btn-page" disabled><i
+                                    class="fas fa-chevron-right"></i></button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <div class="bottom-section">
+
+                <section class="panel details-panel">
+                    <div class="panel-header">
+                        <div class="panel-title" id="details-title">Detalhes da OS</div>
+                    </div>
+
+                    <div class="details-content">
+
+                        <div class="details-upper">
+                            <div class="form-row">
+                                <div class="w-maquina">
+                                    <label>Máquina</label>
+                                    <input type="text" id="val_maquina" class="form-control" disabled />
+                                </div>
+                                <div class="w-tiragem">
+                                    <label>Tiragem</label>
+                                    <input type="text" id="val_tiragem" class="form-control" disabled />
+                                </div>
+                                <div class="w-paginas">
+                                    <label>Páginas</label>
+                                    <input type="text" id="val_pgs" class="form-control" disabled />
+                                </div>
+                                <div class="w-check">
+                                    <input type="checkbox" id="chk_fv">
+                                    <label for="chk_fv" style="margin-bottom:0; cursor:pointer;">Frente/Verso</label>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="w-modelos">
+                                    <label>Modelos</label>
+                                    <input type="text" id="val_modelos" class="form-control" disabled />
+                                </div>
+                                <div class="w-prioridade">
+                                    <label>Prioridade</label>
+                                    <input type="text" id="val_prioridade" class="form-control" disabled />
+                                </div>
+                                <div class="w-data">
+                                    <label>Data</label>
+                                    <input type="date" id="val_data" class="form-control" disabled />
+                                </div>
+                            </div>
+
+                            <div class="row-expand-inputs">
+                                <div class="group-expand-item">
+                                    <label>Papel</label>
+                                    <textarea id="txt_papel" class="form-control" disabled></textarea>
+                                </div>
+                                <div class="group-expand-item">
+                                    <label>Cores</label>
+                                    <textarea id="txt_cor" class="form-control" disabled></textarea>
+                                </div>
+                                <div class="group-expand-item">
+                                    <label>Acabamento</label>
+                                    <textarea id="txt_acabamento" class="form-control" disabled></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="details-lower">
+                            <div class="lower-item">
+                                <label>Obs</label>
+                                <textarea id="txt_obs" class="form-control" disabled></textarea>
+                            </div>
+                            <div class="lower-item">
+                                <label>Contato</label>
+                                <textarea id="txt_contato" class="form-control" disabled></textarea>
+                            </div>
+                        </div>
+
+                    </div>
+                </section>
+
+                <section class="panel history-panel">
+                    <div class="panel-header">
+                        <div class="panel-title">Histórico e Novo Andamento</div>
+                    </div>
+
+                    <div class="history-content">
+                        <div class="history-list table-wrapper" style="background:#fff; border:1px solid #eee;">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="width: 50%;">Situação</th>
+                                        <th style="width: 25%;">Setor</th>
+                                        <th style="width: 25%;">Data</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="history-table-body">
+                                    <tr>
+                                        <td colspan="3" style="text-align:center;">Nenhum registro.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="history-form">
+                            <div class="history-top-row">
+                                <div style="flex:1">
+                                    <label>Andamento</label>
+                                    <select id="new-history-situacao" class="form-control" disabled>
+                                        <option>Selecione...</option>
+                                    </select>
+                                </div>
+                                <div style="flex:1">
+                                    <label>Setor</label>
+                                    <select id="new-history-setor" class="form-control" disabled>
+                                        <option>Selecione...</option>
+                                    </select>
+                                </div>
+                                <div style="flex:1">
+                                    <label>Ponto</label>
+                                    <input type="text" id="new-history-ponto" class="form-control" disabled>
+                                </div>
+                            </div>
+
+                            <div class="history-mid-row">
+                                <label>Observação</label>
+                                <textarea id="new-history-obs" class="form-control" disabled></textarea>
+                            </div>
+
+                            <div class="history-bottom-row">
+                                <div>
+                                    <button id="btn-delete-history" class="btn-sm btn-danger btn-square"
+                                        title="Excluir Andamento Selecionado">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+
+                                <div class="btn-group">
+                                    <button id="btn-new-history" class="btn-sm btn-success">Novo</button>
+                                    <button id="btn-edit-history" class="btn-sm btn-warning">Editar</button>
+
+                                    <button id="btn-save-history" class="btn-sm btn-success"
+                                        style="display:none;">Salvar</button>
+                                    <button id="btn-cancel-history" class="btn-sm btn-danger"
+                                        style="display:none;">Cancelar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+    </div>
+
+    <script src="lib/jquery.min.js"></script>
+    <script src="lib/select2.min.js"></script>
+    <script src="script.js"></script>
+</body>
+
+</html>

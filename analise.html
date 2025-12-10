@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAGRA - Análise Técnica</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="lib/select2.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css">
+
+    <!-- PDF.js e Fabric.js para anotações -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+
+    <style>
+        .analise-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            gap: 10px;
+        }
+
+        .analise-toolbar {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-top: 3px solid var(--primary-green);
+            border-radius: 4px;
+            padding: 10px 15px;
+            display: flex;
+            align-items: flex-end;
+            gap: 15px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            flex-shrink: 0;
+        }
+
+        .analise-workspace {
+            display: flex;
+            gap: 10px;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .col-library,
+        .col-items,
+        .col-preview {
+            display: flex;
+            flex-direction: column;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .col-library {
+            flex: 1;
+            min-width: 250px;
+            max-width: 300px;
+        }
+
+        .col-items {
+            flex: 1.2;
+            min-width: 300px;
+        }
+
+        .col-preview {
+            flex: 1.5;
+            min-width: 400px;
+            background-color: #f8f9fa;
+        }
+
+        .pane-header {
+            padding: 10px;
+            background-color: #f1f3f5;
+            border-bottom: 1px solid #e0e0e0;
+            font-weight: 700;
+            color: #444;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+        }
+
+        .pane-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0;
+        }
+
+        .search-box {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .library-item {
+            padding: 10px 12px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .library-item:hover {
+            background-color: #e6f7ed;
+            color: var(--primary-green);
+        }
+
+        .library-item i {
+            color: #aaa;
+            font-size: 10px;
+        }
+
+        .selected-item {
+            border-bottom: 1px solid #eee;
+            background: #fff;
+            transition: all 0.2s;
+        }
+
+        .selected-item.active {
+            background-color: #e3f2fd;
+            border-left: 3px solid #2196F3;
+        }
+
+        .item-header {
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .item-title {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #333;
+        }
+
+        .item-obs-area {
+            padding: 0 10px 10px 10px;
+            display: none;
+        }
+
+        .selected-item.active .item-obs-area {
+            display: block;
+        }
+
+        .preview-content {
+            padding: 20px;
+            margin: 20px;
+            background: white;
+            border: 1px solid #ddd;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            min-height: 300px;
+            border-radius: 4px;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #aaa;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .cat-header {
+            background: #eee;
+            padding: 5px 10px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #666;
+            text-transform: uppercase;
+        }
+
+        /* Área Editável */
+        .editable-box {
+            outline: none;
+            min-height: 100px;
+            border: 1px dashed transparent;
+            transition: border 0.2s;
+            padding: 5px;
+        }
+
+        .editable-box:hover,
+        .editable-box:focus {
+            border: 1px dashed #0095D4;
+            background-color: #fafafa;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="header-left">
+            <div class="app-title">SAGRA - Análise Técnica</div>
+        </div>
+        <div class="header-right">
+            <div class="user-info">
+                <div class="user-id" id="header-user-id">ID: ---</div>
+            </div>
+        </div>
+    </header>
+
+    <div class="app-body">
+        <aside class="sidebar">
+            <nav class="sidebar-nav">
+                <a href="index.html" class="nav-item"><i class="fas fa-home"></i> Início</a>
+                <a href="gerencia.html" class="nav-item"><i class="fas fa-briefcase"></i> Gerência</a>
+                <a href="analise.html" class="nav-item active"><i class="fas fa-magnifying-glass"></i> Análise</a>
+                <a href="email.html" class="nav-item"><i class="fas fa-envelope"></i> Email</a>
+            </nav>
+        </aside>
+
+        <main style="background-color: #f4f6f8; padding: 10px;">
+            <div class="analise-container">
+
+                <div class="analise-toolbar">
+                    <div style="flex: 2;">
+                        <label>OS Selecionada</label>
+                        <div style="display:flex; gap: 5px;">
+                            <input type="text" id="anl-os-full" class="form-control" readonly
+                                style="background:#eee; font-weight:bold; width: 100px;">
+                            <input type="text" id="anl-titulo" class="form-control" readonly
+                                style="background:#eee; flex:1;">
+                        </div>
+                    </div>
+
+                    <div style="flex: 1;">
+                        <label>Versão Analisada</label>
+                        <select id="anl-versao" class="form-control">
+                            <option value="">Aguardando...</option>
+                        </select>
+                    </div>
+
+                    <div style="flex: 2;">
+                        <label>Componente / Arquivo</label>
+                        <select id="anl-componente" class="form-control">
+                            <option value="Capa" selected>Capa</option>
+                            <option value="Miolo">Miolo</option>
+                            <option value="Arq. Único">Arq. Único</option>
+                        </select>
+                    </div>
+
+                    <div style="flex: 0 0 auto; display:flex; gap:10px;">
+                        <button id="btn-save-analise" class="btn-action btn-new"
+                            style="height: 38px; width: auto; padding: 0 20px;">
+                            <i class="fas fa-save"></i> CONCLUIR E SALVAR
+                        </button>
+                    </div>
+                </div>
+
+                <div class="analise-workspace">
+
+                    <div class="col-library">
+                        <div class="pane-header">
+                            <i class="fas fa-book"></i> Biblioteca
+                            <button class="icon-btn" style="color:#555;" onclick="loadLibrary()" title="Atualizar"><i
+                                    class="fas fa-sync"></i></button>
+                        </div>
+                        <div class="search-box">
+                            <input type="text" id="search-library" class="form-control" placeholder="Pesquisar...">
+                        </div>
+                        <div class="pane-body custom-scroll" id="library-list">
+                            <div class="empty-state"><i class="fas fa-spinner fa-spin"></i> Carregando...</div>
+                        </div>
+                    </div>
+
+                    <div class="col-items">
+                        <div class="pane-header">
+                            <i class="fas fa-list-check"></i> Itens da Análise
+                            <span class="badge-yellow" id="count-items" style="font-size: 0.7rem;">0 itens</span>
+                        </div>
+                        <div class="pane-body custom-scroll" id="selected-list">
+                            <div class="empty-state">
+                                <i class="fas fa-arrow-left" style="font-size: 24px; margin-bottom: 10px;"></i>
+                                Selecione erros na biblioteca.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-preview">
+                        <div class="pane-header">
+                            <i class="fas fa-eye"></i> Relatório (Item Editável)
+                        </div>
+                        <div class="pane-body custom-scroll" style="background: #e9ecef;">
+                            <div id="preview-container">
+                                <div class="empty-state" style="padding-top: 50px;">
+                                    <i class="fas fa-file-invoice"
+                                        style="font-size: 32px; margin-bottom: 10px; color:#ccc;"></i>
+                                    <p>Selecione um item para editar.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL DE PREVIEW -->
+    <div id="preview-modal"
+        style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4);">
+        <div
+            style="background-color: #fefefe; margin: 5% auto; padding: 0; border: 1px solid #888; width: 80%; max-width: 900px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+            <div
+                style="padding: 15px 20px; border-bottom: 1px solid #e5e5e5; display: flex; justify-content: space-between; align-items: center; background-color: #f8f9fa; border-radius: 8px 8px 0 0;">
+                <h3 style="margin: 0; color: #333;">Pré-visualização do Relatório</h3>
+                <span onclick="closePreviewModal()"
+                    style="color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
+            </div>
+            <div id="preview-modal-body" style="padding: 20px; overflow-y: auto; max-height: 70vh;">
+                <!-- HTML gerado pelo servidor entra aqui -->
+            </div>
+            <div
+                style="padding: 15px 20px; border-top: 1px solid #e5e5e5; text-align: right; background-color: #f8f9fa; border-radius: 0 0 8px 8px;">
+                <button onclick="closePreviewModal()"
+                    style="padding: 8px 16px; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">Fechar</button>
+            </div>
+        </div>
+
+        <!-- MODAL DE SELEÇÃO DE ARQUIVO -->
+        <div id="file-selection-modal" class="modal-overlay"
+            style="display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5);">
+            <div
+                style="background:white; margin:10% auto; padding:20px; width:400px; border-radius:5px; box-shadow:0 2px 10px rgba(0,0,0,0.2);">
+                <h4 style="margin-top:0;">Selecione o Arquivo</h4>
+                <div style="margin-bottom:15px;">
+                    <label>Arquivo:</label>
+                    <select id="file-select-list" class="form-control"></select>
+                </div>
+                <div style="margin-bottom:20px;">
+                    <label>Página:</label>
+                    <input type="number" id="file-page-number" class="form-control" value="1" min="1">
+                </div>
+                <div style="text-align:right;">
+                    <button onclick="closeFileSelectionModal()" class="btn-action"
+                        style="background:#ccc; color:#333;">Cancelar</button>
+                    <button onclick="confirmFileSelection()" class="btn-action"
+                        style="background:var(--primary-green); color:white;">Confirmar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL EDITOR DE ANOTAÇÃO -->
+        <div id="annotation-modal" class="modal-overlay"
+            style="display: none; position: fixed; z-index: 2001; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8);">
+            <div style="background:#333; height:100%; display:flex; flex-direction:column;">
+
+                <!-- Toolbar -->
+                <div
+                    style="background:#222; padding:10px; display:flex; gap:10px; align-items:center; border-bottom:1px solid #444;">
+                    <span style="color:white; font-weight:bold; margin-right:20px;">Editor de Anotação</span>
+
+                    <button onclick="setDrawMode('rect')" class="tool-btn" style="padding:5px 10px; cursor:pointer;"><i
+                            class="fas fa-vector-square"></i>
+                        Retângulo</button>
+                    <button onclick="setDrawMode('arrow')" class="tool-btn" style="padding:5px 10px; cursor:pointer;"><i
+                            class="fas fa-long-arrow-alt-right"></i>
+                        Seta</button>
+                    <button onclick="setDrawMode('text')" class="tool-btn" style="padding:5px 10px; cursor:pointer;"><i
+                            class="fas fa-font"></i> Texto</button>
+
+                    <div style="width:1px; height:20px; background:#555; margin:0 10px;"></div>
+
+                    <button onclick="setAnnotationColor('red')" class="tool-btn" style="color:red;"><i
+                            class="fas fa-circle"></i></button>
+                    <button onclick="setAnnotationColor('yellow')" class="tool-btn" style="color:yellow;"><i
+                            class="fas fa-circle"></i></button>
+
+                    <div style="flex:1;"></div>
+
+                    <button onclick="deleteActiveObject()" class="tool-btn"
+                        style="background:#500; color:white; margin-right:20px;"><i class="fas fa-trash"></i> Apagar
+                        Item</button>
+
+                    <button onclick="closeAnnotationModal()" class="btn-action"
+                        style="background:#555; color:white;">Cancelar</button>
+                    <button onclick="saveAnnotationCavas()" class="btn-action"
+                        style="background:var(--primary-green); color:white;">Salvar Anotação</button>
+                </div>
+
+                <!-- Canvas Area -->
+                <div
+                    style="flex:1; overflow:auto; display:flex; justify-content:center; padding:20px; background:#555;">
+                    <div id="canvas-wrapper" style="box-shadow:0 0 20px rgba(0,0,0,0.5);">
+                        <canvas id="annotation-canvas"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script src="lib/jquery.min.js"></script>
+        <script src="analise.js?v=15"></script>
+</body>
+
+</html>

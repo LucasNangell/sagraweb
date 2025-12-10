@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAGRA - Gerência</title>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="lib/select2.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div id="login-overlay" style="display: flex;">
+        <div class="login-box">
+            <h3>Identificação</h3>
+            <input type="text" id="login-ponto-input" class="form-control" placeholder="Ponto">
+            <button id="btn-login-confirm" class="btn-primary">ENTRAR</button>
+        </div>
+    </div>
+
+    <header>
+        <div class="header-left">
+            <div class="app-title">SAGRA (v6.9)</div>
+        </div>
+        <div class="header-right">
+            <div class="user-info">
+                <div class="user-id" id="header-user-id">ID: ---</div>
+            </div>
+        </div>
+    </header>
+
+    <div class="app-body">
+        <aside class="sidebar">
+            <nav class="sidebar-nav">
+                <a href="index.html" class="nav-item"><i class="fas fa-home"></i> Início</a>
+                <a href="#" class="nav-item active"><i class="fas fa-briefcase"></i> Gerência</a>
+                <a href="email.html" class="nav-item"><i class="fas fa-envelope"></i> Email</a>
+                <a href="#" class="nav-item"><i class="fas fa-user"></i> Usuário</a>
+                <a href="settings.html" class="nav-item"><i class="fas fa-cog"></i> Configurações</a>
+            </nav>
+        </aside>
+
+        <main style="padding: 10px; overflow-y: auto; background-color: #F8F9FA;">
+
+            <div class="gerencia-layout-vertical">
+                <div class="panel-header" style="margin-bottom: 10px;">
+                    <div class="panel-title" id="gerencia-title" style="font-size: 1.2rem;">Gerência de OS</div>
+                </div>
+
+                <div class="gerencia-row top-row">
+
+                    <div class="gerencia-actions-sidebar">
+                        <button class="btn-action btn-new"><i class="fas fa-plus-circle"></i> Nova</button>
+                        <button class="btn-action btn-duplicate"><i class="fas fa-copy"></i> Duplicar</button>
+                        <button class="btn-action btn-link"><i class="fas fa-link"></i> Vincular</button>
+                        <button class="btn-action btn-edit"><i class="fas fa-pencil-alt"></i> Editar</button>
+                        <button class="btn-action btn-delete"><i class="fas fa-trash-alt"></i> Excluir</button>
+                    </div>
+
+                    <div class="gerencia-pane col-solicitante">
+                        <div class="panel h-auto">
+                            <div class="panel-header">
+                                <div class="panel-title">Informações do Solicitante</div>
+                            </div>
+                            <div class="details-content no-scroll">
+                                <div class="requester-grid">
+                                    <div class="requester-fields">
+                                        <div class="form-row">
+                                            <div style="flex: 1;">
+                                                <label>Categoria</label>
+                                                <select id="req_categoria" class="form-control">
+                                                    <option value="">Selecione...</option>
+                                                </select>
+                                            </div>
+                                            <div style="flex: 1;">
+                                                <label>Cód. Req.</label>
+                                                <input type="text" id="req_codigo" class="form-control">
+                                            </div>
+                                        </div>
+
+                                        <div class="form-group"><label>Solicitante</label><input type="text"
+                                                id="req_solicitante" class="form-control"></div>
+                                        <div class="form-row">
+                                            <div style="flex: 2;"><label>Titular</label><input type="text"
+                                                    id="req_titular" class="form-control"></div>
+                                            <div style="flex: 1;"><label>Sigla</label><input type="text" id="req_sigla"
+                                                    class="form-control"></div>
+                                        </div>
+                                        <div class="form-row">
+                                            <div style="flex: 1;"><label>Gabinete</label><input type="text"
+                                                    id="req_gabinete" class="form-control"></div>
+                                        </div>
+                                    </div>
+                                    <div class="requester-photo-container">
+                                        <div class="photo-placeholder"><i class="fas fa-user"></i><span>3x4</span></div>
+                                    </div>
+                                </div>
+                                <div class="section-divider"></div>
+                                <div class="sub-section">
+                                    <div class="sub-header">Endereço</div>
+                                    <div class="form-row">
+                                        <div style="flex:1"><label>Andar</label><input type="text" id="req_andar"
+                                                class="form-control"></div>
+                                        <div style="flex:1"><label>Local</label><input type="text" id="req_local"
+                                                class="form-control"></div>
+                                        <div style="flex:1"><label>Ramal</label><input type="text" id="req_ramal"
+                                                class="form-control"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="gerencia-pane col-op">
+                        <div class="panel h-auto">
+                            <div class="panel-header">
+                                <div class="panel-title">Ordem de Produção</div>
+                            </div>
+                            <div class="details-content no-scroll">
+                                <div class="form-row">
+                                    <div style="flex: 1;">
+                                        <label>OS / Ano</label>
+                                        <div style="display:flex; gap:2px;">
+                                            <input type="text" id="op_os" class="form-control" readonly
+                                                style="flex:1; text-align:center;">
+                                            <input type="text" id="op_ano" class="form-control" readonly
+                                                style="flex:1; text-align:center;">
+                                        </div>
+                                    </div>
+                                    <div style="flex: 1;">
+                                        <label>Data Entrada</label>
+                                        <input type="date" id="op_data_entrada" class="form-control">
+                                    </div>
+                                </div>
+                                <div class="form-row mt-5">
+                                    <div style="flex: 1;"><label>Processo</label><input type="text" id="op_processo"
+                                            class="form-control"></div>
+                                    <div style="flex: 1;"><label>Com. Serviço</label><input type="text" id="op_cs"
+                                            class="form-control"></div>
+                                </div>
+                                <div class="section-divider"></div>
+                                <div class="sub-section">
+                                    <div class="sub-header">Tiragem</div>
+                                    <div class="form-group"><label>Pretendida</label><input type="text"
+                                            id="op_tiragem_pret" class="form-control"></div>
+                                    <div class="form-group"><label>Final</label><input type="text" id="op_tiragem_final"
+                                            class="form-control"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="gerencia-pane col-detalhes">
+                        <div class="panel h-auto">
+                            <div class="panel-header">
+                                <div class="panel-title">Detalhes Técnicos</div>
+                            </div>
+                            <div class="details-content">
+
+                                <div class="details-upper">
+                                    <div class="form-row">
+                                        <div class="w-maquina">
+                                            <label>Máquina</label>
+                                            <select id="val_maquina" class="form-control">
+                                                <option>Selecione...</option>
+                                            </select>
+                                        </div>
+                                        <div class="w-tiragem">
+                                            <label>Tiragem</label>
+                                            <input type="text" id="val_tiragem" class="form-control">
+                                        </div>
+                                        <div class="w-paginas">
+                                            <label>Páginas</label>
+                                            <input type="text" id="val_pgs" class="form-control">
+                                        </div>
+                                        <div class="w-check">
+                                            <input type="checkbox" id="chk_fv">
+                                            <label for="chk_fv"
+                                                style="margin-bottom:0; cursor:pointer;">Frente/Verso</label>
+                                        </div>
+                                    </div>
+
+                                    <div class="form-row">
+                                        <div class="w-modelos">
+                                            <label>Modelos</label>
+                                            <input type="text" id="val_modelos" class="form-control">
+                                        </div>
+                                        <div class="w-prioridade">
+                                            <label>Prioridade</label>
+                                            <select id="val_prioridade" class="form-control">
+                                                <option value="Normal">Normal</option>
+                                                <option value="Solicitado p/">Solicitado p/</option>
+                                                <option value="Prometido p/">Prometido p/</option>
+                                            </select>
+                                        </div>
+                                        <div class="w-data">
+                                            <label>Data Entrega</label>
+                                            <input type="date" id="val_data" class="form-control">
+                                        </div>
+                                    </div>
+
+                                    <div class="row-expand-inputs">
+                                        <div class="group-expand-item">
+                                            <label>Papel</label>
+                                            <select id="val_papel" class="form-control" style="margin-bottom:2px;">
+                                                <option>Selecione...</option>
+                                            </select>
+                                            <textarea id="txt_papel_desc" class="form-control"
+                                                placeholder="Descrição..."></textarea>
+                                        </div>
+                                        <div class="group-expand-item">
+                                            <label>Cores</label>
+                                            <select id="val_cores" class="form-control" style="margin-bottom:2px;">
+                                                <option>Selecione...</option>
+                                            </select>
+                                            <textarea id="txt_cores_desc" class="form-control"
+                                                placeholder="Descrição..."></textarea>
+                                        </div>
+                                        <div class="group-expand-item">
+                                            <label>Acabamento</label>
+                                            <textarea id="txt_acabamento" class="form-control"></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="details-lower">
+                                    <div class="lower-item">
+                                        <label>Obs</label>
+                                        <textarea id="txt_obs" class="form-control"></textarea>
+                                    </div>
+                                    <div class="lower-item">
+                                        <label>Contato</label>
+                                        <textarea id="txt_contato" class="form-control"></textarea>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="gerencia-row bottom-row">
+                    <div class="gerencia-pane col-material">
+                        <div class="panel h-auto">
+                            <div class="panel-header">
+                                <div class="panel-title">Material Entregue</div>
+                            </div>
+                            <div class="details-content">
+                                <div class="checkbox-grid">
+                                    <div class="chk-item"><input type="checkbox" id="mat_amostra"><label
+                                            for="mat_amostra" style="color:red;">Amostra (Mat. Fornecido)</label></div>
+                                    <div class="chk-item"><input type="checkbox" id="mat_fotolito"><label
+                                            for="mat_fotolito">Fotolito</label></div>
+                                    <div class="chk-item"><input type="checkbox" id="mat_dobra"><label
+                                            for="mat_dobra">Modelo de dobra</label></div>
+                                    <div class="chk-item"><input type="checkbox" id="mat_original"><label
+                                            for="mat_original" style="color:red;">Prova Impressa</label></div>
+                                </div>
+                                <div class="form-group mt-10"><label>Insumos fornecidos</label><input type="text"
+                                        id="mat_insumos" class="form-control"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="gerencia-pane col-elementos">
+                        <div class="panel h-auto">
+                            <div class="panel-header">
+                                <div class="panel-title">Elementos Gráficos</div>
+                            </div>
+                            <div class="details-content">
+                                <div class="checkbox-grid">
+                                    <div class="chk-item"><input type="checkbox" id="el_brasao"><label
+                                            for="el_brasao">Brasão</label></div>
+                                    <div class="chk-item"><input type="checkbox" id="el_timbre"><label
+                                            for="el_timbre">Timbre Escrito</label></div>
+                                    <div class="chk-item"><input type="checkbox" id="el_arte"><label for="el_arte">Arte
+                                            do Gabinete</label></div>
+                                    <div class="chk-item"><input type="checkbox" id="el_assinatura"><label
+                                            for="el_assinatura">Assinatura</label></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="gerencia-pane col-calculos">
+                        <div class="panel h-auto">
+                            <div class="panel-header">
+                                <div class="panel-title">Cálculos</div>
+                            </div>
+                            <div class="details-content">
+                                <div
+                                    style="display:flex; justify-content:center; align-items:center; height:100%; color:#aaa;">
+                                    <i class="fas fa-calculator" style="margin-right:5px;"></i> Área para Cálculos
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="lib/jquery.min.js"></script>
+    <script src="lib/select2.min.js"></script>
+    <script src="gerencia.js"></script>
+</body>
+
+</html>

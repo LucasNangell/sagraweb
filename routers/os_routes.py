@@ -5,9 +5,14 @@ from database import db
 import logging
 import os
 import glob
+from datetime import datetime
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+# Modelo para receber o usuário na duplicação
+class DuplicateRequest(BaseModel):
+    usuario: str
 
 class HistoryItem(BaseModel):
     situacao: str
@@ -15,6 +20,98 @@ class HistoryItem(BaseModel):
     obs: str
     usuario: str
 
+# --- ADICIONE ESTE NOVO ENDPOINT ---
+@router.post("/os/{ano}/{id}/duplicate")
+def duplicate_os(ano: int, id: int, req: DuplicateRequest):
+    """
+    Duplica uma OS existente gerando um novo número sequencial
+    baseado no tipo (Normal < 5000 ou Papelaria >= 5000).
+    """
+    
+    def transaction_logic(cursor):
+        # 1. Determinar range de numeração (Normal ou Papelaria)
+        is_papelaria = id >= 5000
+        current_year = datetime.now().year
+        
+        # 2. Encontrar o próximo ID disponível no ano CORRENTE
+        if is_papelaria:
+            cursor.execute("""
+                SELECT MAX(NroProtocolo) as max_id 
+                FROM tabProtocolos 
+                WHERE AnoProtocolo = %s AND NroProtocolo >= 5000
+            """, (current_year,))
+        else:
+            cursor.execute("""
+                SELECT MAX(NroProtocolo) as max_id 
+                FROM tabProtocolos 
+                WHERE AnoProtocolo = %s AND NroProtocolo < 5000
+            """, (current_year,))
+            
+        result = cursor.fetchone()
+        max_id = result['max_id']
+        
+        if max_id:
+            new_id = max_id + 1
+        else:
+            new_id = 5000 if is_papelaria else 1
+
+        # 3. Copiar tabProtocolos
+        # Selecionamos as colunas explicitamente para evitar erros de estrutura, 
+        # mas injetamos o NEW_ID e NEW_YEAR
+        cols_protocolo = """
+            CodigoRequisic, CategoriaLink, NomeUsuario, Titular, SiglaOrgao, 
+            GabSalaUsuario, Andar, Localizacao, RamalUsuario, OrgInteressado, CodUsuarioLink,
+            DataEntrada, ProcessoSolicit, CSnro, CotaRepro, CotaCartao, 
+            EntregPrazoLink, EntregData, ContatoTrab
+        """
+        
+        query_proto = f"""
+            INSERT INTO tabProtocolos (NroProtocolo, AnoProtocolo, {cols_protocolo})
+            SELECT %s, %s, {cols_protocolo}
+            FROM tabProtocolos 
+            WHERE NroProtocolo = %s AND AnoProtocolo = %s
+        """
+        cursor.execute(query_proto, (new_id, current_year, id, ano))
+
+        # 4. Copiar tabDetalhesServico
+        cols_detalhes = """
+            TiragemSolicitada, Tiragem, CotaTotal, Titulo, TipoPublicacaoLink, 
+            MaquinaLink, Pags, FrenteVerso, ModelosArq, PapelLink, PapelDescricao, 
+            Cores, CoresDescricao, DescAcabamento, Observ, MaterialFornecido, 
+            Fotolito, ModeloDobra, ProvaImpressa, InsumosFornecidos, 
+            ElemGrafBrasao, ElemGrafTimbre, ElemGrafArteGab, ElemGrafAssinatura
+        """
+        
+        # Nota: NroProtocoloLinkDet e AnoProtocoloLinkDet são as chaves estrangeiras/primárias aqui
+        query_det = f"""
+            INSERT INTO tabDetalhesServico (NroProtocoloLinkDet, AnoProtocoloLinkDet, {cols_detalhes})
+            SELECT %s, %s, {cols_detalhes}
+            FROM tabDetalhesServico 
+            WHERE NroProtocoloLinkDet = %s AND AnoProtocoloLinkDet = %s
+        """
+        cursor.execute(query_det, (new_id, current_year, id, ano))
+
+        # 5. Inserir Andamento Inicial
+        # CodStatus geralmente é composto: IDANO-01 (ex: 001232025-01)
+        new_cod_status = f"{new_id:05d}{current_year}-01"
+        
+        query_hist = """
+            INSERT INTO tabAndamento 
+            (CodStatus, NroProtocoloLink, AnoProtocoloLink, SituacaoLink, SetorLink, Data, UltimoStatus, Observaçao, Ponto)
+            VALUES (%s, %s, %s, 'Entrada Inicial', 'SEFOC', NOW(), 1, 'Duplicado da OS ' || %s || '/' || %s, %s)
+        """
+        cursor.execute(query_hist, (new_cod_status, new_id, current_year, id, ano, req.usuario))
+
+        return {"new_id": new_id, "new_year": current_year}
+
+    try:
+        # Executa tudo atomicamente
+        result = db.execute_transaction([transaction_logic])
+        return result[0]
+    except Exception as e:
+        logger.error(f"Duplicate error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+        
 @router.get("/os/search")
 def search_os(
     nr_os: Optional[int] = None,

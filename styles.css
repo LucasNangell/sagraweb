@@ -47,7 +47,7 @@ body {
     overflow: hidden !important;
 }
 
-/* HEADER E MODAL */
+/* HEADER E MODAL DE LOGIN */
 #login-overlay {
     position: fixed;
     top: 0;
@@ -182,7 +182,7 @@ main {
     background-color: var(--bg-color);
 }
 
-/* COMPONENTES GERAIS */
+/* COMPONENTES DE FORMULÁRIO E PAINÉIS */
 .panel {
     background: #fff;
     border: 1px solid #e0e0e0;
@@ -245,16 +245,12 @@ textarea.form-control {
     margin-bottom: 4px;
 }
 
-/* ==========================================================
-   LAYOUT DE GERÊNCIA (DIVIDIDO EM 2 LINHAS)
-   ========================================================== */
-
+/* === LAYOUT DE GERÊNCIA === */
 .gerencia-layout-vertical {
     display: flex;
     flex-direction: column;
     width: 100%;
     height: 100%;
-    /* Ocupa altura total do Main */
     gap: 10px;
 }
 
@@ -263,21 +259,16 @@ textarea.form-control {
     width: 100%;
     gap: 10px;
     align-items: stretch;
-    /* Estica colunas na altura */
 }
 
 .top-row {
     height: 50%;
 }
 
-/* Metade Superior */
 .bottom-row {
     height: 50%;
 }
 
-/* Metade Inferior */
-
-/* --- COLUNAS LINHA SUPERIOR --- */
 .gerencia-actions-sidebar {
     width: 120px;
     display: flex;
@@ -301,7 +292,6 @@ textarea.form-control {
     min-width: 380px;
 }
 
-/* --- COLUNAS LINHA INFERIOR --- */
 .col-material {
     flex: 1;
     min-width: 250px;
@@ -317,78 +307,65 @@ textarea.form-control {
     min-width: 250px;
 }
 
-/* Classes Genéricas de Painel */
-.gerencia-pane {
-    display: flex;
-    flex-direction: column;
-}
-
 .gerencia-pane .panel {
     height: 100%;
     width: 100%;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
 }
 
-/* Conteúdos Internos */
+/* DETALHES DA OS (USADO NO INDEX E GERÊNCIA) */
 .details-content {
-    flex: 1;
-    padding: 0;
     display: flex;
     flex-direction: column;
+    height: 100%;
     overflow: hidden;
+    gap: 8px;
+    padding: 2px;
 }
 
-.details-content-horizontal {
+.details-upper {
     flex: 1;
-    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-height: 0;
+}
+
+.row-expand-inputs {
+    flex: 1;
     display: flex;
     gap: 10px;
-    overflow: hidden;
-}
-
-/* Detalhes Técnicos */
-.details-left {
-    flex: 2.5;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    height: 100%;
-}
-
-.details-right {
-    flex: 2.1;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    height: 100%;
-}
-
-.row-expand {
-    flex: 1;
-    display: flex;
-    gap: 5px;
     min-height: 0;
 }
 
-.group-expand {
+.group-expand-item {
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: 0;
 }
 
-.right-item {
+.group-expand-item textarea {
+    flex: 1;
+    height: 100% !important;
+    resize: none;
+}
+
+.details-lower {
+    flex: 0 0 30%;
+    display: flex;
+    gap: 10px;
+    min-height: 120px;
+}
+
+.lower-item {
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: 0;
 }
 
-.right-item textarea {
+.lower-item textarea {
     flex: 1;
-    height: 100%;
+    height: 100% !important;
+    resize: none;
 }
 
 .form-row {
@@ -431,65 +408,7 @@ textarea.form-control {
     flex: 3;
 }
 
-/* Solicitante */
-.requester-grid {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 5px;
-    flex-shrink: 0;
-}
-
-.requester-fields {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.requester-photo-container {
-    width: 80px;
-    flex-shrink: 0;
-}
-
-.photo-placeholder {
-    width: 100%;
-    aspect-ratio: 3/4;
-    background-color: #e9ecef;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    color: #999;
-    font-size: 10px;
-}
-
-.sub-section {
-    background: #fdfdfd;
-    border: 1px solid #eee;
-    padding: 5px;
-    border-radius: 4px;
-    flex: 1;
-}
-
-.sub-header {
-    font-size: 10px;
-    font-weight: 700;
-    color: #0095D4;
-    margin-bottom: 4px;
-    border-bottom: 1px dashed #ddd;
-    text-transform: uppercase;
-}
-
-.section-divider {
-    height: 1px;
-    background-color: #eee;
-    margin: 8px 0;
-    flex-shrink: 0;
-}
-
-/* Checkbox Grid (Novas Seções) */
+/* CHECKBOX GRID */
 .checkbox-grid {
     display: flex;
     flex-wrap: wrap;
@@ -504,17 +423,13 @@ textarea.form-control {
     font-size: 11px;
 }
 
-.chk-item input {
-    margin: 0;
-}
-
 .chk-item label {
     margin: 0;
     font-weight: normal;
     cursor: pointer;
 }
 
-/* Botões */
+/* BOTÕES DE AÇÃO */
 .btn-action {
     width: 100%;
     padding: 8px 10px;
@@ -528,8 +443,6 @@ textarea.form-control {
     align-items: center;
     justify-content: flex-start;
     gap: 8px;
-    transition: filter 0.2s, transform 0.1s;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     height: 36px;
 }
 
@@ -559,7 +472,7 @@ textarea.form-control {
     background-color: #dc3545;
 }
 
-/* MANTIDOS DO INDEX (Tabela e Filtros) */
+/* TABELA E FILTROS (INDEX) */
 .filters-card {
     background: white;
     border-radius: 4px;
@@ -619,16 +532,13 @@ textarea.form-control {
     gap: 5px;
 }
 
-/* DIVISÃO 50/50 DO INDEX */
 .top-section {
     flex: 1;
-    /* Ocupa 50% */
     display: flex;
     flex-direction: column;
     overflow: hidden;
     gap: 10px;
     min-height: 0;
-    /* Correção para flexbox */
 }
 
 .data-table-container {
@@ -636,12 +546,10 @@ textarea.form-control {
     border-radius: 4px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     flex: 1;
-    /* Ocupa o restante da Top Section */
     display: flex;
     flex-direction: column;
     overflow: hidden;
     min-height: 0;
-    /* Permite encolher */
 }
 
 .table-wrapper {
@@ -744,11 +652,9 @@ tr.selected {
 
 .bottom-section {
     flex: 1;
-    /* Ocupa os outros 50% */
     display: flex;
     gap: 15px;
     min-height: 0;
-    /* Correção para flexbox */
     align-items: stretch;
     overflow: hidden;
 }
@@ -836,10 +742,6 @@ tr.selected {
     color: white;
 }
 
-.btn-danger:hover {
-    background-color: #c82333;
-}
-
 .btn-square {
     width: 26px;
     padding: 4px 0;
@@ -849,15 +751,13 @@ tr.selected {
     font-size: 12px;
 }
 
+/* SELECT2 CUSTOMIZATION */
 .select2-container .select2-selection--multiple {
     height: 28px !important;
     min-height: 28px !important;
-    max-height: 28px !important;
     border: 1px solid #ccc !important;
     border-radius: 3px !important;
     font-size: 12px !important;
-    background-color: #fff !important;
-    padding: 0 4px !important;
     overflow: hidden !important;
     display: flex !important;
     align-items: center !important;
@@ -876,143 +776,53 @@ tr.selected {
     color: #006400;
     font-weight: 600;
     font-size: 11px;
-    font-family: 'Open Sans', 'Roboto', sans-serif;
     pointer-events: none;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 85%;
-    z-index: 10;
 }
 
-.select2-container--default .select2-selection--multiple .select2-selection__rendered {
-    padding: 0 !important;
-    margin: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    display: flex !important;
-    align-items: center !important;
-}
-
-.select2-search__field {
-    margin: 0 !important;
-    height: 24px !important;
-    line-height: 24px !important;
-    font-family: inherit !important;
-    font-size: 12px !important;
-    background: transparent !important;
-    min-width: 5px !important;
-}
-
-.select2-selection--multiple:not(.has-custom-label) .select2-search__field {
-    width: 100% !important;
-}
-
-.select2-container--default .select2-selection--multiple .select2-selection__placeholder {
-    color: #777 !important;
-}
-
-.select2-results__option {
-    padding: 4px 8px !important;
-    font-size: 12px !important;
-}
-
-.select2-container--default .select2-results__option[aria-selected="true"] {
-    background-color: #e6f7ed !important;
-    color: #006400 !important;
-    font-weight: 700 !important;
-    position: relative;
-}
-
-.select2-container--default .select2-results__option[aria-selected="true"]::after {
-    content: '\f00c';
-    font-family: "Font Awesome 6 Free";
-    font-weight: 900;
-    position: absolute;
-    right: 10px;
-    color: #00B142;
-}
-
-.select2-container--default .select2-results__option--highlighted[aria-selected] {
+.select2-results__option--highlighted[aria-selected] {
     background-color: var(--primary-green) !important;
     color: white !important;
 }
 
-.select2-container--default .select2-results__option--highlighted[aria-selected="true"]::after {
-    color: white !important;
+/* === CONTEXT MENU === */
+.context-menu {
+    display: none;
+    position: absolute;
+    z-index: 10000;
+    background-color: #fff;
+    border: 1px solid #ccc;
+    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    width: 150px;
 }
 
-/* ... (Mantenha o CSS anterior) ... */
+.context-menu ul {
+    list-style: none;
+    padding: 5px 0;
+    margin: 0;
+}
 
-/* === REESTRUTURAÇÃO DETALHES DA OS (Vertical + Rodapé Ajustado) === */
-
-.details-content {
+.context-menu li {
+    padding: 8px 15px;
+    font-size: 12px;
+    color: #333;
+    cursor: pointer;
     display: flex;
-    flex-direction: column;
-    height: 100%;
-    overflow: hidden;
+    align-items: center;
     gap: 8px;
-    padding: 2px;
 }
 
-/* Parte Superior: Inputs + Papel/Cores/Acabamento */
-.details-upper {
-    flex: 1;
-    /* Ocupa o espaço restante (aprox 70%) */
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    min-height: 0;
+.context-menu li:hover {
+    background-color: #f0f2f5;
+    color: var(--primary-green);
 }
 
-/* Linha que contém Papel, Cores e Acabamento */
-.row-expand-inputs {
-    flex: 1;
-    /* Cresce para preencher a altura disponível na seção superior */
-    display: flex;
-    gap: 10px;
-    min-height: 0;
+.context-menu li i {
+    width: 16px;
+    text-align: center;
 }
 
-.group-expand-item {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-}
-
-.group-expand-item textarea {
-    flex: 1;
-    height: 100% !important;
-    resize: none;
-}
-
-/* Parte Inferior: Obs e Contato (AUMENTADA) */
-.details-lower {
-    /* ALTERAÇÃO: Mudado de height:80px para flex-basis de 30% */
-    flex: 0 0 30%;
-    display: flex;
-    gap: 10px;
-    min-height: 120px;
-    /* Garante que não fique pequeno demais em telas baixas */
-}
-
-.lower-item {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-}
-
-.lower-item textarea {
-    flex: 1;
-    height: 100% !important;
-    resize: none;
-}
-
-/* ... (Mantenha o CSS anterior) ... */
-/* ... (Mantenha todo o CSS anterior até chegar na seção de Email) ... */
-
-/* === EMAIL APP STYLES (SAGRA THEME) === */
-
+/* === EMAIL APP STYLES === */
 .email-app-container {
     display: flex;
     width: 100%;
@@ -1020,11 +830,9 @@ tr.selected {
     background-color: white;
 }
 
-/* 1. Mini Sidebar Interna (Estilo Claro/Sagra) */
 .email-nav {
     width: 70px;
     background-color: #f8f9fa;
-    /* Fundo claro para combinar com o resto */
     border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
@@ -1036,7 +844,6 @@ tr.selected {
 
 .email-nav-logo {
     background-color: var(--primary-green);
-    /* Verde SAGRA */
     color: white;
     width: 40px;
     height: 40px;
@@ -1053,7 +860,6 @@ tr.selected {
     background: none;
     border: none;
     color: #6c757d;
-    /* Cinza ícone inativo */
     width: 48px;
     height: 48px;
     border-radius: 12px;
@@ -1072,7 +878,6 @@ tr.selected {
 
 .email-nav-item.active {
     background-color: #e6f7ed;
-    /* Fundo verde claro */
     color: var(--primary-green);
 }
 
@@ -1087,10 +892,8 @@ tr.selected {
     border-radius: 50%;
 }
 
-/* 2. Coluna de Lista */
 .email-list-col {
     width: 340px;
-    /* Levemente mais largo para caber as badges */
     border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
@@ -1132,12 +935,6 @@ tr.selected {
     border-radius: 4px;
     font-size: 0.85rem;
     outline: none;
-    transition: all 0.2s;
-}
-
-.email-search-box input:focus {
-    background-color: white;
-    border-color: var(--primary-green);
 }
 
 .email-list-content {
@@ -1145,7 +942,6 @@ tr.selected {
     overflow-y: auto;
 }
 
-/* Item da Lista */
 .list-item {
     padding: 14px 18px;
     border-bottom: 1px solid #f3f4f6;
@@ -1160,7 +956,6 @@ tr.selected {
 
 .list-item.selected {
     background-color: #e6f7ed;
-    /* Verde muito claro */
     border-left-color: var(--primary-green);
 }
 
@@ -1209,7 +1004,6 @@ tr.selected {
     text-overflow: ellipsis;
 }
 
-/* Badges de Conta/Pasta */
 .account-badge {
     font-size: 0.65rem;
     padding: 2px 6px;
@@ -1230,14 +1024,6 @@ tr.selected {
     color: #9a3412;
 }
 
-.folder-badge {
-    font-size: 0.65rem;
-    color: #666;
-    margin-left: 5px;
-    font-style: italic;
-}
-
-/* 3. Coluna de Detalhes */
 .email-detail-col {
     flex: 1;
     display: flex;
@@ -1264,21 +1050,6 @@ tr.selected {
     color: #222;
 }
 
-.detail-actions button {
-    background: none;
-    border: none;
-    color: #777;
-    padding: 8px;
-    border-radius: 50%;
-    cursor: pointer;
-    transition: background 0.2s;
-}
-
-.detail-actions button:hover {
-    background-color: #f3f4f6;
-    color: var(--primary-green);
-}
-
 .sender-info {
     display: flex;
     align-items: center;
@@ -1295,7 +1066,6 @@ tr.selected {
     align-items: center;
     justify-content: center;
     font-weight: 600;
-    font-size: 1.1rem;
 }
 
 .detail-body {
@@ -1322,12 +1092,6 @@ tr.selected {
     resize: none;
     outline: none;
     margin-bottom: 10px;
-    font-family: inherit;
-    font-size: 0.9rem;
-}
-
-.reply-box:focus {
-    border-color: var(--primary-green);
 }
 
 .reply-toolbar {
@@ -1344,28 +1108,8 @@ tr.selected {
     border-radius: 4px;
     font-weight: 600;
     cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.9rem;
 }
 
-.btn-send:hover {
-    background-color: #009938;
-}
-
-.btn-secondary-action {
-    background: white;
-    border: 1px solid #ccc;
-    padding: 8px 16px;
-    border-radius: 4px;
-    font-weight: 600;
-    color: #555;
-    cursor: pointer;
-    font-size: 0.85rem;
-}
-
-/* Empty State */
 .empty-state {
     flex: 1;
     display: flex;
@@ -1386,46 +1130,4 @@ tr.selected {
     font-size: 32px;
     margin-bottom: 15px;
     color: #bbb;
-}
-
-/* Toast Notification (Estilo Sagra) */
-.toast-hidden {
-    display: none;
-}
-
-#toast-container {
-    position: absolute;
-    top: 60px;
-    right: 20px;
-    z-index: 1000;
-    animation: fadeIn 0.3s;
-}
-
-.toast-content {
-    background-color: #333;
-    color: white;
-    padding: 10px 20px;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-    font-size: 0.9rem;
-    border-left: 4px solid var(--primary-green);
-}
-
-.toast-content i {
-    color: var(--primary-green);
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
 }

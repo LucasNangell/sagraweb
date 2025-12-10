@@ -414,7 +414,7 @@ function renderPreview(item) {
     const container = document.getElementById('preview-container');
     let htmlContent = item.html || '<p style="color:#999; font-style:italic;">(Sem conteúdo)</p>';
     container.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding-bottom:5px; margin-bottom:10px; color:#999; font-size:0.8rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding:5px 5px 0px 5px; margin-bottom:10px; color:#999; font-size:0.8rem;">
                 <span style="font-weight:bold;">SIMULAÇÃO (${item.componenteOrigem || 'Geral'})</span>
                 <button type="button" onclick="alert('DEBUG: Click detectado!'); window.startAnnotation('${item.uniqueId}', event)" class="btn-action" style="padding: 2px 8px; width: auto !important; font-size: 0.75rem; line-height: 1.2; height: auto; min-height: 24px; background-color: var(--primary-green); color: white; border-radius: 4px; border:none; cursor:pointer;">
                     <i class="fas fa-pen-to-square"></i> Indicar no Arquivo

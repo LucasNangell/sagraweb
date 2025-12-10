@@ -76,6 +76,7 @@ function startApp() {
     console.log('SAGRA Web UI Loaded for User:', currentUser);
     loadAuxData();
     setupEventListeners();
+    setupContextMenu(); // Inicializa o menu de contexto
 }
 
 function setupEventListeners() {
@@ -120,6 +121,47 @@ function setupEventListeners() {
     const btnNext = document.getElementById('btn-next');
     if (btnNext) btnNext.addEventListener('click', () => {
         currentPage++; fetchOrders();
+    });
+}
+
+// --- CONFIGURAÇÃO DO MENU DE CONTEXTO ---
+function setupContextMenu() {
+    const menu = document.getElementById('context-menu');
+
+    // Ocultar menu ao clicar em qualquer lugar
+    document.addEventListener('click', () => {
+        menu.style.display = 'none';
+    });
+
+    // Ações do Menu
+    document.getElementById('ctx-new-os').addEventListener('click', () => {
+        window.location.href = 'gerencia.html';
+    });
+
+    document.getElementById('ctx-duplicate-os').addEventListener('click', () => {
+        if (currentAno && currentId) {
+            alert(`Funcionalidade Duplicar OS (${currentId}/${currentAno}) em desenvolvimento.`);
+            // Exemplo de implementação futura:
+            // window.location.href = `gerencia.html?action=duplicate&ano=${currentAno}&id=${currentId}`;
+        } else {
+            alert('Selecione uma OS.');
+        }
+    });
+
+    document.getElementById('ctx-edit-os').addEventListener('click', () => {
+        if (currentAno && currentId) {
+            window.location.href = `gerencia.html?ano=${currentAno}&id=${currentId}`;
+        } else {
+            alert('Selecione uma OS.');
+        }
+    });
+
+    document.getElementById('ctx-link-os').addEventListener('click', () => {
+        if (currentAno && currentId) {
+            alert(`Funcionalidade Vincular OS (${currentId}/${currentAno}) em desenvolvimento.`);
+        } else {
+            alert('Selecione uma OS.');
+        }
     });
 }
 
@@ -512,12 +554,32 @@ function renderTable(data) {
             <td>${prioHtml}</td>
             <td>${formatDate(row.data_entrega)}</td>
         `;
+
+        // Evento de Clique Esquerdo (Original)
         tr.addEventListener('click', () => {
             document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('selected'));
             tr.classList.add('selected');
             loadDetails(row.ano, row.nr_os);
             loadHistory(row.ano, row.nr_os);
         });
+
+        // Evento de Clique Direito (Menu de Contexto)
+        tr.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+
+            // Seleciona a linha visualmente e carrega dados
+            document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('selected'));
+            tr.classList.add('selected');
+            loadDetails(row.ano, row.nr_os);
+            loadHistory(row.ano, row.nr_os);
+
+            // Posiciona e exibe o menu
+            const menu = document.getElementById('context-menu');
+            menu.style.display = 'block';
+            menu.style.left = `${e.pageX}px`;
+            menu.style.top = `${e.pageY}px`;
+        });
+
         tbody.appendChild(tr);
     });
 }
@@ -562,6 +624,67 @@ async function loadDetails(ano, id) {
     } catch (e) {
         console.error("Erro ao carregar detalhes:", e);
     }
+}
+
+// --- CONFIGURAÇÃO DO MENU DE CONTEXTO ---
+function setupContextMenu() {
+    const menu = document.getElementById('context-menu');
+
+    // Ocultar menu ao clicar em qualquer lugar
+    document.addEventListener('click', () => {
+        menu.style.display = 'none';
+    });
+
+    // 1. NOVA OS: Redireciona sem parâmetros (modo criação)
+    document.getElementById('ctx-new-os').addEventListener('click', () => {
+        window.location.href = 'gerencia.html';
+    });
+
+    // 2. DUPLICAR OS: Chama API e redireciona para a nova
+    document.getElementById('ctx-duplicate-os').addEventListener('click', async () => {
+        if (currentAno && currentId) {
+            const confirmDup = confirm(`Deseja duplicar a OS ${currentId}/${currentAno}?`);
+            if (!confirmDup) return;
+
+            try {
+                // Recupera o usuário logado para registrar no histórico
+                const usuarioLogado = localStorage.getItem('sagra_user_ponto') || 'Sistema';
+
+                const response = await fetchWithRetry(`${API_BASE_URL}/os/${currentAno}/${currentId}/duplicate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ usuario: usuarioLogado })
+                });
+
+                if (!response.ok) throw new Error('Erro ao duplicar OS');
+
+                const data = await response.json();
+                alert(`OS duplicada com sucesso! Nova OS: ${data.new_id}/${data.new_year}`);
+
+                // Redireciona para a tela de gerência da NOVA OS (já preenchida no banco)
+                window.location.href = `gerencia.html?ano=${data.new_year}&id=${data.new_id}`;
+
+            } catch (e) {
+                alert('Erro na duplicação: ' + e.message);
+                console.error(e);
+            }
+        } else {
+            alert('Selecione uma OS.');
+        }
+    });
+
+    // 3. EDITAR OS: Redireciona com parâmetros (modo edição)
+    document.getElementById('ctx-edit-os').addEventListener('click', () => {
+        if (currentAno && currentId) {
+            window.location.href = `gerencia.html?ano=${currentAno}&id=${currentId}`;
+        } else {
+            alert('Selecione uma OS.');
+        }
+    });
+
+    document.getElementById('ctx-link-os').addEventListener('click', () => {
+        alert(`Funcionalidade Vincular OS (${currentId}/${currentAno}) em desenvolvimento.`);
+    });
 }
 
 function setValue(id, val) {
@@ -639,3 +762,4 @@ async function fetchWithRetry(url, options = {}, retries = 3) {
         throw error;
     }
 }
+

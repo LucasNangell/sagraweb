@@ -1,4 +1,8 @@
-const API_BASE_URL = `http://${window.location.hostname}:8001/api`;
+// panel.js - Fix: Define hostname fallback para localhost
+
+const hostname = window.location.hostname || 'localhost';
+const API_BASE_URL = `http://${hostname}:8001/api`;
+
 let currentSector = localStorage.getItem('sagra_panel_sector');
 let refreshInterval = null;
 
@@ -7,9 +11,13 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initPanel() {
-    document.getElementById('btn-config').onclick = openConfigModal;
-    document.getElementById('btn-modal-save').onclick = saveConfig;
-    document.getElementById('btn-modal-close').onclick = closeConfigModal;
+    const btnConfig = document.getElementById('btn-config');
+    const btnSave = document.getElementById('btn-modal-save');
+    const btnClose = document.getElementById('btn-modal-close');
+
+    if (btnConfig) btnConfig.onclick = openConfigModal;
+    if (btnSave) btnSave.onclick = saveConfig;
+    if (btnClose) btnClose.onclick = closeConfigModal;
 
     if (currentSector) {
         updateTitle(currentSector);
@@ -26,35 +34,42 @@ function startAutoRefresh() {
 }
 
 function updateTitle(sector) {
-    document.getElementById('panel-title').textContent = `OSs na ${sector}`;
+    const titleEl = document.getElementById('panel-title');
+    if (titleEl) titleEl.textContent = `OSs na ${sector}`;
 }
 
 async function loadPanelData() {
     if (!currentSector) return;
 
     const container = document.getElementById('cards-container');
-    if (container.children.length === 0) {
-        document.getElementById('loading-state').style.display = 'block';
+    const loadingState = document.getElementById('loading-state');
+
+    // Mostra loading apenas se estiver vazio
+    if (container && container.children.length === 0 && loadingState) {
+        loadingState.style.display = 'block';
     }
 
     try {
         const url = `${API_BASE_URL}/os/panel?setor=${encodeURIComponent(currentSector)}`;
+        console.log("Fetching Panel:", url); // Debug
         const response = await fetch(url);
 
         if (!response.ok) throw new Error("Falha ao buscar dados");
 
         const data = await response.json();
 
-        document.getElementById('loading-state').style.display = 'none';
+        if (loadingState) loadingState.style.display = 'none';
         renderCards(data);
 
     } catch (e) {
-        console.error(e);
+        console.error("Erro no Painel:", e);
     }
 }
 
 function renderCards(data) {
     const container = document.getElementById('cards-container');
+    if (!container) return;
+
     container.innerHTML = '';
 
     if (data.length === 0) {
@@ -95,15 +110,14 @@ function createCard(os) {
     let prioIcon = '';
     if (os.prioridade) {
         if (os.prioridade.includes('Prometido')) {
-            priorityClass = 'card-prometido'; // Vermelho
+            priorityClass = 'card-prometido';
             prioIcon = '<i class="fas fa-exclamation-triangle prio-urgente" title="Prometido"></i> ';
         } else if (os.prioridade.includes('Solicitado')) {
-            priorityClass = 'card-solicitado'; // Amarelo
+            priorityClass = 'card-solicitado';
             prioIcon = '<i class="fas fa-exclamation-circle" style="color:#856404;" title="Solicitado"></i> ';
         }
     }
 
-    // Se tiver prioridade, usa a classe de prioridade, senão usa a de borda do status
     div.className = `os-card ${priorityClass || borderClass}`;
 
     div.onclick = () => {
@@ -136,9 +150,11 @@ function createCard(os) {
 
 async function openConfigModal() {
     const modal = document.getElementById('config-modal');
-    modal.style.display = 'flex';
+    if (modal) modal.style.display = 'flex';
 
     const select = document.getElementById('modal-setor-select');
+    if (!select) return;
+
     if (select.options.length <= 1) {
         try {
             const res = await fetch(`${API_BASE_URL}/aux/setores`);
@@ -164,12 +180,13 @@ async function openConfigModal() {
 }
 
 function closeConfigModal() {
-    document.getElementById('config-modal').style.display = 'none';
+    const modal = document.getElementById('config-modal');
+    if (modal) modal.style.display = 'none';
 }
 
 function saveConfig() {
     const select = document.getElementById('modal-setor-select');
-    const val = select.value;
+    const val = select ? select.value : null;
 
     if (val) {
         currentSector = val;

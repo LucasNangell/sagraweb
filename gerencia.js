@@ -33,21 +33,31 @@ async function initGerencia() {
     const ano = urlParams.get('ano');
     const id = urlParams.get('id');
 
-    if (!ano || !id) {
-        alert("Nenhuma OS selecionada. Redirecionando...");
-        window.location.href = 'index.html';
-        return;
-    }
-
-    document.getElementById('gerencia-title').textContent = `Gerência de OS ${id}/${ano}`;
-
     // Carregamento de todas as listas auxiliares
     await Promise.all([loadMaquinas(), loadProdutos(), loadPapeis(), loadCores(), loadCategorias()]);
 
-    // Carregamento dos dados da OS
-    await loadOSData(ano, id);
+    if (ano && id) {
+        // MODO EDIÇÃO (OU PÓS-DUPLICAÇÃO)
+        document.getElementById('gerencia-title').textContent = `Gerência de OS ${id}/${ano}`;
+        await loadOSData(ano, id);
+    } else {
+        // MODO NOVA OS (Campos em branco)
+        document.getElementById('gerencia-title').textContent = `Nova Ordem de Serviço`;
+        clearForm(); // Garante que campos estejam limpos
+
+        // Sugere o usuário atual como solicitante (opcional, melhora UX)
+        // setValue('req_codigo', currentUser); 
+    }
 
     setupButtons();
+}
+
+function clearForm() {
+    const inputs = document.querySelectorAll('input, select, textarea');
+    inputs.forEach(input => {
+        if (input.type === 'checkbox') input.checked = false;
+        else input.value = '';
+    });
 }
 
 async function loadMaquinas() {

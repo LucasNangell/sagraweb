@@ -35,6 +35,20 @@ def setup():
         FOREIGN KEY (ID_Analise) REFERENCES tabAnalises(ID) ON DELETE CASCADE
     );
     """
+
+    sql_tokens = """
+    CREATE TABLE IF NOT EXISTS tabClientTokens (
+        ID INT AUTO_INCREMENT PRIMARY KEY,
+        ID_Analise INT NOT NULL,
+        NroProtocolo INT NOT NULL,
+        AnoProtocolo INT NOT NULL,
+        Token VARCHAR(64) NOT NULL,
+        DataCriacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        DataExpiracao DATETIME NULL,
+        UNIQUE KEY unique_token (Token),
+        FOREIGN KEY (ID_Analise) REFERENCES tabAnalises(ID) ON DELETE CASCADE
+    );
+    """
     
     try:
         db.execute_query(sql_analises)
@@ -42,6 +56,43 @@ def setup():
         
         db.execute_query(sql_itens)
         logger.info("tabAnaliseItens checked/created.")
+
+        db.execute_query(sql_tokens)
+        logger.info("tabClientTokens checked/created.")
+
+        # --- MIGRATION FOR CLIENT PORTAL ---
+        try:
+            chk = db.execute_query("SHOW COLUMNS FROM tabAnaliseItens LIKE 'Desconsiderado'")
+            if not chk:
+                logger.info("Applying migration: Adding client columns to tabAnaliseItens...")
+                db.execute_query("""
+                    ALTER TABLE tabAnaliseItens 
+                    ADD COLUMN Desconsiderado TINYINT(1) DEFAULT 0,
+                    ADD COLUMN ClienteNome VARCHAR(150),
+                    ADD COLUMN ClientePonto VARCHAR(20),
+                    ADD COLUMN DataDesconsiderado DATETIME
+                """)
+                logger.info("Migration applied successfully.")
+            else:
+                logger.info("Migration already applied (Desconsiderado column exists).")
+        except Exception as e:
+             logger.error(f"Migration error: {e}")
+
+        # --- MIGRATION FOR RESOLVER STATUS ---
+        try:
+            chk_res = db.execute_query("SHOW COLUMNS FROM tabAnaliseItens LIKE 'Resolver'")
+            if not chk_res:
+                logger.info("Applying migration: Adding Resolver columns...")
+                db.execute_query("""
+                    ALTER TABLE tabAnaliseItens 
+                    ADD COLUMN Resolver TINYINT(1) DEFAULT 0,
+                    ADD COLUMN DataResolver DATETIME
+                """)
+                logger.info("Migration Resolver applied.")
+            else:
+                logger.info("Migration Resolver already applied.")
+        except Exception as e:
+            logger.error(f"Migration Resolver error: {e}")
         
     except Exception as e:
         logger.error(f"Error creating tables: {e}")

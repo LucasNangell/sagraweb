@@ -270,6 +270,38 @@ def add_os_history(ano: int, id: int, item: HistoryItem):
         logger.error(f"Transaction error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.delete("/os/{ano}/{id}/history/{cod_status}")
+def delete_os_history(ano: int, id: int, cod_status: str):
+    def transaction_logic(cursor):
+        # 1. Delete the specific item
+        cursor.execute("DELETE FROM tabAndamento WHERE CodStatus = %s AND NroProtocoloLink = %s AND AnoProtocoloLink = %s", (cod_status, id, ano))
+        
+        # 2. Fix UltimoStatus
+        # Reset all to 0
+        cursor.execute("UPDATE tabAndamento SET UltimoStatus = 0 WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s", (id, ano))
+        
+        # Set latest to 1
+        cursor.execute("""
+            UPDATE tabAndamento 
+            SET UltimoStatus = 1 
+            WHERE CodStatus = (
+                SELECT sub.CodStatus FROM (
+                    SELECT CodStatus FROM tabAndamento 
+                    WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s 
+                    ORDER BY Data DESC, CodStatus DESC LIMIT 1
+                ) as sub
+            )
+        """, (id, ano))
+        
+        return {"status": "deleted"}
+
+    try:
+        db.execute_transaction([transaction_logic])
+        return {"status": "success"}
+    except Exception as e:
+        logger.error(f"Delete history error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/os/{ano}/{id}/versions")
 def get_os_versions(ano: int, id: int):
     try:

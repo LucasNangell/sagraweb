@@ -10,7 +10,7 @@ let versionPaths = {};
 
 console.log("analise.js: Carregando script...");
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     checkLogin();
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -22,6 +22,18 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('anl-os-full').value = `${currentOs}/${currentAno}`;
         fetchOsTitle(currentAno, currentOs);
         fetchVersions(currentAno, currentOs);
+
+        try {
+            await checkAnalysisAccess(currentAno, currentOs);
+        } catch (e) {
+            if (e.message.includes("já está sendo realizada")) {
+                alert(e.message);
+                window.location.href = 'index.html';
+                return;
+            }
+            console.error(e);
+        }
+
         initAnalysis();
     } else {
         alert("Nenhuma OS identificada.");
@@ -30,14 +42,16 @@ document.addEventListener('DOMContentLoaded', () => {
     loadLibrary();
     document.getElementById('search-library').addEventListener('input', filterLibrary);
 
-    const btnSave = document.getElementById('btn-save-analise');
-    if (btnSave) {
-        btnSave.textContent = "Concluir";
-        btnSave.onclick = () => {
-            alert("Análise salva automaticamente.");
-            window.location.href = 'index.html';
-        };
-    }
+    // Event delegation robusto
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('#btn-save-analise');
+        if (btn) {
+            console.log("Clique capturado via delegação.");
+            e.preventDefault();
+            e.stopPropagation();
+            generateLinkAndFinish();
+        }
+    });
 
     document.getElementById('anl-versao').addEventListener('change', (e) => {
         if (e.target.value) updateAnalysisHeader();
@@ -686,3 +700,114 @@ window.openAnnotationEditor = async function (filePath, pageNum) {
         window.closeAnnotationModal();
     }
 };
+
+// --- LINK GENERATION & MODAL ---
+window.generateLinkAndFinish = async function () {
+    if (!currentAno || !currentOs) {
+        alert("Erro: OS/Ano não identificados.");
+        return;
+    }
+
+    const btn = document.getElementById('btn-save-analise');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerando Link...';
+    btn.disabled = true;
+
+    try {
+        const modal = document.getElementById('link-modal');
+        if (!modal) {
+            alert("Erro interno: Modal 'link-modal' não encontrado no HTML.");
+            // Fallback: mostrar prompt
+            const res = await fetch(`${API_BASE_URL}/analise/${currentAno}/${currentOs}/generate-link`, { method: 'POST' });
+            if (res.ok) {
+                const d = await res.json();
+                prompt("Link Gerado (Copie manualmente):", d.url);
+                window.location.href = 'index.html';
+            }
+            return;
+        }
+
+        const res = await fetch(`${API_BASE_URL}/analise/${currentAno}/${currentOs}/generate-link`, {
+            method: 'POST'
+        });
+
+        if (!res.ok) throw new Error("Erro ao gerar link.");
+
+        const data = await res.json();
+
+        // --- NOVO: Registrar Andamento ---
+        try {
+            const versionSelect = document.getElementById('anl-versao');
+            const versionLabel = versionSelect && versionSelect.options[versionSelect.selectedIndex] ? versionSelect.options[versionSelect.selectedIndex].text : "desconhecida";
+
+            await fetch(`${API_BASE_URL}/analise/client/register-link-movement`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    os_id: parseInt(currentOs),
+                    ano: parseInt(currentAno),
+                    usuario: currentUser,
+                    link: data.url,
+                    versao: versionLabel
+                })
+            });
+        } catch (errMove) {
+            console.error("Erro ao registrar andamento automático: ", errMove);
+        }
+        // ---------------------------------
+
+        // FALLBACK ROBUSTO: Prompt nativo do navegador (Solicitado pelo usuário)
+        // Garante que o usuário veja o link e consiga copiar sem falhas de CSS/DOM
+        prompt("Análise salva com sucesso! \n\nCopie o link seguro abaixo:", data.url);
+
+        // Redireciona para o início
+        window.location.href = 'index.html';
+
+    } catch (e) {
+        alert("Erro ao finalizar: " + e.message);
+        console.error(e);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+};
+
+window.copyLinkToClipboard = function () {
+    const copyText = document.getElementById("generated-link-input");
+    copyText.select();
+    copyText.setSelectionRange(0, 99999);
+    navigator.clipboard.writeText(copyText.value).then(() => {
+        alert("Link copiado!");
+    });
+};
+
+window.finishAndExit = function () {
+    window.location.href = 'index.html';
+};
+
+// --- ACCESS CONTROL ---
+async function checkAnalysisAccess(ano, os) {
+    const res = await fetch(`${API_BASE_URL}/os/${ano}/${os}/ultimo-andamento`);
+    if (!res.ok) throw new Error("Erro ao verificar andamento.");
+    const last = await res.json();
+
+    // Check if Recebido exists
+    if (last.situacao === 'Recebido') {
+        if (String(last.ponto) !== String(currentUser)) {
+            throw new Error(`A análise desta OS já está sendo realizada pelo usuário ponto ${last.ponto}.`);
+        }
+        // Case C: Same user. Continue.
+    } else {
+        // Case A: Register start.
+        await fetch(`${API_BASE_URL}/analise/start`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                os_id: parseInt(os),
+                ano: parseInt(ano),
+                ponto: currentUser,
+                usuario: currentUser
+            })
+        });
+    }
+}

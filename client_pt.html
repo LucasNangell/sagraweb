@@ -13,32 +13,29 @@
     <link rel="stylesheet" href="styles.css">
 
     <style>
-        /* Estilos específicos para o Portal do Cliente */
-
-        /* Controle de visibilidade das seções */
-        .view-section {
-            display: none;
-            height: 100%;
+        /* Reutiliza estilos de analise.html para consistência */
+        .client-container {
+            display: flex;
             flex-direction: column;
+            height: 100%;
             gap: 10px;
         }
 
-        .view-section.active {
-            display: flex;
-        }
-
-        /* Layout de Workspace (Cópia adaptada do analise.html) */
-        .client-workspace {
+        .analise-workspace {
             display: flex;
             gap: 10px;
             flex: 1;
             overflow: hidden;
-            height: 100%;
+            height: calc(100vh - 100px);
+            /* Ajuste para viewport */
         }
 
-        .col-left,
-        .col-center,
-        .col-right {
+        /* Coluna de Itens (Esquerda) */
+        .col-items {
+            flex: 1;
+            /* Equivalente a flex: 1.2 do analise.html mas aqui tem mais espaço */
+            min-width: 300px;
+            max-width: 400px;
             display: flex;
             flex-direction: column;
             background: white;
@@ -48,22 +45,17 @@
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
         }
 
-        .col-left {
-            flex: 1;
-            min-width: 250px;
-            max-width: 300px;
-        }
-
-        .col-center {
-            flex: 1.2;
-            min-width: 300px;
-        }
-
-        .col-right {
-            flex: 1.5;
+        /* Coluna de Preview (Direita) */
+        .col-preview {
+            flex: 2;
+            /* Equivalente a flex: 1.5 do analise.html */
             min-width: 400px;
             background-color: #f8f9fa;
-            position: relative;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
         }
 
         .pane-header {
@@ -84,104 +76,258 @@
             padding: 0;
         }
 
-        /* Itens de Lista Genéricos */
-        .list-item {
-            padding: 12px;
+        /* Estilos de Item */
+        .selected-item {
             border-bottom: 1px solid #eee;
+            background: #fff;
+            transition: all 0.2s;
             cursor: pointer;
-            transition: background 0.2s;
         }
 
-        .list-item:hover {
+        .selected-item:hover {
             background-color: #f9f9f9;
         }
 
-        .list-item.active {
+        .selected-item.active {
             background-color: #e3f2fd;
             border-left: 3px solid #2196F3;
         }
 
-        .list-title {
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 2px;
-        }
-
-        .list-subtitle {
-            font-size: 0.75rem;
-            color: #777;
-        }
-
-        /* Barra de Ferramentas de Edição (Aprovações) */
-        .annotation-toolbar {
-            background: #333;
-            color: white;
-            padding: 8px;
+        .item-header {
+            padding: 15px;
+            /* Mais padding para toque */
             display: flex;
-            justify-content: center;
-            gap: 15px;
+            justify-content: space-between;
+            align-items: center;
         }
 
-        .tool-btn {
-            background: none;
-            border: 1px solid transparent;
-            color: #ccc;
-            cursor: pointer;
-            border-radius: 4px;
-            padding: 4px 8px;
-            transition: all 0.2s;
+        .item-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: #333;
         }
 
-        .tool-btn:hover,
-        .tool-btn.active {
-            background: #555;
-            color: white;
-            border-color: #777;
+        .cat-header {
+            background: #eee;
+            padding: 8px 10px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #666;
+            text-transform: uppercase;
+            border-bottom: 1px solid #ddd;
         }
 
-        /* Área de Preview */
+        /* Preview Area */
         .preview-content {
-            padding: 20px;
+            padding: 30px;
             margin: 20px;
             background: white;
             border: 1px solid #ddd;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
             min-height: 400px;
             border-radius: 4px;
-            position: relative;
         }
 
-        /* Botão de Perigo */
-        .btn-danger-outline {
-            border: 1px solid #dc3545;
-            color: #dc3545;
-            background: white;
+        /* Box de readonly html snapshot */
+        .snapshot-box {
+            border: 1px dashed #ccc;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: #fff;
+        }
+
+        .snapshot-box img {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .obs-read-only {
+            background: #fff3cd;
+            padding: 15px;
+            border-left: 4px solid #ffc107;
+            color: #856404;
+            margin-top: 15px;
+            border-radius: 4px;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #aaa;
+            text-align: center;
+            padding: 20px;
+        }
+
+        /* Modal de Erro */
+        .error-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #f8d7da;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            z-index: 9999;
+        }
+
+        /* Novos estilos Portal Cliente */
+        .btn-success-full {
+            width: 100%;
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .btn-success-full:hover {
+            background-color: #1e874b;
+        }
+
+        .btn-danger-action {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
             padding: 8px 15px;
             border-radius: 4px;
-            font-weight: 600;
+            font-size: 0.9rem;
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 8px;
-            margin: 10px;
-            align-self: flex-end;
-            transition: all 0.2s;
+            gap: 5px;
         }
 
-        .btn-danger-outline:hover {
-            background: #dc3545;
-            color: white;
+        .btn-danger-action:hover {
+            background-color: #c0392b;
         }
 
-        /* Modal Customizado */
-        .modal-warning {
-            border-top: 5px solid #dc3545 !important;
+        .item-disregarded .item-title {
+            text-decoration: line-through;
+            color: #999;
         }
 
-        .modal-warning i {
-            color: #dc3545;
-            font-size: 40px;
+        .item-disregarded-label {
+            color: #c0392b;
+            font-size: 0.75rem;
+            margin-top: 2px;
+            display: block;
+        }
+
+        .disregard-banner {
+            background-color: #fee;
+            border: 1px solid #fcc;
+            color: #c0392b;
+            padding: 10px;
+            border-radius: 4px;
             margin-bottom: 15px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        /* Modal Styles */
+        .modal-client {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content-client {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-title-client {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+            color: #333;
+        }
+
+        .form-group-client {
+            margin-bottom: 15px;
+        }
+
+        .form-label-client {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .form-input-client {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .modal-actions-client {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        /* Resolver Styles */
+        .btn-success-action {
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .btn-success-action:hover {
+            background-color: #219150;
+        }
+
+        .item-resolving-label {
+            color: #27ae60;
+            font-size: 0.75rem;
+            margin-top: 2px;
+            display: block;
+        }
+
+        .resolving-banner {
+            background-color: #e8f8f5;
+            border: 1px solid #d4efdf;
+            color: #27ae60;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            text-align: center;
+            font-weight: bold;
         }
     </style>
 </head>
@@ -193,141 +339,465 @@
             <div class="app-title">SAGRA - Portal do Cliente</div>
         </div>
         <div class="header-right">
-
+            <div class="user-info" style="color:white; font-size: 0.9rem;">
+                <span id="header-os-info">Carregando...</span>
+            </div>
         </div>
     </header>
 
     <div class="app-body">
+        <!-- Sidebar Simplificada (Apenas título ou vazia se não necessária, mas mantendo layout base) -->
+        <!-- O prompt diz para padronizar lista lateral. Analise tem Sidebar Nav. Client_pt.html tinha. 
+             Vou manter a sidebar visualmente mas com item único ou sem links de navegação interna complexa. -->
         <aside class="sidebar">
             <nav class="sidebar-nav">
-                <a href="#" class="nav-item active" onclick="switchView('problemas', this)">
-                    <i class="fas fa-exclamation-triangle"></i> Problemas Técnicos
+                <a href="#" class="nav-item active">
+                    <i class="fas fa-exclamation-triangle"></i> Relatório Técnico
                 </a>
             </nav>
         </aside>
 
         <main style="background-color: #f4f6f8; padding: 15px;">
+            <div class="client-container">
 
-            <div id="view-problemas" class="view-section active">
-                <div class="client-workspace">
+                <div class="analise-workspace">
 
-                    <div class="col-left">
+                    <!-- Coluna Esquerda: Lista de Itens (Read Only) -->
+                    <div class="col-items">
                         <div class="pane-header">
-                            <i class="fas fa-exclamation-circle"></i> OSs com Pendências
+                            <span><i class="fas fa-list-ul"></i> Itens Apontados</span>
+                            <span class="badge-yellow" id="count-items" style="font-size: 0.7rem;">0 itens</span>
                         </div>
-                        <div class="pane-body">
-                            <div class="list-item active">
-                                <div class="list-title">OS 0980/2025</div>
-                                <div class="list-subtitle">3 Problemas encontrados</div>
-                                <span class="badge-yellow"
-                                    style="font-size:10px; background:#f8d7da; color:#721c24;">Ação Necessária</span>
+                        <div class="pane-body custom-scroll" id="selected-list">
+                            <div class="empty-state">
+                                <i class="fas fa-spinner fa-spin"></i> Validando acesso...
                             </div>
+                        </div>
+                        <div class="pane-footer" style="padding:10px; border-top:1px solid #e0e0e0; background:#fff;">
+                            <button class="btn-success-full" onclick="openUploadModal()">
+                                <i class="fas fa-upload"></i> Enviar novo arquivo
+                            </button>
                         </div>
                     </div>
 
-                    <div class="col-center">
+                    <!-- Coluna Direita: Preview (Read Only) -->
+                    <div class="col-preview">
                         <div class="pane-header">
-                            <i class="fas fa-list"></i> Relatório Técnico
+                            <i class="fas fa-eye"></i> Detalhes do Problema
                         </div>
-                        <div class="pane-body">
-                            <div
-                                style="padding:12px; border-bottom:1px solid #eee; background:#fff3cd; border-left:3px solid #ffc107; cursor:pointer;">
-                                <div style="font-weight:bold; color:#856404; margin-bottom:4px;">Nível de Preto (Black
-                                    Levels)</div>
-                                <div style="font-size:11px; color:#555;">Categoria: Vídeo</div>
-                            </div>
-                            <div style="padding:12px; border-bottom:1px solid #eee; cursor:pointer;">
-                                <div style="font-weight:bold; color:#333; margin-bottom:4px;">Erro de Grafia (GC)</div>
-                                <div style="font-size:11px; color:#555;">Categoria: Texto</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-right">
-                        <div class="pane-header">
-                            <i class="fas fa-eye"></i> Detalhe do Problema
-                        </div>
-
-                        <div class="pane-body" style="padding:20px; background:white;">
-                            <h3 style="color:#d32f2f; margin-top:0;">Erro de Vídeo</h3>
-                            <p style="color:#333;">Níveis de preto acima de 0mV detectados. A imagem apresenta aspecto
-                                lavado nas cenas escuras.</p>
-
-                            <div style="margin-top:20px; background:#f9f9f9; padding:10px; border:1px dashed #ccc;">
-                                <strong style="font-size:11px; color:#666;">Evidência Técnica:</strong>
-                                <div
-                                    style="height:150px; background:#eee; margin-top:5px; display:flex; align-items:center; justify-content:center; color:#999;">
-                                    [Imagem/Gráfico do Problema]
+                        <div class="pane-body custom-scroll" style="background: #e9ecef; padding: 20px;">
+                            <div id="preview-container">
+                                <div class="empty-state">
+                                    <i class="fas fa-arrow-left"
+                                        style="font-size: 24px; margin-bottom: 10px; color:#ccc;"></i>
+                                    <p>Selecione um item na lista para ver os detalhes.</p>
                                 </div>
                             </div>
                         </div>
-
-                        <button id="btn-ignore-issue" class="btn-danger-outline">
-                            <i class="fas fa-times-circle"></i> Desconsiderar Problema Técnico
-                        </button>
                     </div>
+
                 </div>
             </div>
-
         </main>
     </div>
 
-    <div id="modal-confirm-ignore" class="login-overlay"
-        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 9999; align-items: center; justify-content: center;">
-        <div class="login-box modal-warning" style="width: 450px; text-align: center; padding: 30px;">
-            <i class="fas fa-exclamation-triangle"></i>
-            <h3 style="color: #dc3545; margin-bottom: 15px;">Termo de Responsabilidade</h3>
-            <p style="font-size: 13px; line-height: 1.6; color: #555; margin-bottom: 25px; text-align: justify;">
-                Ao desconsiderar o problema indicado, você assume <strong>total responsabilidade</strong> sobre
-                possíveis problemas na impressão ou reprodução do arquivo final.
-                <br><br>
-                Tem certeza que deseja desconsiderar este item?
-            </p>
-            <div style="display: flex; gap: 10px; justify-content: center;">
-                <button id="btn-cancel-modal" class="btn-sm"
-                    style="background:#ccc; color:#333; padding:10px 20px; border:none; border-radius:4px; cursor:pointer;">Cancelar</button>
-                <button id="btn-confirm-modal" class="btn-sm"
-                    style="background:#dc3545; color:white; padding:10px 20px; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">Sim,
-                    Desconsiderar</button>
+    <!-- MODAL UPLOAD -->
+    <div id="modal-upload" class="modal-client">
+        <div class="modal-content-client">
+            <div class="modal-title-client">Enviar novo arquivo</div>
+            <div id="upload-fields-container" style="max-height: 300px; overflow-y: auto;">
+                <!-- Fields generated dynamically -->
+            </div>
+            <div class="modal-actions-client">
+                <button class="btn-action" style="background:#ccc; color:#333;"
+                    onclick="closeModal('modal-upload')">Cancelar</button>
+                <button class="btn-action" style="background:#2196F3; color:white;"
+                    onclick="processUploadFirstStep()">Enviar Arquivos</button>
             </div>
         </div>
     </div>
 
+    <!-- MODAL PONTO CONFIRM (UPLOAD) -->
+    <div id="modal-ponto" class="modal-client">
+        <div class="modal-content-client">
+            <div class="modal-title-client">Confirmar Envio</div>
+            <p style="margin-bottom:10px;">Informe o número do ponto para registrar o andamento:</p>
+            <input type="text" id="ponto-upload" class="form-input-client" placeholder="Ex: 12345">
+            <div class="modal-actions-client">
+                <button class="btn-action" style="background:#ccc; color:#333;"
+                    onclick="closeModal('modal-ponto')">Cancelar</button>
+                <button class="btn-action" style="background:#27ae60; color:white;"
+                    onclick="finalizeUpload()">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL WARNING DESCONSIDERAR -->
+    <div id="modal-warning-disregard" class="modal-client">
+        <div class="modal-content-client">
+            <div class="modal-title-client" style="color: #c0392b;"><i class="fas fa-exclamation-triangle"></i> Atenção
+            </div>
+            <p style="font-size: 1rem; color: #555; margin-bottom:20px;">Ao desconsiderar este problema técnico, o
+                cliente assume total responsabilidade por qualquer defeito decorrente do item desconsiderado.</p>
+            <div class="modal-actions-client">
+                <button class="btn-action" style="background:#ccc; color:#333;"
+                    onclick="closeModal('modal-warning-disregard')">Cancelar</button>
+                <button class="btn-action" style="background:#c0392b; color:white;"
+                    onclick="proceedToDisregardInput()">Aceitar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL INPUT DESCONSIDERAR -->
+    <div id="modal-input-disregard" class="modal-client">
+        <div class="modal-content-client">
+            <div class="modal-title-client">Confirmar Responsabilidade</div>
+            <div class="form-group-client">
+                <label class="form-label-client">Informe seu nome:</label>
+                <input type="text" id="disregard-name" class="form-input-client">
+            </div>
+            <div class="form-group-client">
+                <label class="form-label-client">Informe o número do ponto:</label>
+                <input type="text" id="disregard-ponto" class="form-input-client">
+            </div>
+            <div class="modal-actions-client">
+                <button class="btn-action" style="background:#ccc; color:#333;"
+                    onclick="closeModal('modal-input-disregard')">Cancelar</button>
+                <button class="btn-action" style="background:#c0392b; color:white;"
+                    onclick="finalizeDisregard()">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tela de Bloqueio/Erro -->
+    <div id="access-denied" class="error-overlay" style="display: none;">
+        <i class="fas fa-lock" style="font-size: 64px; color: #721c24; margin-bottom: 20px;"></i>
+        <h2 style="color: #721c24;">Acesso Negado</h2>
+        <p style="color: #721c24; max-width: 500px; text-align: center;" id="error-msg">Link inválido ou expirado.</p>
+    </div>
+
     <script>
-        // Lógica de Abas
-        function switchView(viewName, element) {
-            // Esconde todas as views
-            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
-            // Remove active dos links
-            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+        const API_BASE_URL = `http://${window.location.hostname}:8001/api`;
+        let clientData = null;
+        let selectedUploadFiles = {};
+        let currentDisregardItem = null;
 
-            // Ativa a view selecionada
-            document.getElementById(`view-${viewName}`).classList.add('active');
-            // Ativa o link clicado
-            element.classList.add('active');
+        document.addEventListener('DOMContentLoaded', async () => {
+            const params = new URLSearchParams(window.location.search);
+            const os = params.get('os');
+            const ano = params.get('ano');
+            const token = params.get('token');
+
+            if (!os || !ano || !token) { showError("Link incompleto."); return; }
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/analise/client/${ano}/${os}?token=${encodeURIComponent(token)}`);
+                if (res.status === 403 || res.status === 404) {
+                    const err = await res.json();
+                    showError(err.detail || "Acesso negado.");
+                    return;
+                }
+                if (!res.ok) throw new Error("Erro de conexão.");
+
+                clientData = await res.json();
+                clientData.os = os;
+                clientData.ano = ano;
+                initClientView(clientData);
+            } catch (e) {
+                console.error(e);
+                showError("Erro ao carregar dados. Tente novamente.");
+            }
+        });
+
+        function showError(msg) {
+            document.getElementById('access-denied').style.display = 'flex';
+            document.getElementById('error-msg').innerText = msg;
+            document.querySelector('.app-body').style.display = 'none';
         }
 
-        // Lógica do Modal
-        const btnIgnore = document.getElementById('btn-ignore-issue');
-        const modal = document.getElementById('modal-confirm-ignore');
-        const btnCancel = document.getElementById('btn-cancel-modal');
-        const btnConfirm = document.getElementById('btn-confirm-modal');
-
-        if (btnIgnore) {
-            btnIgnore.onclick = () => modal.style.display = 'flex';
+        function initClientView(data) {
+            document.getElementById('header-os-info').textContent = `${data.titulo} | Componente: ${data.componente || 'Geral'}`;
+            // Se tiver estilos globais de desconsiderado, aplicar se necessário
+            renderItems(data.items);
         }
 
-        if (btnCancel) {
-            btnCancel.onclick = () => modal.style.display = 'none';
+        function renderItems(items) {
+            const container = document.getElementById('selected-list');
+            const countEl = document.getElementById('count-items');
+
+            if (!items || items.length === 0) {
+                container.innerHTML = '<div class="empty-state">Nenhum problema técnico apontado.</div>';
+                countEl.textContent = "0 itens";
+                return;
+            }
+
+            countEl.textContent = `${items.length} itens`;
+            container.innerHTML = '';
+
+            const groups = {};
+            items.forEach(item => {
+                const groupName = item.componenteOrigem || 'Outros';
+                if (!groups[groupName]) groups[groupName] = [];
+                groups[groupName].push(item);
+            });
+
+            Object.keys(groups).forEach(groupName => {
+                const header = document.createElement('div');
+                header.className = 'cat-header';
+                header.textContent = groupName.toUpperCase();
+                container.appendChild(header);
+
+                groups[groupName].forEach(item => {
+                    const el = document.createElement('div');
+                    el.className = 'selected-item';
+                    if (item.desconsiderado) el.classList.add('item-disregarded');
+
+                    el.dataset.id = item.uniqueId;
+                    el.onclick = () => selectItem(item);
+
+                    let extraLabel = '';
+                    if (item.desconsiderado) {
+                        extraLabel = `<span class="item-disregarded-label">Desconsiderado</span>`;
+                    } else if (item.resolver) {
+                        extraLabel = `<span class="item-resolving-label">Item será resolvido no novo arquivo</span>`;
+                    }
+
+                    el.innerHTML = `
+                        <div class="item-header">
+                            <div>
+                                <div class="item-title">${item.titulo || 'Sem Título'}</div>
+                                ${extraLabel}
+                            </div>
+                            <i class="fas fa-chevron-right" style="color:#ccc; font-size: 0.8rem;"></i>
+                        </div>
+                    `;
+                    container.appendChild(el);
+                });
+            });
+
+            if (items.length > 0) selectItem(items[0]);
         }
 
-        if (btnConfirm) {
-            btnConfirm.onclick = () => {
-                alert("Item desconsiderado. A responsabilidade foi registrada.");
-                modal.style.display = 'none';
-                // Aqui entraria a lógica de backend para salvar o termo
-            };
+        function selectItem(item) {
+            document.querySelectorAll('.selected-item').forEach(el => el.classList.remove('active'));
+            const activeEl = document.querySelector(`.selected-item[data-id="${item.uniqueId}"]`);
+            if (activeEl) activeEl.classList.add('active');
+            renderPreview(item);
         }
+
+        function renderPreview(item) {
+            const container = document.getElementById('preview-container');
+            const htmlContent = item.html || '<p style="color:#999;font-style:italic;">(Sem evidência visual)</p>';
+            const obsContent = item.obs || '(Sem observações)';
+
+            let headerAction = '';
+            let banner = '';
+
+            if (item.desconsiderado) {
+                banner = `
+                    <div class="disregard-banner">
+                        Este item foi desconsiderado pelo cliente
+                    </div>
+                `;
+            } else if (item.resolver) {
+                banner = `<div class="resolving-banner"><i class="fas fa-check-circle"></i> Item será resolvido no novo arquivo</div>`;
+            }
+
+            // Botões alternados
+            if (!item.resolver) {
+                headerAction += `
+                    <button class="btn-success-action" onclick="handleResolve(${item.uniqueId})" style="margin-right:10px;">
+                        <i class="fas fa-check-circle"></i> Resolver
+                    </button>
+                 `;
+            }
+
+            if (!item.desconsiderado) {
+                headerAction += `
+                    <button class="btn-danger-action" onclick="handleDisregard(${item.uniqueId})">
+                        <i class="fas fa-ban"></i> Desconsiderar
+                    </button>
+                `;
+            }
+
+            container.innerHTML = `
+                <div style="background:#fff; padding:20px; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+                    ${banner}
+
+                    <div style="display:flex; justify-content:space-between; align-items:start; border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:20px;">
+                         <h3 style="margin:0; color:#333;">
+                            ${item.titulo} 
+                            <div style="font-size:0.8rem; font-weight:normal; color:#777; margin-top:5px;">Ref: ${item.componenteOrigem || 'Geral'}</div>
+                         </h3>
+                         <div style="display:flex;">${headerAction}</div>
+                    </div>
+                    
+                    <label style="font-weight:bold; font-size:0.85rem; color:#555; display:block; margin-bottom:5px;">EVIDÊNCIA TÉCNICA:</label>
+                    <div class="snapshot-box">${htmlContent}</div>
+
+                    <label style="font-weight:bold; font-size:0.85rem; color:#555; display:block; margin-bottom:5px;">OBSERVAÇÃO TÉCNICA:</label>
+                    <div class="obs-read-only">${obsContent}</div>
+                </div>
+            `;
+        }
+
+        // --- LOGICA DE UPLOAD ---
+
+        function openUploadModal() {
+            const container = document.getElementById('upload-fields-container');
+            container.innerHTML = '';
+            selectedUploadFiles = {};
+
+            // Identificar componentes únicos dos itens
+            const components = [...new Set(clientData.items.map(i => i.componenteOrigem || 'Geral'))];
+            if (components.length === 0) components.push('Geral');
+
+            components.forEach(comp => {
+                const div = document.createElement('div');
+                div.className = 'form-group-client';
+                div.innerHTML = `
+                    <label class="form-label-client">${comp}</label>
+                    <input type="file" class="form-input-client" accept=".pdf,.jpg,.png" onchange="handleFileSelect(this, '${comp}')">
+                `;
+                container.appendChild(div);
+            });
+
+            document.getElementById('modal-upload').style.display = 'flex';
+        }
+
+        function handleFileSelect(input, component) {
+            if (input.files && input.files[0]) {
+                selectedUploadFiles[component] = input.files[0];
+            } else {
+                delete selectedUploadFiles[component];
+            }
+        }
+
+        function processUploadFirstStep() {
+            if (Object.keys(selectedUploadFiles).length === 0) {
+                alert("Selecione pelo menos um arquivo.");
+                return;
+            }
+            document.getElementById('modal-upload').style.display = 'none';
+            document.getElementById('modal-ponto').style.display = 'flex';
+        }
+
+        async function finalizeUpload() {
+            const ponto = document.getElementById('ponto-upload').value;
+            if (!ponto) { alert("Informe o ponto."); return; }
+
+            const btn = document.querySelector('#modal-ponto button:last-child');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+            btn.disabled = true;
+
+            const formData = new FormData();
+            const params = new URLSearchParams(window.location.search);
+            formData.append('token', params.get('token'));
+            formData.append('os_id', clientData.os);
+            formData.append('ano', clientData.ano);
+            formData.append('ponto', ponto);
+
+            const compMap = {};
+            Object.keys(selectedUploadFiles).forEach(comp => {
+                const file = selectedUploadFiles[comp];
+                formData.append('files', file);
+                compMap[file.name] = comp;
+            });
+            formData.append('componentes', JSON.stringify(compMap));
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/client/upload-files`, { method: 'POST', body: formData });
+                if (!res.ok) throw new Error("Erro ao enviar arquivos.");
+
+                alert("Arquivos enviados com sucesso! A OS foi encaminhada para análise.");
+                location.reload();
+            } catch (e) {
+                alert("Erro: " + e.message);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        // --- LOGICA DE DESCONSIDERAR ---
+
+        function handleDisregard(uniqueId) {
+            currentDisregardItem = uniqueId;
+            document.getElementById('modal-warning-disregard').style.display = 'flex';
+        }
+
+        function proceedToDisregardInput() {
+            document.getElementById('modal-warning-disregard').style.display = 'none';
+            document.getElementById('modal-input-disregard').style.display = 'flex';
+        }
+
+        async function finalizeDisregard() {
+            const nome = document.getElementById('disregard-name').value;
+            const ponto = document.getElementById('disregard-ponto').value;
+
+            if (!nome || !ponto) { alert("Preencha todos os campos."); return; }
+
+            const btn = document.querySelector('#modal-input-disregard button:last-child');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = 'Processando...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/client/desconsiderar-item`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id_item: currentDisregardItem,
+                        nome_cliente: nome,
+                        ponto: ponto,
+                        os_id: parseInt(clientData.os),
+                        ano: parseInt(clientData.ano)
+                    })
+                });
+
+                if (!res.ok) throw new Error("Erro ao processar.");
+
+                const result = await res.json();
+
+                alert("Item desconsiderado com sucesso!");
+                if (result.moved) {
+                    alert("Como todos os itens foram desconsiderados, a OS foi movida para 'Em Execução'!");
+                }
+                location.reload();
+
+            } catch (e) {
+                alert("Erro: " + e.message);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+
+        async function handleResolve(uniqueId) {
+            const btn = event.currentTarget;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/client/resolver-item`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id_item: uniqueId })
+                });
+
+                if (!res.ok) throw new Error("Erro ao processar.");
+                location.reload();
+            } catch (e) {
+                alert("Erro: " + e.message);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
     </script>
 </body>
 

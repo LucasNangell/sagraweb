@@ -1,12 +1,18 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from database import db
-from report_service import report_service # Assumindo que você tem esse arquivo
+from report_service import report_service 
 import logging
 import os
 import datetime
+import secrets
+import string
+from fastapi import UploadFile, File, Form
+import shutil
+import json
+import glob
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -121,3 +127,272 @@ def log_debug(item: dict):
     with open("server_debug.log", "a", encoding="utf-8") as f:
         f.write(f"[{datetime.datetime.now()}] {item.get('message')}\n")
     return {"status": "ok"}
+
+@router.post("/analise/{ano}/{os_id}/generate-link")
+def generate_client_link(ano: int, os_id: int, request: Request):
+    # 1. Obter ID da Análise
+    analise = db.execute_query("SELECT ID, Versao, Componente FROM tabAnalises WHERE NroProtocolo=%s AND AnoProtocolo=%s", (os_id, ano))
+    if not analise:
+        raise HTTPException(status_code=404, detail="Análise não encontrada. Salve-a antes de gerar o link.")
+    
+    id_analise = analise[0]['ID']
+
+    # 2. Verificar se já existe token
+    existing = db.execute_query("SELECT Token FROM tabClientTokens WHERE ID_Analise=%s AND NroProtocolo=%s AND AnoProtocolo=%s", (id_analise, os_id, ano))
+    
+    if existing:
+        token = existing[0]['Token']
+    else:
+        # 3. Gerar novo token seguro
+        token = secrets.token_urlsafe(48) # Gera aprox 64 caracteres
+        db.execute_query("INSERT INTO tabClientTokens (ID_Analise, NroProtocolo, AnoProtocolo, Token) VALUES (%s, %s, %s, %s)",
+                         (id_analise, os_id, ano, token))
+
+    # 4. Construir URL baseada no referer (onde o usuário está)
+    host_url = "http://localhost:8000" # Fallback padrão
+    if request.headers.get("referer"):
+        from urllib.parse import urlparse
+        parsed = urlparse(request.headers.get("referer"))
+        host_url = f"{parsed.scheme}://{parsed.netloc}"
+        
+    final_url = f"{host_url}/client_pt.html?os={os_id}&ano={ano}&token={token}"
+    
+    return {"url": final_url}
+
+@router.get("/analise/client/{ano}/{os_id}")
+def validate_client_token(ano: int, os_id: int, token: str = Query(...)):
+    # 1. Validar Token
+    token_rec = db.execute_query("SELECT ID_Analise, DataExpiracao FROM tabClientTokens WHERE NroProtocolo=%s AND AnoProtocolo=%s AND Token=%s", (os_id, ano, token))
+    
+    if not token_rec:
+         raise HTTPException(status_code=403, detail="Acesso negado. Token inválido ou expirado.")
+
+    if token_rec[0]['DataExpiracao']:
+         raise HTTPException(status_code=403, detail="Acesso negado. Link expirado (arquivos já enviados).")
+
+    id_analise = token_rec[0]['ID_Analise']
+
+    # 2. Buscar Dados da Análise
+    header = db.execute_query("SELECT ID, Versao, Componente FROM tabAnalises WHERE ID=%s", (id_analise,))
+    if not header:
+        raise HTTPException(status_code=404, detail="Análise não encontrada.")
+
+    # 3. Buscar Itens
+    items = db.execute_query("""
+        SELECT i.ID as uniqueId, i.ID_ProblemaPadrao as originalId, i.Obs as obs, i.HTML_Snapshot as html, 
+               i.Componente as componenteOrigem, p.TituloPT as titulo, i.Desconsiderado as desconsiderado,
+               i.Resolver as resolver
+        FROM tabAnaliseItens i LEFT JOIN tabProblemasPadrao p ON i.ID_ProblemaPadrao = p.ID WHERE i.ID_Analise = %s
+    """, (id_analise,))
+    
+    return {
+        "exists": True,
+        "items": items,
+        "componente": header[0]['Componente'],
+        "titulo": f"OS {os_id}/{ano}"
+    }
+
+# --- HELPER DE ANDAMENTO ---
+def add_movement_internal(cursor, os_id, ano, situacao, setor, ponto, obs):
+    cursor.execute("UPDATE tabAndamento SET UltimoStatus = 0 WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s", (os_id, ano))
+    cursor.execute("SELECT COUNT(*) as count FROM tabAndamento WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s", (os_id, ano))
+    res = cursor.fetchone()
+    count = res['count'] if res else 0
+    new_cod = f"{os_id:05d}{ano}-{count + 1:02d}"
+    
+    cursor.execute("""
+        INSERT INTO tabAndamento (CodStatus, NroProtocoloLink, AnoProtocoloLink, SituacaoLink, SetorLink, Data, UltimoStatus, Observaçao, Ponto) 
+        VALUES (%s, %s, %s, %s, %s, NOW(), 1, %s, %s)
+    """, (new_cod, os_id, ano, situacao, setor, obs, ponto))
+
+# --- CLIENT PORTAL ENDPOINTS ---
+
+@router.post("/client/upload-files")
+def client_upload_files(
+    os_id: int = Form(...), 
+    ano: int = Form(...), 
+    ponto: str = Form(...),
+    files: List[UploadFile] = File(...),
+    componentes: str = Form(...),
+    token: str = Form(...)
+):
+    try:
+        comp_map = json.loads(componentes) 
+        
+        # 1. Determinar Caminho da OS (Rede ou Local)
+        base_path_network = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_{ano}"
+        os_pattern = os.path.join(base_path_network, f"{os_id:05d}*")
+        found_folders = glob.glob(os_pattern)
+        
+        target_os_dir = None
+        if found_folders and os.path.isdir(found_folders[0]):
+            target_os_dir = found_folders[0]
+        else:
+            # Fallback local
+            target_os_dir = f"storage_client_uploads/{ano}/{os_id}"
+            os.makedirs(target_os_dir, exist_ok=True)
+            
+        # 2. Determinar Próxima Versão "Original vX"
+        next_ver = 1
+        if os.path.exists(target_os_dir):
+            subitems = os.listdir(target_os_dir)
+            versions = []
+            for item in subitems:
+                if os.path.isdir(os.path.join(target_os_dir, item)) and "original" in item.lower():
+                    # Tentar extrair numero: "Original v3..." -> 3
+                    try:
+                        # Extrai parte apos 'v'
+                        parts = item.lower().split('v') 
+                        if len(parts) > 1:
+                            # Pega caracteres numericos iniciais da segunda parte
+                            ver_str = ""
+                            for char in parts[-1]:
+                                if char.isdigit(): ver_str += char
+                                else: break
+                            if ver_str: versions.append(int(ver_str))
+                    except: pass
+            
+            if versions:
+                next_ver = max(versions) + 1
+        
+        new_folder_name = f"Original v{next_ver} (Portal)"
+        final_dir = os.path.join(target_os_dir, new_folder_name)
+        os.makedirs(final_dir, exist_ok=True)
+        
+        saved_files = []
+        
+        for file in files:
+            file_path = os.path.join(final_dir, file.filename)
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            saved_files.append(file.filename)
+            
+        def transaction(cursor):
+            obs = f"Arquivos enviados pelo cliente via Portal (Salvos em {new_folder_name}): {', '.join(saved_files)}"
+            add_movement_internal(cursor, os_id, ano, "Aguard. Análise", "SEFOC", ponto, obs)
+            
+            # Invalidar Token
+            cursor.execute("UPDATE tabClientTokens SET DataExpiracao = NOW() WHERE Token = %s", (token,))
+            
+        db.execute_transaction([transaction])
+        
+        return {"status": "success", "files": saved_files, "folder": new_folder_name}
+    except Exception as e:
+        logger.error(f"Upload error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class DisregardRequest(BaseModel):
+    id_item: int
+    nome_cliente: str
+    ponto: str
+    os_id: int
+    ano: int
+
+@router.post("/client/desconsiderar-item")
+def client_disregard_item(req: DisregardRequest):
+    def transaction(cursor):
+        cursor.execute("""
+            UPDATE tabAnaliseItens 
+            SET Desconsiderado = 1, ClienteNome = %s, ClientePonto = %s, DataDesconsiderado = NOW()
+            WHERE ID = %s
+        """, (req.nome_cliente, req.ponto, req.id_item))
+        
+        cursor.execute("SELECT ID_Analise FROM tabAnaliseItens WHERE ID = %s", (req.id_item,))
+        anl = cursor.fetchone()
+        if not anl: return {"moved": False}
+        
+        id_analise = anl['ID_Analise']
+        
+        cursor.execute("SELECT COUNT(*) as ativos FROM tabAnaliseItens WHERE ID_Analise = %s AND Desconsiderado = 0", (id_analise,))
+        res = cursor.fetchone()
+        
+        if res['ativos'] == 0:
+            add_movement_internal(cursor, req.os_id, req.ano, "Em Execução", "SEFOC", req.ponto, "Todos os itens técnicos foram desconsiderados pelo cliente.")
+            return {"moved": True}
+        
+        return {"moved": False}
+
+    try:
+        res = db.execute_transaction([transaction])
+        return res[0]
+    except Exception as e:
+        logger.error(f"Disregard error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ResolverRequest(BaseModel):
+    id_item: int
+
+@router.post("/client/resolver-item")
+def client_resolve_item(req: ResolverRequest):
+    def transaction(cursor):
+        cursor.execute("""
+            UPDATE tabAnaliseItens 
+            SET Resolver = 1, Desconsiderado = 0, DataResolver = NOW()
+            WHERE ID = %s
+        """, (req.id_item,))
+        return {"status": "success"}
+
+    try:
+        return db.execute_transaction([transaction])[0]
+    except Exception as e:
+        logger.error(f"Resolve error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class LinkMovementRequest(BaseModel):
+
+    os_id: int
+    ano: int
+    usuario: str
+    link: str
+    versao: str
+
+@router.post("/analise/client/register-link-movement")
+def register_link_movement(req: LinkMovementRequest):
+    def transaction(cursor):
+        # Limpeza da string de versão para formatar como PTVx
+        ver_clean = req.versao.lower().replace("original", "").replace("v", "").replace("(", "").replace(")", "").strip()
+        obs_ver = f"PTV{ver_clean}" if ver_clean else "PTV?"
+        
+        obs = f"Enviar {obs_ver} Link: {req.link}"
+        add_movement_internal(cursor, req.os_id, req.ano, "Encam. de Docum.", "SEFOC", req.usuario, obs)
+        return {"status": "success"}
+
+    try:
+        return db.execute_transaction([transaction])[0]
+    except Exception as e:
+        logger.error(f"Link Register error: {e}")
+@router.get("/os/{ano}/{id}/ultimo-andamento")
+def get_last_movement(ano: int, id: int):
+    try:
+        query = """
+            SELECT SituacaoLink as situacao, SetorLink as setor, Ponto as ponto, Observaçao as obs, Data as data, Ponto as usuario
+            FROM tabAndamento 
+            WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s 
+            ORDER BY Data DESC, CodStatus DESC 
+            LIMIT 1
+        """
+        res = db.execute_query(query, (id, ano))
+        if res:
+            return res[0]
+        return {"situacao": None}
+    except Exception as e:
+        logger.error(f"Error getting last movement: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class StartAnalysisRequest(BaseModel):
+    os_id: int
+    ano: int
+    ponto: str
+    usuario: str
+
+@router.post("/analise/start")
+def start_analysis_mark(req: StartAnalysisRequest):
+    def transaction(cursor):
+        add_movement_internal(cursor, req.os_id, req.ano, "Recebido", "SEFOC", req.ponto, "Em análise")
+        return {"status": "started"}
+
+    try:
+        return db.execute_transaction([transaction])[0]
+    except Exception as e:
+        logger.error(f"Start analysis error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

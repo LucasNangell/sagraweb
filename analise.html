@@ -404,8 +404,33 @@
                 </div>
             </div>
         </div>
+        <!-- MODAL LINK GERADO -->
+        <div id="link-modal"
+            style="display: none; position: fixed; z-index: 3000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center;">
+            <div
+                style="background: white; padding: 25px; border-radius: 8px; width: 500px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); text-align: center;">
+                <i class="fas fa-check-circle"
+                    style="font-size: 48px; color: var(--primary-green); margin-bottom: 15px;"></i>
+                <h3 style="margin: 0 0 10px 0; color: #333;">Análise Salva e Link Gerado!</h3>
+                <p style="color: #666; margin-bottom: 20px; font-size: 14px;">Envie este link para o cliente acessar o
+                    relatório.</p>
+
+                <div style="display: flex; gap: 10px; margin-bottom: 25px;">
+                    <input type="text" id="generated-link-input" class="form-control" readonly
+                        style="text-align: center; color: #0056b3; font-weight: bold;">
+                    <button onclick="copyLinkToClipboard()" class="btn-action"
+                        style="background: #eee; color: #333; border: 1px solid #ccc; width: auto;" title="Copiar"><i
+                            class="fas fa-copy"></i></button>
+                </div>
+
+                <button onclick="finishAndExit()" class="btn-action"
+                    style="background: var(--primary-green); color: white; width: 100%; padding: 12px;">CONCLUIR E
+                    VOLTAR</button>
+            </div>
+        </div>
+
         <script src="lib/jquery.min.js"></script>
-        <script src="analise.js?v=15"></script>
+        <script src="analise.js?v=18"></script>
 </body>
 
 </html>

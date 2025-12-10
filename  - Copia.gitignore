@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+venv/
+.env
+config.json
+server_debug.log
+corel_error.log
+previews/
+.vscode/
+dist/
+build/
+*.spec
+temp_data/
+*.log

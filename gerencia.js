@@ -37,16 +37,17 @@ async function initGerencia() {
     await Promise.all([loadMaquinas(), loadProdutos(), loadPapeis(), loadCores(), loadCategorias()]);
 
     if (ano && id) {
-        // MODO EDIÇÃO (OU PÓS-DUPLICAÇÃO)
-        document.getElementById('gerencia-title').textContent = `Gerência de OS ${id}/${ano}`;
+        // MODO EDIÇÃO
+        document.getElementById('gerencia-title').textContent = `Gerenciamento da OS ${id}/${ano}`;
         await loadOSData(ano, id);
     } else {
-        // MODO NOVA OS (Campos em branco)
+        // MODO NOVA OS
         document.getElementById('gerencia-title').textContent = `Nova Ordem de Serviço`;
-        clearForm(); // Garante que campos estejam limpos
+        clearForm();
 
-        // Sugere o usuário atual como solicitante (opcional, melhora UX)
-        // setValue('req_codigo', currentUser); 
+        // Data de hoje como padrão para entrada
+        const today = new Date().toISOString().split('T')[0];
+        setValue('op_data_entrada', today);
     }
 
     setupButtons();
@@ -59,6 +60,8 @@ function clearForm() {
         else input.value = '';
     });
 }
+
+// --- Funções de Carregamento de Listas (Mantidas) ---
 
 async function loadMaquinas() {
     try {
@@ -79,14 +82,17 @@ async function loadProdutos() {
     try {
         const response = await fetch(`${API_BASE_URL}/aux/produtos`);
         const data = await response.json();
+        // ID agora existe no HTML
         const select = document.getElementById('val_produto');
-        select.innerHTML = '<option value="">Selecione...</option>';
-        data.forEach(item => {
-            const opt = document.createElement('option');
-            opt.value = item.Produto;
-            opt.textContent = item.Produto;
-            select.appendChild(opt);
-        });
+        if (select) {
+            select.innerHTML = '<option value="">Selecione...</option>';
+            data.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.Produto;
+                opt.textContent = item.Produto;
+                select.appendChild(opt);
+            });
+        }
     } catch (e) { console.error(e); }
 }
 
@@ -105,7 +111,6 @@ async function loadCategorias() {
     } catch (e) { console.error(e); }
 }
 
-// NOVA FUNÇÃO: Busca papéis do backend
 async function loadPapeis() {
     try {
         const response = await fetch(`${API_BASE_URL}/aux/papeis`);
@@ -114,14 +119,13 @@ async function loadPapeis() {
         select.innerHTML = '<option value="">Selecione...</option>';
         data.forEach(item => {
             const opt = document.createElement('option');
-            opt.value = item.Papel; // Campo retornado pela API
+            opt.value = item.Papel;
             opt.textContent = item.Papel;
             select.appendChild(opt);
         });
     } catch (e) { console.error(e); }
 }
 
-// NOVA FUNÇÃO: Busca cores do backend
 async function loadCores() {
     try {
         const response = await fetch(`${API_BASE_URL}/aux/cores`);
@@ -130,7 +134,7 @@ async function loadCores() {
         select.innerHTML = '<option value="">Selecione...</option>';
         data.forEach(item => {
             const opt = document.createElement('option');
-            opt.value = item.Cor; // Campo retornado pela API
+            opt.value = item.Cor;
             opt.textContent = item.Cor;
             select.appendChild(opt);
         });
@@ -163,20 +167,20 @@ async function loadOSData(ano, id) {
         setValue('op_tiragem_pret', data.TiragemSolicitada);
         setValue('op_tiragem_final', data.TiragemFinal);
 
-        // --- SEÇÃO: DETALHES TÉCNICOS ---
+        // Novos campos adicionados ao layout
         setValue('val_titulo', data.Titulo);
-        setValue('val_produto', data.TipoPublicacaoLink);
+
+        // --- SEÇÃO: DETALHES TÉCNICOS ---
+        setValue('val_produto', data.TipoPublicacaoLink); // Campo adicionado
         setValue('val_maquina', data.MaquinaLink);
         setValue('val_tiragem', data.Tiragem);
         setValue('val_pgs', data.Pags);
         setCheck('chk_fv', data.FrenteVerso);
         setValue('val_modelos', data.ModelosArq);
 
-        // Prioridade carregada corretamente do EntregPrazoLink
         setValue('val_prioridade', data.EntregPrazoLink);
         setValue('val_data', formatDateForInput(data.EntregData));
 
-        // Papel e Cores carregados dos novos mapeamentos
         setValue('val_papel', data.PapelLink);
         setValue('txt_papel_desc', data.PapelDescricao);
         setValue('val_cores', data.Cores);
@@ -233,5 +237,6 @@ function formatDateForInput(d) {
 }
 
 function setupButtons() {
-    // Implementações futuras
+    // A lógica de botões é mantida conforme sistema original
+    // As classes .btn-new, .btn-duplicate etc foram preservadas no HTML
 }

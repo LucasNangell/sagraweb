@@ -4,12 +4,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SAGRA - Gerência</title>
-    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <title>SAGRA - Sistema de Acompanhamento Gráfico</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="lib/select2.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css">
 </head>
+
 
 <body>
     <div id="login-overlay" style="display: flex;">
@@ -20,13 +23,19 @@
         </div>
     </div>
 
+    <!-- HEADER NOVO -->
     <header>
         <div class="header-left">
-            <div class="app-title">SAGRA (v6.9)</div>
+            <div class="app-title">SAGRA</div>
+            <div class="header-divider"
+                style="height: 20px; border-left: 1px solid rgba(255,255,255,0.3); margin: 0 10px;"></div>
+            <div class="page-title" id="gerencia-title" style="font-size: 1.1rem; color: white;">Gerenciamento da OS
+            </div>
         </div>
+
         <div class="header-right">
             <div class="user-info">
-                <div class="user-id" id="header-user-id">ID: ---</div>
+                <div class="user-id" id="header-user-id" style="color: white; font-weight: 600;">ID: ---</div>
             </div>
         </div>
     </header>
@@ -42,267 +51,333 @@
             </nav>
         </aside>
 
-        <main style="padding: 10px; overflow-y: auto; background-color: #F8F9FA;">
+        <main>
+            <div class="grid-12">
 
-            <div class="gerencia-layout-vertical">
-                <div class="panel-header" style="margin-bottom: 10px;">
-                    <div class="panel-title" id="gerencia-title" style="font-size: 1.2rem;">Gerência de OS</div>
-                </div>
-
-                <div class="gerencia-row top-row">
-
-                    <div class="gerencia-actions-sidebar">
-                        <button class="btn-action btn-new"><i class="fas fa-plus-circle"></i> Nova</button>
-                        <button class="btn-action btn-duplicate"><i class="fas fa-copy"></i> Duplicar</button>
-                        <button class="btn-action btn-link"><i class="fas fa-link"></i> Vincular</button>
-                        <button class="btn-action btn-edit"><i class="fas fa-pencil-alt"></i> Editar</button>
-                        <button class="btn-action btn-delete"><i class="fas fa-trash-alt"></i> Excluir</button>
+                <!-- 1. INFORMAÇÕES DO SOLICITANTE (Col 5) -->
+                <div class="panel col-span-4">
+                    <div class="panel-header">
+                        <div class="panel-title">Informações do Solicitante</div>
                     </div>
-
-                    <div class="gerencia-pane col-solicitante">
-                        <div class="panel h-auto">
-                            <div class="panel-header">
-                                <div class="panel-title">Informações do Solicitante</div>
-                            </div>
-                            <div class="details-content no-scroll">
-                                <div class="requester-grid">
-                                    <div class="requester-fields">
-                                        <div class="form-row">
-                                            <div style="flex: 1;">
-                                                <label>Categoria</label>
-                                                <select id="req_categoria" class="form-control">
-                                                    <option value="">Selecione...</option>
-                                                </select>
-                                            </div>
-                                            <div style="flex: 1;">
-                                                <label>Cód. Req.</label>
-                                                <input type="text" id="req_codigo" class="form-control">
-                                            </div>
-                                        </div>
-
-                                        <div class="form-group"><label>Solicitante</label><input type="text"
-                                                id="req_solicitante" class="form-control"></div>
-                                        <div class="form-row">
-                                            <div style="flex: 2;"><label>Titular</label><input type="text"
-                                                    id="req_titular" class="form-control"></div>
-                                            <div style="flex: 1;"><label>Sigla</label><input type="text" id="req_sigla"
-                                                    class="form-control"></div>
-                                        </div>
-                                        <div class="form-row">
-                                            <div style="flex: 1;"><label>Gabinete</label><input type="text"
-                                                    id="req_gabinete" class="form-control"></div>
-                                        </div>
-                                    </div>
-                                    <div class="requester-photo-container">
-                                        <div class="photo-placeholder"><i class="fas fa-user"></i><span>3x4</span></div>
-                                    </div>
+                    <div class="panel-body split-photo-layout">
+                        <div class="fields-col" style="display: flex; flex-direction: column; gap: 10px;">
+                            <div class="form-group-inline">
+                                <div class="w-50">
+                                    <label>Categoria</label>
+                                    <select id="req_categoria" class="form-control">
+                                        <option value="">Selecione...</option>
+                                    </select>
                                 </div>
-                                <div class="section-divider"></div>
-                                <div class="sub-section">
-                                    <div class="sub-header">Endereço</div>
-                                    <div class="form-row">
-                                        <div style="flex:1"><label>Andar</label><input type="text" id="req_andar"
-                                                class="form-control"></div>
-                                        <div style="flex:1"><label>Local</label><input type="text" id="req_local"
-                                                class="form-control"></div>
-                                        <div style="flex:1"><label>Ramal</label><input type="text" id="req_ramal"
-                                                class="form-control"></div>
-                                    </div>
+                                <div class="w-50">
+                                    <label>Cód. Req.</label>
+                                    <input type="text" id="req_codigo" class="form-control">
                                 </div>
                             </div>
-                        </div>
-                    </div>
 
-                    <div class="gerencia-pane col-op">
-                        <div class="panel h-auto">
-                            <div class="panel-header">
-                                <div class="panel-title">Ordem de Produção</div>
+                            <div class="form-group">
+                                <label>Solicitante</label>
+                                <input type="text" id="req_solicitante" class="form-control">
                             </div>
-                            <div class="details-content no-scroll">
-                                <div class="form-row">
-                                    <div style="flex: 1;">
-                                        <label>OS / Ano</label>
-                                        <div style="display:flex; gap:2px;">
-                                            <input type="text" id="op_os" class="form-control" readonly
-                                                style="flex:1; text-align:center;">
-                                            <input type="text" id="op_ano" class="form-control" readonly
-                                                style="flex:1; text-align:center;">
-                                        </div>
-                                    </div>
-                                    <div style="flex: 1;">
-                                        <label>Data Entrada</label>
-                                        <input type="date" id="op_data_entrada" class="form-control">
-                                    </div>
+
+                            <div class="form-group-inline">
+                                <div class="w-full">
+                                    <label>Titular</label>
+                                    <input type="text" id="req_titular" class="form-control">
                                 </div>
-                                <div class="form-row mt-5">
-                                    <div style="flex: 1;"><label>Processo</label><input type="text" id="op_processo"
+                                <div class="w-33">
+                                    <label>Sigla</label>
+                                    <input type="text" id="req_sigla" class="form-control">
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Gabinete</label>
+                                <input type="text" id="req_gabinete" class="form-control">
+                            </div>
+
+                            <!-- Endereço Compacto -->
+                            <div style="margin-top: 5px; border-top: 1px dashed #e2e8f0; padding-top: 8px;">
+                                <label style="color: var(--primary-green); margin-bottom: 5px;">📍 Endereço /
+                                    Contato</label>
+                                <div class="form-group-inline">
+                                    <div class="w-33"><label>Andar</label><input type="text" id="req_andar"
                                             class="form-control"></div>
-                                    <div style="flex: 1;"><label>Com. Serviço</label><input type="text" id="op_cs"
+                                    <div class="w-33"><label>Local</label><input type="text" id="req_local"
                                             class="form-control"></div>
-                                </div>
-                                <div class="section-divider"></div>
-                                <div class="sub-section">
-                                    <div class="sub-header">Tiragem</div>
-                                    <div class="form-group"><label>Pretendida</label><input type="text"
-                                            id="op_tiragem_pret" class="form-control"></div>
-                                    <div class="form-group"><label>Final</label><input type="text" id="op_tiragem_final"
+                                    <div class="w-33"><label>Ramal</label><input type="text" id="req_ramal"
                                             class="form-control"></div>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <div class="gerencia-pane col-detalhes">
-                        <div class="panel h-auto">
-                            <div class="panel-header">
-                                <div class="panel-title">Detalhes Técnicos</div>
-                            </div>
-                            <div class="details-content">
-
-                                <div class="details-upper">
-                                    <div class="form-row">
-                                        <div class="w-maquina">
-                                            <label>Máquina</label>
-                                            <select id="val_maquina" class="form-control">
-                                                <option>Selecione...</option>
-                                            </select>
-                                        </div>
-                                        <div class="w-tiragem">
-                                            <label>Tiragem</label>
-                                            <input type="text" id="val_tiragem" class="form-control">
-                                        </div>
-                                        <div class="w-paginas">
-                                            <label>Páginas</label>
-                                            <input type="text" id="val_pgs" class="form-control">
-                                        </div>
-                                        <div class="w-check">
-                                            <input type="checkbox" id="chk_fv">
-                                            <label for="chk_fv"
-                                                style="margin-bottom:0; cursor:pointer;">Frente/Verso</label>
-                                        </div>
-                                    </div>
-
-                                    <div class="form-row">
-                                        <div class="w-modelos">
-                                            <label>Modelos</label>
-                                            <input type="text" id="val_modelos" class="form-control">
-                                        </div>
-                                        <div class="w-prioridade">
-                                            <label>Prioridade</label>
-                                            <select id="val_prioridade" class="form-control">
-                                                <option value="Normal">Normal</option>
-                                                <option value="Solicitado p/">Solicitado p/</option>
-                                                <option value="Prometido p/">Prometido p/</option>
-                                            </select>
-                                        </div>
-                                        <div class="w-data">
-                                            <label>Data Entrega</label>
-                                            <input type="date" id="val_data" class="form-control">
-                                        </div>
-                                    </div>
-
-                                    <div class="row-expand-inputs">
-                                        <div class="group-expand-item">
-                                            <label>Papel</label>
-                                            <select id="val_papel" class="form-control" style="margin-bottom:2px;">
-                                                <option>Selecione...</option>
-                                            </select>
-                                            <textarea id="txt_papel_desc" class="form-control"
-                                                placeholder="Descrição..."></textarea>
-                                        </div>
-                                        <div class="group-expand-item">
-                                            <label>Cores</label>
-                                            <select id="val_cores" class="form-control" style="margin-bottom:2px;">
-                                                <option>Selecione...</option>
-                                            </select>
-                                            <textarea id="txt_cores_desc" class="form-control"
-                                                placeholder="Descrição..."></textarea>
-                                        </div>
-                                        <div class="group-expand-item">
-                                            <label>Acabamento</label>
-                                            <textarea id="txt_acabamento" class="form-control"></textarea>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="details-lower">
-                                    <div class="lower-item">
-                                        <label>Obs</label>
-                                        <textarea id="txt_obs" class="form-control"></textarea>
-                                    </div>
-                                    <div class="lower-item">
-                                        <label>Contato</label>
-                                        <textarea id="txt_contato" class="form-control"></textarea>
-                                    </div>
-                                </div>
-
-                            </div>
-                        </div>
-                    </div>
-
-                </div>
-
-                <div class="gerencia-row bottom-row">
-                    <div class="gerencia-pane col-material">
-                        <div class="panel h-auto">
-                            <div class="panel-header">
-                                <div class="panel-title">Material Entregue</div>
-                            </div>
-                            <div class="details-content">
-                                <div class="checkbox-grid">
-                                    <div class="chk-item"><input type="checkbox" id="mat_amostra"><label
-                                            for="mat_amostra" style="color:red;">Amostra (Mat. Fornecido)</label></div>
-                                    <div class="chk-item"><input type="checkbox" id="mat_fotolito"><label
-                                            for="mat_fotolito">Fotolito</label></div>
-                                    <div class="chk-item"><input type="checkbox" id="mat_dobra"><label
-                                            for="mat_dobra">Modelo de dobra</label></div>
-                                    <div class="chk-item"><input type="checkbox" id="mat_original"><label
-                                            for="mat_original" style="color:red;">Prova Impressa</label></div>
-                                </div>
-                                <div class="form-group mt-10"><label>Insumos fornecidos</label><input type="text"
-                                        id="mat_insumos" class="form-control"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="gerencia-pane col-elementos">
-                        <div class="panel h-auto">
-                            <div class="panel-header">
-                                <div class="panel-title">Elementos Gráficos</div>
-                            </div>
-                            <div class="details-content">
-                                <div class="checkbox-grid">
-                                    <div class="chk-item"><input type="checkbox" id="el_brasao"><label
-                                            for="el_brasao">Brasão</label></div>
-                                    <div class="chk-item"><input type="checkbox" id="el_timbre"><label
-                                            for="el_timbre">Timbre Escrito</label></div>
-                                    <div class="chk-item"><input type="checkbox" id="el_arte"><label for="el_arte">Arte
-                                            do Gabinete</label></div>
-                                    <div class="chk-item"><input type="checkbox" id="el_assinatura"><label
-                                            for="el_assinatura">Assinatura</label></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="gerencia-pane col-calculos">
-                        <div class="panel h-auto">
-                            <div class="panel-header">
-                                <div class="panel-title">Cálculos</div>
-                            </div>
-                            <div class="details-content">
-                                <div
-                                    style="display:flex; justify-content:center; align-items:center; height:100%; color:#aaa;">
-                                    <i class="fas fa-calculator" style="margin-right:5px;"></i> Área para Cálculos
+                        <!-- Foto 3x4 -->
+                        <div class="photo-col">
+                            <div class="requester-photo-container">
+                                <div class="photo-circle">
+                                    <div class="photo-initials" id="avatar-initials"><i class="fas fa-user"></i></div>
+                                    <span class="photo-label">FOTO</span>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
+
+                <!-- 2. ORDEM DE PRODUÇÃO (Col 3) -->
+                <div class="panel col-span-3">
+                    <div class="panel-header">
+                        <div class="panel-title">Ordem de Produção</div>
+                    </div>
+                    <div class="panel-body">
+                        <div class="form-group-inline">
+                            <div class="w-50">
+                                <label>OS / Ano</label>
+                                <div style="display: flex; gap: 2px;">
+                                    <input type="text" id="op_os" class="form-control" style="text-align: center;"
+                                        readonly placeholder="0000">
+                                    <span style="font-weight: bold; padding-top: 5px;">/</span>
+                                    <input type="text" id="op_ano" class="form-control" style="text-align: center;"
+                                        readonly placeholder="AAAA">
+                                </div>
+                            </div>
+                            <div class="w-50">
+                                <label>Data Entrada</label>
+                                <input type="date" id="op_data_entrada" class="form-control">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Título da Obra</label>
+                            <input type="text" id="val_titulo" class="form-control">
+                        </div>
+
+                        <div class="form-group-inline">
+                            <div class="w-50">
+                                <label>Processo</label>
+                                <input type="text" id="op_processo" class="form-control">
+                            </div>
+                            <div class="w-50">
+                                <label>Com. Serviço</label>
+                                <input type="text" id="op_cs" class="form-control">
+                            </div>
+                        </div>
+
+                        <div style="background: #f8fafc; padding: 10px; border-radius: 6px; margin-top: auto;">
+                            <label
+                                style="color: var(--secondary-blue); font-weight: 800; font-size: 0.75rem; display: block; margin-bottom: 5px;">TIRAGEM</label>
+                            <div class="form-group-inline">
+                                <div class="w-50">
+                                    <label>Pretendida</label>
+                                    <input type="text" id="op_tiragem_pret" class="form-control">
+                                </div>
+                                <div class="w-50">
+                                    <label>Final</label>
+                                    <input type="text" id="op_tiragem_final" class="form-control">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. DETALHES TÉCNICOS (Col 4) -->
+                <!-- 3. DETALHES TÉCNICOS (Col 5 - Ajuste Largura) -->
+                <div class="panel col-span-5 detalhes-tecnicos-panel">
+                    <div class="panel-header">
+                        <div class="panel-title">Detalhes Técnicos</div>
+                    </div>
+                    <div class="panel-body">
+
+                        <!-- LINHA 1 -->
+                        <div class="dt-row">
+                            <div class="dt-col dt-w-prod">
+                                <label>Produto</label>
+                                <select id="val_produto" class="form-control">
+                                    <option>Selecione...</option>
+                                </select>
+                            </div>
+                            <div class="dt-col dt-w-maq">
+                                <label>Máquina</label>
+                                <select id="val_maquina" class="form-control">
+                                    <option>Selecione...</option>
+                                </select>
+                            </div>
+                            <div class="dt-col dt-w-tir">
+                                <label>Tiragem</label>
+                                <input type="text" id="val_tiragem" class="form-control">
+                            </div>
+                            <div class="dt-col dt-w-pgs">
+                                <label>Páginas</label>
+                                <input type="text" id="val_pgs" class="form-control">
+                            </div>
+                            <div class="dt-col dt-w-fv">
+                                <label class="toggle-wrapper" for="chk_fv" style="margin-bottom: 0;">
+                                    <input type="checkbox" id="chk_fv" class="input-hidden">
+                                    <div class="toggle-switch" style="transform: scale(0.85);"></div>
+                                    <span class="toggle-label" style="font-size: 0.75rem; margin-left: 5px;">F/V</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- LINHA 2 -->
+                        <div class="dt-row">
+                            <div class="dt-col dt-w-modelos">
+                                <label>Modelos</label>
+                                <input type="text" id="val_modelos" class="form-control">
+                            </div>
+                            <div class="dt-col dt-w-prio">
+                                <label>Prioridade</label>
+                                <select id="val_prioridade" class="form-control">
+                                    <option value="Normal">Normal</option>
+                                    <option value="Solicitado p/">Solicitado p/</option>
+                                    <option value="Prometido p/">Prometido p/</option>
+                                </select>
+                            </div>
+                            <div class="dt-col dt-w-data">
+                                <label>Data Entrega</label>
+                                <input type="date" id="val_data" class="form-control">
+                            </div>
+                        </div>
+
+                        <!-- LINHA 3 -->
+                        <div class="dt-grid-3">
+                            <!-- Papel -->
+                            <div class="dt-box-group">
+                                <div class="dt-col">
+                                    <label>Papel</label>
+                                    <select id="val_papel" class="form-control">
+                                        <option>Selecione...</option>
+                                    </select>
+                                </div>
+                                <textarea id="txt_papel_desc" class="form-control dt-textarea-sub"
+                                    placeholder="Descrição..."></textarea>
+                            </div>
+                            <!-- Cores -->
+                            <div class="dt-box-group">
+                                <div class="dt-col">
+                                    <label>Cores</label>
+                                    <select id="val_cores" class="form-control">
+                                        <option>Selecione...</option>
+                                    </select>
+                                </div>
+                                <textarea id="txt_cores_desc" class="form-control dt-textarea-sub"
+                                    placeholder="Descrição..."></textarea>
+                            </div>
+                            <!-- Acabamento -->
+                            <div class="dt-box-group">
+                                <div class="dt-col" style="height: 100%;">
+                                    <label>Acabamento</label>
+                                    <textarea id="txt_acabamento" class="form-control dt-textarea-full"></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- LINHA 4 -->
+                        <div class="dt-grid-2">
+                            <div class="dt-col" style="height: 100%;">
+                                <label>Obs</label>
+                                <textarea id="txt_obs" class="form-control dt-textarea-fixed"></textarea>
+                            </div>
+                            <div class="dt-col" style="height: 100%;">
+                                <label>Contato</label>
+                                <textarea id="txt_contato" class="form-control dt-textarea-fixed"></textarea>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- 4. MATERIAL ENTREGUE (Col 4) -->
+                <div class="panel col-span-4">
+                    <div class="panel-header">
+                        <div class="panel-title">Material Entregue</div>
+                    </div>
+                    <div class="panel-body">
+                        <div class="split-2-cols">
+                            <div class="col-checks">
+                                <div class="toggle-wrapper mb-1">
+                                    <input type="checkbox" id="mat_amostra" style="accent-color: var(--danger-red);">
+                                    <label for="mat_amostra"
+                                        style="color: var(--danger-red); font-weight: 600;">Amostra</label>
+                                </div>
+                                <div class="toggle-wrapper mb-1">
+                                    <input type="checkbox" id="mat_fotolito">
+                                    <label for="mat_fotolito">Fotolito</label>
+                                </div>
+                            </div>
+                            <div class="col-checks">
+                                <div class="toggle-wrapper mb-1">
+                                    <input type="checkbox" id="mat_dobra">
+                                    <label for="mat_dobra">Mod. Dobra</label>
+                                </div>
+                                <div class="toggle-wrapper mb-1">
+                                    <input type="checkbox" id="mat_original" style="accent-color: var(--danger-red);">
+                                    <label for="mat_original" style="color: var(--danger-red); font-weight: 600;">Prova
+                                        Imp.</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group mt-2">
+                            <label>Insumos Fornecidos</label>
+                            <textarea id="mat_insumos" class="form-control" style="height: 50px;"
+                                placeholder="Descreva os insumos..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5. ELEMENTOS GRÁFICOS (Col 4) -->
+                <div class="panel col-span-4">
+                    <div class="panel-header">
+                        <div class="panel-title">Elementos Gráficos</div>
+                    </div>
+                    <div class="panel-body">
+                        <p style="font-size: 0.75rem; color: #94a3b8; font-style: italic; margin-bottom: 8px;">Selecione
+                            os elementos institucionais:</p>
+                        <div class="elements-grid">
+                            <label class="element-card" for="el_brasao">
+                                <input type="checkbox" id="el_brasao" class="input-hidden">
+                                <span class="el-icon">🛡️</span>
+                                <span class="el-name" style="font-size: 0.8rem;">Brasão</span>
+                            </label>
+                            <label class="element-card" for="el_timbre">
+                                <input type="checkbox" id="el_timbre" class="input-hidden">
+                                <span class="el-icon">📝</span>
+                                <span class="el-name" style="font-size: 0.8rem;">Timbre</span>
+                            </label>
+                            <label class="element-card" for="el_arte">
+                                <input type="checkbox" id="el_arte" class="input-hidden">
+                                <span class="el-icon">🎨</span>
+                                <span class="el-name" style="font-size: 0.8rem;">Arte Gab.</span>
+                            </label>
+                            <label class="element-card" for="el_assinatura">
+                                <input type="checkbox" id="el_assinatura" class="input-hidden">
+                                <span class="el-icon">✍️</span>
+                                <span class="el-name" style="font-size: 0.8rem;">Assinatura</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 6. CÁLCULOS (Col 4) -->
+                <div class="panel col-span-4">
+                    <div class="panel-header">
+                        <div class="panel-title">Cálculos & Custos</div>
+                    </div>
+                    <div class="panel-body" style="padding: 0;">
+                        <!-- Estado Vazio -->
+                        <div class="empty-state-calc">
+                            <i class="fas fa-calculator" style="margin-bottom: 15px;"></i>
+                            <p>Nenhuma estimativa gerada para esta OS.</p>
+                            <button class="btn-update" style="margin-top: 10px; background: var(--secondary-blue);">
+                                <i class="fas fa-sync-alt"></i> Gerar Cálculo
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </main>
     </div>
 
+    <!-- SCRIPTS -->
     <script src="lib/jquery.min.js"></script>
     <script src="lib/select2.min.js"></script>
     <script src="gerencia.js"></script>

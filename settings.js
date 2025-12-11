@@ -73,33 +73,79 @@ function populateSelect(id, data, key) {
     });
 }
 
-function loadSavedPreferences() {
-    const prefs = JSON.parse(localStorage.getItem('sagra_prefs_v1'));
-    if (!prefs) return;
-
-    if (prefs.ano) $('#cfg-ano').val(prefs.ano);
-
-    // Aplica valores e FORÇA atualização visual
-    if (prefs.situacao && prefs.situacao.length > 0) {
-        const el = $('#cfg-situacao');
-        el.val(prefs.situacao).trigger('change');
-        updateVisualDisplay(el); // Atualiza visual na hora
+async function loadSavedPreferences() {
+    // 1. Manter Ano via LocalStorage (não solicitado BD para ano)
+    const localPrefs = JSON.parse(localStorage.getItem('sagra_prefs_v1'));
+    if (localPrefs && localPrefs.ano) {
+        $('#cfg-ano').val(localPrefs.ano);
     }
 
-    if (prefs.setor && prefs.setor.length > 0) {
-        const el = $('#cfg-setor');
-        el.val(prefs.setor).trigger('change');
-        updateVisualDisplay(el); // Atualiza visual na hora
+    // 2. Carregar Setores e Situações do Backend
+    const ponto = localStorage.getItem('sagra_user_ponto');
+    if (!ponto) return;
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/settings/filtros/${ponto}`);
+        if (!res.ok) throw new Error("Erro ao buscar filtros");
+        const data = await res.json();
+
+        // Aplica e Atualiza Visual
+        if (data.situacoes && data.situacoes.length > 0) {
+            const el = $('#cfg-situacao');
+            el.val(data.situacoes).trigger('change');
+            updateVisualDisplay(el);
+        }
+
+        if (data.setores && data.setores.length > 0) {
+            const el = $('#cfg-setor');
+            el.val(data.setores).trigger('change');
+            updateVisualDisplay(el);
+        }
+    } catch (e) {
+        console.error("Erro carregando filtros do servidor:", e);
     }
 }
 
-function savePreferences() {
-    const prefs = {
-        ano: $('#cfg-ano').val(),
-        situacao: $('#cfg-situacao').val() || [],
-        setor: $('#cfg-setor').val() || []
-    };
-    localStorage.setItem('sagra_prefs_v1', JSON.stringify(prefs));
-    alert('Preferências salvas com sucesso!');
-    window.location.href = 'index.html';
+async function savePreferences() {
+    const ponto = localStorage.getItem('sagra_user_ponto') || '00000';
+    // Tenta pegar nome de algum lugar ou usa placeholder 
+    const usuario = localStorage.getItem('user_login') || 'Usuario_' + ponto;
+
+    const situacoes = $('#cfg-situacao').val() || [];
+    const setores = $('#cfg-setor').val() || [];
+    const ano = $('#cfg-ano').val();
+
+    // 1. Salvar Ano no LocalStorage (Legado/Extra)
+    const localPrefs = { ano: ano };
+    localStorage.setItem('sagra_prefs_v1', JSON.stringify(localPrefs));
+
+    // 2. Salvar Filtros no Banco
+    const btn = document.getElementById('btn-save-config');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
+    btn.disabled = true;
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/settings/filtros/salvar`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                usuario: usuario,
+                ponto: ponto,
+                situacoes: situacoes,
+                setores: setores
+            })
+        });
+
+        if (!res.ok) throw new Error("Erro ao salvar no servidor");
+
+        alert('Preferências salvas com sucesso!');
+        window.location.href = 'index.html';
+    } catch (e) {
+        alert('Erro ao salvar: ' + e.message);
+        console.error(e);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
 }

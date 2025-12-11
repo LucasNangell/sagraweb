@@ -704,16 +704,38 @@ function toggleHistoryButtons(showActions) {
     }
 }
 
-function applyPreferences() {
-    const prefs = JSON.parse(localStorage.getItem('sagra_prefs_v1'));
-    if (!prefs) { fetchOrders(); return; }
-    if (prefs.ano && document.getElementById('ano')) { document.getElementById('ano').value = prefs.ano; }
-    if (prefs.situacao && prefs.situacao.length > 0) {
-        const el = $('#situacao'); el.val(prefs.situacao).trigger('change');
+async function applyPreferences() {
+    // 1. Manter Ano via LocalStorage
+    const localPrefs = JSON.parse(localStorage.getItem('sagra_prefs_v1'));
+    if (localPrefs && localPrefs.ano && document.getElementById('ano')) {
+        document.getElementById('ano').value = localPrefs.ano;
     }
-    if (prefs.setor && prefs.setor.length > 0) {
-        const el = $('#setor'); el.val(prefs.setor).trigger('change');
+
+    // 2. Buscar Filtros do Backend
+    const ponto = localStorage.getItem('sagra_user_ponto');
+    if (ponto) {
+        try {
+            const res = await fetchWithRetry(`${API_BASE_URL}/settings/filtros/${ponto}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.situacoes && data.situacoes.length > 0) {
+                    $('#situacao').val(data.situacoes).trigger('change');
+                }
+                if (data.setores && data.setores.length > 0) {
+                    $('#setor').val(data.setores).trigger('change');
+                }
+            }
+        } catch (e) {
+            console.error("Erro ao sincronizar filtros:", e);
+        }
     }
+
+    // Atualiza Labels Visuais
+    ['situacao', 'setor'].forEach(id => {
+        const el = $('#' + id);
+        if (el.length) updateVisualDisplay(el);
+    });
+
     currentPage = 1;
     // IMPORTANTE: Busca dados ao iniciar
     fetchOrders();

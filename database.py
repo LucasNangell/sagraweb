@@ -73,8 +73,8 @@ class Database:
         # Load from config or use defaults
         self.host = config_manager.get("db_host", "10.120.1.125")
         self.port = int(config_manager.get("db_port", 3306))
-        self.user = config_manager.get("db_user", "usr_sefoc")
-        self.password = config_manager.get("db_password", "sefoc_2018")
+        self.user = config_manager.get("db_user", "root")
+        self.password = config_manager.get("db_password", "")
         self.db = config_manager.get("db_name", "sagrafulldb")
         
         self.pool = ConnectionPool(

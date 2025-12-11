@@ -97,5 +97,23 @@ def setup():
     except Exception as e:
         logger.error(f"Error creating tables: {e}")
 
+    # --- FILTER SETTINGS TABLE ---
+    try:
+        sql_settings = """
+        CREATE TABLE IF NOT EXISTS tabUserFilterSettings (
+            ID INT PRIMARY KEY AUTO_INCREMENT,
+            Usuario VARCHAR(150) NOT NULL,
+            Ponto VARCHAR(20) NOT NULL,
+            Situacoes TEXT NULL,
+            Setores TEXT NULL,
+            DataAtualizacao DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_ponto (Ponto)
+        );
+        """
+        db.execute_query(sql_settings)
+        logger.info("tabUserFilterSettings checked/created.")
+    except Exception as e:
+        logger.error(f"Error creating filter table: {e}")
+
 if __name__ == "__main__":
     setup()

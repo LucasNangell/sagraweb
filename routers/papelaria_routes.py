@@ -19,7 +19,7 @@ router = APIRouter(prefix="/papelaria")
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURAÇÕES ---
-COREL_MODELS_DIR = r"\\redecamara\dfsdata\cgraf\sefoc\Laboratorio\Modelos\Modelos Corel\Papelaria\CSP"
+COREL_MODELS_DIR = r"\\redecamara\dfsdata\CGraf\Sefoc\Laboratorio\Modelos\Modelos Corel\Papelaria\CSP\WEB"
 BASE_DIR = os.getcwd()
 PREVIEW_DIR = os.path.join(BASE_DIR, "previews")
 os.makedirs(PREVIEW_DIR, exist_ok=True)

@@ -79,15 +79,15 @@ def save_analise(req: AnaliseRequest):
 
 @router.post("/analise/ensure")
 def ensure_analise(req: AnalysisEnsureRequest):
-    existing = db.execute_query("SELECT ID FROM tabAnalises WHERE NroProtocolo=%s AND AnoProtocolo=%s", (req.nro_os, req.ano_os))
+    existing = db.execute_query("SELECT ID FROM tabAnalises WHERE OS=%s AND Ano=%s", (req.nro_os, req.ano_os))
     if existing: return {"id": existing[0]['ID'], "new": False}
-    db.execute_query("INSERT INTO tabAnalises (NroProtocolo, AnoProtocolo, Usuario, Versao, Componente) VALUES (%s, %s, %s, '', '')", (req.nro_os, req.ano_os, req.usuario))
-    new_rec = db.execute_query("SELECT ID FROM tabAnalises WHERE NroProtocolo=%s AND AnoProtocolo=%s", (req.nro_os, req.ano_os))
+    db.execute_query("INSERT INTO tabAnalises (OS, Ano, Usuario, Versao, Componente) VALUES (%s, %s, %s, '', '')", (req.nro_os, req.ano_os, req.usuario))
+    new_rec = db.execute_query("SELECT ID FROM tabAnalises WHERE OS=%s AND Ano=%s", (req.nro_os, req.ano_os))
     return {"id": new_rec[0]['ID'], "new": True}
 
 @router.get("/analise/{ano}/{os_id}/full")
 def get_full_analysis(ano: int, os_id: int):
-    header = db.execute_query("SELECT ID, Versao, Componente FROM tabAnalises WHERE NroProtocolo=%s AND AnoProtocolo=%s", (os_id, ano))
+    header = db.execute_query("SELECT ID, Versao, Componente FROM tabAnalises WHERE OS=%s AND Ano=%s", (os_id, ano))
     if not header: return {"exists": False}
     anl_id = header[0]['ID']
     items = db.execute_query("""
@@ -131,7 +131,7 @@ def log_debug(item: dict):
 @router.post("/analise/{ano}/{os_id}/generate-link")
 def generate_client_link(ano: int, os_id: int, request: Request):
     # 1. Obter ID da Análise
-    analise = db.execute_query("SELECT ID, Versao, Componente FROM tabAnalises WHERE NroProtocolo=%s AND AnoProtocolo=%s", (os_id, ano))
+    analise = db.execute_query("SELECT ID, Versao, Componente FROM tabAnalises WHERE OS=%s AND Ano=%s", (os_id, ano))
     if not analise:
         raise HTTPException(status_code=404, detail="Análise não encontrada. Salve-a antes de gerar o link.")
     

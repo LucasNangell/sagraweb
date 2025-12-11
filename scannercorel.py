@@ -6,14 +6,14 @@ import win32com.client
 import time
 
 # --- CONFIGURAÇÕES ---
-DIR_MODELOS = r"\\redecamara\dfsdata\cgraf\sefoc\Laboratorio\Modelos\Modelos Corel\Papelaria\CSP"
+DIR_MODELOS = r"\\redecamara\dfsdata\CGraf\Sefoc\Laboratorio\Modelos\Modelos Corel\Papelaria\CSP\WEB"
 memoria_campos = {}
 
 def get_db_connection():
     return pymysql.connect(
-        host="10.120.1.125",
-        user="usr_sefoc",
-        password="sefoc_2018",
+        host="127.0.0.1",
+        user="root",
+        password="",
         database="sagrafulldb",
         cursorclass=pymysql.cursors.DictCursor,
         autocommit=True,

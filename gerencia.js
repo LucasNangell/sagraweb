@@ -1,25 +1,15 @@
 const API_BASE_URL = `http://${window.location.hostname}:8001/api`;
 let currentUser = null;
+let initialSnapshot = null; // Snapshot para o botão Cancelar
 
 document.addEventListener('DOMContentLoaded', () => {
-    checkLogin();
+    initGerencia();
 });
-
-function checkLogin() {
-    const savedPonto = localStorage.getItem('sagra_user_ponto');
-    if (savedPonto) {
-        currentUser = savedPonto;
-        document.getElementById('login-overlay').style.display = 'none';
-        updateHeaderUser();
-        initGerencia();
-    } else {
-        window.location.href = 'index.html';
-    }
-}
 
 function updateHeaderUser() {
     const el = document.getElementById('header-user-id');
-    if (el) el.textContent = `ID: ${formatPonto(currentUser)}`;
+    // Mock user for display since authentication is removed
+    if (el) el.textContent = `ID: WebUser`;
 }
 
 function formatPonto(val) {
@@ -32,6 +22,8 @@ async function initGerencia() {
     const urlParams = new URLSearchParams(window.location.search);
     const ano = urlParams.get('ano');
     const id = urlParams.get('id');
+
+    setupButtons(); // Inicializa botões imediatamente
 
     // Carregamento de todas as listas auxiliares
     await Promise.all([loadMaquinas(), loadProdutos(), loadPapeis(), loadCores(), loadCategorias()]);
@@ -51,6 +43,37 @@ async function initGerencia() {
     }
 
     setupButtons();
+
+    // Salva snapshot inicial após carregar tudo (pequeno delay para garantir inputs preenchidos)
+    setTimeout(() => {
+        setupButtons();
+        setupCalculators(); // Inicializa listeners de cálculo
+
+        // Salva snapshot inicial após carregar tudo (pequeno delay para garantir inputs preenchidos)
+        console.log("Snapshot inicial salvo.", initialSnapshot);
+    }, 600);
+}
+
+// Coleta estado atual de todos os inputs (para Snapshot apenas, não confundir com Payload de Save)
+function collectSnapshot() {
+    const state = {};
+    document.querySelectorAll('input, select, textarea').forEach(el => {
+        if (el.id) {
+            state[el.id] = (el.type === 'checkbox') ? el.checked : el.value;
+        }
+    });
+    return state;
+}
+
+function restoreSnapshot() {
+    if (!initialSnapshot) return;
+    for (const [id, val] of Object.entries(initialSnapshot)) {
+        const el = document.getElementById(id);
+        if (el) {
+            if (el.type === 'checkbox') el.checked = val;
+            else el.value = val;
+        }
+    }
 }
 
 function clearForm() {
@@ -82,7 +105,6 @@ async function loadProdutos() {
     try {
         const response = await fetch(`${API_BASE_URL}/aux/produtos`);
         const data = await response.json();
-        // ID agora existe no HTML
         const select = document.getElementById('val_produto');
         if (select) {
             select.innerHTML = '<option value="">Selecione...</option>';
@@ -171,7 +193,7 @@ async function loadOSData(ano, id) {
         setValue('val_titulo', data.Titulo);
 
         // --- SEÇÃO: DETALHES TÉCNICOS ---
-        setValue('val_produto', data.TipoPublicacaoLink); // Campo adicionado
+        setValue('val_produto', data.TipoPublicacaoLink);
         setValue('val_maquina', data.MaquinaLink);
         setValue('val_tiragem', data.Tiragem);
         setValue('val_pgs', data.Pags);
@@ -203,10 +225,48 @@ async function loadOSData(ano, id) {
         setCheck('el_arte', data.ElemGrafArteGab);
         setCheck('el_assinatura', data.ElemGrafAssinatura);
 
+        // --- CÁLCULOS ---
+        if (data.Calculos) {
+            setValue('calc_capa_color', data.Calculos.capa_color);
+            setValue('calc_capa_pb', data.Calculos.capa_pb);
+            setValue('calc_miolo_color', data.Calculos.miolo_color);
+            setValue('calc_miolo_pb', data.Calculos.miolo_pb);
+            setValue('calc_altura', data.Calculos.altura_mm);
+            setValue('calc_largura', data.Calculos.largura_mm);
+            setValue('calc_tiragem', data.Calculos.tiragem);
+            // Recalcula visualmente baseado nos valores carregados
+            recalculateAll();
+        } else {
+            // Se não houver cálculos salvos, força sincronização inicial
+            const tiragemVal = document.getElementById('val_tiragem').value;
+            if (tiragemVal) setValue('calc_tiragem', tiragemVal);
+            recalculateAll();
+        }
+
     } catch (e) {
         alert("Erro ao carregar dados da OS.");
         console.error(e);
     }
+
+    // --- AUTO-BUSCA DEPUTADO AO CARREGAR ---
+    setTimeout(() => {
+        // Garante sync final
+        const tTec = document.getElementById('val_tiragem');
+        const tCalc = document.getElementById('calc_tiragem');
+        if (tTec && tCalc && tTec.value && (!tCalc.value || tCalc.value == '0')) {
+            tCalc.value = tTec.value;
+            recalculateAll();
+        }
+
+        const cat = document.getElementById('req_categoria').value;
+        const sol = document.getElementById('req_solicitante').value;
+
+        // Se for Deputado e tiver nome, busca SEMPRE (para garantir a foto)
+        if (cat === 'Deputado' && sol && sol.length >= 3) {
+            console.log("Acionando busca automática de deputado (Prioridade Foto)...");
+            fetchDeputado(sol);
+        }
+    }, 500);
 }
 
 function setValue(id, val) {
@@ -237,6 +297,325 @@ function formatDateForInput(d) {
 }
 
 function setupButtons() {
-    // A lógica de botões é mantida conforme sistema original
-    // As classes .btn-new, .btn-duplicate etc foram preservadas no HTML
+    // Botão Cancelar
+    const btnCancel = document.getElementById('btn-cancel-os');
+    if (btnCancel) {
+        // Usa onclick para evitar múltiplos listeners em caso de re-execução
+        btnCancel.onclick = (e) => {
+            e.preventDefault();
+            if (confirm("Tem certeza? Isso desfará todas as alterações.")) {
+                restoreSnapshot();
+                window.location.href = 'index.html';
+            }
+        };
+    }
+
+    // Botão Salvar
+    const btnSave = document.getElementById('btn-save-os');
+    if (btnSave) {
+        btnSave.onclick = (e) => {
+            e.preventDefault();
+            saveOS();
+        };
+    }
 }
+
+// --- LÓGICA DE SALVAR ---
+function collectAllFields() {
+    // Mapeia IDs do HTML para os campos esperados pelo Backend (SaveOSRequest)
+    // IDs devem corresponder ao que é carregado em loadOSData
+
+    // Helper
+    const val = (id) => { const el = document.getElementById(id); return el ? el.value : null; };
+    const chk = (id) => { const el = document.getElementById(id); return el ? el.checked : false; };
+
+    // Recupera dados básicos da URL se for Edição
+    const urlParams = new URLSearchParams(window.location.search);
+    const anoURL = urlParams.get('ano');
+    const idURL = urlParams.get('id');
+    const isEdit = (anoURL && idURL && !urlParams.get('action')); // Se tiver action=duplicate, não é edit 'puro' de ID
+
+    // Helper for numeric fields
+    const num = (id) => { const v = val(id); return (v === '' || v === null) ? 0 : v; };
+
+    return {
+        // Identificação
+        NroProtocolo: isEdit ? parseInt(idURL) : null,
+        AnoProtocolo: isEdit ? parseInt(anoURL) : null,
+
+        // Dados Principais
+        CodigoRequisicao: val('req_codigo'),
+        CategoriaLink: val('req_categoria'),
+        NomeUsuario: val('req_solicitante'),
+        Titular: val('req_titular'),
+        SiglaOrgao: val('req_sigla'),
+        GabSalaUsuario: val('req_gabinete'),
+        Andar: val('req_andar'),
+        Localizacao: val('req_local'),
+        RamalUsuario: val('req_ramal'),
+
+        DataEntrada: val('op_data_entrada'),
+        ProcessoSolicit: val('op_processo'),
+        CSnro: val('op_cs'),
+        TiragemSolicitada: val('op_tiragem_pret'),
+        TiragemFinal: val('op_tiragem_final'),
+
+        // Detalhes
+        Titulo: val('val_titulo'),
+        TipoPublicacaoLink: val('val_produto'),
+        MaquinaLink: val('val_maquina'),
+        Tiragem: val('val_tiragem'),
+        Pags: val('val_pgs'),
+        FrenteVerso: chk('chk_fv'),
+        ModelosArq: val('val_modelos'),
+
+        EntregPrazoLink: val('val_prioridade'),
+        EntregData: val('val_data'), // input date YYYY-MM-DD
+
+        PapelLink: val('val_papel'),
+        PapelDescricao: val('txt_papel_desc'),
+        Cores: val('val_cores'),
+        CoresDescricao: val('txt_cores_desc'),
+
+        DescAcabamento: val('txt_acabamento'),
+        Observ: val('txt_obs'),
+        ContatoTrab: val('txt_contato'),
+
+        // Material
+        MaterialFornecido: chk('mat_amostra'),
+        Fotolito: chk('mat_fotolito'),
+        ModeloDobra: chk('mat_dobra'),
+        ProvaImpressa: chk('mat_original'),
+        InsumosFornecidos: val('mat_insumos'),
+
+        // Elementos
+        ElemGrafBrasao: chk('el_brasao'),
+        ElemGrafTimbre: chk('el_timbre'),
+        ElemGrafArteGab: chk('el_arte'),
+        ElemGrafAssinatura: chk('el_assinatura'),
+
+        // CÁLCULOS
+        Calculos: {
+            capa_color: num('calc_capa_color'),
+            capa_pb: num('calc_capa_pb'),
+            miolo_color: num('calc_miolo_color'),
+            miolo_pb: num('calc_miolo_pb'),
+            altura_mm: num('calc_altura'),
+            largura_mm: num('calc_largura'),
+            tiragem: num('calc_tiragem'),
+            coef_a4: num('calc_coef_a4'),
+            total_paginas: num('calc_total_paginas'),
+            cota_total: num('calc_cota_total')
+        },
+
+        // Usuário Atual
+        PontoUsuario: currentUser
+    };
+}
+
+async function saveOS() {
+    const payload = collectAllFields();
+
+    // Validação básica
+    if (!payload.TipoPublicacaoLink) return alert("Selecione um Produto.");
+    if (!payload.Titulo) return alert("Informe o Título.");
+    if (!payload.NomeUsuario) return alert("Informe o Solicitante.");
+
+    document.body.style.cursor = 'wait';
+
+    try {
+        const result = await fetch(`${API_BASE_URL}/os/save`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        const text = await result.text();
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (err) {
+            console.error("JSON Parse Error:", text);
+            throw new Error("Resposta inválida do servidor: " + text.substring(0, 100));
+        }
+
+        if (result.ok && data.status === "ok") {
+            alert(`OS salva com sucesso! (OS: ${data.id}/${data.ano})`);
+            window.location.href = "index.html";
+        } else {
+            const msg = (typeof data.detail === 'object') ? JSON.stringify(data.detail) : (data.detail || data.message || "Erro desconhecido");
+            alert("Erro ao salvar OS: " + msg);
+            console.error("Save Error:", data);
+        }
+    } catch (e) {
+        console.error(e);
+        alert("Erro de comunicação: " + e.message);
+    } finally {
+        document.body.style.cursor = 'default';
+    }
+}
+
+// --- INTEGRAÇÃO DEPUTADOS ---
+let lastDepSearch = "";
+
+async function fetchDeputado(nome) {
+    // Feedback visual discreto (cursor loading)
+    document.body.style.cursor = 'wait';
+
+    try {
+        const encodedName = encodeURIComponent(nome);
+        const res = await fetch(`${API_BASE_URL}/aux/deputado/buscar?nome=${encodedName}`);
+
+        if (!res.ok) throw new Error("Erro API");
+
+        const data = await res.json();
+
+        if (data && data.nome) {
+            // Preenche campos APENAS SE ESTIVEREM VAZIOS (preserva edição manual)
+            const gabInput = document.getElementById('req_gabinete');
+            const andInput = document.getElementById('req_andar');
+            const ramInput = document.getElementById('req_ramal');
+            const locInput = document.getElementById('req_local');
+
+            if (data.gabinete && !gabInput.value) gabInput.value = data.gabinete;
+            if (data.andar && !andInput.value) andInput.value = data.andar;
+            if (data.ramal && !ramInput.value) ramInput.value = data.ramal;
+            // Local geralmente é fixo "Câmara dos Deputados", mas se vier diferente...
+            if (data.local && !locInput.value) locInput.value = data.local;
+
+            // Foto - SEMPRE atualiza se disponível
+            if (data.foto) {
+                const avatarDiv = document.getElementById('avatar-initials');
+                if (avatarDiv) {
+                    // Limpa iniciais
+                    avatarDiv.innerHTML = '';
+                    avatarDiv.style.background = 'none';
+
+                    // Cria Imagem
+                    const img = document.createElement('img');
+                    img.src = data.foto;
+                    img.style.width = '100%';
+                    img.style.height = '100%';
+                    img.style.objectFit = 'cover';
+                    img.style.borderRadius = '50%';
+                    avatarDiv.appendChild(img);
+                }
+            }
+        } else {
+            console.log("Deputado não encontrado"); // Console apenas
+        }
+
+    } catch (e) {
+        console.error("Erro buscando deputado:", e);
+    } finally {
+        document.body.style.cursor = 'default';
+    }
+}
+
+function checkAndSearch() {
+    const catSelect = document.getElementById('req_categoria');
+    const solInput = document.getElementById('req_solicitante');
+    if (!catSelect || !solInput) return;
+
+    const cat = catSelect.value;
+    const nome = solInput.value.trim();
+
+    if (cat === "Deputado" && nome.length >= 3) {
+        if (nome.toLowerCase() === lastDepSearch.toLowerCase()) return;
+        lastDepSearch = nome;
+        console.log("Busca auto deputado:", nome);
+        fetchDeputado(nome);
+    }
+}
+
+// --- LÓGICA DE CÁLCULOS ---
+function setupCalculators() {
+    const inputs = document.querySelectorAll('.calc-input');
+    inputs.forEach(input => {
+        ['input', 'change', 'keyup', 'paste', 'blur'].forEach(evt => {
+            input.addEventListener(evt, recalculateAll);
+        });
+    });
+
+    // Sincroniza Tiragem Técnica -> Tiragem Cálculo
+    const tiragemTecnica = document.getElementById('val_tiragem');
+    if (tiragemTecnica) {
+        tiragemTecnica.addEventListener('input', () => {
+            setValue('calc_tiragem', tiragemTecnica.value);
+            recalculateAll();
+        });
+    }
+
+    // Recalcular se a categoria mudar (pois afeta a Cota)
+    const catSelect = document.getElementById('req_categoria');
+    if (catSelect) {
+        catSelect.addEventListener('change', recalculateAll);
+    }
+}
+
+function recalculateAll() {
+    // 1. Coleta valores (com defaults 0)
+    const getVal = (id) => parseFloat(document.getElementById(id).value) || 0;
+
+    const capaColor = getVal('calc_capa_color');
+    const capaPb = getVal('calc_capa_pb');
+    const mioloColor = getVal('calc_miolo_color');
+    const mioloPb = getVal('calc_miolo_pb');
+
+    const altura = getVal('calc_altura');
+    const largura = getVal('calc_largura');
+    const tiragem = getVal('calc_tiragem');
+
+    // 2. Total Páginas
+    const totalPaginas = capaColor + capaPb + mioloColor + mioloPb;
+    const elTotal = document.getElementById('calc_total_paginas');
+    if (elTotal) elTotal.value = totalPaginas;
+
+    // 3. Coeficiente A4 (Area Ratio)
+    // Nova regra: Exibir 3 casas decimais. Sem floor.
+
+    let coefA4 = 0;
+    if (altura > 0 && largura > 0) {
+        // Cálculo da razão de área
+        // (Altura * Largura) / (297 * 210)
+        coefA4 = (altura * largura) / (297 * 210);
+    }
+    const elCoef = document.getElementById('calc_coef_a4');
+    if (elCoef) elCoef.value = coefA4.toFixed(3);
+
+    // 4. Cota Estimada
+    // Se Categoria == 'Deputado' -> (PagsColor * 4) + (PagsPB * 1)
+    // Se Outros -> (PagsColor * 1) + (PagsPB * 1)
+    // Multiplicado pela Tiragem
+
+    const catSelect = document.getElementById('req_categoria');
+    const categoria = catSelect ? catSelect.value : '';
+    const isDeputado = (categoria === 'Deputado');
+
+    const totalColor = capaColor + mioloColor;
+    const totalPb = capaPb + mioloPb;
+
+    let cotaPorExemplar = 0;
+    if (isDeputado) {
+        cotaPorExemplar = (totalColor * 4) + (totalPb * 1);
+    } else {
+        cotaPorExemplar = (totalColor * 1) + (totalPb * 1);
+    }
+
+    const cotaTotal = cotaPorExemplar * tiragem * coefA4;
+
+    const elCota = document.getElementById('calc_cota_total');
+    if (elCota) elCota.value = cotaTotal.toFixed(2);
+}
+
+
+
+document.addEventListener('DOMContentLoaded', () => {
+    const catSelect = document.getElementById('req_categoria');
+    const solInput = document.getElementById('req_solicitante');
+
+    if (catSelect && solInput) {
+        catSelect.addEventListener('change', checkAndSearch);
+        solInput.addEventListener('blur', checkAndSearch);
+    }
+});

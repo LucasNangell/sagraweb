@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"/><title>Manual Técnico</title>
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: "Calibri", "Arial", sans-serif; line-height: 1.4; color: #000000; background-color: #f0f0f0; padding: 20px; font-size: 11pt; }
+    .document-container { max-width: 210mm; margin: 0 auto; background: white; padding: 20mm; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
+    
+    .section-title { font-size: 14pt; font-weight: bold; font-style: italic; color: #800000; margin-top: 25pt; margin-bottom: 10pt; padding-bottom: 5pt; border-bottom: 1px solid #BFBFBF; text-transform: uppercase; }
+    .section-title:first-child { margin-top: 0; }
+    
+    .description { margin-bottom: 10pt; text-align: justify; white-space: pre-wrap; }
+    
+    .providencias-bar { background-color: #404040; color: white; padding: 3px 10px; margin-bottom: 8pt; font-weight: bold; display: block; width: 100%; }
+    .providencias-bar::before { content: "•"; color: white; margin-right: 8px; }
+    
+    .action-list { list-style: none; margin-bottom: 15pt; }
+    .action-item { margin-bottom: 6pt; padding-left: 20px; position: relative; text-align: justify; }
+    .action-item::before { content: "-"; position: absolute; left: 0; font-weight: bold; color: #333; }
+    
+    .alert-sefoc { color: #C00000; font-weight: bold; font-style: italic; margin: 10pt 0; padding-left: 20px; border-left: 3px solid #C00000; }
+    
+    .tips-title { color: #2c3e50; font-weight: bold; margin-top: 15pt; margin-bottom: 5pt; text-decoration: underline; }
+    .tip-content { font-size: 10.5pt; color: #555; margin-left: 10px; margin-bottom: 5pt; }
+    
+    .obs { font-style: italic; font-weight: bold; margin-top: 10px; }
+</style>
+</head>
+<body>
+    <div class="document-container">
+        <h2 class="section-title">Cores - Overprint não aplicado</h2><p class="description">Arquivo apresenta elementos gráficos sobre fundo colorido sem aplicação de Overprint. No material impresso existe a possibilidade do papel branco ficar aparente entre os elementos gráficos e o fundo colorido:</p><p class="description">- Página 01: Moldura (Linhas e elementos em preto)</p><div class="providencias-bar">Providências</div><ul class="action-list"><li class="action-item">No software de diagramação, aplicar Overprint nos elementos apontados e gerar novo arquivo .pdf</li></ul><div class="tips-title">Dicas</div><p class="description">Overprint impede que seja criada a reserva de cor no elemento que está abaixo, ou seja, o elemento de cima não recorta o elemento de baixo.</p><p class="description">Quando se aplica Overprint no elemento que está acima, ocorre a mistura de cores do elemento de cima com o que está embaixo.</p><p class="description">Quando se remove o Overprint, o elemento de baixo é recortado obedecendo o formato do que está em cima, fazendo com que a cor de cima fique completamente visível.</p><p class="description">Uso comum do Overprint</p><p class="description">Em textos pretos sobre fundos coloridos, pra evitar que a reserva de cor abaixo do texto não crie filetes brancos no caso de problema de registro (encaixe das cores)</p><p class="description">Em elementos coloridos sobre fundos coloridos claros, para criar um efeito de mistura dando a impressão de existir uma terceira na junção dos elementos</p><p class="description">Quando não usar Overprint</p><p class="description">Em elementos brancos, sobre fundos de cor inclusive branco, pois elemento irá desaparecer</p><p class="description">Em elementos coloridos sobre fundos escuros, pois o elemento de cima irá desaparecer</p><p class="description">Quando se deseja que o elemento de cima seja impresso na sua cor pura</p>
+    </div>
+</body>
+</html>

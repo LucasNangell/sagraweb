@@ -20,6 +20,240 @@ class HistoryItem(BaseModel):
     obs: str
     usuario: str
 
+class SaveOSRequest(BaseModel):
+    # Identificação para Update (opcionais para Insert)
+    NroProtocolo: Optional[int] = None
+    AnoProtocolo: Optional[int] = None
+    
+    # Dados Principais
+    CodigoRequisicao: Optional[str] = None
+    CategoriaLink: Optional[str] = None
+    NomeUsuario: Optional[str] = None
+    Titular: Optional[str] = None
+    SiglaOrgao: Optional[str] = None
+    GabSalaUsuario: Optional[str] = None
+    Andar: Optional[str] = None
+    Localizacao: Optional[str] = None
+    RamalUsuario: Optional[str] = None
+    
+    DataEntrada: Optional[str] = None
+    ProcessoSolicit: Optional[str] = None
+    CSnro: Optional[str] = None
+    TiragemSolicitada: Optional[str] = None
+    TiragemFinal: Optional[str] = None
+    
+    # Detalhes
+    Titulo: Optional[str] = None
+    TipoPublicacaoLink: Optional[str] = None
+    MaquinaLink: Optional[str] = None
+    Tiragem: Optional[str] = None
+    Pags: Optional[str] = None
+    FrenteVerso: Optional[bool] = False
+    ModelosArq: Optional[str] = None
+    
+    EntregPrazoLink: Optional[str] = None
+    EntregData: Optional[str] = None
+    
+    PapelLink: Optional[str] = None
+    PapelDescricao: Optional[str] = None
+    Cores: Optional[str] = None
+    CoresDescricao: Optional[str] = None
+    
+    DescAcabamento: Optional[str] = None
+    Observ: Optional[str] = None
+    ContatoTrab: Optional[str] = None
+    
+    # Material / Elementos
+    MaterialFornecido: Optional[bool] = False
+    Fotolito: Optional[bool] = False
+    ModeloDobra: Optional[bool] = False
+    ProvaImpressa: Optional[bool] = False
+    InsumosFornecidos: Optional[str] = None
+    
+    ElemGrafBrasao: Optional[bool] = False
+    ElemGrafTimbre: Optional[bool] = False
+    ElemGrafArteGab: Optional[bool] = False
+    ElemGrafAssinatura: Optional[bool] = False
+    
+    # Usuário que está salvando (pela sessão)
+    PontoUsuario: Optional[str] = None
+
+
+@router.get("/os/{ano}/{id}/path")
+def get_os_path(ano: int, id: int):
+    logger.info(f"DEBUG ENDPOINT: Request path for OS {id}/{ano}")
+    try:
+        path = _get_os_folder_path(ano, id)
+        
+        if path:
+            return {"path": path}
+            
+        # Fallback Local
+        local_path = os.path.abspath(f"storage_test/{ano}/{id}")
+        if os.path.exists(local_path):
+             return {"path": local_path}
+             
+        return {"path": "Pasta não encontrada na rede."}
+    except Exception as e:
+        logger.error(f"Error getting path: {e}")
+        return {"path": f"Erro: {str(e)}"}
+
+def _get_os_folder_path(ano: int, id: int) -> Optional[str]:
+    """Helper para localizar a pasta da OS na rede."""
+    base_path = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_{ano}"
+    os_pattern = os.path.join(base_path, f"{id:05d}*")
+    
+    logger.info(f"DEBUG PATH: Searching for OS {id}/{ano} in {base_path}")
+    logger.info(f"DEBUG PATH: Pattern used: {os_pattern}")
+    
+    found = glob.glob(os_pattern)
+    if found:
+        logger.info(f"DEBUG PATH: Found: {found[0]}")
+        return found[0]
+        
+    logger.info("DEBUG PATH: Not found in network.")
+    return None
+
+@router.post("/os/save")
+def save_os(data: SaveOSRequest):
+    """
+    Salva uma OS (Insert ou Update).
+    Se NroProtocolo e AnoProtocolo forem fornecidos e existirem -> UPDATE.
+    Caso contrário -> INSERT (Gera novo ID).
+    """
+    # Sanitize empty strings to None to avoid DB errors or bad data
+    if data.EntregData == "": data.EntregData = None
+    if data.DataEntrada == "": data.DataEntrada = None
+    if data.NroProtocolo == 0: data.NroProtocolo = None
+    if data.AnoProtocolo == 0: data.AnoProtocolo = None
+
+    def transaction_logic(cursor):
+        is_update = False
+        if data.NroProtocolo and data.AnoProtocolo:
+            cursor.execute("SELECT 1 FROM tabProtocolos WHERE NroProtocolo = %s AND AnoProtocolo = %s", (data.NroProtocolo, data.AnoProtocolo))
+            if cursor.fetchone():
+                is_update = True
+        
+        current_year = data.AnoProtocolo if data.AnoProtocolo else datetime.now().year
+        
+        # --- Lógica de ID para INSERT ---
+        new_id = data.NroProtocolo
+        if not is_update:
+            # Determina se é Papelaria (> 5000) ou Normal (< 5000)
+            cursor.execute("SELECT MAX(NroProtocolo) as max_id FROM tabProtocolos WHERE AnoProtocolo = %s AND NroProtocolo < 5000", (current_year,))
+            res = cursor.fetchone()
+            max_id = res['max_id'] if res and res['max_id'] else 0
+            new_id = max_id + 1
+        
+        # --- CAMPOS TAB PROTOCOLOS ---
+        # Mapeamento Campo Pydantic -> Coluna DB
+        
+        # UPDATE tabProtocolos
+        if is_update:
+            query_proto = """
+                UPDATE tabProtocolos SET
+                    CodigoRequisic=%s, CategoriaLink=%s, NomeUsuario=%s, Titular=%s, SiglaOrgao=%s,
+                    GabSalaUsuario=%s, Andar=%s, Localizacao=%s, RamalUsuario=%s,
+                    DataEntrada=%s, ProcessoSolicit=%s, CSnro=%s,
+                    EntregPrazoLink=%s, EntregData=%s, ContatoTrab=%s
+                WHERE NroProtocolo=%s AND AnoProtocolo=%s
+            """
+            cursor.execute(query_proto, (
+                data.CodigoRequisicao, data.CategoriaLink, data.NomeUsuario, data.Titular, data.SiglaOrgao,
+                data.GabSalaUsuario, data.Andar, data.Localizacao, data.RamalUsuario,
+                data.DataEntrada, data.ProcessoSolicit, data.CSnro,
+                data.EntregPrazoLink, data.EntregData, data.ContatoTrab,
+                data.NroProtocolo, data.AnoProtocolo
+            ))
+        else:
+            query_proto = """
+                INSERT INTO tabProtocolos (
+                    NroProtocolo, AnoProtocolo,
+                    CodigoRequisic, CategoriaLink, NomeUsuario, Titular, SiglaOrgao,
+                    GabSalaUsuario, Andar, Localizacao, RamalUsuario,
+                    DataEntrada, ProcessoSolicit, CSnro,
+                    EntregPrazoLink, EntregData, ContatoTrab,
+                    OrgInteressado  -- Default 'Câmara dos Deputados'
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'Câmara dos Deputados')
+            """
+            cursor.execute(query_proto, (
+                new_id, current_year,
+                data.CodigoRequisicao, data.CategoriaLink, data.NomeUsuario, data.Titular, data.SiglaOrgao,
+                data.GabSalaUsuario, data.Andar, data.Localizacao, data.RamalUsuario,
+                data.DataEntrada, data.ProcessoSolicit, data.CSnro,
+                data.EntregPrazoLink, data.EntregData, data.ContatoTrab
+            ))
+
+        # --- CAMPOS TAB DETALHES ---
+        # UPDATE tabDetalhesServico
+        # Check if details exist (sometimes they might not if data integrity issues, so Upsert logic is safer)
+        
+        # Check existence first
+        cursor.execute("SELECT 1 FROM tabDetalhesServico WHERE NroProtocoloLinkDet=%s AND AnoProtocoloLinkDet=%s", (new_id, current_year))
+        details_exist = cursor.fetchone()
+        
+        if details_exist:
+            query_det = """
+                UPDATE tabDetalhesServico SET
+                    Titulo=%s, TipoPublicacaoLink=%s, MaquinaLink=%s, Tiragem=%s, Pags=%s, FrenteVerso=%s, ModelosArq=%s,
+                    PapelLink=%s, PapelDescricao=%s, Cores=%s, CoresDescricao=%s,
+                    DescAcabamento=%s, Observ=%s,
+                    TiragemSolicitada=%s, CotaTotal=%s,
+                    MaterialFornecido=%s, Fotolito=%s, ModeloDobra=%s, ProvaImpressa=%s, InsumosFornecidos=%s,
+                    ElemGrafBrasao=%s, ElemGrafTimbre=%s, ElemGrafArteGab=%s, ElemGrafAssinatura=%s
+                WHERE NroProtocoloLinkDet=%s AND AnoProtocoloLinkDet=%s
+            """
+            cursor.execute(query_det, (
+                data.Titulo, data.TipoPublicacaoLink, data.MaquinaLink, data.Tiragem, data.Pags, data.FrenteVerso, data.ModelosArq,
+                data.PapelLink, data.PapelDescricao, data.Cores, data.CoresDescricao,
+                data.DescAcabamento, data.Observ,
+                data.TiragemSolicitada, data.TiragemFinal, # Mapeando TiragemFinal -> CotaTotal (conforme load) ou TiragemSolicitada
+                data.MaterialFornecido, data.Fotolito, data.ModeloDobra, data.ProvaImpressa, data.InsumosFornecidos,
+                data.ElemGrafBrasao, data.ElemGrafTimbre, data.ElemGrafArteGab, data.ElemGrafAssinatura,
+                new_id, current_year
+            ))
+        else:
+            query_det = """
+                INSERT INTO tabDetalhesServico (
+                    NroProtocoloLinkDet, AnoProtocoloLinkDet,
+                    Titulo, TipoPublicacaoLink, MaquinaLink, Tiragem, Pags, FrenteVerso, ModelosArq,
+                    PapelLink, PapelDescricao, Cores, CoresDescricao,
+                    DescAcabamento, Observ,
+                    TiragemSolicitada, CotaTotal,
+                    MaterialFornecido, Fotolito, ModeloDobra, ProvaImpressa, InsumosFornecidos,
+                    ElemGrafBrasao, ElemGrafTimbre, ElemGrafArteGab, ElemGrafAssinatura
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            cursor.execute(query_det, (
+                new_id, current_year,
+                data.Titulo, data.TipoPublicacaoLink, data.MaquinaLink, data.Tiragem, data.Pags, data.FrenteVerso, data.ModelosArq,
+                data.PapelLink, data.PapelDescricao, data.Cores, data.CoresDescricao,
+                data.DescAcabamento, data.Observ,
+                data.TiragemSolicitada, data.TiragemFinal,
+                data.MaterialFornecido, data.Fotolito, data.ModeloDobra, data.ProvaImpressa, data.InsumosFornecidos,
+                data.ElemGrafBrasao, data.ElemGrafTimbre, data.ElemGrafArteGab, data.ElemGrafAssinatura
+            ))
+            
+        # --- HISTÓRICO INICIAL (SE NOVO) ---
+        if not is_update:
+            new_cod_status = f"{new_id:05d}{current_year}-01"
+            query_hist = """
+                INSERT INTO tabAndamento 
+                (CodStatus, NroProtocoloLink, AnoProtocoloLink, SituacaoLink, SetorLink, Data, UltimoStatus, Observaçao, Ponto)
+                VALUES (%s, %s, %s, 'Entrada Inicial', 'SEFOC', NOW(), 1, 'OS Criada via Web', %s)
+            """
+            cursor.execute(query_hist, (new_cod_status, new_id, current_year, data.PontoUsuario))
+            
+        return {"status": "ok", "id": new_id, "ano": current_year, "message": "OS salva com sucesso"}
+
+    try:
+        result = db.execute_transaction([transaction_logic])
+        return result[0]
+    except Exception as e:
+        logger.error(f"Save OS error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # --- ADICIONE ESTE NOVO ENDPOINT ---
 @router.post("/os/{ano}/{id}/duplicate")
 def duplicate_os(ano: int, id: int, req: DuplicateRequest):
@@ -253,21 +487,69 @@ def get_os_history(ano: int, id: int):
 
 @router.post("/os/{ano}/{id}/history")
 def add_os_history(ano: int, id: int, item: HistoryItem):
+    logger.info(f"DEBUG: POST History Payload: {item}")
     def transaction_logic(cursor):
+        # Sanitize Ponto (Remove dots/formatting)
+        clean_user = ''.join(filter(str.isdigit, item.usuario)) if item.usuario else ''
+
+        # 1. Reset UltimoStatus
         cursor.execute("UPDATE tabAndamento SET UltimoStatus = 0 WHERE NroProtocoloLink = %(id)s AND AnoProtocoloLink = %(ano)s", {'id': id, 'ano': ano})
-        cursor.execute("SELECT COUNT(*) as count FROM tabAndamento WHERE NroProtocoloLink = %(id)s AND AnoProtocoloLink = %(ano)s", {'id': id, 'ano': ano})
-        result = cursor.fetchone()
-        count = result['count'] if result else 0
-        new_cod = f"{id:05d}{ano}-{count + 1:02d}"
+        
+        # 2. Generate Safest New ID (Max + 1)
+        base_prefix = f"{id:05d}{ano}-"
+        cursor.execute(f"SELECT MAX(CodStatus) as max_cod FROM tabAndamento WHERE CodStatus LIKE '{base_prefix}%'")
+        res = cursor.fetchone()
+        
+        next_seq = 1
+        if res and res['max_cod']:
+            try:
+                existing_suffix = res['max_cod'].split('-')[-1]
+                next_seq = int(existing_suffix) + 1
+            except ValueError:
+                next_seq = 1
+                
+        new_cod = f"{base_prefix}{next_seq:02d}"
+        
+        # Using backticks for special column names to be safe
         cursor.execute(
-            "INSERT INTO tabAndamento (CodStatus, NroProtocoloLink, AnoProtocoloLink, SituacaoLink, SetorLink, Data, UltimoStatus, Observaçao, Ponto) VALUES (%(cod)s, %(id)s, %(ano)s, %(situacao)s, %(setor)s, NOW(), 1, %(obs)s, %(usuario)s)",
-            {'cod': new_cod, 'id': id, 'ano': ano, 'situacao': item.situacao, 'setor': item.setor, 'obs': item.obs, 'usuario': item.usuario}
+            "INSERT INTO tabAndamento (CodStatus, NroProtocoloLink, AnoProtocoloLink, SituacaoLink, SetorLink, `Data`, UltimoStatus, `Observaçao`, Ponto) VALUES (%(cod)s, %(id)s, %(ano)s, %(situacao)s, %(setor)s, NOW(), 1, %(obs)s, %(usuario)s)",
+            {'cod': new_cod, 'id': id, 'ano': ano, 'situacao': item.situacao, 'setor': item.setor, 'obs': item.obs, 'usuario': clean_user}
         )
         return {"new_id": new_cod}
+
     try:
         return db.execute_transaction([transaction_logic])[0]
     except Exception as e:
-        logger.error(f"Transaction error: {e}")
+        logger.error(f"Add history error: {e}")
+        if "Duplicate entry" in str(e):
+             raise HTTPException(status_code=409, detail="Erro de concorrência. Tente novamente.")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class HistoryUpdateItem(HistoryItem):
+    cod_status: str
+
+@router.put("/os/{ano}/{id}/history")
+def update_os_history(ano: int, id: int, item: HistoryUpdateItem):
+    logger.info(f"DEBUG: PUT History Payload: {item}")
+    def transaction_logic(cursor):
+        # Sanitize Ponto
+        clean_user = ''.join(filter(str.isdigit, item.usuario)) if item.usuario else ''
+        
+        cursor.execute(
+            """
+            UPDATE tabAndamento 
+            SET SituacaoLink=%(situacao)s, SetorLink=%(setor)s, `Observaçao`=%(obs)s, Ponto=%(usuario)s
+            WHERE CodStatus=%(cod)s AND NroProtocoloLink=%(id)s AND AnoProtocoloLink=%(ano)s
+            """,
+            {'situacao': item.situacao, 'setor': item.setor, 'obs': item.obs, 'usuario': clean_user, 'cod': item.cod_status, 'id': id, 'ano': ano}
+        )
+        return {"status": "updated"}
+
+    try:
+        db.execute_transaction([transaction_logic])
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"Update history error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/os/{ano}/{id}/history/{cod_status}")
@@ -305,17 +587,13 @@ def delete_os_history(ano: int, id: int, cod_status: str):
 @router.get("/os/{ano}/{id}/versions")
 def get_os_versions(ano: int, id: int):
     try:
-        base_path = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_{ano}"
-        os_pattern = os.path.join(base_path, f"{id:05d}*")
-        found_os_folders = glob.glob(os_pattern)
+        os_folder = _get_os_folder_path(ano, id)
         versions = []
-        if found_os_folders:
-            os_folder = found_os_folders[0]
-            if os.path.exists(os_folder):
-                subitems = os.listdir(os_folder)
-                original_folders = sorted([i for i in subitems if os.path.isdir(os.path.join(os_folder, i)) and "original" in i.lower()])
-                for idx, folder_name in enumerate(original_folders):
-                    versions.append({"version": idx + 1, "label": f"v{idx + 1} ({folder_name})", "path": os.path.join(os_folder, folder_name)})
+        if os_folder and os.path.exists(os_folder):
+            subitems = os.listdir(os_folder)
+            original_folders = sorted([i for i in subitems if os.path.isdir(os.path.join(os_folder, i)) and "original" in i.lower()])
+            for idx, folder_name in enumerate(original_folders):
+                versions.append({"version": idx + 1, "label": f"v{idx + 1} ({folder_name})", "path": os.path.join(os_folder, folder_name)})
         
         if not versions:
             local_test_path = os.path.abspath("storage_test")

@@ -233,6 +233,9 @@ main {
 
 textarea.form-control {
     resize: none;
+    height: auto !important;
+    min-height: 26px;
+    padding: 5px;
 }
 
 .filter-input:focus,
@@ -480,6 +483,9 @@ textarea.form-control {
     padding: 8px 12px;
     border-bottom: 2px solid var(--primary-green);
     flex-shrink: 0;
+    position: relative;
+    /* Fix First Item Click */
+    z-index: 5;
 }
 
 .section-title-bar {
@@ -1464,6 +1470,11 @@ textarea.form-control {
 
 /* LINHA 2: Modelos | Prioridade | Data */
 .dt-w-modelos {
+    width: 80px;
+    flex: 0 0 auto;
+}
+
+.dt-w-formato {
     width: 80px;
     flex: 0 0 auto;
 }

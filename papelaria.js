@@ -4,6 +4,9 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('Módulo Papelaria Dinâmico (PDF) Carregado');
 
     const API_BASE_URL = `http://${window.location.hostname}:8001/api`;
+    let currentAno = null;
+    let currentId = null;
+    let initialSnapshot = null;
 
     // Elementos do DOM
     const selectTipo = document.getElementById('papelaria-tipo');
@@ -12,7 +15,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const formContainer = document.getElementById('dynamic-form-container');
 
     // 1. Carrega lista de modelos
+    // 1. Inicializa Variáveis e Carrega lista de modelos
+    const urlParams = new URLSearchParams(window.location.search);
+    // Tenta pegar da URL ou de SessionStorage (como definido no script.js que salva 'sagra_target_product' mas não o ID explicitamente, mas script.js navega para papelaria.html?id=... geralmente não, ele vai direto. Vamos checar se o link do papelaria no index.html passa parâmetros. O clique no link-papelaria faz window.location.href='papelaria.html'. Então não tem query params!)
+    // Precisamos pegar do sessionStorage que o script.js populou ou algo assim. 
+    // script.js salva 'currentProduct'. E o ID? script.js tem currentId. 
+    // Vamos assumir que, se não tem na URL, tentamos pegar de sessionStorage se salvamos lá.
+    // Mas script.js só salvou produto? Vamos verificar script.js anterior.
+    // Ele salvou 'sagra_target_product'.
+    // Faltou salvar o ID da OS selecionada para a navegação funcionar plenamente?
+    // Na verdade, a arquitetura da Papelaria parece meio solta. 
+    // Vamos adicionar suporte a pegar ID/Ano se passados na URL, e se não, tentar sessionStorage.
+    // Como não alteramos script.js para passar na URL, vamos depender de sessionStorage 'sagra_current_os_id' e 'sagra_current_os_ano' se existirem, ou o usuário deve ter navegado com parametros.
+    // Vamos assumir que o usuário vai navegar via URL no futuro ou que implementamos isso.
+    // Para garantir, no script.js eu deveria ter salvo o ID.
+    // Mas OK, vamos implementar a lógica aqui.
+
+    // Correção rápida: script.js checa ID > 5000 mas não passa na URL. 
+    // A melhor prática seria que papelaria.js lesse de sessionStorage.
+    currentAno = sessionStorage.getItem('sagra_current_os_ano');
+    currentId = sessionStorage.getItem('sagra_current_os_id');
+
     loadModels();
+    setupButtons(); // Hook buttons
 
     // 2. Listener troca de modelo
     $(selectTipo).on('change', function () {
@@ -41,6 +66,62 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if ($.fn.select2) {
                 $(selectTipo).select2({ minimumResultsForSearch: 5, width: '100%' });
+            }
+
+            // Auto-seleção vinda da Dashboard
+            const targetProduct = sessionStorage.getItem('sagra_target_product');
+            if (targetProduct) {
+                console.log("Tentando auto-selecionar produto:", targetProduct);
+                const options = Array.from(selectTipo.options);
+
+                // Função de Normalização
+                const normalize = s => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                const targetNorm = normalize(targetProduct);
+
+                let matchId = null;
+
+                // 1. Busca Exata
+                const exact = options.find(o => o.text === targetProduct || o.value === targetProduct);
+                if (exact) matchId = exact.value;
+
+                // 2. Busca Normalizada
+                if (!matchId) {
+                    const normMatch = options.find(o => normalize(o.text) === targetNorm);
+                    if (normMatch) matchId = normMatch.value;
+                }
+
+                // 3. Busca por Palavras-Chave (Robusta para Abreviações)
+                if (!matchId) {
+                    // Mapeamento manual de casos difíceis (Opcional, mas útil)
+                    const mapManual = {
+                        'cartao': 'ct', // Cartão -> Ct
+                        'envelope': 'env',
+                        'timbrado': 'timbrado'
+                    };
+
+                    // Divide o target em palavras (ex: 'cartao', 'de', 'visita')
+                    const keywords = targetNorm.split(/\s+/).filter(k => k.length > 2); // ignora 'de', 'e'
+
+                    matchId = options.find(o => {
+                        const optNorm = normalize(o.text);
+                        // Verifica se ALGUMA palavra-chave importante está contida no nome do modelo
+                        return keywords.some(k => {
+                            if (optNorm.includes(k)) return true;
+                            // Check mapeamento (ex: se keyword é 'cartao', check se modelo tem 'ct')
+                            if (mapManual[k] && optNorm.includes(mapManual[k])) return true;
+                            return false;
+                        });
+                    })?.value;
+                }
+
+                if (matchId) {
+                    $(selectTipo).val(matchId).trigger('change');
+                    console.log(`Auto-selecionado (Algoritmo): ${targetProduct} -> ID ${matchId}`);
+                } else {
+                    console.warn(`Não foi possível encontrar correspondência para: ${targetProduct}`);
+                }
+
+                sessionStorage.removeItem('sagra_target_product');
             }
         } catch (e) {
             console.error("Erro carregando modelos:", e);
@@ -186,4 +267,131 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
         }
     }
+    function setupButtons() {
+        const btnCancel = document.getElementById('btn-cancel-os');
+        if (btnCancel) {
+            btnCancel.onclick = (e) => {
+                e.preventDefault();
+                if (confirm("Cancelar e voltar ao menu principal?")) {
+                    window.location.href = 'index.html';
+                }
+            };
+        }
+
+        const btnSave = document.getElementById('btn-save-os');
+        if (btnSave) {
+            btnSave.onclick = (e) => {
+                e.preventDefault();
+                saveOSPapelaria();
+            };
+        }
+    }
+
+    async function saveOSPapelaria() {
+        if (!currentId || !currentAno) {
+            alert("Nenhuma OS selecionada para salvar. (ID ausente no SessionStorage)");
+            return;
+        }
+
+        const tipo = $(selectTipo).val();
+        if (!tipo) return alert("Selecione um Produto/Modelo.");
+
+        // Coleta Dynamic Fields
+        const inputs = document.querySelectorAll('.dynamic-input');
+        const dados = {};
+        inputs.forEach(inp => {
+            const key = inp.dataset.key;
+            if (key) dados[key] = inp.value;
+        });
+
+        // Formata para salvar no campo Observação (já que não temos colunas específicas no DB principal)
+        // Ou salvamos como JSON string se couber. Vamos formatar texto legível.
+        let obsTexto = "--- DADOS PAPELARIA ---\n";
+        for (const [k, v] of Object.entries(dados)) {
+            obsTexto += `${k}: ${v}\n`;
+        }
+
+        const payload = {
+            NroProtocolo: parseInt(currentId),
+            AnoProtocolo: parseInt(currentAno),
+            TipoPublicacaoLink: tipo, // Salva o produto
+            Observ: obsTexto, // Salva os dados preenchidos no campo OBS para registro
+            // Campos obrigatórios mínimos para 'Update'
+            NomeUsuario: "Manter", // Mock, backend deve ignorar se for update parcial? 
+            // O backend 'save_os' faz UPDATE total. Se mandarmos campos null, ele pode zerar?
+            // O backend verifica: if data.NomeUsuario ... 
+            // O backend atual faz UPDATE setando TODOS os campos.
+            // PERIGO: Se usarmos o endpoint /save comum, vamos sobrescrever tudo com NULL se não enviarmos.
+            // Precisamos carregar os dados atuais primeiro?
+            // Sim, loadOSData logic seria ideal. 
+            // Como papelaria.js não tem loadOSData completo, vamos fazer um FETCH details primeiro, MERGEAR e depois SALVAR.
+        };
+
+        try {
+            // 1. Fetch dados atuais para não perder info
+            const resDet = await fetch(`${API_BASE_URL}/os/${currentAno}/${currentId}/details`);
+            if (resDet.ok) {
+                const currentData = await resDet.json();
+
+                // Merge
+                payload.CodigoRequisicao = currentData.CodigoRequisicao;
+                payload.CategoriaLink = currentData.CategoriaLink;
+                payload.NomeUsuario = currentData.NomeUsuario;
+                payload.Titular = currentData.Titular;
+                payload.SiglaOrgao = currentData.SiglaOrgao;
+                payload.GabSalaUsuario = currentData.GabSalaUsuario;
+                payload.Andar = currentData.Andar;
+                payload.Localizacao = currentData.Localizacao;
+                payload.RamalUsuario = currentData.RamalUsuario;
+                payload.DataEntrada = formatDateForInput(currentData.DataEntrada);
+                payload.ProcessoSolicit = currentData.ProcessoSolicit;
+                payload.CSnro = currentData.CSnro;
+
+                payload.Titulo = currentData.Titulo; // Mantém título original
+
+                // Atualiza o que interessa
+                payload.TipoPublicacaoLink = tipo;
+
+                // Append na Obs existente em vez de substituir bruta
+                const oldObs = currentData.Observ || "";
+                if (!oldObs.includes("--- DADOS PAPELARIA ---")) {
+                    payload.Observ = oldObs + "\n\n" + obsTexto;
+                } else {
+                    // Tenta substituir o bloco anterior? Complexo. Vamos apenas append se não tiver, ou substituir tudo é arriscado.
+                    // Para simplificar: Substitui OBS pela nova gerada (Papelaria costuma ser controlada por aqui).
+                    // Ou melhor: concatenar sempre.
+                    payload.Observ = oldObs + "\n" + obsTexto;
+                }
+
+                // Envia Save
+                const resSave = await fetch(`${API_BASE_URL}/os/save`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const dataSave = await resSave.json();
+                if (dataSave.status === 'ok') {
+                    alert('Papelaria salva com sucesso!');
+                    window.location.href = 'index.html';
+                } else {
+                    alert('Erro ao salvar: ' + dataSave.message);
+                }
+
+            } else {
+                alert("Erro ao buscar dados originais da OS para merge.");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Erro de comunicação.");
+        }
+    }
+
+    function formatDateForInput(d) {
+        if (!d) return null;
+        const date = new Date(d);
+        if (isNaN(date)) return null;
+        return date.toISOString().split('T')[0];
+    }
+
 });

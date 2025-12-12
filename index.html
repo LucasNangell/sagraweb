@@ -54,7 +54,7 @@
                     Gerência</a>
                 <a href="email.html" class="nav-item"><i class="fas fa-envelope"></i> Email</a>
                 <a href="#" class="nav-item" id="nav-analise"><i class="fas fa-magnifying-glass"></i> Análise</a>
-                <a href="papelaria.html" class="nav-item"><i class="fas fa-copy"></i> Papelaria</a>
+                <a href="papelaria.html" class="nav-item" id="link-papelaria"><i class="fas fa-copy"></i> Papelaria</a>
                 <a href="#" class="nav-item"><i class="fas fa-user"></i> Usuário</a>
                 <a href="settings.html" class="nav-item"><i class="fas fa-cog"></i> Configurações</a>
             </nav>
@@ -311,12 +311,38 @@
             <li id="ctx-duplicate-os"><i class="fas fa-copy"></i> Duplicar OS</li>
             <li id="ctx-edit-os"><i class="fas fa-edit"></i> Editar OS</li>
             <li id="ctx-link-os"><i class="fas fa-link"></i> Vincular OS</li>
+            <li id="ctx-open-folder"><i class="fas fa-folder-open"></i> Abrir Pasta</li>
         </ul>
+    </div>
+
+    <!-- MODAL CAMINHO DA PASTA -->
+    <div id="modal-folder-path"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0, 0, 0, 0.7); z-index: 10001; align-items: center; justify-content: center;">
+        <div class="login-box" style="width: 500px; text-align: left; position: relative;">
+            <h3 style="color: var(--primary-green); margin-bottom: 15px;">Caminho da Pasta da OS</h3>
+            <p style="margin-bottom: 5px; font-weight: bold;" id="folder-path-os-title">OS ---</p>
+            <div style="background: #f1f3f5; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; word-break: break-all; margin-bottom: 20px; color: #333;"
+                id="folder-path-display">
+                Carregando...
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button id="btn-copy-path" class="btn-primary"
+                    style="padding: 8px 15px; background-color: var(--secondary-blue); color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    <i class="fas fa-copy"></i> Copiar
+                </button>
+                <button onclick="document.getElementById('modal-folder-path').style.display='none'"
+                    class="btn-secondary"
+                    style="padding: 8px 15px; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    Fechar
+                </button>
+            </div>
+        </div>
     </div>
 
     <script src="lib/jquery.min.js"></script>
     <script src="lib/select2.min.js"></script>
-    <script src="script.js"></script>
+    <script src="script.js?v=debug-fix-1"></script>
+    <script src="debug_folder.js?v=1"></script>
 </body>
 
 </html>

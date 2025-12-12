@@ -3,6 +3,7 @@
 const API_BASE_URL = `http://${window.location.hostname}:8001/api`;
 let currentAno = null;
 let currentId = null;
+let currentProduct = null;
 let currentUser = null;
 let currentPage = 1;
 const itemsPerPage = 10; // ALTERADO PARA 10 ITENS POR PÁGINA
@@ -16,30 +17,51 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // --- LÓGICA DE LOGIN ---
+// --- LÓGICA DE LOGIN ---
 function checkLogin() {
     const savedPonto = localStorage.getItem('sagra_user_ponto');
 
+    // Listener de Login (movido para cá ou garantido na inicialização)
+    const btnLogin = document.getElementById('btn-login-confirm');
+    if (btnLogin) {
+        btnLogin.onclick = (e) => {
+            e.preventDefault();
+            performLogin();
+        };
+    }
+
+    const inputLogin = document.getElementById('login-ponto-input');
+    if (inputLogin) {
+        inputLogin.onkeypress = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                performLogin();
+            }
+        };
+    }
+
     if (savedPonto) {
         currentUser = savedPonto;
-        document.getElementById('login-overlay').style.display = 'none';
+        const overlay = document.getElementById('login-overlay');
+        if (overlay) overlay.style.display = 'none';
         updateHeaderUser();
         startApp();
     } else {
-        document.getElementById('login-overlay').style.display = 'flex';
-        setTimeout(() => document.getElementById('login-ponto-input').focus(), 100);
+        const overlay = document.getElementById('login-overlay');
+        if (overlay) overlay.style.display = 'flex';
+        setTimeout(() => {
+            const el = document.getElementById('login-ponto-input');
+            if (el) el.focus();
+        }, 100);
     }
 
-    document.getElementById('btn-login-confirm').onclick = performLogin;
-    document.getElementById('login-ponto-input').onkeypress = (e) => {
-        if (e.key === 'Enter') performLogin();
-    };
-
+    // Logout Listener
     const btnLogout = document.getElementById('btn-logout');
     if (btnLogout) {
-        btnLogout.addEventListener('click', () => {
+        btnLogout.onclick = () => {
             localStorage.removeItem('sagra_user_ponto');
             location.reload();
-        });
+        };
     }
 }
 
@@ -77,6 +99,20 @@ function startApp() {
     loadAuxData();
     setupEventListeners();
     setupContextMenu(); // Inicializa o menu de contexto
+    startAutoRefresh(); // Inicia atualização automática
+}
+
+// --- AUTO-REFRESH ---
+let refreshInterval = null;
+function startAutoRefresh() {
+    if (refreshInterval) clearInterval(refreshInterval);
+    refreshInterval = setInterval(() => {
+        // Apenas se não estiver editando ou interagindo pesadamente (opcional)
+        // Mas a regra é: atualizar sem quebrar nada.
+        if (!document.hidden) {
+            fetchOrders(true); // isSilent = true
+        }
+    }, 5000); // 5 segundos
 }
 
 function setupEventListeners() {
@@ -163,6 +199,54 @@ function setupContextMenu() {
             alert('Selecione uma OS.');
         }
     });
+
+    // Ação Abrir Pasta
+    document.getElementById('ctx-open-folder').addEventListener('click', async () => {
+        console.log("DEBUG: Open Folder Clicked. Ano:", currentAno, "ID:", currentId);
+        if (currentAno && currentId) {
+            const osTitle = `OS ${currentId}/${currentAno}`;
+            // UI Feedback
+            const modal = document.getElementById('modal-folder-path');
+            const display = document.getElementById('folder-path-display');
+            const title = document.getElementById('folder-path-os-title');
+
+            modal.style.display = 'flex';
+            title.innerText = osTitle;
+            display.innerText = "Buscando localização da pasta...";
+
+            try {
+                console.log("DEBUG: Fetching path...");
+                const res = await fetch(`${API_BASE_URL}/os/${currentAno}/${currentId}/path`);
+                console.log("DEBUG: Response Status:", res.status);
+                if (!res.ok) throw new Error("Erro na busca");
+                const data = await res.json();
+
+                display.innerText = data.path;
+            } catch (e) {
+                console.error("DEBUG FETCH ERROR:", e);
+                alert("DEBUG ERROR: " + e.message);
+                display.innerText = "Erro ao buscar caminho da pasta. Verifique a conexão com a rede.";
+            }
+
+        } else {
+            alert('Selecione uma OS.');
+        }
+    });
+
+    // Copiar Caminho
+    const btnCopy = document.getElementById('btn-copy-path');
+    if (btnCopy) {
+        btnCopy.addEventListener('click', () => {
+            const text = document.getElementById('folder-path-display').innerText;
+            if (text && text !== "Buscando..." && !text.startsWith("Erro")) {
+                navigator.clipboard.writeText(text).then(() => {
+                    const originalHTML = btnCopy.innerHTML;
+                    btnCopy.innerHTML = '<i class="fas fa-check"></i> Copiado!';
+                    setTimeout(() => btnCopy.innerHTML = originalHTML, 2000);
+                });
+            }
+        });
+    }
 }
 
 // --- NOVA FUNÇÃO DE NAVEGAÇÃO ---
@@ -190,6 +274,33 @@ function setupNavigation() {
             } else {
                 window.location.href = `analise.html?ano=${currentAno}&id=${currentId}`;
             }
+        });
+    }
+
+    const linkPapelaria = document.getElementById('link-papelaria');
+    if (linkPapelaria) {
+        linkPapelaria.addEventListener('click', (e) => {
+            e.preventDefault();
+
+            if (!currentId) {
+                alert("Por favor, selecione uma Ordem de Serviço.");
+                return;
+            }
+
+            const idNum = parseInt(currentId, 10);
+            if (isNaN(idNum) || idNum <= 5000) {
+                alert("O acesso à Papelaria é restrito a OS com número superior a 5000.");
+                return;
+            }
+
+            // Salva o produto para auto-seleção na próxima tela
+            if (currentProduct) {
+                sessionStorage.setItem('sagra_target_product', currentProduct);
+            }
+            if (currentId) sessionStorage.setItem('sagra_current_os_id', currentId);
+            if (currentAno) sessionStorage.setItem('sagra_current_os_ano', currentAno);
+
+            window.location.href = 'papelaria.html';
         });
     }
 }
@@ -493,9 +604,13 @@ function populateSelect(elementId, data, key) {
     });
 }
 
-async function fetchOrders() {
+async function fetchOrders(isSilent = false) {
     const tbody = document.getElementById('orders-table-body');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Carregando...</td></tr>';
+    // Se não for silencioso, mostra loading e limpa
+    if (!isSilent) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Carregando...</td></tr>';
+    }
+
     const params = new URLSearchParams();
     ['nr-os', 'ano', 'produto', 'titulo', 'solicitante'].forEach(id => {
         const el = document.getElementById(id);
@@ -518,71 +633,190 @@ async function fetchOrders() {
     try {
         const response = await fetchWithRetry(`${API_BASE_URL}/os/search?${params.toString()}`);
         const data = await response.json();
+
+        let rows = [];
+        let meta = {};
+
         if (data.meta) {
-            renderTable(data.data);
-            updatePaginationUI(data.meta);
+            rows = data.data;
+            meta = data.meta;
+            updatePaginationUI(meta);
         } else {
-            renderTable(data);
+            rows = data;
         }
+
+        renderTable(rows);
+
     } catch (error) {
         console.error(error);
-        if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:red;">Erro ao carregar.</td></tr>';
+        if (!isSilent && tbody) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:red;">Erro ao carregar.</td></tr>';
+        }
     }
+}
+
+// Função auxiliar para gerar HTML da prioridade
+function getPrioHtml(raw) {
+    let html = raw || '';
+    if (html.includes('Solicitado')) html = `<span class="badge-yellow">${html}</span>`;
+    if (html.includes('Prometido')) html = `<span style="background:#f8d7da; color:#721c24; padding:2px 5px; border-radius:4px;">${html}</span>`;
+    return html;
 }
 
 function renderTable(data) {
     const tbody = document.getElementById('orders-table-body');
     if (!tbody) return;
-    tbody.innerHTML = '';
-    if (data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Nenhum registro encontrado.</td></tr>';
+
+    // Caso lista vazia
+    if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Nenhum registro encontrado.</td></tr>';
         return;
     }
-    data.forEach(row => {
-        const tr = document.createElement('tr');
-        let prioHtml = row.prioridade || '';
-        if (prioHtml.includes('Solicitado')) prioHtml = `<span class="badge-yellow">${prioHtml}</span>`;
-        if (prioHtml.includes('Prometido')) prioHtml = `<span style="background:#f8d7da; color:#721c24; padding:2px 5px; border-radius:4px;">${prioHtml}</span>`;
-        tr.innerHTML = `
-            <td>${row.nr_os}</td>
-            <td>${row.ano}</td>
-            <td>${row.produto || ''}</td>
-            <td title="${row.solicitante || ''}" style="max-width:150px; overflow:hidden; text-overflow:ellipsis;">${row.solicitante || ''}</td>
-            <td title="${row.titulo || ''}" style="max-width:300px; overflow:hidden; text-overflow:ellipsis;">${row.titulo || ''}</td>
-            <td>${row.situacao || ''}</td>
-            <td>${row.setor || ''}</td>
-            <td>${prioHtml}</td>
-            <td>${formatDate(row.data_entrega)}</td>
-        `;
 
-        // Evento de Clique Esquerdo (Original)
-        tr.addEventListener('click', () => {
-            document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('selected'));
-            tr.classList.add('selected');
-            loadDetails(row.ano, row.nr_os);
-            loadHistory(row.ano, row.nr_os);
-        });
+    // --- SMART RENDERING / RECONCILIATION ---
+    // Estratégia: Atualizar linhas existentes pelo índice para manter a ordem da API.
+    // Se o ID mudar, sobrescreve tudo. Se for o mesmo, diff suave.
 
-        // Evento de Clique Direito (Menu de Contexto)
-        tr.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
+    // 1. Remove linhas de placeholder (Carregando/Vazio) ou excesso
+    // Se a primeira linha tiver apenas 1 célula (colspan), é placeholder, limpa tudo.
+    if (tbody.children.length > 0 && tbody.children[0].cells.length === 1) {
+        tbody.innerHTML = '';
+    }
 
-            // Seleciona a linha visualmente e carrega dados
-            document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('selected'));
-            tr.classList.add('selected');
-            loadDetails(row.ano, row.nr_os);
-            loadHistory(row.ano, row.nr_os);
+    // Remove excesso de linhas (se antes tinha 10 e agora tem 5)
+    while (tbody.children.length > data.length) {
+        tbody.removeChild(tbody.lastChild);
+    }
 
-            // Posiciona e exibe o menu
-            const menu = document.getElementById('context-menu');
-            menu.style.display = 'block';
-            menu.style.left = `${e.pageX}px`;
-            menu.style.top = `${e.pageY}px`;
-        });
+    // 2. Itera sobre os dados e atualiza/cria linhas
+    data.forEach((row, index) => {
+        let tr = tbody.children[index];
+        const uniqueKey = `${row.nr_os}-${row.ano}`;
 
-        tbody.appendChild(tr);
+        // Se a linha não existe, cria
+        if (!tr) {
+            tr = document.createElement('tr');
+            tbody.appendChild(tr);
+            // Configura Data Key inicial
+            tr.dataset.key = "";
+            // Adiciona listeners (uma única vez na criação)
+            setupRowListeners(tr);
+        }
+
+        // Verifica se é a mesma OS visualmente
+        const isSameOS = (tr.dataset.key === uniqueKey);
+
+        // Atualiza Dataset
+        tr.dataset.key = uniqueKey;
+        // Armazena objeto completo para acesso rápido no clique
+        tr.rowData = row;
+
+        // Gera o CONTEÚDO HTML das células para comparação
+        // Nota: innerHTML total é custoso, então podemos fazer algo hibrido:
+        // Setar row.innerHTML é mais simples que diff celula-a-celula manualmente, 
+        // mas perde selecionado se reconstruir tudo.
+        // POREM, se usarmos innerHTML, os Listeners somem? Não, os listeners estão no TR.
+        // O clique no TD propaga pro TR.
+
+        // CONTEUDO
+        const cellsData = [
+            row.nr_os,
+            row.ano,
+            row.produto || '',
+            `<span title="${row.solicitante || ''}" style="display:block; max-width:150px; overflow:hidden; text-overflow:ellipsis;">${row.solicitante || ''}</span>`,
+            `<span title="${row.titulo || ''}" style="display:block; max-width:300px; overflow:hidden; text-overflow:ellipsis;">${row.titulo || ''}</span>`,
+            row.situacao || '',
+            row.setor || '',
+            getPrioHtml(row.prioridade),
+            formatDate(row.data_entrega)
+        ];
+
+        // Se a linha já existia, vamos verificar se precisamos mexer
+        // A maneira mais robusta sem virtual DOM complexo é garantir que a estrutura TD existe.
+        if (tr.children.length !== 9) {
+            // Estrutura errada ou nova, recria TDs
+            let html = '';
+            cellsData.forEach(c => html += `<td>${c}</td>`);
+            tr.innerHTML = html;
+        } else {
+            // Diff Célula a Célula
+            if (!isSameOS) {
+                // OS diferente: atualiza tudo cegamente
+                Array.from(tr.children).forEach((td, i) => {
+                    if (td.innerHTML !== String(cellsData[i])) td.innerHTML = cellsData[i];
+                });
+            } else {
+                // Mesma OS: Verifica mudanças finas (ex: status mudou)
+                Array.from(tr.children).forEach((td, i) => {
+                    const newVal = String(cellsData[i]);
+                    if (td.innerHTML !== newVal) {
+                        td.innerHTML = newVal;
+                        // Opcional: Efeito visual de update (highlight)
+                        // td.style.transition = 'background 0.5s';
+                        // td.style.backgroundColor = '#ffffcc';
+                        // setTimeout(() => td.style.backgroundColor = '', 500);
+                    }
+                });
+            }
+        }
+
+        // Restaura seleção visual se necessário
+        if (currentId && currentAno && row.nr_os == currentId && row.ano == currentAno) {
+            if (!tr.classList.contains('selected')) {
+                // Limpa outros
+                document.querySelectorAll('tbody tr.selected').forEach(r => r.classList.remove('selected'));
+                tr.classList.add('selected');
+            }
+        } else {
+            // Se esta linha estava selecionada mas não é mais a atual (ex: mudou id?), remove
+            // Mas aqui comparamos com as variaveis globais.
+            // Se eu selecionei OS 100. Na lista ela é Row 2.
+            // Se OS 100 sai da lista, Row 2 vira OS 101.
+            // Row 2 (OS 101) != currentId (100). Remove selected. Correto.
+            tr.classList.remove('selected');
+        }
     });
 }
+
+function setupRowListeners(tr) {
+    // Clique Esquerdo
+    tr.addEventListener('click', () => {
+        // Recupera dados do dom object
+        const row = tr.rowData;
+        if (!row) return;
+
+        document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('selected'));
+        tr.classList.add('selected');
+
+        // Atualiza estado global
+        currentId = row.nr_os;
+        currentAno = row.ano;
+        currentProduct = row.produto;
+
+        loadDetails(currentAno, currentId);
+        loadHistory(currentAno, currentId);
+    });
+
+    // Clique Direito
+    tr.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const row = tr.rowData;
+        if (!row) return;
+
+        document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('selected'));
+        tr.classList.add('selected');
+
+        currentId = row.nr_os;
+        currentAno = row.ano;
+        currentProduct = row.produto;
+
+        const menu = document.getElementById('context-menu');
+        menu.style.top = `${e.pageY}px`;
+        menu.style.left = `${e.pageX}px`;
+        menu.style.display = 'block';
+    });
+}
+
 
 function updatePaginationUI(meta) {
     const infoSpan = document.getElementById('pagination-info');

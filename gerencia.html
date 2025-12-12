@@ -15,14 +15,6 @@
 
 
 <body>
-    <div id="login-overlay" style="display: flex;">
-        <div class="login-box">
-            <h3>Identificação</h3>
-            <input type="text" id="login-ponto-input" class="form-control" placeholder="Ponto">
-            <button id="btn-login-confirm" class="btn-primary">ENTRAR</button>
-        </div>
-    </div>
-
     <!-- HEADER NOVO -->
     <header>
         <div class="header-left">
@@ -227,6 +219,10 @@
                                 <label>Modelos</label>
                                 <input type="text" id="val_modelos" class="form-control">
                             </div>
+                            <div class="dt-col dt-w-formato">
+                                <label>Formato</label>
+                                <input type="text" id="val_formato" class="form-control">
+                            </div>
                             <div class="dt-col dt-w-prio">
                                 <label>Prioridade</label>
                                 <select id="val_prioridade" class="form-control">
@@ -361,22 +357,96 @@
                 </div>
 
                 <!-- 6. CÁLCULOS (Col 4) -->
-                <div class="panel col-span-4">
+                <div class="panel col-span-4" style="display: flex; flex-direction: column;">
                     <div class="panel-header">
-                        <div class="panel-title">Cálculos & Custos</div>
+                        <div class="panel-title"><i class="fas fa-calculator"></i> Cálculos & Custos</div>
                     </div>
-                    <div class="panel-body" style="padding: 0;">
-                        <!-- Estado Vazio -->
-                        <div class="empty-state-calc">
-                            <i class="fas fa-calculator" style="margin-bottom: 15px;"></i>
-                            <p>Nenhuma estimativa gerada para esta OS.</p>
-                            <button class="btn-update" style="margin-top: 10px; background: var(--secondary-blue);">
-                                <i class="fas fa-sync-alt"></i> Gerar Cálculo
-                            </button>
+                    <div class="panel-body" style="padding: 15px; display: flex; flex-direction: column; gap: 15px;">
+
+                        <!-- Linha 1: Páginas -->
+                        <div class="form-row">
+                            <div class="form-group col-3">
+                                <label>Capa Color</label>
+                                <input type="number" id="calc_capa_color" class="form-control calc-input"
+                                    placeholder="0" min="0">
+                            </div>
+                            <div class="form-group col-3">
+                                <label>Capa P/B</label>
+                                <input type="number" id="calc_capa_pb" class="form-control calc-input" placeholder="0"
+                                    min="0">
+                            </div>
+                            <div class="form-group col-3">
+                                <label>Miolo Color</label>
+                                <input type="number" id="calc_miolo_color" class="form-control calc-input"
+                                    placeholder="0" min="0">
+                            </div>
+                            <div class="form-group col-3">
+                                <label>Miolo P/B</label>
+                                <input type="number" id="calc_miolo_pb" class="form-control calc-input" placeholder="0"
+                                    min="0">
+                            </div>
                         </div>
+
+                        <!-- Linha 2: Totais e Dimensões -->
+                        <div class="form-row">
+                            <div class="form-group col-3">
+                                <label>Total Páginas</label>
+                                <input type="text" id="calc_total_paginas" class="form-control" readonly
+                                    style="background-color: #f8f8f8; font-weight: bold; color: #333;">
+                            </div>
+                            <div class="form-group col-3">
+                                <label>Tiragem</label>
+                                <input type="number" id="calc_tiragem" class="form-control calc-input" placeholder="0"
+                                    min="0" readonly style="background-color: #f8f8f8;">
+                            </div>
+                            <div class="form-group col-3">
+                                <label>Altura (mm)</label>
+                                <input type="number" id="calc_altura" class="form-control calc-input" placeholder="0"
+                                    min="0" step="0.1">
+                            </div>
+                            <div class="form-group col-3">
+                                <label>Largura (mm)</label>
+                                <input type="number" id="calc_largura" class="form-control calc-input" placeholder="0"
+                                    min="0" step="0.1">
+                            </div>
+                        </div>
+
+                        <!-- Linha 3: Resultados Finais -->
+                        <div class="form-row" style="margin-top: auto; padding-top: 10px; border-top: 1px solid #eee;">
+                            <div class="form-group col-6">
+                                <label>Coeficiente A4 (un/folha)</label>
+                                <input type="text" id="calc_coef_a4" class="form-control" readonly
+                                    style="background-color: #f8f8f8; font-weight: bold; color: var(--secondary-blue);">
+                            </div>
+                            <div class="form-group col-6">
+                                <label>Cota Estimada</label>
+                                <input type="text" id="calc_cota_total" class="form-control" readonly
+                                    style="background-color: #f0fdf4; font-weight: bold; color: var(--primary-green); border-color: #bbf7d0;">
+                            </div>
+                        </div>
+
                     </div>
                 </div>
 
+            </div>
+
+            <!-- BOTÕES FLUTUANTES FIXOS -->
+            <div id="fixed-actions-container" style="
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                display: flex;
+                gap: 10px;
+                z-index: 9999;
+            ">
+                <button id="btn-cancel-os" class="btn-action btn-danger"
+                    style="width: auto; padding: 10px 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+                    <i class="fas fa-times"></i> Cancelar
+                </button>
+                <button id="btn-save-os" class="btn-action btn-new"
+                    style="width: auto; padding: 10px 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+                    <i class="fas fa-save"></i> Salvar
+                </button>
             </div>
         </main>
     </div>

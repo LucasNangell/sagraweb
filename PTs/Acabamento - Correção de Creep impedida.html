@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"/><title>Manual Técnico</title>
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: "Calibri", "Arial", sans-serif; line-height: 1.4; color: #000000; background-color: #f0f0f0; padding: 20px; font-size: 11pt; }
+    .document-container { max-width: 210mm; margin: 0 auto; background: white; padding: 20mm; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
+    
+    .section-title { font-size: 14pt; font-weight: bold; font-style: italic; color: #800000; margin-top: 25pt; margin-bottom: 10pt; padding-bottom: 5pt; border-bottom: 1px solid #BFBFBF; text-transform: uppercase; }
+    .section-title:first-child { margin-top: 0; }
+    
+    .description { margin-bottom: 10pt; text-align: justify; white-space: pre-wrap; }
+    
+    .providencias-bar { background-color: #404040; color: white; padding: 3px 10px; margin-bottom: 8pt; font-weight: bold; display: block; width: 100%; }
+    .providencias-bar::before { content: "•"; color: white; margin-right: 8px; }
+    
+    .action-list { list-style: none; margin-bottom: 15pt; }
+    .action-item { margin-bottom: 6pt; padding-left: 20px; position: relative; text-align: justify; }
+    .action-item::before { content: "-"; position: absolute; left: 0; font-weight: bold; color: #333; }
+    
+    .alert-sefoc { color: #C00000; font-weight: bold; font-style: italic; margin: 10pt 0; padding-left: 20px; border-left: 3px solid #C00000; }
+    
+    .tips-title { color: #2c3e50; font-weight: bold; margin-top: 15pt; margin-bottom: 5pt; text-decoration: underline; }
+    .tip-content { font-size: 10.5pt; color: #555; margin-left: 10px; margin-bottom: 5pt; }
+    
+    .obs { font-style: italic; font-weight: bold; margin-top: 10px; }
+</style>
+</head>
+<body>
+    <div class="document-container">
+        <h2 class="section-title">Acabamento - Correção de Creep impedida</h2><p class="description">O trabalho com acabamento grampo canoa exige correção de Creep, mas não atende os requisitos:</p><p class="description">Espelhamento de imagens ou textos próximo ao centro do miolo: Páginas ##</p><p class="description">Margem interna das páginas menor que 12mm (Ajuste consome cerca de 5mm): Páginas ##</p><p class="description">A correção desloca o conteúdo das páginas para a margem interna à medida que chega ao centro do Miolo, para evitar a apara indevida do conteúdo das margens externas</p><div class="providencias-bar">Providências</div><ul class="action-list"><li class="action-item">Encaminhar novo arquivo .pdf reposicionando a imagem espelhada para as páginas ##, distante da parte central do Miolo</li><li class="action-item">Encaminhar novo arquivo .pdf aumentando a margem interna das páginas para 12mm; ou</li><li class="action-item">Autorizar a impressão desconsiderando o problema, ciente de que a margem interna ficará mais estreita devido o ajuste. Espelhamento e conteúdo das margens internas ficarão comprometidos; ou</li><li class="action-item">Autorizar a impressão dispensando a correção de Creep. A numeração ficará desalinhada e o conteúdo das margens externas poderá ser aparado no refile final</li></ul><div class="tips-title">Dicas</div><p class="description">Creep acontece devido o acabamento em grampo canoa, o conteúdo no centro do livreto ficará mais próximo da borda externa das páginas do que aqueles no início ou no fim. O mesmo vale para elementos repetidos como números de página, abas, bordas e muito mais. Isso pode causar bordas desalinhadas e outros problemas que fazem o livreto parecer desarticulado e mal impresso. Em casos de deslizamento severo de grampeamento, por causa da grande quantidade de páginas, há uma possibilidade de que o conteúdo possa realmente ser aparado.</p><div class="alert-sefoc">Alerta SEFOC: Critério para uso do Creeping: Livretos grampo canoa com Miolo AP 75g de 40 a 88 páginas</div>
+    </div>
+</body>
+</html>

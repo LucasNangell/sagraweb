@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Problemas Técnicos e Providências</title>
+<style>
+        /* === RESET E GERAL === */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: "Calibri", "Arial", sans-serif;
+            line-height: 1.4;
+            color: #000000;
+            background-color: #f0f0f0;
+            padding: 20px;
+            font-size: 11pt;
+        }
+        
+        .document-container {
+            max-width: 210mm;
+            margin: 0 auto;
+            background: white;
+            padding: 20mm;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+        }
+
+        /* === TÍTULOS DE SEÇÃO === */
+        .section-title {
+            font-size: 14pt;
+            font-weight: bold;
+            font-style: italic;
+            color: #800000; /* Vinho */
+            margin-top: 25pt;
+            margin-bottom: 10pt;
+            padding-bottom: 5pt;
+            border-bottom: 1px solid #BFBFBF;
+            text-transform: uppercase;
+        }
+        
+        /* Primeira seção não precisa de margem superior grande */
+        .section-title:first-child { margin-top: 0; }
+
+        /* === PARÁGRAFOS DESCRITIVOS === */
+        .description {
+            margin-bottom: 10pt;
+            text-align: justify;
+        }
+
+        /* === BARRA DE PROVIDÊNCIAS === */
+        .providencias-bar {
+            background-color: #404040; /* Cinza escuro */
+            color: white;
+            padding: 3px 10px;
+            margin-bottom: 8pt;
+            font-weight: bold;
+            display: block;
+            width: 100%;
+        }
+        .providencias-bar::before {
+            content: "•";
+            color: white;
+            margin-right: 8px;
+        }
+
+        /* === LISTAS DE AÇÃO (ITENS) === */
+        .action-list {
+            list-style: none;
+            margin-bottom: 15pt;
+        }
+        
+        .action-item {
+            margin-bottom: 6pt;
+            padding-left: 20px;
+            position: relative;
+            text-align: justify;
+        }
+        
+        .action-item::before {
+            content: "-";
+            position: absolute;
+            left: 0;
+            font-weight: bold;
+            color: #333;
+        }
+
+        /* === ALERTAS SEFOC === */
+        .alert-sefoc {
+            color: #C00000; /* Vermelho vivo */
+            font-weight: bold;
+            font-style: italic;
+            margin: 10pt 0;
+            padding-left: 20px;
+            border-left: 3px solid #C00000;
+        }
+
+        /* === DICAS === */
+        .tips-title {
+            color: #2c3e50;
+            font-weight: bold;
+            margin-top: 15pt;
+            margin-bottom: 5pt;
+            text-decoration: underline;
+        }
+        .tip-content {
+            font-size: 10.5pt;
+            color: #555;
+            margin-left: 10px;
+            margin-bottom: 5pt;
+        }
+
+        /* === TABELAS === */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15pt 0;
+            font-size: 10pt;
+        }
+        th, td {
+            border: 1px solid #999;
+            padding: 6px;
+            text-align: left;
+            vertical-align: top;
+        }
+        th {
+            background-color: #e0e0e0;
+            font-weight: bold;
+        }
+
+        /* === PLACEHOLDERS DE IMAGEM === */
+        .img-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #eee;
+            border: 2px dashed #ccc;
+            color: #777;
+            padding: 20px;
+            margin: 15px 0;
+            text-align: center;
+            font-style: italic;
+        }
+
+        @media print {
+            body { margin: 0; padding: 0; background: white; }
+            .document-container { box-shadow: none; margin: 0; padding: 0; max-width: 100%; }
+            .section-title { page-break-after: avoid; }
+            .providencias-bar { page-break-after: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+    </style>
+</head>
+<body>
+    <div class="document-container">
+        <h2 class="section-title">Editoração - Sumário inconsistente ou ausente</h2>
+<p class="description">Sumário com indicação de páginas que não têm correspondência no miolo ou ausência total de sumário em publicações extensas.</p>
+<div class="providencias-bar">Providências</div>
+<ul class="action-list">
+<li class="action-item">Encaminhar novo arquivo .pdf, corrigindo a relação entre os tópicos do sumário e o conteúdo do miolo; ou</li>
+<li class="action-item">Encaminhar novo arquivo .pdf, incluindo Sumário no início do Miolo.</li>
+</ul>
+
+    </div>
+</body>
+</html>

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"/><title>Manual Técnico</title>
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: "Calibri", "Arial", sans-serif; line-height: 1.4; color: #000000; background-color: #f0f0f0; padding: 20px; font-size: 11pt; }
+    .document-container { max-width: 210mm; margin: 0 auto; background: white; padding: 20mm; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
+    
+    .section-title { font-size: 14pt; font-weight: bold; font-style: italic; color: #800000; margin-top: 25pt; margin-bottom: 10pt; padding-bottom: 5pt; border-bottom: 1px solid #BFBFBF; text-transform: uppercase; }
+    .section-title:first-child { margin-top: 0; }
+    
+    .description { margin-bottom: 10pt; text-align: justify; white-space: pre-wrap; }
+    
+    .providencias-bar { background-color: #404040; color: white; padding: 3px 10px; margin-bottom: 8pt; font-weight: bold; display: block; width: 100%; }
+    .providencias-bar::before { content: "•"; color: white; margin-right: 8px; }
+    
+    .action-list { list-style: none; margin-bottom: 15pt; }
+    .action-item { margin-bottom: 6pt; padding-left: 20px; position: relative; text-align: justify; }
+    .action-item::before { content: "-"; position: absolute; left: 0; font-weight: bold; color: #333; }
+    
+    .alert-sefoc { color: #C00000; font-weight: bold; font-style: italic; margin: 10pt 0; padding-left: 20px; border-left: 3px solid #C00000; }
+    
+    .tips-title { color: #2c3e50; font-weight: bold; margin-top: 15pt; margin-bottom: 5pt; text-decoration: underline; }
+    .tip-content { font-size: 10.5pt; color: #555; margin-left: 10px; margin-bottom: 5pt; }
+    
+    .obs { font-style: italic; font-weight: bold; margin-top: 10px; }
+</style>
+</head>
+<body>
+    <div class="document-container">
+        <h2 class="section-title">Fontes rasterizadas (Como imagem)</h2><p class="description">No arquivo há textos em formato RASTER ao invés de FONTE DE TEXTO e ainda em resolução insuficiente para a impressão com boa definição</p><p class="description">No resultado final é alta a probabilidade de ficarem perceptíveis a falta de definição nas letras e as bordas serrilhadas nestes textos</p><div class="providencias-bar">Providências</div><ul class="action-list"><li class="action-item">Encaminhar novo arquivo .pdf preservando os elementos gráficos vetoriais como VETOR e preservando os textos como FONTE DE TEXTO; ou</li><li class="action-item">Autorizar a impressão desconsiderando o problema, com alta probabilidade de textos e traços serem impressos serrilhados e sem definição</li></ul><div class="tips-title">Dicas</div><p class="description">Caso o arquivo tenha sido criado em software de edição de imagens (ex.: Photoshop) ao invés de software vetorial (ex.: InDesign, Corel, Illustrator) é possível, ao fechar o .pdf,  marcar a opção Preservar Recursos de Edição do Photoshop.</p>
+    </div>
+</body>
+</html>

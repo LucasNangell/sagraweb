@@ -14,7 +14,8 @@
 </head>
 
 <body>
-
+    <script>window.SAGRA_API_PORT = 8001;</script>
+    <script src="permissions.js"></script>
     <div id="login-overlay" style="display: flex;">
         <div class="login-box">
             <h3 style="color: var(--primary-green); margin-bottom: 15px;">Identificação</h3>
@@ -29,9 +30,11 @@
     </div>
 
     <header>
+        <div class="header-logo">
+            <img src="Logo Deapa.png" alt="Logo DEAPA">
+        </div>
         <div class="header-left">
             <div class="app-title">SAGRA - Sistema de Acompanhamento Gráfico</div>
-            <div class="app-version">(v6.9)</div>
         </div>
         <div class="header-right">
             <div class="user-info">
@@ -52,7 +55,10 @@
                 <a href="#" class="nav-item active"><i class="fas fa-home"></i> Início</a>
                 <a href="gerencia.html" class="nav-item" id="link-gerencia"><i class="fas fa-briefcase"></i>
                     Gerência</a>
-                <a href="email.html" class="nav-item"><i class="fas fa-envelope"></i> Email</a>
+                <a href="email.html" class="nav-item" style="position: relative;">
+                    <i class="fas fa-envelope"></i> Email
+                    <span id="email-notification-badge" class="notification-badge" style="display: none;">0</span>
+                </a>
                 <a href="#" class="nav-item" id="nav-analise"><i class="fas fa-magnifying-glass"></i> Análise</a>
                 <a href="papelaria.html" class="nav-item" id="link-papelaria"><i class="fas fa-copy"></i> Papelaria</a>
                 <a href="#" class="nav-item"><i class="fas fa-user"></i> Usuário</a>
@@ -310,9 +316,69 @@
             <li id="ctx-new-os"><i class="fas fa-plus"></i> Nova OS</li>
             <li id="ctx-duplicate-os"><i class="fas fa-copy"></i> Duplicar OS</li>
             <li id="ctx-edit-os"><i class="fas fa-edit"></i> Editar OS</li>
+            <li id="ctx-view-details"><i class="fas fa-search"></i> Detalhes da OS</li>
             <li id="ctx-link-os"><i class="fas fa-link"></i> Vincular OS</li>
             <li id="ctx-open-folder"><i class="fas fa-folder-open"></i> Abrir Pasta</li>
+            <li id="ctx-print-ficha"><i class="fas fa-print"></i> Imprimir Ficha</li>
         </ul>
+    </div>
+
+    <!-- MODAL VINCULAR OS -->
+    <div id="modal-vincular-os" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.6); z-index:10002; align-items:center; justify-content:center;">
+        <div class="login-box" style="width:520px; text-align:left; position:relative;">
+            <h3 style="color:var(--primary-green);">Vincular OS</h3>
+            <div style="margin-bottom:8px; font-weight:bold;">Vincular OS selecionada com:</div>
+            <div style="display:flex; gap:8px; margin-bottom:12px;">
+                <input id="vinc-numero" placeholder="Número da OS" style="flex:1; padding:8px;" />
+                <input id="vinc-ano" placeholder="Ano" style="width:90px; padding:8px;" />
+                <button id="btn-add-vinculo" class="btn-primary" style="padding:8px 12px;">Salvar</button>
+            </div>
+
+            <div style="margin-bottom:10px; font-weight:bold;">OSs já vinculadas:</div>
+            <div id="vinculos-list" style="max-height:200px; overflow:auto; background:#f8f9fa; padding:10px; border-radius:4px; border:1px solid #ddd;">
+                <div style="color:#666;">Nenhuma vinculação.</div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+                <button onclick="document.getElementById('modal-vincular-os').style.display='none'" class="btn-secondary">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DECISAO SAIDA P/ -->
+    <div id="modal-decisao-saida" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.6); z-index:10003; align-items:center; justify-content:center;">
+        <div class="login-box" style="width:460px; text-align:left; position:relative;">
+            <h3 style="color:var(--primary-green);">Atenção: OSs vinculadas</h3>
+            <p>Esta OS possui vínculos. Deseja aplicar este andamento para:</p>
+            <div style="margin:12px 0;">
+                <label><input type="radio" name="decisao_sa" value="all" checked /> Todas as OSs vinculadas</label><br/>
+                <label><input type="radio" name="decisao_sa" value="single" /> Somente esta OS</label>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+                <button id="btn-cancel-decisao" class="btn-secondary">Cancelar</button>
+                <button id="btn-confirm-decisao" class="btn-primary">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL IMPRIMIR FICHA -->
+    <div id="modal-print-ficha" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); z-index: 10004; overflow: hidden;">
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 60vh; max-width: 90vw; height: 85vh; background: white; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); display: flex; flex-direction: column;">
+            <div style="padding: 15px; border-bottom: 2px solid #ddd; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
+                <h3 style="color: var(--secondary-blue); margin: 0;">Ficha da Ordem de Serviço</h3>
+                <div style="display: flex; gap: 10px;">
+                    <button id="btn-print-ficha" class="btn-primary" style="padding: 8px 20px; background-color: var(--secondary-blue); color: white; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                        <i class="fas fa-print"></i> Imprimir
+                    </button>
+                    <button id="btn-close-ficha" class="btn-secondary" style="padding: 8px 20px; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        Fechar
+                    </button>
+                </div>
+            </div>
+            <div id="ficha-container" style="flex: 1; overflow: auto; background: #f5f5f5;">
+                <!-- Conteúdo da ficha será carregado aqui -->
+            </div>
+        </div>
     </div>
 
     <!-- MODAL CAMINHO DA PASTA -->
@@ -342,7 +408,7 @@
     <script src="lib/jquery.min.js"></script>
     <script src="lib/select2.min.js"></script>
     <script src="script.js?v=debug-fix-1"></script>
-    <script src="debug_folder.js?v=1"></script>
+    <!-- <script src="debug_folder.js?v=1"></script> DESABILITADO - Funcionalidade movida para script.js -->
 </body>
 
 </html>

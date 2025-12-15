@@ -22,6 +22,7 @@ async function initGerencia() {
     const urlParams = new URLSearchParams(window.location.search);
     const ano = urlParams.get('ano');
     const id = urlParams.get('id');
+    const modo = urlParams.get('modo'); // Detectar modo 'detalhes'
 
     setupButtons(); // Inicializa botões imediatamente
 
@@ -29,9 +30,18 @@ async function initGerencia() {
     await Promise.all([loadMaquinas(), loadProdutos(), loadPapeis(), loadCores(), loadCategorias()]);
 
     if (ano && id) {
-        // MODO EDIÇÃO
-        document.getElementById('gerencia-title').textContent = `Gerenciamento da OS ${id}/${ano}`;
+        // MODO EDIÇÃO ou DETALHES
+        if (modo === 'detalhes') {
+            document.getElementById('gerencia-title').textContent = `Detalhes da OS ${id}/${ano} (Somente Leitura)`;
+        } else {
+            document.getElementById('gerencia-title').textContent = `Gerenciamento da OS ${id}/${ano}`;
+        }
         await loadOSData(ano, id);
+        
+        // Se modo detalhes, aplicar bloqueio
+        if (modo === 'detalhes') {
+            applyReadOnlyMode();
+        }
     } else {
         // MODO NOVA OS
         document.getElementById('gerencia-title').textContent = `Nova Ordem de Serviço`;
@@ -608,6 +618,51 @@ function recalculateAll() {
     if (elCota) elCota.value = cotaTotal.toFixed(2);
 }
 
+/**
+ * Aplica modo somente leitura em toda a página
+ * Desabilita todos os campos e oculta botões de ação
+ */
+function applyReadOnlyMode() {
+    console.log('[Gerencia] Aplicando modo somente leitura...');
+    
+    // 1. Desabilitar todos os inputs de texto
+    const inputs = document.querySelectorAll('input[type="text"], input[type="date"], input[type="number"], textarea');
+    inputs.forEach(input => {
+        input.setAttribute('readonly', 'readonly');
+        input.style.backgroundColor = '#f5f5f5';
+        input.style.cursor = 'not-allowed';
+    });
+    
+    // 2. Desabilitar todos os selects
+    const selects = document.querySelectorAll('select');
+    selects.forEach(select => {
+        select.setAttribute('disabled', 'disabled');
+        select.style.backgroundColor = '#f5f5f5';
+        select.style.cursor = 'not-allowed';
+    });
+    
+    // 3. Ocultar botões de ação (Salvar e Cancelar)
+    const btnSave = document.getElementById('btn-save-os');
+    const btnCancel = document.getElementById('btn-cancel-os');
+    
+    if (btnSave) btnSave.style.display = 'none';
+    if (btnCancel) {
+        // Transformar botão cancelar em "Voltar"
+        btnCancel.innerHTML = '<i class="fas fa-arrow-left"></i> Voltar';
+        btnCancel.className = 'btn-action btn-secondary';
+        btnCancel.onclick = () => window.location.href = 'index.html';
+    }
+    
+    // 4. Desabilitar Select2 (se existir)
+    if (typeof $ !== 'undefined' && $.fn.select2) {
+        $('.select2-hidden-accessible').each(function() {
+            $(this).select2('destroy');
+            $(this).prop('disabled', true);
+        });
+    }
+    
+    console.log('[Gerencia] Modo somente leitura aplicado com sucesso');
+}
 
 
 document.addEventListener('DOMContentLoaded', () => {

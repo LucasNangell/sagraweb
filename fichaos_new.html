@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ordem de Serviço</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.0/dist/JsBarcode.all.min.js"></script>
+    <style>
+        /* Estilos específicos para impressão e ajustes finos */
+        @media print {
+            body { -webkit-print-color-adjust: exact; }
+            .no-print { display: none; }
+        }
+        .input-box {
+            background-color: white;
+            border-radius: 0.25rem;
+            padding: 0.1rem 0.4rem;
+            min-height: 1.5rem;
+            display: flex;
+            align-items: center;
+        }
+        .section-border {
+            border: 2px solid #a0aec0;
+            border-radius: 0.5rem;
+            position: relative;
+            padding: 0.5rem;
+            background-color: #e2e8f0; /* Fundo cinza claro geral */
+        }
+        .section-title {
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin-bottom: 0.2rem;
+            color: #1a202c;
+        }
+        .label-text {
+            font-size: 0.65rem;
+            color: #4a5568;
+            margin-bottom: 0px;
+            line-height: 1;
+        }
+        .field-value {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #000;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .dark-header {
+            background-color: #718096;
+            color: white;
+            padding: 0.25rem;
+            border-radius: 0.25rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-200 font-sans text-gray-800" style="margin: 0; padding: 0;">
+
+    <div class="mx-auto bg-white p-4 relative" style="max-width: 100%;">
+        
+        <!-- Título Principal -->
+        <h1 class="text-center text-2xl font-bold mb-3 uppercase tracking-wider">Ordem de Serviço</h1>
+
+        <!-- Seção 1: Requisição e Cabeçalho -->
+        <div class="mb-1">
+            <h2 class="section-title">Requisição</h2>
+            <div class="section-border grid grid-cols-12 gap-2">
+                
+                <!-- Coluna Esquerda: Datas e Checkboxes -->
+                <div class="col-span-2 flex flex-col gap-1">
+                    <div class="bg-white rounded p-1 border border-gray-300">
+                        <div class="label-text">Data</div>
+                        <div class="field-value text-center" id="ficha-data"></div>
+                    </div>
+                    <div class="flex justify-between items-center text-xs mt-1">
+                        <span>R$ Entregue:</span>
+                        <div class="flex items-center gap-1">
+                            <span>Não</span>
+                            <div class="w-4 h-4 border border-black bg-white"></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center text-xs">
+                        <span>R$ Lançado:</span>
+                        <div class="flex items-center gap-1">
+                            <span>Sim</span>
+                            <div class="w-4 h-4 border border-black bg-white flex items-center justify-center font-bold">✓</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Coluna Meio: Processo e Cotas -->
+                <div class="col-span-6 grid grid-cols-2 gap-2">
+                    <div>
+                        <div class="label-text">Processo</div>
+                        <div class="input-box" id="ficha-processo"></div>
+                    </div>
+                    <div>
+                        <div class="label-text">Cota Rcoro</div>
+                        <div class="input-box justify-end" id="ficha-cota-rcoro"></div>
+                    </div>
+                    <div>
+                        <div class="label-text">OS</div>
+                        <div class="input-box" id="ficha-os"></div>
+                    </div>
+                    <div class="flex gap-2">
+                        <div class="flex-grow">
+                            <div class="label-text">Cota Cartão</div>
+                            <div class="input-box" id="ficha-cota-cartao"></div>
+                        </div>
+                        <div class="flex flex-col justify-end pb-1">
+                            <div class="label-text">Debitar</div>
+                            <div class="flex items-center gap-1 text-xs font-bold">
+                                Usuário <div class="w-4 h-4 border border-black bg-white"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Coluna Direita: Box OS Destacado + Barcode -->
+                <div class="col-span-4 flex flex-col justify-between">
+                    <div class="flex items-start justify-between bg-gray-400 p-1 border border-gray-600 rounded">
+                        <!-- Código de Barras Inserido Aqui -->
+                        <div class="bg-white p-1 rounded overflow-hidden flex justify-center items-center h-12 w-24">
+                            <svg id="barcode-header" class="w-full h-full"></svg>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-xs font-bold" id="ficha-ano"></div>
+                            <div class="text-3xl font-black text-white leading-none" id="ficha-os-ano"></div>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 mt-1">
+                        <div class="w-1/3">
+                            <div class="label-text">Modelos</div>
+                            <div class="input-box justify-center" id="ficha-modelos"></div>
+                        </div>
+                        <div class="w-2/3">
+                            <div class="label-text">Tiragem</div>
+                            <div class="input-box justify-end" id="ficha-tiragem"></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Seção 2: Entidade Solicitante -->
+        <div class="mt-2 mb-1">
+            <h2 class="section-title">Entidade Solicitante</h2>
+            <div class="section-border grid grid-cols-12 gap-2">
+                
+                <div class="col-span-3">
+                    <div class="label-text">Categoria</div>
+                    <div class="input-box" id="ficha-categoria"></div>
+                </div>
+                <div class="col-span-3">
+                    <div class="label-text">Cód. do Usuário</div>
+                    <div class="input-box justify-center" id="ficha-cod-usuario"></div>
+                </div>
+                <div class="col-span-6 row-span-2">
+                    <div class="label-text">Contato</div>
+                    <div class="input-box h-full items-start pt-1" id="ficha-contato"></div>
+                </div>
+
+                <div class="col-span-6">
+                    <div class="label-text">Nome</div>
+                    <div class="dark-header font-bold text-sm" id="ficha-nome"></div>
+                </div>
+
+                <div class="col-span-4">
+                    <div class="label-text">Sigla</div>
+                    <div class="input-box" id="ficha-sigla"></div>
+                </div>
+                <div class="col-span-2">
+                    <div class="label-text">Ramal</div>
+                    <div class="input-box" id="ficha-ramal"></div>
+                </div>
+                <div class="col-span-6">
+                    <div class="label-text">Interessado</div>
+                    <div class="input-box" id="ficha-interessado"></div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Seção 3: Informações Técnicas -->
+        <div class="mt-2 mb-1">
+            <h2 class="section-title">Informações Técnicas</h2>
+            <div class="section-border grid grid-cols-12 gap-x-3 gap-y-2">
+                
+                <!-- Coluna Esquerda Principal -->
+                <div class="col-span-8 grid grid-cols-1 gap-2">
+                    <!-- Linha 1 -->
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <div class="label-text">Tipo de Serviço:</div>
+                            <div class="input-box" id="ficha-tipo-servico"></div>
+                        </div>
+                        <div>
+                            <div class="label-text">Máquina Sugerida:</div>
+                            <div class="input-box" id="ficha-maquina"></div>
+                        </div>
+                    </div>
+                    <!-- Titulo -->
+                    <div>
+                        <div class="label-text">Título:</div>
+                        <div class="input-box h-8" id="ficha-titulo"></div>
+                    </div>
+                    <!-- Cor e Observações -->
+                    <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-4">
+                            <div class="label-text">Cor</div>
+                            <div class="input-box h-8" id="ficha-cor"></div>
+                        </div>
+                        <div class="col-span-8">
+                            <div class="label-text">Observações:</div>
+                            <div class="input-box h-8" id="ficha-obs-cor"></div>
+                        </div>
+                    </div>
+                     <!-- Papel e Observações -->
+                     <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-4">
+                            <div class="label-text">Papel</div>
+                            <div class="input-box h-8" id="ficha-papel"></div>
+                        </div>
+                        <div class="col-span-8">
+                            <div class="label-text">Observações:</div>
+                            <div class="input-box h-8" id="ficha-obs-papel"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Coluna Direita (Páginas, Formato, Acabamento) -->
+                <div class="col-span-4 flex flex-col gap-2">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <div class="label-text">Páginas</div>
+                            <div class="input-box justify-center" id="ficha-paginas"></div>
+                        </div>
+                        <div>
+                            <div class="label-text">Frente / Verso</div>
+                            <div class="flex items-center justify-between bg-white px-2 rounded h-6 mt-1 border border-gray-300">
+                                <span class="text-xs font-bold" id="ficha-fv"></span>
+                                <div class="w-3 h-3 border border-black bg-white"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="label-text">Formato</div>
+                        <div class="input-box" id="ficha-formato"></div>
+                    </div>
+
+                    <div class="flex-grow">
+                        <div class="label-text">Acabamento</div>
+                        <div class="input-box h-full items-start text-xs flex-col pt-1 gap-1" id="ficha-acabamento"></div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Seção 4: Obs Gerais e Insumos -->
+        <div class="mt-2 mb-1 grid grid-cols-12 gap-3">
+            
+            <!-- Obs Gerais -->
+            <div class="col-span-5">
+                <div class="h-full">
+                    <div class="label-text font-bold text-sm ml-1 text-gray-700">Observações Gerais:</div>
+                    <div class="section-border bg-gray-200 h-40">
+                        <div class="bg-white w-full h-full rounded border border-gray-300 p-2 text-xs" id="ficha-obs-gerais"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Insumos e Material -->
+            <div class="col-span-7 section-border grid grid-cols-2 gap-0 p-0 overflow-hidden">
+                <div class="border-r border-gray-400 p-2">
+                    <div class="font-bold text-sm mb-1 bg-gray-300 px-1 -mx-2 -mt-2 py-1 border-b border-gray-400">Insumos Fornecidos</div>
+                    <div class="text-xs mt-2" id="ficha-insumos"></div>
+                </div>
+                <div class="p-2">
+                    <div class="font-bold text-sm mb-1 bg-gray-300 px-1 -mx-2 -mt-2 py-1 border-b border-gray-400">Material Entregue</div>
+                    <div class="text-xs mt-2" id="ficha-material"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Seção 5: Dados de Entrega e Avisos -->
+        <div class="mt-2 grid grid-cols-12 gap-3">
+            
+            <!-- Dados de Entrega -->
+            <div class="col-span-5">
+                <h2 class="section-title">Dados de Entrega</h2>
+                <div class="section-border p-2">
+                    <div class="grid grid-cols-12 gap-2">
+                        <div class="col-span-8">
+                            <div class="label-text">Resp. na Gráfica</div>
+                            <div class="input-box" id="ficha-resp-grafica"></div>
+                        </div>
+                        <div class="col-span-4">
+                            <div class="label-text">Prazo p/ Entrega</div>
+                            <div class="input-box text-[10px] leading-tight flex items-center" id="ficha-prazo"></div>
+                        </div>
+                        <div class="col-span-8">
+                            <div class="label-text">Forma de Entrega</div>
+                            <div class="input-box text-xs" id="ficha-forma-entrega"></div>
+                        </div>
+                        <div class="col-span-4">
+                            <div class="label-text">Data</div>
+                            <div class="input-box justify-center" id="ficha-data-entrega"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Avisos -->
+            <div class="col-span-7">
+                <h2 class="section-title">Avisos</h2>
+                <div class="section-border bg-white p-2 h-28">
+                    <div class="text-xs" id="ficha-avisos"></div>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+</body>
+</html>

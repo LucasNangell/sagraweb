@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Admin - IPs Permitidos</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;padding:20px}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px;border:1px solid #ddd;text-align:left}
+    .actions button{margin-right:6px}
+    .toolbar{margin-bottom:12px}
+  </style>
+</head>
+<body>
+  <h2>Admin - IPs Permitidos</h2>
+  <div class="toolbar">
+    <input id="ip-input" placeholder="IP (ex: 192.168.0.10)">
+    <input id="desc-input" placeholder="Descrição (opcional)">
+    <button id="add-btn">Adicionar</button>
+  </div>
+  <div id="msg" style="margin-bottom:8px;color:#333"></div>
+  <table>
+    <thead>
+      <tr><th>ID</th><th>IP</th><th>Descrição</th><th>Ativo</th><th>Ações</th></tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+
+<script>
+async function fetchList(){
+  const res = await fetch('/api/admin/ip/list');
+  const data = await res.json();
+  const tb = document.getElementById('tbody');
+  tb.innerHTML='';
+  data.forEach(r=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${r.id}</td><td>${r.ip}</td><td>${r.descricao||''}</td><td>${r.ativo? 'Sim':'Não'}</td><td class="actions"></td>`;
+    const actions = tr.querySelector('.actions');
+    const btnToggle = document.createElement('button');
+    btnToggle.textContent = r.ativo? 'Desativar':'Ativar';
+    btnToggle.onclick = async ()=>{
+      await fetch('/api/admin/ip/update', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id, ativo: !r.ativo})});
+      fetchList();
+    };
+    const btnDelete = document.createElement('button');
+    btnDelete.textContent = 'Excluir';
+    btnDelete.onclick = async ()=>{
+      if(!confirm('Excluir registro?')) return;
+      await fetch('/api/admin/ip/delete', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id})});
+      fetchList();
+    };
+    actions.appendChild(btnToggle);
+    actions.appendChild(btnDelete);
+    tb.appendChild(tr);
+  });
+}
+
+document.getElementById('add-btn').onclick = async ()=>{
+  const ip = document.getElementById('ip-input').value.trim();
+  const desc = document.getElementById('desc-input').value.trim();
+  if(!ip){ alert('Informe um IP'); return; }
+  await fetch('/api/admin/ip/add', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ip:ip, descricao: desc, ativo:true})});
+  document.getElementById('ip-input').value='';
+  document.getElementById('desc-input').value='';
+  fetchList();
+};
+
+fetchList();
+</script>
+</body>
+</html>

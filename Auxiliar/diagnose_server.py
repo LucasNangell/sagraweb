@@ -3,7 +3,7 @@ import sys
 
 def check():
     try:
-        url = "http://localhost:8000/api/aux/produtos"
+        url = "http://localhost:8001/api/aux/produtos"
         print(f"Checking {url}...")
         resp = requests.get(url, timeout=5)
         print(f"Status: {resp.status_code}")

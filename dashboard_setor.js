@@ -1,0 +1,415 @@
+const { createApp, ref, onMounted, onUnmounted, watch } = Vue;
+
+createApp({
+    setup() {
+        // --- State ---
+        const lastUpdated = ref("Carregando...");
+        const progress = ref(0);
+        const showSettings = ref(false);
+        const setoresList = ref([]);
+        const andamentosList = ref([]);
+
+        // Configuration State (Persisted)
+        const config = ref({
+            sector: "SEFOC",
+            columns: [
+                {
+                    id: 'entrada',
+                    title: 'p/ Triagem',
+                    statuses: ['Saída p/', 'Saída parcial p/', 'Entrada Inicial', 'Tramit. de Prova p/', 'Tramit. de Prévia p/', 'Comentário']
+                },
+                {
+                    id: 'execucao',
+                    title: 'Em Execução',
+                    statuses: ['Em Execução', 'Recebido']
+                },
+                {
+                    id: 'problema',
+                    title: 'Problemas Técnicos',
+                    statuses: ['Problemas Técnicos', 'Problema Técnico']
+                },
+                {
+                    id: 'doc',
+                    title: 'Enviar e-mail',
+                    statuses: ['Encam. de Docum.']
+                }
+            ]
+        });
+
+        const tempConfig = ref(JSON.parse(JSON.stringify(config.value))); // Deep copy for modal editing
+
+        // Display Data
+        const columns = ref([]);
+        const previousDataMap = ref(new Map()); // To track "New" items
+
+        // --- Logic ---
+
+        // Fetch available setores from API
+        const loadSetores = async () => {
+            try {
+                const API_BASE_URL = `http://${window.location.hostname}:${window.SAGRA_API_PORT || 8000}/api`;
+                const response = await fetch(`${API_BASE_URL}/aux/setores`);
+                const result = await response.json();
+                if (result && Array.isArray(result) && result.length > 0) {
+                    setoresList.value = result.map(item => item.Setor);
+                    console.log("Setores carregados:", setoresList.value);
+                } else {
+                    console.warn("Nenhum setor retornado da API");
+                }
+            } catch (error) {
+                console.error("Error loading setores:", error);
+            }
+        };
+
+        // Fetch available andamentos from API
+        const loadAndamentos = async () => {
+            try {
+                const API_BASE_URL = `http://${window.location.hostname}:${window.SAGRA_API_PORT || 8000}/api`;
+                const response = await fetch(`${API_BASE_URL}/aux/andamentos`);
+                const result = await response.json();
+                if (result && Array.isArray(result) && result.length > 0) {
+                    andamentosList.value = result.map(item => item.Situacao);
+                    console.log("Andamentos carregados:", andamentosList.value);
+                } else {
+                    console.warn("Nenhum andamento retornado da API");
+                }
+            } catch (error) {
+                console.error("Error loading andamentos:", error);
+            }
+        };
+
+        // Toggle andamento for a column
+        const toggleAndamento = (colIdx, andamento) => {
+            const col = tempConfig.value.columns[colIdx];
+            const idx = col.statuses.indexOf(andamento);
+            if (idx === -1) {
+                col.statuses.push(andamento);
+            } else {
+                col.statuses.splice(idx, 1);
+            }
+        };
+
+        // Load Config from LocalStorage
+        const loadConfig = () => {
+            const saved = localStorage.getItem('sagra_dashboard_config');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    // Merge to ensure structure integrity
+                    config.value.sector = parsed.sector || "SEFOC";
+                    if (parsed.columns && parsed.columns.length > 0) {
+                        config.value.columns = parsed.columns;
+                    }
+                } catch (e) { console.error("Error loading config", e); }
+            }
+            // Initialize display columns from config
+            columns.value = config.value.columns.map(c => ({ ...c, items: [] }));
+            tempConfig.value = JSON.parse(JSON.stringify(config.value));
+        };
+
+        const openSettings = () => {
+            // Deep copy config when opening modal
+            tempConfig.value = JSON.parse(JSON.stringify(config.value));
+            showSettings.value = true;
+        };
+
+        const saveSettings = () => {
+            config.value = JSON.parse(JSON.stringify(tempConfig.value));
+            localStorage.setItem('sagra_dashboard_config', JSON.stringify(config.value));
+            showSettings.value = false;
+            // Re-init columns and fetch immediately
+            columns.value = config.value.columns.map(c => ({ ...c, items: [] }));
+            previousDataMap.value.clear(); // Clear history to avoid stale comparisons
+            fetchData();
+        };
+
+        // Fetch Data from Real API
+        const fetchData = async () => {
+            try {
+                // Build dynamic Filters
+                // We fetch specific statuses based on columns config to optimize, 
+                // OR we fetch all active for the sector and filter client-side.
+                // Given the prompt "Filter by sector selected", fetching by sector is safer.
+
+                const params = new URLSearchParams();
+                params.append('setor', config.value.sector);
+                params.append('include_finished', 'false');
+                params.append('limit', '200'); // Fetch enough items
+
+                // Add column statuses to filter
+                // Flatten all statuses from all columns
+                // const allStatuses = config.value.columns.flatMap(c => c.statuses);
+                // allStatuses.forEach(s => params.append('situacao[]', s));
+                // NOTE: API searches EXACT string. 'Saída p/' matches "Saída p/ SEFOC" via "LIKE" check in backend?
+                // Looking at server.py: 
+                // if situacao: ... AND a.SituacaoLink IN (...) -> EQUAL check usually.
+                // BUT server_py: query += " AND a.SituacaoLink IN ({placeholders})" -> equal check.
+                // However, the prompt says "Saída p/" but backend might store "Saída p/ EXPEDICAO".
+                // We will fetch ALL for the sector and filter client-side to be robust against "Saída p/..." variations if needed,
+                // OR relies on "situacao" param being exact.
+                // LET'S FETCH EVERYTHING FOR THE SECTOR first to be safe.
+
+                const API_BASE_URL = `http://${window.location.hostname}:${window.SAGRA_API_PORT || 8000}/api`;
+                const response = await fetch(`${API_BASE_URL}/os/search?${params.toString()}`);
+                const result = await response.json();
+
+                if (result && result.data) {
+                    processData(result.data);
+                }
+
+                lastUpdated.value = new Date().toLocaleTimeString();
+
+            } catch (error) {
+                console.error("Error fetching data:", error);
+            }
+        };
+
+        const processData = (rawData) => {
+            // Create a temp map for the new data
+            const currentDataMap = new Map();
+
+            // Temporary storage for columns
+            const tempColumns = config.value.columns.map(c => ({ ...c, items: [] }));
+
+            rawData.forEach(os => {
+                const uniqueKey = `${os.nr_os}-${os.ano}`;
+                const priorityType = os.prioridade ?
+                    (os.prioridade.includes('Prometido') ? 'priority-high' :
+                        os.prioridade.includes('Solicitado') ? 'priority-medium' : null) : null;
+                const isNew = !previousDataMap.value.has(uniqueKey);
+
+                const item = {
+                    ...os,
+                    uniqueKey,
+                    priorityType,
+                    isNew: isNew // Flag for animation
+                };
+
+                currentDataMap.set(uniqueKey, item);
+
+                // Map to Column
+                // Logic: Check which column's statuses list contains (or starts with) the OS status
+                const colIndex = tempColumns.findIndex(col => {
+                    return col.statuses.some(statusFilter => {
+                        // Exact match OR Starts With (for "Saída p/...")
+                        return os.situacao === statusFilter || os.situacao.startsWith(statusFilter);
+                    });
+                });
+
+                if (colIndex !== -1) {
+                    tempColumns[colIndex].items.push(item);
+                }
+            });
+
+            // --- Sorting Logic (New Rule) ---
+            // 1. Prometido p/
+            // 2. Solicitado p/
+            // 3. OS < 5000
+            // 4. OS >= 5000
+            // Internal Sort: Last Update ASC (Oldest First)
+            const getWeight = (os) => {
+                const prio = os.prioridade || "";
+                if (prio.includes("Prometido p/")) return 0;
+                if (prio.includes("Solicitado p/")) return 1;
+                const nr = parseInt(os.nr_os);
+                if (!isNaN(nr) && nr < 5000) return 2;
+                return 3;
+            };
+
+            tempColumns.forEach(col => {
+                col.items.sort((a, b) => {
+                    const wA = getWeight(a);
+                    const wB = getWeight(b);
+
+                    if (wA !== wB) return wA - wB;
+
+                    // Internal: Date ASC
+                    // last_update comes from API (added to server.py)
+                    const dA = a.last_update ? new Date(a.last_update).getTime() : 0;
+                    const dB = b.last_update ? new Date(b.last_update).getTime() : 0;
+                    return dA - dB;
+                });
+            });
+
+            // Update Reactive State
+            // We replace items but keep Vue's reactivity happy if possible, 
+            // but for full list replacement usually just updating the array is fine.
+            // Vue 3 transition-group handles the diff based on :key
+
+            columns.value = tempColumns;
+
+            // Update History Map for next cycle
+            previousDataMap.value = currentDataMap;
+        };
+
+        // Progress Bar & Polling
+        const startTimer = () => {
+            progress.value = 0;
+            const duration = 5000; // 5 seconds
+            const interval = 100;
+
+            const timer = setInterval(() => {
+                progress.value += (interval / duration) * 100;
+                if (progress.value >= 100) {
+                    clearInterval(timer);
+                    fetchData();
+                    startTimer(); // Loop
+                }
+            }, interval);
+        };
+
+        // Wake Lock - Manter tela ligada
+        let wakeLock = null;
+        let wakeLockVideo = null;
+
+        const requestWakeLock = async () => {
+            // 1. Tentar API Nativa
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log('Wake Lock (API) ativado - tela permanecerá ligada');
+                    wakeLock.addEventListener('release', () => {
+                        console.log('Wake Lock (API) liberado');
+                    });
+                } else {
+                    console.warn('Wake Lock API não suportada nativamente.');
+                }
+            } catch (err) {
+                console.error('Erro ao ativar Wake Lock API:', err);
+            }
+
+            // 2. Fallback: Vídeo em Loop (Hack para Kiosk/TVs)
+            try {
+                if (!wakeLockVideo) {
+                    wakeLockVideo = document.createElement('video');
+                    wakeLockVideo.style.opacity = 0;
+                    wakeLockVideo.style.position = 'absolute';
+                    wakeLockVideo.width = 1;
+                    wakeLockVideo.height = 1;
+                    wakeLockVideo.pointerEvents = 'none';
+                    // WebM pequeno e vazio
+                    wakeLockVideo.src = "data:video/webm;base64,GkXfo0AgQoaBAUL3gQFC8oEEQvOBCEKCQAR3ZWJtQoeBAkKFgQIYU4BnQI0VSalmRBfX17G9n3+iR5MWCoGYIfthgYACk7OCOYGDPZgdT6v/uAAAAAA=";
+                    wakeLockVideo.loop = true;
+                    wakeLockVideo.muted = true;
+                    wakeLockVideo.playsInline = true;
+                    document.body.appendChild(wakeLockVideo);
+                }
+                await wakeLockVideo.play();
+                console.log('Wake Lock (Vídeo Fallback) ativado.');
+            } catch (err) {
+                console.warn('Autoplay bloqueado (aguardando clique):', err);
+            }
+        };
+
+        const releaseWakeLock = async () => {
+            // API
+            if (wakeLock !== null) {
+                try {
+                    await wakeLock.release();
+                    wakeLock = null;
+                } catch (err) { console.error(err); }
+            }
+            // Vídeo
+            if (wakeLockVideo) {
+                wakeLockVideo.pause();
+                wakeLockVideo.remove();
+                wakeLockVideo = null;
+            }
+        };
+
+        // Reativar Wake Lock quando a página voltar a ser visível
+        document.addEventListener('visibilitychange', async () => {
+            if (document.visibilityState === 'visible') {
+                await requestWakeLock();
+            }
+        });
+
+        // Garantir ativação no primeiro clique (superar bloqueio de autoplay)
+        const enableOnInteraction = async () => {
+            await requestWakeLock();
+            document.removeEventListener('click', enableOnInteraction);
+            document.removeEventListener('touchstart', enableOnInteraction);
+        };
+        document.addEventListener('click', enableOnInteraction);
+        document.addEventListener('touchstart', enableOnInteraction);
+
+        onMounted(() => {
+            loadConfig();
+            loadSetores();
+            loadAndamentos();
+            fetchData();
+            startTimer();
+            startWebSocket();
+            requestWakeLock(); // Ativar Wake Lock ao carregar a página
+
+            // Initialize Lucide icons if available globally
+            if (window.lucide) window.lucide.createIcons();
+        });
+
+        const startWebSocket = () => {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const port = window.SAGRA_API_PORT || 8000;
+            const wsUrl = `${protocol}//${window.location.hostname}:${port}/ws`;
+
+            let socket;
+
+            const connect = () => {
+                console.log("Connecting to WebSocket:", wsUrl);
+                socket = new WebSocket(wsUrl);
+
+                socket.onopen = () => {
+                    console.log("WebSocket connected");
+                };
+
+                socket.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'system_update') {
+                            // Debounce or just call? For now direct call is fine.
+                            console.log("System update received:", data);
+                            fetchData();
+                        }
+                    } catch (e) { console.error("WS Message Error", e); }
+                };
+
+                socket.onclose = () => {
+                    console.warn("WebSocket disconnected. Reconnecting in 5s...");
+                    setTimeout(connect, 5000);
+                };
+
+                socket.onerror = (err) => {
+                    console.error("WebSocket Error", err);
+                    socket.close();
+                };
+            };
+
+            connect();
+        };
+
+        watch(showSettings, (val) => {
+            if (!val && window.lucide) {
+                // re-render icons when modal closes if needed
+                setTimeout(() => window.lucide.createIcons(), 100);
+            }
+        });
+
+        // Liberar Wake Lock quando o componente for desmontado
+        onUnmounted(() => {
+            releaseWakeLock();
+        });
+
+        return {
+            config,
+            tempConfig,
+            columns,
+            lastUpdated,
+            progress,
+            showSettings,
+            openSettings,
+            saveSettings,
+            setoresList,
+            andamentosList,
+            toggleAndamento
+        };
+    }
+}).mount('#app');

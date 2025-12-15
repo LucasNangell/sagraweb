@@ -3,7 +3,7 @@ import json
 
 def check_api():
     try:
-        url = "http://localhost:8000/api/aux/formatos"
+        url = "http://localhost:8001/api/aux/formatos"
         print(f"Calling {url}...")
         res = requests.get(url)
         print(f"Status: {res.status_code}")

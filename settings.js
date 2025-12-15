@@ -85,7 +85,7 @@ async function loadSavedPreferences() {
     if (!ponto) return;
 
     try {
-        const res = await fetch(`${API_BASE_URL}/settings/filtros/${ponto}`);
+        const res = await fetch(`${API_BASE_URL}/settings/filtros/ponto/${ponto}`);
         if (!res.ok) throw new Error("Erro ao buscar filtros");
         const data = await res.json();
 

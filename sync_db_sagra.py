@@ -4,6 +4,7 @@ import sys
 import logging
 import time
 import datetime
+import json
 from config_manager import config_manager
 import warnings
 
@@ -40,10 +41,10 @@ warnings.filterwarnings("ignore")
 def get_mysql_conn():
     """Retorna conexão com MySQL (sagrafulldb)."""
     return pymysql.connect(
-        host=config_manager.get("db_host", "10.120.1.125"),
+        host=config_manager.get("db_host", "localhost"),
         port=int(config_manager.get("db_port", 3306)),
-        user=config_manager.get("db_user", "usr_sefoc"),
-        password=config_manager.get("db_password", "sefoc_2018"),
+        user=config_manager.get("db_user", "root"),
+        password=config_manager.get("db_password", ""),
         database=config_manager.get("db_name", "sagrafulldb"),
         cursorclass=pymysql.cursors.DictCursor,
         autocommit=True,
@@ -246,28 +247,44 @@ def sync_os_data(os_id, os_ano):
             table = conf["table"]
             logging.info(f"    - Processing table {table}...")
             
+            # --- DATE FILTERING (Requested by User) ---
+            extra_where_mysql = ""
+            extra_where_access = ""
+            extra_params_mysql = []
+            extra_params_access = []
+
+            if table == "tabAndamento":
+                 today = get_today_date()
+                 # MySQL: DATE(Data) = Today
+                 extra_where_mysql = f" AND DATE({COL_DATA_ANDAMENTO}) = %s"
+                 extra_params_mysql = [today]
+                 
+                 # Access: Data >= Today (00:00:00)
+                 extra_where_access = f" AND {COL_DATA_ANDAMENTO} >= ?" 
+                 extra_params_access = [today]
+
             # FETCH DATA FROM BOTH
             # MySQL
             mysql_rows = []
             with mysql_conn.cursor() as cur:
                 where_clause = " AND ".join([f"{k}=%s" for k in conf["pk"]])
-                sql = f"SELECT * FROM {table} WHERE {where_clause}"
-                cur.execute(sql, conf["pk_vals"])
+                sql = f"SELECT * FROM `{table}` WHERE {where_clause} {extra_where_mysql}"
+                cur.execute(sql, conf["pk_vals"] + extra_params_mysql)
                 cols = [desc[0] for desc in cur.description]
                 mysql_rows = [clean_row(r, cols) for r in cur.fetchall()]
 
             # Access
             acc_cursor = access_conn.cursor()
-            where_clause_acc = " AND ".join([f"{k}=?" for k in conf["pk"]])
-            sql_acc = f"SELECT * FROM [{table}] WHERE {where_clause_acc}"
-            acc_data_raw = fetch_all_as_dict(acc_cursor, sql_acc, conf["pk_vals"])
+            where_clause_acc = " AND ".join([f"[{k}]=?" for k in conf["pk"]])
+            sql_acc = f"SELECT * FROM [{table}] WHERE {where_clause_acc} {extra_where_access}"
+            acc_data_raw = fetch_all_as_dict(acc_cursor, sql_acc, conf["pk_vals"] + extra_params_access)
             
             # --- MERGE LOGIC ---
             # Simples: Se tabAndamento, merge por CodStatus. Se Protocolo/Detalhes, é 1-to-1 (update fields).
             
             if conf.get("is_many"):
                 # Lógica para listas (Andamentos)
-                sync_list_data(table, conf["real_pk"][0], mysql_rows, acc_data_raw, mysql_conn, access_conn)
+                sync_list_data(table, conf["real_pk"][0], mysql_rows, acc_data_raw, mysql_conn, access_conn, conf["pk"], conf["pk_vals"])
             else:
                 # Lógica para objeto único (Protocolo, Detalhes)
                 sync_single_record(table, conf["pk"], conf["pk_vals"], mysql_rows, acc_data_raw, mysql_conn, access_conn)
@@ -334,39 +351,144 @@ def sync_single_record(table, pk_cols, pk_vals, mysql_data, access_data, mysql_c
     if not mysql_item and not access_item:
         return # Nada a fazer
     
-    # 1. Missing in MySQL -> Insert from Access
+    # 1. Access exists, MySQL missing
     if access_item and not mysql_item:
-        logging.info(f"      + Inserting into MySQL {table}...")
-        insert_into_mysql(mysql_conn, table, access_item)
+        if was_deleted_in_mysql(mysql_conn, table, access_item):
+             logging.info(f"      [SYNC-DEL] Record {table} deleted in MySQL -> Delete from Access.")
+             pk_data = get_pk_data(table, access_item)
+             if pk_data:
+                apply_delete_to_access(access_conn, table, pk_data)
+        else:
+            logging.info(f"      [SYNC-NEW] Record {table} New in Access -> Insert MySQL.")
+            insert_into_mysql(mysql_conn, table, access_item)
         return
 
-    # 2. Missing in Access -> Insert from MySQL
+    # 2. MySQL exists, Access missing
     if mysql_item and not access_item:
-        logging.info(f"      + Inserting into Access {table}...")
-        insert_into_access(access_conn, table, mysql_item)
+        if check_pending_mysql_insert(mysql_conn, table, mysql_item):
+             logging.info(f"      [SYNC-NEW] Record {table} New in MySQL -> Insert Access.")
+             insert_into_access(access_conn, table, mysql_item)
+        else:
+             logging.info(f"      [SYNC-DEL] Record {table} missing in Access -> Delete from MySQL.")
+             delete_from_mysql(mysql_conn, table, pk_cols, pk_vals)
         return
 
-    # 3. Exists in Both -> Compare updates
-    # Comparação simplificada: Se dados diferem, assumimos MySQL (web) como mais recente SE tiver mudado hoje?
-    # Ou Access como autoridade final? 
-    # USER PEDIU: "Assumir que a versão com o timestamp mais recente... é a correta"
-    # Problema: Tabelas Access antigas podem nao ter timestamp de update na linha.
-    # Vamos comparar todos valores. Se diferente, update. Quem vence?
-    # Regra segura: Access costuma ser o "erp" legado. Mas se web edita, web vence.
-    # Para simplificar: UPDATE MySQL com dados do Access (Sync Access -> Web preferencialmente), 
-    # MAS se tiver campo de data de modificação, usar.
-    # Como não temos coluna "LastModified" garantida, vamos verificar divergência de conteúdo.
+    # 3. Exists in Both -> NO UPDATES AS REQUESTED ("não altere mais nenhuma informação")
+
+
+def get_pk_data(table, record):
+    if table == 'tabAndamento':
+        return {
+           'CodStatus': record['CodStatus'], 
+           'NroProtocoloLink': record['NroProtocoloLink'], 
+           'AnoProtocoloLink': record['AnoProtocoloLink']
+        }
+    elif table == 'tabProtocolos':
+        return {'NroProtocolo': record['NroProtocolo'], 'AnoProtocolo': record['AnoProtocolo']}
+    elif table == 'tabDetalhesServico':
+        return {'NroProtocoloLinkDet': record['NroProtocoloLinkDet'], 'AnoProtocoloLinkDet': record['AnoProtocoloLinkDet']}
+    return {}
+
+def was_deleted_in_mysql(conn, table, record):
+    pk_data = get_pk_data(table, record)
+    if not pk_data: return False
+
+    # Check sync_changes_log for DELETE action
+    # Using JSON path extraction for accuracy
+    sql = f"SELECT id FROM sync_changes_log WHERE table_name=%s AND action='DELETE'"
+    params = [table]
     
-    if items_differ(mysql_item, access_item, table):
-        logging.info(f"      ! Difference detected in {table}. Updating MySQL < Access (Default rule).")
-        # Por padrão, vamos replicar Access -> MySQL para manter o legado como fonte da verdade, 
-        # a menos que saibamos que a Web editou. 
-        # TODO: Refinar isso se tiver campo 'DataAlteracao'.
-        update_mysql(mysql_conn, table, pk_cols, pk_vals, access_item)
+    for k, v in pk_data.items():
+        # Compare strings to handle int/str mismatch
+        sql += f" AND JSON_UNQUOTE(JSON_EXTRACT(pk_json, '$.{k}')) = %s"
+        params.append(str(v))
+        
+    sql += " LIMIT 1"
+    
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            return cur.fetchone() is not None
+    except Exception as e:
+        logging.error(f"Error checking deleted status: {e}")
+        return False
 
+def enforce_link_integrity(data_dict, link_cols, link_vals):
+    """Garante que o registro pertença à OS correta antes de inserir/atualizar."""
+    if not data_dict or not link_cols or not link_vals: return
+    for col, val in zip(link_cols, link_vals):
+        # Conversão string para comparação segura
+        current_val = data_dict.get(col)
+        if current_val is not None and str(current_val) != str(val):
+             logging.warning(f"      [INTEGRITY WARN] Fix link {col}: {current_val} -> {val}")
+        data_dict[col] = val
 
-def sync_list_data(table, unique_key, mysql_list, access_list, mysql_conn, access_conn):
-    """Sincroniza lista de itens (Ex: Andamentos). Chave única: CodStatus"""
+def delete_from_mysql(conn, table, pk_cols, pk_vals):
+    where_clause = " AND ".join([f"`{k}`=%s" for k in pk_cols])
+    sql = f"DELETE FROM `{table}` WHERE {where_clause}"
+    with conn.cursor() as cur:
+        cur.execute(sql, pk_vals)
+
+def check_pending_mysql_insert(conn, table, record):
+    pk_data = get_pk_data(table, record)
+    if not pk_data: return False
+    
+    # Check for PENDING INSERT (processed=0).
+    # If processed=1, it means we already synced it to Access. 
+    # If it is missing in Access now, it means it was deleted there.
+    
+    sql = f"SELECT id FROM sync_changes_log WHERE table_name=%s AND action='INSERT' AND processed=0"
+    params = [table]
+    
+    for k, v in pk_data.items():
+        # Compare strings to handle int/str mismatch
+        sql += f" AND JSON_UNQUOTE(JSON_EXTRACT(pk_json, '$.{k}')) = %s"
+        params.append(str(v))
+        
+    sql += " LIMIT 1"
+    
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            return cur.fetchone() is not None
+    except Exception as e:
+        logging.error(f"Error checking pending insert: {e}")
+        return False
+
+def items_differ(dict_a, dict_b, table_name="Generic"):
+    """Compara dois dicionários ignorando chaves irrelevantes."""
+    keys = set(dict_a.keys()) & set(dict_b.keys())
+    
+    # Fields to ignore in diff check
+    IGNORE_FIELDS = {'DataEntrada', 'Date', 'DataAndamento', 'HoraAndamento'}
+
+    for k in keys:
+        if k in IGNORE_FIELDS: continue
+        val_a = dict_a[k]
+        val_b = dict_b[k]
+        
+        # Normalização pra comparação
+        str_a = str(val_a) if val_a is not None else ""
+        str_b = str(val_b) if val_b is not None else ""
+        
+        if str_a == str_b: continue
+        if not val_a and not val_b: continue
+        
+        # Boolean normalization
+        bool_map = {"True": "1", "False": "0", "1": "1", "0": "0"}
+        norm_a = bool_map.get(str_a, str_a)
+        norm_b = bool_map.get(str_b, str_b)
+        
+        if norm_a == norm_b: continue
+
+        # logging.info(f"        [DIFF] {table_name}.{k}: '{val_a}' vs '{val_b}'")
+        return True
+        
+    return False
+
+def sync_list_data(table, unique_key, mysql_list, access_list, mysql_conn, access_conn, link_cols=None, link_vals=None):
+    """Sincroniza lista: MDB Master -> MySQL Slave. Exception: New Web Andamentos."""
+    
     mysql_map = {str(item[unique_key]): item for item in mysql_list}
     access_map = {str(item[unique_key]): item for item in access_list}
 
@@ -375,53 +497,38 @@ def sync_list_data(table, unique_key, mysql_list, access_list, mysql_conn, acces
     for key in all_keys:
         m_item = mysql_map.get(key)
         a_item = access_map.get(key)
+        
+        # 1. Exist in Access (Master)
+        if a_item:
+            if not m_item:
+                 # New in Access -> Insert MySQL
+                 logging.info(f"      [MDB->MYSQL] New Item {key} -> Insert MySQL")
+                 if link_cols and link_vals: enforce_link_integrity(a_item, link_cols, link_vals)
+                 insert_into_mysql(mysql_conn, table, a_item)
+            else:
+                 # Exists in both -> Update MySQL (Enforce MDB state)
+                 if items_differ(m_item, a_item, table):
+                      logging.info(f"      [MDB->MYSQL] Diff Item {key} -> Update MySQL")
+                      if link_cols and link_vals: enforce_link_integrity(a_item, link_cols, link_vals)
+                      update_mysql(mysql_conn, table, [unique_key], [key], a_item)
 
-        if a_item and not m_item:
-            # Novo no Access -> MySQL
-            logging.info(f"      + New Andamento {key} -> MySQL")
-            insert_into_mysql(mysql_conn, table, a_item)
+        # 2. Exists in MySQL but NOT Access (Potential Orphan)
         elif m_item and not a_item:
-            # Novo no MySQL -> Access
-            logging.info(f"      + New Andamento {key} -> Access")
-            insert_into_access(access_conn, table, m_item)
-        elif m_item and a_item:
-            # Existe em ambos. Comparar.
-            if items_differ(m_item, a_item, f"{table} (KB={key})"):
-                logging.info(f"      ! Update Andamento {key}: Access -> MySQL")
-                update_mysql(mysql_conn, table, [unique_key], [key], a_item)
+            # Check if it is a pending NEW item from Web?
+            is_pending = False
+            if table == 'tabAndamento':
+                 is_pending = check_pending_mysql_insert(mysql_conn, table, m_item)
+            
+            if is_pending:
+                 # It's waiting to be synced to MDB. Do NOT delete yet.
+                 logging.info(f"      [PENDING] Item {key} waiting for MDB sync. Keeping in MySQL.")
+            else:
+                 # It's an orphan. Access doesn't have it, and it's not "New/Pending".
+                 logging.info(f"      [ORPHAN] Item {key} not in Access -> Delete from MySQL.")
+                 delete_from_mysql(mysql_conn, table, [unique_key], [key])
 
 
-def items_differ(dict_a, dict_b, table_name="Generic"):
-    """Compara dois dicionários ignorando chaves irrelevantes."""
-    keys = set(dict_a.keys()) & set(dict_b.keys())
-    diff_found = False
-    for k in keys:
-        val_a = dict_a[k]
-        val_b = dict_b[k]
-        
-        # Normalização pra comparação
-        if val_a == val_b: continue
-        
-        # Tratar int vs float vs str
-        str_a = str(val_a) if val_a is not None else ""
-        str_b = str(val_b) if val_b is not None else ""
-        
-        if str_a == str_b: continue
-        if not val_a and not val_b: continue # None vs "" vs 0
-        
-        # Boolean normalization (MySQL 1 vs Access True)
-        bool_map = {"True": "1", "False": "0", "1": "1", "0": "0"}
-        norm_a = bool_map.get(str_a, str_a)
-        norm_b = bool_map.get(str_b, str_b)
-        
-        if norm_a == norm_b: continue
 
-        # Ignorar diferenças de precisão em ponto flutuante se forem pequenas?
-        # Por enquanto logar tudo
-        logging.info(f"        [DIFF] {table_name}.{k}: MySQL='{val_a}' vs Access='{val_b}'")
-        diff_found = True
-        
-    return diff_found
 
 # --- SQL GENERATORS ---
 
@@ -450,8 +557,29 @@ def update_mysql(conn, table, pk_cols, pk_vals, data_dict):
     with conn.cursor() as cur:
         cur.execute(sql, vals)
 
+CACHE_ACCESS_COLS = {}
+
+def get_access_columns(conn, table):
+    if table in CACHE_ACCESS_COLS: return CACHE_ACCESS_COLS[table]
+    try:
+        cur = conn.cursor()
+        cur.execute(f"SELECT TOP 1 * FROM [{table}]")
+        cols = {col[0] for col in cur.description}
+        CACHE_ACCESS_COLS[table] = cols
+        return cols
+    except:
+        return set()
+
 def insert_into_access(conn, table, data_dict):
+    valid_cols = get_access_columns(conn, table)
     clean_dict = {k: v for k, v in data_dict.items() if v is not None}
+    
+    if valid_cols:
+        ignored = [k for k in clean_dict.keys() if k not in valid_cols]
+        if ignored:
+             logging.warning(f"  [SCHEMA MATCH] Ignoring columns {ignored} for Access {table}")
+        clean_dict = {k: v for k, v in clean_dict.items() if k in valid_cols}
+
     cols = list(clean_dict.keys())
     vals = list(clean_dict.values())
     placeholders = ", ".join(["?"] * len(cols))
@@ -461,6 +589,162 @@ def insert_into_access(conn, table, data_dict):
     sql = f"INSERT INTO [{table}] ({cols_str}) VALUES ({placeholders})"
     cur = conn.cursor()
     cur.execute(sql, vals)
+    conn.commit()
+
+# --- MYSQL TO ACCESS SYNC (EVENT DRIVEN) ---
+
+def process_mysql_changes():
+    """
+    Sincroniza alterações feitas no MySQL (via Triggers/Log) para o Access.
+    SCOPE: Only tabAndamento INSERTs.
+    """
+    conn = get_mysql_conn()
+    changes = []
+    
+    try:
+        with conn.cursor() as cur:
+            # 1. Fetch unprocessed changes
+            sql = "SELECT * FROM sync_changes_log WHERE processed = 0 ORDER BY id ASC LIMIT 50"
+            cur.execute(sql)
+            changes = cur.fetchall()
+            
+            # DEBUG
+            if changes:
+                logging.info(f"[DEBUG] Found {len(changes)} changes pending in MySQL.")
+            # else:
+            #    logging.info("[DEBUG] No changes found in MySQL.")
+            
+        if not changes:
+            return 0
+
+        logging.info(f"--- Processing {len(changes)} MySQL changes ---")
+
+        for change in changes:
+            try:
+                change_id = change['id']
+                table = change['table_name']
+                pk_json = change['pk_json']
+                action = change['action']
+                
+                # STRICT FILTERING (User Request)
+                if table != 'tabAndamento' or action != 'INSERT':
+                    logging.info(f"    Skipping change {change_id} ({table} {action}) - Sync is strictly New Andamentos only.")
+                    mark_change_processed(conn, change_id)
+                    continue
+
+                # Parse PK
+                if isinstance(pk_json, str):
+                    pk_data = json.loads(pk_json)
+                else:
+                    pk_data = pk_json # pymysql might handle json type
+                
+                # Determine Access Database
+                # Need NroProtocolo/Link to decide DB (rule > 5000)
+                os_id = None
+                
+                if 'NroProtocoloLink' in pk_data:
+                    os_id = pk_data['NroProtocoloLink']
+                elif 'NroProtocolo' in pk_data:
+                    os_id = pk_data['NroProtocolo']
+                elif 'NroProtocoloLinkDet' in pk_data:
+                    # Usually sync_db_sagra uses Nro...LinkDet same as OS id? 
+                    # Assuming NroProtocoloLinkDet acts as NroProtocolo for the logic
+                    os_id = pk_data['NroProtocoloLinkDet']
+                
+                if os_id is None:
+                    logging.warning(f"Skipping change {change_id}: Could not determine OS ID from PK {pk_data}")
+                    mark_change_processed(conn, change_id)
+                    continue
+
+                db_path = get_correct_access_db(int(os_id))
+                access_conn = get_access_conn(db_path)
+                
+                logging.info(f"  > Processing {action} on {table} (ID={pk_data}) -> Access")
+
+                # Only INSERT logic is relevant here due to filter above
+                curr_row = fetch_row_from_mysql(conn, table, pk_data)
+                if curr_row:
+                    apply_upsert_to_access(access_conn, table, pk_data, curr_row)
+                else:
+                    logging.warning(f"    Row not found in MySQL for ID {pk_data}. Maybe deleted subsequently?")
+                
+                access_conn.close()
+                
+                # Mark processed only after success
+                mark_change_processed(conn, change_id)
+                
+            except Exception as e:
+                logging.error(f"    x Error processing change ID {change.get('id')}: {e}")
+                # Optional: Increment retry count or skip? For now, we leave processed=0 to retry?
+                # Or mark processed to avoid block? 
+                # Let's log and NOT mark processed to retry. But risk of getting stuck.
+                pass
+
+        return len(changes)
+
+    finally:
+        conn.close()
+
+def mark_change_processed(conn, change_id):
+    with conn.cursor() as cur:
+        cur.execute("UPDATE sync_changes_log SET processed = 1 WHERE id = %s", (change_id,))
+
+def fetch_row_from_mysql(conn, table, pk_data):
+    where = " AND ".join([f"`{k}`=%s" for k in pk_data.keys()])
+    vals = list(pk_data.values())
+    sql = f"SELECT * FROM `{table}` WHERE {where}"
+    with conn.cursor() as cur:
+        cur.execute(sql, vals)
+        cols = [desc[0] for desc in cur.description]
+        row = cur.fetchone()
+        if row: return clean_row(row, cols)
+    return None
+
+def apply_delete_to_access(conn, table, pk_data):
+    where = " AND ".join([f"[{k}]=?" for k in pk_data.keys()])
+    vals = list(pk_data.values())
+    sql = f"DELETE FROM [{table}] WHERE {where}"
+    conn.cursor().execute(sql, vals)
+    conn.commit()
+
+def apply_upsert_to_access(conn, table, pk_data, row_data):
+    valid_cols = get_access_columns(conn, table)
+    
+    # Filter row_data against valid Access columns
+    if valid_cols:
+        row_data = {k: v for k, v in row_data.items() if k in valid_cols}
+    
+    # Try Update first, if 0 rows, Insert
+    # Access SQL update
+    
+    # 1. Check existence
+    where = " AND ".join([f"[{k}]=?" for k in pk_data.keys()])
+    pk_vals = list(pk_data.values())
+    
+    check_sql = f"SELECT COUNT(*) FROM [{table}] WHERE {where}"
+    cur = conn.cursor()
+    cur.execute(check_sql, pk_vals)
+    exists = cur.fetchone()[0] > 0
+    
+    if exists:
+        # UPDATE
+        # Remove PKs from update set
+        update_data = {k: v for k, v in row_data.items() if k not in pk_data}
+        if not update_data: return # Nothing to update
+        
+        set_clause = ", ".join([f"[{k}]=?" for k in update_data.keys()])
+        sql = f"UPDATE [{table}] SET {set_clause} WHERE {where}"
+        vals = list(update_data.values()) + pk_vals
+        cur.execute(sql, vals)
+    else:
+        # INSERT
+        cols = list(row_data.keys())
+        placeholders = ", ".join(["?"] * len(cols))
+        cols_str = ", ".join([f"[{c}]" for c in cols])
+        sql = f"INSERT INTO [{table}] ({cols_str}) VALUES ({placeholders})"
+        vals = list(row_data.values())
+        cur.execute(sql, vals)
+    
     conn.commit()
 
 # --- MAIN LOOP ---
@@ -484,7 +768,12 @@ def main_loop():
 
             logging.info(f"--- Iniciando ciclo (Incremental > {last_check_time if last_check_time else '00:00'}) ---")
             
-            # 1. Identificar mudanças hoje (passando filtro de tempo)
+            # 1. Process MySQL Changes (Sync Changes Log)
+            processed_count = process_mysql_changes()
+            if processed_count > 0:
+                logging.info(f"Sync MySQL->Access: {processed_count} changes applied.")
+
+            # 2. Identificar mudanças hoje (Access/MySQL Polling)
             changed_ids, max_time_found = discover_changed_os_ids_today(last_check_time)
             
             if not changed_ids:

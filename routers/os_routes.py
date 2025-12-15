@@ -6,6 +6,7 @@ import logging
 import os
 import glob
 from datetime import datetime
+from .andamento_helpers import format_andamento_obs, format_ponto
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -237,12 +238,14 @@ def save_os(data: SaveOSRequest):
         # --- HISTÓRICO INICIAL (SE NOVO) ---
         if not is_update:
             new_cod_status = f"{new_id:05d}{current_year}-01"
+            obs_criacao = format_andamento_obs("OS Criada via Web")
+            ponto_formatado = format_ponto(data.PontoUsuario)
             query_hist = """
                 INSERT INTO tabAndamento 
                 (CodStatus, NroProtocoloLink, AnoProtocoloLink, SituacaoLink, SetorLink, Data, UltimoStatus, Observaçao, Ponto)
-                VALUES (%s, %s, %s, 'Entrada Inicial', 'SEFOC', NOW(), 1, 'OS Criada via Web', %s)
+                VALUES (%s, %s, %s, 'Entrada Inicial', 'SEFOC', NOW(), 1, %s, %s)
             """
-            cursor.execute(query_hist, (new_cod_status, new_id, current_year, data.PontoUsuario))
+            cursor.execute(query_hist, (new_cod_status, new_id, current_year, obs_criacao, ponto_formatado))
             
         return {"status": "ok", "id": new_id, "ano": current_year, "message": "OS salva com sucesso"}
 
@@ -282,8 +285,8 @@ def duplicate_os(ano: int, id: int, req: DuplicateRequest):
             """, (current_year,))
             
         result = cursor.fetchone()
-        max_id = result['max_id']
-        
+        max_id = result['max_id'] if result and result.get('max_id') else None
+
         if max_id:
             new_id = max_id + 1
         else:
@@ -328,13 +331,15 @@ def duplicate_os(ano: int, id: int, req: DuplicateRequest):
         # 5. Inserir Andamento Inicial
         # CodStatus geralmente é composto: IDANO-01 (ex: 001232025-01)
         new_cod_status = f"{new_id:05d}{current_year}-01"
+        obs_duplicacao = format_andamento_obs(f"Duplicado da OS {id}/{ano}")
+        ponto_formatado = format_ponto(req.usuario)
         
         query_hist = """
             INSERT INTO tabAndamento 
             (CodStatus, NroProtocoloLink, AnoProtocoloLink, SituacaoLink, SetorLink, Data, UltimoStatus, Observaçao, Ponto)
-            VALUES (%s, %s, %s, 'Entrada Inicial', 'SEFOC', NOW(), 1, 'Duplicado da OS ' || %s || '/' || %s, %s)
+            VALUES (%s, %s, %s, 'Entrada Inicial', 'SEFOC', NOW(), 1, %s, %s)
         """
-        cursor.execute(query_hist, (new_cod_status, new_id, current_year, id, ano, req.usuario))
+        cursor.execute(query_hist, (new_cod_status, new_id, current_year, obs_duplicacao, ponto_formatado))
 
         return {"new_id": new_id, "new_year": current_year}
 
@@ -459,7 +464,8 @@ def get_os_details(ano: int, id: int):
         p.NroProtocolo, p.AnoProtocolo, p.DataEntrada, p.ProcessoSolicit, p.CSnro,
         d.TiragemSolicitada, d.Tiragem AS TiragemFinal, p.CotaRepro, p.CotaCartao, d.CotaTotal,
         d.Titulo, d.TipoPublicacaoLink, d.MaquinaLink, d.Tiragem, d.Pags, d.FrenteVerso, d.ModelosArq,
-        p.EntregPrazoLink, p.EntregData, d.PapelLink, d.PapelDescricao, d.Cores, d.CoresDescricao, 
+        p.EntregPrazoLink, p.EntregData, p.EntregPeriodo, p.EntregaFormaLink, p.ResponsavelGrafLink,
+        d.PapelLink, d.PapelDescricao, d.Cores, d.CoresDescricao, d.FormatoLink,
         d.DescAcabamento, d.Observ, p.ContatoTrab, d.MaterialFornecido, d.Fotolito, d.ModeloDobra,
         d.ProvaImpressa, d.InsumosFornecidos, md.MidiaDigitalLink, md.MidiaDigitDescricao,
         d.ElemGrafBrasao, d.ElemGrafTimbre, d.ElemGrafArteGab, d.ElemGrafAssinatura
@@ -510,10 +516,15 @@ def add_os_history(ano: int, id: int, item: HistoryItem):
                 
         new_cod = f"{base_prefix}{next_seq:02d}"
         
+        # Formatar observação com hora e preservar quebras de linha
+        obs_formatada = format_andamento_obs(item.obs)
+        # Formatar ponto no padrão #.#00
+        ponto_formatado = format_ponto(clean_user)
+        
         # Using backticks for special column names to be safe
         cursor.execute(
             "INSERT INTO tabAndamento (CodStatus, NroProtocoloLink, AnoProtocoloLink, SituacaoLink, SetorLink, `Data`, UltimoStatus, `Observaçao`, Ponto) VALUES (%(cod)s, %(id)s, %(ano)s, %(situacao)s, %(setor)s, NOW(), 1, %(obs)s, %(usuario)s)",
-            {'cod': new_cod, 'id': id, 'ano': ano, 'situacao': item.situacao, 'setor': item.setor, 'obs': item.obs, 'usuario': clean_user}
+            {'cod': new_cod, 'id': id, 'ano': ano, 'situacao': item.situacao, 'setor': item.setor, 'obs': obs_formatada, 'usuario': ponto_formatado}
         )
         return {"new_id": new_cod}
 
@@ -523,6 +534,147 @@ def add_os_history(ano: int, id: int, item: HistoryItem):
         logger.error(f"Add history error: {e}")
         if "Duplicate entry" in str(e):
              raise HTTPException(status_code=409, detail="Erro de concorrência. Tente novamente.")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/os/{ano}/{id}/vinculos")
+def list_os_vinculos(ano: int, id: int):
+    """Retorna lista de OSs vinculadas à OS fornecida (bidirecional)."""
+    try:
+        query = """
+            SELECT os_principal_numero as principal_num, os_principal_ano as principal_ano,
+                   os_vinculada_numero as vinc_num, os_vinculada_ano as vinc_ano, data_vinculo
+            FROM tabOSVinculadas
+            WHERE (os_principal_numero = %s AND os_principal_ano = %s)
+               OR (os_vinculada_numero = %s AND os_vinculada_ano = %s)
+        """
+        rows = db.execute_query(query, (id, ano, id, ano))
+
+        # Normalize to return the other OS in each relation
+        result = []
+        for r in rows:
+            if r['principal_num'] == id and r['principal_ano'] == ano:
+                result.append({ 'numero': r['vinc_num'], 'ano': r['vinc_ano'], 'data_vinculo': r['data_vinculo'] })
+            else:
+                result.append({ 'numero': r['principal_num'], 'ano': r['principal_ano'], 'data_vinculo': r['data_vinculo'] })
+
+        return result
+    except Exception as e:
+        logger.error(f"Error listing vinculos: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class VinculoRequest(BaseModel):
+    numero: int
+    ano: int
+
+
+@router.post("/os/{ano}/{id}/vincular")
+def create_vinculo(ano: int, id: int, req: VinculoRequest):
+    """Cria vínculo entre a OS (id, ano) e (req.numero, req.ano)."""
+    try:
+        # Validations
+        if req.numero == id and req.ano == ano:
+            raise HTTPException(status_code=400, detail="Não é possível vincular uma OS a ela mesma.")
+
+        # Check existence of both OSs
+        p = db.execute_query("SELECT 1 FROM tabProtocolos WHERE NroProtocolo=%s AND AnoProtocolo=%s", (id, ano))
+        q = db.execute_query("SELECT 1 FROM tabProtocolos WHERE NroProtocolo=%s AND AnoProtocolo=%s", (req.numero, req.ano))
+        if not p or not q:
+            raise HTTPException(status_code=404, detail="Uma das OSs não existe.")
+
+        # Check duplicate in either direction
+        dup = db.execute_query("SELECT 1 FROM tabOSVinculadas WHERE (os_principal_numero=%s AND os_principal_ano=%s AND os_vinculada_numero=%s AND os_vinculada_ano=%s) OR (os_principal_numero=%s AND os_principal_ano=%s AND os_vinculada_numero=%s AND os_vinculada_ano=%s)",
+                               (id, ano, req.numero, req.ano, req.numero, req.ano, id, ano))
+        if dup:
+            raise HTTPException(status_code=409, detail="Vínculo já existe.")
+
+        # Insert canonical direction as provided
+        db.execute_query("INSERT INTO tabOSVinculadas (os_principal_numero, os_principal_ano, os_vinculada_numero, os_vinculada_ano) VALUES (%s,%s,%s,%s)",
+                         (id, ano, req.numero, req.ano))
+        return {"status": "ok"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating vinculo: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/os/{ano}/{id}/vinculo/{v_num}/{v_ano}")
+def delete_vinculo(ano: int, id: int, v_num: int, v_ano: int):
+    try:
+        # Delete any matching pair in either direction
+        db.execute_query("DELETE FROM tabOSVinculadas WHERE (os_principal_numero=%s AND os_principal_ano=%s AND os_vinculada_numero=%s AND os_vinculada_ano=%s) OR (os_principal_numero=%s AND os_principal_ano=%s AND os_vinculada_numero=%s AND os_vinculada_ano=%s)",
+                         (id, ano, v_num, v_ano, v_num, v_ano, id, ano))
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"Error deleting vinculo: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/os/{ano}/{id}/history/replicate")
+def replicate_history(ano: int, id: int, item: HistoryItem):
+    """Replicar andamento para todas OSs vinculadas (incluindo a atual)."""
+    def transaction_logic(cursor):
+        # Find linked OSs
+        cursor.execute("SELECT os_principal_numero as principal_num, os_principal_ano as principal_ano, os_vinculada_numero as vinc_num, os_vinculada_ano as vinc_ano FROM tabOSVinculadas WHERE (os_principal_numero = %s AND os_principal_ano = %s) OR (os_vinculada_numero = %s AND os_vinculada_ano = %s)", (id, ano, id, ano))
+        rows = cursor.fetchall()
+
+        targets = set()
+        targets.add((id, ano))
+        for r in rows:
+            if r['principal_num'] == id and r['principal_ano'] == ano:
+                targets.add((r['vinc_num'], r['vinc_ano']))
+            else:
+                targets.add((r['principal_num'], r['principal_ano']))
+
+        # For each target, insert history similar to add_os_history
+        for (t_num, t_ano) in targets:
+            # Reset UltimoStatus
+            cursor.execute("UPDATE tabAndamento SET UltimoStatus = 0 WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s", (t_num, t_ano))
+
+            base_prefix = f"{t_num:05d}{t_ano}-"
+            cursor.execute(f"SELECT MAX(CodStatus) as max_cod FROM tabAndamento WHERE CodStatus LIKE '{base_prefix}%'")
+            res = cursor.fetchone()
+            next_seq = 1
+            if res and res.get('max_cod'):
+                try:
+                    existing_suffix = res['max_cod'].split('-')[-1]
+                    next_seq = int(existing_suffix) + 1
+                except Exception:
+                    next_seq = 1
+
+            new_cod = f"{base_prefix}{next_seq:02d}"
+            clean_user = ''.join(filter(str.isdigit, item.usuario)) if item.usuario else ''
+            
+            # Formatar observação com hora e preservar quebras de linha
+            obs_formatada = format_andamento_obs(item.obs)
+            # Formatar ponto no padrão #.#00
+            ponto_formatado = format_ponto(clean_user)
+
+            cursor.execute(
+                "INSERT INTO tabAndamento (CodStatus, NroProtocoloLink, AnoProtocoloLink, SituacaoLink, SetorLink, `Data`, UltimoStatus, `Observaçao`, Ponto) VALUES (%s, %s, %s, %s, %s, NOW(), 1, %s, %s)",
+                (new_cod, t_num, t_ano, item.situacao, item.setor, obs_formatada, ponto_formatado)
+            )
+
+        return {"status": "ok", "replicated_to": len(targets)}
+
+    try:
+        return db.execute_transaction([transaction_logic])[0]
+    except Exception as e:
+        logger.error(f"Error replicating history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/os/{ano}/{id}/vinculo/excecao")
+def create_vinculo_excecao(ano: int, id: int, body: dict):
+    """Marca exceção/divergência para uma OS vinculada (quando andamento só aplicado nela)."""
+    try:
+        obs = body.get('observacao') if body else None
+        db.execute_query("INSERT INTO tabOSVinculoExcecoes (NroProtocolo, AnoProtocolo, Observacao) VALUES (%s,%s,%s) ON DUPLICATE KEY UPDATE Observacao = VALUES(Observacao)", (id, ano, obs))
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"Error creating vinculo excecao: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 class HistoryUpdateItem(HistoryItem):
@@ -625,4 +777,35 @@ def get_panel_data(setor: Optional[str] = Query(None)):
         return db.execute_query(query, params)
     except Exception as e:
         logger.error(f"Error fetching panel data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/aux/setores")
+def get_setores():
+    """Retorna lista de setores disponíveis do banco de dados"""
+    try:
+        query = "SELECT DISTINCT Setor FROM tabSetor ORDER BY Setor ASC"
+        result = db.execute_query(query)
+        setores = [{"Setor": row.get("Setor")} for row in result if row.get("Setor")]
+        return setores
+    except Exception as e:
+        logger.error(f"Error fetching setores: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/aux/andamentos")
+def get_andamentos():
+    """Retorna lista de andamentos (situações) disponíveis"""
+    try:
+        query = """
+        SELECT DISTINCT SituacaoLink 
+        FROM tabAndamento 
+        WHERE SituacaoLink IS NOT NULL AND SituacaoLink != ''
+        ORDER BY SituacaoLink ASC
+        """
+        result = db.execute_query(query)
+        andamentos = [{"Situacao": row.get("SituacaoLink")} for row in result if row.get("SituacaoLink")]
+        return andamentos
+    except Exception as e:
+        logger.error(f"Error fetching andamentos: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -65,13 +65,18 @@ document.addEventListener('DOMContentLoaded', () => {
         newBtnCopy.addEventListener('click', () => {
             const display = document.getElementById('folder-path-display');
             const text = display ? display.innerText : "";
+            const lower = text ? text.toLowerCase() : '';
 
-            if (text && text !== "Consultando servidor..." && !text.includes("Erro")) {
+            // Evitar copiar enquanto estiver buscando ou em estado de erro
+            if (text && !lower.includes('consult') && !lower.includes('busc') && !lower.includes('erro') && !lower.includes('não encontrada')) {
                 navigator.clipboard.writeText(text).then(() => {
                     newBtnCopy.innerHTML = '<i class="fas fa-check"></i> Copiado!';
+                    // Fecha o modal após curto delay para feedback visual
                     setTimeout(() => {
                         newBtnCopy.innerHTML = '<i class="fas fa-copy"></i> Copiar';
-                    }, 2000);
+                        const modal = document.getElementById('modal-folder-path');
+                        if (modal) modal.style.display = 'none';
+                    }, 500);
                 }).catch(err => {
                     console.error("Clipboard error:", err);
                     alert("Erro ao copiar para a área de transferência.");

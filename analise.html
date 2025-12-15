@@ -110,8 +110,8 @@
         }
 
         .library-item:hover {
-            background-color: #e6f7ed;
-            color: var(--primary-green);
+            background-color: #e3f2fd;
+            color: var(--secondary-blue);
         }
 
         .library-item i {
@@ -201,9 +201,14 @@
 </head>
 
 <body>
+    <script>window.SAGRA_API_PORT = 8001;</script>
+    <script src="permissions.js"></script>
     <header>
+        <div class="header-logo">
+            <img src="Logo Deapa.png" alt="Logo DEAPA">
+        </div>
         <div class="header-left">
-            <div class="app-title">SAGRA - Análise Técnica</div>
+            <div class="app-title">SAGRA - Sistema de Acompanhamento Gráfico</div>
         </div>
         <div class="header-right">
             <div class="user-info">
@@ -404,6 +409,36 @@
                 </div>
             </div>
         </div>
+        <!-- MODAL DE OBSERVAÇÃO (SEM PROBLEMAS TÉCNICOS) -->
+        <div id="observacao-modal"
+            style="display: none; position: fixed; z-index: 3000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center;">
+            <div
+                style="background: white; padding: 25px; border-radius: 8px; width: 500px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+                <i class="fas fa-info-circle"
+                    style="font-size: 48px; color: #2196F3; margin-bottom: 15px; display: block; text-align: center;"></i>
+                <h3 style="margin: 0 0 10px 0; color: #333; text-align: center;">Nenhum problema técnico foi registrado</h3>
+                <p style="color: #666; margin-bottom: 20px; font-size: 14px; text-align: center;">Informe a observação para lançamento do andamento.</p>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #555;">Observação <span style="color: red;">*</span></label>
+                    <textarea id="observacao-textarea" class="form-control" rows="4" 
+                        style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; resize: vertical;"
+                        placeholder="Digite a observação..."></textarea>
+                </div>
+
+                <div style="display: flex; gap: 10px;">
+                    <button onclick="cancelarObservacao()" class="btn-action"
+                        style="flex: 1; background: #eee; color: #333; border: 1px solid #ccc; padding: 10px;">
+                        Cancelar
+                    </button>
+                    <button onclick="confirmarObservacao()" class="btn-action"
+                        style="flex: 1; background: var(--primary-green); color: white; padding: 10px;">
+                        Confirmar
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- MODAL LINK GERADO -->
         <div id="link-modal"
             style="display: none; position: fixed; z-index: 3000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); align-items: center; justify-content: center;">

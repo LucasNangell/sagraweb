@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Requisição - Ordem de Serviço</title>
+  <style>
+    /* Configuração para formato A5 Retrato */
+    @page {
+      size: 148mm 210mm;
+      margin: 0;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Times New Roman', Times, serif;
+    }
+
+    body {
+      width: 148mm;
+      height: 210mm;
+      padding: 8mm 10mm;
+      position: relative;
+      background-color: white;
+      font-size: 11pt;
+      line-height: 1.2;
+    }
+
+    /* Título principal */
+    .main-title {
+      text-align: center;
+      font-size: 16pt;
+      font-weight: bold;
+      margin-bottom: 6mm;
+      text-decoration: underline;
+    }
+
+    /* Seções principais */
+    .section {
+      margin-bottom: 4mm;
+    }
+
+    .section-title {
+      font-weight: bold;
+      margin-bottom: 2mm;
+      text-decoration: underline;
+    }
+
+    /* Entidade Solicitante */
+    .solicitante {
+      margin-bottom: 6mm;
+    }
+
+    .solicitante-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3mm;
+    }
+
+    .field-group {
+      margin-bottom: 2mm;
+    }
+
+    .field-label {
+      font-weight: bold;
+      display: inline-block;
+      width: 22mm;
+    }
+
+    .field-value {
+      display: inline-block;
+      border-bottom: 1px solid black;
+      min-width: 40mm;
+      padding-left: 2mm;
+    }
+
+    .category-section {
+      margin-bottom: 3mm;
+    }
+
+    .category-item {
+      margin-bottom: 1mm;
+    }
+
+    /* Informações Técnicas - Tabela */
+    .technical-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 4mm;
+    }
+
+    .technical-table th,
+    .technical-table td {
+      border: 1px solid black;
+      padding: 1mm 2mm;
+      text-align: center;
+      vertical-align: middle;
+      height: 7mm;
+    }
+
+    .technical-table th {
+      font-weight: bold;
+      background-color: #f0f0f0;
+    }
+
+    .table-title {
+      font-weight: bold;
+      margin-bottom: 2mm;
+    }
+
+    /* Campos de texto com linha */
+    .line-field {
+      margin-bottom: 3mm;
+    }
+
+    .line-label {
+      font-weight: bold;
+      display: inline-block;
+      width: 25mm;
+    }
+
+    .line-value {
+      border-bottom: 1px solid black;
+      display: inline-block;
+      width: calc(100% - 30mm);
+      padding-left: 2mm;
+    }
+
+    /* Observações Gerais */
+    .observations {
+      margin-top: 4mm;
+      margin-bottom: 4mm;
+    }
+
+    .observations-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5mm;
+    }
+
+    .observation-box {
+      border: 1px solid black;
+      height: 20mm;
+      padding: 2mm;
+    }
+
+    .observation-title {
+      font-weight: bold;
+      margin-bottom: 2mm;
+    }
+
+    /* Dados de Entrega */
+    .delivery-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 4mm;
+    }
+
+    .delivery-table td {
+      border: 1px solid black;
+      padding: 2mm;
+      height: 8mm;
+      vertical-align: middle;
+    }
+
+    .delivery-label {
+      font-weight: bold;
+      width: 40%;
+    }
+
+    /* Avisos no final */
+    .avisos {
+      margin-top: 5mm;
+      font-weight: bold;
+      text-align: center;
+    }
+
+    /* Linhas divisórias */
+    .divider {
+      border-top: 1px solid black;
+      margin: 3mm 0;
+    }
+
+    /* Elementos específicos */
+    .underline {
+      text-decoration: underline;
+    }
+
+    /* Layout de duas colunas */
+    .two-columns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10mm;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Título principal -->
+  <div class="main-title">Requisição &nbsp;&nbsp;&nbsp;&nbsp; Ordem de Serviço</div>
+
+  <!-- Entidade Solicitante -->
+  <div class="section solicitante">
+    <div class="section-title">Entidade Solicitante</div>
+
+    <div class="category-section">
+      <div class="category-item">
+        <span class="field-label">Categoria</span>
+        <span class="field-value"></span>
+      </div>
+
+      <div class="solicitante-grid">
+        <div>
+          <div class="field-group">
+            <span class="field-label">- LASL do Insufru</span>
+            <span class="field-value"></span>
+          </div>
+          <div class="field-group">
+            <span class="field-label">- Contato</span>
+            <span class="field-value"></span>
+          </div>
+        </div>
+
+        <div>
+          <div class="field-group">
+            <span class="field-label">Nome</span>
+            <span class="field-value"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="solicitante-grid">
+      <div>
+        <div class="field-group">
+          <span class="field-label">Bama</span>
+          <span class="field-value"></span>
+        </div>
+      </div>
+
+      <div>
+        <div class="field-group">
+          <span class="field-label">Interessado</span>
+          <span class="field-value"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Informações Técnicas -->
+  <div class="section">
+    <div class="section-title">Informações Técnicas</div>
+
+    <div class="table-title">Físico de Servidor</div>
+    <table class="technical-table">
+      <thead>
+        <tr>
+          <th>Váquina Sugerida</th>
+          <th>Rujíssa</th>
+          <th>Écrate</th>
+          <th>Verso</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Juiz o</td>
+          <td></td>
+          <td>Formosa</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="line-field">
+      <span class="line-label">Firma</span>
+      <span class="line-value">Oficinas úteis</span>
+    </div>
+
+    <div class="line-field">
+      <span class="line-label">Avaliantemura</span>
+      <span class="line-value"></span>
+    </div>
+
+    <div class="line-field">
+      <span class="line-label">Rajuni</span>
+      <span class="line-value">Observar úteis</span>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Observações Gerais -->
+  <div class="section observations">
+    <div class="section-title">Observações Gerais:</div>
+
+    <div class="observations-grid">
+      <div class="observation-box">
+        <div class="observation-title">Insumos Fornecidos</div>
+      </div>
+
+      <div class="observation-box">
+        <div class="observation-title">Material Entregue</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dados de Entrega -->
+  <div class="section">
+    <div class="section-title">Dados de Entrega</div>
+
+    <table class="delivery-table">
+      <tr>
+        <td class="delivery-label">Tespo, na Gráfica</td>
+        <td class="delivery-label">Prazo, n.º Entrega</td>
+      </tr>
+      <tr>
+        <td class="delivery-label">Forma de Entrega</td>
+        <td class="delivery-label">Data</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- Avisos -->
+  <div class="avisos">
+    Avisos
+  </div>
+</body>
+
+</html>

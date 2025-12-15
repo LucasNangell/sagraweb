@@ -15,10 +15,15 @@
 
 
 <body>
+    <script>window.SAGRA_API_PORT = 8001;</script>
+    <script src="permissions.js"></script>
     <!-- HEADER NOVO -->
     <header>
+        <div class="header-logo">
+            <img src="Logo Deapa.png" alt="Logo DEAPA">
+        </div>
         <div class="header-left">
-            <div class="app-title">SAGRA</div>
+            <div class="app-title">SAGRA - Sistema de Acompanhamento Gráfico</div>
             <div class="header-divider"
                 style="height: 20px; border-left: 1px solid rgba(255,255,255,0.3); margin: 0 10px;"></div>
             <div class="page-title" id="gerencia-title" style="font-size: 1.1rem; color: white;">Gerenciamento da OS
@@ -265,7 +270,7 @@
                             <div class="dt-box-group">
                                 <div class="dt-col" style="height: 100%;">
                                     <label>Acabamento</label>
-                                    <textarea id="txt_acabamento" class="form-control dt-textarea-full"></textarea>
+                                    <textarea id="txt_acabamento" class="form-control dt-textarea-full" style="min-height: 85%"></textarea>
                                 </div>
                             </div>
                         </div>
@@ -274,11 +279,11 @@
                         <div class="dt-grid-2">
                             <div class="dt-col" style="height: 100%;">
                                 <label>Obs</label>
-                                <textarea id="txt_obs" class="form-control dt-textarea-fixed"></textarea>
+                                <textarea id="txt_obs" class="form-control dt-textarea-fixed" style="min-height: 75%"></textarea>
                             </div>
                             <div class="dt-col" style="height: 100%;">
                                 <label>Contato</label>
-                                <textarea id="txt_contato" class="form-control dt-textarea-fixed"></textarea>
+                                <textarea id="txt_contato" class="form-control dt-textarea-fixed" style="min-height: 75%"></textarea>
                             </div>
                         </div>
 

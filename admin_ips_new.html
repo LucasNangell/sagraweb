@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAGRA - Administração de IPs</title>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .admin-container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .admin-toolbar {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .toolbar-row {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .toolbar-field {
+            flex: 1;
+        }
+
+        .toolbar-field label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+            font-size: 0.9rem;
+        }
+
+        .toolbar-field input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .admin-table-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .table-header {
+            background: var(--primary-green);
+            color: white;
+            padding: 15px 20px;
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .admin-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .admin-table thead {
+            background: #f8f9fa;
+        }
+
+        .admin-table th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #555;
+            border-bottom: 2px solid #dee2e6;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+
+        .admin-table td {
+            padding: 12px;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 0.9rem;
+        }
+
+        .admin-table tbody tr:hover {
+            background: #f8f9fa;
+        }
+
+        .permission-group {
+            font-weight: 600;
+            color: var(--primary-green);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+        }
+
+        .checkbox-cell {
+            text-align: center;
+        }
+
+        .checkbox-cell input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .status-active {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-inactive {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 5px;
+        }
+
+        .btn-icon {
+            padding: 6px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .btn-save {
+            background: var(--primary-green);
+            color: white;
+        }
+
+        .btn-save:hover {
+            background: #2a8f50;
+        }
+
+        .btn-delete {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-delete:hover {
+            background: #c82333;
+        }
+
+        .btn-toggle {
+            background: #ffc107;
+            color: #000;
+        }
+
+        .btn-toggle:hover {
+            background: #e0a800;
+        }
+
+        .msg-box {
+            padding: 12px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .msg-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .msg-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .sticky-header {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: white;
+        }
+
+        /* Estilos responsivos */
+        @media (max-width: 1200px) {
+            .admin-table {
+                font-size: 0.8rem;
+            }
+
+            .admin-table th,
+            .admin-table td {
+                padding: 8px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <script>window.SAGRA_API_PORT = 8001;</script>
+
+    <!-- HEADER -->
+    <header>
+        <div class="header-logo">
+            <img src="Logo Deapa.png" alt="Logo DEAPA">
+        </div>
+        <div class="header-left">
+            <div class="app-title">SAGRA - Sistema de Acompanhamento Gráfico</div>
+            <div class="header-divider" style="height: 20px; border-left: 1px solid rgba(255,255,255,0.3); margin: 0 10px;"></div>
+            <div class="page-title" style="font-size: 1.1rem; color: white;">Administração de IPs e Permissões</div>
+        </div>
+        <div class="header-right">
+            <div class="user-info">
+                <div class="user-id" style="color: white; font-weight: 600;">Administrador</div>
+            </div>
+        </div>
+    </header>
+
+    <div class="app-body">
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+            <nav class="sidebar-nav">
+                <a href="index.html" class="nav-item"><i class="fas fa-home"></i> Início</a>
+                <a href="gerencia.html" class="nav-item"><i class="fas fa-briefcase"></i> Gerência</a>
+                <a href="email.html" class="nav-item"><i class="fas fa-envelope"></i> Email</a>
+                <a href="#" class="nav-item"><i class="fas fa-magnifying-glass"></i> Análise</a>
+                <a href="papelaria.html" class="nav-item"><i class="fas fa-copy"></i> Papelaria</a>
+                <a href="#" class="nav-item"><i class="fas fa-user"></i> Usuário</a>
+                <a href="settings.html" class="nav-item"><i class="fas fa-cog"></i> Configurações</a>
+                <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
+                    <a href="admin_ips.html" class="nav-item active"><i class="fas fa-shield-alt"></i> Admin IPs</a>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <main>
+            <div class="admin-container">
+                <!-- Mensagem de feedback -->
+                <div id="msg-box" class="msg-box"></div>
+
+                <!-- Toolbar para adicionar novo IP -->
+                <div class="admin-toolbar">
+                    <h3 style="margin: 0 0 15px 0; color: var(--primary-green);">
+                        <i class="fas fa-plus-circle"></i> Adicionar Novo IP
+                    </h3>
+                    <div class="toolbar-row">
+                        <div class="toolbar-field" style="flex: 2;">
+                            <label>Endereço IP (use % como wildcard)</label>
+                            <input type="text" id="new-ip" placeholder="Ex: 192.168.0.10 ou 10.120.1.%">
+                        </div>
+                        <div class="toolbar-field" style="flex: 3;">
+                            <label>Descrição</label>
+                            <input type="text" id="new-desc" placeholder="Ex: Sala de Gerência">
+                        </div>
+                        <div class="toolbar-field" style="flex: 0 0 150px;">
+                            <button id="btn-add-ip" class="btn-primary" style="width: 100%; padding: 10px;">
+                                <i class="fas fa-plus"></i> Adicionar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabela de IPs -->
+                <div class="admin-table-container">
+                    <div class="table-header">
+                        <i class="fas fa-list"></i> IPs Cadastrados e Permissões
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table class="admin-table">
+                            <thead class="sticky-header">
+                                <tr>
+                                    <th style="width: 40px;">ID</th>
+                                    <th style="width: 150px;">IP</th>
+                                    <th style="width: 200px;">Descrição</th>
+                                    <th style="width: 80px;">Status</th>
+                                    <th colspan="6" class="permission-group">Menu de Contexto</th>
+                                    <th colspan="7" class="permission-group">Sidebar</th>
+                                    <th style="width: 150px;">Ações</th>
+                                </tr>
+                                <tr>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th></th>
+                                    <th style="width: 80px;" title="Nova OS">Nova OS</th>
+                                    <th style="width: 80px;" title="Duplicar OS">Duplicar</th>
+                                    <th style="width: 80px;" title="Editar OS">Editar</th>
+                                    <th style="width: 80px;" title="Vincular OS">Vincular</th>
+                                    <th style="width: 80px;" title="Abrir Pasta">Pasta</th>
+                                    <th style="width: 80px;" title="Imprimir Ficha">Ficha</th>
+                                    <th style="width: 80px;" title="Início">Início</th>
+                                    <th style="width: 80px;" title="Gerência">Gerência</th>
+                                    <th style="width: 80px;" title="Email">Email</th>
+                                    <th style="width: 80px;" title="Análise">Análise</th>
+                                    <th style="width: 80px;" title="Papelaria">Papelaria</th>
+                                    <th style="width: 80px;" title="Usuário">Usuário</th>
+                                    <th style="width: 80px;" title="Configurações">Config</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="ips-tbody">
+                                <tr>
+                                    <td colspan="18" style="text-align: center; padding: 30px; color: #999;">
+                                        <i class="fas fa-spinner fa-spin"></i> Carregando...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const API_BASE = `http://${window.location.hostname}:${window.SAGRA_API_PORT || 8001}/api`;
+
+        // Função para mostrar mensagem
+        function showMessage(message, type = 'success') {
+            const msgBox = document.getElementById('msg-box');
+            msgBox.textContent = message;
+            msgBox.className = `msg-box msg-${type}`;
+            msgBox.style.display = 'block';
+
+            setTimeout(() => {
+                msgBox.style.display = 'none';
+            }, 4000);
+        }
+
+        // Carregar lista de IPs
+        async function loadIPs() {
+            try {
+                const response = await fetch(`${API_BASE}/admin/ip/list`);
+                const ips = await response.json();
+
+                const tbody = document.getElementById('ips-tbody');
+                tbody.innerHTML = '';
+
+                if (ips.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="18" style="text-align: center; padding: 30px; color: #999;">
+                                Nenhum IP cadastrado. Use o formulário acima para adicionar.
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                ips.forEach(ip => {
+                    const tr = document.createElement('tr');
+                    tr.dataset.ipId = ip.id;
+
+                    const statusBadge = ip.ativo
+                        ? '<span class="status-badge status-active">Ativo</span>'
+                        : '<span class="status-badge status-inactive">Inativo</span>';
+
+                    tr.innerHTML = `
+                        <td>${ip.id}</td>
+                        <td><strong>${ip.ip}</strong></td>
+                        <td>${ip.descricao || '-'}</td>
+                        <td>${statusBadge}</td>
+                        <td class="checkbox-cell"><input type="checkbox" data-perm="ctx_nova_os" ${ip.ctx_nova_os ? 'checked' : ''}></td>
+                        <td class="checkbox-cell"><input type="checkbox" data-perm="ctx_duplicar_os" ${ip.ctx_duplicar_os ? 'checked' : ''}></td>
+                        <td class="checkbox-cell"><input type="checkbox" data-perm="ctx_editar_os" ${ip.ctx_editar_os ? 'checked' : ''}></td>
+                        <td class="checkbox-cell"><input type="checkbox" data-perm="ctx_vincular_os" ${ip.ctx_vincular_os ? 'checked' : ''}></td>
+                        <td class="checkbox-cell"><input type="checkbox" data-perm="ctx_abrir_pasta" ${ip.ctx_abrir_pasta ? 'checked' : ''}></td>
+                        <td class="checkbox-cell"><input type="checkbox" data-perm="ctx_imprimir_ficha" ${ip.ctx_imprimir_ficha ? 'checked' : ''}></td>
+                        <td class="checkbox-cell"><input type="checkbox" data-perm="sb_inicio" ${ip.sb_inicio ? 'checked' : ''}></td>
+                        <td class="checkbox-cell"><input type="checkbox" data-perm="sb_gerencia" ${ip.sb_gerencia ? 'checked' : ''}></td>
+                        <td class="checkbox-cell"><input type="checkbox" data-perm="sb_email" ${ip.sb_email ? 'checked' : ''}></td>
+                        <td class="checkbox-cell"><input type="checkbox" data-perm="sb_analise" ${ip.sb_analise ? 'checked' : ''}></td>
+                        <td class="checkbox-cell"><input type="checkbox" data-perm="sb_papelaria" ${ip.sb_papelaria ? 'checked' : ''}></td>
+                        <td class="checkbox-cell"><input type="checkbox" data-perm="sb_usuario" ${ip.sb_usuario ? 'checked' : ''}></td>
+                        <td class="checkbox-cell"><input type="checkbox" data-perm="sb_configuracoes" ${ip.sb_configuracoes ? 'checked' : ''}></td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="btn-icon btn-save" onclick="saveIP(${ip.id})" title="Salvar alterações">
+                                    <i class="fas fa-save"></i>
+                                </button>
+                                <button class="btn-icon btn-toggle" onclick="toggleIP(${ip.id}, ${ip.ativo})" title="${ip.ativo ? 'Desativar' : 'Ativar'}">
+                                    <i class="fas fa-${ip.ativo ? 'toggle-on' : 'toggle-off'}"></i>
+                                </button>
+                                <button class="btn-icon btn-delete" onclick="deleteIP(${ip.id})" title="Excluir IP">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    `;
+
+                    tbody.appendChild(tr);
+                });
+
+            } catch (error) {
+                console.error('Erro ao carregar IPs:', error);
+                showMessage('Erro ao carregar lista de IPs', 'error');
+            }
+        }
+
+        // Adicionar novo IP
+        document.getElementById('btn-add-ip').onclick = async () => {
+            const ip = document.getElementById('new-ip').value.trim();
+            const descricao = document.getElementById('new-desc').value.trim();
+
+            if (!ip) {
+                alert('Por favor, informe um endereço IP');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/ip/add`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ip,
+                        descricao,
+                        ativo: true,
+                        // Todas permissões TRUE por padrão
+                        ctx_nova_os: true,
+                        ctx_duplicar_os: true,
+                        ctx_editar_os: true,
+                        ctx_vincular_os: true,
+                        ctx_abrir_pasta: true,
+                        ctx_imprimir_ficha: true,
+                        sb_inicio: true,
+                        sb_gerencia: true,
+                        sb_email: true,
+                        sb_analise: true,
+                        sb_papelaria: true,
+                        sb_usuario: true,
+                        sb_configuracoes: true,
+                    })
+                });
+
+                if (response.ok) {
+                    showMessage('IP adicionado com sucesso!', 'success');
+                    document.getElementById('new-ip').value = '';
+                    document.getElementById('new-desc').value = '';
+                    loadIPs();
+                } else {
+                    const error = await response.json();
+                    showMessage(`Erro: ${error.detail}`, 'error');
+                }
+            } catch (error) {
+                console.error('Erro ao adicionar IP:', error);
+                showMessage('Erro ao adicionar IP', 'error');
+            }
+        };
+
+        // Salvar alterações de um IP
+        window.saveIP = async (id) => {
+            const row = document.querySelector(`tr[data-ip-id="${id}"]`);
+            const checkboxes = row.querySelectorAll('input[type="checkbox"]');
+
+            const data = { id };
+            checkboxes.forEach(cb => {
+                data[cb.dataset.perm] = cb.checked;
+            });
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/ip/update`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                if (response.ok) {
+                    showMessage('Permissões salvas com sucesso!', 'success');
+                } else {
+                    showMessage('Erro ao salvar permissões', 'error');
+                }
+            } catch (error) {
+                console.error('Erro ao salvar:', error);
+                showMessage('Erro ao salvar permissões', 'error');
+            }
+        };
+
+        // Ativar/Desativar IP
+        window.toggleIP = async (id, currentStatus) => {
+            try {
+                const response = await fetch(`${API_BASE}/admin/ip/update`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id,
+                        ativo: !currentStatus
+                    })
+                });
+
+                if (response.ok) {
+                    showMessage(currentStatus ? 'IP desativado' : 'IP ativado', 'success');
+                    loadIPs();
+                } else {
+                    showMessage('Erro ao alterar status', 'error');
+                }
+            } catch (error) {
+                console.error('Erro ao toggle:', error);
+                showMessage('Erro ao alterar status', 'error');
+            }
+        };
+
+        // Excluir IP
+        window.deleteIP = async (id) => {
+            if (!confirm('Tem certeza que deseja excluir este IP?\nEsta ação não pode ser desfeita.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/admin/ip/delete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+
+                if (response.ok) {
+                    showMessage('IP excluído com sucesso', 'success');
+                    loadIPs();
+                } else {
+                    showMessage('Erro ao excluir IP', 'error');
+                }
+            } catch (error) {
+                console.error('Erro ao excluir:', error);
+                showMessage('Erro ao excluir IP', 'error');
+            }
+        };
+
+        // Carregar ao iniciar
+        loadIPs();
+    </script>
+</body>
+
+</html>

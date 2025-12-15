@@ -139,6 +139,50 @@ window.closeFileSelectionModal = function () {
     document.getElementById('file-selection-modal').style.display = 'none';
 };
 
+window.toggleResolucaoObrigatoria = async function (uniqueId, novoValor, event) {
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    
+    try {
+        const res = await fetch(`${API_BASE_URL}/analise/item/toggle-resolucao-obrigatoria`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id_item: uniqueId,
+                resolucao_obrigatoria: novoValor
+            })
+        });
+        
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({ detail: 'Erro desconhecido' }));
+            throw new Error(errorData.detail || "Erro ao atualizar resolução obrigatória");
+        }
+        
+        const data = await res.json();
+        
+        // Atualizar item local
+        const item = selectedItems.find(x => x.uniqueId === uniqueId);
+        if (item) {
+            item.resolucaoObrigatoria = data.resolucao_obrigatoria;
+        }
+        
+        // Re-renderizar lista
+        renderSelectedList();
+        
+        // Se o item estiver selecionado, re-renderizar preview
+        const activeItem = document.querySelector(`.selected-item[data-id="${uniqueId}"].active`);
+        if (activeItem && item) {
+            renderPreview(item);
+        }
+        
+    } catch (e) {
+        alert("Erro ao atualizar resolução obrigatória: " + e.message);
+        console.error(e);
+    }
+};
+
 window.confirmFileSelection = function () {
     const filePath = document.getElementById('file-select-list').value;
     const pageNum = parseInt(document.getElementById('file-page-number').value) || 1;
@@ -387,12 +431,22 @@ function renderSelectedList() {
             const el = document.createElement('div');
             el.className = 'selected-item';
             el.dataset.id = item.uniqueId;
+            
+            // Indicador visual de resolução obrigatória
+            const obrigatoriaTag = item.resolucaoObrigatoria ? 
+                '<span style="display:inline-block; margin-left:8px; font-size:0.7rem; padding:2px 6px; background:#ffc107; color:#000; border-radius:3px; font-weight:bold;">Resolução obrigatória</span>' : '';
+            
             el.innerHTML = `
             <div class="item-header" onclick="selectItem(${item.uniqueId})">
-                <div class="item-title">${item.titulo}</div>
-                <button class="icon-btn" style="color:#d9534f;" onclick="removeItem(${item.uniqueId}, event)">
-                    <i class="fas fa-trash-alt"></i>
-                </button>
+                <div class="item-title">${item.titulo}${obrigatoriaTag}</div>
+                <div style="display:flex; gap:5px;">
+                    <button class="icon-btn" style="color:#ffc107;" onclick="toggleResolucaoObrigatoria(${item.uniqueId}, ${!item.resolucaoObrigatoria}, event)" title="${item.resolucaoObrigatoria ? 'Desmarcar resolução obrigatória' : 'Marcar como resolução obrigatória'}">
+                        <i class="fas ${item.resolucaoObrigatoria ? 'fa-lock' : 'fa-lock-open'}"></i>
+                    </button>
+                    <button class="icon-btn" style="color:#d9534f;" onclick="removeItem(${item.uniqueId}, event)">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>
             </div>
             <div class="item-obs-area">
                 <label style="font-size:10px; font-weight:bold; color:#666;">Observação</label>
@@ -708,6 +762,14 @@ window.generateLinkAndFinish = async function () {
         return;
     }
 
+    // VERIFICAÇÃO: Se não há problemas técnicos, abrir popup de observação
+    if (selectedItems.length === 0) {
+        console.log("Nenhum problema técnico registrado. Abrindo popup de observação...");
+        abrirPopupObservacao();
+        return;
+    }
+
+    // Fluxo normal: COM problemas técnicos
     const btn = document.getElementById('btn-save-analise');
     const originalText = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerando Link...';
@@ -769,6 +831,81 @@ window.generateLinkAndFinish = async function () {
     } finally {
         btn.innerHTML = originalText;
         btn.disabled = false;
+    }
+};
+
+// --- FUNÇÕES PARA POPUP DE OBSERVAÇÃO (SEM PROBLEMAS TÉCNICOS) ---
+
+function abrirPopupObservacao() {
+    const modal = document.getElementById('observacao-modal');
+    const textarea = document.getElementById('observacao-textarea');
+    
+    if (modal && textarea) {
+        textarea.value = ''; // Limpar campo
+        modal.style.display = 'flex';
+        textarea.focus();
+    } else {
+        alert("Erro: Modal de observação não encontrado.");
+    }
+}
+
+window.cancelarObservacao = function () {
+    const modal = document.getElementById('observacao-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+};
+
+window.confirmarObservacao = async function () {
+    const textarea = document.getElementById('observacao-textarea');
+    const observacao = textarea ? textarea.value.trim() : '';
+    
+    // Validar observação
+    if (!observacao) {
+        alert('Por favor, preencha a observação.');
+        if (textarea) textarea.focus();
+        return;
+    }
+    
+    // Desabilitar botão de confirmação
+    const btns = document.querySelectorAll('#observacao-modal button');
+    const confirmBtn = btns[1]; // Segundo botão
+    if (confirmBtn) {
+        const originalText = confirmBtn.innerHTML;
+        confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Registrando...';
+        confirmBtn.disabled = true;
+        
+        try {
+            // Registrar andamento "Em Execução"
+            const response = await fetch(`${API_BASE_URL}/analise/register-execution-movement`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    os_id: parseInt(currentOs),
+                    ano: parseInt(currentAno),
+                    observacao: observacao,
+                    ponto: currentUser
+                })
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || 'Erro ao registrar andamento');
+            }
+            
+            // Sucesso: fechar modal e redirecionar
+            const modal = document.getElementById('observacao-modal');
+            if (modal) modal.style.display = 'none';
+            
+            alert('Análise concluída com sucesso!\nAndamento "Em Execução" registrado.');
+            window.location.href = 'index.html';
+            
+        } catch (e) {
+            console.error('Erro ao registrar andamento:', e);
+            alert('Erro ao registrar andamento: ' + e.message);
+            confirmBtn.innerHTML = originalText;
+            confirmBtn.disabled = false;
+        }
     }
 };
 

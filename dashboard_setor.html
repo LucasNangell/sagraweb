@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SagraWeb - Painel de Setor</title>
+    <!-- Vue 3 CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Local CSS -->
+    <link rel="stylesheet" href="dashboard_setor.css">
+    <style>
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .modal-content {
+            background: var(--card-bg);
+            padding: 2rem;
+            border-radius: 8px;
+            width: 600px;
+            max-width: 90%;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.5rem;
+            background: #121214;
+            border: 1px solid var(--border-color);
+            color: white;
+            border-radius: 4px;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .btn-primary {
+            background: var(--highlight);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: var(--border-color);
+            color: var(--text-primary);
+            margin-right: 0.5rem;
+        }
+
+        .settings-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 0.5rem;
+        }
+
+        .settings-btn:hover {
+            color: var(--text-primary);
+        }
+
+        [v-cloak] {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app" v-cloak>
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <div class="status-indicator">
+                    Atualizado: {{ lastUpdated }}
+                </div>
+            </div>
+
+            <div class="header-center">
+                <h1>OSs na {{ config.sector }}</h1>
+            </div>
+
+            <div class="header-right">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="sector-badge">{{ config.sector }}</span>
+                    <button class="settings-btn" @click="openSettings">
+                        <i data-lucide="settings"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Loading Progress -->
+        <div class="progress-bar">
+            <div class="progress-fill" :style="{ width: progress + '%' }"></div>
+        </div>
+
+        <!-- Main Board -->
+        <main class="board">
+            <div class="column" v-for="col in columns" :key="col.id">
+                <div class="column-header">
+                    <span class="column-title">{{ col.title }}</span>
+                    <span class="column-count">{{ col.items.length }}</span>
+                </div>
+
+                <div class="column-content">
+                    <transition-group name="list">
+                        <div class="card" v-for="os in col.items" :key="os.uniqueKey"
+                            :class="{ 'is-new': os.isNew, 'priority-medium': os.priorityType === 'priority-medium', 'priority-high': os.priorityType === 'priority-high' }">
+                            <div class="card-header">
+                                <span class="os-number">{{ os.nr_os }}/{{ String(os.ano).slice(-2) }}</span>
+                            </div>
+                            <div class="os-situation">{{ os.situacao }}</div>
+                            <div class="os-priority" v-if="os.priorityType">{{ os.priorityType === 'priority-high' ? '🔴 PROMETIDO' : '🟡 SOLICITADO' }}</div>
+                        </div>
+                    </transition-group>
+                </div>
+            </div>
+        </main>
+
+        <!-- Settings Modal -->
+        <div class="modal-overlay" v-if="showSettings">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Configurações do Painel</h2>
+                    <button class="settings-btn" @click="showSettings = false">X</button>
+                </div>
+
+                <div class="form-group">
+                    <label>Setor Monitorado</label>
+                    <select v-model="tempConfig.sector" class="form-control">
+                        <option v-for="setor in setoresList" :key="setor" :value="setor">
+                            {{ setor }}
+                        </option>
+                    </select>
+                </div>
+
+                <div style="margin-top: 2rem; max-height: 400px; overflow-y: auto;">
+                    <h3 style="color: var(--text-primary); margin-bottom: 1rem;">Andamentos por Coluna</h3>
+                    <div v-for="(col, idx) in tempConfig.columns" :key="col.id" style="margin-bottom: 1.5rem; padding: 1rem; background: #29292e; border-radius: 4px;">
+                        <label style="display: block; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: bold;">{{ col.title }}</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                            <label v-for="andamento in andamentosList" :key="andamento" style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-secondary); cursor: pointer;">
+                                <input 
+                                    type="checkbox" 
+                                    :checked="col.statuses.includes(andamento)"
+                                    @change="toggleAndamento(idx, andamento)"
+                                    style="cursor: pointer;"
+                                >
+                                {{ andamento }}
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer" style="text-align: right; margin-top: 2rem;">
+                    <button class="btn btn-secondary" @click="showSettings = false">Cancelar</button>
+                    <button class="btn btn-primary" @click="saveSettings">Salvar e Recarregar</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Local JS -->
+    <script src="dashboard_setor.js"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>

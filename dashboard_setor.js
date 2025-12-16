@@ -193,8 +193,12 @@ createApp({
             await loadSetores();
             await loadAndamentos();
             fetchData();
-            startTimer();
+            
+            // Iniciar WebSocket (atualização instantânea)
             setupWebSocket();
+            
+            // Iniciar timer como fallback (caso WebSocket falhe)
+            startTimer();
 
             // Initialize Lucide icons if available globally
             if (window.lucide) window.lucide.createIcons();
@@ -216,6 +220,7 @@ createApp({
         // --- State ---
         const lastUpdated = ref("Carregando...");
         const progress = ref(0);
+        const connectionStatus = ref('disconnected'); // 'connected' | 'disconnected'
         const showSettings = ref(false);
         const setoresList = ref([]);
         const andamentosList = ref([]);
@@ -470,12 +475,22 @@ createApp({
 
                 if (result && result.data) {
                     processData(result.data);
+                    
+                    // Atualizar status de conexão apenas se não estiver usando WebSocket
+                    // (WebSocket gerencia seu próprio status)
+                    if (connectionStatus.value === 'disconnected') {
+                        // Polling funcionando - marcar como conectado
+                        connectionStatus.value = 'connected';
+                    }
                 }
 
                 lastUpdated.value = new Date().toLocaleTimeString();
 
             } catch (error) {
                 console.error("Error fetching data:", error);
+                
+                // Marcar como desconectado apenas se realmente não conseguir buscar dados
+                connectionStatus.value = 'disconnected';
             }
         };
 
@@ -579,39 +594,64 @@ createApp({
             const wsUrl = `${protocol}//${window.location.hostname}:${port}/ws`;
 
             let socket;
+            let reconnectTimeout;
 
             const connect = () => {
-                console.log("Connecting to WebSocket:", wsUrl);
-                socket = new WebSocket(wsUrl);
+                console.log("[WebSocket] Conectando:", wsUrl);
+                
+                try {
+                    socket = new WebSocket(wsUrl);
 
-                socket.onopen = () => {
-                    console.log("WebSocket connected");
-                };
-
-                socket.onmessage = (event) => {
-                    try {
-                        const data = JSON.parse(event.data);
-                        if (data.type === 'system_update') {
-                            // Debounce or just call? For now direct call is fine.
-                            console.log("System update received:", data);
-                            fetchData();
+                    socket.onopen = () => {
+                        console.log("[WebSocket] Conectado com sucesso");
+                        connectionStatus.value = 'connected';
+                        
+                        // Limpar timeout de reconexão se existir
+                        if (reconnectTimeout) {
+                            clearTimeout(reconnectTimeout);
+                            reconnectTimeout = null;
                         }
-                    } catch (e) { console.error("WS Message Error", e); }
-                };
+                    };
 
-                socket.onclose = () => {
-                    console.warn("WebSocket disconnected. Reconnecting in 5s...");
-                    setTimeout(connect, 5000);
-                };
+                    socket.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            if (data.type === 'system_update') {
+                                console.log("[WebSocket] Atualização recebida:", data);
+                                fetchData();
+                            }
+                        } catch (e) { 
+                            console.error("[WebSocket] Erro ao processar mensagem:", e); 
+                        }
+                    };
 
-                socket.onerror = (err) => {
-                    console.error("WebSocket Error", err);
-                    socket.close();
-                };
+                    socket.onclose = () => {
+                        console.warn("[WebSocket] Conexão fechada. Reconectando em 5s...");
+                        connectionStatus.value = 'disconnected';
+                        
+                        // Reconectar após 5 segundos
+                        reconnectTimeout = setTimeout(connect, 5000);
+                    };
+
+                    socket.onerror = (err) => {
+                        console.error("[WebSocket] Erro:", err);
+                        connectionStatus.value = 'disconnected';
+                        socket.close();
+                    };
+                } catch (err) {
+                    console.error("[WebSocket] Erro ao criar conexão:", err);
+                    connectionStatus.value = 'disconnected';
+                    
+                    // Tentar reconectar em 5 segundos
+                    reconnectTimeout = setTimeout(connect, 5000);
+                }
             };
 
             connect();
         };
+
+        // Alias para compatibilidade com código existente
+        const setupWebSocket = startWebSocket;
 
         watch(showSettings, (val) => {
             if (!val && window.lucide) {
@@ -631,6 +671,7 @@ createApp({
             columns,
             lastUpdated,
             progress,
+            connectionStatus,
             showSettings,
             openSettings,
             saveSettings,

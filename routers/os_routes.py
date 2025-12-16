@@ -7,6 +7,7 @@ import os
 import glob
 from datetime import datetime
 from .andamento_helpers import format_andamento_obs, format_ponto
+import hashlib
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -706,15 +707,45 @@ def update_os_history(ano: int, id: int, item: HistoryUpdateItem):
 
 @router.delete("/os/{ano}/{id}/history/{cod_status}")
 def delete_os_history(ano: int, id: int, cod_status: str):
+    # Executar TUDO dentro de uma única transação
     def transaction_logic(cursor):
-        # 1. Delete the specific item
-        cursor.execute("DELETE FROM tabAndamento WHERE CodStatus = %s AND NroProtocoloLink = %s AND AnoProtocoloLink = %s", (cod_status, id, ano))
+        # 1. Buscar andamento ANTES de excluir
+        cursor.execute("""
+            SELECT SituacaoLink, SetorLink, Data, UltimoStatus, Observaçao, Ponto
+            FROM tabAndamento 
+            WHERE CodStatus = %s
+        """, (cod_status,))
         
-        # 2. Fix UltimoStatus
-        # Reset all to 0
+        andamento = cursor.fetchone()
+        
+        # 2. Registrar hash em deleted_andamentos
+        if andamento:
+            # DictCursor retorna dict, não tupla
+            content_fields = [
+                str(andamento.get('SituacaoLink') or ''),
+                str(andamento.get('SetorLink') or ''),
+                str(andamento.get('Data') or ''),
+                str(andamento.get('UltimoStatus') or ''),
+                str(andamento.get('Observaçao') or ''),
+                str(andamento.get('Ponto') or '')
+            ]
+            content_str = '|'.join(content_fields)
+            content_hash = hashlib.sha256(content_str.encode('utf-8')).hexdigest()
+            
+            cursor.execute("""
+                INSERT INTO deleted_andamentos (codstatus, nro, ano, content_hash, deleted_at, motivo, origem)
+                VALUES (%s, %s, %s, %s, NOW(), 'Exclusão via Frontend', 'API')
+                ON DUPLICATE KEY UPDATE deleted_at = NOW(), content_hash = VALUES(content_hash)
+            """, (cod_status, id, ano, content_hash))
+            
+            logger.info(f"[DELETE] {cod_status} registrado em deleted_andamentos (hash: {content_hash[:8]})")
+        
+        # 3. Excluir do tabAndamento
+        cursor.execute("DELETE FROM tabAndamento WHERE CodStatus = %s", (cod_status,))
+        
+        # 4. Fix UltimoStatus
         cursor.execute("UPDATE tabAndamento SET UltimoStatus = 0 WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s", (id, ano))
         
-        # Set latest to 1
         cursor.execute("""
             UPDATE tabAndamento 
             SET UltimoStatus = 1 
@@ -733,7 +764,7 @@ def delete_os_history(ano: int, id: int, cod_status: str):
         db.execute_transaction([transaction_logic])
         return {"status": "success"}
     except Exception as e:
-        logger.error(f"Delete history error: {e}")
+        logger.error(f"Erro ao excluir {cod_status}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/os/{ano}/{id}/versions")

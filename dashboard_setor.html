@@ -130,7 +130,8 @@
         <header class="header">
             <div class="header-left">
                 <div class="status-indicator">
-                    Atualizado: {{ lastUpdated }}
+                    <span class="connection-status" :class="{ 'connected': connectionStatus === 'connected', 'disconnected': connectionStatus === 'disconnected' }"></span>
+                    <span>Atualizado: {{ lastUpdated }}</span>
                 </div>
             </div>
 
@@ -148,11 +149,6 @@
             </div>
         </header>
 
-        <!-- Loading Progress -->
-        <div class="progress-bar">
-            <div class="progress-fill" :style="{ width: progress + '%' }"></div>
-        </div>
-
         <!-- Main Board -->
         <main class="board" :data-columns="config.columnCount">
             <div class="column" v-for="col in columns" :key="col.id">
@@ -166,7 +162,7 @@
                         <div class="card" v-for="os in col.items" :key="os.uniqueKey"
                             :class="{ 'is-new': os.isNew, 'priority-medium': os.priorityType === 'priority-medium', 'priority-high': os.priorityType === 'priority-high' }">
                             <div class="card-header">
-                                <span class="os-number">{{ os.nr_os }}/{{ String(os.ano).slice(-2) }}</span>
+                                <span class="os-number">{{ parseInt(os.nr_os) < 5000 ? 'OS' : 'SP' }} {{ os.nr_os }}/{{ String(os.ano).slice(-2) }}</span>
                             </div>
                             <div class="os-situation">{{ os.situacao }}</div>
                             <div class="os-priority" v-if="os.priorityType">{{ os.priorityType === 'priority-high' ? '🔴 PROMETIDO' : '🟡 SOLICITADO' }}</div>

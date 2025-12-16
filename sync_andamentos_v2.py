@@ -978,10 +978,35 @@ class AndamentosSynchronizer:
             )
     
     def delete_mysql(self, codstatus: str, andamento: Dict):
+        """
+        Remove andamento do MySQL E registra na tabela deleted_andamentos.
+        
+        IMPORTANTE: Registra o hash do conteúdo para prevenir ressurreição.
+        Isso garante que exclusões manuais no MySQL também sejam respeitadas.
+        """
         try:
             # Backup primeiro
             self.backup_mgr.backup('MySQL', andamento)
             
+            # ===================================================================
+            # CORREÇÃO: Registrar exclusão ANTES de deletar
+            # Isso garante que mesmo exclusões manuais no MySQL sejam respeitadas
+            # ===================================================================
+            nro = andamento.get('NroProtocoloLink')
+            ano = andamento.get('AnoProtocoloLink')
+            origem = 'MySQL'  # Origem da exclusão
+            
+            # Marcar como excluído com hash (previne ressurreição)
+            self.mark_as_deleted(
+                codstatus, 
+                nro, 
+                ano, 
+                origem, 
+                andamento=andamento,  # Passa andamento para calcular hash
+                motivo='Exclusão manual no MySQL ou detectada por sync'
+            )
+            
+            # Agora sim, deletar do MySQL
             conn = self.conn_mgr.get_mysql()
             cursor = conn.cursor()
             
@@ -992,13 +1017,41 @@ class AndamentosSynchronizer:
             
             self.logger.log(
                 'DELETE', 'MDB', 'MySQL', codstatus,
-                andamento.get('NroProtocoloLink'), andamento.get('AnoProtocoloLink'),
-                'Exclusão detectada'
+                nro, ano,
+                'Exclusão detectada e registrada em deleted_andamentos'
             )
         except Exception as e:
             conn.rollback()
             self.logger.log(
                 'DELETE', 'MDB', 'MySQL', codstatus,
+                sucesso=False, erro=str(e)
+            )
+    
+    def delete_mdb(self, codstatus: str, andamento: Dict, mdb_conn, origem: str):
+        """
+        Remove andamento do MDB (Access).
+        NÃO registra em deleted_andamentos pois isso já foi feito antes.
+        """
+        try:
+            cursor = mdb_conn.cursor()
+            
+            cursor.execute("""
+                DELETE FROM tabandamento WHERE CodStatus = ?
+            """, (codstatus,))
+            
+            mdb_conn.commit()
+            cursor.close()
+            
+            self.logger.log(
+                'DELETE', 'MySQL', origem, codstatus,
+                andamento.get('NroProtocoloLink'), andamento.get('AnoProtocoloLink'),
+                f'Excluído do {origem} para sincronizar com MySQL'
+            )
+        except Exception as e:
+            mdb_conn.rollback()
+            self.logger.log(
+                'DELETE', 'MySQL', origem, codstatus,
+                andamento.get('NroProtocoloLink'), andamento.get('AnoProtocoloLink'),
                 sucesso=False, erro=str(e)
             )
     
@@ -1080,6 +1133,15 @@ class AndamentosSynchronizer:
             # MDB → MySQL (novos)
             novos_no_mdb = mdb_all_codes - mysql_codes
             for code in novos_no_mdb:
+                # ===================================================================
+                # CORREÇÃO: Verificar se o código está na lista de exclusões
+                # ANTES de tentar reinserir no MySQL.
+                # Isso evita ressurreição de registros excluídos no MySQL.
+                # ===================================================================
+                if self.is_deleted(code):
+                    # Log throttled (já implementado em insert_mysql via is_resurrection)
+                    continue
+                
                 and_ = None
                 origem = None
                 
@@ -1129,6 +1191,38 @@ class AndamentosSynchronizer:
                     if and_:
                         self.delete_mysql(code, and_)
                         self.update_ultimo_status(and_['NroProtocoloLink'], and_['AnoProtocoloLink'])
+            
+            # ===================================================================
+            # PASSO 3.5: REPLICAR EXCLUSÕES DO MYSQL PARA O MDB
+            # Se um registro foi excluído do MySQL (via frontend), replicar no MDB
+            # ===================================================================
+            for code in list(mdb_all_codes):
+                if self.is_deleted(code) and code in mdb_all_codes:
+                    # Buscar andamento no MDB para excluir
+                    and_mdb = None
+                    for a in mdb_os_data:
+                        if a['CodStatus'] == code:
+                            and_mdb = a
+                            mdb_conn = self.conn_mgr.get_mdb_os()
+                            origem = 'OS_Atual'
+                            break
+                    
+                    if not and_mdb:
+                        for a in mdb_pap_data:
+                            if a['CodStatus'] == code:
+                                and_mdb = a
+                                mdb_conn = self.conn_mgr.get_mdb_pap()
+                                origem = 'Papelaria'
+                                break
+                    
+                    if and_mdb:
+                        self.delete_mdb(code, and_mdb, mdb_conn, origem)
+            
+            # ===================================================================
+            # PASSO 4: DETECTAR EXCLUSÕES MANUAIS NO MYSQL
+            # DESABILITADO: A detecção via cache já faz isso de forma mais eficiente
+            # Ver: detect_and_register_deletions() que usa cache_andamentos_mdb
+            # ===================================================================
             
             # Aplicar formatacao aos registros recentes (a cada 10 ciclos)
             if not hasattr(self, '_format_counter'):

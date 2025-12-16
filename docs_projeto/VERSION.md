@@ -2,6 +2,96 @@
 
 ## 🚀 Histórico de Versões
 
+### v1.4.2 - Sincronização Bidirecional de Exclusões (COMPLETO)
+**Data:** 16/12/2025  
+**Status:** 🚀 Publicado em PROD
+
+**Problema Resolvido:**
+- 🐛 Exclusões no MySQL não eram respeitadas - registros ressuscitavam do MDB
+- 🐛 Exclusões via frontend não propagavam para MDB Access
+
+**Correções Aplicadas:**
+1. **Frontend (routers/os_routes.py):**
+   - ✅ Endpoint de exclusão agora registra hash em `deleted_andamentos`
+   - ✅ Compatibilidade DictCursor (dict vs tuple)
+   - ✅ Hash SHA256 de 6 campos para detecção de ressurreição
+   - ✅ Operação atômica (transaction única)
+
+2. **Sync Engine (sync_andamentos_v2.py):**
+   - ✅ `delete_mysql()` agora registra hash ANTES de excluir
+   - ✅ Nova função `delete_mdb()` para remover de Access
+   - ✅ PASSO 3.5: Propagação MySQL → MDB de exclusões
+   - ✅ Verificação `is_deleted()` em MDB → MySQL (evita reinserção)
+   - ✅ PASSO 4 removido (performance + redundante)
+
+3. **Performance:**
+   - ✅ Filtro de 30 dias mantido (data_limite)
+   - ✅ Uso de dados em cache (sem queries extras)
+   - ✅ Logs throttled (evita spam)
+
+**Arquivos Modificados:**
+- `routers/os_routes.py` (linha 708-768) - Hash registration no delete
+- `sync_andamentos_v2.py` (linhas 978-1223) - 3 correções críticas
+- Arquivos de teste: `test_transaction_direct.py`, `cleanup_test_data.py`
+
+**Documentação:**
+- `CORRECAO_SYNC_EXCLUSAO_MYSQL.md` - Análise técnica completa
+- `CORRECAO_FRONTEND_DELETION.md` - Fix do endpoint DELETE
+
+**Fluxo Completo:**
+```
+Frontend DELETE → hash em deleted_andamentos → DELETE MySQL
+                ↓
+         Sync detecta (2s)
+                ↓
+      is_deleted() = TRUE
+                ↓
+    DELETE de MDB Access
+                ↓
+         ✅ Sincronizado
+```
+
+**Impacto:**
+- ✅ Exclusões bidirecionais (MySQL ↔ MDB)
+- ✅ Zero ressurreições
+- ✅ Integridade de dados garantida
+- ✅ Performance mantida
+- ✅ 100% testado e validado
+
+---
+
+### v1.4.1 - WebSocket e Indicador de Conexão
+**Data:** 16/12/2025  
+**Status:** 🚀 Publicado em PROD
+
+**Novidades:**
+- ⚡ Atualização instantânea via WebSocket (ws://server:8000/ws)
+- 🟢 Indicador visual de conexão (verde/vermelho com glow)
+- 🔄 Polling mantido como fallback (redundância dupla)
+- ♻️ Reconexão automática (5 segundos)
+- 📊 Dashboard com prefixo OS/SP nos números
+
+**Arquivos Modificados:**
+- `dashboard_setor.html` - Indicador de status no header
+- `dashboard_setor.css` - Estilos verde/vermelho com box-shadow
+- `dashboard_setor.js` - WebSocket + connectionStatus ref
+
+**Documentação:**
+- `ALTERACAO_WEBSOCKET_INDICADOR.md` - Guia completo de implementação
+
+**Comportamento:**
+- WebSocket ativo → 🟢 verde, atualizações instantâneas
+- WebSocket falha → 🔴 vermelho, continua via polling
+- Reconexão automática a cada 5s
+
+**Impacto:**
+- ✅ Experiência do usuário melhorada (tempo real)
+- ✅ Sistema mais robusto (dupla redundância)
+- ✅ Feedback visual de status
+- ✅ Zero breaking changes
+
+---
+
 ### v1.3.0 - Padronização e Wake Lock
 **Data:** 15/12/2025  
 **Status:** 🚀 Publicado em PROD

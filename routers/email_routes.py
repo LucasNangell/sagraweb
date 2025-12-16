@@ -8,6 +8,7 @@ import win32com.client
 import os
 import tempfile
 from database import db
+from .andamento_helpers import format_andamento_obs, format_ponto
 
 router = APIRouter(prefix="/email")
 logger = logging.getLogger(__name__)

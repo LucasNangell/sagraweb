@@ -171,4 +171,5 @@ app.mount("/", StaticFiles(directory=".", html=True), name="static")
 
 if __name__ == "__main__":
     # reload=False para garantir que logs apareçam no Launcher
-    uvicorn.run(app, host="0.0.0.0", port=8001, reload=False, access_log=True)
+    # Host 127.0.0.1 = APENAS localhost (não acessível de outras máquinas)
+    uvicorn.run(app, host="127.0.0.1", port=8001, reload=False, access_log=True)

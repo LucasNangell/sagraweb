@@ -1,0 +1,24 @@
+{
+  "// CONFIGURAÇÃO DO BANCO MYSQL": "",
+  "db_host": "localhost",
+  "db_port": 3306,
+  "db_user": "root",
+  "db_password": "sua_senha_aqui",
+  "db_name": "sagradbfull",
+  
+  "// CONFIGURAÇÃO DOS BANCOS ACCESS (MDB)": "",
+  "mdb_os_atual_path": "C:\\Caminho\\Completo\\Para\\Sagra Base - OS Atual.mdb",
+  "mdb_papelaria_path": "C:\\Caminho\\Completo\\Para\\Sagra Base - Papelaria Atual.mdb",
+  
+  "// CONFIGURAÇÕES DE MONITORAMENTO": "",
+  "dias_monitoramento": 30,
+  "intervalo_verificacao_segundos": 0.5,
+  
+  "// OBSERVAÇÕES": [
+    "1. Copie este arquivo para 'config.json' e ajuste os valores",
+    "2. O campo 'dias_monitoramento' define quantos dias anteriores serão monitorados",
+    "3. O campo 'intervalo_verificacao_segundos' define o intervalo mínimo entre ciclos",
+    "4. Caminhos MDB devem usar barras duplas (\\\\) ou barras simples (/) no Windows",
+    "5. Certifique-se de que o driver Microsoft Access está instalado"
+  ]
+}

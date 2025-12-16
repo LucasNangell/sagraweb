@@ -9,11 +9,6 @@ from datetime import datetime
 from collections import deque
 import queue
 
-# Proteção contra múltiplas instâncias no PyInstaller
-if __name__ == "__main__":
-    import multiprocessing
-    multiprocessing.freeze_support()
-
 # --- CONFIGURAÇÃO VISUAL ---
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -261,123 +256,19 @@ class ServerCard(ctk.CTkFrame):
             
         self.lbl_info.configure(text=f"PID: {pid} | Up: {uptime}")
 
-class SessionCard(ctk.CTkFrame):
-    """Card para exibir informações de uma sessão ativa"""
-    def __init__(self, parent, session):
-        super().__init__(parent, fg_color="#2b2b2b", corner_radius=8, height=70)
-        self.pack_propagate(False)
-        
-        ip = session["ip"]
-        porta = session["porta"]
-        pagina = session["pagina"]
-        status = session["status"]
-        segundos = session["segundos_atras"]
-        tipo = session["tipo"]
-        
-        # Container principal horizontal
-        main_frame = ctk.CTkFrame(self, fg_color="transparent")
-        main_frame.pack(fill="both", expand=True, padx=10, pady=8)
-        
-        # Coluna 1: Status indicator + IP
-        col1 = ctk.CTkFrame(main_frame, fg_color="transparent", width=200)
-        col1.pack(side="left", fill="y", padx=(0, 10))
-        col1.pack_propagate(False)
-        
-        status_color = "#66bb6a" if status == "ATIVO" else "#757575"
-        status_indicator = ctk.CTkLabel(
-            col1,
-            text="●",
-            font=("Arial", 16),
-            text_color=status_color
-        )
-        status_indicator.pack(side="left", padx=(0, 5))
-        
-        ip_label = ctk.CTkLabel(
-            col1,
-            text=ip,
-            font=("Arial", 12, "bold"),
-            anchor="w"
-        )
-        ip_label.pack(side="left", fill="x", expand=True)
-        
-        # Coluna 2: Tipo/Porta
-        col2 = ctk.CTkFrame(main_frame, fg_color="transparent", width=100)
-        col2.pack(side="left", fill="y", padx=5)
-        col2.pack_propagate(False)
-        
-        tipo_color = "#2196f3" if tipo == "DEV" else "#4caf50"
-        tipo_label = ctk.CTkLabel(
-            col2,
-            text=tipo,
-            font=("Arial", 11, "bold"),
-            text_color=tipo_color
-        )
-        tipo_label.pack(anchor="w")
-        
-        porta_label = ctk.CTkLabel(
-            col2,
-            text=f":{porta}",
-            font=("Arial", 9),
-            text_color="#999999"
-        )
-        porta_label.pack(anchor="w")
-        
-        # Coluna 3: Página
-        col3 = ctk.CTkFrame(main_frame, fg_color="transparent", width=300)
-        col3.pack(side="left", fill="both", expand=True, padx=5)
-        col3.pack_propagate(False)
-        
-        # Truncar página se muito longa
-        pagina_display = pagina if len(pagina) <= 40 else pagina[:37] + "..."
-        
-        pagina_label = ctk.CTkLabel(
-            col3,
-            text=pagina_display,
-            font=("Arial", 11),
-            anchor="w"
-        )
-        pagina_label.pack(anchor="w")
-        
-        # Coluna 4: Tempo
-        col4 = ctk.CTkFrame(main_frame, fg_color="transparent", width=120)
-        col4.pack(side="left", fill="y", padx=(5, 0))
-        col4.pack_propagate(False)
-        
-        if segundos < 60:
-            tempo_text = f"{segundos}s atrás"
-        else:
-            minutos = segundos // 60
-            tempo_text = f"{minutos}min atrás"
-        
-        tempo_label = ctk.CTkLabel(
-            col4,
-            text=tempo_text,
-            font=("Arial", 10),
-            text_color="#999999",
-            anchor="e"
-        )
-        tempo_label.pack(anchor="e")
-
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("SAGRA Supervisor")
-        self.geometry("900x600")  # Aumentado para acomodar tabs
+        self.geometry("800x500")
         self.resizable(False, False)
         
         # Header
         self.header = ctk.CTkLabel(self, text="SAGRA SYSTEM MONITOR", font=("Arial", 20, "bold"))
         self.header.pack(pady=10)
         
-        # Criar TabView
-        self.tabview = ctk.CTkTabview(self, width=880, height=520)
-        self.tabview.pack(fill="both", expand=True, padx=10, pady=5)
-        
-        # Aba 1: Controle de Servidores
-        self.tab_control = self.tabview.add("Controle")
-        
         # Cards Container
-        self.cards_frame = ctk.CTkFrame(self.tab_control, fg_color="transparent")
+        self.cards_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.cards_frame.pack(fill="x", padx=10, pady=5)
         
         self.cards = {}
@@ -387,16 +278,12 @@ class App(ctk.CTk):
             self.cards[name] = card
             
         # Log Console
-        self.log_label = ctk.CTkLabel(self.tab_control, text="Log de Eventos:", anchor="w")
+        self.log_label = ctk.CTkLabel(self, text="Log de Eventos:", anchor="w")
         self.log_label.pack(fill="x", padx=15, pady=(10,0))
         
-        self.log_box = ctk.CTkTextbox(self.tab_control, height=200)
+        self.log_box = ctk.CTkTextbox(self, height=200)
         self.log_box.pack(fill="both", expand=True, padx=15, pady=5)
-        self.log_box.configure(state="disabled")
-        
-        # Aba 2: Monitoramento de Conexões
-        self.tab_monitor = self.tabview.add("Monitoramento")
-        self._setup_monitor_tab()
+        self.log_box.configure(state="disabled") # Read-only mostly
         
         # Start Supervisor in Thread (auto_start=False para controle manual)
         self.supervisor = SupervisorThread(auto_start=False)
@@ -404,61 +291,6 @@ class App(ctk.CTk):
         
         # GUI Update Loop
         self.after(100, self.update_gui)
-        
-    def _setup_monitor_tab(self):
-        """Configura a aba de monitoramento de conexões ativas"""
-        # Header do Monitor
-        header_frame = ctk.CTkFrame(self.tab_monitor, fg_color="transparent")
-        header_frame.pack(fill="x", padx=10, pady=10)
-        
-        monitor_title = ctk.CTkLabel(
-            header_frame, 
-            text="🌐 Conexões Ativas", 
-            font=("Arial", 18, "bold")
-        )
-        monitor_title.pack(side="left")
-        
-        self.monitor_status_label = ctk.CTkLabel(
-            header_frame,
-            text="●",
-            font=("Arial", 20),
-            text_color="#66bb6a"
-        )
-        self.monitor_status_label.pack(side="left", padx=10)
-        
-        self.monitor_count_label = ctk.CTkLabel(
-            header_frame,
-            text="0 conexões",
-            font=("Arial", 12)
-        )
-        self.monitor_count_label.pack(side="left")
-        
-        # Frame para tabela de sessões
-        self.sessions_frame = ctk.CTkScrollableFrame(
-            self.tab_monitor,
-            width=860,
-            height=380,
-            fg_color="#1a1a1a"
-        )
-        self.sessions_frame.pack(fill="both", expand=True, padx=10, pady=5)
-        
-        # Label para "nenhuma conexão"
-        self.no_sessions_label = ctk.CTkLabel(
-            self.sessions_frame,
-            text="Nenhuma conexão ativa no momento",
-            font=("Arial", 14),
-            text_color="#666666"
-        )
-        self.no_sessions_label.pack(pady=50)
-        
-        # Footer com última atualização
-        self.monitor_footer = ctk.CTkLabel(
-            self.tab_monitor,
-            text="Última atualização: -",
-            font=("Arial", 10),
-            text_color="#666666"
-        )
-        self.monitor_footer.pack(pady=5)
 
     def update_gui(self):
         # Update Cards
@@ -472,98 +304,8 @@ class App(ctk.CTk):
             self.log_box.insert("end", msg + "\n")
             self.log_box.see("end")
             self.log_box.configure(state="disabled")
-        
-        # Update Monitor (a cada 3 segundos para não sobrecarregar)
-        if not hasattr(self, '_monitor_counter'):
-            self._monitor_counter = 0
-        
-        self._monitor_counter += 1
-        if self._monitor_counter >= 6:  # 6 * 500ms = 3s
-            self._monitor_counter = 0
-            self.update_monitor()
             
         self.after(500, self.update_gui)
-    
-    def update_monitor(self):
-        """Atualiza o painel de monitoramento de conexões"""
-        try:
-            # Tentar buscar sessões ativas
-            prod_running = SERVERS["PROD"]["status"] == "RUNNING"
-            dev_running = SERVERS["DEV"]["status"] == "RUNNING"
-            
-            if not prod_running and not dev_running:
-                self._show_no_servers()
-                return
-            
-            # Buscar do servidor que estiver rodando (priorizar PROD)
-            port = 8000 if prod_running else 8001
-            url = f"http://127.0.0.1:{port}/api/system/active-sessions"
-            
-            response = requests.get(url, timeout=2)
-            if response.status_code == 200:
-                data = response.json()
-                self._display_sessions(data)
-            else:
-                self._show_error("Erro ao buscar sessões")
-                
-        except requests.exceptions.ConnectionError:
-            self._show_no_servers()
-        except requests.exceptions.Timeout:
-            self._show_error("Timeout ao buscar sessões")
-        except Exception as e:
-            self._show_error(f"Erro: {str(e)[:50]}")
-    
-    def _show_no_servers(self):
-        """Exibe mensagem quando nenhum servidor está rodando"""
-        self.monitor_status_label.configure(text="●", text_color="#ef5350")
-        self.monitor_count_label.configure(text="Servidores offline")
-        self.monitor_footer.configure(text="Inicie PROD ou DEV para ver conexões")
-        
-        # Limpar sessões exibidas
-        for widget in self.sessions_frame.winfo_children():
-            widget.destroy()
-        
-        self.no_sessions_label = ctk.CTkLabel(
-            self.sessions_frame,
-            text="Servidores offline - Inicie PROD ou DEV",
-            font=("Arial", 14),
-            text_color="#ef5350"
-        )
-        self.no_sessions_label.pack(pady=50)
-    
-    def _show_error(self, error_msg):
-        """Exibe mensagem de erro"""
-        self.monitor_status_label.configure(text="●", text_color="orange")
-        self.monitor_count_label.configure(text=error_msg)
-    
-    def _display_sessions(self, data):
-        """Exibe as sessões ativas na interface"""
-        sessions = data.get("sessions", [])
-        total = data.get("total", 0)
-        timestamp = data.get("timestamp", "-")
-        
-        # Atualizar header
-        self.monitor_status_label.configure(text="●", text_color="#66bb6a")
-        self.monitor_count_label.configure(text=f"{total} {'conexão' if total == 1 else 'conexões'}")
-        self.monitor_footer.configure(text=f"Última atualização: {timestamp}")
-        
-        # Limpar sessões antigas
-        for widget in self.sessions_frame.winfo_children():
-            widget.destroy()
-        
-        if total == 0:
-            self.no_sessions_label = ctk.CTkLabel(
-                self.sessions_frame,
-                text="Nenhuma conexão ativa no momento",
-                font=("Arial", 14),
-                text_color="#666666"
-            )
-            self.no_sessions_label.pack(pady=50)
-            return
-        
-        # Exibir cada sessão
-        for session in sessions:
-            SessionCard(self.sessions_frame, session).pack(fill="x", padx=5, pady=3)
 
     def on_close(self):
         self.supervisor.running = False

@@ -4,6 +4,8 @@ import sys
 import logging
 from config_manager import config_manager
 import warnings
+import json
+import datetime
 
 warnings.filterwarnings("ignore")
 
@@ -44,9 +46,87 @@ def clean_int(val):
     except:
         return None
 
-def clean_date(val):
     if val is None: return None
     return val
+
+def sync_mysql_to_access_diff(mysql_conn):
+    """Syncs NEW Andamentos (from Web) MySQL -> Access via DIRECT DIFF (Today)."""
+    try:
+        today = datetime.date.today()
+        # MySQL: Fetch all for today
+        rows_mysql = []
+        with mysql_conn.cursor() as cur:
+            # Data is DATE or DATETIME. >= CURDATE() covers today.
+            cur.execute("SELECT * FROM tabAndamento WHERE Data >= %s", (today,))
+            rows_mysql = cur.fetchall()
+            
+        if not rows_mysql:
+            return
+
+        # Split by Target DB
+        to_os = []
+        to_papelaria = []
+        
+        for r in rows_mysql:
+            nro = r.get('NroProtocoloLink')
+            if nro:
+                try:
+                    if int(nro) > 5000: to_papelaria.append(r)
+                    else: to_os.append(r)
+                except: pass
+        
+        # Helper to process sync
+        def process_db(target_db, source_rows, lbl):
+            if not source_rows: return
+            try:
+                acc_conn = get_access_conn(target_db)
+                cur = acc_conn.cursor()
+                
+                # Access: Fetch Existing CodStatus for Today
+                today_dt = datetime.datetime.combine(today, datetime.time.min)
+                
+                cur.execute("SELECT [CodStatus] FROM [tabAndamento] WHERE [Data] >= ?", (today_dt,))
+                existing_keys = set(str(row.CodStatus) for row in cur.fetchall())
+                
+                # Identify Missing
+                to_insert = [r for r in source_rows if str(r['CodStatus']) not in existing_keys]
+                
+                if to_insert:
+                    logging.info(f"Reverse Sync ({lbl}): Found {len(to_insert)} items in MySQL missing in MDB.")
+                    
+                    # Get Columns
+                    cur.execute("SELECT TOP 1 * FROM [tabAndamento]")
+                    valid_cols = [c[0] for c in cur.description]
+                    
+                    for r in to_insert:
+                        cols = []
+                        vals = []
+                        for col_name in valid_cols:
+                            val = r.get(col_name)
+                            cols.append(f"[{col_name}]")
+                            vals.append(val)
+                            
+                        phs = ', '.join(['?'] * len(cols))
+                        c_sql = ', '.join(cols)
+                        sql = f"INSERT INTO [tabAndamento] ({c_sql}) VALUES ({phs})"
+                        
+                        try:
+                            cur.execute(sql, vals)
+                            acc_conn.commit()
+                            logging.info(f"  Synced {r.get('CodStatus')} -> {lbl}")
+                        except Exception as e:
+                            logging.error(f"  Failed insert {r.get('CodStatus')}: {e}")
+                            
+                acc_conn.close()
+            except Exception as e:
+                logging.error(f"Error syncing to {lbl}: {e}")
+
+        process_db(ACCESS_DB_OS, to_os, "OS Atual")
+        process_db(ACCESS_DB_PAPELARIA, to_papelaria, "Papelaria Atual")
+        
+    except Exception as e:
+        logging.error(f"Error in Reverse Sync Diff: {e}")
+
 
 def sync_fast_logic():
     mysql_conn = None
@@ -61,6 +141,9 @@ def sync_fast_logic():
         
         affected_os = set()
         
+        # 0. Reverse Sync (MySQL -> Access) Diff Strategy
+        sync_mysql_to_access_diff(mysql_conn)
+
         # 1. Sync Andamentos Only (Fast Check)
         for db_path, source_name in dbs:
             try:

@@ -18,7 +18,8 @@ if __name__ == "__main__":
     try:
         # Executa o servidor Uvicorn
         # Reloader DESATIVADO para garantir captura de logs pelo Launcher
-        uvicorn.run("routers.api:app", host="0.0.0.0", port=8001, reload=False)
+        # Host 127.0.0.1 = APENAS localhost (não acessível de outras máquinas)
+        uvicorn.run("routers.api:app", host="127.0.0.1", port=8001, reload=False)
     except Exception as e:
         logger.error(f"Erro fatal ao iniciar servidor: {e}")
         input("Pressione ENTER para sair...")

@@ -25,7 +25,8 @@ if __name__ == "__main__":
         from routers.api import app
         
         # Executa o servidor Uvicorn com log level debug
-        uvicorn.run(app, host="0.0.0.0", port=8001, log_level="debug", access_log=True)
+        # Host 127.0.0.1 = APENAS localhost (não acessível de outras máquinas)
+        uvicorn.run(app, host="127.0.0.1", port=8001, log_level="debug", access_log=True)
         
     except Exception as e:
         logger.error(f"FATAL ERROR no Debug Server: {e}")

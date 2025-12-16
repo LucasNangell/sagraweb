@@ -279,6 +279,8 @@ def sync_os_data(os_id, os_ano):
             sql_acc = f"SELECT * FROM [{table}] WHERE {where_clause_acc} {extra_where_access}"
             acc_data_raw = fetch_all_as_dict(acc_cursor, sql_acc, conf["pk_vals"] + extra_params_access)
             
+
+            
             # --- MERGE LOGIC ---
             # Simples: Se tabAndamento, merge por CodStatus. Se Protocolo/Detalhes, é 1-to-1 (update fields).
             
@@ -454,6 +456,8 @@ def check_pending_mysql_insert(conn, table, record):
     except Exception as e:
         logging.error(f"Error checking pending insert: {e}")
         return False
+
+
 
 def items_differ(dict_a, dict_b, table_name="Generic"):
     """Compara dois dicionários ignorando chaves irrelevantes."""

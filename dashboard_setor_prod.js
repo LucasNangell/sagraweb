@@ -95,70 +95,6 @@ createApp({
             }
         };
 
-        // =================================================================
-        // KEEP-ALIVE AGRESSIVO - Simula atividade para manter monitor ligado
-        // =================================================================
-        let keepAliveInterval = null;
-        
-        const startKeepAlive = () => {
-            console.log('[Keep-Alive] Iniciando simulacao agressiva de atividade');
-            
-            const simulateActivity = () => {
-                try {
-                    // 1. Disparar evento de mousemove (movimento invisivel)
-                    const moveEvent = new MouseEvent('mousemove', {
-                        view: window,
-                        bubbles: true,
-                        cancelable: true,
-                        clientX: 0,
-                        clientY: 0
-                    });
-                    document.dispatchEvent(moveEvent);
-                    
-                    // 2. Disparar tecla Shift (nao-invasivo)
-                    const keyDown = new KeyboardEvent('keydown', {
-                        key: 'Shift',
-                        code: 'ShiftLeft',
-                        bubbles: true
-                    });
-                    document.dispatchEvent(keyDown);
-                    
-                    setTimeout(() => {
-                        const keyUp = new KeyboardEvent('keyup', {
-                            key: 'Shift',
-                            code: 'ShiftLeft',
-                            bubbles: true
-                        });
-                        document.dispatchEvent(keyUp);
-                    }, 50);
-                    
-                    // 3. Micro-scroll imperceptivel
-                    const scrollPos = window.pageYOffset;
-                    window.scrollBy(0, 1);
-                    setTimeout(() => window.scrollTo(0, scrollPos), 10);
-                    
-                    console.log('[Keep-Alive] Atividade simulada');
-                } catch (err) {
-                    console.error('[Keep-Alive] Erro:', err);
-                }
-            };
-            
-            // Executar imediatamente
-            simulateActivity();
-            
-            // Repetir a cada 25 segundos
-            keepAliveInterval = setInterval(simulateActivity, 25000);
-        };
-        
-        const stopKeepAlive = () => {
-            if (keepAliveInterval !== null) {
-                clearInterval(keepAliveInterval);
-                keepAliveInterval = null;
-                console.log('[Keep-Alive] Simulacao parada');
-            }
-        };
-        // =================================================================
-
         // Inicializar Wake Lock ao montar componente
         onMounted(async () => {
             console.log('[Wake Lock] Inicializando sistema');
@@ -170,9 +106,6 @@ createApp({
             if (!wakeLockSupported) {
                 startFallback();
             }
-
-            // Iniciar Keep-Alive agressivo (sempre, como garantia adicional)
-            startKeepAlive();
 
             // Listeners para gerenciar visibilidade
             document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -205,7 +138,6 @@ createApp({
             console.log('[Wake Lock] Limpando recursos');
             releaseWakeLock();
             stopFallback();
-            stopKeepAlive();
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         });
 
@@ -392,50 +324,6 @@ createApp({
             columns.value = config.value.columns.map(c => ({ ...c, items: [] }));
             previousDataMap.value.clear(); // Clear history to avoid stale comparisons
             fetchData();
-        };
-
-        const clearCache = () => {
-            if (confirm('Tem certeza que deseja limpar o cache e restaurar a configuração padrão?\n\nIsso vai redefinir:\n- Setor selecionado\n- Colunas configuradas\n- Andamentos selecionados')) {
-                localStorage.removeItem('sagra_dashboard_config');
-                console.log('[Cache] Configuração local removida');
-                
-                // Restaurar configuração padrão
-                config.value = {
-                    sector: "SEFOC",
-                    columnCount: 4,
-                    columns: [
-                        {
-                            id: 'col_0',
-                            title: 'p/ Triagem',
-                            statuses: ['Saída p/', 'Saída parcial p/', 'Entrada Inicial', 'Tramit. de Prova p/', 'Tramit. de Prévia p/', 'Comentário']
-                        },
-                        {
-                            id: 'col_1',
-                            title: 'Em Execução',
-                            statuses: ['Em Execução', 'Recebido']
-                        },
-                        {
-                            id: 'col_2',
-                            title: 'Problemas Técnicos',
-                            statuses: ['Problemas Técnicos', 'Problema Técnico']
-                        },
-                        {
-                            id: 'col_3',
-                            title: 'Enviar e-mail',
-                            statuses: ['Encam. de Docum.']
-                        }
-                    ]
-                };
-                
-                tempConfig.value = JSON.parse(JSON.stringify(config.value));
-                columns.value = config.value.columns.map(c => ({ ...c, items: [] }));
-                previousDataMap.value.clear();
-                
-                showSettings.value = false;
-                fetchData();
-                
-                alert('✅ Cache limpo! Configuração padrão restaurada.');
-            }
         };
 
         // Fetch Data from Real API
@@ -634,7 +522,6 @@ createApp({
             showSettings,
             openSettings,
             saveSettings,
-            clearCache,
             setoresList,
             andamentosList,
             toggleAndamento,

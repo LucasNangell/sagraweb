@@ -217,6 +217,8 @@ createApp({
         // FIM WAKE LOCK API
         // =================================================================
 
+        const API_BASE_URL = `http://${window.location.hostname}:${window.SAGRA_API_PORT || 8000}/api`;
+
         // --- State ---
         const lastUpdated = ref("Carregando...");
         const progress = ref(0);
@@ -264,7 +266,6 @@ createApp({
         // Fetch available setores from API
         const loadSetores = async () => {
             try {
-                const API_BASE_URL = `http://${window.location.hostname}:${window.SAGRA_API_PORT || 8000}/api`;
                 const response = await fetch(`${API_BASE_URL}/aux/setores`);
                 const result = await response.json();
                 if (result && Array.isArray(result) && result.length > 0) {
@@ -281,7 +282,6 @@ createApp({
         // Fetch available andamentos from API
         const loadAndamentos = async () => {
             try {
-                const API_BASE_URL = `http://${window.location.hostname}:${window.SAGRA_API_PORT || 8000}/api`;
                 const response = await fetch(`${API_BASE_URL}/aux/andamentos`);
                 const result = await response.json();
                 if (result && Array.isArray(result) && result.length > 0) {
@@ -443,55 +443,56 @@ createApp({
             }
         };
 
-        // Fetch Data from Real API
-        const fetchData = async () => {
-            try {
-                // Build dynamic Filters
-                // We fetch specific statuses based on columns config to optimize, 
-                // OR we fetch all active for the sector and filter client-side.
-                // Given the prompt "Filter by sector selected", fetching by sector is safer.
+        const fetchLegacyData = async () => {
+            const isGravacao = config.value.sector === 'Gravação';
+            const params = new URLSearchParams();
+            params.append('setor', isGravacao ? 'SEFOC' : config.value.sector);
+            params.append('include_finished', 'false');
+            params.append('limit', '200');
+            params.append('pcp_order', 'true');
 
-                const params = new URLSearchParams();
-                params.append('setor', config.value.sector);
-                params.append('include_finished', 'false');
-                params.append('limit', '200'); // Fetch enough items
+            const response = await fetch(`${API_BASE_URL}/os/search?${params.toString()}`);
+            const result = await response.json();
 
-                // Add column statuses to filter
-                // Flatten all statuses from all columns
-                // const allStatuses = config.value.columns.flatMap(c => c.statuses);
-                // allStatuses.forEach(s => params.append('situacao[]', s));
-                // NOTE: API searches EXACT string. 'Saída p/' matches "Saída p/ SEFOC" via "LIKE" check in backend?
-                // Looking at server.py: 
-                // if situacao: ... AND a.SituacaoLink IN (...) -> EQUAL check usually.
-                // BUT server_py: query += " AND a.SituacaoLink IN ({placeholders})" -> equal check.
-                // However, the prompt says "Saída p/" but backend might store "Saída p/ EXPEDICAO".
-                // We will fetch ALL for the sector and filter client-side to be robust against "Saída p/..." variations if needed,
-                // OR relies on "situacao" param being exact.
-                // LET'S FETCH EVERYTHING FOR THE SECTOR first to be safe.
-
-                const API_BASE_URL = `http://${window.location.hostname}:${window.SAGRA_API_PORT || 8000}/api`;
-                const response = await fetch(`${API_BASE_URL}/os/search?${params.toString()}`);
-                const result = await response.json();
-
-                if (result && result.data) {
-                    processData(result.data);
-                    
-                    // Atualizar status de conexão apenas se não estiver usando WebSocket
-                    // (WebSocket gerencia seu próprio status)
-                    if (connectionStatus.value === 'disconnected') {
-                        // Polling funcionando - marcar como conectado
-                        connectionStatus.value = 'connected';
-                    }
+            if (result && result.data) {
+                let data = result.data;
+                if (isGravacao) {
+                    const allowed = new Set(['Gravação', 'Gravação Parcial']);
+                    data = data.filter(item => allowed.has(item.situacao));
                 }
-
-                lastUpdated.value = new Date().toLocaleTimeString();
-
-            } catch (error) {
-                console.error("Error fetching data:", error);
-                
-                // Marcar como desconectado apenas se realmente não conseguir buscar dados
-                connectionStatus.value = 'disconnected';
+                processData(data);
+                connectionStatus.value = 'connected';
             }
+        };
+
+        // Fetch Data from API (prioriza ordenação PCP; fallback mantém comportamento atual)
+        const fetchData = async () => {
+            const params = new URLSearchParams();
+            params.append('setor', config.value.sector);
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/pcp/queue?${params.toString()}`);
+                if (!response.ok) throw new Error(`PCP queue HTTP ${response.status}`);
+
+                const result = await response.json();
+                if (result && Array.isArray(result.items) && result.items.length > 0) {
+                    processData(result.items);
+                    connectionStatus.value = 'connected';
+                } else {
+                    console.warn('Fila PCP vazia ou sem formato esperado — ativando fallback de ordenação padrão');
+                    await fetchLegacyData();
+                }
+            } catch (error) {
+                console.warn('Fila PCP indisponível, usando ordenação padrão', error);
+                try {
+                    await fetchLegacyData();
+                } catch (legacyErr) {
+                    console.error('Falha no fallback de painel', legacyErr);
+                    connectionStatus.value = 'disconnected';
+                }
+            }
+
+            lastUpdated.value = new Date().toLocaleTimeString();
         };
 
         const processData = (rawData) => {
@@ -507,12 +508,14 @@ createApp({
                     (os.prioridade.includes('Prometido') ? 'priority-high' :
                         os.prioridade.includes('Solicitado') ? 'priority-medium' : null) : null;
                 const isNew = !previousDataMap.value.has(uniqueKey);
+                const pcpOrder = Number.isFinite(Number(os.pcp_ordem)) ? Number(os.pcp_ordem) : null;
 
                 const item = {
                     ...os,
                     uniqueKey,
                     priorityType,
-                    isNew: isNew // Flag for animation
+                    isNew: isNew, // Flag for animation
+                    pcp_ordem: pcpOrder
                 };
 
                 currentDataMap.set(uniqueKey, item);
@@ -548,6 +551,15 @@ createApp({
 
             tempColumns.forEach(col => {
                 col.items.sort((a, b) => {
+                    const hasPcpA = Number.isInteger(a.pcp_ordem);
+                    const hasPcpB = Number.isInteger(b.pcp_ordem);
+
+                    if (hasPcpA || hasPcpB) {
+                        if (hasPcpA && hasPcpB) return a.pcp_ordem - b.pcp_ordem;
+                        if (hasPcpA) return -1;
+                        return 1;
+                    }
+
                     const wA = getWeight(a);
                     const wB = getWeight(b);
 
@@ -616,7 +628,7 @@ createApp({
                     socket.onmessage = (event) => {
                         try {
                             const data = JSON.parse(event.data);
-                            if (data.type === 'system_update') {
+                            if (data.type === 'system_update' || data.type === 'pcp_queue_update') {
                                 console.log("[WebSocket] Atualização recebida:", data);
                                 fetchData();
                             }

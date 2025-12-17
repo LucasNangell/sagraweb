@@ -1735,6 +1735,8 @@ def get_setores():
         query = "SELECT DISTINCT Setor FROM tabSetor ORDER BY Setor ASC"
         result = db.execute_query(query)
         setores = [{"Setor": row.get("Setor")} for row in result if row.get("Setor")]
+        if not any(s.get("Setor") == "Gravação" for s in setores):
+            setores.append({"Setor": "Gravação"})
         return setores
     except Exception as e:
         logger.error(f"Error fetching setores: {e}")
@@ -1758,7 +1760,9 @@ def get_andamentos():
         logger.error(f"Error fetching andamentos: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-app.mount("/", StaticFiles(directory=".", html=True), name="static")
+# Serve static files from the project root regardless of the working directory
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+app.mount("/", StaticFiles(directory=BASE_DIR, html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn

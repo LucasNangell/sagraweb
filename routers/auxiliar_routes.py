@@ -13,7 +13,11 @@ def get_situacoes():
 
 @router.get("/setores")
 def get_setores():
-    return db.execute_query("SELECT DISTINCT SetorLink as Setor FROM tabAndamento WHERE SetorLink IS NOT NULL ORDER BY SetorLink")
+    result = db.execute_query("SELECT DISTINCT SetorLink as Setor FROM tabAndamento WHERE SetorLink IS NOT NULL ORDER BY SetorLink")
+    setores = list(result)
+    if not any(row.get("Setor") == "Gravação" for row in setores):
+        setores.append({"Setor": "Gravação"})
+    return setores
 
 @router.get("/maquinas")
 def get_maquinas():

@@ -8,6 +8,7 @@ import glob
 from datetime import datetime
 from .andamento_helpers import format_andamento_obs, format_ponto
 import hashlib
+from pcp_queue_service import ensure_pcp_table
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -363,7 +364,8 @@ def search_os(
     setor: Optional[List[str]] = Query(None),
     include_finished: bool = False,
     page: int = 1,
-    limit: int = 16
+    limit: int = 16,
+    pcp_order: bool = False
 ):
     filters = " WHERE a.UltimoStatus = 1"
     params = {}
@@ -403,6 +405,22 @@ def search_os(
             for i, s in enumerate(clean_setor):
                 params[f'setor_{i}'] = s
 
+    pcp_select = ""
+    pcp_join = ""
+    order_prefix = ""
+
+    if pcp_order:
+        ensure_pcp_table()
+        pcp_select = ", pcp.ordem AS pcp_ordem, pcp.ultima_atualizacao AS pcp_ultima_atualizacao"
+        pcp_join = """
+        LEFT JOIN tab_pcp_fila AS pcp
+            ON (pcp.setor = a.SetorLink AND pcp.nro_os = p.NroProtocolo AND pcp.ano = p.AnoProtocolo)
+        """
+        order_prefix = """
+        CASE WHEN pcp.ordem IS NULL THEN 1 ELSE 0 END,
+        pcp.ordem ASC,
+        """
+
     count_query = f"""
     SELECT COUNT(*) as total
     FROM tabProtocolos AS p
@@ -422,12 +440,16 @@ def search_os(
         p.EntregPrazoLink AS prioridade,
         d.TipoPublicacaoLink AS produto,
         a.SetorLink AS setor,
-        p.EntregData AS data_entrega
+        p.EntregData AS data_entrega,
+        a.Data AS last_update
+        {pcp_select}
     FROM tabProtocolos AS p
     LEFT JOIN tabDetalhesServico AS d ON (p.NroProtocolo = d.NroProtocoloLinkDet) AND (p.AnoProtocolo = d.AnoProtocoloLinkDet)
     LEFT JOIN tabAndamento AS a ON (p.NroProtocolo = a.NroProtocoloLink) AND (p.AnoProtocolo = a.AnoProtocoloLink)
+    {pcp_join}
     {filters}
     ORDER BY 
+        {order_prefix}
         CASE 
             WHEN p.EntregPrazoLink LIKE '%%Prometido p/%%' THEN 0 
             WHEN p.EntregPrazoLink LIKE '%%Solicitado p/%%' THEN 1 
@@ -818,6 +840,8 @@ def get_setores():
         query = "SELECT DISTINCT Setor FROM tabSetor ORDER BY Setor ASC"
         result = db.execute_query(query)
         setores = [{"Setor": row.get("Setor")} for row in result if row.get("Setor")]
+        if not any(s.get("Setor") == "Gravação" for s in setores):
+            setores.append({"Setor": "Gravação"})
         return setores
     except Exception as e:
         logger.error(f"Error fetching setores: {e}")

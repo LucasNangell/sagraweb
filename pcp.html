@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCP – Planejamento e Controle da Produção</title>
+    <link rel="stylesheet" href="pcp.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div id="app" v-cloak>
+        <header class="pcp-header">
+            <div class="header-left">
+                <div class="pill status-pill" :class="wsStatus === 'connected' ? 'ok' : 'warn'">
+                    <span class="dot"></span>
+                    <span>{{ wsStatus === 'connected' ? 'Em tempo real' : 'Reconectando...' }}</span>
+                </div>
+                <div class="pill muted">Atualizado: {{ lastUpdated }}</div>
+            </div>
+            <div class="header-center">
+                <h1>PCP — Planejamento e Controle da Produção</h1>
+                <p>Fila visual por setor com drag-and-drop</p>
+            </div>
+            <div class="header-right">
+                <button class="btn ghost" @click="openSettings">
+                    <i data-lucide="settings"></i> Configurações
+                </button>
+                <button class="btn ghost" @click="refreshAll" :disabled="loading">
+                    <i data-lucide="refresh-ccw"></i> Atualizar agora
+                </button>
+            </div>
+        </header>
+
+        <section class="controls">
+            <div class="control-group inline">
+                <div class="pill info">Arraste para reordenar dentro do setor</div>
+                <div class="pill" :class="loading ? 'warn' : 'ok'">{{ loading ? 'Carregando filas...' : 'Filas sincronizadas' }}</div>
+            </div>
+        </section>
+
+        <main class="pcp-board">
+            <div 
+                class="setor-column" 
+                v-for="setor in selectedSetores" 
+                :key="setor"
+            >
+                <div class="setor-header">
+                    <div class="setor-title">
+                        <span class="badge">Setor</span>
+                        <h2>{{ setor }}</h2>
+                        <span class="counter">{{ filteredQueue(setor).length }}</span>
+                        <span class="pill tiny muted" v-if="isFiltered(setor)">Filtro ativo</span>
+                    </div>
+                    <div class="setor-actions">
+                        <span class="pill tiny" v-if="savingSetor === setor">Salvando ordem...</span>
+                        <button class="btn ghost" @click="refreshQueue(setor)" :disabled="loading">
+                            <i data-lucide="rotate-ccw"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="queue-list" :data-setor="setor">
+                    <div 
+                        class="os-card" 
+                        v-for="os in filteredQueue(setor)" 
+                        :key="`${os.nr_os}-${os.ano}`"
+                        :data-key="`${os.nr_os}-${os.ano}`"
+                    >
+                        <div class="os-head">
+                            <div class="os-number">{{ parseInt(os.nr_os) < 5000 ? 'OS' : 'SP' }} {{ os.nr_os }}/{{ String(os.ano).slice(-2) }}</div>
+                            <div class="os-order" v-if="os.pcp_ordem">#{{ os.pcp_ordem }}</div>
+                        </div>
+                        <div class="os-product">{{ os.produto || 'Produto não informado' }}</div>
+                        <div class="os-meta">
+                            <span class="pill tiny" :class="priorityClass(os.prioridade)">{{ os.prioridade || 'Sem prioridade' }}</span>
+                            <span class="pill tiny muted">{{ os.situacao }}</span>
+                        </div>
+                        <div class="os-time" :class="elapsedClass(os)">
+                            <i data-lucide="clock-3"></i>
+                            <span>{{ formatElapsed(os, nowTick) }}</span>
+                        </div>
+                    </div>
+                    <div v-if="filteredQueue(setor).length === 0" class="empty">Nenhuma OS no setor</div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Settings Modal -->
+        <div class="modal-overlay" v-if="showSettings">
+            <div class="modal">
+                <div class="modal-header">
+                    <h2>Configurações do PCP</h2>
+                    <button class="btn ghost" @click="showSettings = false">Fechar</button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="modal-section">
+                        <h3>Setores exibidos</h3>
+                        <div class="andamento-grid">
+                            <label v-for="setor in setores" :key="setor" class="checkbox small">
+                                <input type="checkbox" :value="setor" :checked="tempConfig.selectedSetores.includes(setor)" @change="toggleSetorInTemp(setor)">
+                                <span>{{ setor }}</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="modal-section">
+                        <h3>Andamentos por setor</h3>
+                        <div class="filter-row">
+                            <select v-model="modalSetor" class="form-select">
+                                <option v-for="setor in tempConfig.selectedSetores" :key="setor" :value="setor">{{ setor }}</option>
+                            </select>
+                            <button class="btn ghost" :disabled="!modalSetor" @click="clearFiltersInTemp(modalSetor)">Limpar</button>
+                        </div>
+                        <div class="andamento-grid modal-scroll">
+                            <label v-for="and in andamentos" :key="and" class="checkbox small">
+                                <input type="checkbox"
+                                       :checked="tempConfig.filters[modalSetor]?.includes(and)"
+                                       @change="toggleAndamentoInTemp(and)"
+                                       :disabled="!modalSetor">
+                                <span>{{ and }}</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button class="btn ghost" @click="showSettings = false">Cancelar</button>
+                    <button class="btn" @click="saveSettings">Salvar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="pcp.js"></script>
+    <script>lucide.createIcons();</script>
+</body>
+</html>

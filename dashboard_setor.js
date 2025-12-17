@@ -101,53 +101,18 @@ createApp({
         let keepAliveInterval = null;
         
         const startKeepAlive = () => {
-            console.log('[Keep-Alive] Iniciando simulacao agressiva de atividade');
-            
-            const simulateActivity = () => {
+            console.log('[Keep-Alive] Iniciando modo leve');
+            // No user-input simulation to avoid page event handlers; just keep a small tick
+            const tick = () => {
                 try {
-                    // 1. Disparar evento de mousemove (movimento invisivel)
-                    const moveEvent = new MouseEvent('mousemove', {
-                        view: window,
-                        bubbles: true,
-                        cancelable: true,
-                        clientX: 0,
-                        clientY: 0
-                    });
-                    document.dispatchEvent(moveEvent);
-                    
-                    // 2. Disparar tecla Shift (nao-invasivo)
-                    const keyDown = new KeyboardEvent('keydown', {
-                        key: 'Shift',
-                        code: 'ShiftLeft',
-                        bubbles: true
-                    });
-                    document.dispatchEvent(keyDown);
-                    
-                    setTimeout(() => {
-                        const keyUp = new KeyboardEvent('keyup', {
-                            key: 'Shift',
-                            code: 'ShiftLeft',
-                            bubbles: true
-                        });
-                        document.dispatchEvent(keyUp);
-                    }, 50);
-                    
-                    // 3. Micro-scroll imperceptivel
-                    const scrollPos = window.pageYOffset;
-                    window.scrollBy(0, 1);
-                    setTimeout(() => window.scrollTo(0, scrollPos), 10);
-                    
-                    console.log('[Keep-Alive] Atividade simulada');
+                    // Touch document title to keep minimal activity without triggering listeners
+                    document.title = document.title;
                 } catch (err) {
-                    console.error('[Keep-Alive] Erro:', err);
+                    console.warn('[Keep-Alive] Tick falhou:', err?.message || err);
                 }
             };
-            
-            // Executar imediatamente
-            simulateActivity();
-            
-            // Repetir a cada 25 segundos
-            keepAliveInterval = setInterval(simulateActivity, 25000);
+            tick();
+            keepAliveInterval = setInterval(tick, 60000);
         };
         
         const stopKeepAlive = () => {
@@ -217,7 +182,36 @@ createApp({
         // FIM WAKE LOCK API
         // =================================================================
 
-        const API_BASE_URL = `http://${window.location.hostname}:${window.SAGRA_API_PORT || 8000}/api`;
+        const apiPort = window.SAGRA_API_PORT || window.location.port || 8001;
+        const forcedBase = 'http://10.120.1.12:8001/api';
+        const candidateApiBases = Array.from(new Set([
+            forcedBase,
+            `http://${window.location.hostname}:${apiPort}/api`,
+            `http://${window.location.hostname}:${apiPort}`
+        ].filter(Boolean)));
+        let resolvedApiBase = null;
+
+        const getApiBases = () => resolvedApiBase ? [resolvedApiBase] : candidateApiBases;
+
+        const fetchJsonWithFallback = async (path) => {
+            const bases = getApiBases();
+            let lastError = null;
+            for (const base of bases) {
+                const url = `${base}${path}`;
+                try {
+                    console.log('[API] GET', url);
+                    const response = await fetch(url, { cache: 'no-store' });
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    const data = await response.json();
+                    resolvedApiBase = base;
+                    return data;
+                } catch (err) {
+                    lastError = err;
+                    console.warn('[API] Falha em', url, err?.message || err);
+                }
+            }
+            throw lastError || new Error('Todas as bases falharam');
+        };
 
         // --- State ---
         const lastUpdated = ref("Carregando...");
@@ -259,15 +253,16 @@ createApp({
 
         // Display Data
         const columns = ref([]);
+        const unmappedItems = ref([]); // Itens que não casam com nenhum andamento configurado
         const previousDataMap = ref(new Map()); // To track "New" items
+        const hiddenCount = ref(0); // Quantidade de OSs fora dos filtros
 
         // --- Logic ---
 
         // Fetch available setores from API
         const loadSetores = async () => {
             try {
-                const response = await fetch(`${API_BASE_URL}/aux/setores`);
-                const result = await response.json();
+                const result = await fetchJsonWithFallback('/aux/setores');
                 if (result && Array.isArray(result) && result.length > 0) {
                     setoresList.value = result.map(item => item.Setor);
                     console.log("Setores carregados:", setoresList.value);
@@ -282,8 +277,7 @@ createApp({
         // Fetch available andamentos from API
         const loadAndamentos = async () => {
             try {
-                const response = await fetch(`${API_BASE_URL}/aux/andamentos`);
-                const result = await response.json();
+                const result = await fetchJsonWithFallback('/aux/andamentos');
                 if (result && Array.isArray(result) && result.length > 0) {
                     andamentosList.value = result.map(item => item.Situacao);
                     console.log("Andamentos carregados:", andamentosList.value);
@@ -451,39 +445,72 @@ createApp({
             params.append('limit', '200');
             params.append('pcp_order', 'true');
 
-            const response = await fetch(`${API_BASE_URL}/os/search?${params.toString()}`);
-            const result = await response.json();
-
-            if (result && result.data) {
-                let data = result.data;
-                if (isGravacao) {
-                    const allowed = new Set(['Gravação', 'Gravação Parcial']);
-                    data = data.filter(item => allowed.has(item.situacao));
+            const basesToTry = getApiBases();
+            for (const base of basesToTry) {
+                const url = `${base}/os/search?${params.toString()}`;
+                try {
+                    console.log('[PCP] Fallback legacy em', url);
+                    const response = await fetch(url, { cache: 'no-store' });
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    const result = await response.json();
+                    if (result && result.data) {
+                        let data = result.data;
+                        if (isGravacao) {
+                            const allowed = new Set(['Gravação', 'Gravação Parcial']);
+                            data = data.filter(item => allowed.has(item.situacao));
+                        }
+                        console.log('[PCP] Fallback legacy OK, itens:', data.length);
+                        processData(data);
+                        connectionStatus.value = 'connected';
+                        resolvedApiBase = base;
+                        return;
+                    }
+                } catch (err) {
+                    console.warn('[PCP] Falha no fallback legacy em', url, err?.message || err);
                 }
-                processData(data);
-                connectionStatus.value = 'connected';
             }
+            throw new Error('Legacy fetch falhou em todas as bases');
         };
 
         // Fetch Data from API (prioriza ordenação PCP; fallback mantém comportamento atual)
         const fetchData = async () => {
             const params = new URLSearchParams();
             params.append('setor', config.value.sector);
+            params.append('_ts', Date.now());
 
-            try {
-                const response = await fetch(`${API_BASE_URL}/pcp/queue?${params.toString()}`);
-                if (!response.ok) throw new Error(`PCP queue HTTP ${response.status}`);
+            const basesToTry = getApiBases();
+            let success = false;
 
-                const result = await response.json();
-                if (result && Array.isArray(result.items) && result.items.length > 0) {
-                    processData(result.items);
-                    connectionStatus.value = 'connected';
-                } else {
-                    console.warn('Fila PCP vazia ou sem formato esperado — ativando fallback de ordenação padrão');
-                    await fetchLegacyData();
+            for (const base of basesToTry) {
+                const url = `${base}/pcp/queue?${params.toString()}`;
+                try {
+                    console.log('[PCP] Buscando fila em', url);
+                    const response = await fetch(url, { cache: 'no-store' });
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                    const result = await response.json();
+                    const count = Array.isArray(result?.items) ? result.items.length : 0;
+                    console.log('[PCP] Resposta', { url, count });
+                    if (count > 0) {
+                        processData(result.items);
+                        connectionStatus.value = 'connected';
+                        resolvedApiBase = base;
+                        success = true;
+                        break;
+                    } else {
+                        console.warn('Fila PCP vazia ou formato inesperado — fallback padrão');
+                        resolvedApiBase = base;
+                        success = true;
+                        await fetchLegacyData();
+                        break;
+                    }
+                } catch (err) {
+                    console.warn('[PCP] Falha ao buscar fila em', url, err?.message || err);
                 }
-            } catch (error) {
-                console.warn('Fila PCP indisponível, usando ordenação padrão', error);
+            }
+
+            if (!success) {
+                console.warn('Fila PCP indisponível, usando ordenação padrão');
                 try {
                     await fetchLegacyData();
                 } catch (legacyErr) {
@@ -501,6 +528,8 @@ createApp({
 
             // Temporary storage for columns
             const tempColumns = config.value.columns.map(c => ({ ...c, items: [] }));
+            const tempUnmapped = [];
+            let hidden = 0;
 
             rawData.forEach(os => {
                 const uniqueKey = `${os.nr_os}-${os.ano}`;
@@ -531,6 +560,9 @@ createApp({
 
                 if (colIndex !== -1) {
                     tempColumns[colIndex].items.push(item);
+                } else {
+                    hidden += 1; // não casa com filtros configurados
+                    tempUnmapped.push(item);
                 }
             });
 
@@ -573,12 +605,32 @@ createApp({
                 });
             });
 
+            // Ordena também os não mapeados pela mesma lógica PCP-first
+            const sortByPcp = (a, b) => {
+                const hasPcpA = Number.isInteger(a.pcp_ordem);
+                const hasPcpB = Number.isInteger(b.pcp_ordem);
+                if (hasPcpA || hasPcpB) {
+                    if (hasPcpA && hasPcpB) return a.pcp_ordem - b.pcp_ordem;
+                    if (hasPcpA) return -1;
+                    return 1;
+                }
+                const wA = getWeight(a);
+                const wB = getWeight(b);
+                if (wA !== wB) return wA - wB;
+                const dA = a.last_update ? new Date(a.last_update).getTime() : 0;
+                const dB = b.last_update ? new Date(b.last_update).getTime() : 0;
+                return dA - dB;
+            };
+            tempUnmapped.sort(sortByPcp);
+
             // Update Reactive State
             // We replace items but keep Vue's reactivity happy if possible, 
             // but for full list replacement usually just updating the array is fine.
             // Vue 3 transition-group handles the diff based on :key
 
             columns.value = tempColumns;
+            unmappedItems.value = tempUnmapped;
+            hiddenCount.value = hidden;
 
             // Update History Map for next cycle
             previousDataMap.value = currentDataMap;
@@ -602,11 +654,11 @@ createApp({
 
         const startWebSocket = () => {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const port = window.SAGRA_API_PORT || 8000;
-            const wsUrl = `${protocol}//${window.location.hostname}:${port}/ws`;
+            const wsUrl = `${protocol}//${window.location.hostname}:${apiPort}/ws`;
 
             let socket;
             let reconnectTimeout;
+            let wsHeartbeat;
 
             const connect = () => {
                 console.log("[WebSocket] Conectando:", wsUrl);
@@ -618,11 +670,16 @@ createApp({
                         console.log("[WebSocket] Conectado com sucesso");
                         connectionStatus.value = 'connected';
                         
-                        // Limpar timeout de reconexão se existir
                         if (reconnectTimeout) {
                             clearTimeout(reconnectTimeout);
                             reconnectTimeout = null;
                         }
+                        if (wsHeartbeat) clearInterval(wsHeartbeat);
+                        wsHeartbeat = setInterval(() => {
+                            if (socket && socket.readyState === WebSocket.OPEN) {
+                                socket.send(JSON.stringify({ type: 'ping', ts: Date.now() }));
+                            }
+                        }, 20000);
                     };
 
                     socket.onmessage = (event) => {
@@ -640,21 +697,29 @@ createApp({
                     socket.onclose = () => {
                         console.warn("[WebSocket] Conexão fechada. Reconectando em 5s...");
                         connectionStatus.value = 'disconnected';
-                        
-                        // Reconectar após 5 segundos
+                        if (wsHeartbeat) {
+                            clearInterval(wsHeartbeat);
+                            wsHeartbeat = null;
+                        }
                         reconnectTimeout = setTimeout(connect, 5000);
                     };
 
                     socket.onerror = (err) => {
                         console.error("[WebSocket] Erro:", err);
                         connectionStatus.value = 'disconnected';
+                        if (wsHeartbeat) {
+                            clearInterval(wsHeartbeat);
+                            wsHeartbeat = null;
+                        }
                         socket.close();
                     };
                 } catch (err) {
                     console.error("[WebSocket] Erro ao criar conexão:", err);
                     connectionStatus.value = 'disconnected';
-                    
-                    // Tentar reconectar em 5 segundos
+                    if (wsHeartbeat) {
+                        clearInterval(wsHeartbeat);
+                        wsHeartbeat = null;
+                    }
                     reconnectTimeout = setTimeout(connect, 5000);
                 }
             };
@@ -681,6 +746,8 @@ createApp({
             config,
             tempConfig,
             columns,
+            unmappedItems,
+            hiddenCount,
             lastUpdated,
             progress,
             connectionStatus,

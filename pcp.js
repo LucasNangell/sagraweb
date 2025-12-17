@@ -25,6 +25,7 @@ createApp({
         const modalSetor = ref(null);
 
         let wsInstance = null;
+        let wsHeartbeat = null;
         let tickTimer = null;
         let pollTimer = null;
 
@@ -100,6 +101,8 @@ createApp({
             delete filters[setor];
             tempConfig.value.filters = filters;
         };
+
+        const makeKey = (item) => `${item.nr_os}-${item.ano}`;
 
         const fetchLegacyQueue = async (setor) => {
             const params = new URLSearchParams();
@@ -180,11 +183,28 @@ createApp({
                     ghostClass: 'drag-ghost',
                     chosenClass: 'drag-chosen',
                     onEnd: (evt) => {
-                        const list = queues.value[setor] ? [...queues.value[setor]] : [];
-                        if (!list.length) return;
-                        const [moved] = list.splice(evt.oldIndex, 1);
-                        list.splice(evt.newIndex, 0, moved);
-                        queues.value = { ...queues.value, [setor]: list };
+                        const full = queues.value[setor] ? [...queues.value[setor]] : [];
+                        if (!full.length) return;
+
+                        // Reordena apenas a lista visível (após filtros) e projeta de volta na lista completa
+                        const visible = filteredQueue(setor);
+                        if (!visible.length) return;
+
+                        const reorderedVisible = [...visible];
+                        const [moved] = reorderedVisible.splice(evt.oldIndex, 1);
+                        reorderedVisible.splice(evt.newIndex, 0, moved);
+
+                        const visibleKeys = new Set(reorderedVisible.map(makeKey));
+                        const queueFromVisible = [...reorderedVisible];
+                        const rebuilt = full.map(item => {
+                            const key = makeKey(item);
+                            if (visibleKeys.has(key)) {
+                                return queueFromVisible.shift();
+                            }
+                            return item; // item estava oculto pelo filtro, mantém posição relativa
+                        });
+
+                        queues.value = { ...queues.value, [setor]: rebuilt };
                         persistOrder(setor).catch(err => console.error('Erro ao salvar ordem', err));
                     }
                 });
@@ -206,8 +226,11 @@ createApp({
                 });
                 if (!response.ok) {
                     const detail = await response.text();
+                    console.error('Falha ao salvar ordem', detail);
+                    alert(`Erro ao salvar ordem do setor ${setor}: ${detail || response.status}`);
                     throw new Error(detail || 'Erro ao salvar ordem');
                 }
+                console.info('Ordem PCP salva com sucesso', { setor, count: items.length });
             } finally {
                 savingSetor.value = null;
             }
@@ -229,6 +252,13 @@ createApp({
                             clearTimeout(reconnectTimer);
                             reconnectTimer = null;
                         }
+                        // Keep the socket alive on infra that drops idle connections
+                        if (wsHeartbeat) clearInterval(wsHeartbeat);
+                        wsHeartbeat = setInterval(() => {
+                            if (wsInstance && wsInstance.readyState === WebSocket.OPEN) {
+                                wsInstance.send(JSON.stringify({ type: 'ping', ts: Date.now() }));
+                            }
+                        }, 20000);
                     };
 
                     wsInstance.onmessage = (event) => {
@@ -248,6 +278,10 @@ createApp({
 
                     wsInstance.onclose = () => {
                         wsStatus.value = 'disconnected';
+                        if (wsHeartbeat) {
+                            clearInterval(wsHeartbeat);
+                            wsHeartbeat = null;
+                        }
                         // Fallback polling while offline
                         if (!pollTimer) {
                             pollTimer = setInterval(refreshAll, 20000);
@@ -257,6 +291,10 @@ createApp({
 
                     wsInstance.onerror = () => {
                         wsStatus.value = 'disconnected';
+                        if (wsHeartbeat) {
+                            clearInterval(wsHeartbeat);
+                            wsHeartbeat = null;
+                        }
                         try { wsInstance.close(); } catch (_) { /* ignore */ }
                     };
                 } catch (err) {
@@ -386,6 +424,10 @@ createApp({
         onUnmounted(() => {
             if (wsInstance) {
                 try { wsInstance.close(); } catch (_) { /* ignore */ }
+            }
+            if (wsHeartbeat) {
+                clearInterval(wsHeartbeat);
+                wsHeartbeat = null;
             }
             if (tickTimer) clearInterval(tickTimer);
             if (pollTimer) clearInterval(pollTimer);

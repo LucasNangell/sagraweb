@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teste Rota /analise/finalize</title>
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        button { padding: 10px 20px; font-size: 16px; }
+        #result { margin-top: 20px; padding: 15px; border: 1px solid #ccc; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>Teste POST /analise/finalize</h1>
+    <p>
+        <button onclick="testarRota()">Testar Rota</button>
+        <button onclick="limparResultado()">Limpar</button>
+    </p>
+    <div id="result"></div>
+    
+    <script>
+        async function testarRota() {
+            const result = document.getElementById('result');
+            result.innerHTML = '<p>Enviando requisição...</p>';
+            
+            try {
+                const response = await fetch('http://localhost:8001/analise/finalize/2025/2562', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        versao: "1"
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    result.innerHTML = `
+                        <div class="success">
+                            <h3>✓ Sucesso!</h3>
+                            <p>Status: ${response.status}</p>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    result.innerHTML = `
+                        <div class="error">
+                            <h3>✗ Erro ${response.status}</h3>
+                            <p>${data.detail || 'Erro desconhecido'}</p>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                result.innerHTML = `
+                    <div class="error">
+                        <h3>✗ Erro de Conexão</h3>
+                        <p>${error.message}</p>
+                        <p>Verifique se o servidor está rodando em http://localhost:8001</p>
+                    </div>
+                `;
+            }
+        }
+        
+        function limparResultado() {
+            document.getElementById('result').innerHTML = '';
+        }
+    </script>
+</body>
+</html>

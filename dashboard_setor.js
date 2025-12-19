@@ -124,6 +124,70 @@ createApp({
         };
         // =================================================================
 
+        // Alerta sonoro para prioridades
+        let alertAudioCtx = null;
+        let customAlert = null;
+        const triggerPriorityAlert = async () => {
+            try {
+                // Tenta tocar arquivo customizado primeiro
+                try {
+                    if (!customAlert) {
+                        customAlert = new Audio('danger.mp3');
+                        customAlert.preload = 'auto';
+                    }
+                    const clip = customAlert.cloneNode(true);
+                    clip.currentTime = 0;
+                    await clip.play();
+                    return;
+                } catch (playErr) {
+                    console.warn('[Alert] Falha ao tocar danger.mp3, usando beep padrão:', playErr?.message || playErr);
+                }
+
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) {
+                    console.warn('[Alert] AudioContext não suportado');
+                    return;
+                }
+
+                if (!alertAudioCtx) {
+                    alertAudioCtx = new AudioContext();
+                }
+
+                if (alertAudioCtx.state === 'suspended') {
+                    await alertAudioCtx.resume();
+                }
+
+                const now = alertAudioCtx.currentTime;
+
+                const scheduleTone = (freq, start, length, peak = 0.22) => {
+                    const osc = alertAudioCtx.createOscillator();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, start);
+
+                    const gain = alertAudioCtx.createGain();
+                    gain.gain.setValueAtTime(0.0001, start);
+                    gain.gain.exponentialRampToValueAtTime(peak, start + 0.02);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, start + length);
+
+                    osc.connect(gain);
+                    gain.connect(alertAudioCtx.destination);
+
+                    osc.start(start);
+                    osc.stop(start + length);
+                };
+
+                // Sequência de 10 beeps agudos de 0.1s
+                const toneLen = 0.075;
+                const gap = 0.005;
+                for (let i = 0; i < 20; i++) {
+                    const startAt = now + i * (toneLen + gap);
+                    scheduleTone(1000, startAt, toneLen, 0.24);
+                }
+            } catch (err) {
+                console.warn('[Alert] Falha ao tocar alerta:', err?.message || err);
+            }
+        };
+
         // Inicializar Wake Lock ao montar componente
         onMounted(async () => {
             console.log('[Wake Lock] Inicializando sistema');
@@ -525,6 +589,7 @@ createApp({
         const processData = (rawData) => {
             // Create a temp map for the new data
             const currentDataMap = new Map();
+            let hasNewPriorityAlert = false;
 
             // Temporary storage for columns
             const tempColumns = config.value.columns.map(c => ({ ...c, items: [] }));
@@ -546,6 +611,10 @@ createApp({
                     isNew: isNew, // Flag for animation
                     pcp_ordem: pcpOrder
                 };
+
+                if (isNew && priorityType) {
+                    hasNewPriorityAlert = true;
+                }
 
                 currentDataMap.set(uniqueKey, item);
 
@@ -631,6 +700,10 @@ createApp({
             columns.value = tempColumns;
             unmappedItems.value = tempUnmapped;
             hiddenCount.value = hidden;
+
+            if (hasNewPriorityAlert) {
+                triggerPriorityAlert();
+            }
 
             // Update History Map for next cycle
             previousDataMap.value = currentDataMap;

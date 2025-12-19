@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gravação (CTP) — Monitoramento</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="gravacao.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div id="app" v-cloak>
+        <div class="page">
+            <div class="topbar">
+                <div>
+                    <div class="pill" :class="(state.meta?.errors?.length || errorMsg) ? 'warn' : 'ok'">
+                        <span class="dot" style="width:10px;height:10px;border-radius:50%;background:currentColor"></span>
+                        <span>{{ (state.meta?.errors?.length || errorMsg) ? 'Checando fontes' : 'Monitorando em tempo real' }}</span>
+                    </div>
+                    <h1>Gravação (CTP) — Apogee / XPose</h1>
+                    <p>Fila técnica de gravação e jobs concluídos, leitura direta do MySQL (xpose_tickets/xpose_paths)</p>
+                </div>
+                <div class="actions">
+                    <span class="status-pill" :class="loading ? 'warn' : 'ok'">
+                        <span class="dot"></span>
+                        {{ loading ? 'Atualizando...' : 'Última leitura: ' + lastUpdated }}
+                    </span>
+                    <div class="queue-inline" v-if="queueHead.totalOs">
+                        <span>{{ queueHead.totalOs }} na fila</span>
+                        <span class="divider">•</span>
+                        <span>{{ queueHead.totalChapas }} chapas</span>
+                    </div>
+                    <button class="btn ghost" @click="fetchData" :disabled="loading">
+                        <i data-lucide="refresh-ccw"></i> Atualizar agora
+                    </button>
+                </div>
+            </div>
+
+            <div v-if="liveJobs.length">
+                <div class="live-job" v-for="job in liveJobs" :key="job.name">
+                    <div class="live-job__head">
+                        <div>
+                            <div class="pill warn">{{ isPrinting(job) ? 'Trabalho sendo gravado' : 'Próximo trabalho da fila' }}</div>
+                            <h2>{{ isPrinting(job) ? 'Trabalho sendo gravado' : 'Próximo trabalho da fila' }} – {{ osLabel(job) || shortName(job) }}</h2>
+                            <div class="muted">Atualização rápida (WebSocket quando disponível)</div>
+                        </div>
+                        <div class="pill" :class="statusClass(job.status)">{{ job.status || 'Printing' }}</div>
+                    </div>
+
+                    <div class="live-job__info-grid">
+                        <div class="info-chip"><i data-lucide="hash"></i> OS: {{ osLabel(job) || '—' }}</div>
+                        <div class="info-chip"><i data-lucide="package"></i> Produto: {{ job.produto || '—' }}</div>
+                        <div class="info-chip"><i data-lucide="type"></i> Título: {{ job.titulo || '—' }}</div>
+                        <div class="info-chip"><i data-lucide="user"></i> Solicitante: {{ job.solicitante || '—' }}</div>
+                        <div class="info-chip"><i data-lucide="cpu"></i> Máquina: {{ job.machine || 'XPose' }}</div>
+                        <div class="info-chip"><i data-lucide="calendar"></i> Entrada: {{ formatDateTime(job.created_at) }}</div>
+                        <div class="info-chip"><i data-lucide="loader"></i> Progresso: {{ progressPct(job) !== null ? progressPct(job) + '%' : '—' }}</div>
+                        <div class="info-chip emphasis"><i data-lucide="disc"></i> Chapas: {{ plateStats(job).printed }} / {{ plateStats(job).total }}</div>
+                        <div class="info-chip" v-if="plateStats(job).avgSeconds"><i data-lucide="clock-3"></i> Tempo médio/chapa: {{ formatDuration(Math.round(plateStats(job).avgSeconds)) }}</div>
+                        <div class="info-chip" v-if="plateStats(job).etaDate || plateStats(job).etaSeconds"><i data-lucide="hourglass"></i> Previsão término: {{ plateStats(job).etaDate ? formatDateTime(plateStats(job).etaDate) : formatDuration(Math.round(plateStats(job).etaSeconds)) }}</div>
+                    </div>
+
+                    <div class="progress" v-if="progressPct(job) !== null">
+                        <span :style="{ width: progressPct(job) + '%' }"></span>
+                    </div>
+
+                    <div class="plate-table">
+                        <div class="plate-table__header">
+                            <span><i data-lucide="disc"></i> Chapa</span>
+                            <span class="center"><i data-lucide="droplet"></i> Cor</span>
+                            <span class="center"><i data-lucide="check-circle"></i> Status</span>
+                            <span class="center"><i data-lucide="play"></i> Início</span>
+                            <span class="center"><i data-lucide="flag"></i> Fim</span>
+                        </div>
+                        <div class="plate-table__body">
+                            <div v-if="ticketPathGroups(job).length > 0">
+                                <div class="plate-subgroup" v-for="group in ticketPathGroups(job)" :key="group.ticket?.name || group.ticket_name">
+                                    <div class="plate-group-row">
+                                        <div class="group-title">{{ group.ticket?.name || 'Caderno' }}</div>
+                                        <div class="group-meta">
+                                            <span class="badge-soft">{{ group.paths.length }} chapas</span>
+                                            <span class="status-pill" :class="statusClass(group.ticket?.status)">
+                                                <span class="dot"></span>
+                                                {{ group.ticket?.status || '—' }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="plate-row subitem" v-for="(path, idx) in group.paths" :key="(path.path_name || pathLabel(path)) + '-' + idx" :class="path.status_normalized">
+                                        <span class="cell">{{ pathDisplay(path, group.ticket?.name) }}</span>
+                                        <span class="cell center">{{ (path.colour || '—').toString().toUpperCase() }}</span>
+                                        <span class="cell center">
+                                            <span class="status-pill" :class="path.status_normalized === 'printed' ? 'ok' : 'warn'">
+                                                <span class="dot"></span>
+                                                {{ path.status || (path.status_normalized === 'printed' ? 'Gravada' : 'Pendente') }}
+                                            </span>
+                                        </span>
+                                        <span class="cell center">{{ path.start_at ? formatDateTime(path.start_at) : '' }}</span>
+                                        <span class="cell center">{{ path.printed_at ? formatDateTime(path.printed_at) : '' }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div v-else class="empty">
+                                <small>Debug: Job tem {{ job?.paths?.length || 0 }} paths, {{ job?.tickets?.length || 0 }} tickets</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="live-job live-job--empty" v-else>
+                <div class="live-job__head">
+                    <div>
+                        <div class="pill muted">Trabalho sendo gravado</div>
+                        <h2>Nenhum trabalho em gravação agora</h2>
+                        <div class="muted">Aguardando próximo caderno da fila</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="summary-grid">
+                <div class="card highlight">
+                    <div class="card-title">
+                        <h3>Fila de gravação</h3>
+                        <span class="badge">Fonte xpose_tickets</span>
+                    </div>
+                    <div class="meta-row">
+                        <div class="pill ok">{{ queueHead.totalOs }} trabalhos</div>
+                        <div class="pill muted">{{ queueHead.totalChapas }} chapas</div>
+                    </div>
+                    <div class="queue-head" v-if="queueHead.entries.length">
+                        <div class="queue-head__item" v-for="item in queueHead.entries" :key="item.key">
+                            <strong>{{ item.os?.nr_os ? 'OS ' + item.os.nr_os + '/' + (item.os.ano ? String(item.os.ano).slice(-2) : '') : 'OS' }}</strong>
+                            <span>{{ item.chapas }} chapas</span>
+                            <small>{{ item.created_at ? formatDateTime(item.created_at) : '—' }}</small>
+                        </div>
+                    </div>
+                    <small>Atualização: {{ state.meta?.generated_at ? new Date(state.meta.generated_at).toLocaleTimeString() : '—' }}</small>
+                </div>
+            </div>
+
+            <section class="section">
+                <div class="section-header">
+                    <div>
+                        <h2>Fila de gravação</h2>
+                        <div class="muted">Status geral e placas por cor</div>
+                    </div>
+                    <div class="pill muted">Atualização automática a cada {{ pollMs / 1000 }}s</div>
+                </div>
+
+                <div class="list">
+                    <div v-if="queueNonPrinting.length === 0" class="empty">Nenhum job na fila de gravação</div>
+                    <div v-for="job in queueNonPrinting" :key="job.name" class="job-card">
+                        <div class="job-head">
+                            <div>
+                                <div class="job-name">{{ shortName(job) }}</div>
+                                <div class="job-os" v-if="osLabel(job)">{{ osLabel(job) }}</div>
+                            </div>
+                            <div class="pill" :class="statusClass(job.status)">{{ job.status || '—' }}</div>
+                        </div>
+                        <!-- Botão de eventos temporariamente oculto -->
+                        <div class="meta-row">
+                            <span class="badge-soft">Produto: {{ job.produto || '—' }}</span>
+                            <span class="badge-soft">Título: {{ job.titulo || '—' }}</span>
+                            <span class="badge-soft">Máquina: {{ job.machine || '—' }}</span>
+                        </div>
+                        <div class="progress" v-if="progressPct(job) !== null">
+                            <span :style="{ width: progressPct(job) + '%' }"></span>
+                        </div>
+                        <div class="info-grid">
+                            <div class="info-chip">Criado: {{ formatDateTime(job.created_at) }}</div>
+                            <div class="info-chip">Tempo decorrido: {{ elapsedFor(job) }}</div>
+                            <div class="info-chip">Chapas: {{ job.metrics?.plates_printed || 0 }} / {{ job.metrics?.plates_total || 0 }}</div>
+                        </div>
+                        <div class="paths" v-if="orderedPaths(job).length">
+                            <span class="path-chip" v-for="(path, idx) in orderedPaths(job)" :key="(path.colour || 'cor') + '-' + idx" :class="pathClass(path)">
+                                <span class="dot"></span>
+                                <span>{{ pathLabel(path) }}</span>
+                                <small class="muted">{{ path.status_label || path.status || '...' }}</small>
+                            </span>
+                        </div>
+                        <div class="timeline" v-if="timeline(job).length">
+                            <div class="timeline-step" v-for="(ev, idx) in timeline(job)" :key="idx">
+                                <strong>{{ ev.code || 'Evento' }}</strong>
+                                <span class="muted">{{ formatDateTime(ev.time) }}</span>
+                            </div>
+                        </div>
+                        <div class="timeline" v-if="historyFor(job).events.length">
+                            <div class="timeline-step" v-for="(ev, idx) in historyFor(job).events" :key="idx">
+                                <strong>{{ formatDateTime(ev.time) || ev.time_raw || 'Hora' }}</strong>
+                                <span class="muted">{{ ev.text || '—' }}</span>
+                            </div>
+                        </div>
+                        <div class="timeline" v-else-if="historyFor(job).error">
+                            <div class="timeline-step">
+                                <span class="muted">{{ historyFor(job).error }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <div class="error-box" v-if="errorMsg">{{ errorMsg }}</div>
+            <div class="error-box" v-else-if="state.meta?.errors?.length">
+                <div>Alertas ao ler XML:</div>
+                <ul>
+                    <li v-for="(err, idx) in state.meta.errors" :key="idx">{{ err }}</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script src="gravacao.js"></script>
+    <script>if (window.lucide?.createIcons) { window.lucide.createIcons(); }</script>
+</body>
+</html>

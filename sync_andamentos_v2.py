@@ -294,6 +294,10 @@ class AndamentosSynchronizer:
         # Cache para throttle de avisos de bloqueio (evita spam de logs)
         self._blocked_warnings_cache = {}  # {codstatus: ultimo_timestamp}
         self._blocked_warning_interval = 300  # 5 minutos entre avisos do mesmo CodStatus
+
+        # Cache para throttling de erros de inserção em MDB (ex.: FK faltando em tabProtocolos)
+        self._mdb_insert_error_cache = {}  # {codstatus: (ultimo_timestamp, ultima_msg)}
+        self._mdb_insert_error_interval = 300  # 5 minutos entre avisos iguais do mesmo CodStatus
     
     # ===================================================================
     # CONTROLE DE EXCLUSÕES DEFINITIVAS
@@ -435,6 +439,25 @@ class AndamentosSynchronizer:
             self.logger.logger.info(f"[EXCLUSÃO DEFINITIVA] {codstatus} marcado como excluído")
         except Exception as e:
             self.logger.logger.error(f"[ERRO] Erro ao marcar exclusão: {e}")
+
+    def remove_from_deleted(self, codstatus: str):
+        """Remove CodStatus da tabela deleted_andamentos após propagar a exclusão."""
+        try:
+            conn = self.conn_mgr.get_mysql()
+            cursor = conn.cursor()
+
+            cursor.execute("DELETE FROM deleted_andamentos WHERE codstatus = %s", (codstatus,))
+
+            conn.commit()
+            cursor.close()
+
+            self.logger.logger.info(
+                f"[LIMPEZA] {codstatus} removido de deleted_andamentos após sincronizar exclusão"
+            )
+        except Exception as e:
+            self.logger.logger.error(
+                f"[ERRO] Erro ao remover {codstatus} de deleted_andamentos após exclusão: {e}"
+            )
     
     def detect_and_register_deletions(self, mysql_codes: set, mdb_all_codes: set):
         """
@@ -831,20 +854,97 @@ class AndamentosSynchronizer:
             
         except Exception as e:
             self.logger.logger.error(f"[ERRO] Erro ao sincronizar dados da OS {nro}/{ano}: {e}")
+
+    def ensure_mysql_ultimo_status_from_mdb(self, nro: int, ano: int):
+        """Replica o campo UltimoStatus do MDB de origem para o MySQL da mesma OS."""
+        try:
+            mdb_conn = self.conn_mgr.get_mdb_by_nro(nro)
+            mdb_cur = mdb_conn.cursor()
+            mdb_cur.execute(
+                """
+                SELECT CodStatus, UltimoStatus
+                FROM tabandamento
+                WHERE NroProtocoloLink = ? AND AnoProtocoloLink = ?
+                ORDER BY CodStatus
+                """,
+                (nro, ano),
+            )
+            source_rows = mdb_cur.fetchall()
+            mdb_cur.close()
+
+            # Mapear quais codstatus devem ficar como UltimoStatus=True conforme o MDB
+            cods_true = {row.CodStatus for row in source_rows if getattr(row, "UltimoStatus", False)}
+
+            conn = self.conn_mgr.get_mysql()
+            cur = conn.cursor()
+
+            # Se não houver registros no MDB, apenas zera UltimoStatus no MySQL para a OS
+            if not source_rows:
+                cur.execute(
+                    """
+                    UPDATE tabandamento SET UltimoStatus = FALSE
+                    WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s
+                    """,
+                    (nro, ano),
+                )
+                conn.commit()
+                cur.close()
+                return
+
+            # Zera todos no MySQL e marca somente os que o MDB aponta como último
+            cur.execute(
+                """
+                UPDATE tabandamento SET UltimoStatus = FALSE
+                WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s
+                """,
+                (nro, ano),
+            )
+
+            if cods_true:
+                cur.execute(
+                    """
+                    UPDATE tabandamento SET UltimoStatus = TRUE
+                    WHERE CodStatus IN (%s)
+                    """
+                    % (", ".join(["%s"] * len(cods_true))),
+                    tuple(cods_true),
+                )
+            else:
+                # fallback: se MDB não marcar ninguém, escolher o maior CodStatus como true
+                cur.execute(
+                    """
+                    UPDATE tabandamento SET UltimoStatus = TRUE
+                    WHERE CodStatus = (
+                        SELECT MAX(CodStatus) FROM (
+                            SELECT CodStatus FROM tabandamento
+                            WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s
+                        ) AS sub
+                    )
+                    """,
+                    (nro, ano),
+                )
+
+            conn.commit()
+            cur.close()
+        except Exception as e:
+            self.logger.logger.error(
+                f"[ERRO] Erro ao replicar UltimoStatus do MDB para MySQL em {nro}/{ano}: {e}"
+            )
     
     def insert_mysql(self, andamento: Dict, origem: str):
         """
         Insere registro no MySQL, mas apenas se NÃO estiver na lista de exclusões.
         BLOQUEIO DE REINSERÇÃO: Registros excluídos nunca voltam.
         
-        IMPORTANTE: Também sincroniza dados da OS (tabProtocolos e tabDetalhesServico)
-        quando um novo andamento é inserido.
+        IMPORTANTE: Sincronização das tabelas da OS ocorre antes da chamada
+        para este método em perform_sync, garantindo que tabProtocolos e
+        tabDetalhesServico já estejam atualizadas.
         """
         try:
             codstatus = andamento['CodStatus']
             nro = andamento['NroProtocoloLink']
             ano = andamento['AnoProtocoloLink']
-            
+
             # ===================================================================
             # VERIFICAÇÃO CRÍTICA: Bloquear RESSURREIÇÃO de registros excluídos
             # MAS permitir NOVOS registros legítimos (mesmo CodStatus, conteúdo diferente)
@@ -853,14 +953,14 @@ class AndamentosSynchronizer:
                 # Throttle de avisos: só logar a cada 5 minutos para o mesmo CodStatus
                 current_time = time.time()
                 last_warning = self._blocked_warnings_cache.get(codstatus, 0)
-                
+
                 if current_time - last_warning >= self._blocked_warning_interval:
                     self.logger.logger.warning(
                         f"[BLOQUEADO] CodStatus {codstatus} é RESSURREIÇÃO de registro excluído. "
                         f"Inserções bloqueadas continuamente (aviso a cada 5min)."
                     )
                     self._blocked_warnings_cache[codstatus] = current_time
-                
+
                 # Log detalhado sempre (para estatísticas)
                 self.logger.log(
                     'INSERT_BLOCKED', origem, 'MySQL', codstatus,
@@ -868,16 +968,9 @@ class AndamentosSynchronizer:
                     'Bloqueado: ressurreição de registro excluído'
                 )
                 return  # NÃO INSERIR
-            
+
             # ===================================================================
-            # PASSO 1: Sincronizar dados da OS (tabProtocolos e tabDetalhesServico)
-            # Isso garante que quando um novo andamento aparece, os dados da OS
-            # também estejam disponíveis no MySQL para a API
-            # ===================================================================
-            self.sync_os_data_from_mdb(nro, ano, origem)
-            
-            # ===================================================================
-            # PASSO 2: Inserir o andamento
+            # PASSO ÚNICO: Inserir o andamento (dados da OS já sincronizados)
             # ===================================================================
             conn = self.conn_mgr.get_mysql()
             cursor = conn.cursor()
@@ -900,7 +993,7 @@ class AndamentosSynchronizer:
             self.logger.log(
                 'INSERT', origem, 'MySQL', andamento['CodStatus'],
                 nro, ano,
-                f'Novo andamento + Dados da OS sincronizados de {origem}'
+                'Novo andamento sincronizado'
             )
         except Exception as e:
             conn.rollback()
@@ -971,11 +1064,19 @@ class AndamentosSynchronizer:
             )
         except Exception as e:
             conn.rollback()
-            self.logger.log(
-                'INSERT', 'MySQL', destino, andamento.get('CodStatus'),
-                andamento.get('NroProtocoloLink'), andamento.get('AnoProtocoloLink'),
-                sucesso=False, erro=str(e)
-            )
+            error_msg = str(e)
+            codstatus_err = andamento.get('CodStatus')
+            now = time.time()
+            last_ts, last_msg = self._mdb_insert_error_cache.get(codstatus_err, (0, None))
+
+            # Só loga se passou o intervalo ou se a mensagem mudou (evita spam em erros repetidos)
+            if (now - last_ts) >= self._mdb_insert_error_interval or last_msg != error_msg:
+                self._mdb_insert_error_cache[codstatus_err] = (now, error_msg)
+                self.logger.log(
+                    'INSERT', 'MySQL', destino, codstatus_err,
+                    andamento.get('NroProtocoloLink'), andamento.get('AnoProtocoloLink'),
+                    sucesso=False, erro=error_msg
+                )
     
     def delete_mysql(self, codstatus: str, andamento: Dict):
         """
@@ -1011,6 +1112,9 @@ class AndamentosSynchronizer:
             cursor = conn.cursor()
             
             cursor.execute("DELETE FROM tabandamento WHERE CodStatus = %s", (codstatus,))
+
+            # Após propagar a exclusão, limpar o registro de controle
+            cursor.execute("DELETE FROM deleted_andamentos WHERE codstatus = %s", (codstatus,))
             
             conn.commit()
             cursor.close()
@@ -1018,7 +1122,7 @@ class AndamentosSynchronizer:
             self.logger.log(
                 'DELETE', 'MDB', 'MySQL', codstatus,
                 nro, ano,
-                'Exclusão detectada e registrada em deleted_andamentos'
+                'Exclusão propagada e removida de deleted_andamentos'
             )
         except Exception as e:
             conn.rollback()
@@ -1041,6 +1145,9 @@ class AndamentosSynchronizer:
             
             mdb_conn.commit()
             cursor.close()
+
+            # Após excluir do MDB, remover o controle de exclusão
+            self.remove_from_deleted(codstatus)
             
             self.logger.log(
                 'DELETE', 'MySQL', origem, codstatus,
@@ -1159,8 +1266,12 @@ class AndamentosSynchronizer:
                             break
                 
                 if and_:
+                    # Sincronizar metadados da OS apenas para OSs com mudança em tabandamento
+                    self.sync_os_data_from_mdb(and_['NroProtocoloLink'], and_['AnoProtocoloLink'], origem)
+
                     self.insert_mysql(and_, origem)
-                    self.update_ultimo_status(and_['NroProtocoloLink'], and_['AnoProtocoloLink'])
+                    # Replica UltimoStatus do MDB (origem) para o MySQL
+                    self.ensure_mysql_ultimo_status_from_mdb(and_['NroProtocoloLink'], and_['AnoProtocoloLink'])
             
             # MySQL → MDB (novos)
             # Inserir no MDB apenas registros que não estão na lista de exclusões
@@ -1190,7 +1301,11 @@ class AndamentosSynchronizer:
                     and_ = next((a for a in mysql_data if a['CodStatus'] == code), None)
                     if and_:
                         self.delete_mysql(code, and_)
-                        self.update_ultimo_status(and_['NroProtocoloLink'], and_['AnoProtocoloLink'])
+                        # Após exclusão, alinhar UltimoStatus conforme o MDB de origem
+                        self.ensure_mysql_ultimo_status_from_mdb(
+                            and_['NroProtocoloLink'],
+                            and_['AnoProtocoloLink']
+                        )
             
             # ===================================================================
             # PASSO 3.5: REPLICAR EXCLUSÕES DO MYSQL PARA O MDB

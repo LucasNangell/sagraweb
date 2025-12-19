@@ -10,7 +10,7 @@ import os
 from datetime import datetime
 
 # Import dos Routers (Módulos)
-from routers import os_routes, analise_routes, email_routes, auxiliar_routes, papelaria_routes, settings_routes, ip_admin_routes, realtime, pcp_routes
+from routers import os_routes, analise_routes, email_routes, auxiliar_routes, papelaria_routes, settings_routes, ip_admin_routes, realtime, pcp_routes, gravacao_routes, requisicao_routes
 
 # Configurar logger
 logging.basicConfig(level=logging.INFO)
@@ -166,7 +166,9 @@ app.include_router(papelaria_routes.router, prefix="/api")
 app.include_router(settings_routes.router, prefix="/api")
 app.include_router(ip_admin_routes.router)  # Já tem /api no próprio router
 app.include_router(pcp_routes.router, prefix="/api")
+app.include_router(gravacao_routes.router, prefix="/api")
 app.include_router(realtime.router)
+app.include_router(requisicao_routes.router, prefix="/api")
 
 # Mount static files
 app.mount("/", StaticFiles(directory=".", html=True), name="static")

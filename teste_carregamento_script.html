@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Teste de Carregamento do Script</title>
+</head>
+<body>
+    <h1>Teste de Carregamento do email_oft_integration.js</h1>
+    
+    <div id="status" style="padding: 20px; margin: 20px; border: 1px solid #ccc; background: #f9f9f9;">
+        <p>Aguardando...</p>
+    </div>
+    
+    <!-- Simular configuracao de porta -->
+    <script>
+        window.SAGRA_API_PORT = 8001;
+        console.log('SAGRA_API_PORT definido como:', window.SAGRA_API_PORT);
+    </script>
+    
+    <!-- Carregar script de integracao -->
+    <script src="email_oft_integration.js"></script>
+    
+    <!-- Teste -->
+    <script>
+        const statusDiv = document.getElementById('status');
+        
+        // Aguardar um pouco para o script carregar
+        setTimeout(() => {
+            let html = '<h3>Resultado do Teste:</h3><ul>';
+            
+            // Teste 1: Verificar se script foi carregado
+            if (typeof PT_Email_OFT !== 'undefined') {
+                html += '<li style="color: green;"><strong>OK</strong> - PT_Email_OFT carregado</li>';
+            } else {
+                html += '<li style="color: red;"><strong>ERRO</strong> - PT_Email_OFT NAO foi carregado</li>';
+            }
+            
+            // Teste 2: Verificar API_BASE
+            if (typeof API_BASE !== 'undefined') {
+                html += '<li><strong>API_BASE:</strong> ' + API_BASE + '</li>';
+            }
+            
+            // Teste 3: Verificar funcoes
+            if (typeof PT_Email_OFT !== 'undefined') {
+                html += '<li><strong>Funcoes disponíveis:</strong>';
+                html += '<ul>';
+                for (let chave in PT_Email_OFT) {
+                    html += '<li>' + chave + ': ' + typeof PT_Email_OFT[chave] + '</li>';
+                }
+                html += '</ul></li>';
+            }
+            
+            html += '</ul>';
+            statusDiv.innerHTML = html;
+            
+        }, 500);
+    </script>
+</body>
+</html>

@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Requisição de Serviços Gráficos</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #f5f5f5;
+            padding: 20px;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+        }
+
+        h1 {
+            font-size: 22px;
+            font-weight: 700;
+            color: #000;
+            margin-bottom: 25px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 8px;
+        }
+
+        h2 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #000;
+            margin: 25px 0 15px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 5px;
+        }
+
+        th,
+        td {
+            border: 1px solid #ccc;
+            padding: 10px 12px;
+            text-align: left;
+            vertical-align: top;
+            font-size: 14px;
+        }
+
+        th {
+            background-color: #f0f0f0;
+            font-weight: 600;
+        }
+
+        .highlight {
+            font-weight: 700;
+            background-color: #f9f9f9;
+        }
+
+        .two-columns {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+            margin-bottom: 25px;
+        }
+
+        .label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #000;
+        }
+
+        .info-block {
+            margin-bottom: 15px;
+        }
+
+        .info-value {
+            padding: 8px 10px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            min-height: 36px;
+            display: flex;
+            align-items: center;
+        }
+
+        .indented {
+            margin-left: 20px;
+        }
+
+        .sigla-box {
+            display: inline-block;
+            background-color: #f0f0f0;
+            padding: 8px 15px;
+            border-radius: 4px;
+            font-weight: 700;
+            margin-top: 5px;
+            border: 1px solid #ddd;
+        }
+
+        .contact-info {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+
+        .contact-info p {
+            margin-bottom: 8px;
+        }
+
+        .interessado {
+            font-weight: 700;
+            font-size: 16px;
+            color: #000;
+            margin-top: 10px;
+            text-transform: uppercase;
+        }
+
+        .servico-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 15px;
+        }
+
+        .servico-item {
+            margin-bottom: 15px;
+        }
+
+        .pagination-info {
+            display: flex;
+            gap: 30px;
+            margin-top: 15px;
+        }
+
+        .acabamento {
+            margin-top: 20px;
+            font-weight: 600;
+        }
+
+        .aviso-box {
+            background-color: #fff9e6;
+            border-left: 4px solid #ffcc00;
+            padding: 15px;
+            margin-top: 25px;
+        }
+
+        .observacoes {
+            background-color: #f0f7ff;
+            border: 1px solid #cce0ff;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 4px;
+        }
+
+        .material-list {
+            list-style-type: none;
+            margin-top: 10px;
+        }
+
+        .material-list li {
+            padding: 8px 0;
+            border-bottom: 1px dashed #ddd;
+        }
+
+        .material-list li:before {
+            content: "- ";
+            font-weight: bold;
+        }
+
+        .footer {
+            margin-top: 40px;
+            text-align: right;
+            color: #666;
+            font-size: 13px;
+            border-top: 1px solid #ddd;
+            padding-top: 15px;
+        }
+
+        .inline-table {
+            display: inline-table;
+            width: auto;
+            margin-right: 20px;
+        }
+
+        .inline-table td {
+            border: none;
+            padding: 5px 15px 5px 0;
+            background-color: transparent;
+        }
+
+        .no-border td {
+            border: none;
+            padding: 5px 15px 5px 0;
+        }
+
+        .no-border {
+            border: none;
+        }
+
+        .data-table {
+            margin-bottom: 20px;
+        }
+
+        .data-table td:first-child {
+            font-weight: 600;
+            width: 30%;
+        }
+
+        .requisicao-header {
+            margin-bottom: 25px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Seção Requisição -->
+        <div class="section">
+            <h1>Requisição</h1>
+            <div class="requisicao-header">
+                <table class="data-table">
+                    <tr>
+                        <td>Data</td>
+                        <td>18/12/2025</td>
+                        <td>Processo</td>
+                        <td></td>
+                        <td>Cota Repro</td>
+                        <td>200</td>
+                    </tr>
+                </table>
+
+                <div style="display: flex; margin-top: 15px;">
+                    <table class="inline-table no-border">
+                        <tr>
+                            <td><strong>RS Entregue</strong></td>
+                        </tr>
+                        <tr>
+                            <td>CS</td>
+                        </tr>
+                    </table>
+
+                    <table class="inline-table no-border">
+                        <tr>
+                            <td><strong>RS Lançada</strong></td>
+                        </tr>
+                        <tr>
+                            <td>Sim</td>
+                        </tr>
+                    </table>
+
+                    <table class="inline-table no-border">
+                        <tr>
+                            <td><strong>Cota Cartão</strong></td>
+                        </tr>
+                        <tr>
+                            <td></td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Seção Entidade Solicitante -->
+        <div class="section">
+            <h2>Entidade Solicitante</h2>
+            <div class="two-columns">
+                <div>
+                    <div class="info-block">
+                        <div class="label">Categoria</div>
+                        <div class="info-value highlight">Órgão</div>
+                    </div>
+                    <div class="info-block">
+                        <div class="label">Cód. do Usuário</div>
+                        <div class="info-value">22735</div>
+                    </div>
+                    <div class="info-block">
+                        <div class="label">Nome</div>
+                        <div class="info-value"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="info-block">
+                        <div class="label">Coord. de Serviços Gráficos - DEAPA</div>
+                        <div class="sigla-box">CGRAF</div>
+                    </div>
+                    <div class="info-block">
+                        <div class="label">Ramal</div>
+                        <div class="info-value">6-2700</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="contact-info">
+                <p><strong>Contato</strong></p>
+                <p>Prova para dep. e gab.arnaldo jardim</p>
+                <p>Entregar para gab 245</p>
+
+                <div class="interessado">Interessado: ARNALDO JARDIM</div>
+            </div>
+        </div>
+
+        <!-- Seção Informações Técnicas -->
+        <div class="section">
+            <h2>Informações Técnicas</h2>
+            <div class="two-columns">
+                <div>
+                    <div class="info-block">
+                        <div class="label">Tipo de Serviço</div>
+                        <div class="info-value highlight">Ct Visita</div>
+                    </div>
+                    <div class="info-block">
+                        <div class="label">Máquina Sugerida</div>
+                        <div class="info-value">Digital Cor</div>
+                    </div>
+                    <div class="info-block">
+                        <div class="label">Título</div>
+                        <div class="info-value"></div>
+                    </div>
+                    <div class="info-block">
+                        <div class="label">Deputado Vicentinho Junior</div>
+                        <div class="info-value"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="info-block">
+                        <div class="label">Cor</div>
+                        <div class="info-value highlight">Policromia</div>
+                    </div>
+                    <div class="info-block">
+                        <div class="label">Observações:</div>
+                        <div class="info-value"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="servico-info">
+                <div>
+                    <div class="servico-item">
+                        <div class="label">Páginas</div>
+                        <div class="info-value">Frente / Verso</div>
+                    </div>
+                    <div class="servico-item">
+                        <div class="label"></div>
+                        <div class="info-value">2 Sim</div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="servico-item">
+                        <div class="label">Formato</div>
+                        <div class="info-value">Ct Visita2 50 x 85</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="acabamento">
+                Acabamento: Refile
+            </div>
+
+            <div class="aviso-box">
+                <strong>Avisos</strong>
+            </div>
+
+            <div class="observacoes">
+                <strong>Observações Gerais:</strong><br>
+                Repetição do SP 6554/25, encaminhar P2 conforme solicitado pelo usuário, inserindo email
+                arnaldojardinofficial@gmail.com
+            </div>
+        </div>
+
+        <!-- Seção Dados de Entrega -->
+        <div class="section">
+            <h2>Dados de Entrega</h2>
+            <table>
+                <tr>
+                    <th>Resp. na Gráfica</th>
+                    <td></td>
+                    <th>Prazo p/ Entrega Normal</th>
+                    <td></td>
+                </tr>
+                <tr>
+                    <th>Forma de Entrega</th>
+                    <td>Entreg. na SEDIR IV</td>
+                    <th>Data</th>
+                    <td></td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- Seção Insumos Fornecidos -->
+        <div class="section">
+            <h2>Insumos Fornecidos</h2>
+            <div class="label">Material Entregue</div>
+            <ul class="material-list">
+                <li>Original Impresso</li>
+            </ul>
+        </div>
+
+        <!-- Rodapé -->
+        <div class="footer">
+            Impresso em 18/12/2025 19:04:11
+        </div>
+    </div>
+</body>
+
+</html>

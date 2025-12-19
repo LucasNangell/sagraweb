@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>DIAGNOSTICO - Sistema Email OFT</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-left: 4px solid #007bff;
+        }
+        .test-section h3 {
+            margin-top: 0;
+            color: #007bff;
+        }
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+        .info {
+            color: #666;
+        }
+        .code {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background: #f0f0f0;
+        }
+        .log-container {
+            background: #000;
+            color: #0f0;
+            padding: 10px;
+            border-radius: 3px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .log-line {
+            margin: 2px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>DIAGNOSTICO - Sistema Email OFT (email_oft_integration.js)</h1>
+        
+        <div class="test-section">
+            <h3>1. Verificacao de Configuracao Basica</h3>
+            <table>
+                <tr>
+                    <th>Item</th>
+                    <th>Status</th>
+                    <th>Detalhes</th>
+                </tr>
+                <tr>
+                    <td>window.SAGRA_API_PORT</td>
+                    <td id="test-port-status">Aguardando...</td>
+                    <td id="test-port-detail"></td>
+                </tr>
+                <tr>
+                    <td>API_BASE</td>
+                    <td id="test-api-status">Aguardando...</td>
+                    <td id="test-api-detail"></td>
+                </tr>
+                <tr>
+                    <td>typeof PT_Email_OFT</td>
+                    <td id="test-module-status">Aguardando...</td>
+                    <td id="test-module-detail"></td>
+                </tr>
+            </table>
+        </div>
+        
+        <div class="test-section">
+            <h3>2. Funcoes Disponíveis</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Funcao</th>
+                        <th>Tipo</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="funcoes-lista">
+                    <tr><td colspan="3">Aguardando carregamento...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="test-section">
+            <h3>3. Teste de Conectividade com Backend</h3>
+            <p>Tentando conectar em: <span id="api-url" class="code"></span></p>
+            <button onclick="testarConexao()">Testar Conexao</button>
+            <p id="conexao-resultado" style="margin-top: 10px;"></p>
+        </div>
+        
+        <div class="test-section">
+            <h3>4. Console de JavaScript (Logs)</h3>
+            <div class="log-container" id="console-logs">
+                <div class="log-line">[Aguardando logs do navegador...]</div>
+            </div>
+            <p style="font-size: 12px; color: #666;">
+                Abra F12 do navegador para ver logs detalhados
+            </p>
+        </div>
+        
+        <div class="test-section">
+            <h3>5. Passos para Corrigir se Houver Erro</h3>
+            <ol>
+                <li>Se PT_Email_OFT = undefined: Recarregar pagina (Ctrl+F5)</li>
+                <li>Se conexao falha (404): Verificar se servidor esta rodando na porta correta</li>
+                <li>Se conexao falha (500): Verificar logs do backend: <span class="code">tail -f logs/email_*.log</span></li>
+                <li>Se alguma funcao falta: Verificar arquivo email_oft_integration.js</li>
+            </ol>
+        </div>
+    </div>
+    
+    <!-- Configurar porta antes de carregar script -->
+    <script>
+        window.SAGRA_API_PORT = 8001;
+    </script>
+    
+    <!-- Carregar script de integracao -->
+    <script src="email_oft_integration.js"></script>
+    
+    <!-- Script de testes -->
+    <script>
+        // Funcao para capturar console.log
+        const logs = [];
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalWarn = console.warn;
+        
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            logs.push({ type: 'log', msg: args.join(' ') });
+            updateLogs();
+        };
+        
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            logs.push({ type: 'error', msg: args.join(' ') });
+            updateLogs();
+        };
+        
+        console.warn = function(...args) {
+            originalWarn.apply(console, args);
+            logs.push({ type: 'warn', msg: args.join(' ') });
+            updateLogs();
+        };
+        
+        function updateLogs() {
+            const logContainer = document.getElementById('console-logs');
+            logContainer.innerHTML = logs.map(l => {
+                let color = '#0f0';
+                if (l.type === 'error') color = '#f00';
+                if (l.type === 'warn') color = '#ff0';
+                return `<div class="log-line" style="color: ${color};">[${l.type.toUpperCase()}] ${escapeHtml(l.msg)}</div>`;
+            }).join('');
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        function escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+        
+        // Executar testes apos delay para script carregar
+        setTimeout(() => {
+            // Teste 1: SAGRA_API_PORT
+            const port = window.SAGRA_API_PORT;
+            if (port === 8001) {
+                document.getElementById('test-port-status').innerHTML = '<span class="success">OK</span>';
+                document.getElementById('test-port-detail').innerHTML = port;
+            } else {
+                document.getElementById('test-port-status').innerHTML = '<span class="error">ERRO</span>';
+                document.getElementById('test-port-detail').innerHTML = 'Porta nao definida corretamente';
+            }
+            
+            // Teste 2: API_BASE
+            const apiBase = typeof API_BASE !== 'undefined' ? API_BASE : 'undefined';
+            if (apiBase !== 'undefined' && apiBase.includes('8001')) {
+                document.getElementById('test-api-status').innerHTML = '<span class="success">OK</span>';
+                document.getElementById('test-api-detail').innerHTML = apiBase;
+                document.getElementById('api-url').innerHTML = apiBase;
+            } else {
+                document.getElementById('test-api-status').innerHTML = '<span class="error">ERRO</span>';
+                document.getElementById('test-api-detail').innerHTML = apiBase;
+            }
+            
+            // Teste 3: PT_Email_OFT
+            if (typeof PT_Email_OFT !== 'undefined' && PT_Email_OFT !== null) {
+                document.getElementById('test-module-status').innerHTML = '<span class="success">OK</span>';
+                document.getElementById('test-module-detail').innerHTML = 'Modulo carregado com sucesso';
+                
+                // Listar funcoes
+                const funcoesList = document.getElementById('funcoes-lista');
+                let html = '';
+                for (let funcao in PT_Email_OFT) {
+                    html += `<tr>
+                        <td>${funcao}</td>
+                        <td>${typeof PT_Email_OFT[funcao]}</td>
+                        <td><span class="success">OK</span></td>
+                    </tr>`;
+                }
+                funcoesList.innerHTML = html;
+            } else {
+                document.getElementById('test-module-status').innerHTML = '<span class="error">ERRO</span>';
+                document.getElementById('test-module-detail').innerHTML = 'PT_Email_OFT nao foi carregado';
+            }
+        }, 1000);
+        
+        // Teste de conectividade
+        async function testarConexao() {
+            const resultado = document.getElementById('conexao-resultado');
+            resultado.innerHTML = 'Testando...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/email/inbox`);
+                if (response.status === 404) {
+                    resultado.innerHTML = '<span class="error">ERRO 404:</span> Endpoint nao encontrado. Verificar se rotas foram registradas corretamente.';
+                } else if (response.status === 500) {
+                    resultado.innerHTML = '<span class="error">ERRO 500:</span> Erro interno no servidor. Verificar logs do backend.';
+                } else if (response.ok) {
+                    resultado.innerHTML = '<span class="success">OK:</span> Conexao com backend estabelecida com sucesso!';
+                } else {
+                    resultado.innerHTML = `<span class="error">ERRO ${response.status}:</span> ${response.statusText}`;
+                }
+            } catch (err) {
+                resultado.innerHTML = `<span class="error">ERRO de conexao:</span> ${err.message}<br/>Verificar se servidor esta rodando em http://localhost:8001`;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -324,7 +324,8 @@
     </div>
 
     <!-- MODAL VINCULAR OS -->
-    <div id="modal-vincular-os" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.6); z-index:10002; align-items:center; justify-content:center;">
+    <div id="modal-vincular-os"
+        style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.6); z-index:10002; align-items:center; justify-content:center;">
         <div class="login-box" style="width:520px; text-align:left; position:relative;">
             <h3 style="color:var(--primary-green);">Vincular OS</h3>
             <div style="margin-bottom:8px; font-weight:bold;">Vincular OS selecionada com:</div>
@@ -335,23 +336,27 @@
             </div>
 
             <div style="margin-bottom:10px; font-weight:bold;">OSs já vinculadas:</div>
-            <div id="vinculos-list" style="max-height:200px; overflow:auto; background:#f8f9fa; padding:10px; border-radius:4px; border:1px solid #ddd;">
+            <div id="vinculos-list"
+                style="max-height:200px; overflow:auto; background:#f8f9fa; padding:10px; border-radius:4px; border:1px solid #ddd;">
                 <div style="color:#666;">Nenhuma vinculação.</div>
             </div>
 
             <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
-                <button onclick="document.getElementById('modal-vincular-os').style.display='none'" class="btn-secondary">Cancelar</button>
+                <button onclick="document.getElementById('modal-vincular-os').style.display='none'"
+                    class="btn-secondary">Cancelar</button>
             </div>
         </div>
     </div>
 
     <!-- MODAL DECISAO SAIDA P/ -->
-    <div id="modal-decisao-saida" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.6); z-index:10003; align-items:center; justify-content:center;">
+    <div id="modal-decisao-saida"
+        style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.6); z-index:10003; align-items:center; justify-content:center;">
         <div class="login-box" style="width:460px; text-align:left; position:relative;">
             <h3 style="color:var(--primary-green);">Atenção: OSs vinculadas</h3>
             <p>Esta OS possui vínculos. Deseja aplicar este andamento para:</p>
             <div style="margin:12px 0;">
-                <label><input type="radio" name="decisao_sa" value="all" checked /> Todas as OSs vinculadas</label><br/>
+                <label><input type="radio" name="decisao_sa" value="all" checked /> Todas as OSs
+                    vinculadas</label><br />
                 <label><input type="radio" name="decisao_sa" value="single" /> Somente esta OS</label>
             </div>
             <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
@@ -362,20 +367,26 @@
     </div>
 
     <!-- MODAL IMPRIMIR FICHA -->
-    <div id="modal-print-ficha" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); z-index: 10004; overflow: hidden;">
-        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 60vh; max-width: 90vw; height: 85vh; background: white; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); display: flex; flex-direction: column;">
-            <div style="padding: 15px; border-bottom: 2px solid #ddd; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
+    <div id="modal-print-ficha"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); z-index: 10004; overflow: hidden;">
+        <div
+            style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); height: 92vh; aspect-ratio: 148 / 210; width: auto; max-width: 92vw; background: white; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); display: flex; flex-direction: column;">
+            <div
+                style="padding: 15px; border-bottom: 2px solid #ddd; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
                 <h3 style="color: var(--secondary-blue); margin: 0;">Ficha da Ordem de Serviço</h3>
                 <div style="display: flex; gap: 10px;">
-                    <button id="btn-print-ficha" class="btn-primary" style="padding: 8px 20px; background-color: var(--secondary-blue); color: white; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                    <button id="btn-print-ficha" class="btn-primary"
+                        style="padding: 8px 20px; background-color: var(--secondary-blue); color: white; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 5px;">
                         <i class="fas fa-print"></i> Imprimir
                     </button>
-                    <button id="btn-close-ficha" class="btn-secondary" style="padding: 8px 20px; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    <button id="btn-close-ficha" class="btn-secondary"
+                        style="padding: 8px 20px; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
                         Fechar
                     </button>
                 </div>
             </div>
-            <div id="ficha-container" style="flex: 1; overflow: auto; background: #f5f5f5;">
+            <div id="ficha-container"
+                style="flex: 1; overflow: hidden; background: #f5f5f5; display: flex; flex-direction: column;">
                 <!-- Conteúdo da ficha será carregado aqui -->
             </div>
         </div>
@@ -407,7 +418,7 @@
 
     <script src="lib/jquery.min.js"></script>
     <script src="lib/select2.min.js"></script>
-    <script src="script.js?v=debug-fix-1"></script>
+    <script src="script.js?v=force-reload-1"></script>
     <!-- <script src="debug_folder.js?v=1"></script> DESABILITADO - Funcionalidade movida para script.js -->
 </body>
 

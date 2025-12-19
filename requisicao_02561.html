@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Requisição</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 0;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #fff;
+            color: #333;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .container {
+            width: 800px;
+            margin: 0 auto;
+        }
+
+        /* General Utils */
+        .row {
+            display: flex;
+            gap: 5px;
+        }
+
+        .col {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .flex-1 {
+            flex: 1;
+        }
+
+        .flex-2 {
+            flex: 2;
+        }
+
+        .flex-3 {
+            flex: 3;
+        }
+
+        .full-width {
+            width: 100%;
+        }
+
+        /* Section Styling */
+        .section-box {
+            background-color: #dcdcdc;
+            border: 2px solid #b0b0b0;
+            border-radius: 8px;
+            padding: 5px;
+            margin-bottom: 5px;
+            position: relative;
+        }
+
+        .section-header {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 2px;
+            margin-top: 0;
+            padding-left: 2px;
+        }
+
+        /* Field Styling */
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            margin-right: 5px;
+            margin-bottom: 2px;
+        }
+
+        .field-group:last-child {
+            margin-right: 0;
+        }
+
+        .label {
+            font-size: 11px;
+            color: #555;
+            font-weight: 600;
+            margin-bottom: 1px;
+            padding-left: 2px;
+            white-space: nowrap;
+        }
+
+        .value-box {
+            background-color: #fff;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 14px;
+            font-weight: bold;
+            min-height: 20px;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Specific modifications based on image */
+        .value-box.dark {
+            background-color: #808080;
+            color: #fff;
+        }
+
+        .value-box.large-text {
+            font-size: 16px;
+        }
+
+        /* Header Specifics */
+        .header-section {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 5px;
+        }
+
+        .main-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin: 0;
+            padding: 5px 0;
+        }
+
+        /* Top Right Box */
+        .order-box {
+            background-color: #cfcfcf;
+            border: 2px solid #b0b0b0;
+            border-radius: 8px;
+            padding: 5px;
+            flex: 0 0 180px;
+        }
+
+        .order-number {
+            background-color: #808080;
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+            text-align: center;
+            padding: 5px;
+            border-radius: 6px;
+            margin-bottom: 5px;
+        }
+
+        /* Layout Grids */
+        .grid-tech {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr 0.5fr 0.5fr;
+            gap: 5px;
+        }
+
+        .grid-tech-row2 {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 5px;
+        }
+
+        /* Textarea simulation */
+        .value-box.textarea {
+            align-items: flex-start;
+            height: 100%;
+            min-height: 50px;
+        }
+
+        .sub-grid-2col {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 5px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <div class="main-title">Requisição</div>
+
+        <!-- Top Block -->
+        <div class="header-section">
+            <!-- Date & Basics -->
+            <div class="section-box" style="flex: 0 0 140px;">
+                <div class="field-group">
+                    <span class="label">Data</span>
+                    <div class="value-box">19/12/2025</div>
+                </div>
+                <div class="row" style="margin-top: 5px;">
+                    <div class="field-group flex-1">
+                        <span class="label" style="font-size: 10px;">RS Entregue</span>
+                        <div class="value-box">Sim</div>
+                    </div>
+                    <div class="field-group flex-1">
+                        <span class="label" style="font-size: 10px;">RS Lançada</span>
+                        <div class="value-box">Não</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Processo -->
+            <div class="section-box" style="flex: 1;">
+                <div class="field-group">
+                    <span class="label">Processo</span>
+                    <div class="value-box">PROC-02561/2025</div>
+                </div>
+                <div class="field-group" style="margin-top: 5px;">
+                    <span class="label">CS</span>
+                    <div class="value-box">CS-1234</div>
+                </div>
+            </div>
+
+            <!-- Cota -->
+            <div class="section-box" style="flex: 1.2; display: flex;">
+                <div style="flex: 1;">
+                    <div class="field-group">
+                        <span class="label">Cota Repro</span>
+                        <div class="value-box" style="justify-content: flex-end;">200</div>
+                    </div>
+                    <div class="field-group" style="margin-top: 5px;">
+                        <span class="label">Cota Cartão</span>
+                        <div class="value-box">50</div>
+                    </div>
+                </div>
+                <div class="field-group" style="width: 60px; margin-left: 5px; justify-content: center;">
+                    <span class="label">Debitar</span>
+                    <div class="value-box"
+                        style="height: 40px; justify-content: center; text-align: center; font-size: 11px;">Usuario Exemplo
+                    </div>
+                </div>
+            </div>
+
+            <!-- Order ID Box -->
+            <div class="order-box">
+                <div class="order-number">02561/25</div>
+                <div class="row">
+                    <div class="field-group flex-1">
+                        <span class="label">Modelos</span>
+                        <div class="value-box">1</div>
+                    </div>
+                    <div class="field-group flex-1">
+                        <span class="label">Tiragem</span>
+                        <div class="value-box" style="justify-content: flex-end;">1.000</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Entidade Solicitante -->
+        <div class="section-header">Entidade Solicitante</div>
+        <div class="section-box">
+            <div class="row">
+                <div class="col flex-2">
+                    <div class="row">
+                        <div class="field-group flex-1">
+                            <span class="label">Categoria</span>
+                            <div class="value-box">Orgao</div>
+                        </div>
+                        <div class="field-group flex-1">
+                            <span class="label">Cód. do Usuário</span>
+                            <div class="value-box" style="justify-content: center;">22735</div>
+                        </div>
+                    </div>
+                    <div class="field-group" style="margin-top: 5px;">
+                        <span class="label">Nome</span>
+                        <div class="value-box dark">Coord. de Serviços Gráficos - DEAPA</div>
+                    </div>
+                </div>
+                <div class="col flex-1">
+                    <div class="field-group" style="height: 100%;">
+                        <span class="label">Contato</span>
+                        <div class="value-box textarea" style="font-size: 13px; font-weight: normal;">
+                            Prova para dep. e gab.arnaldo jardim
+Entregar para gab 245
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row" style="margin-top: 5px;">
+                <div class="field-group flex-2">
+                    <span class="label">Sigla</span>
+                    <div class="value-box">CGRAF</div>
+                </div>
+                <div class="field-group flex-1">
+                    <span class="label">Ramal</span>
+                    <div class="value-box">6-2700</div>
+                </div>
+                <div class="field-group flex-2">
+                    <span class="label">Interessado</span>
+                    <div class="value-box">ARNALDO JARDIM</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Informações Técnicas -->
+        <div class="section-header">Informações Técnicas</div>
+        <div class="row">
+            <!-- Main Tech Left -->
+            <div class="col flex-3">
+                <div class="section-box">
+                    <div class="grid-tech">
+                        <div class="field-group">
+                            <span class="label">Tipo de Serviço</span>
+                            <div class="value-box dark">Ct Visita</div>
+                        </div>
+                        <div class="field-group">
+                            <span class="label">Máquina Sugerida</span>
+                            <div class="value-box">Digital Cor</div>
+                        </div>
+                        <div class="field-group">
+                            <span class="label">Páginas</span>
+                            <div class="value-box" style="justify-content: center;">2</div>
+                        </div>
+                        <div class="field-group">
+                            <span class="label">Frente / Verso</span>
+                            <div class="value-box" style="justify-content: center;">Sim</div>
+                        </div>
+                    </div>
+                    <div class="grid-tech-row2" style="margin-top: 5px;">
+                        <div class="field-group">
+                            <span class="label">Título</span>
+                            <div class="value-box dark">Deputado Vicentinho Junior</div>
+                        </div>
+                        <div class="field-group">
+                            <span class="label">Formato</span>
+                            <div class="value-box">Ct Visita2 50 x 85</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-box">
+                    <div class="sub-grid-2col">
+                        <div class="field-group">
+                            <span class="label">Cor</span>
+                            <div class="value-box">Policromia</div>
+                        </div>
+                        <div class="field-group">
+                            <span class="label">Observações:</span>
+                            <div class="value-box" style="height: 38px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-box">
+                    <div class="sub-grid-2col">
+                        <div class="field-group">
+                            <span class="label">Papel</span>
+                            <div class="value-box">Couché Fosco 300gr</div>
+                        </div>
+                        <div class="field-group">
+                            <span class="label">Observações:</span>
+                            <div class="value-box" style="height: 38px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Acabamento Right -->
+            <div class="col flex-1">
+                <div class="section-box" style="height: 100%;">
+                    <div class="field-group" style="height: 100%;">
+                        <span class="label">Acabamento:</span>
+                        <div class="value-box textarea" style="height: 100%; font-weight: normal;">
+                            - Refile
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Section -->
+        <div class="row" style="margin-top: 5px;">
+            <!-- Observações Gerais -->
+            <div class="col flex-1">
+                <div class="section-header" style="font-size: 14px;">Observações Gerais:</div>
+                <div class="section-box" style="flex: 1;">
+                    <div class="value-box textarea" style="font-weight: normal; font-size: 12px; height: 100%;">
+                        Repetição do SP 6554/25, encaminhar P2 conforme solicitado peo usuário, inserindi e-mail arnaldojardimoficial@gmail.com
+                    </div>
+                </div>
+            </div>
+
+            <!-- Insumos/Material -->
+            <div class="col flex-1.2">
+                <div class="section-box" style="height: 100%; padding: 0;">
+                    <div class="row" style="height: 100%; gap: 0;">
+                        <div class="col flex-1" style="padding: 5px; border-right: 2px solid #b0b0b0;">
+                            <div class="section-header" style="font-size: 14px;">Insumos Fornecidos</div>
+                            <div class="value-box" style="flex: 1;"></div>
+                        </div>
+                        <div class="col flex-1" style="padding: 5px;">
+                            <div class="section-header" style="font-size: 14px;">Material Entregue</div>
+                            <div class="value-box textarea" style="flex: 1; font-weight: normal;">- Original Impresso
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer Row -->
+        <div class="row" style="margin-top: 5px;">
+            <!-- Dados de Entrega -->
+            <div class="flex-1">
+                <div class="section-header">Dados de Entrega</div>
+                <div class="section-box">
+                    <div class="row">
+                        <div class="field-group flex-1">
+                            <span class="label">Resp. na Gráfica</span>
+                            <div class="value-box"></div>
+                        </div>
+                        <div class="field-group flex-1">
+                            <span class="label">Prazo p/ Entrega</span>
+                            <div class="value-box">Normal</div>
+                        </div>
+                    </div>
+                    <div class="row" style="margin-top: 5px;">
+                        <div class="field-group flex-1">
+                            <span class="label">Forma de Entrega</span>
+                            <div class="value-box">Entreg. na SEDIR IV</div>
+                        </div>
+                        <div class="field-group flex-1">
+                            <span class="label">Data</span>
+                            <div class="value-box"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Avisos -->
+            <div class="flex-1">
+                <div class="section-header">Avisos</div>
+                <div class="section-box">
+                    <div class="value-box" style="margin-bottom: 3px; height: 18px;"></div>
+                    <div class="value-box" style="margin-bottom: 3px; height: 18px;"></div>
+                    <div class="value-box" style="height: 18px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div style="text-align: right; font-size: 11px; margin-top: 5px;">
+            Impresso em 19/12/2025 11:23:20
+        </div>
+
+    </div>
+
+</body>
+
+</html>

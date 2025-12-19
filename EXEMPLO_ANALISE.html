@@ -1,0 +1,130 @@
+<!--
+EXEMPLO DE INTEGRAÇÃO - analise.html
+Copie o conteúdo deste arquivo na sua página analise.html
+
+Passos:
+1. Adicione <script src="email_oft_integration.js"></script> na seção <head>
+2. Adicione o event listener no final do <script>
+3. Teste clicando em "Concluir"
+-->
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Análise de Problemas Técnicos</title>
+    <script src="email_oft_integration.js"></script>
+</head>
+<body>
+    <!-- ... seu HTML existente ... -->
+
+    <button id="btn-concluir" type="button">Concluir Análise</button>
+
+    <script>
+        // ========================================
+        // Configuração global (se não existir)
+        // ========================================
+        // Certifique-se de que estas variáveis estão definidas:
+        // - OS_ID (número da OS)
+        // - ANO (ano da OS)
+        
+        // Exemplo (remova se já estiver definido):
+        if (typeof OS_ID === 'undefined') {
+            // Obter de parâmetros URL ou formulário
+            const urlParams = new URLSearchParams(window.location.search);
+            window.OS_ID = urlParams.get('os') || localStorage.getItem('current_os') || 1234;
+            window.ANO = urlParams.get('ano') || localStorage.getItem('current_ano') || 2024;
+        }
+
+        // ========================================
+        // Event Listener para Botão "Concluir"
+        // ========================================
+        document.getElementById('btn-concluir').addEventListener('click', async (e) => {
+            e.preventDefault();
+            
+            console.log('Clique em Concluir detectado');
+            console.log(`OS: ${OS_ID}, Ano: ${ANO}`);
+            
+            // Mostrar confirmação antes de processar
+            const confirma = confirm(
+                `Finalizar análise da OS ${OS_ID}/${ANO}?\n\n` +
+                'Isso irá:\n' +
+                '1. Gerar HTML dos problemas técnicos\n' +
+                '2. Salvar no banco de dados\n' +
+                '3. Preparar para envio por email'
+            );
+            
+            if (!confirma) {
+                console.log('Ação cancelada pelo usuário');
+                return;
+            }
+            
+            // Chamar função do módulo
+            const sucesso = await PT_Email_OFT.finalizarAnalise();
+            
+            if (sucesso) {
+                // Feedback de sucesso
+                PT_Email_OFT.logger.log('Análise finalizada com sucesso!');
+                
+                // Opcionalmente: redirecionar para email.html
+                const redireciona = confirm(
+                    'Análise finalizada!\n\n' +
+                    'Deseja abrir a tela de envio de email agora?'
+                );
+                
+                if (redireciona) {
+                    // Passar parâmetros para próxima tela
+                    window.location.href = `email.html?os=${OS_ID}&ano=${ANO}&tipo=pt`;
+                }
+            } else {
+                PT_Email_OFT.logger.error('Erro ao finalizar análise');
+            }
+        });
+
+        // ========================================
+        // Opcional: Debug Console
+        // ========================================
+        window.PT_DEBUG = {
+            getOS: () => ({ os: OS_ID, ano: ANO }),
+            getHtmlConfig: () => ({ 
+                api_base: PT_Email_OFT.api_base,
+                logger_prefix: PT_Email_OFT.logger_prefix 
+            }),
+            showLogs: () => PT_Email_OFT.showLogsReport(),
+            clearLogs: () => PT_Email_OFT.clearLogs()
+        };
+        
+        console.log('DEBUG: Use PT_DEBUG.* para acessar funções de debug');
+    </script>
+</body>
+</html>
+
+<!--
+NOTAS IMPORTANTES:
+
+1. Variáveis Globais Necessárias:
+   - OS_ID (número inteiro)
+   - ANO (número inteiro)
+   
+2. Módulo JavaScript:
+   - email_oft_integration.js deve estar no mesmo diretório
+   
+3. Se houver erro "PT_Email_OFT is not defined":
+   - Verifique se <script src="email_oft_integration.js"></script> está carregado
+   - Verifique se não há erro de CORS
+   - Abra console (F12) e procure por erros
+
+4. API Base:
+   - Padrão: http://localhost:8000
+   - Modifique se usar porta diferente
+
+5. Testes:
+   - F12 → Console
+   - PT_Email_OFT.getLogs() → Ver histórico
+   - PT_Email_OFT.showLogsReport() → Exibir relatório completo
+
+6. Tratamento de Erros:
+   - Todos os erros são exibidos em alert()
+   - Logs completos em localStorage
+   - Verifique browser console para detalhes
+-->

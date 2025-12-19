@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aprovação de Prova - Ordem de Serviço</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Calibri, Arial, sans-serif;
+            background-color: #f4f4f4;
+            padding: 20px;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header {
+            background-color: #ffffff;
+            padding: 30px 20px;
+            border-bottom: 3px solid #1F497D;
+            text-align: center;
+        }
+        
+        .header img {
+            max-width: 200px;
+            height: auto;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .title-section {
+            display: flex;
+            gap: 40px;
+            margin-bottom: 30px;
+            align-items: flex-start;
+        }
+        
+        .title-section .icon {
+            flex-shrink: 0;
+            width: 120px;
+            text-align: center;
+        }
+        
+        .title-section .icon img {
+            width: 100%;
+            height: auto;
+        }
+        
+        .title-text h2 {
+            font-size: 16px;
+            font-weight: bold;
+            color: #C09100;
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        
+        .title-text h2 .teal {
+            color: #008080;
+        }
+        
+        .title-section .logo {
+            flex-shrink: 0;
+            width: 150px;
+            text-align: right;
+        }
+        
+        .title-section .logo img {
+            width: 100%;
+            height: auto;
+        }
+        
+        .alert-box {
+            display: flex;
+            gap: 20px;
+            margin: 30px 0;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-left: 4px solid #C00000;
+        }
+        
+        .alert-box .icon {
+            flex-shrink: 0;
+            width: 80px;
+            text-align: center;
+        }
+        
+        .alert-box .icon img {
+            width: 100%;
+            height: auto;
+        }
+        
+        .alert-box .text {
+            flex: 1;
+        }
+        
+        .alert-box .text p {
+            color: #C00000;
+            font-weight: bold;
+            line-height: 1.6;
+            text-align: justify;
+        }
+        
+        .instructions {
+            margin: 30px 0;
+            text-align: justify;
+            line-height: 1.6;
+        }
+        
+        .instructions p {
+            margin-bottom: 15px;
+            color: #000;
+        }
+        
+        .instructions strong {
+            font-weight: bold;
+        }
+        
+        .instruction-item {
+            margin: 15px 0 15px 35px;
+            color: #000;
+        }
+        
+        .instruction-item.authorize {
+            color: #000;
+        }
+        
+        .instruction-item.authorize strong {
+            color: #008000;
+            font-weight: bold;
+        }
+        
+        .instruction-item.modify {
+            color: #000;
+        }
+        
+        .instruction-item.modify strong {
+            color: #800000;
+            font-weight: bold;
+        }
+        
+        .obs {
+            margin: 20px 0 20px 35px;
+            font-weight: bold;
+            color: #000;
+        }
+        
+        .obs strong {
+            font-weight: bold;
+        }
+        
+        .important-section {
+            display: flex;
+            gap: 20px;
+            margin: 30px 0;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-left: 4px solid #800000;
+        }
+        
+        .important-section .icon {
+            flex-shrink: 0;
+            width: 80px;
+            text-align: right;
+        }
+        
+        .important-section .icon img {
+            width: 100%;
+            height: auto;
+        }
+        
+        .important-section .text {
+            flex: 1;
+        }
+        
+        .important-section .text p {
+            line-height: 1.6;
+            text-align: justify;
+            margin-bottom: 10px;
+            color: #000;
+        }
+        
+        .important-header {
+            font-weight: bold;
+            color: #800000;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+        
+        .important-section .text strong {
+            font-weight: bold;
+        }
+        
+        .footer {
+            background-color: #ffffff;
+            padding: 20px;
+            text-align: center;
+            border-top: 3px solid #1F497D;
+        }
+        
+        .footer img {
+            max-width: 100%;
+            height: auto;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                margin: 0;
+                border-radius: 0;
+            }
+            
+            .title-section {
+                flex-direction: column;
+                gap: 20px;
+            }
+            
+            .title-section .logo {
+                width: 100%;
+            }
+            
+            .important-section,
+            .alert-box {
+                flex-direction: column;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="emailProvaOS_arquivos/image001.jpg" alt="Logo Topo">
+        </div>
+        
+        <div class="content">
+            <div class="title-section">
+                <div class="icon">
+                    <img src="emailProvaOS_arquivos/image002.jpg" alt="Ícone">
+                </div>
+                <div class="title-text">
+                    <h2>Segue prova da <span class="teal">Ordem de Serviço</span><br>
+                    solicitada junto à CGraf sob o número<br>
+                    informado no Assunto desta mensagem</h2>
+                </div>
+                <div class="logo">
+                    <img src="emailProvaOS_arquivos/image003.jpg" alt="Logo">
+                </div>
+            </div>
+            
+            <div class="alert-box">
+                <div class="icon">
+                    <img src="emailProvaOS_arquivos/image004.jpg" alt="Aviso">
+                </div>
+                <div class="text">
+                    <p>Sugerimos que a prova seja conferida com atenção, pois a CGraf <u>não aceitará reclamações posteriores</u> referentes a serviços que tenham tido a impressão autorizada.</p>
+                </div>
+            </div>
+            
+            <div class="instructions">
+                <p>Para <strong style="color: #008000;">autorizar a impressão</strong> responda este e-mail, <strong>sem alterar o campo Assunto</strong>:</p>
+                <div class="instruction-item authorize">
+                    - informando "Impressão autorizada conforme Prova; e<br>
+                    - indicando Nome e Número de Ponto.
+                </div>
+                
+                <div class="obs">
+                    Obs.: <span>Quando houver mais de um modelo na prova encaminhada, indicar quais estão aprovados.</span>
+                </div>
+                
+                <p style="margin-top: 20px;">Para <strong style="color: #800000;">solicitar alterações</strong> responda este e-mail, <strong>sem alterar o campo Assunto</strong>:</p>
+                <div class="instruction-item modify">
+                    - informando "Solicitamos que sejam feitas as seguintes alterações:" e detalhando as alterações necessárias; ou<br>
+                    - anexando um novo arquivo para impressão.
+                </div>
+            </div>
+            
+            <div class="important-section">
+                <div class="icon">
+                    <img src="emailProvaOS_arquivos/image005.jpg" alt="Importante">
+                </div>
+                <div class="text">
+                    <div class="important-header">IMPORTANTE:</div>
+                    <p>A Prova PDF é sempre disponibilizada para os Serviços da Cota de Papelaria. Para os demais serviços de impressão (OSs), a Prova PDF é disponibilizada apenas quando estiver fora das seguintes situações:</p>
+                    <p>
+                        - Saída impressa estiver igual ao Original encaminhado pelo solicitante;<br>
+                        - Repetição de serviço sem alterações;<br>
+                        - Arquivo original encaminhado pelo solicitante no formato PDF.
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <img src="emailProvaOS_arquivos/image006.jpg" alt="Rodapé">
+        </div>
+    </div>
+</body>
+</html>

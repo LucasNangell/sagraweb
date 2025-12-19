@@ -1,0 +1,286 @@
+<!--
+EXEMPLO DE INTEGRAÇÃO - email.html
+Copie o conteúdo deste arquivo na sua página email.html
+
+Passos:
+1. Adicione <script src="email_oft_integration.js"></script> na seção <head>
+2. Adicione os campos de formulário necessários
+3. Adicione o event listener no final do <script>
+4. Teste preenchendo e clicando em "Enviar"
+-->
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Envio de Email - Problemas Técnicos</title>
+    <script src="email_oft_integration.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; }
+        input, textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 10px 20px; background: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0052a3; }
+        .tipo-email { margin: 10px 0; }
+        .info { background: #e7f3ff; padding: 10px; border-left: 4px solid #0066cc; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>Envio de Email - Problemas Técnicos</h1>
+
+    <div class="info">
+        ℹ️ Certifique-se de ter finalizado a análise antes de enviar!
+    </div>
+
+    <form id="form-envio-email">
+        
+        <!-- Informações da OS (preenchidas automaticamente) -->
+        <div class="form-group">
+            <label>OS:</label>
+            <input type="hidden" id="os" value="">
+            <input type="text" id="os-display" disabled value="">
+        </div>
+
+        <div class="form-group">
+            <label>Ano:</label>
+            <input type="hidden" id="ano" value="">
+            <input type="text" id="ano-display" disabled value="">
+        </div>
+
+        <!-- Tipo de Email -->
+        <div class="form-group">
+            <label>Tipo de Email:</label>
+            <div class="tipo-email">
+                <label>
+                    <input type="radio" name="tipo_email" value="pt" checked> 
+                    Problemas Técnicos (usa template .OFT)
+                </label>
+            </div>
+            <div class="tipo-email">
+                <label>
+                    <input type="radio" name="tipo_email" value="proof"> 
+                    Prova (usa HTML inline)
+                </label>
+            </div>
+        </div>
+
+        <!-- Versão do Email -->
+        <div class="form-group">
+            <label for="versao">Versão do Email:</label>
+            <input type="text" id="versao" value="1" placeholder="1, 2, 3, etc">
+            <small>Deixe como "1" para primeira versão</small>
+        </div>
+
+        <!-- Destinatários -->
+        <div class="form-group">
+            <label for="para">Para (Destinatários):</label>
+            <textarea id="para" rows="4" placeholder="email1@dominio.com&#10;email2@dominio.com&#10;Separe com ponto-e-vírgula ou quebra de linha"></textarea>
+        </div>
+
+        <!-- Ponto (setor) -->
+        <div class="form-group">
+            <label for="ponto">Ponto:</label>
+            <input type="text" id="ponto" value="SEFOC" placeholder="Ex: SEFOC">
+        </div>
+
+        <!-- Botão de Envio -->
+        <div class="form-group">
+            <button type="submit" id="btn-enviar">📧 Enviar Email</button>
+            <button type="reset" style="background: #666;">Limpar</button>
+        </div>
+    </form>
+
+    <script>
+        // ========================================
+        // Configuração Inicial
+        // ========================================
+        
+        // Obter parâmetros da URL (se vindo de analise.html)
+        function initializeForm() {
+            const urlParams = new URLSearchParams(window.location.search);
+            
+            const os = urlParams.get('os') || localStorage.getItem('current_os') || '1234';
+            const ano = urlParams.get('ano') || localStorage.getItem('current_ano') || '2024';
+            const tipo = urlParams.get('tipo') || 'pt';
+            
+            document.getElementById('os').value = os;
+            document.getElementById('os-display').value = os;
+            document.getElementById('ano').value = ano;
+            document.getElementById('ano-display').value = ano;
+            
+            // Selecionar tipo correto
+            document.querySelector(`input[name="tipo_email"][value="${tipo}"]`).checked = true;
+            
+            // Salvar em localStorage para persistência
+            localStorage.setItem('current_os', os);
+            localStorage.setItem('current_ano', ano);
+            localStorage.setItem('email_tipo', tipo);
+            
+            console.log(`Formulário inicializado: OS ${os}/${ano}, tipo: ${tipo}`);
+        }
+        
+        // Inicializar ao carregar
+        document.addEventListener('DOMContentLoaded', initializeForm);
+
+        // ========================================
+        // Event Listener para Envio
+        // ========================================
+        document.getElementById('form-envio-email').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            console.log('Envio de email solicitado');
+            
+            // Coletar dados
+            const os_id = document.getElementById('os').value;
+            const ano = document.getElementById('ano').value;
+            const versao = document.getElementById('versao').value || "1";
+            const tipo_email = document.querySelector('input[name="tipo_email"]:checked').value;
+            const ponto = document.getElementById('ponto').value || "SEFOC";
+            
+            // Processar destinatários
+            const para_texto = document.getElementById('para').value;
+            if (!para_texto.trim()) {
+                alert('Favor informar pelo menos um destinatário');
+                return;
+            }
+            
+            const destinatarios = para_texto
+                .split(/[;\n]/)  // Separar por ; ou quebra de linha
+                .map(e => e.trim())
+                .filter(e => e.length > 0 && e.includes('@'));
+            
+            if (destinatarios.length === 0) {
+                alert('Nenhum endereço de email válido encontrado');
+                return;
+            }
+            
+            console.log(`Enviando email:`, {
+                os: os_id,
+                ano: ano,
+                versao: versao,
+                tipo: tipo_email,
+                destinatarios: destinatarios.length,
+                ponto: ponto
+            });
+            
+            // Mostrar confirmação
+            const confirma = confirm(
+                `Enviar email ${tipo_email} para ${destinatarios.length} destinatário(s)?` +
+                `\n\nOS: ${os_id}/${ano}` +
+                `\nVersão: ${versao}` +
+                `\nDestinatários:\n${destinatarios.join('\n')}`
+            );
+            
+            if (!confirma) {
+                console.log('Envio cancelado pelo usuário');
+                return;
+            }
+            
+            // Chamar função apropriada baseado no tipo
+            let sucesso = false;
+            
+            if (tipo_email === 'pt') {
+                sucesso = await PT_Email_OFT.enviarEmail(
+                    os_id,
+                    ano,
+                    versao,
+                    destinatarios,
+                    ponto
+                );
+            } else {
+                // Implementar função para outro tipo se necessário
+                console.warn('Tipo de email não implementado:', tipo_email);
+                alert(`Envio de tipo "${tipo_email}" não está implementado neste exemplo`);
+                return;
+            }
+            
+            // Feedback final
+            if (sucesso) {
+                PT_Email_OFT.logger.log(`Email enviado com sucesso para ${destinatarios.length} destinatário(s)`);
+                
+                // Limpar formulário
+                const limpa = confirm('Email enviado com sucesso!\n\nDeseja limpar o formulário?');
+                if (limpa) {
+                    document.getElementById('form-envio-email').reset();
+                    initializeForm();
+                }
+            } else {
+                PT_Email_OFT.logger.error('Falha no envio do email');
+            }
+        });
+
+        // ========================================
+        // Funções de Debug (F12 Console)
+        // ========================================
+        window.EMAIL_DEBUG = {
+            getForm: () => ({
+                os: document.getElementById('os').value,
+                ano: document.getElementById('ano').value,
+                versao: document.getElementById('versao').value,
+                tipo: document.querySelector('input[name="tipo_email"]:checked').value,
+                ponto: document.getElementById('ponto').value,
+                para: document.getElementById('para').value
+            }),
+            clearForm: () => document.getElementById('form-envio-email').reset(),
+            showLogs: () => PT_Email_OFT.showLogsReport(),
+            testEnvio: async () => {
+                const form = window.EMAIL_DEBUG.getForm();
+                console.log('Testando envio com dados:', form);
+                await PT_Email_OFT.enviarEmail(
+                    form.os,
+                    form.ano,
+                    form.versao,
+                    ['teste@test.com'],
+                    form.ponto
+                );
+            }
+        };
+        
+        console.log('DEBUG: Use EMAIL_DEBUG.* para acessar funções de debug');
+    </script>
+</body>
+</html>
+
+<!--
+NOTAS IMPORTANTES:
+
+1. Campos Obrigatórios:
+   - OS (preenchida automaticamente via URL ou localStorage)
+   - Ano (preenchida automaticamente via URL ou localStorage)
+   - Para (destinatários) - DEVE TER PELO MENOS UM EMAIL VÁLIDO
+   
+2. Suporte de Destinatários:
+   - Separe com ; (ponto-e-vírgula)
+   - Separe com quebra de linha
+   - Apenas endereços com @ são aceitos
+
+3. Fluxo Esperado:
+   - Vir de analise.html com ?os=1234&ano=2024&tipo=pt
+   - Preencher destinatários
+   - Clicar "Enviar"
+   - Ver confirmação
+   - Email enviado para Outlook
+
+4. Tipos de Email Suportados (neste exemplo):
+   - "pt" = Problemas Técnicos (usa template .OFT)
+   - "proof" = Não implementado aqui (você precisa implementar)
+
+5. Se houver erro "Template .oft não encontrado":
+   - Certifique-se que emailProbTec.oft existe na raiz do projeto
+   - Verifique se o placeholder <<<CONTEUDO_PROBLEMAS>>> está no arquivo
+
+6. Logs:
+   - F12 → Console → PT_Email_OFT.showLogsReport()
+   - F12 → Console → EMAIL_DEBUG.showLogs()
+
+7. Debug:
+   - F12 → Console → EMAIL_DEBUG.getForm() → Ver dados atuais
+   - F12 → Console → EMAIL_DEBUG.testEnvio() → Testar envio
+   - F12 → Console → PT_Email_OFT.logger.* → Acessar logger
+
+8. Redirecionamento:
+   - Se vindo de analise.html: parâmetros em URL passados automaticamente
+   - Se acesso direto: preenchimento via localStorage
+   - Se nada funcionar: preencher manualmente OS e Ano
+-->

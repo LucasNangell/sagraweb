@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Requisição</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.0/dist/JsBarcode.all.min.js"></script>
+
+    <style>
+        /* GLOBAL STYLES (Screen & Print) */
+        @page {
+            size: A5 portrait;
+            margin: 0;
+        }
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            /* No scrollbars ever */
+            background-color: #fff;
+            /* Gray background for screen, white for print */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        /* Wrappers */
+        #a5-root {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: flex-start;
+            justify-content: flex-start;
+            overflow: hidden;
+            background: white;
+        }
+
+        #a5-scale {
+            transform-origin: top left;
+
+            /*width: 770px;
+            /* Fixed content width */
+            /* transform is set by JS */
+        }
+
+        .container {
+            width: 830px;
+            margin: 0 auto;
+            /* Restore padding for visual breathing room inside the scaled area */
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        @media print {
+            body {
+                background-color: #fff;
+                height: 210mm;
+                width: 148mm;
+            }
+
+            #a5-root {
+                width: 100% !important;
+                height: 100% !important;
+            }
+
+            /* Hide everything else */
+            body>*:not(#a5-root) {
+                display: none;
+            }
+        }
+
+        /* General Utils */
+        .row {
+            display: flex;
+            gap: 5px;
+        }
+
+        .col {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .flex-1 {
+            flex: 1;
+        }
+
+        .flex-2 {
+            flex: 2;
+        }
+
+        .flex-3 {
+            flex: 3;
+        }
+
+        .full-width {
+            width: 100%;
+        }
+
+        /* Section Styling */
+        .section-box {
+            background-color: #dcdcdc;
+            border: 2px solid #b0b0b0;
+            border-radius: 8px;
+            padding: 5px;
+            margin-bottom: 5px;
+            position: relative;
+        }
+
+        .section-header {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 2px;
+            margin-top: 0;
+            padding-left: 2px;
+        }
+
+        /* Field Styling */
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            margin-right: 5px;
+            margin-bottom: 2px;
+        }
+
+        .field-group:last-child {
+            margin-right: 0;
+        }
+
+        .label {
+            font-size: 11px;
+            color: #555;
+            font-weight: 600;
+            margin-bottom: 1px;
+            padding-left: 2px;
+            white-space: nowrap;
+        }
+
+        .value-box {
+            background-color: #fff;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 14px;
+            font-weight: bold;
+            min-height: 20px;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Specific modifications based on image */
+        .value-box.dark {
+            background-color: #808080;
+            color: #fff;
+        }
+
+        .value-box.large-text {
+            font-size: 16px;
+        }
+
+        /* Header Specifics */
+        .header-section {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 5px;
+        }
+
+        .main-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin: 0;
+            padding: 5px 0;
+        }
+
+        /* Top Right Box */
+        .order-box {
+            background-color: #cfcfcf;
+            border: 2px solid #b0b0b0;
+            border-radius: 8px;
+            padding: 5px;
+            flex: 0 0 180px;
+        }
+
+        .order-number {
+            background-color: #808080;
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+            text-align: center;
+            padding: 5px;
+            border-radius: 6px;
+            margin-bottom: 5px;
+        }
+
+        /* Layout Grids */
+        .grid-tech {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr 0.5fr 0.5fr;
+            gap: 5px;
+        }
+
+        .grid-tech-row2 {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 5px;
+        }
+
+        /* Textarea simulation */
+        .value-box.textarea {
+            align-items: flex-start;
+            height: 100%;
+            min-height: 50px;
+        }
+
+        .sub-grid-2col {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="a5-root">
+        <div id="a5-scale">
+            <div class="container">
+                <div class="main-title">Requisição</div>
+
+                <div class="header-section">
+                    <div class="section-box" style="flex: 0 0 140px;">
+                        <div class="field-group">
+                            <span class="label">Data</span>
+                            <div class="value-box">{{ data_atual }}</div>
+                        </div>
+                        <div class="row" style="margin-top: 5px;">
+                            <div class="field-group flex-1">
+                                <span class="label" style="font-size: 10px;">RS Entregue</span>
+                                <div class="value-box">{{ rs_entregue }}</div>
+                            </div>
+                            <div class="field-group flex-1">
+                                <span class="label" style="font-size: 10px;">RS Lançada</span>
+                                <div class="value-box">{{ rs_lancada }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="section-box" style="flex: 1;">
+                        <div class="field-group">
+                            <span class="label">Processo</span>
+                            <div class="value-box">{{ processo }}</div>
+                        </div>
+                        <div class="field-group" style="margin-top: 5px;">
+                            <span class="label">CS</span>
+                            <div class="value-box">{{ cs }}</div>
+                        </div>
+                    </div>
+
+                    <div class="section-box" style="flex: 1.2; display: flex;">
+                        <div style="flex: 1;">
+                            <div class="field-group">
+                                <span class="label">Cota Repro</span>
+                                <div class="value-box" style="justify-content: flex-end;">{{ cota_repro }}</div>
+                            </div>
+                            <div class="field-group" style="margin-top: 5px;">
+                                <span class="label">Cota Cartão</span>
+                                <div class="value-box">{{ cota_cartao }}</div>
+                            </div>
+                        </div>
+                        <div class="field-group" style="width: 60px; margin-left: 5px; justify-content: center;">
+                            <span class="label">Debitar</span>
+                            <div class="value-box"
+                                style="height: 40px; justify-content: center; text-align: center; font-size: 11px;">{{
+                                debitar_usuario }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="order-box">
+                        <div class="order-number">{{ numero_pedido }}</div>
+                        <div class="row">
+                            <div class="field-group flex-1">
+                                <span class="label">Modelos</span>
+                                <div class="value-box">{{ modelos_qtd }}</div>
+                            </div>
+                            <div class="field-group flex-1">
+                                <span class="label">Tiragem</span>
+                                <div class="value-box" style="justify-content: flex-end;">{{ tiragem_qtd }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-header">Entidade Solicitante</div>
+                <div class="section-box">
+                    <div class="row">
+                        <div class="col flex-2">
+                            <div class="row">
+                                <div class="field-group flex-1">
+                                    <span class="label">Categoria</span>
+                                    <div class="value-box">{{ solicitante_categoria }}</div>
+                                </div>
+                                <div class="field-group flex-1">
+                                    <span class="label">Cód. do Usuário</span>
+                                    <div class="value-box" style="justify-content: center;">{{ solicitante_cod }}</div>
+                                </div>
+                            </div>
+                            <div class="field-group" style="margin-top: 5px;">
+                                <span class="label">Nome</span>
+                                <div class="value-box dark">{{ solicitante_nome }}</div>
+                            </div>
+                        </div>
+                        <div class="col flex-1">
+                            <div class="field-group" style="height: 100%;">
+                                <span class="label">Contato</span>
+                                <div class="value-box textarea" style="font-size: 13px; font-weight: normal;">
+                                    {{ solicitante_contato }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row" style="margin-top: 5px;">
+                        <div class="field-group flex-2">
+                            <span class="label">Sigla</span>
+                            <div class="value-box">{{ solicitante_sigla }}</div>
+                        </div>
+                        <div class="field-group flex-1">
+                            <span class="label">Ramal</span>
+                            <div class="value-box">{{ solicitante_ramal }}</div>
+                        </div>
+                        <div class="field-group flex-2">
+                            <span class="label">Interessado</span>
+                            <div class="value-box">{{ solicitante_interessado }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-header">Informações Técnicas</div>
+                <div class="row">
+                    <div class="col flex-3">
+                        <div class="section-box">
+                            <div class="grid-tech">
+                                <div class="field-group">
+                                    <span class="label">Tipo de Serviço</span>
+                                    <div class="value-box dark">{{ servico_tipo }}</div>
+                                </div>
+                                <div class="field-group">
+                                    <span class="label">Máquina Sugerida</span>
+                                    <div class="value-box">{{ maquina_sugerida }}</div>
+                                </div>
+                                <div class="field-group">
+                                    <span class="label">Páginas</span>
+                                    <div class="value-box" style="justify-content: center;">{{ paginas }}</div>
+                                </div>
+                                <div class="field-group">
+                                    <span class="label">Frente / Verso</span>
+                                    <div class="value-box" style="justify-content: center;">{{ frente_verso }}</div>
+                                </div>
+                            </div>
+                            <div class="grid-tech-row2" style="margin-top: 5px;">
+                                <div class="field-group">
+                                    <span class="label">Título</span>
+                                    <div class="value-box dark">{{ servico_titulo }}</div>
+                                </div>
+                                <div class="field-group">
+                                    <span class="label">Formato</span>
+                                    <div class="value-box">{{ servico_formato }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="section-box">
+                            <div class="sub-grid-2col">
+                                <div class="field-group">
+                                    <span class="label">Cor</span>
+                                    <div class="value-box">{{ servico_cor }}</div>
+                                </div>
+                                <div class="field-group">
+                                    <span class="label">Observações:</span>
+                                    <div class="value-box" style="height: 38px;">{{ obs_cor }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="section-box">
+                            <div class="sub-grid-2col">
+                                <div class="field-group">
+                                    <span class="label">Papel</span>
+                                    <div class="value-box">{{ servico_papel }}</div>
+                                </div>
+                                <div class="field-group">
+                                    <span class="label">Observações:</span>
+                                    <div class="value-box" style="height: 38px;">{{ obs_papel }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col flex-1">
+                        <div class="section-box" style="height: 100%;">
+                            <div class="field-group" style="height: 100%;">
+                                <span class="label">Acabamento:</span>
+                                <div class="value-box textarea" style="height: 100%; font-weight: normal;">
+                                    {{ servico_acabamento }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row" style="margin-top: 5px; height: 200px;">
+                    <div class="col flex-1">
+                        <div class="section-header" style="font-size: 14px;">Observações Gerais:</div>
+                        <div class="section-box" style="flex: 1;">
+                            <div class="value-box textarea" style="font-weight: normal; font-size: 12px; height: 90%;">
+                                {{ obs_gerais }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col flex-1">
+                        <div class="section-box" style="height: 100%; padding: 0;">
+                            <div class="row" style="height: 100%; gap: 0;">
+                                <div class="col flex-1" style="padding: 5px; border-right: 2px solid #b0b0b0;">
+                                    <div class="section-header" style="font-size: 14px;">Insumos Fornecidos</div>
+                                    <div class="value-box" style="flex: 1;">{{ insumos }}</div>
+                                </div>
+                                <div class="col flex-1" style="padding: 5px;">
+                                    <div class="section-header" style="font-size: 14px;">Material Entregue</div>
+                                    <div class="value-box textarea" style="flex: 1; font-weight: normal;">{{
+                                        material_entregue
+                                        }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row" style="margin-top: 5px;">
+                    <div class="flex-1">
+                        <div class="section-header">Dados de Entrega</div>
+                        <div class="section-box">
+                            <div class="row">
+                                <div class="field-group flex-1">
+                                    <span class="label">Resp. na Gráfica</span>
+                                    <div class="value-box">{{ resp_grafica }}</div>
+                                </div>
+                                <div class="field-group flex-1">
+                                    <span class="label">Prazo p/ Entrega</span>
+                                    <div class="value-box">{{ prazo_entrega }}</div>
+                                </div>
+                            </div>
+                            <div class="row" style="margin-top: 5px;">
+                                <div class="field-group flex-1">
+                                    <span class="label">Forma de Entrega</span>
+                                    <div class="value-box">{{ forma_entrega }}</div>
+                                </div>
+                                <div class="field-group flex-1">
+                                    <span class="label">Data</span>
+                                    <div class="value-box">{{ data_entrega }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex-1">
+                        <div class="section-header">Avisos</div>
+                        <div class="section-box">
+                            <div class="value-box" style="margin-bottom: 3px; height: 22px;">{{ aviso_1 }}</div>
+                            <div class="value-box" style="margin-bottom: 3px; height: 22px;">{{ aviso_2 }}</div>
+                            <div class="value-box" style="height: 22px;">{{ aviso_3 }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="text-align: right; font-size: 11px; margin-top: 5px;">
+                    Impresso em {{ timestamp_impressao }}
+                </div>
+                
+                <div style="text-align: center; margin-top: 25px;">
+                    <svg id="barcode"></svg>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            // ADICIONADO: Geração do código de barras
+            // Usa o valor do campo numero_pedido
+            try {
+                JsBarcode("#barcode", "{{ numero_pedido }}", {
+                    format: "CODE128",
+                    lineColor: "#000",
+                    width: 1.5,
+                    height: 35,
+                    displayValue: true,
+                    fontSize: 14,
+                    margin: 0
+                });
+            } catch (e) {
+                console.error("Erro ao gerar código de barras:", e);
+            }
+
+            // Script de Auto-Escala Universal (Tela e Impressão)
+            function updateScale() {
+                const root = document.getElementById('a5-root');
+                const scaleContainer = document.getElementById('a5-scale');
+                if (!root || !scaleContainer) return;
+
+                // Screen/Window dimensions (clientWidth includes padding if box-sizing border-box, but here we want viewport)
+                const availableW = root.clientWidth;
+                const availableH = root.clientHeight;
+
+                // Content base width (800px)
+                const contentW = 800;
+                // Content height
+                const contentH = scaleContainer.scrollHeight;
+
+                if (availableW === 0 || availableH === 0) return;
+
+                // 1. Calculate Width Scale
+                const scaleX = availableW / contentW;
+
+                // 2. Calculate Height Scale (to fit vertically without scroll)
+                let scale = scaleX;
+                if (contentH > 0) {
+                    const scaleY = availableH / contentH;
+                    // Use the smaller scale to ensure it fits completely
+                    scale = Math.min(scaleX, scaleY);
+                }
+
+                // 3. Apply Scale with Safety Buffer (1% margin) to prevent edge clipping
+                scale = scale * 0.99;
+                scaleContainer.style.transform = `scale(${scale})`;
+            }
+
+            // Run on significant events
+            window.addEventListener('load', updateScale);
+            window.addEventListener('resize', updateScale);
+
+            // Polling backup (for late font rendering)
+            setTimeout(updateScale, 200);
+            setTimeout(updateScale, 1000);
+
+            // Print specifics
+            window.onbeforeprint = function () {
+                // Force update before printing to ensure correct scale calculation based on print media size
+                updateScale();
+            };
+
+            // Initial call
+            if (document.readyState === 'complete') updateScale();
+        })();
+    </script>
+</body>
+
+</html>

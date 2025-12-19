@@ -918,8 +918,43 @@ window.copyLinkToClipboard = function () {
     });
 };
 
-window.finishAndExit = function () {
-    window.location.href = 'index.html';
+window.finishAndExit = async function () {
+    try {
+        // Validar se temos OS_ID e ANO
+        if (!currentOs || !currentAno) {
+            console.error("OS_ID ou ANO não definidos");
+            window.location.href = 'index.html';
+            return;
+        }
+
+        console.log(`[OFT Integration] Finalizando análise para OS ${currentOs}/${currentAno}`);
+
+        // Definir variáveis globais para módulo OFT
+        window.OS_ID = parseInt(currentOs);
+        window.ANO = parseInt(currentAno);
+
+        // Chamar função de finalização do módulo OFT
+        if (typeof PT_Email_OFT !== 'undefined' && PT_Email_OFT.finalizarAnalise) {
+            const sucesso = await PT_Email_OFT.finalizarAnalise();
+            
+            if (sucesso) {
+                console.log("[OFT Integration] Análise finalizada com sucesso!");
+                // Redirecionar após breve delay
+                setTimeout(() => {
+                    window.location.href = 'index.html';
+                }, 1500);
+            } else {
+                console.warn("[OFT Integration] Erro ao finalizar análise, redirecionando mesmo assim");
+                window.location.href = 'index.html';
+            }
+        } else {
+            console.warn("[OFT Integration] Módulo PT_Email_OFT não carregado, redirecionando");
+            window.location.href = 'index.html';
+        }
+    } catch (error) {
+        console.error("[OFT Integration] Erro ao finalizar análise:", error);
+        window.location.href = 'index.html';
+    }
 };
 
 // --- ACCESS CONTROL ---

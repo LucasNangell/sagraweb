@@ -11,7 +11,66 @@ from database import db
 from .andamento_helpers import format_andamento_obs, format_ponto
 
 router = APIRouter(prefix="/email")
+router = APIRouter(prefix="/email")
 logger = logging.getLogger(__name__)
+
+# Helper para Data/Hora
+from datetime import datetime
+import glob
+import re
+
+def _get_os_folder_path(ano: int, id: int) -> Optional[str]:
+    """Helper para localizar a pasta da OS na rede (Duplicado de os_routes para evitar circularidade)."""
+    if id >= 5000:
+        base_path = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_Papelaria_{ano}"
+    else:
+        base_path = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_{ano}"
+        
+    os_pattern = os.path.join(base_path, f"{id:05d}*")
+    
+    # Check fallback for local testing
+    if not os.path.exists(r"\\redecamara\DfsData"):
+        local_path = os.path.abspath(f"storage_test/{ano}/{id}")
+        if os.path.exists(local_path):
+            return local_path
+
+    found = glob.glob(os_pattern)
+    if found:
+        return found[0]
+    return None
+
+def _get_latest_pdf(os_path: str) -> Optional[str]:
+    """Busca o PDF mais recente na pasta Sefoc dentro da OS."""
+    sefoc_path = os.path.join(os_path, "Sefoc")
+    if not os.path.exists(sefoc_path):
+        return None
+        
+    pdfs = glob.glob(os.path.join(sefoc_path, "*.pdf"))
+    if not pdfs:
+        return None
+        
+    # Retorna o mais recente
+    return max(pdfs, key=os.path.getmtime)
+
+def _get_proof_template_content(os_id: int) -> str:
+    """Retorna o conteúdo do template HTML adequado (Prova SP ou Prova OS)."""
+    filename = "emailProvaSP.htm" if os_id > 5000 else "emailProvaOS.htm"
+    # Tenta ler do diretório atual ou raiz (assumindo que launcher roda na raiz)
+    try:
+        with open(filename, "r", encoding="cp1252") as f: # Tenta ANSI/Windows-1252 primeiro (comum no ambiente)
+            return f.read()
+    except UnicodeDecodeError:
+        with open(filename, "r", encoding="utf-8") as f: # Fallback para UTF-8
+            return f.read()
+    except FileNotFoundError:
+        # Tenta caminho absoluto se necessário (assumindo estrutura padrão)
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        path = os.path.join(base_dir, filename)
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return f.read()
+        except:
+             return f"<html><body>Erro: Template {filename} não encontrado.</body></html>"
 
 # Modelos Pydantic para requisições
 class AndamentoRequest(BaseModel):
@@ -405,6 +464,7 @@ class EmailPTRequest(BaseModel):
     versao: str
     to: List[str]
     ponto: str
+    type: str = "pt" # pt | proof
 
 @router.post("/send-pt")
 def send_pt_email(request: EmailPTRequest):
@@ -412,55 +472,131 @@ def send_pt_email(request: EmailPTRequest):
     Envia e-mail de Problemas Técnicos usando HTML salvo no banco de dados
     """
     try:
-        # 1. Buscar HTML salvo no banco de dados
-        query = """
-            SELECT 
-                p.email_pt_html,
-                p.email_pt_versao,
-                d.TipoPublicacaoLink as produto,
-                d.Titulo as titulo
-            FROM tabProtocolos p
-            LEFT JOIN tabDetalhesServico d ON 
-                p.NroProtocolo = d.NroProtocoloLinkDet AND 
-                p.AnoProtocolo = d.AnoProtocoloLinkDet
-            WHERE p.NroProtocolo = %(os)s AND p.AnoProtocolo = %(ano)s
-        """
-        result = db.execute_query(query, {'os': request.os, 'ano': request.ano})
+        email_html = ""
+        assunto = ""
+        attachments_to_send = []
+
+        if request.type == "proof":
+            import os as _os
+            import glob as _glob
+            
+            # --- LÓGICA DE PROVA ---
+            # 1. Carregar Template
+            email_html = _get_proof_template_content(request.os)
+            
+            # 2. Localizar PDF
+            os_path = _get_os_folder_path(request.ano, request.os)
+            if not os_path:
+                raise HTTPException(status_code=404, detail="Pasta da OS não encontrada na rede.")
+            
+            sefoc_path = _os.path.join(os_path, "Sefoc")
+            pdfs = []
+            if _os.path.exists(sefoc_path):
+                pdfs = _glob.glob(_os.path.join(sefoc_path, "*.pdf"))
+                
+            if not pdfs:
+                 raise HTTPException(status_code=400, detail="Nenhum arquivo PDF encontrado na pasta Sefoc da OS.")
+
+            # Selecionar o mais recente para anexo
+            pdf_path = max(pdfs, key=_os.path.getmtime)
+            attachments_to_send.append(pdf_path)
+            
+            # 2.1 Calcular Versão (Qtde de PDFs)
+            nova_versao = str(len(pdfs))
+            
+            # 2.2 Buscar Dados do Banco (Solicitante e Produto)
+            q_dados = """
+                SELECT 
+                    p.NomeUsuario as solicitante,
+                    d.TipoPublicacaoLink as produto
+                FROM tabProtocolos p
+                LEFT JOIN tabDetalhesServico d ON 
+                    p.NroProtocolo = d.NroProtocoloLinkDet AND 
+                    p.AnoProtocolo = d.AnoProtocoloLinkDet
+                WHERE p.NroProtocolo = %(os)s AND p.AnoProtocolo = %(ano)s
+            """
+            res_dados = db.execute_query(q_dados, {'os': request.os, 'ano': request.ano})
+            solicitante = "Solicitante"
+            produto = "Produto"
+            if res_dados:
+                solicitante = res_dados[0].get('solicitante') or "Solicitante"
+                produto = res_dados[0].get('produto') or "Produto"
+
+            # 3. Assunto
+            # "Cgraf: Prova x OS NrOS/Ano - Produto - Solicitante"
+            assunto = f"Cgraf: Prova {nova_versao} OS {request.os}/{request.ano} - {produto} - {solicitante}"
+
+        else:
+            # --- LÓGICA PADRÃO (PROBLEMA TÉCNICO) ---
+            # 1. Buscar HTML salvo no banco de dados
+            query = """
+                SELECT 
+                    p.email_pt_html,
+                    p.email_pt_versao,
+                    d.TipoPublicacaoLink as produto,
+                    d.Titulo as titulo
+                FROM tabProtocolos p
+                LEFT JOIN tabDetalhesServico d ON 
+                    p.NroProtocolo = d.NroProtocoloLinkDet AND 
+                    p.AnoProtocolo = d.AnoProtocoloLinkDet
+                WHERE p.NroProtocolo = %(os)s AND p.AnoProtocolo = %(ano)s
+            """
+            result = db.execute_query(query, {'os': request.os, 'ano': request.ano})
+            
+            if not result or not result[0].get('email_pt_html'):
+                raise HTTPException(
+                    status_code=404, 
+                    detail="HTML do e-mail não encontrado. Por favor, conclua a análise primeiro."
+                )
+            
+            email_html = result[0]['email_pt_html']
+            produto = result[0].get('produto') or 'Produto'
+            titulo = result[0].get('titulo') or 'Título'
+            
+            # 2. Montar assunto padronizado
+            # Formato: CGraf: Problemas Técnicos, arq. vx OS 0000/00 - Produto - Título
+            ano_curto = str(request.ano)[-2:]  # Últimos 2 dígitos do ano
+            assunto = f"CGraf: Problemas Técnicos, arq. v{request.versao} OS {request.os:04d}/{ano_curto} - {produto} - {titulo}"
+            nova_versao = request.versao # Manter logica original para PT
         
-        if not result or not result[0].get('email_pt_html'):
-            raise HTTPException(
-                status_code=404, 
-                detail="HTML do e-mail não encontrado. Por favor, conclua a análise primeiro."
-            )
-        
-        email_html = result[0]['email_pt_html']
-        produto = result[0].get('produto') or 'Produto'
-        titulo = result[0].get('titulo') or 'Título'
-        
-        # 2. Montar assunto padronizado
-        # Formato: CGraf: Problemas Técnicos, arq. vx OS 0000/00 - Produto - Título
-        ano_curto = str(request.ano)[-2:]  # Últimos 2 dígitos do ano
-        assunto = f"CGraf: Problemas Técnicos, arq. v{request.versao} OS {request.os:04d}/{ano_curto} - {produto} - {titulo}"
-        
-        # 3. Enviar e-mail via Outlook
+        # --- ENVIO COMUM ---
         pythoncom.CoInitialize()
         try:
             outlook = win32com.client.Dispatch("Outlook.Application")
             mail = outlook.CreateItem(0)  # 0 = MailItem
             
+            debug_sender_used = "Default"
+            sender_email = "papelaria.deapa@camara.leg.br" if request.os >= 5000 else None
+            
+            if sender_email:
+                # ESTRATEGIA: SentOnBehalfOfName
+                # Testes diagnosticos mostraram que mail.SendUsingAccount falha com RPC_E_SERVERFAULT
+                # porem mail.SentOnBehalfOfName funciona corretamente.
+                try:
+                    mail.SentOnBehalfOfName = sender_email
+                    debug_sender_used = f"{sender_email} (via SentOnBehalf)"
+                    logger.info(f"Sending using SentOnBehalfOfName: {sender_email}")
+                except Exception as acc_err:
+                     logger.error(f"Error setting SentOnBehalfOfName {sender_email}: {acc_err}")
+                     debug_sender_used = f"Default (Error: {str(acc_err)})"
+
             # Destinatários
             mail.To = "; ".join(request.to)
             
             # Assunto
             mail.Subject = assunto
             
-            # Corpo HTML (usar HTML salvo no banco)
+            # Corpo HTML
             mail.HTMLBody = email_html
+            
+            # Anexar arquivos (apenas para Proof no momento)
+            for att_path in attachments_to_send:
+                mail.Attachments.Add(att_path)
             
             # Enviar
             mail.Send()
             
-            logger.info(f"PT Email sent successfully to {request.to} for OS {request.os}/{request.ano}")
+            logger.info(f"Email ({request.type}) sent successfully to {request.to} for OS {request.os}/{request.ano}")
             
         finally:
             pythoncom.CoUninitialize()
@@ -491,7 +627,11 @@ def send_pt_email(request: EmailPTRequest):
             new_cod = f"{base_prefix}{next_seq:02d}"
             
             # Inserir novo andamento com hora formatada
-            obs = f"PTV{request.versao} enviado"
+            if request.type == 'proof':
+                obs = f"Prova v{nova_versao} enviada por e-mail"
+            else:
+                obs = f"PTV{nova_versao} enviado"
+                
             obs_formatada = format_andamento_obs(obs)
             ponto_formatado = format_ponto(request.ponto)
             
@@ -521,7 +661,9 @@ def send_pt_email(request: EmailPTRequest):
         return {
             "success": True, 
             "message": "E-mail enviado com sucesso",
-            "subject": assunto
+            "subject": assunto,
+            "attachments": [os.path.basename(p) for p in attachments_to_send],
+            "used_account": debug_sender_used
         }
         
     except HTTPException:
@@ -544,15 +686,52 @@ def get_pt_html(ano: int, os: int):
         result = db.execute_query(query, {'os': os, 'ano': ano})
         
         if not result or not result[0].get('email_pt_html'):
-            raise HTTPException(
-                status_code=404, 
-                detail="HTML não encontrado. Conclua a análise primeiro para gerar o e-mail."
-            )
+            # --- LOGICA DE FALLBACK: PROVA ---
+            # Se não tem HTML de PT, assumimos que pode ser envio de prova direta.
+            # Retornamos o template de prova para o frontend decidir
+            
+            template_html = _get_proof_template_content(os)
+            
+            # Tentar antecipar o nome do arquivo para mostrar no frontend
+            found_pdf_name = None
+            debug_path = "Caminho não determinado"
+            
+            try:
+                import os as _os # Importar com alias para não conflitar com argumento 'os' (int)
+                
+                os_path = _get_os_folder_path(ano, os)
+                if os_path:
+                    # Caminho onde procuramos os PDFs
+                    sefoc_path = _os.path.join(os_path, "Sefoc")
+                    debug_path = sefoc_path
+                    
+                    latest_pdf = _get_latest_pdf(os_path)
+                    if latest_pdf:
+                         found_pdf_name = _os.path.basename(latest_pdf)
+                else:
+                     # Se não achou a pasta da OS, tenta mostrar onde procuraria
+                     if os >= 5000:
+                        base = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_Papelaria_{ano}"
+                     else:
+                        base = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_{ano}"
+                     debug_path = fr"{base}\{os:05d}*\Sefoc"
+            except Exception as e:
+                debug_path = f"Erro ao calcular caminho: {str(e)}"
+
+            return {
+                "html": template_html,
+                "versao": "1", # Default
+                "data": None,
+                "type": "proof",
+                "detected_attachment": found_pdf_name,
+                "search_path": debug_path
+            }
         
         return {
             "html": result[0]['email_pt_html'],
             "versao": result[0].get('email_pt_versao'),
-            "data": result[0].get('email_pt_data')
+            "data": result[0].get('email_pt_data'),
+            "type": "pt"
         }
         
     except HTTPException:

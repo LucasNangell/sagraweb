@@ -8,6 +8,7 @@ let currentUser = null;
 let inboxData = []; // Armazena os e-mails carregados
 let pendenciasData = []; // Armazena as pendências de OS
 let currentEmailHTML = ''; // Armazena o HTML do email sendo editado/visualizado
+let currentEmailType = 'pt'; // 'pt' ou 'proof'
 let currentSelectedEmail = null; // Armazena o email atualmente selecionado
 let refreshTimer = null; // Timer para auto-refresh
 let notificationTimer = null; // Timer para notificações
@@ -46,17 +47,17 @@ function initApp() {
 
     // Carrega dados iniciais
     loadInbox();
-    
+
     // Iniciar auto-refresh a cada 15s
     startAutoRefresh();
-    
+
     // Iniciar atualização de notificações
     startNotificationUpdates();
 }
 
 async function loadInbox(silent = false) {
     const container = document.getElementById('email-list-container');
-    
+
     if (!silent) {
         container.innerHTML = '<div style="text-align:center; padding:20px; color:#999;">Carregando e-mails...</div>';
     }
@@ -71,25 +72,25 @@ async function loadInbox(silent = false) {
         }
 
         const newData = await response.json();
-        
+
         // Comparação simples: verificar se mudou
         const oldHash = inboxData.map(e => e.id).join(',');
         const newHash = newData.map(e => e.id).join(',');
-        
+
         if (oldHash !== newHash || !silent) {
             // Salvar scroll atual
             const scrollPos = container.scrollTop;
             const previousSelectedId = selectedId;
-            
+
             inboxData = newData;
 
             if (activeTab === 'inbox') {
                 renderList();
-                
+
                 // Restaurar scroll
                 if (silent) {
                     container.scrollTop = scrollPos;
-                    
+
                     // Re-selecionar item se ainda existir
                     if (previousSelectedId && inboxData.find(e => e.id === previousSelectedId)) {
                         selectItem(previousSelectedId);
@@ -144,7 +145,7 @@ function startAutoRefresh() {
     if (refreshTimer) {
         clearInterval(refreshTimer);
     }
-    
+
     // Atualizar a cada 15 segundos
     refreshTimer = setInterval(() => {
         if (activeTab === 'inbox') {
@@ -156,12 +157,12 @@ function startAutoRefresh() {
 function startNotificationUpdates() {
     // Atualizar badge imediatamente
     updateNotificationBadge();
-    
+
     // Limpar timer anterior se existir
     if (notificationTimer) {
         clearInterval(notificationTimer);
     }
-    
+
     // Atualizar a cada 15 segundos
     notificationTimer = setInterval(() => {
         updateNotificationBadge();
@@ -171,14 +172,14 @@ function startNotificationUpdates() {
 async function updateNotificationBadge() {
     try {
         const response = await fetch(`${API_BASE_URL}/email/notification_status?setor=SEFOC`);
-        
+
         if (!response.ok) return;
-        
+
         const data = await response.json();
         const badge = document.getElementById('email-notification-badge');
-        
+
         if (!badge) return;
-        
+
         if (data.has_notification) {
             const total = data.inbox_count + data.pendencias_count;
             badge.textContent = total > 99 ? '99+' : total;
@@ -200,7 +201,7 @@ function switchTab(tab) {
 
     document.getElementById('list-title').textContent = tab === 'inbox' ? 'Caixa de Entrada' : 'Pendências de O.S.';
     renderDetail(null);
-    
+
     if (tab === 'inbox') {
         if (inboxData.length === 0) {
             loadInbox();
@@ -275,12 +276,12 @@ function selectItem(id) {
 
     const data = activeTab === 'inbox' ? inboxData : pendenciasData;
     const item = data.find(x => (activeTab === 'inbox' ? x.id === id : x.os === id));
-    
+
     // Armazenar email selecionado para uso posterior
     if (activeTab === 'inbox' && item) {
         currentSelectedEmail = item;
     }
-    
+
     renderDetail(item);
 }
 
@@ -320,28 +321,28 @@ function parseOsAno(subject) {
 // Helper function: Remove thread antigos (corta em "De:" ou "From:")
 function stripThread(body) {
     if (!body) return '';
-    
+
     // Procura por linha iniciando com "De:" ou "From:"
     const lines = body.split('\n');
     const cutIndex = lines.findIndex(line => {
         const trimmed = line.trim();
         return trimmed.startsWith('De:') || trimmed.startsWith('From:');
     });
-    
+
     if (cutIndex !== -1) {
         return lines.slice(0, cutIndex).join('\n');
     }
-    
+
     return body;
 }
 
 function renderInboxDetail(email, container) {
     // Parse OS e Ano do assunto
     const { os, ano } = parseOsAno(email.subject);
-    
+
     // Remove thread do corpo
     const cleanBody = stripThread(email.body);
-    
+
     let attachmentsHtml = '';
 
     // Anexos Dinâmicos
@@ -446,19 +447,19 @@ async function enviarParaExecucao() {
     const situacao = document.getElementById('inbox-situacao').value;
     const setor = document.getElementById('inbox-setor').value;
     const observacao = document.getElementById('inbox-obs').value;
-    
+
     if (!os || !ano) {
         alert('Preencha os campos NrOS e Ano');
         return;
     }
-    
+
     // Pegar o entry_id do email selecionado
     const emailEntryId = currentSelectedEmail ? currentSelectedEmail.real_id : null;
-    
+
     try {
         const response = await fetch(`${API_BASE_URL}/email/andamento`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 os, ano, situacao, setor,
                 observacao: observacao || '',
@@ -466,31 +467,31 @@ async function enviarParaExecucao() {
                 email_entry_id: emailEntryId
             })
         });
-        
+
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || 'Erro ao enviar');
         }
-        
+
         const result = await response.json();
-        
+
         // Verificar se houve problema com Outlook
         if (result.outlook_updated === false) {
             showToast('Andamento lançado, mas não foi possível marcar o e-mail no Outlook');
         } else {
             showToast('Andamento criado e e-mail marcado como lido!');
         }
-        
+
         console.log('Andamento criado:', result);
-        
+
         // Limpar campos
         document.getElementById('inbox-obs').value = '';
-        
+
         // Recarregar inbox após 1 segundo
         setTimeout(() => {
             loadInbox(true);
         }, 1000);
-        
+
     } catch (e) {
         console.error('Erro:', e);
         alert('Erro ao enviar para execução: ' + e.message);
@@ -499,7 +500,7 @@ async function enviarParaExecucao() {
 
 function renderPendenciaDetail(osItem, container) {
     currentEmailHTML = ''; // Reset
-    
+
     container.innerHTML = `
         <div style="display: flex; flex-direction: column; height: 100%;">
             <!-- Form Superior: 1/5 -->
@@ -558,17 +559,17 @@ function renderPendenciaDetail(osItem, container) {
             </div>
         </div>
     `;
-    
+
     // Carregar HTML automaticamente
     loadEmailPreview(osItem.os, osItem.ano);
 }
 
 async function loadEmailPreview(os, ano) {
     const previewContainer = document.getElementById('email-preview-container');
-    
+
     try {
         const response = await fetch(`${API_BASE_URL}/email/pt-html/${ano}/${os}`);
-        
+
         if (!response.ok) {
             const error = await response.json();
             previewContainer.innerHTML = `
@@ -580,13 +581,35 @@ async function loadEmailPreview(os, ano) {
             `;
             return;
         }
-        
+
         const data = await response.json();
         currentEmailHTML = data.html;
-        
+        currentEmailType = data.type || 'pt';
+
         // Renderizar HTML na prévia
         previewContainer.innerHTML = data.html;
-        
+
+        // Feedback visual do tipo (discreto)
+        // Feedback visual do tipo (discreto)
+        if (currentEmailType === 'proof') {
+            // Injetar um aviso no container se for prova
+            const aviso = document.createElement('div');
+            aviso.style.cssText = "background:#fff3cd; color:#856404; padding:10px; text-align:center; font-size:12px; border-bottom:1px solid #ffeeba;";
+
+            let fileMsg = 'O último PDF da pasta será anexado automaticamente.';
+            if (data.detected_attachment) {
+                fileMsg = `Anexo automático: <strong>${data.detected_attachment}</strong>`;
+            } else {
+                fileMsg = `<strong>Atenção:</strong> Nenhum PDF encontrado.<br><small style="opacity:0.8">Procurado em: ${data.search_path || '?'}</small>`;
+                aviso.style.color = "#721c24";
+                aviso.style.backgroundColor = "#f8d7da";
+                aviso.style.borderColor = "#f5c6cb";
+            }
+
+            aviso.innerHTML = `<i class="fas fa-file-pdf"></i> Modo: <strong>Envio de Prova</strong> - ${fileMsg}`;
+            previewContainer.insertBefore(aviso, previewContainer.firstChild);
+        }
+
         // Se houver versão salva, preencher automaticamente
         if (data.versao) {
             const versaoInput = document.getElementById('pend-versao');
@@ -594,13 +617,13 @@ async function loadEmailPreview(os, ano) {
                 versaoInput.value = data.versao;
             }
         }
-        
+
         console.log('HTML carregado com sucesso:', {
             versao: data.versao,
             data: data.data,
             tamanho: data.html.length
         });
-        
+
     } catch (err) {
         console.error('Erro ao carregar prévia:', err);
         previewContainer.innerHTML = `
@@ -620,23 +643,23 @@ async function enviarEmailPendencia() {
     const emailDep = document.getElementById('pend-email-dep').value.trim();
     const emailGab = document.getElementById('pend-email-gab').value.trim();
     const emailContato = document.getElementById('pend-email-contato').value.trim();
-    
+
     // Validações
     if (!versao) {
         alert('Preencha o número da versão (ex: 1, 2, 3...)');
         document.getElementById('pend-versao').focus();
         return;
     }
-    
+
     // Montar lista de destinatários (remover vazios)
     const destinatarios = [emailDep, emailGab, emailContato].filter(e => e !== '');
-    
+
     if (destinatarios.length === 0) {
         alert('Preencha pelo menos um e-mail de destinatário');
         document.getElementById('pend-email-dep').focus();
         return;
     }
-    
+
     // Validar formato de e-mails
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     for (const email of destinatarios) {
@@ -645,45 +668,53 @@ async function enviarEmailPendencia() {
             return;
         }
     }
-    
+
     try {
         // Usar novo endpoint que busca HTML do banco e registra andamento
         const response = await fetch(`${API_BASE_URL}/email/send-pt`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 os: os,
                 ano: ano,
                 versao: versao,
                 to: destinatarios,
-                ponto: currentUser
+                ponto: currentUser,
+                type: currentEmailType
             })
         });
-        
+
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || 'Erro ao enviar e-mail');
         }
-        
+
         const result = await response.json();
-        
+
         // Mostrar confirmação de sucesso
-        showToast('E-mail enviado com sucesso!');
-        
+        let msg = 'E-mail enviado com sucesso!';
+        if (result.attachments && result.attachments.length > 0) {
+            msg += '\nAnexo(s): ' + result.attachments.join(', ');
+        }
+
+        showToast(msg);
+        alert(msg); // Reforço também com alert como solicitado para ver o nome
+
         console.log('Email enviado:', result);
         console.log('Assunto:', result.subject);
-        
+        console.log('Anexos:', result.attachments);
+
         // Limpar campos
         document.getElementById('pend-versao').value = '';
         document.getElementById('pend-email-dep').value = '';
         document.getElementById('pend-email-gab').value = '';
         document.getElementById('pend-email-contato').value = '';
-        
+
         // Recarregar pendências após 1 segundo
         setTimeout(() => {
             loadPendencias();
         }, 1000);
-        
+
     } catch (e) {
         console.error('Erro:', e);
         alert('Erro ao enviar e-mail: ' + e.message);

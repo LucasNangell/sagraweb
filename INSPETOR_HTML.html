@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Inspetor de HTML - Email OFT</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #007bff;
+            padding-bottom: 10px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-left: 4px solid #007bff;
+            border-radius: 3px;
+        }
+        .section h2 {
+            margin-top: 0;
+            color: #007bff;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px 5px 5px 0;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .form-group {
+            margin: 10px 0;
+        }
+        label {
+            display: block;
+            margin: 10px 0 5px 0;
+            font-weight: bold;
+            color: #333;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+        textarea {
+            min-height: 100px;
+            font-family: monospace;
+        }
+        .output-container {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 3px;
+            margin: 10px 0;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .html-preview {
+            background: white;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            margin: 10px 0;
+        }
+        .code {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 3px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+        }
+        .success {
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            color: #2e7d32;
+        }
+        .error {
+            background: #ffebee;
+            border-left: 4px solid #f44336;
+            color: #c62828;
+        }
+        .warning {
+            background: #fff3e0;
+            border-left: 4px solid #ff9800;
+            color: #e65100;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background: #f5f5f5;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Inspetor de HTML - Email de Problemas Técnicos</h1>
+        
+        <div class="section">
+            <h2>1. Gerar HTML de Teste</h2>
+            <p>Digite os problemas técnicos e veja como o HTML será gerado:</p>
+            
+            <div class="form-group">
+                <label>Numero de Problemas:</label>
+                <input type="number" id="numProblemas" value="3" min="1" max="10">
+            </div>
+            
+            <div id="problemas-container"></div>
+            
+            <button onclick="gerarProblemas()">Gerar Campos de Entrada</button>
+            <button onclick="gerarHTML()" style="background: #28a745;">Gerar HTML</button>
+            <button onclick="limpar()" style="background: #6c757d;">Limpar Tudo</button>
+        </div>
+        
+        <div class="section">
+            <h2>2. HTML Gerado</h2>
+            <div id="resultado-html" style="display: none;">
+                <div class="info-box success">
+                    <strong>HTML foi gerado com sucesso!</strong> Veja a visualizacao abaixo.
+                </div>
+                
+                <div>
+                    <h3>Codigo HTML (copiar para BD):</h3>
+                    <div class="code" id="html-code"></div>
+                    <button onclick="copiarHTML()" style="background: #17a2b8;">Copiar para Clipboard</button>
+                </div>
+                
+                <div>
+                    <h3>Visualizacao do HTML (como vai aparecer no email):</h3>
+                    <div class="html-preview" id="html-preview"></div>
+                </div>
+            </div>
+            
+            <div id="resultado-vazio" style="display: none;">
+                <div class="info-box warning">
+                    Nenhum HTML foi gerado. Preencha os campos acima e clique em "Gerar HTML".
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>3. Inspecionar BD Atual</h2>
+            <p>Para ver qual HTML esta salvo no banco de dados para a OS, execute a query SQL:</p>
+            
+            <div class="form-group">
+                <label>Numero da OS:</label>
+                <input type="number" id="os-numero" value="2562" placeholder="Exemplo: 2562">
+            </div>
+            
+            <div class="form-group">
+                <label>Ano:</label>
+                <input type="number" id="os-ano" value="2025" placeholder="Exemplo: 2025">
+            </div>
+            
+            <button onclick="gerarQuerySQL()" style="background: #ffc107; color: #333;">Gerar Query SQL</button>
+            
+            <div id="sql-query" style="display: none; margin-top: 10px;">
+                <h4>Query para executar no MySQL:</h4>
+                <div class="code" id="sql-code"></div>
+                <button onclick="copiarSQL()" style="background: #17a2b8;">Copiar Query</button>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>4. Teste de Conectividade com Backend</h2>
+            <p>Verificar se a funcao de gerar HTML esta disponível no backend:</p>
+            
+            <button onclick="testarBackend()" style="background: #6c757d;">Testar Backend</button>
+            <div id="teste-backend" style="margin-top: 10px; display: none;"></div>
+        </div>
+        
+        <div class="section">
+            <h2>5. Instrucoes</h2>
+            <ol>
+                <li><strong>Gerar HTML de Teste:</strong> Preencha os problemas na secao 1 e clique "Gerar HTML"</li>
+                <li><strong>Ver HTML no BD:</strong> Use a secao 3 para gerar a query SQL e execute no MySQL Workbench</li>
+                <li><strong>Comparar:</strong> Compare o HTML gerado na secao 2 com o que esta no BD</li>
+                <li><strong>Se diferentes:</strong> Pode haver problema na funcao de geracao ou na insercao no BD</li>
+                <li><strong>Se igual:</strong> O sistema esta gerando e salvando o HTML corretamente!</li>
+            </ol>
+        </div>
+    </div>
+    
+    <script>
+        // Configurar porta
+        window.SAGRA_API_PORT = 8001;
+    </script>
+    
+    <!-- Carregar script de integracao -->
+    <script src="email_oft_integration.js"></script>
+    
+    <script>
+        function gerarProblemas() {
+            const num = parseInt(document.getElementById('numProblemas').value) || 3;
+            let html = '';
+            
+            for (let i = 1; i <= num; i++) {
+                html += `
+                    <div class="form-group">
+                        <label>Problema ${i} - Titulo:</label>
+                        <input type="text" class="problema-titulo" placeholder="Ex: Problema com Layout" value="Problema ${i}">
+                    </div>
+                    <div class="form-group">
+                        <label>Problema ${i} - Observação:</label>
+                        <textarea class="problema-obs" placeholder="Descreva o problema...">Descricao do Problema ${i}</textarea>
+                    </div>
+                `;
+            }
+            
+            document.getElementById('problemas-container').innerHTML = html;
+        }
+        
+        function gerarHTML() {
+            const titulos = document.querySelectorAll('.problema-titulo');
+            const obs = document.querySelectorAll('.problema-obs');
+            
+            if (titulos.length === 0) {
+                alert('Clique em "Gerar Campos de Entrada" primeiro');
+                return;
+            }
+            
+            const problemas = [];
+            for (let i = 0; i < titulos.length; i++) {
+                if (titulos[i].value.trim() || obs[i].value.trim()) {
+                    problemas.push({
+                        titulo: titulos[i].value.trim() || `Problema ${i+1}`,
+                        obs: obs[i].value.trim() || ''
+                    });
+                }
+            }
+            
+            if (problemas.length === 0) {
+                document.getElementById('resultado-vazio').style.display = 'block';
+                document.getElementById('resultado-html').style.display = 'none';
+                return;
+            }
+            
+            // Chamar funcao do backend (se disponível) ou simular
+            if (typeof PT_Email_OFT !== 'undefined') {
+                // Usar funcao real do backend
+                fetch(`${API_BASE}/debug/gerar-html-problemas`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ problemas: problemas })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.html) {
+                        mostrarHTML(data.html);
+                    }
+                })
+                .catch(err => {
+                    console.log('Funcao backend nao disponível, usando funcao local');
+                    mostrarHTML(simularGeracaoHTML(problemas));
+                });
+            } else {
+                // Simular funcao
+                mostrarHTML(simularGeracaoHTML(problemas));
+            }
+        }
+        
+        function simularGeracaoHTML(problemas) {
+            let html = '<div style="font-family: Calibri, Arial, sans-serif; color: #333;">\n';
+            
+            problemas.forEach((p, i) => {
+                html += `
+        <div style="margin-bottom: 20px; padding: 15px; background-color: #f9f9f9; border-left: 4px solid #953735;">
+            <h4 style="margin: 0 0 10px 0; color: #953735; font-size: 14px;">
+                ${i + 1}. ${escapeHtml(p.titulo)}
+            </h4>
+            <p style="margin: 0; color: #333; line-height: 1.5; font-size: 13px;">
+                ${escapeHtml(p.obs)}
+            </p>
+        </div>
+`;
+            });
+            
+            html += '</div>';
+            return html;
+        }
+        
+        function mostrarHTML(html) {
+            document.getElementById('resultado-html').style.display = 'block';
+            document.getElementById('resultado-vazio').style.display = 'none';
+            document.getElementById('html-code').textContent = html;
+            document.getElementById('html-preview').innerHTML = html;
+        }
+        
+        function copiarHTML() {
+            const html = document.getElementById('html-code').textContent;
+            navigator.clipboard.writeText(html).then(() => {
+                alert('HTML copiado para clipboard!');
+            });
+        }
+        
+        function gerarQuerySQL() {
+            const os = document.getElementById('os-numero').value;
+            const ano = document.getElementById('os-ano').value;
+            
+            const query = `SELECT 
+    NroProtocolo,
+    AnoProtocolo,
+    email_pt_versao,
+    email_pt_data,
+    CHAR_LENGTH(email_pt_html) as tamanho_html,
+    LEFT(email_pt_html, 500) as primeiros_500_chars,
+    email_pt_html as html_completo
+FROM tabProtocolos
+WHERE NroProtocolo = ${os} AND AnoProtocolo = ${ano};`;
+            
+            document.getElementById('sql-code').textContent = query;
+            document.getElementById('sql-query').style.display = 'block';
+        }
+        
+        function copiarSQL() {
+            const query = document.getElementById('sql-code').textContent;
+            navigator.clipboard.writeText(query).then(() => {
+                alert('Query copiada para clipboard!');
+            });
+        }
+        
+        function testarBackend() {
+            const resultado = document.getElementById('teste-backend');
+            resultado.style.display = 'block';
+            resultado.innerHTML = 'Testando...';
+            
+            if (typeof PT_Email_OFT === 'undefined') {
+                resultado.innerHTML = '<div class="info-box error">Erro: PT_Email_OFT nao foi carregado. Recarregue a pagina.</div>';
+                return;
+            }
+            
+            resultado.innerHTML = '<div class="info-box success">OK: Modulo PT_Email_OFT carregado e disponível</div>';
+        }
+        
+        function limpar() {
+            document.getElementById('problemas-container').innerHTML = '';
+            document.getElementById('resultado-html').style.display = 'none';
+            document.getElementById('resultado-vazio').style.display = 'none';
+            document.getElementById('sql-query').style.display = 'none';
+            document.getElementById('teste-backend').style.display = 'none';
+        }
+        
+        function escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+        
+        // Carregar campos ao abrir
+        window.addEventListener('load', () => {
+            gerarProblemas();
+        });
+    </script>
+</body>
+</html>

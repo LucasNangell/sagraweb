@@ -19,6 +19,10 @@ from fastapi.responses import StreamingResponse
 from fpdf import FPDF
 import io
 
+# Body models para requisições
+class FinalizeAnalysisRequest(BaseModel):
+    versao: Optional[str] = "1"
+
 # Removed HTMLPDF class
 templates = Jinja2Templates(directory="templates")
 
@@ -87,6 +91,83 @@ def save_analise(req: AnaliseRequest):
         return {"status": "success", "analise_id": result['id']}
     except Exception as e:
         logger.error(f"Erro salvando analise: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/analise/finalize/{ano}/{os_id}")
+def finalize_analysis(ano: int, os_id: int, request: FinalizeAnalysisRequest):
+    """
+    Finaliza a análise gerando HTML dos problemas técnicos e salvando no banco de dados.
+    Este endpoint é chamado quando o usuário clica em "Concluir" na tela de análise.
+    """
+    try:
+        # Obter versao do request body
+        versao = request.versao if request.versao else "1"
+        
+        # Garantir que versao nunca seja None
+        if not versao or versao.strip() == "":
+            versao = "1"
+        versao = versao.strip()
+        
+        logger.info(f"POST /analise/finalize/{ano}/{os_id} - Finalizando análise com versao: {versao}")
+        
+        # Buscar todos os itens da análise
+        header = db.execute_query(
+            "SELECT ID FROM tabAnalises WHERE OS=%s AND Ano=%s", 
+            (os_id, ano)
+        )
+        
+        if not header:
+            raise HTTPException(status_code=404, detail="Análise não encontrada")
+        
+        anl_id = header[0]['ID']
+        
+        # Buscar problemas da análise
+        items = db.execute_query("""
+            SELECT i.ID as uniqueId, i.ID_ProblemaPadrao as originalId, i.Obs as obs, 
+                   i.HTML_Snapshot as html, i.Componente as componenteOrigem, 
+                   i.ResolucaoObrigatoria as resolucaoObrigatoria, p.TituloPT as titulo
+            FROM tabAnaliseItens i 
+            LEFT JOIN tabProblemasPadrao p ON i.ID_ProblemaPadrao = p.ID 
+            WHERE i.ID_Analise = %s
+        """, (anl_id,))
+        
+        if not items:
+            logger.warning(f"Análise {os_id}/{ano} finalizada sem problemas identificados")
+            html_problemas = "<p>Nenhum problema técnico foi identificado na análise.</p>"
+        else:
+            # Gerar HTML formatado com os problemas
+            problemas_para_html = [
+                {
+                    'titulo': item.get('titulo', f'Problema {i+1}'),
+                    'obs': item.get('obs', '')
+                }
+                for i, item in enumerate(items)
+            ]
+            
+            # Importar função de email_routes
+            from . import email_routes
+            html_problemas = email_routes._generate_problemas_html(problemas_para_html)
+            logger.info(f"HTML dos problemas gerado com {len(html_problemas)} bytes")
+        
+        # Salvar HTML no banco de dados na tabProtocolos
+        logger.info(f"Atualizando tabProtocolos para NroProtocolo={os_id}, AnoProtocolo={ano}")
+        resultado = db.execute_query("""
+            UPDATE tabProtocolos 
+            SET email_pt_html = %s, email_pt_versao = %s, email_pt_data = NOW()
+            WHERE NroProtocolo = %s AND AnoProtocolo = %s
+        """, (html_problemas, versao, os_id, ano))
+        logger.info(f"Resultado UPDATE: {resultado} - Análise finalizada para OS {os_id}/{ano}")
+        
+        return {
+            "status": "success",
+            "message": "Análise finalizada e HTML dos problemas técnicos gerado",
+            "html_preview": html_problemas[:200] + "..." if len(html_problemas) > 200 else html_problemas
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao finalizar análise: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/analise/ensure")
@@ -391,7 +472,10 @@ def client_upload_files(
         comp_map = json.loads(componentes) 
         
         # 1. Determinar Caminho da OS (Rede ou Local)
-        base_path_network = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_{ano}"
+        if os_id >= 5000:
+            base_path_network = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_Papelaria_{ano}"
+        else:
+            base_path_network = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_{ano}"
         os_pattern = os.path.join(base_path_network, f"{os_id:05d}*")
         found_folders = glob.glob(os_pattern)
         

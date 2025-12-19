@@ -1,0 +1,4329 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<?xml-stylesheet type="text/xsl" href="\\CTPFILA\Stylesheets$\JobTickets.xslt"?>
+<XPoseTicketsDS xmlns="http://Luscher.co.uk/jobticket.xsd">
+  <VersionInfo>
+    <Major>1</Major>
+    <Minor>5</Minor>
+    <Revision>0</Revision>
+  </VersionInfo>
+  <XPoseTicket>
+    <Name>02327-K-Miolo_LivretoA5.pdf</Name>
+    <Template>Apogee Komori IBF_Fast</Template>
+    <TemplateType>Single</TemplateType>
+    <Priority>5</Priority>
+    <Status>Ready</Status>
+    <LaserOffset>3</LaserOffset>
+    <HotPlateOn>true</HotPlateOn>
+    <HotPlateInside>true</HotPlateInside>
+    <PixelDoubling>false</PixelDoubling>
+    <CountPlates>true</CountPlates>
+    <LoadBalancingReturnable>false</LoadBalancingReturnable>
+    <MediaName>Komori_760x605</MediaName>
+    <MediaWidth>760</MediaWidth>
+    <MediaHeight>605</MediaHeight>
+    <MediaThickness>0.3</MediaThickness>
+    <Invert>true</Invert>
+    <Burnout>true</Burnout>
+    <MirrorX>false</MirrorX>
+    <MirrorY>true</MirrorY>
+    <Created>2025-12-10T19:49:29.84375-03:00</Created>
+    <MergeOperator>Or</MergeOperator>
+    <Single>
+      <Along>0</Along>
+      <Around>0</Around>
+    </Single>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>02327-K-Miolo_LivretoA5.pdf (C) (Cad 1).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>02327-K-Miolo_LivretoA5.pdf (M) (Cad 1).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>02327-K-Miolo_LivretoA5.pdf (Y) (Cad 1).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>02327-K-Miolo_LivretoA5.pdf (K) (Cad 1).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+  </XPoseTicket>
+  <XPoseTicket>
+    <Name>2025_OS 02410-K-Livro 160x230</Name>
+    <Template>Apogee Komori IBF_Fast</Template>
+    <TemplateType>Single</TemplateType>
+    <Priority>5</Priority>
+    <Status>Ready</Status>
+    <LaserOffset>3</LaserOffset>
+    <HotPlateOn>true</HotPlateOn>
+    <HotPlateInside>true</HotPlateInside>
+    <PixelDoubling>false</PixelDoubling>
+    <CountPlates>true</CountPlates>
+    <LoadBalancingReturnable>false</LoadBalancingReturnable>
+    <MediaName>Komori_760x605</MediaName>
+    <MediaWidth>760</MediaWidth>
+    <MediaHeight>605</MediaHeight>
+    <MediaThickness>0.3</MediaThickness>
+    <Invert>true</Invert>
+    <Burnout>true</Burnout>
+    <MirrorX>false</MirrorX>
+    <MirrorY>true</MirrorY>
+    <Created>2025-12-11T11:30:40.109375-03:00</Created>
+    <MergeOperator>Or</MergeOperator>
+    <Single>
+      <Along>0</Along>
+      <Around>0</Around>
+    </Single>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 1 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 1 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 1 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 1 B) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 1 B) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 1 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 2 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 2 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 2 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 3 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 3 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 3 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 4 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 4 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 4 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 4 B) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 4 B) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 4 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 5 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 5 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 5 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 5 B) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 5 B) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 5 B) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 5 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 6 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 6 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 6 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 6 B) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 6 B) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 6 B) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 6 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 7 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 7 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 7 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 7 B) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 7 B) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 7 B) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 7 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 8 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 8 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 8 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 8 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 8 B) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 8 B) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 8 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 9 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 9 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 9 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 9 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 9 B) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 9 B) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 9 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 10 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 10 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 10 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 10 B) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 10 B) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 10 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 11 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 11 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 11 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 11 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 11 B) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 11 B) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 11 B) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 11 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 12 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 12 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 12 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 12 B) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 12 B) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 12 B) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 12 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 13 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 13 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 13 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 13 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 13 B) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 13 B) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 13 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 14 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 14 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 14 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 14 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 14 B) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 14 B) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 14 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 15 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 15 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 15 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 15 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 15 B) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 15 B) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 15 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 16 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 16 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 16 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 16 B) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 16 B) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 16 B) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 16 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 17 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 17 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 17 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 17 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 17 B) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 17 B) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02410-K-Livro 160x230 (Cad 17 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+  </XPoseTicket>
+  <XPoseTicket>
+    <Name>02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF</Name>
+    <Template>Apogee Komori IBF_Fast</Template>
+    <TemplateType>Single</TemplateType>
+    <Priority>5</Priority>
+    <Status>Ready</Status>
+    <LaserOffset>3</LaserOffset>
+    <HotPlateOn>true</HotPlateOn>
+    <HotPlateInside>true</HotPlateInside>
+    <PixelDoubling>false</PixelDoubling>
+    <CountPlates>true</CountPlates>
+    <LoadBalancingReturnable>false</LoadBalancingReturnable>
+    <MediaName>Komori_760x605</MediaName>
+    <MediaWidth>760</MediaWidth>
+    <MediaHeight>605</MediaHeight>
+    <MediaThickness>0.3</MediaThickness>
+    <Invert>true</Invert>
+    <Burnout>true</Burnout>
+    <MirrorX>false</MirrorX>
+    <MirrorY>true</MirrorY>
+    <Created>2025-12-11T14:50:47.140625-03:00</Created>
+    <MergeOperator>Or</MergeOperator>
+    <Single>
+      <Along>0</Along>
+      <Around>0</Around>
+    </Single>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 1) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 1) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 1) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 1) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 2) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 2) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 2) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 2) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 3) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 3) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 3) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 3) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 4) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 4) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 4) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 4) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 5) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 5) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 5) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 5) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 6) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 6) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 6) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 6) 02386-H-RibamarSilva-LivretoCapa_LeiMa - Miolo.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+  </XPoseTicket>
+  <XPoseTicket>
+    <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir</Name>
+    <Template>Apogee Komori IBF_Fast</Template>
+    <TemplateType>Single</TemplateType>
+    <Priority>5</Priority>
+    <Status>Ready</Status>
+    <LaserOffset>3</LaserOffset>
+    <HotPlateOn>true</HotPlateOn>
+    <HotPlateInside>true</HotPlateInside>
+    <PixelDoubling>false</PixelDoubling>
+    <CountPlates>true</CountPlates>
+    <LoadBalancingReturnable>false</LoadBalancingReturnable>
+    <MediaName>Komori_760x605</MediaName>
+    <MediaWidth>760</MediaWidth>
+    <MediaHeight>605</MediaHeight>
+    <MediaThickness>0.3</MediaThickness>
+    <Invert>true</Invert>
+    <Burnout>true</Burnout>
+    <MirrorX>false</MirrorX>
+    <MirrorY>true</MirrorY>
+    <Created>2025-12-12T10:10:05.40625-03:00</Created>
+    <MergeOperator>Or</MergeOperator>
+    <Single>
+      <Along>0</Along>
+      <Around>0</Around>
+    </Single>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 1 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 1 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 1 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 1 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 1 B) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 1 B) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 1 B) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 1 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 2 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 2 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 2 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 2 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 2 B) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 2 B) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 2 B) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 2 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 3 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 3 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 3 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 3 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 3 B) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 3 B) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 3 B) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 3 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 4 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 4 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 4 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-Coedi-RevistaCapa_OsDir (Cad 4 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+  </XPoseTicket>
+  <XPoseTicket>
+    <Name>2025_OS 02400-K-02400-Coedi-RevistaCapa_Capa</Name>
+    <Template>Apogee Komori IBF_Fast</Template>
+    <TemplateType>Single</TemplateType>
+    <Priority>5</Priority>
+    <Status>Ready</Status>
+    <LaserOffset>3</LaserOffset>
+    <HotPlateOn>true</HotPlateOn>
+    <HotPlateInside>true</HotPlateInside>
+    <PixelDoubling>false</PixelDoubling>
+    <CountPlates>true</CountPlates>
+    <LoadBalancingReturnable>false</LoadBalancingReturnable>
+    <MediaName>Komori_760x605</MediaName>
+    <MediaWidth>760</MediaWidth>
+    <MediaHeight>605</MediaHeight>
+    <MediaThickness>0.3</MediaThickness>
+    <Invert>true</Invert>
+    <Burnout>true</Burnout>
+    <MirrorX>false</MirrorX>
+    <MirrorY>true</MirrorY>
+    <Created>2025-12-12T10:17:56.359375-03:00</Created>
+    <MergeOperator>Or</MergeOperator>
+    <Single>
+      <Along>0</Along>
+      <Around>0</Around>
+    </Single>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-02400-Coedi-RevistaCapa_Capa (Cad 1 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-02400-Coedi-RevistaCapa_Capa (Cad 1 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-02400-Coedi-RevistaCapa_Capa (Cad 1 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-02400-Coedi-RevistaCapa_Capa (Cad 1 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-02400-Coedi-RevistaCapa_Capa (Cad 1 B) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-02400-Coedi-RevistaCapa_Capa (Cad 1 B) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-02400-Coedi-RevistaCapa_Capa (Cad 1 B) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02400-K-02400-Coedi-RevistaCapa_Capa (Cad 1 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+  </XPoseTicket>
+  <XPoseTicket>
+    <Name>02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF</Name>
+    <Template>Apogee Komori IBF_Fast</Template>
+    <TemplateType>Single</TemplateType>
+    <Priority>5</Priority>
+    <Status>Ready</Status>
+    <LaserOffset>3</LaserOffset>
+    <HotPlateOn>true</HotPlateOn>
+    <HotPlateInside>true</HotPlateInside>
+    <PixelDoubling>false</PixelDoubling>
+    <CountPlates>true</CountPlates>
+    <LoadBalancingReturnable>false</LoadBalancingReturnable>
+    <MediaName>Komori_760x605</MediaName>
+    <MediaWidth>760</MediaWidth>
+    <MediaHeight>605</MediaHeight>
+    <MediaThickness>0.3</MediaThickness>
+    <Invert>true</Invert>
+    <Burnout>true</Burnout>
+    <MirrorX>false</MirrorX>
+    <MirrorY>true</MirrorY>
+    <Created>2025-12-16T08:06:33.765625-03:00</Created>
+    <MergeOperator>Or</MergeOperator>
+    <Single>
+      <Along>0</Along>
+      <Around>0</Around>
+    </Single>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 1) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 1) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 1) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 1) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 2) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 2) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 2) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 2) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 3) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 3) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 3) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 3) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 4) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 4) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 4) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 4) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 5) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 5) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 5) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 5) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 6) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 6) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 6) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 6) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 7) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 7) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 7) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 7) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 8) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 8) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 8) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 8) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 9) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 9) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 9) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 9) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 10) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 10) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 10) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 10) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 11) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 11) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 11) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 11) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 12) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 12) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 12) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 12) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 13) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 13) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 13) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 13) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 14) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 14) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 14) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 14) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 15) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 15) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 15) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 15) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 16) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 16) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 16) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 16) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 17) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 17) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 17) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 17) 02464-K-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+  </XPoseTicket>
+  <XPoseTicket>
+    <Name>02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF</Name>
+    <Template>Apogee SM74 IBF_Fast</Template>
+    <TemplateType>Single</TemplateType>
+    <Priority>5</Priority>
+    <Status>Ready</Status>
+    <LaserOffset>3</LaserOffset>
+    <HotPlateOn>true</HotPlateOn>
+    <HotPlateInside>true</HotPlateInside>
+    <PixelDoubling>false</PixelDoubling>
+    <CountPlates>true</CountPlates>
+    <LoadBalancingReturnable>false</LoadBalancingReturnable>
+    <MediaName>SM74 e Catu</MediaName>
+    <MediaWidth>760</MediaWidth>
+    <MediaHeight>605</MediaHeight>
+    <MediaThickness>0.3</MediaThickness>
+    <Invert>true</Invert>
+    <Burnout>true</Burnout>
+    <MirrorX>false</MirrorX>
+    <MirrorY>true</MirrorY>
+    <Created>2025-12-16T08:11:58.21875-03:00</Created>
+    <MergeOperator>Or</MergeOperator>
+    <Single>
+      <Along>0</Along>
+      <Around>0</Around>
+    </Single>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 1) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 1) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 1) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 1) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 2) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 2) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 2) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 2) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 3) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 3) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 3) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 3) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 4) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 4) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 4) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 4) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 5) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 5) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 5) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 5) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 6) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 6) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 6) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 6) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 7) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 7) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 7) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 7) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 8) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 8) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 8) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 8) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 9) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 9) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 9) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 9) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 10) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 10) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 10) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 10) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 11) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 11) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 11) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 11) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 12) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 12) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 12) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 12) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 13) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 13) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 13) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 13) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 14) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 14) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 14) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 14) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 15) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 15) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 15) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 15) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 16) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 16) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 16) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 16) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 17) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 17) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 17) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 17) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 18) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 18) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 18) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 18) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 19) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 19) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 19) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 19) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 20) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 20) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 20) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 20) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+  </XPoseTicket>
+  <XPoseTicket>
+    <Name>02464-H-Livro_Miolo+TR04Pgs_LivretoA5-FV.PDF</Name>
+    <Template>Apogee SM74 IBF_Fast</Template>
+    <TemplateType>Single</TemplateType>
+    <Priority>5</Priority>
+    <Status>Ready</Status>
+    <LaserOffset>3</LaserOffset>
+    <HotPlateOn>true</HotPlateOn>
+    <HotPlateInside>true</HotPlateInside>
+    <PixelDoubling>false</PixelDoubling>
+    <CountPlates>true</CountPlates>
+    <LoadBalancingReturnable>false</LoadBalancingReturnable>
+    <MediaName>SM74 e Catu</MediaName>
+    <MediaWidth>760</MediaWidth>
+    <MediaHeight>605</MediaHeight>
+    <MediaThickness>0.3</MediaThickness>
+    <Invert>true</Invert>
+    <Burnout>true</Burnout>
+    <MirrorX>false</MirrorX>
+    <MirrorY>true</MirrorY>
+    <Created>2025-12-16T08:16:39.71875-03:00</Created>
+    <MergeOperator>Or</MergeOperator>
+    <Single>
+      <Along>0</Along>
+      <Around>0</Around>
+    </Single>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 1) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5-FV.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 1) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5-FV.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 1) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5-FV.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 1) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5-FV.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 2) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5-FV.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 2) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5-FV.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 2) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5-FV.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 2) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5-FV.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 3) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5-FV.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 3) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5-FV.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 3) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5-FV.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 3) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5-FV.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 4) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5-FV.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 4) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5-FV.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 4) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5-FV.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 4) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5-FV.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 5) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5-FV.PDF (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 5) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5-FV.PDF (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 5) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5-FV.PDF (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>(Cad 5) 02464-H-Livro_Miolo+TR04Pgs_LivretoA5-FV.PDF (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+  </XPoseTicket>
+  <XPoseTicket>
+    <Name>2025_OS 02464-K-DenisePessoa-Livro_Eca_Teste tinteiro</Name>
+    <Template>Apogee Komori IBF_Fast</Template>
+    <TemplateType>Single</TemplateType>
+    <Priority>5</Priority>
+    <Status>Ready</Status>
+    <LaserOffset>3</LaserOffset>
+    <HotPlateOn>true</HotPlateOn>
+    <HotPlateInside>true</HotPlateInside>
+    <PixelDoubling>false</PixelDoubling>
+    <CountPlates>true</CountPlates>
+    <LoadBalancingReturnable>false</LoadBalancingReturnable>
+    <MediaName>Komori_760x605</MediaName>
+    <MediaWidth>760</MediaWidth>
+    <MediaHeight>605</MediaHeight>
+    <MediaThickness>0.3</MediaThickness>
+    <Invert>true</Invert>
+    <Burnout>true</Burnout>
+    <MirrorX>false</MirrorX>
+    <MirrorY>true</MirrorY>
+    <Created>2025-12-16T13:02:15.296875-03:00</Created>
+    <MergeOperator>Or</MergeOperator>
+    <Single>
+      <Along>0</Along>
+      <Around>0</Around>
+    </Single>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02464-K-DenisePessoa-Livro_Eca_Teste tinteiro (Cad 1 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02464-K-DenisePessoa-Livro_Eca_Teste tinteiro (Cad 1 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02464-K-DenisePessoa-Livro_Eca_Teste tinteiro (Cad 1 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02464-K-DenisePessoa-Livro_Eca_Teste tinteiro (Cad 1 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02464-K-DenisePessoa-Livro_Eca_Teste tinteiro (Cad 1 B) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02464-K-DenisePessoa-Livro_Eca_Teste tinteiro (Cad 1 B) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02464-K-DenisePessoa-Livro_Eca_Teste tinteiro (Cad 1 B) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02464-K-DenisePessoa-Livro_Eca_Teste tinteiro (Cad 1 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+  </XPoseTicket>
+  <XPoseTicket>
+    <Name>2025_OS 02433-K-Folheto_A5</Name>
+    <Template>Apogee Komori IBF_Fast</Template>
+    <TemplateType>Single</TemplateType>
+    <Priority>5</Priority>
+    <Status>Ready</Status>
+    <LaserOffset>3</LaserOffset>
+    <HotPlateOn>true</HotPlateOn>
+    <HotPlateInside>true</HotPlateInside>
+    <PixelDoubling>false</PixelDoubling>
+    <CountPlates>true</CountPlates>
+    <LoadBalancingReturnable>false</LoadBalancingReturnable>
+    <MediaName>Komori_760x605</MediaName>
+    <MediaWidth>760</MediaWidth>
+    <MediaHeight>605</MediaHeight>
+    <MediaThickness>0.3</MediaThickness>
+    <Invert>true</Invert>
+    <Burnout>true</Burnout>
+    <MirrorX>false</MirrorX>
+    <MirrorY>true</MirrorY>
+    <Created>2025-12-16T14:50:44.6875-03:00</Created>
+    <MergeOperator>Or</MergeOperator>
+    <Single>
+      <Along>0</Along>
+      <Around>0</Around>
+    </Single>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02433-K-Folheto_A5 (Cad 1 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02433-K-Folheto_A5 (Cad 1 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02433-K-Folheto_A5 (Cad 1 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02433-K-Folheto_A5 (Cad 1 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+  </XPoseTicket>
+  <XPoseTicket>
+    <Name>2025_OS 02447-K-ClarissaTercio-Folheto_Presta</Name>
+    <Template>Apogee Komori IBF_Fast</Template>
+    <TemplateType>Single</TemplateType>
+    <Priority>5</Priority>
+    <Status>Ready</Status>
+    <LaserOffset>3</LaserOffset>
+    <HotPlateOn>true</HotPlateOn>
+    <HotPlateInside>true</HotPlateInside>
+    <PixelDoubling>false</PixelDoubling>
+    <CountPlates>true</CountPlates>
+    <LoadBalancingReturnable>false</LoadBalancingReturnable>
+    <MediaName>Komori_760x605</MediaName>
+    <MediaWidth>760</MediaWidth>
+    <MediaHeight>605</MediaHeight>
+    <MediaThickness>0.3</MediaThickness>
+    <Invert>true</Invert>
+    <Burnout>true</Burnout>
+    <MirrorX>false</MirrorX>
+    <MirrorY>true</MirrorY>
+    <Created>2025-12-17T06:42:57.234375-03:00</Created>
+    <MergeOperator>Or</MergeOperator>
+    <Single>
+      <Along>0</Along>
+      <Around>0</Around>
+    </Single>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02447-K-ClarissaTercio-Folheto_Presta (Cad 1 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02447-K-ClarissaTercio-Folheto_Presta (Cad 1 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02447-K-ClarissaTercio-Folheto_Presta (Cad 1 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02447-K-ClarissaTercio-Folheto_Presta (Cad 1 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+  </XPoseTicket>
+  <XPoseTicket>
+    <Name>2025_OS 02447-K-ClarissaTercio-Folheto_Presta (1)</Name>
+    <Template>Apogee Komori IBF_Fast</Template>
+    <TemplateType>Single</TemplateType>
+    <Priority>5</Priority>
+    <Status>Ready</Status>
+    <LaserOffset>3</LaserOffset>
+    <HotPlateOn>true</HotPlateOn>
+    <HotPlateInside>true</HotPlateInside>
+    <PixelDoubling>false</PixelDoubling>
+    <CountPlates>true</CountPlates>
+    <LoadBalancingReturnable>false</LoadBalancingReturnable>
+    <MediaName>Komori_760x605</MediaName>
+    <MediaWidth>760</MediaWidth>
+    <MediaHeight>605</MediaHeight>
+    <MediaThickness>0.3</MediaThickness>
+    <Invert>true</Invert>
+    <Burnout>true</Burnout>
+    <MirrorX>false</MirrorX>
+    <MirrorY>true</MirrorY>
+    <Created>2025-12-17T06:48:02.59375-03:00</Created>
+    <MergeOperator>Or</MergeOperator>
+    <Single>
+      <Along>0</Along>
+      <Around>0</Around>
+    </Single>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02447-K-ClarissaTercio-Folheto_Presta (Cad 1 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02447-K-ClarissaTercio-Folheto_Presta (Cad 1 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02447-K-ClarissaTercio-Folheto_Presta (Cad 1 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02447-K-ClarissaTercio-Folheto_Presta (Cad 1 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+  </XPoseTicket>
+  <XPoseTicket>
+    <Name>2025_OS 02448-K-JandiraFeghali-Informativo_Inform</Name>
+    <Template>Apogee Komori IBF_Fast</Template>
+    <TemplateType>Single</TemplateType>
+    <Priority>5</Priority>
+    <Status>Ready</Status>
+    <LaserOffset>3</LaserOffset>
+    <HotPlateOn>true</HotPlateOn>
+    <HotPlateInside>true</HotPlateInside>
+    <PixelDoubling>false</PixelDoubling>
+    <CountPlates>true</CountPlates>
+    <LoadBalancingReturnable>false</LoadBalancingReturnable>
+    <MediaName>Komori_760x605</MediaName>
+    <MediaWidth>760</MediaWidth>
+    <MediaHeight>605</MediaHeight>
+    <MediaThickness>0.3</MediaThickness>
+    <Invert>true</Invert>
+    <Burnout>true</Burnout>
+    <MirrorX>false</MirrorX>
+    <MirrorY>true</MirrorY>
+    <Created>2025-12-18T09:41:29.984375-03:00</Created>
+    <MergeOperator>Or</MergeOperator>
+    <Single>
+      <Along>0</Along>
+      <Around>0</Around>
+    </Single>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02448-K-JandiraFeghali-Informativo_Inform (Cad 1 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02448-K-JandiraFeghali-Informativo_Inform (Cad 1 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02448-K-JandiraFeghali-Informativo_Inform (Cad 1 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02448-K-JandiraFeghali-Informativo_Inform (Cad 1 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+  </XPoseTicket>
+  <XPoseTicket>
+    <Name>2025_OS 02500-K-LuizCarlosBusato-LivretoCapa_Missao</Name>
+    <Template>Apogee Komori IBF_Fast</Template>
+    <TemplateType>Single</TemplateType>
+    <Priority>5</Priority>
+    <Status>Ready</Status>
+    <LaserOffset>3</LaserOffset>
+    <HotPlateOn>true</HotPlateOn>
+    <HotPlateInside>true</HotPlateInside>
+    <PixelDoubling>false</PixelDoubling>
+    <CountPlates>true</CountPlates>
+    <LoadBalancingReturnable>false</LoadBalancingReturnable>
+    <MediaName>Komori_760x605</MediaName>
+    <MediaWidth>760</MediaWidth>
+    <MediaHeight>605</MediaHeight>
+    <MediaThickness>0.3</MediaThickness>
+    <Invert>true</Invert>
+    <Burnout>true</Burnout>
+    <MirrorX>false</MirrorX>
+    <MirrorY>true</MirrorY>
+    <Created>2025-12-18T15:02:05.671875-03:00</Created>
+    <MergeOperator>Or</MergeOperator>
+    <Single>
+      <Along>0</Along>
+      <Around>0</Around>
+    </Single>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02500-K-LuizCarlosBusato-LivretoCapa_Missao (Cad 1 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02500-K-LuizCarlosBusato-LivretoCapa_Missao (Cad 1 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02500-K-LuizCarlosBusato-LivretoCapa_Missao (Cad 1 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02500-K-LuizCarlosBusato-LivretoCapa_Missao (Cad 1 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02500-K-LuizCarlosBusato-LivretoCapa_Missao (Cad 2 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02500-K-LuizCarlosBusato-LivretoCapa_Missao (Cad 2 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02500-K-LuizCarlosBusato-LivretoCapa_Missao (Cad 2 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02500-K-LuizCarlosBusato-LivretoCapa_Missao (Cad 2 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02500-K-LuizCarlosBusato-LivretoCapa_Missao (Cad 3 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02500-K-LuizCarlosBusato-LivretoCapa_Missao (Cad 3 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02500-K-LuizCarlosBusato-LivretoCapa_Missao (Cad 3 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02500-K-LuizCarlosBusato-LivretoCapa_Missao (Cad 3 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02500-K-LuizCarlosBusato-LivretoCapa_Missao (Cad 3 B) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02500-K-LuizCarlosBusato-LivretoCapa_Missao (Cad 3 B) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02500-K-LuizCarlosBusato-LivretoCapa_Missao (Cad 3 B) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02500-K-LuizCarlosBusato-LivretoCapa_Missao (Cad 3 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+  </XPoseTicket>
+  <XPoseTicket>
+    <Name>2025_OS 02480-PM-FrancianeBayer-Livro_Eca (1)</Name>
+    <Template>Apogee PM52 IBF_Fast</Template>
+    <TemplateType>Single</TemplateType>
+    <Priority>5</Priority>
+    <Status>Ready</Status>
+    <LaserOffset>3</LaserOffset>
+    <HotPlateOn>true</HotPlateOn>
+    <HotPlateInside>true</HotPlateInside>
+    <PixelDoubling>false</PixelDoubling>
+    <CountPlates>true</CountPlates>
+    <LoadBalancingReturnable>false</LoadBalancingReturnable>
+    <MediaName>PM52_525x459</MediaName>
+    <MediaWidth>525</MediaWidth>
+    <MediaHeight>459</MediaHeight>
+    <MediaThickness>0.15</MediaThickness>
+    <Invert>true</Invert>
+    <Burnout>true</Burnout>
+    <MirrorX>false</MirrorX>
+    <MirrorY>true</MirrorY>
+    <Created>2025-12-18T16:26:39.609375-03:00</Created>
+    <MergeOperator>Or</MergeOperator>
+    <Single>
+      <Along>0</Along>
+      <Around>0</Around>
+    </Single>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-PM-FrancianeBayer-Livro_Eca (Cad 11 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-PM-FrancianeBayer-Livro_Eca (Cad 11 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-PM-FrancianeBayer-Livro_Eca (Cad 11 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-PM-FrancianeBayer-Livro_Eca (Cad 11 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+  </XPoseTicket>
+  <XPoseTicket>
+    <Name>2025_OS 02480-SM-FrancianeBayer-Livro_Eca</Name>
+    <Template>Apogee SM74 IBF_Fast</Template>
+    <TemplateType>Single</TemplateType>
+    <Priority>5</Priority>
+    <Status>Printing</Status>
+    <LaserOffset>3</LaserOffset>
+    <HotPlateOn>true</HotPlateOn>
+    <HotPlateInside>true</HotPlateInside>
+    <PixelDoubling>false</PixelDoubling>
+    <CountPlates>true</CountPlates>
+    <LoadBalancingReturnable>false</LoadBalancingReturnable>
+    <MediaName>SM74 e Catu</MediaName>
+    <MediaWidth>760</MediaWidth>
+    <MediaHeight>605</MediaHeight>
+    <MediaThickness>0.3</MediaThickness>
+    <Invert>true</Invert>
+    <Burnout>true</Burnout>
+    <MirrorX>false</MirrorX>
+    <MirrorY>true</MirrorY>
+    <Created>2025-12-18T16:26:46.21875-03:00</Created>
+    <Printed>2025-12-18T19:00:11.484375-03:00</Printed>
+    <MergeOperator>Or</MergeOperator>
+    <MachineSerialNumber>2855</MachineSerialNumber>
+    <Single>
+      <Along>0</Along>
+      <Around>0</Around>
+    </Single>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 A) (K).tif</Name>
+      <Printed>2025-12-18T17:48:47.296875-03:00</Printed>
+      <Status>Printed</Status>
+      <Colour>K</Colour>
+      <HotPlateId Identifier="1218-1742-0154" />
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 B) (K).tif</Name>
+      <Printed>2025-12-18T17:55:07.40625-03:00</Printed>
+      <Status>Printed</Status>
+      <Colour>K</Colour>
+      <HotPlateId Identifier="1218-1748-0155" />
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 A) (K).tif</Name>
+      <Printed>2025-12-18T18:01:19.109375-03:00</Printed>
+      <Status>Printed</Status>
+      <Colour>K</Colour>
+      <HotPlateId Identifier="1218-1755-0156" />
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 B) (K).tif</Name>
+      <Printed>2025-12-18T18:07:30.75-03:00</Printed>
+      <Status>Printed</Status>
+      <Colour>K</Colour>
+      <HotPlateId Identifier="1218-1801-0157" />
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif</Name>
+      <Printed>2025-12-18T18:22:09.6875-03:00</Printed>
+      <Status>Printed</Status>
+      <Colour>K</Colour>
+      <HotPlateId Identifier="1218-1807-0158" />
+      <HotPlateId Identifier="1218-1816-0159" />
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 B) (K).tif</Name>
+      <Printed>2025-12-18T18:28:31.6875-03:00</Printed>
+      <Status>Printed</Status>
+      <Colour>K</Colour>
+      <HotPlateId Identifier="1218-1822-0160" />
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 A) (K).tif</Name>
+      <Printed>2025-12-18T18:35:01.375-03:00</Printed>
+      <Status>Printed</Status>
+      <Colour>K</Colour>
+      <HotPlateId Identifier="1218-1828-0161" />
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 B) (K).tif</Name>
+      <Printed>2025-12-18T18:41:33.96875-03:00</Printed>
+      <Status>Printed</Status>
+      <Colour>K</Colour>
+      <HotPlateId Identifier="1218-1835-0162" />
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 A) (K).tif</Name>
+      <Printed>2025-12-18T18:47:45.625-03:00</Printed>
+      <Status>Printed</Status>
+      <Colour>K</Colour>
+      <HotPlateId Identifier="1218-1841-0163" />
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 B) (K).tif</Name>
+      <Printed>2025-12-18T18:53:57.328125-03:00</Printed>
+      <Status>Printed</Status>
+      <Colour>K</Colour>
+      <HotPlateId Identifier="1218-1847-0164" />
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 6 A) (K).tif</Name>
+      <Printed>2025-12-18T19:00:11.484375-03:00</Printed>
+      <Status>Printed</Status>
+      <Colour>K</Colour>
+      <HotPlateId Identifier="1218-1854-0165" />
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 6 B) (K).tif</Name>
+      <Status>Printing</Status>
+      <Colour>K</Colour>
+      <HotPlateId Identifier="1218-1900-0166" />
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 7 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 7 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 8 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 8 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 9 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 9 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 10 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 10 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <History>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:42:29.96875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 A) (K).tif) ROM Base Version 7.4.1
+CTP Machine Version 5.02 Options 0x37
+Luscher Library Version 8.1.6
+Luscher DLL Version 2.5.6</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:42:30.171875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 A) (K).tif) Sending 'C:\Documents and Settings\sefoc\Configurações locais\Temp\tmp13E.tmp' ... </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:42:30.375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 A) (K).tif) Done</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:42:30.578125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 A) (K).tif) tplot -start luscherctp plot xresolution 2400.00 yresolution 2400.00 position 0.0 0.0 size 762.677 605.991 -stop -end -ctp -mbeam -DA -btl 2f08 -rev -invert -mirrorY -P 832 832 0 95 "\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 A) (K).tif" -inside -hotcount 53545 </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:42:30.78125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 A) (K).tif) Chan 0 using '\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 A) (K).tif'</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:42:30.984375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 A) (K).tif) Plot Linework (5) 70392 pixels 57164 lines</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:42:32-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 A) (K).tif) STATUS : S00 XPose! Offline (local mode)</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:42:46.25-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 A) (K).tif) STATUS : S20 Automatic plate centering...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:42:47.875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 A) (K).tif) Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:42:48.28125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 A) (K).tif) STATUS : S01 XPose! Online  (remote mode)</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:42:50.3125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 A) (K).tif) STATUS : S40 Adjusting focus...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:43:18.546875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 A) (K).tif) STATUS : S60 Exposing...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:43:21.1875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 A) (K).tif) Plot Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:48:46.796875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 A) (K).tif) Plot Finished OK</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:48:54.875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 B) (K).tif) ROM Base Version 7.4.1
+CTP Machine Version 5.02 Options 0x37
+Luscher Library Version 8.1.6
+Luscher DLL Version 2.5.6</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:48:55.078125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 B) (K).tif) Sending 'C:\Documents and Settings\sefoc\Configurações locais\Temp\tmp140.tmp' ... </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:48:55.296875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 B) (K).tif) Done</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:48:55.5-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 B) (K).tif) tplot -start luscherctp plot xresolution 2400.00 yresolution 2400.00 position 0.0 0.0 size 762.677 605.991 -stop -end -ctp -mbeam -DA -btl 2f08 -rev -invert -mirrorY -P 832 832 0 95 "\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 B) (K).tif" -inside -hotcount 53546 </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:48:55.703125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 B) (K).tif) Chan 0 using '\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 B) (K).tif'</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:48:55.90625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 B) (K).tif) Plot Linework (5) 70392 pixels 57164 lines</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:48:56.921875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 B) (K).tif) STATUS : S00 XPose! Offline (local mode)</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:49:15.046875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 B) (K).tif) STATUS : S20 Automatic plate centering...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:49:16.875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 B) (K).tif) Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:49:17.078125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 B) (K).tif) STATUS : S01 XPose! Online  (remote mode)</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:49:19.109375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 B) (K).tif) STATUS : S40 Adjusting focus...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:49:39.21875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 B) (K).tif) STATUS : S60 Exposing...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:49:41.25-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 B) (K).tif) Plot Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:55:06.875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 1 B) (K).tif) Plot Finished OK</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:55:15.203125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 A) (K).tif) ROM Base Version 7.4.1
+CTP Machine Version 5.02 Options 0x37
+Luscher Library Version 8.1.6
+Luscher DLL Version 2.5.6</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:55:15.40625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 A) (K).tif) Sending 'C:\Documents and Settings\sefoc\Configurações locais\Temp\tmp141.tmp' ... </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:55:15.609375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 A) (K).tif) Done</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:55:15.8125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 A) (K).tif) tplot -start luscherctp plot xresolution 2400.00 yresolution 2400.00 position 0.0 0.0 size 762.677 605.991 -stop -end -ctp -mbeam -DA -btl 2f08 -rev -invert -mirrorY -P 832 832 0 95 "\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 A) (K).tif" -inside -hotcount 53547 </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:55:16.015625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 A) (K).tif) Chan 0 using '\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 A) (K).tif'</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:55:16.21875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 A) (K).tif) Plot Linework (5) 70392 pixels 57164 lines</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:55:17.234375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 A) (K).tif) STATUS : S00 XPose! Offline (local mode)</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:55:33.484375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 A) (K).tif) STATUS : S20 Automatic plate centering...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:55:33.890625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 A) (K).tif) Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:55:35.515625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 A) (K).tif) STATUS : S40 Adjusting focus...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:55:49.53125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 A) (K).tif) STATUS : S60 Exposing...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T17:55:52.984375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 A) (K).tif) Plot Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:01:18.609375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 A) (K).tif) Plot Finished OK</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:01:27.046875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 B) (K).tif) ROM Base Version 7.4.1
+CTP Machine Version 5.02 Options 0x37
+Luscher Library Version 8.1.6
+Luscher DLL Version 2.5.6</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:01:27.25-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 B) (K).tif) Sending 'C:\Documents and Settings\sefoc\Configurações locais\Temp\tmp142.tmp' ... </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:01:27.453125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 B) (K).tif) Done</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:01:27.65625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 B) (K).tif) tplot -start luscherctp plot xresolution 2400.00 yresolution 2400.00 position 0.0 0.0 size 762.677 605.991 -stop -end -ctp -mbeam -DA -btl 2f08 -rev -invert -mirrorY -P 832 832 0 95 "\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 B) (K).tif" -inside -hotcount 53548 </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:01:27.859375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 B) (K).tif) Chan 0 using '\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 B) (K).tif'</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:01:28.0625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 B) (K).tif) Plot Linework (5) 70392 pixels 57164 lines</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:01:29.078125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 B) (K).tif) STATUS : S00 XPose! Offline (local mode)</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:01:45.328125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 B) (K).tif) STATUS : S20 Automatic plate centering...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:01:45.53125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 B) (K).tif) Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:01:47.359375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 B) (K).tif) STATUS : S40 Adjusting focus...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:02:01.375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 B) (K).tif) STATUS : S60 Exposing...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:02:04.625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 B) (K).tif) Plot Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:07:30.234375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 2 B) (K).tif) Plot Finished OK</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:07:38.390625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif) ROM Base Version 7.4.1
+CTP Machine Version 5.02 Options 0x37
+Luscher Library Version 8.1.6
+Luscher DLL Version 2.5.6</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:07:38.59375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif) Sending 'C:\Documents and Settings\sefoc\Configurações locais\Temp\tmp143.tmp' ... </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:07:38.796875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif) Done</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:07:39-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif) tplot -start luscherctp plot xresolution 2400.00 yresolution 2400.00 position 0.0 0.0 size 762.677 605.991 -stop -end -ctp -mbeam -DA -btl 2f08 -rev -invert -mirrorY -P 832 832 0 95 "\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif" -inside -hotcount 53549 </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:07:39.203125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif) Chan 0 using '\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif'</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:07:39.40625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif) Plot Linework (5) 70392 pixels 57164 lines</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:07:40.421875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif) STATUS : S00 XPose! Offline (local mode)</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:07:46.515625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif) ERROR : E10:0055  Error motor drive head crash protection active</Text>
+      </Event>
+      <Event>
+        <Type>Error</Type>
+        <Time>2025-12-18T18:07:47.171875-03:00</Time>
+        <Text>E10:0055 Error motor drive head crash protection active</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:16:22.1875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif) ROM Base Version 7.4.1
+CTP Machine Version 5.02 Options 0x37
+Luscher Library Version 8.1.6
+Luscher DLL Version 2.5.6</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:16:22.390625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif) Sending 'C:\Documents and Settings\sefoc\Configurações locais\Temp\tmp145.tmp' ... </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:16:22.59375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif) Done</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:16:22.796875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif) tplot -start luscherctp plot xresolution 2400.00 yresolution 2400.00 position 0.0 0.0 size 762.677 605.991 -stop -end -ctp -mbeam -DA -btl 2f08 -rev -invert -mirrorY -P 832 832 0 95 "\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif" -inside -hotcount 53549 </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:16:23-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif) Chan 0 using '\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif'</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:16:23.203125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif) Plot Linework (5) 70392 pixels 57164 lines</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:16:23.40625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif) Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:16:24.21875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif) STATUS : S40 Adjusting focus...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:16:40.484375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif) STATUS : S60 Exposing...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:16:43.53125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif) Plot Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:22:09.15625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 A) (K).tif) Plot Finished OK</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:22:17.546875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 B) (K).tif) ROM Base Version 7.4.1
+CTP Machine Version 5.02 Options 0x37
+Luscher Library Version 8.1.6
+Luscher DLL Version 2.5.6</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:22:17.75-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 B) (K).tif) Sending 'C:\Documents and Settings\sefoc\Configurações locais\Temp\tmp146.tmp' ... </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:22:17.953125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 B) (K).tif) Done</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:22:18.15625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 B) (K).tif) tplot -start luscherctp plot xresolution 2400.00 yresolution 2400.00 position 0.0 0.0 size 762.677 605.991 -stop -end -ctp -mbeam -DA -btl 2f08 -rev -invert -mirrorY -P 832 832 0 95 "\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 B) (K).tif" -inside -hotcount 53550 </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:22:18.375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 B) (K).tif) Chan 0 using '\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 B) (K).tif'</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:22:18.578125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 B) (K).tif) Plot Linework (5) 70392 pixels 57164 lines</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:22:19.59375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 B) (K).tif) STATUS : S00 XPose! Offline (local mode)</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:22:43.78125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 B) (K).tif) STATUS : S20 Automatic plate centering...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:22:45.609375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 B) (K).tif) Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:22:45.8125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 B) (K).tif) STATUS : S01 XPose! Online  (remote mode)</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:22:47.84375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 B) (K).tif) STATUS : S40 Adjusting focus...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:23:02.078125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 B) (K).tif) STATUS : S60 Exposing...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:23:05.53125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 B) (K).tif) Plot Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:28:31.171875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 3 B) (K).tif) Plot Finished OK</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:28:39.359375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 A) (K).tif) ROM Base Version 7.4.1
+CTP Machine Version 5.02 Options 0x37
+Luscher Library Version 8.1.6
+Luscher DLL Version 2.5.6</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:28:39.5625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 A) (K).tif) Sending 'C:\Documents and Settings\sefoc\Configurações locais\Temp\tmp147.tmp' ... </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:28:39.765625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 A) (K).tif) Done</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:28:39.96875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 A) (K).tif) tplot -start luscherctp plot xresolution 2400.00 yresolution 2400.00 position 0.0 0.0 size 762.677 605.991 -stop -end -ctp -mbeam -DA -btl 2f08 -rev -invert -mirrorY -P 832 832 0 95 "\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 A) (K).tif" -inside -hotcount 53551 </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:28:40.171875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 A) (K).tif) Chan 0 using '\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 A) (K).tif'</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:28:40.375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 A) (K).tif) Plot Linework (5) 70392 pixels 57164 lines</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:28:41.390625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 A) (K).tif) STATUS : S00 XPose! Offline (local mode)</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:29:15.71875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 A) (K).tif) STATUS : S20 Automatic plate centering...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:29:16.125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 A) (K).tif) Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:29:17.75-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 A) (K).tif) STATUS : S40 Adjusting focus...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:29:31.96875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 A) (K).tif) STATUS : S60 Exposing...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:29:35.21875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 A) (K).tif) Plot Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:35:00.828125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 A) (K).tif) Plot Finished OK</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:35:09.203125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 B) (K).tif) ROM Base Version 7.4.1
+CTP Machine Version 5.02 Options 0x37
+Luscher Library Version 8.1.6
+Luscher DLL Version 2.5.6</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:35:09.40625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 B) (K).tif) Sending 'C:\Documents and Settings\sefoc\Configurações locais\Temp\tmp148.tmp' ... </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:35:09.609375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 B) (K).tif) Done</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:35:09.8125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 B) (K).tif) tplot -start luscherctp plot xresolution 2400.00 yresolution 2400.00 position 0.0 0.0 size 762.677 605.991 -stop -end -ctp -mbeam -DA -btl 2f08 -rev -invert -mirrorY -P 832 832 0 95 "\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 B) (K).tif" -inside -hotcount 53552 </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:35:10.015625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 B) (K).tif) Chan 0 using '\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 B) (K).tif'</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:35:10.21875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 B) (K).tif) Plot Linework (5) 70392 pixels 57164 lines</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:35:11.234375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 B) (K).tif) STATUS : S00 XPose! Offline (local mode)</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:35:37.4375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 B) (K).tif) STATUS : S20 Automatic plate centering...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:35:39.46875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 B) (K).tif) Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:35:39.671875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 B) (K).tif) STATUS : S01 XPose! Online  (remote mode)</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:35:41.5-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 B) (K).tif) STATUS : S40 Adjusting focus...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:36:05.6875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 B) (K).tif) STATUS : S60 Exposing...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:36:07.921875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 B) (K).tif) Plot Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:41:33.4375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 4 B) (K).tif) Plot Finished OK</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:41:41.484375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 A) (K).tif) ROM Base Version 7.4.1
+CTP Machine Version 5.02 Options 0x37
+Luscher Library Version 8.1.6
+Luscher DLL Version 2.5.6</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:41:41.6875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 A) (K).tif) Sending 'C:\Documents and Settings\sefoc\Configurações locais\Temp\tmp149.tmp' ... </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:41:41.890625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 A) (K).tif) Done</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:41:42.09375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 A) (K).tif) tplot -start luscherctp plot xresolution 2400.00 yresolution 2400.00 position 0.0 0.0 size 762.677 605.991 -stop -end -ctp -mbeam -DA -btl 2f08 -rev -invert -mirrorY -P 832 832 0 95 "\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 A) (K).tif" -inside -hotcount 53553 </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:41:42.296875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 A) (K).tif) Chan 0 using '\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 A) (K).tif'</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:41:42.5-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 A) (K).tif) Plot Linework (5) 70392 pixels 57164 lines</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:41:43.515625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 A) (K).tif) STATUS : S00 XPose! Offline (local mode)</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:41:59.765625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 A) (K).tif) STATUS : S20 Automatic plate centering...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:42:00.375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 A) (K).tif) Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:42:01.796875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 A) (K).tif) STATUS : S40 Adjusting focus...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:42:15.8125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 A) (K).tif) STATUS : S60 Exposing...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:42:19.46875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 A) (K).tif) Plot Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:47:45.09375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 A) (K).tif) Plot Finished OK</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:47:53.40625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 B) (K).tif) ROM Base Version 7.4.1
+CTP Machine Version 5.02 Options 0x37
+Luscher Library Version 8.1.6
+Luscher DLL Version 2.5.6</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:47:53.609375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 B) (K).tif) Sending 'C:\Documents and Settings\sefoc\Configurações locais\Temp\tmp14B.tmp' ... </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:47:53.8125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 B) (K).tif) Done</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:47:54.015625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 B) (K).tif) tplot -start luscherctp plot xresolution 2400.00 yresolution 2400.00 position 0.0 0.0 size 762.677 605.991 -stop -end -ctp -mbeam -DA -btl 2f08 -rev -invert -mirrorY -P 832 832 0 95 "\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 B) (K).tif" -inside -hotcount 53554 </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:47:54.21875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 B) (K).tif) Chan 0 using '\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 B) (K).tif'</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:47:54.421875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 B) (K).tif) Plot Linework (5) 70392 pixels 57164 lines</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:47:55.4375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 B) (K).tif) STATUS : S00 XPose! Offline (local mode)</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:48:11.6875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 B) (K).tif) STATUS : S20 Automatic plate centering...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:48:12.09375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 B) (K).tif) Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:48:13.71875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 B) (K).tif) STATUS : S40 Adjusting focus...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:48:27.734375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 B) (K).tif) STATUS : S60 Exposing...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:48:31.1875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 B) (K).tif) Plot Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:53:56.796875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 5 B) (K).tif) Plot Finished OK</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:54:05.28125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 6 A) (K).tif) ROM Base Version 7.4.1
+CTP Machine Version 5.02 Options 0x37
+Luscher Library Version 8.1.6
+Luscher DLL Version 2.5.6</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:54:05.484375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 6 A) (K).tif) Sending 'C:\Documents and Settings\sefoc\Configurações locais\Temp\tmp14C.tmp' ... </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:54:05.6875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 6 A) (K).tif) Done</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:54:05.890625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 6 A) (K).tif) tplot -start luscherctp plot xresolution 2400.00 yresolution 2400.00 position 0.0 0.0 size 762.677 605.991 -stop -end -ctp -mbeam -DA -btl 2f08 -rev -invert -mirrorY -P 832 832 0 95 "\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 6 A) (K).tif" -inside -hotcount 53555 </Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:54:06.09375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 6 A) (K).tif) Chan 0 using '\\fscaraiva4\CGraf\Apogee_Files\3- PrintQ\PrintQ Jobs\Apogee SM74 IBF_Fast\2025_OS 02480-SM-FrancianeBayer-Livro_Eca\2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 6 A) (K).tif'</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:54:06.296875-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 6 A) (K).tif) Plot Linework (5) 70392 pixels 57164 lines</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:54:07.3125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 6 A) (K).tif) STATUS : S00 XPose! Offline (local mode)</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:54:23.578125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 6 A) (K).tif) STATUS : S20 Automatic plate centering...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:54:25.609375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 6 A) (K).tif) Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:54:25.8125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 6 A) (K).tif) STATUS : S01 XPose! Online  (remote mode)</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:54:27.640625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 6 A) (K).tif) STATUS : S40 Adjusting focus...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:54:41.65625-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 6 A) (K).tif) STATUS : S60 Exposing...</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T18:54:45.3125-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 6 A) (K).tif) Plot Started</Text>
+      </Event>
+      <Event>
+        <Type>Comment</Type>
+        <Time>2025-12-18T19:00:10.9375-03:00</Time>
+        <Text>(2025_OS 02480-SM-FrancianeBayer-Livro_Eca (Cad 6 A) (K).tif) Plot Finished OK</Text>
+      </Event>
+    </History>
+  </XPoseTicket>
+  <XPoseTicket>
+    <Name>2025_OS 02537-PM-GiselaSimona-Livro_Codigo</Name>
+    <Template>Apogee PM52 IBF_Fast</Template>
+    <TemplateType>Single</TemplateType>
+    <Priority>5</Priority>
+    <Status>Ready</Status>
+    <LaserOffset>3</LaserOffset>
+    <HotPlateOn>true</HotPlateOn>
+    <HotPlateInside>true</HotPlateInside>
+    <PixelDoubling>false</PixelDoubling>
+    <CountPlates>true</CountPlates>
+    <LoadBalancingReturnable>false</LoadBalancingReturnable>
+    <MediaName>PM52_525x459</MediaName>
+    <MediaWidth>525</MediaWidth>
+    <MediaHeight>459</MediaHeight>
+    <MediaThickness>0.15</MediaThickness>
+    <Invert>true</Invert>
+    <Burnout>true</Burnout>
+    <MirrorX>false</MirrorX>
+    <MirrorY>true</MirrorY>
+    <Created>2025-12-18T19:14:06.671875-03:00</Created>
+    <MergeOperator>Or</MergeOperator>
+    <Single>
+      <Along>0</Along>
+      <Around>0</Around>
+    </Single>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02537-PM-GiselaSimona-Livro_Codigo (Cad 7 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02537-PM-GiselaSimona-Livro_Codigo (Cad 7 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02537-PM-GiselaSimona-Livro_Codigo (Cad 7 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02537-PM-GiselaSimona-Livro_Codigo (Cad 7 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+  </XPoseTicket>
+  <XPoseTicket>
+    <Name>2025_OS 02537-SM-GiselaSimona-Livro_Codigo</Name>
+    <Template>Apogee SM74 IBF_Fast</Template>
+    <TemplateType>Single</TemplateType>
+    <Priority>5</Priority>
+    <Status>Ready</Status>
+    <LaserOffset>3</LaserOffset>
+    <HotPlateOn>true</HotPlateOn>
+    <HotPlateInside>true</HotPlateInside>
+    <PixelDoubling>false</PixelDoubling>
+    <CountPlates>true</CountPlates>
+    <LoadBalancingReturnable>false</LoadBalancingReturnable>
+    <MediaName>SM74 e Catu</MediaName>
+    <MediaWidth>760</MediaWidth>
+    <MediaHeight>605</MediaHeight>
+    <MediaThickness>0.3</MediaThickness>
+    <Invert>true</Invert>
+    <Burnout>true</Burnout>
+    <MirrorX>false</MirrorX>
+    <MirrorY>true</MirrorY>
+    <Created>2025-12-18T19:14:13.71875-03:00</Created>
+    <MergeOperator>Or</MergeOperator>
+    <Single>
+      <Along>0</Along>
+      <Around>0</Around>
+    </Single>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02537-SM-GiselaSimona-Livro_Codigo (Cad 2 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02537-SM-GiselaSimona-Livro_Codigo (Cad 2 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02537-SM-GiselaSimona-Livro_Codigo (Cad 3 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02537-SM-GiselaSimona-Livro_Codigo (Cad 3 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02537-SM-GiselaSimona-Livro_Codigo (Cad 4 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02537-SM-GiselaSimona-Livro_Codigo (Cad 4 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02537-SM-GiselaSimona-Livro_Codigo (Cad 5 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02537-SM-GiselaSimona-Livro_Codigo (Cad 5 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02537-SM-GiselaSimona-Livro_Codigo (Cad 6 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02537-SM-GiselaSimona-Livro_Codigo (Cad 6 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02537-SM-GiselaSimona-Livro_Codigo (Cad 1 B) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+  </XPoseTicket>
+  <XPoseTicket>
+    <Name>2025_OS 02537-K-GiselaSimona-Livro_Codigo</Name>
+    <Template>Apogee Komori IBF_Fast</Template>
+    <TemplateType>Single</TemplateType>
+    <Priority>5</Priority>
+    <Status>Ready</Status>
+    <LaserOffset>3</LaserOffset>
+    <HotPlateOn>true</HotPlateOn>
+    <HotPlateInside>true</HotPlateInside>
+    <PixelDoubling>false</PixelDoubling>
+    <CountPlates>true</CountPlates>
+    <LoadBalancingReturnable>false</LoadBalancingReturnable>
+    <MediaName>Komori_760x605</MediaName>
+    <MediaWidth>760</MediaWidth>
+    <MediaHeight>605</MediaHeight>
+    <MediaThickness>0.3</MediaThickness>
+    <Invert>true</Invert>
+    <Burnout>true</Burnout>
+    <MirrorX>false</MirrorX>
+    <MirrorY>true</MirrorY>
+    <Created>2025-12-18T19:14:38.53125-03:00</Created>
+    <MergeOperator>Or</MergeOperator>
+    <Single>
+      <Along>0</Along>
+      <Around>0</Around>
+    </Single>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02537-K-GiselaSimona-Livro_Codigo (Cad 1 A) (C).tif</Name>
+      <Status>Ready</Status>
+      <Colour>C</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02537-K-GiselaSimona-Livro_Codigo (Cad 1 A) (M).tif</Name>
+      <Status>Ready</Status>
+      <Colour>M</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02537-K-GiselaSimona-Livro_Codigo (Cad 1 A) (Y).tif</Name>
+      <Status>Ready</Status>
+      <Colour>Y</Colour>
+    </Path>
+    <Path>
+      <Hold>false</Hold>
+      <Print>true</Print>
+      <Name>2025_OS 02537-K-GiselaSimona-Livro_Codigo (Cad 1 A) (K).tif</Name>
+      <Status>Ready</Status>
+      <Colour>K</Colour>
+    </Path>
+  </XPoseTicket>
+</XPoseTicketsDS>

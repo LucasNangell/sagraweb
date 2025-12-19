@@ -19,6 +19,8 @@ from starlette.responses import HTMLResponse
 import socket
 import tempfile
 from routers.andamento_helpers import format_andamento_obs, format_ponto
+from routers.gravacao_routes import router as gravacao_router
+from routers.requisicao_routes import router as requisicao_router
 import glob
 import io
 from fpdf import FPDF
@@ -450,7 +452,10 @@ async def download_folder_opener():
 def get_os_versions(ano: int, id: int):
     try:
         # Caminho base da rede
-        base_path = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_{ano}"
+        if id >= 5000:
+            base_path = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_Papelaria_{ano}"
+        else:
+            base_path = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_{ano}"
         
         # Procura pasta da OS (5 digitos + qualquer sufixo)
         os_pattern = os.path.join(base_path, f"{id:05d}*")
@@ -516,7 +521,10 @@ def get_os_path(ano: int, id: int):
 
 def _get_os_folder_path(ano: int, id: int) -> Optional[str]:
     """Helper para localizar a pasta da OS na rede."""
-    base_path = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_{ano}"
+    if id >= 5000:
+        base_path = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_Papelaria_{ano}"
+    else:
+        base_path = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_{ano}"
     os_pattern = os.path.join(base_path, f"{id:05d}*")
 
     logger.info(f"DEBUG PATH: Searching for OS {id}/{ano} in {base_path}")
@@ -1759,6 +1767,10 @@ def get_andamentos():
     except Exception as e:
         logger.error(f"Error fetching andamentos: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# --- Gravação CTP (PrintQ) ---
+app.include_router(gravacao_router, prefix="/api")
+app.include_router(requisicao_router, prefix="/api")
 
 # Serve static files from the project root regardless of the working directory
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))

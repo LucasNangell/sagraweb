@@ -365,7 +365,7 @@ function setupContextMenu() {
                 body: JSON.stringify({ path }),
                 signal: AbortSignal.timeout(2000) // Timeout de 2s
             });
-            
+
             if (response.ok) {
                 const data = await response.json();
                 return data.success === true;
@@ -382,13 +382,13 @@ function setupContextMenu() {
      */
     window.showDownloadServiceNotification = function showDownloadServiceNotification() {
         console.log('🔔 Criando notificação de download');
-        
+
         // Remover notificação existente se houver
         const existing = document.getElementById('local-service-notification');
         if (existing) {
             existing.remove();
         }
-        
+
         // Criar notificação
         const notification = document.createElement('div');
         notification.id = 'local-service-notification';
@@ -458,7 +458,7 @@ function setupContextMenu() {
         `;
         document.body.appendChild(notification);
         console.log('✅ Notificação adicionada ao DOM');
-        
+
         // Event listeners
         document.getElementById('btn-download-service').addEventListener('click', () => {
             console.log('⬇️ Iniciando download do serviço');
@@ -466,7 +466,7 @@ function setupContextMenu() {
             window.location.href = `${API_BASE_URL}/download/folder-opener`;
             notification.remove();
         });
-        
+
         document.getElementById('btn-close-notification').addEventListener('click', () => {
             console.log('❌ Notificação fechada pelo usuário');
             notification.remove();
@@ -476,10 +476,10 @@ function setupContextMenu() {
     document.getElementById('ctx-open-folder').addEventListener('click', async () => {
         console.log("=== DEBUG: Open Folder Clicked ===");
         console.log("Ano:", currentAno, "ID:", currentId);
-        
+
         if (currentAno && currentId) {
             const osTitle = `OS ${currentId}/${currentAno}`;
-            
+
             try {
                 console.log("1️⃣ Fetching path...");
                 const res = await fetch(`${API_BASE_URL}/os/${currentAno}/${currentId}/path`);
@@ -488,18 +488,18 @@ function setupContextMenu() {
                 const data = await res.json();
                 const folderPath = data.path;
                 console.log("3️⃣ Folder Path:", folderPath);
-                
+
                 // Tentar abrir localmente (apenas DEV)
                 console.log("4️⃣ Tentando abrir pasta localmente:", folderPath);
                 const openedLocally = await window.tryOpenFolderLocally(folderPath);
                 console.log("5️⃣ Resultado openedLocally:", openedLocally);
-                
+
                 if (openedLocally) {
                     console.log("✅ Pasta aberta automaticamente! Não mostra popup.");
                     // Sucesso - não precisa mostrar modal
                     return;
                 }
-                
+
                 // Fallback: mostrar popup tradicional
                 console.log("⚠️ Serviço local não disponível - usando fallback");
                 console.log("6️⃣ Mostrando modal...");
@@ -511,11 +511,11 @@ function setupContextMenu() {
                 title.innerText = osTitle;
                 display.innerText = folderPath;
                 console.log("7️⃣ Modal exibido");
-                
+
                 // Verificar sessionStorage
                 const alreadyNotified = sessionStorage.getItem('folder-service-notified');
                 console.log("8️⃣ SessionStorage 'folder-service-notified':", alreadyNotified);
-                
+
                 // Mostrar notificação para download do serviço (apenas uma vez por sessão)
                 if (!alreadyNotified) {
                     console.log('📢 Mostrando notificação de download do serviço local');
@@ -528,7 +528,7 @@ function setupContextMenu() {
                 } else {
                     console.log('ℹ️ Notificação já foi exibida nesta sessão');
                 }
-                
+
             } catch (e) {
                 console.error("❌ DEBUG FETCH ERROR:", e);
                 alert("Erro ao buscar caminho da pasta: " + e.message);
@@ -1402,154 +1402,42 @@ async function openPrintFichaModal(id, ano) {
     const modal = document.getElementById('modal-print-ficha');
     const container = document.getElementById('ficha-container');
 
-    console.log('Modal encontrado:', !!modal, 'Container encontrado:', !!container);
-
     if (!modal || !container) {
         console.error('Modal ou container não encontrado!');
         alert('Erro: Elementos do modal não foram encontrados.');
         return;
     }
 
-    // Mostrar modal e bloquear scroll do body
     modal.style.display = 'block';
     document.body.style.overflow = 'hidden';
-    container.innerHTML = '<div style="text-align: center; padding: 40px; color: #666;"><i class="fas fa-spinner fa-spin" style="font-size: 24px;"></i><br>Carregando dados...</div>';
 
-    try {
-        // Buscar dados da OS
-        console.log('Buscando dados da OS...');
-        const response = await fetchWithRetry(`${API_BASE_URL}/os/${ano}/${id}/details`);
-        if (!response.ok) throw new Error('Erro ao carregar dados da OS');
-        const data = await response.json();
-        console.log('Dados recebidos:', data);
+    // Mostra loading
+    container.innerHTML = '<div style="text-align: center; padding: 40px; color: #666;"><i class="fas fa-spinner fa-spin" style="font-size: 24px;"></i><br>Gerando requisição...</div>';
 
-        // Criar iframe para renderizar a ficha com Tailwind
-        const iframe = document.createElement('iframe');
-        iframe.style.width = '100%';
-        iframe.style.height = '100%';
-        iframe.style.border = 'none';
-        iframe.style.backgroundColor = 'white';
-        
-        container.innerHTML = '';
-        container.appendChild(iframe);
+    // Cria iframe apontando diretamente para o backend
+    const iframe = document.createElement('iframe');
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.border = '0';
+    iframe.style.display = 'block';
+    iframe.style.backgroundColor = 'white';
 
-        // Carregar template da ficha no iframe
-        const fichaResponse = await fetch('fichaos.html');
-        const fichaHTML = await fichaResponse.text();
-        
-        // Escrever HTML no iframe
-        iframe.contentDocument.open();
-        iframe.contentDocument.write(fichaHTML);
-        iframe.contentDocument.close();
-        
-        // Aguardar o iframe carregar
-        await new Promise(resolve => {
-            if (iframe.contentDocument.readyState === 'complete') {
-                resolve();
-            } else {
-                iframe.onload = resolve;
-            }
-        });
-        
-        // Aguardar Tailwind e scripts carregarem
-        await new Promise(resolve => setTimeout(resolve, 800));
-        
-        const iframeDoc = iframe.contentDocument;
-        
-        // Preencher campos usando IDs
-        setFichaFieldInIframe(iframeDoc, 'ficha-data', formatDateBR(data.DataEntrada));
-        setFichaFieldInIframe(iframeDoc, 'ficha-processo', data.ProcessoSolicit);
-        setFichaFieldInIframe(iframeDoc, 'ficha-cota-rcoro', data.CotaRepro);
-        setFichaFieldInIframe(iframeDoc, 'ficha-cota-cartao', '');
-        setFichaFieldInIframe(iframeDoc, 'ficha-os', `${id}/${ano}`);
-        setFichaFieldInIframe(iframeDoc, 'ficha-ano', ano);
-        setFichaFieldInIframe(iframeDoc, 'ficha-os-ano', `${String(id).padStart(5, '0')}/${String(ano).slice(-2)}`);
-        setFichaFieldInIframe(iframeDoc, 'ficha-modelos', '');
-        setFichaFieldInIframe(iframeDoc, 'ficha-tiragem', data.Tiragem);
-        
-        // Entidade Solicitante
-        setFichaFieldInIframe(iframeDoc, 'ficha-categoria', data.CategoriaLink);
-        setFichaFieldInIframe(iframeDoc, 'ficha-cod-usuario', data.CodUsuarioLink);
-        setFichaFieldInIframe(iframeDoc, 'ficha-contato', data.ContatoTrab);
-        setFichaFieldInIframe(iframeDoc, 'ficha-nome', data.NomeUsuario);
-        setFichaFieldInIframe(iframeDoc, 'ficha-sigla', '');
-        setFichaFieldInIframe(iframeDoc, 'ficha-ramal', data.RamalUsuario);
-        setFichaFieldInIframe(iframeDoc, 'ficha-interessado', data.OrgInteressado);
-        
-        // Informações Técnicas
-        setFichaFieldInIframe(iframeDoc, 'ficha-tipo-servico', data.TipoPublicacaoLink);
-        setFichaFieldInIframe(iframeDoc, 'ficha-maquina', data.MaquinaLink);
-        setFichaFieldInIframe(iframeDoc, 'ficha-paginas', data.Pags);
-        setFichaFieldInIframe(iframeDoc, 'ficha-fv', data.FrenteVerso ? 'Sim' : 'Não');
-        setFichaFieldInIframe(iframeDoc, 'ficha-titulo', data.Titulo);
-        setFichaFieldInIframe(iframeDoc, 'ficha-formato', data.FormatoLink);
-        setFichaFieldInIframe(iframeDoc, 'ficha-cor', data.Cores ? `${data.Cores}` : '');
-        setFichaFieldInIframe(iframeDoc, 'ficha-obs-cor', data.CoresDescricao);
-        setFichaFieldInIframe(iframeDoc, 'ficha-papel', data.PapelLink);
-        setFichaFieldInIframe(iframeDoc, 'ficha-obs-papel', data.PapelDescricao);
-        
-        // Acabamento formatado como lista com quebras de linha
-        let acabamento = '';
-        if (data.DescAcabamento) {
-            const lines = data.DescAcabamento.split(/\r?\n/).filter(l => l.trim());
-            acabamento = lines.map(line => {
-                line = line.trim();
-                return line.startsWith('-') ? line : `- ${line}`;
-            }).join('\n');
-        }
-        const acabamentoEl = iframeDoc.getElementById('ficha-acabamento');
-        if (acabamentoEl && acabamento) {
-            acabamentoEl.innerHTML = '';
-            acabamento.split('\n').forEach(line => {
-                const p = iframeDoc.createElement('p');
-                p.textContent = line;
-                p.style.margin = '0';
-                p.style.lineHeight = '1.2';
-                acabamentoEl.appendChild(p);
-            });
-        }
-        
-        // Observações Gerais
-        setFichaFieldInIframe(iframeDoc, 'ficha-obs-gerais', data.Observ);
-        
-        // Insumos e Material
-        setFichaFieldInIframe(iframeDoc, 'ficha-insumos', data.InsumosFornecidos || 'Arquivos na pasta');
-        setFichaFieldInIframe(iframeDoc, 'ficha-material', data.MaterialFornecido);
-        
-        // Dados de Entrega
-        setFichaFieldInIframe(iframeDoc, 'ficha-resp-grafica', data.ResponsavelGrafLink);
-        setFichaFieldInIframe(iframeDoc, 'ficha-forma-entrega', data.EntregaFormaLink);
-        setFichaFieldInIframe(iframeDoc, 'ficha-prazo', data.EntregPeriodo ? `Solicitado p/ ${data.EntregPeriodo}` : '');
-        setFichaFieldInIframe(iframeDoc, 'ficha-data-entrega', formatDateBR(data.EntregData));
-        
-        // Avisos
-        const avisos = [data.EntregPeriodo, data.EntregPrazoLink].filter(Boolean).join(' - ');
-        setFichaFieldInIframe(iframeDoc, 'ficha-avisos', avisos);
-        
-        // Gerar código de barras no iframe
-        if (iframe.contentWindow.JsBarcode) {
-            const barcodeElement = iframeDoc.getElementById('barcode-header');
-            if (barcodeElement) {
-                const osAnoText = `${String(id).padStart(5, '0')}/${String(ano).slice(-2)}`;
-                try {
-                    iframe.contentWindow.JsBarcode(barcodeElement, osAnoText, {
-                        format: "CODE128",
-                        lineColor: "#000",
-                        width: 2,
-                        height: 35,
-                        displayValue: false,
-                        margin: 0
-                    });
-                } catch (e) {
-                    console.warn('Erro ao gerar código de barras:', e);
-                }
-            }
-        }
-        
-    } catch (error) {
-        console.error('Erro ao carregar ficha:', error);
-        container.innerHTML = '<div style="text-align: center; padding: 40px; color: #d32f2f;"><i class="fas fa-exclamation-triangle" style="font-size: 24px;"></i><br>Erro ao carregar dados da OS</div>';
-    }
+    // Usar o endpoint novo de relatório
+    // Encode 'ponto' if necessary, but it's alphanumeric usually.
+    const userParam = currentUser ? `?ponto=${currentUser}` : '';
+    const reportUrl = `${API_BASE_URL}/reports/requisicao/${ano}/${id}${userParam}`;
+    console.log('Carregando relatório de:', reportUrl);
+
+    iframe.src = reportUrl;
+
+    // Quando carregar, limpa label de loading
+    iframe.onload = function () {
+        console.log('Iframe carregado.');
+    };
+
+    // Limpa container e adiciona iframe
+    container.innerHTML = '';
+    container.appendChild(iframe);
 }
 
 function setFichaFieldInIframe(doc, id, value) {
@@ -1579,7 +1467,7 @@ function formatDateBR(dateStr) {
         btnPrint.addEventListener('click', () => {
             const container = document.getElementById('ficha-container');
             if (!container) return;
-            
+
             const iframe = container.querySelector('iframe');
             if (!iframe || !iframe.contentDocument) {
                 alert('Aguarde o carregamento completo da ficha antes de imprimir.');
@@ -1590,6 +1478,12 @@ function formatDateBR(dateStr) {
             try {
                 iframe.contentWindow.focus();
                 iframe.contentWindow.print();
+
+                // Fecha o modal após enviar para impressão (o diálogo bloqueia a execução até fechar)
+                if (modal) {
+                    modal.style.display = 'none';
+                    document.body.style.overflow = '';
+                }
             } catch (e) {
                 console.error('Erro ao imprimir:', e);
                 alert('Erro ao iniciar impressão.');
@@ -1608,7 +1502,7 @@ function formatDateBR(dateStr) {
 
     // Fechar modal ao clicar fora
     if (modal) {
-        modal.addEventListener('click', function(e) {
+        modal.addEventListener('click', function (e) {
             if (e.target === modal) {
                 modal.style.display = 'none';
                 document.body.style.overflow = '';

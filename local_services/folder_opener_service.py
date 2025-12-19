@@ -22,6 +22,9 @@ Versão: 1.0.0
 
 import os
 import sys
+import subprocess
+import time
+import ctypes
 from pathlib import Path
 from datetime import datetime
 from flask import Flask, request, jsonify
@@ -141,8 +144,40 @@ def open_folder():
         
         # Abrir pasta no Explorer
         try:
-            os.startfile(folder_path)
-            log(f"✅ Pasta aberta com sucesso: {folder_path}")
+            # Usar subprocess para abrir a pasta
+            subprocess.Popen(['explorer', folder_path], shell=True)
+            
+            # Aguardar a janela ser criada
+            time.sleep(0.7)
+            
+            # Trazer a janela do Explorer para o primeiro plano
+            try:
+                def bring_to_front():
+                    """Traz a janela do Explorer para o primeiro plano"""
+                    EnumWindows = ctypes.windll.user32.EnumWindows
+                    SetForegroundWindow = ctypes.windll.user32.SetForegroundWindow
+                    ShowWindow = ctypes.windll.user32.ShowWindow
+                    
+                    hwnd_list = []
+                    
+                    def enum_callback(hwnd, param):
+                        hwnd_list.append(hwnd)
+                        return True
+                    
+                    callback_func = ctypes.CFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)(enum_callback)
+                    EnumWindows(callback_func, 0)
+                    
+                    # Trazer a última janela para frente (deve ser a do Explorer)
+                    if hwnd_list:
+                        hwnd = hwnd_list[-1]
+                        SetForegroundWindow(hwnd)
+                        ShowWindow(hwnd, 5)  # SW_SHOW = 5
+                
+                bring_to_front()
+            except Exception as e:
+                log(f"Aviso: Nao foi possivel trazer janela para frente: {e}")
+            
+            log(f"Pasta aberta com sucesso: {folder_path}")
             
             return jsonify({
                 "success": True,

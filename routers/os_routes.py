@@ -103,7 +103,11 @@ def get_os_path(ano: int, id: int):
 
 def _get_os_folder_path(ano: int, id: int) -> Optional[str]:
     """Helper para localizar a pasta da OS na rede."""
-    base_path = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_{ano}"
+    if id >= 5000:
+        base_path = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_Papelaria_{ano}"
+    else:
+        base_path = fr"\\redecamara\DfsData\CGraf\Sefoc\Deputados\{ano}\Deputados_{ano}"
+        
     os_pattern = os.path.join(base_path, f"{id:05d}*")
     
     logger.info(f"DEBUG PATH: Searching for OS {id}/{ano} in {base_path}")

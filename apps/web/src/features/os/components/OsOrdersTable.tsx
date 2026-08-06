@@ -201,6 +201,8 @@ interface OsOrdersTableProps {
   onExportReport?: () => void;
   isExporting?: boolean;
   exportDisabled?: boolean;
+  /** Duplo clique na linha abre o modal de detalhes da gerência. */
+  onOpenGerenciaDetail?: (row: OsSearchRow) => void;
 }
 
 export function OsOrdersTable({
@@ -223,6 +225,7 @@ export function OsOrdersTable({
   onExportReport,
   isExporting = false,
   exportDisabled = false,
+  onOpenGerenciaDetail,
 }: OsOrdersTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [, startSelectionTransition] = useTransition();
@@ -353,6 +356,16 @@ export function OsOrdersTable({
       });
     },
     [onSelectRow, selectionLocked],
+  );
+
+  const handleOpenGerenciaDetail = useCallback(
+    (row: OsSearchRow) => {
+      if (selectionLocked || !onOpenGerenciaDetail) {
+        return;
+      }
+      onOpenGerenciaDetail(row);
+    },
+    [onOpenGerenciaDetail, selectionLocked],
   );
 
   const rowsRefreshSignature = useMemo(
@@ -632,6 +645,7 @@ export function OsOrdersTable({
                           isSelected && "bg-[var(--highlight-yellow)]",
                         )}
                         onClick={() => handleSelectRow(data)}
+                        onDoubleClick={() => handleOpenGerenciaDetail(data)}
                         onContextMenu={() => handleSelectRow(data)}
                       >
                         {tableRow.getVisibleCells().map((cell) => (
@@ -713,6 +727,7 @@ export function OsOrdersTable({
                         isSelected && "bg-[var(--highlight-yellow)]",
                       )}
                       onClick={() => handleSelectRow(data)}
+                      onDoubleClick={() => handleOpenGerenciaDetail(data)}
                       onContextMenu={() => handleSelectRow(data)}
                     >
                       <div className="flex items-start justify-between gap-2">

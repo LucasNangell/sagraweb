@@ -40,11 +40,12 @@ import {
 import { useOsFiltersStore } from "../osFiltersStore";
 import { useOsSelectionStore } from "../osSelectionStore";
 import type { ProvaFichaCorOptions } from "../utils/requisicaoReportUrl";
-import type { OsSortColumn, OsSortDir, SavedFilter } from "../types";
+import type { OsSearchRow, OsSortColumn, OsSortDir, SavedFilter } from "../types";
 import { OsAuditLogModal } from "./OsAuditLogModal";
 import { OsDetailsPanel } from "./OsDetailsPanel";
 import { OsFiltersPanel } from "./OsFiltersPanel";
 import { OsFolderBrowserModal } from "./OsFolderBrowserModal";
+import { OsGerenciaDetailModal } from "./OsGerenciaDetailModal";
 import { OsHistoryPanel } from "./OsHistoryPanel";
 import { OsMoverPastasModal } from "./OsMoverPastasModal";
 import { OsOrdersTable } from "./OsOrdersTable";
@@ -80,6 +81,7 @@ export function OsHomePage() {
   const [userListFetchPending, setUserListFetchPending] = useState(false);
   const [vincularOpen, setVincularOpen] = useState(false);
   const [auditLogOpen, setAuditLogOpen] = useState(false);
+  const [gerenciaDetailOpen, setGerenciaDetailOpen] = useState(false);
   const [printModePickerOpen, setPrintModePickerOpen] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
   const [printMode, setPrintMode] = useState<
@@ -456,6 +458,32 @@ export function OsHomePage() {
     [markUserListFetch, patchFilters],
   );
 
+  const handleOpenGerenciaDetail = useCallback(
+    (row: OsSearchRow) => {
+      if (!can("ctx_detalhes_os") && !can("ctx_editar_os")) {
+        return;
+      }
+      const target: OsSearchRow =
+        row.is_sub_os || row.kind === "sub_os"
+          ? {
+              ...row,
+              nr_os: row.parent_nr_os ?? row.nr_os,
+              ano: row.parent_ano ?? row.ano,
+              is_sub_os: undefined,
+              kind: "main_os",
+              parent_nr_os: undefined,
+              parent_ano: undefined,
+              sub_os_id: undefined,
+              componente_nome: undefined,
+              display_label: undefined,
+            }
+          : row;
+      setSelected(target);
+      setGerenciaDetailOpen(true);
+    },
+    [can, setSelected],
+  );
+
   const handleExportReport = useCallback(async () => {
     if (textBelowMinLength) {
       window.alert(
@@ -578,6 +606,7 @@ export function OsHomePage() {
             onExportReport={() => void handleExportReport()}
             isExporting={isExportingReport}
             exportDisabled={!prefsBootstrapped || textBelowMinLength}
+            onOpenGerenciaDetail={handleOpenGerenciaDetail}
           />
         </div>
 
@@ -637,6 +666,14 @@ export function OsHomePage() {
         open={auditLogOpen}
         onClose={() => setAuditLogOpen(false)}
       />
+
+      {gerenciaDetailOpen ? (
+        <OsGerenciaDetailModal
+          row={selected}
+          open={gerenciaDetailOpen}
+          onClose={() => setGerenciaDetailOpen(false)}
+        />
+      ) : null}
 
       <OsPrintModeModal
         open={printModePickerOpen}

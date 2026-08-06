@@ -38,6 +38,8 @@ export const defaultOsFilters = (): OsSearchFilters => ({
   includeSp: true,
   page: 1,
   limit: DEFAULT_PAGE_SIZE,
+  sortBy: "nr_os",
+  sortDir: "desc",
 });
 
 interface OsFiltersState {

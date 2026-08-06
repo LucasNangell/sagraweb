@@ -4,19 +4,19 @@ overview: Abrir, com duplo clique na lista de OS, um modal profissional em somen
 todos:
   - id: audit-field-lengths
     content: Script SQL read-only + gerar fieldSizing.ts a partir de avg/p90/max
-    status: pending
+    status: completed
   - id: extract-sections-hook
     content: Extrair seções do GerenciaFormGrid + hook useGerenciaOsEditor reutilizado pela página
-    status: pending
+    status: completed
   - id: build-modal
     content: Criar OsGerenciaDetailModal com sidebar de abas, RO→edit, save/cancel
-    status: pending
+    status: completed
   - id: wire-dblclick
     content: onDoubleClick em OsOrdersTable + estado em OsHomePage + permissões
-    status: pending
+    status: completed
   - id: verify
     content: "Smoke: abrir/editar/salvar; regressão visual da página /gerencia"
-    status: pending
+    status: completed
 isProject: false
 ---
 

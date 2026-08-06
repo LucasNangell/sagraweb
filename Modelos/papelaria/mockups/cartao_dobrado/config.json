@@ -1,0 +1,102 @@
+{
+  "id": "cartao_dobrado",
+  "nome": "Cartão Dobrado (3 painéis)",
+  "tipo_produto": "cartao_dobrado",
+  "canvas": {
+    "largura": 1200,
+    "altura": 800
+  },
+  "faces": {
+    "painel_1": {
+      "label": "Painel 1",
+      "tipo": "quad",
+      "pontos": [
+        [
+          260,
+          260
+        ],
+        [
+          490,
+          248
+        ],
+        [
+          503,
+          488
+        ],
+        [
+          250,
+          502
+        ]
+      ],
+      "bbox": {
+        "x": 250,
+        "y": 248,
+        "largura": 253,
+        "altura": 254
+      },
+      "rotacao_graus": -3.0,
+      "observacoes": "Área de encaixe — Painel 1"
+    },
+    "painel_2": {
+      "label": "Painel 2",
+      "tipo": "quad",
+      "pontos": [
+        [
+          510,
+          248
+        ],
+        [
+          740,
+          236
+        ],
+        [
+          753,
+          476
+        ],
+        [
+          523,
+          488
+        ]
+      ],
+      "bbox": {
+        "x": 510,
+        "y": 236,
+        "largura": 243,
+        "altura": 252
+      },
+      "rotacao_graus": 0.0,
+      "observacoes": "Área de encaixe — Painel 2"
+    },
+    "painel_3": {
+      "label": "Painel 3",
+      "tipo": "quad",
+      "pontos": [
+        [
+          760,
+          236
+        ],
+        [
+          990,
+          224
+        ],
+        [
+          1003,
+          464
+        ],
+        [
+          773,
+          476
+        ]
+      ],
+      "bbox": {
+        "x": 760,
+        "y": 224,
+        "largura": 243,
+        "altura": 252
+      },
+      "rotacao_graus": 3.0,
+      "observacoes": "Área de encaixe — Painel 3"
+    }
+  },
+  "observacoes": "Brochura dobrada em Z com três painéis visíveis."
+}

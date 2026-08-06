@@ -1,0 +1,1106 @@
+import { cn } from "@sagra/ui";
+import { Link } from "@tanstack/react-router";
+import { Search, Trash2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { queryKeys } from "@/api/query-keys";
+
+import { useSetoresLookup, useSituacoesLookup } from "@/api/hooks/useAuxLookups";
+import { useOsHistory, useOsHistoryMutations } from "@/api/hooks/useOsHistory";
+import {
+  useOsComponentes,
+  useSubOsHistory,
+  useSubOsHistoryMutations,
+  useSubOsList,
+} from "@/api/hooks/useSubOs";
+import {
+  addSubOsHistory,
+  checkOsVinculoReplicacao,
+  createOrGetSubOs,
+  createVinculoExcecao,
+  fetchOsHistory,
+  fetchSubOsHistory,
+} from "@/api/os";
+import {
+  analiseButtonCaption,
+  canEditAnalisePreview,
+  hasProblemasTecnicosAndamento,
+  resolveAnaliseButtonMode,
+} from "@/features/analise/analiseAccess";
+import { useAccessControl } from "@/features/auth/useAccessControl";
+import { useAuthStore } from "@/features/auth/authStore";
+import { formatDateBr, formatPonto } from "@/lib/format";
+import { dedupeOsHistoryRows } from "../osHistoryUtils";
+import { silentRefreshOsSearch } from "../osRealtimeSync";
+import { useOsFiltersStore } from "../osFiltersStore";
+import type {
+  HistoryPayload,
+  OsHistoryRow,
+  OsSearchRow,
+  OsVinculoGrupoMembro,
+  ProtocoloEntregaPayload,
+  SubOsHistoryRow,
+} from "../types";
+import { OsDecisaoSaidaModal } from "./OsDecisaoSaidaModal";
+import { OsGravacaoAlterarArquivosButton } from "./OsGravacaoAlterarArquivosButton";
+import { OsEntregaModal } from "./OsEntregaModal";
+import {
+  GravacaoPendenteLaunchModal,
+  type GravacaoPendenteLaunchResult,
+} from "@/features/gravacao-externa/components/GravacaoPendenteLaunchModal";
+import { isGravacaoPendenteSituacao } from "@/features/gravacao-externa/constants";
+
+interface OsHistoryPanelProps {
+  selected: OsSearchRow | null;
+  flash?: boolean;
+  embedded?: boolean;
+  onEditingChange?: (editing: boolean) => void;
+}
+
+interface HistoryFormState {
+  situacao: string;
+  setor: string;
+  obs: string;
+  usuario: string;
+}
+
+const emptyForm = (): HistoryFormState => ({
+  situacao: "",
+  setor: "",
+  obs: "",
+  usuario: "",
+});
+
+const FROZEN_SITUACOES = new Set(["Entregue", "Cancelada", "Cancelado"]);
+
+function isEntregueSituacao(situacao: string): boolean {
+  return situacao.trim() === "Entregue";
+}
+
+/** "" = não escolhido; "main" = OS principal; "sub:123" = Sub OS; "comp:456" = componente sem Sub OS */
+type AndamentoTargetKey = "" | "main" | `sub:${number}` | `comp:${number}`;
+
+interface DestinationOption {
+  key: AndamentoTargetKey;
+  label: string;
+}
+
+function isOsFrozen(row: OsSearchRow | null): boolean {
+  if (!row) return false;
+  if (row.is_sub_os) return Boolean(row.congelada);
+  return FROZEN_SITUACOES.has((row.situacao ?? "").trim());
+}
+
+export function OsHistoryPanel({
+  selected,
+  flash,
+  embedded = false,
+  onEditingChange,
+}: OsHistoryPanelProps) {
+  const queryClient = useQueryClient();
+  const filters = useOsFiltersStore((s) => s.filters);
+  const user = useAuthStore((s) => s.user);
+  const { can } = useAccessControl();
+  const isSubOs = Boolean(selected?.is_sub_os);
+  const parentAno = selected?.parent_ano ?? selected?.ano ?? null;
+  const parentId = selected?.parent_nr_os ?? selected?.nr_os ?? null;
+  const ano = parentAno;
+  const id = parentId;
+  const subOsId = isSubOs ? (selected?.sub_os_id ?? null) : null;
+  const osAno = ano != null ? Number(ano) : null;
+  const osId = id != null ? Number(id) : null;
+
+  const historyQuery = useOsHistory(osAno, osId);
+  const subHistoryQuery = useSubOsHistory(ano, id, subOsId);
+  const subOsListQuery = useSubOsList(ano, id, Boolean(selected) && !isSubOs);
+  const componentesQuery = useOsComponentes(ano, id, {
+    enabled: Boolean(selected) && !isSubOs,
+  });
+  const { addMutation, updateMutation, deleteMutation, replicateMutation } =
+    useOsHistoryMutations(isSubOs ? null : ano, isSubOs ? null : id);
+  const { addMutation: addSubOsMutation, deleteMutation: deleteSubOsMutation } =
+    useSubOsHistoryMutations(ano, id, subOsId);
+
+  const activeSubOsList = subOsListQuery.data ?? [];
+  const activeComponents = useMemo(
+    () => (componentesQuery.data ?? []).filter((c) => c.ativo),
+    [componentesQuery.data],
+  );
+
+  const destinationOptions = useMemo((): DestinationOption[] => {
+    if (!selected || isSubOs) {
+      return [];
+    }
+    const options: DestinationOption[] = [
+      { key: "main", label: `OS ${selected.nr_os} (principal)` },
+    ];
+    const componentIdsWithSubOs = new Set(
+      activeSubOsList.map((s) => s.componente_id),
+    );
+    for (const sub of activeSubOsList) {
+      options.push({ key: `sub:${sub.id}`, label: sub.display_name });
+    }
+    for (const comp of activeComponents) {
+      if (!componentIdsWithSubOs.has(comp.id)) {
+        options.push({
+          key: `comp:${comp.id}`,
+          label: `${selected.nr_os} [${comp.nome}]`,
+        });
+      }
+    }
+    return options;
+  }, [selected, isSubOs, activeSubOsList, activeComponents]);
+
+  /** OS principal com Sub OSs e/ou componentes ativos exige escolha de destino. */
+  const needsDestinationSelector =
+    !isSubOs && (activeSubOsList.length > 0 || activeComponents.length > 0);
+
+  const situacoesQuery = useSituacoesLookup();
+  const setoresQuery = useSetoresLookup();
+
+  const [editing, setEditing] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [selectedHistory, setSelectedHistory] = useState<OsHistoryRow | null>(
+    null,
+  );
+  const [form, setForm] = useState<HistoryFormState>(emptyForm);
+  const [pendingSaida, setPendingSaida] = useState<HistoryPayload | null>(null);
+  const [pendingGrupoMembros, setPendingGrupoMembros] = useState<
+    OsVinculoGrupoMembro[]
+  >([]);
+  const [andamentoTarget, setAndamentoTarget] = useState<AndamentoTargetKey>("");
+  const [confirmMainOs, setConfirmMainOs] = useState(false);
+  const [entregaModalOpen, setEntregaModalOpen] = useState(false);
+  const [gravacaoPendenteModalOpen, setGravacaoPendenteModalOpen] = useState(false);
+  const [selectedSubHistory, setSelectedSubHistory] =
+    useState<SubOsHistoryRow | null>(null);
+
+  useEffect(() => {
+    onEditingChange?.(editing);
+  }, [editing, onEditingChange]);
+
+  useEffect(() => {
+    return () => {
+      onEditingChange?.(false);
+    };
+  }, [onEditingChange]);
+
+  const historyOsKey =
+    ano != null && id != null
+      ? `${ano}:${id}${isSubOs ? `:sub:${subOsId}` : ""}`
+      : null;
+
+  const historyQueryEnabled = osAno != null && osId != null;
+
+  /** Só exibe linhas após fetch da OS atual (deduplicadas por CodStatus). */
+  const rows = useMemo(() => {
+    if (!historyQueryEnabled) {
+      return [];
+    }
+    if (isSubOs) {
+      if (subHistoryQuery.isPending) return [];
+      return subHistoryQuery.data ?? [];
+    }
+    if (historyQuery.isPending) {
+      return [];
+    }
+    return dedupeOsHistoryRows(historyQuery.data ?? []);
+  }, [
+    historyQueryEnabled,
+    isSubOs,
+    historyQuery.isPending,
+    historyQuery.data,
+    subHistoryQuery.isPending,
+    subHistoryQuery.data,
+  ]);
+
+  const showHistoryLoading =
+    !historyQueryEnabled ||
+    (isSubOs
+      ? subHistoryQuery.isPending ||
+        (subHistoryQuery.isFetching && rows.length === 0)
+      : historyQuery.isPending ||
+        (historyQuery.isFetching && rows.length === 0));
+
+  const frozen = isOsFrozen(selected);
+
+  const lastAutoKeyRef = useRef<string | null>(null);
+  const historyListRef = useRef<HTMLDivElement>(null);
+
+  const resetForm = useCallback(() => {
+    setEditing(false);
+    setIsEditMode(false);
+    setForm(emptyForm());
+  }, []);
+
+  const selectHistoryRow = useCallback((row: OsHistoryRow) => {
+    setSelectedHistory(row);
+    setForm({
+      situacao: row.SituacaoLink ?? "",
+      setor: row.SetorLink ?? "",
+      obs: row.Observaçao ?? "",
+      usuario: formatPonto(row.Ponto ?? ""),
+    });
+    if (!editing) {
+      setIsEditMode(false);
+    }
+  }, [editing]);
+
+  useEffect(() => {
+    resetForm();
+    setSelectedHistory(null);
+    setSelectedSubHistory(null);
+    setAndamentoTarget(
+      isSubOs && subOsId != null ? (`sub:${subOsId}` as AndamentoTargetKey) : "",
+    );
+    setConfirmMainOs(false);
+    lastAutoKeyRef.current = null;
+  }, [ano, id, isSubOs, subOsId, resetForm]);
+
+  useEffect(() => {
+    if (!selected || rows.length === 0 || editing) {
+      return;
+    }
+    const last = rows[rows.length - 1];
+    if (!last) {
+      return;
+    }
+    const key = isSubOs
+      ? `${ano}-${id}-sub-${(last as SubOsHistoryRow).id}`
+      : `${ano}-${id}-${(last as OsHistoryRow).CodStatus}`;
+    if (lastAutoKeyRef.current === key) {
+      return;
+    }
+    lastAutoKeyRef.current = key;
+    if (isSubOs) {
+      const subRow = last as SubOsHistoryRow;
+      setSelectedSubHistory(subRow);
+      setForm({
+        situacao: subRow.situacao ?? "",
+        setor: subRow.setor ?? "",
+        obs: subRow.observacao ?? "",
+        usuario: formatPonto(subRow.ponto ?? ""),
+      });
+    } else {
+      selectHistoryRow(last as OsHistoryRow);
+    }
+  }, [rows, selected, editing, ano, id, isSubOs, selectHistoryRow]);
+
+  useEffect(() => {
+    if (
+      !selected ||
+      historyQuery.isPending ||
+      historyQuery.isFetching ||
+      rows.length === 0
+    ) {
+      return;
+    }
+    const list = historyListRef.current;
+    if (!list) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      list.scrollTop = list.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [
+    selected,
+    ano,
+    id,
+    historyQuery.isPending,
+    historyQuery.isFetching,
+    rows.length,
+  ]);
+
+  const destinoLabel = useMemo(() => {
+    if (!selected) {
+      return "";
+    }
+    if (isSubOs) {
+      return (
+        selected.display_label ??
+        `${selected.nr_os} [${selected.componente_nome ?? "Componente"}]`
+      );
+    }
+    if (andamentoTarget === "main") {
+      return `OS ${selected.nr_os}`;
+    }
+    if (andamentoTarget.startsWith("sub:")) {
+      const sid = Number(andamentoTarget.slice(4));
+      const sub = activeSubOsList.find((s) => s.id === sid);
+      return sub?.display_name ?? andamentoTarget;
+    }
+    if (andamentoTarget.startsWith("comp:")) {
+      const opt = destinationOptions.find((o) => o.key === andamentoTarget);
+      return opt?.label ?? andamentoTarget;
+    }
+    return "Selecione o destino abaixo";
+  }, [selected, isSubOs, andamentoTarget, activeSubOsList, destinationOptions]);
+
+  const canSaveNew = useMemo(() => {
+    if (!editing || isEditMode) {
+      return true;
+    }
+    if (isSubOs) {
+      return true;
+    }
+    if (!needsDestinationSelector) {
+      return true;
+    }
+    if (!andamentoTarget) {
+      return false;
+    }
+    if (andamentoTarget === "main") {
+      return confirmMainOs;
+    }
+    return (
+      andamentoTarget.startsWith("sub:") || andamentoTarget.startsWith("comp:")
+    );
+  }, [
+    editing,
+    isEditMode,
+    isSubOs,
+    needsDestinationSelector,
+    andamentoTarget,
+    confirmMainOs,
+  ]);
+
+  const startNew = () => {
+    if (frozen) {
+      window.alert("OS congelada (Entregue/Cancelada) — andamento bloqueado.");
+      return;
+    }
+    setIsEditMode(false);
+    setEditing(true);
+    setSelectedHistory(null);
+    setSelectedSubHistory(null);
+    setAndamentoTarget(
+      isSubOs && subOsId != null
+        ? (`sub:${subOsId}` as AndamentoTargetKey)
+        : needsDestinationSelector
+          ? ""
+          : "main",
+    );
+    setConfirmMainOs(false);
+    setForm({
+      situacao: "",
+      setor: "",
+      obs: "",
+      usuario: user ? formatPonto(user.ponto) : "",
+    });
+  };
+
+  const startEdit = () => {
+    if (!selectedHistory) {
+      window.alert("Selecione um andamento na lista para editar.");
+      return;
+    }
+    setIsEditMode(true);
+    setEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
+    setIsEditMode(false);
+    if (selectedHistory) {
+      selectHistoryRow(selectedHistory);
+    } else {
+      setForm(emptyForm());
+    }
+  };
+
+  const buildPayload = (): HistoryPayload => ({
+    situacao: form.situacao,
+    setor: form.setor,
+    obs: form.obs,
+    usuario: form.usuario,
+    confirm_main_os_target: needsDestinationSelector ? confirmMainOs : true,
+  });
+
+  const refreshAfterSubOsSave = async (targetSubId: number) => {
+    if (!selected || ano == null || id == null) {
+      return;
+    }
+    const [mainHistory, subHistory] = await Promise.all([
+      fetchOsHistory(ano, id),
+      fetchSubOsHistory(ano, id, targetSubId),
+    ]);
+    queryClient.setQueryData(
+      queryKeys.os.history(ano, id),
+      dedupeOsHistoryRows(mainHistory),
+    );
+    queryClient.setQueryData(
+      queryKeys.os.subOsHistory(ano, id, targetSubId),
+      subHistory,
+    );
+    queryClient.invalidateQueries({ queryKey: queryKeys.os.subOs(ano, id) });
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.os.subOsSummary(ano, id),
+    });
+    await silentRefreshOsSearch(queryClient, undefined, {
+      skipCrossTabLock: true,
+    });
+  };
+
+  const saveHistory = async (payloadOverride?: HistoryPayload) => {
+    if (!selected) {
+      window.alert("Selecione uma OS primeiro.");
+      return;
+    }
+    if (frozen) {
+      window.alert("OS congelada (Entregue/Cancelada) — andamento bloqueado.");
+      return;
+    }
+    if (!form.situacao || !form.setor) {
+      window.alert("Preencha Situação e Setor.");
+      return;
+    }
+    if (!canSaveNew) {
+      window.alert(
+        "Selecione o destino do andamento e confirme se for da OS principal.",
+      );
+      return;
+    }
+
+    const payload = payloadOverride ?? buildPayload();
+    const launchingOnMainOs =
+      !isSubOs &&
+      !andamentoTarget.startsWith("sub:") &&
+      !andamentoTarget.startsWith("comp:");
+
+    if (
+      !payloadOverride &&
+      !isEditMode &&
+      isEntregueSituacao(form.situacao) &&
+      launchingOnMainOs
+    ) {
+      setEntregaModalOpen(true);
+      return;
+    }
+
+    if (
+      !payloadOverride &&
+      !isEditMode &&
+      isGravacaoPendenteSituacao(form.situacao) &&
+      launchingOnMainOs
+    ) {
+      setGravacaoPendenteModalOpen(true);
+      return;
+    }
+
+    let targetSubId: number | null =
+      isSubOs && subOsId != null
+        ? subOsId
+        : andamentoTarget.startsWith("sub:")
+          ? Number(andamentoTarget.slice(4))
+          : null;
+
+    try {
+      if (andamentoTarget.startsWith("comp:")) {
+        const compId = Number(andamentoTarget.slice(5));
+        const sub = await createOrGetSubOs(selected.ano, selected.nr_os, compId);
+        targetSubId = sub.id;
+      }
+
+      if (targetSubId != null) {
+        if (isEditMode) {
+          window.alert("Edição de andamento de Sub OS não disponível nesta versão.");
+          return;
+        }
+        if (isSubOs) {
+          await addSubOsMutation.mutateAsync(payload);
+        } else {
+          await addSubOsHistory(ano!, id!, targetSubId, payload);
+          await refreshAfterSubOsSave(targetSubId);
+        }
+      } else if (isEditMode && selectedHistory) {
+        await updateMutation.mutateAsync({
+          ...payload,
+          cod_status: selectedHistory.CodStatus,
+        });
+      } else {
+        const replicacao = await checkOsVinculoReplicacao(
+          selected.ano,
+          selected.nr_os,
+          form.situacao,
+          form.setor,
+        );
+        if (replicacao.requires_confirmation) {
+          setPendingGrupoMembros(replicacao.membros ?? []);
+          setPendingSaida(payload);
+          return;
+        }
+        await addMutation.mutateAsync(payload);
+      }
+      resetForm();
+      setAndamentoTarget(
+        isSubOs && subOsId != null ? (`sub:${subOsId}` as AndamentoTargetKey) : "",
+      );
+      setConfirmMainOs(false);
+    } catch (e) {
+      window.alert(
+        `Erro ao salvar: ${e instanceof Error ? e.message : "falha"}`,
+      );
+    }
+  };
+
+  const handleEntregaConfirm = (entrega: ProtocoloEntregaPayload) => {
+    setEntregaModalOpen(false);
+    void saveHistory({ ...buildPayload(), protocolo_entrega: entrega });
+  };
+
+  const handleGravacaoPendenteConfirm = (result: GravacaoPendenteLaunchResult) => {
+    setGravacaoPendenteModalOpen(false);
+    void saveHistory({
+      ...buildPayload(),
+      obs: result.obs || form.obs,
+      gravacao_pendente_arquivos: result.arquivos.map((f) => ({
+        absolute_path: f.absolute_path,
+        nome: f.nome,
+        maquina: f.maquina ?? null,
+      })),
+      gravacao_pendente_chapas: result.chapas,
+      gravacao_pendente_juntadas: result.juntadas.map((j) => ({
+        numero: j.nr_os,
+        ano: j.ano,
+      })),
+    });
+  };
+
+  const handleDelete = async () => {
+    if (isSubOs) {
+      if (!selectedSubHistory) {
+        window.alert("Selecione um andamento para excluir.");
+        return;
+      }
+      const label =
+        selected?.display_label ??
+        `${selected?.nr_os} [${selected?.componente_nome ?? "Componente"}]`;
+      const inherited = Boolean(selectedSubHistory.herdado_da_os_principal);
+      const confirmMsg = inherited
+        ? `Excluir andamento herdado da Sub OS ${label}?\n\nIsso remove apenas o status herdado deste componente. O andamento da OS principal não será alterado.`
+        : `Excluir andamento da Sub OS ${label}?`;
+      if (!window.confirm(confirmMsg)) {
+        return;
+      }
+      try {
+        await deleteSubOsMutation.mutateAsync(selectedSubHistory.id);
+        window.alert("Andamento da Sub OS excluído.");
+        setSelectedSubHistory(null);
+        setForm(emptyForm());
+      } catch (e) {
+        window.alert(
+          `Erro ao excluir: ${e instanceof Error ? e.message : "falha"}`,
+        );
+      }
+      return;
+    }
+
+    if (!selectedHistory) {
+      window.alert("Selecione um andamento para excluir.");
+      return;
+    }
+    const confirmMsg =
+      "ATENÇÃO: Deseja excluir este andamento?\n\n" +
+      "Andamentos herdados ou espelhados nas Sub OSs correspondentes também serão removidos.\n\n" +
+      "Isso irá reorganizar a numeração de todos os andamentos desta OS.\n" +
+      "Essa ação não pode ser desfeita.";
+    if (!window.confirm(confirmMsg)) {
+      return;
+    }
+    try {
+      await deleteMutation.mutateAsync(selectedHistory.CodStatus);
+      window.alert("Andamento excluído e lista reorganizada.");
+      setSelectedHistory(null);
+      setForm(emptyForm());
+    } catch (e) {
+      window.alert(
+        `Erro ao excluir: ${e instanceof Error ? e.message : "falha"}`,
+      );
+    }
+  };
+
+  const handleDecisao = async (choice: "all" | "single") => {
+    if (!selected || !pendingSaida) {
+      return;
+    }
+    setPendingSaida(null);
+    setPendingGrupoMembros([]);
+    try {
+      if (choice === "all") {
+        await replicateMutation.mutateAsync(pendingSaida);
+        window.alert("Andamento replicado para o grupo.");
+      } else {
+        await addMutation.mutateAsync(pendingSaida);
+        await createVinculoExcecao(selected.ano, selected.nr_os, {
+          observacao: "Andamento divergente aplicado apenas a esta OS",
+          usuario_ponto: pendingSaida.usuario,
+          situacao: pendingSaida.situacao,
+          setor: pendingSaida.setor,
+        });
+        window.alert(
+          "Andamento salvo apenas nesta OS. O criador do vínculo foi notificado.",
+        );
+      }
+      resetForm();
+    } catch (e) {
+      window.alert(
+        `Erro ao aplicar decisão: ${e instanceof Error ? e.message : "falha"}`,
+      );
+    }
+  };
+
+  const saving =
+    addMutation.isPending ||
+    updateMutation.isPending ||
+    deleteMutation.isPending ||
+    replicateMutation.isPending ||
+    addSubOsMutation.isPending ||
+    deleteSubOsMutation.isPending;
+
+  const panelTitle = isSubOs
+    ? `HISTÓRICO — ${selected?.display_label ?? selected?.componente_nome ?? "Sub OS"}`
+    : "HISTÓRICO DE TRAMITAÇÃO";
+
+  const mainHistoryRows = useMemo(
+    () => dedupeOsHistoryRows(historyQuery.data ?? []),
+    [historyQuery.data],
+  );
+  const lastMainHistory = mainHistoryRows[mainHistoryRows.length - 1] ?? null;
+  const historyHasProblemasTecnicos =
+    hasProblemasTecnicosAndamento(mainHistoryRows);
+
+  const analiseCanEdit = canEditAnalisePreview({
+    userSetor: user?.setor,
+    situacao: lastMainHistory?.SituacaoLink,
+    lastPonto: lastMainHistory?.Ponto,
+    currentPonto: user?.ponto,
+  });
+  const analiseMode = resolveAnaliseButtonMode({
+    canEdit: analiseCanEdit,
+    hasProblemasTecnicos: historyHasProblemasTecnicos,
+    currentSituacao: lastMainHistory?.SituacaoLink,
+  });
+
+  const showAnaliseButton =
+    !editing &&
+    Boolean(selected) &&
+    can("sb_analise") &&
+    selected != null &&
+    selected.nr_os < 5000 &&
+    osAno != null &&
+    osId != null &&
+    analiseMode != null;
+
+  const analiseCaption = analiseMode
+    ? analiseButtonCaption(analiseMode)
+    : "";
+
+
+  return (
+    <>
+      <section
+        className={cn(
+          "flex min-h-0 flex-1 flex-col transition-shadow",
+          embedded
+            ? ""
+            : "rounded-lg border border-sagra-border bg-white shadow-sm",
+          flash && "ring-2 ring-inset ring-primary-green/40",
+        )}
+      >
+        <div className="shrink-0 border-b border-sagra-border bg-slate-50/80 px-3 py-1.5">
+          <h3 className="text-xs font-bold tracking-wide text-secondary-blue">
+            {panelTitle}
+          </h3>
+          {isSubOs && selected?.componente_nome ? (
+            <p className="mt-0.5 text-[0.65rem] font-semibold text-amber-800">
+              Componente: {selected.componente_nome}
+              {frozen ? " — congelada" : ""}
+            </p>
+          ) : null}
+        </div>
+
+        {!selected && (
+          <p className="flex flex-1 items-center justify-center p-4 text-sm text-neutral-500">
+            Selecione uma OS para ver o histórico.
+          </p>
+        )}
+
+        {selected && (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row">
+            <div
+              ref={historyListRef}
+              className={cn(
+                "relative max-h-[min(40vh,280px)] min-h-[140px] min-w-0 shrink-0 overflow-y-auto overscroll-contain border-b border-sagra-border sm:max-h-none sm:h-auto sm:w-[45.6%] sm:border-r sm:border-b-0",
+                editing && "cursor-not-allowed",
+              )}
+            >
+              {editing ? (
+                <div
+                  className="absolute inset-0 z-10 cursor-not-allowed bg-white/40"
+                  aria-hidden
+                />
+              ) : null}
+              <table
+                className={cn(
+                  "w-full border-collapse text-xs",
+                  editing && "pointer-events-none opacity-60",
+                )}
+              >
+                <thead className="sticky top-0 bg-slate-100">
+                  <tr>
+                    <th className="px-2 py-1.5 text-left font-semibold">
+                      Situação
+                    </th>
+                    <th className="px-2 py-1.5 text-left font-semibold">Setor</th>
+                    <th className="px-2 py-1.5 text-left font-semibold">Data</th>
+                  </tr>
+                </thead>
+                <tbody key={historyOsKey ?? "empty"}>
+                  {showHistoryLoading ? (
+                    <tr>
+                      <td
+                        colSpan={3}
+                        className="px-2 py-4 text-center text-neutral-500"
+                      >
+                        Carregando...
+                      </td>
+                    </tr>
+                  ) : rows.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={3}
+                        className="px-2 py-4 text-center text-neutral-500"
+                      >
+                        Nenhum andamento.
+                      </td>
+                    </tr>
+                  ) : (
+                    rows.map((row) => {
+                      if (isSubOs) {
+                        const subRow = row as SubOsHistoryRow;
+                        const isRowSelected =
+                          selectedSubHistory?.id === subRow.id;
+                        return (
+                          <tr
+                            key={`${historyOsKey}-${subRow.id}`}
+                            onClick={() => {
+                              if (!editing) {
+                                setSelectedSubHistory(subRow);
+                                setForm({
+                                  situacao: subRow.situacao ?? "",
+                                  setor: subRow.setor ?? "",
+                                  obs: subRow.observacao ?? "",
+                                  usuario: formatPonto(subRow.ponto ?? ""),
+                                });
+                              }
+                            }}
+                            className={cn(
+                              "cursor-pointer border-b border-sagra-border/50 hover:bg-slate-50",
+                              isRowSelected && "bg-[var(--highlight-yellow)]",
+                            )}
+                          >
+                            <td className="px-2 py-1">{subRow.situacao ?? "-"}</td>
+                            <td className="px-2 py-1">{subRow.setor ?? "-"}</td>
+                            <td className="px-2 py-1">
+                              {formatDateBr(subRow.data ?? undefined)}
+                            </td>
+                          </tr>
+                        );
+                      }
+                      const mainRow = row as OsHistoryRow;
+                      const isRowSelected =
+                        selectedHistory?.CodStatus === mainRow.CodStatus;
+                      return (
+                        <tr
+                          key={`${historyOsKey}-${mainRow.CodStatus}`}
+                          onClick={() => {
+                            if (!editing) {
+                              selectHistoryRow(mainRow);
+                            }
+                          }}
+                          className={cn(
+                            "cursor-pointer border-b border-sagra-border/50 hover:bg-slate-50",
+                            isRowSelected && "bg-[var(--highlight-yellow)]",
+                          )}
+                        >
+                          <td className="px-2 py-1">
+                            {mainRow.SituacaoLink ?? "-"}
+                          </td>
+                          <td className="px-2 py-1">{mainRow.SetorLink ?? "-"}</td>
+                          <td className="px-2 py-1">{formatDateBr(mainRow.Data)}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-2">
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+                <div className="flex min-h-full flex-col gap-2">
+                  {editing && !isEditMode ? (
+                    <div className="flex min-w-0 shrink-0 flex-col gap-1.5">
+                  <div className="rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-xs text-blue-950">
+                    <p className="font-bold">Destino do andamento:</p>
+                    <p className="mt-0.5 font-semibold">{destinoLabel}</p>
+                  </div>
+                  {!isSubOs && needsDestinationSelector ? (
+                    <>
+                      <label className="min-w-0 text-xs">
+                        <span className="font-semibold text-neutral-700">
+                          Lançar andamento em: *
+                        </span>
+                        <select
+                          value={andamentoTarget}
+                          onChange={(e) => {
+                            const v = e.target.value as AndamentoTargetKey;
+                            setAndamentoTarget(v);
+                            if (v !== "main") {
+                              setConfirmMainOs(false);
+                            }
+                          }}
+                          className="mt-0.5 h-8 w-full rounded border border-sagra-border px-1 text-xs"
+                        >
+                          <option value="">Selecione o destino...</option>
+                          {destinationOptions.map((opt) => (
+                            <option key={opt.key} value={opt.key}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[0.65rem] text-amber-900">
+                        {andamentoTarget === "main"
+                          ? "Este andamento será lançado na OS principal e também atualizará todos os componentes ativos desta OS."
+                          : "Esta OS possui componentes com andamento independente. Confirme o destino do andamento."}
+                      </p>
+                      {andamentoTarget === "main" ? (
+                        <label className="flex items-start gap-2 text-xs text-neutral-800">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 shrink-0"
+                            checked={confirmMainOs}
+                            onChange={(e) =>
+                              setConfirmMainOs(e.target.checked)
+                            }
+                          />
+                          <span>
+                            Confirmo que este andamento pertence à OS principal (
+                            {selected?.nr_os}) e deve ser aplicado a todos os
+                            componentes ativos.
+                          </span>
+                        </label>
+                      ) : null}
+                    </>
+                  ) : null}
+                  {frozen ? (
+                    <p className="text-xs font-semibold text-amber-800">
+                      OS congelada — não é permitido novo andamento.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {editing && isEditMode && frozen ? (
+                <p className="shrink-0 text-xs font-semibold text-amber-800">
+                  OS congelada — não é permitido novo andamento.
+                </p>
+              ) : null}
+
+              <div className="grid shrink-0 grid-cols-1 gap-1.5 sm:grid-cols-3">
+                <label className="min-w-0 text-xs">
+                  <span className="font-semibold text-neutral-600">Andamento</span>
+                  <select
+                    value={form.situacao}
+                    disabled={!editing}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, situacao: e.target.value }))
+                    }
+                    className="mt-0.5 h-8 w-full rounded border border-sagra-border px-1 text-xs disabled:bg-slate-50"
+                  >
+                    <option value="">Selecione...</option>
+                    {(situacoesQuery.data ?? []).map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="min-w-0 text-xs">
+                  <span className="font-semibold text-neutral-600">Setor</span>
+                  <select
+                    value={form.setor}
+                    disabled={!editing}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, setor: e.target.value }))
+                    }
+                    className="mt-0.5 h-8 w-full rounded border border-sagra-border px-1 text-xs disabled:bg-slate-50"
+                  >
+                    <option value="">Selecione...</option>
+                    {(setoresQuery.data ?? []).map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="min-w-0 text-xs">
+                  <span className="font-semibold text-neutral-600">Ponto</span>
+                  <input
+                    type="text"
+                    value={form.usuario}
+                    disabled={!editing}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, usuario: e.target.value }))
+                    }
+                    className="mt-0.5 h-8 w-full rounded border border-sagra-border px-2 text-xs disabled:bg-slate-50"
+                  />
+                </label>
+              </div>
+
+              <label className="flex min-h-[5rem] min-w-0 flex-1 flex-col text-xs">
+                <span className="shrink-0 font-semibold text-neutral-600">
+                  Observação
+                </span>
+                <textarea
+                  value={form.obs}
+                  disabled={!editing}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, obs: e.target.value }))
+                  }
+                  className="mt-0.5 min-h-[5rem] w-full flex-1 resize-none rounded border border-sagra-border px-2 py-1.5 text-xs disabled:bg-slate-50"
+                />
+              </label>
+                </div>
+              </div>
+
+              <div className="flex shrink-0 items-center justify-between gap-2 border-t border-sagra-border/60 pt-2">
+                {!(editing && !isEditMode) ? (
+                  <button
+                    type="button"
+                    title="Excluir andamento selecionado"
+                    disabled={
+                      isSubOs
+                        ? !selectedSubHistory || saving
+                        : !selectedHistory || saving
+                    }
+                    onClick={() => void handleDelete()}
+                    className="flex size-8 items-center justify-center rounded bg-sagra-danger text-white disabled:opacity-40"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                ) : (
+                  <span className="size-8" aria-hidden />
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  {showAnaliseButton ? (
+                    <Link
+                      to="/analise"
+                      search={{
+                        ano: String(osAno),
+                        id: String(osId),
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded bg-secondary-blue px-3 py-1.5 text-xs font-semibold text-white no-underline hover:bg-secondary-blue/90 hover:text-white hover:no-underline"
+                    >
+                      <Search className="size-3.5" aria-hidden />
+                      {analiseCaption}
+                    </Link>
+                  ) : null}
+                  {!editing && !isSubOs ? (
+                    <OsGravacaoAlterarArquivosButton
+                      selected={selected}
+                      frozen={frozen}
+                      disabled={saving}
+                    />
+                  ) : null}
+                  {!editing ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={frozen}
+                        onClick={startNew}
+                        className="rounded bg-primary-green px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                      >
+                        Novo
+                      </button>
+                      {!isSubOs ? (
+                        <button
+                          type="button"
+                          onClick={startEdit}
+                          className="rounded bg-amber-500 px-4 py-1.5 text-xs font-semibold text-white"
+                        >
+                          Editar
+                        </button>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        disabled={saving || !canSaveNew}
+                        onClick={() => void saveHistory()}
+                        className="rounded bg-primary-green px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                      >
+                        Salvar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={cancelEdit}
+                        className="rounded bg-sagra-danger px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                      >
+                        Cancelar
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <OsDecisaoSaidaModal
+        open={pendingSaida != null}
+        currentOs={
+          selected
+            ? { numero: selected.nr_os, ano: selected.ano }
+            : null
+        }
+        situacao={pendingSaida?.situacao}
+        setor={pendingSaida?.setor}
+        membros={pendingGrupoMembros}
+        onClose={() => {
+          setPendingSaida(null);
+          setPendingGrupoMembros([]);
+        }}
+        onConfirm={(choice) => void handleDecisao(choice)}
+      />
+
+      <OsEntregaModal
+        open={entregaModalOpen}
+        saving={saving}
+        defaults={{
+          nr_ponto: form.usuario,
+          entregue_por: form.usuario,
+          setor: form.setor,
+        }}
+        onClose={() => setEntregaModalOpen(false)}
+        onConfirm={handleEntregaConfirm}
+      />
+
+      <GravacaoPendenteLaunchModal
+        row={selected}
+        open={gravacaoPendenteModalOpen}
+        initialObs={form.obs}
+        saving={saving}
+        onClose={() => setGravacaoPendenteModalOpen(false)}
+        onConfirm={handleGravacaoPendenteConfirm}
+      />
+    </>
+  );
+}

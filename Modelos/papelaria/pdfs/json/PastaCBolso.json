@@ -1,0 +1,70 @@
+{
+  "canvas": {
+    "width": 2494,
+    "height": 3628
+  },
+  "faces": [
+    {
+      "id": "frente",
+      "nome": "Frente",
+      "baseImage": "frente_base.png",
+      "pageIndex": 0,
+      "elementos": [
+        {
+          "id": "NomeDep",
+          "tipo": "texto",
+          "template": "{nome_deputado}",
+          "x": 299,
+          "y": 2855,
+          "width": 1896,
+          "height": 140,
+          "fontFamily": "\"ITC Stone Sans Std\", \"Stone Sans\", Arial, Helvetica, sans-serif",
+          "fontSize": 104,
+          "fontWeight": 600,
+          "fontStyle": "normal",
+          "color": "#231f20",
+          "align": "center",
+          "anchor": "middle",
+          "lineHeight": 1.0,
+          "letterSpacing": 0
+        },
+        {
+          "id": "Genero",
+          "tipo": "texto",
+          "template": "{genero}",
+          "x": 299,
+          "y": 2952,
+          "width": 1896,
+          "height": 108,
+          "fontFamily": "\"ITC Stone Sans Std\", \"Stone Sans\", Arial, Helvetica, sans-serif",
+          "fontSize": 80,
+          "fontWeight": 500,
+          "fontStyle": "normal",
+          "color": "#231f20",
+          "align": "center",
+          "anchor": "middle",
+          "lineHeight": 1.0,
+          "letterSpacing": 0
+        },
+        {
+          "id": "PartidoDep",
+          "tipo": "texto",
+          "template": "{partido}/{uf}",
+          "x": 299,
+          "y": 3053,
+          "width": 1896,
+          "height": 108,
+          "fontFamily": "\"ITC Stone Sans Std\", \"Stone Sans\", Arial, Helvetica, sans-serif",
+          "fontSize": 80,
+          "fontWeight": 500,
+          "fontStyle": "normal",
+          "color": "#231f20",
+          "align": "center",
+          "anchor": "middle",
+          "lineHeight": 1.0,
+          "letterSpacing": 0
+        }
+      ]
+    }
+  ]
+}

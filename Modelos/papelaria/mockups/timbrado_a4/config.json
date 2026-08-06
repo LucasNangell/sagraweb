@@ -1,0 +1,42 @@
+{
+  "id": "timbrado_a4",
+  "nome": "Timbrado A4",
+  "tipo_produto": "timbrado",
+  "canvas": {
+    "largura": 1200,
+    "altura": 800
+  },
+  "faces": {
+    "frente": {
+      "label": "Frente",
+      "tipo": "quad",
+      "pontos": [
+        [
+          440,
+          130
+        ],
+        [
+          760,
+          120
+        ],
+        [
+          778,
+          588
+        ],
+        [
+          420,
+          598
+        ]
+      ],
+      "bbox": {
+        "x": 420,
+        "y": 120,
+        "largura": 358,
+        "altura": 478
+      },
+      "rotacao_graus": -1.0,
+      "observacoes": "Área útil da folha timbrada."
+    }
+  },
+  "observacoes": "Folha A4 em proporção 210×297 com sombra suave."
+}

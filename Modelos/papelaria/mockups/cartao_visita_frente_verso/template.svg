@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+<defs>
+<filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+<feGaussianBlur in="SourceGraphic" stdDeviation="18"/>
+</filter>
+</defs>
+<rect width="100%" height="100%" fill="rgb(245, 246, 250)"/>
+<ellipse cx="600.0" cy="580.0" rx="520.0" ry="75.0" fill="rgba(20,24,35,0.18)" filter="url(#shadow)"/>
+<polygon points="220.0,290.0 560.0,275.0 575.0,455.0 210.0,470.0" fill="rgb(232, 234, 238)" stroke="#c8ccd4" stroke-width="1.5"/>
+<polygon points="640.0,275.0 980.0,260.0 995.0,440.0 625.0,455.0" fill="rgb(232, 234, 238)" stroke="#c8ccd4" stroke-width="1.5"/>
+<polygon points="230.0,300.0 550.0,286.0 565.0,442.0 220.0,458.0" fill="rgba(255,255,255,0.55)" stroke="rgb(120, 130, 150)" stroke-width="2" stroke-dasharray="10 6"/>
+<text x="228.0" y="308.0" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="rgb(90, 100, 115)">Frente</text>
+<polygon points="650.0,286.0 970.0,272.0 985.0,428.0 640.0,444.0" fill="rgba(255,255,255,0.55)" stroke="rgb(120, 130, 150)" stroke-width="2" stroke-dasharray="10 6"/>
+<text x="648.0" y="294.0" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="rgb(90, 100, 115)">Verso</text>
+</svg>

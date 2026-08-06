@@ -1,0 +1,106 @@
+{
+  "canvas": {
+    "width": 964,
+    "height": 567
+  },
+  "faces": [
+    {
+      "id": "frente",
+      "nome": "Frente",
+      "baseImage": "frente_base.png",
+      "pageIndex": 0,
+      "elementos": [
+        {
+          "id": "NomeDep",
+          "tipo": "texto",
+          "template": "{nome_deputado}",
+          "x": 116,
+          "y": 233,
+          "width": 732,
+          "height": 59,
+          "fontFamily": "\"ITC Stone Sans Std\", \"Stone Sans\", Arial, Helvetica, sans-serif",
+          "fontSize": 44,
+          "fontWeight": 600,
+          "fontStyle": "normal",
+          "color": "#231f20",
+          "align": "center",
+          "anchor": "middle",
+          "lineHeight": 1.0,
+          "letterSpacing": 0
+        },
+        {
+          "id": "Genero",
+          "tipo": "texto",
+          "template": "{genero}",
+          "x": 116,
+          "y": 279,
+          "width": 732,
+          "height": 43,
+          "fontFamily": "\"ITC Stone Sans Std\", \"Stone Sans\", Arial, Helvetica, sans-serif",
+          "fontSize": 32,
+          "fontWeight": 500,
+          "fontStyle": "normal",
+          "color": "#231f20",
+          "align": "center",
+          "anchor": "middle",
+          "lineHeight": 1.0,
+          "letterSpacing": 0
+        },
+        {
+          "id": "PartidoDep",
+          "tipo": "texto",
+          "template": "{partido}/{uf}",
+          "x": 116,
+          "y": 315,
+          "width": 732,
+          "height": 43,
+          "fontFamily": "\"ITC Stone Sans Std\", \"Stone Sans\", Arial, Helvetica, sans-serif",
+          "fontSize": 32,
+          "fontWeight": 500,
+          "fontStyle": "normal",
+          "color": "#231f20",
+          "align": "center",
+          "anchor": "middle",
+          "lineHeight": 1.0,
+          "letterSpacing": 0
+        },
+        {
+          "id": "Endereco",
+          "tipo": "texto",
+          "template": "Câmara dos Deputados\nAnexo {anexo}, Gabinete {gabinete}\nCEP 70160-900 - Brasília/DF",
+          "x": 34,
+          "y": 441,
+          "width": 467,
+          "height": 95,
+          "fontFamily": "\"ITC Stone Sans Std\", \"Stone Sans\", Arial, Helvetica, sans-serif",
+          "fontSize": 28,
+          "fontWeight": 500,
+          "fontStyle": "normal",
+          "color": "#231f20",
+          "align": "left",
+          "anchor": "start",
+          "lineHeight": 1.2,
+          "letterSpacing": 0
+        },
+        {
+          "id": "Contato",
+          "tipo": "texto",
+          "template": "Fones: (61) 3215-5{gabinete}\n3215-3{gabinete}\n{email}",
+          "x": 463,
+          "y": 441,
+          "width": 467,
+          "height": 95,
+          "fontFamily": "\"ITC Stone Sans Std\", \"Stone Sans\", Arial, Helvetica, sans-serif",
+          "fontSize": 28,
+          "fontWeight": 500,
+          "fontStyle": "normal",
+          "color": "#231f20",
+          "align": "right",
+          "anchor": "start",
+          "lineHeight": 1.2,
+          "letterSpacing": 0
+        }
+      ]
+    }
+  ]
+}

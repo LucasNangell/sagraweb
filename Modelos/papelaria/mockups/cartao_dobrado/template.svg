@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+<defs>
+<filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+<feGaussianBlur in="SourceGraphic" stdDeviation="18"/>
+</filter>
+</defs>
+<rect width="100%" height="100%" fill="rgb(245, 246, 250)"/>
+<ellipse cx="600.0" cy="600.0" rx="500.0" ry="80.0" fill="rgba(20,24,35,0.18)" filter="url(#shadow)"/>
+<polygon points="250.0,250.0 500.0,235.0 515.0,500.0 240.0,515.0" fill="rgb(232, 234, 238)" stroke="#c8ccd4" stroke-width="1.5"/>
+<polygon points="500.0,235.0 750.0,220.0 765.0,485.0 515.0,500.0" fill="rgb(232, 234, 238)" stroke="#c8ccd4" stroke-width="1.5"/>
+<polygon points="750.0,220.0 1000.0,205.0 1015.0,470.0 765.0,485.0" fill="rgb(232, 234, 238)" stroke="#c8ccd4" stroke-width="1.5"/>
+<polygon points="260.0,260.0 490.0,248.0 503.0,488.0 250.0,502.0" fill="rgba(255,255,255,0.55)" stroke="rgb(120, 130, 150)" stroke-width="2" stroke-dasharray="10 6"/>
+<text x="258.0" y="270.0" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="rgb(90, 100, 115)">Painel 1</text>
+<polygon points="510.0,248.0 740.0,236.0 753.0,476.0 523.0,488.0" fill="rgba(255,255,255,0.55)" stroke="rgb(120, 130, 150)" stroke-width="2" stroke-dasharray="10 6"/>
+<text x="518.0" y="258.0" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="rgb(90, 100, 115)">Painel 2</text>
+<polygon points="760.0,236.0 990.0,224.0 1003.0,464.0 773.0,476.0" fill="rgba(255,255,255,0.55)" stroke="rgb(120, 130, 150)" stroke-width="2" stroke-dasharray="10 6"/>
+<text x="768.0" y="246.0" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="rgb(90, 100, 115)">Painel 3</text>
+</svg>

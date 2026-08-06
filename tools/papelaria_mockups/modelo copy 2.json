@@ -1,0 +1,73 @@
+{
+  "id": "cartao_visita_frente_verso_flip",
+  "cena": {
+    "rotateX": 8,
+    "rotateY": -18,
+    "perspective": 1200,
+    "rotateYHover": 180,
+    "perspectiveOrigin": "50% 45%"
+  },
+  "modo": "cartao_simples",
+  "nome": "Cartão de visita — frente e verso com giro",
+  "faces": [
+    {
+      "id": "frente",
+      "nome": "Frente",
+      "sombra": true,
+      "zIndex": 2,
+      "style3d": {
+        "rotateY": 0,
+        "translateZ": 1,
+        "transformOrigin": "center center",
+        "backfaceVisibility": "hidden"
+      },
+      "className": "mockup-face--front",
+      "pageIndex": 0
+    },
+    {
+      "id": "verso",
+      "nome": "Verso",
+      "sombra": true,
+      "zIndex": 1,
+      "style3d": {
+        "rotateY": 180,
+        "translateZ": 0,
+        "transformOrigin": "center center",
+        "backfaceVisibility": "hidden"
+      },
+      "className": "mockup-face--back",
+      "pageIndex": 1
+    }
+  ],
+  "vinco": null,
+  "dobras": [],
+  "interacao": {
+    "tipo": "flip",
+    "textoAjuda": "Passe o mouse ou clique para virar o cartão",
+    "acionamento": "hover_click",
+    "rotateYVerso": 180,
+    "rotateYFrente": 0
+  },
+  "maxPaginas": 2,
+  "orientacao": "paisagem",
+  "produtoMatch": [
+    "ct visita",
+    "cartão de visita",
+    "cartao de visita",
+    "visita frente verso",
+    "cartão visita frente e verso",
+    "cartao visita frente e verso"
+  ],
+  "alturaAbertaMm": 50,
+  "aberturaInicial": 0,
+  "alturaFechadaMm": 50,
+  "larguraAbertaMm": 85,
+  "larguraFechadaMm": 85,
+  "modoVisualizacao": "flip_3d",
+  "arquivoModeloMatch": [
+    "CtVisitaFV",
+    "CtVisitaFrenteVerso",
+    "CartaoVisitaFV",
+    "CtVisita"
+  ]
+}

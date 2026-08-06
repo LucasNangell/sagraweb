@@ -1,0 +1,72 @@
+{
+  "id": "pasta_com_bolso",
+  "nome": "Pasta com Bolso",
+  "tipo_produto": "pasta",
+  "canvas": {
+    "largura": 1200,
+    "altura": 800
+  },
+  "faces": {
+    "capa": {
+      "label": "Capa",
+      "tipo": "quad",
+      "pontos": [
+        [
+          290,
+          210
+        ],
+        [
+          610,
+          198
+        ],
+        [
+          628,
+          508
+        ],
+        [
+          270,
+          522
+        ]
+      ],
+      "bbox": {
+        "x": 270,
+        "y": 198,
+        "largura": 358,
+        "altura": 324
+      },
+      "rotacao_graus": -2.0,
+      "observacoes": "Face externa da pasta (capa)."
+    },
+    "interior": {
+      "label": "Interior",
+      "tipo": "quad",
+      "pontos": [
+        [
+          630,
+          198
+        ],
+        [
+          950,
+          186
+        ],
+        [
+          968,
+          496
+        ],
+        [
+          648,
+          508
+        ]
+      ],
+      "bbox": {
+        "x": 630,
+        "y": 186,
+        "largura": 338,
+        "altura": 322
+      },
+      "rotacao_graus": 2.0,
+      "observacoes": "Interior com área de bolso indicada por linha tracejada no SVG."
+    }
+  },
+  "observacoes": "Pasta institucional aberta com capa e interior/bolso."
+}

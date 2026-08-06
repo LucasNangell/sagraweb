@@ -1,0 +1,212 @@
+{
+  "columnCount": 8,
+  "columns": [
+    {
+      "id": "col_0",
+      "title": "SEGEP",
+      "statuses": [
+        "Saída parcial p/",
+        "Saída p/",
+        "Saída Parcial p/",
+        "Tramit. de Prévia p/",
+        "Tramit. de Prova p/",
+        "Solicit. Regravação",
+        "Regravação p/",
+        "Aguard. Aprovação",
+        "Aguard. Juntada",
+        "Aguard. RS",
+        "Arquivo Disponibilizado",
+        "Comentário",
+        "CotasGraf Atualizado",
+        "Em Execução",
+        "Aguard. Autorização",
+        "Aguard. Retirada",
+        "Alteração de OS",
+        "Contato Usuário",
+        "Dev. por Incorreção",
+        "Em Execução Parcial",
+        "Entrada Inicial",
+        "Produção Suspensa",
+        "Pendência Resolvida",
+        "Pendência CGRAF",
+        "Gravação Pendente",
+        "Gravação",
+        "Pendência Usuário"
+      ],
+      "sector": "SEGEP",
+      "sectors": [
+        "SEGEP"
+      ],
+      "muted": true
+    },
+    {
+      "id": "col_1",
+      "title": "SECOG / SEORG",
+      "statuses": [
+        "Recebido",
+        "Aguard. Aprovação",
+        "Aguard. RS",
+        "Arquivo Disponibilizado",
+        "Comentário",
+        "Contato Usuário",
+        "Alteração de OS",
+        "Aguard. Retirada",
+        "Aguard. Autorização",
+        "Dev. por Incorreção",
+        "CotasGraf Atualizado",
+        "Saída p/",
+        "Tramit. de Prova p/",
+        "Tramit. de Prévia p/",
+        "Saída Parcial p/",
+        "Regravação p/",
+        "Produção Suspensa",
+        "Pendência Resolvida",
+        "Pendência CGRAF",
+        "Pendência Usuário"
+      ],
+      "sector": "SEORG",
+      "sectors": [
+        "SEORG",
+        "SECOG"
+      ],
+      "muted": true
+    },
+    {
+      "id": "col_2",
+      "title": "SEFOC",
+      "statuses": [
+        "Problema Técnico",
+        "Em Execução",
+        "Em Execução Parcial",
+        "Entrada Inicial",
+        "Contato Usuário",
+        "Comentário",
+        "Recebido",
+        "Saída p/",
+        "Saída Parcial p/",
+        "Tramit. de Prévia p/",
+        "Regravação p/",
+        "Tramit. de Prova p/",
+        "Problemas Técnicos",
+        "Pendência Resolvida"
+      ],
+      "sector": "SEFOC",
+      "sectors": [
+        "SEFOC"
+      ],
+      "muted": true
+    },
+    {
+      "id": "col_3",
+      "title": "SIELT",
+      "statuses": [
+        "Em Execução",
+        "Em Execução Parcial",
+        "Dev. por Incorreção",
+        "Contato Usuário",
+        "Comentário",
+        "Solicit. Regravação",
+        "Recebido",
+        "Saída p/",
+        "Tramit. de Prova p/",
+        "Produção Autorizada",
+        "Tramit. de Prévia p/",
+        "Saída Parcial p/",
+        "Regravação p/",
+        "Produção Suspensa",
+        "Pendência Resolvida"
+      ],
+      "sector": "SIELT",
+      "sectors": [
+        "SIELT"
+      ],
+      "muted": true
+    },
+    {
+      "id": "col_1775141479151_4",
+      "title": "Gravação",
+      "statuses": [
+        "Gravação",
+        "Gravação Parcial"
+      ],
+      "sector": "SEIMP",
+      "sectors": [
+        "SEFOC"
+      ],
+      "muted": true
+    },
+    {
+      "id": "col_1775511844525",
+      "title": "SEIMP",
+      "sectors": [
+        "SEIMP"
+      ],
+      "statuses": [
+        "Tramit. de Prova p/",
+        "Solicit. Regravação",
+        "Saída p/",
+        "Recebido",
+        "Produção Autorizada",
+        "Tramit. de Prévia p/",
+        "Saída Parcial p/",
+        "Regravação p/",
+        "Produção Suspensa",
+        "Pendência Resolvida",
+        "Em Execução",
+        "Em Execução Parcial",
+        "Entrada Inicial"
+      ],
+      "muted": true
+    },
+    {
+      "id": "col_1775512194494_6",
+      "title": "SEPAC / Encad.",
+      "sectors": [
+        "Encadernação",
+        "SEPAC"
+      ],
+      "statuses": [
+        "Tramit. de Prova p/",
+        "Solicit. Regravação",
+        "Saída p/",
+        "Recebido",
+        "Tramit. de Prévia p/",
+        "Saída Parcial p/",
+        "Regravação p/",
+        "Produção Suspensa",
+        "Pendência Resolvida",
+        "Aguard. RS",
+        "Aguard. Retirada",
+        "Pendência CGRAF",
+        "Produção Autorizada",
+        "Entrada Inicial",
+        "Dev. por Incorreção",
+        "Contato Usuário",
+        "Alteração de OS",
+        "Comentário"
+      ],
+      "muted": true
+    },
+    {
+      "id": "col_1775512195084_7",
+      "title": "Exped. / Corresp.",
+      "sectors": [
+        "SEDIR",
+        "Expedição",
+        "Correspondência"
+      ],
+      "statuses": [
+        "Tramit. de Prévia p/",
+        "Regravação p/",
+        "Saída Parcial p/",
+        "Tramit. de Prova p/",
+        "Solicit. Regravação",
+        "Saída p/",
+        "Recebido",
+        "Aguard. Retirada",
+        "Aguard. RS"
+      ],
+      "muted": true
+    }
+  ]
+}

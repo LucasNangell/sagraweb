@@ -1,0 +1,45 @@
+{
+    "env": "production",
+    "server_host": "10.1.1.73",
+    "server_port": 8001,
+    "api_external_url": "http://10.1.1.73:8001",
+    "mysql_only": true,
+    "sync_andamentos_enabled": false,
+    "allowed_ips": {
+        "master": "10.120.1.14",
+        "local_network": "10.1.1.73"
+    },
+    "db_host": "10.1.1.73",
+    "db_port": 3306,
+    "db_user": "usr_sagraweb",
+    "db_name": "sagrafulldb",
+    "mdb_os_atual_path": "I:\\ControleDeTrabalhos\\BaseDeDados - SAGRA2\\Sagra Base - OS Atual.mdb",
+    "mdb_papelaria_path": "I:\\ControleDeTrabalhos\\BaseDeDados - SAGRA2\\Sagra Base - Papelaria Atual.mdb",
+    "mdb_os_antiga_path": "I:\\ControleDeTrabalhos\\BaseDeDados - SAGRA2\\Sagra Base - OS AntigaCore.mdb",
+    "mdb_papelaria_antiga_path": "I:\\ControleDeTrabalhos\\BaseDeDados - SAGRA2\\Sagra Base - Papelaria Antiga.mdb",
+    "mdb_lombada_path": "c:\\_SAGRA\\Bancos Extras\\CalcularLombada2010.mdb",
+    "mdb_backup_dir": "I:\\ControleDeTrabalhos\\BaseDeDados - SAGRA old\\Backup 72h",
+    "mysql_backup_dir": "I:\\ControleDeTrabalhos\\BaseDeDados - SAGRA2\\BackupMySQL",
+    "network_paths": {
+        "dfs_deputados": "\\\\redecamara\\DfsData\\CGraf\\Sefoc\\Deputados",
+        "dfs_deputados_papelaria": "\\\\redecamara\\DfsData\\CGraf\\Sefoc\\Deputados",
+        "apogee_files": "\\\\cgrafsysvm\\ApogeeFiles"
+    },
+    "credenciais_depol": {
+        "jpg_dir": "\\\\redecamara\\DfsData\\CGraf\\Sefoc\\Deputados\\_Temp\\2025\\Credenciais Depol\\JPG",
+        "svg_dir": "\\\\redecamara\\DfsData\\CGraf\\Sefoc\\Deputados\\_Temp\\2025\\Credenciais Depol",
+        "auto_criar_os": false,
+        "os_template_nro": 20,
+        "os_template_ano": 2026
+    },
+    "_dev_env_file": "Copie config/.env.example para config/.env (gitignore recomendado)",
+    "_env_variables": {
+        "DB_HOST": "host MySQL",
+        "DB_USER": "usuário MySQL",
+        "DB_PASSWORD": "senha (não commitar)",
+        "DB_NAME": "banco",
+        "MASTER_IP": "127.0.0.1 em dev",
+        "PORT": "8001",
+        "ENV": "development | production"
+    }
+}

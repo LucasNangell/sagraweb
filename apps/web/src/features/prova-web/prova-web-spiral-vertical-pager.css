@@ -1,0 +1,77 @@
+.prova-web-spiral-vp__stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  background: linear-gradient(165deg, #e8eef4 0%, #d5dde6 100%);
+  overflow: hidden;
+}
+
+.prova-web-spiral-vp--css-fs {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: #0f172a;
+}
+
+.prova-web-spiral-vp__book {
+  position: relative;
+  flex-shrink: 0;
+  transform-style: preserve-3d;
+  perspective: 1400px;
+  box-shadow:
+    0 12px 28px rgba(15, 23, 42, 0.18),
+    0 2px 6px rgba(15, 23, 42, 0.08);
+  background: #f8f6f2;
+}
+
+.prova-web-spiral-vp__under,
+.prova-web-spiral-vp__leaf {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #f8f6f2;
+}
+
+.prova-web-spiral-vp__under img,
+.prova-web-spiral-vp__leaf img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+}
+
+.prova-web-spiral-vp__leaf {
+  transform-origin: top center;
+  transform-style: preserve-3d;
+  z-index: 2;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.06);
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  backface-visibility: hidden;
+}
+
+.prova-web-spiral-vp__leaf--out {
+  transform: rotateX(-95deg);
+}
+
+.prova-web-spiral-vp__leaf--in {
+  animation: prova-web-spiral-vp-in 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes prova-web-spiral-vp-in {
+  from {
+    transform: rotateX(-95deg);
+  }
+  to {
+    transform: rotateX(0deg);
+  }
+}
+
+.prova-web-spiral-vp__hint {
+  margin: 0;
+  font-size: 0.7rem;
+  color: #64748b;
+}

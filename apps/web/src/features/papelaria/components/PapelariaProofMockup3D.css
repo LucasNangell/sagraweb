@@ -1,0 +1,206 @@
+.proof-mockup-root {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 280px;
+  background: radial-gradient(ellipse at 50% 85%, #e2e8f0 0%, #f8fafc 70%);
+  border-radius: 0.5rem;
+  padding: 1.25rem 1rem 1.75rem;
+  position: relative;
+}
+
+/* .proof-mockup-root::after {
+  content: "";
+  position: absolute;
+  bottom: 14%;
+  left: 50%;
+  width: 62%;
+  height: 10px;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse, rgba(15, 23, 42, 0.16) 0%, transparent 72%);
+  filter: blur(4px);
+  pointer-events: none;
+} */
+
+.proof-mockup-perspective {
+  perspective: 1200px;
+  perspective-origin: 50% 42%;
+}
+
+.proof-mockup-card {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.45s ease;
+}
+
+.proof-mockup-card--fold {
+  transition: transform 0.45s ease;
+}
+
+.proof-mockup-card--vinco-esquerdo::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  transform: translateZ(1.5px);
+  background: linear-gradient(
+    to right,
+    #9ca3af 0%,
+    #d1d5db 35%,
+    #e5e7eb 70%,
+    transparent 100%
+  );
+  border-radius: 1px 0 0 1px;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.proof-mockup-card--vinco-topo::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 3px;
+  transform: translateZ(1.5px);
+  background: linear-gradient(
+    to bottom,
+    #9ca3af 0%,
+    #d1d5db 35%,
+    #e5e7eb 70%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 4;
+}
+
+.mockup-face {
+  position: absolute;
+  border-radius: 2px;
+  background-color: #fff;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  image-rendering: auto;
+  backface-visibility: hidden;
+  transition: transform 0.45s ease;
+  overflow: hidden;
+}
+
+.mockup-face--full {
+  inset: 0;
+}
+
+.mockup-face--shadow {
+  box-shadow: 8px 10px 22px rgba(15, 23, 42, 0.12);
+}
+
+.mockup-face--back {
+  background-color: #fdfdfd;
+  border: 1px solid #e5e7eb;
+  border-left: none;
+  box-shadow: 10px 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+.mockup-face--back::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 0.12) 0%,
+    rgba(0, 0, 0, 0.04) 12%,
+    transparent 36%
+  );
+}
+
+.mockup-face--front {
+  border-left: 2px solid #b8b8b8;
+  box-shadow: -2px 2px 15px rgba(0, 0, 0, 0.08);
+}
+
+.mockup-face--front-top {
+  border-top: 2px solid #b8b8b8;
+  box-shadow: 0 -2px 15px rgba(0, 0, 0, 0.08);
+}
+
+.mockup-face--back-top::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.12) 0%,
+    rgba(0, 0, 0, 0.04) 12%,
+    transparent 36%
+  );
+}
+
+.mockup-face--offset-back {
+  opacity: 0.92;
+  filter: brightness(0.96);
+}
+
+.mockup-face--ghost {
+  opacity: 0.35;
+  filter: brightness(0.9);
+}
+
+.proof-mockup-note {
+  margin-top: 0.75rem;
+  font-size: 0.65rem;
+  color: #64748b;
+  text-align: center;
+  max-width: 28rem;
+}
+
+.proof-mockup-note--warn {
+  color: #b45309;
+}
+
+.proof-mockup-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 220px;
+  padding: 1.5rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+@media (max-width: 767px) {
+  .proof-mockup-root {
+    min-height: min(45vh, 280px);
+    padding: 0.75rem 0.5rem 1rem;
+  }
+
+  .proof-mockup-placeholder {
+    min-height: min(40vh, 220px);
+    padding: 1rem;
+  }
+}
+
+/* Portal — mockup 3D cabe no painel (escala via ResolveSceneBasePx); sem popout de layout */
+.proof-mockup-root--portal-fit {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.proof-mockup-root--portal-fit .proof-mockup-perspective {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}

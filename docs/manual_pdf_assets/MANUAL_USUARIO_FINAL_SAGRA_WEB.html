@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SAGRA Web — Manual do Usuário Final</title>
+  <link rel="stylesheet" href="file:///C:/dev/SagraWeb/docs/manual_pdf_assets/manual-style.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+
+<section class="cover-page" aria-label="Capa">
+  <div class="cover-org">Manual Técnico e Operacional — DEAPA / SEFOC / Câmara dos Deputados</div>
+  <h1 class="cover-title">SAGRA Web</h1>
+  <p class="cover-subtitle">Manual do Usuário Final</p>
+  <p class="cover-doc-type">Parte 2 — Guia operacional para operadores e clientes</p>
+  <div class="cover-meta">
+    <p><strong>Versão:</strong> 2.0</p>
+    <p><strong>Data de geração:</strong> 09/06/2026</p>
+    <p><strong>Seções:</strong> 15 a 33</p>
+  </div>
+</section>
+<section class="doc-info"><h2 id="informações-do-documento">Informações do Documento</h2>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Versão do manual</strong></td>
+<td>2.0</td>
+</tr>
+<tr>
+<td><strong>Data de geração</strong></td>
+<td>09/06/2026</td>
+</tr>
+<tr>
+<td><strong>Público-alvo</strong></td>
+<td>Analistas de sistemas, desenvolvedores, suporte técnico, administradores, operadores SEFOC/DEAPA, analistas de qualidade, PCP, gabinetes/deputados (clientes)</td>
+</tr>
+<tr>
+<td><strong>Confidencialidade</strong></td>
+<td>Uso interno — Câmara dos Deputados / DEAPA / SEFOC. Não distribuir externamente sem autorização. Contém referências a caminhos de rede, IPs internos e arquitetura de produção.</td>
+</tr>
+</tbody>
+</table></section><section class="toc-section">
+<h2 id="sumario">Sumário</h2>
+<div class="toc-body">
+<h3 class="toc-part">Parte 2 — Manual do Usuário Final</h3>
+<p class="toc-item"><strong>15.</strong> <a href="#15-introdução-ao-sistema">Introdução ao Sistema</a></p>
+<p class="toc-item"><strong>16.</strong> <a href="#16-acesso-ao-sistema">Acesso ao Sistema</a></p>
+<p class="toc-item"><strong>17.</strong> <a href="#17-página-inicial--dashboard">Página Inicial / Dashboard</a></p>
+<p class="toc-item"><strong>18.</strong> <a href="#18-ordens-de-serviço">Ordens de Serviço</a></p>
+<p class="toc-item"><strong>19.</strong> <a href="#19-gerência--gestão-de-os">Gerência / Gestão de OS</a></p>
+<p class="toc-item"><strong>20.</strong> <a href="#20-análise-técnica">Análise Técnica</a></p>
+<p class="toc-item"><strong>21.</strong> <a href="#21-problemas-técnicos">Problemas Técnicos</a></p>
+<p class="toc-item"><strong>22.</strong> <a href="#22-provas-e-aprovação">Provas e Aprovação</a></p>
+<p class="toc-item"><strong>23.</strong> <a href="#23-portal-do-cliente">Portal do Cliente</a></p>
+<p class="toc-item"><strong>24.</strong> <a href="#24-envio-de-arquivos">Envio de Arquivos</a></p>
+<p class="toc-item"><strong>25.</strong> <a href="#25-e-mail">E-mail</a></p>
+<p class="toc-item"><strong>26.</strong> <a href="#26-contas-do-gabinete">Contas do Gabinete</a></p>
+<p class="toc-item"><strong>27.</strong> <a href="#27-relatórios">Relatórios</a></p>
+<p class="toc-item"><strong>28.</strong> <a href="#28-usuários-e-permissões">Usuários e Permissões</a></p>
+<p class="toc-item"><strong>29.</strong> <a href="#29-erros-comuns-e-como-resolver">Erros Comuns e Como Resolver</a></p>
+<p class="toc-item"><strong>30.</strong> <a href="#30-boas-práticas-de-uso">Boas Práticas de Uso</a></p>
+<p class="toc-item"><strong>31.</strong> <a href="#31-glossário">Glossário</a></p>
+<p class="toc-item"><strong>32.</strong> <a href="#32-checklists-operacionais">Checklists Operacionais</a></p>
+<p class="toc-item"><strong>33.</strong> <a href="#33-apêndices">Apêndices</a></p>
+</div>
+</section><main class="content"><h1 id="parte-2-manual-do-usuário-final">PARTE 2 — MANUAL DO USUÁRIO FINAL</h1>
+<blockquote>
+<p><strong>Público:</strong> operadores SEFOC/DEAPA, analistas de qualidade, atendimento, PCP, administradores e <strong>clientes</strong> (gabinetes parlamentares e órgãos).<br />
+<strong>Objetivo:</strong> explicar, em linguagem simples, como usar o SAGRA Web no dia a dia — sem exigir conhecimento técnico de programação ou infraestrutura.</p>
+</blockquote>
+<hr />
+<h2 id="15-introdução-ao-sistema">15. Introdução ao Sistema</h2>
+<h3 id="151-o-que-é-o-sagra-web">15.1 O que é o SAGRA Web?</h3>
+<p>O <strong>SAGRA Web</strong> (Sistema de Acompanhamento Gráfico) é o sistema da DEAPA/SEFOC da Câmara dos Deputados para acompanhar e gerenciar <strong>Ordens de Serviço (OS)</strong> gráficas — desde o pedido do gabinete até a entrega do material impresso.</p>
+<p>Com ele você pode:</p>
+<ul>
+<li>Buscar e acompanhar OS em produção</li>
+<li>Registrar andamentos e histórico</li>
+<li>Fazer análise técnica de arquivos PDF</li>
+<li>Comunicar problemas técnicos e provas ao cliente</li>
+<li>Receber arquivos corrigidos e aprovações</li>
+<li>Gerar relatórios e acompanhar filas de produção</li>
+</ul>
+<h3 id="152-quem-usa-o-sistema">15.2 Quem usa o sistema?</h3>
+<table>
+<thead>
+<tr>
+<th>Perfil</th>
+<th>O que faz no sistema</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Operador de produção</strong></td>
+<td>Busca OS, registra andamentos, acompanha status</td>
+</tr>
+<tr>
+<td><strong>Analista de qualidade</strong></td>
+<td>Analisa arquivos, registra problemas técnicos, gera links para o cliente</td>
+</tr>
+<tr>
+<td><strong>Atendimento / e-mail</strong></td>
+<td>Lê caixa Exchange, envia PT e provas por e-mail</td>
+</tr>
+<tr>
+<td><strong>PCP / planejamento</strong></td>
+<td>Organiza fila de produção por setor</td>
+</tr>
+<tr>
+<td><strong>Administrador</strong></td>
+<td>Gerencia usuários, permissões e configurações</td>
+</tr>
+<tr>
+<td><strong>Cliente (gabinete/órgão)</strong></td>
+<td>Acompanha OS, resolve pendências, aprova provas, envia arquivos</td>
+</tr>
+</tbody>
+</table>
+<h3 id="153-duas-interfaces-principais">15.3 Duas interfaces principais</h3>
+<table>
+<thead>
+<tr>
+<th>Área</th>
+<th>Endereço</th>
+<th>Quem acessa</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Sistema interno</strong></td>
+<td><code>/</code>, <code>/analise</code>, <code>/email</code>, etc.</td>
+<td>Equipe SEFOC/DEAPA</td>
+</tr>
+<tr>
+<td><strong>Portal do Cliente</strong></td>
+<td><code>/cliente</code></td>
+<td>Gabinetes e órgãos solicitantes</td>
+</tr>
+</tbody>
+</table>
+<div class="alert alert-alert-importante"><strong>Importante:</strong> As duas áreas têm <strong>logins separados</strong>. Entrar no sistema interno não dá acesso ao Portal do Cliente, e vice-versa.</div>
+<h3 id="154-conceitos-que-você-verá-com-frequência">15.4 Conceitos que você verá com frequência</h3>
+<table>
+<thead>
+<tr>
+<th>Conceito</th>
+<th>Significado resumido</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>OS</strong></td>
+<td>Ordem de Serviço — pedido de trabalho gráfico</td>
+</tr>
+<tr>
+<td><strong>Protocolo</strong></td>
+<td>Número + ano que identificam a OS</td>
+</tr>
+<tr>
+<td><strong>Andamento</strong></td>
+<td>Registro de movimentação (situação, setor, data)</td>
+</tr>
+<tr>
+<td><strong>PT / PTV</strong></td>
+<td>Problemas Técnicos — relatório de inconsistências no arquivo</td>
+</tr>
+<tr>
+<td><strong>Prova</strong></td>
+<td>Versão digital do material para aprovação do cliente</td>
+</tr>
+<tr>
+<td><strong>Token</strong></td>
+<td>Código na URL para acesso seguro sem senha</td>
+</tr>
+<tr>
+<td><strong>Pendência</strong></td>
+<td>Situação que exige ação do cliente ou da equipe</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Exemplo:</strong> A OS <strong>2150/2026</strong> pode estar em <strong>"Problemas Técnicos"</strong> — o cliente precisa corrigir o arquivo e enviar de volta pelo portal.</p>
+<hr />
+<h2 id="16-acesso-ao-sistema">16. Acesso ao Sistema</h2>
+<h3 id="161-sistema-interno-rede-interna-lan">16.1 Sistema interno — rede interna (LAN)</h3>
+<ol>
+<li>Abra o navegador e acesse o endereço do SAGRA Web (ex.: <code>http://cgrafsysvm</code>).</li>
+<li>Se não estiver logado, você será direcionado para <strong><code>/login</code></strong>.</li>
+<li>Informe seu <strong>ponto</strong> e <strong>nome</strong>.</li>
+<li>Clique em entrar.</li>
+</ol>
+<div class="alert alert-alert-resultado"><strong>Resultado esperado:</strong> Página <strong>Início</strong> (<code>/</code>) com menu lateral conforme suas permissões.</div>
+<h3 id="162-sistema-interno-internet-remoto">16.2 Sistema interno — internet (remoto)</h3>
+<ol>
+<li>Acesse o endereço externo (ex.: <code>cgraf.online</code>).</li>
+<li>Use <strong>e-mail ou ponto + senha</strong> em <code>/login</code>.</li>
+<li>Primeiro acesso: ative a conta em <code>/login/activate</code> (link por e-mail).</li>
+<li>Esqueceu a senha: use <code>/login/forgot</code>.</li>
+</ol>
+<div class="alert alert-alert-atencao"><strong>Atenção:</strong> Acesso remoto exige conta ativada e permissões configuradas pelo administrador.</div>
+<h3 id="163-portal-do-cliente">16.3 Portal do Cliente</h3>
+<ol>
+<li>Acesse <strong><code>/cliente/login</code></strong>.</li>
+<li>Informe <strong>e-mail</strong> e <strong>senha</strong>.</li>
+<li>Primeiro acesso: <code>/cliente/login/activate?token=...</code> (senha mínimo 8 caracteres).</li>
+</ol>
+<div class="alert alert-alert-resultado"><strong>Resultado esperado:</strong> Dashboard em <code>/cliente</code>.</div>
+<h3 id="164-links-por-token-sem-login">16.4 Links por token (sem login)</h3>
+<table>
+<thead>
+<tr>
+<th>Tipo</th>
+<th>Rota</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Problemas técnicos</td>
+<td><code>/portal/pt/{token}?os=...&amp;ano=...</code></td>
+</tr>
+<tr>
+<td>Aprovação de prova</td>
+<td><code>/portal/aprovacao/{token}?os=...&amp;ano=...</code></td>
+</tr>
+<tr>
+<td>Envio de arquivos</td>
+<td><code>/portal/os-arquivos/{token}?os=...&amp;ano=...</code></td>
+</tr>
+</tbody>
+</table>
+<div class="alert alert-alert-atencao"><strong>Atenção:</strong> Não compartilhe links publicamente; encaminhe apenas ao destinatário correto.</div>
+<h3 id="165-encerrar-sessão">16.5 Encerrar sessão</h3>
+<table>
+<thead>
+<tr>
+<th>Área</th>
+<th>Como sair</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sistema interno</td>
+<td>Botão <strong>Sair</strong> no cabeçalho</td>
+</tr>
+<tr>
+<td>Portal do Cliente</td>
+<td>Botão <strong>Sair</strong> na barra superior</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="17-página-inicial-dashboard">17. Página Inicial / Dashboard</h2>
+<h3 id="171-o-que-é-a-página-início">17.1 O que é a página Início</h3>
+<p>A rota <strong><code>/</code></strong> (menu <strong>Início</strong>) é o ponto central do sistema interno: busca OS, detalhes, histórico e ações pelo <strong>menu de contexto</strong>.</p>
+<p><strong>Quem acessa:</strong> operadores com permissão <strong>Início</strong> (<code>sb_inicio</code>).</p>
+<h3 id="172-buscar-uma-os">17.2 Buscar uma OS</h3>
+<ol>
+<li>Abra o menu <strong>Início</strong>.</li>
+<li>Use os <strong>filtros</strong> (protocolo, ano, situação, setor, gabinete).</li>
+<li>A lista atualiza automaticamente (debounce ~250 ms).</li>
+<li>Clique na linha da OS desejada.</li>
+</ol>
+<div class="alert alert-alert-resultado"><strong>Resultado esperado:</strong> Painel lateral com detalhes e histórico.</div>
+<p><strong>Dica:</strong> Se a lista estiver vazia, limpe os filtros restritivos.</p>
+<h3 id="173-menu-de-contexto">17.3 Menu de contexto</h3>
+<table>
+<thead>
+<tr>
+<th>Ação</th>
+<th>O que faz</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Nova OS</strong></td>
+<td><code>/gerencia?action=new</code></td>
+</tr>
+<tr>
+<td><strong>Editar OS</strong></td>
+<td>Edição da OS selecionada</td>
+</tr>
+<tr>
+<td><strong>Duplicar OS</strong></td>
+<td>Cópia com novo número</td>
+</tr>
+<tr>
+<td><strong>Vincular OS</strong></td>
+<td>Associa OS relacionadas</td>
+</tr>
+<tr>
+<td><strong>Abrir pasta</strong></td>
+<td>Pasta de rede no Windows</td>
+</tr>
+<tr>
+<td><strong>Imprimir ficha</strong></td>
+<td>Ficha de requisição</td>
+</tr>
+<tr>
+<td><strong>Detalhes</strong></td>
+<td>Informações expandidas</td>
+</tr>
+</tbody>
+</table>
+<div class="alert alert-alert-importante"><strong>Importante:</strong> Cada ação exige permissão específica (<code>ctx_*</code>).</div>
+<h3 id="174-atualização-automática">17.4 Atualização automática</h3>
+<p>A lista é atualizada via <strong>WebSocket</strong> quando há mudanças. Recarregue a página se necessário.</p>
+<hr />
+<h2 id="18-ordens-de-serviço">18. Ordens de Serviço</h2>
+<h3 id="181-identificação">18.1 Identificação</h3>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Exemplo</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Número</strong></td>
+<td>2150</td>
+<td>Protocolo</td>
+</tr>
+<tr>
+<td><strong>Ano</strong></td>
+<td>2026</td>
+<td>Ano de abertura</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Formato:</strong> OS <strong>2150/2026</strong>.</p>
+<h3 id="182-situações-comuns">18.2 Situações comuns</h3>
+<table>
+<thead>
+<tr>
+<th>Situação</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Entrada Inicial</strong></td>
+<td>OS recém-aberta</td>
+</tr>
+<tr>
+<td><strong>Em Execução</strong></td>
+<td>Em produção / análise</td>
+</tr>
+<tr>
+<td><strong>Problemas Técnicos</strong></td>
+<td>Cliente deve corrigir arquivo</td>
+</tr>
+<tr>
+<td><strong>Aguard. Aprovação</strong></td>
+<td>Prova aguardando cliente</td>
+</tr>
+<tr>
+<td><strong>Pendência Usuário</strong></td>
+<td>Aguardando ação do cliente</td>
+</tr>
+<tr>
+<td><strong>Entregue</strong></td>
+<td>Material finalizado</td>
+</tr>
+<tr>
+<td><strong>Cancelada</strong></td>
+<td>OS encerrada</td>
+</tr>
+</tbody>
+</table>
+<h3 id="183-pasta-de-rede">18.3 Pasta de rede</h3>
+<p>Cada OS possui pasta na rede com arquivos de produção. Operadores autorizados abrem via <strong>Abrir pasta</strong> no menu de contexto.</p>
+<div class="alert alert-alert-atencao"><strong>Atenção:</strong> Requer Windows com acesso à rede interna.</div>
+<hr />
+<h2 id="19-gerência-gestão-de-os">19. Gerência / Gestão de OS</h2>
+<h3 id="191-acesso">19.1 Acesso</h3>
+<p>A <strong>Gerência</strong> <strong>não</strong> aparece no menu lateral. Acesso pelo menu de contexto na Início.</p>
+<p><strong>Permissão:</strong> <code>sb_gerencia</code> + <code>ctx_nova_os</code> / <code>ctx_editar_os</code>.</p>
+<h3 id="192-criar-nova-os">19.2 Criar nova OS</h3>
+<ol>
+<li>Menu de contexto → <strong>Nova OS</strong>.</li>
+<li>Preencha campos obrigatórios (gabinete, produto, título).</li>
+<li>Confirme pasta de rede, se solicitado.</li>
+<li>Clique em <strong>Salvar</strong>.</li>
+</ol>
+<div class="alert alert-alert-resultado"><strong>Resultado esperado:</strong> OS criada; modal opcional para enviar link de arquivos ao cliente.</div>
+<h3 id="193-editar-e-duplicar">19.3 Editar e duplicar</h3>
+<ul>
+<li><strong>Editar:</strong> selecione OS → menu contexto → <strong>Editar OS</strong>.</li>
+<li><strong>Duplicar:</strong> copia dados de OS existente para novo protocolo.</li>
+</ul>
+<div class="alert alert-alert-atencao"><strong>Atenção:</strong> Alterações em OS avançada podem impactar setores downstream.</div>
+<hr />
+<h2 id="20-análise-técnica">20. Análise Técnica</h2>
+<h3 id="201-finalidade">20.1 Finalidade</h3>
+<p>Verificar se o PDF do cliente está adequado para impressão (margens, fontes, imagens, sangria).</p>
+<p><strong>Rota:</strong> <code>/analise?ano=...&amp;id=...</code> — permissão <code>sb_analise</code>.</p>
+<h3 id="202-passo-a-passo">20.2 Passo a passo</h3>
+<ol>
+<li>Selecione a OS na Início.</li>
+<li>Abra menu <strong>Análise</strong>.</li>
+<li>Selecione versão e <strong>componente</strong> (Capa, Miolo, etc.).</li>
+<li>Adicione itens da biblioteca de problemas padrão.</li>
+<li><strong>Opcional:</strong> pré-análise automatizada ou anotações no PDF.</li>
+<li>Clique em <strong>Concluir e salvar</strong>.</li>
+</ol>
+<h3 id="203-resultado-ao-concluir">20.3 Resultado ao concluir</h3>
+<table>
+<thead>
+<tr>
+<th>Situação</th>
+<th>O que acontece</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Sem problemas</strong></td>
+<td>Andamento <strong>Em Execução</strong></td>
+</tr>
+<tr>
+<td><strong>Com problemas</strong></td>
+<td>Link portal PT + andamento <strong>Problemas Técnicos</strong></td>
+</tr>
+<tr>
+<td><strong>Já em PT</strong></td>
+<td>Reenvio PTV → <strong>Encam. de Docum.</strong></td>
+</tr>
+</tbody>
+</table>
+<div class="alert alert-alert-importante"><strong>Importante:</strong> Concluir análise <strong>não envia e-mail</strong> automaticamente. Envie PT pelo módulo <strong>E-mail</strong>.</div>
+<hr />
+<h2 id="21-problemas-técnicos">21. Problemas Técnicos</h2>
+<h3 id="211-fluxo-resumido">21.1 Fluxo resumido</h3>
+<pre><code>Analista conclui com problemas → link /portal/pt/{token}
+→ Técnico envia e-mail (módulo E-mail)
+→ Cliente corrige e envia arquivos
+→ OS volta para Em Execução; link expira
+</code></pre>
+<h3 id="212-portal-pt-procedimento-do-cliente">21.2 Portal PT — procedimento do cliente</h3>
+<p><strong>Rota:</strong> <code>/portal/pt/{token}?os=...&amp;ano=...</code></p>
+<ol>
+<li>Abra o link (e-mail ou <code>/cliente/problemas-tecnicos</code>).</li>
+<li>Preencha <strong>nome</strong> e <strong>ponto</strong> no cabeçalho.</li>
+<li>Revise itens por componente.</li>
+<li><strong>Desconsiderar</strong> itens opcionais ou <strong>Enviar arquivo</strong> corrigido.</li>
+<li>Repita até todos os componentes pendentes.</li>
+</ol>
+<div class="alert alert-alert-resultado"><strong>Resultado esperado:</strong> Tela de sucesso; OS em <strong>Em Execução</strong>.</div>
+<div class="alert alert-alert-atencao"><strong>Atenção:</strong> Itens <strong>obrigatórios</strong> (cadeado) não podem ser desconsiderados.</div>
+<h3 id="213-pelo-portal-do-cliente">21.3 Pelo Portal do Cliente</h3>
+<ul>
+<li>Dashboard → seção <strong>Problemas Técnicos</strong></li>
+<li>Página <strong><code>/cliente/problemas-tecnicos</code></strong></li>
+<li>Bridge: <code>/cliente/os/{ano}/{nrOs}/problemas-tecnicos</code></li>
+</ul>
+<hr />
+<h2 id="22-provas-e-aprovação">22. Provas e Aprovação</h2>
+<h3 id="221-o-que-é-prova">22.1 O que é prova</h3>
+<p>Versão digital do material enviada ao cliente para <strong>aprovar</strong> antes da impressão final.</p>
+<h3 id="222-procedimento-do-cliente">22.2 Procedimento do cliente</h3>
+<p><strong>Rota:</strong> <code>/portal/aprovacao/{token}?os=...&amp;ano=...</code></p>
+<ol>
+<li>Abra o link (e-mail ou <code>/cliente/provas</code>).</li>
+<li>Aguarde carregamento do PDF.</li>
+<li>Revise texto, imagens, cores e dimensões.</li>
+<li><strong>Aprovar</strong> ou <strong>Reprovar</strong> com comentário.</li>
+<li>Confirme.</li>
+</ol>
+<div class="alert alert-alert-importante"><strong>Importante:</strong> Aprovar autoriza continuidade da produção. Em dúvida, <strong>reprove</strong> com motivo claro.</div>
+<h3 id="223-rotas-relacionadas">22.3 Rotas relacionadas</h3>
+<table>
+<thead>
+<tr>
+<th>Rota</th>
+<th>Função</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/portal/aprovacao/{token}</code></td>
+<td>Aprovar/reprovar</td>
+</tr>
+<tr>
+<td><code>/portal/prova/{token}</code></td>
+<td>Visualização read-only do relatório PT</td>
+</tr>
+<tr>
+<td><code>/cliente/os/{ano}/{nrOs}/prova</code></td>
+<td>Ponte autenticada → aprovação</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="23-portal-do-cliente">23. Portal do Cliente</h2>
+<h3 id="231-visão-geral">23.1 Visão geral</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detalhe</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>URL</strong></td>
+<td><code>/cliente</code></td>
+</tr>
+<tr>
+<td><strong>Login</strong></td>
+<td><code>/cliente/login</code></td>
+</tr>
+<tr>
+<td><strong>Atualização</strong></td>
+<td>Automática a cada <strong>60 segundos</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="232-cabeçalho-e-barra-de-contexto">23.2 Cabeçalho e barra de contexto</h3>
+<ul>
+<li>Logo DEAPA, título <strong>SAGRA Web</strong></li>
+<li><strong>Solicitante</strong>, deputado/órgão, gabinete, usuário logado</li>
+<li>Botões <strong>Atualizar</strong> e <strong>Sair</strong></li>
+</ul>
+<h3 id="233-menu-lateral">23.3 Menu lateral</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Rota</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Visão Geral</td>
+<td><code>/cliente</code></td>
+</tr>
+<tr>
+<td>Problemas Técnicos</td>
+<td><code>/cliente/problemas-tecnicos</code></td>
+</tr>
+<tr>
+<td>Provas</td>
+<td><code>/cliente/provas</code></td>
+</tr>
+<tr>
+<td>Contas</td>
+<td><code>/cliente/contas</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="234-dashboard-seções">23.4 Dashboard — seções</h3>
+<table>
+<thead>
+<tr>
+<th>Seção</th>
+<th>Conteúdo</th>
+<th>Botão</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Problemas Técnicos</strong></td>
+<td>OS com correção pendente</td>
+<td>Ver pendência — PT</td>
+</tr>
+<tr>
+<td><strong>Aguardando Aprovação</strong></td>
+<td>Provas para conferir</td>
+<td>Ver pendência — Prova</td>
+</tr>
+<tr>
+<td><strong>Aguardando Arquivos</strong></td>
+<td>OS aguardando arquivos</td>
+<td>Enviar arquivos</td>
+</tr>
+<tr>
+<td><strong>Em andamento</strong></td>
+<td>Produção sem pendência do gabinete</td>
+<td>(acompanhamento)</td>
+</tr>
+</tbody>
+</table>
+<p>Cada OS é <strong>acordeão</strong>: expanda para ver a <strong>timeline</strong>.</p>
+<h3 id="235-contas-clientecontas">23.5 Contas (<code>/cliente/contas</code>)</h3>
+<ol>
+<li>Conta <strong>Principal</strong> administra subcontas.</li>
+<li>Preencha nome + e-mail da subconta.</li>
+<li>Pessoa recebe e-mail de ativação (48 h).</li>
+</ol>
+<div class="alert alert-alert-atencao"><strong>Atenção:</strong> E-mail da subconta deve ser único.</div>
+<h3 id="236-timeline">23.6 Timeline</h3>
+<p>Marcos: Entrada Inicial → Pré-Impressão → Análise → Impressão → Acabamento → Expedição → Entregue.</p>
+<table>
+<thead>
+<tr>
+<th>Cor</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Verde</td>
+<td>Concluído</td>
+</tr>
+<tr>
+<td>Âmbar</td>
+<td>Pendência do cliente</td>
+</tr>
+<tr>
+<td>Cinza</td>
+<td>Aguardando</td>
+</tr>
+</tbody>
+</table>
+<p>Carregada <strong>ao expandir</strong> a OS (não no carregamento inicial).</p>
+<h3 id="237-atualizar-e-sair">23.7 Atualizar e sair</h3>
+<ul>
+<li><strong>Automático:</strong> refetch a cada 60 s.</li>
+<li><strong>Manual:</strong> botão <strong>Atualizar</strong> após ação no portal PT/prova.</li>
+<li><strong>Sair:</strong> encerra sessão → <code>/cliente/login</code>.</li>
+</ul>
+<hr />
+<h2 id="24-envio-de-arquivos">24. Envio de Arquivos</h2>
+<h3 id="241-quando-enviar">24.1 Quando enviar</h3>
+<ul>
+<li>OS recém-criada (link por e-mail da equipe)</li>
+<li>Pendência em <strong>Aguardando Arquivos</strong> no portal</li>
+</ul>
+<h3 id="242-procedimento">24.2 Procedimento</h3>
+<p><strong>Rota:</strong> <code>/portal/os-arquivos/{token}?os=...&amp;ano=...</code></p>
+<ol>
+<li>Abra o link.</li>
+<li>Confira número da OS.</li>
+<li>Arraste arquivos ou use seletor.</li>
+<li>Clique em <strong>Enviar</strong>.</li>
+<li>Aguarde confirmação.</li>
+</ol>
+<div class="alert alert-alert-atencao"><strong>Atenção:</strong> Limite de upload no servidor: até <strong>50 MB</strong> por requisição (Nginx).</div>
+<hr />
+<h2 id="25-e-mail">25. E-mail</h2>
+<h3 id="251-finalidade">25.1 Finalidade</h3>
+<p>Integração com <strong>Microsoft Exchange</strong>: inbox, pendências, envio de PT e provas.</p>
+<p><strong>Rota:</strong> <code>/email</code> — permissão <code>sb_email</code>.</p>
+<h3 id="252-configuração-inicial">25.2 Configuração inicial</h3>
+<ol>
+<li>Abra <strong>E-mail</strong> → configurações Exchange.</li>
+<li>Informe credenciais e pastas.</li>
+<li>Teste conexão e salve.</li>
+</ol>
+<h3 id="253-enviar-pt">25.3 Enviar PT</h3>
+<ol>
+<li>Conclua análise com problemas (seção 20).</li>
+<li>Módulo <strong>E-mail</strong> → <strong>Enviar PT</strong>.</li>
+<li>Revise assunto e corpo.</li>
+<li>Confirme envio.</li>
+</ol>
+<div class="alert alert-alert-resultado"><strong>Resultado esperado:</strong> E-mail ao cliente; andamento <strong>Pendência Usuário</strong>; pendência visível no <code>/cliente</code>.</div>
+<hr />
+<h2 id="26-contas-do-gabinete">26. Contas do Gabinete</h2>
+<table>
+<thead>
+<tr>
+<th>Tipo</th>
+<th>Quem</th>
+<th>Função</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Principal</strong></td>
+<td>Responsável pelo gabinete</td>
+<td>Ver OS, criar subcontas</td>
+</tr>
+<tr>
+<td><strong>Subconta</strong></td>
+<td>Membro da equipe</td>
+<td>Mesmo escopo após ativação</td>
+</tr>
+</tbody>
+</table>
+<p>Conta principal cadastrada pela equipe interna em <strong>Usuários</strong> (<code>/usuarios</code>).</p>
+<hr />
+<h2 id="27-relatórios">27. Relatórios</h2>
+<p><strong>Rota:</strong> <code>/relatorios</code> — permissão <code>sb_relatorio</code>.</p>
+<ol>
+<li>Escolha filtros (período, situação, setor).</li>
+<li>Selecione colunas.</li>
+<li><strong>Gerar</strong> → HTML no navegador.</li>
+<li><strong>Opcional:</strong> exportar XLSX.</li>
+</ol>
+<p><strong>Ficha de requisição:</strong> menu contexto → <strong>Imprimir ficha</strong> → <code>/impressao/requisicao/{ano}/{id}</code>.</p>
+<hr />
+<h2 id="28-usuários-e-permissões">28. Usuários e Permissões</h2>
+<h3 id="281-permissões-de-menu-sb_">28.1 Permissões de menu (<code>sb_*</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>Permissão</th>
+<th>Módulo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sb_inicio</code></td>
+<td>Início</td>
+</tr>
+<tr>
+<td><code>sb_gerencia</code></td>
+<td>Gerência (contexto)</td>
+</tr>
+<tr>
+<td><code>sb_analise</code></td>
+<td>Análise</td>
+</tr>
+<tr>
+<td><code>sb_email</code></td>
+<td>E-mail</td>
+</tr>
+<tr>
+<td><code>sb_papelaria</code></td>
+<td>Papelaria</td>
+</tr>
+<tr>
+<td><code>sb_relatorio</code></td>
+<td>Relatórios</td>
+</tr>
+<tr>
+<td><code>sb_pcp</code></td>
+<td>PCP</td>
+</tr>
+<tr>
+<td><code>sb_gravacao</code></td>
+<td>Gravação</td>
+</tr>
+<tr>
+<td><code>sb_usuarios</code></td>
+<td>Usuários</td>
+</tr>
+<tr>
+<td><code>sb_admin_ips</code></td>
+<td>Admin IPs / Configurações</td>
+</tr>
+</tbody>
+</table>
+<h3 id="282-permissões-de-contexto-ctx_">28.2 Permissões de contexto (<code>ctx_*</code>)</h3>
+<p><code>ctx_nova_os</code>, <code>ctx_editar_os</code>, <code>ctx_duplicar_os</code>, <code>ctx_vincular_os</code>, <code>ctx_abrir_pasta</code>, <code>ctx_imprimir_ficha</code>, <code>ctx_detalhes_os</code>.</p>
+<h3 id="283-sem-permissão">28.3 Sem permissão?</h3>
+<p>Informe ponto, IP e justificativa ao administrador (Admin IPs / Usuários).</p>
+<p>Clientes do portal <strong>não</strong> usam <code>sb_*</code> — isolamento automático por gabinete.</p>
+<hr />
+<h2 id="29-erros-comuns-e-como-resolver">29. Erros Comuns e Como Resolver</h2>
+<table>
+<thead>
+<tr>
+<th>Problema</th>
+<th>Causa provável</th>
+<th>Solução</th>
+<th>Escalar quando</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"Sem permissão" após login</td>
+<td>IP não cadastrado</td>
+<td>Solicitar cadastro ao admin</td>
+<td>Persiste após liberação</td>
+</tr>
+<tr>
+<td>Sessão expirada</td>
+<td>Cookie expirado</td>
+<td>Login novamente</td>
+<td>Loop contínuo</td>
+</tr>
+<tr>
+<td>Lista OS vazia</td>
+<td>Filtros restritivos</td>
+<td>Limpar filtros</td>
+<td>OS existe e não aparece</td>
+</tr>
+<tr>
+<td>Análise sem dados</td>
+<td>OS não selecionada</td>
+<td>Selecionar OS na Início</td>
+<td>URL correta e sem dados</td>
+</tr>
+<tr>
+<td>Link PT inválido/expirado</td>
+<td>Token expirado ou upload concluído</td>
+<td>Solicitar novo link</td>
+<td>Cliente ainda precisa corrigir</td>
+</tr>
+<tr>
+<td>Botão pendência ausente no <code>/cliente</code></td>
+<td>Token expirado</td>
+<td>Aguardar reenvio; Atualizar</td>
+<td>Dias sem botão</td>
+</tr>
+<tr>
+<td>Upload falha</td>
+<td>Arquivo grande / rede</td>
+<td>Reduzir tamanho; outro navegador</td>
+<td>Falha com arquivos pequenos</td>
+</tr>
+<tr>
+<td>E-mail não conecta</td>
+<td>Credenciais Exchange</td>
+<td>Reconfigurar módulo E-mail</td>
+<td>Após credenciais confirmadas</td>
+</tr>
+<tr>
+<td>Conta pendente ativação</td>
+<td>Primeiro acesso incompleto</td>
+<td>Link de ativação</td>
+<td>Link expirado</td>
+</tr>
+<tr>
+<td>Prova não carrega PDF</td>
+<td>Arquivo ausente na pasta</td>
+<td>Contatar SEFOC</td>
+<td>Urgência de prazo</td>
+</tr>
+<tr>
+<td>Página desatualizada</td>
+<td>Cache / PWA antigo</td>
+<td>Ctrl+F5 ou aceitar atualização PWA</td>
+<td>Layout quebrado para todos</td>
+</tr>
+<tr>
+<td>Erro 503 / lentidão</td>
+<td>Carga ou indisponibilidade</td>
+<td>Aguardar e tentar</td>
+<td>&gt; 15 min indisponível</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="30-boas-práticas-de-uso">30. Boas Práticas de Uso</h2>
+<h3 id="operadores-internos">Operadores internos</h3>
+<ol>
+<li>Selecione a OS na Início antes de Análise/E-mail.</li>
+<li>Conclua análise antes de enviar PT.</li>
+<li>Registre andamentos claros.</li>
+<li>Não compartilhe links com token publicamente.</li>
+<li>Encerre sessão em estações compartilhadas.</li>
+</ol>
+<h3 id="analistas">Analistas</h3>
+<ol>
+<li>Use biblioteca de problemas padrão.</li>
+<li>Marque <strong>obrigatório</strong> só quando indispensável.</li>
+<li>Envie PT por e-mail após concluir com problemas.</li>
+</ol>
+<h3 id="clientes">Clientes</h3>
+<ol>
+<li>Monitore pendências no <code>/cliente</code>.</li>
+<li>Responda PT e provas rapidamente.</li>
+<li>Preencha nome e ponto no portal PT.</li>
+<li>Use subcontas em vez de compartilhar senha.</li>
+</ol>
+<hr />
+<h2 id="31-glossário">31. Glossário</h2>
+<table>
+<thead>
+<tr>
+<th>Termo</th>
+<th>Definição</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>OS</strong></td>
+<td>Ordem de Serviço gráfica</td>
+</tr>
+<tr>
+<td><strong>Protocolo</strong></td>
+<td>Número da OS (ex.: 2150)</td>
+</tr>
+<tr>
+<td><strong>Andamento</strong></td>
+<td>Movimentação com situação, setor e data</td>
+</tr>
+<tr>
+<td><strong>Setor</strong></td>
+<td>Área da produção (SEFOC, SIELT, etc.)</td>
+</tr>
+<tr>
+<td><strong>Situação</strong></td>
+<td>Status atual da OS</td>
+</tr>
+<tr>
+<td><strong>PT / PTV</strong></td>
+<td>Problemas Técnicos / versão do relatório</td>
+</tr>
+<tr>
+<td><strong>Prova</strong></td>
+<td>Material digital para aprovação</td>
+</tr>
+<tr>
+<td><strong>Token</strong></td>
+<td>Código na URL para ação sem login</td>
+</tr>
+<tr>
+<td><strong>Dashboard</strong></td>
+<td>Painel resumo (Início ou Portal Cliente)</td>
+</tr>
+<tr>
+<td><strong>Portal</strong></td>
+<td>Área para cliente externo (PT, prova, arquivos)</td>
+</tr>
+<tr>
+<td><strong>Upload</strong></td>
+<td>Envio de arquivo ao servidor</td>
+</tr>
+<tr>
+<td><strong>Refetch</strong></td>
+<td>Atualização automática ou manual de dados</td>
+</tr>
+<tr>
+<td><strong>Pendência</strong></td>
+<td>Ação necessária do cliente ou equipe</td>
+</tr>
+<tr>
+<td><strong>Gabinete</strong></td>
+<td>Escritório parlamentar solicitante</td>
+</tr>
+<tr>
+<td><strong>Subconta</strong></td>
+<td>Usuário adicional do gabinete</td>
+</tr>
+<tr>
+<td><strong>Componente</strong></td>
+<td>Parte da publicação (Capa, Miolo)</td>
+</tr>
+<tr>
+<td><strong>PCP</strong></td>
+<td>Planejamento e Controle da Produção</td>
+</tr>
+<tr>
+<td><strong>Timeline</strong></td>
+<td>Linha do tempo de marcos da OS</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="32-checklists-operacionais">32. Checklists Operacionais</h2>
+<h3 id="321-técnico-concluir-análise">32.1 Técnico — concluir análise</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Item</th>
+<th>✓</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>OS correta selecionada</td>
+<td></td>
+</tr>
+<tr>
+<td>2</td>
+<td>Versão e componente corretos</td>
+<td></td>
+</tr>
+<tr>
+<td>3</td>
+<td>Problemas registrados com clareza</td>
+<td></td>
+</tr>
+<tr>
+<td>4</td>
+<td>Análise concluída e salva</td>
+<td></td>
+</tr>
+<tr>
+<td>5</td>
+<td>Se houve problemas: PT enviado por e-mail</td>
+<td></td>
+</tr>
+<tr>
+<td>6</td>
+<td>Andamento verificado na Início</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="322-cliente-resolver-pt">32.2 Cliente — resolver PT</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Item</th>
+<th>✓</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Link aberto (e-mail ou <code>/cliente/problemas-tecnicos</code>)</td>
+<td></td>
+</tr>
+<tr>
+<td>2</td>
+<td>Nome e ponto preenchidos</td>
+<td></td>
+</tr>
+<tr>
+<td>3</td>
+<td>Arquivos corrigidos enviados por componente</td>
+<td></td>
+</tr>
+<tr>
+<td>4</td>
+<td>Tela de sucesso exibida</td>
+<td></td>
+</tr>
+<tr>
+<td>5</td>
+<td>Pendência sumiu no <code>/cliente</code> (Atualizar)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="323-cliente-aprovar-prova">32.3 Cliente — aprovar prova</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Item</th>
+<th>✓</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>PDF carregou completamente</td>
+<td></td>
+</tr>
+<tr>
+<td>2</td>
+<td>Texto, imagens e cores conferidos</td>
+<td></td>
+</tr>
+<tr>
+<td>3</td>
+<td>Aprovação ou reprovação com comentário</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="324-suporte">32.4 Suporte</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Item</th>
+<th>✓</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>/health</code> ou página inicial responde</td>
+<td></td>
+</tr>
+<tr>
+<td>2</td>
+<td>Login funciona</td>
+<td></td>
+</tr>
+<tr>
+<td>3</td>
+<td>IP cadastrado (se 403)</td>
+<td></td>
+</tr>
+<tr>
+<td>4</td>
+<td>Token portal válido (se pendência)</td>
+<td></td>
+</tr>
+<tr>
+<td>5</td>
+<td>Build recente (se layout quebrado)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="325-publicação-deploy">32.5 Publicação (deploy)</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Item</th>
+<th>✓</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Backup antes do deploy</td>
+<td></td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>pnpm build</code> sem erros</td>
+<td></td>
+</tr>
+<tr>
+<td>3</td>
+<td>Login staff e cliente testados</td>
+<td></td>
+</tr>
+<tr>
+<td>4</td>
+<td>Fluxos PT e prova validados</td>
+<td></td>
+</tr>
+<tr>
+<td>5</td>
+<td>Equipe avisada sobre atualização PWA</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="33-apêndices">33. Apêndices</h2>
+<h3 id="apêndice-a-matriz-de-módulos">Apêndice A — Matriz de módulos</h3>
+<table>
+<thead>
+<tr>
+<th>Módulo</th>
+<th>Rota</th>
+<th>Perfil</th>
+<th>Login</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Início</td>
+<td><code>/</code></td>
+<td>Operador</td>
+<td>Staff</td>
+</tr>
+<tr>
+<td>Gerência</td>
+<td><code>/gerencia</code></td>
+<td>Operador</td>
+<td>Staff</td>
+</tr>
+<tr>
+<td>Análise</td>
+<td><code>/analise</code></td>
+<td>Analista</td>
+<td>Staff</td>
+</tr>
+<tr>
+<td>E-mail</td>
+<td><code>/email</code></td>
+<td>Atendimento</td>
+<td>Staff</td>
+</tr>
+<tr>
+<td>Portal Cliente</td>
+<td><code>/cliente</code></td>
+<td>Gabinete</td>
+<td>Cliente</td>
+</tr>
+<tr>
+<td>PT portal</td>
+<td><code>/portal/pt/{token}</code></td>
+<td>Cliente</td>
+<td>Token</td>
+</tr>
+<tr>
+<td>Prova</td>
+<td><code>/portal/aprovacao/{token}</code></td>
+<td>Cliente</td>
+<td>Token</td>
+</tr>
+<tr>
+<td>Contas</td>
+<td><code>/cliente/contas</code></td>
+<td>Gabinete</td>
+<td>Cliente</td>
+</tr>
+</tbody>
+</table>
+<h3 id="apêndice-b-endpoints-resumidos">Apêndice B — Endpoints resumidos</h3>
+<table>
+<thead>
+<tr>
+<th>Grupo</th>
+<th>Método</th>
+<th>Endpoint</th>
+<th>Tela</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Auth staff</td>
+<td>POST</td>
+<td><code>/api/auth/session</code></td>
+<td>Login LAN</td>
+</tr>
+<tr>
+<td>Auth cliente</td>
+<td>POST</td>
+<td><code>/api/auth/cliente/login</code></td>
+<td>Login portal</td>
+</tr>
+<tr>
+<td>OS</td>
+<td>GET</td>
+<td><code>/api/os/search</code></td>
+<td>Início</td>
+</tr>
+<tr>
+<td>Análise</td>
+<td>POST</td>
+<td><code>/api/analise/{ano}/{os}/generate-link</code></td>
+<td>Concluir análise</td>
+</tr>
+<tr>
+<td>Cliente</td>
+<td>GET</td>
+<td><code>/api/cliente/dashboard</code></td>
+<td><code>/cliente</code></td>
+</tr>
+<tr>
+<td>E-mail</td>
+<td>POST</td>
+<td><code>/api/email/send-pt</code></td>
+<td>Envio PT</td>
+</tr>
+</tbody>
+</table>
+<p><em>Prefixo produção: <code>/sagra/api</code>.</em></p>
+<h3 id="apêndice-c-histórico-de-versão-do-manual">Apêndice C — Histórico de versão do manual</h3>
+<table>
+<thead>
+<tr>
+<th>Versão</th>
+<th>Data</th>
+<th>Alterações</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1.0</td>
+<td>—</td>
+<td>Rascunhos e inventário</td>
+</tr>
+<tr>
+<td>1.1</td>
+<td>06/06/2026</td>
+<td>Revisão crítica parcial</td>
+</tr>
+<tr>
+<td><strong>2.0</strong></td>
+<td><strong>09/06/2026</strong></td>
+<td><strong>Parte 1 técnica (seções 1–14) + Parte 2 usuário (seções 15–33)</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>Fim do Manual Completo do Sistema SAGRA Web — versão 2.0 (09/06/2026).</em></p>
+<p><em>Base: <code>docs/INVENTARIO_COMPLETO_PARA_MANUAL_SAGRA_WEB.md</code>, <code>docs/PAGINA_CLIENTE.md</code>, <code>docs/PAGINA_PORTAL_PT_PROBLEMAS_TECNICOS.md</code>. Validar em homologação antes do uso operacional.</em></p></main>
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    if (typeof mermaid !== "undefined") {
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    }
+  });
+</script>
+</body>
+</html>

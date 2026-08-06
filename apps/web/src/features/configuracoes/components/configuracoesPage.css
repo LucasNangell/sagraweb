@@ -1,0 +1,238 @@
+/* Shell da página admin/configuracoes */
+.configuracoes-page-shell {
+  --config-content-max: 72rem;
+}
+
+.configuracoes-page-header {
+  border-radius: 0.5rem;
+  border: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  padding: 1rem 1.25rem;
+}
+
+.configuracoes-tab-intro {
+  border-radius: 0.5rem;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  padding: 0.75rem 1rem;
+}
+
+.configuracoes-tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.configuracoes-tab-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  border-radius: 0.5rem;
+  border: 1px solid #e2e8f0;
+  background: #f1f5f9;
+  padding: 0.25rem;
+}
+
+.config-section + .config-section,
+.configuracoes-tab-panel > .config-section + .config-section {
+  margin-top: 0;
+}
+
+.config-sidebar-nav {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #e2e8f0;
+}
+
+.configuracoes-page-scroll {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #64748b #e2e8f0;
+}
+
+.configuracoes-page-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.configuracoes-page-scroll::-webkit-scrollbar-track {
+  background: #e2e8f0;
+  border-radius: 5px;
+}
+
+.configuracoes-page-scroll::-webkit-scrollbar-thumb {
+  background: #64748b;
+  border-radius: 5px;
+  min-height: 40px;
+}
+
+.configuracoes-page-scroll::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+.configuracoes-checks-scroll {
+  height: 18rem;
+  max-height: 18rem;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #64748b #e2e8f0;
+}
+
+.configuracoes-checks-scroll::-webkit-scrollbar {
+  width: 10px;
+  -webkit-appearance: none;
+}
+
+.configuracoes-checks-scroll::-webkit-scrollbar-track {
+  background: #e2e8f0;
+  border-radius: 5px;
+}
+
+.configuracoes-checks-scroll::-webkit-scrollbar-thumb {
+  background: #64748b;
+  border-radius: 5px;
+  min-height: 40px;
+}
+
+.configuracoes-checks-scroll::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Papelaria: seções altas com editor + prévia em painel fixo */
+.papelaria-admin-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: calc(100dvh - 10rem);
+}
+
+/* E-mail: conteúdo empilhado — rolagem pela página inteira */
+.email-admin-section {
+  display: flex;
+  flex-direction: column;
+  max-height: none;
+  overflow: visible;
+}
+
+.papelaria-admin-four-col,
+.email-admin-three-col {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.papelaria-admin-four-col {
+  min-height: 0;
+  flex: 1 1 auto;
+  max-height: calc(100dvh - 14rem);
+  overflow: hidden;
+}
+
+.email-admin-three-col {
+  min-height: 28rem;
+  max-height: none;
+  overflow: visible;
+}
+
+@media (min-width: 1024px) {
+  .papelaria-admin-four-col {
+    grid-template-columns: 11.5rem minmax(0, 1.25fr) minmax(0, 17rem) minmax(0, 1.15fr);
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .email-admin-three-col {
+    grid-template-columns: 11.5rem minmax(0, 1.35fr) minmax(0, 1fr);
+    grid-template-rows: auto;
+    align-items: start;
+  }
+
+  .papelaria-admin-four-col > .papelaria-admin-col,
+  .papelaria-admin-four-col > .papelaria-admin-col-span {
+    min-height: 0;
+    min-width: 0;
+  }
+
+  .email-admin-three-col > .email-admin-col,
+  .email-admin-three-col > .email-admin-col-span {
+    min-width: 0;
+  }
+}
+
+.papelaria-admin-col {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.email-admin-col {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: visible;
+}
+
+.email-admin-three-col .papelaria-admin-model-list {
+  max-height: 22rem;
+  flex: none;
+}
+
+.papelaria-admin-model-list {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #64748b #e2e8f0;
+}
+
+.papelaria-admin-model-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.papelaria-admin-model-list::-webkit-scrollbar-track {
+  background: #e2e8f0;
+  border-radius: 4px;
+}
+
+.papelaria-admin-model-list::-webkit-scrollbar-thumb {
+  background: #64748b;
+  border-radius: 4px;
+}
+
+.papelaria-admin-json-editor {
+  min-height: 0;
+  flex: 1 1 auto;
+  resize: none;
+  overflow-y: auto;
+}
+
+.papelaria-admin-tuning-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #64748b #e2e8f0;
+}
+
+.papelaria-admin-preview-panel {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.email-admin-preview-panel {
+  min-height: 16rem;
+  overflow: visible;
+}
+
+.email-admin-editor-scroll {
+  overflow-x: hidden;
+  overflow-y: visible;
+}

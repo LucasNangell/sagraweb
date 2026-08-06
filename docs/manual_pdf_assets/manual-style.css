@@ -1,0 +1,458 @@
+/* SAGRA Web — Manual técnico-operacional (PDF) */
+
+@page {
+  size: A4;
+  margin: 20mm 18mm 24mm 18mm;
+}
+
+:root {
+  --color-text: #1a2332;
+  --color-muted: #4a5568;
+  --color-heading: #0f2d52;
+  --color-accent: #1e4d7b;
+  --color-border: #cbd5e1;
+  --color-table-head: #e8eef4;
+  --color-code-bg: #f4f6f8;
+  --font-body: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: Consolas, "Courier New", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 11pt;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+body {
+  margin: 0;
+  padding: 0 18mm;
+  font-family: var(--font-body);
+  color: var(--color-text);
+  line-height: 1.55;
+  background: #fff;
+}
+
+/* ── Capa ── */
+.cover-page {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 248mm;
+  text-align: center;
+  page-break-after: always;
+  padding: 2rem 0;
+  margin: 0 -18mm;
+  border-bottom: 4px solid var(--color-accent);
+}
+
+.cover-org {
+  font-size: 11pt;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin-bottom: 2.5rem;
+}
+
+.cover-title {
+  font-size: 32pt;
+  font-weight: 700;
+  color: var(--color-heading);
+  margin: 0 0 0.5rem;
+  letter-spacing: -0.02em;
+}
+
+.cover-subtitle {
+  font-size: 14pt;
+  color: var(--color-accent);
+  margin: 0 0 2rem;
+  font-weight: 500;
+}
+
+.cover-doc-type {
+  font-size: 13pt;
+  color: var(--color-muted);
+  margin: 0 0 3rem;
+  font-style: italic;
+}
+
+.cover-meta {
+  font-size: 11pt;
+  color: var(--color-muted);
+  line-height: 1.8;
+}
+
+.cover-meta strong {
+  color: var(--color-heading);
+}
+
+/* ── Metadados do documento ── */
+.doc-info {
+  page-break-after: always;
+  padding: 1rem 0 2rem;
+}
+
+.doc-info h2 {
+  border-bottom: 2px solid var(--color-accent);
+  padding-bottom: 0.4rem;
+  margin-top: 0;
+}
+
+.doc-info table {
+  width: 100%;
+  font-size: 10pt;
+}
+
+/* ── Sumário ── */
+.toc-section {
+  page-break-after: always;
+  padding: 1rem 0;
+}
+
+.toc-section h2 {
+  font-size: 18pt;
+  color: var(--color-heading);
+  border-bottom: 2px solid var(--color-accent);
+  padding-bottom: 0.5rem;
+  margin-top: 0;
+}
+
+.toc-section ol,
+.toc-section ul {
+  padding-left: 1.4rem;
+}
+
+.toc-section li {
+  margin: 0.35rem 0;
+  line-height: 1.45;
+}
+
+.toc-section a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.toc-section a:hover {
+  text-decoration: underline;
+}
+
+.toc-section ul {
+  list-style: none;
+  padding-left: 2rem;
+  margin-top: 0.2rem;
+}
+
+.toc-section ul li::before {
+  content: "– ";
+  color: var(--color-muted);
+}
+
+.toc-body {
+  columns: 1;
+}
+
+.toc-item {
+  margin: 0.45rem 0;
+  line-height: 1.5;
+  font-size: 11pt;
+}
+
+.toc-item strong {
+  color: var(--color-heading);
+  margin-right: 0.25rem;
+}
+
+.toc-section .toc-body > ul {
+  margin: 0.15rem 0 0.6rem 0;
+}
+
+/* ── Conteúdo principal ── */
+main.content {
+  max-width: 100%;
+}
+
+main.content > h2:first-child {
+  page-break-before: avoid;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--color-heading);
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+h2 {
+  font-size: 17pt;
+  margin-top: 1.75rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--color-border);
+  page-break-before: always;
+  break-before: page;
+}
+
+h2:first-of-type,
+main.content > h2:first-child {
+  page-break-before: avoid;
+}
+
+h3 {
+  font-size: 13pt;
+  margin-top: 1.25rem;
+  color: var(--color-accent);
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+h4 {
+  font-size: 11.5pt;
+  margin-top: 1rem;
+  color: var(--color-text);
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+p {
+  margin: 0.6rem 0;
+  orphans: 3;
+  widows: 3;
+}
+
+a {
+  color: var(--color-accent);
+  word-break: break-word;
+}
+
+ul, ol {
+  margin: 0.5rem 0 0.75rem;
+  padding-left: 1.5rem;
+}
+
+li {
+  margin: 0.25rem 0;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 1.5rem 0;
+}
+
+/* ── Tabelas ── */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0 1.25rem;
+  font-size: 9.5pt;
+  page-break-inside: auto;
+  table-layout: fixed;
+}
+
+thead {
+  display: table-header-group;
+}
+
+tr {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+th, td {
+  border: 1px solid var(--color-border);
+  padding: 0.5rem 0.6rem;
+  vertical-align: top;
+  text-align: left;
+  overflow-wrap: anywhere;
+  word-wrap: break-word;
+  hyphens: auto;
+}
+
+th {
+  background: var(--color-table-head);
+  color: var(--color-heading);
+  font-weight: 600;
+}
+
+tbody tr:nth-child(even) {
+  background: #fafbfc;
+}
+
+/* ── Código ── */
+code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--color-code-bg);
+  padding: 0.12em 0.35em;
+  border-radius: 3px;
+  word-break: break-all;
+}
+
+pre {
+  background: var(--color-code-bg);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 9pt;
+  line-height: 1.5;
+  page-break-inside: avoid;
+  break-inside: avoid;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+}
+
+/* ── Avisos ── */
+.alert {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  border-left: 4px solid;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.alert strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.alert-atencao {
+  background: #fff8e6;
+  border-color: #d97706;
+  color: #78350f;
+}
+
+.alert-importante {
+  background: #eff6ff;
+  border-color: #2563eb;
+  color: #1e3a5f;
+}
+
+.alert-risco {
+  background: #fef2f2;
+  border-color: #dc2626;
+  color: #7f1d1d;
+}
+
+.alert-resultado {
+  background: #ecfdf5;
+  border-color: #059669;
+  color: #064e3b;
+}
+
+.alert-validacao {
+  background: #f5f3ff;
+  border-color: #7c3aed;
+  color: #4c1d95;
+}
+
+.alert-block {
+  margin: 1rem 0;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.alert-block .alert {
+  margin-bottom: 0.5rem;
+}
+
+.alert-block ol,
+.alert-block ul {
+  margin: 0.25rem 0 0.5rem 1.25rem;
+  padding-left: 1.25rem;
+}
+
+.alert-validacao-inline {
+  color: #6d28d9;
+  background: #f5f3ff;
+  padding: 0.05em 0.25em;
+  border-radius: 2px;
+}
+
+blockquote {
+  margin: 1rem 0;
+  padding: 0.65rem 1rem;
+  border-left: 4px solid var(--color-border);
+  background: #f8fafc;
+  color: var(--color-muted);
+}
+
+/* ── Checklists ── */
+input[type="checkbox"] {
+  margin-right: 0.4rem;
+  transform: scale(1.1);
+}
+
+/* Markdown task lists if present */
+li:has(input[type="checkbox"]) {
+  list-style: none;
+  margin-left: -1.2rem;
+}
+
+/* ── Impressão / quebras ── */
+.no-break {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+@media print {
+  body {
+    background: white;
+  }
+
+  a[href^="#"] {
+    color: var(--color-accent);
+  }
+}
+
+/* ── Partes do manual ── */
+.part-divider {
+  page-break-before: always;
+  break-before: page;
+  margin: 2rem 0 1.5rem;
+  padding: 1.5rem 0 0.5rem;
+  border-top: 3px solid var(--color-accent);
+}
+
+.part-divider h1 {
+  font-size: 20pt;
+  border: none;
+  page-break-before: avoid;
+  margin: 0;
+}
+
+.toc-part {
+  font-size: 12pt;
+  color: var(--color-accent);
+  margin: 1.25rem 0 0.5rem;
+  font-weight: 600;
+}
+
+/* ── Diagramas Mermaid ── */
+.mermaid {
+  margin: 1rem 0 1.5rem;
+  padding: 0.75rem;
+  background: #f8fafc;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  page-break-inside: avoid;
+  break-inside: avoid;
+  text-align: center;
+  overflow-x: auto;
+}
+
+.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}

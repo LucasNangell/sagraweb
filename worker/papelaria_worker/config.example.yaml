@@ -1,0 +1,33 @@
+# API única — servidor de produção
+# Use o FQDN — o alias curto cgrafsysvm redireciona 301 e quebra POST do worker.
+api_base_url: "https://cgrafsysvm.redecamara.camara.gov.br/sagra/api"
+ssl_verify: false
+
+# Para testar inspeção de .cdr no admin (DEV), use a mesma API do painel local:
+# api_base_url: "http://127.0.0.1:8001/api"
+
+worker_secret: "trocar"
+worker_id: auto
+
+poll_interval_sec: 8
+models_dir: "\\\\redecamara\\DfsData\\CGraf\\Sefoc\\Laboratorio\\Modelos\\Modelos Corel\\Papelaria\\CSP\\WEB"
+# Credenciais DEPOL — caminhos vêm no payload do job (jpg_dir / svg_dir da API);
+# opcionalmente espelhe aqui para referência local:
+# credenciais_depol_jpg_dir: "\\\\redecamara\\DfsData\\CGraf\\Sefoc\\Deputados\\_Temp\\2025\\Credenciais Depol\\JPG"
+# credenciais_depol_svg_dir: "\\\\redecamara\\DfsData\\CGraf\\Sefoc\\Deputados\\_Temp\\2025\\Credenciais Depol"
+temp_dir: "C:\\SAGRA-Papelaria-Worker\\temp"
+logs_dir: "C:\\SAGRA-Papelaria-Worker\\logs"
+
+corel_visible: false
+job_timeout_sec: 300
+max_retries: 3
+kill_corel_on_timeout: false
+
+load_balance_enabled: true
+max_cpu_percent: 75
+max_memory_percent: 80
+prevent_sleep: true
+
+auto_update_enabled: true
+auto_update_source: "I:\\Transferencia\\_Temp1\\SAGRA-Papelaria-Worker.exe"
+auto_update_check_sec: 300

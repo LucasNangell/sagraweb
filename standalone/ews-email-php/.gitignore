@@ -1,0 +1,7 @@
+# Credenciais — nunca versionar
+credentials.enc
+credentials.key
+
+# Arquivos temporários de senha
+*.password
+senha.txt

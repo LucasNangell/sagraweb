@@ -1,0 +1,160 @@
+.prova-web-fold-mockup {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0.35rem;
+  padding: 0.4rem 0.5rem 0.45rem;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: linear-gradient(165deg, #d4dde8 0%, #c0cbd8 50%, #aeb9c8 100%);
+  user-select: none;
+  touch-action: none;
+}
+
+.prova-web-fold-mockup__hint {
+  margin: 0;
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  line-height: 1.2;
+  color: #475569;
+  text-align: center;
+}
+
+.prova-web-fold-mockup__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+}
+
+.prova-web-fold-mockup__toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 0.5rem;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #334155;
+  cursor: pointer;
+}
+
+.prova-web-fold-mockup__toolbar button:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+
+.prova-web-fold-mockup__toolbar button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.prova-web-fold-mockup__toolbar-sep {
+  display: inline-block;
+  width: 1px;
+  height: 1.1rem;
+  margin: 0 0.15rem;
+  background: #cbd5e1;
+}
+
+.prova-web-fold-mockup__zoom-label {
+  min-width: 2.6rem;
+  text-align: center;
+  font-size: 0.7rem;
+  color: #475569;
+}
+
+.prova-web-fold-mockup__slider {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 0.5rem;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.7rem;
+  color: #475569;
+  min-width: 10rem;
+}
+
+.prova-web-fold-mockup__slider input[type="range"] {
+  flex: 1;
+  min-width: 5rem;
+  accent-color: #1a7a4c;
+}
+
+.prova-web-fold-mockup__stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  cursor: grab;
+  overflow: hidden;
+  overscroll-behavior: none;
+  border-radius: 0.4rem;
+}
+
+.prova-web-fold-mockup__stage:active {
+  cursor: grabbing;
+}
+
+.prova-web-fold-mockup__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.prova-web-fold-mockup__loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  font-size: 0.8rem;
+  color: #475569;
+  pointer-events: none;
+  background: rgb(197 208 220 / 0.55);
+}
+
+.prova-web-fold-mockup__solver {
+  position: absolute;
+  top: 0.4rem;
+  left: 50%;
+  z-index: 2;
+  max-width: calc(100% - 1rem);
+  margin: 0;
+  transform: translateX(-50%);
+  border-radius: 0.4rem;
+  background: rgb(254 243 199 / 0.92);
+  padding: 0.25rem 0.55rem;
+  font-size: 0.7rem;
+  color: #92400e;
+  pointer-events: none;
+}
+
+.prova-web-fold-mockup__meta {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.35rem;
+  left: 0.5rem;
+  z-index: 1;
+  margin: 0;
+  font-size: 0.65rem;
+  line-height: 1.2;
+  color: #475569;
+  text-align: center;
+  pointer-events: none;
+  text-shadow: 0 1px 0 rgb(255 255 255 / 0.55);
+}

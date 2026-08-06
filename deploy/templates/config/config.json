@@ -1,0 +1,27 @@
+{
+    "env": "production",
+    "server_host": "10.1.1.73",
+    "server_port": 8050,
+    "api_external_url": "http://10.1.1.73/sagra",
+    "public_web_base": "http://cgrafsysvm",
+    "allowed_ips": {
+        "master": "10.120.1.14",
+        "local_network": "10.1.1.73"
+    },
+    "db_host": "10.1.1.73",
+    "db_port": 3306,
+    "db_user": "usr_sagraweb",
+    "db_name": "sagrafulldb",
+    "mysql_only": true,
+    "sync_andamentos_enabled": false,
+    "mdb_os_atual_path": "I:\\ControleDeTrabalhos\\BaseDeDados - SAGRA2\\Sagra Base - OS Atual.mdb",
+    "mdb_papelaria_path": "I:\\ControleDeTrabalhos\\BaseDeDados - SAGRA2\\Sagra Base - Papelaria Atual.mdb",
+    "mdb_os_antiga_path": "I:\\ControleDeTrabalhos\\BaseDeDados - SAGRA2\\Sagra Base - OS AntigaCore.mdb",
+    "mdb_papelaria_antiga_path": "I:\\ControleDeTrabalhos\\BaseDeDados - SAGRA2\\Sagra Base - Papelaria Antiga.mdb",
+    "mdb_backup_dir": "I:\\ControleDeTrabalhos\\BaseDeDados - SAGRA old\\Backup 72h",
+    "mysql_backup_dir": "I:\\ControleDeTrabalhos\\BaseDeDados - SAGRA2\\BackupMySQL",
+    "network_paths": {
+        "dfs_deputados": "\\\\redecamara\\DfsData\\CGraf\\Sefoc\\Deputados",
+        "dfs_deputados_papelaria": "\\\\redecamara\\DfsData\\CGraf\\Sefoc\\Deputados"
+    }
+}

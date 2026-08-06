@@ -1,0 +1,1698 @@
+"""Serviço de Gravação Externa — sessões, arquivos e mensagens."""
+from __future__ import annotations
+
+import io
+import json
+import logging
+import os
+import tempfile
+import zipfile
+from pathlib import Path
+from typing import Any, Optional
+
+from fastapi import HTTPException
+from PIL import Image
+
+from database import db
+from routers.andamento_helpers import format_ponto
+from services.gravacao_externa_realtime_service import (
+    push_gravacao_externa_iniciada,
+    push_gravacao_externa_message,
+)
+from services.notification_push_service import insert_user_notification, push_user_notification
+from services.gravacao_externa_email_service import send_gravacao_notification_email
+from services.os_vinculo_grupo_service import _clean_ponto, _lookup_usuario_nome
+
+logger = logging.getLogger(__name__)
+
+SITUACAO_GRAVACAO_EXTERNA = "Gravação Externa"
+SITUACAO_AGUARD_RETIRADA = "Aguard. Retirada"
+SITUACAO_GRAVACAO = "Gravação"
+SETOR_GRAVACAO_CONCLUIDA = "SEFOC"
+SETOR_ENTREGA_CHAPAS = "SEFOC"
+ACTIVE_STATUSES = frozenset({"pendente", "iniciada"})
+ALLOWED_EXTENSIONS = frozenset({".pdf", ".tif", ".tiff"})
+MESSAGE_MAX_LENGTH = 8000
+TIF_PREVIEW_MAX_EDGE = int(os.getenv("SAGRA_TIF_PREVIEW_MAX_EDGE", "2400"))
+
+
+def is_gravacao_externa_situacao(situacao: str | None) -> bool:
+    return str(situacao or "").strip() == SITUACAO_GRAVACAO_EXTERNA
+
+
+def cancel_active_externa_sessions(ano: int, os_id: int) -> None:
+    """Encerra sessões ativas quando a OS deixa de estar em Gravação Externa."""
+    db.execute_query(
+        """
+        UPDATE tab_os_gravacao_externa
+        SET Status = 'cancelada'
+        WHERE OsAno = %s AND OsNro = %s AND Status IN ('pendente', 'iniciada')
+        """,
+        (ano, os_id),
+    )
+    logger.info("Sessões Gravação Externa canceladas para OS %s/%s", os_id, ano)
+
+
+def cancel_active_externa_sessions_cursor(cursor, ano: int, os_id: int) -> None:
+    """Encerra sessões ativas de Gravação Externa (permite relançar com novos arquivos)."""
+    cursor.execute(
+        """
+        UPDATE tab_os_gravacao_externa
+        SET Status = 'cancelada'
+        WHERE OsAno = %s AND OsNro = %s AND Status IN ('pendente', 'iniciada')
+        """,
+        (ano, os_id),
+    )
+
+
+def cleanup_stale_externa_sessions() -> list[dict[str, Any]]:
+    """Cancela sessões ativas cuja OS não está mais com último andamento Gravação Externa."""
+    from services.andamento_operacional import ultimo_operacional_cod_subquery
+
+    ultimo_cod = ultimo_operacional_cod_subquery("ge.OsNro", "ge.OsAno")
+    rows = db.execute_query(
+        f"""
+        SELECT ge.Id, ge.OsNro, ge.OsAno, ge.CodStatus
+        FROM tab_os_gravacao_externa ge
+        WHERE ge.Status IN ('pendente', 'iniciada')
+          AND NOT EXISTS (
+            SELECT 1
+            FROM tabAndamento a
+            WHERE a.CodStatus = {ultimo_cod}
+              AND a.SituacaoLink = %s
+          )
+        ORDER BY ge.Id ASC
+        """,
+        (SITUACAO_GRAVACAO_EXTERNA,),
+    )
+    cleaned: list[dict[str, Any]] = []
+    for row in rows or []:
+        os_id = int(row["OsNro"])
+        ano = int(row["OsAno"])
+        cancel_active_externa_sessions(ano, os_id)
+        cleaned.append(
+            {
+                "gravacao_externa_id": int(row["Id"]),
+                "os_id": os_id,
+                "ano": ano,
+                "cod_status": row.get("CodStatus"),
+            }
+        )
+    return cleaned
+
+
+def _normalize_relative_path(relative: str) -> str:
+    cleaned = (relative or "").replace("\\", "/").strip().strip("/")
+    if not cleaned:
+        raise ValueError("Caminho relativo inválido.")
+    parts = [part for part in cleaned.split("/") if part and part != "."]
+    for part in parts:
+        if part == "..":
+            raise ValueError("Caminho relativo inválido.")
+    return "/".join(parts)
+
+
+def _resolve_os_root_path(ano: int, os_id: int) -> Optional[str]:
+    from routers.os_routes import _get_os_folder_path
+
+    path = _get_os_folder_path(ano, os_id)
+    if path and os.path.isdir(path):
+        return path
+    local_path = os.path.abspath(f"storage_test/{ano}/{os_id}")
+    if os.path.isdir(local_path):
+        return local_path
+    return None
+
+
+def _resolve_os_file_path(ano: int, os_id: int, relative: str) -> str:
+    from routers.os_routes import _resolve_os_relative_path
+
+    root = _resolve_os_root_path(ano, os_id)
+    if not root:
+        raise ValueError("Pasta da OS não encontrada.")
+    rel = _normalize_relative_path(relative)
+    full = _resolve_os_relative_path(root, rel)
+    if not os.path.isfile(full):
+        raise ValueError(f"Arquivo não encontrado: {rel}")
+    ext = Path(full).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise ValueError(f"Tipo de arquivo não permitido: {ext}")
+    return full
+
+
+def validate_arquivos_input(
+    ano: int,
+    os_id: int,
+    arquivos: list[dict[str, str]],
+) -> list[dict[str, Any]]:
+    if not arquivos:
+        raise ValueError("Selecione ao menos um arquivo para Gravação Externa.")
+    validated: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for idx, item in enumerate(arquivos):
+        relative = _normalize_relative_path(str(item.get("relative") or ""))
+        nome = str(item.get("nome") or Path(relative).name).strip() or Path(relative).name
+        if relative in seen:
+            continue
+        seen.add(relative)
+        full = _resolve_os_file_path(ano, os_id, relative)
+        size = None
+        try:
+            size = os.path.getsize(full)
+        except OSError:
+            size = None
+        validated.append(
+            {
+                "relative": relative,
+                "nome": nome,
+                "tamanho_bytes": size,
+                "ordem": idx,
+            }
+        )
+    if not validated:
+        raise ValueError("Selecione ao menos um arquivo válido para Gravação Externa.")
+    return validated
+
+
+def has_active_session(ano: int, os_id: int) -> bool:
+    rows = db.execute_query(
+        """
+        SELECT Id FROM tab_os_gravacao_externa
+        WHERE OsAno = %s AND OsNro = %s AND Status IN ('pendente', 'iniciada')
+        LIMIT 1
+        """,
+        (ano, os_id),
+    )
+    return bool(rows)
+
+
+def insert_session_with_arquivos_cursor(
+    cursor,
+    *,
+    ano: int,
+    os_id: int,
+    cod_status: str,
+    ponto_fmt: str,
+    lancado_por_nome: str | None,
+    validated_arquivos: list[dict[str, Any]],
+    origem_pendente_id: int | None = None,
+    fornecedor_ponto: str | None = None,
+    juntada_grupo_id: str | None = None,
+) -> int:
+    # Relançamento: encerra sessão ativa anterior e grava a nova com os arquivos atuais.
+    cancel_active_externa_sessions_cursor(cursor, ano, os_id)
+    fornecedor_fmt = (
+        format_ponto(_clean_ponto(fornecedor_ponto)) if fornecedor_ponto else None
+    ) or None
+    grupo_id = (juntada_grupo_id or "").strip() or None
+    cursor.execute(
+        """
+        INSERT INTO tab_os_gravacao_externa
+            (OsAno, OsNro, CodStatus, LancadoPorPonto, LancadoPorNome, Status,
+             OrigemPendenteId, FornecedorPonto, JuntadaGrupoId)
+        VALUES (%s, %s, %s, %s, %s, 'pendente', %s, %s, %s)
+        """,
+        (
+            ano,
+            os_id,
+            cod_status,
+            ponto_fmt,
+            lancado_por_nome,
+            origem_pendente_id,
+            fornecedor_fmt,
+            grupo_id,
+        ),
+    )
+    session_id = int(cursor.lastrowid)
+    for arquivo in validated_arquivos:
+        abs_path = arquivo.get("absolute_path")
+        relative = str(arquivo.get("relative") or "")
+        if abs_path:
+            cursor.execute(
+                """
+                INSERT INTO tab_os_gravacao_externa_arquivo
+                    (GravacaoExternaId, RelativePath, AbsolutePath, NomeArquivo, TamanhoBytes, Ordem, Maquina)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    session_id,
+                    relative,
+                    abs_path,
+                    arquivo["nome"],
+                    arquivo.get("tamanho_bytes"),
+                    arquivo["ordem"],
+                    arquivo.get("maquina"),
+                ),
+            )
+        else:
+            cursor.execute(
+                """
+                INSERT INTO tab_os_gravacao_externa_arquivo
+                    (GravacaoExternaId, RelativePath, NomeArquivo, TamanhoBytes, Ordem, Maquina)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    session_id,
+                    relative,
+                    arquivo["nome"],
+                    arquivo.get("tamanho_bytes"),
+                    arquivo["ordem"],
+                    arquivo.get("maquina"),
+                ),
+            )
+    return session_id
+
+
+def create_session_with_arquivos(
+    *,
+    ano: int,
+    os_id: int,
+    cod_status: str,
+    lancado_por_ponto: str,
+    arquivos: list[dict[str, str]],
+) -> int:
+    validated = validate_arquivos_input(ano, os_id, arquivos)
+    nome = _lookup_usuario_nome(lancado_por_ponto) or ""
+    ponto_fmt = format_ponto(_clean_ponto(lancado_por_ponto))
+
+    def tx(cursor):
+        return insert_session_with_arquivos_cursor(
+            cursor,
+            ano=ano,
+            os_id=os_id,
+            cod_status=cod_status,
+            ponto_fmt=ponto_fmt,
+            lancado_por_nome=nome or None,
+            validated_arquivos=validated,
+        )
+
+    return int(db.execute_transaction([tx])[0])
+
+
+def _map_session_row(row: dict[str, Any]) -> dict[str, Any]:
+    origem = row.get("OrigemPendenteId")
+    juntada = row.get("JuntadaGrupoId")
+    return {
+        "id": int(row["Id"]),
+        "os_ano": int(row["OsAno"]),
+        "os_nro": int(row["OsNro"]),
+        "cod_status": str(row.get("CodStatus") or ""),
+        "lancado_por_ponto": str(row.get("LancadoPorPonto") or ""),
+        "lancado_por_nome": row.get("LancadoPorNome"),
+        "status": str(row.get("Status") or "pendente"),
+        "iniciado_por_ponto": row.get("IniciadoPorPonto"),
+        "iniciado_em": row.get("IniciadoEm"),
+        "criado_em": row.get("CriadoEm"),
+        "origem_pendente_id": int(origem) if origem is not None else None,
+        "fornecedor_ponto": row.get("FornecedorPonto"),
+        "juntada_grupo_id": str(juntada).strip() if juntada else None,
+        "concluida_em": row.get("ConcluidaEm"),
+        "concluida_por_ponto": row.get("ConcluidaPorPonto"),
+        "entrega_lancada_em": row.get("EntregaLancadaEm"),
+        "recebido_por_ponto": row.get("RecebidoPorPonto"),
+        "recebido_por_nome": row.get("RecebidoPorNome"),
+        "pagamento_nf_em": row.get("PagamentoNfEm"),
+    }
+
+
+def _map_arquivo_row(row: dict[str, Any]) -> dict[str, Any]:
+    maquina = row.get("Maquina")
+    return {
+        "id": int(row["Id"]),
+        "relative": str(row.get("RelativePath") or ""),
+        "absolute_path": row.get("AbsolutePath"),
+        "nome": str(row.get("NomeArquivo") or ""),
+        "tamanho_bytes": row.get("TamanhoBytes"),
+        "ordem": int(row.get("Ordem") or 0),
+        "maquina": str(maquina).strip() if maquina else None,
+    }
+
+
+def _map_mensagem_row(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": int(row["Id"]),
+        "autor_ponto": str(row.get("AutorPonto") or ""),
+        "autor_nome": row.get("AutorNome"),
+        "autor_papel": str(row.get("AutorPapel") or ""),
+        "mensagem": str(row.get("Mensagem") or ""),
+        "criado_em": row.get("CriadoEm"),
+    }
+
+
+def get_active_session(ano: int, os_id: int) -> Optional[dict[str, Any]]:
+    rows = db.execute_query(
+        """
+        SELECT * FROM tab_os_gravacao_externa
+        WHERE OsAno = %s AND OsNro = %s AND Status IN ('pendente', 'iniciada')
+        ORDER BY Id DESC
+        LIMIT 1
+        """,
+        (ano, os_id),
+    )
+    if not rows:
+        return None
+    return _map_session_row(rows[0])
+
+
+def get_session_by_id(session_id: int) -> Optional[dict[str, Any]]:
+    rows = db.execute_query(
+        "SELECT * FROM tab_os_gravacao_externa WHERE Id = %s LIMIT 1",
+        (session_id,),
+    )
+    if not rows:
+        return None
+    return _map_session_row(rows[0])
+
+
+def _fetch_arquivos(session_id: int) -> list[dict[str, Any]]:
+    rows = db.execute_query(
+        """
+        SELECT * FROM tab_os_gravacao_externa_arquivo
+        WHERE GravacaoExternaId = %s
+        ORDER BY Ordem ASC, Id ASC
+        """,
+        (session_id,),
+    )
+    return [_map_arquivo_row(r) for r in rows]
+
+
+def _fetch_mensagens(session_id: int) -> list[dict[str, Any]]:
+    rows = db.execute_query(
+        """
+        SELECT * FROM tab_os_gravacao_externa_mensagem
+        WHERE GravacaoExternaId = %s
+        ORDER BY CriadoEm ASC, Id ASC
+        """,
+        (session_id,),
+    )
+    return [_map_mensagem_row(r) for r in rows]
+
+
+def build_session_detail(session: dict[str, Any]) -> dict[str, Any]:
+    sid = int(session["id"])
+    return {
+        **session,
+        "arquivos": _fetch_arquivos(sid),
+        "mensagens": _fetch_mensagens(sid),
+    }
+
+
+def list_os_gravacao_externa(
+    *,
+    ano: Optional[int] = None,
+    search: Optional[str] = None,
+    limit: int = 200,
+    offset: int = 0,
+    fornecedor_ponto: Optional[str] = None,
+) -> tuple[list[dict[str, Any]], int]:
+    from services.andamento_operacional import ultimo_operacional_cod_subquery
+
+    params: dict[str, Any] = {"limit": limit, "offset": offset}
+    ultimo_cod = ultimo_operacional_cod_subquery("p.NroProtocolo", "p.AnoProtocolo")
+    filters = """
+        WHERE a.SituacaoLink = %(situacao)s
+          AND a.CodStatus = {ultimo_cod}
+    """.format(ultimo_cod=ultimo_cod)
+    params["situacao"] = SITUACAO_GRAVACAO_EXTERNA
+
+    if ano:
+        filters += " AND p.AnoProtocolo = %(ano)s"
+        params["ano"] = ano
+
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        filters += """
+            AND (
+                CAST(p.NroProtocolo AS CHAR) LIKE %(search)s
+                OR p.Titular LIKE %(search)s
+                OR p.NomeUsuario LIKE %(search)s
+                OR EXISTS (
+                    SELECT 1 FROM tabDetalhesServico d
+                    WHERE d.NroProtocoloLinkDet = p.NroProtocolo
+                      AND d.AnoProtocoloLinkDet = p.AnoProtocolo
+                      AND d.TipoPublicacaoLink LIKE %(search)s
+                )
+            )
+        """
+        params["search"] = term
+
+    fornecedor_fmt = None
+    if fornecedor_ponto:
+        fornecedor_fmt = format_ponto(_clean_ponto(fornecedor_ponto)) or str(
+            fornecedor_ponto
+        ).strip()
+        params["fornecedor_ponto"] = fornecedor_fmt
+        ge_join = """
+        INNER JOIN tab_os_gravacao_externa ge
+            ON ge.OsAno = p.AnoProtocolo
+           AND ge.OsNro = p.NroProtocolo
+           AND ge.Status IN ('pendente', 'iniciada')
+           AND ge.FornecedorPonto = %(fornecedor_ponto)s
+        """
+    else:
+        ge_join = """
+        LEFT JOIN tab_os_gravacao_externa ge
+            ON ge.OsAno = p.AnoProtocolo
+           AND ge.OsNro = p.NroProtocolo
+           AND ge.Status IN ('pendente', 'iniciada')
+        """
+
+    count_sql = f"""
+        SELECT COUNT(*) AS cnt FROM (
+            SELECT COALESCE(ge.JuntadaGrupoId, CONCAT(p.AnoProtocolo, '-', p.NroProtocolo)) AS gkey
+            FROM tabProtocolos p
+            INNER JOIN tabAndamento a
+                ON a.NroProtocoloLink = p.NroProtocolo
+               AND a.AnoProtocoloLink = p.AnoProtocolo
+               AND a.CodStatus = {ultimo_cod}
+            {ge_join}
+            {filters}
+            GROUP BY gkey
+        ) t
+    """
+    count_params = {k: v for k, v in params.items() if k not in ("limit", "offset")}
+    count_row = db.execute_query(count_sql, count_params)
+    total = int((count_row[0] if count_row else {}).get("cnt") or 0)
+
+    list_sql = f"""
+        SELECT
+            p.NroProtocolo AS nr_os,
+            p.AnoProtocolo AS ano,
+            p.Titular AS solicitante,
+            p.NomeUsuario AS nome_usuario,
+            a.SituacaoLink AS situacao,
+            a.SetorLink AS setor,
+            a.`Data` AS last_update,
+            ge.Id AS gravacao_externa_id,
+            ge.Status AS gravacao_status,
+            ge.LancadoPorPonto AS lancado_por_ponto,
+            ge.LancadoPorNome AS lancado_por_nome,
+            ge.FornecedorPonto AS fornecedor_ponto,
+            ge.CriadoEm AS gravacao_criado_em,
+            ge.JuntadaGrupoId AS juntada_grupo_id,
+            (
+                SELECT d.TipoPublicacaoLink
+                FROM tabDetalhesServico d
+                WHERE d.NroProtocoloLinkDet = p.NroProtocolo
+                  AND d.AnoProtocoloLinkDet = p.AnoProtocolo
+                LIMIT 1
+            ) AS produto,
+            (
+                SELECT d.Titulo
+                FROM tabDetalhesServico d
+                WHERE d.NroProtocoloLinkDet = p.NroProtocolo
+                  AND d.AnoProtocoloLinkDet = p.AnoProtocolo
+                LIMIT 1
+            ) AS titulo
+        FROM tabProtocolos p
+        INNER JOIN tabAndamento a
+            ON a.NroProtocoloLink = p.NroProtocolo
+           AND a.AnoProtocoloLink = p.AnoProtocolo
+           AND a.CodStatus = {ultimo_cod}
+        {ge_join}
+        {filters}
+        ORDER BY a.`Data` DESC, p.NroProtocolo DESC
+        LIMIT 2000
+    """
+    list_params = {k: v for k, v in params.items() if k not in ("limit", "offset")}
+    rows = db.execute_query(list_sql, list_params)
+    items = []
+    for row in rows or []:
+        solicitante = row.get("solicitante") or row.get("nome_usuario")
+        juntada = row.get("juntada_grupo_id")
+        items.append(
+            {
+                "nr_os": int(row["nr_os"]),
+                "ano": int(row["ano"]),
+                "solicitante": solicitante,
+                "produto": row.get("produto"),
+                "titulo": row.get("titulo"),
+                "situacao": row.get("situacao"),
+                "setor": row.get("setor"),
+                "last_update": row.get("last_update"),
+                "gravacao_externa_id": row.get("gravacao_externa_id"),
+                "gravacao_status": row.get("gravacao_status") or "sem_sessao",
+                "lancado_por_ponto": row.get("lancado_por_ponto"),
+                "lancado_por_nome": row.get("lancado_por_nome"),
+                "fornecedor_ponto": row.get("fornecedor_ponto"),
+                "gravacao_criado_em": row.get("gravacao_criado_em"),
+                "juntada_grupo_id": str(juntada).strip() if juntada else None,
+            }
+        )
+    from services.gravacao_pendente_service import _aggregate_list_items_by_juntada
+
+    aggregated = _aggregate_list_items_by_juntada(items)
+    return aggregated[offset : offset + limit], total
+
+
+def user_can_access_session(
+    session: dict[str, Any],
+    *,
+    ponto: str,
+    has_operator_permission: bool,
+    is_fornecedor: bool = False,
+) -> bool:
+    if has_operator_permission:
+        return True
+    from services.support_ponto_utils import ponto_matches
+
+    if ponto_matches(session.get("fornecedor_ponto"), ponto):
+        return True
+    if is_fornecedor:
+        return False
+    return ponto_matches(session.get("lancado_por_ponto"), ponto)
+
+
+def session_allows_operacao_fornecedor(
+    session: dict[str, Any],
+    ponto: str,
+) -> bool:
+    from services.support_ponto_utils import ponto_matches
+
+    return ponto_matches(session.get("fornecedor_ponto"), ponto)
+
+
+def require_session_access(
+    session: dict[str, Any],
+    *,
+    ponto: str,
+    has_operator_permission: bool,
+) -> None:
+    if not user_can_access_session(
+        session,
+        ponto=ponto,
+        has_operator_permission=has_operator_permission,
+    ):
+        raise HTTPException(status_code=403, detail="Acesso negado à sessão de Gravação Externa.")
+
+
+def get_arquivo_for_session(
+    session: dict[str, Any],
+    arquivo_id: int,
+) -> dict[str, Any]:
+    rows = db.execute_query(
+        """
+        SELECT * FROM tab_os_gravacao_externa_arquivo
+        WHERE Id = %s AND GravacaoExternaId = %s
+        LIMIT 1
+        """,
+        (arquivo_id, session["id"]),
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
+    return _map_arquivo_row(rows[0])
+
+
+def resolve_arquivo_absolute_path(session: dict[str, Any], arquivo: dict[str, Any]) -> str:
+    abs_path = arquivo.get("absolute_path")
+    if abs_path:
+        from services.network_files_service import validate_network_arquivos_input
+
+        validated = validate_network_arquivos_input(
+            [{"absolute_path": str(abs_path), "nome": arquivo.get("nome") or ""}]
+        )
+        return str(validated[0]["absolute_path"])
+    try:
+        return _resolve_os_file_path(
+            int(session["os_ano"]),
+            int(session["os_nro"]),
+            str(arquivo["relative"]),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+def build_session_arquivos_zip(session: dict[str, Any]) -> tuple[str, str]:
+    """Empacota todos os arquivos da sessão em um ZIP (ZIP_STORED em disco).
+
+    Returns:
+        (tmp_path, download_filename) — caller must delete tmp_path after send.
+    """
+    arquivos = _fetch_arquivos(int(session["id"]))
+    if not arquivos:
+        raise HTTPException(status_code=404, detail="Nenhum arquivo para download.")
+
+    fd, tmp_path = tempfile.mkstemp(suffix=".zip", prefix="gravacao_externa_")
+    os.close(fd)
+    try:
+        used_names: set[str] = set()
+        with zipfile.ZipFile(tmp_path, "w", compression=zipfile.ZIP_STORED) as archive:
+            for arquivo in arquivos:
+                path = resolve_arquivo_absolute_path(session, arquivo)
+                if not os.path.isfile(path):
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Arquivo não encontrado: {arquivo.get('nome') or path}",
+                    )
+                nome = str(arquivo.get("nome") or Path(path).name).strip() or "arquivo"
+                candidate = nome
+                counter = 1
+                while candidate in used_names:
+                    stem, ext = os.path.splitext(nome)
+                    candidate = f"{stem}_{counter}{ext}"
+                    counter += 1
+                used_names.add(candidate)
+                archive.write(path, arcname=candidate)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+    os_nro = int(session["os_nro"])
+    os_ano = int(session["os_ano"])
+    filename = f"gravacao_externa_OS_{os_nro:05d}_{os_ano}.zip"
+    return tmp_path, filename
+
+
+def _downscale_image_for_preview(img: Image.Image, max_edge: int) -> Image.Image:
+    """Reduz imagem grande sem carregar RGB completo (suporta 1-bit offset)."""
+    width, height = img.size
+    longest = max(width, height)
+    if longest <= max_edge:
+        return img
+    scale = longest / max_edge
+    new_size = (max(1, int(width / scale)), max(1, int(height / scale)))
+    return img.resize(new_size, Image.Resampling.BOX)
+
+
+def _apply_plate_separation_tint(img: Image.Image, channel: str) -> Image.Image:
+    from services.plate_filename_utils import PLATE_CHANNEL_RGB
+
+    channel = channel.upper()
+    rgb = PLATE_CHANNEL_RGB.get(channel)
+    if not rgb:
+        return _normalize_image_for_png(img)
+    gray = img.convert("L") if img.mode != "L" else img
+    paper = Image.new("RGB", gray.size, (255, 255, 255))
+    ink_layer = Image.new("RGB", gray.size, rgb)
+    mask = Image.eval(gray, lambda p: 255 - p)
+    paper.paste(ink_layer, mask=mask)
+    return paper
+
+
+def _normalize_image_for_png(img: Image.Image) -> Image.Image:
+    if img.mode == "1":
+        return img.convert("L")
+    if img.mode == "CMYK":
+        return img.convert("RGB")
+    if img.mode == "P":
+        return img.convert("RGBA" if "transparency" in img.info else "RGB")
+    if img.mode == "RGBA":
+        background = Image.new("RGB", img.size, (255, 255, 255))
+        background.paste(img, mask=img.split()[-1])
+        return background
+    if img.mode not in ("RGB", "L"):
+        return img.convert("RGB")
+    return img
+
+
+def render_tif_preview_png(file_path: str, *, filename: str | None = None) -> bytes:
+    """Gera PNG de prévia para placas TIF grandes (offset / 1-bit na rede)."""
+    from PIL import ImageFile
+
+    from services.plate_filename_utils import parse_plate_color_from_filename
+
+    display_name = filename or os.path.basename(file_path)
+    plate_color = parse_plate_color_from_filename(display_name)
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
+    old_max_pixels = Image.MAX_IMAGE_PIXELS
+    try:
+        # Placas offset excedem o limite anti-bomb do Pillow; a prévia é sempre reduzida.
+        Image.MAX_IMAGE_PIXELS = None
+        with Image.open(file_path) as img:
+            width, height = img.size
+            logger.info(
+                "TIF preview: %s mode=%s size=%sx%s",
+                os.path.basename(file_path),
+                img.mode,
+                width,
+                height,
+            )
+            img.load()
+            preview = _downscale_image_for_preview(img, TIF_PREVIEW_MAX_EDGE)
+            if plate_color:
+                preview = _apply_plate_separation_tint(preview, plate_color)
+            else:
+                preview = _normalize_image_for_png(preview)
+            buffer = io.BytesIO()
+            preview.save(buffer, format="PNG", compress_level=3)
+            return buffer.getvalue()
+    except Exception as exc:
+        logger.error(
+            "Falha ao converter TIF para preview (%s): %s",
+            os.path.basename(file_path),
+            exc,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível gerar preview do arquivo TIF.",
+        ) from exc
+    finally:
+        Image.MAX_IMAGE_PIXELS = old_max_pixels
+
+
+def get_or_build_preview_png(file_path: str, *, filename: str | None = None) -> bytes:
+    """Retorna PNG de preview do cache local ou gera e persiste."""
+    from services.gravacao_preview_cache_service import get_or_build_cached_preview
+
+    display_name = filename or os.path.basename(file_path)
+    return get_or_build_cached_preview(file_path, display_name)
+
+
+PLATE_COMPOSITE_ORDER = ("C", "M", "Y", "K")
+
+
+def collect_plate_separations_for_group(
+    arquivos: list[dict[str, Any]],
+    group_key: str,
+) -> dict[str, dict[str, Any]]:
+    from services.plate_filename_utils import parse_plate_filename
+
+    normalized_key = group_key.strip()
+    result: dict[str, dict[str, Any]] = {}
+    for arq in arquivos:
+        nome = str(arq.get("nome") or "")
+        parsed = parse_plate_filename(nome)
+        if parsed.group_key != normalized_key or not parsed.color:
+            continue
+        result[parsed.color] = arq
+    return result
+
+
+def _load_tif_tinted_preview_layer(
+    file_path: str,
+    channel: str,
+    max_edge: int,
+) -> Image.Image:
+    from PIL import ImageFile
+
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
+    with Image.open(file_path) as img:
+        img.load()
+        preview = _downscale_image_for_preview(img, max_edge)
+        return _apply_plate_separation_tint(preview, channel)
+
+
+def render_plate_composite_png(
+    file_paths_by_color: dict[str, str],
+    *,
+    max_edge: int = TIF_PREVIEW_MAX_EDGE,
+) -> bytes:
+    """Compõe separações CMYK tintadas (multiply) em um PNG de preview."""
+    if len(file_paths_by_color) < 2:
+        raise HTTPException(
+            status_code=400,
+            detail="Composição requer ao menos 2 separações.",
+        )
+
+    from PIL import ImageChops, ImageFile
+
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
+    old_max_pixels = Image.MAX_IMAGE_PIXELS
+    layers: list[Image.Image] = []
+    try:
+        Image.MAX_IMAGE_PIXELS = None
+        for channel in PLATE_COMPOSITE_ORDER:
+            path = file_paths_by_color.get(channel)
+            if not path:
+                continue
+            layers.append(_load_tif_tinted_preview_layer(path, channel, max_edge))
+
+        if len(layers) < 2:
+            raise HTTPException(
+                status_code=400,
+                detail="Composição requer ao menos 2 separações.",
+            )
+
+        max_w = max(layer.size[0] for layer in layers)
+        max_h = max(layer.size[1] for layer in layers)
+        target_size = (max_w, max_h)
+        composite = Image.new("RGB", target_size, (255, 255, 255))
+        for index, layer in enumerate(layers):
+            if layer.size != target_size:
+                logger.warning(
+                    "Composite preview: redimensionando camada %s de %s para %s",
+                    index,
+                    layer.size,
+                    target_size,
+                )
+                layer = layer.resize(target_size, Image.Resampling.BOX)
+            composite = ImageChops.multiply(composite, layer)
+
+        buffer = io.BytesIO()
+        composite.save(buffer, format="PNG", compress_level=3)
+        return buffer.getvalue()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Falha ao gerar preview composto CMYK: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível gerar preview composto.",
+        ) from exc
+    finally:
+        Image.MAX_IMAGE_PIXELS = old_max_pixels
+        for layer in layers:
+            layer.close()
+
+
+def render_session_composite_preview(
+    session: dict[str, Any],
+    group_key: str,
+    arquivos: list[dict[str, Any]],
+) -> bytes:
+    from services.gravacao_preview_cache_service import get_or_build_composite_preview
+
+    separations = collect_plate_separations_for_group(arquivos, group_key)
+    return get_or_build_composite_preview(
+        separations,
+        group_key,
+        lambda arq: resolve_arquivo_absolute_path(session, arq),
+    )
+
+
+def iniciar_gravacao(
+    *,
+    ano: int,
+    os_id: int,
+    operador_ponto: str,
+) -> dict[str, Any]:
+    session = get_active_session(ano, os_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão de Gravação Externa não encontrada.")
+    if session["status"] == "iniciada":
+        return build_session_detail(session)
+
+    ponto_fmt = format_ponto(_clean_ponto(operador_ponto))
+    db.execute_query(
+        """
+        UPDATE tab_os_gravacao_externa
+        SET Status = 'iniciada',
+            IniciadoPorPonto = %s,
+            IniciadoEm = NOW()
+        WHERE Id = %s
+        """,
+        (ponto_fmt, session["id"]),
+    )
+    updated = get_active_session(ano, os_id) or session
+    updated["status"] = "iniciada"
+
+    launcher = str(session.get("lancado_por_ponto") or "")
+    send_gravacao_notification_email(
+        event="iniciada",
+        ano=ano,
+        os_id=os_id,
+        target_ponto=launcher,
+        target_nome=session.get("lancado_por_nome"),
+        operador_ponto=ponto_fmt,
+    )
+    push_gravacao_externa_iniciada(
+        gravacao_externa_id=int(session["id"]),
+        os_ano=ano,
+        os_nro=os_id,
+        lancado_por_ponto=launcher,
+        status="iniciada",
+    )
+    return build_session_detail(updated)
+
+
+def _resolve_autor_papel(session: dict[str, Any], ponto: str, is_operator: bool) -> str:
+    from services.support_ponto_utils import ponto_matches
+
+    if ponto_matches(session.get("lancado_por_ponto"), ponto):
+        return "lancador"
+    if ponto_matches(session.get("fornecedor_ponto"), ponto) or is_operator:
+        return "operador"
+    raise HTTPException(status_code=403, detail="Acesso negado.")
+
+
+def add_mensagem(
+    *,
+    ano: int,
+    os_id: int,
+    ponto: str,
+    mensagem: str,
+    is_operator: bool,
+) -> dict[str, Any]:
+    text = (mensagem or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Mensagem vazia.")
+    if len(text) > MESSAGE_MAX_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Mensagem excede {MESSAGE_MAX_LENGTH} caracteres.",
+        )
+
+    session = get_active_session(ano, os_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão de Gravação Externa não encontrada.")
+    require_session_access(
+        session,
+        ponto=ponto,
+        has_operator_permission=is_operator,
+    )
+    papel = _resolve_autor_papel(session, ponto, is_operator)
+    nome = _lookup_usuario_nome(ponto) or ""
+    ponto_fmt = format_ponto(_clean_ponto(ponto))
+
+    def tx(cursor):
+        cursor.execute(
+            """
+            INSERT INTO tab_os_gravacao_externa_mensagem
+                (GravacaoExternaId, AutorPonto, AutorNome, AutorPapel, Mensagem)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (session["id"], ponto_fmt, nome or None, papel, text),
+        )
+        msg_id = int(cursor.lastrowid)
+        cursor.execute(
+            "SELECT * FROM tab_os_gravacao_externa_mensagem WHERE Id = %s",
+            (msg_id,),
+        )
+        row = cursor.fetchone()
+        return _map_mensagem_row(row)
+
+    thread_msg = db.execute_transaction([tx])[0]
+
+    os_label = f"{os_id:05d}/{str(ano)[-2:]}"
+    if papel == "operador":
+        target = str(session.get("lancado_por_ponto") or "")
+        notif_msg = f"Nova mensagem de Gravação Externa na OS {os_label}."
+    else:
+        iniciado = str(session.get("iniciado_por_ponto") or "")
+        target = iniciado or str(session.get("lancado_por_ponto") or "")
+        notif_msg = f"Resposta sobre Gravação Externa na OS {os_label}."
+
+    if target and _clean_ponto(target) != _clean_ponto(ponto):
+        detalhes = json.dumps(
+            {
+                "tipo": "gravacao_externa_mensagem",
+                "gravacao_externa_id": session["id"],
+                "os_ano": ano,
+                "os_nro": os_id,
+                "message_id": thread_msg["id"],
+            },
+            ensure_ascii=False,
+        )
+        notification_id = insert_user_notification(
+            ponto=_clean_ponto(target) or target,
+            nro=os_id,
+            ano=ano,
+            mensagem=notif_msg,
+            detalhes_json=detalhes,
+        )
+        push_user_notification(
+            target_ponto=target,
+            mensagem=notif_msg,
+            nro=os_id,
+            ano=ano,
+            notification_id=notification_id,
+            action="gravacao_externa_mensagem",
+            gravacao_message_id=int(thread_msg["id"]),
+        )
+
+    push_gravacao_externa_message(
+        gravacao_externa_id=int(session["id"]),
+        os_ano=ano,
+        os_nro=os_id,
+        thread_message=thread_msg,
+        lancado_por_ponto=str(session.get("lancado_por_ponto") or ""),
+    )
+    return thread_msg
+
+
+def list_mensagens(
+    *,
+    ano: int,
+    os_id: int,
+    ponto: str,
+    is_operator: bool,
+    has_view_permission: bool = False,
+) -> list[dict[str, Any]]:
+    session = get_active_session(ano, os_id)
+    if not session:
+        return []
+    if has_view_permission:
+        return _fetch_mensagens(int(session["id"]))
+    if session_allows_operacao_fornecedor(session, ponto):
+        return _fetch_mensagens(int(session["id"]))
+    require_session_access(
+        session,
+        ponto=ponto,
+        has_operator_permission=is_operator,
+    )
+    return _fetch_mensagens(int(session["id"]))
+
+
+def validate_arquivos_absolute_input(
+    arquivos: list[dict[str, str]],
+) -> list[dict[str, Any]]:
+    from services.network_files_service import validate_network_arquivos_input
+
+    return validate_network_arquivos_input(arquivos)
+
+
+def update_session_arquivos(
+    *,
+    ano: int,
+    os_id: int,
+    arquivos: list[dict[str, str]],
+) -> dict[str, Any]:
+    session = get_active_session(ano, os_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão de Gravação Externa não encontrada.")
+    if session["status"] != "pendente":
+        raise HTTPException(
+            status_code=400,
+            detail="Só é possível alterar arquivos antes de iniciar a gravação.",
+        )
+    validated = validate_arquivos_absolute_input(arquivos)
+
+    def tx(cursor):
+        cursor.execute(
+            "DELETE FROM tab_os_gravacao_externa_arquivo WHERE GravacaoExternaId = %s",
+            (session["id"],),
+        )
+        for arquivo in validated:
+            cursor.execute(
+                """
+                INSERT INTO tab_os_gravacao_externa_arquivo
+                    (GravacaoExternaId, RelativePath, AbsolutePath, NomeArquivo, TamanhoBytes, Ordem, Maquina)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    session["id"],
+                    "",
+                    arquivo["absolute_path"],
+                    arquivo["nome"],
+                    arquivo.get("tamanho_bytes"),
+                    arquivo["ordem"],
+                    arquivo.get("maquina"),
+                ),
+            )
+        return session["id"]
+
+    db.execute_transaction([tx])
+    from services.gravacao_externa_realtime_service import push_gravacao_externa_arquivos_atualizados
+    from services.gravacao_preview_cache_service import enqueue_preview_warmup
+
+    enqueue_preview_warmup(validated)
+    push_gravacao_externa_arquivos_atualizados(
+        gravacao_externa_id=int(session["id"]),
+        os_ano=ano,
+        os_nro=os_id,
+        lancado_por_ponto=str(session.get("lancado_por_ponto") or ""),
+    )
+    updated = get_active_session(ano, os_id) or session
+    return build_session_detail(updated)
+
+
+def _resolve_ponto_andamento_gravacao_externa(
+    cod_status: str,
+    *,
+    lancado_por_ponto: str = "",
+    operador_ponto: str = "",
+) -> str:
+    """Ponto do andamento Gravação Externa (CodStatus da sessão), com fallbacks."""
+    cod = str(cod_status or "").strip()
+    if cod:
+        rows = db.execute_query(
+            "SELECT Ponto FROM tabAndamento WHERE CodStatus = %s LIMIT 1",
+            (cod,),
+        )
+        if rows and rows[0].get("Ponto"):
+            return str(rows[0]["Ponto"]).strip()
+    if lancado_por_ponto:
+        return format_ponto(_clean_ponto(lancado_por_ponto))
+    return format_ponto(_clean_ponto(operador_ponto))
+
+
+def _fetch_chapas_origem_pendente(origem_pendente_id: int | None) -> list[dict[str, Any]]:
+    if not origem_pendente_id:
+        return []
+    rows = db.execute_query(
+        """
+        SELECT Maquina, QuantidadeChapas
+        FROM tab_os_gravacao_pendente_chapa
+        WHERE GravacaoPendenteId = %s
+        ORDER BY Id
+        """,
+        (int(origem_pendente_id),),
+    )
+    return [
+        {
+            "maquina": str(r.get("Maquina") or "").strip(),
+            "quantidade": int(r.get("QuantidadeChapas") or 0),
+        }
+        for r in (rows or [])
+    ]
+
+
+def _notify_concluir_gravacao(
+    *,
+    ano: int,
+    os_id: int,
+    new_cod: str,
+) -> None:
+    """Materializa busca, WebSocket e replica andamento no MDB após concluir gravação."""
+    from services.os_andamento_post_change_service import after_andamento_changed
+
+    after_andamento_changed(
+        os_id,
+        ano,
+        "history_added",
+        codstatus=new_cod,
+        situacao=SITUACAO_AGUARD_RETIRADA,
+        setor=SETOR_GRAVACAO_CONCLUIDA,
+        source="gravacao_externa_concluir",
+    )
+
+    def _sync_to_mdb() -> None:
+        from routers.mdb_writer import sync_andamento_from_mysql_to_mdb
+
+        sync_andamento_from_mysql_to_mdb(new_cod, os_id, ano, operation="insert")
+
+    try:
+        from routers.mdb_writer import dispatch_mdb_sync
+
+        dispatch_mdb_sync(
+            "gravacao_concluir",
+            _sync_to_mdb,
+            cod_status=new_cod,
+            nro=os_id,
+            ano=ano,
+        )
+    except Exception as exc:
+        logger.warning("Falha ao enfileirar sync MDB após concluir gravação: %s", exc)
+
+
+def _get_ultimo_situacao_operacional(ano: int, os_id: int) -> Optional[str]:
+    """Situação do último andamento operacional da OS (exclui espelhos de Sub OS)."""
+    from services.andamento_operacional import mirror_exclude_clause_for
+
+    mirror = mirror_exclude_clause_for("a")
+    rows = db.execute_query(
+        f"""
+        SELECT a.SituacaoLink AS situacao
+        FROM tabAndamento a
+        WHERE a.NroProtocoloLink = %s
+          AND a.AnoProtocoloLink = %s
+          AND {mirror}
+        ORDER BY a.`Data` DESC, a.CodStatus DESC
+        LIMIT 1
+        """,
+        (os_id, ano),
+    )
+    if not rows:
+        return None
+    situacao = rows[0].get("situacao")
+    return str(situacao).strip() if situacao is not None else None
+
+
+def _build_concluida_sem_sessao_detail(
+    *,
+    ano: int,
+    os_id: int,
+    cod_status: str,
+    concluida_por_ponto: str,
+) -> dict[str, Any]:
+    """Detalhe sintético compatível com GravacaoExternaDetailResponse após concluir sem sessão."""
+    return {
+        "id": 0,
+        "os_ano": ano,
+        "os_nro": os_id,
+        "cod_status": cod_status,
+        "lancado_por_ponto": "",
+        "lancado_por_nome": None,
+        "status": "concluida",
+        "iniciado_por_ponto": None,
+        "iniciado_em": None,
+        "criado_em": None,
+        "origem_pendente_id": None,
+        "fornecedor_ponto": None,
+        "concluida_em": None,
+        "concluida_por_ponto": concluida_por_ponto,
+        "entrega_lancada_em": None,
+        "recebido_por_ponto": None,
+        "recebido_por_nome": None,
+        "pagamento_nf_em": None,
+        "arquivos": [],
+        "mensagens": [],
+    }
+
+
+def _concluir_gravacao_sem_sessao(
+    *,
+    ano: int,
+    os_id: int,
+    operador_ponto: str,
+) -> dict[str, Any]:
+    """Conclui OS em Gravação Externa sem sessão/arquivos: só andamento Aguard. Retirada."""
+    situacao = _get_ultimo_situacao_operacional(ano, os_id)
+    if not is_gravacao_externa_situacao(situacao):
+        raise HTTPException(
+            status_code=400,
+            detail="A OS precisa estar em Gravação Externa para concluir sem sessão.",
+        )
+
+    ponto_andamento = format_ponto(_clean_ponto(operador_ponto))
+
+    from routers.andamento_helpers import format_andamento_obs, format_gravacao_concluida_obs
+    from routers.os_audit_service import log_andamento_added
+    from services.andamento_operacional import insert_andamento_as_ultimo
+
+    obs = format_andamento_obs(format_gravacao_concluida_obs([]))
+    base_prefix = f"{os_id:05d}{ano}-"
+
+    def tx(cursor):
+        cursor.execute(
+            "SELECT MAX(CodStatus) as max_cod FROM tabAndamento WHERE CodStatus LIKE %s",
+            (f"{base_prefix}%",),
+        )
+        res = cursor.fetchone()
+        next_seq = 1
+        if res and res.get("max_cod"):
+            try:
+                next_seq = int(str(res["max_cod"]).split("-")[-1]) + 1
+            except ValueError:
+                next_seq = 1
+        new_cod = f"{base_prefix}{next_seq:02d}"
+
+        insert_andamento_as_ultimo(
+            cursor,
+            cod_status=new_cod,
+            nro=os_id,
+            ano=ano,
+            situacao=SITUACAO_AGUARD_RETIRADA,
+            setor=SETOR_GRAVACAO_CONCLUIDA,
+            obs=obs,
+            ponto=ponto_andamento,
+        )
+        log_andamento_added(
+            cursor,
+            nro=os_id,
+            ano=ano,
+            cod_status=new_cod,
+            situacao=SITUACAO_AGUARD_RETIRADA,
+            setor=SETOR_GRAVACAO_CONCLUIDA,
+            obs=obs,
+            ponto=ponto_andamento,
+            origem="gravacao_externa_concluir_sem_sessao",
+        )
+        return new_cod
+
+    new_cod = str(db.execute_transaction([tx])[0])
+    _notify_concluir_gravacao(ano=ano, os_id=os_id, new_cod=new_cod)
+
+    return _build_concluida_sem_sessao_detail(
+        ano=ano,
+        os_id=os_id,
+        cod_status=new_cod,
+        concluida_por_ponto=ponto_andamento,
+    )
+
+
+def concluir_gravacao(
+    *,
+    ano: int,
+    os_id: int,
+    operador_ponto: str,
+) -> dict[str, Any]:
+    session = get_active_session(ano, os_id)
+    if not session:
+        return _concluir_gravacao_sem_sessao(
+            ano=ano, os_id=os_id, operador_ponto=operador_ponto
+        )
+    if session["status"] == "concluida":
+        return build_session_detail(session)
+    if session["status"] != "iniciada":
+        raise HTTPException(
+            status_code=400,
+            detail="A gravação precisa estar iniciada para ser concluída.",
+        )
+
+    rows = db.execute_query(
+        "SELECT * FROM tab_os_gravacao_externa WHERE Id = %s LIMIT 1",
+        (session["id"],),
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Sessão de Gravação Externa não encontrada.")
+    session_row = rows[0]
+    origem_pendente_id = session_row.get("OrigemPendenteId")
+    launcher = str(session.get("lancado_por_ponto") or session_row.get("LancadoPorPonto") or "")
+
+    ponto_andamento = format_ponto(_clean_ponto(operador_ponto))
+    chapas = _fetch_chapas_origem_pendente(
+        int(origem_pendente_id) if origem_pendente_id else None
+    )
+
+    from routers.andamento_helpers import format_andamento_obs, format_gravacao_concluida_obs
+    from routers.os_audit_service import log_andamento_added
+    from services.andamento_operacional import insert_andamento_as_ultimo
+
+    obs = format_andamento_obs(format_gravacao_concluida_obs(chapas))
+    base_prefix = f"{os_id:05d}{ano}-"
+
+    def tx(cursor):
+        cursor.execute(
+            """
+            UPDATE tab_os_gravacao_externa
+            SET Status = 'concluida',
+                ConcluidaEm = NOW(),
+                ConcluidaPorPonto = %s
+            WHERE Id = %s
+            """,
+            (ponto_andamento, session["id"]),
+        )
+
+        cursor.execute(
+            "SELECT MAX(CodStatus) as max_cod FROM tabAndamento WHERE CodStatus LIKE %s",
+            (f"{base_prefix}%",),
+        )
+        res = cursor.fetchone()
+        next_seq = 1
+        if res and res.get("max_cod"):
+            try:
+                next_seq = int(str(res["max_cod"]).split("-")[-1]) + 1
+            except ValueError:
+                next_seq = 1
+        new_cod = f"{base_prefix}{next_seq:02d}"
+
+        insert_andamento_as_ultimo(
+            cursor,
+            cod_status=new_cod,
+            nro=os_id,
+            ano=ano,
+            situacao=SITUACAO_AGUARD_RETIRADA,
+            setor=SETOR_GRAVACAO_CONCLUIDA,
+            obs=obs,
+            ponto=ponto_andamento,
+        )
+        log_andamento_added(
+            cursor,
+            nro=os_id,
+            ano=ano,
+            cod_status=new_cod,
+            situacao=SITUACAO_AGUARD_RETIRADA,
+            setor=SETOR_GRAVACAO_CONCLUIDA,
+            obs=obs,
+            ponto=ponto_andamento,
+            origem="gravacao_externa_concluir",
+        )
+        return new_cod
+
+    new_cod = str(db.execute_transaction([tx])[0])
+    _notify_concluir_gravacao(ano=ano, os_id=os_id, new_cod=new_cod)
+
+    send_gravacao_notification_email(
+        event="concluida",
+        ano=ano,
+        os_id=os_id,
+        target_ponto=launcher,
+        target_nome=session.get("lancado_por_nome"),
+        operador_ponto=ponto_andamento,
+    )
+
+    from services.gravacao_externa_realtime_service import push_gravacao_externa_concluida
+
+    push_gravacao_externa_concluida(
+        gravacao_externa_id=int(session["id"]),
+        os_ano=ano,
+        os_nro=os_id,
+        lancado_por_ponto=launcher,
+    )
+
+    concluded = get_session_by_id(int(session["id"]))
+    if not concluded:
+        concluded = _map_session_row(session_row)
+        concluded["status"] = "concluida"
+    return build_session_detail(concluded)
+
+
+def get_concluida_session(ano: int, os_id: int) -> Optional[dict[str, Any]]:
+    rows = db.execute_query(
+        """
+        SELECT * FROM tab_os_gravacao_externa
+        WHERE OsAno = %s AND OsNro = %s AND Status = 'concluida'
+        ORDER BY Id DESC
+        LIMIT 1
+        """,
+        (ano, os_id),
+    )
+    if not rows:
+        return None
+    return _map_session_row(rows[0])
+
+
+def list_os_gravacao_aguardando_entrega(
+    *,
+    ano: Optional[int] = None,
+    search: Optional[str] = None,
+    limit: int = 200,
+    offset: int = 0,
+    fornecedor_ponto: Optional[str] = None,
+) -> tuple[list[dict[str, Any]], int]:
+    params: dict[str, Any] = {"limit": limit, "offset": offset}
+    filters = """
+        WHERE ge.Status = 'concluida'
+          AND ge.EntregaLancadaEm IS NULL
+    """
+    if ano:
+        filters += " AND ge.OsAno = %(ano)s"
+        params["ano"] = ano
+    if fornecedor_ponto:
+        params["fornecedor_ponto"] = (
+            format_ponto(_clean_ponto(fornecedor_ponto)) or str(fornecedor_ponto).strip()
+        )
+        filters += " AND ge.FornecedorPonto = %(fornecedor_ponto)s"
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        filters += """
+            AND (
+                CAST(p.NroProtocolo AS CHAR) LIKE %(search)s
+                OR p.Titular LIKE %(search)s
+                OR p.NomeUsuario LIKE %(search)s
+            )
+        """
+        params["search"] = term
+
+    count_sql = f"""
+        SELECT COUNT(*) AS cnt
+        FROM tab_os_gravacao_externa ge
+        INNER JOIN tabProtocolos p
+            ON p.NroProtocolo = ge.OsNro AND p.AnoProtocolo = ge.OsAno
+        {filters}
+    """
+    count_row = db.execute_query(count_sql, params)
+    total = int((count_row[0] if count_row else {}).get("cnt") or 0)
+
+    list_sql = f"""
+        SELECT
+            p.NroProtocolo AS nr_os,
+            p.AnoProtocolo AS ano,
+            p.Titular AS solicitante,
+            p.NomeUsuario AS nome_usuario,
+            ge.Id AS gravacao_externa_id,
+            ge.Status AS gravacao_status,
+            ge.LancadoPorPonto AS lancado_por_ponto,
+            ge.LancadoPorNome AS lancado_por_nome,
+            ge.FornecedorPonto AS fornecedor_ponto,
+            ge.ConcluidaEm AS concluida_em,
+            ge.ConcluidaPorPonto AS concluida_por_ponto,
+            ge.CriadoEm AS gravacao_criado_em,
+            ge.OrigemPendenteId AS origem_pendente_id,
+            (
+                SELECT d.TipoPublicacaoLink
+                FROM tabDetalhesServico d
+                WHERE d.NroProtocoloLinkDet = p.NroProtocolo
+                  AND d.AnoProtocoloLinkDet = p.AnoProtocolo
+                LIMIT 1
+            ) AS produto,
+            (
+                SELECT d.Titulo
+                FROM tabDetalhesServico d
+                WHERE d.NroProtocoloLinkDet = p.NroProtocolo
+                  AND d.AnoProtocoloLinkDet = p.AnoProtocolo
+                LIMIT 1
+            ) AS titulo
+        FROM tab_os_gravacao_externa ge
+        INNER JOIN tabProtocolos p
+            ON p.NroProtocolo = ge.OsNro AND p.AnoProtocolo = ge.OsAno
+        {filters}
+        ORDER BY ge.ConcluidaEm DESC, ge.Id DESC
+        LIMIT %(limit)s OFFSET %(offset)s
+    """
+    rows = db.execute_query(list_sql, params)
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        origem = row.get("origem_pendente_id")
+        chapas = _fetch_chapas_origem_pendente(int(origem) if origem else None)
+        items.append(
+            {
+                "nr_os": int(row["nr_os"]),
+                "ano": int(row["ano"]),
+                "solicitante": row.get("solicitante") or row.get("nome_usuario"),
+                "produto": row.get("produto"),
+                "titulo": row.get("titulo"),
+                "situacao": SITUACAO_AGUARD_RETIRADA,
+                "setor": SETOR_GRAVACAO_CONCLUIDA,
+                "last_update": row.get("concluida_em"),
+                "gravacao_externa_id": row.get("gravacao_externa_id"),
+                "gravacao_status": row.get("gravacao_status") or "concluida",
+                "lancado_por_ponto": row.get("lancado_por_ponto"),
+                "lancado_por_nome": row.get("lancado_por_nome"),
+                "fornecedor_ponto": row.get("fornecedor_ponto"),
+                "concluida_em": row.get("concluida_em"),
+                "concluida_por_ponto": row.get("concluida_por_ponto"),
+                "gravacao_criado_em": row.get("gravacao_criado_em"),
+                "chapas_por_maquina": chapas,
+                "total_chapas": sum(int(c.get("quantidade") or 0) for c in chapas),
+            }
+        )
+    return items, total
+
+
+def _notify_entrega_chapas(*, ano: int, os_id: int, new_cod: str) -> None:
+    from services.os_andamento_post_change_service import after_andamento_changed
+
+    after_andamento_changed(
+        os_id,
+        ano,
+        "history_added",
+        codstatus=new_cod,
+        situacao=SITUACAO_GRAVACAO,
+        setor=SETOR_ENTREGA_CHAPAS,
+        source="gravacao_externa_entrega",
+    )
+
+    def _sync_to_mdb() -> None:
+        from routers.mdb_writer import sync_andamento_from_mysql_to_mdb
+
+        sync_andamento_from_mysql_to_mdb(new_cod, os_id, ano, operation="insert")
+
+    try:
+        from routers.mdb_writer import dispatch_mdb_sync
+
+        dispatch_mdb_sync(
+            "gravacao_entrega",
+            _sync_to_mdb,
+            cod_status=new_cod,
+            nro=os_id,
+            ano=ano,
+        )
+    except Exception as exc:
+        logger.warning("Falha ao enfileirar sync MDB após entrega de chapas: %s", exc)
+
+
+def lancar_entrega_chapas(
+    *,
+    ano: int,
+    os_id: int,
+    recebido_por_ponto: str,
+    recebido_por_nome: str | None = None,
+) -> dict[str, Any]:
+    session = get_concluida_session(ano, os_id)
+    if not session:
+        raise HTTPException(
+            status_code=404,
+            detail="Sessão concluída de Gravação Externa não encontrada.",
+        )
+    if session.get("entrega_lancada_em"):
+        raise HTTPException(
+            status_code=400,
+            detail="Recebimento de chapas já foi lançado para esta OS.",
+        )
+
+    recebido_fmt = format_ponto(_clean_ponto(recebido_por_ponto))
+    if not recebido_fmt:
+        raise HTTPException(status_code=400, detail="Informe o ponto de quem recebeu.")
+    recebido_nome = (recebido_por_nome or "").strip()
+    if not recebido_nome:
+        recebido_nome = (
+            _lookup_usuario_nome(recebido_fmt)
+            or _lookup_usuario_nome(recebido_por_ponto)
+            or ""
+        )
+    if not recebido_nome:
+        raise HTTPException(
+            status_code=400,
+            detail="Informe o nome de quem recebeu.",
+        )
+    if len(recebido_nome) > 128:
+        raise HTTPException(
+            status_code=400,
+            detail="Nome de quem recebeu deve ter no máximo 128 caracteres.",
+        )
+
+    chapas = _fetch_chapas_origem_pendente(session.get("origem_pendente_id"))
+    from routers.andamento_helpers import format_andamento_obs, format_gravacao_entrega_obs
+    from routers.os_audit_service import log_andamento_added
+    from services.andamento_operacional import insert_andamento_as_ultimo
+
+    obs = format_andamento_obs(format_gravacao_entrega_obs(chapas))
+    base_prefix = f"{os_id:05d}{ano}-"
+    session_id = int(session["id"])
+
+    def tx(cursor):
+        cursor.execute(
+            """
+            UPDATE tab_os_gravacao_externa
+            SET EntregaLancadaEm = NOW(),
+                RecebidoPorPonto = %s,
+                RecebidoPorNome = %s
+            WHERE Id = %s AND EntregaLancadaEm IS NULL
+            """,
+            (recebido_fmt, recebido_nome, session_id),
+        )
+        if cursor.rowcount == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Recebimento de chapas já foi lançado para esta OS.",
+            )
+
+        cursor.execute(
+            "SELECT MAX(CodStatus) as max_cod FROM tabAndamento WHERE CodStatus LIKE %s",
+            (f"{base_prefix}%",),
+        )
+        res = cursor.fetchone()
+        next_seq = 1
+        if res and res.get("max_cod"):
+            try:
+                next_seq = int(str(res["max_cod"]).split("-")[-1]) + 1
+            except ValueError:
+                next_seq = 1
+        new_cod = f"{base_prefix}{next_seq:02d}"
+
+        insert_andamento_as_ultimo(
+            cursor,
+            cod_status=new_cod,
+            nro=os_id,
+            ano=ano,
+            situacao=SITUACAO_GRAVACAO,
+            setor=SETOR_ENTREGA_CHAPAS,
+            obs=obs,
+            ponto=recebido_fmt,
+        )
+        log_andamento_added(
+            cursor,
+            nro=os_id,
+            ano=ano,
+            cod_status=new_cod,
+            situacao=SITUACAO_GRAVACAO,
+            setor=SETOR_ENTREGA_CHAPAS,
+            obs=obs,
+            ponto=recebido_fmt,
+            origem="gravacao_externa_entrega",
+        )
+        return new_cod
+
+    new_cod = str(db.execute_transaction([tx])[0])
+    _notify_entrega_chapas(ano=ano, os_id=os_id, new_cod=new_cod)
+
+    updated = get_session_by_id(session_id)
+    if not updated:
+        raise HTTPException(status_code=500, detail="Falha ao atualizar sessão após entrega.")
+    return build_session_detail(updated)

@@ -1,0 +1,179 @@
+.cliente-proof-edit {
+  /* 964 / 567 — cartão horizontal típico */
+  --preview-ar: 1.699;
+  --preview-ar-inv: 0.588;
+  --preview-fields-w: 220px;
+  --preview-sidebar-w: 18rem;
+  /* PortalSystemHeader h-20 + cabeçalhos/disclaimer/padding do artigo */
+  --preview-header-h: var(--sagra-portal-header-h, 5rem);
+  --preview-chrome-extra: 11rem;
+  --preview-chrome-h: calc(var(--preview-header-h) + var(--preview-chrome-extra));
+  --preview-col-w: calc(100vw - var(--preview-sidebar-w) - 4.5rem - var(--preview-fields-w) - 1rem);
+  --preview-max-h: min(
+    calc((100dvh - var(--preview-chrome-h)) / var(--preview-face-count, 1)),
+    calc(var(--preview-col-w) / var(--preview-ar-inv))
+  );
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  width: 100%;
+}
+
+.cliente-proof-edit__general {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  background: #f8fafc;
+  padding: 0.875rem;
+}
+
+.cliente-proof-edit__general-title {
+  margin: 0 0 0.625rem;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #4b5563;
+}
+
+.cliente-proof-edit__faces {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+
+/* Duas faces lado a lado só quando há largura para prévias grandes em cada coluna */
+@media (min-width: 1800px) {
+  .cliente-proof-edit {
+    --preview-col-w: calc(
+      (100vw - var(--preview-sidebar-w) - 5rem) / 2 - var(--preview-fields-w) - 1.25rem
+    );
+    --preview-max-h: min(
+      calc((100dvh - var(--preview-chrome-h)) / var(--preview-face-count, 1)),
+      calc(var(--preview-col-w) / var(--preview-ar-inv))
+    );
+  }
+
+  .cliente-proof-edit__faces {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.cliente-proof-edit__face {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  padding: 0.875rem;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+}
+
+.cliente-proof-edit__face-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #374151;
+}
+
+.cliente-proof-edit__face-body {
+  display: grid;
+  grid-template-columns: minmax(0, var(--preview-fields-w)) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.cliente-proof-edit__fields {
+  min-width: 0;
+  max-height: var(--preview-max-h);
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.cliente-proof-edit__preview-wrap {
+  container-type: size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  max-height: 64vh;
+  height: var(--preview-max-h);
+  min-height: min(280px, var(--preview-max-h));
+  padding: 0.375rem;
+  border-radius: 0.375rem;
+  background: #f1f5f9;
+}
+
+.cliente-proof-edit-preview.papelaria-live-preview {
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+.cliente-proof-edit-preview .papelaria-live-preview__stage {
+  container-type: size;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+}
+
+.cliente-proof-edit-preview .papelaria-live-preview__face-column {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.cliente-proof-edit-preview .papelaria-live-preview__face-stage {
+  container-type: size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex: 1;
+}
+
+.cliente-proof-edit-preview .papelaria-live-preview__canvas {
+  flex-shrink: 0;
+  width: min(100cqw, calc(100cqh * var(--preview-ar, 1.699)));
+  height: min(100cqh, calc(100cqw / var(--preview-ar, 1.699)));
+  max-width: 100%;
+  max-height: 100%;
+  margin: 0 auto;
+  aspect-ratio: var(--preview-aspect, 964 / 567);
+}
+
+@media (max-width: 900px) {
+  .cliente-proof-edit {
+    --preview-sidebar-w: 0px;
+    --preview-fields-w: 100%;
+    --preview-chrome-extra: 14rem;
+    --preview-col-w: calc(100vw - 2.5rem);
+    --preview-max-h: min(
+      calc((100dvh - var(--preview-chrome-h)) / var(--preview-face-count, 1)),
+      calc(var(--preview-col-w) / var(--preview-ar-inv))
+    );
+  }
+
+  .cliente-proof-edit__face-body {
+    grid-template-columns: 1fr;
+  }
+
+  .cliente-proof-edit__fields {
+    max-height: none;
+    overflow: visible;
+  }
+}

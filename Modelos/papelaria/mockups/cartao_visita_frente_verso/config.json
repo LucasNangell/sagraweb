@@ -1,0 +1,72 @@
+{
+  "id": "cartao_visita_frente_verso",
+  "nome": "Cartão de Visita — Frente e Verso",
+  "tipo_produto": "cartao_visita",
+  "canvas": {
+    "largura": 1200,
+    "altura": 800
+  },
+  "faces": {
+    "frente": {
+      "label": "Frente",
+      "tipo": "quad",
+      "pontos": [
+        [
+          230,
+          300
+        ],
+        [
+          550,
+          286
+        ],
+        [
+          565,
+          442
+        ],
+        [
+          220,
+          458
+        ]
+      ],
+      "bbox": {
+        "x": 220,
+        "y": 286,
+        "largura": 345,
+        "altura": 172
+      },
+      "rotacao_graus": -2.0,
+      "observacoes": "Área de encaixe — Frente"
+    },
+    "verso": {
+      "label": "Verso",
+      "tipo": "quad",
+      "pontos": [
+        [
+          650,
+          286
+        ],
+        [
+          970,
+          272
+        ],
+        [
+          985,
+          428
+        ],
+        [
+          640,
+          444
+        ]
+      ],
+      "bbox": {
+        "x": 640,
+        "y": 272,
+        "largura": 345,
+        "altura": 172
+      },
+      "rotacao_graus": 2.0,
+      "observacoes": "Área de encaixe — Verso"
+    }
+  },
+  "observacoes": "Duas faces lado a lado para prova visual frente/verso."
+}

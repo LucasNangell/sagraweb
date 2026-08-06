@@ -1,0 +1,22 @@
+{
+  "name": "@sagra/api-types",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Tipos TypeScript gerados a partir do OpenAPI do FastAPI",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "tsc --noEmit -p tsconfig.json",
+    "lint": "echo \"@sagra/api-types: lint pendente (Fase 0)\"",
+    "generate": "echo \"Pendente: orval/openapi-typescript contra http://127.0.0.1:8001/openapi.json\""
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

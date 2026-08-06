@@ -1,0 +1,10 @@
+# ARQUIVO DEPRECADO
+# As configurações de conexão agora são gerenciadas pelo config_manager.py
+# a partir do arquivo config.json na raiz do projeto.
+
+mysql_global:
+  host: "10.1.1.73"
+  port: 3306
+  user: "usr_sagraweb"
+  password: "Sefoc_2018"
+  database: "sagrafulldb"

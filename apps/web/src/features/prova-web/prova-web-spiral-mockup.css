@@ -1,0 +1,96 @@
+.prova-web-spiral-mockup {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: linear-gradient(160deg, #dbe3ec 0%, #c5d0dc 55%, #b7c3d1 100%);
+  user-select: none;
+  touch-action: none;
+}
+
+.prova-web-spiral-mockup__hint {
+  margin: 0;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: #475569;
+}
+
+.prova-web-spiral-mockup__stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 900px;
+  flex: 1 1 auto;
+  min-height: 0;
+  cursor: grab;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.prova-web-spiral-mockup__stage:active {
+  cursor: grabbing;
+}
+
+.prova-web-spiral-mockup__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.prova-web-spiral-mockup__loading,
+.prova-web-spiral-mockup__error {
+  position: absolute;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  pointer-events: none;
+}
+
+.prova-web-spiral-mockup__loading {
+  background: rgba(255, 255, 255, 0.85);
+  color: #475569;
+}
+
+.prova-web-spiral-mockup__error {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.prova-web-spiral-mockup__toolbar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.prova-web-spiral-mockup__toolbar button {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.prova-web-spiral-mockup__toolbar button:hover {
+  background: #f8fafc;
+}
+
+.prova-web-spiral-mockup__meta {
+  font-size: 0.7rem;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}

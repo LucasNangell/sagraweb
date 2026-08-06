@@ -1,0 +1,52 @@
+{
+  "canvas": {
+    "width": 2381,
+    "height": 3368
+  },
+  "faces": [
+    {
+      "id": "frente",
+      "nome": "Frente",
+      "baseImage": "frente_base.png",
+      "pageIndex": 0,
+      "elementos": [
+        {
+          "id": "Cabecalho",
+          "tipo": "texto",
+          "template": "Gabinete do Deputado\n{nome_deputado}\n- {partido}/{uf}",
+          "x": 286,
+          "y": 232,
+          "width": 1810,
+          "height": 192,
+          "fontFamily": "\"ITC Stone Sans Std\", \"Stone Sans\", Arial, Helvetica, sans-serif",
+          "fontSize": 48,
+          "fontWeight": 500,
+          "fontStyle": "normal",
+          "color": "#231f20",
+          "align": "center",
+          "anchor": "start",
+          "lineHeight": 1.15,
+          "letterSpacing": 0
+        },
+        {
+          "id": "Rodape",
+          "tipo": "texto",
+          "template": "Câmara dos Deputados | Anexo {anexo} - Gabinete {gabinete} | CEP 70160-900 - Brasília/DF\nTels (61) 3215-5{gabinete}/3{gabinete} | {email}",
+          "x": 286,
+          "y": 3236,
+          "width": 1810,
+          "height": 80,
+          "fontFamily": "\"ITC Stone Sans Std\", \"Stone Sans\", Arial, Helvetica, sans-serif",
+          "fontSize": 32,
+          "fontWeight": 500,
+          "fontStyle": "normal",
+          "color": "#231f20",
+          "align": "center",
+          "anchor": "start",
+          "lineHeight": 1.15,
+          "letterSpacing": 0
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<style>
+  body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background-color: #e9ecef;
+    margin: 0;
+    font-family: sans-serif;
+  }
+
+  .mockup-container {
+    perspective: 1200px;
+  }
+
+  .card {
+    /* Proporção A6 ampliada (105x148mm) */
+    width: 210px;
+    height: 296px;
+    position: relative;
+    transform-style: preserve-3d;
+    /* Rotação global da cena para ver pela lateral esquerda */
+    transform: rotateY(-30deg) rotateX(5deg);
+    transition: transform 0.5s ease;
+  }
+
+  /* Leve ajuste de visualização ao passar o mouse em todo o bloco */
+  .card:hover {
+    transform: rotateY(-20deg) rotateX(5deg);
+  }
+
+  .leaf {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 2px;
+    /* O eixo de rotação fica na extremidade esquerda (o vinco/dobra) */
+    transform-origin: left center;
+    transition: transform 0.5s ease;
+  }
+
+  /* --- Folha de Trás (Verso interno do cartão) --- */
+  .back-leaf {
+    background: #fdfdfd;
+    border: 1px solid #e0e0e0;
+    box-shadow: 10px 10px 20px rgba(0,0,0,0.1);
+  }
+
+  /* Sombra projetada pela capa na folha de trás (aumenta o realismo da fresta) */
+  .back-leaf::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(to right, rgba(0,0,0,0.12) 0%, rgba(0,0,0,0.02) 15%, transparent 40%);
+  }
+
+  /* --- Folha da Frente (Capa) --- */
+  .front-leaf {
+    background: #ffffff;
+    /* Rotação positiva no eixo Y para criar a abertura em relação à folha de trás */
+    transform: rotateY(18deg);
+    border-left: 2px solid #cfcfcf; /* Simula a lombada/dobra do papel */
+    box-shadow: 5px 2px 15px rgba(0,0,0,0.06);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #888;
+  }
+
+  /* Aumenta a abertura do cartão dinamicamente ao passar o mouse */
+  .card:hover .front-leaf {
+    transform: rotateY(28deg);
+  }
+  
+  .content {
+    text-align: center;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<div class="mockup-container">
+  <div class="card">
+    <div class="leaf back-leaf"></div>
+    
+    <div class="leaf front-leaf">
+      <div class="content">
+        <strong>Capa A6</strong><br>
+        <small>(A5 Dobrado)</small>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

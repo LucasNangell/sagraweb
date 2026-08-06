@@ -1,0 +1,187 @@
+﻿"""Listagem e resolução segura de PDFs de prova na pasta Sefoc da OS."""
+from __future__ import annotations
+
+import glob
+import os
+import re
+from datetime import datetime, timezone
+from typing import Any, Optional
+
+from fastapi import HTTPException
+
+_INVALID_PROOF_NAME = re.compile(r"[/\\]|\.\.")
+
+_MAX_FILENAME_LEN = 512
+
+
+def _max_attachment_bytes() -> int:
+    raw = (os.environ.get("SAGRA_EMAIL_ATTACHMENT_MAX_MB") or "50").strip()
+    try:
+        mb = max(1, int(raw))
+    except ValueError:
+        mb = 50
+    return mb * 1024 * 1024
+
+
+def validate_proof_pdf_size(pdf_path: str) -> None:
+    """Bloqueia anexo acima do limite configurável (padrão 50 MB)."""
+    try:
+        size = os.path.getsize(pdf_path)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Não foi possível ler o tamanho do PDF de prova.",
+        ) from exc
+    limit = _max_attachment_bytes()
+    if size > limit:
+        mb = limit // (1024 * 1024)
+        raise HTTPException(
+            status_code=400,
+            detail=f"O PDF de prova excede o limite de {mb} MB para anexo em e-mail.",
+        )
+
+
+def validate_proof_filename(filename: str) -> str:
+    """Valida caminho relativo dentro de Sefoc (ex.: prova.pdf ou Offset/prova.pdf)."""
+    raw = (filename or "").strip().replace("\\", "/")
+    if not raw or raw in (".", ".."):
+        raise HTTPException(status_code=400, detail="Nome de arquivo de prova inválido.")
+    parts = [part for part in raw.split("/") if part and part != "."]
+    if not parts or ".." in parts:
+        raise HTTPException(status_code=400, detail="Nome de arquivo de prova inválido.")
+    for part in parts:
+        if _INVALID_PROOF_NAME.search(part) or part != os.path.basename(part):
+            raise HTTPException(status_code=400, detail="Nome de arquivo de prova inválido.")
+        if len(part) > _MAX_FILENAME_LEN:
+            raise HTTPException(status_code=400, detail="Nome de arquivo de prova inválido.")
+    if not parts[-1].lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="O arquivo de prova deve ser um PDF.")
+    return "/".join(parts)
+
+
+def _get_os_folder_path(ano: int, os_id: int) -> Optional[str]:
+    from routers.email_routes import _get_os_folder_path
+
+    return _get_os_folder_path(ano, os_id)
+
+
+def _sefoc_dir(ano: int, os_id: int) -> Optional[str]:
+    os_path = _get_os_folder_path(ano, os_id)
+    if not os_path:
+        return None
+    sefoc_path = os.path.join(os_path, "Sefoc")
+    if not os.path.isdir(sefoc_path):
+        return None
+    return sefoc_path
+
+
+def _is_path_under_dir(candidate: str, directory: str) -> bool:
+    try:
+        real_candidate = os.path.realpath(candidate)
+        real_dir = os.path.realpath(directory)
+        if not real_dir.endswith(os.sep):
+            real_dir = real_dir + os.sep
+        return real_candidate.startswith(real_dir)
+    except OSError:
+        return False
+
+
+def resolve_proof_pdf_path(ano: int, os_id: int, filename: str) -> str:
+    """Resolve caminho físico do PDF de prova dentro de Sefoc/ (somente backend)."""
+    safe_name = validate_proof_filename(filename)
+    sefoc_path = _sefoc_dir(ano, os_id)
+    if not sefoc_path:
+        raise HTTPException(
+            status_code=404,
+            detail="Pasta Sefoc da OS não encontrada ou sem PDFs de prova.",
+        )
+    full_path = os.path.normpath(os.path.join(sefoc_path, *safe_name.split("/")))
+    if not _is_path_under_dir(full_path, sefoc_path):
+        raise HTTPException(status_code=400, detail="Nome de arquivo de prova inválido.")
+    if not os.path.isfile(full_path):
+        raise HTTPException(status_code=404, detail="PDF de prova não encontrado na pasta Sefoc.")
+    if not safe_name.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="O arquivo de prova deve ser um PDF.")
+    return full_path
+
+
+def list_proof_pdf_files(ano: int, os_id: int) -> dict[str, Any]:
+    """Lista metadados seguros dos PDFs em Sefoc/ (sem caminho UNC)."""
+    sefoc_path = _sefoc_dir(ano, os_id)
+    files: list[dict[str, Any]] = []
+    suggested: Optional[str] = None
+    latest_mtime = -1.0
+
+    if sefoc_path:
+        pattern = os.path.join(sefoc_path, "*.pdf")
+        for pdf_path in glob.glob(pattern):
+            if not os.path.isfile(pdf_path):
+                continue
+            name = os.path.basename(pdf_path)
+            try:
+                stat = os.stat(pdf_path)
+                mtime = stat.st_mtime
+                modified_at = datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
+                size = stat.st_size
+            except OSError:
+                modified_at = None
+                mtime = 0.0
+                size = 0
+            files.append(
+                {
+                    "name": name,
+                    "size": size,
+                    "modified_at": modified_at,
+                }
+            )
+            if mtime > latest_mtime:
+                latest_mtime = mtime
+                suggested = name
+
+    files.sort(key=lambda item: item["name"].lower())
+
+    return {
+        "os": os_id,
+        "ano": ano,
+        "files": files,
+        "suggested": suggested,
+    }
+
+
+def latest_proof_pdf_path(ano: int, os_id: int) -> Optional[str]:
+    """Fallback legado: PDF mais recente em Sefoc/ (tokens antigos sem ArquivoProva)."""
+    sefoc_path = _sefoc_dir(ano, os_id)
+    if not sefoc_path:
+        return None
+    pdfs = glob.glob(os.path.join(sefoc_path, "*.pdf"))
+    if not pdfs:
+        return None
+    return max(pdfs, key=os.path.getmtime)
+
+
+def resolve_proof_pdf_for_token_row(
+    proof_row: dict,
+    ano: int,
+    os_id: int,
+) -> tuple[Optional[str], str]:
+    """
+    Retorna (caminho_físico, nome_exibição).
+    Token de Prova WEB resolve pelo registro tabProvaWeb; caso contrário usa
+    ArquivoProva do token e, na ausência dele, o fallback legado (latest).
+    """
+    if (proof_row.get("TipoProva") or "").strip() == "prova_web":
+        from services.prova_web_record_service import resolve_prova_web_pdf
+
+        return resolve_prova_web_pdf(ano, os_id)
+
+    arquivo = (proof_row.get("ArquivoProva") or "").strip()
+    if arquivo:
+        try:
+            path = resolve_proof_pdf_path(ano, os_id, arquivo)
+            return path, os.path.basename(arquivo)
+        except HTTPException:
+            return None, arquivo
+    legacy = latest_proof_pdf_path(ano, os_id)
+    if legacy:
+        return legacy, os.path.basename(legacy)
+    return None, ""

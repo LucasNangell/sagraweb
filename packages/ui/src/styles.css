@@ -1,0 +1,9 @@
+/**
+ * Tokens globais DEAPA — importados por apps/web via index.css
+ */
+:root {
+  --primary-green: #00b142;
+  --secondary-blue: #24344d;
+  --bg-color: #f8f9fa;
+  --text-dark: #333333;
+}

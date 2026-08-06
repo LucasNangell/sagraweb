@@ -1,0 +1,67 @@
+# Monorepo Node
+node_modules/
+.pnpm-store/
+dist/
+build/
+*.tsbuildinfo
+
+# Vite / Vitest
+.vite/
+coverage/
+
+# Env / runtime config (templates *.example* entram no repo)
+.env
+.env.local
+.env.*.local
+config/.env
+config/.env.*
+!config/.env.example
+!config/.env.production.example
+config/config.json
+config/configbk.json
+config/config copy.json
+config/config_painel_global.json
+config/vapid.json
+config/vapid_dev.json
+config/gdrive/token.json
+config/gdrive/client_secret*.json
+
+# Dados locais / artefatos pesados
+backups/
+logs/
+portfolio-imports/
+storage/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.log
+*.mdb
+*.accdb
+
+# IDE / Cursor (mantém plans; ignora debug logs do agent)
+.idea/
+*.swp
+.cursor/*
+!.cursor/plans/
+!.cursor/plans/**
+!.cursor/rules/
+!.cursor/rules/**
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Pacote de deploy gerado (pnpm package:release)
+deploy/release/
+
+# Artefatos temporários de recuperação
+deploy/recovery_temp/
+
+# Fotos faciais (painel tablet)
+app/backend/data/face_enrollments/
+
+# Cache de renderização da Prova WEB
+app/backend/cache/
+
+# TanStack Router generated (recreated on dev)
+apps/web/src/routeTree.gen.ts

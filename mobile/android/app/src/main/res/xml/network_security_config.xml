@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Produção usa HTTPS (cgrafsysvm.camara.leg.br).
+  Cleartext liberado só para intranet (debug/troubleshoot).
+  Se o host usar CA interna da Câmara, adicione o .crt em res/raw/
+  e referencie em <certificates src="@raw/camara_ca" />.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <!-- <certificates src="@raw/camara_ca" /> -->
+        </trust-anchors>
+    </base-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">10.1.1.73</domain>
+        <domain includeSubdomains="true">cgrafsysvm</domain>
+        <domain includeSubdomains="true">cgrafsysvm.redecamara.camara.gov.br</domain>
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

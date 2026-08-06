@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SAGRA — Mockup 3D Papelaria (protótipo)</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #f1f5f9;
+      color: #334155;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 1rem 1.25rem;
+      background: #fff;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    header h1 { margin: 0; font-size: 1rem; color: #1e3a8a; }
+    main { flex: 1; display: grid; grid-template-columns: 240px 1fr; gap: 0; min-height: 0; }
+    aside {
+      background: #fff;
+      border-right: 1px solid #e2e8f0;
+      padding: 1rem;
+      overflow-y: auto;
+    }
+    aside button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      margin-bottom: 0.35rem;
+      padding: 0.5rem 0.6rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.375rem;
+      background: #f8fafc;
+      cursor: pointer;
+      font-size: 0.75rem;
+    }
+    aside button.active { background: #dbeafe; border-color: #93c5fd; color: #1e3a8a; font-weight: 600; }
+    .stage-wrap { display: flex; flex-direction: column; padding: 1rem; gap: 0.75rem; }
+    .pm3d-viewport {
+      flex: 1;
+      min-height: 360px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(ellipse at 50% 80%, #e2e8f0, #f8fafc);
+      border-radius: 0.5rem;
+      perspective: 1200px;
+    }
+    .pm3d-scene { transform-style: preserve-3d; transition: transform 0.35s ease; }
+    .pm3d-product { position: relative; transform-style: preserve-3d; }
+    .pm3d-face {
+      position: absolute;
+      background-repeat: no-repeat;
+      background-color: #fafafa;
+      border-radius: 2px;
+      backface-visibility: hidden;
+      box-shadow: 1px 2px 8px rgba(15,23,42,.08);
+      transition: transform 0.4s ease;
+    }
+    .controls { display: flex; flex-wrap: wrap; gap: 0.75rem; font-size: 0.75rem; }
+    .controls label { display: inline-flex; align-items: center; gap: 0.35rem; }
+    input[type=range] { width: 90px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Mockup 3D genérico — Papelaria SAGRA</h1>
+    <p style="margin:0.35rem 0 0;font-size:0.75rem;color:#64748b">Protótipo HTML — mesma lógica de crop/transform do React</p>
+  </header>
+  <main>
+    <aside id="presets"></aside>
+    <div class="stage-wrap">
+      <div class="pm3d-viewport">
+        <div class="pm3d-scene" id="scene">
+          <div class="pm3d-product" id="product"></div>
+        </div>
+      </div>
+      <div class="controls">
+        <label>Zoom <input type="range" id="zoom" min="0.6" max="1.4" step="0.05" value="1" /></label>
+        <label>Rotação Y <input type="range" id="rotY" min="-90" max="90" value="-28" /></label>
+        <label>Abertura <input type="range" id="fold" min="0" max="1" step="0.02" value="0.4" /></label>
+        <label><input type="checkbox" id="debug" /> Debug</label>
+      </div>
+    </div>
+  </main>
+  <script>
+    const DEMO_ARTE = `data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='800'><rect width='600' height='800' fill='#1e3a5f'/><rect x='600' width='600' height='800' fill='#f1f5f9'/><line x1='600' y1='0' x2='600' y2='800' stroke='#94a3b8' stroke-width='2' stroke-dasharray='8 6'/><text x='300' y='400' fill='#fff' font-size='42' text-anchor='middle' font-weight='bold'>CAPA</text><text x='900' y='380' fill='#334155' font-size='36' text-anchor='middle' font-weight='bold'>INTERIOR</text></svg>`)}`;
+
+    const PRESETS = {
+      cartao_a6_retrato_dobrado: {
+        nome: "Cartão A6 retrato dobrado",
+        config: {
+          larguraAbertaMm: 210, alturaAbertaMm: 148, larguraFechadaMm: 105, alturaFechadaMm: 148,
+          faces: [
+            { id: "interior", nome: "Interior", crop: { x: 50, y: 0, width: 50, height: 100 }, transform: { translateZ: -0.2 }, zIndex: 1 },
+            { id: "capa", nome: "Capa", crop: { x: 0, y: 0, width: 50, height: 100 }, transform: { rotateY: 28, origin: "right center", translateZ: 0.6 }, abreComDobra: true, zIndex: 3 },
+          ],
+        },
+      },
+      cartao_simples_90x50: {
+        nome: "Cartão 90×50",
+        config: {
+          larguraAbertaMm: 90, alturaAbertaMm: 50, larguraFechadaMm: 90, alturaFechadaMm: 50,
+          faces: [
+            { id: "verso", nome: "Verso", crop: { x: 0, y: 0, width: 100, height: 100 }, transform: { translateZ: -0.4 }, zIndex: 1 },
+            { id: "frente", nome: "Frente", crop: { x: 0, y: 0, width: 100, height: 100 }, transform: { translateZ: 0.4 }, zIndex: 2 },
+          ],
+        },
+      },
+    };
+
+    let active = "cartao_a6_retrato_dobrado";
+
+    function cropBg(crop) {
+      const { x, y, width, height } = crop;
+      return {
+        backgroundSize: `${(100 / width) * 100}% ${(100 / height) * 100}%`,
+        backgroundPosition: `${-(x / width) * 100}% ${-(y / height) * 100}%`,
+      };
+    }
+
+    function faceTransform(face, foldOpen) {
+      const t = face.transform || {};
+      let ry = t.rotateY || 0;
+      if (face.abreComDobra && t.rotateY != null) ry = t.rotateY * foldOpen;
+      const parts = [];
+      if (t.translateZ) parts.push(`translateZ(${t.translateZ}px)`);
+      if (ry) parts.push(`rotateY(${ry}deg)`);
+      return parts.join(" ") || "none";
+    }
+
+    function sceneSize(cfg, fold, base = 300) {
+      const w = (cfg.larguraFechadaMm || cfg.larguraAbertaMm) + ((cfg.larguraAbertaMm - (cfg.larguraFechadaMm || cfg.larguraAbertaMm)) * fold);
+      const h = (cfg.alturaFechadaMm || cfg.alturaAbertaMm);
+      const ratio = w / h;
+      return ratio >= 1 ? { width: base, height: Math.round(base / ratio) } : { width: Math.round(base * ratio), height: base };
+    }
+
+    function render() {
+      const preset = PRESETS[active];
+      const cfg = preset.config;
+      const fold = Number(document.getElementById("fold").value);
+      const zoom = Number(document.getElementById("zoom").value);
+      const rotY = Number(document.getElementById("rotY").value);
+      const debug = document.getElementById("debug").checked;
+      const sz = sceneSize(cfg, fold);
+
+      document.getElementById("scene").style.transform = `rotateX(6deg) rotateY(${rotY}deg) scale(${zoom})`;
+      const product = document.getElementById("product");
+      product.style.width = sz.width + "px";
+      product.style.height = sz.height + "px";
+      product.innerHTML = "";
+
+      cfg.faces.slice().sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)).forEach((face) => {
+        const el = document.createElement("div");
+        el.className = "pm3d-face";
+        const bg = cropBg(face.crop);
+        Object.assign(el.style, {
+          width: face.crop.width + "%",
+          height: face.crop.height + "%",
+          left: face.crop.x + "%",
+          top: face.crop.y + "%",
+          zIndex: face.zIndex || 1,
+          backgroundImage: `url("${DEMO_ARTE}")`,
+          backgroundSize: bg.backgroundSize,
+          backgroundPosition: bg.backgroundPosition,
+          transformOrigin: face.transform?.origin || "center center",
+          transform: faceTransform(face, fold),
+        });
+        if (debug) el.title = face.nome;
+        product.appendChild(el);
+      });
+    }
+
+    const aside = document.getElementById("presets");
+    Object.entries(PRESETS).forEach(([id, p]) => {
+      const btn = document.createElement("button");
+      btn.textContent = p.nome;
+      btn.onclick = () => { active = id; aside.querySelectorAll("button").forEach(b => b.classList.remove("active")); btn.classList.add("active"); render(); };
+      if (id === active) btn.classList.add("active");
+      aside.appendChild(btn);
+    });
+
+    ["zoom", "rotY", "fold", "debug"].forEach((id) => document.getElementById(id).addEventListener("input", render));
+    render();
+  </script>
+</body>
+</html>

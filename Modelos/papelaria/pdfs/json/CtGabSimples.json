@@ -1,0 +1,34 @@
+{
+  "canvas": {
+    "width": 1684,
+    "height": 1191
+  },
+  "faces": [
+    {
+      "id": "frente",
+      "nome": "Frente",
+      "baseImage": "frente_base.png",
+      "pageIndex": 0,
+      "elementos": [
+        {
+          "id": "NomeDep",
+          "tipo": "texto",
+          "template": "{nome_deputado}",
+          "x": 202,
+          "y": 175,
+          "width": 1280,
+          "height": 72,
+          "fontFamily": "\"ITC Stone Sans Std\", \"Stone Sans\", Arial, Helvetica, sans-serif",
+          "fontSize": 48,
+          "fontWeight": 500,
+          "fontStyle": "normal",
+          "color": "#231f20",
+          "align": "center",
+          "anchor": "middle",
+          "lineHeight": 1.0,
+          "letterSpacing": 0
+        }
+      ]
+    }
+  ]
+}

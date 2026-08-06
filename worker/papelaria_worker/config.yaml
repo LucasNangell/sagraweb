@@ -1,0 +1,27 @@
+# API única — servidor de produção (mesmo destino para .exe, python worker.py e painel admin)
+api_base_url: "https://cgrafsysvm.redecamara.camara.gov.br/sagra/api"
+# Inspeção de .cdr no admin (DEV): aponte para a mesma API do painel, ex.:
+# api_base_url: "http://127.0.0.1:8001/api"
+ssl_verify: false
+
+worker_secret: "dsajkfhkdjsfleuwahfkKHKHKJGEKkhdsfkjhHKFhkjhkjdhakhKJH"
+worker_id: auto
+
+poll_interval_sec: 1
+models_dir: "\\\\redecamara\\DfsData\\CGraf\\Sefoc\\Laboratorio\\Modelos\\Modelos Corel\\Papelaria\\CSP\\WEB"
+temp_dir: "C:\\SAGRA-Papelaria-Worker\\temp"
+logs_dir: "C:\\SAGRA-Papelaria-Worker\\logs"
+
+corel_visible: false
+job_timeout_sec: 300
+max_retries: 3
+kill_corel_on_timeout: false
+
+load_balance_enabled: true
+max_cpu_percent: 75
+max_memory_percent: 80
+prevent_sleep: true
+
+auto_update_enabled: true
+auto_update_source: "I:\\Transferencia\\_Temp1\\SAGRA-Papelaria-Worker.exe"
+auto_update_check_sec: 300

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+<defs>
+<filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+<feGaussianBlur in="SourceGraphic" stdDeviation="18"/>
+</filter>
+</defs>
+<rect width="100%" height="100%" fill="rgb(245, 246, 250)"/>
+<ellipse cx="610.0" cy="560.0" rx="300.0" ry="70.0" fill="rgba(20,24,35,0.18)" filter="url(#shadow)"/>
+<polygon points="390.0,270.0 810.0,250.0 830.0,470.0 370.0,490.0" fill="rgb(232, 234, 238)" stroke="#c8ccd4" stroke-width="1.5"/>
+<polygon points="400.0,280.0 800.0,262.0 818.0,458.0 382.0,478.0" fill="rgba(255,255,255,0.55)" stroke="rgb(120, 130, 150)" stroke-width="2" stroke-dasharray="10 6"/>
+<text x="390.0" y="284.0" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="rgb(90, 100, 115)">Frente</text>
+</svg>

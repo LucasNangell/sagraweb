@@ -1,0 +1,6177 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MANUAL COMPLETO DO SISTEMA SAGRA WEB</title>
+  <link rel="stylesheet" href="file:///C:/dev/SagraWeb/docs/manual_pdf_assets/manual-style.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+
+<section class="cover-page" aria-label="Capa">
+  <div class="cover-org">Manual Técnico e Operacional — DEAPA / SEFOC / Câmara dos Deputados</div>
+  <h1 class="cover-title">SAGRA Web</h1>
+  <p class="cover-subtitle">Sistema de Acompanhamento Gráfico</p>
+  <p class="cover-doc-type">Manual técnico e operacional — Parte 1 (técnica) e Parte 2 (usuário final)</p>
+  <div class="cover-meta">
+    <p><strong>Versão:</strong> 2.0</p>
+    <p><strong>Data de geração:</strong> 09/06/2026</p>
+    <p><strong>Última revisão:</strong> 09/06/2026</p>
+  </div>
+</section>
+<section class="doc-info"><h2 id="informações-do-documento">Informações do Documento</h2>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Nome do sistema</strong></td>
+<td>SAGRA Web — Sistema de Acompanhamento Gráfico</td>
+</tr>
+<tr>
+<td><strong>Subtítulo</strong></td>
+<td>Manual Técnico e Operacional — DEAPA / SEFOC / Câmara dos Deputados</td>
+</tr>
+<tr>
+<td><strong>Versão do manual</strong></td>
+<td>2.0</td>
+</tr>
+<tr>
+<td><strong>Data de geração</strong></td>
+<td>09/06/2026</td>
+</tr>
+<tr>
+<td><strong>Finalidade do documento</strong></td>
+<td>Documentação completa do sistema SAGRA Web para equipes técnicas (Parte 1) e usuários finais (Parte 2). Baseado em auditoria estática do código-fonte e configuração de produção.</td>
+</tr>
+<tr>
+<td><strong>Público-alvo</strong></td>
+<td>Analistas de sistemas, desenvolvedores, suporte técnico, administradores, operadores SEFOC/DEAPA, analistas de qualidade, PCP, gabinetes/deputados (clientes)</td>
+</tr>
+<tr>
+<td><strong>Confidencialidade</strong></td>
+<td><strong>Uso interno</strong> — Câmara dos Deputados / DEAPA / SEFOC. Não distribuir externamente sem autorização. Contém referências a caminhos de rede, IPs internos e arquitetura de produção.</td>
+</tr>
+<tr>
+<td><strong>Base documental</strong></td>
+<td><code>docs/INVENTARIO_COMPLETO_PARA_MANUAL_SAGRA_WEB.md</code>, código em <code>C:\dev\SagraWeb</code>, deploy em <code>\\cgrafsysvm\Sistemas CGraf\Sagra Web</code></td>
+</tr>
+<tr>
+<td><strong>Legenda de confiança</strong></td>
+<td><strong>[CERTO]</strong> — confirmado no código; <strong>[INFERÊNCIA]</strong> — deduzido; <strong>[NÃO IDENTIFICADO]</strong> — não encontrado</td>
+</tr>
+</tbody>
+</table></section><section class="toc-section">
+<h2 id="sumario">Sumário</h2>
+<div class="toc-body">
+<h3 class="toc-part">Parte 1 — Manual Técnico do Sistema</h3>
+<p class="toc-item"><strong>1.</strong> <a href="#1-visão-geral-técnica">Visão Geral Técnica</a></p>
+<p class="toc-item"><strong>2.</strong> <a href="#2-arquitetura-do-sistema">Arquitetura do Sistema</a></p>
+<p class="toc-item"><strong>3.</strong> <a href="#3-estrutura-de-pastas">Estrutura de Pastas</a></p>
+<p class="toc-item"><strong>4.</strong> <a href="#4-front-end">Front-end</a></p>
+<p class="toc-item"><strong>5.</strong> <a href="#5-back-end">Back-end</a></p>
+<p class="toc-item"><strong>6.</strong> <a href="#6-apis-e-endpoints">APIs e Endpoints</a></p>
+<p class="toc-item"><strong>7.</strong> <a href="#7-banco-de-dados">Banco de Dados</a></p>
+<p class="toc-item"><strong>8.</strong> <a href="#8-autenticação-sessões-e-permissões">Autenticação, Sessões e Permissões</a></p>
+<p class="toc-item"><strong>9.</strong> <a href="#9-fluxos-técnicos-ponta-a-ponta">Fluxos Técnicos Ponta a Ponta</a></p>
+<p class="toc-item"><strong>10.</strong> <a href="#10-integrações-externas">Integrações Externas</a></p>
+<p class="toc-item"><strong>11.</strong> <a href="#11-performance-e-atualizações-automáticas">Performance e Atualizações Automáticas</a></p>
+<p class="toc-item"><strong>12.</strong> <a href="#12-segurança-e-pontos-críticos">Segurança e Pontos Críticos</a></p>
+<p class="toc-item"><strong>13.</strong> <a href="#13-build-deploy-e-produção">Build, Deploy e Produção</a></p>
+<p class="toc-item"><strong>14.</strong> <a href="#14-manutenção-e-suporte">Manutenção e Suporte</a></p>
+<h3 class="toc-part">Parte 2 — Manual do Usuário Final</h3>
+<p class="toc-item"><strong>15.</strong> <a href="#15-introdução-ao-sistema">Introdução ao Sistema</a></p>
+<p class="toc-item"><strong>16.</strong> <a href="#16-acesso-ao-sistema">Acesso ao Sistema</a></p>
+<p class="toc-item"><strong>17.</strong> <a href="#17-página-inicial--dashboard">Página Inicial / Dashboard</a></p>
+<p class="toc-item"><strong>18.</strong> <a href="#18-ordens-de-serviço">Ordens de Serviço</a></p>
+<p class="toc-item"><strong>19.</strong> <a href="#19-gerência--gestão-de-os">Gerência / Gestão de OS</a></p>
+<p class="toc-item"><strong>20.</strong> <a href="#20-análise-técnica">Análise Técnica</a></p>
+<p class="toc-item"><strong>21.</strong> <a href="#21-problemas-técnicos">Problemas Técnicos</a></p>
+<p class="toc-item"><strong>22.</strong> <a href="#22-provas-e-aprovação">Provas e Aprovação</a></p>
+<p class="toc-item"><strong>23.</strong> <a href="#23-portal-do-cliente">Portal do Cliente</a></p>
+<p class="toc-item"><strong>24.</strong> <a href="#24-envio-de-arquivos">Envio de Arquivos</a></p>
+<p class="toc-item"><strong>25.</strong> <a href="#25-e-mail">E-mail</a></p>
+<p class="toc-item"><strong>26.</strong> <a href="#26-contas-do-gabinete">Contas do Gabinete</a></p>
+<p class="toc-item"><strong>27.</strong> <a href="#27-relatórios">Relatórios</a></p>
+<p class="toc-item"><strong>28.</strong> <a href="#28-usuários-e-permissões">Usuários e Permissões</a></p>
+<p class="toc-item"><strong>29.</strong> <a href="#29-erros-comuns-e-como-resolver">Erros Comuns e Como Resolver</a></p>
+<p class="toc-item"><strong>30.</strong> <a href="#30-boas-práticas-de-uso">Boas Práticas de Uso</a></p>
+<p class="toc-item"><strong>31.</strong> <a href="#31-glossário">Glossário</a></p>
+<p class="toc-item"><strong>32.</strong> <a href="#32-checklists-operacionais">Checklists Operacionais</a></p>
+<p class="toc-item"><strong>33.</strong> <a href="#33-apêndices">Apêndices</a></p>
+</div>
+</section><main class="content"><h1 id="parte-1-manual-técnico-do-sistema">PARTE 1 — MANUAL TÉCNICO DO SISTEMA</h1>
+<h2 id="1-visão-geral-técnica">1. Visão Geral Técnica</h2>
+<h3 id="11-identificação-do-sistema">1.1 Identificação do sistema</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Nome</td>
+<td><strong>SAGRA Web</strong> — Sistema de Acompanhamento Gráfico</td>
+</tr>
+<tr>
+<td>Organização</td>
+<td>DEAPA / SEFOC / Câmara dos Deputados</td>
+</tr>
+<tr>
+<td>Repositório de desenvolvimento</td>
+<td><code>C:\dev\SagraWeb</code></td>
+</tr>
+<tr>
+<td>Deploy produção</td>
+<td><code>\\cgrafsysvm\Sistemas CGraf\Sagra Web</code> <strong>[CERTO]</strong></td>
+</tr>
+<tr>
+<td>Proxy reverso</td>
+<td><code>\\cgrafsysvm\nginx\conf\nginx.conf</code> <strong>[CERTO]</strong></td>
+</tr>
+<tr>
+<td>Banco de dados</td>
+<td>MySQL <code>sagrafulldb</code> em <code>10.1.1.73</code> <strong>[CERTO]</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="12-finalidade">1.2 Finalidade</h3>
+<p>O SAGRA Web gerencia o <strong>ciclo de vida completo de Ordens de Serviço (OS) gráficas</strong> na produção parlamentar:</p>
+<ul>
+<li>Busca, criação, edição e duplicação de OS</li>
+<li>Registro de andamentos e timeline operacional</li>
+<li>Análise técnica de qualidade com pré-análise automatizada de PDFs</li>
+<li>Comunicação via Microsoft Exchange (EWS): PT, provas, andamentos</li>
+<li>Portais seguros por token para clientes externos (PT, prova, upload de arquivos)</li>
+<li>Portal autenticado para gabinetes/deputados</li>
+<li>Fila PCP (kanban), gravação (Xpose), papelaria, relatórios customizados</li>
+<li>Painéis TV em tempo real (setor e global)</li>
+</ul>
+<h3 id="13-estado-atual-da-plataforma-certo">1.3 Estado atual da plataforma <strong>[CERTO]</strong></h3>
+<p>O sistema está em <strong>migração de UI legada HTML/jQuery</strong> (<code>app/frontend/</code>) para <strong>SPA React 19 + TypeScript</strong> (<code>apps/web/</code>). O backend <strong>FastAPI</strong> permanece como camada única de API.</p>
+<p>Em produção (<code>config/config.json</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Valor prod</th>
+<th>Efeito</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mysql_only</code></td>
+<td><code>true</code></td>
+<td>MySQL é a fonte da verdade</td>
+</tr>
+<tr>
+<td><code>sync_andamentos_enabled</code></td>
+<td><code>false</code></td>
+<td>Sync bidirecional MDB↔MySQL desabilitado</td>
+</tr>
+<tr>
+<td><code>env</code></td>
+<td><code>production</code></td>
+<td>Modo produção</td>
+</tr>
+</tbody>
+</table>
+<div class="alert alert-alert-importante"><strong>Importante:</strong> Escrita dual-write em Access MDB (<code>mdb_writer.py</code>) só ocorre quando <code>mysql_only=false</code>. Em produção atual, saves vão exclusivamente ao MySQL.</div>
+<h3 id="14-público-atendido-e-perfis-de-acesso">1.4 Público atendido e perfis de acesso</h3>
+<table>
+<thead>
+<tr>
+<th>Perfil</th>
+<th>Autenticação</th>
+<th>Cookie / credencial</th>
+<th>Rotas principais</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Operador LAN</td>
+<td>Ponto + nome</td>
+<td><code>sagra_session</code></td>
+<td><code>/_authenticated/*</code> (URLs reais: <code>/</code>, <code>/analise</code>, etc.)</td>
+</tr>
+<tr>
+<td>Operador remoto</td>
+<td>E-mail/ponto + senha</td>
+<td><code>sagra_session</code></td>
+<td>Idem, via internet (<code>cgraf.online</code>) <strong>[INFERÊNCIA]</strong></td>
+</tr>
+<tr>
+<td>MASTER / admin sistema</td>
+<td>IP privilegiado + sessão</td>
+<td><code>sagra_session</code></td>
+<td><code>/api/admin/*</code>, <code>/admin/ips</code>, <code>/admin/configuracoes</code></td>
+</tr>
+<tr>
+<td>Admin usuários</td>
+<td>Permissão <code>sb_usuarios</code></td>
+<td><code>sagra_session</code></td>
+<td><code>/usuarios</code></td>
+</tr>
+<tr>
+<td>Cliente gabinete</td>
+<td>E-mail + senha</td>
+<td><code>sagra_cliente_session</code></td>
+<td><code>/cliente/*</code></td>
+</tr>
+<tr>
+<td>Cliente anônimo (link)</td>
+<td>Token na URL</td>
+<td>—</td>
+<td><code>/portal/*</code></td>
+</tr>
+<tr>
+<td>Painel TV</td>
+<td>Sem login (GET anônimo)</td>
+<td>—</td>
+<td><code>/painel/setor</code>, <code>/painel/global</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="15-módulos-mapeados">1.5 Módulos mapeados</h3>
+<table>
+<thead>
+<tr>
+<th>Módulo</th>
+<th>Status</th>
+<th>Router / rota principal</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Login interno</td>
+<td>✅</td>
+<td><code>/login/*</code> → <code>auth_routes.py</code></td>
+</tr>
+<tr>
+<td>Login cliente</td>
+<td>✅</td>
+<td><code>/cliente/login/*</code> → <code>cliente_gabinete_routes.py</code></td>
+</tr>
+<tr>
+<td>Dashboard / Início</td>
+<td>✅</td>
+<td><code>/</code> → <code>OsHomePage</code></td>
+</tr>
+<tr>
+<td>Gerência</td>
+<td>✅</td>
+<td><code>/gerencia</code> → <code>os_routes.py</code> (acesso via menu contexto, não sidebar)</td>
+</tr>
+<tr>
+<td>Análise</td>
+<td>✅</td>
+<td><code>/analise</code> → <code>analise_routes.py</code></td>
+</tr>
+<tr>
+<td>E-mail</td>
+<td>✅</td>
+<td><code>/email</code> → <code>email_routes.py</code></td>
+</tr>
+<tr>
+<td>Portal Cliente</td>
+<td>✅</td>
+<td><code>/cliente/*</code> → <code>cliente_gabinete_routes.py</code></td>
+</tr>
+<tr>
+<td>Portal PT</td>
+<td>✅</td>
+<td><code>/portal/pt/$token</code> → <code>analise_routes.py</code></td>
+</tr>
+<tr>
+<td>Provas / Aprovação</td>
+<td>✅</td>
+<td><code>/portal/aprovacao/$token</code> → <code>proof_portal_routes.py</code></td>
+</tr>
+<tr>
+<td>Envio arquivos</td>
+<td>✅</td>
+<td><code>/portal/os-arquivos/$token</code> → <code>os_arquivos_routes.py</code></td>
+</tr>
+<tr>
+<td>Contas gabinete</td>
+<td>✅</td>
+<td><code>/cliente/contas</code> → <code>cliente_gabinete_routes.py</code></td>
+</tr>
+<tr>
+<td>PCP</td>
+<td>✅</td>
+<td><code>/pcp</code> → <code>pcp_routes.py</code></td>
+</tr>
+<tr>
+<td>Gravação</td>
+<td>✅</td>
+<td><code>/gravacao</code> → <code>gravacao_routes.py</code></td>
+</tr>
+<tr>
+<td>Papelaria</td>
+<td>✅</td>
+<td><code>/papelaria</code> → <code>papelaria_routes.py</code></td>
+</tr>
+<tr>
+<td>Relatórios</td>
+<td>✅</td>
+<td><code>/relatorios</code> → <code>report_custom_routes.py</code></td>
+</tr>
+<tr>
+<td>Painéis TV</td>
+<td>✅</td>
+<td><code>/painel/*</code></td>
+</tr>
+<tr>
+<td>Sub-OS / componentes</td>
+<td>✅</td>
+<td><code>os_sub_os_routes.py</code></td>
+</tr>
+<tr>
+<td>Pré-análise</td>
+<td>✅</td>
+<td><code>pre_analise_routes.py</code></td>
+</tr>
+<tr>
+<td>Sync MDB/MySQL</td>
+<td>⚠️ Condicional</td>
+<td><code>sync_routes.py</code> — só se <code>SYNC_ANDAMENTOS_ENABLED=true</code></td>
+</tr>
+<tr>
+<td>Computadores ativos</td>
+<td>⚠️</td>
+<td>Permissão <code>sb_active_computers</code> existe; rota React <strong>[NÃO IDENTIFICADO]</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="16-stack-tecnológica-resumida-certo">1.6 Stack tecnológica resumida <strong>[CERTO]</strong></h3>
+<table>
+<thead>
+<tr>
+<th>Camada</th>
+<th>Tecnologia</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Monorepo</td>
+<td>pnpm workspaces (<code>pnpm-workspace.yaml</code>)</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td>React 19, TypeScript 5.7, Vite 6, TanStack Router/Query/Table</td>
+</tr>
+<tr>
+<td>Estado</td>
+<td>Zustand (6 stores), React Hook Form + Zod</td>
+</tr>
+<tr>
+<td>Estilo</td>
+<td>Tailwind CSS v4, <code>@sagra/ui</code> (shadcn-style)</td>
+</tr>
+<tr>
+<td>PWA</td>
+<td>vite-plugin-pwa + Workbox</td>
+</tr>
+<tr>
+<td>Backend</td>
+<td>FastAPI + Uvicorn (Python 3)</td>
+</tr>
+<tr>
+<td>Banco</td>
+<td>MySQL via PyMySQL pool (<code>database.py</code>) — <strong>sem ORM</strong></td>
+</tr>
+<tr>
+<td>Legado</td>
+<td>Microsoft Access MDB (opcional)</td>
+</tr>
+<tr>
+<td>Proxy</td>
+<td>Nginx → Uvicorn <code>:8050</code> (prod), <code>:8001</code> (dev)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="17-visão-arquitetural-simplificada">1.7 Visão arquitetural simplificada</h3>
+<div class="mermaid">
+flowchart TB
+    subgraph Browser
+        SPA["SPA React<br/>apps/web"]
+        PWA["Service Worker<br/>Workbox"]
+    end
+    subgraph Proxy
+        NGINX["Nginx :80<br/>/sagra/api/ → :8050"]
+    end
+    subgraph Backend
+        API["FastAPI<br/>app/backend"]
+        WS["WebSocket<br/>realtime.py"]
+    end
+    subgraph Dados
+        MYSQL[(MySQL sagrafulldb)]
+        MDB[(Access MDB<br/>opcional)]
+        UNC["UNC Rede<br/>pastas OS"]
+    end
+    subgraph Externos
+        EWS["Exchange EWS"]
+        CF["Cloudflare Tunnel"]
+        ZROK["zrok painéis"]
+    end
+    SPA --> NGINX
+    PWA --> SPA
+    NGINX --> API
+    NGINX --> WS
+    API --> MYSQL
+    API -.-> MDB
+    API --> UNC
+    API --> EWS
+    CF --> NGINX
+    ZROK --> NGINX
+</div>
+
+<hr />
+<h2 id="2-arquitetura-do-sistema">2. Arquitetura do Sistema</h2>
+<h3 id="21-separação-frontend-backend-certo">2.1 Separação frontend / backend <strong>[CERTO]</strong></h3>
+<pre><code>Dev:  Vite :5173  ──proxy /api,/ws──►  FastAPI :8001
+Prod: Nginx :80   ──/sagra/api/────►  FastAPI :8050
+      Nginx       ──/ (SPA)────────►  app/frontend/ (build React)
+</code></pre>
+<p>Resolução de prefixo API no front: <code>apps/web/src/lib/api.ts</code> → <code>resolveSagraApiPrefix()</code> retorna <code>/api</code> (dev) ou <code>/sagra/api</code> (prod).</p>
+<h3 id="22-camadas-do-backend">2.2 Camadas do backend</h3>
+<table>
+<thead>
+<tr>
+<th>Camada</th>
+<th>Localização</th>
+<th>Responsabilidade</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Entry point</td>
+<td><code>app/backend/main.py</code> → <code>routers/api.py:app</code></td>
+<td>Startup, middleware, registro routers</td>
+</tr>
+<tr>
+<td>Routers</td>
+<td><code>app/backend/routers/</code> (~25 módulos)</td>
+<td>Endpoints REST + WebSocket</td>
+</tr>
+<tr>
+<td>Services</td>
+<td><code>app/backend/services/</code> (57 módulos)</td>
+<td>Regras de negócio</td>
+</tr>
+<tr>
+<td>Schemas</td>
+<td><code>app/backend/schemas/</code> + inline nos routers</td>
+<td>Contratos Pydantic</td>
+</tr>
+<tr>
+<td>Security</td>
+<td><code>app/backend/security/</code></td>
+<td>Auth, sessão, IP, Cloudflare</td>
+</tr>
+<tr>
+<td>Database</td>
+<td><code>app/backend/database.py</code></td>
+<td>Pool PyMySQL, SQL raw</td>
+</tr>
+<tr>
+<td>Config</td>
+<td><code>app/backend/config_manager.py</code></td>
+<td><code>config/config.json</code> + <code>.env</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-camadas-do-frontend">2.3 Camadas do frontend</h3>
+<table>
+<thead>
+<tr>
+<th>Camada</th>
+<th>Localização</th>
+<th>Responsabilidade</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Entry</td>
+<td><code>apps/web/src/main.tsx</code></td>
+<td>Bootstrap React, providers</td>
+</tr>
+<tr>
+<td>Rotas</td>
+<td><code>apps/web/src/routes/</code> (file-based)</td>
+<td>TanStack Router; <code>routeTree.gen.ts</code> gerado</td>
+</tr>
+<tr>
+<td>Features</td>
+<td><code>apps/web/src/features/</code></td>
+<td>Módulos de domínio (os, analise, email, cliente…)</td>
+</tr>
+<tr>
+<td>API clients</td>
+<td><code>apps/web/src/api/</code></td>
+<td>Hooks React Query + fetch</td>
+</tr>
+<tr>
+<td>Components</td>
+<td><code>apps/web/src/components/</code></td>
+<td>Auth, layout, portal, PWA</td>
+</tr>
+<tr>
+<td>Lib</td>
+<td><code>apps/web/src/lib/</code></td>
+<td><code>api.ts</code>, <code>query-client.ts</code>, utilitários</td>
+</tr>
+<tr>
+<td>UI compartilhada</td>
+<td><code>packages/ui/</code></td>
+<td>Componentes shadcn</td>
+</tr>
+</tbody>
+</table>
+<h3 id="24-padrões-arquiteturais-certo">2.4 Padrões arquiteturais <strong>[CERTO]</strong></h3>
+<table>
+<thead>
+<tr>
+<th>Padrão</th>
+<th>Implementação</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Rotas API</td>
+<td>Routers FastAPI montados em <code>api.py</code></td>
+</tr>
+<tr>
+<td>Acesso a dados</td>
+<td>SQL raw via <code>execute_query</code> / <code>execute_transaction</code></td>
+</tr>
+<tr>
+<td>Auth API</td>
+<td><code>APIAccessMiddleware</code> (<code>security/api_auth.py</code>) — IP + sessão HttpOnly</td>
+</tr>
+<tr>
+<td>Auth SPA</td>
+<td><code>AuthGuard</code> / <code>ClienteAuthGuard</code> + <code>GET /api/permissions</code></td>
+</tr>
+<tr>
+<td>Tempo real</td>
+<td>WebSocket <code>/ws</code>, <code>/api/ws</code> — <code>routers/realtime.py</code></td>
+</tr>
+<tr>
+<td>Schema DB</td>
+<td><code>CREATE TABLE IF NOT EXISTS</code> no startup (<code>api.py</code>) + DDL em <code>deploy/sql/</code></td>
+</tr>
+<tr>
+<td>Deep links SPA</td>
+<td><code>_register_spa_shell_routes</code> em <code>api.py</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="25-ambientes-certo-inferência">2.5 Ambientes <strong>[CERTO / INFERÊNCIA]</strong></h3>
+<table>
+<thead>
+<tr>
+<th>Ambiente</th>
+<th>Host</th>
+<th>Porta API</th>
+<th>URL pública</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Dev local</td>
+<td><code>10.1.1.73</code></td>
+<td><code>8001</code></td>
+<td><code>http://10.1.1.73:8001</code></td>
+</tr>
+<tr>
+<td>Produção</td>
+<td><code>cgrafsysvm</code> / <code>10.1.1.73</code></td>
+<td><code>8050</code></td>
+<td><code>http://cgrafsysvm</code> (Nginx)</td>
+</tr>
+<tr>
+<td>Internet staff</td>
+<td>Cloudflare</td>
+<td>—</td>
+<td><code>cgraf.online</code> <strong>[INFERÊNCIA]</strong></td>
+</tr>
+<tr>
+<td>Painéis TV</td>
+<td>zrok</td>
+<td>—</td>
+<td><code>sagra-painel.shares.zrok.io</code> <strong>[INFERÊNCIA]</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="26-bibliotecas-principais">2.6 Bibliotecas principais</h3>
+<p><strong>Frontend</strong> (<code>apps/web/package.json</code>): <code>@tanstack/react-router</code>, <code>@tanstack/react-query</code>, <code>@tanstack/react-table</code>, <code>@tanstack/react-virtual</code>, <code>zustand</code>, <code>chart.js</code>, <code>pdfjs-dist</code>, <code>@dnd-kit/*</code>, <code>lucide-react</code>, <code>workbox-window</code>.</p>
+<p><strong>Backend</strong> (<code>app/backend/requirements.txt</code>): <code>fastapi</code>, <code>uvicorn</code>, <code>pydantic</code>, <code>PyMySQL</code>, <code>pyodbc</code>, <code>fpdf2</code>, <code>pymupdf</code>, <code>pytesseract</code>, <code>opencv-python-headless</code>, <code>pandas</code>, <code>Jinja2</code>, <code>bleach</code>, <code>requests-negotiate-sspi</code>, <code>google-api-python-client</code>.</p>
+<h3 id="27-pwa-e-cache-certo">2.7 PWA e cache <strong>[CERTO]</strong></h3>
+<ul>
+<li><code>vite-plugin-pwa</code> com Workbox em <code>apps/web/vite.config.ts</code></li>
+<li>Nginx aplica <code>no-cache</code> em HTML via <code>$sagra_html_no_cache</code></li>
+<li>Atualizações via componente <code>PwaUpdatePrompt</code></li>
+<li><strong>Atenção:</strong> Clientes com Service Worker antigo após deploy podem precisar aceitar atualização via prompt ou hard refresh.</li>
+</ul>
+<hr />
+<h2 id="3-estrutura-de-pastas">3. Estrutura de Pastas</h2>
+<pre><code>C:\dev\SagraWeb\
+├── apps\web\                    # SPA React (fonte principal UI)
+│   └── src\
+│       ├── routes\              # Rotas TanStack (file-based)
+│       ├── features\            # Módulos de domínio
+│       ├── api\                 # Clientes HTTP + hooks React Query
+│       ├── components\          # UI compartilhada
+│       └── lib\                 # api.ts, query-client.ts
+├── packages\
+│   ├── ui\                      # Componentes shadcn compartilhados
+│   └── api-types\               # Tipos TS derivados de OpenAPI (planejado)
+├── app\
+│   ├── backend\                 # FastAPI — routers, services, security
+│   │   ├── routers\             # ~25 routers REST
+│   │   ├── services\            # 57 módulos de negócio
+│   │   ├── security\            # Auth, sessão, IP
+│   │   ├── schemas\             # Pydantic
+│   │   └── tests\               # pytest
+│   └── frontend\                # Build SPA + HTML legado (migração)
+├── config\                      # config.json, .env, .env.example
+├── deploy\                      # Scripts release, templates, SQL DDL
+│   ├── scripts\                 # package-release.ps1, deploy-producao.ps1
+│   └── sql\                     # Migrations manuais
+├── docs\                        # Documentação
+├── app\services\                # Scripts operacionais (sync, backup)
+│   └── sync_tables\             # Sync MDB↔MySQL batch
+├── logs\                        # Logs de runtime
+└── package.json                 # Scripts monorepo
+</code></pre>
+<h3 id="31-entry-points-críticos">3.1 Entry points críticos</h3>
+<table>
+<thead>
+<tr>
+<th>Função</th>
+<th>Arquivo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bootstrap front</td>
+<td><code>apps/web/src/main.tsx</code></td>
+</tr>
+<tr>
+<td>Bootstrap back</td>
+<td><code>app/backend/main.py</code> → <code>routers/api.py:app</code></td>
+</tr>
+<tr>
+<td>Configuração</td>
+<td><code>app/backend/config_manager.py</code></td>
+</tr>
+<tr>
+<td>Prefixo API</td>
+<td><code>apps/web/src/lib/api.ts</code></td>
+</tr>
+<tr>
+<td>Permissões front</td>
+<td><code>apps/web/src/features/auth/permissions.ts</code></td>
+</tr>
+<tr>
+<td>Middleware auth</td>
+<td><code>app/backend/security/api_auth.py</code></td>
+</tr>
+<tr>
+<td>Sessão/cookies</td>
+<td><code>app/backend/security/session_auth.py</code></td>
+</tr>
+<tr>
+<td>Pool DB</td>
+<td><code>app/backend/database.py</code></td>
+</tr>
+<tr>
+<td>Nav sidebar</td>
+<td><code>apps/web/src/components/layout/nav-config.ts</code></td>
+</tr>
+<tr>
+<td>Tipos permissão</td>
+<td><code>apps/web/src/features/auth/types.ts</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="32-onde-encontrar-cada-tipo-de-artefato">3.2 Onde encontrar cada tipo de artefato</h3>
+<table>
+<thead>
+<tr>
+<th>Artefato</th>
+<th>Localização</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Páginas React</td>
+<td><code>apps/web/src/routes/</code> + <code>apps/web/src/features/*/pages/</code></td>
+</tr>
+<tr>
+<td>Componentes compartilhados</td>
+<td><code>apps/web/src/components/</code></td>
+</tr>
+<tr>
+<td>Hooks de API</td>
+<td><code>apps/web/src/api/</code> e <code>apps/web/src/features/*/api.ts</code></td>
+</tr>
+<tr>
+<td>Stores Zustand</td>
+<td><code>apps/web/src/features/*/Store.ts</code></td>
+</tr>
+<tr>
+<td>Routers backend</td>
+<td><code>app/backend/routers/*.py</code></td>
+</tr>
+<tr>
+<td>Services backend</td>
+<td><code>app/backend/services/*.py</code></td>
+</tr>
+<tr>
+<td>DDL incremental</td>
+<td><code>deploy/sql/*.sql</code></td>
+</tr>
+<tr>
+<td>Templates e-mail</td>
+<td><code>tabEmailTemplateModel</code> + presets em disco</td>
+</tr>
+<tr>
+<td>UI legada</td>
+<td><code>app/frontend/</code> (HTML/jQuery, migração)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4-front-end">4. Front-end</h2>
+<h3 id="41-framework-e-padrões">4.1 Framework e padrões</h3>
+<table>
+<thead>
+<tr>
+<th>Aspecto</th>
+<th>Implementação</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Framework</td>
+<td>React 19 + TypeScript</td>
+</tr>
+<tr>
+<td>Build</td>
+<td>Vite 6 (<code>apps/web/vite.config.ts</code>)</td>
+</tr>
+<tr>
+<td>Roteamento</td>
+<td>TanStack Router — file-based; segmento <code>_authenticated</code> é <strong>pathless</strong></td>
+</tr>
+<tr>
+<td>Estado servidor</td>
+<td>TanStack Query v5 (<code>lib/query-client.ts</code>)</td>
+</tr>
+<tr>
+<td>Estado cliente</td>
+<td>Zustand — 6 stores principais</td>
+</tr>
+<tr>
+<td>Formulários</td>
+<td>React Hook Form + Zod</td>
+</tr>
+<tr>
+<td>Estilo</td>
+<td>Tailwind CSS v4 + <code>@sagra/ui</code></td>
+</tr>
+<tr>
+<td>Tabelas</td>
+<td>TanStack Table + virtualização</td>
+</tr>
+<tr>
+<td>DnD</td>
+<td><code>@dnd-kit</code> (PCP)</td>
+</tr>
+<tr>
+<td>PDF viewer</td>
+<td><code>pdfjs-dist</code> (portais prova/PT)</td>
+</tr>
+<tr>
+<td>WebSocket</td>
+<td><code>useSagraWebSocket</code> hook</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Total de rotas identificadas:</strong> 33 em <code>routeTree.gen.ts</code> <strong>[CERTO]</strong></p>
+<p><strong>Lazy-loaded (6):</strong> <code>/gerencia</code>, <code>/email</code>, <code>/analise</code>, <code>/relatorios</code>, <code>/pcp</code>, <code>/gravacao</code></p>
+<h3 id="42-layouts-e-guards">4.2 Layouts e guards</h3>
+<table>
+<thead>
+<tr>
+<th>Layout</th>
+<th>Arquivo</th>
+<th>Guard</th>
+<th>Shell</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Staff autenticado</td>
+<td><code>routes/_authenticated.tsx</code></td>
+<td><code>AuthGuard</code></td>
+<td><code>AppShell</code></td>
+</tr>
+<tr>
+<td>Login staff</td>
+<td><code>routes/login.tsx</code></td>
+<td>Redireciona autenticados → <code>/</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Cliente autenticado</td>
+<td><code>features/cliente/layout/ClienteAuthenticatedLayout.tsx</code></td>
+<td><code>ClienteAuthGuard</code></td>
+<td><code>ClientePortalShell</code></td>
+</tr>
+<tr>
+<td>Portal token</td>
+<td><code>routes/portal.tsx</code></td>
+<td>—</td>
+<td><code>PortalLayout</code></td>
+</tr>
+<tr>
+<td>Painéis TV</td>
+<td><code>routes/painel.tsx</code></td>
+<td>Sem AuthGuard</td>
+<td>Fullscreen</td>
+</tr>
+</tbody>
+</table>
+<p>Nav sidebar staff: <code>components/layout/nav-config.ts</code> — itens controlados por permissões <code>sb_*</code>.</p>
+<h3 id="43-stores-zustand">4.3 Stores Zustand</h3>
+<table>
+<thead>
+<tr>
+<th>Store</th>
+<th>Arquivo</th>
+<th>Persistência</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>useAuthStore</code></td>
+<td><code>features/auth/authStore.ts</code></td>
+<td>Cookie sessão</td>
+</tr>
+<tr>
+<td><code>useClienteStore</code></td>
+<td><code>features/cliente/clienteStore.ts</code></td>
+<td>Cookie cliente</td>
+</tr>
+<tr>
+<td><code>useOsFiltersStore</code></td>
+<td><code>features/os/osFiltersStore.ts</code></td>
+<td>localStorage</td>
+</tr>
+<tr>
+<td><code>useOsSelectionStore</code></td>
+<td><code>features/os/osSelectionStore.ts</code></td>
+<td>Memória</td>
+</tr>
+<tr>
+<td><code>usePcpConfigStore</code></td>
+<td><code>features/pcp/pcpConfigStore.ts</code></td>
+<td>localStorage</td>
+</tr>
+<tr>
+<td><code>usePainelConfigStore</code></td>
+<td><code>features/painel-global/painelConfigStore.ts</code></td>
+<td>localStorage</td>
+</tr>
+</tbody>
+</table>
+<h3 id="44-rotas-internas-staff-autenticado">4.4 Rotas internas (staff autenticado)</h3>
+<p>Layout: <code>_authenticated</code> → <code>AuthGuard</code> + <code>AppShell</code></p>
+<h4 id="441-início-lista-de-os">4.4.1 <code>/</code> — Início / Lista de OS</h4>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>URL</strong></td>
+<td><code>/</code></td>
+</tr>
+<tr>
+<td><strong>Arquivo rota</strong></td>
+<td><code>routes/_authenticated/index.tsx</code></td>
+</tr>
+<tr>
+<td><strong>Componente</strong></td>
+<td><code>OsHomePage</code> (<code>features/os/pages/OsHomePage.tsx</code>)</td>
+</tr>
+<tr>
+<td><strong>Permissão</strong></td>
+<td><code>sb_inicio</code></td>
+</tr>
+<tr>
+<td><strong>Usuário</strong></td>
+<td>Operadores de produção, atendimento</td>
+</tr>
+<tr>
+<td><strong>Finalidade</strong></td>
+<td>Busca/lista OS, detalhes, histórico, ações de contexto</td>
+</tr>
+<tr>
+<td><strong>APIs</strong></td>
+<td><code>GET /api/os/search</code>, <code>GET /api/os/{ano}/{id}/details</code>, <code>GET /api/os/{ano}/{id}/history</code>, <code>GET /api/os/{ano}/{id}/vinculos</code>, audit-log</td>
+</tr>
+<tr>
+<td><strong>Ações</strong></td>
+<td>Filtrar, selecionar OS, menu contexto (<code>ctx_*</code>), abrir pasta, vincular, imprimir ficha</td>
+</tr>
+<tr>
+<td><strong>Estados UI</strong></td>
+<td>loading (query), erro, vazio, refresh via WebSocket <code>system_update</code></td>
+</tr>
+<tr>
+<td><strong>Obs.</strong></td>
+<td>Debounce busca 250ms; paginação server-side</td>
+</tr>
+</tbody>
+</table>
+<h4 id="442-gerencia-gerência-de-os">4.4.2 <code>/gerencia</code> — Gerência de OS</h4>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>URL</strong></td>
+<td><code>/gerencia</code> (query: <code>?action=new</code>, <code>?ano=&amp;id=</code> edit)</td>
+</tr>
+<tr>
+<td><strong>Arquivo rota</strong></td>
+<td><code>routes/_authenticated/gerencia.tsx</code></td>
+</tr>
+<tr>
+<td><strong>Componente</strong></td>
+<td><code>GerenciaPage</code> (lazy)</td>
+</tr>
+<tr>
+<td><strong>Permissão</strong></td>
+<td><code>sb_gerencia</code> + <code>ctx_nova_os</code> / <code>ctx_editar_os</code> / <code>ctx_duplicar_os</code></td>
+</tr>
+<tr>
+<td><strong>Usuário</strong></td>
+<td>Operadores com permissão de gerência</td>
+</tr>
+<tr>
+<td><strong>Finalidade</strong></td>
+<td>Criar, editar, duplicar OS; componentes; sub-OS; pasta rede</td>
+</tr>
+<tr>
+<td><strong>APIs</strong></td>
+<td><code>POST /api/os/save</code>, <code>GET /api/os/next_id</code>, <code>/api/aux/*</code>, <code>/api/os/{ano}/{id}/folder-*</code>, <code>/api/os/{ano}/{id}/componentes</code>, <code>/api/os/{ano}/{id}/sub-os/*</code></td>
+</tr>
+<tr>
+<td><strong>Ações</strong></td>
+<td>Salvar, duplicar, browse pasta UNC, modal envio arquivos (nova OS)</td>
+</tr>
+<tr>
+<td><strong>Estados UI</strong></td>
+<td>loading aux/OS, erro save, validação formulário</td>
+</tr>
+<tr>
+<td><strong>Obs.</strong></td>
+<td><strong>Não está no sidebar</strong> — acesso via menu contexto na <code>/</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="443-analise-análise-técnica">4.4.3 <code>/analise</code> — Análise Técnica</h4>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>URL</strong></td>
+<td><code>/analise?ano=&amp;id=</code></td>
+</tr>
+<tr>
+<td><strong>Arquivo rota</strong></td>
+<td><code>routes/_authenticated/analise.tsx</code></td>
+</tr>
+<tr>
+<td><strong>Componente</strong></td>
+<td><code>AnalisePage</code> (lazy)</td>
+</tr>
+<tr>
+<td><strong>Permissão</strong></td>
+<td><code>sb_analise</code></td>
+</tr>
+<tr>
+<td><strong>Usuário</strong></td>
+<td>Analistas de qualidade</td>
+</tr>
+<tr>
+<td><strong>Finalidade</strong></td>
+<td>Análise técnica, pré-análise PDF, biblioteca problemas, links PT</td>
+</tr>
+<tr>
+<td><strong>APIs</strong></td>
+<td><code>/api/analise/*</code>, <code>/api/files/*</code>, <code>/api/pre-analise/*</code></td>
+</tr>
+<tr>
+<td><strong>Ações</strong></td>
+<td>Adicionar itens, pré-análise stream, anotações PDF, finalizar, gerar link PT</td>
+</tr>
+<tr>
+<td><strong>Estados UI</strong></td>
+<td>Requer <code>?ano=&amp;id=</code>; loading análise; stream pré-análise NDJSON</td>
+</tr>
+<tr>
+<td><strong>Obs.</strong></td>
+<td>Sem OS na URL → tela orienta seleção</td>
+</tr>
+</tbody>
+</table>
+<h4 id="444-email-módulo-e-mail">4.4.4 <code>/email</code> — Módulo E-mail</h4>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>URL</strong></td>
+<td><code>/email</code></td>
+</tr>
+<tr>
+<td><strong>Arquivo rota</strong></td>
+<td><code>routes/_authenticated/email.tsx</code></td>
+</tr>
+<tr>
+<td><strong>Componente</strong></td>
+<td><code>EmailPage</code> (lazy)</td>
+</tr>
+<tr>
+<td><strong>Permissão</strong></td>
+<td><code>sb_email</code></td>
+</tr>
+<tr>
+<td><strong>Usuário</strong></td>
+<td>Atendimento, analistas</td>
+</tr>
+<tr>
+<td><strong>Finalidade</strong></td>
+<td>Inbox Exchange, pendências, envio PT/prova</td>
+</tr>
+<tr>
+<td><strong>APIs</strong></td>
+<td><code>/api/email/*</code> (config, inbox, pendencias, send, send-pt, andamento)</td>
+</tr>
+<tr>
+<td><strong>Ações</strong></td>
+<td>Configurar EWS, ler inbox, enviar e-mail/PT, registrar andamento</td>
+</tr>
+<tr>
+<td><strong>Estados UI</strong></td>
+<td>Badge contador no menu; loading inbox</td>
+</tr>
+<tr>
+<td><strong>Obs.</strong></td>
+<td>Requer config Exchange por ponto (<code>tabEmailExchangeConfig</code>)</td>
+</tr>
+</tbody>
+</table>
+<h4 id="445-papelaria-papelaria">4.4.5 <code>/papelaria</code> — Papelaria</h4>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>URL</strong></td>
+<td><code>/papelaria</code></td>
+</tr>
+<tr>
+<td><strong>Arquivo rota</strong></td>
+<td><code>routes/_authenticated/papelaria.tsx</code></td>
+</tr>
+<tr>
+<td><strong>Componente</strong></td>
+<td><code>PapelariaPage</code></td>
+</tr>
+<tr>
+<td><strong>Permissão</strong></td>
+<td><code>sb_papelaria</code></td>
+</tr>
+<tr>
+<td><strong>Usuário</strong></td>
+<td>Operadores papelaria</td>
+</tr>
+<tr>
+<td><strong>Finalidade</strong></td>
+<td>Cartões SVG + preview Corel legado</td>
+</tr>
+<tr>
+<td><strong>APIs</strong></td>
+<td><code>/api/papelaria/*</code></td>
+</tr>
+<tr>
+<td><strong>Ações</strong></td>
+<td>Selecionar modelo, gerar SVG, preview PDF</td>
+</tr>
+<tr>
+<td><strong>Estados UI</strong></td>
+<td>Exige OS com <code>NroProtocolo &gt;= 5000</code></td>
+</tr>
+<tr>
+<td><strong>Obs.</strong></td>
+<td>Preview Corel via COM Windows — <strong>[INFERÊNCIA]</strong></td>
+</tr>
+</tbody>
+</table>
+<h4 id="446-relatorios-relatórios">4.4.6 <code>/relatorios</code> — Relatórios</h4>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>URL</strong></td>
+<td><code>/relatorios</code></td>
+</tr>
+<tr>
+<td><strong>Arquivo rota</strong></td>
+<td><code>routes/_authenticated/relatorios.tsx</code></td>
+</tr>
+<tr>
+<td><strong>Componente</strong></td>
+<td><code>RelatorioPage</code> (lazy)</td>
+</tr>
+<tr>
+<td><strong>Permissão</strong></td>
+<td><code>sb_relatorio</code></td>
+</tr>
+<tr>
+<td><strong>Usuário</strong></td>
+<td>Gestão, operadores autorizados</td>
+</tr>
+<tr>
+<td><strong>Finalidade</strong></td>
+<td>Relatórios customizados HTML/XLSX</td>
+</tr>
+<tr>
+<td><strong>APIs</strong></td>
+<td><code>POST /api/reports/custom</code>, <code>POST /api/reports/xlsx</code></td>
+</tr>
+<tr>
+<td><strong>Ações</strong></td>
+<td>Definir filtros/colunas, gerar, exportar</td>
+</tr>
+<tr>
+<td><strong>Estados UI</strong></td>
+<td>loading geração</td>
+</tr>
+</tbody>
+</table>
+<h4 id="447-pcp-fila-pcp">4.4.7 <code>/pcp</code> — Fila PCP</h4>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>URL</strong></td>
+<td><code>/pcp</code></td>
+</tr>
+<tr>
+<td><strong>Arquivo rota</strong></td>
+<td><code>routes/_authenticated/pcp.tsx</code></td>
+</tr>
+<tr>
+<td><strong>Componente</strong></td>
+<td><code>PcpPage</code> (lazy)</td>
+</tr>
+<tr>
+<td><strong>Permissão</strong></td>
+<td><code>sb_pcp</code></td>
+</tr>
+<tr>
+<td><strong>Usuário</strong></td>
+<td>PCP, planejamento</td>
+</tr>
+<tr>
+<td><strong>Finalidade</strong></td>
+<td>Fila kanban por setor, reordenação</td>
+</tr>
+<tr>
+<td><strong>APIs</strong></td>
+<td><code>GET/POST /api/pcp/queue</code></td>
+</tr>
+<tr>
+<td><strong>Ações</strong></td>
+<td>Selecionar setor, drag-and-drop reorder</td>
+</tr>
+<tr>
+<td><strong>Estados UI</strong></td>
+<td>DnD + WS <code>pcp_queue_update</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="448-gravacao-gravação">4.4.8 <code>/gravacao</code> — Gravação</h4>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>URL</strong></td>
+<td><code>/gravacao</code></td>
+</tr>
+<tr>
+<td><strong>Arquivo rota</strong></td>
+<td><code>routes/_authenticated/gravacao.tsx</code></td>
+</tr>
+<tr>
+<td><strong>Componente</strong></td>
+<td><code>GravacaoPage</code> (lazy)</td>
+</tr>
+<tr>
+<td><strong>Permissão</strong></td>
+<td><code>sb_gravacao</code></td>
+</tr>
+<tr>
+<td><strong>Usuário</strong></td>
+<td>Setor gravação</td>
+</tr>
+<tr>
+<td><strong>Finalidade</strong></td>
+<td>Monitor Xpose/PrintQ</td>
+</tr>
+<tr>
+<td><strong>APIs</strong></td>
+<td><code>/api/gravacao/*</code>, WS <code>/api/ws/jobs</code></td>
+</tr>
+<tr>
+<td><strong>Ações</strong></td>
+<td>Monitorar jobs CTP</td>
+</tr>
+<tr>
+<td><strong>Estados UI</strong></td>
+<td>Tempo real via WebSocket</td>
+</tr>
+</tbody>
+</table>
+<h4 id="449-usuarios-administração-de-usuários">4.4.9 <code>/usuarios</code> — Administração de Usuários</h4>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>URL</strong></td>
+<td><code>/usuarios</code></td>
+</tr>
+<tr>
+<td><strong>Arquivo rota</strong></td>
+<td><code>routes/_authenticated/usuarios.tsx</code></td>
+</tr>
+<tr>
+<td><strong>Componente</strong></td>
+<td><code>UsuariosPage</code></td>
+</tr>
+<tr>
+<td><strong>Permissão</strong></td>
+<td><code>sb_usuarios</code></td>
+</tr>
+<tr>
+<td><strong>Usuário</strong></td>
+<td>Administradores</td>
+</tr>
+<tr>
+<td><strong>Finalidade</strong></td>
+<td>CRUD usuários internos e clientes gabinete</td>
+</tr>
+<tr>
+<td><strong>APIs</strong></td>
+<td><code>/api/admin/users/*</code>, <code>/api/admin/clientes/*</code></td>
+</tr>
+<tr>
+<td><strong>Ações</strong></td>
+<td>Criar/editar usuário, permissões, cadastrar gabinete</td>
+</tr>
+</tbody>
+</table>
+<h4 id="4410-adminips-administração-de-ips">4.4.10 <code>/admin/ips</code> — Administração de IPs</h4>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>URL</strong></td>
+<td><code>/admin/ips</code></td>
+</tr>
+<tr>
+<td><strong>Arquivo rota</strong></td>
+<td><code>routes/_authenticated/admin/ips.tsx</code></td>
+</tr>
+<tr>
+<td><strong>Componente</strong></td>
+<td><code>AdminIpsPage</code></td>
+</tr>
+<tr>
+<td><strong>Permissão</strong></td>
+<td><code>sb_admin_ips</code></td>
+</tr>
+<tr>
+<td><strong>Usuário</strong></td>
+<td>MASTER / admins</td>
+</tr>
+<tr>
+<td><strong>Finalidade</strong></td>
+<td>Matriz RBAC por IP</td>
+</tr>
+<tr>
+<td><strong>APIs</strong></td>
+<td><code>/api/admin/ip/*</code>, <code>POST /api/access-request</code></td>
+</tr>
+<tr>
+<td><strong>Ações</strong></td>
+<td>CRUD IPs, flags permissão, gestão solicitações</td>
+</tr>
+</tbody>
+</table>
+<h4 id="4411-adminconfiguracoes-configurações-do-sistema">4.4.11 <code>/admin/configuracoes</code> — Configurações do Sistema</h4>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>URL</strong></td>
+<td><code>/admin/configuracoes</code></td>
+</tr>
+<tr>
+<td><strong>Arquivo rota</strong></td>
+<td><code>routes/_authenticated/admin/configuracoes.tsx</code></td>
+</tr>
+<tr>
+<td><strong>Componente</strong></td>
+<td><code>ConfiguracoesPage</code></td>
+</tr>
+<tr>
+<td><strong>Permissão</strong></td>
+<td><code>sb_admin_ips</code></td>
+</tr>
+<tr>
+<td><strong>Usuário</strong></td>
+<td>MASTER / admins</td>
+</tr>
+<tr>
+<td><strong>Finalidade</strong></td>
+<td>Checks pré-análise, templates e-mail</td>
+</tr>
+<tr>
+<td><strong>APIs</strong></td>
+<td><code>/api/admin/system/*</code></td>
+</tr>
+<tr>
+<td><strong>Ações</strong></td>
+<td>Editar checks, reset templates, teste envio</td>
+</tr>
+</tbody>
+</table>
+<h4 id="4412-impressaorequisicaoanoid-ficha-requisição">4.4.12 <code>/impressao/requisicao/$ano/$id</code> — Ficha Requisição</h4>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>URL</strong></td>
+<td><code>/impressao/requisicao/{ano}/{id}</code></td>
+</tr>
+<tr>
+<td><strong>Arquivo rota</strong></td>
+<td><code>routes/_authenticated/impressao/requisicao.$ano.$id.tsx</code></td>
+</tr>
+<tr>
+<td><strong>Componente</strong></td>
+<td><code>RequisicaoPrintPage</code></td>
+</tr>
+<tr>
+<td><strong>Permissão</strong></td>
+<td><code>ctx_imprimir_ficha</code></td>
+</tr>
+<tr>
+<td><strong>APIs</strong></td>
+<td><code>GET /api/reports/requisicao/{ano}/{id}</code></td>
+</tr>
+<tr>
+<td><strong>Ações</strong></td>
+<td>Auto-print ao carregar</td>
+</tr>
+</tbody>
+</table>
+<h4 id="4413-catch-all-módulo-em-migração">4.4.13 Catch-all — Módulo em migração</h4>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>URL</strong></td>
+<td>Qualquer rota autenticada não migrada</td>
+</tr>
+<tr>
+<td><strong>Arquivo rota</strong></td>
+<td><code>routes/_authenticated/$.tsx</code></td>
+</tr>
+<tr>
+<td><strong>Componente</strong></td>
+<td><code>ModulePlaceholderPage</code></td>
+</tr>
+<tr>
+<td><strong>Permissão</strong></td>
+<td>Sessão apenas</td>
+</tr>
+<tr>
+<td><strong>Estados UI</strong></td>
+<td>Mensagem "Módulo em migração"</td>
+</tr>
+</tbody>
+</table>
+<h3 id="45-rotas-login-staff-público">4.5 Rotas login staff (público)</h3>
+<table>
+<thead>
+<tr>
+<th>URL</th>
+<th>Arquivo</th>
+<th>Finalidade</th>
+<th>APIs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/login</code></td>
+<td><code>login.index.tsx</code></td>
+<td>Login LAN (ponto+nome) ou internet (senha)</td>
+<td><code>POST /api/auth/session</code>, <code>POST /api/auth/login</code></td>
+</tr>
+<tr>
+<td><code>/login/activate</code></td>
+<td><code>login.activate.tsx</code></td>
+<td>Ativação conta internet</td>
+<td><code>/api/auth/activate/*</code></td>
+</tr>
+<tr>
+<td><code>/login/forgot</code></td>
+<td><code>login.forgot.tsx</code></td>
+<td>Solicitar reset senha</td>
+<td><code>POST /api/auth/forgot-password</code></td>
+</tr>
+<tr>
+<td><code>/login/reset</code></td>
+<td><code>login.reset.tsx</code></td>
+<td>Redefinir senha com token</td>
+<td><code>/api/auth/reset-password/*</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="46-rotas-portal-cliente-gabinete-autenticado">4.6 Rotas portal cliente (gabinete autenticado)</h3>
+<p>Cookie: <code>sagra_cliente_session</code> (separado de <code>sagra_session</code>)</p>
+<table>
+<thead>
+<tr>
+<th>URL</th>
+<th>Arquivo</th>
+<th>Componente</th>
+<th>Finalidade</th>
+<th>APIs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/cliente</code></td>
+<td><code>cliente/index.tsx</code></td>
+<td><code>ClienteDashboardPage</code></td>
+<td>Dashboard OS, timeline, pendências</td>
+<td><code>GET /api/cliente/dashboard</code>, <code>/api/cliente/me</code></td>
+</tr>
+<tr>
+<td><code>/cliente/login</code></td>
+<td><code>cliente/login.index.tsx</code></td>
+<td><code>ClienteLoginPage</code></td>
+<td>Login gabinete</td>
+<td><code>POST /api/auth/cliente/login</code></td>
+</tr>
+<tr>
+<td><code>/cliente/login/activate</code></td>
+<td><code>cliente/login.activate.tsx</code></td>
+<td>Ativação conta</td>
+<td><code>?token=</code></td>
+<td><code>/api/auth/cliente/activate/*</code></td>
+</tr>
+<tr>
+<td><code>/cliente/contas</code></td>
+<td><code>cliente/contas.tsx</code></td>
+<td><code>ClienteContasPanel</code></td>
+<td>Subcontas</td>
+<td><code>GET/POST /api/cliente/contas</code></td>
+</tr>
+<tr>
+<td><code>/cliente/provas</code></td>
+<td><code>cliente/provas.tsx</code></td>
+<td><code>ClientePendenciasListPage</code></td>
+<td>Pendências prova</td>
+<td>dashboard + tokens</td>
+</tr>
+<tr>
+<td><code>/cliente/problemas-tecnicos</code></td>
+<td><code>cliente/problemas-tecnicos.tsx</code></td>
+<td><code>ClientePendenciasListPage</code></td>
+<td>Pendências PT</td>
+<td>dashboard + tokens</td>
+</tr>
+<tr>
+<td><code>/cliente/os/$ano/$nrOs/prova</code></td>
+<td>bridge</td>
+<td><code>ClienteProofBridgePage</code></td>
+<td>Ponte → portal prova</td>
+<td>redireciona <code>/portal/aprovacao/$token</code></td>
+</tr>
+<tr>
+<td><code>/cliente/os/$ano/$nrOs/arquivos</code></td>
+<td>bridge</td>
+<td><code>ClienteArquivosBridgePage</code></td>
+<td>Ponte → upload</td>
+<td>redireciona <code>/portal/os-arquivos/$token</code></td>
+</tr>
+<tr>
+<td><code>/cliente/os/$ano/$nrOs/problemas-tecnicos</code></td>
+<td>bridge</td>
+<td><code>ClientePtBridgePage</code></td>
+<td>Ponte → portal PT</td>
+<td>redireciona <code>/portal/pt/$token</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Refetch automático:</strong> dashboard a cada 60s via React Query <strong>[CERTO — <code>docs/PAGINA_CLIENTE.md</code>]</strong></p>
+<h3 id="47-rotas-portais-públicos-por-token">4.7 Rotas portais públicos por token</h3>
+<p>Layout: <code>routes/portal.tsx</code> → <code>PortalLayout</code>. Validação: token + query <code>?os=&amp;ano=</code> no backend.</p>
+<table>
+<thead>
+<tr>
+<th>URL</th>
+<th>Arquivo</th>
+<th>Componente</th>
+<th>Finalidade</th>
+<th>APIs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/portal/pt/$token</code></td>
+<td><code>portal/pt.$token.tsx</code></td>
+<td><code>PortalPtPage</code></td>
+<td>PT interativo, upload correções</td>
+<td><code>/api/analise/client/*</code>, <code>/api/client/upload-*</code></td>
+</tr>
+<tr>
+<td><code>/portal/prova/$token</code></td>
+<td><code>portal/prova.$token.tsx</code></td>
+<td><code>PortalProvaPage</code></td>
+<td>Visualização PDF PT (read-only)</td>
+<td><code>GET /api/client/report/{ano}/{os_id}</code></td>
+</tr>
+<tr>
+<td><code>/portal/aprovacao/$token</code></td>
+<td><code>portal/aprovacao.$token.tsx</code></td>
+<td><code>PortalAprovacaoPage</code></td>
+<td>Aprovar/reprovar prova</td>
+<td><code>/api/client/proof/*</code></td>
+</tr>
+<tr>
+<td><code>/portal/os-arquivos/$token</code></td>
+<td><code>portal/os-arquivos.$token.tsx</code></td>
+<td><code>PortalOsArquivosPage</code></td>
+<td>Upload arquivos nova OS</td>
+<td><code>/api/client/os-arquivos/*</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="48-rotas-painéis-tv-sem-login">4.8 Rotas painéis TV (sem login)</h3>
+<table>
+<thead>
+<tr>
+<th>URL</th>
+<th>Arquivo</th>
+<th>Componente</th>
+<th>Finalidade</th>
+<th>APIs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/painel/setor</code></td>
+<td><code>painel/setor.tsx</code></td>
+<td><code>DashboardSetorPage</code></td>
+<td>Dashboard setor fullscreen</td>
+<td><code>GET /api/os/search</code>, <code>/api/pcp/queue</code>, WS</td>
+</tr>
+<tr>
+<td><code>/painel/global</code></td>
+<td><code>painel/global.tsx</code></td>
+<td><code>PainelGlobalPage</code></td>
+<td>Visão global produção</td>
+<td><code>GET /api/os/search</code>, WS, Chart.js</td>
+</tr>
+</tbody>
+</table>
+<div class="alert alert-alert-atencao"><strong>Atenção:</strong> Rotas sem <code>AuthGuard</code>. Controle via permissão sidebar + flag <code>SAGRA_PAINEL_SKIP_IP_CHECK</code> no backend.</div>
+<h3 id="49-permissões-de-menu-de-contexto-os-não-são-rotas">4.9 Permissões de menu de contexto OS (não são rotas)</h3>
+<p>Definidas em <code>features/auth/types.ts</code>, aplicadas via <code>useAccessControl</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Chave</th>
+<th>Finalidade</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ctx_nova_os</code></td>
+<td>Abrir <code>/gerencia?action=new</code></td>
+</tr>
+<tr>
+<td><code>ctx_duplicar_os</code></td>
+<td>Duplicar OS selecionada</td>
+</tr>
+<tr>
+<td><code>ctx_editar_os</code></td>
+<td>Editar OS selecionada</td>
+</tr>
+<tr>
+<td><code>ctx_vincular_os</code></td>
+<td>Modal vincular OS</td>
+</tr>
+<tr>
+<td><code>ctx_abrir_pasta</code></td>
+<td>Abrir pasta UNC (Folder Opener)</td>
+</tr>
+<tr>
+<td><code>ctx_imprimir_ficha</code></td>
+<td>Imprimir ficha requisição</td>
+</tr>
+<tr>
+<td><code>ctx_detalhes_os</code></td>
+<td>Ver detalhes expandidos</td>
+</tr>
+</tbody>
+</table>
+<h3 id="410-padrões-de-loading-erro-e-vazio">4.10 Padrões de loading, erro e vazio</h3>
+<table>
+<thead>
+<tr>
+<th>Padrão</th>
+<th>Implementação</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Loading listas</td>
+<td>TanStack Query <code>isLoading</code> / <code>isFetching</code> + skeletons</td>
+</tr>
+<tr>
+<td>Erro API</td>
+<td>Toast + mensagem inline; 403 → redirect login</td>
+</tr>
+<tr>
+<td>Vazio</td>
+<td>Componentes empty state por feature</td>
+</tr>
+<tr>
+<td>Retry</td>
+<td>React Query retry configurado em <code>query-client.ts</code></td>
+</tr>
+<tr>
+<td>Debounce busca OS</td>
+<td>250ms em filtros</td>
+</tr>
+<tr>
+<td>Permissão negada</td>
+<td><code>AuthGuard</code> redirect ou mensagem; <code>createDeniedPermissions()</code> anti fail-open</td>
+</tr>
+</tbody>
+</table>
+<h2 id="5-back-end">5. Back-end</h2>
+<h3 id="51-framework-e-organização">5.1 Framework e organização</h3>
+<table>
+<thead>
+<tr>
+<th>Aspecto</th>
+<th>Detalhe</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Framework</td>
+<td>FastAPI + Uvicorn</td>
+</tr>
+<tr>
+<td>Entry</td>
+<td><code>app/backend/main.py</code> → <code>routers/api.py:app</code></td>
+</tr>
+<tr>
+<td>Porta dev</td>
+<td><code>8001</code> (via <code>config.json</code> / <code>.env</code>)</td>
+</tr>
+<tr>
+<td>Porta prod</td>
+<td><code>8050</code> <strong>[CERTO — nginx upstream]</strong></td>
+</tr>
+<tr>
+<td>Routers</td>
+<td>~25 módulos em <code>app/backend/routers/</code></td>
+</tr>
+<tr>
+<td>Services</td>
+<td>57 módulos em <code>app/backend/services/</code></td>
+</tr>
+<tr>
+<td>Testes</td>
+<td><code>app/backend/tests/</code> — pytest</td>
+</tr>
+<tr>
+<td>OpenAPI</td>
+<td><code>/docs</code>, <code>/openapi.json</code> (OpenAPI 3.1)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="52-registro-de-routers-certo">5.2 Registro de routers <strong>[CERTO]</strong></h3>
+<p>Montagem central em <code>app/backend/routers/api.py</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Router</th>
+<th>Prefixo / escopo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>auth_routes.py</code></td>
+<td><code>/api/auth/*</code></td>
+</tr>
+<tr>
+<td><code>os_routes.py</code></td>
+<td><code>/api/os/*</code></td>
+</tr>
+<tr>
+<td><code>os_sub_os_routes.py</code></td>
+<td><code>/api/os/{ano}/{id}/sub-os/*</code></td>
+</tr>
+<tr>
+<td><code>analise_routes.py</code></td>
+<td><code>/api/analise/*</code>, <code>/api/files/*</code>, <code>/api/analise/client/*</code></td>
+</tr>
+<tr>
+<td><code>pre_analise_routes.py</code></td>
+<td><code>/api/pre-analise/*</code></td>
+</tr>
+<tr>
+<td><code>email_routes.py</code></td>
+<td><code>/api/email/*</code></td>
+</tr>
+<tr>
+<td><code>cliente_gabinete_routes.py</code></td>
+<td><code>/api/cliente/*</code>, <code>/api/auth/cliente/*</code></td>
+</tr>
+<tr>
+<td><code>proof_portal_routes.py</code></td>
+<td><code>/api/client/proof/*</code></td>
+</tr>
+<tr>
+<td><code>os_arquivos_routes.py</code></td>
+<td><code>/api/client/os-arquivos/*</code></td>
+</tr>
+<tr>
+<td><code>ip_admin_routes.py</code></td>
+<td><code>/api/permissions</code>, <code>/api/admin/ip/*</code></td>
+</tr>
+<tr>
+<td><code>user_admin_routes.py</code></td>
+<td><code>/api/admin/users/*</code></td>
+</tr>
+<tr>
+<td><code>admin_system_routes.py</code></td>
+<td><code>/api/admin/system/*</code></td>
+</tr>
+<tr>
+<td><code>auxiliar_routes.py</code></td>
+<td><code>/api/aux/*</code></td>
+</tr>
+<tr>
+<td><code>pcp_routes.py</code></td>
+<td><code>/api/pcp/*</code></td>
+</tr>
+<tr>
+<td><code>papelaria_routes.py</code></td>
+<td><code>/api/papelaria/*</code></td>
+</tr>
+<tr>
+<td><code>gravacao_routes.py</code></td>
+<td><code>/api/gravacao/*</code></td>
+</tr>
+<tr>
+<td><code>report_custom_routes.py</code></td>
+<td><code>/api/reports/*</code></td>
+</tr>
+<tr>
+<td><code>requisicao_routes.py</code></td>
+<td><code>/api/reports/requisicao/*</code></td>
+</tr>
+<tr>
+<td><code>settings_routes.py</code></td>
+<td><code>/api/settings/*</code></td>
+</tr>
+<tr>
+<td><code>notifications_routes.py</code></td>
+<td><code>/api/notifications/*</code></td>
+</tr>
+<tr>
+<td><code>config_routes.py</code></td>
+<td><code>/api/config/*</code></td>
+</tr>
+<tr>
+<td><code>realtime.py</code></td>
+<td><code>/ws</code>, <code>/api/ws</code>, <code>/api/realtime/notify</code></td>
+</tr>
+<tr>
+<td><code>sync_routes.py</code></td>
+<td><code>/api/sync/*</code> — <strong>condicional</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Total aproximado:</strong> ~190 rotas REST + WebSocket <strong>[CERTO]</strong></p>
+<h3 id="53-middleware-e-startup">5.3 Middleware e startup</h3>
+<table>
+<thead>
+<tr>
+<th>Componente</th>
+<th>Arquivo</th>
+<th>Função</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>APIAccessMiddleware</code></td>
+<td><code>security/api_auth.py</code></td>
+<td>Valida IP + cookie sessão; 403 anti fail-open</td>
+</tr>
+<tr>
+<td>Startup schema</td>
+<td><code>api.py</code></td>
+<td><code>CREATE TABLE IF NOT EXISTS</code> tabelas web-only</td>
+</tr>
+<tr>
+<td>SPA shell routes</td>
+<td><code>api.py</code></td>
+<td>Deep links <code>/login</code>, <code>/cliente</code>, <code>/portal</code>, <code>/painel</code></td>
+</tr>
+<tr>
+<td>Cloudflare Access</td>
+<td><code>security/cloudflare_access.py</code></td>
+<td>Bloqueio rotas internas via internet</td>
+</tr>
+<tr>
+<td>Rate limit</td>
+<td><strong>[INFERÊNCIA]</strong> <code>SAGRA_RATE_LIMIT_ENABLED</code></td>
+<td>Limitação requisições</td>
+</tr>
+</tbody>
+</table>
+<h3 id="54-services-principais-por-domínio">5.4 Services principais por domínio</h3>
+<table>
+<thead>
+<tr>
+<th>Domínio</th>
+<th>Service(s)</th>
+<th>Arquivo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OS / save</td>
+<td>lógica save, audit</td>
+<td><code>os_save_service.py</code>, <code>os_audit_service.py</code></td>
+</tr>
+<tr>
+<td>Andamentos</td>
+<td>regras operacionais</td>
+<td><code>andamento_operacional.py</code></td>
+</tr>
+<tr>
+<td>Timeline cliente</td>
+<td>filtros, sub-OS</td>
+<td><code>cliente_os_timeline_service.py</code></td>
+</tr>
+<tr>
+<td>Análise</td>
+<td>CRUD, finalização</td>
+<td>services em <code>analise_routes.py</code> + dedicados</td>
+</tr>
+<tr>
+<td>Pré-análise</td>
+<td>checks PDF</td>
+<td><code>services/pre_analise/</code></td>
+</tr>
+<tr>
+<td>E-mail</td>
+<td>EWS wrapper</td>
+<td><code>ews_service.py</code></td>
+</tr>
+<tr>
+<td>Prova</td>
+<td>tokens, PDF</td>
+<td><code>proof_files_service.py</code></td>
+</tr>
+<tr>
+<td>Pasta OS</td>
+<td>path UNC</td>
+<td><code>os_folder_structure.py</code></td>
+</tr>
+<tr>
+<td>Arquivos</td>
+<td>acesso rede</td>
+<td><code>file_access.py</code></td>
+</tr>
+<tr>
+<td>MDB dual-write</td>
+<td>fila async</td>
+<td><code>mdb_writer.py</code></td>
+</tr>
+<tr>
+<td>Sync</td>
+<td>batch MDB↔MySQL</td>
+<td><code>sync_andamentos_v2.py</code></td>
+</tr>
+<tr>
+<td>Deputados</td>
+<td>API Câmara</td>
+<td><code>deputados_camara_service.py</code></td>
+</tr>
+<tr>
+<td>GDrive</td>
+<td>upload portal</td>
+<td><code>gdrive_portal_upload.py</code> (desabilitado prod)</td>
+</tr>
+<tr>
+<td>Ativação e-mail</td>
+<td>SMTP</td>
+<td><code>activation_email_service.py</code>, <code>cliente_activation_email_service.py</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="55-autenticação-backend">5.5 Autenticação backend</h3>
+<table>
+<thead>
+<tr>
+<th>Modo</th>
+<th>Handler</th>
+<th>Cookie</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LAN staff</td>
+<td><code>POST /api/auth/session</code></td>
+<td><code>sagra_session</code> (HMAC)</td>
+</tr>
+<tr>
+<td>Internet staff</td>
+<td><code>POST /api/auth/login</code></td>
+<td><code>sagra_session</code></td>
+</tr>
+<tr>
+<td>Cliente gabinete</td>
+<td><code>POST /api/auth/cliente/login</code></td>
+<td><code>sagra_cliente_session</code></td>
+</tr>
+<tr>
+<td>Token portal</td>
+<td>Validação no handler</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>Arquivos: <code>security/session_auth.py</code>, <code>security/api_auth.py</code>, <code>routers/auth_routes.py</code></p>
+<h3 id="56-uploads-e-arquivos">5.6 Uploads e arquivos</h3>
+<table>
+<thead>
+<tr>
+<th>Fluxo</th>
+<th>Router</th>
+<th>Destino</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Upload PT (cliente)</td>
+<td><code>analise_routes.py</code></td>
+<td>UNC pasta OS</td>
+</tr>
+<tr>
+<td>Upload arquivos OS</td>
+<td><code>os_arquivos_routes.py</code></td>
+<td>UNC pasta OS</td>
+</tr>
+<tr>
+<td>Upload indicação análise</td>
+<td><code>analise_routes.py</code></td>
+<td>Path controlado</td>
+</tr>
+<tr>
+<td>GDrive staging</td>
+<td><code>gdrive_portal_upload.py</code></td>
+<td>Drive → UNC (se habilitado)</td>
+</tr>
+<tr>
+<td>Serve arquivo UNC</td>
+<td><code>GET /api/files/serve</code></td>
+<td>Stream do filesystem</td>
+</tr>
+</tbody>
+</table>
+<h3 id="57-geração-de-relatórios-e-pdf">5.7 Geração de relatórios e PDF</h3>
+<table>
+<thead>
+<tr>
+<th>Tipo</th>
+<th>Router/Service</th>
+<th>Saída</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Relatório customizado</td>
+<td><code>report_custom_routes.py</code></td>
+<td>HTML / XLSX</td>
+</tr>
+<tr>
+<td>Ficha requisição</td>
+<td><code>requisicao_routes.py</code></td>
+<td>HTML print</td>
+</tr>
+<tr>
+<td>PDF prova</td>
+<td><code>proof_files_service.py</code></td>
+<td>PDF da pasta OS</td>
+</tr>
+<tr>
+<td>PDF PT legado SAT</td>
+<td><code>analise_routes.py</code></td>
+<td><code>tabRegistroPT</code></td>
+</tr>
+<tr>
+<td>Pré-análise</td>
+<td><code>pre_analise/</code></td>
+<td>NDJSON stream</td>
+</tr>
+</tbody>
+</table>
+<h3 id="58-logs-e-erros-comuns">5.8 Logs e erros comuns</h3>
+<table>
+<thead>
+<tr>
+<th>Código HTTP</th>
+<th>Causa típica</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>401</td>
+<td>Sem cookie em rota que exige sessão explícita</td>
+</tr>
+<tr>
+<td>403</td>
+<td>IP não cadastrado ou sessão inválida (<code>APIAccessMiddleware</code>)</td>
+</tr>
+<tr>
+<td>404</td>
+<td>OS/recurso não encontrado</td>
+</tr>
+<tr>
+<td>503</td>
+<td>Pool DB esgotado ou GDrive desabilitado</td>
+</tr>
+</tbody>
+</table>
+<p>Logs runtime: diretório <code>logs/</code>; sync logs podem ser grandes (~234 MB mencionados em auditoria anterior) <strong>[INFERÊNCIA]</strong>.</p>
+<h3 id="59-compatibilidade-ui-legada">5.9 Compatibilidade UI legada</h3>
+<p><code>POST /api/users/identify</code> também emite cookie <code>sagra_session</code> <strong>[CERTO — <code>docs/API_FASE_B_AUTH.md</code>]</strong>. UI legada em <code>app/frontend/</code> ainda consome alguns endpoints.</p>
+<hr />
+<h2 id="6-apis-e-endpoints">6. APIs e Endpoints</h2>
+<blockquote>
+<p><strong>Referência completa:</strong> OpenAPI em <code>http://127.0.0.1:8001/docs</code> (dev) ou via Nginx em produção.<br />
+<strong>Legenda auth:</strong> <strong>Pub</strong> = público; <strong>Sess</strong> = sessão+IP; <strong>M</strong> = MASTER; <strong>Token</strong> = validado no handler; <strong>Cli</strong> = cookie cliente.</p>
+</blockquote>
+<h3 id="61-infraestrutura">6.1 Infraestrutura</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Rota</th>
+<th>Arquivo</th>
+<th>Auth</th>
+<th>Finalidade</th>
+<th>Tabelas</th>
+<th>Telas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/health</code></td>
+<td><code>api.py</code></td>
+<td>Pub</td>
+<td>Ping DB</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/config/public</code></td>
+<td><code>config_routes.py</code></td>
+<td>Pub</td>
+<td>Flags bootstrap (<code>apiBase</code>, <code>mysqlOnly</code>, <code>syncEnabled</code>, <code>env</code>)</td>
+<td>—</td>
+<td><code>main.tsx</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/connected-ips</code></td>
+<td><code>api.py</code></td>
+<td>M</td>
+<td>IPs ativos (60s)</td>
+<td>—</td>
+<td>admin</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/download/folder-opener</code></td>
+<td><code>api.py</code></td>
+<td>Sess</td>
+<td>Download <code>SAGRA-FolderOpener.exe</code></td>
+<td>—</td>
+<td>menu contexto pasta</td>
+</tr>
+</tbody>
+</table>
+<h3 id="62-autenticação-auth">6.2 Autenticação (auth)</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Rota</th>
+<th>Arquivo</th>
+<th>Auth</th>
+<th>Finalidade</th>
+<th>Tabelas</th>
+<th>Telas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/api/auth/session</code></td>
+<td><code>auth_routes.py</code></td>
+<td>Pub (LAN)</td>
+<td>Login ponto+nome → cookie</td>
+<td><code>tabUsuarios</code></td>
+<td><code>/login</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/auth/login</code></td>
+<td><code>auth_routes.py</code></td>
+<td>Pub (internet)</td>
+<td>Login e-mail/senha → cookie</td>
+<td><code>tabUsuarios</code>, <code>user_permissions</code></td>
+<td><code>/login</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/auth/me</code></td>
+<td><code>auth_routes.py</code></td>
+<td>Pub (401 se sem cookie)</td>
+<td>Sessão atual</td>
+<td>—</td>
+<td>bootstrap</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/auth/logout</code></td>
+<td><code>auth_routes.py</code></td>
+<td>Pub</td>
+<td>Limpa cookie</td>
+<td>—</td>
+<td>header</td>
+</tr>
+<tr>
+<td>GET/POST</td>
+<td><code>/api/auth/activate/*</code></td>
+<td><code>auth_routes.py</code></td>
+<td>Pub</td>
+<td>Ativação conta internet</td>
+<td><code>tabUsuarios</code></td>
+<td><code>/login/activate</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/auth/forgot-password</code></td>
+<td><code>auth_routes.py</code></td>
+<td>Pub</td>
+<td>Solicita reset (SMTP)</td>
+<td><code>tabUsuarios</code></td>
+<td><code>/login/forgot</code></td>
+</tr>
+<tr>
+<td>GET/POST</td>
+<td><code>/api/auth/reset-password/*</code></td>
+<td><code>auth_routes.py</code></td>
+<td>Pub</td>
+<td>Nova senha com token</td>
+<td><code>tabUsuarios</code></td>
+<td><code>/login/reset</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/auth/cliente/login</code></td>
+<td><code>cliente_gabinete_routes.py</code></td>
+<td>Pub</td>
+<td>Login gabinete</td>
+<td><code>tabClienteGabinete</code></td>
+<td><code>/cliente/login</code></td>
+</tr>
+<tr>
+<td>GET/POST</td>
+<td><code>/api/auth/cliente/activate/*</code></td>
+<td><code>cliente_gabinete_routes.py</code></td>
+<td>Pub</td>
+<td>Ativação cliente</td>
+<td><code>tabClienteGabinete</code></td>
+<td><code>/cliente/login/activate</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="63-usuário-interno-e-permissões-user">6.3 Usuário interno e permissões (user)</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Rota</th>
+<th>Arquivo</th>
+<th>Auth</th>
+<th>Finalidade</th>
+<th>Tabelas</th>
+<th>Telas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/permissions</code></td>
+<td><code>ip_admin_routes.py</code></td>
+<td>Sess</td>
+<td>Permissões efetivas IP+usuário</td>
+<td><code>ip_permissions</code>, <code>user_permissions</code></td>
+<td>todas autenticadas</td>
+</tr>
+<tr>
+<td>GET/POST</td>
+<td><code>/api/admin/ip/*</code></td>
+<td><code>ip_admin_routes.py</code></td>
+<td>M</td>
+<td>CRUD IPs e flags RBAC</td>
+<td><code>ip_permissions</code></td>
+<td><code>/admin/ips</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/access-request</code></td>
+<td><code>ip_admin_routes.py</code></td>
+<td>Pub</td>
+<td>Solicitação auto-acesso</td>
+<td><code>tabSolicitacoesAcesso</code></td>
+<td>login</td>
+</tr>
+<tr>
+<td>GET/POST</td>
+<td><code>/api/admin/access-requests</code></td>
+<td><code>ip_admin_routes.py</code></td>
+<td>M</td>
+<td>Gestão solicitações</td>
+<td><code>tabSolicitacoesAcesso</code></td>
+<td><code>/admin/ips</code></td>
+</tr>
+<tr>
+<td>GET/POST/PUT/DELETE</td>
+<td><code>/api/admin/users/*</code></td>
+<td><code>user_admin_routes.py</code></td>
+<td>M</td>
+<td>CRUD usuários, permissões</td>
+<td><code>tabUsuarios</code>, <code>user_permissions</code></td>
+<td><code>/usuarios</code></td>
+</tr>
+<tr>
+<td>GET/POST</td>
+<td><code>/api/admin/clientes/*</code></td>
+<td><code>cliente_gabinete_routes.py</code></td>
+<td>M</td>
+<td>Admin clientes gabinete</td>
+<td><code>tabClienteGabinete</code></td>
+<td><code>/usuarios</code></td>
+</tr>
+<tr>
+<td>GET/PUT</td>
+<td><code>/api/settings/*</code></td>
+<td><code>settings_routes.py</code></td>
+<td>Sess</td>
+<td>Preferências UI, filtros salvos</td>
+<td><code>tabUserPreferences</code></td>
+<td>SettingsModal</td>
+</tr>
+<tr>
+<td>GET/POST</td>
+<td><code>/api/notifications/*</code></td>
+<td><code>notifications_routes.py</code></td>
+<td>Sess</td>
+<td>Notificações (stub front)</td>
+<td><code>tabNotificacoes</code></td>
+<td>header</td>
+</tr>
+</tbody>
+</table>
+<h3 id="64-cliente-gabinete-cliente">6.4 Cliente gabinete (cliente)</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Rota</th>
+<th>Arquivo</th>
+<th>Auth</th>
+<th>Finalidade</th>
+<th>Tabelas</th>
+<th>Telas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/cliente/me</code></td>
+<td><code>cliente_gabinete_routes.py</code></td>
+<td>Cli</td>
+<td>Sessão atual gabinete</td>
+<td><code>tabClienteGabinete</code></td>
+<td><code>/cliente</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/cliente/dashboard</code></td>
+<td><code>cliente_gabinete_routes.py</code></td>
+<td>Cli</td>
+<td>OS do gabinete, pendências</td>
+<td><code>tabProtocolos</code>, tokens</td>
+<td><code>/cliente</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/cliente/os/{ano}/{nr_os}/andamentos</code></td>
+<td><code>cliente_gabinete_routes.py</code></td>
+<td>Cli</td>
+<td>Timeline filtrada</td>
+<td><code>tabAndamento</code></td>
+<td>timeline cliente</td>
+</tr>
+<tr>
+<td>GET/POST</td>
+<td><code>/api/cliente/contas</code></td>
+<td><code>cliente_gabinete_routes.py</code></td>
+<td>Cli</td>
+<td>Subcontas gabinete</td>
+<td><code>tabClienteGabinete</code></td>
+<td><code>/cliente/contas</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="65-ordens-de-serviço-os">6.5 Ordens de Serviço (OS)</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Rota</th>
+<th>Arquivo</th>
+<th>Auth</th>
+<th>Finalidade</th>
+<th>Tabelas</th>
+<th>Telas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/os/search</code></td>
+<td><code>os_routes.py</code></td>
+<td>Sess</td>
+<td>Busca paginada OS</td>
+<td><code>tabProtocolos</code>, <code>tabDetalhesServico</code></td>
+<td><code>/</code>, painéis</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/os/next_id</code></td>
+<td><code>os_routes.py</code></td>
+<td>Sess</td>
+<td>Próximo ID OS</td>
+<td>leitura</td>
+<td><code>/gerencia</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/os/{ano}/{id}/details</code></td>
+<td><code>os_routes.py</code></td>
+<td>Sess</td>
+<td>Detalhes OS</td>
+<td>leitura</td>
+<td>OsDetailsPanel</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/os/save</code></td>
+<td><code>os_routes.py</code></td>
+<td>Sess</td>
+<td>Criar/editar OS</td>
+<td><code>tabProtocolos</code>, <code>tabDetalhesServico</code></td>
+<td><code>/gerencia</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/os/{ano}/{id}/duplicate</code></td>
+<td><code>os_routes.py</code></td>
+<td>Sess</td>
+<td>Duplicar OS</td>
+<td>idem</td>
+<td><code>/gerencia</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/os/{ano}/{id}/path</code></td>
+<td><code>os_routes.py</code></td>
+<td>Sess</td>
+<td>Path UNC pasta OS</td>
+<td>—</td>
+<td>menu contexto</td>
+</tr>
+<tr>
+<td>GET/POST</td>
+<td><code>/api/os/{ano}/{id}/folder-*</code></td>
+<td><code>os_routes.py</code></td>
+<td>Sess</td>
+<td>Browse/criar pasta rede</td>
+<td>filesystem</td>
+<td>FolderBrowserModal</td>
+</tr>
+<tr>
+<td>GET/POST/DELETE</td>
+<td><code>/api/os/{ano}/{id}/vinculo*</code></td>
+<td><code>os_routes.py</code></td>
+<td>Sess</td>
+<td>Vínculos OS</td>
+<td><code>tabOSVinculadas</code></td>
+<td>OsVincularModal</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/os/{ano}/{id}/componentes</code></td>
+<td><code>os_sub_os_routes.py</code></td>
+<td>Sess</td>
+<td>Componentes Sub-OS</td>
+<td><code>tab_os_componentes</code></td>
+<td><code>/gerencia</code></td>
+</tr>
+<tr>
+<td>GET/POST</td>
+<td><code>/api/os/{ano}/{id}/sub-os/*</code></td>
+<td><code>os_sub_os_routes.py</code></td>
+<td>Sess</td>
+<td>Sub-ordens</td>
+<td><code>tab_os_sub_os</code>, <code>tab_os_sub_os_andamento</code></td>
+<td><code>/gerencia</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/aux/protocolo/buscar</code></td>
+<td><code>auxiliar_routes.py</code></td>
+<td>Sess</td>
+<td>Lookup protocolo</td>
+<td><code>tabProtocolos</code></td>
+<td><code>/gerencia</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/aux/*</code></td>
+<td><code>auxiliar_routes.py</code></td>
+<td>Sess</td>
+<td>Categorias, situações, setores, deputado</td>
+<td>lookups</td>
+<td>filtros, gerência</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Efeito colateral save:</strong> fila async <code>mdb_writer</code> se <code>MYSQL_ONLY=false</code> <strong>[CERTO]</strong>.</p>
+<h3 id="66-andamento-andamento">6.6 Andamento (andamento)</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Rota</th>
+<th>Arquivo</th>
+<th>Auth</th>
+<th>Finalidade</th>
+<th>Tabelas</th>
+<th>Telas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/os/{ano}/{id}/history</code></td>
+<td><code>os_routes.py</code></td>
+<td>Sess</td>
+<td>Listar andamentos</td>
+<td><code>tabAndamento</code></td>
+<td>OsHistoryPanel</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/os/{ano}/{id}/history</code></td>
+<td><code>os_routes.py</code></td>
+<td>Sess</td>
+<td>Adicionar andamento</td>
+<td><code>tabAndamento</code></td>
+<td>OsHistoryPanel</td>
+</tr>
+<tr>
+<td>PUT</td>
+<td><code>/api/os/{ano}/{id}/history</code></td>
+<td><code>os_routes.py</code></td>
+<td>Sess</td>
+<td>Editar andamento</td>
+<td><code>tabAndamento</code></td>
+<td>OsHistoryPanel</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/api/os/{ano}/{id}/history/{cod_status}</code></td>
+<td><code>os_routes.py</code></td>
+<td>Sess</td>
+<td>Excluir (tombstone)</td>
+<td><code>tabAndamento</code>, <code>deleted_andamentos</code></td>
+<td>OsHistoryPanel</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/email/andamento</code></td>
+<td><code>email_routes.py</code></td>
+<td>Sess</td>
+<td>Andamento via e-mail</td>
+<td><code>tabAndamento</code></td>
+<td><code>/email</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="67-análise-analise">6.7 Análise (analise)</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Rota</th>
+<th>Arquivo</th>
+<th>Auth</th>
+<th>Finalidade</th>
+<th>Tabelas</th>
+<th>Telas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/api/analise/ensure</code></td>
+<td><code>analise_routes.py</code></td>
+<td>Sess</td>
+<td>Garantir sessão análise</td>
+<td><code>tabAnalises</code></td>
+<td><code>/analise</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/analise/{ano}/{os_id}/full</code></td>
+<td><code>analise_routes.py</code></td>
+<td>Sess</td>
+<td>Análise completa</td>
+<td><code>tabAnalises</code>, <code>tabAnaliseItens</code></td>
+<td><code>/analise</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/analise/save</code></td>
+<td><code>analise_routes.py</code></td>
+<td>Sess</td>
+<td>Salvar análise</td>
+<td>idem</td>
+<td><code>/analise</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/analise/finalize/{ano}/{os_id}</code></td>
+<td><code>analise_routes.py</code></td>
+<td>Sess</td>
+<td>Finalizar análise</td>
+<td>idem + andamento</td>
+<td><code>/analise</code></td>
+</tr>
+<tr>
+<td>GET/POST</td>
+<td><code>/api/analise/item/*</code></td>
+<td><code>analise_routes.py</code></td>
+<td>Sess</td>
+<td>CRUD itens</td>
+<td><code>tabAnaliseItens</code></td>
+<td><code>/analise</code></td>
+</tr>
+<tr>
+<td>GET/POST</td>
+<td><code>/api/analise/problemas-padrao/*</code></td>
+<td><code>analise_routes.py</code></td>
+<td>Sess</td>
+<td>Biblioteca problemas</td>
+<td><code>tabProblemasPadrao</code></td>
+<td><code>/analise</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/analise/generate-link</code></td>
+<td><code>analise_routes.py</code></td>
+<td>Sess</td>
+<td>Gerar token PT</td>
+<td><code>tabClientTokens</code></td>
+<td><code>/analise</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/analise/register-link-movement</code></td>
+<td><code>analise_routes.py</code></td>
+<td>Sess</td>
+<td>Andamento "Problemas Técnicos"</td>
+<td><code>tabAndamento</code></td>
+<td><code>/analise</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/files/list</code></td>
+<td><code>analise_routes.py</code></td>
+<td>Sess</td>
+<td>Listar arquivos UNC</td>
+<td>filesystem</td>
+<td><code>/analise</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/files/serve</code></td>
+<td><code>analise_routes.py</code></td>
+<td>Sess/Token</td>
+<td>Servir arquivo</td>
+<td>filesystem</td>
+<td><code>/analise</code>, portais</td>
+</tr>
+<tr>
+<td>GET/POST</td>
+<td><code>/api/pre-analise/*</code></td>
+<td><code>pre_analise_routes.py</code></td>
+<td>Sess</td>
+<td>Checks PDF automatizados</td>
+<td><code>tab_pre_analise_snapshot</code></td>
+<td><code>/analise</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/analise/legacy-pt/{sat_codigo}/pdf</code></td>
+<td><code>analise_routes.py</code></td>
+<td>Sess/Token</td>
+<td>PDF SAT legado</td>
+<td><code>tabRegistroPT</code></td>
+<td><code>/analise</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="68-problemas-técnicos-portal-pt">6.8 Problemas Técnicos — portal (PT)</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Rota</th>
+<th>Arquivo</th>
+<th>Auth</th>
+<th>Finalidade</th>
+<th>Tabelas</th>
+<th>Telas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/analise/client/{ano}/{os_id}</code></td>
+<td><code>analise_routes.py</code></td>
+<td>Token</td>
+<td>Dados PT para cliente</td>
+<td><code>tabClientTokens</code>, <code>tabAnaliseItens</code></td>
+<td><code>/portal/pt/$token</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/client/desconsiderar-item</code></td>
+<td><code>analise_routes.py</code></td>
+<td>Token</td>
+<td>Desconsiderar item opcional</td>
+<td><code>tabAnaliseItens</code></td>
+<td><code>/portal/pt/$token</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/client/upload-files</code></td>
+<td><code>analise_routes.py</code></td>
+<td>Token</td>
+<td>Upload correções</td>
+<td>filesystem, <code>tabAndamento</code></td>
+<td><code>/portal/pt/$token</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/client/resolver-item</code></td>
+<td><code>analise_routes.py</code></td>
+<td>Token</td>
+<td>Marcar item resolvido</td>
+<td>idem</td>
+<td><code>/portal/pt/$token</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="69-provas-e-aprovação-provas">6.9 Provas e aprovação (provas)</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Rota</th>
+<th>Arquivo</th>
+<th>Auth</th>
+<th>Finalidade</th>
+<th>Tabelas</th>
+<th>Telas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/client/proof/{ano}/{os_id}</code></td>
+<td><code>proof_portal_routes.py</code></td>
+<td>Token</td>
+<td>Dados prova</td>
+<td><code>tabProofTokens</code></td>
+<td><code>/portal/aprovacao/$token</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/client/proof/pdf</code></td>
+<td><code>proof_portal_routes.py</code></td>
+<td>Token</td>
+<td>PDF prova</td>
+<td>filesystem</td>
+<td><code>/portal/aprovacao/$token</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/client/proof/respond</code></td>
+<td><code>proof_portal_routes.py</code></td>
+<td>Token</td>
+<td>Aprovar/reprovar</td>
+<td><code>tabAndamento</code></td>
+<td><code>/portal/aprovacao/$token</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/client/report/{ano}/{os_id}</code></td>
+<td><code>proof_portal_routes.py</code></td>
+<td>Token</td>
+<td>Relatório PT read-only</td>
+<td>—</td>
+<td><code>/portal/prova/$token</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/email/proof-files/{ano}/{os}</code></td>
+<td><code>email_routes.py</code></td>
+<td>Sess</td>
+<td>Arquivos prova na pasta</td>
+<td>filesystem</td>
+<td><code>/email</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/email/pt-html/{ano}/{os}</code></td>
+<td><code>email_routes.py</code></td>
+<td>Sess</td>
+<td>Preview HTML PT</td>
+<td>templates</td>
+<td><code>/email</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="610-arquivos-upload-arquivos">6.10 Arquivos / upload (arquivos)</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Rota</th>
+<th>Arquivo</th>
+<th>Auth</th>
+<th>Finalidade</th>
+<th>Tabelas</th>
+<th>Telas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET/POST</td>
+<td><code>/api/client/os-arquivos/*</code></td>
+<td><code>os_arquivos_routes.py</code></td>
+<td>Token</td>
+<td>Portal upload nova OS</td>
+<td><code>tabOsArquivosTokens</code></td>
+<td><code>/portal/os-arquivos/$token</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/os/{ano}/{id}/arquivos/enviar-email</code></td>
+<td><code>os_arquivos_routes.py</code></td>
+<td>Sess</td>
+<td>Enviar link upload por e-mail</td>
+<td>tokens + EWS</td>
+<td>NovaOsArquivosModal</td>
+</tr>
+</tbody>
+</table>
+<h3 id="611-e-mail-email">6.11 E-mail (email)</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Rota</th>
+<th>Arquivo</th>
+<th>Auth</th>
+<th>Finalidade</th>
+<th>Tabelas</th>
+<th>Telas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET/PUT</td>
+<td><code>/api/email/config</code></td>
+<td><code>email_routes.py</code></td>
+<td>Sess</td>
+<td>Config Exchange por ponto</td>
+<td><code>tabEmailExchangeConfig</code></td>
+<td><code>/email</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/email/config/connect</code></td>
+<td><code>email_routes.py</code></td>
+<td>Sess</td>
+<td>Teste conexão EWS</td>
+<td>—</td>
+<td><code>/email</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/email/config/folders</code></td>
+<td><code>email_routes.py</code></td>
+<td>Sess</td>
+<td>Listar pastas EWS</td>
+<td>—</td>
+<td><code>/email</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/email/inbox</code></td>
+<td><code>email_routes.py</code></td>
+<td>Sess</td>
+<td>Caixa de entrada</td>
+<td>EWS</td>
+<td><code>/email</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/email/pendencias</code></td>
+<td><code>email_routes.py</code></td>
+<td>Sess</td>
+<td>Pendências</td>
+<td>EWS</td>
+<td><code>/email</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/email/notification_status</code></td>
+<td><code>email_routes.py</code></td>
+<td>Sess</td>
+<td>Status notificações</td>
+<td>EWS</td>
+<td><code>/email</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/email/send</code></td>
+<td><code>email_routes.py</code></td>
+<td>Sess</td>
+<td>Envio e-mail livre</td>
+<td>EWS</td>
+<td><code>/email</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/email/send-pt</code></td>
+<td><code>email_routes.py</code></td>
+<td>Sess</td>
+<td>Envio PT com template</td>
+<td>EWS + tokens</td>
+<td><code>/email</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/email/save-mht</code></td>
+<td><code>email_routes.py</code></td>
+<td>Sess</td>
+<td>Salvar MHT</td>
+<td>EWS + filesystem</td>
+<td><code>/email</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/email/mark-read</code></td>
+<td><code>email_routes.py</code></td>
+<td>Sess</td>
+<td>Marcar lido</td>
+<td>EWS</td>
+<td><code>/email</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="612-contas-contas">6.12 Contas (contas)</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Rota</th>
+<th>Arquivo</th>
+<th>Auth</th>
+<th>Finalidade</th>
+<th>Tabelas</th>
+<th>Telas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET/POST</td>
+<td><code>/api/cliente/contas</code></td>
+<td><code>cliente_gabinete_routes.py</code></td>
+<td>Cli</td>
+<td>Subcontas gabinete</td>
+<td><code>tabClienteGabinete</code></td>
+<td><code>/cliente/contas</code></td>
+</tr>
+<tr>
+<td>GET/POST</td>
+<td><code>/api/admin/clientes/*</code></td>
+<td><code>cliente_gabinete_routes.py</code></td>
+<td>M</td>
+<td>Cadastro gabinete master</td>
+<td><code>tabClienteGabinete</code></td>
+<td><code>/usuarios</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="613-relatórios-relatorios">6.13 Relatórios (relatorios)</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Rota</th>
+<th>Arquivo</th>
+<th>Auth</th>
+<th>Finalidade</th>
+<th>Tabelas</th>
+<th>Telas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/api/reports/custom</code></td>
+<td><code>report_custom_routes.py</code></td>
+<td>Sess</td>
+<td>Relatório HTML customizado</td>
+<td>queries dinâmicas</td>
+<td><code>/relatorios</code></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/reports/xlsx</code></td>
+<td><code>report_custom_routes.py</code></td>
+<td>Sess</td>
+<td>Exportação XLSX</td>
+<td>queries dinâmicas</td>
+<td><code>/relatorios</code></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/reports/requisicao/{ano}/{id}</code></td>
+<td><code>requisicao_routes.py</code></td>
+<td>Sess</td>
+<td>Ficha requisição HTML</td>
+<td>leitura OS</td>
+<td>impressão</td>
+</tr>
+</tbody>
+</table>
+<h3 id="614-demais-módulos-others">6.14 Demais módulos (others)</h3>
+<table>
+<thead>
+<tr>
+<th>Módulo</th>
+<th>Prefixo</th>
+<th>Endpoints chave</th>
+<th>Telas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PCP</td>
+<td><code>/api/pcp</code></td>
+<td><code>GET/POST /api/pcp/queue</code></td>
+<td><code>/pcp</code>, <code>/painel/setor</code></td>
+</tr>
+<tr>
+<td>Papelaria</td>
+<td><code>/api/papelaria</code></td>
+<td>modelos, svg, preview</td>
+<td><code>/papelaria</code></td>
+</tr>
+<tr>
+<td>Gravação</td>
+<td><code>/api/gravacao</code></td>
+<td>xpose/status, jobticket</td>
+<td><code>/gravacao</code></td>
+</tr>
+<tr>
+<td>Admin sistema</td>
+<td><code>/api/admin/system</code></td>
+<td>pré-análise checks, email templates</td>
+<td><code>/admin/configuracoes</code></td>
+</tr>
+<tr>
+<td>Painel defaults</td>
+<td><code>/api/admin/setor-painel-defaults</code></td>
+<td>defaults por setor</td>
+<td><code>/painel/setor</code></td>
+</tr>
+<tr>
+<td>WebSocket</td>
+<td><code>/ws</code>, <code>/api/ws</code></td>
+<td><code>system_update</code>, <code>pcp_queue_update</code>, <code>force_refresh</code></td>
+<td>OS, PCP, painéis</td>
+</tr>
+<tr>
+<td>Realtime notify</td>
+<td><code>/api/realtime/notify</code></td>
+<td>push admin</td>
+<td>admin</td>
+</tr>
+<tr>
+<td>Sync</td>
+<td><code>/api/sync/*</code></td>
+<td>start/stop/logs — <strong>condicional</strong></td>
+<td>UI legada <strong>[NÃO IDENTIFICADO]</strong> React</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Exemplo</strong> — fluxo de chamada típico na <code>/</code>:</p>
+<pre><code>GET /api/config/public  →  bootstrap
+POST /api/auth/session  →  cookie
+GET /api/permissions    →  RBAC front
+GET /api/os/search      →  lista OS
+WS /api/ws              →  system_update
+</code></pre>
+<h2 id="7-banco-de-dados">7. Banco de Dados</h2>
+<h3 id="71-identificação-de-os-certo">7.1 Identificação de OS <strong>[CERTO]</strong></h3>
+<table>
+<thead>
+<tr>
+<th>Conceito</th>
+<th>Campo / regra</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Chave composta</td>
+<td><code>NroProtocolo</code> + <code>AnoProtocolo</code></td>
+</tr>
+<tr>
+<td>Tabela cabeçalho</td>
+<td><code>tabProtocolos</code></td>
+</tr>
+<tr>
+<td>Detalhes técnicos</td>
+<td><code>tabDetalhesServico</code></td>
+</tr>
+<tr>
+<td>Papelaria vs OS</td>
+<td><code>NroProtocolo &gt;= 5000</code> → MDB Papelaria; <code>&lt; 5000</code> → MDB OS Atual</td>
+</tr>
+<tr>
+<td>Pasta rede</td>
+<td>Derivada via <code>os_folder_structure.py</code> → UNC <code>\\redecamara\DfsData\...</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="72-conexão-e-acesso-certo">7.2 Conexão e acesso <strong>[CERTO]</strong></h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detalhe</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Engine</td>
+<td>MySQL 8 (<code>sagrafulldb</code>)</td>
+</tr>
+<tr>
+<td>Driver</td>
+<td>PyMySQL pool — <code>app/backend/database.py</code></td>
+</tr>
+<tr>
+<td>Host prod</td>
+<td><code>10.1.1.73</code> (<code>config/config.json</code>)</td>
+</tr>
+<tr>
+<td>Padrão acesso</td>
+<td>SQL raw — <strong>sem ORM</strong></td>
+</tr>
+<tr>
+<td>Pool size</td>
+<td><code>SAGRA_DB_POOL_SIZE</code> (env)</td>
+</tr>
+<tr>
+<td>Schema startup</td>
+<td><code>CREATE TABLE IF NOT EXISTS</code> em <code>api.py</code></td>
+</tr>
+<tr>
+<td>DDL incremental</td>
+<td><code>deploy/sql/*.sql</code></td>
+</tr>
+</tbody>
+</table>
+<div class="alert alert-alert-atencao"><strong>Atenção:</strong> <code>schema_sagrafulldb.sql</code> completo <strong>[NÃO IDENTIFICADO]</strong> no repo dev — apenas DDL incrementais.</div>
+<h3 id="73-tabelas-legadas-access-synced-certo">7.3 Tabelas legadas (Access-synced) <strong>[CERTO]</strong></h3>
+<table>
+<thead>
+<tr>
+<th>Tabela</th>
+<th>Finalidade</th>
+<th>Fluxos</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tabProtocolos</code></td>
+<td>Cabeçalho OS</td>
+<td>Busca, save, dashboard cliente</td>
+</tr>
+<tr>
+<td><code>tabDetalhesServico</code></td>
+<td>Especificação, produto, setor</td>
+<td>Detalhes, gerência</td>
+</tr>
+<tr>
+<td><code>tabAndamento</code></td>
+<td>Histórico status (<code>CodStatus</code> PK)</td>
+<td>Timeline staff/cliente</td>
+</tr>
+<tr>
+<td><code>tabOSVinculadas</code></td>
+<td>OS vinculadas</td>
+<td>Vincular modal</td>
+</tr>
+<tr>
+<td><code>tabRegistroPT</code></td>
+<td>Relatórios SAT legados (PDF)</td>
+<td>PDF PT legado</td>
+</tr>
+<tr>
+<td><code>tabcategorias</code>, <code>tabPapel</code>, <code>tabCores</code>, <code>tabFormatos</code></td>
+<td>Lookups</td>
+<td>Gerência, filtros</td>
+</tr>
+<tr>
+<td><code>tabdadosdeputados</code></td>
+<td>Deputados locais (XLS)</td>
+<td>Gerência</td>
+</tr>
+</tbody>
+</table>
+<h3 id="74-tabelas-análise-portal-certo">7.4 Tabelas análise / portal <strong>[CERTO]</strong></h3>
+<table>
+<thead>
+<tr>
+<th>Tabela</th>
+<th>Finalidade</th>
+<th>Fluxos</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tabAnalises</code></td>
+<td>Sessão análise por OS</td>
+<td><code>/analise</code></td>
+</tr>
+<tr>
+<td><code>tabAnaliseItens</code></td>
+<td>Itens/problemas da análise</td>
+<td>Análise, portal PT</td>
+</tr>
+<tr>
+<td><code>tabProblemasPadrao</code></td>
+<td>Biblioteca problemas padrão</td>
+<td>Análise</td>
+</tr>
+<tr>
+<td><code>tabClientTokens</code></td>
+<td>Tokens portal PT (<code>DataExpiracao</code>)</td>
+<td><code>/portal/pt/*</code></td>
+</tr>
+<tr>
+<td><code>tabProofTokens</code></td>
+<td>Tokens aprovação prova</td>
+<td><code>/portal/aprovacao/*</code></td>
+</tr>
+<tr>
+<td><code>tabOsArquivosTokens</code></td>
+<td>Tokens upload arquivos</td>
+<td><code>/portal/os-arquivos/*</code></td>
+</tr>
+<tr>
+<td><code>tabMigracaoSatRegistroPT</code></td>
+<td>Controle migração SAT → análise</td>
+<td>Migração legado</td>
+</tr>
+</tbody>
+</table>
+<h3 id="75-tabelas-web-only-mysql-sem-mdb-certo">7.5 Tabelas web-only (MySQL, sem MDB) <strong>[CERTO]</strong></h3>
+<table>
+<thead>
+<tr>
+<th>Tabela</th>
+<th>Finalidade</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tab_os_componentes</code></td>
+<td>Componentes para Sub-OS</td>
+</tr>
+<tr>
+<td><code>tab_os_sub_os</code></td>
+<td>Sub-ordens de serviço</td>
+</tr>
+<tr>
+<td><code>tab_os_sub_os_andamento</code></td>
+<td>Andamentos Sub-OS (espelho de <code>tabAndamento</code>)</td>
+</tr>
+<tr>
+<td><code>tabOSVinculoGrupos</code></td>
+<td>Grupos sincronização vínculos</td>
+</tr>
+<tr>
+<td><code>tabClienteGabinete</code></td>
+<td>Contas portal cliente / subcontas</td>
+</tr>
+<tr>
+<td><code>tabEmailExchangeConfig</code></td>
+<td>Config EWS por ponto</td>
+</tr>
+<tr>
+<td><code>tabEmailTemplateModel</code></td>
+<td>Modelos e-mail multi-template</td>
+</tr>
+<tr>
+<td><code>tab_pre_analise_snapshot</code></td>
+<td>Cache pré-análise</td>
+</tr>
+<tr>
+<td><code>tab_os_audit_log</code></td>
+<td>Auditoria alterações OS</td>
+</tr>
+<tr>
+<td><code>tabUserPreferences</code></td>
+<td>Preferências UI</td>
+</tr>
+<tr>
+<td><code>tabSetorPainelDefaults</code></td>
+<td>Defaults painel por setor</td>
+</tr>
+<tr>
+<td><code>tab_pcp_fila</code></td>
+<td>Fila PCP</td>
+</tr>
+<tr>
+<td><code>tabSolicitacoesAcesso</code></td>
+<td>Solicitações acesso IP</td>
+</tr>
+<tr>
+<td><code>user_permissions</code></td>
+<td>RBAC por ponto (internet)</td>
+</tr>
+<tr>
+<td><code>ip_permissions</code></td>
+<td>RBAC por IP</td>
+</tr>
+<tr>
+<td><code>deleted_andamentos</code></td>
+<td>Tombstone andamentos excluídos</td>
+</tr>
+<tr>
+<td><code>ct_gravacao_*</code>, <code>xpose_*</code></td>
+<td>Gravação / Xpose</td>
+</tr>
+<tr>
+<td><code>tabNotificacoes</code></td>
+<td>Notificações (stub front)</td>
+</tr>
+<tr>
+<td><code>log_sync_andamentos</code></td>
+<td>Logs sync MDB (se habilitado)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="76-autenticação-e-rbac-certo">7.6 Autenticação e RBAC <strong>[CERTO]</strong></h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detalhe</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Usuário interno</td>
+<td><code>tabUsuarios.Ponto</code> (numérico); colunas auth em <code>user_auth_schema.py</code></td>
+</tr>
+<tr>
+<td>Sessão staff</td>
+<td>Cookie <code>sagra_session</code> — HMAC <code>SAGRA_SESSION_SECRET</code></td>
+</tr>
+<tr>
+<td>Sessão cliente</td>
+<td>Cookie <code>sagra_cliente_session</code></td>
+</tr>
+<tr>
+<td>Token portal</td>
+<td>UUID em tabelas <code>*Tokens</code>; validação OS+ano+expiração</td>
+</tr>
+<tr>
+<td>IP permissions</td>
+<td><code>ip_permissions</code> — base RBAC</td>
+</tr>
+<tr>
+<td>User permissions</td>
+<td><code>user_permissions</code> — overlay internet</td>
+</tr>
+</tbody>
+</table>
+<h3 id="77-diagrama-er-simplificado">7.7 Diagrama ER simplificado</h3>
+<div class="mermaid">
+erDiagram
+    tabProtocolos ||--|| tabDetalhesServico : "NroProtocolo+Ano"
+    tabProtocolos ||--o{ tabAndamento : "historico"
+    tabProtocolos ||--o{ tabAnalises : "analise"
+    tabAnalises ||--o{ tabAnaliseItens : "itens"
+    tabProtocolos ||--o{ tabClientTokens : "token PT"
+    tabProtocolos ||--o{ tabProofTokens : "token prova"
+    tabProtocolos ||--o{ tabOsArquivosTokens : "token arquivos"
+    tabProtocolos ||--o{ tab_os_sub_os : "sub-os"
+    tabClienteGabinete ||--o{ tabProtocolos : "escopo gabinete"
+    ip_permissions ||--o{ user_permissions : "overlay"
+</div>
+
+<h3 id="78-arquivos-fora-do-db">7.8 Arquivos (fora do DB)</h3>
+<table>
+<thead>
+<tr>
+<th>Tipo</th>
+<th>Localização</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pasta OS</td>
+<td>UNC — <code>GET /api/os/{ano}/{id}/path</code></td>
+</tr>
+<tr>
+<td>PDFs prova</td>
+<td>Subpasta OS — <code>proof_files_service.py</code></td>
+</tr>
+<tr>
+<td>Indicações análise</td>
+<td>Upload controlado — <code>analise_routes.py</code></td>
+</tr>
+<tr>
+<td>Templates e-mail</td>
+<td><code>tabEmailTemplateModel</code> + presets HTML em disco</td>
+</tr>
+<tr>
+<td>Modelos Corel</td>
+<td>UNC — <code>config.json</code> → <code>network_paths</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="8-autenticação-sessões-e-permissões">8. Autenticação, Sessões e Permissões</h2>
+<h3 id="81-três-modos-de-acesso-certo">8.1 Três modos de acesso <strong>[CERTO]</strong></h3>
+<table>
+<thead>
+<tr>
+<th>Modo</th>
+<th>Cookie / credencial</th>
+<th>Middleware</th>
+<th>Rotas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Staff</td>
+<td><code>sagra_session</code></td>
+<td><code>APIAccessMiddleware</code> + IP</td>
+<td><code>/_authenticated/*</code>, <code>/api/*</code> (exceto públicas)</td>
+</tr>
+<tr>
+<td>Cliente</td>
+<td><code>sagra_cliente_session</code></td>
+<td>Validação em <code>/api/cliente/*</code></td>
+<td><code>/cliente/*</code></td>
+</tr>
+<tr>
+<td>Token público</td>
+<td>Query/path token</td>
+<td>Validação no handler</td>
+<td><code>/portal/*</code>, <code>/api/client/*</code> (público)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="82-login-interno-lan-vs-internet">8.2 Login interno — LAN vs internet</h3>
+<table>
+<thead>
+<tr>
+<th>Modo</th>
+<th>Endpoint</th>
+<th>Credencial</th>
+<th>Cookie</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LAN</td>
+<td><code>POST /api/auth/session</code></td>
+<td><code>{ponto, nome}</code></td>
+<td><code>sagra_session</code> (HttpOnly HMAC)</td>
+</tr>
+<tr>
+<td>Internet</td>
+<td><code>POST /api/auth/login</code></td>
+<td><code>{login, password}</code></td>
+<td><code>sagra_session</code> + overlay <code>user_permissions</code></td>
+</tr>
+</tbody>
+</table>
+<p>Arquivos: <code>auth_routes.py</code>, <code>session_auth.py</code>, <code>features/auth/api.ts</code>, <code>AuthBootstrap.tsx</code></p>
+<div class="alert alert-alert-importante"><strong>Importante:</strong> Permissões RBAC continuam baseadas no <strong>IP</strong> da sessão (<code>ip_permissions</code>), com overlay de <code>user_permissions</code> para login internet.</div>
+<h3 id="83-login-cliente-gabinete">8.3 Login cliente gabinete</h3>
+<pre><code>POST /api/auth/cliente/login → cookie sagra_cliente_session
+GET /api/cliente/me + GET /api/cliente/dashboard → ClienteAuthGuard libera /cliente/*
+</code></pre>
+<p>Cookie <strong>separado</strong> de <code>sagra_session</code> — sessões staff e cliente são independentes.</p>
+<h3 id="84-portal-por-token-vs-portal-autenticado">8.4 Portal por token vs portal autenticado</h3>
+<table>
+<thead>
+<tr>
+<th>Aspecto</th>
+<th>Portal token (<code>/portal/*</code>)</th>
+<th>Portal cliente (<code>/cliente/*</code>)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Auth</td>
+<td>Token UUID na URL + <code>?os=&amp;ano=</code></td>
+<td>Cookie <code>sagra_cliente_session</code></td>
+</tr>
+<tr>
+<td>Escopo</td>
+<td>Uma OS / uma ação (PT, prova, arquivos)</td>
+<td>Todas OS do gabinete</td>
+</tr>
+<tr>
+<td>Expiração</td>
+<td><code>DataExpiracao</code> na tabela token</td>
+<td>Sessão cookie</td>
+</tr>
+<tr>
+<td>Bridge routes</td>
+<td><code>/cliente/os/.../prova</code> redireciona para token</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="85-guards-frontend-certo">8.5 Guards frontend <strong>[CERTO]</strong></h3>
+<table>
+<thead>
+<tr>
+<th>Guard</th>
+<th>Arquivo</th>
+<th>Granularidade</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AuthGuard</code></td>
+<td><code>components/auth/AuthGuard.tsx</code></td>
+<td><code>sb_*</code> por rota</td>
+</tr>
+<tr>
+<td><code>ClienteAuthGuard</code></td>
+<td><code>features/cliente/</code></td>
+<td>Sessão cliente</td>
+</tr>
+<tr>
+<td><code>useAccessControl</code></td>
+<td>hook</td>
+<td><code>ctx_*</code> menu contexto OS</td>
+</tr>
+<tr>
+<td><code>AuthBootstrap</code></td>
+<td>bootstrap</td>
+<td><code>GET /api/auth/me</code> + <code>/api/permissions</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="86-chaves-de-permissão-certo-featuresauthtypests">8.6 Chaves de permissão <strong>[CERTO]</strong> — <code>features/auth/types.ts</code></h3>
+<p><strong>Sidebar (<code>sb_*</code>):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Chave</th>
+<th>Rota / função</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sb_inicio</code></td>
+<td><code>/</code></td>
+</tr>
+<tr>
+<td><code>sb_gerencia</code></td>
+<td><code>/gerencia</code></td>
+</tr>
+<tr>
+<td><code>sb_email</code></td>
+<td><code>/email</code></td>
+</tr>
+<tr>
+<td><code>sb_analise</code></td>
+<td><code>/analise</code></td>
+</tr>
+<tr>
+<td><code>sb_papelaria</code></td>
+<td><code>/papelaria</code></td>
+</tr>
+<tr>
+<td><code>sb_relatorio</code></td>
+<td><code>/relatorios</code></td>
+</tr>
+<tr>
+<td><code>sb_dashboard_setor</code></td>
+<td><code>/painel/setor</code></td>
+</tr>
+<tr>
+<td><code>sb_dashboard_global</code></td>
+<td><code>/painel/global</code></td>
+</tr>
+<tr>
+<td><code>sb_pcp</code></td>
+<td><code>/pcp</code></td>
+</tr>
+<tr>
+<td><code>sb_gravacao</code></td>
+<td><code>/gravacao</code></td>
+</tr>
+<tr>
+<td><code>sb_usuarios</code></td>
+<td><code>/usuarios</code></td>
+</tr>
+<tr>
+<td><code>sb_admin_ips</code></td>
+<td><code>/admin/ips</code>, <code>/admin/configuracoes</code></td>
+</tr>
+<tr>
+<td><code>sb_configuracoes</code></td>
+<td>alias admin</td>
+</tr>
+<tr>
+<td><code>sb_active_computers</code></td>
+<td><strong>[NÃO IDENTIFICADO]</strong> rota React</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Contexto OS (<code>ctx_*</code>):</strong> <code>ctx_nova_os</code>, <code>ctx_duplicar_os</code>, <code>ctx_editar_os</code>, <code>ctx_vincular_os</code>, <code>ctx_abrir_pasta</code>, <code>ctx_imprimir_ficha</code>, <code>ctx_detalhes_os</code></p>
+<p><strong>Painel setor:</strong> <code>painelSetores[]</code> ou <code>painelSetoresLegacyAll</code></p>
+<h3 id="87-precedência-ip-vs-usuário-certo-inferência">8.7 Precedência IP vs usuário <strong>[CERTO / INFERÊNCIA]</strong></h3>
+<ol>
+<li>Base: <code>ip_permissions</code> (sempre aplicada)</li>
+<li>Overlay: <code>user_permissions</code> (login internet; LAN se customizado)</li>
+<li>Em conflito: overlay usuário prevalece <strong>[INFERÊNCIA — <code>get_permissions</code>]</strong></li>
+</ol>
+<h3 id="88-master-certo">8.8 MASTER <strong>[CERTO]</strong></h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>IPs master</td>
+<td><code>10.120.1.14</code> (<code>allowed_ips.master</code>), servidor <code>10.1.1.73</code>, loopback</td>
+</tr>
+<tr>
+<td>Acesso exclusivo</td>
+<td><code>/api/admin/*</code>, <code>/api/sync/*</code>, <code>/api/connected-ips</code></td>
+</tr>
+<tr>
+<td>Decorators</td>
+<td><code>require_master_ip</code>, <code>require_admin_config_access</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="89-política-anti-fail-open-certo">8.9 Política anti fail-open <strong>[CERTO]</strong></h3>
+<table>
+<thead>
+<tr>
+<th>Camada</th>
+<th>Comportamento</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Backend</td>
+<td>Sem sessão/IP → HTTP <strong>403</strong> (<code>api_auth.py</code>)</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td><code>createDeniedPermissions()</code> — todas negadas por padrão (<code>permissions.ts</code>)</td>
+</tr>
+<tr>
+<td>Permissões</td>
+<td>Só concedidas com resposta explícita da API</td>
+</tr>
+</tbody>
+</table>
+<div class="alert alert-alert-atencao"><strong>Atenção:</strong> RBAC granular <code>sb_*</code> é <strong>primariamente frontend</strong>. API valida IP cadastrado + sessão, não flag individual por endpoint (exceto admin). Operador LAN com IP amplo tem acesso API completo mesmo sem permissão de sidebar.</div>
+<h3 id="810-configuração-produção-sessão">8.10 Configuração produção sessão</h3>
+<p>Variáveis em <code>config/.env</code> (nomes apenas — <strong>sem valores</strong>):</p>
+<pre><code>SAGRA_SESSION_SECRET
+SAGRA_SESSION_SECURE
+SAGRA_PUBLIC_WEB_BASE
+SAGRA_CORS_ORIGINS
+</code></pre>
+<p>Ver <code>config/.env.example</code> e <code>docs/API_FASE_B_AUTH.md</code>.</p>
+<h2 id="9-fluxos-técnicos-ponta-a-ponta">9. Fluxos Técnicos Ponta a Ponta</h2>
+<h3 id="91-autenticação-interna-staff-certo">9.1 Autenticação interna (staff) <strong>[CERTO]</strong></h3>
+<div class="mermaid">
+sequenceDiagram
+    participant U as Usuário
+    participant SPA as SPA React
+    participant API as FastAPI
+    participant DB as MySQL
+
+    U->>SPA: Acessa /login
+    alt LAN
+        U->>SPA: ponto + nome
+        SPA->>API: POST /api/auth/session
+    else Internet
+        U->>SPA: login + senha
+        SPA->>API: POST /api/auth/login
+    end
+    API->>DB: tabUsuarios
+    API-->>SPA: Set-Cookie sagra_session
+    SPA->>API: GET /api/auth/me
+    SPA->>API: GET /api/permissions
+    alt Permissões OK
+        SPA->>SPA: AuthGuard libera /_authenticated/*
+    else Sem permissões
+        SPA->>API: POST /api/auth/logout
+    end
+</div>
+
+<p>Arquivos: <code>authStore.ts</code>, <code>AuthBootstrap.tsx</code>, <code>session_auth.py</code>, <code>api_auth.py</code></p>
+<h3 id="92-autenticação-cliente-gabinete-certo">9.2 Autenticação cliente gabinete <strong>[CERTO]</strong></h3>
+<div class="mermaid">
+sequenceDiagram
+    participant C as Cliente
+    participant SPA as Portal Cliente
+    participant API as FastAPI
+
+    C->>SPA: /cliente/login
+    C->>SPA: e-mail + senha
+    SPA->>API: POST /api/auth/cliente/login
+    API-->>SPA: Set-Cookie sagra_cliente_session
+    SPA->>API: GET /api/cliente/me
+    SPA->>API: GET /api/cliente/dashboard
+    loop A cada 60s
+        SPA->>API: GET /api/cliente/dashboard
+    end
+</div>
+
+<h3 id="93-criação-e-consulta-de-os-certo">9.3 Criação e consulta de OS <strong>[CERTO]</strong></h3>
+<div class="mermaid">
+flowchart TD
+    A["/ — filtros"] --> B["GET /api/os/search<br/>debounce 250ms"]
+    B --> C["Selecionar linha"]
+    C --> D["GET details + history"]
+    E["Menu ctx_nova_os"] --> F["/gerencia?action=new"]
+    F --> G["GET /api/os/next_id"]
+    G --> H["Preencher form"]
+    H --> I["POST /api/os/save"]
+    I --> J["MySQL commit"]
+    I --> K["audit log"]
+    I --> L["mdb_writer async<br/>se MYSQL_ONLY=false"]
+    I --> M["NovaOsArquivosModal<br/>enviar e-mail portal"]
+</div>
+
+<h3 id="94-andamento-timeline-certo">9.4 Andamento / timeline <strong>[CERTO]</strong></h3>
+<p><strong>Staff:</strong> <code>OsHistoryPanel</code> → <code>GET /api/os/{ano}/{id}/history</code></p>
+<table>
+<thead>
+<tr>
+<th>Ação</th>
+<th>Endpoint</th>
+<th>Efeito</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Adicionar</td>
+<td>POST history</td>
+<td><code>tabAndamento</code> + broadcast WS</td>
+</tr>
+<tr>
+<td>Editar</td>
+<td>PUT history</td>
+<td>Atualiza registro</td>
+</tr>
+<tr>
+<td>Excluir</td>
+<td>DELETE history/{cod_status}</td>
+<td>Tombstone <code>deleted_andamentos</code></td>
+</tr>
+<tr>
+<td>Replicar</td>
+<td>POST replicate</td>
+<td>OS vinculadas</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cliente:</strong> <code>GET /api/cliente/os/{ano}/{nr_os}/andamentos</code> → <code>cliente_os_timeline_service.py</code> (filtros, espelho sub-OS)</p>
+<p><strong>Sub-OS:</strong> andamentos em <code>tab_os_sub_os_andamento</code> espelham <code>tabAndamento</code></p>
+<h3 id="95-análise-técnica-certo">9.5 Análise técnica <strong>[CERTO]</strong></h3>
+<div class="mermaid">
+flowchart TD
+    A["/analise?ano=&id="] --> B["POST /api/analise/ensure"]
+    B --> C["GET full"]
+    C --> D["Adicionar itens<br/>tabProblemasPadrao"]
+    C --> E["Pré-análise PDF<br/>stream NDJSON"]
+    C --> F["Anotações PDF<br/>indication-image"]
+    C --> G{"Finalizar"}
+    G -->|Sem itens| H["Modal obs<br/>andamento Em Execução"]
+    G -->|Com itens| I["generate-link<br/>tabClientTokens"]
+    I --> J["register-link-movement<br/>Problemas Técnicos"]
+</div>
+
+<h3 id="96-problemas-técnicos-portal-certo">9.6 Problemas técnicos — portal <strong>[CERTO]</strong></h3>
+<div class="mermaid">
+sequenceDiagram
+    participant T as Técnico
+    participant API as FastAPI
+    participant C as Cliente
+    participant UNC as Pasta UNC
+
+    T->>API: Finaliza análise + generate-link
+    API-->>T: URL /portal/pt/{token}?os=&ano=
+    T->>C: E-mail com link
+    C->>API: GET /api/analise/client/{ano}/{os}?token=
+    C->>API: POST /client/desconsiderar-item (opcional)
+    C->>API: POST /client/upload-files
+    API->>UNC: Grava arquivos corrigidos
+    Note over API: Todos componentes resolvidos
+    API->>API: Andamento "Em Execução" + token expira
+</div>
+
+<p>Detalhe: <code>docs/PAGINA_PORTAL_PT_PROBLEMAS_TECNICOS.md</code></p>
+<h3 id="97-provas-e-aprovação-certo">9.7 Provas e aprovação <strong>[CERTO]</strong></h3>
+<div class="mermaid">
+flowchart LR
+    A["Módulo E-mail<br/>send-pt / prova"] --> B["tabProofTokens"]
+    B --> C["E-mail com link"]
+    C --> D["/portal/aprovacao/{token}"]
+    D --> E["GET proof data + PDF"]
+    E --> F["POST /api/client/proof/respond"]
+    F --> G["Andamento aprovação/reprovação"]
+</div>
+
+<p>Bridge autenticada: <code>/cliente/os/{ano}/{nrOs}/prova</code> → redireciona para portal token.</p>
+<h3 id="98-envio-de-e-mails-certo">9.8 Envio de e-mails <strong>[CERTO]</strong></h3>
+<pre><code>/email → configurar EWS (tabEmailExchangeConfig)
+  ├─ GET inbox / pendencias
+  ├─ POST /send (corpo livre)
+  └─ POST /send-pt (template HTML, link portal, anexos)
+       └─ POST /andamento (registra movimento na OS)
+</code></pre>
+<h3 id="99-contas-do-gabinete-certo">9.9 Contas do gabinete <strong>[CERTO]</strong></h3>
+<pre><code>/cliente/contas → GET /api/cliente/contas
+  └─ POST criar subconta → e-mail ativação (cliente_activation_email_service)
+Admin: /usuarios → POST /api/admin/clientes (cadastro gabinete master)
+</code></pre>
+<h3 id="910-upload-arquivos-nova-os-certo">9.10 Upload arquivos nova OS <strong>[CERTO]</strong></h3>
+<div class="mermaid">
+sequenceDiagram
+    participant Op as Operador
+    participant API as FastAPI
+    participant C as Cliente
+    participant UNC as Pasta UNC
+
+    Op->>API: POST /api/os/save (nova OS)
+    Op->>API: POST /api/os/.../arquivos/enviar-email
+    API->>C: E-mail com link token
+    C->>API: GET /api/client/os-arquivos/... (valida token)
+    C->>API: POST upload-files
+    API->>UNC: Arquivos na pasta OS
+</div>
+
+<h3 id="911-sync-mdbmysql-certo-desabilitado-prod">9.11 Sync MDB/MySQL <strong>[CERTO — desabilitado prod]</strong></h3>
+<pre><code>Se SYNC_ANDAMENTOS_ENABLED=true:
+  POST /api/sync/start → subprocess sync_andamentos_v2.py
+  ↔ bidirecional tabAndamento MySQL ↔ Access cache
+
+Produção atual: mysql_only=true, sync_andamentos_enabled=false
+</code></pre>
+<hr />
+<h2 id="10-integrações-externas">10. Integrações Externas</h2>
+<table>
+<thead>
+<tr>
+<th>Integração</th>
+<th>Status</th>
+<th>Arquivos</th>
+<th>Config / env</th>
+<th>Fluxo resumido</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>MySQL</strong></td>
+<td>Ativo</td>
+<td><code>database.py</code></td>
+<td><code>DB_*</code>, <code>SAGRA_DB_*</code></td>
+<td>Pool PyMySQL; fonte da verdade</td>
+</tr>
+<tr>
+<td><strong>Access MDB</strong></td>
+<td>Desabilitado prod</td>
+<td><code>mdb_writer.py</code></td>
+<td><code>MYSQL_ONLY</code>, <code>mdb_*_path</code></td>
+<td>Dual-write async se habilitado</td>
+</tr>
+<tr>
+<td><strong>UNC rede</strong></td>
+<td>Ativo</td>
+<td><code>os_folder_structure.py</code>, <code>file_access.py</code></td>
+<td><code>network_paths</code> em <code>config.json</code></td>
+<td>Pastas OS, modelos Corel, PDFs</td>
+</tr>
+<tr>
+<td><strong>Exchange EWS</strong></td>
+<td>Ativo</td>
+<td><code>ews_service.py</code></td>
+<td><code>EWS_*</code>, <code>tabEmailExchangeConfig</code></td>
+<td>SSPI/NTLM Windows; inbox, send, PT</td>
+</tr>
+<tr>
+<td><strong>SMTP</strong></td>
+<td>Ativo</td>
+<td><code>activation_email_service.py</code></td>
+<td>env <strong>[INFERÊNCIA]</strong></td>
+<td>Ativação usuário/cliente, reset senha</td>
+</tr>
+<tr>
+<td><strong>Google Drive</strong></td>
+<td>Código pronto, off</td>
+<td><code>gdrive_portal_upload.py</code></td>
+<td><code>SAGRA_PORTAL_UPLOAD_GDRIVE</code></td>
+<td>Upload portal Drive → UNC</td>
+</tr>
+<tr>
+<td><strong>Cloudflare Tunnel</strong></td>
+<td>Ativo prod</td>
+<td><code>security/cloudflare_access.py</code></td>
+<td>—</td>
+<td>Acesso internet staff</td>
+</tr>
+<tr>
+<td><strong>zrok</strong></td>
+<td>Ativo painéis</td>
+<td><code>iniciar-zrok-painel.bat</code></td>
+<td>—</td>
+<td>Expõe <code>/painel/*</code> externamente</td>
+</tr>
+<tr>
+<td><strong>Nginx</strong></td>
+<td>Ativo</td>
+<td><code>\\cgrafsysvm\nginx\conf\nginx.conf</code></td>
+<td>upstream <code>:8050</code></td>
+<td><code>/sagra/api/</code> → API; SPA na raiz</td>
+</tr>
+<tr>
+<td><strong>PyMuPDF / Tesseract</strong></td>
+<td>Ativo</td>
+<td><code>services/pre_analise/</code></td>
+<td><code>TESSERACT_CMD</code>, <code>SAGRA_PREANALISE_*</code></td>
+<td>Checks PDF automatizados</td>
+</tr>
+<tr>
+<td><strong>Corel COM</strong></td>
+<td>Windows only</td>
+<td><code>papelaria_routes.py</code></td>
+<td>UNC modelos <code>.cdr</code></td>
+<td>Preview PDF legado</td>
+</tr>
+<tr>
+<td><strong>Câmara API deputados</strong></td>
+<td>Ativo</td>
+<td><code>deputados_camara_service.py</code></td>
+<td>cache TTL env</td>
+<td>Lookup gerência</td>
+</tr>
+<tr>
+<td><strong>Xpose / Apogee</strong></td>
+<td>Ativo</td>
+<td><code>gravacao_routes.py</code></td>
+<td>UNC <code>\\cgrafsysvm\ApogeeFiles\</code></td>
+<td>Jobs CTP em MySQL</td>
+</tr>
+<tr>
+<td><strong>Folder Opener</strong></td>
+<td>Ativo Windows</td>
+<td>download endpoint</td>
+<td>—</td>
+<td>Abre Explorer em UNC</td>
+</tr>
+<tr>
+<td><strong>WebSocket</strong></td>
+<td>Ativo</td>
+<td><code>realtime.py</code></td>
+<td>—</td>
+<td>Eventos tempo real</td>
+</tr>
+</tbody>
+</table>
+<h3 id="101-nginx-roteamento-sagra-certo">10.1 Nginx — roteamento SAGRA <strong>[CERTO]</strong></h3>
+<table>
+<thead>
+<tr>
+<th>Location</th>
+<th>Destino</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/sagra/api/</code></td>
+<td><code>http://127.0.0.1:8050/api/</code></td>
+</tr>
+<tr>
+<td><code>/sagra/api/ws</code></td>
+<td>WebSocket backend</td>
+</tr>
+<tr>
+<td><code>/sagra/*</code> (exceto api)</td>
+<td>301 → <code>/*</code></td>
+</tr>
+<tr>
+<td><code>/</code> (SPA)</td>
+<td>Arquivos estáticos build React</td>
+</tr>
+<tr>
+<td><code>/producao</code></td>
+<td>301 → <code>/painel/global</code></td>
+</tr>
+</tbody>
+</table>
+<p>App produção: <code>C:/Sistemas CGraf/Sagra Web</code> <strong>[CERTO — comentário nginx.conf]</strong></p>
+<h3 id="102-paths-de-rede-configconfigjson">10.2 Paths de rede (<code>config/config.json</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>Chave</th>
+<th>Path</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>network_paths.dfs_deputados</code></td>
+<td><code>\\redecamara\DfsData\CGraf\Sefoc\Deputados</code></td>
+</tr>
+<tr>
+<td>MDB paths</td>
+<td><code>I:\ControleDeTrabalhos\...</code> (legado)</td>
+</tr>
+</tbody>
+</table>
+<div class="alert alert-alert-atencao"><strong>Atenção:</strong> Conteúdo exato <code>.env</code> produção <strong>[NÃO ACESSÍVEL]</strong> nesta documentação.</div>
+<hr />
+<h2 id="11-performance-e-atualizações-automáticas">11. Performance e Atualizações Automáticas</h2>
+<h3 id="111-react-query-certo">11.1 React Query <strong>[CERTO]</strong></h3>
+<table>
+<thead>
+<tr>
+<th>Configuração</th>
+<th>Onde</th>
+<th>Valor / efeito</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>staleTime</code></td>
+<td>hooks por feature</td>
+<td>Controla freshness dos dados</td>
+</tr>
+<tr>
+<td><code>refetchInterval: 60_000</code></td>
+<td>hooks cliente dashboard</td>
+<td>Refetch a cada 60s</td>
+</tr>
+<tr>
+<td>Retry</td>
+<td><code>query-client.ts</code></td>
+<td>Retry automático em falha</td>
+</tr>
+<tr>
+<td>Invalidação</td>
+<td>após mutations</td>
+<td>Refresh listas afetadas</td>
+</tr>
+</tbody>
+</table>
+<h3 id="112-websocket-vs-polling">11.2 WebSocket vs polling</h3>
+<table>
+<thead>
+<tr>
+<th>Consumidor</th>
+<th>Mecanismo</th>
+<th>Eventos</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Staff <code>/</code></td>
+<td>WebSocket</td>
+<td><code>system_update</code> → refresh busca OS</td>
+</tr>
+<tr>
+<td>PCP</td>
+<td>WebSocket</td>
+<td><code>pcp_queue_update</code></td>
+</tr>
+<tr>
+<td>Painéis</td>
+<td>WebSocket + polling</td>
+<td>Chart.js refresh</td>
+</tr>
+<tr>
+<td>Portal cliente</td>
+<td>Polling 60s</td>
+<td><strong>[INFERÊNCIA]</strong> cliente não usa WS diretamente</td>
+</tr>
+<tr>
+<td>Admin</td>
+<td><code>force_refresh</code></td>
+<td>Reload página todos clientes</td>
+</tr>
+</tbody>
+</table>
+<h3 id="113-websocket-tipos-de-mensagem">11.3 WebSocket — tipos de mensagem</h3>
+<table>
+<thead>
+<tr>
+<th>Tipo</th>
+<th>Efeito no front</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>system_update</code></td>
+<td>Refresh busca OS</td>
+</tr>
+<tr>
+<td><code>pcp_queue_update</code></td>
+<td>Refresh fila PCP</td>
+</tr>
+<tr>
+<td><code>force_refresh</code></td>
+<td>Reload página (admin)</td>
+</tr>
+<tr>
+<td><code>ping</code> / <code>pong</code></td>
+<td>Keepalive</td>
+</tr>
+</tbody>
+</table>
+<p>Hook: <code>useSagraWebSocket</code>; router: <code>realtime.py</code></p>
+<h3 id="114-lazy-loading">11.4 Lazy loading</h3>
+<p>6 rotas staff lazy-loaded: <code>/gerencia</code>, <code>/email</code>, <code>/analise</code>, <code>/relatorios</code>, <code>/pcp</code>, <code>/gravacao</code> — reduz bundle inicial.</p>
+<h3 id="115-timeline-sob-demanda">11.5 Timeline sob demanda</h3>
+<p>Timeline cliente carregada ao expandir OS no dashboard — não no load inicial <strong>[CERTO — <code>docs/PAGINA_CLIENTE.md</code>]</strong>.</p>
+<h3 id="116-pwa-service-worker">11.6 PWA / Service Worker</h3>
+<table>
+<thead>
+<tr>
+<th>Aspecto</th>
+<th>Detalhe</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Plugin</td>
+<td><code>vite-plugin-pwa</code> + Workbox</td>
+</tr>
+<tr>
+<td>Atualização</td>
+<td><code>PwaUpdatePrompt</code> — prompt ao usuário</td>
+</tr>
+<tr>
+<td>Cache HTML</td>
+<td>Nginx <code>no-cache</code> em HTML</td>
+</tr>
+<tr>
+<td>Risco</td>
+<td>SW antigo após deploy — mitigado por prompt</td>
+</tr>
+</tbody>
+</table>
+<h3 id="117-riscos-de-performance">11.7 Riscos de performance</h3>
+<table>
+<thead>
+<tr>
+<th>Risco</th>
+<th>Mitigação / observação</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /api/os/search</code> com milhares de registros</td>
+<td>Paginação server-side; filtros</td>
+</tr>
+<tr>
+<td>Pré-análise <code>run-all/stream</code></td>
+<td>CPU intensivo (PyMuPDF/OCR)</td>
+</tr>
+<tr>
+<td>Pool DB esgotado</td>
+<td>503; ajustar <code>SAGRA_DB_POOL_SIZE</code></td>
+</tr>
+<tr>
+<td>Logs sync grandes</td>
+<td>Monitorar <code>logs/</code></td>
+</tr>
+<tr>
+<td>Refetch excessivo cliente</td>
+<td>Corrigido P0 — ver <code>RELATORIO_CORRECAO_P0_REFETCH_PORTAL_CLIENTE.md</code></td>
+</tr>
+</tbody>
+</table>
+<div class="alert alert-alert-importante"><strong>Importante:</strong> Evitar reduzir <code>staleTime</code> globalmente — pode aumentar carga no MySQL e EWS.</div>
+<hr />
+<h2 id="12-segurança-e-pontos-críticos">12. Segurança e Pontos Críticos</h2>
+<h3 id="121-arquivos-críticos-alterar-com-cautela">12.1 Arquivos críticos (alterar com cautela)</h3>
+<table>
+<thead>
+<tr>
+<th>Arquivo / área</th>
+<th>Risco</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>app/backend/routers/api.py</code></td>
+<td>Startup schema, middleware, routers</td>
+</tr>
+<tr>
+<td><code>app/backend/security/api_auth.py</code></td>
+<td>Toda segurança API</td>
+</tr>
+<tr>
+<td><code>app/backend/security/session_auth.py</code></td>
+<td>Cookies e HMAC</td>
+</tr>
+<tr>
+<td><code>app/backend/database.py</code></td>
+<td>Pool e transações</td>
+</tr>
+<tr>
+<td><code>app/backend/routers/os_routes.py</code></td>
+<td>CRUD OS + histórico</td>
+</tr>
+<tr>
+<td><code>app/backend/routers/mdb_writer.py</code></td>
+<td>Dual-write legado</td>
+</tr>
+<tr>
+<td><code>app/backend/services/andamento_operacional.py</code></td>
+<td>Regras andamento</td>
+</tr>
+<tr>
+<td><code>config/config.json</code>, <code>config/.env</code></td>
+<td>Segredos e paths produção</td>
+</tr>
+<tr>
+<td><code>\\cgrafsysvm\nginx\conf\nginx.conf</code></td>
+<td>Roteamento público</td>
+</tr>
+<tr>
+<td><code>apps/web/src/lib/api.ts</code></td>
+<td>Prefixo API prod/dev</td>
+</tr>
+<tr>
+<td><code>apps/web/src/features/auth/permissions.ts</code></td>
+<td>Anti fail-open front</td>
+</tr>
+</tbody>
+</table>
+<h3 id="122-endpoints-sensíveis">12.2 Endpoints sensíveis</h3>
+<table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>Risco</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>POST /api/os/save</code></td>
+<td>Altera dados produção</td>
+</tr>
+<tr>
+<td><code>DELETE /api/os/.../history/{cod_status}</code></td>
+<td>Remove histórico (tombstone)</td>
+</tr>
+<tr>
+<td><code>POST /api/admin/ip/delete</code></td>
+<td>Remove acesso IP</td>
+</tr>
+<tr>
+<td><code>POST /api/realtime/notify</code> (force_refresh)</td>
+<td>Recarrega todos clientes</td>
+</tr>
+<tr>
+<td><code>POST /api/sync/start</code></td>
+<td>Sync MDB (se habilitado)</td>
+</tr>
+<tr>
+<td><code>POST /api/admin/system/email-templates/*/reset</code></td>
+<td>Restaura templates</td>
+</tr>
+<tr>
+<td><code>/api/client/*</code> com token</td>
+<td>Upload para pasta OS (escopo token)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="123-tokens-portal">12.3 Tokens portal</h3>
+<table>
+<thead>
+<tr>
+<th>Aspecto</th>
+<th>Controle</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Entropia</td>
+<td>UUID em tabelas <code>*Tokens</code></td>
+</tr>
+<tr>
+<td>Expiração</td>
+<td><code>DataExpiracao</code></td>
+</tr>
+<tr>
+<td>Validação</td>
+<td>Token + OS + ano conferidos no handler</td>
+</tr>
+<tr>
+<td>Escopo</td>
+<td>Uma OS / uma ação por token</td>
+</tr>
+</tbody>
+</table>
+<div class="alert alert-alert-atencao"><strong>Atenção:</strong> Links por token são <strong>capability URLs</strong> — quem possui o link tem acesso. Não compartilhar publicamente.</div>
+<h3 id="124-uploads">12.4 Uploads</h3>
+<table>
+<thead>
+<tr>
+<th>Risco</th>
+<th>Mitigação</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Escrita UNC</td>
+<td>Validado escopo token/sessão</td>
+</tr>
+<tr>
+<td>Tamanho</td>
+<td><code>client_max_body_size 50M</code> (nginx); <code>SAGRA_EMAIL_ATTACHMENT_MAX_MB</code></td>
+</tr>
+<tr>
+<td>GDrive 503</td>
+<td>Desabilitado por padrão em prod</td>
+</tr>
+</tbody>
+</table>
+<h3 id="125-permissões-lacunas-conhecidas">12.5 Permissões — lacunas conhecidas</h3>
+<table>
+<thead>
+<tr>
+<th>Lacuna</th>
+<th>Detalhe</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>API não valida cada <code>sb_*</code></td>
+<td>Operador LAN com IP amplo → acesso API completo</td>
+</tr>
+<tr>
+<td>Painéis sem AuthGuard</td>
+<td>Dependem de <code>SAGRA_PAINEL_SKIP_IP_CHECK</code></td>
+</tr>
+<tr>
+<td>WebSocket <code>/api/ws/jobs</code></td>
+<td>Autenticação limitada <strong>[CERTO]</strong></td>
+</tr>
+<tr>
+<td>Redis em realtime</td>
+<td>Uso <strong>[NÃO CONFIRMADO]</strong> no código analisado</td>
+</tr>
+</tbody>
+</table>
+<h3 id="126-fluxos-que-impactam-produção">12.6 Fluxos que impactam produção</h3>
+<ul>
+<li>Save OS + andamentos</li>
+<li>Finalizar análise → gera token PT</li>
+<li>Resposta prova cliente</li>
+<li>Upload portal → grava UNC</li>
+<li>Reordenação PCP</li>
+<li>Admin IPs / permissões</li>
+</ul>
+<h3 id="127-dependências-externas-frágeis">12.7 Dependências externas frágeis</h3>
+<table>
+<thead>
+<tr>
+<th>Dependência</th>
+<th>Impacto se indisponível</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MySQL <code>10.1.1.73</code></td>
+<td>Sistema inteiro para</td>
+</tr>
+<tr>
+<td>UNC <code>\\redecamara\DfsData\...</code></td>
+<td>Pastas OS, uploads, pré-análise</td>
+</tr>
+<tr>
+<td>Exchange EWS</td>
+<td>Módulo e-mail; envio PT/prova</td>
+</tr>
+<tr>
+<td>Nginx / Uvicorn</td>
+<td>Acesso web</td>
+</tr>
+<tr>
+<td>Tesseract</td>
+<td>Pré-análise OCR degradada</td>
+</tr>
+<tr>
+<td>Corel COM</td>
+<td>Preview papelaria legado falha</td>
+</tr>
+<tr>
+<td>Cloudflare/zrok</td>
+<td>Acesso externo</td>
+</tr>
+</tbody>
+</table>
+<h3 id="128-divergência-documentação-legada">12.8 Divergência documentação legada</h3>
+<p><code>contexto_executivo.md</code> (26/05/2026) descreve vulnerabilidades <strong>parcialmente corrigidas</strong> na Fase B (<code>APIAccessMiddleware</code>, <code>permissions.ts</code> anti fail-open). <strong>Validar sempre no ambiente alvo.</strong></p>
+<hr />
+<h2 id="13-build-deploy-e-produção">13. Build, Deploy e Produção</h2>
+<h3 id="131-comandos-monorepo-certo">13.1 Comandos monorepo <strong>[CERTO]</strong></h3>
+<table>
+<thead>
+<tr>
+<th>Comando</th>
+<th>Script</th>
+<th>Finalidade</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pnpm dev</code></td>
+<td><code>apps/web</code> Vite :5173</td>
+<td>Desenvolvimento front</td>
+</tr>
+<tr>
+<td><code>pnpm build</code></td>
+<td>build recursivo workspaces</td>
+<td>Build produção</td>
+</tr>
+<tr>
+<td><code>pnpm test</code></td>
+<td>pytest + vitest</td>
+<td>Testes</td>
+</tr>
+<tr>
+<td><code>pnpm package:release</code></td>
+<td><code>deploy/scripts/package-release.ps1</code></td>
+<td>Empacotar release</td>
+</tr>
+<tr>
+<td><code>pnpm deploy:prod</code></td>
+<td><code>deploy/scripts/deploy-producao.ps1</code></td>
+<td>Deploy produção</td>
+</tr>
+<tr>
+<td><code>pnpm typecheck</code></td>
+<td>TS check</td>
+<td>Validação tipos</td>
+</tr>
+<tr>
+<td><code>pnpm lint</code></td>
+<td>ESLint</td>
+<td>Lint</td>
+</tr>
+</tbody>
+</table>
+<p>Backend dev: <code>uvicorn</code> em <code>:8001</code>; prod: <code>:8050</code>.</p>
+<h3 id="132-fluxo-build-front">13.2 Fluxo build front</h3>
+<pre><code>apps/web/  →  vite build  →  app/frontend/  (assets estáticos)
+</code></pre>
+<p>Prefixo API prod: <code>/sagra/api</code> via <code>resolveSagraApiPrefix()</code> em <code>apps/web/src/lib/api.ts</code>.</p>
+<h3 id="133-deploy-produção-certo-inferência">13.3 Deploy produção <strong>[CERTO / INFERÊNCIA]</strong></h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pasta produção</td>
+<td><code>\\cgrafsysvm\Sistemas CGraf\Sagra Web</code></td>
+</tr>
+<tr>
+<td>Script</td>
+<td><code>deploy/scripts/deploy-producao.ps1</code></td>
+</tr>
+<tr>
+<td>Nginx</td>
+<td>Reinício/reload conforme script — <strong>não reiniciar servidor indevidamente</strong></td>
+</tr>
+<tr>
+<td>Backup</td>
+<td>Script de release deve fazer backup antes <strong>[INFERÊNCIA]</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="134-arquitetura-produção">13.4 Arquitetura produção</h3>
+<pre><code>Browser → Nginx :80 (cgrafsysvm)
+           ├─ /           → SPA React (app/frontend/)
+           ├─ /sagra/api/ → Uvicorn :8050
+           └─ /sagra/api/ws → WebSocket
+</code></pre>
+<h3 id="135-variáveis-de-ambiente-críticas">13.5 Variáveis de ambiente críticas</h3>
+<p>Fonte: <code>config/.env.example</code> — ver Apêndice do inventário para lista completa de nomes.</p>
+<table>
+<thead>
+<tr>
+<th>Variável</th>
+<th>Finalidade</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PORT</code></td>
+<td>Porta Uvicorn (8050 prod)</td>
+</tr>
+<tr>
+<td><code>ENV</code></td>
+<td>Ambiente</td>
+</tr>
+<tr>
+<td><code>MYSQL_ONLY</code></td>
+<td>Desabilita dual-write MDB</td>
+</tr>
+<tr>
+<td><code>SYNC_ANDAMENTOS_ENABLED</code></td>
+<td>Habilita sync (false prod)</td>
+</tr>
+<tr>
+<td><code>SAGRA_SESSION_SECRET</code></td>
+<td>HMAC cookies</td>
+</tr>
+<tr>
+<td><code>SAGRA_DB_POOL_SIZE</code></td>
+<td>Pool conexões</td>
+</tr>
+<tr>
+<td><code>SAGRA_PAINEL_SKIP_IP_CHECK</code></td>
+<td>Painéis sem check IP</td>
+</tr>
+<tr>
+<td><code>EWS_*</code></td>
+<td>Exchange</td>
+</tr>
+<tr>
+<td><code>VITE_DEV_PORT</code></td>
+<td>Porta dev Vite</td>
+</tr>
+</tbody>
+</table>
+<h3 id="136-o-que-não-alterar-em-produção-sem-procedimento">13.6 O que NÃO alterar em produção sem procedimento</h3>
+<ul>
+<li><code>config/.env</code> — segredos e flags</li>
+<li><code>config/config.json</code> — paths MDB, rede, flags</li>
+<li><code>nginx.conf</code> — roteamento</li>
+<li>DDL manual em <code>deploy/sql/</code> — executar com backup</li>
+<li>IPs master em <code>allowed_ips</code></li>
+</ul>
+<h3 id="137-validação-pós-deploy">13.7 Validação pós-deploy</h3>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>Como validar</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>API viva</td>
+<td><code>GET /health</code> ou <code>GET /api/config/public</code></td>
+</tr>
+<tr>
+<td>SPA carrega</td>
+<td>Abrir <code>/</code> no browser</td>
+</tr>
+<tr>
+<td>Login</td>
+<td><code>POST /api/auth/session</code> + <code>GET /api/permissions</code></td>
+</tr>
+<tr>
+<td>Prefixo API</td>
+<td>Network tab — chamadas em <code>/sagra/api/</code></td>
+</tr>
+<tr>
+<td>WebSocket</td>
+<td>Conexão WS em <code>/sagra/api/ws</code></td>
+</tr>
+<tr>
+<td>PWA</td>
+<td>Verificar prompt atualização se SW antigo</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Exemplo</strong> — smoke test API:</p>
+<pre><code class="language-powershell">curl http://cgrafsysvm/sagra/api/config/public
+curl http://cgrafsysvm/health
+</code></pre>
+<hr />
+<h2 id="14-manutenção-e-suporte">14. Manutenção e Suporte</h2>
+<h3 id="141-onde-procurar-erros">14.1 Onde procurar erros</h3>
+<table>
+<thead>
+<tr>
+<th>Fonte</th>
+<th>Localização</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Logs backend</td>
+<td><code>logs/</code> no diretório da aplicação</td>
+</tr>
+<tr>
+<td>Logs Nginx</td>
+<td><code>C:/nginx/logs/error.log</code>, <code>access.log</code></td>
+</tr>
+<tr>
+<td>Logs sync</td>
+<td><code>log_sync_andamentos</code> (se sync habilitado)</td>
+</tr>
+<tr>
+<td>Console browser</td>
+<td>DevTools → Network, Console</td>
+</tr>
+<tr>
+<td>pytest</td>
+<td><code>app/backend/tests/</code></td>
+</tr>
+<tr>
+<td>OpenAPI</td>
+<td><code>/docs</code> — testar endpoints isolados</td>
+</tr>
+</tbody>
+</table>
+<h3 id="142-diagnóstico-por-sintoma">14.2 Diagnóstico por sintoma</h3>
+<table>
+<thead>
+<tr>
+<th>Sintoma</th>
+<th>Causa provável</th>
+<th>Ação</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HTTP 403 em <code>/api/*</code></td>
+<td>IP não cadastrado ou cookie ausente</td>
+<td>Verificar <code>ip_permissions</code>; refazer login</td>
+</tr>
+<tr>
+<td>HTTP 401 em <code>/api/auth/me</code></td>
+<td>Cookie expirado/inválido</td>
+<td>Limpar cookies; login novamente</td>
+</tr>
+<tr>
+<td>HTTP 503</td>
+<td>Pool DB esgotado ou GDrive off</td>
+<td>Verificar MySQL; <code>SAGRA_DB_POOL_SIZE</code></td>
+</tr>
+<tr>
+<td>Lista OS vazia</td>
+<td>Filtros restritivos</td>
+<td>Reset filtros; verificar query params</td>
+</tr>
+<tr>
+<td><code>/analise</code> sem dados</td>
+<td>Falta <code>?ano=&amp;id=</code></td>
+<td>Selecionar OS na <code>/</code> primeiro</td>
+</tr>
+<tr>
+<td>E-mail não conecta</td>
+<td>EWS/credenciais</td>
+<td>Verificar <code>tabEmailExchangeConfig</code>, <code>EWS_*</code></td>
+</tr>
+<tr>
+<td>Upload falha</td>
+<td>UNC inacessível / tamanho</td>
+<td>Verificar path OS; limite nginx 50M</td>
+</tr>
+<tr>
+<td>Token expirado</td>
+<td><code>DataExpiracao</code> passada</td>
+<td>Gerar novo link (análise/e-mail)</td>
+</tr>
+<tr>
+<td>Painel não atualiza</td>
+<td>WS desconectado</td>
+<td>Verificar <code>/sagra/api/ws</code>; reload</td>
+</tr>
+<tr>
+<td>Portal cliente desatualizado</td>
+<td>Cache/staleTime</td>
+<td>Aguardar 60s ou hard refresh</td>
+</tr>
+<tr>
+<td>Save OS aviso MDB</td>
+<td>Dual-write falhou</td>
+<td>Normal se <code>mysql_only=true</code>; ignorar aviso MDB</td>
+</tr>
+</tbody>
+</table>
+<h3 id="143-validação-apis">14.3 Validação APIs</h3>
+<pre><code class="language-powershell"># Config pública (sem auth)
+curl http://127.0.0.1:8001/api/config/public
+
+# Login dev
+curl -c cookies.txt -X POST http://127.0.0.1:8001/api/auth/session `
+  -H &quot;Content-Type: application/json&quot; `
+  -d &quot;{\&quot;ponto\&quot;: 918713, \&quot;nome\&quot;: \&quot;Seu Nome\&quot;}&quot;
+
+# Permissões
+curl -b cookies.txt http://127.0.0.1:8001/api/permissions
+
+# Health DB
+curl http://127.0.0.1:8001/health
+</code></pre>
+<p>Ver fluxo completo: <code>docs/API_FASE_B_AUTH.md</code></p>
+<h3 id="144-validação-frontend">14.4 Validação frontend</h3>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>Procedimento</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Build</td>
+<td><code>pnpm build</code> sem erros</td>
+</tr>
+<tr>
+<td>Typecheck</td>
+<td><code>pnpm typecheck</code></td>
+</tr>
+<tr>
+<td>Testes</td>
+<td><code>pnpm test:frontend</code></td>
+</tr>
+<tr>
+<td>Rotas</td>
+<td>Navegar 33 rotas em <code>routeTree.gen.ts</code></td>
+</tr>
+<tr>
+<td>Guards</td>
+<td>Usuário sem <code>sb_analise</code> não acessa <code>/analise</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="145-scripts-operacionais">14.5 Scripts operacionais</h3>
+<table>
+<thead>
+<tr>
+<th>Script</th>
+<th>Finalidade</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ajuste_andamentos_os_antigas.py</code></td>
+<td>Manutenção andamentos (MySQL only)</td>
+</tr>
+<tr>
+<td><code>app/services/sync_tables/</code></td>
+<td>Sync MDB↔MySQL batch</td>
+</tr>
+<tr>
+<td><code>deploy/scripts/package-release.ps1</code></td>
+<td>Empacotar release</td>
+</tr>
+<tr>
+<td><code>deploy/scripts/deploy-producao.ps1</code></td>
+<td>Publicar produção</td>
+</tr>
+<tr>
+<td><code>iniciar-zrok-painel.bat</code></td>
+<td>Expor painéis via zrok</td>
+</tr>
+</tbody>
+</table>
+<h3 id="146-itens-pendentes-validação-humana">14.6 Itens pendentes / validação humana</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Rota React <code>sb_active_computers</code></td>
+<td><strong>[NÃO IDENTIFICADO]</strong></td>
+</tr>
+<tr>
+<td>UI React sync (<code>/api/sync/*</code>)</td>
+<td><strong>[NÃO IDENTIFICADO]</strong> — UI legada</td>
+</tr>
+<tr>
+<td>Google Drive em produção</td>
+<td>Desabilitado por padrão</td>
+</tr>
+<tr>
+<td>Header notificações (sino)</td>
+<td>Stub — badge fixo 0</td>
+</tr>
+<tr>
+<td><code>schema_sagrafulldb.sql</code> completo</td>
+<td><strong>[NÃO IDENTIFICADO]</strong> no repo dev</td>
+</tr>
+<tr>
+<td>Conteúdo <code>.env</code> produção</td>
+<td><strong>[NÃO ACESSÍVEL]</strong></td>
+</tr>
+<tr>
+<td>Redis em realtime</td>
+<td><strong>[NÃO CONFIRMADO]</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="147-checklist-suporte-rápido">14.7 Checklist suporte rápido</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Verificação</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>MySQL acessível (<code>GET /health</code>)</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Nginx rodando; upstream <code>:8050</code> responde</td>
+</tr>
+<tr>
+<td>3</td>
+<td>IP do usuário em <code>ip_permissions</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td>Cookie <code>sagra_session</code> presente</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>GET /api/permissions</code> retorna flags esperadas</td>
+</tr>
+<tr>
+<td>6</td>
+<td>UNC pasta OS acessível do servidor</td>
+</tr>
+<tr>
+<td>7</td>
+<td>EWS configurado (módulo e-mail)</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Token portal não expirado</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Build front publicado (versão correta)</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Logs em <code>logs/</code> sem erro crítico recente</td>
+</tr>
+</tbody>
+</table>
+<h3 id="148-prioridades-homologação-recomendado">14.8 Prioridades homologação <strong>[recomendado]</strong></h3>
+<ol>
+<li>Login staff LAN + internet + cliente gabinete</li>
+<li>Ciclo OS → análise → PT → upload cliente → execução</li>
+<li>Ciclo prova → aprovação</li>
+<li>E-mail send-pt com template configurado</li>
+<li>PCP reorder + WebSocket</li>
+<li>Painéis setor/global via URL TV</li>
+<li>Contas gabinete + subconta</li>
+<li>Permissões IP — operador sem <code>sb_analise</code> não acessa <code>/analise</code></li>
+</ol>
+<h1 id="parte-2-manual-do-usuário-final">PARTE 2 — MANUAL DO USUÁRIO FINAL</h1>
+<blockquote>
+<p><strong>Público:</strong> operadores SEFOC/DEAPA, analistas de qualidade, atendimento, PCP, administradores e <strong>clientes</strong> (gabinetes parlamentares e órgãos).<br />
+<strong>Objetivo:</strong> explicar, em linguagem simples, como usar o SAGRA Web no dia a dia — sem exigir conhecimento técnico de programação ou infraestrutura.</p>
+</blockquote>
+<hr />
+<h2 id="15-introdução-ao-sistema">15. Introdução ao Sistema</h2>
+<h3 id="151-o-que-é-o-sagra-web">15.1 O que é o SAGRA Web?</h3>
+<p>O <strong>SAGRA Web</strong> (Sistema de Acompanhamento Gráfico) é o sistema da DEAPA/SEFOC da Câmara dos Deputados para acompanhar e gerenciar <strong>Ordens de Serviço (OS)</strong> gráficas — desde o pedido do gabinete até a entrega do material impresso.</p>
+<p>Com ele você pode:</p>
+<ul>
+<li>Buscar e acompanhar OS em produção</li>
+<li>Registrar andamentos e histórico</li>
+<li>Fazer análise técnica de arquivos PDF</li>
+<li>Comunicar problemas técnicos e provas ao cliente</li>
+<li>Receber arquivos corrigidos e aprovações</li>
+<li>Gerar relatórios e acompanhar filas de produção</li>
+</ul>
+<h3 id="152-quem-usa-o-sistema">15.2 Quem usa o sistema?</h3>
+<table>
+<thead>
+<tr>
+<th>Perfil</th>
+<th>O que faz no sistema</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Operador de produção</strong></td>
+<td>Busca OS, registra andamentos, acompanha status</td>
+</tr>
+<tr>
+<td><strong>Analista de qualidade</strong></td>
+<td>Analisa arquivos, registra problemas técnicos, gera links para o cliente</td>
+</tr>
+<tr>
+<td><strong>Atendimento / e-mail</strong></td>
+<td>Lê caixa Exchange, envia PT e provas por e-mail</td>
+</tr>
+<tr>
+<td><strong>PCP / planejamento</strong></td>
+<td>Organiza fila de produção por setor</td>
+</tr>
+<tr>
+<td><strong>Administrador</strong></td>
+<td>Gerencia usuários, permissões e configurações</td>
+</tr>
+<tr>
+<td><strong>Cliente (gabinete/órgão)</strong></td>
+<td>Acompanha OS, resolve pendências, aprova provas, envia arquivos</td>
+</tr>
+</tbody>
+</table>
+<h3 id="153-duas-interfaces-principais">15.3 Duas interfaces principais</h3>
+<table>
+<thead>
+<tr>
+<th>Área</th>
+<th>Endereço</th>
+<th>Quem acessa</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Sistema interno</strong></td>
+<td><code>/</code>, <code>/analise</code>, <code>/email</code>, etc.</td>
+<td>Equipe SEFOC/DEAPA</td>
+</tr>
+<tr>
+<td><strong>Portal do Cliente</strong></td>
+<td><code>/cliente</code></td>
+<td>Gabinetes e órgãos solicitantes</td>
+</tr>
+</tbody>
+</table>
+<div class="alert alert-alert-importante"><strong>Importante:</strong> As duas áreas têm <strong>logins separados</strong>. Entrar no sistema interno não dá acesso ao Portal do Cliente, e vice-versa.</div>
+<h3 id="154-conceitos-que-você-verá-com-frequência">15.4 Conceitos que você verá com frequência</h3>
+<table>
+<thead>
+<tr>
+<th>Conceito</th>
+<th>Significado resumido</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>OS</strong></td>
+<td>Ordem de Serviço — pedido de trabalho gráfico</td>
+</tr>
+<tr>
+<td><strong>Protocolo</strong></td>
+<td>Número + ano que identificam a OS</td>
+</tr>
+<tr>
+<td><strong>Andamento</strong></td>
+<td>Registro de movimentação (situação, setor, data)</td>
+</tr>
+<tr>
+<td><strong>PT / PTV</strong></td>
+<td>Problemas Técnicos — relatório de inconsistências no arquivo</td>
+</tr>
+<tr>
+<td><strong>Prova</strong></td>
+<td>Versão digital do material para aprovação do cliente</td>
+</tr>
+<tr>
+<td><strong>Token</strong></td>
+<td>Código na URL para acesso seguro sem senha</td>
+</tr>
+<tr>
+<td><strong>Pendência</strong></td>
+<td>Situação que exige ação do cliente ou da equipe</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Exemplo:</strong> A OS <strong>2150/2026</strong> pode estar em <strong>"Problemas Técnicos"</strong> — o cliente precisa corrigir o arquivo e enviar de volta pelo portal.</p>
+<hr />
+<h2 id="16-acesso-ao-sistema">16. Acesso ao Sistema</h2>
+<h3 id="161-sistema-interno-rede-interna-lan">16.1 Sistema interno — rede interna (LAN)</h3>
+<ol>
+<li>Abra o navegador e acesse o endereço do SAGRA Web (ex.: <code>http://cgrafsysvm</code>).</li>
+<li>Se não estiver logado, você será direcionado para <strong><code>/login</code></strong>.</li>
+<li>Informe seu <strong>ponto</strong> e <strong>nome</strong>.</li>
+<li>Clique em entrar.</li>
+</ol>
+<div class="alert alert-alert-resultado"><strong>Resultado esperado:</strong> Página <strong>Início</strong> (<code>/</code>) com menu lateral conforme suas permissões.</div>
+<h3 id="162-sistema-interno-internet-remoto">16.2 Sistema interno — internet (remoto)</h3>
+<ol>
+<li>Acesse o endereço externo (ex.: <code>cgraf.online</code>).</li>
+<li>Use <strong>e-mail ou ponto + senha</strong> em <code>/login</code>.</li>
+<li>Primeiro acesso: ative a conta em <code>/login/activate</code> (link por e-mail).</li>
+<li>Esqueceu a senha: use <code>/login/forgot</code>.</li>
+</ol>
+<div class="alert alert-alert-atencao"><strong>Atenção:</strong> Acesso remoto exige conta ativada e permissões configuradas pelo administrador.</div>
+<h3 id="163-portal-do-cliente">16.3 Portal do Cliente</h3>
+<ol>
+<li>Acesse <strong><code>/cliente/login</code></strong>.</li>
+<li>Informe <strong>e-mail</strong> e <strong>senha</strong>.</li>
+<li>Primeiro acesso: <code>/cliente/login/activate?token=...</code> (senha mínimo 8 caracteres).</li>
+</ol>
+<div class="alert alert-alert-resultado"><strong>Resultado esperado:</strong> Dashboard em <code>/cliente</code>.</div>
+<h3 id="164-links-por-token-sem-login">16.4 Links por token (sem login)</h3>
+<table>
+<thead>
+<tr>
+<th>Tipo</th>
+<th>Rota</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Problemas técnicos</td>
+<td><code>/portal/pt/{token}?os=...&amp;ano=...</code></td>
+</tr>
+<tr>
+<td>Aprovação de prova</td>
+<td><code>/portal/aprovacao/{token}?os=...&amp;ano=...</code></td>
+</tr>
+<tr>
+<td>Envio de arquivos</td>
+<td><code>/portal/os-arquivos/{token}?os=...&amp;ano=...</code></td>
+</tr>
+</tbody>
+</table>
+<div class="alert alert-alert-atencao"><strong>Atenção:</strong> Não compartilhe links publicamente; encaminhe apenas ao destinatário correto.</div>
+<h3 id="165-encerrar-sessão">16.5 Encerrar sessão</h3>
+<table>
+<thead>
+<tr>
+<th>Área</th>
+<th>Como sair</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sistema interno</td>
+<td>Botão <strong>Sair</strong> no cabeçalho</td>
+</tr>
+<tr>
+<td>Portal do Cliente</td>
+<td>Botão <strong>Sair</strong> na barra superior</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="17-página-inicial-dashboard">17. Página Inicial / Dashboard</h2>
+<h3 id="171-o-que-é-a-página-início">17.1 O que é a página Início</h3>
+<p>A rota <strong><code>/</code></strong> (menu <strong>Início</strong>) é o ponto central do sistema interno: busca OS, detalhes, histórico e ações pelo <strong>menu de contexto</strong>.</p>
+<p><strong>Quem acessa:</strong> operadores com permissão <strong>Início</strong> (<code>sb_inicio</code>).</p>
+<h3 id="172-buscar-uma-os">17.2 Buscar uma OS</h3>
+<ol>
+<li>Abra o menu <strong>Início</strong>.</li>
+<li>Use os <strong>filtros</strong> (protocolo, ano, situação, setor, gabinete).</li>
+<li>A lista atualiza automaticamente (debounce ~250 ms).</li>
+<li>Clique na linha da OS desejada.</li>
+</ol>
+<div class="alert alert-alert-resultado"><strong>Resultado esperado:</strong> Painel lateral com detalhes e histórico.</div>
+<p><strong>Dica:</strong> Se a lista estiver vazia, limpe os filtros restritivos.</p>
+<h3 id="173-menu-de-contexto">17.3 Menu de contexto</h3>
+<table>
+<thead>
+<tr>
+<th>Ação</th>
+<th>O que faz</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Nova OS</strong></td>
+<td><code>/gerencia?action=new</code></td>
+</tr>
+<tr>
+<td><strong>Editar OS</strong></td>
+<td>Edição da OS selecionada</td>
+</tr>
+<tr>
+<td><strong>Duplicar OS</strong></td>
+<td>Cópia com novo número</td>
+</tr>
+<tr>
+<td><strong>Vincular OS</strong></td>
+<td>Associa OS relacionadas</td>
+</tr>
+<tr>
+<td><strong>Abrir pasta</strong></td>
+<td>Pasta de rede no Windows</td>
+</tr>
+<tr>
+<td><strong>Imprimir ficha</strong></td>
+<td>Ficha de requisição</td>
+</tr>
+<tr>
+<td><strong>Detalhes</strong></td>
+<td>Informações expandidas</td>
+</tr>
+</tbody>
+</table>
+<div class="alert alert-alert-importante"><strong>Importante:</strong> Cada ação exige permissão específica (<code>ctx_*</code>).</div>
+<h3 id="174-atualização-automática">17.4 Atualização automática</h3>
+<p>A lista é atualizada via <strong>WebSocket</strong> quando há mudanças. Recarregue a página se necessário.</p>
+<hr />
+<h2 id="18-ordens-de-serviço">18. Ordens de Serviço</h2>
+<h3 id="181-identificação">18.1 Identificação</h3>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Exemplo</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Número</strong></td>
+<td>2150</td>
+<td>Protocolo</td>
+</tr>
+<tr>
+<td><strong>Ano</strong></td>
+<td>2026</td>
+<td>Ano de abertura</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Formato:</strong> OS <strong>2150/2026</strong>.</p>
+<h3 id="182-situações-comuns">18.2 Situações comuns</h3>
+<table>
+<thead>
+<tr>
+<th>Situação</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Entrada Inicial</strong></td>
+<td>OS recém-aberta</td>
+</tr>
+<tr>
+<td><strong>Em Execução</strong></td>
+<td>Em produção / análise</td>
+</tr>
+<tr>
+<td><strong>Problemas Técnicos</strong></td>
+<td>Cliente deve corrigir arquivo</td>
+</tr>
+<tr>
+<td><strong>Aguard. Aprovação</strong></td>
+<td>Prova aguardando cliente</td>
+</tr>
+<tr>
+<td><strong>Pendência Usuário</strong></td>
+<td>Aguardando ação do cliente</td>
+</tr>
+<tr>
+<td><strong>Entregue</strong></td>
+<td>Material finalizado</td>
+</tr>
+<tr>
+<td><strong>Cancelada</strong></td>
+<td>OS encerrada</td>
+</tr>
+</tbody>
+</table>
+<h3 id="183-pasta-de-rede">18.3 Pasta de rede</h3>
+<p>Cada OS possui pasta na rede com arquivos de produção. Operadores autorizados abrem via <strong>Abrir pasta</strong> no menu de contexto.</p>
+<div class="alert alert-alert-atencao"><strong>Atenção:</strong> Requer Windows com acesso à rede interna.</div>
+<hr />
+<h2 id="19-gerência-gestão-de-os">19. Gerência / Gestão de OS</h2>
+<h3 id="191-acesso">19.1 Acesso</h3>
+<p>A <strong>Gerência</strong> <strong>não</strong> aparece no menu lateral. Acesso pelo menu de contexto na Início.</p>
+<p><strong>Permissão:</strong> <code>sb_gerencia</code> + <code>ctx_nova_os</code> / <code>ctx_editar_os</code>.</p>
+<h3 id="192-criar-nova-os">19.2 Criar nova OS</h3>
+<ol>
+<li>Menu de contexto → <strong>Nova OS</strong>.</li>
+<li>Preencha campos obrigatórios (gabinete, produto, título).</li>
+<li>Confirme pasta de rede, se solicitado.</li>
+<li>Clique em <strong>Salvar</strong>.</li>
+</ol>
+<div class="alert alert-alert-resultado"><strong>Resultado esperado:</strong> OS criada; modal opcional para enviar link de arquivos ao cliente.</div>
+<h3 id="193-editar-e-duplicar">19.3 Editar e duplicar</h3>
+<ul>
+<li><strong>Editar:</strong> selecione OS → menu contexto → <strong>Editar OS</strong>.</li>
+<li><strong>Duplicar:</strong> copia dados de OS existente para novo protocolo.</li>
+</ul>
+<div class="alert alert-alert-atencao"><strong>Atenção:</strong> Alterações em OS avançada podem impactar setores downstream.</div>
+<hr />
+<h2 id="20-análise-técnica">20. Análise Técnica</h2>
+<h3 id="201-finalidade">20.1 Finalidade</h3>
+<p>Verificar se o PDF do cliente está adequado para impressão (margens, fontes, imagens, sangria).</p>
+<p><strong>Rota:</strong> <code>/analise?ano=...&amp;id=...</code> — permissão <code>sb_analise</code>.</p>
+<h3 id="202-passo-a-passo">20.2 Passo a passo</h3>
+<ol>
+<li>Selecione a OS na Início.</li>
+<li>Abra menu <strong>Análise</strong>.</li>
+<li>Selecione versão e <strong>componente</strong> (Capa, Miolo, etc.).</li>
+<li>Adicione itens da biblioteca de problemas padrão.</li>
+<li><strong>Opcional:</strong> pré-análise automatizada ou anotações no PDF.</li>
+<li>Clique em <strong>Concluir e salvar</strong>.</li>
+</ol>
+<h3 id="203-resultado-ao-concluir">20.3 Resultado ao concluir</h3>
+<table>
+<thead>
+<tr>
+<th>Situação</th>
+<th>O que acontece</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Sem problemas</strong></td>
+<td>Andamento <strong>Em Execução</strong></td>
+</tr>
+<tr>
+<td><strong>Com problemas</strong></td>
+<td>Link portal PT + andamento <strong>Problemas Técnicos</strong></td>
+</tr>
+<tr>
+<td><strong>Já em PT</strong></td>
+<td>Reenvio PTV → <strong>Encam. de Docum.</strong></td>
+</tr>
+</tbody>
+</table>
+<div class="alert alert-alert-importante"><strong>Importante:</strong> Concluir análise <strong>não envia e-mail</strong> automaticamente. Envie PT pelo módulo <strong>E-mail</strong>.</div>
+<hr />
+<h2 id="21-problemas-técnicos">21. Problemas Técnicos</h2>
+<h3 id="211-fluxo-resumido">21.1 Fluxo resumido</h3>
+<pre><code>Analista conclui com problemas → link /portal/pt/{token}
+→ Técnico envia e-mail (módulo E-mail)
+→ Cliente corrige e envia arquivos
+→ OS volta para Em Execução; link expira
+</code></pre>
+<h3 id="212-portal-pt-procedimento-do-cliente">21.2 Portal PT — procedimento do cliente</h3>
+<p><strong>Rota:</strong> <code>/portal/pt/{token}?os=...&amp;ano=...</code></p>
+<ol>
+<li>Abra o link (e-mail ou <code>/cliente/problemas-tecnicos</code>).</li>
+<li>Preencha <strong>nome</strong> e <strong>ponto</strong> no cabeçalho.</li>
+<li>Revise itens por componente.</li>
+<li><strong>Desconsiderar</strong> itens opcionais ou <strong>Enviar arquivo</strong> corrigido.</li>
+<li>Repita até todos os componentes pendentes.</li>
+</ol>
+<div class="alert alert-alert-resultado"><strong>Resultado esperado:</strong> Tela de sucesso; OS em <strong>Em Execução</strong>.</div>
+<div class="alert alert-alert-atencao"><strong>Atenção:</strong> Itens <strong>obrigatórios</strong> (cadeado) não podem ser desconsiderados.</div>
+<h3 id="213-pelo-portal-do-cliente">21.3 Pelo Portal do Cliente</h3>
+<ul>
+<li>Dashboard → seção <strong>Problemas Técnicos</strong></li>
+<li>Página <strong><code>/cliente/problemas-tecnicos</code></strong></li>
+<li>Bridge: <code>/cliente/os/{ano}/{nrOs}/problemas-tecnicos</code></li>
+</ul>
+<hr />
+<h2 id="22-provas-e-aprovação">22. Provas e Aprovação</h2>
+<h3 id="221-o-que-é-prova">22.1 O que é prova</h3>
+<p>Versão digital do material enviada ao cliente para <strong>aprovar</strong> antes da impressão final.</p>
+<h3 id="222-procedimento-do-cliente">22.2 Procedimento do cliente</h3>
+<p><strong>Rota:</strong> <code>/portal/aprovacao/{token}?os=...&amp;ano=...</code></p>
+<ol>
+<li>Abra o link (e-mail ou <code>/cliente/provas</code>).</li>
+<li>Aguarde carregamento do PDF.</li>
+<li>Revise texto, imagens, cores e dimensões.</li>
+<li><strong>Aprovar</strong> ou <strong>Reprovar</strong> com comentário.</li>
+<li>Confirme.</li>
+</ol>
+<div class="alert alert-alert-importante"><strong>Importante:</strong> Aprovar autoriza continuidade da produção. Em dúvida, <strong>reprove</strong> com motivo claro.</div>
+<h3 id="223-rotas-relacionadas">22.3 Rotas relacionadas</h3>
+<table>
+<thead>
+<tr>
+<th>Rota</th>
+<th>Função</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/portal/aprovacao/{token}</code></td>
+<td>Aprovar/reprovar</td>
+</tr>
+<tr>
+<td><code>/portal/prova/{token}</code></td>
+<td>Visualização read-only do relatório PT</td>
+</tr>
+<tr>
+<td><code>/cliente/os/{ano}/{nrOs}/prova</code></td>
+<td>Ponte autenticada → aprovação</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="23-portal-do-cliente">23. Portal do Cliente</h2>
+<h3 id="231-visão-geral">23.1 Visão geral</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detalhe</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>URL</strong></td>
+<td><code>/cliente</code></td>
+</tr>
+<tr>
+<td><strong>Login</strong></td>
+<td><code>/cliente/login</code></td>
+</tr>
+<tr>
+<td><strong>Atualização</strong></td>
+<td>Automática a cada <strong>60 segundos</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="232-cabeçalho-e-barra-de-contexto">23.2 Cabeçalho e barra de contexto</h3>
+<ul>
+<li>Logo DEAPA, título <strong>SAGRA Web</strong></li>
+<li><strong>Solicitante</strong>, deputado/órgão, gabinete, usuário logado</li>
+<li>Botões <strong>Atualizar</strong> e <strong>Sair</strong></li>
+</ul>
+<h3 id="233-menu-lateral">23.3 Menu lateral</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Rota</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Visão Geral</td>
+<td><code>/cliente</code></td>
+</tr>
+<tr>
+<td>Problemas Técnicos</td>
+<td><code>/cliente/problemas-tecnicos</code></td>
+</tr>
+<tr>
+<td>Provas</td>
+<td><code>/cliente/provas</code></td>
+</tr>
+<tr>
+<td>Contas</td>
+<td><code>/cliente/contas</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="234-dashboard-seções">23.4 Dashboard — seções</h3>
+<table>
+<thead>
+<tr>
+<th>Seção</th>
+<th>Conteúdo</th>
+<th>Botão</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Problemas Técnicos</strong></td>
+<td>OS com correção pendente</td>
+<td>Ver pendência — PT</td>
+</tr>
+<tr>
+<td><strong>Aguardando Aprovação</strong></td>
+<td>Provas para conferir</td>
+<td>Ver pendência — Prova</td>
+</tr>
+<tr>
+<td><strong>Aguardando Arquivos</strong></td>
+<td>OS aguardando arquivos</td>
+<td>Enviar arquivos</td>
+</tr>
+<tr>
+<td><strong>Em andamento</strong></td>
+<td>Produção sem pendência do gabinete</td>
+<td>(acompanhamento)</td>
+</tr>
+</tbody>
+</table>
+<p>Cada OS é <strong>acordeão</strong>: expanda para ver a <strong>timeline</strong>.</p>
+<h3 id="235-contas-clientecontas">23.5 Contas (<code>/cliente/contas</code>)</h3>
+<ol>
+<li>Conta <strong>Principal</strong> administra subcontas.</li>
+<li>Preencha nome + e-mail da subconta.</li>
+<li>Pessoa recebe e-mail de ativação (48 h).</li>
+</ol>
+<div class="alert alert-alert-atencao"><strong>Atenção:</strong> E-mail da subconta deve ser único.</div>
+<h3 id="236-timeline">23.6 Timeline</h3>
+<p>Marcos: Entrada Inicial → Pré-Impressão → Análise → Impressão → Acabamento → Expedição → Entregue.</p>
+<table>
+<thead>
+<tr>
+<th>Cor</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Verde</td>
+<td>Concluído</td>
+</tr>
+<tr>
+<td>Âmbar</td>
+<td>Pendência do cliente</td>
+</tr>
+<tr>
+<td>Cinza</td>
+<td>Aguardando</td>
+</tr>
+</tbody>
+</table>
+<p>Carregada <strong>ao expandir</strong> a OS (não no carregamento inicial).</p>
+<h3 id="237-atualizar-e-sair">23.7 Atualizar e sair</h3>
+<ul>
+<li><strong>Automático:</strong> refetch a cada 60 s.</li>
+<li><strong>Manual:</strong> botão <strong>Atualizar</strong> após ação no portal PT/prova.</li>
+<li><strong>Sair:</strong> encerra sessão → <code>/cliente/login</code>.</li>
+</ul>
+<hr />
+<h2 id="24-envio-de-arquivos">24. Envio de Arquivos</h2>
+<h3 id="241-quando-enviar">24.1 Quando enviar</h3>
+<ul>
+<li>OS recém-criada (link por e-mail da equipe)</li>
+<li>Pendência em <strong>Aguardando Arquivos</strong> no portal</li>
+</ul>
+<h3 id="242-procedimento">24.2 Procedimento</h3>
+<p><strong>Rota:</strong> <code>/portal/os-arquivos/{token}?os=...&amp;ano=...</code></p>
+<ol>
+<li>Abra o link.</li>
+<li>Confira número da OS.</li>
+<li>Arraste arquivos ou use seletor.</li>
+<li>Clique em <strong>Enviar</strong>.</li>
+<li>Aguarde confirmação.</li>
+</ol>
+<div class="alert alert-alert-atencao"><strong>Atenção:</strong> Limite de upload no servidor: até <strong>50 MB</strong> por requisição (Nginx).</div>
+<hr />
+<h2 id="25-e-mail">25. E-mail</h2>
+<h3 id="251-finalidade">25.1 Finalidade</h3>
+<p>Integração com <strong>Microsoft Exchange</strong>: inbox, pendências, envio de PT e provas.</p>
+<p><strong>Rota:</strong> <code>/email</code> — permissão <code>sb_email</code>.</p>
+<h3 id="252-configuração-inicial">25.2 Configuração inicial</h3>
+<ol>
+<li>Abra <strong>E-mail</strong> → configurações Exchange.</li>
+<li>Informe credenciais e pastas.</li>
+<li>Teste conexão e salve.</li>
+</ol>
+<h3 id="253-enviar-pt">25.3 Enviar PT</h3>
+<ol>
+<li>Conclua análise com problemas (seção 20).</li>
+<li>Módulo <strong>E-mail</strong> → <strong>Enviar PT</strong>.</li>
+<li>Revise assunto e corpo.</li>
+<li>Confirme envio.</li>
+</ol>
+<div class="alert alert-alert-resultado"><strong>Resultado esperado:</strong> E-mail ao cliente; andamento <strong>Pendência Usuário</strong>; pendência visível no <code>/cliente</code>.</div>
+<hr />
+<h2 id="26-contas-do-gabinete">26. Contas do Gabinete</h2>
+<table>
+<thead>
+<tr>
+<th>Tipo</th>
+<th>Quem</th>
+<th>Função</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Principal</strong></td>
+<td>Responsável pelo gabinete</td>
+<td>Ver OS, criar subcontas</td>
+</tr>
+<tr>
+<td><strong>Subconta</strong></td>
+<td>Membro da equipe</td>
+<td>Mesmo escopo após ativação</td>
+</tr>
+</tbody>
+</table>
+<p>Conta principal cadastrada pela equipe interna em <strong>Usuários</strong> (<code>/usuarios</code>).</p>
+<hr />
+<h2 id="27-relatórios">27. Relatórios</h2>
+<p><strong>Rota:</strong> <code>/relatorios</code> — permissão <code>sb_relatorio</code>.</p>
+<ol>
+<li>Escolha filtros (período, situação, setor).</li>
+<li>Selecione colunas.</li>
+<li><strong>Gerar</strong> → HTML no navegador.</li>
+<li><strong>Opcional:</strong> exportar XLSX.</li>
+</ol>
+<p><strong>Ficha de requisição:</strong> menu contexto → <strong>Imprimir ficha</strong> → <code>/impressao/requisicao/{ano}/{id}</code>.</p>
+<hr />
+<h2 id="28-usuários-e-permissões">28. Usuários e Permissões</h2>
+<h3 id="281-permissões-de-menu-sb_">28.1 Permissões de menu (<code>sb_*</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>Permissão</th>
+<th>Módulo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sb_inicio</code></td>
+<td>Início</td>
+</tr>
+<tr>
+<td><code>sb_gerencia</code></td>
+<td>Gerência (contexto)</td>
+</tr>
+<tr>
+<td><code>sb_analise</code></td>
+<td>Análise</td>
+</tr>
+<tr>
+<td><code>sb_email</code></td>
+<td>E-mail</td>
+</tr>
+<tr>
+<td><code>sb_papelaria</code></td>
+<td>Papelaria</td>
+</tr>
+<tr>
+<td><code>sb_relatorio</code></td>
+<td>Relatórios</td>
+</tr>
+<tr>
+<td><code>sb_pcp</code></td>
+<td>PCP</td>
+</tr>
+<tr>
+<td><code>sb_gravacao</code></td>
+<td>Gravação</td>
+</tr>
+<tr>
+<td><code>sb_usuarios</code></td>
+<td>Usuários</td>
+</tr>
+<tr>
+<td><code>sb_admin_ips</code></td>
+<td>Admin IPs / Configurações</td>
+</tr>
+</tbody>
+</table>
+<h3 id="282-permissões-de-contexto-ctx_">28.2 Permissões de contexto (<code>ctx_*</code>)</h3>
+<p><code>ctx_nova_os</code>, <code>ctx_editar_os</code>, <code>ctx_duplicar_os</code>, <code>ctx_vincular_os</code>, <code>ctx_abrir_pasta</code>, <code>ctx_imprimir_ficha</code>, <code>ctx_detalhes_os</code>.</p>
+<h3 id="283-sem-permissão">28.3 Sem permissão?</h3>
+<p>Informe ponto, IP e justificativa ao administrador (Admin IPs / Usuários).</p>
+<p>Clientes do portal <strong>não</strong> usam <code>sb_*</code> — isolamento automático por gabinete.</p>
+<hr />
+<h2 id="29-erros-comuns-e-como-resolver">29. Erros Comuns e Como Resolver</h2>
+<table>
+<thead>
+<tr>
+<th>Problema</th>
+<th>Causa provável</th>
+<th>Solução</th>
+<th>Escalar quando</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"Sem permissão" após login</td>
+<td>IP não cadastrado</td>
+<td>Solicitar cadastro ao admin</td>
+<td>Persiste após liberação</td>
+</tr>
+<tr>
+<td>Sessão expirada</td>
+<td>Cookie expirado</td>
+<td>Login novamente</td>
+<td>Loop contínuo</td>
+</tr>
+<tr>
+<td>Lista OS vazia</td>
+<td>Filtros restritivos</td>
+<td>Limpar filtros</td>
+<td>OS existe e não aparece</td>
+</tr>
+<tr>
+<td>Análise sem dados</td>
+<td>OS não selecionada</td>
+<td>Selecionar OS na Início</td>
+<td>URL correta e sem dados</td>
+</tr>
+<tr>
+<td>Link PT inválido/expirado</td>
+<td>Token expirado ou upload concluído</td>
+<td>Solicitar novo link</td>
+<td>Cliente ainda precisa corrigir</td>
+</tr>
+<tr>
+<td>Botão pendência ausente no <code>/cliente</code></td>
+<td>Token expirado</td>
+<td>Aguardar reenvio; Atualizar</td>
+<td>Dias sem botão</td>
+</tr>
+<tr>
+<td>Upload falha</td>
+<td>Arquivo grande / rede</td>
+<td>Reduzir tamanho; outro navegador</td>
+<td>Falha com arquivos pequenos</td>
+</tr>
+<tr>
+<td>E-mail não conecta</td>
+<td>Credenciais Exchange</td>
+<td>Reconfigurar módulo E-mail</td>
+<td>Após credenciais confirmadas</td>
+</tr>
+<tr>
+<td>Conta pendente ativação</td>
+<td>Primeiro acesso incompleto</td>
+<td>Link de ativação</td>
+<td>Link expirado</td>
+</tr>
+<tr>
+<td>Prova não carrega PDF</td>
+<td>Arquivo ausente na pasta</td>
+<td>Contatar SEFOC</td>
+<td>Urgência de prazo</td>
+</tr>
+<tr>
+<td>Página desatualizada</td>
+<td>Cache / PWA antigo</td>
+<td>Ctrl+F5 ou aceitar atualização PWA</td>
+<td>Layout quebrado para todos</td>
+</tr>
+<tr>
+<td>Erro 503 / lentidão</td>
+<td>Carga ou indisponibilidade</td>
+<td>Aguardar e tentar</td>
+<td>&gt; 15 min indisponível</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="30-boas-práticas-de-uso">30. Boas Práticas de Uso</h2>
+<h3 id="operadores-internos">Operadores internos</h3>
+<ol>
+<li>Selecione a OS na Início antes de Análise/E-mail.</li>
+<li>Conclua análise antes de enviar PT.</li>
+<li>Registre andamentos claros.</li>
+<li>Não compartilhe links com token publicamente.</li>
+<li>Encerre sessão em estações compartilhadas.</li>
+</ol>
+<h3 id="analistas">Analistas</h3>
+<ol>
+<li>Use biblioteca de problemas padrão.</li>
+<li>Marque <strong>obrigatório</strong> só quando indispensável.</li>
+<li>Envie PT por e-mail após concluir com problemas.</li>
+</ol>
+<h3 id="clientes">Clientes</h3>
+<ol>
+<li>Monitore pendências no <code>/cliente</code>.</li>
+<li>Responda PT e provas rapidamente.</li>
+<li>Preencha nome e ponto no portal PT.</li>
+<li>Use subcontas em vez de compartilhar senha.</li>
+</ol>
+<hr />
+<h2 id="31-glossário">31. Glossário</h2>
+<table>
+<thead>
+<tr>
+<th>Termo</th>
+<th>Definição</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>OS</strong></td>
+<td>Ordem de Serviço gráfica</td>
+</tr>
+<tr>
+<td><strong>Protocolo</strong></td>
+<td>Número da OS (ex.: 2150)</td>
+</tr>
+<tr>
+<td><strong>Andamento</strong></td>
+<td>Movimentação com situação, setor e data</td>
+</tr>
+<tr>
+<td><strong>Setor</strong></td>
+<td>Área da produção (SEFOC, SIELT, etc.)</td>
+</tr>
+<tr>
+<td><strong>Situação</strong></td>
+<td>Status atual da OS</td>
+</tr>
+<tr>
+<td><strong>PT / PTV</strong></td>
+<td>Problemas Técnicos / versão do relatório</td>
+</tr>
+<tr>
+<td><strong>Prova</strong></td>
+<td>Material digital para aprovação</td>
+</tr>
+<tr>
+<td><strong>Token</strong></td>
+<td>Código na URL para ação sem login</td>
+</tr>
+<tr>
+<td><strong>Dashboard</strong></td>
+<td>Painel resumo (Início ou Portal Cliente)</td>
+</tr>
+<tr>
+<td><strong>Portal</strong></td>
+<td>Área para cliente externo (PT, prova, arquivos)</td>
+</tr>
+<tr>
+<td><strong>Upload</strong></td>
+<td>Envio de arquivo ao servidor</td>
+</tr>
+<tr>
+<td><strong>Refetch</strong></td>
+<td>Atualização automática ou manual de dados</td>
+</tr>
+<tr>
+<td><strong>Pendência</strong></td>
+<td>Ação necessária do cliente ou equipe</td>
+</tr>
+<tr>
+<td><strong>Gabinete</strong></td>
+<td>Escritório parlamentar solicitante</td>
+</tr>
+<tr>
+<td><strong>Subconta</strong></td>
+<td>Usuário adicional do gabinete</td>
+</tr>
+<tr>
+<td><strong>Componente</strong></td>
+<td>Parte da publicação (Capa, Miolo)</td>
+</tr>
+<tr>
+<td><strong>PCP</strong></td>
+<td>Planejamento e Controle da Produção</td>
+</tr>
+<tr>
+<td><strong>Timeline</strong></td>
+<td>Linha do tempo de marcos da OS</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="32-checklists-operacionais">32. Checklists Operacionais</h2>
+<h3 id="321-técnico-concluir-análise">32.1 Técnico — concluir análise</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Item</th>
+<th>✓</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>OS correta selecionada</td>
+<td></td>
+</tr>
+<tr>
+<td>2</td>
+<td>Versão e componente corretos</td>
+<td></td>
+</tr>
+<tr>
+<td>3</td>
+<td>Problemas registrados com clareza</td>
+<td></td>
+</tr>
+<tr>
+<td>4</td>
+<td>Análise concluída e salva</td>
+<td></td>
+</tr>
+<tr>
+<td>5</td>
+<td>Se houve problemas: PT enviado por e-mail</td>
+<td></td>
+</tr>
+<tr>
+<td>6</td>
+<td>Andamento verificado na Início</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="322-cliente-resolver-pt">32.2 Cliente — resolver PT</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Item</th>
+<th>✓</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Link aberto (e-mail ou <code>/cliente/problemas-tecnicos</code>)</td>
+<td></td>
+</tr>
+<tr>
+<td>2</td>
+<td>Nome e ponto preenchidos</td>
+<td></td>
+</tr>
+<tr>
+<td>3</td>
+<td>Arquivos corrigidos enviados por componente</td>
+<td></td>
+</tr>
+<tr>
+<td>4</td>
+<td>Tela de sucesso exibida</td>
+<td></td>
+</tr>
+<tr>
+<td>5</td>
+<td>Pendência sumiu no <code>/cliente</code> (Atualizar)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="323-cliente-aprovar-prova">32.3 Cliente — aprovar prova</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Item</th>
+<th>✓</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>PDF carregou completamente</td>
+<td></td>
+</tr>
+<tr>
+<td>2</td>
+<td>Texto, imagens e cores conferidos</td>
+<td></td>
+</tr>
+<tr>
+<td>3</td>
+<td>Aprovação ou reprovação com comentário</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="324-suporte">32.4 Suporte</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Item</th>
+<th>✓</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>/health</code> ou página inicial responde</td>
+<td></td>
+</tr>
+<tr>
+<td>2</td>
+<td>Login funciona</td>
+<td></td>
+</tr>
+<tr>
+<td>3</td>
+<td>IP cadastrado (se 403)</td>
+<td></td>
+</tr>
+<tr>
+<td>4</td>
+<td>Token portal válido (se pendência)</td>
+<td></td>
+</tr>
+<tr>
+<td>5</td>
+<td>Build recente (se layout quebrado)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="325-publicação-deploy">32.5 Publicação (deploy)</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Item</th>
+<th>✓</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Backup antes do deploy</td>
+<td></td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>pnpm build</code> sem erros</td>
+<td></td>
+</tr>
+<tr>
+<td>3</td>
+<td>Login staff e cliente testados</td>
+<td></td>
+</tr>
+<tr>
+<td>4</td>
+<td>Fluxos PT e prova validados</td>
+<td></td>
+</tr>
+<tr>
+<td>5</td>
+<td>Equipe avisada sobre atualização PWA</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="33-apêndices">33. Apêndices</h2>
+<h3 id="apêndice-a-matriz-de-módulos">Apêndice A — Matriz de módulos</h3>
+<table>
+<thead>
+<tr>
+<th>Módulo</th>
+<th>Rota</th>
+<th>Perfil</th>
+<th>Login</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Início</td>
+<td><code>/</code></td>
+<td>Operador</td>
+<td>Staff</td>
+</tr>
+<tr>
+<td>Gerência</td>
+<td><code>/gerencia</code></td>
+<td>Operador</td>
+<td>Staff</td>
+</tr>
+<tr>
+<td>Análise</td>
+<td><code>/analise</code></td>
+<td>Analista</td>
+<td>Staff</td>
+</tr>
+<tr>
+<td>E-mail</td>
+<td><code>/email</code></td>
+<td>Atendimento</td>
+<td>Staff</td>
+</tr>
+<tr>
+<td>Portal Cliente</td>
+<td><code>/cliente</code></td>
+<td>Gabinete</td>
+<td>Cliente</td>
+</tr>
+<tr>
+<td>PT portal</td>
+<td><code>/portal/pt/{token}</code></td>
+<td>Cliente</td>
+<td>Token</td>
+</tr>
+<tr>
+<td>Prova</td>
+<td><code>/portal/aprovacao/{token}</code></td>
+<td>Cliente</td>
+<td>Token</td>
+</tr>
+<tr>
+<td>Contas</td>
+<td><code>/cliente/contas</code></td>
+<td>Gabinete</td>
+<td>Cliente</td>
+</tr>
+</tbody>
+</table>
+<h3 id="apêndice-b-endpoints-resumidos">Apêndice B — Endpoints resumidos</h3>
+<table>
+<thead>
+<tr>
+<th>Grupo</th>
+<th>Método</th>
+<th>Endpoint</th>
+<th>Tela</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Auth staff</td>
+<td>POST</td>
+<td><code>/api/auth/session</code></td>
+<td>Login LAN</td>
+</tr>
+<tr>
+<td>Auth cliente</td>
+<td>POST</td>
+<td><code>/api/auth/cliente/login</code></td>
+<td>Login portal</td>
+</tr>
+<tr>
+<td>OS</td>
+<td>GET</td>
+<td><code>/api/os/search</code></td>
+<td>Início</td>
+</tr>
+<tr>
+<td>Análise</td>
+<td>POST</td>
+<td><code>/api/analise/{ano}/{os}/generate-link</code></td>
+<td>Concluir análise</td>
+</tr>
+<tr>
+<td>Cliente</td>
+<td>GET</td>
+<td><code>/api/cliente/dashboard</code></td>
+<td><code>/cliente</code></td>
+</tr>
+<tr>
+<td>E-mail</td>
+<td>POST</td>
+<td><code>/api/email/send-pt</code></td>
+<td>Envio PT</td>
+</tr>
+</tbody>
+</table>
+<p><em>Prefixo produção: <code>/sagra/api</code>.</em></p>
+<h3 id="apêndice-c-histórico-de-versão-do-manual">Apêndice C — Histórico de versão do manual</h3>
+<table>
+<thead>
+<tr>
+<th>Versão</th>
+<th>Data</th>
+<th>Alterações</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1.0</td>
+<td>—</td>
+<td>Rascunhos e inventário</td>
+</tr>
+<tr>
+<td>1.1</td>
+<td>06/06/2026</td>
+<td>Revisão crítica parcial</td>
+</tr>
+<tr>
+<td><strong>2.0</strong></td>
+<td><strong>09/06/2026</strong></td>
+<td><strong>Parte 1 técnica (seções 1–14) + Parte 2 usuário (seções 15–33)</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>Fim do Manual Completo do Sistema SAGRA Web — versão 2.0 (09/06/2026).</em></p>
+<p><em>Base: <code>docs/INVENTARIO_COMPLETO_PARA_MANUAL_SAGRA_WEB.md</code>, <code>docs/PAGINA_CLIENTE.md</code>, <code>docs/PAGINA_PORTAL_PT_PROBLEMAS_TECNICOS.md</code>. Validar em homologação antes do uso operacional.</em></p></main>
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    if (typeof mermaid !== "undefined") {
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    }
+  });
+</script>
+</body>
+</html>

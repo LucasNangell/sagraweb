@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Requisição</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.0/dist/JsBarcode.all.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        /* Página A5: 148mm x 210mm — área útil com 5mm de margem: 138mm x 200mm */
+        :root {
+            --page-width: 148mm;
+            --page-height: 210mm;
+            --a5-width: 136mm;
+            --a5-height: 195mm;
+            --print-margin: 5mm;
+            --print-max-height: 200mm;
+            --ficha-contato-max: 42px;
+            --ficha-obs-cor-max: 35px;
+            --ficha-obs-papel-max: 35px;
+            --ficha-acabamento-max: 90px;
+            --ficha-obs-gerais-max: 72px;
+            --ficha-insumos-max: 55px;
+            --ficha-material-max: 55px;
+        }
+
+        /* GLOBAL STYLES */
+        @page {
+            size: A5 portrait;
+            margin: var(--print-margin);
+        }
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #fff;
+            font-family: 'Inter', system-ui, sans-serif;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        /* Wrappers */
+        #a5-root {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: flex-start;
+            justify-content: flex-start;
+            overflow: hidden;
+            background: white;
+            box-sizing: border-box;
+            padding: var(--print-margin);
+        }
+
+        #a5-scale {
+            transform-origin: top left;
+            width: 800px;
+        }
+
+        .container {
+            width: 870px;
+            margin: 0 auto;
+            padding: 5px;
+            box-sizing: border-box;
+        }
+
+        /* General Utils */
+        .row {
+            display: flex;
+            gap: 5px;
+        }
+
+        .col {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .flex-1 {
+            flex: 1;
+        }
+
+        .flex-2 {
+            flex: 2;
+        }
+
+        .flex-3 {
+            flex: 3;
+        }
+
+        /* Section Styling */
+        .section-box {
+            background-color: #dcdcdc;
+            border: 2px solid #b0b0b0;
+            border-radius: 8px;
+            padding: 5px;
+            margin-bottom: 10px;
+            position: relative;
+        }
+
+        .section-header {
+            font-size: 14px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 2px;
+            margin-top: 0 !important;
+            padding-left: 2px;
+        }
+
+        /* Field Styling */
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            margin-right: 5px;
+            margin-bottom: 2px;
+        }
+
+        .field-group:last-child {
+            margin-right: 0;
+        }
+
+        .label {
+            font-size: 11px;
+            color: #555;
+            font-weight: 600;
+            margin-bottom: 1px;
+            padding-left: 2px;
+            white-space: nowrap;
+        }
+
+        .value-box {
+            background-color: #fff;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 12px;
+            font-weight: bold;
+            min-height: 20px;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+        }
+        .value-box-menor {
+            background-color: #fff;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 9px;
+            font-weight: bold;
+            min-height: 20px;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+        }
+        /* Overlay Carimbo Style */
+        .overlay-carimbo {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            /* Adjust size as needed, e.g., 80% of the section width */
+            opacity: 0.8;
+            /* Slight transparency to see text behind */
+            pointer-events: none;
+            /* Allows clicking through if necessary */
+            z-index: 10;
+        }
+
+        .ficha-top-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            min-height: 48px;
+            margin-bottom: 6px;
+            padding: 6px 4px;
+            border-bottom: 2px solid #b0b0b0;
+        }
+
+        .ficha-tipo-header {
+            font-size: 22px;
+            font-weight: 700;
+            color: #222;
+            margin: 0;
+            padding-left: 2px;
+            flex: 1;
+            line-height: 1.1;
+        }
+
+        .barcode-header {
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+        }
+
+        .barcode-header #barcode {
+            display: block;
+            max-width: 78mm;
+            height: auto;
+        }
+
+        .aviso-text {
+            font-size: 10px;
+        }
+
+        /* Specific modifications */
+        .value-box.dark {
+            background-color: #808080;
+            color: #fff;
+        }
+
+        /* Header Specifics */
+        .header-section {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 5px;
+        }
+
+        .main-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin: 0;
+            padding: 5px 0;
+        }
+
+        /* Top Right Box */
+        .order-box {
+            background-color: #cfcfcf;
+            border: 2px solid #b0b0b0;
+            border-radius: 8px;
+            padding: 5px;
+            flex: 0 0 220px;
+        }
+
+        .order-number {
+            background-color: #808080;
+            color: white;
+            font-size: 34px;
+            font-weight: bold;
+            text-align: center;
+            padding: 5px;
+            border-radius: 6px;
+            margin-bottom: 5px;
+        }
+
+        /* Layout Grids */
+        .grid-tech {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr 0.5fr 0.5fr;
+            gap: 5px;
+        }
+
+        .grid-tech-row2 {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 5px;
+        }
+
+        /* Textarea simulation */
+        .value-box.textarea {
+            align-items: flex-start;
+            height: 100%;
+            min-height: 30px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            overflow: auto;
+        }
+
+        .sub-grid-2col {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 5px;
+        }
+
+        /* REGRAS DE IMPRESSÃO E PRÉ-VISUALIZAÇÃO (mesmo layout da folha A5) */
+        @media screen, print {
+
+            html,
+            body {
+                width: auto !important;
+                height: auto !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: white !important;
+                transform: none !important;
+            }
+
+            #a5-root {
+                width: 100% !important;
+                height: auto !important;
+                max-width: var(--a5-width) !important;
+                padding: 0 !important;
+                transform: none !important;
+                display: block !important;
+                position: static !important;
+                margin: 0 auto !important;
+                box-sizing: border-box !important;
+            }
+
+            #a5-scale {
+                transform: none !important;
+                width: var(--a5-width) !important;
+                height: auto !important;
+                max-width: var(--a5-width) !important;
+            }
+
+            .container {
+                width: 100% !important;
+                max-width: var(--a5-width) !important;
+                height: auto !important;
+                min-height: auto !important;
+                padding: 1mm !important;
+                margin: 0 auto !important;
+                transform: none !important;
+                box-sizing: border-box !important;
+            }
+
+            /* COMPACTAR CONTEÚDO - CORRIGIDO */
+            .main-title {
+                font-size: 16px !important;
+                margin-bottom: 3px !important;
+                padding: 2px 0 !important;
+            }
+
+            .section-header {
+                font-size: 11px !important;
+                margin-bottom: 2px !important;
+                padding-left: 1px !important;
+            }
+
+            /* HEADER SECTION - AJUSTE DE GRID */
+            .header-section {
+                display: grid !important;
+                grid-template-columns: 130px 1fr 1.2fr 140px !important;
+                gap: 3px !important;
+                margin-bottom: 5px !important;
+            }
+
+            .section-box {
+                margin-bottom: 8px !important;
+                padding: 3px !important;
+                border-radius: 4px !important;
+                border-width: 1px !important;
+            }
+
+            .value-box {
+                font-size: 12px !important;
+                padding: 2px 4px !important;
+                min-height: 18px !important;
+                border-radius: 3px !important;
+                line-height: 1.2 !important;
+                /* white-space: normal !important; */
+                overflow: visible !important;
+                word-wrap: break-word !important;
+                word-break: break-word !important;
+            }
+            .value-box-menor {
+                font-size: 9px !important;
+                padding: 2px 4px !important;
+                min-height: 18px !important;
+                border-radius: 3px !important;
+                line-height: 1.2 !important;
+                /* white-space: normal !important; */
+                overflow: visible !important;
+                word-wrap: break-word !important;
+                word-break: break-word !important;
+            }
+            .label {
+                font-size: 8px !important;
+                margin-bottom: 0 !important;
+                padding-left: 1px !important;
+                line-height: 1 !important;
+            }
+
+            .order-number {
+                font-size: 18px !important;
+                padding: 2px !important;
+                margin-bottom: 3px !important;
+            }
+
+            .order-box {
+                padding: 3px !important;
+                flex: 0 0 120px !important;
+            }
+
+            /* AJUSTES DE GRID ESPECÍFICOS */
+            .grid-tech {
+                grid-template-columns: 1.2fr 0.8fr 0.4fr 0.4fr !important;
+                gap: 3px !important;
+            }
+
+            .grid-tech-row2 {
+                grid-template-columns: 1.5fr 0.5fr !important;
+                gap: 3px !important;
+                margin-top: 3px !important;
+            }
+
+            /* TEXTAREAS - ALTURA FIXA COM CLIP (sempre 1 página A5) */
+            .value-box.textarea {
+                min-height: auto !important;
+                height: auto !important;
+                font-size: 8px !important;
+                line-height: 1.2 !important;
+                overflow: hidden !important;
+                align-items: flex-start !important;
+            }
+
+            .ficha-contato.value-box.textarea {
+                min-height: 28px !important;
+                max-height: var(--ficha-contato-max) !important;
+                overflow: hidden !important;
+            }
+
+            .ficha-obs-cor.value-box.textarea {
+                min-height: 28px !important;
+                max-height: var(--ficha-obs-cor-max) !important;
+                height: var(--ficha-obs-cor-max) !important;
+                overflow: hidden !important;
+            }
+
+            .ficha-obs-papel.value-box.textarea {
+                min-height: 28px !important;
+                max-height: var(--ficha-obs-papel-max) !important;
+                height: var(--ficha-obs-papel-max) !important;
+                overflow: hidden !important;
+            }
+
+            /* OBSERVAÇÕES GERAIS, INSUMOS E MATERIAL ENTREGUE */
+            .ficha-obs-row {
+                min-height: 72px !important;
+                max-height: 90px !important;
+                align-items: stretch !important;
+                overflow: hidden !important;
+            }
+
+            .ficha-obs-row .section-box {
+                min-height: 55px !important;
+                overflow: hidden !important;
+            }
+
+            .ficha-obs-gerais.value-box.textarea {
+                min-height: 62px !important;
+                max-height: var(--ficha-obs-gerais-max) !important;
+                overflow: hidden !important;
+            }
+
+            .ficha-insumos.value-box.textarea,
+            .ficha-material-entregue.value-box.textarea {
+                min-height: 40px !important;
+                max-height: var(--ficha-insumos-max) !important;
+                overflow: hidden !important;
+                font-size: 8px !important;
+            }
+
+            .ficha-material-entregue.value-box.textarea {
+                max-height: var(--ficha-material-max) !important;
+            }
+
+            /* ÁREA DE AÇABAMENTO */
+            .ficha-acabamento.value-box.textarea {
+                max-height: var(--ficha-acabamento-max) !important;
+                min-height: 28px !important;
+                font-size: 8px !important;
+                line-height: 1.15 !important;
+                overflow: hidden !important;
+            }
+
+            .ficha-acabamento-wrap.section-box,
+            .ficha-acabamento-wrap .field-group {
+                height: auto !important;
+                max-height: calc(var(--ficha-acabamento-max) + 24px) !important;
+                overflow: hidden !important;
+            }
+
+            /* CÓDIGO DE BARRAS - NO HEADER */
+            .ficha-top-header {
+                min-height: 32px !important;
+                padding: 3px 2px !important;
+                margin-bottom: 4px !important;
+            }
+
+            #barcode {
+                position: relative !important;
+                display: block !important;
+                margin: 0 !important;
+                transform: scale(0.85) !important;
+                transform-origin: center right !important;
+                width: 65mm !important;
+                height: 9mm !important;
+                left: auto !important;
+                bottom: auto !important;
+            }
+
+            .ficha-tipo-header {
+                font-size: 17px !important;
+                margin-bottom: 0 !important;
+            }
+
+            .aviso-text {
+                font-size: 8px !important;
+            }
+
+            /* RODAPÉ - NO FLUXO NORMAL */
+            .ficha-print-footer,
+            div[style*="text-align: right"] {
+                position: relative !important;
+                display: block !important;
+                text-align: right !important;
+                font-size: 7px !important;
+                margin-top: 5px !important;
+                margin-right: 5px !important;
+                bottom: auto !important;
+                right: auto !important;
+                flex-shrink: 0 !important;
+            }
+
+            /* ADICIONAR PEQUENO ESPAÇO FINAL */
+            .container::after {
+                content: '';
+                display: block;
+                height: 2mm !important;
+            }
+
+            /* REMOVER ESPAÇOS DESNECESSÁRIOS */
+            .field-group {
+                margin-bottom: 1px !important;
+                margin-right: 3px !important;
+                min-height: 18px !important;
+            }
+
+            .field-group[style*="margin-top"] {
+                margin-top: 2px !important;
+            }
+
+            /* PREVENIR QUEBRAS */
+            .section-box,
+            .row,
+            .col,
+            .field-group {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                -webkit-column-break-inside: avoid !important;
+            }
+        }
+
+        /* Limites rígidos da folha — somente na impressão real. */
+        @media print {
+
+            html,
+            body {
+                max-width: var(--a5-width) !important;
+                max-height: var(--print-max-height) !important;
+                height: auto !important;
+                overflow: hidden !important;
+            }
+
+            #a5-root {
+                max-height: var(--print-max-height) !important;
+                height: auto !important;
+                overflow: hidden !important;
+            }
+
+            #a5-scale {
+                max-height: var(--print-max-height) !important;
+                overflow: hidden !important;
+                transform-origin: top left !important;
+            }
+
+            .container {
+                max-height: var(--print-max-height) !important;
+                overflow: hidden !important;
+            }
+
+            .value-box.textarea {
+                overflow: hidden !important;
+            }
+
+            .ficha-print-footer {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+
+            /* OCULTAR EXTRAS */
+            body>*:not(#a5-root) {
+                display: none !important;
+            }
+        }
+
+        /* Pré-visualização em tela: dimensões exatas definidas via JS (sem centralização). */
+        @media screen {
+            html,
+            body {
+                width: auto !important;
+                height: auto !important;
+                max-width: none !important;
+                max-height: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: hidden !important;
+                background-color: #fff !important;
+                display: block !important;
+            }
+
+            #a5-root {
+                margin: 0 !important;
+                padding: 0 !important;
+                width: auto !important;
+                max-width: none !important;
+                height: auto !important;
+                max-height: none !important;
+                overflow: hidden !important;
+                display: block !important;
+            }
+
+            #a5-scale {
+                width: var(--a5-width) !important;
+                max-width: var(--a5-width) !important;
+                height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+                transform-origin: top left;
+            }
+
+            .container {
+                max-width: var(--a5-width) !important;
+                height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="a5-root">
+        <div id="a5-scale">
+            <div class="container">
+                <div class="ficha-top-header">
+                    <div class="section-header ficha-tipo-header">{{ ficha_tipo }}</div>
+                    <div class="barcode-header">
+                        <svg id="barcode"></svg>
+                    </div>
+                </div>
+
+                <div class="header-section">
+                    <div class="section-box" style="flex: 0 0 140px;">
+                        <div class="field-group">
+                            <span class="label">Data</span>
+                            <div class="value-box-menor">{{ data_atual }}</div>
+                        </div>
+                        <div class="row" style="margin-top: 5px;">
+                            <div class="field-group flex-1">
+                                <span class="label" style="font-size: 10px;">RS Entregue</span>
+                                <div class="value-box-menor">{{ rs_entregue }}</div>
+                            </div>
+                            <div class="field-group flex-1">
+                                <span class="label" style="font-size: 10px;">RS Lançada</span>
+                                <div class="value-box-menor">{{ rs_lancada }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="section-box" style="flex: 1;">
+                        <div class="field-group">
+                            <span class="label">Processo</span>
+                            <div class="value-box-menor">{{ processo }}</div>
+                        </div>
+                        <div class="field-group" style="margin-top: 5px;">
+                            <span class="label">CS</span>
+                            <div class="value-box-menor">{{ cs }}</div>
+                        </div>
+                    </div>
+
+                    <div class="section-box" style="flex: 1.2; display: flex;">
+                        <div style="flex: 1;">
+                            <div class="field-group">
+                                <span class="label">Cota Repro</span>
+                                <div class="value-box-menor" style="justify-content: flex-end;">{{ cota_repro }}</div>
+                            </div>
+                            <div class="field-group" style="margin-top: 5px;">
+                                <span class="label">Cota Cartão</span>
+                                <div class="value-box-menor">{{ cota_cartao }}</div>
+                            </div>
+                        </div>
+                        <div class="field-group" style="width: 60px; margin-left: 5px; justify-content: center;">
+                            <span class="label">Debitar</span>
+                            <div class="value-box-menor"
+                                style="height: 40px; justify-content: center; text-align: center; font-size: 11px;">
+                                {{ debitar_usuario }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="order-box">
+                        <div class="order-number">{{ numero_pedido }}</div>
+                        <div class="row">
+                            <div class="field-group flex-1">
+                                <span class="label">Modelos</span>
+                                <div class="value-box-menor">{{ modelos_qtd }}</div>
+                            </div>
+                            <div class="field-group flex-1">
+                                <span class="label">Tiragem</span>
+                                <div class="value-box-menor" id="tiragem-display" style="justify-content: flex-end;">{{
+                                    tiragem_qtd }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-header">Entidade Solicitante</div>
+                <div class="section-box">
+                    <div class="row">
+                        <div class="col flex-2">
+                            <div class="row">
+                                <div class="field-group flex-1">
+                                    <span class="label">Categoria</span>
+                                    <div class="value-box">{{ solicitante_categoria }}</div>
+                                </div>
+                                <div class="field-group flex-1">
+                                    <span class="label">Cód. do Usuário</span>
+                                    <div class="value-box" style="justify-content: center;">{{ solicitante_cod }}</div>
+                                </div>
+                            </div>
+                            <div class="field-group" style="margin-top: 5px;">
+                                <span class="label">Nome</span>
+                                <div class="value-box dark">{{ solicitante_nome }}</div>
+                            </div>
+                        </div>
+                        <div class="col flex-1">
+                            <div class="field-group">
+                                <span class="label">Contato</span>
+                                <div class="value-box textarea ficha-contato" style="font-size: 13px; font-weight: normal;">{{
+                                    solicitante_contato }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row" style="margin-top: 5px;">
+                        <div class="field-group flex-2">
+                            <span class="label">Sigla</span>
+                            <div class="value-box">{{ solicitante_sigla }}</div>
+                        </div>
+                        <div class="field-group flex-1">
+                            <span class="label">Ramal</span>
+                            <div class="value-box">{{ solicitante_ramal }}</div>
+                        </div>
+                        <div class="field-group flex-1">
+                            <span class="label">Gabinete</span>
+                            <div class="value-box">{{ solicitante_gabinete }}</div>
+                        </div>
+                        <div class="field-group flex-2">
+                            <span class="label">Interessado</span>
+                            <div class="value-box">{{ solicitante_interessado }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-header">Informações Técnicas</div>
+                <div class="row">
+                    <div class="col flex-3">
+                        <div class="section-box">
+                            <div class="grid-tech">
+                                <div class="field-group">
+                                    <span class="label">Tipo de Serviço</span>
+                                    <div class="value-box dark">{{ servico_tipo }}</div>
+                                </div>
+                                <div class="field-group">
+                                    <span class="label">Máquina Sugerida</span>
+                                    <div class="value-box">{{ maquina_sugerida }}</div>
+                                </div>
+                                <div class="field-group">
+                                    <span class="label">Páginas</span>
+                                    <div class="value-box" style="justify-content: center;">{{ paginas }}</div>
+                                </div>
+                                <div class="field-group">
+                                    <span class="label">Frente / Verso</span>
+                                    <div class="value-box" style="justify-content: center;">{{ frente_verso }}</div>
+                                </div>
+                            </div>
+                            <div class="grid-tech-row2" style="margin-top: 5px;">
+                                <div class="field-group">
+                                    <span class="label">Título</span>
+                                    <div class="value-box dark">{{ servico_titulo }}</div>
+                                </div>
+                                <div class="field-group">
+                                    <span class="label">Formato</span>
+                                    <div class="value-box">{{ servico_formato }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="section-box">
+                            <div class="sub-grid-2col">
+                                <div class="field-group">
+                                    <span class="label">Cor</span>
+                                    <div class="value-box">{{ servico_cor }}</div>
+                                </div>
+                                <div class="field-group">
+                                    <span class="label">Observações:</span>
+                                    <div class="value-box textarea ficha-obs-cor">{{ obs_cor }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="section-box">
+                            <div class="sub-grid-2col">
+                                <div class="field-group">
+                                    <span class="label">Papel</span>
+                                    <div class="value-box">{{ servico_papel }}</div>
+                                </div>
+                                <div class="field-group">
+                                    <span class="label">Observações:</span>
+                                    <div class="value-box textarea ficha-obs-papel">{{ obs_papel }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col flex-1">
+                        <div class="section-box ficha-acabamento-wrap" style="height: 100%;">
+                            <div class="field-group ficha-acabamento-wrap" style="height: 100%;">
+                                <span class="label">Acabamento:</span>
+                                <div class="value-box textarea ficha-acabamento"
+                                    style="font-weight: normal; font-size: 11px;">{{
+                                    servico_acabamento }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- OBSERVAÇÕES GERAIS E INSUMOS - ALTURAS AJUSTADAS -->
+                <div class="row ficha-obs-row">
+                    <div class="col flex-1">
+                        <div class="section-header" style="font-size: 14px;">Observações Gerais:</div>
+                        <div class="section-box" style="flex: 1; height: 100%;">
+                            <div class="value-box textarea ficha-obs-gerais"
+                                style="font-weight: normal; font-size: 11px;">{{ obs_gerais
+                                }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col flex-1">
+                        <div class="section-box" style="height: 100%; padding: 0;">
+                            <div class="row" style="height: 100%; gap: 0;">
+                                <div class="col flex-1" style="padding: 5px; border-right: 2px solid #b0b0b0;">
+                                    <div class="section-header" style="font-size: 11px;">Insumos Fornecidos</div>
+                                    <div class="value-box textarea ficha-insumos" style="flex: 1; min-height: 50px; height: 100%; font-weight: normal;">
+                                        {{ insumos }}</div>
+                                </div>
+                                <div class="col flex-1" style="padding: 5px;">
+                                    <div class="section-header" style="font-size: 11px;">Material Entregue</div>
+                                    <div class="value-box textarea ficha-material-entregue" style="flex: 1; min-height: 50px; height: 100%; font-weight: normal;">
+                                        {{ material_entregue }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DADOS DE ENTREGA E AVISOS -->
+                <div class="row" style="margin-top: 3px;">
+                    <div class="col flex-1">
+                        <div class="section-header">Dados de Entrega</div>
+                        <div class="section-box" style="flex: 1;">
+                            <div class="row">
+                                <div class="field-group flex-1">
+                                    <span class="label">Resp. na Gráfica</span>
+                                    <div class="value-box">{{ resp_grafica }}</div>
+                                </div>
+                                <div class="field-group flex-1">
+                                    <span class="label">Prazo p/ Entrega</span>
+                                    <div class="value-box">{{ prazo_entrega }}</div>
+                                </div>
+                            </div>
+                            <div class="row" style="margin-top: 3px;">
+                                <div class="field-group flex-1">
+                                    <span class="label">Forma de Entrega</span>
+                                    <div class="value-box">{{ forma_entrega }}</div>
+                                </div>
+                                <div class="field-group flex-1">
+                                    <span class="label">Data</span>
+                                    <div class="value-box">{{ data_entrega }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col flex-1">
+                        <div class="section-header">Avisos</div>
+                        <div class="section-box" style="flex: 1; position: relative;">
+                            {% if show_carimbo_prioridade %}
+                            <img src="{{ carimbo_src }}" class="overlay-carimbo" alt="Prioridade">
+                            {% endif %}
+                            <div class="value-box aviso-text" style="margin-bottom: 2px; height: 22px;">{{ aviso_1
+                                }}</div>
+                            <div class="value-box aviso-text" style="margin-bottom: 2px; height: 22px;">{{ aviso_2
+                                }}</div>
+                            <div class="value-box aviso-text" style="height: 22px;">{{ aviso_3 }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RODAPÉ -->
+                <div class="ficha-print-footer" style="text-align: right; font-size: 10px; margin-top: 2px; line-height: 1;">
+                    Impresso em {{ timestamp_impressao }}
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            // Geração do código de barras
+            try {
+                JsBarcode("#barcode", "{{ numero_pedido }}", {
+                    format: "CODE128",
+                    lineColor: "#000",
+                    width: 1,
+                    height: 25,
+                    displayValue: true,
+                    fontSize: 10,
+                    margin: 0
+                });
+            } catch (e) {
+                console.error("Erro ao gerar código de barras:", e);
+            }
+
+            var FICHA_FIELD_MIN_HEIGHTS = {
+                'ficha-obs-gerais': 65,
+                'ficha-insumos': 50,
+                'ficha-material-entregue': 50,
+                'ficha-contato': 28,
+                'ficha-acabamento': 28,
+                'ficha-obs-cor': 28,
+                'ficha-obs-papel': 28,
+            };
+
+            var FICHA_FIELD_MAX_HEIGHTS = {
+                'ficha-obs-gerais': 72,
+                'ficha-insumos': 55,
+                'ficha-material-entregue': 55,
+                'ficha-contato': 42,
+                'ficha-acabamento': 90,
+                'ficha-obs-cor': 35,
+                'ficha-obs-papel': 35,
+            };
+
+            function getFichaFieldMinHeight(box) {
+                for (var cls in FICHA_FIELD_MIN_HEIGHTS) {
+                    if (box.classList.contains(cls)) {
+                        return FICHA_FIELD_MIN_HEIGHTS[cls];
+                    }
+                }
+                return 0;
+            }
+
+            function getFichaFieldMaxHeight(box) {
+                for (var cls in FICHA_FIELD_MAX_HEIGHTS) {
+                    if (box.classList.contains(cls)) {
+                        return FICHA_FIELD_MAX_HEIGHTS[cls];
+                    }
+                }
+                return 150;
+            }
+
+            function measureMmToPx(mm) {
+                var probe = document.createElement('div');
+                probe.style.height = mm + 'mm';
+                probe.style.width = '1px';
+                probe.style.position = 'absolute';
+                probe.style.left = '-9999px';
+                probe.style.visibility = 'hidden';
+                document.body.appendChild(probe);
+                var px = probe.offsetHeight;
+                document.body.removeChild(probe);
+                return px;
+            }
+
+            function autoSizeTextarea(box) {
+                var minFieldH = getFichaFieldMinHeight(box);
+                var maxFieldH = getFichaFieldMaxHeight(box);
+                var floorH = minFieldH > 0 ? minFieldH : 30;
+
+                box.style.setProperty('height', 'auto', 'important');
+                box.style.setProperty('min-height', '0', 'important');
+                box.style.setProperty('max-height', 'none', 'important');
+                box.style.setProperty('overflow', 'hidden', 'important');
+
+                var targetH = Math.max(floorH, box.scrollHeight + 2);
+                targetH = Math.min(targetH, maxFieldH);
+
+                box.style.setProperty('height', targetH + 'px', 'important');
+                box.style.setProperty('max-height', maxFieldH + 'px', 'important');
+                box.style.setProperty('overflow', 'hidden', 'important');
+                if (minFieldH > 0) {
+                    box.style.setProperty('min-height', minFieldH + 'px', 'important');
+                }
+            }
+
+            function resetAcabamentoWrapHeight() {
+                var acabamentoBox = document.querySelector('.ficha-acabamento');
+                if (!acabamentoBox) return;
+                var fieldGroup = acabamentoBox.closest('.field-group');
+                var sectionBox = acabamentoBox.closest('.section-box');
+                if (fieldGroup) {
+                    fieldGroup.style.setProperty('height', 'auto', 'important');
+                }
+                if (sectionBox) {
+                    sectionBox.style.setProperty('height', 'auto', 'important');
+                }
+            }
+
+            function fitPrintPageScale() {
+                var scaleEl = document.getElementById('a5-scale');
+                var root = document.getElementById('a5-root');
+                var container = document.querySelector('.container');
+                if (!scaleEl || !root || !container) return;
+
+                scaleEl.style.transform = 'none';
+                root.style.height = '';
+                root.style.width = '';
+
+                var maxH = measureMmToPx(200);
+                var contentH = container.scrollHeight;
+                if (!contentH) return;
+
+                var scale = contentH > maxH ? maxH / contentH : 1;
+                if (scale < 1) {
+                    scaleEl.style.transform = 'scale(' + scale + ')';
+                    scaleEl.style.transformOrigin = 'top left';
+                }
+
+                root.style.width = '138mm';
+                root.style.height = Math.ceil(contentH * scale) + 'px';
+                root.style.overflow = 'visible';
+            }
+
+            function compressPrintLayoutToA5() {
+                fitPrintPageScale();
+            }
+
+            // Mesmo ajuste de alturas usado na impressão — garante pré-visualização fiel.
+            function adjustLayoutForFit() {
+                const textareas = document.querySelectorAll('.value-box.textarea');
+                textareas.forEach(function (box) {
+                    autoSizeTextarea(box);
+                });
+
+                resetAcabamentoWrapHeight();
+
+                const container = document.querySelector('.container');
+                if (container) {
+                    container.style.maxWidth = '138mm';
+                    container.style.maxHeight = '';
+                }
+
+                const scaleContainer = document.getElementById('a5-scale');
+                if (scaleContainer) {
+                    scaleContainer.style.transform = 'none';
+                }
+            }
+
+            function adjustForPrint() {
+                clearPreviewScale();
+                adjustLayoutForFit();
+                fitPrintPageScale();
+            }
+
+            function clearPreviewScale() {
+                const scaleEl = document.getElementById('a5-scale');
+                const root = document.getElementById('a5-root');
+                if (!scaleEl || !root) return;
+                scaleEl.style.transform = '';
+                root.style.width = '';
+                root.style.height = '';
+                document.documentElement.style.width = '';
+                document.documentElement.style.height = '';
+                document.body.style.width = '';
+                document.body.style.height = '';
+            }
+
+            var previewLimits = { w: 0, h: 0 };
+
+            function updatePreviewScale() {
+                if (window.matchMedia && window.matchMedia('print').matches) {
+                    return;
+                }
+
+                const scaleEl = document.getElementById('a5-scale');
+                const root = document.getElementById('a5-root');
+                if (!scaleEl || !root) return;
+
+                scaleEl.style.transform = 'none';
+                root.style.width = '';
+                root.style.height = '';
+                document.documentElement.style.width = '';
+                document.documentElement.style.height = '';
+                document.body.style.width = '';
+                document.body.style.height = '';
+
+                const container = document.querySelector('.container');
+                const measureEl = container || scaleEl;
+                const contentW = measureEl.scrollWidth || measureEl.offsetWidth;
+                const contentH = measureEl.scrollHeight || measureEl.offsetHeight;
+
+                const limitW =
+                    previewLimits.w > 0 ? previewLimits.w : window.innerWidth;
+                const limitH =
+                    previewLimits.h > 0 ? previewLimits.h : window.innerHeight;
+
+                if (!limitW || !limitH || !contentW || !contentH) return;
+
+                let scale = Math.min(limitW / contentW, limitH / contentH);
+                if (scale > 1) {
+                    scale = 1;
+                }
+
+                const scaledW = Math.ceil(contentW * scale);
+                const scaledH = Math.ceil(contentH * scale);
+
+                scaleEl.style.transform = 'scale(' + scale + ')';
+                scaleEl.style.transformOrigin = 'top left';
+                root.style.width = scaledW + 'px';
+                root.style.height = scaledH + 'px';
+                root.style.margin = '0';
+                root.style.padding = '0';
+
+                document.documentElement.style.width = scaledW + 'px';
+                document.documentElement.style.height = scaledH + 'px';
+                document.body.style.width = scaledW + 'px';
+                document.body.style.height = scaledH + 'px';
+
+                if (window.parent !== window) {
+                    window.parent.postMessage(
+                        {
+                            type: 'sagra-ficha-preview-size',
+                            width: scaledW,
+                            height: scaledH,
+                        },
+                        '*',
+                    );
+                }
+            }
+
+            function schedulePreviewScale() {
+                adjustLayoutForFit();
+                updatePreviewScale();
+                setTimeout(function () {
+                    adjustLayoutForFit();
+                    updatePreviewScale();
+                }, 50);
+                setTimeout(function () {
+                    adjustLayoutForFit();
+                    updatePreviewScale();
+                }, 200);
+                setTimeout(function () {
+                    adjustLayoutForFit();
+                    updatePreviewScale();
+                }, 600);
+            }
+
+            if (!window.matchMedia || !window.matchMedia('print').matches) {
+                window.addEventListener('load', schedulePreviewScale);
+                window.addEventListener('resize', function () {
+                    adjustLayoutForFit();
+                    updatePreviewScale();
+                });
+                if (window.ResizeObserver) {
+                    new ResizeObserver(function () {
+                        adjustLayoutForFit();
+                        updatePreviewScale();
+                    }).observe(document.documentElement);
+                }
+            }
+
+            // Para impressão, ajustar elementos
+            window.onbeforeprint = function () {
+                clearPreviewScale();
+                adjustForPrint();
+            };
+
+            // Restaura alturas automáticas e escala de pré-visualização após impressão
+            window.onafterprint = function () {
+                const textareas = document.querySelectorAll('.value-box.textarea');
+                textareas.forEach(function (box) {
+                    box.style.removeProperty('height');
+                    box.style.removeProperty('min-height');
+                    box.style.removeProperty('max-height');
+                });
+                const acabamentoBox = document.querySelector('.ficha-acabamento');
+                if (acabamentoBox) {
+                    const fieldGroup = acabamentoBox.closest('.field-group');
+                    const sectionBox = acabamentoBox.closest('.section-box');
+                    if (fieldGroup) {
+                        fieldGroup.style.removeProperty('height');
+                    }
+                    if (sectionBox) {
+                        sectionBox.style.removeProperty('height');
+                    }
+                }
+                schedulePreviewScale();
+            };
+
+            // --- LISTENER PARA IMPRESSÃO VIA POSTMESSAGE (Cross-Origin Support) ---
+            window.addEventListener('message', function (event) {
+                if (
+                    event.data === 'preview-resize' ||
+                    event.data?.type === 'preview-resize'
+                ) {
+                    if (event.data?.maxWidth > 0) {
+                        previewLimits.w = event.data.maxWidth;
+                    }
+                    if (event.data?.maxHeight > 0) {
+                        previewLimits.h = event.data.maxHeight;
+                    }
+                    schedulePreviewScale();
+                    return;
+                }
+                if (event.data === 'print') {
+                    adjustForPrint();
+                    setTimeout(() => {
+                        window.print();
+                    }, 100);
+                }
+            });
+
+            // Override Tiragem for Prova Mode
+            window.addEventListener('load', function () {
+                const params = new URLSearchParams(window.location.search);
+                const printMode = params.get('mode');
+                if (printMode === 'prova' || printMode === 'prova_ficha') {
+                    const el = document.getElementById('tiragem-display');
+                    if (el) el.innerText = '1';
+                }
+            });
+        })();
+    </script>
+</body>
+
+</html>

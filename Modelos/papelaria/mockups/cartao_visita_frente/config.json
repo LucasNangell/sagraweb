@@ -1,0 +1,42 @@
+{
+  "id": "cartao_visita_frente",
+  "nome": "Cartão de Visita — Somente Frente",
+  "tipo_produto": "cartao_visita",
+  "canvas": {
+    "largura": 1200,
+    "altura": 800
+  },
+  "faces": {
+    "frente": {
+      "label": "Frente",
+      "tipo": "quad",
+      "pontos": [
+        [
+          400,
+          280
+        ],
+        [
+          800,
+          262
+        ],
+        [
+          818,
+          458
+        ],
+        [
+          382,
+          478
+        ]
+      ],
+      "bbox": {
+        "x": 382,
+        "y": 262,
+        "largura": 436,
+        "altura": 216
+      },
+      "rotacao_graus": -2.5,
+      "observacoes": "Face frontal do cartão; encaixar arte exportada do Corel."
+    }
+  },
+  "observacoes": "Mockup base para cartão 90×50 mm, face única com leve perspectiva."
+}

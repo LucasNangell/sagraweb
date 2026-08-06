@@ -1,0 +1,14 @@
+Credenciais Google Drive — portal cliente (upload sem banda zrok)
+
+1. client_secret*.json — OAuth do projeto Google Cloud (copiado do script gdrive_sync).
+2. token.json — gere com conta fotolitocd@gmail.com:
+   - No servidor, com SAGRA_PORTAL_UPLOAD_GDRIVE=false, execute uma vez:
+     python -c "from services.gdrive_portal_upload import _load_credentials; _load_credentials()"
+   - Ou copie token.json já autorizado para esta conta.
+
+3. No Drive da conta, crie/confirm a pasta "Originais" (ou defina SAGRA_GDRIVE_STAGING_FOLDER).
+
+4. Em config/.env:
+   SAGRA_PORTAL_UPLOAD_GDRIVE=true
+
+Não commitar estes arquivos (estão no .gitignore).

@@ -1,0 +1,3 @@
+# Dependências recomendadas (pip install -r requirements-security.txt)
+bleach>=6.0.0
+python-dotenv>=1.0.0

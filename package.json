@@ -1,0 +1,27 @@
+{
+  "name": "sagra-web-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "SAGRA Web — monorepo React + TypeScript (Fase 0)",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @sagra/web dev",
+    "build": "pnpm -r run build",
+    "test": "pnpm test:backend && pnpm test:frontend",
+    "test:backend": "python -m pytest app/backend/tests -q",
+    "test:frontend": "pnpm --filter @sagra/web test",
+    "package:release": "powershell -NoProfile -ExecutionPolicy Bypass -File deploy/scripts/package-release.ps1",
+    "deploy:prod": "powershell -NoProfile -ExecutionPolicy Bypass -File deploy/scripts/deploy-producao.ps1",
+    "lint": "pnpm -r run lint",
+    "typecheck": "pnpm -r run typecheck",
+    "clean": "pnpm -r exec -- rimraf dist node_modules/.vite 2>nul || true"
+  },
+  "devDependencies": {
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.3"
+  }
+}

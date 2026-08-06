@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+<defs>
+<filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+<feGaussianBlur in="SourceGraphic" stdDeviation="18"/>
+</filter>
+</defs>
+<rect width="100%" height="100%" fill="rgb(245, 246, 250)"/>
+<ellipse cx="600.0" cy="650.0" rx="380.0" ry="72.0" fill="rgba(20,24,35,0.18)" filter="url(#shadow)"/>
+<polygon points="266.0,170.0 598.0,162.0 608.0,632.0 256.0,640.0" fill="rgb(232, 234, 238)" stroke="#c8ccd4" stroke-width="1.5"/>
+<polygon points="602.0,162.0 936.0,172.0 944.0,642.0 612.0,632.0" fill="rgb(232, 234, 238)" stroke="#c8ccd4" stroke-width="1.5"/>
+<line x1="600.0" y1="155.0" x2="610.0" y2="645.0" stroke="#6b7585" stroke-width="2.5" stroke-dasharray="8 5"/>
+<polygon points="276.0,180.0 588.0,172.0 596.0,618.0 266.0,626.0" fill="rgba(255,255,255,0.55)" stroke="rgb(120, 130, 150)" stroke-width="2" stroke-dasharray="10 6"/>
+<text x="274.0" y="194.0" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="rgb(90, 100, 115)">Capa</text>
+<polygon points="612.0,172.0 926.0,182.0 934.0,626.0 618.0,618.0" fill="rgba(255,255,255,0.55)" stroke="rgb(120, 130, 150)" stroke-width="2" stroke-dasharray="10 6"/>
+<text x="620.0" y="194.0" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="rgb(90, 100, 115)">Interior</text>
+</svg>

@@ -1,0 +1,480 @@
+{
+  "table_counts": {
+    "tabProtocolos": 84083,
+    "tabAndamento": 199179,
+    "tabDetalhesServico": 85660,
+    "tab_os_ultimo_andamento_operacional": 84075,
+    "tab_os_componentes": 12,
+    "tab_os_sub_os": 6,
+    "tab_os_sub_os_andamento": 0,
+    "tab_pcp_fila": 291,
+    "tabProofTokens": 10,
+    "tabPapelariaJobs": 61,
+    "tabClienteGabinete": 4,
+    "tab_os_audit_log": 1102
+  },
+  "os_totals": {
+    "total_os": 84083,
+    "os_normal_lt5000": "54821",
+    "papelaria_gte5000": "29262"
+  },
+  "os_by_year": [
+    {
+      "ano": 2026,
+      "total": 2032,
+      "normal": "1059",
+      "papelaria": "973"
+    },
+    {
+      "ano": 2025,
+      "total": 4244,
+      "normal": "2637",
+      "papelaria": "1607"
+    },
+    {
+      "ano": 2024,
+      "total": 3435,
+      "normal": "1950",
+      "papelaria": "1485"
+    },
+    {
+      "ano": 2023,
+      "total": 5637,
+      "normal": "2299",
+      "papelaria": "3338"
+    },
+    {
+      "ano": 2022,
+      "total": 2678,
+      "normal": "1270",
+      "papelaria": "1408"
+    },
+    {
+      "ano": 2021,
+      "total": 2443,
+      "normal": "1213",
+      "papelaria": "1230"
+    },
+    {
+      "ano": 2020,
+      "total": 1499,
+      "normal": "754",
+      "papelaria": "745"
+    },
+    {
+      "ano": 2019,
+      "total": 6891,
+      "normal": "2966",
+      "papelaria": "3925"
+    },
+    {
+      "ano": 2018,
+      "total": 3852,
+      "normal": "2603",
+      "papelaria": "1249"
+    },
+    {
+      "ano": 2017,
+      "total": 5284,
+      "normal": "3610",
+      "papelaria": "1674"
+    },
+    {
+      "ano": 2016,
+      "total": 4912,
+      "normal": "3023",
+      "papelaria": "1889"
+    },
+    {
+      "ano": 2015,
+      "total": 7639,
+      "normal": "4155",
+      "papelaria": "3484"
+    },
+    {
+      "ano": 2014,
+      "total": 4189,
+      "normal": "3193",
+      "papelaria": "996"
+    },
+    {
+      "ano": 2013,
+      "total": 6892,
+      "normal": "4830",
+      "papelaria": "2062"
+    },
+    {
+      "ano": 2012,
+      "total": 5091,
+      "normal": "3504",
+      "papelaria": "1587"
+    }
+  ],
+  "os_status_mat": {
+    "total_mat": 84075,
+    "entregue": "78835",
+    "cancelada": "4789",
+    "ativa": "451"
+  },
+  "andamentos_stats": {
+    "total_andamentos": 199179,
+    "os_com_andamento": 84081,
+    "media_andamentos_por_os": "2.37"
+  },
+  "date_nulls": {
+    "total": 84083,
+    "sem_data_entrada": "0",
+    "sem_entreg_data": "63318",
+    "sem_data_conclusao": "46890",
+    "sem_recebim_data": "5027",
+    "sem_prioridade_texto": "2"
+  },
+  "entregue_sem_conclusao": {
+    "cnt": 41813
+  },
+  "data_incoerente": {
+    "conclusao_antes_entrada": "244",
+    "prometida_antes_entrada": "169",
+    "conclusao_muito_apos_prometida": "14"
+  },
+  "datas_futuras": {
+    "entrada_futura": "0",
+    "entreg_muito_futura": "0",
+    "conclusao_futura": "16"
+  },
+  "tempo_medio_conclusao": {
+    "os_entregues_com_datas": 36796,
+    "media_dias": "136.9",
+    "media_dias_vs_prometida_base": "144.4"
+  },
+  "tempo_por_produto": [
+    {
+      "produto": "Ct Visita",
+      "cnt": 8311,
+      "media_dias": "34.1"
+    },
+    {
+      "produto": "Timbrado A4",
+      "cnt": 3452,
+      "media_dias": "25.3"
+    },
+    {
+      "produto": "Pasta Avulso c/ Bolso",
+      "cnt": 3049,
+      "media_dias": "37.6"
+    },
+    {
+      "produto": "Bloco A5",
+      "cnt": 2728,
+      "media_dias": "58.3"
+    },
+    {
+      "produto": "Impresso Gen\u00e9rico",
+      "cnt": 2301,
+      "media_dias": "124.5"
+    },
+    {
+      "produto": "Ct Gab Simples (Cor)",
+      "cnt": 2255,
+      "media_dias": "19.2"
+    },
+    {
+      "produto": "Ct de Cumprimento",
+      "cnt": 1810,
+      "media_dias": "48.4"
+    },
+    {
+      "produto": "Aerograma",
+      "cnt": 1528,
+      "media_dias": "534.8"
+    },
+    {
+      "produto": "Livro",
+      "cnt": 1250,
+      "media_dias": "2140.7"
+    },
+    {
+      "produto": "Acabamento",
+      "cnt": 1214,
+      "media_dias": "5.9"
+    },
+    {
+      "produto": "Livreto c/ Capa",
+      "cnt": 1207,
+      "media_dias": "54.1"
+    },
+    {
+      "produto": "Livreto s/ Capa",
+      "cnt": 1096,
+      "media_dias": "78.7"
+    },
+    {
+      "produto": "Jornal A4",
+      "cnt": 982,
+      "media_dias": "6.2"
+    },
+    {
+      "produto": "Pasta Avulso s/ Bolso",
+      "cnt": 669,
+      "media_dias": "29.1"
+    },
+    {
+      "produto": "Ct Duplo Paisagem Topo",
+      "cnt": 640,
+      "media_dias": "26.4"
+    },
+    {
+      "produto": "Apostila",
+      "cnt": 628,
+      "media_dias": "6.0"
+    },
+    {
+      "produto": "Cartaz",
+      "cnt": 482,
+      "media_dias": "70.6"
+    },
+    {
+      "produto": "Blocos Diversos",
+      "cnt": 475,
+      "media_dias": "162.5"
+    },
+    {
+      "produto": "Ct Duplo Retrato Lateral",
+      "cnt": 444,
+      "media_dias": "33.3"
+    },
+    {
+      "produto": "Folder",
+      "cnt": 335,
+      "media_dias": "227.6"
+    }
+  ],
+  "tempo_por_prioridade": [
+    {
+      "prioridade": "Outros",
+      "cnt": 33886,
+      "media_dias": "115.8",
+      "media_atraso_vs_prometida": "1.8"
+    },
+    {
+      "prioridade": "Solicitado",
+      "cnt": 2670,
+      "media_dias": "6.9",
+      "media_atraso_vs_prometida": "113.0"
+    },
+    {
+      "prioridade": "Prometido",
+      "cnt": 466,
+      "media_dias": "635.3",
+      "media_atraso_vs_prometida": "514.9"
+    }
+  ],
+  "tempo_por_setor_inicial": [
+    {
+      "setor_inicial": "SEDIR ",
+      "cnt": 30785,
+      "media_dias": "158.1"
+    },
+    {
+      "setor_inicial": "SECOG",
+      "cnt": 5690,
+      "media_dias": "28.9"
+    },
+    {
+      "setor_inicial": "SIELT",
+      "cnt": 119,
+      "media_dias": "3.6"
+    },
+    {
+      "setor_inicial": "Expedi\u00e7\u00e3o",
+      "cnt": 99,
+      "media_dias": "29.4"
+    },
+    {
+      "setor_inicial": "SEPAC",
+      "cnt": 31,
+      "media_dias": "21.6"
+    },
+    {
+      "setor_inicial": "SEFOC",
+      "cnt": 31,
+      "media_dias": "7.5"
+    }
+  ],
+  "os_sem_andamento": {
+    "cnt": 3
+  },
+  "multi_detalhes": {
+    "os_com_multiplos_detalhes": 1734
+  },
+  "detalhes_nulls": {
+    "total_detalhes": 85660,
+    "sem_produto": "2",
+    "sem_titulo": "156",
+    "sem_tiragem": "2214",
+    "sem_pags": "1918",
+    "sem_formato": "1256",
+    "sem_maquina": "2"
+  },
+  "treinamento": {
+    "entregues_total": 78835,
+    "com_datas_validas": "36796",
+    "com_produto": "36796",
+    "com_2_andamentos": "27"
+  },
+  "ultimo_status_issues": {
+    "os_com_multiplos_ultimo_status": "151",
+    "os_sem_ultimo_status": "2"
+  },
+  "situacoes": [
+    {
+      "situacao": "Entregue",
+      "cnt": 78835
+    },
+    {
+      "situacao": "Cancelado",
+      "cnt": 4789
+    },
+    {
+      "situacao": "Aguard. Aprova\u00e7\u00e3o",
+      "cnt": 194
+    },
+    {
+      "situacao": "Produ\u00e7\u00e3o Suspensa",
+      "cnt": 80
+    },
+    {
+      "situacao": "Pend\u00eancia Usu\u00e1rio",
+      "cnt": 59
+    },
+    {
+      "situacao": "Sa\u00edda p/",
+      "cnt": 40
+    },
+    {
+      "situacao": "Grava\u00e7\u00e3o",
+      "cnt": 30
+    },
+    {
+      "situacao": "Pend\u00eancia CGRAF",
+      "cnt": 27
+    },
+    {
+      "situacao": "Entrada Inicial",
+      "cnt": 5
+    },
+    {
+      "situacao": "Aguard. Juntada",
+      "cnt": 3
+    },
+    {
+      "situacao": "Coment\u00e1rio",
+      "cnt": 3
+    },
+    {
+      "situacao": "Em Execu\u00e7\u00e3o",
+      "cnt": 3
+    },
+    {
+      "situacao": "Recebido",
+      "cnt": 2
+    },
+    {
+      "situacao": "Tramit. de Pr\u00e9via p/",
+      "cnt": 2
+    },
+    {
+      "situacao": "Pend\u00eancia Resolvida",
+      "cnt": 1
+    },
+    {
+      "situacao": "Sa\u00edda Parcial p/",
+      "cnt": 1
+    },
+    {
+      "situacao": "Tramit. de Prova p/",
+      "cnt": 1
+    }
+  ],
+  "setores_ativos": [
+    {
+      "setor": "SEFOC",
+      "cnt": 290
+    },
+    {
+      "setor": "SECOG",
+      "cnt": 53
+    },
+    {
+      "setor": "SEORG",
+      "cnt": 30
+    },
+    {
+      "setor": "SEGEP",
+      "cnt": 28
+    },
+    {
+      "setor": "SIELT",
+      "cnt": 13
+    },
+    {
+      "setor": "Expedi\u00e7\u00e3o",
+      "cnt": 11
+    },
+    {
+      "setor": "SEPAC",
+      "cnt": 8
+    },
+    {
+      "setor": "Encaderna\u00e7\u00e3o",
+      "cnt": 6
+    },
+    {
+      "setor": "Correspond\u00eancia",
+      "cnt": 5
+    },
+    {
+      "setor": "SEDIR",
+      "cnt": 3
+    },
+    {
+      "setor": "SEIMP",
+      "cnt": 2
+    },
+    {
+      "setor": "Gr\u00e1fica r\u00e1pida",
+      "cnt": 1
+    },
+    {
+      "setor": "Diretoria",
+      "cnt": 1
+    }
+  ],
+  "proof_tokens": {
+    "total": 10,
+    "com_resposta": "3",
+    "aprovados": "1",
+    "reprovados": "2"
+  },
+  "atraso_distrib": {
+    "no_prazo": "1958",
+    "atrasadas": "980",
+    "sem_data_prometida": "34084",
+    "media_dias_atraso": "151.7"
+  },
+  "tempo_normal_vs_papelaria": {
+    "entregue_normal": "18653",
+    "media_normal": "236.0",
+    "entregue_papelaria": "18369",
+    "media_papelaria": "-8.9"
+  },
+  "mat_coverage": {
+    "protocolos": 84083,
+    "materializada": 84075,
+    "protocolos_com_andamento": 84080
+  },
+  "retornos_setor": {
+    "media_retornos_setor": "0.83",
+    "max_retornos": 84
+  }
+}

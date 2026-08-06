@@ -1,0 +1,118 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import "tailwindcss";
+@import "@sagra/ui/styles.css";
+
+/* Tokens DEAPA — espelham app/frontend/styles.css */
+:root {
+  --primary-green: #00b142;
+  --secondary-blue: #24344d;
+  --bg-color: #f8f9fa;
+  --text-dark: #333333;
+  --text-white: #ffffff;
+  --border-color: #dddddd;
+  --highlight-yellow: #fff9c4;
+  --action-yellow: #ffc107;
+  --danger-red: #dc3545;
+  --gray-btn: #6c757d;
+  --font-main: "Inter", system-ui, sans-serif;
+}
+
+@theme {
+  --color-primary-green: var(--primary-green);
+  --color-secondary-blue: var(--secondary-blue);
+  --color-sagra-bg: var(--bg-color);
+  --color-sagra-text: var(--text-dark);
+  --color-sagra-border: var(--border-color);
+  --color-sagra-danger: var(--danger-red);
+  --color-sagra-accent: #0095d4;
+  --font-sans: var(--font-main);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font-main);
+  font-size: 14px;
+  background-color: var(--bg-color);
+  color: var(--text-dark);
+}
+
+/* Links do menu lateral — evita aparência de hyperlink visitado do navegador */
+.sagra-sidebar-nav a:any-link {
+  text-decoration: none !important;
+}
+
+.sagra-sidebar-nav a:link,
+.sagra-sidebar-nav a:visited {
+  color: var(--text-dark);
+}
+
+.sagra-sidebar-nav a[data-status="active"],
+.sagra-sidebar-nav a[data-status="active"]:visited {
+  color: var(--primary-green);
+}
+
+/* Host do Shadow DOM do corpo do e-mail (estilos ficam isolados dentro do shadow) */
+.email-html-host {
+  display: block;
+}
+
+/* Host do Shadow DOM na página Análise (biblioteca / itens editáveis) */
+.analise-html-host {
+  display: block;
+}
+
+/* Filtros da página Início — larguras herdadas / grupos */
+.os-filter-row .os-filter-field--xs,
+.os-filter-groups .os-filter-field--xs {
+  flex: 0 1 4.5rem;
+  min-width: 4rem;
+}
+.os-filter-row .os-filter-field--sm {
+  flex: 1 1 6.5rem;
+  min-width: 5.5rem;
+}
+.os-filter-row .os-filter-field--md {
+  flex: 1 1 7.5rem;
+  min-width: 6.5rem;
+}
+
+@media (max-width: 639px) {
+  .os-filter-row .os-filter-field--xs,
+  .os-filter-groups .os-filter-field--xs {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-width: 0;
+  }
+
+  .os-filter-row .os-filter-field--sm,
+  .os-filter-row .os-filter-field--md {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .os-filter-row .os-filter-actions {
+    flex: 1 1 100%;
+    justify-content: stretch;
+  }
+
+  .os-filter-row .os-filter-actions > button:last-child {
+    flex: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-safe\:animate-\[fadeIn_320ms_ease-out_both\],
+  .motion-safe\:animate-\[fadeIn_300ms_ease-out_both\],
+  .motion-safe\:animate-\[fadeIn_280ms_ease-out\] {
+    animation: none;
+  }
+}

@@ -1,0 +1,142 @@
+.prova-web-book {
+  margin: 0 auto;
+  touch-action: none;
+  overscroll-behavior: none;
+  position: relative;
+}
+
+/* PageFlip (fixed): evitar paddingBottom de autoSize sobrar e estourar o estágio */
+.prova-web-book.stf__parent {
+  box-sizing: border-box;
+}
+
+.prova-web-book .stf__wrapper {
+  box-sizing: border-box;
+  height: 100%;
+  padding-bottom: 0 !important;
+}
+
+.prova-web-book .stf__block {
+  height: 100%;
+}
+
+.prova-web-page {
+  position: relative;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.prova-web-page[data-density="hard"] {
+  background: #f4f2ee;
+}
+
+.prova-web-page img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+}
+
+.prova-web-page-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(110deg, #f1f5f9 25%, #e2e8f0 37%, #f1f5f9 63%);
+  background-size: 200% 100%;
+  animation: prova-web-shimmer 1.2s linear infinite;
+}
+
+@keyframes prova-web-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.prova-web-flipbook-fs-fallback {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+}
+
+/*
+  Sombra suave no gutter (centro do spread).
+  Precisa ser ::after sobre a imagem — inset box-shadow fica escondido pelo <img>.
+*/
+.prova-web-page.--left::after,
+.prova-web-page.--right::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 36px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.prova-web-page.--left::after {
+  right: 0;
+  background: linear-gradient(
+    to left,
+    rgba(0, 0, 0, 0.14) 0%,
+    rgba(0, 0, 0, 0.05) 35%,
+    rgba(0, 0, 0, 0) 100%
+  );
+}
+
+.prova-web-page.--right::after {
+  left: 0;
+  background: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 0.14) 0%,
+    rgba(0, 0, 0, 0.05) 35%,
+    rgba(0, 0, 0, 0) 100%
+  );
+}
+
+.prova-web-zoom-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.85);
+  padding: 2rem 1rem;
+}
+
+.prova-web-zoom-backdrop img {
+  max-width: none;
+  background: #ffffff;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+}
+
+/* Junção entre as duas páginas ampliadas */
+.prova-web-zoom-spread {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  position: relative;
+}
+
+.prova-web-zoom-spread::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 48px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.1) 45%,
+    rgba(0, 0, 0, 0.1) 55%,
+    rgba(0, 0, 0, 0) 100%
+  );
+}

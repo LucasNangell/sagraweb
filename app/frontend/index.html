@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SAGRA Web</title>
+    <meta name="theme-color" content="#121214" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="SAGRA" />
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <script>
+      (function () {
+        var p = location.pathname;
+        if (
+          p === "/sagra" ||
+          (p.startsWith("/sagra/") && !p.startsWith("/sagra/api"))
+        ) {
+          location.replace(
+            (p === "/sagra" ? "/" : p.slice(6) || "/") +
+              location.search +
+              location.hash,
+          );
+        }
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-DjBCiRhm.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DldO5xxg.css">
+  <link rel="manifest" href="/manifest.webmanifest"></head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

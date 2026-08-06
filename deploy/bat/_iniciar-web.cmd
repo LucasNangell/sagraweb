@@ -1,0 +1,108 @@
+@echo off
+chcp 65001 >nul
+setlocal EnableExtensions EnableDelayedExpansion
+
+set "WEB_PORT=%~1"
+if "%WEB_PORT%"=="" set "WEB_PORT=5173"
+
+set "ROOT=%~dp0..\.."
+set "VITE_PKG=%ROOT%\apps\web\node_modules\vite\bin\vite.js"
+
+call "%~dp0_resolve-dev-tools.cmd"
+
+cd /d "%ROOT%"
+if errorlevel 1 (
+    echo [ERRO] Raiz do projeto nao encontrada: %ROOT%
+    pause
+    exit /b 1
+)
+
+where pnpm >nul 2>&1
+if errorlevel 1 (
+    echo [ERRO] pnpm nao encontrado. Instale: npm install -g pnpm
+    echo        Ou ative Corepack: corepack enable ^&^& corepack prepare pnpm@9.15.0 --activate
+    echo        E garanta %%APPDATA%%\npm no PATH do usuario.
+    pause
+    exit /b 1
+)
+
+where node >nul 2>&1
+if errorlevel 1 (
+    echo [ERRO] Node.js nao encontrado.
+    pause
+    exit /b 1
+)
+
+set "VITE_DEV_PORT=%WEB_PORT%"
+set "API_PORT=8001"
+if exist "%ROOT%\config\.env" (
+    for /f "usebackq eol=# tokens=1,* delims==" %%a in ("%ROOT%\config\.env") do (
+        set "line=%%a"
+        if not "!line!"=="" set "%%a=%%b"
+    )
+)
+if defined PORT set "API_PORT=%PORT%"
+
+if not exist "%VITE_PKG%" (
+    echo [FRONT] Vite nao encontrado - executando pnpm install...
+    call :pnpm_install_or_fail
+    if errorlevel 1 exit /b 1
+)
+
+title SAGRA-WEB :%WEB_PORT%
+
+echo.
+echo  SAGRA Web (Vite) - http://localhost:%WEB_PORT%/
+echo  Proxy /api -^> http://127.0.0.1:%API_PORT%
+curl.exe -s -o NUL -w "%%{http_code}" "http://127.0.0.1:%API_PORT%/health/live" 2>nul | findstr /B "200" >nul
+if errorlevel 1 (
+    echo  [AVISO] API nao responde em http://127.0.0.1:%API_PORT%/health/live
+    echo          Confira a janela "SAGRA-API" ou execute: iniciar-api.bat restart
+    echo.
+) else (
+    echo  [OK] API respondendo em http://127.0.0.1:%API_PORT%/health/live
+)
+echo  Ctrl+C para encerrar esta janela ^(nao encerra a API^).
+echo.
+
+call pnpm dev
+set "RC=!ERRORLEVEL!"
+
+if not "!RC!"=="0" (
+    echo.
+    echo [FRONT] Falha ao iniciar Vite - tentando reparar dependencias...
+    call :pnpm_install_or_fail
+    if errorlevel 1 exit /b 1
+    call pnpm dev
+    set "RC=!ERRORLEVEL!"
+)
+
+if not "!RC!"=="0" (
+    echo.
+    echo [ERRO] Falha ao iniciar Vite ^(codigo !RC!^).
+    pause
+    exit /b !RC!
+)
+
+pause
+exit /b 0
+
+:pnpm_install_or_fail
+call pnpm install
+if errorlevel 1 (
+    echo [AVISO] pnpm install falhou. Limpando node_modules e repetindo...
+    if exist "node_modules" rmdir /s /q "node_modules"
+    call pnpm install
+    if errorlevel 1 (
+        echo [ERRO] Nao foi possivel instalar dependencias do frontend.
+        echo        Use Node.js 20 LTS se estiver em v22+ com erros de modulo.
+        pause
+        exit /b 1
+    )
+)
+if not exist "%VITE_PKG%" (
+    echo [ERRO] Vite nao encontrado apos pnpm install: %VITE_PKG%
+    pause
+    exit /b 1
+)
+exit /b 0

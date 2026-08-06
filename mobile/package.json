@@ -1,0 +1,41 @@
+{
+  "name": "sagra-tablet-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SAGRA Tablet — APK Capacitor do painel/tablet (isolado do monorepo web)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit --pretty false",
+    "cap:sync": "npx cap sync android",
+    "cap:open": "npx cap open android",
+    "apk:debug": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-apk.ps1",
+    "apk:release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-apk.ps1 -Release"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.2.0",
+    "@capacitor/core": "^7.2.0",
+    "@capacitor-community/keep-awake": "^7.1.0",
+    "@capacitor/preferences": "^7.0.1",
+    "lucide-react": "^0.474.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.2.0",
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

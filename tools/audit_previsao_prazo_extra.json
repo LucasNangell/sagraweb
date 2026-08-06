@@ -1,0 +1,121 @@
+{
+  "andamentos_entregue_dist": [
+    {
+      "bucket": "1",
+      "cnt": 69756
+    },
+    {
+      "bucket": "11+",
+      "cnt": 7236
+    },
+    {
+      "bucket": "2-5",
+      "cnt": 611
+    },
+    {
+      "bucket": "6-10",
+      "cnt": 1232
+    }
+  ],
+  "conclusao_proxy": {
+    "com_data_conclusao": "37022",
+    "sem_conclusao_com_recebim": "41748",
+    "sem_conclusao_total": "41813"
+  },
+  "conclusao_por_ano": [
+    {
+      "ano": 2026,
+      "total_entregue": 1676,
+      "com_conclusao": "0",
+      "pct": "0.0"
+    },
+    {
+      "ano": 2025,
+      "total_entregue": 4019,
+      "com_conclusao": "0",
+      "pct": "0.0"
+    },
+    {
+      "ano": 2024,
+      "total_entregue": 3242,
+      "com_conclusao": "1",
+      "pct": "0.0"
+    },
+    {
+      "ano": 2023,
+      "total_entregue": 5362,
+      "com_conclusao": "1453",
+      "pct": "27.1"
+    },
+    {
+      "ano": 2022,
+      "total_entregue": 2525,
+      "com_conclusao": "1093",
+      "pct": "43.3"
+    },
+    {
+      "ano": 2021,
+      "total_entregue": 2279,
+      "com_conclusao": "1023",
+      "pct": "44.9"
+    },
+    {
+      "ano": 2020,
+      "total_entregue": 1381,
+      "com_conclusao": "456",
+      "pct": "33.0"
+    },
+    {
+      "ano": 2019,
+      "total_entregue": 6561,
+      "com_conclusao": "3697",
+      "pct": "56.3"
+    },
+    {
+      "ano": 2018,
+      "total_entregue": 3656,
+      "com_conclusao": "1565",
+      "pct": "42.8"
+    },
+    {
+      "ano": 2017,
+      "total_entregue": 4952,
+      "com_conclusao": "2468",
+      "pct": "49.8"
+    }
+  ],
+  "papelaria_negativa": {
+    "conclusao_antes": "65",
+    "conclusao_ok": "18304"
+  },
+  "inicio_proxy": {
+    "avg_diff_entrada_vs_primeiro_andamento": "-76.2",
+    "diff_maior_7d": "35817"
+  },
+  "fim_proxy_entregue": {
+    "total": 78835,
+    "conclusao_prox_andamento_3d": "27238",
+    "sem_conclusao": "41813",
+    "media_dias_entrada_ate_andamento_entregue": "11.2"
+  },
+  "entreg_prazo_link_dist": [
+    {
+      "prazo": "Normal",
+      "cnt": 62548
+    },
+    {
+      "prazo": "Solicitado p/",
+      "cnt": 19470
+    },
+    {
+      "prazo": "Prometido p/",
+      "cnt": 2063
+    },
+    {
+      "prazo": "(vazio)",
+      "cnt": 2
+    }
+  ],
+  "situacoes_distinct": 32,
+  "setores_distinct": 20
+}

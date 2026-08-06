@@ -1,0 +1,72 @@
+{
+  "id": "cartao_a6_retrato_dobrado",
+  "nome": "Cartão A6 Retrato Dobrado",
+  "tipo_produto": "cartao_dobrado",
+  "canvas": {
+    "largura": 1200,
+    "altura": 800
+  },
+  "faces": {
+    "capa": {
+      "label": "Capa",
+      "tipo": "quad",
+      "pontos": [
+        [
+          276,
+          180
+        ],
+        [
+          588,
+          172
+        ],
+        [
+          596,
+          618
+        ],
+        [
+          266,
+          626
+        ]
+      ],
+      "bbox": {
+        "x": 266,
+        "y": 172,
+        "largura": 330,
+        "altura": 454
+      },
+      "rotacao_graus": -2.5,
+      "observacoes": "Painel esquerdo — capa (A6 retrato, 105×148 mm)."
+    },
+    "interior": {
+      "label": "Interior",
+      "tipo": "quad",
+      "pontos": [
+        [
+          612,
+          172
+        ],
+        [
+          926,
+          182
+        ],
+        [
+          934,
+          626
+        ],
+        [
+          618,
+          618
+        ]
+      ],
+      "bbox": {
+        "x": 612,
+        "y": 172,
+        "largura": 322,
+        "altura": 454
+      },
+      "rotacao_graus": 2.5,
+      "observacoes": "Painel direito — interior (A6 retrato, 105×148 mm)."
+    }
+  },
+  "observacoes": "A5 aberto em paisagem (210×148 mm) com dobra central vertical, resultando em A6 retrato fechado (105×148 mm por painel)."
+}

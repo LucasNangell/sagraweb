@@ -1,0 +1,31 @@
+# SAGRA Web — dependências Python (produção)
+# pip install -r requirements.txt
+
+fastapi>=0.115.0,<1.0
+uvicorn[standard]>=0.30.0,<1.0
+pydantic>=2.0,<3.0
+email-validator>=2.0.0,<3.0
+PyMySQL>=1.1.0
+python-dotenv>=1.0.0
+bleach>=6.0.0
+lxml>=5.0.0
+lxml_html_clean>=0.4.0
+requests>=2.31.0
+pywebpush>=2.0.0,<3.0
+requests-negotiate-sspi>=0.5.0
+pyodbc>=5.0.0
+fpdf2>=2.7.0
+pymupdf>=1.24.0
+pytesseract>=0.3.10
+Pillow>=10.0.0
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
+Jinja2>=3.1.0
+openpyxl>=3.1.0
+pandas>=2.0.0
+onnxruntime>=1.16.0,<2.0
+xlrd>=2.0.1
+# Portal cliente — upload direto ao Google Drive (evita banda zrok)
+google-api-python-client>=2.100.0,<3.0
+google-auth-oauthlib>=1.2.0,<2.0
+google-auth-httplib2>=0.2.0,<1.0

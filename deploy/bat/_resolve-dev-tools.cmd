@@ -14,8 +14,11 @@ if exist "%APPDATA%\npm\pnpm.cmd" (
     set "SAGRA_PNPM=%APPDATA%\npm\pnpm.cmd"
 )
 
-REM Scripts npm/pnpm: PowerShell com Bypass (evita ExecutionPolicy Restricted)
-set "npm_config_script_shell=powershell.exe -NoProfile -ExecutionPolicy Bypass -Command"
+REM script-shell so pode ter args (quebra pnpm com -4058). Usa so o valor do .npmrc.
+if defined npm_config_script_shell (
+    echo %npm_config_script_shell%| findstr /C:" " >nul
+    if not errorlevel 1 set "npm_config_script_shell="
+)
 
 REM Python real via launcher "py -3" (evita stub WindowsApps)
 set "SAGRA_PYTHON="

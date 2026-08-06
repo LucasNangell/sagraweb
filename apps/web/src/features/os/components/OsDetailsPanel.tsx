@@ -132,63 +132,75 @@ export function OsDetailsPanel({
       )}
 
       {showDetailsFields && data && (
-        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-2 text-xs md:min-h-0 md:flex-1 md:overflow-hidden">
-          <div className="grid shrink-0 grid-cols-2 gap-1.5 sm:grid-cols-12">
-            <Field label="Máquina" className="col-span-2 sm:col-span-4">
-              <ReadonlyInput value={maquina} />
-            </Field>
-            <Field label="Tiragem" className="col-span-1 sm:col-span-3">
-              <ReadonlyInput value={data.Tiragem} />
-            </Field>
-            <Field label="Páginas" className="col-span-1 sm:col-span-3">
-              <ReadonlyInput value={paginas} />
-            </Field>
-            <div className="col-span-2 flex items-end gap-1.5 pb-1 sm:col-span-2">
-              <input
-                type="checkbox"
-                checked={toCheck(data.FrenteVerso)}
-                readOnly
-                disabled
-                aria-readonly="true"
-                aria-label="Frente/Verso"
-                className="size-3.5 accent-primary-green disabled:opacity-100"
-              />
-              <label className="text-neutral-600">Frente/Verso</label>
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-1.5 overflow-y-auto p-2 text-xs sm:grid-cols-2 lg:grid-cols-4 lg:grid-rows-[auto_minmax(0,1fr)] lg:overflow-hidden">
+          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2 lg:col-span-3">
+            <div className="grid grid-cols-2 items-end gap-1.5 sm:grid-cols-[minmax(0,2.2fr)_minmax(3.25rem,0.55fr)_minmax(3.25rem,0.55fr)_minmax(3.25rem,0.55fr)_auto]">
+              <Field label="Máquina" className="col-span-2 sm:col-span-1">
+                <ReadonlyInput value={maquina} />
+              </Field>
+              <Field label="Tiragem">
+                <ReadonlyInput value={data.Tiragem} />
+              </Field>
+              <Field label="Páginas">
+                <ReadonlyInput value={paginas} />
+              </Field>
+              <Field label="Modelos">
+                <ReadonlyInput value={data.ModelosArq} />
+              </Field>
+              <div className="flex items-end gap-1.5 pb-1">
+                <input
+                  type="checkbox"
+                  checked={toCheck(data.FrenteVerso)}
+                  readOnly
+                  tabIndex={-1}
+                  aria-readonly="true"
+                  aria-label="Frente/Verso"
+                  onChange={() => {}}
+                  className="pointer-events-none size-3.5 shrink-0 accent-primary-green"
+                />
+                <label className="whitespace-nowrap leading-tight text-neutral-600">
+                  Frente/Verso
+                </label>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+              <Field label="Formato">
+                <ReadonlyInput value={data.FormatoLink} />
+              </Field>
+              <Field label="Prioridade">
+                <ReadonlyInput value={data.EntregPrazoLink} />
+              </Field>
+              <Field label="Data" className="col-span-2 sm:col-span-1">
+                <ReadonlyInput value={formatDateForInput(data.EntregData)} />
+              </Field>
             </div>
           </div>
 
-          <div className="grid shrink-0 grid-cols-2 gap-1.5 sm:grid-cols-12">
-            <Field label="Módulos" className="col-span-2 sm:col-span-4">
-              <ReadonlyInput value={data.ModelosArq} />
-            </Field>
-            <Field label="Formato" className="col-span-1 sm:col-span-3">
-              <ReadonlyInput value={data.FormatoLink} />
-            </Field>
-            <Field label="Prioridade" className="col-span-1 sm:col-span-3">
-              <ReadonlyInput value={data.EntregPrazoLink} />
-            </Field>
-            <Field label="Data" className="col-span-2 sm:col-span-2">
-              <ReadonlyInput value={formatDateForInput(data.EntregData)} />
-            </Field>
-          </div>
+          <Field
+            label="Contato"
+            fill
+            className="min-h-[5.5rem] h-full sm:col-span-2 lg:col-span-1"
+          >
+            <ReadonlyTextarea value={data.ContatoTrab} fill />
+          </Field>
 
-          <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
-            <Field label="Papel" fill className="min-h-[4.5rem] lg:min-h-0">
-              <ReadonlyTextarea value={papel} fill />
-            </Field>
-            <Field label="Cores" fill className="min-h-[4.5rem] lg:min-h-0">
-              <ReadonlyTextarea value={cores} fill />
-            </Field>
-            <Field label="Acabamento" fill className="min-h-[4.5rem] lg:min-h-0">
-              <ReadonlyTextarea value={data.DescAcabamento} fill />
-            </Field>
-            <Field label="Obs" fill className="min-h-[4.5rem] lg:min-h-0">
-              <ReadonlyTextarea value={data.Observ} fill />
-            </Field>
-            <Field label="Contato" fill className="min-h-[4.5rem] lg:min-h-0">
-              <ReadonlyTextarea value={data.ContatoTrab} fill />
-            </Field>
-          </div>
+          <Field label="Papel" fill className="min-h-[4.5rem] h-full lg:min-h-0">
+            <ReadonlyTextarea value={papel} fill />
+          </Field>
+          <Field label="Cores" fill className="min-h-[4.5rem] h-full lg:min-h-0">
+            <ReadonlyTextarea value={cores} fill />
+          </Field>
+          <Field
+            label="Acabamento"
+            fill
+            className="min-h-[4.5rem] h-full lg:min-h-0"
+          >
+            <ReadonlyTextarea value={data.DescAcabamento} fill />
+          </Field>
+          <Field label="Obs" fill className="min-h-[4.5rem] h-full lg:min-h-0">
+            <ReadonlyTextarea value={data.Observ} fill />
+          </Field>
         </div>
       )}
     </section>
@@ -210,7 +222,7 @@ function Field({
     <div
       className={cn(
         "min-w-0",
-        fill && "flex min-h-0 flex-1 flex-col",
+        fill && "flex h-full min-h-0 flex-1 flex-col",
         className,
       )}
     >

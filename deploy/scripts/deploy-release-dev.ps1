@@ -43,8 +43,24 @@ if (-not $SkipBuild) {
     Write-DeployStep "Build pacote (pnpm package:release)"
     Push-Location $DevRoot
     try {
-        $pnpm = Get-Command pnpm -ErrorAction Stop
-        & pnpm package:release
+        # Evita script-shell com argumentos (ENOENT/-4058) herdado de sessoes antigas.
+        if ($env:npm_config_script_shell -and $env:npm_config_script_shell -match '\s') {
+            Remove-Item Env:\npm_config_script_shell -ErrorAction SilentlyContinue
+        }
+
+        # Preferir pnpm.cmd (PowerShell resolve pnpm.ps1 e falha com ExecutionPolicy Restricted).
+        $pnpmCmd = Join-Path $env:APPDATA "npm\pnpm.cmd"
+        if (-not (Test-Path -LiteralPath $pnpmCmd)) {
+            $found = Get-Command "pnpm.cmd" -ErrorAction SilentlyContinue
+            if ($found) {
+                $pnpmCmd = $found.Source
+            } else {
+                $found = Get-Command "pnpm" -ErrorAction Stop
+                $pnpmCmd = $found.Source
+            }
+        }
+        Write-Host "Usando: $pnpmCmd"
+        & $pnpmCmd package:release
         if ($LASTEXITCODE -ne 0) {
             throw "pnpm package:release falhou (codigo $LASTEXITCODE)"
         }

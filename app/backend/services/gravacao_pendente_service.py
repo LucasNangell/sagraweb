@@ -554,6 +554,162 @@ def _aggregate_list_items_by_juntada(
     return result
 
 
+def _enrich_juntada_membros_from_sessions(
+    aggregated: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Inclui membros de sessões ativas do mesmo JuntadaGrupoId mesmo se a OS
+    filha saiu do filtro de SituacaoLink (ex.: andamento órfão/perdido)."""
+    group_ids = sorted(
+        {
+            str(item.get("juntada_grupo_id") or "").strip()
+            for item in aggregated
+            if str(item.get("juntada_grupo_id") or "").strip()
+        }
+    )
+    if not group_ids:
+        return aggregated
+
+    placeholders = ", ".join(["%s"] * len(group_ids))
+    rows = db.execute_query(
+        f"""
+        SELECT OsNro AS nr_os, OsAno AS ano, JuntadaGrupoId AS juntada_grupo_id
+        FROM tab_os_gravacao_pendente
+        WHERE Status = 'ativa'
+          AND JuntadaGrupoId IN ({placeholders})
+        """,
+        tuple(group_ids),
+    )
+    by_group: dict[str, list[dict[str, int]]] = {}
+    for row in rows or []:
+        gid = str(row.get("juntada_grupo_id") or "").strip()
+        if not gid:
+            continue
+        by_group.setdefault(gid, []).append(
+            {"nr_os": int(row["nr_os"]), "ano": int(row["ano"])}
+        )
+
+    for item in aggregated:
+        gid = str(item.get("juntada_grupo_id") or "").strip()
+        if not gid:
+            continue
+        membros = list(item.get("membros") or [])
+        for extra in by_group.get(gid, []):
+            if not any(
+                m["nr_os"] == extra["nr_os"] and m["ano"] == extra["ano"] for m in membros
+            ):
+                membros.append(extra)
+        item["membros"] = sorted(membros, key=lambda m: (m["nr_os"], m["ano"]))
+    return aggregated
+
+
+def repair_orphan_pendente_andamentos() -> list[dict[str, Any]]:
+    """Recria andamento Gravação Pendente quando a sessão ativa referencia CodStatus ausente."""
+    from routers.andamento_helpers import format_andamento_obs, format_gravacao_pendente_obs
+    from routers.os_audit_service import log_andamento_added
+    from services.andamento_operacional import insert_andamento_as_ultimo
+
+    rows = db.execute_query(
+        """
+        SELECT gp.Id, gp.OsNro, gp.OsAno, gp.CodStatus, gp.LancadoPorPonto, gp.JuntadaGrupoId
+        FROM tab_os_gravacao_pendente gp
+        WHERE gp.Status = 'ativa'
+          AND gp.CodStatus IS NOT NULL
+          AND gp.CodStatus != ''
+          AND NOT EXISTS (
+            SELECT 1 FROM tabAndamento a
+            WHERE a.CodStatus COLLATE utf8mb4_general_ci
+                = gp.CodStatus COLLATE utf8mb4_general_ci
+          )
+        ORDER BY gp.Id ASC
+        """
+    )
+    repaired: list[dict[str, Any]] = []
+    for row in rows or []:
+        os_id = int(row["OsNro"])
+        ano = int(row["OsAno"])
+        cod_status = str(row["CodStatus"] or "").strip()
+        if not cod_status:
+            continue
+        ponto_fmt = format_ponto(_clean_ponto(str(row.get("LancadoPorPonto") or "")))
+        chapas = _fetch_pendente_chapas(int(row["Id"]))
+        juntada_id = row.get("JuntadaGrupoId")
+        obs_body = format_gravacao_pendente_obs(chapas)
+        if juntada_id:
+            members = list_active_pendente_by_juntada(str(juntada_id))
+            labels = [format_os_list_label(int(m["os_nro"]), int(m["os_ano"])) for m in members]
+            if labels:
+                if len(labels) == 1:
+                    juntada_line = f"OSs juntadas: {labels[0]}"
+                elif len(labels) == 2:
+                    juntada_line = f"OSs juntadas: {labels[0]} e {labels[1]}"
+                else:
+                    juntada_line = (
+                        f"OSs juntadas: {', '.join(labels[:-1])} e {labels[-1]}"
+                    )
+                obs_body = f"{juntada_line}\n\n{obs_body}"
+        obs = format_andamento_obs(obs_body)
+
+        def tx(cursor, *, _cod=cod_status, _os=os_id, _ano=ano, _ponto=ponto_fmt, _obs=obs):
+            insert_andamento_as_ultimo(
+                cursor,
+                cod_status=_cod,
+                nro=_os,
+                ano=_ano,
+                situacao=SITUACAO_GRAVACAO_PENDENTE,
+                setor=SETOR_GRAVACAO_PENDENTE,
+                obs=_obs,
+                ponto=_ponto,
+            )
+            log_andamento_added(
+                cursor,
+                nro=_os,
+                ano=_ano,
+                cod_status=_cod,
+                situacao=SITUACAO_GRAVACAO_PENDENTE,
+                setor=SETOR_GRAVACAO_PENDENTE,
+                obs=_obs,
+                ponto=_ponto,
+                origem="repair_orphan_pendente_andamento",
+            )
+            return _cod
+
+        db.execute_transaction([tx])
+
+        def _sync() -> None:
+            from routers.mdb_writer import sync_andamento_from_mysql_to_mdb
+
+            sync_andamento_from_mysql_to_mdb(cod_status, os_id, ano, operation="insert")
+
+        try:
+            from routers.mdb_writer import dispatch_mdb_sync
+
+            dispatch_mdb_sync(
+                "repair_orphan_pendente",
+                _sync,
+                cod_status=cod_status,
+                nro=os_id,
+                ano=ano,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Falha ao enfileirar sync MDB reparo pendente %s/%s %s: %s",
+                os_id,
+                ano,
+                cod_status,
+                exc,
+            )
+
+        repaired.append(
+            {
+                "os_id": os_id,
+                "ano": ano,
+                "cod_status": cod_status,
+                "gravacao_pendente_id": int(row["Id"]),
+            }
+        )
+    return repaired
+
+
 def _map_pendente_arquivo(row: dict[str, Any]) -> dict[str, Any]:
     maquina = row.get("Maquina")
     return {
@@ -712,7 +868,9 @@ def list_os_gravacao_pendente(
                 "juntada_grupo_id": str(juntada).strip() if juntada else None,
             }
         )
-    aggregated = _aggregate_list_items_by_juntada(items)
+    aggregated = _enrich_juntada_membros_from_sessions(
+        _aggregate_list_items_by_juntada(items)
+    )
     count_group_sql = f"""
         SELECT COUNT(*) AS cnt FROM (
             SELECT COALESCE(gp.JuntadaGrupoId, CONCAT(p.AnoProtocolo, '-', p.NroProtocolo)) AS gkey
@@ -1616,23 +1774,9 @@ def _enviar_uma_pendente_para_externa_cursor(
             detail=f"OS {os_id}/{ano}: lançamento já enviado para Gravação Externa.",
         )
 
-    base_prefix = f"{os_id:05d}{ano}-"
-    cursor.execute(
-        "SELECT MAX(CodStatus) as max_cod FROM tabAndamento WHERE CodStatus LIKE %s",
-        (f"{base_prefix}%",),
-    )
-    res = cursor.fetchone()
-    next_seq = 1
-    if res and res.get("max_cod"):
-        try:
-            next_seq = int(str(res["max_cod"]).split("-")[-1]) + 1
-        except ValueError:
-            next_seq = 1
-    new_cod = f"{base_prefix}{next_seq:02d}"
-
     from routers.andamento_helpers import format_andamento_obs, format_gravacao_envio_externa_obs
     from routers.os_audit_service import log_andamento_added
-    from services.andamento_operacional import insert_andamento_as_ultimo
+    from services.andamento_operacional import insert_andamento_as_ultimo, next_cod_status_for_os
 
     chapas_rows = []
     cursor.execute(
@@ -1653,6 +1797,7 @@ def _enviar_uma_pendente_para_externa_cursor(
         )
 
     obs = format_andamento_obs(format_gravacao_envio_externa_obs(chapas_rows))
+    new_cod = next_cod_status_for_os(cursor, os_id, ano)
     insert_andamento_as_ultimo(
         cursor,
         cod_status=new_cod,

@@ -65,6 +65,50 @@ def test_aggregate_list_items_by_juntada():
     assert solo["membros"] == [{"nr_os": 100, "ano": 2026}]
 
 
+@patch("services.gravacao_pendente_service.db")
+def test_enrich_juntada_membros_from_sessions(mock_db):
+    from services.gravacao_pendente_service import _enrich_juntada_membros_from_sessions
+
+    aggregated = [
+        {
+            "nr_os": 5746,
+            "ano": 2026,
+            "juntada_grupo_id": "g1",
+            "membros": [{"nr_os": 5746, "ano": 2026}],
+        }
+    ]
+    mock_db.execute_query.return_value = [
+        {"nr_os": 5746, "ano": 2026, "juntada_grupo_id": "g1"},
+        {"nr_os": 6059, "ano": 2026, "juntada_grupo_id": "g1"},
+    ]
+    result = _enrich_juntada_membros_from_sessions(aggregated)
+    assert {m["nr_os"] for m in result[0]["membros"]} == {5746, 6059}
+
+
+def test_next_cod_status_avoids_session_reuse():
+    from services.andamento_operacional import next_cod_status_for_os
+
+    cursor = MagicMock()
+
+    def execute(sql, params=None):
+        return None
+
+    def fetchone():
+        # Sequência de fetchone: andamento max 07, pendente max 08, externa None
+        if not hasattr(fetchone, "n"):
+            fetchone.n = 0
+        fetchone.n += 1
+        if fetchone.n == 1:
+            return {"max_cod": "060592026-07"}
+        if fetchone.n == 2:
+            return {"max_cod": "060592026-08"}
+        return {"max_cod": None}
+
+    cursor.execute.side_effect = execute
+    cursor.fetchone.side_effect = fetchone
+    assert next_cod_status_for_os(cursor, 6059, 2026) == "060592026-09"
+
+
 @patch("services.gravacao_pendente_service.get_active_pendente_session", return_value=None)
 @patch("services.gravacao_pendente_service.os_exists", side_effect=lambda a, n: (a, n) != (2026, 999))
 def test_validate_juntadas(_mock_exists, _mock_active):

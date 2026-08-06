@@ -1420,21 +1420,9 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
         from services.gravacao_pendente_service import lookup_os_solicitante
 
         def _next_cod_status(nro: int, ano_os: int) -> str:
-            base_prefix = f"{nro:05d}{ano_os}-"
-            like_pattern = f"{base_prefix}%"
-            cursor.execute(
-                "SELECT MAX(CodStatus) as max_cod FROM tabAndamento WHERE CodStatus LIKE %s",
-                (like_pattern,),
-            )
-            res = cursor.fetchone()
-            next_seq = 1
-            if res and res["max_cod"]:
-                try:
-                    existing_suffix = res["max_cod"].split("-")[-1]
-                    next_seq = int(existing_suffix) + 1
-                except ValueError:
-                    next_seq = 1
-            return f"{base_prefix}{next_seq:02d}"
+            from services.andamento_operacional import next_cod_status_for_os
+
+            return next_cod_status_for_os(cursor, nro, ano_os)
 
         def _insert_andamento_for(nro: int, ano_os: int) -> str:
             cursor.execute(

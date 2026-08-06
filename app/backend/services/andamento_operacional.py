@@ -57,6 +57,49 @@ def get_mirror_cod_statuses_for_os(nro: int, ano: int) -> List[str]:
     return [str(r["cod"]).strip() for r in (rows or []) if r.get("cod")]
 
 
+def next_cod_status_for_os(cursor, nro: int, ano: int) -> str:
+    """Próximo CodStatus (NRO/ANO-XX), evitando reutilizar códigos ainda referenciados
+    em sessões de Gravação Pendente/Externa (mesmo após DELETE do andamento)."""
+    base_prefix = f"{nro:05d}{ano}-"
+    like_pattern = f"{base_prefix}%"
+    max_seq = 0
+
+    def _bump_from_cod(cod: object) -> None:
+        nonlocal max_seq
+        if not cod:
+            return
+        try:
+            suffix = str(cod).split("-")[-1]
+            max_seq = max(max_seq, int(suffix))
+        except ValueError:
+            return
+
+    cursor.execute(
+        "SELECT MAX(CodStatus) AS max_cod FROM tabAndamento WHERE CodStatus LIKE %s",
+        (like_pattern,),
+    )
+    row = cursor.fetchone() or {}
+    _bump_from_cod(row.get("max_cod") if isinstance(row, dict) else None)
+
+    for table in ("tab_os_gravacao_pendente", "tab_os_gravacao_externa"):
+        try:
+            cursor.execute(
+                f"""
+                SELECT MAX(CodStatus) AS max_cod
+                FROM {table}
+                WHERE OsNro = %s AND OsAno = %s AND CodStatus LIKE %s
+                """,
+                (nro, ano, like_pattern),
+            )
+            srow = cursor.fetchone() or {}
+            _bump_from_cod(srow.get("max_cod") if isinstance(srow, dict) else None)
+        except Exception:
+            # Tabela pode não existir em ambientes antigos de teste.
+            pass
+
+    return f"{base_prefix}{max_seq + 1:02d}"
+
+
 def insert_andamento_as_ultimo(
     cursor,
     *,

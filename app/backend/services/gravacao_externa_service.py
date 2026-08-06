@@ -582,9 +582,14 @@ def list_os_gravacao_externa(
                 "juntada_grupo_id": str(juntada).strip() if juntada else None,
             }
         )
-    from services.gravacao_pendente_service import _aggregate_list_items_by_juntada
+    from services.gravacao_pendente_service import (
+        _aggregate_list_items_by_juntada,
+        _enrich_juntada_membros_from_sessions,
+    )
 
-    aggregated = _aggregate_list_items_by_juntada(items)
+    aggregated = _enrich_juntada_membros_from_sessions(
+        _aggregate_list_items_by_juntada(items)
+    )
     return aggregated[offset : offset + limit], total
 
 

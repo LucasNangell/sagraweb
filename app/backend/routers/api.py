@@ -1081,6 +1081,18 @@ def startup_init():
         logger.error("Erro ao garantir schema Gravação Pendente no startup: %s", exc)
 
     try:
+        from services.gravacao_pendente_service import repair_orphan_pendente_andamentos
+
+        repaired_p = repair_orphan_pendente_andamentos()
+        if repaired_p:
+            logger.info(
+                "Reparo andamentos órfãos Gravação Pendente: %s OS(s)",
+                len(repaired_p),
+            )
+    except Exception as exc:
+        logger.error("Erro no reparo de andamentos órfãos Gravação Pendente: %s", exc)
+
+    try:
         from services.gravacao_externa_service import repair_legacy_gravacao_externa_andamentos
 
         repaired = repair_legacy_gravacao_externa_andamentos()

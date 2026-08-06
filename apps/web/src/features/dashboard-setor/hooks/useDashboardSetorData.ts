@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { fetchAndamentos } from "@/api/pcp";
-import { fetchSetores } from "@/api/aux";
+import { fetchSetores } from "@/api/auxLookups";
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 
 import { fetchDashboardSectorData } from "../api";

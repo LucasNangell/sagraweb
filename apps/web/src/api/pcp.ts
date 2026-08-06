@@ -67,7 +67,7 @@ export async function fetchAndamentos(): Promise<string[]> {
       .map((r) => r.Situacao)
       .filter((v): v is string => Boolean(v?.trim()));
   } catch {
-    const { fetchSituacoes } = await import("@/api/aux");
+    const { fetchSituacoes } = await import("@/api/auxLookups");
     return fetchSituacoes();
   }
 }

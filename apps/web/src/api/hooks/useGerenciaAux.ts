@@ -7,7 +7,7 @@ import {
   fetchMaquinas,
   fetchPapeis,
   fetchProdutos,
-} from "@/api/aux";
+} from "@/api/auxLookups";
 import { queryKeys } from "@/api/query-keys";
 
 const STALE_MS = 5 * 60 * 1000;

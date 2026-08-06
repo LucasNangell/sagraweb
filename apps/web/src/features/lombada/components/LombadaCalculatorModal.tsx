@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { fetchPapeisLombada } from "@/api/aux";
+import { fetchPapeisLombada } from "@/api/auxLookups";
 import { queryKeys } from "@/api/query-keys";
 import { cn } from "@sagra/ui";
 

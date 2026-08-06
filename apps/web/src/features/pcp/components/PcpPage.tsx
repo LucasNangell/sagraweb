@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { fetchAndamentos } from "@/api/pcp";
 import { pcpQueueKey } from "@/api/hooks/usePcpQueue";
-import { fetchSetores } from "@/api/aux";
+import { fetchSetores } from "@/api/auxLookups";
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 import { usePcpConfigStore } from "../pcpConfigStore";
 import { PcpColumnWrapper } from "./PcpColumnWrapper";

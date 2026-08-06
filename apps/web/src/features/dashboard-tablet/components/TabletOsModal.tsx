@@ -1,7 +1,7 @@
 import { Delete, Loader2, Mic, MicOff, Plus, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { fetchSetores } from "@/api/aux";
+import { fetchSetores } from "@/api/auxLookups";
 import { addOsHistory } from "@/api/os";
 import { fetchAndamentos } from "@/api/pcp";
 import { fetchUserNameByPonto } from "@/features/auth/api";

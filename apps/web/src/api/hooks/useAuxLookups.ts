@@ -5,7 +5,7 @@ import {
   fetchMaquinas,
   fetchSetores,
   fetchSituacoes,
-} from "@/api/aux";
+} from "@/api/auxLookups";
 import { queryKeys } from "@/api/query-keys";
 
 const LOOKUP_STALE_MS = 5 * 60 * 1000;

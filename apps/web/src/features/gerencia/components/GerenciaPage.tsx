@@ -2,7 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Loader2, Save, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { fetchDeputadoLookup } from "@/api/aux";
+import { fetchDeputadoLookup } from "@/api/auxLookups";
 import { useGerenciaAuxLookups } from "@/api/hooks/useGerenciaAux";
 import {
   fetchGerenciaCoefA4Produtos,

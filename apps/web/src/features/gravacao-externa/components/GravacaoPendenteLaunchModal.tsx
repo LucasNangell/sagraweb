@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { FileImage, FileText, Loader2, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { fetchMaquinas } from "@/api/aux";
+import { fetchMaquinas } from "@/api/auxLookups";
 import { fetchGravacaoPendenteChapasEstimate } from "@/api/gravacaoPendente";
 import { fetchOsDetails } from "@/api/os";
 import type { NetworkFilePick } from "@/api/networkFiles";

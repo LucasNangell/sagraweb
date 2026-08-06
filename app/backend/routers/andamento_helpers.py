@@ -100,29 +100,42 @@ def format_gravacao_pendente_obs(
     return "\n".join(lines)
 
 
+def _format_chapas_lines(chapas: list[dict], *, heading: str = "Chapas por máquina:") -> list[str]:
+    lines: list[str] = [heading]
+    if chapas:
+        for ch in chapas:
+            maquina = str(ch.get("maquina") or "").strip()
+            qty = ch.get("quantidade", ch.get("quantidade_chapas", 0))
+            lines.append(f"- {maquina}: {qty}")
+    else:
+        lines.append("- (não informado)")
+    return lines
+
+
+def format_gravacao_envio_externa_obs(chapas: list[dict]) -> str:
+    """Obs do andamento Saída p/ ao enviar para Gravação Externa."""
+    return "\n".join(_format_chapas_lines(chapas))
+
+
+def format_gravacao_recebido_obs(chapas: list[dict]) -> str:
+    """Obs do andamento Recebido ao iniciar gravação (download)."""
+    lines: list[str] = ["Arquivos baixados:", ""]
+    lines.extend(_format_chapas_lines(chapas))
+    return "\n".join(lines)
+
+
 def format_gravacao_concluida_obs(chapas: list[dict]) -> str:
-    """Monta bloco de observação para andamento Aguard. Retirada após concluir gravação."""
+    """Obs do andamento Grav. Concluída após concluir gravação."""
     lines: list[str] = [
         "Gravação concluída. Aguardando retirada de:",
         "",
-        "Chapas por máquina:",
     ]
-    for ch in chapas:
-        maquina = str(ch.get("maquina") or "").strip()
-        qty = ch.get("quantidade", ch.get("quantidade_chapas", 0))
-        lines.append(f"- {maquina}: {qty}")
-    if not chapas:
-        lines.append("- (não informado)")
+    lines.extend(_format_chapas_lines(chapas))
     return "\n".join(lines)
 
 
 def format_gravacao_entrega_obs(chapas: list[dict]) -> str:
-    """Monta bloco de observação para andamento Recebido ao lançar entrega de chapas."""
-    lines: list[str] = ["Entrega de chapas.", "", "Chapas por máquina:"]
-    for ch in chapas:
-        maquina = str(ch.get("maquina") or "").strip()
-        qty = ch.get("quantidade", ch.get("quantidade_chapas", 0))
-        lines.append(f"- {maquina}: {qty}")
-    if not chapas:
-        lines.append("- (não informado)")
+    """Obs do andamento Saída p/ ao lançar recebimento de chapas."""
+    lines: list[str] = ["Chapas recebidas:", ""]
+    lines.extend(_format_chapas_lines(chapas))
     return "\n".join(lines)

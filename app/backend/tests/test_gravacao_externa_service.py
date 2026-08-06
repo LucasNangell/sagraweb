@@ -7,15 +7,20 @@ import pytest
 from routers.andamento_helpers import (
     format_gravacao_concluida_obs,
     format_gravacao_entrega_obs,
+    format_gravacao_envio_externa_obs,
+    format_gravacao_recebido_obs,
 )
 from services.gravacao_externa_service import (
-    SITUACAO_AGUARD_RETIRADA,
-    SITUACAO_GRAVACAO,
-    SITUACAO_GRAVACAO_EXTERNA,
     SETOR_ENTREGA_CHAPAS,
+    SETOR_GRAV_EXTERNA,
     SETOR_GRAVACAO_CONCLUIDA,
+    SITUACAO_GRAV_CONCLUIDA,
+    SITUACAO_GRAVACAO_EXTERNA,
+    SITUACAO_RECEBIDO,
+    SITUACAO_SAIDA_P,
     concluir_gravacao,
     iniciar_gravacao,
+    is_em_gravacao_externa_operacional,
     is_gravacao_externa_situacao,
     session_allows_operacao_fornecedor,
     user_can_access_session,
@@ -23,14 +28,15 @@ from services.gravacao_externa_service import (
 )
 
 
-def test_setor_gravacao_concluida_is_sefoc():
-    assert SETOR_GRAVACAO_CONCLUIDA == "SEFOC"
-    assert SITUACAO_AGUARD_RETIRADA == "Aguard. Retirada"
+def test_setor_gravacao_concluida_is_segep():
+    assert SETOR_GRAVACAO_CONCLUIDA == "SEGEP"
+    assert SITUACAO_GRAV_CONCLUIDA == "Grav. Concluída"
 
 
 def test_entrega_chapas_andamento_targets():
-    assert SITUACAO_GRAVACAO == "Gravação"
-    assert SETOR_ENTREGA_CHAPAS == "SEFOC"
+    assert SITUACAO_SAIDA_P == "Saída p/"
+    assert SETOR_ENTREGA_CHAPAS == "Gravação"
+    assert SETOR_GRAV_EXTERNA == "Grav. Externa"
 
 
 def test_format_gravacao_concluida_obs():
@@ -48,15 +54,32 @@ def test_format_gravacao_concluida_obs():
 
 def test_format_gravacao_entrega_obs():
     text = format_gravacao_entrega_obs([{"maquina": "M1", "quantidade": 2}])
-    assert "Entrega de chapas." in text
+    assert "Chapas recebidas:" in text
     assert "Chapas por máquina:" in text
     assert "M1: 2" in text
+
+
+def test_format_gravacao_envio_and_recebido_obs():
+    envio = format_gravacao_envio_externa_obs([{"maquina": "M1", "quantidade": 1}])
+    assert "Chapas por máquina:" in envio
+    assert "M1: 1" in envio
+    recebido = format_gravacao_recebido_obs([{"maquina": "M1", "quantidade": 1}])
+    assert "Arquivos baixados:" in recebido
+    assert "M1: 1" in recebido
 
 
 def test_is_gravacao_externa_situacao():
     assert is_gravacao_externa_situacao(SITUACAO_GRAVACAO_EXTERNA)
     assert not is_gravacao_externa_situacao("Gravação")
     assert not is_gravacao_externa_situacao("")
+
+
+def test_is_em_gravacao_externa_operacional():
+    assert is_em_gravacao_externa_operacional(SITUACAO_SAIDA_P, SETOR_GRAV_EXTERNA)
+    assert is_em_gravacao_externa_operacional(SITUACAO_RECEBIDO, SETOR_GRAV_EXTERNA)
+    assert is_em_gravacao_externa_operacional(SITUACAO_GRAVACAO_EXTERNA, "SEFOC")
+    assert not is_em_gravacao_externa_operacional(SITUACAO_SAIDA_P, "Gravação")
+    assert not is_em_gravacao_externa_operacional(SITUACAO_GRAV_CONCLUIDA, "SEGEP")
 
 
 def test_user_can_access_session_operator():
@@ -212,6 +235,7 @@ def test_create_session_with_arquivos_overwrites_active(mock_db, mock_validate):
     assert any("INSERT INTO tab_os_gravacao_externa" in s for s in captured_sql)
 
 
+@patch("services.gravacao_externa_service._notify_iniciar_gravacao")
 @patch("services.gravacao_externa_service.push_user_notification")
 @patch("services.gravacao_externa_service.insert_user_notification")
 @patch("services.gravacao_externa_service.push_gravacao_externa_iniciada")
@@ -227,6 +251,7 @@ def test_iniciar_gravacao_uses_email_without_inapp_notification(
     _realtime,
     mock_insert,
     mock_push,
+    mock_notify_iniciar,
 ):
     session = {
         "id": 7,
@@ -236,6 +261,35 @@ def test_iniciar_gravacao_uses_email_without_inapp_notification(
     }
     mock_get_active.side_effect = [session, {**session, "status": "iniciada"}]
     mock_build.return_value = {"status": "iniciada"}
+    mock_db.execute_query.side_effect = [
+        [{"situacao": "Saída p/", "setor": "Grav. Externa"}],  # ultimo operacional
+        [
+            {
+                "Id": 7,
+                "OsAno": 2026,
+                "OsNro": 100,
+                "OrigemPendenteId": None,
+                "Status": "pendente",
+                "LancadoPorPonto": "918.713",
+            }
+        ],
+    ]
+
+    captured: dict = {}
+
+    def fake_tx(ops):
+        cursor = MagicMock()
+        cursor.fetchone.return_value = {"max_cod": "001002026-01"}
+
+        def execute(sql, params=None):
+            sql_norm = " ".join(str(sql).split())
+            if "INSERT INTO tabAndamento" in sql_norm:
+                captured["insert_params"] = params
+
+        cursor.execute.side_effect = execute
+        return [op(cursor) for op in ops]
+
+    mock_db.execute_transaction.side_effect = fake_tx
 
     iniciar_gravacao(ano=2026, os_id=100, operador_ponto="111.111")
 
@@ -243,7 +297,10 @@ def test_iniciar_gravacao_uses_email_without_inapp_notification(
     assert mock_email.call_args.kwargs["event"] == "iniciada"
     mock_insert.assert_not_called()
     mock_push.assert_not_called()
-    mock_db.execute_query.assert_called_once()
+    assert captured["insert_params"][3] == SITUACAO_RECEBIDO
+    assert captured["insert_params"][4] == SETOR_GRAV_EXTERNA
+    assert "Arquivos baixados:" in captured["insert_params"][5]
+    mock_notify_iniciar.assert_called_once()
 
 
 @patch("services.gravacao_externa_service.send_gravacao_notification_email")
@@ -320,9 +377,9 @@ def test_concluir_gravacao_inserts_andamento_with_operador_ponto(
     assert captured["demote_params"] == (100, 2026)
     params = captured["insert_params"]
     assert "NOW(), 1," in captured["insert_sql"]
-    assert params[3] == SITUACAO_AGUARD_RETIRADA
+    assert params[3] == SITUACAO_GRAV_CONCLUIDA
     assert params[4] == SETOR_GRAVACAO_CONCLUIDA
-    assert params[4] == "SEFOC"
+    assert params[4] == "SEGEP"
     assert "M1: 5" in params[5]
     assert "Aguardando retirada de:" in params[5]
     assert params[6] == "999.999"
@@ -348,8 +405,8 @@ def test_concluir_gravacao_idempotent_when_already_concluded(mock_get, mock_buil
 
 
 @patch("services.gravacao_externa_service.get_active_session")
-def test_concluir_gravacao_requires_iniciada(mock_get):
-    mock_get.return_value = {"id": 1, "status": "pendente"}
+def test_concluir_gravacao_rejects_unknown_status(mock_get):
+    mock_get.return_value = {"id": 1, "status": "cancelada"}
 
     with pytest.raises(Exception) as exc:
         concluir_gravacao(ano=2026, os_id=100, operador_ponto="123")
@@ -357,16 +414,16 @@ def test_concluir_gravacao_requires_iniciada(mock_get):
 
 
 @patch("services.gravacao_externa_service._notify_concluir_gravacao")
-@patch("services.gravacao_externa_service._get_ultimo_situacao_operacional")
+@patch("services.gravacao_externa_service._get_ultimo_operacional")
 @patch("services.gravacao_externa_service.get_active_session", return_value=None)
 @patch("services.gravacao_externa_service.db")
 def test_concluir_gravacao_sem_sessao_insere_andamento(
     mock_db,
     _mock_get_session,
-    mock_situacao,
+    mock_operacional,
     mock_notify,
 ):
-    mock_situacao.return_value = SITUACAO_GRAVACAO_EXTERNA
+    mock_operacional.return_value = (SITUACAO_RECEBIDO, SETOR_GRAV_EXTERNA)
     captured: dict = {}
 
     def fake_tx(ops):
@@ -393,7 +450,7 @@ def test_concluir_gravacao_sem_sessao_insere_andamento(
     assert "session_update" not in captured
     assert captured["demote_params"] == (100, 2026)
     params = captured["insert_params"]
-    assert params[3] == SITUACAO_AGUARD_RETIRADA
+    assert params[3] == SITUACAO_GRAV_CONCLUIDA
     assert params[4] == SETOR_GRAVACAO_CONCLUIDA
     assert "Aguardando retirada de:" in params[5]
     assert "(não informado)" in params[5]
@@ -406,10 +463,10 @@ def test_concluir_gravacao_sem_sessao_insere_andamento(
     assert result["cod_status"] == "001002026-02"
 
 
-@patch("services.gravacao_externa_service._get_ultimo_situacao_operacional")
+@patch("services.gravacao_externa_service._get_ultimo_operacional")
 @patch("services.gravacao_externa_service.get_active_session", return_value=None)
-def test_concluir_gravacao_sem_sessao_requires_situacao(mock_get, mock_situacao):
-    mock_situacao.return_value = "Gravação"
+def test_concluir_gravacao_sem_sessao_requires_situacao(mock_get, mock_operacional):
+    mock_operacional.return_value = ("Gravação", "SEFOC")
 
     with pytest.raises(Exception) as exc:
         concluir_gravacao(ano=2026, os_id=100, operador_ponto="123")
@@ -433,7 +490,7 @@ def test_insert_andamento_as_ultimo_demotes_then_inserts_with_flag():
         cod_status="001002026-03",
         nro=100,
         ano=2026,
-        situacao=SITUACAO_GRAVACAO,
+        situacao=SITUACAO_SAIDA_P,
         setor=SETOR_ENTREGA_CHAPAS,
         obs="obs",
         ponto="111.111",
@@ -448,12 +505,11 @@ def test_insert_andamento_as_ultimo_demotes_then_inserts_with_flag():
         "001002026-03",
         100,
         2026,
-        SITUACAO_GRAVACAO,
+        SITUACAO_SAIDA_P,
         SETOR_ENTREGA_CHAPAS,
         "obs",
         "111.111",
     )
-
 
 @patch("services.gravacao_externa_service._notify_entrega_chapas")
 @patch("services.gravacao_externa_service.get_session_by_id")
@@ -512,5 +568,6 @@ def test_lancar_entrega_chapas_inserts_andamento_as_ultimo(
 
     assert captured["demote_params"] == (100, 2026)
     assert "NOW(), 1," in captured["insert_sql"]
-    assert captured["insert_params"][3] == SITUACAO_GRAVACAO
+    assert captured["insert_params"][3] == SITUACAO_SAIDA_P
     assert captured["insert_params"][4] == SETOR_ENTREGA_CHAPAS
+    assert "Chapas recebidas:" in captured["insert_params"][5]

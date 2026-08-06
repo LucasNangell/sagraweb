@@ -464,7 +464,9 @@ def test_enviar_para_externa_emails_when_andamento_is_created(
 
     assert captured["demote_params"] == (100, 2026)
     assert "NOW(), 1," in captured["insert_sql"]
-    assert captured["insert_params"][3] == "Gravação Externa"
+    assert captured["insert_params"][3] == "Saída p/"
+    assert captured["insert_params"][4] == "Grav. Externa"
+    assert "Chapas por máquina:" in captured["insert_params"][5]
     email.assert_called_once_with(
         event="encaminhada",
         ano=2026,

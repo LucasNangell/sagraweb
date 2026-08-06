@@ -12,7 +12,13 @@ import {
 import type { WebSocketStatus } from "@/hooks/useSagraWebSocket";
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 
-const GRAVACAO_EXTERNA_SITUACAO = "Gravação Externa";
+import {
+  GRAVACAO_CONCLUIDA_SITUACAO,
+  GRAVACAO_EXTERNA_SITUACAO,
+  GRAVACAO_RECEBIDO_SITUACAO,
+  GRAVACAO_SAIDA_P_SITUACAO,
+  SETOR_GRAV_EXTERNA,
+} from "@/features/gravacao-externa/constants";
 
 export interface UseGravacaoExternaRealtimeOptions {
   /** OS cuja conversa está aberta (chat). */
@@ -24,6 +30,17 @@ function invalidateGravacaoExternaList(queryClient: ReturnType<typeof useQueryCl
   void queryClient.invalidateQueries({
     queryKey: queryKeys.gravacaoExterna.prefix,
   });
+}
+
+function isGravacaoExternaSystemSituacao(situacao: string | undefined): boolean {
+  const sit = String(situacao || "").trim();
+  return (
+    sit === GRAVACAO_EXTERNA_SITUACAO ||
+    sit === GRAVACAO_SAIDA_P_SITUACAO ||
+    sit === GRAVACAO_RECEBIDO_SITUACAO ||
+    sit === GRAVACAO_CONCLUIDA_SITUACAO ||
+    sit === SETOR_GRAV_EXTERNA
+  );
 }
 
 export function useGravacaoExternaRealtime(
@@ -95,7 +112,7 @@ export function useGravacaoExternaRealtime(
 
       if (msgType === "system_update") {
         const situacao = (data as GravacaoExternaWsPayload & { situacao?: string }).situacao;
-        if (situacao === GRAVACAO_EXTERNA_SITUACAO) {
+        if (isGravacaoExternaSystemSituacao(situacao)) {
           invalidateGravacaoExternaList(queryClient);
         }
         return;

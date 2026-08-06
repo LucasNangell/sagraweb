@@ -1,5 +1,11 @@
-export const GRAVACAO_EXTERNA_SITUACAO = "Gravação Externa";
+export const GRAVACAO_EXTERNA_SITUACAO = "Gravação Externa"; // legado
 export const GRAVACAO_PENDENTE_SITUACAO = "Gravação Pendente";
+export const GRAVACAO_SAIDA_P_SITUACAO = "Saída p/";
+export const GRAVACAO_RECEBIDO_SITUACAO = "Recebido";
+export const GRAVACAO_CONCLUIDA_SITUACAO = "Grav. Concluída";
+export const SETOR_GRAV_EXTERNA = "Grav. Externa";
+export const SETOR_GRAVACAO_PENDENTE = "SEGEP";
+export const SETOR_GRAVACAO_ENTREGA = "Gravação";
 
 export const GRAVACAO_EXTERNA_ALLOWED_EXTENSIONS = [".pdf", ".tif", ".tiff"];
 
@@ -14,6 +20,19 @@ export function isGravacaoPendenteSituacao(situacao: string | null | undefined):
 
 export function isGravacaoExternaSituacao(situacao: string | null | undefined): boolean {
   return String(situacao || "").trim() === GRAVACAO_EXTERNA_SITUACAO;
+}
+
+export function isEmGravacaoExternaOperacional(
+  situacao: string | null | undefined,
+  setor: string | null | undefined,
+): boolean {
+  const sit = String(situacao || "").trim();
+  const setr = String(setor || "").trim();
+  if (sit === GRAVACAO_EXTERNA_SITUACAO) return true;
+  return (
+    setr === SETOR_GRAV_EXTERNA &&
+    (sit === GRAVACAO_SAIDA_P_SITUACAO || sit === GRAVACAO_RECEBIDO_SITUACAO)
+  );
 }
 
 export function canAlterarArquivosGravacaoExterna(

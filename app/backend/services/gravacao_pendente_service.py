@@ -13,7 +13,8 @@ from fastapi import HTTPException
 from database import db
 from routers.andamento_helpers import format_gravacao_pendente_obs, format_ponto
 from services.gravacao_externa_service import (
-    SITUACAO_GRAVACAO_EXTERNA,
+    SETOR_GRAV_EXTERNA,
+    SITUACAO_SAIDA_P,
     build_session_detail,
     get_active_session,
     insert_session_with_arquivos_cursor,
@@ -30,7 +31,8 @@ from services.os_vinculo_grupo_service import _clean_ponto, _lookup_usuario_nome
 logger = logging.getLogger(__name__)
 
 SITUACAO_GRAVACAO_PENDENTE = "Gravação Pendente"
-DEFAULT_SETOR_ENVIO_EXTERNA = "SEFOC"
+DEFAULT_SETOR_ENVIO_EXTERNA = SETOR_GRAV_EXTERNA
+SETOR_GRAVACAO_PENDENTE = "SEGEP"
 ACTIVE_PENDENTE_STATUSES = frozenset({"ativa"})
 ALLOWED_MAQUINAS_CONFIG = frozenset({"Komori", "SM74", "PM52"})
 COTA_AJUSTE_MODES = frozenset({"set", "inc", "dec"})
@@ -1628,17 +1630,35 @@ def _enviar_uma_pendente_para_externa_cursor(
             next_seq = 1
     new_cod = f"{base_prefix}{next_seq:02d}"
 
-    from routers.andamento_helpers import format_andamento_obs
+    from routers.andamento_helpers import format_andamento_obs, format_gravacao_envio_externa_obs
     from routers.os_audit_service import log_andamento_added
     from services.andamento_operacional import insert_andamento_as_ultimo
 
-    obs = format_andamento_obs("Enviado para Gravação Externa.")
+    chapas_rows = []
+    cursor.execute(
+        """
+        SELECT Maquina, QuantidadeChapas
+        FROM tab_os_gravacao_pendente_chapa
+        WHERE GravacaoPendenteId = %s
+        ORDER BY Id
+        """,
+        (int(pendente["id"]),),
+    )
+    for r in cursor.fetchall() or []:
+        chapas_rows.append(
+            {
+                "maquina": str(r.get("Maquina") or "").strip(),
+                "quantidade": int(r.get("QuantidadeChapas") or 0),
+            }
+        )
+
+    obs = format_andamento_obs(format_gravacao_envio_externa_obs(chapas_rows))
     insert_andamento_as_ultimo(
         cursor,
         cod_status=new_cod,
         nro=os_id,
         ano=ano,
-        situacao=SITUACAO_GRAVACAO_EXTERNA,
+        situacao=SITUACAO_SAIDA_P,
         setor=setor_link,
         obs=obs,
         ponto=ponto_fmt,
@@ -1648,7 +1668,7 @@ def _enviar_uma_pendente_para_externa_cursor(
         nro=os_id,
         ano=ano,
         cod_status=new_cod,
-        situacao=SITUACAO_GRAVACAO_EXTERNA,
+        situacao=SITUACAO_SAIDA_P,
         setor=setor_link,
         obs=obs,
         ponto=ponto_fmt,
@@ -1770,7 +1790,7 @@ def _notify_enviar_gravacao_externa(
         ano,
         "history_added",
         codstatus=new_cod,
-        situacao=SITUACAO_GRAVACAO_EXTERNA,
+        situacao=SITUACAO_SAIDA_P,
         setor=setor,
         source="enviar_gravacao_externa",
     )
@@ -1830,17 +1850,20 @@ def repair_orphan_gravacao_externa_sessions() -> list[dict[str, Any]]:
         ponto_fmt = format_ponto(_clean_ponto(str(row.get("LancadoPorPonto") or "")))
 
         def tx(cursor, *, _cod=cod_status, _os=os_id, _ano=ano, _ponto=ponto_fmt):
-            from routers.andamento_helpers import format_andamento_obs
+            from routers.andamento_helpers import (
+                format_andamento_obs,
+                format_gravacao_envio_externa_obs,
+            )
             from routers.os_audit_service import log_andamento_added
             from services.andamento_operacional import insert_andamento_as_ultimo
 
-            obs = format_andamento_obs("Enviado para Gravação Externa.")
+            obs = format_andamento_obs(format_gravacao_envio_externa_obs([]))
             insert_andamento_as_ultimo(
                 cursor,
                 cod_status=_cod,
                 nro=_os,
                 ano=_ano,
-                situacao=SITUACAO_GRAVACAO_EXTERNA,
+                situacao=SITUACAO_SAIDA_P,
                 setor=DEFAULT_SETOR_ENVIO_EXTERNA,
                 obs=obs,
                 ponto=_ponto,
@@ -1850,7 +1873,7 @@ def repair_orphan_gravacao_externa_sessions() -> list[dict[str, Any]]:
                 nro=_os,
                 ano=_ano,
                 cod_status=_cod,
-                situacao=SITUACAO_GRAVACAO_EXTERNA,
+                situacao=SITUACAO_SAIDA_P,
                 setor=DEFAULT_SETOR_ENVIO_EXTERNA,
                 obs=obs,
                 ponto=_ponto,

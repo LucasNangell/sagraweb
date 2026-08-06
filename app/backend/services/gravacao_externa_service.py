@@ -25,11 +25,21 @@ from services.os_vinculo_grupo_service import _clean_ponto, _lookup_usuario_nome
 
 logger = logging.getLogger(__name__)
 
+# Legado (ainda aceito em reparo / cancelamento até limpar a fila)
 SITUACAO_GRAVACAO_EXTERNA = "Gravação Externa"
-SITUACAO_AGUARD_RETIRADA = "Aguard. Retirada"
-SITUACAO_GRAVACAO = "Gravação"
-SETOR_GRAVACAO_CONCLUIDA = "SEFOC"
-SETOR_ENTREGA_CHAPAS = "SEFOC"
+SITUACAO_AGUARD_RETIRADA = "Aguard. Retirada"  # legado; conclusão passa a Grav. Concluída
+
+SITUACAO_SAIDA_P = "Saída p/"
+SITUACAO_RECEBIDO = "Recebido"
+SITUACAO_GRAV_CONCLUIDA = "Grav. Concluída"
+SITUACAO_GRAVACAO = "Gravação"  # legado; entrega passa a Saída p/ + setor Gravação
+
+SETOR_GRAV_EXTERNA = "Grav. Externa"
+SETOR_GRAVACAO_CONCLUIDA = "SEGEP"
+SETOR_ENTREGA_CHAPAS = "Gravação"
+SETOR_GRAVACAO = "Gravação"
+
+SITUACOES_OPERACIONAIS_EXTERNA = frozenset({SITUACAO_SAIDA_P, SITUACAO_RECEBIDO})
 ACTIVE_STATUSES = frozenset({"pendente", "iniciada"})
 ALLOWED_EXTENSIONS = frozenset({".pdf", ".tif", ".tiff"})
 MESSAGE_MAX_LENGTH = 8000
@@ -37,7 +47,20 @@ TIF_PREVIEW_MAX_EDGE = int(os.getenv("SAGRA_TIF_PREVIEW_MAX_EDGE", "2400"))
 
 
 def is_gravacao_externa_situacao(situacao: str | None) -> bool:
+    """Legado: andamento exatamente 'Gravação Externa'."""
     return str(situacao or "").strip() == SITUACAO_GRAVACAO_EXTERNA
+
+
+def is_em_gravacao_externa_operacional(
+    situacao: str | None,
+    setor: str | None = None,
+) -> bool:
+    """OS ainda no fluxo operacional da Gravação Externa (antes de Grav. Concluída)."""
+    sit = str(situacao or "").strip()
+    setr = str(setor or "").strip()
+    if sit == SITUACAO_GRAVACAO_EXTERNA:
+        return True
+    return setr == SETOR_GRAV_EXTERNA and sit in SITUACOES_OPERACIONAIS_EXTERNA
 
 
 def cancel_active_externa_sessions(ano: int, os_id: int) -> None:
@@ -66,7 +89,7 @@ def cancel_active_externa_sessions_cursor(cursor, ano: int, os_id: int) -> None:
 
 
 def cleanup_stale_externa_sessions() -> list[dict[str, Any]]:
-    """Cancela sessões ativas cuja OS não está mais com último andamento Gravação Externa."""
+    """Cancela sessões ativas cuja OS não está mais no fluxo operacional Grav. Externa."""
     from services.andamento_operacional import ultimo_operacional_cod_subquery
 
     ultimo_cod = ultimo_operacional_cod_subquery("ge.OsNro", "ge.OsAno")
@@ -79,11 +102,22 @@ def cleanup_stale_externa_sessions() -> list[dict[str, Any]]:
             SELECT 1
             FROM tabAndamento a
             WHERE a.CodStatus = {ultimo_cod}
-              AND a.SituacaoLink = %s
+              AND (
+                a.SituacaoLink = %s
+                OR (
+                    a.SetorLink = %s
+                    AND a.SituacaoLink IN (%s, %s)
+                )
+              )
           )
         ORDER BY ge.Id ASC
         """,
-        (SITUACAO_GRAVACAO_EXTERNA,),
+        (
+            SITUACAO_GRAVACAO_EXTERNA,
+            SETOR_GRAV_EXTERNA,
+            SITUACAO_SAIDA_P,
+            SITUACAO_RECEBIDO,
+        ),
     )
     cleaned: list[dict[str, Any]] = []
     for row in rows or []:
@@ -410,10 +444,19 @@ def list_os_gravacao_externa(
     params: dict[str, Any] = {"limit": limit, "offset": offset}
     ultimo_cod = ultimo_operacional_cod_subquery("p.NroProtocolo", "p.AnoProtocolo")
     filters = """
-        WHERE a.SituacaoLink = %(situacao)s
-          AND a.CodStatus = {ultimo_cod}
+        WHERE a.CodStatus = {ultimo_cod}
+          AND (
+            a.SituacaoLink = %(situacao_legado)s
+            OR (
+                a.SetorLink = %(setor_operacional)s
+                AND a.SituacaoLink IN (%(sit_saida)s, %(sit_recebido)s)
+            )
+          )
     """.format(ultimo_cod=ultimo_cod)
-    params["situacao"] = SITUACAO_GRAVACAO_EXTERNA
+    params["situacao_legado"] = SITUACAO_GRAVACAO_EXTERNA
+    params["setor_operacional"] = SETOR_GRAV_EXTERNA
+    params["sit_saida"] = SITUACAO_SAIDA_P
+    params["sit_recebido"] = SITUACAO_RECEBIDO
 
     if ano:
         filters += " AND p.AnoProtocolo = %(ano)s"
@@ -883,39 +926,109 @@ def iniciar_gravacao(
     session = get_active_session(ano, os_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão de Gravação Externa não encontrada.")
-    if session["status"] == "iniciada":
-        return build_session_detail(session)
 
     ponto_fmt = format_ponto(_clean_ponto(operador_ponto))
-    db.execute_query(
-        """
-        UPDATE tab_os_gravacao_externa
-        SET Status = 'iniciada',
-            IniciadoPorPonto = %s,
-            IniciadoEm = NOW()
-        WHERE Id = %s
-        """,
-        (ponto_fmt, session["id"]),
+    situacao_atual, setor_atual = _get_ultimo_operacional(ano, os_id)
+    ja_recebido = (
+        str(situacao_atual or "").strip() == SITUACAO_RECEBIDO
+        and str(setor_atual or "").strip() == SETOR_GRAV_EXTERNA
     )
+    if session["status"] == "iniciada" and ja_recebido:
+        return build_session_detail(session)
+
+    rows = db.execute_query(
+        "SELECT * FROM tab_os_gravacao_externa WHERE Id = %s LIMIT 1",
+        (session["id"],),
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Sessão de Gravação Externa não encontrada.")
+    session_row = rows[0]
+    origem_pendente_id = session_row.get("OrigemPendenteId")
+    chapas = _fetch_chapas_origem_pendente(
+        int(origem_pendente_id) if origem_pendente_id else None
+    )
+
+    from routers.andamento_helpers import format_andamento_obs, format_gravacao_recebido_obs
+    from routers.os_audit_service import log_andamento_added
+    from services.andamento_operacional import insert_andamento_as_ultimo
+
+    obs = format_andamento_obs(format_gravacao_recebido_obs(chapas))
+    base_prefix = f"{os_id:05d}{ano}-"
+    need_andamento = not ja_recebido
+
+    def tx(cursor):
+        if session["status"] != "iniciada":
+            cursor.execute(
+                """
+                UPDATE tab_os_gravacao_externa
+                SET Status = 'iniciada',
+                    IniciadoPorPonto = %s,
+                    IniciadoEm = NOW()
+                WHERE Id = %s
+                """,
+                (ponto_fmt, session["id"]),
+            )
+        new_cod = None
+        if need_andamento:
+            cursor.execute(
+                "SELECT MAX(CodStatus) as max_cod FROM tabAndamento WHERE CodStatus LIKE %s",
+                (f"{base_prefix}%",),
+            )
+            res = cursor.fetchone()
+            next_seq = 1
+            if res and res.get("max_cod"):
+                try:
+                    next_seq = int(str(res["max_cod"]).split("-")[-1]) + 1
+                except ValueError:
+                    next_seq = 1
+            new_cod = f"{base_prefix}{next_seq:02d}"
+            insert_andamento_as_ultimo(
+                cursor,
+                cod_status=new_cod,
+                nro=os_id,
+                ano=ano,
+                situacao=SITUACAO_RECEBIDO,
+                setor=SETOR_GRAV_EXTERNA,
+                obs=obs,
+                ponto=ponto_fmt,
+            )
+            log_andamento_added(
+                cursor,
+                nro=os_id,
+                ano=ano,
+                cod_status=new_cod,
+                situacao=SITUACAO_RECEBIDO,
+                setor=SETOR_GRAV_EXTERNA,
+                obs=obs,
+                ponto=ponto_fmt,
+                origem="gravacao_externa_iniciar",
+            )
+        return new_cod
+
+    new_cod = db.execute_transaction([tx])[0]
+    if new_cod:
+        _notify_iniciar_gravacao(ano=ano, os_id=os_id, new_cod=str(new_cod))
+
     updated = get_active_session(ano, os_id) or session
     updated["status"] = "iniciada"
 
     launcher = str(session.get("lancado_por_ponto") or "")
-    send_gravacao_notification_email(
-        event="iniciada",
-        ano=ano,
-        os_id=os_id,
-        target_ponto=launcher,
-        target_nome=session.get("lancado_por_nome"),
-        operador_ponto=ponto_fmt,
-    )
-    push_gravacao_externa_iniciada(
-        gravacao_externa_id=int(session["id"]),
-        os_ano=ano,
-        os_nro=os_id,
-        lancado_por_ponto=launcher,
-        status="iniciada",
-    )
+    if session["status"] != "iniciada":
+        send_gravacao_notification_email(
+            event="iniciada",
+            ano=ano,
+            os_id=os_id,
+            target_ponto=launcher,
+            target_nome=session.get("lancado_por_nome"),
+            operador_ponto=ponto_fmt,
+        )
+        push_gravacao_externa_iniciada(
+            gravacao_externa_id=int(session["id"]),
+            os_ano=ano,
+            os_nro=os_id,
+            lancado_por_ponto=launcher,
+            status="iniciada",
+        )
     return build_session_detail(updated)
 
 
@@ -1151,52 +1264,14 @@ def _fetch_chapas_origem_pendente(origem_pendente_id: int | None) -> list[dict[s
     ]
 
 
-def _notify_concluir_gravacao(
-    *,
-    ano: int,
-    os_id: int,
-    new_cod: str,
-) -> None:
-    """Materializa busca, WebSocket e replica andamento no MDB após concluir gravação."""
-    from services.os_andamento_post_change_service import after_andamento_changed
-
-    after_andamento_changed(
-        os_id,
-        ano,
-        "history_added",
-        codstatus=new_cod,
-        situacao=SITUACAO_AGUARD_RETIRADA,
-        setor=SETOR_GRAVACAO_CONCLUIDA,
-        source="gravacao_externa_concluir",
-    )
-
-    def _sync_to_mdb() -> None:
-        from routers.mdb_writer import sync_andamento_from_mysql_to_mdb
-
-        sync_andamento_from_mysql_to_mdb(new_cod, os_id, ano, operation="insert")
-
-    try:
-        from routers.mdb_writer import dispatch_mdb_sync
-
-        dispatch_mdb_sync(
-            "gravacao_concluir",
-            _sync_to_mdb,
-            cod_status=new_cod,
-            nro=os_id,
-            ano=ano,
-        )
-    except Exception as exc:
-        logger.warning("Falha ao enfileirar sync MDB após concluir gravação: %s", exc)
-
-
-def _get_ultimo_situacao_operacional(ano: int, os_id: int) -> Optional[str]:
-    """Situação do último andamento operacional da OS (exclui espelhos de Sub OS)."""
+def _get_ultimo_operacional(ano: int, os_id: int) -> tuple[Optional[str], Optional[str]]:
+    """Situação e setor do último andamento operacional (exclui espelhos Sub OS)."""
     from services.andamento_operacional import mirror_exclude_clause_for
 
     mirror = mirror_exclude_clause_for("a")
     rows = db.execute_query(
         f"""
-        SELECT a.SituacaoLink AS situacao
+        SELECT a.SituacaoLink AS situacao, a.SetorLink AS setor
         FROM tabAndamento a
         WHERE a.NroProtocoloLink = %s
           AND a.AnoProtocoloLink = %s
@@ -1207,9 +1282,102 @@ def _get_ultimo_situacao_operacional(ano: int, os_id: int) -> Optional[str]:
         (os_id, ano),
     )
     if not rows:
-        return None
+        return None, None
     situacao = rows[0].get("situacao")
-    return str(situacao).strip() if situacao is not None else None
+    setor = rows[0].get("setor")
+    return (
+        str(situacao).strip() if situacao is not None else None,
+        str(setor).strip() if setor is not None else None,
+    )
+
+
+def _get_ultimo_situacao_operacional(ano: int, os_id: int) -> Optional[str]:
+    situacao, _setor = _get_ultimo_operacional(ano, os_id)
+    return situacao
+
+
+def _notify_andamento_mdb(
+    *,
+    task_name: str,
+    ano: int,
+    os_id: int,
+    new_cod: str,
+    situacao: str,
+    setor: str,
+    source: str,
+    operation: str = "insert",
+) -> None:
+    from services.os_andamento_post_change_service import after_andamento_changed
+
+    after_andamento_changed(
+        os_id,
+        ano,
+        "history_added" if operation == "insert" else "history_updated",
+        codstatus=new_cod,
+        situacao=situacao,
+        setor=setor,
+        source=source,
+    )
+
+    def _sync_to_mdb() -> None:
+        from routers.mdb_writer import sync_andamento_from_mysql_to_mdb
+
+        sync_andamento_from_mysql_to_mdb(new_cod, os_id, ano, operation=operation)
+
+    try:
+        from routers.mdb_writer import dispatch_mdb_sync
+
+        dispatch_mdb_sync(
+            task_name,
+            _sync_to_mdb,
+            cod_status=new_cod,
+            nro=os_id,
+            ano=ano,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Falha ao enfileirar sync MDB (%s) andamento %s: %s",
+            task_name,
+            new_cod,
+            exc,
+        )
+
+
+def _notify_concluir_gravacao(
+    *,
+    ano: int,
+    os_id: int,
+    new_cod: str,
+) -> None:
+    """Materializa busca, WebSocket e replica andamento no MDB após concluir gravação."""
+    _notify_andamento_mdb(
+        task_name="gravacao_concluir",
+        ano=ano,
+        os_id=os_id,
+        new_cod=new_cod,
+        situacao=SITUACAO_GRAV_CONCLUIDA,
+        setor=SETOR_GRAVACAO_CONCLUIDA,
+        source="gravacao_externa_concluir",
+        operation="insert",
+    )
+
+
+def _notify_iniciar_gravacao(
+    *,
+    ano: int,
+    os_id: int,
+    new_cod: str,
+) -> None:
+    _notify_andamento_mdb(
+        task_name="gravacao_iniciar",
+        ano=ano,
+        os_id=os_id,
+        new_cod=new_cod,
+        situacao=SITUACAO_RECEBIDO,
+        setor=SETOR_GRAV_EXTERNA,
+        source="gravacao_externa_iniciar",
+        operation="insert",
+    )
 
 
 def _build_concluida_sem_sessao_detail(
@@ -1250,9 +1418,9 @@ def _concluir_gravacao_sem_sessao(
     os_id: int,
     operador_ponto: str,
 ) -> dict[str, Any]:
-    """Conclui OS em Gravação Externa sem sessão/arquivos: só andamento Aguard. Retirada."""
-    situacao = _get_ultimo_situacao_operacional(ano, os_id)
-    if not is_gravacao_externa_situacao(situacao):
+    """Conclui OS em Gravação Externa sem sessão/arquivos: só andamento Grav. Concluída."""
+    situacao, setor = _get_ultimo_operacional(ano, os_id)
+    if not is_em_gravacao_externa_operacional(situacao, setor):
         raise HTTPException(
             status_code=400,
             detail="A OS precisa estar em Gravação Externa para concluir sem sessão.",
@@ -1286,7 +1454,7 @@ def _concluir_gravacao_sem_sessao(
             cod_status=new_cod,
             nro=os_id,
             ano=ano,
-            situacao=SITUACAO_AGUARD_RETIRADA,
+            situacao=SITUACAO_GRAV_CONCLUIDA,
             setor=SETOR_GRAVACAO_CONCLUIDA,
             obs=obs,
             ponto=ponto_andamento,
@@ -1296,7 +1464,7 @@ def _concluir_gravacao_sem_sessao(
             nro=os_id,
             ano=ano,
             cod_status=new_cod,
-            situacao=SITUACAO_AGUARD_RETIRADA,
+            situacao=SITUACAO_GRAV_CONCLUIDA,
             setor=SETOR_GRAVACAO_CONCLUIDA,
             obs=obs,
             ponto=ponto_andamento,
@@ -1328,10 +1496,10 @@ def concluir_gravacao(
         )
     if session["status"] == "concluida":
         return build_session_detail(session)
-    if session["status"] != "iniciada":
+    if session["status"] not in ("iniciada", "pendente"):
         raise HTTPException(
             status_code=400,
-            detail="A gravação precisa estar iniciada para ser concluída.",
+            detail="A gravação precisa estar pendente ou iniciada para ser concluída.",
         )
 
     rows = db.execute_query(
@@ -1386,7 +1554,7 @@ def concluir_gravacao(
             cod_status=new_cod,
             nro=os_id,
             ano=ano,
-            situacao=SITUACAO_AGUARD_RETIRADA,
+            situacao=SITUACAO_GRAV_CONCLUIDA,
             setor=SETOR_GRAVACAO_CONCLUIDA,
             obs=obs,
             ponto=ponto_andamento,
@@ -1396,7 +1564,7 @@ def concluir_gravacao(
             nro=os_id,
             ano=ano,
             cod_status=new_cod,
-            situacao=SITUACAO_AGUARD_RETIRADA,
+            situacao=SITUACAO_GRAV_CONCLUIDA,
             setor=SETOR_GRAVACAO_CONCLUIDA,
             obs=obs,
             ponto=ponto_andamento,
@@ -1537,7 +1705,7 @@ def list_os_gravacao_aguardando_entrega(
                 "solicitante": row.get("solicitante") or row.get("nome_usuario"),
                 "produto": row.get("produto"),
                 "titulo": row.get("titulo"),
-                "situacao": SITUACAO_AGUARD_RETIRADA,
+                "situacao": SITUACAO_GRAV_CONCLUIDA,
                 "setor": SETOR_GRAVACAO_CONCLUIDA,
                 "last_update": row.get("concluida_em"),
                 "gravacao_externa_id": row.get("gravacao_externa_id"),
@@ -1556,35 +1724,16 @@ def list_os_gravacao_aguardando_entrega(
 
 
 def _notify_entrega_chapas(*, ano: int, os_id: int, new_cod: str) -> None:
-    from services.os_andamento_post_change_service import after_andamento_changed
-
-    after_andamento_changed(
-        os_id,
-        ano,
-        "history_added",
-        codstatus=new_cod,
-        situacao=SITUACAO_GRAVACAO,
+    _notify_andamento_mdb(
+        task_name="gravacao_entrega",
+        ano=ano,
+        os_id=os_id,
+        new_cod=new_cod,
+        situacao=SITUACAO_SAIDA_P,
         setor=SETOR_ENTREGA_CHAPAS,
         source="gravacao_externa_entrega",
+        operation="insert",
     )
-
-    def _sync_to_mdb() -> None:
-        from routers.mdb_writer import sync_andamento_from_mysql_to_mdb
-
-        sync_andamento_from_mysql_to_mdb(new_cod, os_id, ano, operation="insert")
-
-    try:
-        from routers.mdb_writer import dispatch_mdb_sync
-
-        dispatch_mdb_sync(
-            "gravacao_entrega",
-            _sync_to_mdb,
-            cod_status=new_cod,
-            nro=os_id,
-            ano=ano,
-        )
-    except Exception as exc:
-        logger.warning("Falha ao enfileirar sync MDB após entrega de chapas: %s", exc)
 
 
 def lancar_entrega_chapas(
@@ -1671,7 +1820,7 @@ def lancar_entrega_chapas(
             cod_status=new_cod,
             nro=os_id,
             ano=ano,
-            situacao=SITUACAO_GRAVACAO,
+            situacao=SITUACAO_SAIDA_P,
             setor=SETOR_ENTREGA_CHAPAS,
             obs=obs,
             ponto=recebido_fmt,
@@ -1681,7 +1830,7 @@ def lancar_entrega_chapas(
             nro=os_id,
             ano=ano,
             cod_status=new_cod,
-            situacao=SITUACAO_GRAVACAO,
+            situacao=SITUACAO_SAIDA_P,
             setor=SETOR_ENTREGA_CHAPAS,
             obs=obs,
             ponto=recebido_fmt,
@@ -1696,3 +1845,87 @@ def lancar_entrega_chapas(
     if not updated:
         raise HTTPException(status_code=500, detail="Falha ao atualizar sessão após entrega.")
     return build_session_detail(updated)
+
+
+def repair_legacy_gravacao_externa_andamentos() -> list[dict[str, Any]]:
+    """One-shot: OSs em OPs em andamento com andamento legado → Saída p/ ou Recebido + sync MDB."""
+    from routers.andamento_helpers import (
+        format_andamento_obs,
+        format_gravacao_envio_externa_obs,
+        format_gravacao_recebido_obs,
+    )
+    from services.andamento_operacional import ultimo_operacional_cod_subquery
+
+    ultimo_cod = ultimo_operacional_cod_subquery("ge.OsNro", "ge.OsAno")
+    rows = db.execute_query(
+        f"""
+        SELECT
+            ge.Id AS ge_id,
+            ge.OsNro AS os_nro,
+            ge.OsAno AS os_ano,
+            ge.Status AS ge_status,
+            ge.OrigemPendenteId AS origem_pendente_id,
+            a.CodStatus AS cod_status
+        FROM tab_os_gravacao_externa ge
+        INNER JOIN tabAndamento a
+            ON a.CodStatus = {ultimo_cod}
+        WHERE ge.Status IN ('pendente', 'iniciada')
+          AND a.SituacaoLink = %s
+        ORDER BY ge.Id ASC
+        """,
+        (SITUACAO_GRAVACAO_EXTERNA,),
+    )
+    repaired: list[dict[str, Any]] = []
+    for row in rows or []:
+        os_id = int(row["os_nro"])
+        ano = int(row["os_ano"])
+        cod_status = str(row["cod_status"] or "").strip()
+        status = str(row["ge_status"] or "").strip()
+        if not cod_status:
+            continue
+        origem = row.get("origem_pendente_id")
+        chapas = _fetch_chapas_origem_pendente(int(origem) if origem else None)
+        if status == "iniciada":
+            new_sit = SITUACAO_RECEBIDO
+            new_setor = SETOR_GRAV_EXTERNA
+            obs = format_andamento_obs(format_gravacao_recebido_obs(chapas))
+        else:
+            new_sit = SITUACAO_SAIDA_P
+            new_setor = SETOR_GRAV_EXTERNA
+            obs = format_andamento_obs(format_gravacao_envio_externa_obs(chapas))
+
+        def tx(cursor, *, _cod=cod_status, _sit=new_sit, _setor=new_setor, _obs=obs):
+            cursor.execute(
+                """
+                UPDATE tabAndamento
+                SET SituacaoLink = %s,
+                    SetorLink = %s,
+                    `Observaçao` = %s
+                WHERE CodStatus = %s
+                """,
+                (_sit, _setor, _obs, _cod),
+            )
+            return _cod
+
+        db.execute_transaction([tx])
+        _notify_andamento_mdb(
+            task_name="gravacao_repair_legado",
+            ano=ano,
+            os_id=os_id,
+            new_cod=cod_status,
+            situacao=new_sit,
+            setor=new_setor,
+            source="repair_legacy_gravacao_externa",
+            operation="update",
+        )
+        repaired.append(
+            {
+                "os_id": os_id,
+                "ano": ano,
+                "cod_status": cod_status,
+                "situacao": new_sit,
+                "setor": new_setor,
+                "session_status": status,
+            }
+        )
+    return repaired

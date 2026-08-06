@@ -3,8 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   GRAVACAO_EXTERNA_SITUACAO,
   GRAVACAO_PENDENTE_SITUACAO,
+  GRAVACAO_RECEBIDO_SITUACAO,
+  GRAVACAO_SAIDA_P_SITUACAO,
+  SETOR_GRAV_EXTERNA,
   canAlterarArquivosGravacaoExterna,
   canAlterarArquivosGravacaoPendente,
+  isEmGravacaoExternaOperacional,
   isGravacaoExternaFile,
   isGravacaoPendenteSituacao,
 } from "@/features/gravacao-externa/constants";
@@ -26,6 +30,17 @@ describe("gravacao-externa constants", () => {
     expect(isGravacaoPendenteSituacao("Gravação Pendente")).toBe(true);
     expect(isGravacaoPendenteSituacao("Gravação Externa")).toBe(false);
     expect(isGravacaoPendenteSituacao(null)).toBe(false);
+  });
+
+  it("recognizes fluxo operacional Grav. Externa", () => {
+    expect(isEmGravacaoExternaOperacional(GRAVACAO_SAIDA_P_SITUACAO, SETOR_GRAV_EXTERNA)).toBe(
+      true,
+    );
+    expect(isEmGravacaoExternaOperacional(GRAVACAO_RECEBIDO_SITUACAO, SETOR_GRAV_EXTERNA)).toBe(
+      true,
+    );
+    expect(isEmGravacaoExternaOperacional(GRAVACAO_SAIDA_P_SITUACAO, "Gravação")).toBe(false);
+    expect(isEmGravacaoExternaOperacional(GRAVACAO_EXTERNA_SITUACAO, "SEFOC")).toBe(true);
   });
 
   it("allows alterar arquivos only before gravacao starts", () => {

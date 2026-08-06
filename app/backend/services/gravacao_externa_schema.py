@@ -193,12 +193,23 @@ def ensure_gravacao_externa_schema() -> None:
 
 
 def _seed_situacao_catalog() -> None:
-    try:
-        db.execute_query(
-            """
-            INSERT IGNORE INTO tabSystemCatalog (Categoria, Rotulo, Ativo, Ordem, Origem)
-            VALUES ('situacao', 'Gravação Externa', 1, 50, 'catalog')
-            """
-        )
-    except Exception as exc:
-        logger.warning("Seed situação Gravação Externa ignorado: %s", exc)
+    seeds = (
+        ("situacao", "Gravação Externa", 0, 50),  # legado (leitura/reparo)
+        ("situacao", "Saída p/", 1, 51),
+        ("situacao", "Recebido", 1, 52),
+        ("situacao", "Grav. Concluída", 1, 53),
+        ("setor", "Grav. Externa", 1, 60),
+        ("setor", "Gravação", 1, 61),
+        ("setor", "SEGEP", 1, 62),
+    )
+    for categoria, rotulo, ativo, ordem in seeds:
+        try:
+            db.execute_query(
+                """
+                INSERT IGNORE INTO tabSystemCatalog (Categoria, Rotulo, Ativo, Ordem, Origem)
+                VALUES (%s, %s, %s, %s, 'catalog')
+                """,
+                (categoria, rotulo, ativo, ordem),
+            )
+        except Exception as exc:
+            logger.warning("Seed %s/%s ignorado: %s", categoria, rotulo, exc)

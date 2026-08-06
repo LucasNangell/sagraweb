@@ -1081,6 +1081,18 @@ def startup_init():
         logger.error("Erro ao garantir schema Gravação Pendente no startup: %s", exc)
 
     try:
+        from services.gravacao_externa_service import repair_legacy_gravacao_externa_andamentos
+
+        repaired = repair_legacy_gravacao_externa_andamentos()
+        if repaired:
+            logger.info(
+                "Reparo andamentos legado Gravação Externa: %s OS(s)",
+                len(repaired),
+            )
+    except Exception as exc:
+        logger.error("Erro no reparo de andamentos legado Gravação Externa: %s", exc)
+
+    try:
         from services.gravacao_preview_cache_service import (
             enqueue_preview_warmup_for_active_sessions,
         )

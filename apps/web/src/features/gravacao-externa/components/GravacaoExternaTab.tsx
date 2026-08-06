@@ -325,7 +325,7 @@ export function GravacaoExternaTab() {
           <p className="p-4 text-center text-sm text-neutral-500">
             {isAguardando
               ? "Nenhuma OS aguardando entrega de chapas."
-              : "Nenhuma OS com andamento Gravação Externa."}
+              : "Nenhuma OS em Gravação Externa (setor Grav. Externa)."}
           </p>
         ) : (
           <ul className="space-y-1">

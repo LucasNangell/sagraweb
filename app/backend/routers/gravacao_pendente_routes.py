@@ -230,7 +230,7 @@ class GravacaoPendentePagamentoNfResponse(BaseModel):
 
 
 class EnviarGravacaoExternaBody(BaseModel):
-    setor: str = Field(default="SEFOC", min_length=1)
+    setor: str = Field(default="Grav. Externa", min_length=1)
     fornecedor_ponto: Optional[str] = None
 
 

@@ -18,7 +18,7 @@ import {
 import {
   canAlterarArquivosGravacaoExterna,
   canAlterarArquivosGravacaoPendente,
-  isGravacaoExternaSituacao,
+  isEmGravacaoExternaOperacional,
   isGravacaoPendenteSituacao,
 } from "@/features/gravacao-externa/constants";
 import type { OsSearchRow } from "../types";
@@ -37,7 +37,7 @@ export function OsGravacaoAlterarArquivosButton({
   const [modalOpen, setModalOpen] = useState(false);
 
   const isSubOs = Boolean(selected.is_sub_os);
-  const isExterna = isGravacaoExternaSituacao(selected.situacao);
+  const isExterna = isEmGravacaoExternaOperacional(selected.situacao, selected.setor);
   const isPendente = isGravacaoPendenteSituacao(selected.situacao);
   const canFetch = !isSubOs && !frozen && (isExterna || isPendente);
 

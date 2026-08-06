@@ -267,7 +267,7 @@ export async function enviarGravacaoPendenteParaExterna(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      setor: "SEFOC",
+      setor: "Grav. Externa",
       ...(opts?.fornecedorPonto
         ? { fornecedor_ponto: opts.fornecedorPonto }
         : {}),

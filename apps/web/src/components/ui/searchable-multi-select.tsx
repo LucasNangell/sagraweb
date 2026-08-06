@@ -1,6 +1,6 @@
 import { cn } from "@sagra/ui";
 import { ChevronDown, Loader2, X } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 import type { MultiSelectOption } from "./multi-select";
 
@@ -45,6 +45,7 @@ export function SearchableMultiSelect({
   const searchId = `${fieldId}-search`;
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const isLeft = labelSide === "left";
   const showLabel = !hideLabel && Boolean(label);
 
@@ -57,6 +58,16 @@ export function SearchableMultiSelect({
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      return;
+    }
+    const focusSearch = () => searchRef.current?.focus({ preventScroll: true });
+    focusSearch();
+    const t = window.setTimeout(focusSearch, 0);
+    return () => window.clearTimeout(t);
+  }, [open]);
 
   const summary =
     value.length === 0
@@ -99,6 +110,19 @@ export function SearchableMultiSelect({
         type="button"
         disabled={disabled}
         onClick={handleOpen}
+        onKeyDown={(e) => {
+          if (disabled || e.ctrlKey || e.metaKey || e.altKey) {
+            return;
+          }
+          if (e.key.length === 1 && e.key !== " ") {
+            e.preventDefault();
+            if (!open) {
+              setOpen(true);
+              onOpen?.();
+            }
+            onSearchChange?.((open ? searchQuery : "") + e.key);
+          }
+        }}
         aria-label={ariaLabel ?? (hideLabel || !showLabel ? label || undefined : undefined)}
         className={cn(
           "flex h-9 w-full items-center justify-between gap-2 rounded border border-sagra-border bg-white px-2 text-left text-sm",
@@ -129,6 +153,7 @@ export function SearchableMultiSelect({
         <div className="absolute z-40 mt-1 w-full rounded border border-sagra-border bg-white shadow-lg">
           <div className="border-b border-sagra-border/60 p-2">
             <input
+              ref={searchRef}
               id={searchId}
               type="search"
               value={searchQuery}
@@ -136,6 +161,9 @@ export function SearchableMultiSelect({
               placeholder="Digite para filtrar..."
               className="h-8 w-full rounded border border-sagra-border px-2 text-sm outline-none focus:border-primary-green focus:ring-1 focus:ring-primary-green/30"
               autoComplete="off"
+              autoFocus
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
             />
           </div>
           <div className="max-h-52 overflow-y-auto py-1">

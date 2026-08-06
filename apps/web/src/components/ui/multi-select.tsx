@@ -1,6 +1,6 @@
 import { cn } from "@sagra/ui";
 import { ChevronDown, X } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 export interface MultiSelectOption {
   value: string;
@@ -77,10 +77,15 @@ export function MultiSelect({
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
-  useEffect(() => {
-    if (open) {
-      searchRef.current?.focus();
+  useLayoutEffect(() => {
+    if (!open) {
+      return;
     }
+    const focusSearch = () => searchRef.current?.focus({ preventScroll: true });
+    focusSearch();
+    // Garantir após o clique do botão (alguns browsers devolvem o foco ao trigger).
+    const t = window.setTimeout(focusSearch, 0);
+    return () => window.clearTimeout(t);
   }, [open]);
 
   const summary =
@@ -128,6 +133,18 @@ export function MultiSelect({
         type="button"
         disabled={disabled}
         onClick={handleOpen}
+        onKeyDown={(e) => {
+          if (disabled || e.ctrlKey || e.metaKey || e.altKey) {
+            return;
+          }
+          if (e.key.length === 1 && e.key !== " ") {
+            e.preventDefault();
+            if (!open) {
+              setOpen(true);
+            }
+            setSearchQuery((prev) => (open ? prev : "") + e.key);
+          }
+        }}
         aria-label={ariaLabel ?? (hideLabel || !showLabel ? label || undefined : undefined)}
         className={cn(
           "flex h-9 w-full items-center justify-between gap-2 rounded border border-sagra-border bg-white px-2 text-left text-sm",
@@ -166,6 +183,7 @@ export function MultiSelect({
               placeholder="Digite para filtrar..."
               className="h-8 w-full rounded border border-sagra-border px-2 text-sm outline-none focus:border-primary-green focus:ring-1 focus:ring-primary-green/30"
               autoComplete="off"
+              autoFocus
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
             />

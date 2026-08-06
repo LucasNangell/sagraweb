@@ -27,12 +27,12 @@ logger = logging.getLogger(__name__)
 
 # Legado (ainda aceito em reparo / cancelamento até limpar a fila)
 SITUACAO_GRAVACAO_EXTERNA = "Gravação Externa"
-SITUACAO_AGUARD_RETIRADA = "Aguard. Retirada"  # legado; conclusão passa a Grav. Concluída
+SITUACAO_AGUARD_RETIRADA = "Aguard. Retirada"  # legado; conclusão passa a Gravação Ext. Concluída
 
 SITUACAO_SAIDA_P = "Saída p/"
 SITUACAO_RECEBIDO = "Recebido"
-SITUACAO_GRAV_CONCLUIDA = "Grav. Concluída"
-SITUACAO_GRAVACAO = "Gravação"  # legado; entrega passa a Saída p/ + setor Gravação
+SITUACAO_GRAV_CONCLUIDA = "Gravação Ext. Concluída"
+SITUACAO_GRAVACAO = "Gravação"  # legado; entrega passa a Recebido + setor Gravação
 
 SETOR_GRAV_EXTERNA = "Grav. Externa"
 SETOR_GRAVACAO_CONCLUIDA = "SEGEP"
@@ -55,7 +55,7 @@ def is_em_gravacao_externa_operacional(
     situacao: str | None,
     setor: str | None = None,
 ) -> bool:
-    """OS ainda no fluxo operacional da Gravação Externa (antes de Grav. Concluída)."""
+    """OS ainda no fluxo operacional da Gravação Externa (antes de Gravação Ext. Concluída)."""
     sit = str(situacao or "").strip()
     setr = str(setor or "").strip()
     if sit == SITUACAO_GRAVACAO_EXTERNA:
@@ -1423,7 +1423,7 @@ def _concluir_gravacao_sem_sessao(
     os_id: int,
     operador_ponto: str,
 ) -> dict[str, Any]:
-    """Conclui OS em Gravação Externa sem sessão/arquivos: só andamento Grav. Concluída."""
+    """Conclui OS em Gravação Externa sem sessão/arquivos: só andamento Gravação Ext. Concluída."""
     situacao, setor = _get_ultimo_operacional(ano, os_id)
     if not is_em_gravacao_externa_operacional(situacao, setor):
         raise HTTPException(
@@ -1734,7 +1734,7 @@ def _notify_entrega_chapas(*, ano: int, os_id: int, new_cod: str) -> None:
         ano=ano,
         os_id=os_id,
         new_cod=new_cod,
-        situacao=SITUACAO_SAIDA_P,
+        situacao=SITUACAO_RECEBIDO,
         setor=SETOR_ENTREGA_CHAPAS,
         source="gravacao_externa_entrega",
         operation="insert",
@@ -1825,7 +1825,7 @@ def lancar_entrega_chapas(
             cod_status=new_cod,
             nro=os_id,
             ano=ano,
-            situacao=SITUACAO_SAIDA_P,
+            situacao=SITUACAO_RECEBIDO,
             setor=SETOR_ENTREGA_CHAPAS,
             obs=obs,
             ponto=recebido_fmt,
@@ -1835,7 +1835,7 @@ def lancar_entrega_chapas(
             nro=os_id,
             ano=ano,
             cod_status=new_cod,
-            situacao=SITUACAO_SAIDA_P,
+            situacao=SITUACAO_RECEBIDO,
             setor=SETOR_ENTREGA_CHAPAS,
             obs=obs,
             ponto=recebido_fmt,

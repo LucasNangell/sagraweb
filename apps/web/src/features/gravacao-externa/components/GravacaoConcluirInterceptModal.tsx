@@ -60,7 +60,7 @@ export function GravacaoConcluirInterceptModal({
             <strong>
               {pendingSituacao} / {pendingSetor}
             </strong>
-            , o sistema registrará <strong>Grav. Concluída / SEGEP</strong>.
+            , o sistema registrará <strong>Gravação Ext. Concluída / SEGEP</strong>.
           </p>
 
           {chapas.length > 0 ? (

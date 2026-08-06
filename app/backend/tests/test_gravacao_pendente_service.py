@@ -535,6 +535,7 @@ def test_list_historico_uses_pendente_base(mock_db):
                 "gravacao_externa_id": 20,
                 "ano": 2026,
                 "nr_os": 100,
+                "juntada_grupo_id": None,
                 "lancado_por_ponto": "111",
                 "lancado_por_nome": "A",
                 "criado_em": None,
@@ -571,6 +572,8 @@ def test_list_historico_uses_pendente_base(mock_db):
     assert total_chapas == 3
     assert items[0]["gravacao_pendente_id"] == 10
     assert items[0]["fornecedor_ponto"] == "918.713"
+    assert items[0]["juntada_grupo_id"] is None
+    assert items[0]["membros"] == [{"nr_os": 100, "ano": 2026}]
     count_sql = mock_db.execute_query.call_args_list[0][0][0]
     list_sql = mock_db.execute_query.call_args_list[1][0][0]
     assert "GROUP BY gp.OsAno, gp.OsNro" in count_sql
@@ -580,6 +583,177 @@ def test_list_historico_uses_pendente_base(mock_db):
     assert "REPLACE(REPLACE(IFNULL(ge.RecebidoPorPonto" in list_sql
     assert "AS UNSIGNED\n                ),\n                0\n            )" in list_sql
     assert "0," not in list_sql.split("NULLIF(")[1].split("LEFT JOIN")[0]
+
+
+@patch("services.gravacao_pendente_service.db")
+def test_list_historico_enriches_juntada_membros(mock_db):
+    from datetime import datetime
+
+    from services.gravacao_pendente_service import list_historico_concluidas
+
+    mock_db.execute_query.side_effect = [
+        [{"cnt": 1}],
+        [
+            {
+                "gravacao_pendente_id": 10,
+                "gravacao_externa_id": 20,
+                "ano": 2026,
+                "nr_os": 100,
+                "juntada_grupo_id": "grp-1",
+                "lancado_por_ponto": "111",
+                "lancado_por_nome": "A",
+                "criado_em": None,
+                "enviada_em": None,
+                "fornecedor_ponto": None,
+                "fornecedor_nome": None,
+                "iniciado_em": None,
+                "iniciado_por_ponto": None,
+                "concluida_em": None,
+                "entrega_lancada_em": None,
+                "recebido_por_ponto": None,
+                "recebido_por_nome": None,
+                "pagamento_nf_em": None,
+                "solicitante": "Cli",
+                "titulo": "Tit",
+                "total_chapas_os": 2,
+            }
+        ],
+        [{"Maquina": "Komori", "QuantidadeChapas": 2}],
+        [
+            {"nr_os": 100, "ano": 2026, "juntada_grupo_id": "grp-1"},
+            {"nr_os": 200, "ano": 2026, "juntada_grupo_id": "grp-1"},
+        ],
+    ]
+    with (
+        patch(
+            "services.gravacao_pendente_service.ensure_controle_list_desde",
+            return_value=datetime(2026, 7, 14, 18, 0, 0),
+        ),
+        patch(
+            "services.gravacao_pendente_service.get_total_chapas_gravadas_concluidas",
+            return_value=2,
+        ),
+    ):
+        items, _total, _chapas = list_historico_concluidas(limit=10, offset=0)
+
+    assert items[0]["juntada_grupo_id"] == "grp-1"
+    assert {m["nr_os"] for m in items[0]["membros"]} == {100, 200}
+
+
+@patch("services.gravacao_pendente_service.resolve_fornecedor_ponto", return_value="918.713")
+@patch("services.gravacao_pendente_service.db")
+def test_update_controle_lancamento_replicates_juntada(mock_db, _resolve):
+    from datetime import datetime
+
+    from services.gravacao_pendente_service import update_controle_lancamento
+
+    executed: list[tuple[str, tuple]] = []
+
+    def fake_tx(operations):
+        cursor = MagicMock()
+        externa_seq = iter([{"Id": 100}, {"Id": 101}])
+
+        def execute(sql, params=None):
+            executed.append((" ".join(str(sql).split()), params or ()))
+
+        def fetchone():
+            last_sql = executed[-1][0] if executed else ""
+            if "FOR UPDATE" in last_sql:
+                return {"Id": 10, "JuntadaGrupoId": "grp-1"}
+            if "ORDER BY Id DESC" in last_sql:
+                return next(externa_seq)
+            return None
+
+        def fetchall():
+            return [{"Id": 10}, {"Id": 11}]
+
+        cursor.execute.side_effect = execute
+        cursor.fetchone.side_effect = fetchone
+        cursor.fetchall.side_effect = fetchall
+        return [operation(cursor) for operation in operations]
+
+    mock_db.execute_transaction.side_effect = fake_tx
+
+    result = update_controle_lancamento(
+        gravacao_pendente_id=10,
+        chapas=[{"maquina": "Komori", "quantidade": 5}],
+        criado_em=datetime(2026, 7, 1, 10, 0, 0),
+        enviada_em=datetime(2026, 7, 2, 10, 0, 0),
+        fornecedor_ponto="918713",
+        concluida_em=datetime(2026, 7, 3, 10, 0, 0),
+        entrega_lancada_em=datetime(2026, 7, 4, 10, 0, 0),
+        recebido_por_ponto="111",
+        recebido_por_nome="Recebedor",
+        pagamento_nf_em=datetime(2026, 7, 5, 12, 0, 0),
+    )
+
+    assert result["gravacao_pendente_id"] == 10
+    assert result["updated_pendente_ids"] == [10, 11]
+    assert result["updated_externa_ids"] == [100, 101]
+    assert result["juntada_grupo_id"] == "grp-1"
+    assert result["total_chapas"] == 5
+    assert result["chapas"] == [{"maquina": "Komori", "quantidade": 5}]
+
+    chapa_deletes = [e for e in executed if e[0].startswith("DELETE FROM tab_os_gravacao_pendente_chapa")]
+    assert len(chapa_deletes) == 2
+    chapa_inserts = [e for e in executed if "INSERT INTO tab_os_gravacao_pendente_chapa" in e[0]]
+    assert len(chapa_inserts) == 2
+    externa_updates = [e for e in executed if "UPDATE tab_os_gravacao_externa" in e[0]]
+    assert len(externa_updates) == 2
+    assert all("PagamentoNfEm" in e[0] for e in externa_updates)
+
+
+@patch("services.gravacao_pendente_service.db")
+def test_update_controle_lancamento_solo_without_externa(mock_db):
+    from datetime import datetime
+
+    from services.gravacao_pendente_service import update_controle_lancamento
+
+    executed: list[str] = []
+
+    def fake_tx(operations):
+        cursor = MagicMock()
+        state = {"n": 0}
+
+        def execute(sql, params=None):
+            executed.append(" ".join(str(sql).split()))
+
+        def fetchone():
+            state["n"] += 1
+            if state["n"] == 1:
+                return {"Id": 42, "JuntadaGrupoId": None}
+            return None  # no externa
+
+        cursor.execute.side_effect = execute
+        cursor.fetchone.side_effect = fetchone
+        cursor.fetchall.return_value = []
+        return [operation(cursor) for operation in operations]
+
+    mock_db.execute_transaction.side_effect = fake_tx
+
+    result = update_controle_lancamento(
+        gravacao_pendente_id=42,
+        chapas=[{"maquina": "SM74", "quantidade": 2}],
+        criado_em=datetime(2026, 8, 1),
+        enviada_em=None,
+        fornecedor_ponto=None,
+        concluida_em=None,
+        entrega_lancada_em=None,
+        recebido_por_ponto=None,
+        recebido_por_nome=None,
+        pagamento_nf_em=None,
+    )
+    assert result["updated_pendente_ids"] == [42]
+    assert result["updated_externa_ids"] == []
+    assert not any("UPDATE tab_os_gravacao_externa" in sql for sql in executed)
+
+
+def test_chapas_gravadas_sql_dedupes_juntada():
+    from services.gravacao_pendente_service import _chapas_gravadas_concluidas_base_sql
+
+    sql = _chapas_gravadas_concluidas_base_sql()
+    assert "COALESCE(gp2.JuntadaGrupoId, CONCAT('solo-', gp2.Id))" in sql
+    assert "MIN(gp2.Id)" in sql
 
 
 @patch("services.gravacao_pendente_service.get_cota_inicial_chapas", return_value=10)

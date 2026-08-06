@@ -1,7 +1,6 @@
 import { cn } from "@sagra/ui";
 import {
   ArrowLeft,
-  Check,
   ChevronsLeft,
   ChevronsRight,
   Clock,
@@ -10,11 +9,11 @@ import {
   Search,
   Send,
   Trash2,
-  X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import type {
+  GravacaoPendenteControleUpdateBody,
   GravacaoPendenteFornecedorItem,
   GravacaoPendenteHistoricoItem,
   GravacaoPendenteOsItem,
@@ -31,7 +30,7 @@ import {
   useGravacaoPendenteDetail,
   useGravacaoPendenteHistorico,
   useGravacaoPendenteOsList,
-  usePatchGravacaoPendentePagamentoNfMutation,
+  usePatchGravacaoPendenteControleMutation,
 } from "@/api/hooks/useGravacaoPendente";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useAccessControl } from "@/features/auth/useAccessControl";
@@ -39,6 +38,7 @@ import { useMatchMedia } from "@/hooks/useMatchMedia";
 import { formatDateBr, formatDateTimeBr } from "@/lib/format";
 import { formatOsJuntadaLabel } from "../utils/formatOsJuntadaLabel";
 import { GravacaoFornecedorSelectModal } from "./GravacaoFornecedorSelectModal";
+import { GravacaoPendenteControleEditModal } from "./GravacaoPendenteControleEditModal";
 import { GravacaoPendenteHistoricoCota } from "./GravacaoPendenteHistoricoCota";
 import {
   GravacaoExternaArquivosPanel,
@@ -102,9 +102,9 @@ export function GravacaoPendenteTab() {
   const [fornecedorModalOpen, setFornecedorModalOpen] = useState(false);
   const [fornecedores, setFornecedores] = useState<GravacaoPendenteFornecedorItem[]>([]);
   const [controleExpanded, setControleExpanded] = useState(false);
-  const [editingNfId, setEditingNfId] = useState<number | null>(null);
-  const [editingNfValue, setEditingNfValue] = useState("");
-  const patchNfMutation = usePatchGravacaoPendentePagamentoNfMutation();
+  const [editingControleItem, setEditingControleItem] =
+    useState<GravacaoPendenteHistoricoItem | null>(null);
+  const patchControleMutation = usePatchGravacaoPendenteControleMutation();
   const deleteControleMutation = useDeleteGravacaoPendenteControleMutation();
 
   const listQuery = useGravacaoPendenteOsList({
@@ -118,18 +118,13 @@ export function GravacaoPendenteTab() {
       ? item.chapas_por_maquina.map((c) => `${c.maquina}: ${c.quantidade}`).join(" · ")
       : "—";
 
-  const handleSaveNf = async (item: GravacaoPendenteHistoricoItem, dateValue: string) => {
-    if (item.gravacao_externa_id == null) return;
-    try {
-      await patchNfMutation.mutateAsync({
-        gravacaoExternaId: item.gravacao_externa_id,
-        pagamento_nf_em: dateValue ? `${dateValue}T12:00:00` : null,
-      });
-      setEditingNfId(null);
-      setEditingNfValue("");
-    } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Não foi possível salvar a data da NF.");
-    }
+  const handleSaveControle = async (body: GravacaoPendenteControleUpdateBody) => {
+    if (editingControleItem?.gravacao_pendente_id == null) return;
+    await patchControleMutation.mutateAsync({
+      gravacaoPendenteId: editingControleItem.gravacao_pendente_id,
+      body,
+    });
+    setEditingControleItem(null);
   };
 
   const handleDeleteControle = async (item: GravacaoPendenteHistoricoItem) => {
@@ -520,18 +515,14 @@ export function GravacaoPendenteTab() {
                     <th className="whitespace-nowrap px-2 py-1.5 text-left font-semibold">
                       Pagamento NF
                     </th>
-                    {canDeleteControle ? (
-                      <th className="px-2 py-1.5 text-center font-semibold">Ações</th>
-                    ) : null}
+                    <th className="px-2 py-1.5 text-center font-semibold">Ações</th>
                   </>
                 ) : (
                   <>
                     <th className="px-2 py-1.5 text-left font-semibold">Cliente</th>
                     <th className="px-2 py-1.5 text-right font-semibold">Total</th>
                     <th className="px-2 py-1.5 text-left font-semibold">Grav. Concluída</th>
-                    {canDeleteControle ? (
-                      <th className="px-2 py-1.5 text-center font-semibold">Ações</th>
-                    ) : null}
+                    <th className="px-2 py-1.5 text-center font-semibold">Ações</th>
                   </>
                 )}
               </tr>
@@ -542,9 +533,7 @@ export function GravacaoPendenteTab() {
                   item.fornecedor_nome?.trim() || item.fornecedor_ponto || "—";
                 const recebidoLabel =
                   item.recebido_por_nome?.trim() || item.recebido_por_ponto || "—";
-                const nfInputValue = item.pagamento_nf_em
-                  ? new Date(item.pagamento_nf_em).toISOString().slice(0, 10)
-                  : "";
+                const canEditControle = item.gravacao_pendente_id != null;
                 return (
                   <tr key={historicoRowKey(item)} className="border-b border-neutral-100">
                     <td className="whitespace-nowrap px-2 py-1 font-medium">
@@ -579,79 +568,36 @@ export function GravacaoPendenteTab() {
                         <td className="max-w-[10rem] truncate px-2 py-1" title={recebidoLabel}>
                           {recebidoLabel}
                         </td>
-                        <td className="px-2 py-1">
-                          {item.gravacao_externa_id != null ? (
-                            <div className="flex items-center gap-1">
-                              <input
-                                type="date"
-                                value={
-                                  editingNfId === item.gravacao_externa_id
-                                    ? editingNfValue
-                                    : nfInputValue
-                                }
-                                disabled={editingNfId !== item.gravacao_externa_id}
-                                onChange={(e) => setEditingNfValue(e.target.value)}
-                                className="rounded border border-neutral-300 px-1 py-0.5 text-[11px] disabled:bg-neutral-100 disabled:text-neutral-600"
-                                aria-label={`Pagamento NF OS ${formatOsListLabel(item)}`}
-                              />
-                              {editingNfId === item.gravacao_externa_id ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    aria-label={`Salvar Pagamento NF OS ${formatOsListLabel(item)}`}
-                                    disabled={patchNfMutation.isPending}
-                                    onClick={() => void handleSaveNf(item, editingNfValue)}
-                                    className="rounded p-1 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
-                                  >
-                                    <Check className="size-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    aria-label={`Cancelar edição Pagamento NF OS ${formatOsListLabel(item)}`}
-                                    disabled={patchNfMutation.isPending}
-                                    onClick={() => {
-                                      setEditingNfId(null);
-                                      setEditingNfValue("");
-                                    }}
-                                    className="rounded p-1 text-neutral-600 hover:bg-neutral-100"
-                                  >
-                                    <X className="size-3.5" />
-                                  </button>
-                                </>
-                              ) : (
-                                <button
-                                  type="button"
-                                  aria-label={`Editar Pagamento NF OS ${formatOsListLabel(item)}`}
-                                  onClick={() => {
-                                    setEditingNfId(item.gravacao_externa_id);
-                                    setEditingNfValue(nfInputValue);
-                                  }}
-                                  className="rounded p-1 text-sky-700 hover:bg-sky-50"
-                                >
-                                  <Pencil className="size-3.5" />
-                                </button>
-                              )}
-                            </div>
-                          ) : (
-                            formatDateBr(item.pagamento_nf_em) || "—"
-                          )}
+                        <td className="whitespace-nowrap px-2 py-1">
+                          {formatDateBr(item.pagamento_nf_em) || "—"}
                         </td>
-                        {canDeleteControle ? (
-                          <td className="px-2 py-1 text-center">
+                        <td className="px-2 py-1 text-center">
+                          <div className="inline-flex items-center justify-center gap-0.5">
                             <button
                               type="button"
-                              aria-label={`Excluir controle OS ${formatOsListLabel(item)}`}
-                              disabled={
-                                item.gravacao_pendente_id == null ||
-                                deleteControleMutation.isPending
-                              }
-                              onClick={() => void handleDeleteControle(item)}
-                              className="rounded p-1 text-red-700 hover:bg-red-50 disabled:opacity-40"
+                              aria-label={`Editar controle OS ${formatOsListLabel(item)}`}
+                              disabled={!canEditControle || patchControleMutation.isPending}
+                              onClick={() => setEditingControleItem(item)}
+                              className="rounded p-1 text-sky-700 hover:bg-sky-50 disabled:opacity-40"
                             >
-                              <Trash2 className="size-3.5" />
+                              <Pencil className="size-3.5" />
                             </button>
-                          </td>
-                        ) : null}
+                            {canDeleteControle ? (
+                              <button
+                                type="button"
+                                aria-label={`Excluir controle OS ${formatOsListLabel(item)}`}
+                                disabled={
+                                  item.gravacao_pendente_id == null ||
+                                  deleteControleMutation.isPending
+                                }
+                                onClick={() => void handleDeleteControle(item)}
+                                className="rounded p-1 text-red-700 hover:bg-red-50 disabled:opacity-40"
+                              >
+                                <Trash2 className="size-3.5" />
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
                       </>
                     ) : (
                       <>
@@ -667,22 +613,33 @@ export function GravacaoPendenteTab() {
                         <td className="px-2 py-1">
                           {formatDateBr(item.concluida_em) || "—"}
                         </td>
-                        {canDeleteControle ? (
-                          <td className="px-2 py-1 text-center">
+                        <td className="px-2 py-1 text-center">
+                          <div className="inline-flex items-center justify-center gap-0.5">
                             <button
                               type="button"
-                              aria-label={`Excluir controle OS ${formatOsListLabel(item)}`}
-                              disabled={
-                                item.gravacao_pendente_id == null ||
-                                deleteControleMutation.isPending
-                              }
-                              onClick={() => void handleDeleteControle(item)}
-                              className="rounded p-1 text-red-700 hover:bg-red-50 disabled:opacity-40"
+                              aria-label={`Editar controle OS ${formatOsListLabel(item)}`}
+                              disabled={!canEditControle || patchControleMutation.isPending}
+                              onClick={() => setEditingControleItem(item)}
+                              className="rounded p-1 text-sky-700 hover:bg-sky-50 disabled:opacity-40"
                             >
-                              <Trash2 className="size-3.5" />
+                              <Pencil className="size-3.5" />
                             </button>
-                          </td>
-                        ) : null}
+                            {canDeleteControle ? (
+                              <button
+                                type="button"
+                                aria-label={`Excluir controle OS ${formatOsListLabel(item)}`}
+                                disabled={
+                                  item.gravacao_pendente_id == null ||
+                                  deleteControleMutation.isPending
+                                }
+                                onClick={() => void handleDeleteControle(item)}
+                                className="rounded p-1 text-red-700 hover:bg-red-50 disabled:opacity-40"
+                              >
+                                <Trash2 className="size-3.5" />
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
                       </>
                     )}
                   </tr>
@@ -736,6 +693,14 @@ export function GravacaoPendenteTab() {
           setFornecedores([]);
         }}
         onConfirm={(ponto) => void doEnviar(ponto)}
+      />
+
+      <GravacaoPendenteControleEditModal
+        open={editingControleItem != null}
+        item={editingControleItem}
+        saving={patchControleMutation.isPending}
+        onClose={() => setEditingControleItem(null)}
+        onSave={handleSaveControle}
       />
     </>
   );

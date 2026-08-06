@@ -29,6 +29,7 @@ from services.gravacao_pendente_service import (
     list_os_gravacao_pendente,
     recalc_cotas_from_fornecedores,
     require_pendente_session_access,
+    update_controle_lancamento,
     update_cota_inicial_chapas,
     update_pagamento_nf,
     update_pendente_session_arquivos,
@@ -105,6 +106,8 @@ class GravacaoPendenteHistoricoItem(BaseModel):
     gravacao_externa_id: Optional[int] = None
     ano: int
     nr_os: int
+    juntada_grupo_id: Optional[str] = None
+    membros: List[GravacaoPendenteOsMembro] = Field(default_factory=list)
     solicitante: Optional[str] = None
     titulo: Optional[str] = None
     lancado_por_ponto: Optional[str] = None
@@ -226,6 +229,40 @@ class GravacaoPendentePagamentoNfBody(BaseModel):
 
 class GravacaoPendentePagamentoNfResponse(BaseModel):
     gravacao_externa_id: int
+    pagamento_nf_em: Optional[datetime] = None
+
+
+class GravacaoPendenteControleChapaBody(BaseModel):
+    maquina: str
+    quantidade: int = Field(..., ge=1)
+
+
+class GravacaoPendenteControleUpdateBody(BaseModel):
+    chapas: List[GravacaoPendenteControleChapaBody] = Field(default_factory=list)
+    criado_em: Optional[datetime] = None
+    enviada_em: Optional[datetime] = None
+    fornecedor_ponto: Optional[str] = None
+    concluida_em: Optional[datetime] = None
+    entrega_lancada_em: Optional[datetime] = None
+    recebido_por_ponto: Optional[str] = None
+    recebido_por_nome: Optional[str] = None
+    pagamento_nf_em: Optional[datetime] = None
+
+
+class GravacaoPendenteControleUpdateResponse(BaseModel):
+    gravacao_pendente_id: int
+    updated_pendente_ids: List[int] = Field(default_factory=list)
+    updated_externa_ids: List[int] = Field(default_factory=list)
+    juntada_grupo_id: Optional[str] = None
+    chapas: List[dict] = Field(default_factory=list)
+    total_chapas: int = 0
+    criado_em: Optional[datetime] = None
+    enviada_em: Optional[datetime] = None
+    fornecedor_ponto: Optional[str] = None
+    concluida_em: Optional[datetime] = None
+    entrega_lancada_em: Optional[datetime] = None
+    recebido_por_ponto: Optional[str] = None
+    recebido_por_nome: Optional[str] = None
     pagamento_nf_em: Optional[datetime] = None
 
 
@@ -445,6 +482,34 @@ def patch_gravacao_pendente_pagamento_nf(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return GravacaoPendentePagamentoNfResponse.model_validate(result)
+
+
+@router.patch(
+    "/gravacao-pendente/controle/{gravacao_pendente_id}",
+    response_model=GravacaoPendenteControleUpdateResponse,
+)
+def patch_gravacao_pendente_controle(
+    request: Request,
+    gravacao_pendente_id: int,
+    body: GravacaoPendenteControleUpdateBody,
+):
+    _require_pendente_permission(request)
+    try:
+        result = update_controle_lancamento(
+            gravacao_pendente_id=gravacao_pendente_id,
+            chapas=[c.model_dump() for c in body.chapas],
+            criado_em=body.criado_em,
+            enviada_em=body.enviada_em,
+            fornecedor_ponto=body.fornecedor_ponto,
+            concluida_em=body.concluida_em,
+            entrega_lancada_em=body.entrega_lancada_em,
+            recebido_por_ponto=body.recebido_por_ponto,
+            recebido_por_nome=body.recebido_por_nome,
+            pagamento_nf_em=body.pagamento_nf_em,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return GravacaoPendenteControleUpdateResponse.model_validate(result)
 
 
 @router.delete("/gravacao-pendente/controle/{gravacao_pendente_id}")

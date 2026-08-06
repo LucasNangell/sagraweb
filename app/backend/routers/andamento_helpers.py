@@ -125,7 +125,7 @@ def format_gravacao_recebido_obs(chapas: list[dict]) -> str:
 
 
 def format_gravacao_concluida_obs(chapas: list[dict]) -> str:
-    """Obs do andamento Grav. Concluída após concluir gravação."""
+    """Obs do andamento Gravação Ext. Concluída após concluir gravação."""
     lines: list[str] = [
         "Gravação concluída. Aguardando retirada de:",
         "",
@@ -135,7 +135,7 @@ def format_gravacao_concluida_obs(chapas: list[dict]) -> str:
 
 
 def format_gravacao_entrega_obs(chapas: list[dict]) -> str:
-    """Obs do andamento Saída p/ ao lançar recebimento de chapas."""
+    """Obs do andamento Recebido / Gravação ao lançar recebimento de chapas."""
     lines: list[str] = ["Chapas recebidas:", ""]
     lines.extend(_format_chapas_lines(chapas))
     return "\n".join(lines)

@@ -1345,7 +1345,7 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
                 detail={
                     "code": "gravacao_externa_pendente_conclusao",
                     "message": (
-                        "Conclua a Gravação Externa (Grav. Concluída) antes de "
+                        "Conclua a Gravação Externa (Gravação Ext. Concluída) antes de "
                         "lançar outro andamento."
                     ),
                 },

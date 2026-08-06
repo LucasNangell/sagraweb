@@ -57,6 +57,8 @@ export interface GravacaoPendenteHistoricoItem {
   gravacao_externa_id?: number | null;
   ano: number;
   nr_os: number;
+  juntada_grupo_id?: string | null;
+  membros?: GravacaoPendenteOsMembro[];
   solicitante?: string | null;
   titulo?: string | null;
   lancado_por_ponto?: string | null;
@@ -74,6 +76,35 @@ export interface GravacaoPendenteHistoricoItem {
   pagamento_nf_em?: string | null;
   total_chapas: number;
   chapas_por_maquina: { maquina: string; quantidade: number }[];
+}
+
+export interface GravacaoPendenteControleUpdateBody {
+  chapas: { maquina: string; quantidade: number }[];
+  criado_em?: string | null;
+  enviada_em?: string | null;
+  fornecedor_ponto?: string | null;
+  concluida_em?: string | null;
+  entrega_lancada_em?: string | null;
+  recebido_por_ponto?: string | null;
+  recebido_por_nome?: string | null;
+  pagamento_nf_em?: string | null;
+}
+
+export interface GravacaoPendenteControleUpdateResponse {
+  gravacao_pendente_id: number;
+  updated_pendente_ids: number[];
+  updated_externa_ids: number[];
+  juntada_grupo_id?: string | null;
+  chapas: { maquina: string; quantidade: number }[];
+  total_chapas: number;
+  criado_em?: string | null;
+  enviada_em?: string | null;
+  fornecedor_ponto?: string | null;
+  concluida_em?: string | null;
+  entrega_lancada_em?: string | null;
+  recebido_por_ponto?: string | null;
+  recebido_por_nome?: string | null;
+  pagamento_nf_em?: string | null;
 }
 
 export interface GravacaoPendenteHistoricoResponse {
@@ -247,6 +278,20 @@ export async function patchGravacaoPendentePagamentoNf(
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pagamento_nf_em }),
+    },
+  );
+}
+
+export async function patchGravacaoPendenteControle(
+  gravacaoPendenteId: number,
+  body: GravacaoPendenteControleUpdateBody,
+) {
+  return apiFetch<GravacaoPendenteControleUpdateResponse>(
+    `/gravacao-pendente/controle/${gravacaoPendenteId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     },
   );
 }

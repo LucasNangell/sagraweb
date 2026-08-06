@@ -197,7 +197,8 @@ def _seed_situacao_catalog() -> None:
         ("situacao", "Gravação Externa", 0, 50),  # legado (leitura/reparo)
         ("situacao", "Saída p/", 1, 51),
         ("situacao", "Recebido", 1, 52),
-        ("situacao", "Grav. Concluída", 1, 53),
+        ("situacao", "Grav. Concluída", 0, 53),  # legado
+        ("situacao", "Gravação Ext. Concluída", 1, 54),
         ("setor", "Grav. Externa", 1, 60),
         ("setor", "Gravação", 1, 61),
         ("setor", "SEGEP", 1, 62),

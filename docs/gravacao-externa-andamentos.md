@@ -67,11 +67,11 @@ Chapas por máquina:
 
 ---
 
-## 4. Aguard. Retirada > mudar para "Grav. Concluída"
+## 4. Aguard. Retirada > mudar para "Gravação Ext. Concluída"
 
 | Campo | Valor |
 |--------|--------|
-| **Andamento** | `Grav. Concluída` |
+| **Andamento** | `Gravação Ext. Concluída` |
 | **Setor** | `SEGEP` |
 | **Observação** | |
 
@@ -87,16 +87,16 @@ Chapas por máquina:
 
 | Quando é registrado | Ação do usuário |
 |---------------------|-----------------|
-| Ao confirmar **Gravação concluída** (com sessão `iniciada`, ou sem sessão para operador com permissão). | Sessão externa passa a `concluida` e a OS entra na lista **Aguardando retirada**. | Se a OS estiver no Setor "Grav. Externa" e o usuário tentar lançar algum andamento manualmente, sem ser pelo botão de gravação concluída, o sistema deve exibir um modal com os mesmos campos que são exibidos quando clica no botão gravação concluída, para preencher as informações e lançar o andamento corretamente e atualizar a lista de controle de chapas gravadas, assim ele registra o andamento "Grav. Concluída" antes de registrar o andamento que o usuário estava tentando fazer.
+| Ao confirmar **Gravação concluída** (com sessão `iniciada`, ou sem sessão para operador com permissão). | Sessão externa passa a `concluida` e a OS entra na lista **Aguardando retirada**. | Se a OS estiver no Setor "Grav. Externa" e o usuário tentar lançar algum andamento manualmente, sem ser pelo botão de gravação concluída, o sistema deve exibir um modal com os mesmos campos que são exibidos quando clica no botão gravação concluída, para preencher as informações e lançar o andamento corretamente e atualizar a lista de controle de chapas gravadas, assim ele registra o andamento "Gravação Ext. Concluída" antes de registrar o andamento que o usuário estava tentando fazer.
 
 
 ---
 
-## 5. Gravação *(saída de Aguardando retirada)* > Altera para "Saída p/" 
+## 5. Recebido *(saída de Aguardando retirada)*
 
 | Campo | Valor |
 |--------|--------|
-| **Andamento** | `Saída p/` |
+| **Andamento** | `Recebido` |
 | **Setor** | `Gravação` |
 | **Observação** | |
 
@@ -117,9 +117,9 @@ Chapas por máquina:
 ## Resumo em ordem
 
 ```
-1. Gravação Pendente     | SEGEP         | Chapas por máquina: …          → lançamento + arquivos
-2. Saída p/              | Grav. Externa | Chapas por máquina: …          → Enviar para Externa
-3. Recebido              | Grav. Externa | Arquivos baixados: …           → Iniciar gravação
-4. Grav. Concluída        | SEGEP         | Gravação concluída. Aguardando… → Gravação concluída
-5. Saída p/              | Gravação      | Chapas recebidas: …            → recebimento (sai da lista)
+1. Gravação Pendente         | SEGEP         | Chapas por máquina: …          → lançamento + arquivos
+2. Saída p/                  | Grav. Externa | Chapas por máquina: …          → Enviar para Externa
+3. Recebido                  | Grav. Externa | Arquivos baixados: …           → Iniciar gravação
+4. Gravação Ext. Concluída    | SEGEP         | Gravação concluída. Aguardando… → Gravação concluída
+5. Recebido                  | Gravação      | Chapas recebidas: …            → recebimento (sai da lista)
 ```

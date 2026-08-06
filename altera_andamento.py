@@ -1,166 +1,305 @@
 import pyodbc
 import os
 import sys
+from datetime import datetime
 
-def atualizar_registros_mdb():
-    """
-    Atualiza registros na tabela 'tabandamento' alterando o campo SetorLink
-    de 'SEFOC/GRAV' para 'Gravação'
-    """
+def conectar_banco(db_path):
+    """Estabelece conexão com o banco de dados Access"""
     
-    # Caminho do banco de dados
-    db_path = r"I:\ControleDeTrabalhos\BaseDeDados - SAGRA2\Sagra Base - Papelaria Antiga.mdb"
-    
-    # Verifica se o arquivo existe
     if not os.path.exists(db_path):
         print(f"ERRO: Arquivo não encontrado em: {db_path}")
-        return
+        return None
     
-    print(f"Banco de dados encontrado: {db_path}")
-    
-    # String de conexão para Access .mdb (usando driver Microsoft Access)
-    # Para sistemas 32 bits
+    # String de conexão para Access .mdb
     conn_str_32 = (
         r'DRIVER={Microsoft Access Driver (*.mdb)};'
         f'DBQ={db_path};'
     )
     
-    # Para sistemas 64 bits (se o driver 32 bits não funcionar)
     conn_str_64 = (
         r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};'
         f'DBQ={db_path};'
     )
     
-    connection = None
-    
     try:
         # Tenta conectar primeiro com o driver 32 bits
-        print("Tentando conectar com driver 32 bits...")
         try:
             connection = pyodbc.connect(conn_str_32)
-            print("Conexão estabelecida com sucesso (driver 32 bits)!")
-        except pyodbc.Error as e:
-            print(f"Driver 32 bits falhou: {e}")
-            print("Tentando conectar com driver 64 bits...")
+            print(f"  Conectado com driver 32 bits")
+        except pyodbc.Error:
             connection = pyodbc.connect(conn_str_64)
-            print("Conexão estabelecida com sucesso (driver 64 bits)!")
+            print(f"  Conectado com driver 64 bits")
         
+        return connection
+    
+    except pyodbc.Error as e:
+        print(f"  ERRO ao conectar: {e}")
+        return None
+
+def contar_registros(cursor, db_name):
+    """Conta quantos registros serão alterados"""
+    
+    count_query = """
+        SELECT COUNT(*) 
+        FROM tabandamento 
+        WHERE SetorLink = 'SEFOC' 
+        AND SituacaoLink = 'Gravação'
+    """
+    
+    cursor.execute(count_query)
+    return cursor.fetchone()[0]
+
+def mostrar_amostra(cursor, db_name):
+    """Mostra uma amostra dos registros que serão alterados"""
+    
+    sample_query = """
+        SELECT TOP 5 * 
+        FROM tabandamento 
+        WHERE SetorLink = 'SEFOC' 
+        AND SituacaoLink = 'Gravação'
+    """
+    
+    cursor.execute(sample_query)
+    samples = cursor.fetchall()
+    
+    if samples:
+        print(f"\n  Primeiros 5 registros que serão alterados em {db_name}:")
+        columns = [column[0] for column in cursor.description]
+        for idx, row in enumerate(samples, 1):
+            print(f"  Registro {idx}:")
+            for i, col in enumerate(columns):
+                print(f"    {col}: {row[i]}")
+            print()
+
+def atualizar_banco(db_path, db_name):
+    """Atualiza os registros em um banco específico"""
+    
+    print(f"\n{'='*60}")
+    print(f"Processando: {db_name}")
+    print(f"{'='*60}")
+    
+    connection = conectar_banco(db_path)
+    if not connection:
+        return False
+    
+    try:
         cursor = connection.cursor()
         
-        # Primeiro, conta quantos registros serão alterados
-        count_query = """
-            SELECT COUNT(*) 
-            FROM tabandamento 
-            WHERE SetorLink = 'SEFOC/GRAV'
-        """
-        
-        cursor.execute(count_query)
-        count = cursor.fetchone()[0]
-        
-        print(f"\nRegistros encontrados para atualização: {count}")
+        # Conta registros a serem alterados
+        count = contar_registros(cursor, db_name)
+        print(f"\n  Registros encontrados para atualização: {count}")
         
         if count == 0:
-            print("Nenhum registro encontrado para atualizar.")
-            return
+            print("  Nenhum registro para alterar neste banco.")
+            return True
         
-        # Mostra alguns exemplos dos registros que serão alterados
-        sample_query = """
-            SELECT TOP 5 * 
-            FROM tabandamento 
-            WHERE SetorLink = 'SEFOC/GRAV'
-        """
-        
-        cursor.execute(sample_query)
-        samples = cursor.fetchall()
-        
-        if samples:
-            print("\nPrimeiros 5 registros que serão alterados:")
-            columns = [column[0] for column in cursor.description]
-            for row in samples:
-                print("-" * 40)
-                for i, col in enumerate(columns):
-                    print(f"  {col}: {row[i]}")
-        
-        # Confirmação do usuário
-        resposta = input(f"\nDeseja realmente atualizar {count} registro(s)? (S/N): ").upper()
-        
-        if resposta != 'S':
-            print("Operação cancelada pelo usuário.")
-            return
+        # Mostra amostra
+        mostrar_amostra(cursor, db_name)
         
         # Query de atualização
         update_query = """
             UPDATE tabandamento 
-            SET SetorLink = 'Gravação' 
-            WHERE SetorLink = 'SEFOC/GRAV'
+            SET SetorLink = 'Gravação', 
+                SituacaoLink = 'Saída p/' 
+            WHERE SetorLink = 'SEFOC' 
+            AND SituacaoLink = 'Gravação'
         """
         
-        print("\nExecutando atualização...")
+        print(f"  Executando atualização...")
         cursor.execute(update_query)
         connection.commit()
         
-        print(f"✓ Atualização concluída com sucesso!")
-        print(f"  Registros alterados: {count}")
-        print(f"  Campo: SetorLink")
-        print(f"  De: 'SEFOC/GRAV'")
-        print(f"  Para: 'Gravação'")
+        print(f"  ✓ Atualização concluída com sucesso!")
+        print(f"    Registros alterados: {count}")
+        print(f"    SetorLink: 'SEFOC' -> 'Gravação'")
+        print(f"    SituacaoLink: 'Gravação' -> 'Saída p/'")
         
         # Verificação pós-atualização
-        verify_query = """
+        verify_old_query = """
             SELECT COUNT(*) 
             FROM tabandamento 
-            WHERE SetorLink = 'SEFOC/GRAV'
+            WHERE SetorLink = 'SEFOC' 
+            AND SituacaoLink = 'Gravação'
         """
         
-        cursor.execute(verify_query)
+        cursor.execute(verify_old_query)
         remaining_old = cursor.fetchone()[0]
         
-        # Verifica quantos registros agora têm o novo valor
+        # Verifica novos valores
         verify_new_query = """
             SELECT COUNT(*) 
             FROM tabandamento 
-            WHERE SetorLink = 'Gravação'
+            WHERE SetorLink = 'Gravação' 
+            AND SituacaoLink = 'Saída p/'
         """
         
         cursor.execute(verify_new_query)
         new_count = cursor.fetchone()[0]
         
         if remaining_old == 0:
-            print(f"\n✓ Verificação: Todos os registros foram atualizados corretamente.")
-            print(f"  Total de registros com 'Gravação': {new_count}")
+            print(f"  ✓ Verificação: Todos os registros foram atualizados corretamente.")
+            print(f"    Total de registros com os novos valores: {new_count}")
         else:
-            print(f"\n⚠ AVISO: Ainda existem {remaining_old} registro(s) com o valor antigo 'SEFOC/GRAV'.")
-            print(f"  Registros alterados para 'Gravação': {new_count}")
+            print(f"  ⚠ AVISO: Ainda existem {remaining_old} registro(s) com valores antigos.")
+            print(f"    Registros com novos valores: {new_count}")
+        
+        return True
         
     except pyodbc.Error as e:
-        print(f"\nERRO na operação com o banco de dados: {e}")
-        if connection:
-            connection.rollback()
-            print("Rollback executado.")
+        print(f"  ERRO na operação: {e}")
+        connection.rollback()
+        print("  Rollback executado.")
+        return False
         
     except Exception as e:
-        print(f"\nERRO inesperado: {e}")
-        if connection:
-            connection.rollback()
-            print("Rollback executado.")
+        print(f"  ERRO inesperado: {e}")
+        connection.rollback()
+        print("  Rollback executado.")
+        return False
     
     finally:
         if connection:
             cursor.close()
             connection.close()
-            print("\nConexão fechada.")
+            print("  Conexão fechada.")
 
-if __name__ == "__main__":
+def gerar_relatorio(resultados, hora_inicio):
+    """Gera um relatório final da operação"""
+    
+    hora_fim = datetime.now()
+    duracao = hora_fim - hora_inicio
+    
+    print(f"\n{'='*60}")
+    print("RELATÓRIO FINAL")
+    print(f"{'='*60}")
+    print(f"Início: {hora_inicio.strftime('%d/%m/%Y %H:%M:%S')}")
+    print(f"Fim: {hora_fim.strftime('%d/%m/%Y %H:%M:%S')}")
+    print(f"Duração: {duracao}")
+    print(f"\nResultados por banco:")
+    
+    sucessos = 0
+    falhas = 0
+    
+    for banco, sucesso in resultados.items():
+        status = "✓ SUCESSO" if sucesso else "✗ FALHA"
+        if sucesso:
+            sucessos += 1
+        else:
+            falhas += 1
+        print(f"  {banco}: {status}")
+    
+    print(f"\nResumo:")
+    print(f"  Total de bancos processados: {len(resultados)}")
+    print(f"  Sucessos: {sucessos}")
+    print(f"  Falhas: {falhas}")
+    
+    print(f"\nAlterações realizadas:")
+    print(f"  Condição: SetorLink = 'SEFOC' E SituacaoLink = 'Gravação'")
+    print(f"  Novo SetorLink: 'Gravação'")
+    print(f"  Nova SituacaoLink: 'Saída p/'")
+
+def salvar_log(resultados, hora_inicio, base_path):
+    """Salva log da operação em arquivo"""
+    
+    log_path = os.path.join(base_path, "log_atualizacao_multiplas_bases.txt")
+    
+    try:
+        with open(log_path, 'a', encoding='utf-8') as log_file:
+            log_file.write(f"\n{'='*60}\n")
+            log_file.write(f"Atualização em: {hora_inicio.strftime('%d/%m/%Y %H:%M:%S')}\n")
+            log_file.write(f"SetorLink: 'SEFOC' -> 'Gravação'\n")
+            log_file.write(f"SituacaoLink: 'Gravação' -> 'Saída p/'\n")
+            log_file.write(f"{'='*60}\n")
+            
+            for nome, sucesso in resultados.items():
+                status = "SUCESSO" if sucesso else "FALHA"
+                log_file.write(f"{nome}: {status}\n")
+            
+            log_file.write(f"{'='*60}\n")
+        
+        print(f"\nLog salvo em: {log_path}")
+        return True
+    
+    except Exception as e:
+        print(f"\nNão foi possível salvar o log: {e}")
+        return False
+
+def main():
+    """Função principal"""
+    
+    hora_inicio = datetime.now()
+    
     print("=" * 60)
-    print("ATUALIZAÇÃO DE REGISTROS - BANCO DE DADOS ACCESS")
+    print("ATUALIZAÇÃO EM LOTE - QUATRO BASES DE DADOS")
     print("=" * 60)
-    print("Banco: Sagra Base - Papelaria Antiga.mdb")
-    print("Tabela: tabandamento")
-    print("De: 'SEFOC/GRAV'")
-    print("Para: 'Gravação'")
+    print("Alteração:")
+    print("  SetorLink: 'SEFOC' -> 'Gravação'")
+    print("  SituacaoLink: 'Gravação' -> 'Saída p/'")
     print("=" * 60)
     
-    atualizar_registros_mdb()
+    # Definição dos bancos de dados
+    base_dir = r"I:\ControleDeTrabalhos\BaseDeDados - SAGRA2"
+    
+    bancos = {
+        "OS AntigaCore": os.path.join(base_dir, "Sagra Base - OS AntigaCore.mdb"),
+        "Papelaria Antiga": os.path.join(base_dir, "Sagra Base - Papelaria Antiga.mdb"),
+        "OS Atual": os.path.join(base_dir, "Sagra Base - OS Atual.mdb"),
+        "Papelaria Atual": os.path.join(base_dir, "Sagra Base - Papelaria Atual.mdb")
+    }
+    
+    # Confirmação do usuário
+    print("\nBancos que serão processados:")
+    for nome, caminho in bancos.items():
+        existe = "✓" if os.path.exists(caminho) else "✗"
+        print(f"  {existe} {nome}: {os.path.basename(caminho)}")
+    
+    # Verifica se todos os arquivos existem
+    arquivos_faltantes = [nome for nome, caminho in bancos.items() if not os.path.exists(caminho)]
+    
+    if arquivos_faltantes:
+        print(f"\n⚠ ATENÇÃO: Os seguintes arquivos não foram encontrados:")
+        for nome in arquivos_faltantes:
+            print(f"  • {nome}")
+        
+        resposta = input(f"\nDeseja continuar mesmo assim? (S/N): ").upper()
+        if resposta != 'S':
+            print("\nOperação cancelada pelo usuário.")
+            return
+    
+    resposta = input(f"\nDeseja continuar com a atualização nas bases encontradas? (S/N): ").upper()
+    
+    if resposta != 'S':
+        print("\nOperação cancelada pelo usuário.")
+        return
+    
+    # Processa cada banco
+    resultados = {}
+    
+    for nome, caminho in bancos.items():
+        # Pula arquivos que não existem
+        if not os.path.exists(caminho):
+            print(f"\n{'='*60}")
+            print(f"Pulando {nome} - Arquivo não encontrado")
+            print(f"{'='*60}")
+            resultados[nome] = False
+            continue
+        
+        sucesso = atualizar_banco(caminho, nome)
+        resultados[nome] = sucesso
+    
+    # Gera relatório final
+    gerar_relatorio(resultados, hora_inicio)
+    
+    # Salva log
+    salvar_log(resultados, hora_inicio, base_dir)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\nOperação interrompida pelo usuário.")
+    except Exception as e:
+        print(f"\nErro crítico: {e}")
     
     print("\nPressione Enter para sair...")
     input()

@@ -10,10 +10,12 @@ import {
   fetchGravacaoPendenteFornecedores,
   fetchGravacaoPendenteHistorico,
   fetchGravacaoPendenteOsList,
+  patchGravacaoPendenteControle,
   patchGravacaoPendentePagamentoNf,
   putGravacaoPendenteFornecedorCotas,
   putGravacaoPendenteMaquinasConfig,
   updateGravacaoPendenteArquivos,
+  type GravacaoPendenteControleUpdateBody,
   type GravacaoPendenteCotaAdjustMode,
   type GravacaoPendenteListFilters,
   type GravacaoPendenteMaquinaPrecoItem,
@@ -152,6 +154,27 @@ export function usePatchGravacaoPendentePagamentoNfMutation() {
       gravacaoExternaId: number;
       pagamento_nf_em: string | null;
     }) => patchGravacaoPendentePagamentoNf(gravacaoExternaId, pagamento_nf_em),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.gravacaoPendente.historico(),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.gravacaoPendente.prefix,
+      });
+    },
+  });
+}
+
+export function usePatchGravacaoPendenteControleMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      gravacaoPendenteId,
+      body,
+    }: {
+      gravacaoPendenteId: number;
+      body: GravacaoPendenteControleUpdateBody;
+    }) => patchGravacaoPendenteControle(gravacaoPendenteId, body),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.gravacaoPendente.historico(),

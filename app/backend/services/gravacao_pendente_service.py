@@ -423,6 +423,26 @@ def list_active_pendente_by_juntada(juntada_grupo_id: str) -> list[dict[str, Any
     return [_map_pendente_session(r) for r in rows or []]
 
 
+def list_pendente_by_juntada(
+    juntada_grupo_id: str,
+    *,
+    exclude_cancelada: bool = True,
+) -> list[dict[str, Any]]:
+    """Lista sessões pendentes do grupo (controle/histórico, não só ativas)."""
+    gid = (juntada_grupo_id or "").strip()
+    if not gid:
+        return []
+    sql = """
+        SELECT * FROM tab_os_gravacao_pendente
+        WHERE JuntadaGrupoId = %s
+    """
+    if exclude_cancelada:
+        sql += " AND Status <> 'cancelada'"
+    sql += " ORDER BY OsNro ASC, OsAno ASC, Id ASC"
+    rows = db.execute_query(sql, (gid,))
+    return [_map_pendente_session(r) for r in rows or []]
+
+
 def os_exists(ano: int, os_id: int) -> bool:
     rows = db.execute_query(
         """
@@ -1395,6 +1415,168 @@ def update_pagamento_nf(
     return {"gravacao_externa_id": ge_id, "pagamento_nf_em": pagamento_nf_em}
 
 
+def _latest_externa_id_for_pendente_cursor(cursor, pendente_id: int) -> int | None:
+    cursor.execute(
+        """
+        SELECT Id
+        FROM tab_os_gravacao_externa
+        WHERE OrigemPendenteId = %s
+        ORDER BY Id DESC
+        LIMIT 1
+        """,
+        (pendente_id,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return None
+    if isinstance(row, dict):
+        return int(row["Id"]) if row.get("Id") is not None else None
+    return int(row[0]) if row[0] is not None else None
+
+
+def update_controle_lancamento(
+    *,
+    gravacao_pendente_id: int,
+    chapas: list[dict[str, Any]],
+    criado_em: datetime | None,
+    enviada_em: datetime | None,
+    fornecedor_ponto: str | None,
+    concluida_em: datetime | None,
+    entrega_lancada_em: datetime | None,
+    recebido_por_ponto: str | None,
+    recebido_por_nome: str | None,
+    pagamento_nf_em: datetime | None,
+) -> dict[str, Any]:
+    """Atualiza campos editáveis do controle e replica no grupo de juntada."""
+    try:
+        pendente_id = int(gravacao_pendente_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("gravacao_pendente_id inválido") from exc
+
+    validated_chapas = validate_chapas_input(chapas, allow_empty=True)
+
+    fornecedor_fmt: str | None = None
+    fornecedor_raw = str(fornecedor_ponto or "").strip()
+    if fornecedor_raw:
+        fornecedor_fmt = resolve_fornecedor_ponto(fornecedor_raw)
+
+    recebido_ponto = str(recebido_por_ponto or "").strip() or None
+    if recebido_ponto:
+        recebido_ponto = format_ponto(_clean_ponto(recebido_ponto)) or recebido_ponto
+    recebido_nome = str(recebido_por_nome or "").strip() or None
+
+    def tx(cursor):
+        cursor.execute(
+            """
+            SELECT Id, JuntadaGrupoId
+            FROM tab_os_gravacao_pendente
+            WHERE Id = %s
+            LIMIT 1
+            FOR UPDATE
+            """,
+            (pendente_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Lançamento do controle não encontrado.")
+        if isinstance(row, dict):
+            juntada_raw = row.get("JuntadaGrupoId")
+        else:
+            juntada_raw = row[1] if len(row) > 1 else None
+        juntada_id = str(juntada_raw).strip() if juntada_raw else None
+
+        target_ids: list[int] = [pendente_id]
+        if juntada_id:
+            cursor.execute(
+                """
+                SELECT Id
+                FROM tab_os_gravacao_pendente
+                WHERE JuntadaGrupoId = %s
+                  AND Status <> 'cancelada'
+                ORDER BY Id ASC
+                """,
+                (juntada_id,),
+            )
+            group_rows = cursor.fetchall() or []
+            target_ids = []
+            for gr in group_rows:
+                if isinstance(gr, dict):
+                    target_ids.append(int(gr["Id"]))
+                else:
+                    target_ids.append(int(gr[0]))
+            if pendente_id not in target_ids:
+                target_ids.append(pendente_id)
+
+        updated_externa_ids: list[int] = []
+        for sid in target_ids:
+            cursor.execute(
+                """
+                UPDATE tab_os_gravacao_pendente
+                SET CriadoEm = %s, EnviadaEm = %s
+                WHERE Id = %s
+                """,
+                (criado_em, enviada_em, sid),
+            )
+            cursor.execute(
+                "DELETE FROM tab_os_gravacao_pendente_chapa WHERE GravacaoPendenteId = %s",
+                (sid,),
+            )
+            for chapa in validated_chapas:
+                cursor.execute(
+                    """
+                    INSERT INTO tab_os_gravacao_pendente_chapa
+                        (GravacaoPendenteId, Maquina, QuantidadeChapas)
+                    VALUES (%s, %s, %s)
+                    """,
+                    (sid, chapa["maquina"], chapa["quantidade"]),
+                )
+
+            ge_id = _latest_externa_id_for_pendente_cursor(cursor, sid)
+            if ge_id is None:
+                continue
+            cursor.execute(
+                """
+                UPDATE tab_os_gravacao_externa
+                SET FornecedorPonto = %s,
+                    ConcluidaEm = %s,
+                    EntregaLancadaEm = %s,
+                    RecebidoPorPonto = %s,
+                    RecebidoPorNome = %s,
+                    PagamentoNfEm = %s
+                WHERE Id = %s
+                """,
+                (
+                    fornecedor_fmt,
+                    concluida_em,
+                    entrega_lancada_em,
+                    recebido_ponto,
+                    recebido_nome,
+                    pagamento_nf_em,
+                    ge_id,
+                ),
+            )
+            updated_externa_ids.append(ge_id)
+
+        return {
+            "gravacao_pendente_id": pendente_id,
+            "updated_pendente_ids": target_ids,
+            "updated_externa_ids": updated_externa_ids,
+            "juntada_grupo_id": juntada_id,
+            "chapas": validated_chapas,
+            "total_chapas": sum(c["quantidade"] for c in validated_chapas),
+            "criado_em": criado_em,
+            "enviada_em": enviada_em,
+            "fornecedor_ponto": fornecedor_fmt,
+            "concluida_em": concluida_em,
+            "entrega_lancada_em": entrega_lancada_em,
+            "recebido_por_ponto": recebido_ponto,
+            "recebido_por_nome": recebido_nome,
+            "pagamento_nf_em": pagamento_nf_em,
+        }
+
+    return db.execute_transaction([tx])[0]
+
+
 def delete_controle_lancamento(gravacao_pendente_id: int) -> int:
     try:
         pendente_id = int(gravacao_pendente_id)
@@ -1527,6 +1709,7 @@ def list_historico_concluidas(
             ge.Id AS gravacao_externa_id,
             gp.OsAno AS ano,
             gp.OsNro AS nr_os,
+            gp.JuntadaGrupoId AS juntada_grupo_id,
             gp.LancadoPorPonto AS lancado_por_ponto,
             gp.LancadoPorNome AS lancado_por_nome,
             gp.CriadoEm AS criado_em,
@@ -1610,12 +1793,17 @@ def list_historico_concluidas(
                 (pendente_id,),
             )
         ge_id = row.get("gravacao_externa_id")
+        juntada_raw = row.get("juntada_grupo_id")
+        juntada_id = str(juntada_raw).strip() if juntada_raw else None
+        membros = [{"nr_os": int(row["nr_os"]), "ano": int(row["ano"])}]
         items.append(
             {
                 "gravacao_pendente_id": int(pendente_id) if pendente_id is not None else None,
                 "gravacao_externa_id": int(ge_id) if ge_id is not None else None,
                 "ano": int(row["ano"]),
                 "nr_os": int(row["nr_os"]),
+                "juntada_grupo_id": juntada_id,
+                "membros": membros,
                 "solicitante": row.get("solicitante"),
                 "titulo": row.get("titulo"),
                 "lancado_por_ponto": row.get("lancado_por_ponto"),
@@ -1641,7 +1829,53 @@ def list_historico_concluidas(
                 ],
             }
         )
+    _enrich_historico_juntada_membros(items)
     return items, total, total_chapas
+
+
+def _enrich_historico_juntada_membros(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Inclui membros não cancelados do mesmo JuntadaGrupoId (mantém 1 linha por OS)."""
+    group_ids = sorted(
+        {
+            str(item.get("juntada_grupo_id") or "").strip()
+            for item in items
+            if str(item.get("juntada_grupo_id") or "").strip()
+        }
+    )
+    if not group_ids:
+        return items
+
+    placeholders = ", ".join(["%s"] * len(group_ids))
+    rows = db.execute_query(
+        f"""
+        SELECT OsNro AS nr_os, OsAno AS ano, JuntadaGrupoId AS juntada_grupo_id
+        FROM tab_os_gravacao_pendente
+        WHERE Status <> 'cancelada'
+          AND JuntadaGrupoId IN ({placeholders})
+        """,
+        tuple(group_ids),
+    )
+    by_group: dict[str, list[dict[str, int]]] = {}
+    for row in rows or []:
+        gid = str(row.get("juntada_grupo_id") or "").strip()
+        if not gid:
+            continue
+        by_group.setdefault(gid, []).append(
+            {"nr_os": int(row["nr_os"]), "ano": int(row["ano"])}
+        )
+
+    for item in items:
+        gid = str(item.get("juntada_grupo_id") or "").strip()
+        if not gid:
+            continue
+        membros = list(item.get("membros") or [])
+        for extra in by_group.get(gid, []):
+            if not any(
+                m["nr_os"] == extra["nr_os"] and m["ano"] == extra["ano"] for m in membros
+            ):
+                membros.append(extra)
+        item["membros"] = sorted(membros, key=lambda m: (m["nr_os"], m["ano"]))
+    return items
 
 
 def user_can_access_pendente_session(

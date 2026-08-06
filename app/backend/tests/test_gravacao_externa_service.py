@@ -30,11 +30,11 @@ from services.gravacao_externa_service import (
 
 def test_setor_gravacao_concluida_is_segep():
     assert SETOR_GRAVACAO_CONCLUIDA == "SEGEP"
-    assert SITUACAO_GRAV_CONCLUIDA == "Grav. Concluída"
+    assert SITUACAO_GRAV_CONCLUIDA == "Gravação Ext. Concluída"
 
 
 def test_entrega_chapas_andamento_targets():
-    assert SITUACAO_SAIDA_P == "Saída p/"
+    assert SITUACAO_RECEBIDO == "Recebido"
     assert SETOR_ENTREGA_CHAPAS == "Gravação"
     assert SETOR_GRAV_EXTERNA == "Grav. Externa"
 
@@ -490,7 +490,7 @@ def test_insert_andamento_as_ultimo_demotes_then_inserts_with_flag():
         cod_status="001002026-03",
         nro=100,
         ano=2026,
-        situacao=SITUACAO_SAIDA_P,
+        situacao=SITUACAO_RECEBIDO,
         setor=SETOR_ENTREGA_CHAPAS,
         obs="obs",
         ponto="111.111",
@@ -505,7 +505,7 @@ def test_insert_andamento_as_ultimo_demotes_then_inserts_with_flag():
         "001002026-03",
         100,
         2026,
-        SITUACAO_SAIDA_P,
+        SITUACAO_RECEBIDO,
         SETOR_ENTREGA_CHAPAS,
         "obs",
         "111.111",
@@ -568,6 +568,6 @@ def test_lancar_entrega_chapas_inserts_andamento_as_ultimo(
 
     assert captured["demote_params"] == (100, 2026)
     assert "NOW(), 1," in captured["insert_sql"]
-    assert captured["insert_params"][3] == SITUACAO_SAIDA_P
+    assert captured["insert_params"][3] == SITUACAO_RECEBIDO
     assert captured["insert_params"][4] == SETOR_ENTREGA_CHAPAS
     assert "Chapas recebidas:" in captured["insert_params"][5]

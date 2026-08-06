@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GravacaoPendenteTab } from "./GravacaoPendenteTab";
 
-const patchNf = vi.fn();
+const patchControle = vi.fn();
 const deleteControle = vi.fn();
 let canDelete = true;
 
@@ -35,8 +35,12 @@ vi.mock("@/api/hooks/useGravacaoPendente", () => ({
     isPending: false,
   }),
   useGravacaoPendenteDetail: () => ({ data: null }),
-  usePatchGravacaoPendentePagamentoNfMutation: () => ({
-    mutateAsync: patchNf,
+  useGravacaoPendenteFornecedores: () => ({
+    data: { items: [{ ponto: "918.713", nome: "Forn" }] },
+    isPending: false,
+  }),
+  usePatchGravacaoPendenteControleMutation: () => ({
+    mutateAsync: patchControle,
     isPending: false,
   }),
   useDeleteGravacaoPendenteControleMutation: () => ({
@@ -64,8 +68,8 @@ vi.mock("./GravacaoFornecedorSelectModal", () => ({
 
 describe("GravacaoPendenteTab controle", () => {
   beforeEach(() => {
-    patchNf.mockReset();
-    patchNf.mockResolvedValue({});
+    patchControle.mockReset();
+    patchControle.mockResolvedValue({});
     deleteControle.mockReset();
     deleteControle.mockResolvedValue({});
     canDelete = true;
@@ -85,32 +89,55 @@ describe("GravacaoPendenteTab controle", () => {
         "Grav. Concluída",
         "Receb. CGRAF",
         "Recebido por",
+        "Pagamento NF",
+        "Ações",
       ]),
     );
   });
 
-  it("mantém NF bloqueada até editar e mostra exclusão autorizada", async () => {
+  it("abre modal de edição pelo lápis e salva via PATCH completo", async () => {
     render(<GravacaoPendenteTab />);
     fireEvent.click(screen.getByRole("button", { name: "Expandir lista de controle" }));
 
-    const input = screen.getByLabelText("Pagamento NF OS 00100/26");
-    expect(input).toHaveProperty("disabled", true);
-    fireEvent.click(screen.getByRole("button", { name: "Editar Pagamento NF OS 00100/26" }));
-    expect(input).toHaveProperty("disabled", false);
-    fireEvent.change(input, { target: { value: "2026-07-10" } });
-    fireEvent.click(screen.getByRole("button", { name: "Salvar Pagamento NF OS 00100/26" }));
+    expect(screen.queryByLabelText("Pagamento NF OS 00100/26")).toBeNull();
+    expect(screen.getByText(/05\/07\/2026|5\/7\/2026/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Editar controle OS 00100/26" }));
+    const dialog = screen.getByRole("dialog", { name: "Editar controle de chapas" });
+    expect(dialog).toBeTruthy();
+    expect(dialog.textContent).toContain("Cliente");
+    expect(dialog.textContent).toContain("Título");
+    expect(dialog.textContent).toContain("OS / Ano");
+
+    // Campos bloqueados não são inputs editáveis
+    expect(screen.queryByRole("textbox", { name: "Cliente" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Título" })).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Chapas Komori"), { target: { value: "4" } });
+    fireEvent.change(screen.getByLabelText("Pagamento NF"), {
+      target: { value: "2026-07-10" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+
     await waitFor(() => {
-      expect(patchNf).toHaveBeenCalledWith({
-        gravacaoExternaId: 84,
-        pagamento_nf_em: "2026-07-10T12:00:00",
+      expect(patchControle).toHaveBeenCalledWith({
+        gravacaoPendenteId: 42,
+        body: expect.objectContaining({
+          chapas: [{ maquina: "Komori", quantidade: 4 }],
+          pagamento_nf_em: "2026-07-10T12:00:00",
+        }),
       });
     });
-    expect(screen.getByRole("button", { name: "Excluir controle OS 00100/26" })).toBeTruthy();
   });
 
-  it("oculta exclusão sem a permissão específica", () => {
+  it("mostra exclusão autorizada e oculta sem a permissão específica", () => {
+    const { unmount } = render(<GravacaoPendenteTab />);
+    expect(screen.getByRole("button", { name: "Excluir controle OS 00100/26" })).toBeTruthy();
+    unmount();
+
     canDelete = false;
     render(<GravacaoPendenteTab />);
     expect(screen.queryByRole("button", { name: "Excluir controle OS 00100/26" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Editar controle OS 00100/26" })).toBeTruthy();
   });
 });

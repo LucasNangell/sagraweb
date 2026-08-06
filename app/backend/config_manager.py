@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import os
@@ -11,8 +12,24 @@ else:
     PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 CONFIG_FILE = PROJECT_ROOT / "config" / "config.json"
+CONFIG_DEVELOPMENT_FILE = PROJECT_ROOT / "config" / "config.development.json"
 ENV_FILE = PROJECT_ROOT / "config" / ".env"
 FRONTEND_DIR = PROJECT_ROOT / "app" / "frontend"
+
+# Chaves de conexão cobertas pelo overlay DEV (nunca gravar overlay em config.json).
+_DEV_CONNECTION_KEYS = (
+    "db_host",
+    "db_port",
+    "db_user",
+    "db_name",
+    "db_password",
+    "mysql_only",
+    "mdb_os_atual_path",
+    "mdb_papelaria_path",
+    "mdb_os_antiga_path",
+    "mdb_papelaria_antiga_path",
+    "mdb_lombada_path",
+)
 
 # Defaults sem segredos — credenciais vêm de .env / variáveis de ambiente
 DEFAULT_CONFIG = {
@@ -164,11 +181,8 @@ class ConfigManager:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(ConfigManager, cls).__new__(cls)
-            cls._instance.config = DEFAULT_CONFIG.copy()
-            if "allowed_ips" in cls._instance.config:
-                cls._instance.config["allowed_ips"] = dict(
-                    cls._instance.config["allowed_ips"]
-                )
+            cls._instance.config = copy.deepcopy(DEFAULT_CONFIG)
+            cls._instance._disk_config = copy.deepcopy(DEFAULT_CONFIG)
             cls._instance.load_config()
         return cls._instance
 
@@ -234,6 +248,50 @@ class ConfigManager:
             else:
                 self.config[key] = value
 
+    def _apply_development_overlay(self) -> None:
+        """Mescla config.development.json só em runtime (não altera config.json)."""
+        if not self.is_development():
+            return
+        if not CONFIG_DEVELOPMENT_FILE.exists():
+            logging.warning(
+                "ENV=development mas %s ausente — mantendo conexões de config.json",
+                CONFIG_DEVELOPMENT_FILE,
+            )
+            return
+        try:
+            with open(CONFIG_DEVELOPMENT_FILE, "r", encoding="utf-8-sig") as f:
+                overlay = json.load(f)
+        except Exception as exc:
+            logging.error("Erro ao ler %s: %s", CONFIG_DEVELOPMENT_FILE, exc)
+            return
+        if not isinstance(overlay, dict):
+            logging.error("%s deve ser um objeto JSON", CONFIG_DEVELOPMENT_FILE)
+            return
+        applied = []
+        for key, value in overlay.items():
+            if key.startswith("_"):
+                continue
+            self.config[key] = value
+            applied.append(key)
+        # Senha: não herdar automaticamente a de produção apontando para XAMPP.
+        # Com host local, use DB_PASSWORD do .env (vazio = root XAMPP) se a variável existir.
+        if _is_loopback_host(str(self.config.get("db_host") or "")):
+            if "DB_PASSWORD" in os.environ:
+                self.config["db_password"] = os.environ.get("DB_PASSWORD") or ""
+            elif "SAGRA_DB_PASSWORD" in os.environ:
+                self.config["db_password"] = os.environ.get("SAGRA_DB_PASSWORD") or ""
+            else:
+                self.config["db_password"] = ""
+        elif "DB_PASSWORD" in os.environ:
+            self.config["db_password"] = os.environ.get("DB_PASSWORD") or ""
+        elif "SAGRA_DB_PASSWORD" in os.environ:
+            self.config["db_password"] = os.environ.get("SAGRA_DB_PASSWORD") or ""
+        logging.info(
+            "Overlay DEV aplicado (%s): %s",
+            CONFIG_DEVELOPMENT_FILE.name,
+            ", ".join(applied) if applied else "(vazio)",
+        )
+
     def _apply_development_profile(self) -> None:
         """Dev local: Uvicorn em 127.0.0.1:8001, API direta sem Nginx/Cloudflare."""
         if not self.is_development():
@@ -260,6 +318,17 @@ class ConfigManager:
             "Perfil ENV=development: API local em %s (sem Nginx/Cloudflare)%s",
             self.config["api_external_url"],
             f"; links públicos em {public_hint}" if public_hint else "",
+        )
+        mysql = self.get_mysql_config()
+        paths = self.get_mdb_paths()
+        logging.info(
+            "Conexões DEV | MySQL %s@%s:%s/%s | MDB OS=%s | Papelaria=%s",
+            mysql.get("user"),
+            mysql.get("host"),
+            mysql.get("port"),
+            mysql.get("database"),
+            paths.get("os_atual"),
+            paths.get("papelaria"),
         )
 
     def _log_operational_mode(self) -> None:
@@ -297,13 +366,19 @@ class ConfigManager:
                     self.config.update(loaded_config)
                     if "allowed_ips" in loaded_config:
                         self.config["allowed_ips"] = dict(loaded_config["allowed_ips"])
+                    # Baseline persistente: o que está/ fica em config.json (produção).
+                    self._disk_config = copy.deepcopy(self.config)
             except Exception as exc:
                 logging.error("Error loading config: %s", exc)
+                self._disk_config = copy.deepcopy(self.config)
         else:
             CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+            self._disk_config = copy.deepcopy(self.config)
             self.save_config()
 
         self._apply_env_overrides()
+        # Overlay DEV sobrepõe host/MDB de config.json e DB_HOST do .env (evita escrever na VM).
+        self._apply_development_overlay()
         self._apply_development_profile()
         self._log_operational_mode()
 
@@ -311,17 +386,40 @@ class ConfigManager:
             pwd = os.getenv("DB_PASSWORD") or os.getenv("SAGRA_DB_PASSWORD")
             if pwd:
                 self.config["db_password"] = pwd
+            elif self.is_development() and _is_loopback_host(
+                str(self.config.get("db_host") or "")
+            ):
+                logging.info(
+                    "DEV: db_password vazio (ex.: root no MariaDB/XAMPP local)"
+                )
             else:
                 logging.warning(
                     "db_password não definido. Configure DB_PASSWORD no config/.env"
                 )
 
     def save_config(self, new_config=None) -> None:
+        """Persiste apenas o baseline (config.json). Overlay DEV nunca é gravado."""
         if new_config:
             self.config.update(new_config)
+            if not hasattr(self, "_disk_config"):
+                self._disk_config = copy.deepcopy(self.config)
+            for key, value in new_config.items():
+                self._disk_config[key] = copy.deepcopy(value)
         try:
+            to_write = copy.deepcopy(getattr(self, "_disk_config", self.config))
+            # Garantia extra: conexões injetadas só em runtime DEV não vazam para o arquivo.
+            if self.is_development() and CONFIG_DEVELOPMENT_FILE.exists():
+                try:
+                    with open(CONFIG_FILE, "r", encoding="utf-8-sig") as f:
+                        on_disk = json.load(f)
+                    if isinstance(on_disk, dict):
+                        for key in _DEV_CONNECTION_KEYS:
+                            if key in on_disk:
+                                to_write[key] = copy.deepcopy(on_disk[key])
+                except Exception:
+                    pass
             with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                json.dump(self.config, f, indent=4)
+                json.dump(to_write, f, indent=4)
         except Exception as exc:
             logging.error("Error saving config: %s", exc)
 
@@ -339,6 +437,9 @@ class ConfigManager:
 
     def set(self, key, value) -> None:
         self.config[key] = value
+        if not hasattr(self, "_disk_config"):
+            self._disk_config = copy.deepcopy(self.config)
+        self._disk_config[key] = copy.deepcopy(value)
 
     def get_server_config(self):
         return {

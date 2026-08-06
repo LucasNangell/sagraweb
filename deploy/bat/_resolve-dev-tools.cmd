@@ -8,10 +8,14 @@ REM - "python" aponta para o stub da Microsoft Store (WindowsApps) e falha
 REM - pnpm instalado em %APPDATA%\npm mas essa pasta nao esta no PATH
 REM ============================================================================
 
-REM pnpm global (npm i -g pnpm)
+REM pnpm global (npm i -g pnpm) — preferir pnpm.cmd (evita pnpm.ps1 + ExecutionPolicy)
 if exist "%APPDATA%\npm\pnpm.cmd" (
     set "PATH=%APPDATA%\npm;%PATH%"
+    set "SAGRA_PNPM=%APPDATA%\npm\pnpm.cmd"
 )
+
+REM Scripts npm/pnpm sempre em cmd nesta sessao (nao PowerShell)
+set "npm_config_script_shell=C:\Windows\System32\cmd.exe"
 
 REM Python real via launcher "py -3" (evita stub WindowsApps)
 set "SAGRA_PYTHON="
@@ -37,13 +41,17 @@ if defined SAGRA_PYTHON (
 )
 
 REM Ultimo recurso: ativar pnpm via Corepack (Node.js)
-where pnpm >nul 2>&1
-if errorlevel 1 (
-    where corepack >nul 2>&1
-    if not errorlevel 1 (
-        corepack enable >nul 2>&1
-        corepack prepare pnpm@9.15.0 --activate >nul 2>&1
+if not defined SAGRA_PNPM (
+    where pnpm >nul 2>&1
+    if errorlevel 1 (
+        where corepack >nul 2>&1
+        if not errorlevel 1 (
+            corepack enable >nul 2>&1
+            corepack prepare pnpm@9.15.0 --activate >nul 2>&1
+        )
     )
+    if exist "%APPDATA%\npm\pnpm.cmd" set "SAGRA_PNPM=%APPDATA%\npm\pnpm.cmd"
 )
+if not defined SAGRA_PNPM set "SAGRA_PNPM=pnpm.cmd"
 
 exit /b 0

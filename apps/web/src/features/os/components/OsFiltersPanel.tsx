@@ -174,8 +174,8 @@ export function OsFiltersPanel({
               title="Ordem de serviço"
               className="w-auto shrink-0 xl:border-r xl:border-sagra-border xl:pr-4"
             >
-              <div className="os-filter-os-pair grid grid-cols-[5rem_auto_5rem] gap-x-1.5 gap-y-2">
-                <FilterField label="Nr OS">
+              <FilterField label="Nr OS/Ano" labelWidth="os">
+                <div className="flex w-[11.25rem] items-center gap-1.5">
                   <input
                     type="text"
                     inputMode="numeric"
@@ -187,58 +187,62 @@ export function OsFiltersPanel({
                         page: 1,
                       })
                     }
-                    className={inputClass}
+                    className={cn(inputClass, "min-w-0 flex-1")}
+                    aria-label="Nr OS"
                   />
-                </FilterField>
-                <span
-                  className="mb-2 self-end text-sm font-semibold text-neutral-400"
-                  aria-hidden
-                >
-                  /
-                </span>
-                <MultiSelect
-                  label="Ano"
-                  className="min-w-0 w-full flex-none"
-                  options={yearOptions}
-                  value={anosAsStrings}
-                  onChange={(vals) =>
-                    onPatchFilters({
-                      anos: vals
-                        .map((v) => Number.parseInt(v, 10))
-                        .filter((n) => !Number.isNaN(n)),
-                      page: 1,
-                    })
-                  }
-                  disabled={yearsQuery.isLoading && yearOptions.length === 0}
-                  placeholder={
-                    yearsQuery.isLoading ? "Carregando..." : "Todos"
-                  }
-                />
-                <FilterField label="Processo" className="col-span-3 min-w-0">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="00.000.000/0000"
-                    value={filters.processo ?? ""}
-                    onChange={(e) =>
+                  <span
+                    className="shrink-0 text-sm font-semibold text-neutral-400"
+                    aria-hidden
+                  >
+                    /
+                  </span>
+                  <MultiSelect
+                    label="Ano"
+                    hideLabel
+                    aria-label="Ano"
+                    className="min-w-0 flex-1 flex-none"
+                    options={yearOptions}
+                    value={anosAsStrings}
+                    onChange={(vals) =>
                       onPatchFilters({
-                        processo: formatProcessoMask(e.target.value),
+                        anos: vals
+                          .map((v) => Number.parseInt(v, 10))
+                          .filter((n) => !Number.isNaN(n)),
                         page: 1,
                       })
                     }
-                    className={cn(inputClass, "min-w-0 w-full")}
-                    aria-label="Processo"
+                    disabled={yearsQuery.isLoading && yearOptions.length === 0}
+                    placeholder={
+                      yearsQuery.isLoading ? "Carregando..." : "Todos"
+                    }
                   />
-                </FilterField>
-              </div>
+                </div>
+              </FilterField>
+              <FilterField label="Processo" labelWidth="os">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="00.000.000/0000"
+                  value={filters.processo ?? ""}
+                  onChange={(e) =>
+                    onPatchFilters({
+                      processo: formatProcessoMask(e.target.value),
+                      page: 1,
+                    })
+                  }
+                  className={cn(inputClass, "w-[11.25rem] shrink-0")}
+                  aria-label="Processo"
+                />
+              </FilterField>
             </FilterGroup>
 
             <FilterGroup
               title="Solicitante"
-              className="w-full shrink-0 sm:w-[12rem] xl:border-r xl:border-sagra-border xl:px-4"
+              className="min-w-0 flex-1 xl:border-r xl:border-sagra-border xl:px-4"
             >
               <MultiSelect
                 label="Categoria"
+                labelSide="left"
                 className="min-w-0 w-full flex-none"
                 options={categoriasQuery.data ?? []}
                 value={filters.categorias}
@@ -249,6 +253,7 @@ export function OsFiltersPanel({
               />
               <SearchableMultiSelect
                 label="Nome"
+                labelSide="left"
                 className="min-w-0 w-full flex-none"
                 value={filters.solicitantes}
                 onChange={(solicitantes) =>
@@ -264,21 +269,31 @@ export function OsFiltersPanel({
 
             <FilterGroup
               title="Dados da OS"
-              className="min-w-0 flex-1 xl:border-r xl:border-sagra-border xl:px-4"
-              fieldsClassName="grid w-full grid-cols-2 gap-2"
+              className="min-w-0 flex-[2] xl:border-r xl:border-sagra-border xl:px-4"
+              fieldsClassName="grid w-full grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(15rem,19rem)]"
             >
-              <FilterField label="Título" className="min-w-0">
+              <FilterField label="Título">
                 <input
                   type="text"
                   value={filters.titulo ?? ""}
                   onChange={(e) =>
                     onPatchFilters({ titulo: e.target.value, page: 1 })
                   }
-                  className={inputClass}
+                  className={cn(inputClass, "min-w-0 flex-1")}
                 />
               </FilterField>
+              <MultiSelect
+                label="Máquina"
+                labelSide="left"
+                className="min-w-0 w-full flex-none"
+                options={maquinasQuery.data ?? []}
+                value={filters.maquinas}
+                onChange={(maquinas) => onPatchFilters({ maquinas, page: 1 })}
+                disabled={maquinasQuery.isLoading}
+              />
               <SearchableMultiSelect
                 label="Produto"
+                labelSide="left"
                 className="min-w-0 w-full flex-none"
                 value={filters.produtos}
                 onChange={(produtos) =>
@@ -291,15 +306,8 @@ export function OsFiltersPanel({
                 onOpen={() => setProductsOpen(true)}
               />
               <MultiSelect
-                label="Máquina"
-                className="min-w-0 w-full flex-none"
-                options={maquinasQuery.data ?? []}
-                value={filters.maquinas}
-                onChange={(maquinas) => onPatchFilters({ maquinas, page: 1 })}
-                disabled={maquinasQuery.isLoading}
-              />
-              <MultiSelect
                 label="Prioridade"
+                labelSide="left"
                 className="min-w-0 w-full flex-none"
                 options={PRIORIDADE_OPTIONS}
                 value={filters.prioridade}
@@ -311,10 +319,11 @@ export function OsFiltersPanel({
 
             <FilterGroup
               title="Andamento"
-              className="w-full shrink-0 sm:w-[12rem] xl:pl-4"
+              className="min-w-0 flex-1 xl:pl-4"
             >
               <MultiSelect
                 label="Setor"
+                labelSide="left"
                 className="min-w-0 w-full flex-none"
                 options={setoresQuery.data ?? []}
                 value={filters.setor}
@@ -323,6 +332,7 @@ export function OsFiltersPanel({
               />
               <MultiSelect
                 label="Situação"
+                labelSide="left"
                 className="min-w-0 w-full flex-none"
                 options={situacoesQuery.data ?? []}
                 value={filters.situacao}
@@ -390,15 +400,23 @@ function FilterField({
   label,
   children,
   className,
+  labelWidth,
 }: {
   label: string;
   children: ReactNode;
   className?: string;
+  /** Alinha rótulos do grupo Ordem de serviço (Nr OS/Ano + Processo). */
+  labelWidth?: "os";
 }) {
   return (
-    <div className={cn("min-w-0", className)}>
-      <label className="mb-1 block text-xs font-semibold text-neutral-600">
-        {label}
+    <div className={cn("flex min-w-0 items-center gap-2", className)}>
+      <label
+        className={cn(
+          "shrink-0 whitespace-nowrap text-xs font-semibold text-neutral-600",
+          labelWidth === "os" && "w-[4.75rem]",
+        )}
+      >
+        {label}:
       </label>
       {children}
     </div>

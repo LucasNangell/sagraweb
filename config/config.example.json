@@ -33,10 +33,11 @@
         "os_template_ano": 2026
     },
     "_dev_env_file": "Copie config/.env.example para config/.env (gitignore recomendado)",
+    "_dev_overlay": "Com ENV=development, config/config.development.json sobrepõe MySQL/MDB em runtime sem alterar este arquivo (produção intacta no deploy)",
     "_env_variables": {
-        "DB_HOST": "host MySQL",
-        "DB_USER": "usuário MySQL",
-        "DB_PASSWORD": "senha (não commitar)",
+        "DB_HOST": "host MySQL (em DEV o overlay manda; use 127.0.0.1 no .env local)",
+        "DB_USER": "usuário MySQL (DEV XAMPP: root)",
+        "DB_PASSWORD": "senha (não commitar; DEV XAMPP: vazio)",
         "DB_NAME": "banco",
         "MASTER_IP": "127.0.0.1 em dev",
         "PORT": "8001",

@@ -19,11 +19,13 @@ if errorlevel 1 (
 
 where pnpm >nul 2>&1
 if errorlevel 1 (
-    echo [ERRO] pnpm nao encontrado. Instale: npm install -g pnpm
-    echo        Ou ative Corepack: corepack enable ^&^& corepack prepare pnpm@9.15.0 --activate
-    echo        E garanta %%APPDATA%%\npm no PATH do usuario.
-    pause
-    exit /b 1
+    if not exist "%SAGRA_PNPM%" (
+        echo [ERRO] pnpm nao encontrado. Instale: npm install -g pnpm
+        echo        Ou ative Corepack: corepack enable ^&^& corepack prepare pnpm@9.15.0 --activate
+        echo        E garanta %%APPDATA%%\npm no PATH do usuario.
+        pause
+        exit /b 1
+    )
 )
 
 where node >nul 2>&1
@@ -65,7 +67,7 @@ if errorlevel 1 (
 echo  Ctrl+C para encerrar esta janela ^(nao encerra a API^).
 echo.
 
-call pnpm dev
+call "%SAGRA_PNPM%" dev
 set "RC=!ERRORLEVEL!"
 
 if not "!RC!"=="0" (
@@ -73,7 +75,7 @@ if not "!RC!"=="0" (
     echo [FRONT] Falha ao iniciar Vite - tentando reparar dependencias...
     call :pnpm_install_or_fail
     if errorlevel 1 exit /b 1
-    call pnpm dev
+    call "%SAGRA_PNPM%" dev
     set "RC=!ERRORLEVEL!"
 )
 
@@ -88,11 +90,11 @@ pause
 exit /b 0
 
 :pnpm_install_or_fail
-call pnpm install
+call "%SAGRA_PNPM%" install
 if errorlevel 1 (
     echo [AVISO] pnpm install falhou. Limpando node_modules e repetindo...
     if exist "node_modules" rmdir /s /q "node_modules"
-    call pnpm install
+    call "%SAGRA_PNPM%" install
     if errorlevel 1 (
         echo [ERRO] Nao foi possivel instalar dependencias do frontend.
         echo        Use Node.js 20 LTS se estiver em v22+ com erros de modulo.

@@ -17,6 +17,10 @@ interface SearchableMultiSelectProps {
   disabled?: boolean;
   isLoading?: boolean;
   className?: string;
+  /** `top` (padrão) = rótulo acima; `left` = rótulo à esquerda com ":". */
+  labelSide?: "top" | "left";
+  hideLabel?: boolean;
+  "aria-label"?: string;
 }
 
 export function SearchableMultiSelect({
@@ -32,12 +36,17 @@ export function SearchableMultiSelect({
   disabled = false,
   isLoading = false,
   className,
+  labelSide = "top",
+  hideLabel = false,
+  "aria-label": ariaLabel,
 }: SearchableMultiSelectProps) {
   const autoId = useId();
   const fieldId = id ?? autoId;
   const searchId = `${fieldId}-search`;
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const isLeft = labelSide === "left";
+  const showLabel = !hideLabel && Boolean(label);
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
@@ -83,16 +92,14 @@ export function SearchableMultiSelect({
     }
   };
 
-  return (
-    <div ref={rootRef} className={cn("relative min-w-0 flex-1", className)}>
-      <label htmlFor={fieldId} className="mb-1 block text-xs font-semibold text-neutral-600">
-        {label}
-      </label>
+  const control = (
+    <div className="relative min-w-0 flex-1">
       <button
         id={fieldId}
         type="button"
         disabled={disabled}
         onClick={handleOpen}
+        aria-label={ariaLabel ?? (hideLabel || !showLabel ? label || undefined : undefined)}
         className={cn(
           "flex h-9 w-full items-center justify-between gap-2 rounded border border-sagra-border bg-white px-2 text-left text-sm",
           disabled && "cursor-not-allowed opacity-60",
@@ -107,12 +114,12 @@ export function SearchableMultiSelect({
       {value.length > 0 && (
         <button
           type="button"
-          className="absolute right-8 top-[1.65rem] text-neutral-400 hover:text-neutral-700"
+          className="absolute right-8 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700"
           onClick={(e) => {
             e.stopPropagation();
             onChange([]);
           }}
-          aria-label={`Limpar ${label}`}
+          aria-label={`Limpar ${label || ariaLabel || "seleção"}`}
         >
           <X className="size-3.5" />
         </button>
@@ -158,6 +165,30 @@ export function SearchableMultiSelect({
           </div>
         </div>
       )}
+    </div>
+  );
+
+  return (
+    <div
+      ref={rootRef}
+      className={cn(
+        "relative min-w-0",
+        isLeft ? "flex items-center gap-2" : "flex-1",
+        className,
+      )}
+    >
+      {showLabel ? (
+        <label
+          htmlFor={fieldId}
+          className={cn(
+            "text-xs font-semibold text-neutral-600",
+            isLeft ? "mb-0 shrink-0 whitespace-nowrap" : "mb-1 block",
+          )}
+        >
+          {isLeft ? `${label}:` : label}
+        </label>
+      ) : null}
+      {control}
     </div>
   );
 }

@@ -139,7 +139,20 @@ class Database:
         self.user = config_manager.get("db_user", "usr_sagraweb")
         self.password = config_manager.get("db_password") or ""
         if not self.password:
-            logger.error("Senha MySQL não configurada. Defina SAGRA_DB_PASSWORD.")
+            host = str(self.host or "").strip().lower()
+            if config_manager.is_development() and host in (
+                "127.0.0.1",
+                "localhost",
+                "::1",
+            ):
+                logger.info(
+                    "DEV MySQL local sem senha (XAMPP/MariaDB root) — host=%s",
+                    self.host,
+                )
+            else:
+                logger.error(
+                    "Senha MySQL não configurada. Defina SAGRA_DB_PASSWORD."
+                )
         self.db = config_manager.get("db_name", "sagrafulldb")
 
         self.pool = ConnectionPool(

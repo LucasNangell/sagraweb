@@ -50,6 +50,7 @@ title SAGRA-API :%API_PORT%
 
 echo.
 echo  SAGRA API — http://127.0.0.1:%API_PORT%/
+echo  Perfil: DEV — conexoes MySQL/MDB de config.development.json
 echo  Health: http://127.0.0.1:%API_PORT%/health/live
 echo  Ctrl+C para encerrar esta janela.
 echo.

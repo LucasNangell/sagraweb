@@ -91,6 +91,10 @@ if exist "%ENV_FILE%" (
 set "SAGRA_ENV=development"
 set "ENV=development"
 
+echo  Perfil: DEV ^(ENV=development^) — MySQL/MDB via config.development.json
+echo           Producao na VM usa ENV=production + config.json ^(sem overlay^).
+echo.
+
 if /I "%MODE%"=="unificado" goto :modo_unificado
 goto :modo_dev
 

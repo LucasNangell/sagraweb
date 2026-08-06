@@ -325,32 +325,33 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
         </header>
 
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
-          <section className="flex flex-col gap-3 sm:flex-row sm:flex-wrap xl:flex-nowrap xl:items-start xl:gap-0">
+          <section className="flex flex-col gap-3 sm:flex-row sm:flex-wrap xl:flex-nowrap xl:items-stretch xl:gap-0">
             <FilterGroup
               title="Ordem de serviço"
-              className="sm:min-w-[12rem] sm:flex-1 xl:border-r xl:border-sagra-border xl:pr-4"
+              className="w-auto shrink-0 xl:border-r xl:border-sagra-border xl:pr-4"
             >
-              <div className="flex w-max max-w-full flex-col gap-2">
-                <div className="flex items-end gap-1.5">
-                  <Field label="Nr OS" className="w-[4.5rem] shrink-0">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      placeholder="Ex: 2244"
-                      value={criterios.nr_os != null ? String(criterios.nr_os) : ""}
-                      onChange={(e) =>
-                        patchCriterios({ nr_os: parseOptionalInt(e.target.value) })
-                      }
-                      className={inputClass}
-                      disabled={disabled}
-                    />
-                  </Field>
-                  <span className="mb-2 shrink-0 text-sm font-semibold text-neutral-400" aria-hidden>
+              <Field label="Nr OS/Ano" labelWidth="os">
+                <div className="flex w-[11.25rem] items-center gap-1.5">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="Ex: 2244"
+                    value={criterios.nr_os != null ? String(criterios.nr_os) : ""}
+                    onChange={(e) =>
+                      patchCriterios({ nr_os: parseOptionalInt(e.target.value) })
+                    }
+                    className={cn(inputClass, "min-w-0 flex-1")}
+                    disabled={disabled}
+                    aria-label="Nr OS"
+                  />
+                  <span className="shrink-0 text-sm font-semibold text-neutral-400" aria-hidden>
                     /
                   </span>
                   <MultiSelect
                     label="Ano"
-                    className="w-[4.5rem] shrink-0"
+                    hideLabel
+                    aria-label="Ano"
+                    className="min-w-0 flex-1 flex-none"
                     options={yearOptions}
                     value={anosAsStrings}
                     onChange={(vals) =>
@@ -364,28 +365,30 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                     placeholder={yearsQuery.isLoading ? "Carregando..." : "Todos"}
                   />
                 </div>
-                <Field label="Processo" className="min-w-0 w-full">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="00.000.000/0000"
-                    value={criterios.processo ? formatProcessoMask(criterios.processo) : ""}
-                    onChange={(e) =>
-                      patchCriterios({ processo: formatProcessoMask(e.target.value) })
-                    }
-                    className={cn(inputClass, "min-w-0")}
-                    disabled={disabled}
-                  />
-                </Field>
-              </div>
+              </Field>
+              <Field label="Processo" labelWidth="os">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="00.000.000/0000"
+                  value={criterios.processo ? formatProcessoMask(criterios.processo) : ""}
+                  onChange={(e) =>
+                    patchCriterios({ processo: formatProcessoMask(e.target.value) })
+                  }
+                  className={cn(inputClass, "w-[11.25rem] shrink-0")}
+                  disabled={disabled}
+                />
+              </Field>
             </FilterGroup>
 
             <FilterGroup
               title="Solicitante"
-              className="sm:min-w-[11rem] sm:flex-1 xl:border-r xl:border-sagra-border xl:px-4"
+              className="min-w-0 flex-1 xl:border-r xl:border-sagra-border xl:px-4"
             >
               <MultiSelect
                 label="Categoria"
+                labelSide="left"
+                className="min-w-0 w-full flex-none"
                 options={categoriasQuery.data ?? []}
                 value={criterios.categorias}
                 onChange={(categorias) => patchCriterios({ categorias })}
@@ -393,6 +396,8 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
               />
               <SearchableMultiSelect
                 label="Nome"
+                labelSide="left"
+                className="min-w-0 w-full flex-none"
                 value={criterios.solicitantes}
                 onChange={(solicitantes) => patchCriterios({ solicitantes })}
                 options={requestersQuery.data?.data ?? []}
@@ -405,20 +410,31 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
 
             <FilterGroup
               title="Dados da OS"
-              className="sm:min-w-[18rem] sm:flex-[1.4] xl:border-r xl:border-sagra-border xl:px-4"
-              fieldsClassName="grid grid-cols-2 gap-2"
+              className="min-w-0 flex-[2] xl:border-r xl:border-sagra-border xl:px-4"
+              fieldsClassName="grid w-full grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(15rem,19rem)]"
             >
               <Field label="Título">
                 <input
                   type="text"
                   value={criterios.titulo}
                   onChange={(e) => patchCriterios({ titulo: e.target.value })}
-                  className={inputClass}
+                  className={cn(inputClass, "min-w-0 flex-1")}
                   disabled={disabled}
                 />
               </Field>
+              <MultiSelect
+                label="Máquina"
+                labelSide="left"
+                className="min-w-0 w-full flex-none"
+                options={maquinasQuery.data ?? []}
+                value={criterios.maquinas}
+                onChange={(maquinas) => patchCriterios({ maquinas })}
+                disabled={disabled || maquinasQuery.isLoading}
+              />
               <SearchableMultiSelect
                 label="Produto"
+                labelSide="left"
+                className="min-w-0 w-full flex-none"
                 value={criterios.produtos}
                 onChange={(produtos) => patchCriterios({ produtos })}
                 options={productsQuery.data?.data ?? []}
@@ -428,14 +444,9 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                 onOpen={() => setProductsOpen(true)}
               />
               <MultiSelect
-                label="Máquina"
-                options={maquinasQuery.data ?? []}
-                value={criterios.maquinas}
-                onChange={(maquinas) => patchCriterios({ maquinas })}
-                disabled={disabled || maquinasQuery.isLoading}
-              />
-              <MultiSelect
                 label="Prioridade"
+                labelSide="left"
+                className="min-w-0 w-full flex-none"
                 options={PRIORIDADE_OPTIONS}
                 value={criterios.prioridade}
                 onChange={(prioridade) => patchCriterios({ prioridade })}
@@ -445,10 +456,12 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
 
             <FilterGroup
               title="Andamento"
-              className="sm:min-w-[11rem] sm:flex-1 xl:pl-4"
+              className="min-w-0 flex-1 xl:pl-4"
             >
               <MultiSelect
                 label="Setor"
+                labelSide="left"
+                className="min-w-0 w-full flex-none"
                 options={setoresQuery.data ?? []}
                 value={selectedSetores}
                 onChange={setSelectedSetores}
@@ -456,6 +469,8 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
               />
               <MultiSelect
                 label="Situação"
+                labelSide="left"
+                className="min-w-0 w-full flex-none"
                 options={situacoesQuery.data ?? []}
                 value={selectedSituacoes}
                 onChange={setSelectedSituacoes}
@@ -597,7 +612,9 @@ function FilterGroup({
       <h3 className="text-[0.7rem] font-bold uppercase tracking-wide text-secondary-blue/80">
         {title}
       </h3>
-      <div className={cn("flex flex-col gap-2", fieldsClassName)}>{children}</div>
+      <div className={cn("flex min-w-0 flex-col gap-2", fieldsClassName)}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -606,15 +623,22 @@ function Field({
   label,
   children,
   className,
+  labelWidth,
 }: {
   label: string;
   children: ReactNode;
   className?: string;
+  labelWidth?: "os";
 }) {
   return (
-    <div className={cn("min-w-0", className)}>
-      <label className="mb-1 block text-xs font-semibold text-neutral-600">
-        {label}
+    <div className={cn("flex min-w-0 items-center gap-2", className)}>
+      <label
+        className={cn(
+          "shrink-0 whitespace-nowrap text-xs font-semibold text-neutral-600",
+          labelWidth === "os" && "w-[4.75rem]",
+        )}
+      >
+        {label}:
       </label>
       {children}
     </div>

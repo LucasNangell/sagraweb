@@ -97,7 +97,7 @@ export function OsDetailsPanel({
       className={cn(
         "flex min-h-0 flex-1 flex-col transition-shadow",
         embedded
-          ? "border-b border-sagra-border lg:border-r lg:border-b-0"
+          ? ""
           : "rounded-lg border border-sagra-border bg-white shadow-sm",
         flash && "ring-2 ring-inset ring-primary-green/40",
       )}

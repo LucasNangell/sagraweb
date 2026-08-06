@@ -340,7 +340,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                     onChange={(e) =>
                       patchCriterios({ nr_os: parseOptionalInt(e.target.value) })
                     }
-                    className={cn(inputClass, "min-w-0 flex-1")}
+                    className={cn(inputClass, "min-w-0 flex-[2]")}
                     disabled={disabled}
                     aria-label="Nr OS"
                   />
@@ -351,7 +351,8 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                     label="Ano"
                     hideLabel
                     aria-label="Ano"
-                    className="min-w-0 flex-1 flex-none"
+                    className="min-w-0 flex-[3] flex-none"
+                    dropdownClassName="min-w-[8rem]"
                     options={yearOptions}
                     value={anosAsStrings}
                     onChange={(vals) =>

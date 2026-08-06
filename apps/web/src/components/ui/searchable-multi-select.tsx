@@ -125,20 +125,28 @@ export function SearchableMultiSelect({
         }}
         aria-label={ariaLabel ?? (hideLabel || !showLabel ? label || undefined : undefined)}
         className={cn(
-          "flex h-9 w-full items-center justify-between gap-2 rounded border border-sagra-border bg-white px-2 text-left text-sm",
+          "flex h-9 w-full items-center gap-1 rounded border border-sagra-border bg-white pl-2 pr-2 text-left text-sm",
           disabled && "cursor-not-allowed opacity-60",
         )}
       >
-        <span className={cn("truncate", value.length === 0 && "text-neutral-400")}>
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate",
+            value.length === 0 && "text-neutral-400",
+          )}
+        >
           {summary}
         </span>
+        {value.length > 0 ? (
+          <span className="size-3.5 shrink-0" aria-hidden />
+        ) : null}
         <ChevronDown className="size-4 shrink-0 text-neutral-500" />
       </button>
 
       {value.length > 0 && (
         <button
           type="button"
-          className="absolute right-8 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700"
+          className="absolute right-7 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700"
           onClick={(e) => {
             e.stopPropagation();
             onChange([]);

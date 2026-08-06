@@ -84,7 +84,7 @@ export function OsFiltersPanel({
   const anosAsStrings = (filters.anos ?? []).map(String);
 
   return (
-    <section className="shrink-0 rounded-lg border border-sagra-border bg-white shadow-sm">
+    <section className="shrink-0 rounded-lg border border-sagra-border border-t-4 border-t-secondary-blue bg-white shadow-sm">
       <div className="flex items-center justify-between gap-2 border-b border-sagra-border px-3 py-2 md:hidden">
         <h2 className="min-w-0 flex-1 text-sm font-semibold text-secondary-blue">
           {titleStatus}
@@ -187,7 +187,7 @@ export function OsFiltersPanel({
                         page: 1,
                       })
                     }
-                    className={cn(inputClass, "min-w-0 flex-1")}
+                    className={cn(inputClass, "min-w-0 flex-[2]")}
                     aria-label="Nr OS"
                   />
                   <span
@@ -200,7 +200,8 @@ export function OsFiltersPanel({
                     label="Ano"
                     hideLabel
                     aria-label="Ano"
-                    className="min-w-0 flex-1 flex-none"
+                    className="min-w-0 flex-[3] flex-none"
+                    dropdownClassName="min-w-[8rem]"
                     options={yearOptions}
                     value={anosAsStrings}
                     onChange={(vals) =>

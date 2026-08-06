@@ -54,7 +54,7 @@ if not exist "%VITE_PKG%" (
 title SAGRA-WEB :%WEB_PORT%
 
 echo.
-echo  SAGRA Web (Vite) - http://localhost:%WEB_PORT%/
+echo  SAGRA Web (Vite) - http://127.0.0.1:%WEB_PORT%/
 echo  Proxy /api -^> http://127.0.0.1:%API_PORT%
 curl.exe -s -o NUL -w "%%{http_code}" "http://127.0.0.1:%API_PORT%/health/live" 2>nul | findstr /B "200" >nul
 if errorlevel 1 (
@@ -67,7 +67,8 @@ if errorlevel 1 (
 echo  Ctrl+C para encerrar esta janela ^(nao encerra a API^).
 echo.
 
-call "%SAGRA_PNPM%" dev
+REM Sobe Vite via node (nao depende de script-shell/PowerShell do pnpm).
+call :start_vite
 set "RC=!ERRORLEVEL!"
 
 if not "!RC!"=="0" (
@@ -75,7 +76,7 @@ if not "!RC!"=="0" (
     echo [FRONT] Falha ao iniciar Vite - tentando reparar dependencias...
     call :pnpm_install_or_fail
     if errorlevel 1 exit /b 1
-    call "%SAGRA_PNPM%" dev
+    call :start_vite
     set "RC=!ERRORLEVEL!"
 )
 
@@ -89,7 +90,20 @@ if not "!RC!"=="0" (
 pause
 exit /b 0
 
+:start_vite
+if not exist "%VITE_PKG%" (
+    echo [ERRO] Vite nao encontrado: %VITE_PKG%
+    exit /b 1
+)
+cd /d "%ROOT%\apps\web"
+if errorlevel 1 exit /b 1
+node "%VITE_PKG%" --port %WEB_PORT% --host 127.0.0.1
+set "RC=!ERRORLEVEL!"
+cd /d "%ROOT%"
+exit /b !RC!
+
 :pnpm_install_or_fail
+if not defined SAGRA_PNPM set "SAGRA_PNPM=pnpm.cmd"
 call "%SAGRA_PNPM%" install
 if errorlevel 1 (
     echo [AVISO] pnpm install falhou. Limpando node_modules e repetindo...

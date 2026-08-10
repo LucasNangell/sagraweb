@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type {
   AnaliseLabEdge,
@@ -14,6 +14,7 @@ import {
   labelEdge,
   labelTipo,
 } from "./analiseLabLabels";
+import { parsePageSpec, validatePageSpec } from "./analiseLabPageSpec";
 
 interface AnaliseLabMarkEditorProps {
   mark: AnaliseLabMark;
@@ -30,7 +31,16 @@ export function AnaliseLabMarkEditor({
   onCancel,
   onDelete,
 }: AnaliseLabMarkEditorProps) {
-  const [pagina, setPagina] = useState(mark.pagina);
+  const [allPages, setAllPages] = useState(
+    !mark.paginas?.trim() && mark.pagina === 0,
+  );
+  const [pageSpec, setPageSpec] = useState(
+    mark.paginas?.trim()
+      ? mark.paginas
+      : mark.pagina > 0
+        ? String(mark.pagina)
+        : "",
+  );
   const [cor, setCor] = useState(mark.cor as AnaliseLabMarkCor);
   const [rotulo, setRotulo] = useState(mark.rotulo || "");
   const [espelhar, setEspelhar] = useState(Boolean(mark.espelhar));
@@ -40,13 +50,42 @@ export function AnaliseLabMarkEditor({
   });
 
   useEffect(() => {
-    setPagina(mark.pagina);
+    setAllPages(!mark.paginas?.trim() && mark.pagina === 0);
+    setPageSpec(
+      mark.paginas?.trim()
+        ? mark.paginas
+        : mark.pagina > 0
+          ? String(mark.pagina)
+          : "",
+    );
     setCor(mark.cor as AnaliseLabMarkCor);
     setRotulo(mark.rotulo || "");
     setEspelhar(Boolean(mark.espelhar));
     setPaginaOrigem(mark.paginaOrigem || 1);
     setGeom({ ...mark.geometria });
   }, [mark]);
+
+  const pageSpecError = useMemo(() => {
+    if (allPages) return null;
+    return validatePageSpec(pageSpec);
+  }, [allPages, pageSpec]);
+
+  const showMirror = useMemo(() => {
+    if (
+      mark.tipo !== "offset_corte" &&
+      mark.tipo !== "faixa" &&
+      mark.tipo !== "retangulo"
+    ) {
+      return false;
+    }
+    if (allPages) return true;
+    if (pageSpecError) return false;
+    try {
+      return parsePageSpec(pageSpec).length > 1;
+    } catch {
+      return false;
+    }
+  }, [allPages, mark.tipo, pageSpec, pageSpecError]);
 
   const setNum = (key: string, value: number) => {
     setGeom((g) => ({ ...g, [key]: value }));
@@ -198,17 +237,33 @@ export function AnaliseLabMarkEditor({
         </label>
       )}
 
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Página (0 = todas)
+      <label className="flex items-center gap-2 text-xs text-neutral-700">
         <input
-          type="number"
-          min={0}
-          step={1}
-          value={pagina}
-          onChange={(e) => setPagina(Number(e.target.value) || 0)}
-          className="rounded border border-sagra-border px-2 py-1.5"
+          type="checkbox"
+          checked={allPages}
+          onChange={(e) => setAllPages(e.target.checked)}
         />
+        Todas as páginas
       </label>
+
+      {!allPages ? (
+        <label className="flex flex-col gap-1 text-xs text-neutral-600">
+          Páginas
+          <input
+            value={pageSpec}
+            onChange={(e) => setPageSpec(e.target.value)}
+            className={
+              pageSpecError
+                ? "rounded border border-sagra-danger px-2 py-1.5"
+                : "rounded border border-sagra-border px-2 py-1.5"
+            }
+            placeholder="1-15,20,23,25-30"
+          />
+          {pageSpecError ? (
+            <span className="text-[11px] text-sagra-danger">{pageSpecError}</span>
+          ) : null}
+        </label>
+      ) : null}
 
       <label className="flex flex-col gap-1 text-xs text-neutral-600">
         Cor
@@ -235,10 +290,7 @@ export function AnaliseLabMarkEditor({
         />
       </label>
 
-      {pagina === 0 &&
-      (mark.tipo === "offset_corte" ||
-        mark.tipo === "faixa" ||
-        mark.tipo === "retangulo") ? (
+      {showMirror ? (
         <>
           <label className="flex items-center gap-2 text-xs text-neutral-700">
             <input
@@ -265,17 +317,31 @@ export function AnaliseLabMarkEditor({
       <div className="flex gap-1 pt-1">
         <button
           type="button"
-          disabled={busy}
-          onClick={() =>
+          disabled={busy || Boolean(pageSpecError)}
+          onClick={() => {
+            if (allPages) {
+              onSave({
+                pagina: 0,
+                paginas: "",
+                geometria: geom,
+                rotulo: rotulo || null,
+                cor,
+                espelhar,
+                pagina_origem: paginaOrigem,
+              });
+              return;
+            }
+            const pages = parsePageSpec(pageSpec);
             onSave({
-              pagina,
+              pagina: pages[0],
+              paginas: pageSpec,
               geometria: geom,
               rotulo: rotulo || null,
               cor,
               espelhar,
               pagina_origem: paginaOrigem,
-            })
-          }
+            });
+          }}
           className="flex-1 rounded bg-secondary-blue px-2 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
         >
           Salvar

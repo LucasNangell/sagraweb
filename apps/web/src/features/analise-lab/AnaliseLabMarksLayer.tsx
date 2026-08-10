@@ -6,6 +6,7 @@ import {
   formatMm,
   resolveMarkGeometry,
 } from "./analiseLabGeometry";
+import { isMarkVisibleOnPage } from "./analiseLabPageSpec";
 
 const COLOR_MAP: Record<string, string> = {
   red: "#dc2626",
@@ -148,7 +149,7 @@ export function AnaliseLabMarksLayer({
   const sy = pageHeightMm > 0 ? displayHeight / pageHeightMm : 1;
 
   const visible = marks.filter((m) => {
-    if (m.pagina !== 0 && m.pagina !== pageNumber) return false;
+    if (!isMarkVisibleOnPage(m, pageNumber)) return false;
     if (!includeMedidas && m.tipo === "medida") return false;
     return true;
   });

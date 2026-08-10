@@ -7,12 +7,22 @@ import {
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
-import type { AnaliseLabMark, AnaliseLabMarkCor } from "@/api/analiseLab";
+import type {
+  AnaliseLabEdge,
+  AnaliseLabMark,
+  AnaliseLabMarkCor,
+} from "@/api/analiseLab";
 import type { ProvaWebPageMeta } from "@/api/provaWeb";
 
 import { AnaliseLabMarksLayer } from "./AnaliseLabMarksLayer";
 import type { AnaliseLabTool } from "./AnaliseLabMarkTools";
-import { distanceMm, formatMm, pageSizeMm } from "./analiseLabGeometry";
+import {
+  distanceMm,
+  faixaFromDrag,
+  formatMm,
+  pageSizeMm,
+} from "./analiseLabGeometry";
+import { labelEdge } from "./analiseLabLabels";
 
 interface AnaliseLabInspectorProps {
   pages: ProvaWebPageMeta[];
@@ -21,6 +31,7 @@ interface AnaliseLabInspectorProps {
   resolveUrl: (page: number) => string;
   marks: AnaliseLabMark[];
   tool: AnaliseLabTool;
+  edge: AnaliseLabEdge;
   applyAllPages: boolean;
   cor: AnaliseLabMarkCor;
   rotulo: string;
@@ -29,7 +40,14 @@ interface AnaliseLabInspectorProps {
     tipo: "ponto" | "retangulo" | "medida";
     geometria: Record<string, number>;
   }) => void;
+  onCreateFaixaDrag: (args: { fromMm: number; toMm: number }) => void;
 }
+
+type RulerDrag = {
+  axis: "x" | "y";
+  startMm: number;
+  currentMm: number;
+};
 
 export function AnaliseLabInspector({
   pages,
@@ -38,16 +56,19 @@ export function AnaliseLabInspector({
   resolveUrl,
   marks,
   tool,
+  edge,
   applyAllPages: _applyAllPages,
   cor: _cor,
   rotulo: _rotulo,
   selectedMarkId = null,
   onCreateGeometryMark,
+  onCreateFaixaDrag,
 }: AnaliseLabInspectorProps) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [zoom, setZoom] = useState(1);
   const [draft, setDraft] = useState<{ xMm: number; yMm: number } | null>(null);
   const [hoverMm, setHoverMm] = useState<{ x: number; y: number } | null>(null);
+  const [rulerDrag, setRulerDrag] = useState<RulerDrag | null>(null);
 
   const page = pages[pageIndex];
   const { widthMm, heightMm } = useMemo(
@@ -57,6 +78,13 @@ export function AnaliseLabInspector({
 
   const displayW = Math.round((page?.width || 800) * zoom);
   const displayH = Math.round((page?.height || 1130) * zoom);
+
+  const topRulerActive =
+    tool === "faixa" &&
+    (edge === "left" || edge === "right" || edge === "all");
+  const leftRulerActive =
+    tool === "faixa" &&
+    (edge === "top" || edge === "bottom" || edge === "all");
 
   const toMm = (clientX: number, clientY: number) => {
     const el = imgRef.current;
@@ -73,6 +101,7 @@ export function AnaliseLabInspector({
   };
 
   const handleClick = (e: React.MouseEvent) => {
+    if (rulerDrag) return;
     if (
       tool === "select" ||
       tool === "offset_corte" ||
@@ -126,6 +155,87 @@ export function AnaliseLabInspector({
     }
   };
 
+  const startRulerDrag = (
+    e: React.PointerEvent,
+    axis: "x" | "y",
+  ) => {
+    if (tool !== "faixa") return;
+    e.preventDefault();
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    const el = imgRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const startMm =
+      axis === "x"
+        ? Math.max(
+            0,
+            Math.min(
+              widthMm,
+              ((e.clientX - rect.left) / Math.max(1, rect.width)) * widthMm,
+            ),
+          )
+        : Math.max(
+            0,
+            Math.min(
+              heightMm,
+              ((e.clientY - rect.top) / Math.max(1, rect.height)) * heightMm,
+            ),
+          );
+    setRulerDrag({ axis, startMm, currentMm: startMm });
+  };
+
+  const moveRulerDrag = (e: React.PointerEvent, axis: "x" | "y") => {
+    if (!rulerDrag || rulerDrag.axis !== axis) return;
+    const el = imgRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const currentMm =
+      axis === "x"
+        ? Math.max(
+            0,
+            Math.min(
+              widthMm,
+              ((e.clientX - rect.left) / Math.max(1, rect.width)) * widthMm,
+            ),
+          )
+        : Math.max(
+            0,
+            Math.min(
+              heightMm,
+              ((e.clientY - rect.top) / Math.max(1, rect.height)) * heightMm,
+            ),
+          );
+    setRulerDrag({ ...rulerDrag, currentMm });
+  };
+
+  const endRulerDrag = (e: React.PointerEvent) => {
+    if (!rulerDrag) return;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    const dragEdge =
+      rulerDrag.axis === "x"
+        ? edge === "all"
+          ? "left"
+          : edge
+        : edge === "all"
+          ? "top"
+          : edge;
+    const converted = faixaFromDrag(
+      dragEdge,
+      rulerDrag.startMm,
+      rulerDrag.currentMm,
+      widthMm,
+      heightMm,
+    );
+    setRulerDrag(null);
+    if (!converted || converted.toMm <= converted.fromMm) return;
+    onCreateFaixaDrag(converted);
+  };
+
   if (!page) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-neutral-500">
@@ -137,17 +247,31 @@ export function AnaliseLabInspector({
   const liveLabel =
     draft && hoverMm && (tool === "medida" || tool === "retangulo")
       ? tool === "medida"
-        ? formatMm(
-            distanceMm(draft.xMm, draft.yMm, hoverMm.x, hoverMm.y),
-          )
+        ? formatMm(distanceMm(draft.xMm, draft.yMm, hoverMm.x, hoverMm.y))
         : `${formatMm(Math.abs(hoverMm.x - draft.xMm))} × ${formatMm(
             Math.abs(hoverMm.y - draft.yMm),
           )}`
       : null;
 
+  const faixaPreview = rulerDrag
+    ? faixaFromDrag(
+        rulerDrag.axis === "x"
+          ? edge === "all"
+            ? "left"
+            : edge
+          : edge === "all"
+            ? "top"
+            : edge,
+        rulerDrag.startMm,
+        rulerDrag.currentMm,
+        widthMm,
+        heightMm,
+      )
+    : null;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-200/70">
-      <div className="flex shrink-0 items-center justify-center gap-2 border-b border-sagra-border bg-white px-3 py-2">
+      <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 border-b border-sagra-border bg-white px-3 py-2">
         <button
           type="button"
           disabled={pageIndex <= 0}
@@ -196,6 +320,12 @@ export function AnaliseLabInspector({
             {liveLabel}
           </span>
         ) : null}
+        {faixaPreview ? (
+          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-900">
+            De {formatMm(faixaPreview.fromMm)} · Até {formatMm(faixaPreview.toMm)}{" "}
+            · {labelEdge(edge)}
+          </span>
+        ) : null}
       </div>
 
       <div className="relative min-h-0 flex-1 overflow-auto p-4">
@@ -210,7 +340,22 @@ export function AnaliseLabInspector({
           onMouseLeave={() => setHoverMm(null)}
         >
           <div
-            className="pointer-events-none absolute -left-6 top-0 h-full w-6 border-r border-neutral-300 bg-neutral-100 text-[9px] text-neutral-500"
+            className={
+              leftRulerActive
+                ? "absolute -left-6 top-0 z-10 h-full w-6 cursor-row-resize border-r border-sky-400 bg-sky-50 text-[9px] text-neutral-500"
+                : "pointer-events-none absolute -left-6 top-0 h-full w-6 border-r border-neutral-300 bg-neutral-100 text-[9px] text-neutral-500"
+            }
+            onPointerDown={
+              leftRulerActive
+                ? (e) => startRulerDrag(e, "y")
+                : undefined
+            }
+            onPointerMove={
+              leftRulerActive
+                ? (e) => moveRulerDrag(e, "y")
+                : undefined
+            }
+            onPointerUp={leftRulerActive ? endRulerDrag : undefined}
             aria-hidden
           >
             {Array.from({ length: Math.floor(heightMm / 10) + 1 }).map((_, i) => (
@@ -224,7 +369,22 @@ export function AnaliseLabInspector({
             ))}
           </div>
           <div
-            className="pointer-events-none absolute -top-5 left-0 h-5 w-full border-b border-neutral-300 bg-neutral-100 text-[9px] text-neutral-500"
+            className={
+              topRulerActive
+                ? "absolute -top-5 left-0 z-10 h-5 w-full cursor-col-resize border-b border-sky-400 bg-sky-50 text-[9px] text-neutral-500"
+                : "pointer-events-none absolute -top-5 left-0 h-5 w-full border-b border-neutral-300 bg-neutral-100 text-[9px] text-neutral-500"
+            }
+            onPointerDown={
+              topRulerActive
+                ? (e) => startRulerDrag(e, "x")
+                : undefined
+            }
+            onPointerMove={
+              topRulerActive
+                ? (e) => moveRulerDrag(e, "x")
+                : undefined
+            }
+            onPointerUp={topRulerActive ? endRulerDrag : undefined}
             aria-hidden
           >
             {Array.from({ length: Math.floor(widthMm / 10) + 1 }).map((_, i) => (
@@ -255,6 +415,53 @@ export function AnaliseLabInspector({
             includeMedidas
             selectedMarkId={selectedMarkId}
           />
+          {rulerDrag && faixaPreview ? (
+            <svg
+              className="pointer-events-none absolute inset-0 h-full w-full"
+              viewBox={`0 0 ${displayW} ${displayH}`}
+              aria-hidden
+            >
+              {rulerDrag.axis === "x" ? (
+                <rect
+                  x={
+                    (Math.min(rulerDrag.startMm, rulerDrag.currentMm) /
+                      widthMm) *
+                    displayW
+                  }
+                  y={0}
+                  width={
+                    (Math.abs(rulerDrag.currentMm - rulerDrag.startMm) /
+                      widthMm) *
+                    displayW
+                  }
+                  height={displayH}
+                  fill="rgba(245,158,11,0.2)"
+                  stroke="#d97706"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                />
+              ) : (
+                <rect
+                  x={0}
+                  y={
+                    (Math.min(rulerDrag.startMm, rulerDrag.currentMm) /
+                      heightMm) *
+                    displayH
+                  }
+                  width={displayW}
+                  height={
+                    (Math.abs(rulerDrag.currentMm - rulerDrag.startMm) /
+                      heightMm) *
+                    displayH
+                  }
+                  fill="rgba(245,158,11,0.2)"
+                  stroke="#d97706"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                />
+              )}
+            </svg>
+          ) : null}
           {draft && hoverMm && (tool === "medida" || tool === "retangulo") ? (
             <svg
               className="pointer-events-none absolute inset-0 h-full w-full"
@@ -290,12 +497,8 @@ export function AnaliseLabInspector({
                 </>
               ) : (
                 <rect
-                  x={
-                    (Math.min(draft.xMm, hoverMm.x) / widthMm) * displayW
-                  }
-                  y={
-                    (Math.min(draft.yMm, hoverMm.y) / heightMm) * displayH
-                  }
+                  x={(Math.min(draft.xMm, hoverMm.x) / widthMm) * displayW}
+                  y={(Math.min(draft.yMm, hoverMm.y) / heightMm) * displayH}
                   width={
                     (Math.abs(hoverMm.x - draft.xMm) / widthMm) * displayW
                   }

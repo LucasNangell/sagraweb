@@ -36,6 +36,7 @@ import {
 } from "./AnaliseLabMarkTools";
 import { AnaliseLabSourcePicker } from "./AnaliseLabSourcePicker";
 import { pageSizeMm } from "./analiseLabGeometry";
+import { parsePageSpec } from "./analiseLabPageSpec";
 
 interface AnaliseLabPageProps {
   ano: number;
@@ -62,6 +63,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const [offsetMm, setOffsetMm] = useState(7);
   const [fromMm, setFromMm] = useState(0);
   const [applyAllPages, setApplyAllPages] = useState(true);
+  const [pageSpec, setPageSpec] = useState("1");
   const [espelhar, setEspelhar] = useState(true);
   const [cor, setCor] = useState<AnaliseLabMarkCor>("red");
   const [rotulo, setRotulo] = useState("corte 7mm");
@@ -184,8 +186,27 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     return pages[pageIndex]?.page ?? pageIndex + 1;
   }, [manifestQuery.data?.pages, pageIndex]);
 
+  useEffect(() => {
+    if (!applyAllPages) {
+      setPageSpec((prev) => {
+        // Só pré-preenche se o campo está vazio ou é um único número antigo
+        if (!prev.trim() || /^\d+$/.test(prev.trim())) {
+          return String(pageNumero);
+        }
+        return prev;
+      });
+    }
+  }, [applyAllPages, pageNumero]);
+
   const canEspelharTipo = (tipo: string) =>
     tipo === "offset_corte" || tipo === "faixa" || tipo === "retangulo";
+
+  const resolveScope = () => {
+    if (applyAllPages) {
+      return { pagina: 0, paginas: null as string | null };
+    }
+    return { pagina: pageNumero, paginas: pageSpec };
+  };
 
   const addMark = async (payload: {
     tipo: AnaliseLabMark["tipo"];
@@ -195,14 +216,23 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     setActionBusy(true);
     setActionError(null);
     try {
-      const pagina = payload.pagina ?? (applyAllPages ? 0 : pageNumero);
+      const scope = resolveScope();
+      let multi = applyAllPages;
+      if (!multi && scope.paginas) {
+        try {
+          multi = parsePageSpec(scope.paginas).length > 1;
+        } catch {
+          multi = false;
+        }
+      }
       const res = await createAnaliseLabMark(ano, osId, {
-        pagina,
+        pagina: payload.pagina ?? scope.pagina,
+        paginas: scope.paginas,
         tipo: payload.tipo as "offset_corte",
         geometria: payload.geometria,
         rotulo: rotulo || null,
         cor,
-        espelhar: applyAllPages && canEspelharTipo(payload.tipo) && espelhar,
+        espelhar: canEspelharTipo(payload.tipo) && espelhar && multi,
         pagina_origem: pageNumero,
       });
       setLocalMarks((prev) => [...(prev ?? []), res.mark]);
@@ -477,6 +507,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                       }
                       marks={marks}
                       tool={tool}
+                      edge={edge}
                       applyAllPages={applyAllPages}
                       cor={cor}
                       rotulo={rotulo}
@@ -485,6 +516,16 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         void addMark({
                           tipo: args.tipo,
                           geometria: args.geometria,
+                        })
+                      }
+                      onCreateFaixaDrag={(args) =>
+                        void addMark({
+                          tipo: "faixa",
+                          geometria: {
+                            edge,
+                            fromMm: args.fromMm,
+                            toMm: args.toMm,
+                          },
                         })
                       }
                     />
@@ -499,6 +540,8 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                       onFromMmChange={setFromMm}
                       applyAllPages={applyAllPages}
                       onApplyAllPagesChange={setApplyAllPages}
+                      pageSpec={pageSpec}
+                      onPageSpecChange={setPageSpec}
                       espelhar={espelhar}
                       onEspelharChange={setEspelhar}
                       cor={cor}

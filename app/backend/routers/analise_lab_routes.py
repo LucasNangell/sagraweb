@@ -153,6 +153,7 @@ class AnaliseLabMarkCreate(BaseModel):
     cor: str = Field("red", max_length=32)
     espelhar: bool = False
     pagina_origem: int = 0
+    paginas: Optional[str] = Field(None, max_length=255)
 
 
 class AnaliseLabMarkUpdate(BaseModel):
@@ -162,6 +163,7 @@ class AnaliseLabMarkUpdate(BaseModel):
     cor: Optional[str] = Field(None, max_length=32)
     espelhar: Optional[bool] = None
     pagina_origem: Optional[int] = None
+    paginas: Optional[str] = Field(None, max_length=255)
 
 
 @router.get("/os/{ano}/{os_id}/analise-lab")
@@ -524,6 +526,7 @@ def create_marca(
             ponto=_session_ponto(request),
             espelhar=body.espelhar,
             pagina_origem=body.pagina_origem,
+            paginas=body.paginas,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -554,6 +557,7 @@ def patch_marca(
             cor=body.cor,
             espelhar=body.espelhar,
             pagina_origem=body.pagina_origem,
+            paginas=body.paginas,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

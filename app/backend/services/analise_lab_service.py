@@ -7,7 +7,7 @@ import json
 import logging
 import os
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 
 from database import db
 from services.prova_web_render_service import (
@@ -18,6 +18,8 @@ from services.prova_web_render_service import (
 )
 
 logger = logging.getLogger(__name__)
+
+_MAX_PAGES_SPEC = 400
 
 RENDER_PENDING = "pending"
 RENDER_RUNNING = "running"
@@ -60,10 +62,89 @@ _SELECT_SESSAO = """
 """
 
 _SELECT_MARCA = """
-    ID, SessaoID, Pagina, Tipo, GeometriaJson, Rotulo, Cor,
+    ID, SessaoID, Pagina, Paginas, Tipo, GeometriaJson, Rotulo, Cor,
     Espelhar, PaginaOrigem, CropVersao,
     PontoRegistro, DataRegistro, DataAtualizacao
 """
+
+
+def parse_page_spec(spec: str) -> list[int]:
+    """Expande '1-15,20,23,25-30' em lista ordenada sem duplicatas."""
+    raw = (spec or "").strip()
+    if not raw:
+        raise ValueError("Informe as páginas (ex.: 1-15,20,23).")
+    pages: set[int] = set()
+    for token in raw.split(","):
+        part = token.strip()
+        if not part:
+            continue
+        if "-" in part:
+            ends = part.split("-", 1)
+            if len(ends) != 2 or not ends[0].strip() or not ends[1].strip():
+                raise ValueError(f"Intervalo inválido: {part}")
+            try:
+                start = int(ends[0].strip())
+                end = int(ends[1].strip())
+            except ValueError as exc:
+                raise ValueError(f"Intervalo inválido: {part}") from exc
+            if start < 1 or end < 1:
+                raise ValueError("Páginas devem ser >= 1.")
+            if start > end:
+                raise ValueError(f"Intervalo inválido: {part}")
+            for n in range(start, end + 1):
+                pages.add(n)
+        else:
+            try:
+                n = int(part)
+            except ValueError as exc:
+                raise ValueError(f"Página inválida: {part}") from exc
+            if n < 1:
+                raise ValueError("Páginas devem ser >= 1.")
+            pages.add(n)
+    if not pages:
+        raise ValueError("Informe as páginas (ex.: 1-15,20,23).")
+    if len(pages) > _MAX_PAGES_SPEC:
+        raise ValueError(f"Máximo de {_MAX_PAGES_SPEC} páginas por marca.")
+    return sorted(pages)
+
+
+def format_page_spec(pages: Iterable[int]) -> str:
+    """Compacta páginas ordenadas em '1-15,20,23,25-30'."""
+    ordered = sorted({int(p) for p in pages if int(p) >= 1})
+    if not ordered:
+        return ""
+    runs: list[tuple[int, int]] = []
+    start = prev = ordered[0]
+    for n in ordered[1:]:
+        if n == prev + 1:
+            prev = n
+            continue
+        runs.append((start, prev))
+        start = prev = n
+    runs.append((start, prev))
+    parts: list[str] = []
+    for a, b in runs:
+        parts.append(str(a) if a == b else f"{a}-{b}")
+    return ",".join(parts)
+
+
+def _normalize_paginas(
+    *,
+    pagina: int,
+    paginas: Optional[str],
+) -> tuple[int, Optional[str]]:
+    """
+    Retorna (pagina_indice, paginas_canonicas).
+    - Spec preenchida: Pagina = primeira página; Paginas = forma canônica.
+    - Spec vazia: Paginas = None; Pagina = 0 (todas) ou página única.
+    """
+    raw = (paginas or "").strip() if paginas is not None else ""
+    if raw:
+        pages = parse_page_spec(raw)
+        return pages[0], format_page_spec(pages)
+    if int(pagina) < 0:
+        raise ValueError("Página inválida.")
+    return int(pagina), None
 
 
 def _parse_json_object(raw: Any) -> Optional[dict[str, Any]]:
@@ -386,10 +467,12 @@ def resolve_session_sources(
 
 
 def _row_to_mark(row: dict[str, Any]) -> dict[str, Any]:
+    paginas_raw = (row.get("Paginas") or "").strip() or None
     return {
         "id": int(row.get("ID") or 0),
         "sessaoId": int(row.get("SessaoID") or 0),
         "pagina": int(row.get("Pagina") or 0),
+        "paginas": paginas_raw,
         "tipo": (row.get("Tipo") or "").strip(),
         "geometria": _parse_json_object(row.get("GeometriaJson")) or {},
         "rotulo": (row.get("Rotulo") or "").strip() or None,
@@ -503,6 +586,7 @@ def add_mark(
     ponto: Optional[int],
     espelhar: bool = False,
     pagina_origem: int = 0,
+    paginas: Optional[str] = None,
 ) -> dict[str, Any]:
     tipo_n = (tipo or "").strip().lower()
     if tipo_n not in MARK_TYPES:
@@ -510,10 +594,9 @@ def add_mark(
     cor_n = (cor or "red").strip().lower()
     if cor_n not in MARK_COLORS:
         raise ValueError("Cor inválida.")
-    if int(pagina) < 0:
-        raise ValueError("Página inválida.")
     if int(pagina_origem) < 0:
         raise ValueError("Página de origem inválida.")
+    pagina_n, paginas_n = _normalize_paginas(pagina=pagina, paginas=paginas)
     geom = _validate_geometry(tipo_n, geometria)
     rotulo_n = (rotulo or "").strip()[:120] or None
     session = get_session_by_id(sessao_id)
@@ -521,13 +604,14 @@ def add_mark(
     db.execute_query(
         """
         INSERT INTO tabAnaliseLabMarca
-            (SessaoID, Pagina, Tipo, GeometriaJson, Rotulo, Cor,
+            (SessaoID, Pagina, Paginas, Tipo, GeometriaJson, Rotulo, Cor,
              Espelhar, PaginaOrigem, CropVersao, PontoRegistro)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             int(sessao_id),
-            int(pagina),
+            int(pagina_n),
+            paginas_n,
             tipo_n,
             json.dumps(geom, ensure_ascii=False),
             rotulo_n,
@@ -562,13 +646,29 @@ def update_mark(
     cor: Optional[str] = None,
     espelhar: Optional[bool] = None,
     pagina_origem: Optional[int] = None,
+    paginas: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
     current = get_mark(mark_id)
     if not current:
         return None
-    pagina_n = int(pagina) if pagina is not None else int(current["pagina"])
-    if pagina_n < 0:
-        raise ValueError("Página inválida.")
+
+    if paginas is not None:
+        # Cliente enviou o campo (mesmo vazio = todas/pág. única via pagina)
+        pagina_base = int(pagina) if pagina is not None else 0
+        if str(paginas).strip():
+            pagina_n, paginas_n = _normalize_paginas(
+                pagina=pagina_base, paginas=paginas
+            )
+        else:
+            if pagina_base < 0:
+                raise ValueError("Página inválida.")
+            pagina_n, paginas_n = pagina_base, None
+    elif pagina is not None:
+        pagina_n, paginas_n = _normalize_paginas(pagina=int(pagina), paginas=None)
+    else:
+        pagina_n = int(current["pagina"])
+        paginas_n = current.get("paginas")
+
     cor_n = (cor or current["cor"] or "red").strip().lower()
     if cor_n not in MARK_COLORS:
         raise ValueError("Cor inválida.")
@@ -595,12 +695,13 @@ def update_mark(
     db.execute_query(
         """
         UPDATE tabAnaliseLabMarca
-        SET Pagina = %s, GeometriaJson = %s, Rotulo = %s, Cor = %s,
+        SET Pagina = %s, Paginas = %s, GeometriaJson = %s, Rotulo = %s, Cor = %s,
             Espelhar = %s, PaginaOrigem = %s
         WHERE ID = %s
         """,
         (
             pagina_n,
+            paginas_n,
             json.dumps(geom, ensure_ascii=False),
             rotulo_n,
             cor_n,

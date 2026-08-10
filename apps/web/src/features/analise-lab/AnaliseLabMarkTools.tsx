@@ -1,5 +1,5 @@
 import { Pencil, Ruler, Trash2 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import type {
   AnaliseLabEdge,
@@ -14,6 +14,11 @@ import {
   labelEdge,
   labelTipo,
 } from "./analiseLabLabels";
+import {
+  markScopeLabel,
+  parsePageSpec,
+  validatePageSpec,
+} from "./analiseLabPageSpec";
 
 export type AnaliseLabTool =
   | "select"
@@ -45,6 +50,8 @@ interface AnaliseLabMarkToolsProps {
   onFromMmChange: (v: number) => void;
   applyAllPages: boolean;
   onApplyAllPagesChange: (v: boolean) => void;
+  pageSpec: string;
+  onPageSpecChange: (v: string) => void;
   espelhar: boolean;
   onEspelharChange: (v: boolean) => void;
   cor: AnaliseLabMarkCor;
@@ -75,6 +82,8 @@ export function AnaliseLabMarkTools({
   onFromMmChange,
   applyAllPages,
   onApplyAllPagesChange,
+  pageSpec,
+  onPageSpecChange,
   espelhar,
   onEspelharChange,
   cor,
@@ -93,9 +102,26 @@ export function AnaliseLabMarkTools({
   editorSlot,
   busy = false,
 }: AnaliseLabMarkToolsProps) {
+  const pageSpecError = useMemo(() => {
+    if (applyAllPages) return null;
+    return validatePageSpec(pageSpec);
+  }, [applyAllPages, pageSpec]);
+
+  const multiPageScope = useMemo(() => {
+    if (applyAllPages) return true;
+    if (pageSpecError) return false;
+    try {
+      return parsePageSpec(pageSpec).length > 1;
+    } catch {
+      return false;
+    }
+  }, [applyAllPages, pageSpec, pageSpecError]);
+
   const showMirror =
-    applyAllPages &&
+    multiPageScope &&
     (tool === "offset_corte" || tool === "faixa" || tool === "retangulo");
+
+  const insertDisabled = busy || (!applyAllPages && Boolean(pageSpecError));
 
   return (
     <aside className="flex w-72 shrink-0 flex-col gap-3 overflow-y-auto border-l border-sagra-border bg-white p-3 text-sm">
@@ -157,6 +183,29 @@ export function AnaliseLabMarkTools({
         Aplicar a todas as páginas
       </label>
 
+      {!applyAllPages ? (
+        <label className="flex flex-col gap-1 text-xs text-neutral-600">
+          Páginas
+          <input
+            value={pageSpec}
+            onChange={(e) => onPageSpecChange(e.target.value)}
+            className={
+              pageSpecError
+                ? "rounded border border-sagra-danger px-2 py-1.5"
+                : "rounded border border-sagra-border px-2 py-1.5"
+            }
+            placeholder="1-15,20,23,25-30"
+          />
+          {pageSpecError ? (
+            <span className="text-[11px] text-sagra-danger">{pageSpecError}</span>
+          ) : (
+            <span className="text-[11px] text-neutral-400">
+              Use vírgulas e hífens (ex.: 1-15,20,23).
+            </span>
+          )}
+        </label>
+      ) : null}
+
       {showMirror ? (
         <label className="flex items-center gap-2 text-xs text-neutral-700">
           <input
@@ -185,17 +234,23 @@ export function AnaliseLabMarkTools({
             </select>
           </label>
           {tool === "faixa" ? (
-            <label className="flex flex-col gap-1 text-xs text-neutral-600">
-              De (mm)
-              <input
-                type="number"
-                min={0}
-                step={0.5}
-                value={fromMm}
-                onChange={(e) => onFromMmChange(Number(e.target.value) || 0)}
-                className="rounded border border-sagra-border px-2 py-1.5"
-              />
-            </label>
+            <>
+              <p className="text-[11px] text-neutral-500">
+                Arraste na régua da página para criar a faixa, ou informe De/Até
+                abaixo.
+              </p>
+              <label className="flex flex-col gap-1 text-xs text-neutral-600">
+                De (mm)
+                <input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={fromMm}
+                  onChange={(e) => onFromMmChange(Number(e.target.value) || 0)}
+                  className="rounded border border-sagra-border px-2 py-1.5"
+                />
+              </label>
+            </>
           ) : null}
           <label className="flex flex-col gap-1 text-xs text-neutral-600">
             {tool === "offset_corte" ? "Offset (mm)" : "Até (mm)"}
@@ -210,7 +265,7 @@ export function AnaliseLabMarkTools({
           </label>
           <button
             type="button"
-            disabled={busy}
+            disabled={insertDisabled}
             onClick={tool === "offset_corte" ? onAddOffset : onAddFaixa}
             className="w-full rounded bg-secondary-blue px-2 py-1.5 text-xs font-semibold text-white hover:bg-secondary-blue/90 disabled:opacity-50"
           >
@@ -235,7 +290,7 @@ export function AnaliseLabMarkTools({
           </label>
           <button
             type="button"
-            disabled={busy}
+            disabled={insertDisabled}
             onClick={onAddGrade}
             className="w-full rounded bg-secondary-blue px-2 py-1.5 text-xs font-semibold text-white hover:bg-secondary-blue/90 disabled:opacity-50"
           >
@@ -250,6 +305,9 @@ export function AnaliseLabMarkTools({
           {tool === "medida" || tool === "retangulo"
             ? " (dois cliques)."
             : "."}
+          {!applyAllPages && pageSpecError
+            ? " Corrija o campo Páginas antes de gravar."
+            : ""}
         </p>
       )}
 
@@ -280,7 +338,7 @@ export function AnaliseLabMarkTools({
                 <Pencil className="mr-1 inline size-3 opacity-60" aria-hidden />
                 {labelTipo(m.tipo)}
                 {m.rotulo ? ` · ${m.rotulo}` : ""}
-                {m.pagina === 0 ? " · todas" : ` · p${m.pagina}`}
+                {` · ${markScopeLabel(m)}`}
               </button>
               <button
                 type="button"

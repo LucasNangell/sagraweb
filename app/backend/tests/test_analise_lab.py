@@ -66,3 +66,33 @@ def test_canonicalize_crop_json_stable() -> None:
     b = lab._canonicalize_crop_json({"unico": {"left": 2, "bottom": 4, "right": 3, "top": 1}})
     assert a == b
     assert lab._canonicalize_crop_json(None) is None
+
+
+def test_parse_page_spec_mixed() -> None:
+    pages = lab.parse_page_spec("1-15,20,23,25-30")
+    assert pages == [
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 20, 23, 25, 26, 27, 28,
+        29, 30,
+    ]
+    assert len(pages) == 23
+
+
+def test_format_page_spec_merges_overlaps() -> None:
+    assert lab.format_page_spec(lab.parse_page_spec("1-5,3-8")) == "1-8"
+
+
+def test_parse_page_spec_rejects_bad() -> None:
+    with pytest.raises(ValueError):
+        lab.parse_page_spec("0")
+    with pytest.raises(ValueError):
+        lab.parse_page_spec("5-1")
+    with pytest.raises(ValueError):
+        lab.parse_page_spec("abc")
+    with pytest.raises(ValueError):
+        lab.parse_page_spec("")
+
+
+def test_normalize_paginas_spec_sets_first_page() -> None:
+    pagina, paginas = lab._normalize_paginas(pagina=0, paginas="4,2,6-7")
+    assert pagina == 2
+    assert paginas == "2,4,6-7"

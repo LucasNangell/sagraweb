@@ -1,0 +1,128 @@
+/** Parser de escopo de páginas: "1-15,20,23,25-30". */
+
+export const MAX_PAGES_SPEC = 400;
+
+export function parsePageSpec(spec: string): number[] {
+  const raw = (spec || "").trim();
+  if (!raw) {
+    throw new Error("Informe as páginas (ex.: 1-15,20,23).");
+  }
+  const pages = new Set<number>();
+  for (const token of raw.split(",")) {
+    const part = token.trim();
+    if (!part) continue;
+    if (part.includes("-")) {
+      const [a, b] = part.split("-", 2);
+      if (!a?.trim() || !b?.trim()) {
+        throw new Error(`Intervalo inválido: ${part}`);
+      }
+      const start = Number(a.trim());
+      const end = Number(b.trim());
+      if (!Number.isInteger(start) || !Number.isInteger(end)) {
+        throw new Error(`Intervalo inválido: ${part}`);
+      }
+      if (start < 1 || end < 1) {
+        throw new Error("Páginas devem ser >= 1.");
+      }
+      if (start > end) {
+        throw new Error(`Intervalo inválido: ${part}`);
+      }
+      for (let n = start; n <= end; n += 1) pages.add(n);
+    } else {
+      const n = Number(part);
+      if (!Number.isInteger(n)) {
+        throw new Error(`Página inválida: ${part}`);
+      }
+      if (n < 1) {
+        throw new Error("Páginas devem ser >= 1.");
+      }
+      pages.add(n);
+    }
+  }
+  if (!pages.size) {
+    throw new Error("Informe as páginas (ex.: 1-15,20,23).");
+  }
+  if (pages.size > MAX_PAGES_SPEC) {
+    throw new Error(`Máximo de ${MAX_PAGES_SPEC} páginas por marca.`);
+  }
+  return [...pages].sort((a, b) => a - b);
+}
+
+export function formatPageSpec(pages: Iterable<number>): string {
+  const ordered = [...new Set([...pages].map((p) => Math.trunc(p)))]
+    .filter((p) => p >= 1)
+    .sort((a, b) => a - b);
+  if (!ordered.length) return "";
+  const parts: string[] = [];
+  let start = ordered[0]!;
+  let prev = ordered[0]!;
+  for (let i = 1; i < ordered.length; i += 1) {
+    const n = ordered[i]!;
+    if (n === prev + 1) {
+      prev = n;
+      continue;
+    }
+    parts.push(start === prev ? String(start) : `${start}-${prev}`);
+    start = prev = n;
+  }
+  parts.push(start === prev ? String(start) : `${start}-${prev}`);
+  return parts.join(",");
+}
+
+export function validatePageSpec(spec: string): string | null {
+  try {
+    parsePageSpec(spec);
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : "Especificação inválida.";
+  }
+}
+
+export function pageSpecIncludes(
+  spec: string | null | undefined,
+  page: number,
+): boolean {
+  if (!spec?.trim()) return false;
+  try {
+    return parsePageSpec(spec).includes(page);
+  } catch {
+    return false;
+  }
+}
+
+export interface MarkPageScope {
+  pagina: number;
+  paginas?: string | null;
+}
+
+/** Visibilidade da marca na página atual (legado Pagina + spec Paginas). */
+export function isMarkVisibleOnPage(
+  mark: MarkPageScope,
+  pageNumber: number,
+): boolean {
+  if (mark.paginas?.trim()) {
+    return pageSpecIncludes(mark.paginas, pageNumber);
+  }
+  if (mark.pagina === 0) return true;
+  return mark.pagina === pageNumber;
+}
+
+export function markScopeLabel(mark: MarkPageScope): string {
+  if (mark.paginas?.trim()) {
+    const s = mark.paginas.trim();
+    return s.length > 28 ? `p${s.slice(0, 25)}…` : `p${s}`;
+  }
+  if (mark.pagina === 0) return "todas";
+  return `p${mark.pagina}`;
+}
+
+export function markTouchesMultiplePages(mark: MarkPageScope): boolean {
+  if (mark.paginas?.trim()) {
+    try {
+      return parsePageSpec(mark.paginas).length > 1;
+    } catch {
+      return false;
+    }
+  }
+  return mark.pagina === 0;
+}

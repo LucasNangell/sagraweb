@@ -62,6 +62,8 @@ export interface AnaliseLabMark {
   id: number;
   sessaoId: number;
   pagina: number;
+  /** Spec canônica: "1-15,20,23". Null/omitido = usa pagina (0=todas). */
+  paginas?: string | null;
   tipo: AnaliseLabMarkTipo | string;
   geometria: Record<string, number | string>;
   rotulo?: string | null;
@@ -114,6 +116,7 @@ export interface CreateAnaliseLabMarkPayload {
   cor?: AnaliseLabMarkCor;
   espelhar?: boolean;
   pagina_origem?: number;
+  paginas?: string | null;
 }
 
 export interface UpdateAnaliseLabMarkPayload {
@@ -123,6 +126,7 @@ export interface UpdateAnaliseLabMarkPayload {
   cor?: AnaliseLabMarkCor;
   espelhar?: boolean;
   pagina_origem?: number;
+  paginas?: string | null;
 }
 
 export async function fetchAnaliseLabInfo(

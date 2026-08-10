@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   clamp,
   distanceMm,
+  faixaFromDrag,
   formatMm,
   mmPerPx,
   mirrorEdge,
@@ -55,6 +56,16 @@ describe("analiseLabGeometry", () => {
     expect(shouldMirrorMark(faixa, 4)).toBe(true);
     expect(resolveMarkGeometry(faixa, 4, 210).edge).toBe("left");
 
+    const bySpec = {
+      pagina: 1,
+      espelhar: true,
+      paginaOrigem: 1,
+      tipo: "faixa",
+      geometria: { edge: "left", fromMm: 0, toMm: 10 },
+    };
+    expect(shouldMirrorMark(bySpec, 2)).toBe(true);
+    expect(resolveMarkGeometry(bySpec, 2, 210).edge).toBe("right");
+
     const rect = {
       pagina: 0,
       espelhar: true,
@@ -64,5 +75,25 @@ describe("analiseLabGeometry", () => {
     };
     expect(resolveMarkGeometry(rect, 2, 200).xMm).toBe(170);
     expect(resolveMarkGeometry(rect, 1, 200).xMm).toBe(10);
+  });
+
+  it("converts drag interval to faixa De/Até by edge", () => {
+    expect(faixaFromDrag("left", 5, 15, 210, 297)).toEqual({
+      fromMm: 5,
+      toMm: 15,
+    });
+    expect(faixaFromDrag("right", 200, 210, 210, 297)).toEqual({
+      fromMm: 0,
+      toMm: 10,
+    });
+    expect(faixaFromDrag("top", 0, 12, 210, 297)).toEqual({
+      fromMm: 0,
+      toMm: 12,
+    });
+    expect(faixaFromDrag("bottom", 287, 297, 210, 297)).toEqual({
+      fromMm: 0,
+      toMm: 10,
+    });
+    expect(faixaFromDrag("left", 10, 10.2, 210, 297)).toBeNull();
   });
 });

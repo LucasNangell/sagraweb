@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS tabAnaliseLabMarca (
     ID INT AUTO_INCREMENT PRIMARY KEY,
     SessaoID INT NOT NULL,
     Pagina INT NOT NULL DEFAULT 0,
+    Paginas VARCHAR(255) NULL,
     Tipo VARCHAR(32) NOT NULL,
     GeometriaJson JSON NOT NULL,
     Rotulo VARCHAR(120) NULL,
@@ -110,6 +111,12 @@ def ensure_analise_lab_schema() -> None:
                 "tabAnaliseLabMarca",
                 "CropVersao",
                 "CropVersao INT NOT NULL DEFAULT 1",
+            )
+            _ensure_column(
+                cursor,
+                "tabAnaliseLabMarca",
+                "Paginas",
+                "Paginas VARCHAR(255) NULL",
             )
         logger.info("Schema Análise Lab garantido (tabAnaliseLabSessao/Marca).")
     except Exception as exc:

@@ -53,6 +53,45 @@ export function mirrorEdge(edge: EdgeKey): EdgeKey {
   return edge;
 }
 
+/** Converte intervalo absoluto na página (xMin/xMax ou yMin/yMax) em De/Até a partir da borda. */
+export function faixaFromDrag(
+  edge: EdgeKey,
+  aMm: number,
+  bMm: number,
+  pageWidthMm: number,
+  pageHeightMm: number,
+): { fromMm: number; toMm: number } | null {
+  const lo = Math.min(aMm, bMm);
+  const hi = Math.max(aMm, bMm);
+  if (hi - lo < 0.5) return null;
+  const e = String(edge || "top");
+  if (e === "left" || e === "all") {
+    return {
+      fromMm: Math.max(0, lo),
+      toMm: Math.min(pageWidthMm, hi),
+    };
+  }
+  if (e === "right") {
+    return {
+      fromMm: Math.max(0, pageWidthMm - hi),
+      toMm: Math.min(pageWidthMm, pageWidthMm - lo),
+    };
+  }
+  if (e === "top") {
+    return {
+      fromMm: Math.max(0, lo),
+      toMm: Math.min(pageHeightMm, hi),
+    };
+  }
+  if (e === "bottom") {
+    return {
+      fromMm: Math.max(0, pageHeightMm - hi),
+      toMm: Math.min(pageHeightMm, pageHeightMm - lo),
+    };
+  }
+  return null;
+}
+
 export interface MarkGeometryLike {
   edge?: string;
   offsetMm?: number;
@@ -83,7 +122,7 @@ export function shouldMirrorMark(
   mark: MarkMirrorInput,
   pageNumber: number,
 ): boolean {
-  if (mark.pagina !== 0 || !mark.espelhar) return false;
+  if (!mark.espelhar) return false;
   const origem = Math.max(1, Number(mark.paginaOrigem) || 1);
   return pageNumber % 2 !== origem % 2;
 }

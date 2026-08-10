@@ -12,7 +12,7 @@ import type { ProvaWebPageMeta } from "@/api/provaWeb";
 
 import { AnaliseLabMarksLayer } from "./AnaliseLabMarksLayer";
 import type { AnaliseLabTool } from "./AnaliseLabMarkTools";
-import { formatMm, pageSizeMm } from "./analiseLabGeometry";
+import { distanceMm, formatMm, pageSizeMm } from "./analiseLabGeometry";
 
 interface AnaliseLabInspectorProps {
   pages: ProvaWebPageMeta[];
@@ -24,6 +24,7 @@ interface AnaliseLabInspectorProps {
   applyAllPages: boolean;
   cor: AnaliseLabMarkCor;
   rotulo: string;
+  selectedMarkId?: number | null;
   onCreateGeometryMark: (args: {
     tipo: "ponto" | "retangulo" | "medida";
     geometria: Record<string, number>;
@@ -40,6 +41,7 @@ export function AnaliseLabInspector({
   applyAllPages: _applyAllPages,
   cor: _cor,
   rotulo: _rotulo,
+  selectedMarkId = null,
   onCreateGeometryMark,
 }: AnaliseLabInspectorProps) {
   const imgRef = useRef<HTMLImageElement>(null);
@@ -71,7 +73,12 @@ export function AnaliseLabInspector({
   };
 
   const handleClick = (e: React.MouseEvent) => {
-    if (tool === "select" || tool === "offset_corte" || tool === "faixa" || tool === "grade") {
+    if (
+      tool === "select" ||
+      tool === "offset_corte" ||
+      tool === "faixa" ||
+      tool === "grade"
+    ) {
       return;
     }
     const pt = toMm(e.clientX, e.clientY);
@@ -127,6 +134,17 @@ export function AnaliseLabInspector({
     );
   }
 
+  const liveLabel =
+    draft && hoverMm && (tool === "medida" || tool === "retangulo")
+      ? tool === "medida"
+        ? formatMm(
+            distanceMm(draft.xMm, draft.yMm, hoverMm.x, hoverMm.y),
+          )
+        : `${formatMm(Math.abs(hoverMm.x - draft.xMm))} × ${formatMm(
+            Math.abs(hoverMm.y - draft.yMm),
+          )}`
+      : null;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-200/70">
       <div className="flex shrink-0 items-center justify-center gap-2 border-b border-sagra-border bg-white px-3 py-2">
@@ -173,6 +191,11 @@ export function AnaliseLabInspector({
             ({formatMm(hoverMm.x)}, {formatMm(hoverMm.y)})
           </span>
         ) : null}
+        {liveLabel ? (
+          <span className="rounded bg-sky-100 px-1.5 py-0.5 text-xs font-semibold text-sky-800">
+            {liveLabel}
+          </span>
+        ) : null}
       </div>
 
       <div className="relative min-h-0 flex-1 overflow-auto p-4">
@@ -186,7 +209,6 @@ export function AnaliseLabInspector({
           }}
           onMouseLeave={() => setHoverMm(null)}
         >
-          {/* Réguas */}
           <div
             className="pointer-events-none absolute -left-6 top-0 h-full w-6 border-r border-neutral-300 bg-neutral-100 text-[9px] text-neutral-500"
             aria-hidden
@@ -231,7 +253,63 @@ export function AnaliseLabInspector({
             displayWidth={displayW}
             displayHeight={displayH}
             includeMedidas
+            selectedMarkId={selectedMarkId}
           />
+          {draft && hoverMm && (tool === "medida" || tool === "retangulo") ? (
+            <svg
+              className="pointer-events-none absolute inset-0 h-full w-full"
+              viewBox={`0 0 ${displayW} ${displayH}`}
+              aria-hidden
+            >
+              {tool === "medida" ? (
+                <>
+                  <line
+                    x1={(draft.xMm / widthMm) * displayW}
+                    y1={(draft.yMm / heightMm) * displayH}
+                    x2={(hoverMm.x / widthMm) * displayW}
+                    y2={(hoverMm.y / heightMm) * displayH}
+                    stroke="#0ea5e9"
+                    strokeWidth={1.5}
+                    strokeDasharray="4 3"
+                  />
+                  <text
+                    x={
+                      (((draft.xMm + hoverMm.x) / 2) / widthMm) * displayW + 4
+                    }
+                    y={
+                      (((draft.yMm + hoverMm.y) / 2) / heightMm) * displayH - 4
+                    }
+                    fill="#0369a1"
+                    fontSize={12}
+                    fontWeight={600}
+                  >
+                    {formatMm(
+                      distanceMm(draft.xMm, draft.yMm, hoverMm.x, hoverMm.y),
+                    )}
+                  </text>
+                </>
+              ) : (
+                <rect
+                  x={
+                    (Math.min(draft.xMm, hoverMm.x) / widthMm) * displayW
+                  }
+                  y={
+                    (Math.min(draft.yMm, hoverMm.y) / heightMm) * displayH
+                  }
+                  width={
+                    (Math.abs(hoverMm.x - draft.xMm) / widthMm) * displayW
+                  }
+                  height={
+                    (Math.abs(hoverMm.y - draft.yMm) / heightMm) * displayH
+                  }
+                  fill="rgba(14,165,233,0.15)"
+                  stroke="#0ea5e9"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                />
+              )}
+            </svg>
+          ) : null}
           {draft ? (
             <div
               className="pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-sky-500"

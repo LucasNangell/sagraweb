@@ -16,6 +16,7 @@ import {
   resolveSeedCrop,
 } from "./provaWebCenteredCrop";
 import type { SpiralHoleGuide } from "./spiralBinding";
+import type { ProvaWebCropSource } from "./provaWebCropSource";
 import { useProvaWebCropMeta } from "./useProvaWebCropMeta";
 
 /** Guia de vinco no preview de crop (posição na área útil). */
@@ -67,6 +68,8 @@ export interface ProvaWebCropPanelProps {
    */
   seedTargetWidthMm?: number | null;
   seedTargetHeightMm?: number | null;
+  /** Fonte alternativa de PDF/meta (ex.: Análise Lab). */
+  cropSource?: ProvaWebCropSource;
 }
 
 export function ProvaWebCropPanel({
@@ -89,6 +92,7 @@ export function ProvaWebCropPanel({
   formatoAlturaMm = null,
   seedTargetWidthMm = null,
   seedTargetHeightMm = null,
+  cropSource,
 }: ProvaWebCropPanelProps) {
   const [detectMarks, setDetectMarks] = useState(false);
   const [detecting, setDetecting] = useState(false);
@@ -96,6 +100,7 @@ export function ProvaWebCropPanel({
 
   const metaQuery = useProvaWebCropMeta(ano, osId, relativePath, {
     detectMarks,
+    cropSource,
   });
 
   useEffect(() => {
@@ -228,6 +233,7 @@ export function ProvaWebCropPanel({
           foldLines={foldLines}
           onFoldPosicaoChange={onFoldPosicaoChange}
           spiralGuides={spiralGuides}
+          cropSource={cropSource}
         />
         {coverGuides && (
           <div className="mt-2 flex flex-wrap justify-center gap-3 text-[10px] text-neutral-500">
@@ -441,6 +447,7 @@ function PdfCropPreview({
   foldLines,
   onFoldPosicaoChange,
   spiralGuides,
+  cropSource,
 }: {
   ano: number;
   osId: number;
@@ -453,6 +460,7 @@ function PdfCropPreview({
   foldLines?: FoldLineGuide[];
   onFoldPosicaoChange?: (id: string, posicaoMm: number) => void;
   spiralGuides?: SpiralHoleGuide | null;
+  cropSource?: ProvaWebCropSource;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -461,7 +469,9 @@ function PdfCropPreview({
 
   useEffect(() => {
     let cancelled = false;
-    const url = provaWebSourcePdfUrl(ano, osId, relativePath);
+    const url = cropSource
+      ? cropSource.pdfUrl(relativePath)
+      : provaWebSourcePdfUrl(ano, osId, relativePath);
     setLoading(true);
     setError(null);
 
@@ -499,7 +509,7 @@ function PdfCropPreview({
     return () => {
       cancelled = true;
     };
-  }, [ano, osId, relativePath, pageIndex]);
+  }, [ano, osId, relativePath, pageIndex, cropSource]);
 
   const insetStyle =
     widthMm > 0 && heightMm > 0 && size.w > 0

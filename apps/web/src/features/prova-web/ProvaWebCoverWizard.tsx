@@ -9,6 +9,7 @@ import {
   type ProvaWebCapaCrop,
 } from "@/api/provaWeb";
 import { ProvaWebCropPanel } from "./ProvaWebCropPanel";
+import type { ProvaWebCropSource } from "./provaWebCropSource";
 import {
   centeredCropMm,
   coverSpreadTargetMm,
@@ -65,6 +66,7 @@ export interface ProvaWebCoverWizardProps {
   formatoLabel?: string | null;
   formatoLarguraMm?: number | null;
   formatoAlturaMm?: number | null;
+  cropSource?: ProvaWebCropSource;
 }
 
 export function ProvaWebCoverWizard({
@@ -78,12 +80,13 @@ export function ProvaWebCoverWizard({
   formatoLabel = null,
   formatoLarguraMm = null,
   formatoAlturaMm = null,
+  cropSource,
 }: ProvaWebCoverWizardProps) {
   const [assignRole, setAssignRole] = useState<CoverRole>("cover-front");
   const seededMetaRef = useRef(false);
 
-  const capaMeta = useProvaWebCropMeta(ano, osId, capaPath);
-  const mioloMeta = useProvaWebCropMeta(ano, osId, mioloPath);
+  const capaMeta = useProvaWebCropMeta(ano, osId, capaPath, { cropSource });
+  const mioloMeta = useProvaWebCropMeta(ano, osId, mioloPath, { cropSource });
 
   const mediaW = capaMeta.data?.widthMm ?? capaMeta.data?.pages[0]?.widthMm ?? 0;
   const mediaH =
@@ -453,6 +456,7 @@ export function ProvaWebCoverWizard({
           formatoAlturaMm={formatoAlturaMm}
           seedTargetWidthMm={spreadTarget?.w ?? null}
           seedTargetHeightMm={spreadTarget?.h ?? null}
+          cropSource={cropSource}
           coverGuides={
             value.layout === "spread"
               ? {

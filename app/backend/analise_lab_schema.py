@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS tabAnaliseLabSessao (
     RenderProgress JSON NULL,
     RenderStartedAt DATETIME NULL,
     RenderFinishedAt DATETIME NULL,
+    CropVersao INT NOT NULL DEFAULT 1,
     PontoRegistro INT NULL,
     DataRegistro DATETIME DEFAULT CURRENT_TIMESTAMP,
     DataAtualizacao DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -44,6 +45,9 @@ CREATE TABLE IF NOT EXISTS tabAnaliseLabMarca (
     GeometriaJson JSON NOT NULL,
     Rotulo VARCHAR(120) NULL,
     Cor VARCHAR(32) NOT NULL DEFAULT 'red',
+    Espelhar TINYINT(1) NOT NULL DEFAULT 0,
+    PaginaOrigem INT NOT NULL DEFAULT 0,
+    CropVersao INT NOT NULL DEFAULT 1,
     PontoRegistro INT NULL,
     DataRegistro DATETIME DEFAULT CURRENT_TIMESTAMP,
     DataAtualizacao DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -55,6 +59,27 @@ CREATE TABLE IF NOT EXISTS tabAnaliseLabMarca (
 """
 
 
+def _column_exists(cursor, table: str, column: str) -> bool:
+    cursor.execute(
+        """
+        SELECT COUNT(*) AS c FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = %s
+          AND COLUMN_NAME = %s
+        """,
+        (table, column),
+    )
+    row = cursor.fetchone()
+    return bool(row and int(row.get("c") or 0) > 0)
+
+
+def _ensure_column(cursor, table: str, column: str, ddl: str) -> None:
+    if _column_exists(cursor, table, column):
+        return
+    cursor.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+    logger.info("Análise Lab: coluna %s.%s adicionada.", table, column)
+
+
 def ensure_analise_lab_schema() -> None:
     """Cria/atualiza tabelas do Análise Lab (idempotente)."""
     db = Database()
@@ -62,6 +87,30 @@ def ensure_analise_lab_schema() -> None:
         with db.cursor() as cursor:
             cursor.execute(_CREATE_TAB_SESSAO_SQL)
             cursor.execute(_CREATE_TAB_MARCA_SQL)
+            _ensure_column(
+                cursor,
+                "tabAnaliseLabSessao",
+                "CropVersao",
+                "CropVersao INT NOT NULL DEFAULT 1",
+            )
+            _ensure_column(
+                cursor,
+                "tabAnaliseLabMarca",
+                "Espelhar",
+                "Espelhar TINYINT(1) NOT NULL DEFAULT 0",
+            )
+            _ensure_column(
+                cursor,
+                "tabAnaliseLabMarca",
+                "PaginaOrigem",
+                "PaginaOrigem INT NOT NULL DEFAULT 0",
+            )
+            _ensure_column(
+                cursor,
+                "tabAnaliseLabMarca",
+                "CropVersao",
+                "CropVersao INT NOT NULL DEFAULT 1",
+            )
         logger.info("Schema Análise Lab garantido (tabAnaliseLabSessao/Marca).")
     except Exception as exc:
         logger.error("Erro ao garantir schema Análise Lab: %s", exc)

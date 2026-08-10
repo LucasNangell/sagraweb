@@ -1,4 +1,4 @@
-"""Testes do Análise Lab (schema soft + pasta + marcas)."""
+"""Testes do Análise Lab (pasta, marcas, bordas e espelhamento)."""
 from __future__ import annotations
 
 import pytest
@@ -27,6 +27,15 @@ def test_validate_geometry_offset() -> None:
     assert g == {"edge": "top", "offsetMm": 7.0}
 
 
+def test_validate_geometry_accepts_all_edges() -> None:
+    g = lab._validate_geometry("offset_corte", {"edge": "all", "offsetMm": 5})
+    assert g["edge"] == "all"
+    f = lab._validate_geometry(
+        "faixa", {"edge": "all", "fromMm": 0, "toMm": 10}
+    )
+    assert f["edge"] == "all"
+
+
 def test_validate_geometry_rejects_bad_type() -> None:
     with pytest.raises(ValueError, match="Tipo"):
         lab._validate_geometry("xyz", {})
@@ -50,3 +59,10 @@ def test_add_mark_rejects_invalid_tipo(monkeypatch: pytest.MonkeyPatch) -> None:
             cor="red",
             ponto=None,
         )
+
+
+def test_canonicalize_crop_json_stable() -> None:
+    a = lab._canonicalize_crop_json({"unico": {"top": 1, "left": 2, "right": 3, "bottom": 4}})
+    b = lab._canonicalize_crop_json({"unico": {"left": 2, "bottom": 4, "right": 3, "top": 1}})
+    assert a == b
+    assert lab._canonicalize_crop_json(None) is None

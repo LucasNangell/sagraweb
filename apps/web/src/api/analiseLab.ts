@@ -1,5 +1,10 @@
 import { apiFetch, apiUrl } from "@/lib/api";
-import type { ProvaWebManifestBase, ProvaWebModo } from "@/api/provaWeb";
+import type {
+  ProvaWebCropJson,
+  ProvaWebCropMetaResponse,
+  ProvaWebManifestBase,
+  ProvaWebModo,
+} from "@/api/provaWeb";
 
 export type AnaliseLabRenderStatus =
   | "pending"
@@ -27,7 +32,7 @@ export type AnaliseLabMarkCor =
   | "black"
   | "white";
 
-export type AnaliseLabEdge = "top" | "right" | "bottom" | "left";
+export type AnaliseLabEdge = "top" | "right" | "bottom" | "left" | "all";
 
 export interface AnaliseLabRenderProgress {
   done?: number;
@@ -43,13 +48,14 @@ export interface AnaliseLabSession {
   arquivoUnico: string | null;
   arquivoCapa: string | null;
   arquivoMiolo: string | null;
-  cropJson?: Record<string, unknown> | null;
+  cropJson?: ProvaWebCropJson | Record<string, unknown> | null;
   pastaRender: string;
   renderStatus: AnaliseLabRenderStatus;
   renderError?: string | null;
   renderProgress?: AnaliseLabRenderProgress | null;
   renderStartedAt?: string | null;
   renderFinishedAt?: string | null;
+  cropVersao?: number;
 }
 
 export interface AnaliseLabMark {
@@ -60,6 +66,9 @@ export interface AnaliseLabMark {
   geometria: Record<string, number | string>;
   rotulo?: string | null;
   cor: AnaliseLabMarkCor | string;
+  espelhar?: boolean;
+  paginaOrigem?: number;
+  cropVersao?: number;
 }
 
 export interface AnaliseLabInfo {
@@ -94,7 +103,7 @@ export interface SaveAnaliseLabPayload {
   arquivo_unico?: string | null;
   arquivo_capa?: string | null;
   arquivo_miolo?: string | null;
-  crop_json?: Record<string, unknown> | null;
+  crop_json?: ProvaWebCropJson | null;
 }
 
 export interface CreateAnaliseLabMarkPayload {
@@ -103,6 +112,17 @@ export interface CreateAnaliseLabMarkPayload {
   geometria: Record<string, number | string>;
   rotulo?: string | null;
   cor?: AnaliseLabMarkCor;
+  espelhar?: boolean;
+  pagina_origem?: number;
+}
+
+export interface UpdateAnaliseLabMarkPayload {
+  pagina?: number;
+  geometria?: Record<string, number | string>;
+  rotulo?: string | null;
+  cor?: AnaliseLabMarkCor;
+  espelhar?: boolean;
+  pagina_origem?: number;
 }
 
 export async function fetchAnaliseLabInfo(
@@ -163,6 +183,30 @@ export function analiseLabPageUrl(
   return apiUrl(`/os/${ano}/${osId}/analise-lab/pages/${page}.png${q}`);
 }
 
+export function analiseLabSourcePdfUrl(
+  ano: number,
+  osId: number,
+  relativePath: string,
+): string {
+  const q = new URLSearchParams({ path: relativePath });
+  return apiUrl(`/os/${ano}/${osId}/analise-lab/pdf?${q.toString()}`);
+}
+
+export async function fetchAnaliseLabCropMeta(
+  ano: number,
+  osId: number,
+  relativePath: string,
+  opts?: { detectMarks?: boolean },
+): Promise<ProvaWebCropMetaResponse> {
+  const q = new URLSearchParams({ path: relativePath });
+  if (opts?.detectMarks) {
+    q.set("detect_marks", "true");
+  }
+  return apiFetch(
+    `/os/${ano}/${osId}/analise-lab/crop-meta?${q.toString()}`,
+  );
+}
+
 export async function createAnaliseLabMark(
   ano: number,
   osId: number,
@@ -170,6 +214,19 @@ export async function createAnaliseLabMark(
 ): Promise<{ ok: boolean; mark: AnaliseLabMark }> {
   return apiFetch(`/os/${ano}/${osId}/analise-lab/marcas`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateAnaliseLabMark(
+  ano: number,
+  osId: number,
+  markId: number,
+  payload: UpdateAnaliseLabMarkPayload,
+): Promise<{ ok: boolean; mark: AnaliseLabMark }> {
+  return apiFetch(`/os/${ano}/${osId}/analise-lab/marcas/${markId}`, {
+    method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
@@ -192,5 +249,4 @@ export async function listAnaliseLabMarks(
   return apiFetch(`/os/${ano}/${osId}/analise-lab/marcas`);
 }
 
-/** Placeholder to keep modo typed when wiring Unico. */
 export type AnaliseLabModo = Extract<ProvaWebModo, "unico" | "capa_miolo">;

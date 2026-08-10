@@ -16,15 +16,19 @@ import {
   fetchAnaliseLabManifest,
   reprocessAnaliseLab,
   saveAnaliseLab,
+  updateAnaliseLabMark,
   type AnaliseLabMark,
   type AnaliseLabMarkCor,
   type AnaliseLabEdge,
   type SaveAnaliseLabPayload,
+  type UpdateAnaliseLabMarkPayload,
 } from "@/api/analiseLab";
+import type { ProvaWebCropJson } from "@/api/provaWeb";
 import { ProvaWebViewerShell } from "@/features/prova-web/ProvaWebViewerShell";
 import logoUrl from "@/logo.png";
 
 import { AnaliseLabInspector } from "./AnaliseLabInspector";
+import { AnaliseLabMarkEditor } from "./AnaliseLabMarkEditor";
 import { AnaliseLabMarksLayer } from "./AnaliseLabMarksLayer";
 import {
   AnaliseLabMarkTools,
@@ -56,11 +60,14 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const [tool, setTool] = useState<AnaliseLabTool>("offset_corte");
   const [edge, setEdge] = useState<AnaliseLabEdge>("top");
   const [offsetMm, setOffsetMm] = useState(7);
+  const [fromMm, setFromMm] = useState(0);
   const [applyAllPages, setApplyAllPages] = useState(true);
+  const [espelhar, setEspelhar] = useState(true);
   const [cor, setCor] = useState<AnaliseLabMarkCor>("red");
   const [rotulo, setRotulo] = useState("corte 7mm");
   const [stepMm, setStepMm] = useState(10);
   const [localMarks, setLocalMarks] = useState<AnaliseLabMark[] | null>(null);
+  const [selectedMarkId, setSelectedMarkId] = useState<number | null>(null);
 
   const infoQuery = useQuery({
     queryKey: ["analise-lab-info", ano, osId],
@@ -107,6 +114,15 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   }, [info?.marks]);
 
   const marks = localMarks ?? info?.marks ?? [];
+  const sessionCropVersao = session?.cropVersao ?? 1;
+  const staleMarksCount = marks.filter(
+    (m) => (m.cropVersao ?? 1) !== sessionCropVersao,
+  ).length;
+
+  const selectedMark =
+    selectedMarkId == null
+      ? null
+      : (marks.find((m) => m.id === selectedMarkId) ?? null);
 
   const manifestQuery = useQuery({
     queryKey: ["analise-lab-manifest", ano, osId],
@@ -168,6 +184,9 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     return pages[pageIndex]?.page ?? pageIndex + 1;
   }, [manifestQuery.data?.pages, pageIndex]);
 
+  const canEspelharTipo = (tipo: string) =>
+    tipo === "offset_corte" || tipo === "faixa" || tipo === "retangulo";
+
   const addMark = async (payload: {
     tipo: AnaliseLabMark["tipo"];
     geometria: Record<string, number | string>;
@@ -176,12 +195,15 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     setActionBusy(true);
     setActionError(null);
     try {
+      const pagina = payload.pagina ?? (applyAllPages ? 0 : pageNumero);
       const res = await createAnaliseLabMark(ano, osId, {
-        pagina: payload.pagina ?? (applyAllPages ? 0 : pageNumero),
+        pagina,
         tipo: payload.tipo as "offset_corte",
         geometria: payload.geometria,
         rotulo: rotulo || null,
         cor,
+        espelhar: applyAllPages && canEspelharTipo(payload.tipo) && espelhar,
+        pagina_origem: pageNumero,
       });
       setLocalMarks((prev) => [...(prev ?? []), res.mark]);
       invalidate();
@@ -194,11 +216,31 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     }
   };
 
+  const handleUpdateMark = async (payload: UpdateAnaliseLabMarkPayload) => {
+    if (selectedMarkId == null) return;
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      const res = await updateAnaliseLabMark(ano, osId, selectedMarkId, payload);
+      setLocalMarks((prev) =>
+        (prev ?? []).map((m) => (m.id === selectedMarkId ? res.mark : m)),
+      );
+      invalidate();
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Erro ao atualizar marca.",
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
   const handleDeleteMark = async (id: number) => {
     setActionBusy(true);
     try {
       await deleteAnaliseLabMark(ano, osId, id);
       setLocalMarks((prev) => (prev ?? []).filter((m) => m.id !== id));
+      if (selectedMarkId === id) setSelectedMarkId(null);
       invalidate();
     } catch (err) {
       setActionError(
@@ -210,7 +252,13 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   };
 
   const renderPageOverlay = (
-    page: { page: number; width: number; height: number; widthPt: number; heightPt: number },
+    page: {
+      page: number;
+      width: number;
+      height: number;
+      widthPt: number;
+      heightPt: number;
+    },
     size: { width: number; height: number },
   ) => {
     const { widthMm, heightMm } = pageSizeMm(page.widthPt, page.heightPt);
@@ -223,6 +271,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
         displayWidth={size.width}
         displayHeight={size.height}
         includeMedidas={false}
+        selectedMarkId={selectedMarkId}
       />
     );
   };
@@ -296,6 +345,15 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
         </p>
       ) : null}
 
+      {staleMarksCount > 0 && !showPicker && renderReady ? (
+        <p className="shrink-0 bg-amber-50 px-4 py-2 text-center text-sm text-amber-900">
+          {staleMarksCount} marca{staleMarksCount === 1 ? "" : "s"}{" "}
+          {staleMarksCount === 1 ? "foi criada" : "foram criadas"} com outra
+          configuração de corte e pode{staleMarksCount === 1 ? "" : "m"} estar
+          fora de posição.
+        </p>
+      ) : null}
+
       <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {infoQuery.isLoading ? (
           <Centered>
@@ -327,6 +385,19 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
             ano={ano}
             osId={osId}
             saving={actionBusy}
+            formato={info.formato}
+            formatoAlturaMm={info.formatoAlturaMm}
+            formatoLarguraMm={info.formatoLarguraMm}
+            initialVersaoLabel={session?.versaoLabel}
+            initialModo={
+              session?.modo === "capa_miolo" ? "capa_miolo" : "unico"
+            }
+            initialArquivoUnico={session?.arquivoUnico}
+            initialArquivoCapa={session?.arquivoCapa}
+            initialArquivoMiolo={session?.arquivoMiolo}
+            initialCropJson={
+              (session?.cropJson as ProvaWebCropJson | null | undefined) ?? null
+            }
             onGenerateStarted={handleGenerateStarted}
             onGenerate={(p) => void handleGenerate(p)}
           />
@@ -409,6 +480,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                       applyAllPages={applyAllPages}
                       cor={cor}
                       rotulo={rotulo}
+                      selectedMarkId={selectedMarkId}
                       onCreateGeometryMark={(args) =>
                         void addMark({
                           tipo: args.tipo,
@@ -423,8 +495,12 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                       onEdgeChange={setEdge}
                       offsetMm={offsetMm}
                       onOffsetMmChange={setOffsetMm}
+                      fromMm={fromMm}
+                      onFromMmChange={setFromMm}
                       applyAllPages={applyAllPages}
                       onApplyAllPagesChange={setApplyAllPages}
+                      espelhar={espelhar}
+                      onEspelharChange={setEspelhar}
                       cor={cor}
                       onCorChange={setCor}
                       rotulo={rotulo}
@@ -432,8 +508,21 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                       stepMm={stepMm}
                       onStepMmChange={setStepMm}
                       marks={marks}
+                      selectedMarkId={selectedMarkId}
+                      onSelectMark={setSelectedMarkId}
                       onDeleteMark={(id) => void handleDeleteMark(id)}
                       busy={actionBusy}
+                      editorSlot={
+                        selectedMark ? (
+                          <AnaliseLabMarkEditor
+                            mark={selectedMark}
+                            busy={actionBusy}
+                            onSave={(p) => void handleUpdateMark(p)}
+                            onCancel={() => setSelectedMarkId(null)}
+                            onDelete={() => void handleDeleteMark(selectedMark.id)}
+                          />
+                        ) : null
+                      }
                       onAddOffset={() =>
                         void addMark({
                           tipo: "offset_corte",
@@ -443,7 +532,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                       onAddFaixa={() =>
                         void addMark({
                           tipo: "faixa",
-                          geometria: { edge, fromMm: 0, toMm: offsetMm },
+                          geometria: { edge, fromMm, toMm: offsetMm },
                         })
                       }
                       onAddGrade={() =>

@@ -8,11 +8,23 @@ import {
   type AnaliseLabFileEntry,
   type SaveAnaliseLabPayload,
 } from "@/api/analiseLab";
+import type { ProvaWebCropJson } from "@/api/provaWeb";
+
+import { AnaliseLabCropAssistant } from "./AnaliseLabCropAssistant";
 
 interface AnaliseLabSourcePickerProps {
   ano: number;
   osId: number;
   saving?: boolean;
+  formato?: string | null;
+  formatoAlturaMm?: number | null;
+  formatoLarguraMm?: number | null;
+  initialVersaoLabel?: string | null;
+  initialModo?: "unico" | "capa_miolo" | null;
+  initialArquivoUnico?: string | null;
+  initialArquivoCapa?: string | null;
+  initialArquivoMiolo?: string | null;
+  initialCropJson?: ProvaWebCropJson | null;
   onGenerate: (payload: SaveAnaliseLabPayload) => void;
   onGenerateStarted?: () => void;
 }
@@ -21,6 +33,15 @@ export function AnaliseLabSourcePicker({
   ano,
   osId,
   saving = false,
+  formato = null,
+  formatoAlturaMm = null,
+  formatoLarguraMm = null,
+  initialVersaoLabel = null,
+  initialModo = null,
+  initialArquivoUnico = null,
+  initialArquivoCapa = null,
+  initialArquivoMiolo = null,
+  initialCropJson = null,
   onGenerate,
   onGenerateStarted,
 }: AnaliseLabSourcePickerProps) {
@@ -31,11 +52,20 @@ export function AnaliseLabSourcePicker({
   });
 
   const versions = versionsQuery.data?.versions ?? [];
-  const [versaoLabel, setVersaoLabel] = useState("");
-  const [modo, setModo] = useState<"unico" | "capa_miolo">("unico");
-  const [selUnico, setSelUnico] = useState<string | null>(null);
-  const [selCapa, setSelCapa] = useState<string | null>(null);
-  const [selMiolo, setSelMiolo] = useState<string | null>(null);
+  const [phase, setPhase] = useState<"pick" | "crop">("pick");
+  const [versaoLabel, setVersaoLabel] = useState(initialVersaoLabel || "");
+  const [modo, setModo] = useState<"unico" | "capa_miolo">(
+    initialModo === "capa_miolo" ? "capa_miolo" : "unico",
+  );
+  const [selUnico, setSelUnico] = useState<string | null>(
+    initialArquivoUnico || null,
+  );
+  const [selCapa, setSelCapa] = useState<string | null>(
+    initialArquivoCapa || null,
+  );
+  const [selMiolo, setSelMiolo] = useState<string | null>(
+    initialArquivoMiolo || null,
+  );
 
   useEffect(() => {
     if (!versaoLabel && versions.length) {
@@ -51,7 +81,7 @@ export function AnaliseLabSourcePicker({
   });
 
   const files = filesQuery.data?.files ?? [];
-  const canConfirm =
+  const canContinue =
     modo === "unico" ? Boolean(selUnico) : Boolean(selCapa && selMiolo);
 
   const groups = useMemo(() => {
@@ -64,17 +94,35 @@ export function AnaliseLabSourcePicker({
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b, "pt-BR"));
   }, [files]);
 
-  const handleGenerate = () => {
-    if (!canConfirm || !versaoLabel || saving) return;
-    onGenerateStarted?.();
-    onGenerate({
-      versao_label: versaoLabel,
-      modo,
-      arquivo_unico: modo === "unico" ? selUnico : null,
-      arquivo_capa: modo === "capa_miolo" ? selCapa : null,
-      arquivo_miolo: modo === "capa_miolo" ? selMiolo : null,
-    });
-  };
+  if (phase === "crop") {
+    return (
+      <AnaliseLabCropAssistant
+        ano={ano}
+        osId={osId}
+        modo={modo}
+        arquivoUnico={selUnico}
+        arquivoCapa={selCapa}
+        arquivoMiolo={selMiolo}
+        saving={saving}
+        onBack={() => setPhase("pick")}
+        formato={formato}
+        formatoAlturaMm={formatoAlturaMm}
+        formatoLarguraMm={formatoLarguraMm}
+        initialCropJson={initialCropJson}
+        onConfirm={(cropJson) => {
+          onGenerateStarted?.();
+          onGenerate({
+            versao_label: versaoLabel,
+            modo,
+            arquivo_unico: modo === "unico" ? selUnico : null,
+            arquivo_capa: modo === "capa_miolo" ? selCapa : null,
+            arquivo_miolo: modo === "capa_miolo" ? selMiolo : null,
+            crop_json: cropJson,
+          });
+        }}
+      />
+    );
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 p-6">
@@ -83,8 +131,8 @@ export function AnaliseLabSourcePicker({
           Análise Lab — fontes
         </h2>
         <p className="text-sm text-neutral-600">
-          Escolha a versão Original e o(s) PDF(s) para inspecionar com marcas em
-          mm. Esta página não altera a Análise nem a Prova WEB.
+          Escolha a versão Original e o(s) PDF(s). Em seguida configure o corte
+          (lombada e orelhas, se houver capa).
         </p>
       </div>
 
@@ -215,12 +263,11 @@ export function AnaliseLabSourcePicker({
 
       <button
         type="button"
-        disabled={!canConfirm || saving || !versaoLabel}
-        onClick={handleGenerate}
+        disabled={!canContinue || saving || !versaoLabel}
+        onClick={() => setPhase("crop")}
         className="inline-flex items-center justify-center gap-2 rounded-lg bg-secondary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-secondary-blue/90 disabled:opacity-50"
       >
-        {saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-        Gerar visualização do laboratório
+        Continuar para configuração de corte
       </button>
     </div>
   );

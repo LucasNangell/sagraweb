@@ -49,14 +49,20 @@ MARK_TYPES = frozenset(
 MARK_COLORS = frozenset(
     {"red", "orange", "yellow", "green", "blue", "purple", "black", "white"}
 )
-MARK_EDGES = frozenset({"top", "right", "bottom", "left"})
+MARK_EDGES = frozenset({"top", "right", "bottom", "left", "all"})
 
 _SELECT_SESSAO = """
     ID, NroProtocolo, AnoProtocolo, VersaoLabel, Modo,
     ArquivoUnico, ArquivoCapa, ArquivoMiolo, CropJson, PastaRender,
     RenderStatus, RenderError, RenderProgress,
-    RenderStartedAt, RenderFinishedAt, PontoRegistro,
+    RenderStartedAt, RenderFinishedAt, CropVersao, PontoRegistro,
     DataRegistro, DataAtualizacao
+"""
+
+_SELECT_MARCA = """
+    ID, SessaoID, Pagina, Tipo, GeometriaJson, Rotulo, Cor,
+    Espelhar, PaginaOrigem, CropVersao,
+    PontoRegistro, DataRegistro, DataAtualizacao
 """
 
 
@@ -113,6 +119,7 @@ def _row_to_session(row: dict[str, Any]) -> dict[str, Any]:
         "renderProgress": _parse_json_object(row.get("RenderProgress")),
         "renderStartedAt": _iso(row.get("RenderStartedAt")),
         "renderFinishedAt": _iso(row.get("RenderFinishedAt")),
+        "cropVersao": int(row.get("CropVersao") or 1),
         "pontoRegistro": row.get("PontoRegistro"),
         "dataRegistro": _iso(row.get("DataRegistro")),
         "dataAtualizacao": _iso(row.get("DataAtualizacao")),
@@ -149,6 +156,12 @@ def get_session_by_id(sessao_id: int) -> Optional[dict[str, Any]]:
     return _row_to_session(rows[0])
 
 
+def _canonicalize_crop_json(crop_json: Optional[dict[str, Any]]) -> Optional[str]:
+    if crop_json is None:
+        return None
+    return json.dumps(crop_json, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
 def upsert_session(
     ano: int,
     os_id: int,
@@ -166,6 +179,12 @@ def upsert_session(
     )
     existing = get_session(ano, os_id)
     if existing:
+        prev_canon = _canonicalize_crop_json(existing.get("cropJson"))
+        next_canon = _canonicalize_crop_json(crop_json)
+        crop_changed = prev_canon != next_canon
+        next_crop_versao = int(existing.get("cropVersao") or 1) + (
+            1 if crop_changed else 0
+        )
         db.execute_query(
             """
             UPDATE tabAnaliseLabSessao
@@ -174,7 +193,7 @@ def upsert_session(
                 CropJson = %s, PastaRender = %s,
                 RenderStatus = %s, RenderError = NULL, RenderProgress = NULL,
                 RenderStartedAt = NULL, RenderFinishedAt = NULL,
-                PontoRegistro = %s
+                CropVersao = %s, PontoRegistro = %s
             WHERE NroProtocolo = %s AND AnoProtocolo = %s
             """,
             (
@@ -186,6 +205,7 @@ def upsert_session(
                 crop_payload,
                 LAB_PASTA_RENDER,
                 RENDER_PENDING,
+                next_crop_versao,
                 ponto,
                 os_id,
                 ano,
@@ -197,8 +217,8 @@ def upsert_session(
             INSERT INTO tabAnaliseLabSessao
                 (NroProtocolo, AnoProtocolo, VersaoLabel, Modo,
                  ArquivoUnico, ArquivoCapa, ArquivoMiolo, CropJson,
-                 PastaRender, RenderStatus, PontoRegistro)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 PastaRender, RenderStatus, CropVersao, PontoRegistro)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 os_id,
@@ -211,6 +231,7 @@ def upsert_session(
                 crop_payload,
                 LAB_PASTA_RENDER,
                 RENDER_PENDING,
+                1,
                 ponto,
             ),
         )
@@ -373,6 +394,9 @@ def _row_to_mark(row: dict[str, Any]) -> dict[str, Any]:
         "geometria": _parse_json_object(row.get("GeometriaJson")) or {},
         "rotulo": (row.get("Rotulo") or "").strip() or None,
         "cor": (row.get("Cor") or "red").strip() or "red",
+        "espelhar": bool(int(row.get("Espelhar") or 0)),
+        "paginaOrigem": int(row.get("PaginaOrigem") or 0),
+        "cropVersao": int(row.get("CropVersao") or 1),
         "pontoRegistro": row.get("PontoRegistro"),
         "dataRegistro": _iso(row.get("DataRegistro")),
         "dataAtualizacao": _iso(row.get("DataAtualizacao")),
@@ -381,9 +405,8 @@ def _row_to_mark(row: dict[str, Any]) -> dict[str, Any]:
 
 def list_marks(sessao_id: int) -> list[dict[str, Any]]:
     rows = db.execute_query(
-        """
-        SELECT ID, SessaoID, Pagina, Tipo, GeometriaJson, Rotulo, Cor,
-               PontoRegistro, DataRegistro, DataAtualizacao
+        f"""
+        SELECT {_SELECT_MARCA}
         FROM tabAnaliseLabMarca
         WHERE SessaoID = %(sid)s
         ORDER BY ID ASC
@@ -395,9 +418,8 @@ def list_marks(sessao_id: int) -> list[dict[str, Any]]:
 
 def get_mark(mark_id: int) -> Optional[dict[str, Any]]:
     rows = db.execute_query(
-        """
-        SELECT ID, SessaoID, Pagina, Tipo, GeometriaJson, Rotulo, Cor,
-               PontoRegistro, DataRegistro, DataAtualizacao
+        f"""
+        SELECT {_SELECT_MARCA}
         FROM tabAnaliseLabMarca
         WHERE ID = %(id)s
         LIMIT 1
@@ -479,6 +501,8 @@ def add_mark(
     rotulo: Optional[str],
     cor: str,
     ponto: Optional[int],
+    espelhar: bool = False,
+    pagina_origem: int = 0,
 ) -> dict[str, Any]:
     tipo_n = (tipo or "").strip().lower()
     if tipo_n not in MARK_TYPES:
@@ -488,13 +512,18 @@ def add_mark(
         raise ValueError("Cor inválida.")
     if int(pagina) < 0:
         raise ValueError("Página inválida.")
+    if int(pagina_origem) < 0:
+        raise ValueError("Página de origem inválida.")
     geom = _validate_geometry(tipo_n, geometria)
     rotulo_n = (rotulo or "").strip()[:120] or None
+    session = get_session_by_id(sessao_id)
+    crop_versao = int((session or {}).get("cropVersao") or 1)
     db.execute_query(
         """
         INSERT INTO tabAnaliseLabMarca
-            (SessaoID, Pagina, Tipo, GeometriaJson, Rotulo, Cor, PontoRegistro)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+            (SessaoID, Pagina, Tipo, GeometriaJson, Rotulo, Cor,
+             Espelhar, PaginaOrigem, CropVersao, PontoRegistro)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             int(sessao_id),
@@ -503,13 +532,15 @@ def add_mark(
             json.dumps(geom, ensure_ascii=False),
             rotulo_n,
             cor_n,
+            1 if espelhar else 0,
+            int(pagina_origem),
+            crop_versao,
             ponto,
         ),
     )
     rows = db.execute_query(
-        """
-        SELECT ID, SessaoID, Pagina, Tipo, GeometriaJson, Rotulo, Cor,
-               PontoRegistro, DataRegistro, DataAtualizacao
+        f"""
+        SELECT {_SELECT_MARCA}
         FROM tabAnaliseLabMarca
         WHERE SessaoID = %(sid)s
         ORDER BY ID DESC
@@ -529,6 +560,8 @@ def update_mark(
     geometria: Optional[dict[str, Any]] = None,
     rotulo: Optional[str] = None,
     cor: Optional[str] = None,
+    espelhar: Optional[bool] = None,
+    pagina_origem: Optional[int] = None,
 ) -> Optional[dict[str, Any]]:
     current = get_mark(mark_id)
     if not current:
@@ -549,10 +582,21 @@ def update_mark(
         if rotulo is not None
         else current.get("rotulo")
     )
+    espelhar_n = (
+        bool(espelhar) if espelhar is not None else bool(current.get("espelhar"))
+    )
+    origem_n = (
+        int(pagina_origem)
+        if pagina_origem is not None
+        else int(current.get("paginaOrigem") or 0)
+    )
+    if origem_n < 0:
+        raise ValueError("Página de origem inválida.")
     db.execute_query(
         """
         UPDATE tabAnaliseLabMarca
-        SET Pagina = %s, GeometriaJson = %s, Rotulo = %s, Cor = %s
+        SET Pagina = %s, GeometriaJson = %s, Rotulo = %s, Cor = %s,
+            Espelhar = %s, PaginaOrigem = %s
         WHERE ID = %s
         """,
         (
@@ -560,6 +604,8 @@ def update_mark(
             json.dumps(geom, ensure_ascii=False),
             rotulo_n,
             cor_n,
+            1 if espelhar_n else 0,
+            origem_n,
             int(mark_id),
         ),
     )

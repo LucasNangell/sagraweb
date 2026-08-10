@@ -20,6 +20,7 @@ from services.analise_lab_job_service import (
     cancel_analise_lab_render,
     enqueue_analise_lab_render,
 )
+from services.prova_web_crop_service import build_pdf_crop_meta
 from services.prova_web_render_service import (
     LAB_PASTA_RENDER,
     MODE_CAPA_MIOLO,
@@ -150,6 +151,8 @@ class AnaliseLabMarkCreate(BaseModel):
     geometria: dict[str, Any]
     rotulo: Optional[str] = Field(None, max_length=120)
     cor: str = Field("red", max_length=32)
+    espelhar: bool = False
+    pagina_origem: int = 0
 
 
 class AnaliseLabMarkUpdate(BaseModel):
@@ -157,6 +160,8 @@ class AnaliseLabMarkUpdate(BaseModel):
     geometria: Optional[dict[str, Any]] = None
     rotulo: Optional[str] = Field(None, max_length=120)
     cor: Optional[str] = Field(None, max_length=32)
+    espelhar: Optional[bool] = None
+    pagina_origem: Optional[int] = None
 
 
 @router.get("/os/{ano}/{os_id}/analise-lab")
@@ -220,6 +225,57 @@ def list_analise_lab_files(
         "files": files,
         "truncated": truncated,
     }
+
+
+@router.get("/os/{ano}/{os_id}/analise-lab/pdf")
+def get_analise_lab_source_pdf(
+    ano: int,
+    os_id: int,
+    request: Request,
+    path: str = Query(..., min_length=1, max_length=512),
+):
+    """Serve um PDF da pasta da OS para preview (pdf.js) no assistente de crop."""
+    _require_analise(request)
+    folder = _require_os_folder(ano, os_id)
+    try:
+        full = resolve_os_relative_pdf(folder, path)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return FileResponse(
+        full,
+        media_type="application/pdf",
+        filename=os.path.basename(full),
+        content_disposition_type="inline",
+    )
+
+
+@router.get("/os/{ano}/{os_id}/analise-lab/crop-meta")
+def get_analise_lab_crop_meta(
+    ano: int,
+    os_id: int,
+    request: Request,
+    path: str = Query(..., min_length=1, max_length=512),
+    detect_marks: bool = Query(False),
+):
+    """Metadados de página + sugestão de crop (TrimBox → BleedBox → 0)."""
+    _require_analise(request)
+    folder = _require_os_folder(ano, os_id)
+    try:
+        full = resolve_os_relative_pdf(folder, path)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        meta = build_pdf_crop_meta(full, detect_marks=detect_marks)
+    except Exception as exc:
+        logger.error("Análise Lab crop-meta falhou (%s/%s): %s", os_id, ano, exc)
+        raise HTTPException(
+            status_code=500, detail="Falha ao ler metadados do PDF."
+        ) from exc
+    return {"ano": ano, "os": os_id, "path": path.replace("\\", "/"), **meta}
 
 
 @router.put("/os/{ano}/{os_id}/analise-lab")
@@ -466,6 +522,8 @@ def create_marca(
             rotulo=body.rotulo,
             cor=body.cor,
             ponto=_session_ponto(request),
+            espelhar=body.espelhar,
+            pagina_origem=body.pagina_origem,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -494,6 +552,8 @@ def patch_marca(
             geometria=body.geometria,
             rotulo=body.rotulo,
             cor=body.cor,
+            espelhar=body.espelhar,
+            pagina_origem=body.pagina_origem,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

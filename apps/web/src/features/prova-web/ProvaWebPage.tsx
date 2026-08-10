@@ -20,7 +20,9 @@ import {
   fetchProvaWebManifest,
   provaWebPageUrl,
   reprocessProvaWeb,
+  type ProvaWebInfo,
   type ProvaWebManifest,
+  type ProvaWebRecord,
   type ProvaWebRenderStatus,
 } from "@/api/provaWeb";
 import { ClienteProofMockupPanel } from "@/features/cliente/components/proof/ClienteProofMockupPanel";
@@ -50,6 +52,8 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
   const [linkCopied, setLinkCopied] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  /** true desde o clique em gerar até o servidor confirmar ready/error. */
+  const [optimisticGenerating, setOptimisticGenerating] = useState(false);
   const [approvedModal, setApprovedModal] = useState<{
     portalUrl: string;
     versao: number;
@@ -61,6 +65,7 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
     retry: 1,
     refetchInterval: (query) => {
       const status = query.state.data?.record?.renderStatus;
+      if (optimisticGenerating) return 1500;
       return isRenderInFlight(status) ? 2000 : false;
     },
   });
@@ -69,13 +74,15 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
   const record = info?.record ?? null;
   const hasRecord = Boolean(record);
   const isDraft = Boolean(record?.isDraft || record?.status === "rascunho");
-  const showPicker = pickerOpen || (Boolean(info) && !hasRecord);
+  const showPicker =
+    !optimisticGenerating && (pickerOpen || (Boolean(info) && !hasRecord));
   const portalUrl = info?.portalUrl?.trim() || "";
   const renderStatus = record?.renderStatus;
-  const renderInFlight = isRenderInFlight(renderStatus);
-  const renderReady = isRenderReady(renderStatus);
+  const renderInFlight =
+    optimisticGenerating || isRenderInFlight(renderStatus);
+  const renderReady = !optimisticGenerating && isRenderReady(renderStatus);
   const renderError =
-    renderStatus === "error"
+    !optimisticGenerating && renderStatus === "error"
       ? record?.renderError?.trim() || "Falha ao gerar as páginas da prova."
       : null;
   const progress = record?.renderProgress;
@@ -104,6 +111,22 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
     document.title = `Prova WEB — OS ${osId}/${ano}`;
   }, [ano, osId]);
 
+  useEffect(() => {
+    if (!optimisticGenerating) return;
+    if (
+      renderStatus === "ready" ||
+      renderStatus === "error" ||
+      renderStatus === "cancelled" ||
+      renderStatus === "running" ||
+      renderStatus === "pending"
+    ) {
+      // Servidor já assumiu o ciclo — manter UI de gerando só se pending/running.
+      if (renderStatus === "ready" || renderStatus === "error" || renderStatus === "cancelled") {
+        setOptimisticGenerating(false);
+      }
+    }
+  }, [optimisticGenerating, renderStatus]);
+
   const invalidateProvaQueries = () => {
     void queryClient.invalidateQueries({ queryKey: ["prova-web-info", ano, osId] });
     void queryClient.invalidateQueries({
@@ -111,10 +134,39 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
     });
   };
 
-  const handleSaved = () => {
+  const handleGenerateStarted = () => {
     setPickerOpen(false);
+    setOptimisticGenerating(true);
     setActionError(null);
+    // Evita mostrar viewer antigo enquanto a nova geração sobe.
+    queryClient.removeQueries({ queryKey: ["prova-web-manifest", ano, osId] });
+  };
+
+  const handleSaved = (saved: ProvaWebRecord) => {
+    setPickerOpen(false);
+    setOptimisticGenerating(true);
+    setActionError(null);
+    queryClient.setQueryData(
+      ["prova-web-info", ano, osId],
+      (prev: ProvaWebInfo | undefined) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          record: {
+            ...saved,
+            renderStatus: saved.renderStatus || "pending",
+          },
+          versionCount: Math.max(prev.versionCount ?? 0, saved.versao ?? 0),
+        };
+      },
+    );
     invalidateProvaQueries();
+  };
+
+  const handleSaveFailed = (message: string) => {
+    setOptimisticGenerating(false);
+    setActionError(message);
+    setPickerOpen(true);
   };
 
   const handleCopyLink = async () => {
@@ -342,12 +394,14 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
             osId={osId}
             info={info}
             onSaved={handleSaved}
+            onGenerateStarted={handleGenerateStarted}
+            onSaveFailed={handleSaveFailed}
             onViewExisting={() => setPickerOpen(false)}
             onCancel={hasRecord ? () => setPickerOpen(false) : undefined}
           />
         )}
 
-        {info && !showPicker && hasRecord && (
+        {info && !showPicker && (hasRecord || optimisticGenerating) && (
           <>
             {renderInFlight && (
               <CenteredState>
@@ -356,7 +410,9 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
                   aria-hidden
                 />
                 <p className="text-sm text-neutral-600">
-                  Gerando as páginas da prova em segundo plano…
+                  {optimisticGenerating && !isRenderInFlight(renderStatus)
+                    ? "Iniciando a geração da prova…"
+                    : "Gerando as páginas da prova em segundo plano…"}
                 </p>
                 {progressLabel ? (
                   <p className="text-xs font-medium text-neutral-700">

@@ -30,6 +30,10 @@ interface ProvaWebFilePickerProps {
   osId: number;
   info: ProvaWebInfo;
   onSaved: (record: ProvaWebRecord, portalUrl?: string | null) => void;
+  /** Disparado no clique de confirmar, antes do PUT — feedback imediato. */
+  onGenerateStarted?: () => void;
+  /** Falha após onGenerateStarted (picker pode já ter fechado). */
+  onSaveFailed?: (message: string) => void;
   /** Volta ao visualizador da última prova sem gerar nova. */
   onViewExisting?: () => void;
   /** Presente apenas quando já existe registro (permite voltar sem salvar). */
@@ -43,6 +47,8 @@ export function ProvaWebFilePicker({
   osId,
   info,
   onSaved,
+  onGenerateStarted,
+  onSaveFailed,
   onViewExisting,
   onCancel,
 }: ProvaWebFilePickerProps) {
@@ -133,6 +139,8 @@ export function ProvaWebFilePicker({
     setAskExisting(false);
     setSaving(true);
     setSaveError(null);
+    // Feedback imediato: a página já mostra "Gerando…" sem esperar o PUT.
+    onGenerateStarted?.();
     try {
       const res = await saveProvaWebRecord(ano, osId, {
         modo,
@@ -153,9 +161,10 @@ export function ProvaWebFilePicker({
       });
       finishSaved(res.record, res.portalUrl);
     } catch (err) {
-      setSaveError(
-        err instanceof Error ? err.message : "Erro ao salvar o arquivo da prova.",
-      );
+      const message =
+        err instanceof Error ? err.message : "Erro ao salvar o arquivo da prova.";
+      setSaveError(message);
+      onSaveFailed?.(message);
     } finally {
       setSaving(false);
     }

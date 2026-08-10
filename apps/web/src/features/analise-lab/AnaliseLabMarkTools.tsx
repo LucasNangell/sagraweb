@@ -1,4 +1,14 @@
-import { useMemo } from "react";
+import {
+  ArrowUpRight,
+  Circle,
+  Grid3X3,
+  MousePointer2,
+  Pencil,
+  Ruler,
+  Square,
+  Type,
+} from "lucide-react";
+import { useMemo, type ReactNode } from "react";
 
 import type {
   AnaliseLabEdge,
@@ -22,16 +32,24 @@ export type AnaliseLabTool =
   | "retangulo"
   | "ponto"
   | "medida"
-  | "grade";
+  | "grade"
+  | "seta"
+  | "circulo"
+  | "texto"
+  | "livre";
 
-const TOOLS: Array<{ id: AnaliseLabTool; label: string }> = [
-  { id: "select", label: "Selecionar" },
-  { id: "offset_corte", label: "Offset" },
-  { id: "faixa", label: "Faixa" },
-  { id: "retangulo", label: "Retângulo" },
-  { id: "ponto", label: "Ponto" },
-  { id: "medida", label: "Medir" },
-  { id: "grade", label: "Grade" },
+const TOOLS: Array<{ id: AnaliseLabTool; label: string; icon: ReactNode }> = [
+  { id: "select", label: "Selecionar", icon: <MousePointer2 className="size-3.5" /> },
+  { id: "offset_corte", label: "Offset", icon: <Ruler className="size-3.5" /> },
+  { id: "faixa", label: "Faixa", icon: <Square className="size-3.5" /> },
+  { id: "retangulo", label: "Retângulo", icon: <Square className="size-3.5" /> },
+  { id: "circulo", label: "Círculo", icon: <Circle className="size-3.5" /> },
+  { id: "seta", label: "Seta", icon: <ArrowUpRight className="size-3.5" /> },
+  { id: "ponto", label: "Ponto", icon: <Circle className="size-3.5" /> },
+  { id: "medida", label: "Medir", icon: <Ruler className="size-3.5" /> },
+  { id: "texto", label: "Texto", icon: <Type className="size-3.5" /> },
+  { id: "livre", label: "Livre", icon: <Pencil className="size-3.5" /> },
+  { id: "grade", label: "Grade", icon: <Grid3X3 className="size-3.5" /> },
 ];
 
 interface AnaliseLabMarkToolsProps {
@@ -55,13 +73,15 @@ interface AnaliseLabMarkToolsProps {
   onRotuloChange: (v: string) => void;
   stepMm: number;
   onStepMmChange: (v: number) => void;
+  espessura: number;
+  onEspessuraChange: (v: number) => void;
   onAddOffset: () => void;
   onAddFaixa: () => void;
   onAddGrade: () => void;
   busy?: boolean;
 }
 
-/** Controles da paleta flutuante (sem aside / lista). */
+/** Controles da paleta (sem aside / lista). */
 export function AnaliseLabMarkTools({
   tool,
   onToolChange,
@@ -83,6 +103,8 @@ export function AnaliseLabMarkTools({
   onRotuloChange,
   stepMm,
   onStepMmChange,
+  espessura,
+  onEspessuraChange,
   onAddOffset,
   onAddFaixa,
   onAddGrade,
@@ -105,8 +127,15 @@ export function AnaliseLabMarkTools({
 
   const showMirror =
     multiPageScope &&
-    (tool === "offset_corte" || tool === "faixa" || tool === "retangulo");
+    (tool === "offset_corte" ||
+      tool === "faixa" ||
+      tool === "retangulo" ||
+      tool === "seta" ||
+      tool === "circulo" ||
+      tool === "texto");
   const insertDisabled = busy || (!applyAllPages && Boolean(pageSpecError));
+  const showStroke =
+    tool === "seta" || tool === "circulo" || tool === "livre";
 
   return (
     <div className="flex flex-col gap-2 text-sm">
@@ -116,14 +145,16 @@ export function AnaliseLabMarkTools({
             key={t.id}
             type="button"
             disabled={busy}
+            title={t.label}
             onClick={() => onToolChange(t.id)}
             className={
               tool === t.id
-                ? "rounded bg-primary-green px-2 py-1 text-xs font-medium text-white"
-                : "rounded border border-sagra-border bg-white px-2 py-1 text-xs text-neutral-700 hover:bg-neutral-50"
+                ? "inline-flex items-center gap-1 rounded bg-primary-green px-1.5 py-1 text-[10px] font-medium text-white"
+                : "inline-flex items-center gap-1 rounded border border-sagra-border bg-white px-1.5 py-1 text-[10px] text-neutral-700 hover:bg-neutral-50"
             }
           >
-            {t.label}
+            {t.icon}
+            <span className="hidden sm:inline">{t.label}</span>
           </button>
         ))}
       </div>
@@ -152,6 +183,21 @@ export function AnaliseLabMarkTools({
           className="rounded border border-sagra-border px-2 py-1.5"
         />
       </label>
+
+      {showStroke ? (
+        <label className="flex flex-col gap-1 text-xs text-neutral-600">
+          Espessura
+          <select
+            value={espessura}
+            onChange={(e) => onEspessuraChange(Number(e.target.value) || 2)}
+            className="rounded border border-sagra-border px-2 py-1.5"
+          >
+            <option value={1}>Fina</option>
+            <option value={2}>Média</option>
+            <option value={3}>Grossa</option>
+          </select>
+        </label>
+      ) : null}
 
       <label className="flex items-center gap-2 text-xs text-neutral-700">
         <input
@@ -268,12 +314,31 @@ export function AnaliseLabMarkTools({
         </div>
       )}
 
-      {(tool === "retangulo" || tool === "ponto" || tool === "medida") && (
+      {(tool === "retangulo" ||
+        tool === "ponto" ||
+        tool === "medida" ||
+        tool === "seta" ||
+        tool === "circulo") && (
         <p className="text-xs text-neutral-500">
           Clique na página para posicionar
-          {tool === "medida" || tool === "retangulo" ? " (dois cliques)." : "."}
+          {tool === "medida" ||
+          tool === "retangulo" ||
+          tool === "seta" ||
+          tool === "circulo"
+            ? " (dois cliques)."
+            : "."}
         </p>
       )}
+      {tool === "texto" ? (
+        <p className="text-xs text-neutral-500">
+          Clique na página e digite o texto (Enter para gravar).
+        </p>
+      ) : null}
+      {tool === "livre" ? (
+        <p className="text-xs text-neutral-500">
+          Arraste na página para desenhar o traço livre.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -290,4 +355,8 @@ type AnaliseLabMarkTipoOrNull =
   | "ponto"
   | "medida"
   | "grade"
+  | "seta"
+  | "circulo"
+  | "texto"
+  | "livre"
   | null;

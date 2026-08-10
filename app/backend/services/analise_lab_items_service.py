@@ -331,6 +331,10 @@ def delete_item(item_id: int) -> bool:
     if not before:
         return False
     db.execute_query(
+        "UPDATE tabAnaliseLabMarca SET ItemID = NULL WHERE ItemID = %(id)s",
+        {"id": int(item_id)},
+    )
+    db.execute_query(
         "DELETE FROM tabAnaliseLabItem WHERE ID = %(id)s",
         {"id": int(item_id)},
     )

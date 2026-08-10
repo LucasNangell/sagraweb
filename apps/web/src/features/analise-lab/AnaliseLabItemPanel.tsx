@@ -1,27 +1,42 @@
+import { Link2, Unlink } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import type {
   AnaliseLabItem,
   AnaliseLabItemEscopo,
+  AnaliseLabMark,
   UpdateAnaliseLabItemPayload,
 } from "@/api/analiseLab";
 import { AnaliseHtmlEditor } from "@/features/analise/components/AnaliseHtmlEditor";
-import { validatePageSpec } from "./analiseLabPageSpec";
+import { labelTipo } from "./analiseLabLabels";
+import { markScopeLabel, validatePageSpec } from "./analiseLabPageSpec";
 
 interface AnaliseLabItemPanelProps {
   item: AnaliseLabItem;
+  marks: AnaliseLabMark[];
+  linkingActive: boolean;
   busy?: boolean;
   onSave: (payload: UpdateAnaliseLabItemPayload) => void;
   onClose: () => void;
   onDelete: () => void;
+  onStartLinking: () => void;
+  onStopLinking: () => void;
+  onUnlinkMark: (markId: number) => void;
+  onDeleteMark: (markId: number) => void;
 }
 
 export function AnaliseLabItemPanel({
   item,
+  marks,
+  linkingActive,
   busy,
   onSave,
   onClose,
   onDelete,
+  onStartLinking,
+  onStopLinking,
+  onUnlinkMark,
+  onDeleteMark,
 }: AnaliseLabItemPanelProps) {
   const [titulo, setTitulo] = useState(item.titulo);
   const [html, setHtml] = useState(item.htmlSnapshot || "");
@@ -48,8 +63,13 @@ export function AnaliseLabItemPanel({
     return validatePageSpec(pageSpec);
   }, [escopo, pageSpec]);
 
+  const linkedMarks = useMemo(
+    () => marks.filter((m) => m.itemId === item.id),
+    [item.id, marks],
+  );
+
   return (
-    <aside className="flex w-80 shrink-0 flex-col gap-2 overflow-y-auto border-l border-sagra-border bg-white p-3 text-sm">
+    <aside className="flex w-[544px] max-w-[45vw] shrink-0 flex-col gap-2 overflow-y-auto border-l border-sagra-border bg-white p-3 text-sm">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-xs font-semibold uppercase text-neutral-600">Problema</h2>
         <button type="button" className="text-xs text-neutral-500" onClick={onClose}>
@@ -120,7 +140,7 @@ export function AnaliseLabItemPanel({
         </label>
       ) : null}
 
-      <div className="max-h-[45vh] overflow-auto rounded border border-sagra-border">
+      <div className="max-h-[60vh] overflow-auto rounded border border-sagra-border">
         <AnaliseHtmlEditor
           html={html}
           onChange={setHtml}
@@ -138,6 +158,75 @@ export function AnaliseLabItemPanel({
           className="rounded border border-sagra-border px-2 py-1.5"
         />
       </label>
+
+      <div className="space-y-1.5 rounded border border-sagra-border bg-neutral-50 p-2">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-[11px] font-semibold uppercase text-neutral-600">
+            Marca vinculada
+          </h3>
+          {linkingActive ? (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-900"
+              onClick={onStopLinking}
+            >
+              <Unlink className="size-3" aria-hidden />
+              Concluir marcação
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={busy}
+              className="inline-flex items-center gap-1 rounded bg-secondary-blue px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
+              onClick={onStartLinking}
+            >
+              <Link2 className="size-3" aria-hidden />
+              Marcar no arquivo
+            </button>
+          )}
+        </div>
+        {linkingActive ? (
+          <p className="text-[11px] text-amber-800">
+            Próximas marcas serão vinculadas a este problema.
+          </p>
+        ) : null}
+        {linkedMarks.length ? (
+          <ul className="space-y-0.5 text-[11px]">
+            {linkedMarks.map((m) => (
+              <li
+                key={m.id}
+                className="flex items-center gap-1 rounded bg-white px-1 py-0.5"
+              >
+                <span className="min-w-0 flex-1 truncate">
+                  {labelTipo(m.tipo)}
+                  {m.rotulo ? ` · ${m.rotulo}` : ""}
+                  {` · ${markScopeLabel(m)}`}
+                </span>
+                <button
+                  type="button"
+                  className="text-neutral-500 hover:text-neutral-800"
+                  title="Desvincular"
+                  disabled={busy}
+                  onClick={() => onUnlinkMark(m.id)}
+                >
+                  <Unlink className="size-3" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  className="text-sagra-danger"
+                  title="Excluir marca"
+                  disabled={busy}
+                  onClick={() => onDeleteMark(m.id)}
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-[11px] text-neutral-500">Nenhuma marca vinculada.</p>
+        )}
+      </div>
 
       <div className="flex gap-1">
         <button

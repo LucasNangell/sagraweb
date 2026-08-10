@@ -46,6 +46,10 @@ MARK_TYPES = frozenset(
         "ponto",
         "medida",
         "grade",
+        "seta",
+        "circulo",
+        "texto",
+        "livre",
     }
 )
 MARK_COLORS = frozenset(
@@ -63,7 +67,7 @@ _SELECT_SESSAO = """
 
 _SELECT_MARCA = """
     ID, SessaoID, Pagina, Paginas, Tipo, GeometriaJson, Rotulo, Cor,
-    Espelhar, PaginaOrigem, CropVersao,
+    Espelhar, PaginaOrigem, CropVersao, ItemID,
     PontoRegistro, DataRegistro, DataAtualizacao
 """
 
@@ -468,6 +472,7 @@ def resolve_session_sources(
 
 def _row_to_mark(row: dict[str, Any]) -> dict[str, Any]:
     paginas_raw = (row.get("Paginas") or "").strip() or None
+    item_raw = row.get("ItemID")
     return {
         "id": int(row.get("ID") or 0),
         "sessaoId": int(row.get("SessaoID") or 0),
@@ -480,10 +485,21 @@ def _row_to_mark(row: dict[str, Any]) -> dict[str, Any]:
         "espelhar": bool(int(row.get("Espelhar") or 0)),
         "paginaOrigem": int(row.get("PaginaOrigem") or 0),
         "cropVersao": int(row.get("CropVersao") or 1),
+        "itemId": int(item_raw) if item_raw is not None else None,
         "pontoRegistro": row.get("PontoRegistro"),
         "dataRegistro": _iso(row.get("DataRegistro")),
         "dataAtualizacao": _iso(row.get("DataAtualizacao")),
     }
+
+
+def _clamp_espessura(geom: dict[str, Any]) -> int:
+    try:
+        esp = int(geom.get("espessura") or 2)
+    except (TypeError, ValueError):
+        esp = 2
+    if esp < 1 or esp > 3:
+        raise ValueError("espessura deve estar entre 1 e 3.")
+    return esp
 
 
 def list_marks(sessao_id: int) -> list[dict[str, Any]]:
@@ -572,6 +588,71 @@ def _validate_geometry(tipo: str, geom: dict[str, Any]) -> dict[str, Any]:
         if step < 1 or step > 50:
             raise ValueError("stepMm deve estar entre 1 e 50.")
         return {"stepMm": round(step, 3)}
+    if tipo == "seta":
+        x1 = float(geom.get("x1Mm") or 0)
+        y1 = float(geom.get("y1Mm") or 0)
+        x2 = float(geom.get("x2Mm") or 0)
+        y2 = float(geom.get("y2Mm") or 0)
+        for v in (x1, y1, x2, y2):
+            if v < 0 or v > 2000:
+                raise ValueError("Seta inválida.")
+        return {
+            "x1Mm": round(x1, 3),
+            "y1Mm": round(y1, 3),
+            "x2Mm": round(x2, 3),
+            "y2Mm": round(y2, 3),
+            "espessura": _clamp_espessura(geom),
+        }
+    if tipo == "circulo":
+        x = float(geom.get("xMm") or 0)
+        y = float(geom.get("yMm") or 0)
+        w = float(geom.get("wMm") or 0)
+        h = float(geom.get("hMm") or 0)
+        if w <= 0 or h <= 0 or x < 0 or y < 0 or x > 2000 or y > 2000:
+            raise ValueError("Círculo inválido.")
+        return {
+            "xMm": round(x, 3),
+            "yMm": round(y, 3),
+            "wMm": round(w, 3),
+            "hMm": round(h, 3),
+            "espessura": _clamp_espessura(geom),
+        }
+    if tipo == "texto":
+        x = float(geom.get("xMm") or 0)
+        y = float(geom.get("yMm") or 0)
+        texto = str(geom.get("texto") or "").strip()
+        if x < 0 or y < 0 or x > 2000 or y > 2000:
+            raise ValueError("Texto inválido.")
+        if not texto or len(texto) > 500:
+            raise ValueError("texto deve ter entre 1 e 500 caracteres.")
+        try:
+            tamanho = float(geom.get("tamanhoPt") or 12)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("tamanhoPt inválido.") from exc
+        if tamanho < 6 or tamanho > 96:
+            raise ValueError("tamanhoPt deve estar entre 6 e 96.")
+        return {
+            "xMm": round(x, 3),
+            "yMm": round(y, 3),
+            "texto": texto,
+            "tamanhoPt": round(tamanho, 1),
+        }
+    if tipo == "livre":
+        raw_points = geom.get("points")
+        if not isinstance(raw_points, list) or len(raw_points) < 2:
+            raise ValueError("Traço livre precisa de ao menos 2 pontos.")
+        if len(raw_points) > 2000:
+            raise ValueError("Traço livre limitado a 2000 pontos.")
+        points: list[list[float]] = []
+        for pt in raw_points:
+            if not isinstance(pt, (list, tuple)) or len(pt) < 2:
+                raise ValueError("Ponto inválido no traço livre.")
+            x = float(pt[0])
+            y = float(pt[1])
+            if x < 0 or y < 0 or x > 2000 or y > 2000:
+                raise ValueError("Ponto inválido no traço livre.")
+            points.append([round(x, 3), round(y, 3)])
+        return {"points": points, "espessura": _clamp_espessura(geom)}
     raise ValueError(f"Tipo de marca inválido: {tipo}")
 
 
@@ -587,6 +668,7 @@ def add_mark(
     espelhar: bool = False,
     pagina_origem: int = 0,
     paginas: Optional[str] = None,
+    item_id: Optional[int] = None,
 ) -> dict[str, Any]:
     tipo_n = (tipo or "").strip().lower()
     if tipo_n not in MARK_TYPES:
@@ -599,14 +681,17 @@ def add_mark(
     pagina_n, paginas_n = _normalize_paginas(pagina=pagina, paginas=paginas)
     geom = _validate_geometry(tipo_n, geometria)
     rotulo_n = (rotulo or "").strip()[:120] or None
+    item_n = int(item_id) if item_id is not None else None
+    if item_n is not None and item_n < 1:
+        raise ValueError("ItemID inválido.")
     session = get_session_by_id(sessao_id)
     crop_versao = int((session or {}).get("cropVersao") or 1)
     db.execute_query(
         """
         INSERT INTO tabAnaliseLabMarca
             (SessaoID, Pagina, Paginas, Tipo, GeometriaJson, Rotulo, Cor,
-             Espelhar, PaginaOrigem, CropVersao, PontoRegistro)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             Espelhar, PaginaOrigem, CropVersao, ItemID, PontoRegistro)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             int(sessao_id),
@@ -619,6 +704,7 @@ def add_mark(
             1 if espelhar else 0,
             int(pagina_origem),
             crop_versao,
+            item_n,
             ponto,
         ),
     )
@@ -647,6 +733,8 @@ def update_mark(
     espelhar: Optional[bool] = None,
     pagina_origem: Optional[int] = None,
     paginas: Optional[str] = None,
+    item_id: Optional[int] = None,
+    clear_item: bool = False,
 ) -> Optional[dict[str, Any]]:
     current = get_mark(mark_id)
     if not current:
@@ -692,11 +780,19 @@ def update_mark(
     )
     if origem_n < 0:
         raise ValueError("Página de origem inválida.")
+    if clear_item:
+        item_n = None
+    elif item_id is not None:
+        item_n = int(item_id)
+        if item_n < 1:
+            raise ValueError("ItemID inválido.")
+    else:
+        item_n = current.get("itemId")
     db.execute_query(
         """
         UPDATE tabAnaliseLabMarca
         SET Pagina = %s, Paginas = %s, GeometriaJson = %s, Rotulo = %s, Cor = %s,
-            Espelhar = %s, PaginaOrigem = %s
+            Espelhar = %s, PaginaOrigem = %s, ItemID = %s
         WHERE ID = %s
         """,
         (
@@ -707,6 +803,7 @@ def update_mark(
             cor_n,
             1 if espelhar_n else 0,
             origem_n,
+            item_n,
             int(mark_id),
         ),
     )

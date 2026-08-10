@@ -329,6 +329,113 @@ export function AnaliseLabMarksLayer({
           }
           return <g key={mark.id}>{lines}</g>;
         }
+        if (mark.tipo === "seta") {
+          const x1 = Number(g.x1Mm) * sx;
+          const y1 = Number(g.y1Mm) * sy;
+          const x2 = Number(g.x2Mm) * sx;
+          const y2 = Number(g.y2Mm) * sy;
+          const lw = Math.max(1, Number(g.espessura) || 2);
+          const headLen = Math.max(10, lw * 5);
+          const angle = Math.atan2(y2 - y1, x2 - x1);
+          const ax1 = x2 - headLen * Math.cos(angle - Math.PI / 6);
+          const ay1 = y2 - headLen * Math.sin(angle - Math.PI / 6);
+          const ax2 = x2 - headLen * Math.cos(angle + Math.PI / 6);
+          const ay2 = y2 - headLen * Math.sin(angle + Math.PI / 6);
+          return (
+            <g key={mark.id}>
+              <line
+                x1={x1}
+                y1={y1}
+                x2={x2}
+                y2={y2}
+                stroke={color}
+                strokeWidth={selected ? lw + 1 : lw}
+              />
+              <polygon
+                points={`${x2},${y2} ${ax1},${ay1} ${ax2},${ay2}`}
+                fill={color}
+              />
+              {mark.rotulo ? (
+                <text
+                  x={(x1 + x2) / 2 + 4}
+                  y={(y1 + y2) / 2 - 4}
+                  fill={color}
+                  fontSize={11}
+                >
+                  {mark.rotulo}
+                </text>
+              ) : null}
+            </g>
+          );
+        }
+        if (mark.tipo === "circulo") {
+          const x = Number(g.xMm) * sx;
+          const y = Number(g.yMm) * sy;
+          const w = Math.max(1, Number(g.wMm) * sx);
+          const h = Math.max(1, Number(g.hMm) * sy);
+          const lw = Math.max(1, Number(g.espessura) || 2);
+          return (
+            <g key={mark.id}>
+              <ellipse
+                cx={x + w / 2}
+                cy={y + h / 2}
+                rx={w / 2}
+                ry={h / 2}
+                fill="none"
+                stroke={color}
+                strokeWidth={selected ? lw + 1 : lw}
+              />
+              {mark.rotulo ? (
+                <text x={x + 2} y={y - 4} fill={color} fontSize={11}>
+                  {mark.rotulo}
+                </text>
+              ) : null}
+            </g>
+          );
+        }
+        if (mark.tipo === "texto") {
+          const x = Number(g.xMm) * sx;
+          const y = Number(g.yMm) * sy;
+          const fontSize = Math.max(8, (Number(g.tamanhoPt) || 12) * (sx * 0.35));
+          const label = String(g.texto || mark.rotulo || "");
+          return (
+            <g key={mark.id}>
+              <text
+                x={x}
+                y={y}
+                fill={color}
+                fontSize={fontSize}
+                fontWeight={selected ? 700 : 500}
+              >
+                {label}
+              </text>
+            </g>
+          );
+        }
+        if (mark.tipo === "livre") {
+          const pts = Array.isArray(g.points) ? g.points : [];
+          if (pts.length < 2) return null;
+          const lw = Math.max(1, Number(g.espessura) || 2);
+          const d = pts
+            .map((pt, i) => {
+              const x = Number(pt?.[0]) * sx;
+              const y = Number(pt?.[1]) * sy;
+              return `${i === 0 ? "M" : "L"}${x},${y}`;
+            })
+            .join(" ");
+          return (
+            <g key={mark.id}>
+              <path
+                d={d}
+                fill="none"
+                stroke={color}
+                strokeWidth={selected ? lw + 1 : lw}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </g>
+          );
+        }
         return null;
       })}
     </svg>

@@ -43,6 +43,14 @@ interface ProvaWebFlipbookProps {
     page: ProvaWebPageMeta,
     size: { width: number; height: number },
   ) => ReactNode;
+  /** Overlay no slot do estágio (ex.: balões fora da página). */
+  renderStageOverlay?: (ctx: {
+    visiblePages: ProvaWebPageMeta[];
+    pageSize: { width: number; height: number };
+    slotWidth: number;
+    isSpread: boolean;
+    flipping: boolean;
+  }) => ReactNode;
   /** Navega para a página lógica (manifest.page) quando o nonce muda. */
   pageTarget?: { page: number; nonce: number } | null;
   /** Página lógica visível (esquerda do spread) após virar ou aplicar alvo. */
@@ -55,6 +63,7 @@ export function ProvaWebFlipbook({
   manifest,
   buildPageUrl,
   renderPageOverlay,
+  renderStageOverlay,
   pageTarget,
   onPageChange,
 }: ProvaWebFlipbookProps) {
@@ -76,6 +85,7 @@ export function ProvaWebFlipbook({
       manifest={manifest}
       buildPageUrl={buildPageUrl}
       renderPageOverlay={renderPageOverlay}
+      renderStageOverlay={renderStageOverlay}
       pageTarget={pageTarget}
       onPageChange={onPageChange}
     />
@@ -88,6 +98,7 @@ function ProvaWebFlipbookHorizontal({
   manifest,
   buildPageUrl,
   renderPageOverlay,
+  renderStageOverlay,
   pageTarget,
   onPageChange,
 }: ProvaWebFlipbookProps) {
@@ -136,6 +147,7 @@ function ProvaWebFlipbookHorizontal({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [cssFullscreen, setCssFullscreen] = useState(false);
   const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
+  const [flipping, setFlipping] = useState(false);
 
   pageIndexRef.current = pageIndex;
 
@@ -240,6 +252,10 @@ function ProvaWebFlipbookHorizontal({
       const visible = resolveVisiblePages(pages, safe);
       const left = visible[0]?.page;
       if (left != null) onPageChangeRef.current?.(left);
+    });
+    flip.on("changeState", (e) => {
+      const state = String(e.data || "");
+      setFlipping(state === "flipping" || state === "user_fold");
     });
     flipRef.current = flip;
 
@@ -469,7 +485,7 @@ function ProvaWebFlipbookHorizontal({
       >
         {/* Slot 2p fixo: capa/contracapa na metade direita (sem salto ao abrir). */}
         <div
-          className="flex shrink-0 items-center justify-end"
+          className="relative flex shrink-0 items-center justify-end"
           style={{
             width: slotWidth,
             height: baseSize.height,
@@ -523,6 +539,15 @@ function ProvaWebFlipbookHorizontal({
               );
             })}
           </div>
+          {renderStageOverlay
+            ? renderStageOverlay({
+                visiblePages,
+                pageSize: baseSize,
+                slotWidth,
+                isSpread,
+                flipping,
+              })
+            : null}
         </div>
       </div>
 

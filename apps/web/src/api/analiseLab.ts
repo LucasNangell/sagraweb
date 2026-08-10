@@ -20,7 +20,11 @@ export type AnaliseLabMarkTipo =
   | "retangulo"
   | "ponto"
   | "medida"
-  | "grade";
+  | "grade"
+  | "seta"
+  | "circulo"
+  | "texto"
+  | "livre";
 
 export type AnaliseLabMarkCor =
   | "red"
@@ -65,7 +69,7 @@ export interface AnaliseLabMark {
   /** Spec canônica: "1-15,20,23". Null/omitido = usa pagina (0=todas). */
   paginas?: string | null;
   tipo: AnaliseLabMarkTipo | string;
-  geometria: Record<string, number | string>;
+  geometria: Record<string, number | string | number[][]>;
   rotulo?: string | null;
   cor: AnaliseLabMarkCor | string;
   espelhar?: boolean;
@@ -133,22 +137,24 @@ export interface SaveAnaliseLabPayload {
 export interface CreateAnaliseLabMarkPayload {
   pagina: number;
   tipo: AnaliseLabMarkTipo;
-  geometria: Record<string, number | string>;
+  geometria: Record<string, number | string | number[][]>;
   rotulo?: string | null;
   cor?: AnaliseLabMarkCor;
   espelhar?: boolean;
   pagina_origem?: number;
   paginas?: string | null;
+  item_id?: number | null;
 }
 
 export interface UpdateAnaliseLabMarkPayload {
   pagina?: number;
-  geometria?: Record<string, number | string>;
+  geometria?: Record<string, number | string | number[][]>;
   rotulo?: string | null;
   cor?: AnaliseLabMarkCor;
   espelhar?: boolean;
   pagina_origem?: number;
   paginas?: string | null;
+  item_id?: number | null;
 }
 
 export async function fetchAnaliseLabInfo(

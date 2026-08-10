@@ -106,7 +106,11 @@ export interface MarkGeometryLike {
   x2Mm?: number;
   y2Mm?: number;
   stepMm?: number;
-  [key: string]: number | string | undefined;
+  texto?: string;
+  tamanhoPt?: number;
+  espessura?: number;
+  points?: number[][];
+  [key: string]: number | string | number[][] | undefined;
 }
 
 export interface MarkMirrorInput {
@@ -138,7 +142,7 @@ export function resolveMarkGeometry(
   if (mark.tipo === "offset_corte" || mark.tipo === "faixa") {
     return { ...g, edge: mirrorEdge(String(g.edge || "top")) };
   }
-  if (mark.tipo === "retangulo") {
+  if (mark.tipo === "retangulo" || mark.tipo === "circulo") {
     const x = Number(g.xMm) || 0;
     const w = Number(g.wMm) || 0;
     return {
@@ -146,17 +150,28 @@ export function resolveMarkGeometry(
       xMm: Math.max(0, pageWidthMm - x - w),
     };
   }
-  if (mark.tipo === "ponto") {
+  if (mark.tipo === "ponto" || mark.tipo === "texto") {
     const x = Number(g.xMm) || 0;
     return { ...g, xMm: Math.max(0, pageWidthMm - x) };
   }
-  if (mark.tipo === "medida") {
+  if (mark.tipo === "medida" || mark.tipo === "seta") {
     const x1 = Number(g.x1Mm) || 0;
     const x2 = Number(g.x2Mm) || 0;
     return {
       ...g,
       x1Mm: Math.max(0, pageWidthMm - x1),
       x2Mm: Math.max(0, pageWidthMm - x2),
+    };
+  }
+  if (mark.tipo === "livre") {
+    const pts = Array.isArray(g.points) ? g.points : [];
+    return {
+      ...g,
+      points: pts.map((pt) => {
+        const x = Number(pt?.[0]) || 0;
+        const y = Number(pt?.[1]) || 0;
+        return [Math.max(0, pageWidthMm - x), y];
+      }),
     };
   }
   return g;

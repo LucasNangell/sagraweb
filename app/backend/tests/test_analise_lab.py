@@ -48,6 +48,48 @@ def test_validate_geometry_grade_bounds() -> None:
     assert g["stepMm"] == 10.0
 
 
+def test_validate_geometry_seta_circulo_texto_livre() -> None:
+    seta = lab._validate_geometry(
+        "seta",
+        {"x1Mm": 10, "y1Mm": 10, "x2Mm": 50, "y2Mm": 40, "espessura": 2},
+    )
+    assert seta["x2Mm"] == 50.0
+    assert seta["espessura"] == 2
+    circulo = lab._validate_geometry(
+        "circulo",
+        {"xMm": 5, "yMm": 5, "wMm": 20, "hMm": 15, "espessura": 1},
+    )
+    assert circulo["wMm"] == 20.0
+    texto = lab._validate_geometry(
+        "texto",
+        {"xMm": 1, "yMm": 2, "texto": "OK", "tamanhoPt": 14},
+    )
+    assert texto["texto"] == "OK"
+    assert texto["tamanhoPt"] == 14.0
+    livre = lab._validate_geometry(
+        "livre",
+        {"points": [[0, 0], [1, 1], [2, 0]], "espessura": 3},
+    )
+    assert len(livre["points"]) == 3
+    assert livre["espessura"] == 3
+
+
+def test_validate_geometry_rejects_bad_drawing_payloads() -> None:
+    with pytest.raises(ValueError):
+        lab._validate_geometry("texto", {"xMm": 1, "yMm": 2, "texto": ""})
+    with pytest.raises(ValueError):
+        lab._validate_geometry("livre", {"points": [[0, 0]]})
+    with pytest.raises(ValueError):
+        lab._validate_geometry(
+            "circulo", {"xMm": 0, "yMm": 0, "wMm": 0, "hMm": 10}
+        )
+    with pytest.raises(ValueError):
+        lab._validate_geometry(
+            "seta",
+            {"x1Mm": -1, "y1Mm": 0, "x2Mm": 1, "y2Mm": 1},
+        )
+
+
 def test_add_mark_rejects_invalid_tipo(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(ValueError, match="Tipo"):
         lab.add_mark(

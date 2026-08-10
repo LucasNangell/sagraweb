@@ -5,7 +5,6 @@ import {
   FlaskConical,
   Loader2,
   RefreshCw,
-  Ruler,
   ScanSearch,
   Trash2,
 } from "lucide-react";
@@ -36,6 +35,7 @@ import type { ProblemaPadrao } from "@/features/analise/types";
 import { ProvaWebViewerShell } from "@/features/prova-web/ProvaWebViewerShell";
 import logoUrl from "@/logo.png";
 
+import { AnaliseLabBalloonLayer } from "./AnaliseLabBalloonLayer";
 import { AnaliseLabConcluir } from "./AnaliseLabConcluir";
 import { AnaliseLabInspector } from "./AnaliseLabInspector";
 import { AnaliseLabItemList } from "./AnaliseLabItemList";
@@ -47,9 +47,7 @@ import {
   AnaliseLabMarkTools,
   type AnaliseLabTool,
 } from "./AnaliseLabMarkTools";
-import { AnaliseLabProblemBox } from "./AnaliseLabProblemBox";
 import { AnaliseLabSourcePicker } from "./AnaliseLabSourcePicker";
-import { FloatingPanel } from "./FloatingPanel";
 import { itemOccurrences } from "./analiseLabComponente";
 import { pageSizeMm } from "./analiseLabGeometry";
 import { parsePageSpec } from "./analiseLabPageSpec";
@@ -77,7 +75,6 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [tab, setTab] = useState<LabTab>("inspecao");
   const [leftPane, setLeftPane] = useState<LeftPane>("biblioteca");
-  const [toolsOpen, setToolsOpen] = useState(false);
   const [concluirOpen, setConcluirOpen] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -97,10 +94,13 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const [cor, setCor] = useState<AnaliseLabMarkCor>("red");
   const [rotulo, setRotulo] = useState("corte 7mm");
   const [stepMm, setStepMm] = useState(10);
+  const [espessura, setEspessura] = useState(2);
   const [localMarks, setLocalMarks] = useState<AnaliseLabMark[] | null>(null);
   const [localItens, setLocalItens] = useState<AnaliseLabItem[] | null>(null);
   const [selectedMarkId, setSelectedMarkId] = useState<number | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
+  const [linkingItemId, setLinkingItemId] = useState<number | null>(null);
+  const [dismissedBalloonIds, setDismissedBalloonIds] = useState<number[]>([]);
   const [occurrenceIndex, setOccurrenceIndex] = useState(0);
   const [itemEscopoDefault, setItemEscopoDefault] =
     useState<AnaliseLabItemEscopo>("pagina");
@@ -247,7 +247,12 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   }, [applyAllPages, pageNumero]);
 
   const canEspelharTipo = (tipo: string) =>
-    tipo === "offset_corte" || tipo === "faixa" || tipo === "retangulo";
+    tipo === "offset_corte" ||
+    tipo === "faixa" ||
+    tipo === "retangulo" ||
+    tipo === "seta" ||
+    tipo === "circulo" ||
+    tipo === "texto";
 
   const resolveScope = () => {
     if (applyAllPages) {
@@ -258,7 +263,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
 
   const addMark = async (payload: {
     tipo: AnaliseLabMark["tipo"];
-    geometria: Record<string, number | string>;
+    geometria: Record<string, number | string | number[][]>;
     pagina?: number;
   }) => {
     setActionBusy(true);
@@ -282,6 +287,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
         cor,
         espelhar: canEspelharTipo(payload.tipo) && espelhar && multi,
         pagina_origem: pageNumero,
+        item_id: linkingItemId,
       });
       setLocalMarks((prev) => [...(prev ?? []), res.mark]);
       invalidate();
@@ -398,7 +404,11 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   }, [selectedItemId]);
 
   useEffect(() => {
-    if (!selectedItem || !occurrences.length) return;
+    setDismissedBalloonIds([]);
+  }, [currentPage, tab]);
+
+  useEffect(() => {
+    if (!selectedItem || !occurrences.length || tab !== "inspecao") return;
     const page = occurrences[occurrenceIndex];
     if (page) goToPage(page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -413,6 +423,11 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
       setOccurrenceIndex(0);
     }
   };
+
+  const linkingItem =
+    linkingItemId == null
+      ? null
+      : (itens.find((i) => i.id === linkingItemId) ?? null);
 
   const renderPageOverlay = (
     page: {
@@ -460,6 +475,8 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     onRotuloChange: setRotulo,
     stepMm,
     onStepMmChange: setStepMm,
+    espessura,
+    onEspessuraChange: setEspessura,
     busy: actionBusy,
     onAddOffset: () =>
       void addMark({
@@ -675,7 +692,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
               <div className="flex min-h-0 flex-1 overflow-hidden">
                 {tab === "inspecao" ? (
                   <>
-                    <aside className="flex w-64 shrink-0 flex-col border-r border-sagra-border bg-white">
+                    <aside className="flex w-[332px] shrink-0 flex-col border-r border-sagra-border bg-white">
                       <div className="flex shrink-0 gap-0.5 border-b border-sagra-border p-1">
                         {(
                           [
@@ -700,8 +717,8 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                       </div>
                       <div className="flex min-h-0 flex-1 flex-col p-2">
                         {leftPane === "biblioteca" ? (
-                          <>
-                            <label className="mb-1 flex flex-col gap-0.5 text-[11px] text-neutral-500">
+                          <div className="flex min-h-0 flex-1 flex-col gap-2">
+                            <label className="flex shrink-0 flex-col gap-0.5 text-[11px] text-neutral-500">
                               Ao registrar
                               <select
                                 value={itemEscopoDefault}
@@ -717,11 +734,19 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                                 <option value="arquivo">Arquivo todo</option>
                               </select>
                             </label>
-                            <AnaliseLabLibrary
-                              busy={actionBusy}
-                              onRegister={(p) => void registerProblema(p)}
-                            />
-                          </>
+                            <div className="min-h-0 flex-1 overflow-hidden">
+                              <AnaliseLabLibrary
+                                busy={actionBusy}
+                                onRegister={(p) => void registerProblema(p)}
+                              />
+                            </div>
+                            <div className="max-h-[45%] min-h-0 shrink-0 overflow-y-auto border-t border-sagra-border pt-2">
+                              <h3 className="mb-1 text-[11px] font-semibold uppercase text-neutral-600">
+                                Ferramentas
+                              </h3>
+                              <AnaliseLabMarkTools {...markToolsProps} />
+                            </div>
+                          </div>
                         ) : null}
                         {leftPane === "itens" ? (
                           <AnaliseLabItemList
@@ -781,52 +806,108 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                       </div>
                     </aside>
 
-                    <AnaliseLabInspector
-                      pages={pages}
-                      pageIndex={pageIndex}
-                      onPageIndexChange={(idx) => {
-                        const page = pages[idx]?.page;
-                        if (page) setCurrentPage(page);
-                      }}
-                      resolveUrl={(page) =>
-                        analiseLabPageUrl(
-                          ano,
-                          osId,
-                          page,
-                          manifestQuery.data.cacheKey,
-                        )
-                      }
-                      marks={marks}
-                      tool={tool}
-                      edge={edge}
-                      applyAllPages={applyAllPages}
-                      cor={cor}
-                      rotulo={rotulo}
-                      selectedMarkId={selectedMarkId}
-                      onCreateGeometryMark={(args) =>
-                        void addMark({
-                          tipo: args.tipo,
-                          geometria: args.geometria,
-                        })
-                      }
-                      onCreateFaixaDrag={(args) =>
-                        void addMark({
-                          tipo: "faixa",
-                          geometria: {
-                            edge,
-                            fromMm: args.fromMm,
-                            toMm: args.toMm,
-                          },
-                        })
-                      }
-                    />
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                      {linkingItem ? (
+                        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-950">
+                          <span>
+                            Marcando para: <strong>{linkingItem.titulo}</strong>
+                          </span>
+                          <button
+                            type="button"
+                            className="rounded border border-amber-300 bg-white px-2 py-0.5 font-semibold"
+                            onClick={() => setLinkingItemId(null)}
+                          >
+                            Concluir
+                          </button>
+                        </div>
+                      ) : null}
+                      <AnaliseLabInspector
+                        pages={pages}
+                        pageTarget={{ page: currentPage, nonce: pageNonce }}
+                        onPageChange={(page) => setCurrentPage(page)}
+                        resolveUrl={(page) =>
+                          analiseLabPageUrl(
+                            ano,
+                            osId,
+                            page,
+                            manifestQuery.data.cacheKey,
+                          )
+                        }
+                        marks={marks}
+                        tool={tool}
+                        edge={edge}
+                        applyAllPages={applyAllPages}
+                        cor={cor}
+                        rotulo={rotulo}
+                        espessura={espessura}
+                        selectedMarkId={selectedMarkId}
+                        onCreateGeometryMark={(args) =>
+                          void addMark({
+                            tipo: args.tipo,
+                            geometria: args.geometria,
+                            pagina: args.pagina,
+                          })
+                        }
+                        onCreateFaixaDrag={(args) =>
+                          void addMark({
+                            tipo: "faixa",
+                            pagina: args.pagina,
+                            geometria: {
+                              edge,
+                              fromMm: args.fromMm,
+                              toMm: args.toMm,
+                            },
+                          })
+                        }
+                      />
+                    </div>
 
                     {selectedItem ? (
                       <AnaliseLabItemPanel
                         item={selectedItem}
+                        marks={marks}
+                        linkingActive={linkingItemId === selectedItem.id}
                         busy={actionBusy}
-                        onClose={() => setSelectedItemId(null)}
+                        onClose={() => {
+                          setSelectedItemId(null);
+                          if (linkingItemId === selectedItem.id) {
+                            setLinkingItemId(null);
+                          }
+                        }}
                         onDelete={() => void handleDeleteItem(selectedItem.id)}
+                        onStartLinking={() => {
+                          setLinkingItemId(selectedItem.id);
+                          setLeftPane("biblioteca");
+                        }}
+                        onStopLinking={() => setLinkingItemId(null)}
+                        onUnlinkMark={(markId) => {
+                          void (async () => {
+                            setActionBusy(true);
+                            try {
+                              const res = await updateAnaliseLabMark(
+                                ano,
+                                osId,
+                                markId,
+                                { item_id: null },
+                              );
+                              setLocalMarks((prev) =>
+                                (prev ?? []).map((m) =>
+                                  m.id === markId ? res.mark : m,
+                                ),
+                              );
+                              invalidate();
+                            } catch (err) {
+                              setActionError(
+                                err instanceof Error
+                                  ? err.message
+                                  : "Erro ao desvincular marca.",
+                              );
+                            } finally {
+                              setActionBusy(false);
+                            }
+                          })();
+                        }}
+                        onDeleteMark={(id) => void handleDeleteMark(id)}
                         onSave={(p) => {
                           void (async () => {
                             setActionBusy(true);
@@ -856,26 +937,10 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         }}
                       />
                     ) : null}
-
-                    <button
-                      type="button"
-                      className="fixed bottom-4 left-4 z-30 flex size-12 items-center justify-center rounded-full bg-secondary-blue text-white shadow-lg hover:bg-secondary-blue/90"
-                      title="Ferramentas de marca"
-                      onClick={() => setToolsOpen((o) => !o)}
-                    >
-                      <Ruler className="size-5" aria-hidden />
-                    </button>
-                    <FloatingPanel
-                      title="Ferramentas"
-                      open={toolsOpen}
-                      onOpenChange={setToolsOpen}
-                    >
-                      <AnaliseLabMarkTools {...markToolsProps} />
-                    </FloatingPanel>
                   </>
                 ) : (
                   <>
-                    <aside className="flex w-64 shrink-0 flex-col border-r border-sagra-border bg-white p-2">
+                    <aside className="flex w-[332px] shrink-0 flex-col border-r border-sagra-border bg-white p-2">
                       <h2 className="mb-1 text-xs font-semibold uppercase text-neutral-600">
                         Problemas
                       </h2>
@@ -900,18 +965,32 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         )
                       }
                       renderPageOverlay={renderPageOverlay}
+                      renderStageOverlay={(ctx) => (
+                        <AnaliseLabBalloonLayer
+                          items={itens}
+                          marks={marks}
+                          pages={pages}
+                          visiblePages={ctx.visiblePages}
+                          pageSize={ctx.pageSize}
+                          slotWidth={ctx.slotWidth}
+                          isSpread={ctx.isSpread}
+                          flipping={ctx.flipping}
+                          selectedItemId={selectedItemId}
+                          dismissedIds={dismissedBalloonIds}
+                          onDismiss={(id) =>
+                            setDismissedBalloonIds((prev) =>
+                              prev.includes(id) ? prev : [...prev, id],
+                            )
+                          }
+                          onGoToOccurrence={(itemId, page) => {
+                            setSelectedItemId(itemId);
+                            goToPage(page);
+                          }}
+                        />
+                      )}
                       pageTarget={{ page: currentPage, nonce: pageNonce }}
                       onPageChange={(page) => setCurrentPage(page)}
                     />
-                    {selectedItem ? (
-                      <AnaliseLabProblemBox
-                        item={selectedItem}
-                        occurrences={occurrences}
-                        occurrenceIndex={occurrenceIndex}
-                        onOccurrenceChange={setOccurrenceIndex}
-                        onClose={() => setSelectedItemId(null)}
-                      />
-                    ) : null}
                   </>
                 )}
               </div>

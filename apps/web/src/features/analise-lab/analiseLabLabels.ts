@@ -30,6 +30,10 @@ export const TIPO_LABELS: Record<string, string> = {
   ponto: "Ponto",
   medida: "Medida",
   grade: "Grade",
+  seta: "Seta",
+  circulo: "Círculo",
+  texto: "Texto",
+  livre: "Livre",
 };
 
 export const EDGE_OPTIONS: AnaliseLabEdge[] = [

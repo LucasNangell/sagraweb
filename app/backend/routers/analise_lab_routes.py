@@ -156,6 +156,7 @@ class AnaliseLabMarkCreate(BaseModel):
     espelhar: bool = False
     pagina_origem: int = 0
     paginas: Optional[str] = Field(None, max_length=255)
+    item_id: Optional[int] = None
 
 
 class AnaliseLabMarkUpdate(BaseModel):
@@ -166,6 +167,7 @@ class AnaliseLabMarkUpdate(BaseModel):
     espelhar: Optional[bool] = None
     pagina_origem: Optional[int] = None
     paginas: Optional[str] = Field(None, max_length=255)
+    item_id: Optional[int] = None
 
 
 class AnaliseLabItemCreate(BaseModel):
@@ -561,6 +563,7 @@ def create_marca(
             espelhar=body.espelhar,
             pagina_origem=body.pagina_origem,
             paginas=body.paginas,
+            item_id=body.item_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -583,6 +586,7 @@ def patch_marca(
     if not current or int(current["sessaoId"]) != int(session["id"]):
         raise HTTPException(status_code=404, detail="Marca não encontrada.")
     try:
+        clear_item = "item_id" in body.model_fields_set and body.item_id is None
         mark = lab.update_mark(
             mark_id,
             pagina=body.pagina,
@@ -592,6 +596,8 @@ def patch_marca(
             espelhar=body.espelhar,
             pagina_origem=body.pagina_origem,
             paginas=body.paginas,
+            item_id=body.item_id,
+            clear_item=clear_item,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

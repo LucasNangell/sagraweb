@@ -75,6 +75,28 @@ describe("analiseLabGeometry", () => {
     };
     expect(resolveMarkGeometry(rect, 2, 200).xMm).toBe(170);
     expect(resolveMarkGeometry(rect, 1, 200).xMm).toBe(10);
+
+    const seta = {
+      pagina: 0,
+      espelhar: true,
+      paginaOrigem: 1,
+      tipo: "seta",
+      geometria: { x1Mm: 10, y1Mm: 5, x2Mm: 40, y2Mm: 8 },
+    };
+    expect(resolveMarkGeometry(seta, 2, 200).x1Mm).toBe(190);
+    expect(resolveMarkGeometry(seta, 2, 200).x2Mm).toBe(160);
+
+    const livre = {
+      pagina: 0,
+      espelhar: true,
+      paginaOrigem: 1,
+      tipo: "livre",
+      geometria: { points: [[10, 5], [40, 8]] },
+    };
+    expect(resolveMarkGeometry(livre, 2, 200).points).toEqual([
+      [190, 5],
+      [160, 8],
+    ]);
   });
 
   it("converts drag interval to faixa De/Até by edge", () => {

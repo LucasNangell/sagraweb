@@ -342,6 +342,8 @@ export interface ProvaWebManifestBase {
   aspectRatio: number | null;
   totalSourcePages: number;
   truncated: boolean;
+  /** Escala de rasterização (~dpi/72); opcional, já enviada pelo backend. */
+  renderScale?: number;
   /** Presente quando capa+miolo com lombadaMm > 0. */
   bookMockup?: ProvaWebBookMockupMeta;
   /** Presente no modo folha_dobrada. */

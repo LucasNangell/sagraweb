@@ -51,6 +51,7 @@ from routers import (
     support_routes,
     os_notificacao_routes,
     prova_web_routes,
+    analise_lab_routes,
 )
 from security.api_auth import APIAccessMiddleware, is_master_client, resolve_client_ip
 from logging_setup import configure_root_api_logging
@@ -1141,6 +1142,15 @@ def startup_init():
         logger.error("Erro ao garantir schema Prova WEB no startup: %s", exc)
 
     try:
+        from analise_lab_schema import ensure_analise_lab_schema
+        ensure_analise_lab_schema()
+        from services.analise_lab_job_service import recover_analise_lab_render_jobs
+
+        recover_analise_lab_render_jobs()
+    except Exception as exc:
+        logger.error("Erro ao garantir schema Análise Lab no startup: %s", exc)
+
+    try:
         from services.prova_web_fold_model_service import (
             ensure_prova_web_fold_model_schema,
         )
@@ -1164,6 +1174,7 @@ app.include_router(gravacao_externa_routes.router, prefix="/api")
 app.include_router(gravacao_pendente_routes.router, prefix="/api")
 app.include_router(network_files_routes.router, prefix="/api")
 app.include_router(prova_web_routes.router, prefix="/api")
+app.include_router(analise_lab_routes.router, prefix="/api")
 app.include_router(realtime.router)
 app.include_router(requisicao_routes.router, prefix="/api")
 app.include_router(email_routes.router, prefix="/api")

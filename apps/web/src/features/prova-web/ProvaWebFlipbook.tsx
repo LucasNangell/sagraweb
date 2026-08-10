@@ -14,6 +14,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 
 import {
@@ -37,6 +38,11 @@ interface ProvaWebFlipbookProps {
   manifest: ProvaWebManifestBase;
   /** Sobrescreve a URL das páginas (ex.: portal do cliente, com token). */
   buildPageUrl?: (page: number) => string;
+  /** Overlay opcional por página (ex.: marcas do Análise Lab). */
+  renderPageOverlay?: (
+    page: ProvaWebPageMeta,
+    size: { width: number; height: number },
+  ) => ReactNode;
 }
 
 export function ProvaWebFlipbook({
@@ -44,6 +50,7 @@ export function ProvaWebFlipbook({
   osId,
   manifest,
   buildPageUrl,
+  renderPageOverlay,
 }: ProvaWebFlipbookProps) {
   if (shouldUseVerticalSpiralPager(manifest)) {
     return (
@@ -62,6 +69,7 @@ export function ProvaWebFlipbook({
       osId={osId}
       manifest={manifest}
       buildPageUrl={buildPageUrl}
+      renderPageOverlay={renderPageOverlay}
     />
   );
 }
@@ -71,6 +79,7 @@ function ProvaWebFlipbookHorizontal({
   osId,
   manifest,
   buildPageUrl,
+  renderPageOverlay,
 }: ProvaWebFlipbookProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -424,12 +433,20 @@ function ProvaWebFlipbookHorizontal({
                   }
                 >
                   {src ? (
-                    <img
-                      src={src}
-                      alt={pageAlt(page, total)}
-                      loading="eager"
-                      draggable={false}
-                    />
+                    <div className="relative h-full w-full">
+                      <img
+                        src={src}
+                        alt={pageAlt(page, total)}
+                        loading="eager"
+                        draggable={false}
+                      />
+                      {renderPageOverlay
+                        ? renderPageOverlay(page, {
+                            width: baseSize.width,
+                            height: baseSize.height,
+                          })
+                        : null}
+                    </div>
                   ) : (
                     <div
                       className="prova-web-page-placeholder"

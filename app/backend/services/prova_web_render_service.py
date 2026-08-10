@@ -33,7 +33,8 @@ _SPREAD_RATIO_THRESHOLD = 1.7
 
 _MANIFEST_NAME = "manifest.json"
 _WEB_RELATIVE = os.path.join("Sefoc", "AdminDocs", "WEB")
-_PASTA_RENDER_RE = re.compile(r"^Prova([1-9]\d*)$")
+_PASTA_RENDER_RE = re.compile(r"^(Prova[1-9]\d*|AnaliseLab)$")
+LAB_PASTA_RENDER = "AnaliseLab"
 
 # Versão da lógica de composição do livro. Incrementar invalida caches antigos.
 _LAYOUT_VERSION = 6

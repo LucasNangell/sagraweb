@@ -16,6 +16,7 @@ SPA_ROUTE_PERMISSIONS: dict[str, str] = {
     "/gerencia": "sb_gerencia",
     "/email": "sb_email",
     "/analise": "sb_analise",
+    "/analise-lab": "sb_analise",
     "/papelaria": "sb_papelaria",
     "/relatorios": "sb_relatorio",
     "/painel/global": "sb_dashboard_global",

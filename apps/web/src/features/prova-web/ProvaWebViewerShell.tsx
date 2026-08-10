@@ -1,5 +1,5 @@
 import { BookOpen, Box, FileText } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 
 import {
   provaWebPageUrl,
@@ -30,6 +30,11 @@ export interface ProvaWebViewerShellProps {
   pdfSources?: ProvaWebPdfSource[];
   /** Constrói URL do PDF; default = provaWebSourcePdfUrl com path. */
   buildPdfUrl?: (source: ProvaWebPdfSource) => string;
+  /** Overlay opcional por página no flipbook (marcas técnicas). */
+  renderPageOverlay?: (
+    page: ProvaWebPageMeta,
+    size: { width: number; height: number },
+  ) => ReactNode;
 }
 
 /**
@@ -44,6 +49,7 @@ export function ProvaWebViewerShell({
   spineUrl: spineUrlProp,
   pdfSources = [],
   buildPdfUrl: buildPdfUrlProp,
+  renderPageOverlay,
 }: ProvaWebViewerShellProps) {
   const foldMockup = manifest.foldMockup;
   const bookMockup = manifest.bookMockup;
@@ -98,6 +104,7 @@ export function ProvaWebViewerShell({
         osId={osId}
         manifest={manifest}
         buildPageUrl={buildPageUrl}
+        renderPageOverlay={renderPageOverlay}
       />
     );
   }
@@ -161,6 +168,7 @@ export function ProvaWebViewerShell({
           osId={osId}
           manifest={manifest}
           buildPageUrl={buildPageUrl}
+          renderPageOverlay={renderPageOverlay}
         />
       ) : isFold && foldMockup ? (
         <ProvaWebFoldMockup3D

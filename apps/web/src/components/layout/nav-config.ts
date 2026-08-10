@@ -142,6 +142,7 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionKey> = {
   "/gerencia": "sb_gerencia",
   "/email": "sb_email",
   "/analise": "sb_analise",
+  "/analise-lab": "sb_analise",
   "/papelaria": "sb_papelaria",
   "/credenciais-depol": "sb_credenciais_depol",
   "/relatorios": "sb_relatorio",
@@ -198,6 +199,18 @@ export function canAccessRoute(permissions: Permissions, path: string): boolean 
       hasPermission(permissions, "sb_estoque") ||
       hasPermission(permissions, "sb_estoque_gerente")
     );
+  }
+  if (
+    normalized === "/analise-lab" ||
+    normalized.startsWith("/analise-lab/")
+  ) {
+    return hasPermission(permissions, "sb_analise");
+  }
+  if (
+    normalized === "/prova-web" ||
+    normalized.startsWith("/prova-web/")
+  ) {
+    return hasPermission(permissions, "ctx_prova_web");
   }
 
   const perm = ROUTE_PERMISSIONS[normalized];

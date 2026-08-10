@@ -71,6 +71,27 @@ export interface AnaliseLabMark {
   espelhar?: boolean;
   paginaOrigem?: number;
   cropVersao?: number;
+  itemId?: number | null;
+}
+
+export type AnaliseLabItemEscopo = "pagina" | "paginas" | "arquivo";
+export type AnaliseLabComponente = "Capa" | "Miolo" | "Arq. Único";
+
+export interface AnaliseLabItem {
+  id: number;
+  sessaoId: number;
+  idProblemaPadrao?: number | null;
+  titulo: string;
+  htmlSnapshot: string;
+  obs?: string | null;
+  componente: AnaliseLabComponente | string;
+  escopo: AnaliseLabItemEscopo | string;
+  pagina: number;
+  paginas?: string | null;
+  versaoLabel: string;
+  ordem: number;
+  resolucaoObrigatoria?: boolean;
+  itemAnaliseId?: number | null;
 }
 
 export interface AnaliseLabInfo {
@@ -78,6 +99,7 @@ export interface AnaliseLabInfo {
   os: number;
   session: AnaliseLabSession | null;
   marks: AnaliseLabMark[];
+  itens?: AnaliseLabItem[];
   osFolderFound: boolean;
   titulo: string;
   produto: string;
@@ -251,6 +273,90 @@ export async function listAnaliseLabMarks(
   osId: number,
 ): Promise<{ marks: AnaliseLabMark[] }> {
   return apiFetch(`/os/${ano}/${osId}/analise-lab/marcas`);
+}
+
+export interface CreateAnaliseLabItemPayload {
+  id_problema?: number | null;
+  titulo?: string;
+  html_snapshot?: string;
+  escopo: AnaliseLabItemEscopo;
+  pagina?: number;
+  paginas?: string | null;
+  componente?: string | null;
+  versao_label?: string | null;
+  obs?: string | null;
+  confirm_split?: boolean;
+}
+
+export interface UpdateAnaliseLabItemPayload {
+  titulo?: string;
+  html_snapshot?: string;
+  obs?: string | null;
+  componente?: string;
+  escopo?: AnaliseLabItemEscopo;
+  pagina?: number;
+  paginas?: string | null;
+  resolucao_obrigatoria?: boolean;
+  ordem?: number;
+}
+
+export async function createAnaliseLabItem(
+  ano: number,
+  osId: number,
+  payload: CreateAnaliseLabItemPayload,
+): Promise<{
+  ok: boolean;
+  items: AnaliseLabItem[];
+  needsConfirm?: boolean;
+  splitPreview?: Record<string, string> | null;
+}> {
+  return apiFetch(`/os/${ano}/${osId}/analise-lab/itens`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateAnaliseLabItem(
+  ano: number,
+  osId: number,
+  itemId: number,
+  payload: UpdateAnaliseLabItemPayload,
+): Promise<{ ok: boolean; item: AnaliseLabItem }> {
+  return apiFetch(`/os/${ano}/${osId}/analise-lab/itens/${itemId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteAnaliseLabItem(
+  ano: number,
+  osId: number,
+  itemId: number,
+): Promise<{ ok: boolean }> {
+  return apiFetch(`/os/${ano}/${osId}/analise-lab/itens/${itemId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function fetchAnaliseLabRelatorio(
+  ano: number,
+  osId: number,
+): Promise<{ html: string }> {
+  return apiFetch(`/os/${ano}/${osId}/analise-lab/relatorio`);
+}
+
+export async function concluirAnaliseLab(
+  ano: number,
+  osId: number,
+  payload?: { versao?: string; usuario?: string },
+): Promise<{ ok: boolean; url: string; idAnalise: number; versao: string }> {
+  return apiFetch(`/os/${ano}/${osId}/analise-lab/concluir`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload || {}),
+  });
 }
 
 export type AnaliseLabModo = Extract<ProvaWebModo, "unico" | "capa_miolo">;

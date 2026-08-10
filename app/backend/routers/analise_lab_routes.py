@@ -16,6 +16,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from services import analise_lab_service as lab
+from services import analise_lab_items_service as lab_items
+from services import analise_lab_report_service as lab_report
 from services.analise_lab_job_service import (
     cancel_analise_lab_render,
     enqueue_analise_lab_render,
@@ -166,17 +168,49 @@ class AnaliseLabMarkUpdate(BaseModel):
     paginas: Optional[str] = Field(None, max_length=255)
 
 
+class AnaliseLabItemCreate(BaseModel):
+    id_problema: Optional[int] = None
+    titulo: Optional[str] = Field(None, max_length=255)
+    html_snapshot: Optional[str] = None
+    escopo: Literal["pagina", "paginas", "arquivo"] = "pagina"
+    pagina: int = 0
+    paginas: Optional[str] = Field(None, max_length=255)
+    componente: Optional[str] = Field(None, max_length=24)
+    versao_label: Optional[str] = Field(None, max_length=128)
+    obs: Optional[str] = None
+    confirm_split: bool = False
+
+
+class AnaliseLabItemUpdate(BaseModel):
+    titulo: Optional[str] = Field(None, max_length=255)
+    html_snapshot: Optional[str] = None
+    obs: Optional[str] = None
+    componente: Optional[str] = Field(None, max_length=24)
+    escopo: Optional[Literal["pagina", "paginas", "arquivo"]] = None
+    pagina: Optional[int] = None
+    paginas: Optional[str] = Field(None, max_length=255)
+    resolucao_obrigatoria: Optional[bool] = None
+    ordem: Optional[int] = None
+
+
+class AnaliseLabConcluir(BaseModel):
+    versao: Optional[str] = None
+    usuario: Optional[str] = None
+
+
 @router.get("/os/{ano}/{os_id}/analise-lab")
 def get_analise_lab(ano: int, os_id: int, request: Request):
     _require_analise(request)
     folder = _os_folder(ano, os_id)
     session = lab.get_session(ano, os_id)
     marks = lab.list_marks(session["id"]) if session else []
+    itens = lab_items.list_items(session["id"]) if session else []
     return {
         "ano": ano,
         "os": os_id,
         "session": session,
         "marks": marks,
+        "itens": itens,
         "osFolderFound": bool(folder and os.path.isdir(folder)),
         **_os_info(ano, os_id),
     }
@@ -575,3 +609,149 @@ def remove_marca(ano: int, os_id: int, mark_id: int, request: Request):
         raise HTTPException(status_code=404, detail="Marca não encontrada.")
     lab.delete_mark(mark_id)
     return {"ok": True}
+
+
+@router.get("/os/{ano}/{os_id}/analise-lab/itens")
+def list_itens(ano: int, os_id: int, request: Request):
+    _require_analise(request)
+    session = lab.get_session(ano, os_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão do laboratório não encontrada.")
+    return {"itens": lab_items.list_items(session["id"])}
+
+
+@router.post("/os/{ano}/{os_id}/analise-lab/itens")
+def create_item(ano: int, os_id: int, body: AnaliseLabItemCreate, request: Request):
+    _require_analise(request)
+    session = lab.get_session(ano, os_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão do laboratório não encontrada.")
+    try:
+        if body.id_problema:
+            try:
+                manifest = _require_ready_manifest(ano, os_id, session)
+            except HTTPException:
+                manifest = {"pages": []}
+            result = lab_items.register_from_library(
+                session["id"],
+                id_problema=int(body.id_problema),
+                escopo=body.escopo,
+                pagina=body.pagina,
+                paginas=body.paginas,
+                versao_label=body.versao_label or session.get("versaoLabel") or "",
+                ponto=_session_ponto(request),
+                manifest=manifest,
+                confirm_split=body.confirm_split,
+            )
+            return {"ok": True, **result}
+
+        componente = (body.componente or "").strip()
+        if not componente:
+            try:
+                manifest = _require_ready_manifest(ano, os_id, session)
+            except HTTPException:
+                manifest = {"pages": []}
+            page_list = (
+                lab.parse_page_spec(body.paginas)
+                if body.paginas
+                else ([body.pagina] if body.pagina else [])
+            )
+            grouped = lab_items.componente_for_pages(session, manifest, page_list)
+            componente = next(iter(grouped.keys()), "Arq. Único")
+        item = lab_items.add_item(
+            session["id"],
+            titulo=body.titulo or "Problema técnico",
+            html_snapshot=body.html_snapshot or "",
+            componente=componente,
+            escopo=body.escopo,
+            pagina=body.pagina,
+            paginas=body.paginas,
+            versao_label=body.versao_label or session.get("versaoLabel") or "",
+            id_problema_padrao=None,
+            obs=body.obs,
+            ponto=_session_ponto(request),
+        )
+        return {"ok": True, "items": [item], "needsConfirm": False}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.patch("/os/{ano}/{os_id}/analise-lab/itens/{item_id}")
+def patch_item(
+    ano: int,
+    os_id: int,
+    item_id: int,
+    body: AnaliseLabItemUpdate,
+    request: Request,
+):
+    _require_analise(request)
+    session = lab.get_session(ano, os_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão do laboratório não encontrada.")
+    current = lab_items.get_item(item_id)
+    if not current or int(current["sessaoId"]) != int(session["id"]):
+        raise HTTPException(status_code=404, detail="Item não encontrado.")
+    try:
+        item = lab_items.update_item(
+            item_id,
+            titulo=body.titulo,
+            html_snapshot=body.html_snapshot,
+            obs=body.obs,
+            componente=body.componente,
+            escopo=body.escopo,
+            pagina=body.pagina,
+            paginas=body.paginas,
+            resolucao_obrigatoria=body.resolucao_obrigatoria,
+            ordem=body.ordem,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "item": item}
+
+
+@router.delete("/os/{ano}/{os_id}/analise-lab/itens/{item_id}")
+def remove_item(ano: int, os_id: int, item_id: int, request: Request):
+    _require_analise(request)
+    session = lab.get_session(ano, os_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão do laboratório não encontrada.")
+    current = lab_items.get_item(item_id)
+    if not current or int(current["sessaoId"]) != int(session["id"]):
+        raise HTTPException(status_code=404, detail="Item não encontrado.")
+    lab_items.delete_item(item_id)
+    return {"ok": True}
+
+
+@router.get("/os/{ano}/{os_id}/analise-lab/relatorio")
+def get_relatorio(ano: int, os_id: int, request: Request):
+    _require_analise(request)
+    session = lab.get_session(ano, os_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão do laboratório não encontrada.")
+    html = lab_report.build_lab_consolidated_html(ano, os_id, session)
+    return {"html": html}
+
+
+@router.post("/os/{ano}/{os_id}/analise-lab/concluir")
+def concluir_lab(
+    ano: int, os_id: int, body: AnaliseLabConcluir, request: Request
+):
+    _require_analise(request)
+    session = lab.get_session(ano, os_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão do laboratório não encontrada.")
+    usuario = body.usuario or ""
+    if not usuario:
+        sess = getattr(request.state, "sagra_session", None)
+        usuario = str(getattr(sess, "ponto", "") or "")
+    try:
+        result = lab_report.conclude(
+            ano,
+            os_id,
+            session,
+            versao=body.versao,
+            usuario=usuario,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return result

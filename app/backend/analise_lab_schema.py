@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS tabAnaliseLabMarca (
     Espelhar TINYINT(1) NOT NULL DEFAULT 0,
     PaginaOrigem INT NOT NULL DEFAULT 0,
     CropVersao INT NOT NULL DEFAULT 1,
+    ItemID INT NULL,
     PontoRegistro INT NULL,
     DataRegistro DATETIME DEFAULT CURRENT_TIMESTAMP,
     DataAtualizacao DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -56,6 +57,31 @@ CREATE TABLE IF NOT EXISTS tabAnaliseLabMarca (
     CONSTRAINT fk_analise_lab_marca_sessao
         FOREIGN KEY (SessaoID) REFERENCES tabAnaliseLabSessao(ID)
         ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+"""
+
+_CREATE_TAB_ITEM_SQL = """
+CREATE TABLE IF NOT EXISTS tabAnaliseLabItem (
+    ID INT AUTO_INCREMENT PRIMARY KEY,
+    SessaoID INT NOT NULL,
+    ID_ProblemaPadrao INT NULL,
+    Titulo VARCHAR(255) NOT NULL,
+    HtmlSnapshot LONGTEXT NOT NULL,
+    Obs TEXT NULL,
+    Componente VARCHAR(24) NOT NULL,
+    Escopo VARCHAR(16) NOT NULL,
+    Pagina INT NOT NULL DEFAULT 0,
+    Paginas VARCHAR(255) NULL,
+    VersaoLabel VARCHAR(128) NOT NULL DEFAULT '',
+    Ordem INT NOT NULL DEFAULT 0,
+    ResolucaoObrigatoria TINYINT(1) NOT NULL DEFAULT 0,
+    ItemAnaliseID INT NULL,
+    PontoRegistro INT NULL,
+    DataRegistro DATETIME DEFAULT CURRENT_TIMESTAMP,
+    DataAtualizacao DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_lab_item_sessao (SessaoID, VersaoLabel, Componente),
+    CONSTRAINT fk_lab_item_sessao FOREIGN KEY (SessaoID)
+        REFERENCES tabAnaliseLabSessao(ID) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 """
 
@@ -88,6 +114,7 @@ def ensure_analise_lab_schema() -> None:
         with db.cursor() as cursor:
             cursor.execute(_CREATE_TAB_SESSAO_SQL)
             cursor.execute(_CREATE_TAB_MARCA_SQL)
+            cursor.execute(_CREATE_TAB_ITEM_SQL)
             _ensure_column(
                 cursor,
                 "tabAnaliseLabSessao",
@@ -118,7 +145,13 @@ def ensure_analise_lab_schema() -> None:
                 "Paginas",
                 "Paginas VARCHAR(255) NULL",
             )
-        logger.info("Schema Análise Lab garantido (tabAnaliseLabSessao/Marca).")
+            _ensure_column(
+                cursor,
+                "tabAnaliseLabMarca",
+                "ItemID",
+                "ItemID INT NULL",
+            )
+        logger.info("Schema Análise Lab garantido (Sessao/Marca/Item).")
     except Exception as exc:
         logger.error("Erro ao garantir schema Análise Lab: %s", exc)
         raise

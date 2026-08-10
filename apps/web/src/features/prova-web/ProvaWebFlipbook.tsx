@@ -43,6 +43,10 @@ interface ProvaWebFlipbookProps {
     page: ProvaWebPageMeta,
     size: { width: number; height: number },
   ) => ReactNode;
+  /** Navega para a página lógica (manifest.page) quando o nonce muda. */
+  pageTarget?: { page: number; nonce: number } | null;
+  /** Página lógica visível (esquerda do spread) após virar ou aplicar alvo. */
+  onPageChange?: (page: number) => void;
 }
 
 export function ProvaWebFlipbook({
@@ -51,6 +55,8 @@ export function ProvaWebFlipbook({
   manifest,
   buildPageUrl,
   renderPageOverlay,
+  pageTarget,
+  onPageChange,
 }: ProvaWebFlipbookProps) {
   if (shouldUseVerticalSpiralPager(manifest)) {
     return (
@@ -70,6 +76,8 @@ export function ProvaWebFlipbook({
       manifest={manifest}
       buildPageUrl={buildPageUrl}
       renderPageOverlay={renderPageOverlay}
+      pageTarget={pageTarget}
+      onPageChange={onPageChange}
     />
   );
 }
@@ -80,6 +88,8 @@ function ProvaWebFlipbookHorizontal({
   manifest,
   buildPageUrl,
   renderPageOverlay,
+  pageTarget,
+  onPageChange,
 }: ProvaWebFlipbookProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -92,6 +102,20 @@ function ProvaWebFlipbookHorizontal({
   const pages = manifest.pages;
   const total = pages.length;
   const cacheKey = manifest.cacheKey;
+
+  const onPageChangeRef = useRef(onPageChange);
+  onPageChangeRef.current = onPageChange;
+  const pageTargetRef = useRef(pageTarget);
+  pageTargetRef.current = pageTarget;
+
+  const reportVisiblePage = useCallback(
+    (idx: number) => {
+      const visible = resolveVisiblePages(pages, idx);
+      const left = visible[0]?.page;
+      if (left != null) onPageChangeRef.current?.(left);
+    },
+    [pages],
+  );
 
   const resolveUrl = useCallback(
     (page: ProvaWebPageMeta) => {
@@ -211,9 +235,32 @@ function ProvaWebFlipbookHorizontal({
     flip.loadFromHTML(el.querySelectorAll<HTMLElement>(".prova-web-page"));
     flip.on("flip", (e) => {
       const idx = Number(e.data);
-      setPageIndex(Number.isFinite(idx) ? idx : 0);
+      const safe = Number.isFinite(idx) ? idx : 0;
+      setPageIndex(safe);
+      const visible = resolveVisiblePages(pages, safe);
+      const left = visible[0]?.page;
+      if (left != null) onPageChangeRef.current?.(left);
     });
     flipRef.current = flip;
+
+    const target = pageTargetRef.current;
+    if (target?.page) {
+      const hit = pages.find((p) => p.page === target.page);
+      const idx = hit
+        ? pages.indexOf(hit)
+        : Math.max(0, Math.min(total - 1, target.page - 1));
+      if (idx !== pageIndexRef.current) {
+        try {
+          flip.turnToPage(idx);
+        } catch {
+          /* ignore */
+        }
+        setPageIndex(idx);
+      }
+      const visible = resolveVisiblePages(pages, idx);
+      const left = visible[0]?.page;
+      if (left != null) onPageChangeRef.current?.(left);
+    }
 
     return () => {
       flipRef.current = null;
@@ -226,6 +273,25 @@ function ProvaWebFlipbookHorizontal({
     // Remonta só quando o conjunto de páginas muda; tamanho via update().
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manifest.cacheKey, total, stageSize.w > 0]);
+
+  useEffect(() => {
+    if (!pageTarget) return;
+    const flip = flipRef.current;
+    if (!flip) return;
+    const hit = pages.find((p) => p.page === pageTarget.page);
+    const idx = hit
+      ? pages.indexOf(hit)
+      : Math.max(0, Math.min(total - 1, pageTarget.page - 1));
+    const visible = resolveVisiblePages(pages, pageIndexRef.current);
+    if (visible[0]?.page === pageTarget.page) return;
+    try {
+      flip.turnToPage(idx);
+    } catch {
+      /* ignore */
+    }
+    setPageIndex(idx);
+    reportVisiblePage(idx);
+  }, [pageTarget?.nonce, pageTarget?.page, pages, reportVisiblePage, total]);
 
   // Reaplica dimensões contain sem perder página; capa fica na metade direita do slot.
   useEffect(() => {

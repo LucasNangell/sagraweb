@@ -35,6 +35,8 @@ export interface ProvaWebViewerShellProps {
     page: ProvaWebPageMeta,
     size: { width: number; height: number },
   ) => ReactNode;
+  pageTarget?: { page: number; nonce: number } | null;
+  onPageChange?: (page: number) => void;
 }
 
 /**
@@ -50,6 +52,8 @@ export function ProvaWebViewerShell({
   pdfSources = [],
   buildPdfUrl: buildPdfUrlProp,
   renderPageOverlay,
+  pageTarget,
+  onPageChange,
 }: ProvaWebViewerShellProps) {
   const foldMockup = manifest.foldMockup;
   const bookMockup = manifest.bookMockup;
@@ -105,6 +109,8 @@ export function ProvaWebViewerShell({
         manifest={manifest}
         buildPageUrl={buildPageUrl}
         renderPageOverlay={renderPageOverlay}
+        pageTarget={pageTarget}
+        onPageChange={onPageChange}
       />
     );
   }
@@ -169,6 +175,8 @@ export function ProvaWebViewerShell({
           manifest={manifest}
           buildPageUrl={buildPageUrl}
           renderPageOverlay={renderPageOverlay}
+          pageTarget={pageTarget}
+          onPageChange={onPageChange}
         />
       ) : isFold && foldMockup ? (
         <ProvaWebFoldMockup3D

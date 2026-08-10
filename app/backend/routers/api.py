@@ -1134,6 +1134,9 @@ def startup_init():
     try:
         from prova_web_schema import ensure_prova_web_schema
         ensure_prova_web_schema()
+        from services.prova_web_job_service import recover_prova_web_render_jobs
+
+        recover_prova_web_render_jobs()
     except Exception as exc:
         logger.error("Erro ao garantir schema Prova WEB no startup: %s", exc)
 

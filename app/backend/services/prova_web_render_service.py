@@ -11,7 +11,7 @@ import json
 import logging
 import os
 import re
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from services.prova_web_crop_service import (
     empty_crop,
@@ -45,6 +45,14 @@ MODE_UNICO = "unico"
 MODE_CAPA_MIOLO = "capa_miolo"
 MODE_FOLHA_DOBRADA = "folha_dobrada"
 MODE_ESPIRAL = "espiral"
+
+
+class ProvaWebRenderCancelled(Exception):
+    """Render abortado cooperativamente (descartar / substituir rascunho)."""
+
+
+ProgressCallback = Callable[[int, int], None]
+AbortCallback = Callable[[], bool]
 
 ROLE_COVER_FRONT = "cover-front"
 ROLE_COVER_FRONT_INSIDE = "cover-front-inside"
@@ -796,6 +804,8 @@ def ensure_prova_web_pages(
     os_folder: str,
     pasta_render: str,
     crop_json: Optional[dict[str, Any]] = None,
+    progress_callback: Optional[ProgressCallback] = None,
+    should_abort: Optional[AbortCallback] = None,
 ) -> dict[str, Any]:
     """
     Garante PNGs renderizados em Sefoc/AdminDocs/WEB/{pasta_render} e retorna
@@ -807,6 +817,17 @@ def ensure_prova_web_pages(
     crop_json None: comportamento legado (TrimBox automático).
     """
     import fitz
+
+    def _check_abort() -> None:
+        if should_abort and should_abort():
+            raise ProvaWebRenderCancelled("Render cancelado.")
+
+    def _progress(done: int, total: int) -> None:
+        if progress_callback:
+            try:
+                progress_callback(max(0, int(done)), max(0, int(total)))
+            except Exception:
+                logger.debug("Prova WEB: progresso callback falhou", exc_info=True)
 
     scale = render_scale()
     key = _cache_key(mode, source_paths, scale, crop_json)
@@ -822,6 +843,7 @@ def ensure_prova_web_pages(
         except (OSError, json.JSONDecodeError):
             pass
 
+    _check_abort()
     matrix = fitz.Matrix(scale, scale)
     truncated = False
     total_source_pages = 0
@@ -856,7 +878,9 @@ def ensure_prova_web_pages(
             body_count = min(len(miolo_doc), _MAX_PAGES)
             truncated = len(miolo_doc) > body_count
             miolo_width_pt: Optional[float] = None
+            _progress(0, body_count)
             for index in range(body_count):
+                _check_abort()
                 page = miolo_doc.load_page(index)
                 _apply_mm_crop(page, miolo_crop)
                 if miolo_width_pt is None:
@@ -864,7 +888,9 @@ def ensure_prova_web_pages(
                 png_path = os.path.join(cache_dir, f"body_{index}.png")
                 meta = _render_page_png(page, matrix, png_path)
                 body_entries.append({**meta, "role": ROLE_PAGE, "path": png_path})
+                _progress(index + 1, body_count)
 
+        _check_abort()
         with fitz.open(capa_path) as capa_doc:
             total_source_pages += len(capa_doc)
             cover_entries, spine_file = _render_cover_pages(
@@ -907,11 +933,14 @@ def ensure_prova_web_pages(
                 frente_idx = 0
             crop_mm = folheto_cfg.get("crop")
 
+            _check_abort()
+            _progress(0, 2)
             page = doc.load_page(frente_idx)
             _apply_mm_crop(page, crop_mm)
             png_path = os.path.join(cache_dir, "body_0.png")
             meta = _render_page_png(page, matrix, png_path)
             ordered.append({**meta, "role": ROLE_SHEET_FRONT, "path": png_path})
+            _progress(1, 2)
 
             has_verso = (
                 verso_idx is not None
@@ -920,6 +949,7 @@ def ensure_prova_web_pages(
                 and int(verso_idx) != frente_idx
             )
             if has_verso:
+                _check_abort()
                 page_v = doc.load_page(int(verso_idx))
                 _apply_mm_crop(page_v, crop_mm)
                 png_v = os.path.join(cache_dir, "body_1.png")
@@ -929,6 +959,7 @@ def ensure_prova_web_pages(
             else:
                 # Uma página: se o PDF tem 2+, usar a 2ª como verso implícito
                 if len(doc) >= 2 and verso_idx is None:
+                    _check_abort()
                     page_v = doc.load_page(1)
                     _apply_mm_crop(page_v, crop_mm)
                     png_v = os.path.join(cache_dir, "body_1.png")
@@ -937,6 +968,7 @@ def ensure_prova_web_pages(
                     folheto_cfg["pageVerso"] = 1
                 else:
                     folheto_cfg["pageVerso"] = None
+            _progress(len(ordered), max(len(ordered), 1))
 
             # Dimensões úteis a partir da face renderizada
             folheto_cfg["usableWidthMm"] = pt_to_mm(float(ordered[0]["widthPt"]))
@@ -967,7 +999,9 @@ def ensure_prova_web_pages(
             total_source_pages = len(doc)
             count = min(len(doc), _MAX_PAGES)
             truncated = len(doc) > count
+            _progress(0, count)
             for index in range(count):
+                _check_abort()
                 page = doc.load_page(index)
                 _apply_mm_crop(page, unico_crop)
                 if count >= 2 and index == 0:
@@ -979,7 +1013,9 @@ def ensure_prova_web_pages(
                 png_path = os.path.join(cache_dir, f"body_{index}.png")
                 meta = _render_page_png(page, matrix, png_path)
                 ordered.append({**meta, "role": role, "path": png_path})
+                _progress(index + 1, count)
 
+    _check_abort()
     pages: list[dict[str, Any]] = []
     for number, entry in enumerate(ordered, start=1):
         final_name = f"page_{number}.png"
@@ -1045,6 +1081,33 @@ def ensure_prova_web_pages(
         pasta_render,
     )
     return manifest
+
+
+def try_load_cached_manifest(
+    *,
+    mode: str,
+    source_paths: list[str],
+    os_folder: str,
+    pasta_render: str,
+    crop_json: Optional[dict[str, Any]] = None,
+) -> Optional[dict[str, Any]]:
+    """Retorna manifest em disco se válido; não rasteriza."""
+    try:
+        cache_dir = resolve_web_render_dir(os_folder, pasta_render)
+    except (FileNotFoundError, ValueError, OSError):
+        return None
+    manifest_path = os.path.join(cache_dir, _MANIFEST_NAME)
+    if not os.path.isfile(manifest_path):
+        return None
+    try:
+        with open(manifest_path, encoding="utf-8") as fh:
+            existing = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        return None
+    scale = render_scale()
+    if not _manifest_matches(existing, mode, source_paths, scale, crop_json):
+        return None
+    return existing
 
 
 def resolve_rendered_page_path(

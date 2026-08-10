@@ -31,6 +31,20 @@ def test_row_to_record_rascunho_is_draft() -> None:
     assert rec["status"] == svc.STATUS_RASCUNHO
     assert rec["isDraft"] is True
     assert rec["versao"] == 1
+    assert rec["renderStatus"] == svc.RENDER_READY
+
+
+def test_row_to_record_render_pending() -> None:
+    rec = svc._row_to_record(
+        _row(
+            Status="rascunho",
+            RenderStatus="pending",
+            RenderProgress='{"done": 2, "total": 10}',
+        )
+    )
+    assert rec["renderStatus"] == svc.RENDER_PENDING
+    assert rec["renderProgress"] == {"done": 2, "total": 10}
+    assert rec["isDraft"] is True
 
 
 def test_row_to_record_publicado() -> None:

@@ -28,6 +28,29 @@ logger = logging.getLogger(__name__)
 STATUS_RASCUNHO = "rascunho"
 STATUS_PUBLICADO = "publicado"
 
+RENDER_PENDING = "pending"
+RENDER_RUNNING = "running"
+RENDER_READY = "ready"
+RENDER_ERROR = "error"
+RENDER_CANCELLED = "cancelled"
+
+RENDER_STATUSES = frozenset(
+    {
+        RENDER_PENDING,
+        RENDER_RUNNING,
+        RENDER_READY,
+        RENDER_ERROR,
+        RENDER_CANCELLED,
+    }
+)
+RENDER_IN_FLIGHT = frozenset({RENDER_PENDING, RENDER_RUNNING})
+
+_SELECT_PROVA_WEB_COLS = """
+    Modo, ArquivoUnico, ArquivoCapa, ArquivoMiolo, CropJson,
+    Versao, PastaRender, Status, RenderStatus, RenderError, RenderProgress,
+    RenderStartedAt, RenderFinishedAt, PontoRegistro, DataRegistro, DataAtualizacao
+"""
+
 
 def os_folder_path(ano: int, os_id: int) -> Optional[str]:
     from routers.os_routes import _get_os_folder_path
@@ -42,7 +65,7 @@ def require_os_folder(ano: int, os_id: int) -> str:
     return folder
 
 
-def _parse_crop_json(raw: Any) -> Optional[dict[str, Any]]:
+def _parse_json_object(raw: Any) -> Optional[dict[str, Any]]:
     if raw is None or raw == "":
         return None
     if isinstance(raw, dict):
@@ -56,6 +79,27 @@ def _parse_crop_json(raw: Any) -> Optional[dict[str, Any]]:
             return None
         return data if isinstance(data, dict) else None
     return None
+
+
+def _parse_crop_json(raw: Any) -> Optional[dict[str, Any]]:
+    return _parse_json_object(raw)
+
+
+def _normalize_render_status(raw: Any) -> str:
+    value = (str(raw).strip().lower() if raw is not None else "") or RENDER_READY
+    return value if value in RENDER_STATUSES else RENDER_READY
+
+
+def is_render_ready(record: Optional[dict[str, Any]]) -> bool:
+    if not record:
+        return False
+    return _normalize_render_status(record.get("renderStatus")) == RENDER_READY
+
+
+def is_render_in_flight(record: Optional[dict[str, Any]]) -> bool:
+    if not record:
+        return False
+    return _normalize_render_status(record.get("renderStatus")) in RENDER_IN_FLIGHT
 
 
 def _row_to_record(row: dict[str, Any]) -> dict[str, Any]:
@@ -72,6 +116,8 @@ def _row_to_record(row: dict[str, Any]) -> dict[str, Any]:
         if status_raw == STATUS_RASCUNHO
         else STATUS_PUBLICADO
     )
+    render_status = _normalize_render_status(row.get("RenderStatus"))
+    render_error = (row.get("RenderError") or "").strip() or None
     return {
         "modo": (row.get("Modo") or MODE_UNICO).strip(),
         "arquivoUnico": (row.get("ArquivoUnico") or "").strip() or None,
@@ -82,6 +128,11 @@ def _row_to_record(row: dict[str, Any]) -> dict[str, Any]:
         "pastaRender": pasta,
         "status": status,
         "isDraft": status == STATUS_RASCUNHO,
+        "renderStatus": render_status,
+        "renderError": render_error,
+        "renderProgress": _parse_json_object(row.get("RenderProgress")),
+        "renderStartedAt": _iso(row.get("RenderStartedAt")),
+        "renderFinishedAt": _iso(row.get("RenderFinishedAt")),
         "pontoRegistro": row.get("PontoRegistro"),
         "dataRegistro": _iso(row.get("DataRegistro")),
         "dataAtualizacao": _iso(row.get("DataAtualizacao")),
@@ -91,9 +142,8 @@ def _row_to_record(row: dict[str, Any]) -> dict[str, Any]:
 def get_prova_web_record(ano: int, os_id: int) -> Optional[dict[str, Any]]:
     """Última versão da Prova WEB da OS (ORDER BY Versao DESC)."""
     rows = db.execute_query(
-        """
-        SELECT Modo, ArquivoUnico, ArquivoCapa, ArquivoMiolo, CropJson,
-               Versao, PastaRender, Status, PontoRegistro, DataRegistro, DataAtualizacao
+        f"""
+        SELECT {_SELECT_PROVA_WEB_COLS}
         FROM tabProvaWeb
         WHERE NroProtocolo = %(nro)s AND AnoProtocolo = %(ano)s
         ORDER BY Versao DESC
@@ -110,9 +160,8 @@ def get_prova_web_record_by_versao(
     ano: int, os_id: int, versao: int
 ) -> Optional[dict[str, Any]]:
     rows = db.execute_query(
-        """
-        SELECT Modo, ArquivoUnico, ArquivoCapa, ArquivoMiolo, CropJson,
-               Versao, PastaRender, Status, PontoRegistro, DataRegistro, DataAtualizacao
+        f"""
+        SELECT {_SELECT_PROVA_WEB_COLS}
         FROM tabProvaWeb
         WHERE NroProtocolo = %(nro)s AND AnoProtocolo = %(ano)s
           AND Versao = %(versao)s
@@ -142,6 +191,218 @@ def set_prova_web_status(ano: int, os_id: int, versao: int, status: str) -> None
             "versao": int(versao),
         },
     )
+
+
+def set_prova_web_render_state(
+    ano: int,
+    os_id: int,
+    versao: int,
+    *,
+    render_status: str,
+    render_error: Optional[str] = None,
+    render_progress: Optional[dict[str, Any]] = None,
+    touch_started: bool = False,
+    touch_finished: bool = False,
+    clear_error: bool = False,
+    clear_progress: bool = False,
+) -> None:
+    if render_status not in RENDER_STATUSES:
+        raise ValueError(f"RenderStatus inválido: {render_status}")
+    progress_payload = None
+    if render_progress is not None:
+        progress_payload = json.dumps(render_progress, ensure_ascii=False)
+    error_value = None if clear_error else render_error
+    if error_value is not None:
+        error_value = str(error_value).strip()[:512] or None
+    sets = [
+        "RenderStatus = %(render_status)s",
+        "RenderError = %(render_error)s",
+    ]
+    if render_progress is not None or clear_progress:
+        sets.append("RenderProgress = %(render_progress)s")
+    if touch_started:
+        sets.append("RenderStartedAt = NOW()")
+    if touch_finished:
+        sets.append("RenderFinishedAt = NOW()")
+    params: dict[str, Any] = {
+        "render_status": render_status,
+        "render_error": error_value,
+        "nro": os_id,
+        "ano": ano,
+        "versao": int(versao),
+    }
+    if render_progress is not None or clear_progress:
+        params["render_progress"] = None if clear_progress else progress_payload
+    db.execute_query(
+        f"""
+        UPDATE tabProvaWeb
+        SET {", ".join(sets)}
+        WHERE NroProtocolo = %(nro)s AND AnoProtocolo = %(ano)s
+          AND Versao = %(versao)s
+        """,
+        params,
+    )
+
+
+def finalize_prova_web_render(
+    ano: int,
+    os_id: int,
+    versao: int,
+    *,
+    render_status: str,
+    render_error: Optional[str] = None,
+    clear_error: bool = False,
+    clear_progress: bool = False,
+) -> bool:
+    """Atualiza estado final só se ainda estiver `running` (evita race com replace)."""
+    if render_status not in (RENDER_READY, RENDER_ERROR, RENDER_CANCELLED):
+        raise ValueError(f"Status final inválido: {render_status}")
+    applied = {"ok": False}
+    error_value = None if clear_error else render_error
+    if error_value is not None:
+        error_value = str(error_value).strip()[:512] or None
+
+    def _op(cursor) -> None:
+        sets = [
+            "RenderStatus = %s",
+            "RenderError = %s",
+            "RenderFinishedAt = NOW()",
+        ]
+        params: list[Any] = [render_status, error_value]
+        if clear_progress:
+            sets.append("RenderProgress = NULL")
+        cursor.execute(
+            f"""
+            UPDATE tabProvaWeb
+            SET {", ".join(sets)}
+            WHERE NroProtocolo = %s AND AnoProtocolo = %s
+              AND Versao = %s
+              AND RenderStatus = %s
+            """,
+            (
+                *params,
+                os_id,
+                ano,
+                int(versao),
+                RENDER_RUNNING,
+            ),
+        )
+        applied["ok"] = int(cursor.rowcount or 0) == 1
+
+    db.execute_transaction([_op])
+    return bool(applied["ok"])
+
+
+def mark_prova_web_render_pending(ano: int, os_id: int, versao: int) -> None:
+    db.execute_query(
+        """
+        UPDATE tabProvaWeb
+        SET RenderStatus = %(status)s,
+            RenderError = NULL,
+            RenderProgress = NULL,
+            RenderStartedAt = NULL,
+            RenderFinishedAt = NULL
+        WHERE NroProtocolo = %(nro)s AND AnoProtocolo = %(ano)s
+          AND Versao = %(versao)s
+        """,
+        {
+            "status": RENDER_PENDING,
+            "nro": os_id,
+            "ano": ano,
+            "versao": int(versao),
+        },
+    )
+
+
+def update_prova_web_render_progress(
+    ano: int,
+    os_id: int,
+    versao: int,
+    *,
+    done: int,
+    total: int,
+) -> bool:
+    """Atualiza progresso só se ainda estiver `running`."""
+    applied = {"ok": False}
+    payload = json.dumps(
+        {"done": max(0, int(done)), "total": max(0, int(total))},
+        ensure_ascii=False,
+    )
+
+    def _op(cursor) -> None:
+        cursor.execute(
+            """
+            UPDATE tabProvaWeb
+            SET RenderProgress = %s
+            WHERE NroProtocolo = %s AND AnoProtocolo = %s
+              AND Versao = %s
+              AND RenderStatus = %s
+            """,
+            (payload, os_id, ano, int(versao), RENDER_RUNNING),
+        )
+        applied["ok"] = int(cursor.rowcount or 0) == 1
+
+    db.execute_transaction([_op])
+    return bool(applied["ok"])
+
+
+def claim_prova_web_render(ano: int, os_id: int, versao: int) -> bool:
+    """pending → running. Retorna True se este worker ganhou o claim."""
+    claimed = {"ok": False}
+
+    def _op(cursor) -> None:
+        cursor.execute(
+            """
+            UPDATE tabProvaWeb
+            SET RenderStatus = %s,
+                RenderError = NULL,
+                RenderStartedAt = NOW(),
+                RenderFinishedAt = NULL
+            WHERE NroProtocolo = %s AND AnoProtocolo = %s
+              AND Versao = %s
+              AND RenderStatus = %s
+            """,
+            (
+                RENDER_RUNNING,
+                os_id,
+                ano,
+                int(versao),
+                RENDER_PENDING,
+            ),
+        )
+        claimed["ok"] = int(cursor.rowcount or 0) == 1
+
+    db.execute_transaction([_op])
+    return bool(claimed["ok"])
+
+
+def list_prova_web_render_jobs(
+    *, statuses: Optional[list[str]] = None
+) -> list[dict[str, Any]]:
+    wanted = [s for s in (statuses or list(RENDER_IN_FLIGHT)) if s in RENDER_STATUSES]
+    if not wanted:
+        return []
+    placeholders = ", ".join(["%s"] * len(wanted))
+    rows = db.execute_query(
+        f"""
+        SELECT {_SELECT_PROVA_WEB_COLS}, NroProtocolo, AnoProtocolo
+        FROM tabProvaWeb
+        WHERE RenderStatus IN ({placeholders})
+        ORDER BY DataAtualizacao ASC
+        """,
+        tuple(wanted),
+    )
+    out: list[dict[str, Any]] = []
+    for row in rows or []:
+        rec = _row_to_record(row)
+        out.append(
+            {
+                **rec,
+                "nroProtocolo": int(row.get("NroProtocolo") or 0),
+                "anoProtocolo": int(row.get("AnoProtocolo") or 0),
+            }
+        )
+    return out
 
 
 def delete_prova_web_version(ano: int, os_id: int, versao: int) -> bool:

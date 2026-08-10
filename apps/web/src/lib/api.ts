@@ -92,7 +92,10 @@ export async function apiFetch<T>(
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
     try {
-      const data = JSON.parse(text) as { detail?: string; message?: string };
+      const data = JSON.parse(text) as {
+        detail?: string | { message?: string; renderStatus?: string };
+        message?: string;
+      };
       if (typeof data.detail === "string" && data.detail.trim()) {
         if (res.status === 404 && data.detail === "Not Found") {
           throw new Error(
@@ -100,6 +103,14 @@ export async function apiFetch<T>(
           );
         }
         throw new Error(data.detail);
+      }
+      if (
+        data.detail &&
+        typeof data.detail === "object" &&
+        typeof data.detail.message === "string" &&
+        data.detail.message.trim()
+      ) {
+        throw new Error(data.detail.message);
       }
       if (typeof data.message === "string" && data.message.trim()) {
         throw new Error(data.message);

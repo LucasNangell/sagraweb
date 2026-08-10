@@ -193,6 +193,19 @@ export interface ProvaWebCropJson {
   espiral?: ProvaWebEspiralCrop;
 }
 
+export interface ProvaWebRenderProgress {
+  done?: number;
+  total?: number;
+}
+
+export type ProvaWebRenderStatus =
+  | "pending"
+  | "running"
+  | "ready"
+  | "error"
+  | "cancelled"
+  | string;
+
 export interface ProvaWebRecord {
   modo: ProvaWebModo;
   arquivoUnico: string | null;
@@ -204,6 +217,11 @@ export interface ProvaWebRecord {
   /** rascunho | publicado */
   status?: "rascunho" | "publicado" | string;
   isDraft?: boolean;
+  renderStatus?: ProvaWebRenderStatus;
+  renderError?: string | null;
+  renderProgress?: ProvaWebRenderProgress | null;
+  renderStartedAt?: string | null;
+  renderFinishedAt?: string | null;
   pontoRegistro: number | null;
   dataRegistro: string | null;
   dataAtualizacao: string | null;
@@ -407,6 +425,7 @@ export async function saveProvaWebRecord(
   record: ProvaWebRecord;
   portalUrl?: string | null;
   versionCount?: number;
+  renderStatus?: ProvaWebRenderStatus;
 }> {
   return apiFetch(`/os/${ano}/${osId}/prova-web`, {
     method: "PUT",
@@ -426,6 +445,20 @@ export async function approveProvaWeb(
   versao: number;
 }> {
   return apiFetch(`/os/${ano}/${osId}/prova-web/${versao}/aprovar`, {
+    method: "POST",
+  });
+}
+
+export async function reprocessProvaWeb(
+  ano: number,
+  osId: number,
+  versao: number,
+): Promise<{
+  ok: boolean;
+  record: ProvaWebRecord | null;
+  renderStatus?: ProvaWebRenderStatus;
+}> {
+  return apiFetch(`/os/${ano}/${osId}/prova-web/${versao}/reprocessar`, {
     method: "POST",
   });
 }

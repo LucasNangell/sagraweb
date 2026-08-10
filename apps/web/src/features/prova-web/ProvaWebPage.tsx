@@ -19,7 +19,9 @@ import {
   fetchProvaWebInfo,
   fetchProvaWebManifest,
   provaWebPageUrl,
+  reprocessProvaWeb,
   type ProvaWebManifest,
+  type ProvaWebRenderStatus,
 } from "@/api/provaWeb";
 import { ClienteProofMockupPanel } from "@/features/cliente/components/proof/ClienteProofMockupPanel";
 import logoUrl from "@/logo.png";
@@ -32,6 +34,14 @@ import { pdfSourcesFromRecord } from "./provaWebPdfSources";
 interface ProvaWebPageProps {
   ano: number;
   osId: number;
+}
+
+function isRenderInFlight(status: ProvaWebRenderStatus | undefined): boolean {
+  return status === "pending" || status === "running";
+}
+
+function isRenderReady(status: ProvaWebRenderStatus | undefined): boolean {
+  return !status || status === "ready";
 }
 
 export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
@@ -49,6 +59,10 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
     queryKey: ["prova-web-info", ano, osId],
     queryFn: () => fetchProvaWebInfo(ano, osId),
     retry: 1,
+    refetchInterval: (query) => {
+      const status = query.state.data?.record?.renderStatus;
+      return isRenderInFlight(status) ? 2000 : false;
+    },
   });
 
   const info = infoQuery.data;
@@ -57,11 +71,26 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
   const isDraft = Boolean(record?.isDraft || record?.status === "rascunho");
   const showPicker = pickerOpen || (Boolean(info) && !hasRecord);
   const portalUrl = info?.portalUrl?.trim() || "";
+  const renderStatus = record?.renderStatus;
+  const renderInFlight = isRenderInFlight(renderStatus);
+  const renderReady = isRenderReady(renderStatus);
+  const renderError =
+    renderStatus === "error"
+      ? record?.renderError?.trim() || "Falha ao gerar as páginas da prova."
+      : null;
+  const progress = record?.renderProgress;
+  const progressLabel =
+    progress &&
+    typeof progress.done === "number" &&
+    typeof progress.total === "number" &&
+    progress.total > 0
+      ? `${progress.done} / ${progress.total} páginas`
+      : null;
 
   const manifestQuery = useQuery({
     queryKey: ["prova-web-manifest", ano, osId],
     queryFn: () => fetchProvaWebManifest(ano, osId),
-    enabled: hasRecord && !showPicker,
+    enabled: hasRecord && !showPicker && renderReady && !renderError,
     retry: 1,
     staleTime: 60_000,
   });
@@ -100,7 +129,7 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
   };
 
   const handleApprove = async () => {
-    if (!record?.versao || actionBusy) return;
+    if (!record?.versao || actionBusy || !renderReady) return;
     setActionBusy(true);
     setActionError(null);
     try {
@@ -144,6 +173,22 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
     }
   };
 
+  const handleReprocess = async () => {
+    if (!record?.versao || actionBusy) return;
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      await reprocessProvaWeb(ano, osId, record.versao);
+      invalidateProvaQueries();
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Erro ao reiniciar a geração.",
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
   return (
     <div
       className={
@@ -168,6 +213,11 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
                 Rascunho
               </span>
             ) : null}
+            {renderInFlight && !showPicker ? (
+              <span className="ml-2 inline-block rounded bg-sky-300/90 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-secondary-blue">
+                Gerando
+              </span>
+            ) : null}
           </h1>
           {info && (info.titulo || info.produto) && (
             <p className="truncate text-xs text-white/70">
@@ -181,9 +231,14 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
               <>
                 <button
                   type="button"
-                  disabled={actionBusy}
+                  disabled={actionBusy || !renderReady}
                   onClick={() => void handleApprove()}
                   className="flex items-center gap-1.5 rounded-md border border-primary-green/80 bg-primary-green/20 px-2 py-1.5 text-sm font-medium hover:bg-primary-green/30 disabled:opacity-50 sm:px-3"
+                  title={
+                    !renderReady
+                      ? "Aguarde a geração das páginas"
+                      : "Aprovar e gerar link do cliente"
+                  }
                 >
                   {actionBusy ? (
                     <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
@@ -203,7 +258,7 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
                 </button>
                 <button
                   type="button"
-                  disabled={actionBusy}
+                  disabled={actionBusy || renderInFlight}
                   onClick={() => {
                     setActionError(null);
                     setPickerOpen(true);
@@ -294,30 +349,38 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
 
         {info && !showPicker && hasRecord && (
           <>
-            {manifestQuery.isLoading && (
+            {renderInFlight && (
               <CenteredState>
                 <Loader2
                   className="size-8 animate-spin text-primary-green"
                   aria-hidden
                 />
                 <p className="text-sm text-neutral-600">
-                  Renderizando as páginas da prova…
+                  Gerando as páginas da prova em segundo plano…
                 </p>
-                <p className="text-xs text-neutral-500">
-                  A primeira abertura pode demorar alguns segundos.
+                {progressLabel ? (
+                  <p className="text-xs font-medium text-neutral-700">
+                    {progressLabel}
+                  </p>
+                ) : null}
+                <p className="max-w-md text-center text-xs text-neutral-500">
+                  Você pode continuar usando o restante do sistema. Esta tela
+                  atualiza automaticamente ao concluir.
                 </p>
               </CenteredState>
             )}
 
-            {manifestQuery.isError && (
+            {!renderInFlight && renderError && (
               <CenteredState>
                 <p className="max-w-md text-center text-sm font-medium text-sagra-danger">
-                  {manifestQuery.error instanceof Error
-                    ? manifestQuery.error.message
-                    : "Erro ao renderizar a prova."}
+                  {renderError}
                 </p>
                 <div className="flex gap-2">
-                  <RetryButton onClick={() => void manifestQuery.refetch()} />
+                  <RetryButton
+                    onClick={() => void handleReprocess()}
+                    label={actionBusy ? "Reiniciando…" : "Tentar novamente"}
+                    disabled={actionBusy}
+                  />
                   <button
                     type="button"
                     onClick={() => setPickerOpen(true)}
@@ -329,7 +392,46 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
               </CenteredState>
             )}
 
-            {manifestQuery.data &&
+            {renderReady && !renderError && manifestQuery.isLoading && (
+              <CenteredState>
+                <Loader2
+                  className="size-8 animate-spin text-primary-green"
+                  aria-hidden
+                />
+                <p className="text-sm text-neutral-600">
+                  Carregando visualização…
+                </p>
+              </CenteredState>
+            )}
+
+            {renderReady && !renderError && manifestQuery.isError && (
+              <CenteredState>
+                <p className="max-w-md text-center text-sm font-medium text-sagra-danger">
+                  {manifestQuery.error instanceof Error
+                    ? manifestQuery.error.message
+                    : "Erro ao carregar a prova."}
+                </p>
+                <div className="flex gap-2">
+                  <RetryButton onClick={() => void manifestQuery.refetch()} />
+                  <RetryButton
+                    onClick={() => void handleReprocess()}
+                    label="Regenerar páginas"
+                    disabled={actionBusy}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPickerOpen(true)}
+                    className="rounded-lg border border-sagra-border bg-white px-3 py-1.5 text-xs text-neutral-700 shadow-sm hover:bg-neutral-50"
+                  >
+                    Escolher outro arquivo
+                  </button>
+                </div>
+              </CenteredState>
+            )}
+
+            {renderReady &&
+              !renderError &&
+              manifestQuery.data &&
               (info.isPapelaria ? (
                 <PapelariaMockupStage
                   ano={ano}
@@ -410,15 +512,24 @@ function CenteredState({ children }: { children: React.ReactNode }) {
   );
 }
 
-function RetryButton({ onClick }: { onClick: () => void }) {
+function RetryButton({
+  onClick,
+  label = "Tentar novamente",
+  disabled = false,
+}: {
+  onClick: () => void;
+  label?: string;
+  disabled?: boolean;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-1.5 rounded-lg border border-sagra-border bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 shadow-sm hover:bg-neutral-50"
+      disabled={disabled}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-sagra-border bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 shadow-sm hover:bg-neutral-50 disabled:opacity-50"
     >
       <RefreshCw className="size-3.5" aria-hidden />
-      Tentar novamente
+      {label}
     </button>
   );
 }

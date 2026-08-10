@@ -22,25 +22,35 @@ from pydantic import BaseModel, Field
 from database import db
 from services.prova_web_crop_service import build_pdf_crop_meta
 from services.prova_web_record_service import (
+    RENDER_ERROR,
+    RENDER_PENDING,
+    RENDER_READY,
     STATUS_PUBLICADO,
     STATUS_RASCUNHO,
     count_prova_web_versions,
     delete_prova_web_version,
     get_prova_web_record,
     get_prova_web_record_by_versao,
+    is_render_in_flight,
+    is_render_ready,
+    mark_prova_web_render_pending,
     next_prova_web_versao,
     resolve_record_sources,
     set_prova_web_status,
+)
+from services.prova_web_job_service import (
+    cancel_prova_web_render,
+    enqueue_prova_web_render,
 )
 from services.prova_web_render_service import (
     MODE_CAPA_MIOLO,
     MODE_ESPIRAL,
     delete_web_render_dir,
-    ensure_prova_web_pages,
     pasta_render_for_versao,
     resolve_os_relative_pdf,
     resolve_rendered_asset_path,
     resolve_rendered_page_path,
+    try_load_cached_manifest,
 )
 
 logger = logging.getLogger(__name__)
@@ -224,30 +234,75 @@ def _normalize_crop_json(
 def _render_for_record(
     ano: int, os_id: int, record: dict[str, Any]
 ) -> dict[str, Any]:
+    """Carrega manifest em cache se ready; nunca rasteriza no request HTTP."""
+    if is_render_in_flight(record):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "A prova ainda está sendo gerada.",
+                "renderStatus": record.get("renderStatus"),
+                "renderProgress": record.get("renderProgress"),
+            },
+        )
+    if record.get("renderStatus") == RENDER_ERROR:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": record.get("renderError")
+                or "Falha ao gerar as páginas da prova.",
+                "renderStatus": RENDER_ERROR,
+                "renderError": record.get("renderError"),
+            },
+        )
+    if not is_render_ready(record):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "A prova ainda não está pronta para visualização.",
+                "renderStatus": record.get("renderStatus"),
+            },
+        )
+
     folder = _require_os_folder(ano, os_id)
     mode, sources = _resolve_record_sources(ano, os_id, record)
     pasta = record.get("pastaRender") or pasta_render_for_versao(
         int(record.get("versao") or 1)
     )
+    cached = try_load_cached_manifest(
+        mode=mode,
+        source_paths=sources,
+        os_folder=folder,
+        pasta_render=pasta,
+        crop_json=record.get("cropJson"),
+    )
+    if cached:
+        return cached
+
+    # ready sem cache: reenfileira e não bloqueia o request.
+    versao = int(record.get("versao") or 1)
     try:
-        return ensure_prova_web_pages(
-            ano,
-            os_id,
-            mode=mode,
-            source_paths=sources,
-            os_folder=folder,
-            pasta_render=pasta,
-            crop_json=record.get("cropJson"),
-        )
-    except ValueError as exc:
-        logger.warning("Prova WEB: crop inválido OS %s/%s: %s", os_id, ano, exc)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        mark_prova_web_render_pending(ano, os_id, versao)
+        enqueue_prova_web_render(ano, os_id, versao)
     except Exception as exc:
-        logger.error("Prova WEB: falha ao renderizar OS %s/%s: %s", os_id, ano, exc)
-        raise HTTPException(
-            status_code=500,
-            detail="Falha ao renderizar as páginas da prova.",
-        ) from exc
+        logger.error(
+            "Prova WEB: falha ao reenfileirar cache miss (%s/%s v%s): %s",
+            os_id,
+            ano,
+            versao,
+            exc,
+        )
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "message": "Arquivos da prova indisponíveis; regeneração iniciada.",
+            "renderStatus": RENDER_PENDING,
+        },
+    )
+
+
+def _schedule_render(ano: int, os_id: int, versao: int) -> None:
+    mark_prova_web_render_pending(ano, os_id, versao)
+    enqueue_prova_web_render(ano, os_id, versao)
 
 
 def _ensure_portal_link(
@@ -480,6 +535,7 @@ def save_prova_web(ano: int, os_id: int, body: ProvaWebUpdate, request: Request)
     if replace_draft and existing:
         versao = int(existing["versao"])
         pasta = existing.get("pastaRender") or pasta_render_for_versao(versao)
+        cancel_prova_web_render(ano, os_id, versao)
         try:
             delete_web_render_dir(folder, pasta)
         except Exception as exc:
@@ -495,7 +551,9 @@ def save_prova_web(ano: int, os_id: int, body: ProvaWebUpdate, request: Request)
             UPDATE tabProvaWeb
             SET PastaRender = %s, Modo = %s,
                 ArquivoUnico = %s, ArquivoCapa = %s, ArquivoMiolo = %s,
-                CropJson = %s, Status = %s, PontoRegistro = %s
+                CropJson = %s, Status = %s, PontoRegistro = %s,
+                RenderStatus = %s, RenderError = NULL, RenderProgress = NULL,
+                RenderStartedAt = NULL, RenderFinishedAt = NULL
             WHERE NroProtocolo = %s AND AnoProtocolo = %s AND Versao = %s
             """,
             (
@@ -507,6 +565,7 @@ def save_prova_web(ano: int, os_id: int, body: ProvaWebUpdate, request: Request)
                 crop_payload,
                 STATUS_RASCUNHO,
                 ponto,
+                RENDER_PENDING,
                 os_id,
                 ano,
                 versao,
@@ -523,8 +582,8 @@ def save_prova_web(ano: int, os_id: int, body: ProvaWebUpdate, request: Request)
             INSERT INTO tabProvaWeb
                 (NroProtocolo, AnoProtocolo, Versao, PastaRender, Modo,
                  ArquivoUnico, ArquivoCapa, ArquivoMiolo, CropJson, Status,
-                 PontoRegistro)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 RenderStatus, PontoRegistro)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 os_id,
@@ -537,19 +596,33 @@ def save_prova_web(ano: int, os_id: int, body: ProvaWebUpdate, request: Request)
                 arquivo_miolo,
                 crop_payload,
                 STATUS_RASCUNHO,
+                RENDER_PENDING,
                 ponto,
             ),
         )
 
-    record = _get_record(ano, os_id)
-    if record:
-        _render_for_record(ano, os_id, record)
+    try:
+        enqueue_prova_web_render(ano, os_id, versao)
+    except Exception as exc:
+        logger.error(
+            "Prova WEB: falha ao enfileirar render (%s/%s v%s): %s",
+            os_id,
+            ano,
+            versao,
+            exc,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Falha ao iniciar a geração da prova.",
+        ) from exc
 
+    record = _get_record(ano, os_id)
     return {
         "ok": True,
         "record": record,
         "versionCount": count_prova_web_versions(ano, os_id),
         "portalUrl": None,
+        "renderStatus": (record or {}).get("renderStatus"),
     }
 
 
@@ -579,6 +652,15 @@ def aprovar_prova_web(ano: int, os_id: int, versao: int, request: Request):
             status_code=409,
             detail="Esta prova já está publicada.",
         )
+    if not is_render_ready(record):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Aguarde a geração das páginas antes de aprovar.",
+                "renderStatus": record.get("renderStatus"),
+                "renderError": record.get("renderError"),
+            },
+        )
     set_prova_web_status(ano, os_id, versao, STATUS_PUBLICADO)
     ponto = _session_ponto(request)
     # Garante que o token use a versão aprovada (última publicada esperada).
@@ -589,6 +671,56 @@ def aprovar_prova_web(ano: int, os_id: int, versao: int, request: Request):
         "record": record,
         "portalUrl": portal_url,
         "versao": versao,
+    }
+
+
+@router.post("/os/{ano}/{os_id}/prova-web/{versao}/reprocessar")
+def reprocessar_prova_web(ano: int, os_id: int, versao: int, request: Request):
+    """Reenfileira render (erro, cancelado ou cache miss)."""
+    _require_prova_web(request)
+    record = get_prova_web_record_by_versao(ano, os_id, versao)
+    if not record:
+        raise HTTPException(status_code=404, detail="Prova WEB não encontrada.")
+    if is_render_in_flight(record):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "A geração desta prova já está em andamento.",
+                "renderStatus": record.get("renderStatus"),
+            },
+        )
+    folder = _os_folder(ano, os_id)
+    pasta = record.get("pastaRender") or pasta_render_for_versao(versao)
+    if folder and os.path.isdir(folder):
+        try:
+            delete_web_render_dir(folder, pasta)
+        except Exception as exc:
+            logger.warning(
+                "Prova WEB: falha ao limpar pasta no reprocessar (%s/%s v%s): %s",
+                os_id,
+                ano,
+                versao,
+                exc,
+            )
+    try:
+        _schedule_render(ano, os_id, versao)
+    except Exception as exc:
+        logger.error(
+            "Prova WEB: falha ao reprocessar (%s/%s v%s): %s",
+            os_id,
+            ano,
+            versao,
+            exc,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Falha ao reiniciar a geração da prova.",
+        ) from exc
+    record = get_prova_web_record_by_versao(ano, os_id, versao)
+    return {
+        "ok": True,
+        "record": record,
+        "renderStatus": (record or {}).get("renderStatus"),
     }
 
 
@@ -603,6 +735,7 @@ def descartar_prova_web(ano: int, os_id: int, versao: int, request: Request):
             status_code=409,
             detail="Só é possível descartar provas em rascunho.",
         )
+    cancel_prova_web_render(ano, os_id, versao)
     folder = _os_folder(ano, os_id)
     pasta = record.get("pastaRender") or pasta_render_for_versao(versao)
     if folder and os.path.isdir(folder):

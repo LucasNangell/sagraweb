@@ -601,6 +601,7 @@ def _require_prova_web_context(
     """Retorna (record, mode, source_paths, os_folder) da Prova WEB (latest)."""
     from services.prova_web_record_service import (
         get_prova_web_record,
+        is_render_ready,
         require_os_folder,
         resolve_record_sources,
     )
@@ -611,6 +612,16 @@ def _require_prova_web_context(
         raise HTTPException(
             status_code=404,
             detail="Nenhum arquivo de prova registrado para esta OS.",
+        )
+    if record.get("isDraft"):
+        raise HTTPException(
+            status_code=404,
+            detail="A prova ainda não está disponível para o cliente.",
+        )
+    if not is_render_ready(record):
+        raise HTTPException(
+            status_code=503,
+            detail="A visualização da prova está temporariamente indisponível.",
         )
     try:
         folder = require_os_folder(ano, os_id)
@@ -624,6 +635,39 @@ def _require_prova_web_context(
     return record, mode, sources, folder
 
 
+def _load_portal_flipbook_manifest(
+    ano: int, os_id: int, record: dict, mode: str, sources: list[str], folder: str
+) -> dict:
+    """Serve cache; se ausente, tenta reenfileirar internamente e responde 503."""
+    from services.prova_web_record_service import mark_prova_web_render_pending
+    from services.prova_web_job_service import enqueue_prova_web_render
+    from services.prova_web_render_service import try_load_cached_manifest
+
+    pasta = record["pastaRender"]
+    cached = try_load_cached_manifest(
+        mode=mode,
+        source_paths=sources,
+        os_folder=folder,
+        pasta_render=pasta,
+        crop_json=record.get("cropJson"),
+    )
+    if cached:
+        return cached
+
+    versao = int(record.get("versao") or 1)
+    try:
+        mark_prova_web_render_pending(ano, os_id, versao)
+        enqueue_prova_web_render(ano, os_id, versao)
+    except Exception as exc:
+        logger.warning(
+            "Portal flipbook: falha ao reenfileirar OS %s/%s: %s", os_id, ano, exc
+        )
+    raise HTTPException(
+        status_code=503,
+        detail="A visualização da prova está sendo regenerada. Tente novamente em instantes.",
+    )
+
+
 @router.get("/client/proof/{ano}/{os_id}/flipbook/manifest")
 def get_proof_flipbook_manifest(ano: int, os_id: int, token: str = Query(...)):
     """Manifest do flipbook da Prova WEB — escopo do token (sem sessão interna)."""
@@ -635,19 +679,14 @@ def get_proof_flipbook_manifest(ano: int, os_id: int, token: str = Query(...)):
         )
 
     from config_manager import config_manager
-    from services.prova_web_render_service import ensure_prova_web_pages
 
     record, mode, sources, folder = _require_prova_web_context(ano, os_id)
     try:
-        manifest = ensure_prova_web_pages(
-            ano,
-            os_id,
-            mode=mode,
-            source_paths=sources,
-            os_folder=folder,
-            pasta_render=record["pastaRender"],
-            crop_json=record.get("cropJson"),
+        manifest = _load_portal_flipbook_manifest(
+            ano, os_id, record, mode, sources, folder
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception(
             "Erro flipbook prova OS %s/%s: %s", os_id, ano, exc
@@ -696,23 +735,14 @@ def serve_proof_flipbook_page(
     if not _is_prova_web_token(proof):
         raise HTTPException(status_code=404, detail="Página não disponível.")
 
-    from services.prova_web_render_service import (
-        ensure_prova_web_pages,
-        resolve_rendered_page_path,
-    )
+    from services.prova_web_render_service import resolve_rendered_page_path
 
     record, mode, sources, folder = _require_prova_web_context(ano, os_id)
     try:
-        ensure_prova_web_pages(
-            ano,
-            os_id,
-            mode=mode,
-            source_paths=sources,
-            os_folder=folder,
-            pasta_render=record["pastaRender"],
-            crop_json=record.get("cropJson"),
-        )
+        _load_portal_flipbook_manifest(ano, os_id, record, mode, sources, folder)
         path = resolve_rendered_page_path(folder, record["pastaRender"], page)
+    except HTTPException:
+        raise
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
@@ -741,23 +771,14 @@ def serve_proof_flipbook_asset(
     if not _is_prova_web_token(proof):
         raise HTTPException(status_code=404, detail="Asset não disponível.")
 
-    from services.prova_web_render_service import (
-        ensure_prova_web_pages,
-        resolve_rendered_asset_path,
-    )
+    from services.prova_web_render_service import resolve_rendered_asset_path
 
     record, mode, sources, folder = _require_prova_web_context(ano, os_id)
     try:
-        ensure_prova_web_pages(
-            ano,
-            os_id,
-            mode=mode,
-            source_paths=sources,
-            os_folder=folder,
-            pasta_render=record["pastaRender"],
-            crop_json=record.get("cropJson"),
-        )
+        _load_portal_flipbook_manifest(ano, os_id, record, mode, sources, folder)
         path = resolve_rendered_asset_path(folder, record["pastaRender"], name)
+    except HTTPException:
+        raise
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:

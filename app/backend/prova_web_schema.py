@@ -23,6 +23,11 @@ CREATE TABLE IF NOT EXISTS tabProvaWeb (
     ArquivoMiolo VARCHAR(512) NULL,
     CropJson JSON NULL,
     Status VARCHAR(16) NOT NULL DEFAULT 'rascunho',
+    RenderStatus VARCHAR(16) NOT NULL DEFAULT 'ready',
+    RenderError VARCHAR(512) NULL,
+    RenderProgress JSON NULL,
+    RenderStartedAt DATETIME NULL,
+    RenderFinishedAt DATETIME NULL,
     PontoRegistro INT NULL,
     DataRegistro DATETIME DEFAULT CURRENT_TIMESTAMP,
     DataAtualizacao DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -111,6 +116,53 @@ def _ensure_prova_web_version_columns(cursor) -> None:
             """
         )
         logger.info("Coluna tabProvaWeb.Status adicionada (existentes=publicado).")
+
+    _ensure_prova_web_render_columns(cursor)
+
+
+def _ensure_prova_web_render_columns(cursor) -> None:
+    """Colunas de render assíncrono (idempotente). Existentes = ready."""
+    if not _column_exists(cursor, "tabProvaWeb", "RenderStatus"):
+        cursor.execute(
+            """
+            ALTER TABLE tabProvaWeb
+            ADD COLUMN RenderStatus VARCHAR(16) NOT NULL DEFAULT 'ready'
+            AFTER Status
+            """
+        )
+        logger.info("Coluna tabProvaWeb.RenderStatus adicionada (existentes=ready).")
+    if not _column_exists(cursor, "tabProvaWeb", "RenderError"):
+        cursor.execute(
+            """
+            ALTER TABLE tabProvaWeb
+            ADD COLUMN RenderError VARCHAR(512) NULL AFTER RenderStatus
+            """
+        )
+        logger.info("Coluna tabProvaWeb.RenderError adicionada.")
+    if not _column_exists(cursor, "tabProvaWeb", "RenderProgress"):
+        cursor.execute(
+            """
+            ALTER TABLE tabProvaWeb
+            ADD COLUMN RenderProgress JSON NULL AFTER RenderError
+            """
+        )
+        logger.info("Coluna tabProvaWeb.RenderProgress adicionada.")
+    if not _column_exists(cursor, "tabProvaWeb", "RenderStartedAt"):
+        cursor.execute(
+            """
+            ALTER TABLE tabProvaWeb
+            ADD COLUMN RenderStartedAt DATETIME NULL AFTER RenderProgress
+            """
+        )
+        logger.info("Coluna tabProvaWeb.RenderStartedAt adicionada.")
+    if not _column_exists(cursor, "tabProvaWeb", "RenderFinishedAt"):
+        cursor.execute(
+            """
+            ALTER TABLE tabProvaWeb
+            ADD COLUMN RenderFinishedAt DATETIME NULL AFTER RenderStartedAt
+            """
+        )
+        logger.info("Coluna tabProvaWeb.RenderFinishedAt adicionada.")
 
 
 def ensure_prova_web_schema() -> None:

@@ -26,6 +26,18 @@ interface AnaliseLabBalloonLayerProps {
   dismissedIds: number[];
   onDismiss: (itemId: number) => void;
   onGoToOccurrence: (itemId: number, page: number) => void;
+  /** Se informado (ex.: Folhear folhas), usa posições medidas em vez do layout do flipbook. */
+  pageRectsOverride?: Record<
+    number,
+    {
+      left: number;
+      top: number;
+      width: number;
+      height: number;
+      widthMm: number;
+      heightMm: number;
+    }
+  >;
 }
 
 const MAX_VISIBLE = 3;
@@ -46,6 +58,7 @@ export function AnaliseLabBalloonLayer({
   dismissedIds,
   onDismiss,
   onGoToOccurrence,
+  pageRectsOverride,
 }: AnaliseLabBalloonLayerProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -62,6 +75,7 @@ export function AnaliseLabBalloonLayer({
   }, [dismissedIds, items, marks, pages, visiblePages]);
 
   const pageRects = useMemo(() => {
+    if (pageRectsOverride) return pageRectsOverride;
     const map: Record<
       number,
       {
@@ -100,19 +114,36 @@ export function AnaliseLabBalloonLayer({
       });
     }
     return map;
-  }, [isSpread, pageSize.height, pageSize.width, slotWidth, visiblePages]);
+  }, [
+    isSpread,
+    pageRectsOverride,
+    pageSize.height,
+    pageSize.width,
+    slotWidth,
+    visiblePages,
+  ]);
+
+  const stageHeight = useMemo(() => {
+    if (pageRectsOverride) {
+      const bottoms = Object.values(pageRectsOverride).map(
+        (r) => r.top + r.height,
+      );
+      return Math.max(pageSize.height, ...bottoms, 1);
+    }
+    return pageSize.height;
+  }, [pageRectsOverride, pageSize.height]);
 
   const packed = useMemo(
     () =>
       packBalloons(anchors, {
-        stageHeight: pageSize.height,
+        stageHeight,
         balloonHeight: BALLOON_H,
         gap: GAP,
         pageRects,
         slotWidth,
         gutterRight,
       }),
-    [anchors, gutterRight, pageRects, pageSize.height, slotWidth],
+    [anchors, gutterRight, pageRects, slotWidth, stageHeight],
   );
 
   if (flipping || !packed.length) return null;

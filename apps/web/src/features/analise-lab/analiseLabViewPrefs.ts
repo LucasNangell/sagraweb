@@ -29,6 +29,17 @@ export const DEFAULT_VIEW_PREFS: InspectorViewPrefs = {
   offsetColor: "#dc2626",
 };
 
+/** Folhear / browse: sem auxiliares da Inspeção (réguas, grade, guias, offset). */
+export const BROWSE_VIEW_PREFS: InspectorViewPrefs = {
+  ...DEFAULT_VIEW_PREFS,
+  rulers: false,
+  grid: false,
+  guides: false,
+  guidesXMm: [],
+  guidesYMm: [],
+  offset: false,
+};
+
 const HEX_COLOR = /^#[0-9a-f]{6}$/;
 
 function normalizeColor(raw: unknown, fallback: string): string {

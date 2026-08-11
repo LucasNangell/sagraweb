@@ -100,7 +100,7 @@ type VersionComponentMode = "capa-miolo" | "arq-unico";
 export function resolveVersionComponentMode(
   classified: VersionPdfFile[],
   forceCapaMiolo: boolean,
-  versionItems: AnaliseSelectedItem[],
+  versionItems: Array<{ componenteOrigem?: string }>,
 ): VersionComponentMode {
   if (forceCapaMiolo) return "capa-miolo";
 
@@ -131,9 +131,9 @@ function componentAllowedInMode(label: string, mode: VersionComponentMode): bool
   return label === "Arq. Único";
 }
 
-function buildComponentLabelsForVersion(
+export function buildComponentLabelsForVersion(
   classified: VersionPdfFile[],
-  versionItems: AnaliseSelectedItem[],
+  versionItems: Array<{ componenteOrigem?: string }>,
   mode: VersionComponentMode,
 ): Set<string> {
   const labels = new Set<string>();

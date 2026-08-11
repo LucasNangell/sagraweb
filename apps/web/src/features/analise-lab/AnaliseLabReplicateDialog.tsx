@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { AnaliseLabItem } from "@/api/analiseLab";
+import {
+  itemMatchesVersion,
+  resolveItemVersion,
+} from "@/features/analise/analiseItemsTree";
+import type { OsVersionItem } from "@/features/analise/types";
 
 interface AnaliseLabReplicateDialogProps {
   open: boolean;
   versaoLabel: string;
   items: AnaliseLabItem[];
+  versions?: OsVersionItem[];
   busy?: boolean;
   onClose: () => void;
   onConfirm: (payload: {
@@ -14,20 +20,37 @@ interface AnaliseLabReplicateDialogProps {
   }) => void;
 }
 
+function itemBelongsToSourceVersao(
+  item: AnaliseLabItem,
+  versaoLabel: string,
+  versions: OsVersionItem[],
+): boolean {
+  const stored = item.versaoLabel || "(sem versão)";
+  if (stored === versaoLabel) return true;
+  if (!versions.length) return false;
+  const target =
+    resolveItemVersion(versaoLabel, versions) ??
+    versions.find((v) => v.label === versaoLabel) ??
+    null;
+  if (!target) return false;
+  return itemMatchesVersion(item.versaoLabel, target);
+}
+
 export function AnaliseLabReplicateDialog({
   open,
   versaoLabel,
   items,
+  versions = [],
   busy,
   onClose,
   onConfirm,
 }: AnaliseLabReplicateDialogProps) {
   const sourceItems = useMemo(
     () =>
-      items.filter(
-        (i) => (i.versaoLabel || "(sem versão)") === versaoLabel,
+      items.filter((i) =>
+        itemBelongsToSourceVersao(i, versaoLabel, versions),
       ),
-    [items, versaoLabel],
+    [items, versaoLabel, versions],
   );
   const [selected, setSelected] = useState<number[]>([]);
   const [copiarMarcas, setCopiarMarcas] = useState(false);

@@ -319,7 +319,7 @@ export function AnaliseLabClientPortalPanel({
                           type="button"
                           disabled={isPortalLocked}
                           onClick={() => triggerUpload(group)}
-                          className="inline-flex items-center gap-1 rounded bg-primary-green px-1.5 py-0.5 text-[9px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                          className="inline-flex items-center gap-1 rounded bg-primary-green px-2 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
                         >
                           {groupBlocked ? (
                             <Loader2 className="size-3 animate-spin" />

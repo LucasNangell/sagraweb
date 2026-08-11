@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 
 import type {
@@ -59,6 +60,8 @@ interface AnaliseLabInspectorProps {
   markTools: AnaliseLabToolbarMarkProps;
   /** Com painel do problema aberto, opções da marca ficam no painel. */
   hideMarkOptions?: boolean;
+  /** Folhear browse: sem réguas/grade/guias/offset. */
+  hideViewAids?: boolean;
   prefs: InspectorViewPrefs;
   onPrefsChange: (prefs: InspectorViewPrefs) => void;
   pagePick?: {
@@ -92,6 +95,27 @@ interface AnaliseLabInspectorProps {
     alongToMm: number;
     pagina: number;
   }) => void;
+  /** Reserva à direita para balões (Folhear folhas). */
+  stageGutterRight?: number;
+  renderStageOverlay?: (ctx: {
+    visiblePages: ProvaWebPageMeta[];
+    pageSize: { width: number; height: number };
+    slotWidth: number;
+    gutterRight: number;
+    isSpread: boolean;
+    flipping: boolean;
+    pageRectsOverride: Record<
+      number,
+      {
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+        widthMm: number;
+        heightMm: number;
+      }
+    >;
+  }) => ReactNode;
 }
 
 export function AnaliseLabInspector({
@@ -110,6 +134,7 @@ export function AnaliseLabInspector({
   selectedMarkId = null,
   markTools,
   hideMarkOptions = false,
+  hideViewAids = false,
   prefs,
   onPrefsChange,
   pagePick = null,
@@ -117,8 +142,11 @@ export function AnaliseLabInspector({
   onCreateGeometryMark,
   onCreateFaixaDrag,
   onCreateSangriaDrag,
+  stageGutterRight = 0,
+  renderStageOverlay,
 }: AnaliseLabInspectorProps) {
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const suppressScrollSyncRef = useRef(false);
   const lastNonceRef = useRef<number | null>(null);
@@ -132,6 +160,25 @@ export function AnaliseLabInspector({
   const [avail, setAvail] = useState({ width: 800, height: 1000 });
   const [loadedPages, setLoadedPages] = useState<Set<number>>(() => new Set());
   const [activePage, setActivePage] = useState(pages[0]?.page ?? 1);
+  const [balloonCtx, setBalloonCtx] = useState<{
+    visiblePages: ProvaWebPageMeta[];
+    pageSize: { width: number; height: number };
+    slotWidth: number;
+    gutterRight: number;
+    isSpread: boolean;
+    flipping: boolean;
+    pageRectsOverride: Record<
+      number,
+      {
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+        widthMm: number;
+        heightMm: number;
+      }
+    >;
+  } | null>(null);
 
   zoomRef.current = zoom;
   activePageRef.current = activePage;
@@ -160,7 +207,7 @@ export function AnaliseLabInspector({
     if (!el) return;
     const measure = () => {
       setAvail({
-        width: el.clientWidth,
+        width: Math.max(40, el.clientWidth - stageGutterRight),
         height: el.clientHeight,
       });
     };
@@ -168,7 +215,127 @@ export function AnaliseLabInspector({
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [stageGutterRight]);
+
+  useEffect(() => {
+    if (!renderStageOverlay || stageGutterRight <= 0) {
+      setBalloonCtx(null);
+      return;
+    }
+    const stage = stageRef.current;
+    const scroller = scrollerRef.current;
+    if (!stage || !scroller) return;
+
+    const measureBalloons = () => {
+      const stageBox = stage.getBoundingClientRect();
+      const viewportTop = scroller.scrollTop;
+      const viewportBottom = viewportTop + scroller.clientHeight;
+      const visible: ProvaWebPageMeta[] = [];
+      const pageRectsOverride: Record<
+        number,
+        {
+          left: number;
+          top: number;
+          width: number;
+          height: number;
+          widthMm: number;
+          heightMm: number;
+        }
+      > = {};
+
+      for (const page of pages) {
+        const node = scroller.querySelector(
+          `[data-lab-page="${page.page}"]`,
+        ) as HTMLElement | null;
+        if (!node) continue;
+        const rect = node.getBoundingClientRect();
+        const top = rect.top - stageBox.top;
+        const relTop =
+          rect.top -
+          scroller.getBoundingClientRect().top +
+          scroller.scrollTop;
+        const relBottom = relTop + rect.height;
+        if (relBottom < viewportTop || relTop > viewportBottom) continue;
+
+        const { widthMm, heightMm } = pageSizeMm(
+          page.widthPt || 0,
+          page.heightPt || 0,
+        );
+        visible.push(page);
+        pageRectsOverride[page.page] = {
+          left: rect.left - stageBox.left,
+          top,
+          width: rect.width,
+          height: rect.height,
+          widthMm,
+          heightMm,
+        };
+      }
+
+      if (!visible.length) {
+        // Fallback: página ativa
+        const active =
+          pages.find((p) => p.page === activePageRef.current) ?? pages[0];
+        if (active) {
+          const node = scroller.querySelector(
+            `[data-lab-page="${active.page}"]`,
+          ) as HTMLElement | null;
+          if (node) {
+            const rect = node.getBoundingClientRect();
+            const { widthMm, heightMm } = pageSizeMm(
+              active.widthPt || 0,
+              active.heightPt || 0,
+            );
+            visible.push(active);
+            pageRectsOverride[active.page] = {
+              left: rect.left - stageBox.left,
+              top: rect.top - stageBox.top,
+              width: rect.width,
+              height: rect.height,
+              widthMm,
+              heightMm,
+            };
+          }
+        }
+      }
+
+      if (!visible.length) {
+        setBalloonCtx(null);
+        return;
+      }
+
+      const firstRect = pageRectsOverride[visible[0]!.page];
+      setBalloonCtx({
+        visiblePages: visible,
+        pageSize: firstRect
+          ? { width: firstRect.width, height: firstRect.height }
+          : { width: 400, height: 560 },
+        slotWidth: Math.max(1, stage.clientWidth),
+        gutterRight: stageGutterRight,
+        isSpread: visible.length > 1,
+        flipping: false,
+        pageRectsOverride,
+      });
+    };
+
+    measureBalloons();
+    const ro = new ResizeObserver(measureBalloons);
+    ro.observe(stage);
+    ro.observe(scroller);
+    scroller.addEventListener("scroll", measureBalloons, { passive: true });
+    return () => {
+      ro.disconnect();
+      scroller.removeEventListener("scroll", measureBalloons);
+    };
+  }, [
+    activePage,
+    pages,
+    renderStageOverlay,
+    rows,
+    stageGutterRight,
+    viewMode,
+    zoom,
+  ]);
 
   useEffect(() => {
     saveInspectorViewMode(viewMode);
@@ -428,6 +595,7 @@ export function AnaliseLabInspector({
       <AnaliseLabToolbar
         mark={markTools}
         hideMarkOptions={hideMarkOptions}
+        hideViewAids={hideViewAids}
         prefs={prefs}
         onPrefsChange={onPrefsChange}
         activePage={activePage}
@@ -467,8 +635,16 @@ export function AnaliseLabInspector({
         </div>
       ) : null}
 
-      <div ref={scrollerRef} className="relative min-h-0 flex-1 overflow-auto p-4">
-        <div className="mx-auto flex flex-col gap-8">
+      <div
+        ref={scrollerRef}
+        className="relative min-h-0 flex-1 overflow-auto p-4"
+        style={
+          stageGutterRight > 0
+            ? { paddingRight: stageGutterRight + 16 }
+            : undefined
+        }
+      >
+        <div ref={stageRef} className="relative mx-auto flex w-full flex-col gap-8">
           {rows.map((row, rowIdx) => (
             <div
               key={`row-${rowIdx}-${row.map((p) => p.page).join("-")}`}
@@ -536,6 +712,9 @@ export function AnaliseLabInspector({
               })}
             </div>
           ))}
+          {renderStageOverlay && balloonCtx
+            ? renderStageOverlay(balloonCtx)
+            : null}
         </div>
       </div>
     </div>

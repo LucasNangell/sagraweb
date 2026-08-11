@@ -1,4 +1,8 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   BookOpen,
   CheckCircle2,
@@ -6,10 +10,10 @@ import {
   Loader2,
   RefreshCw,
   ScanSearch,
-  Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import { fetchOsVersions } from "@/api/analise";
 import {
   analiseLabPageUrl,
   createAnaliseLabItem,
@@ -33,8 +37,11 @@ import {
   type UpdateAnaliseLabItemPayload,
   type UpdateAnaliseLabMarkPayload,
 } from "@/api/analiseLab";
+import { queryKeys } from "@/api/query-keys";
 import type { ProvaWebCropJson } from "@/api/provaWeb";
+import { countPdfPagesInFolder } from "@/features/analise/pdfPageCount";
 import type { ProblemaPadrao } from "@/features/analise/types";
+import { versionNeedsCapaMioloPrompt } from "@/features/analise/versionPdfClassify";
 import { ProvaWebViewerShell } from "@/features/prova-web/ProvaWebViewerShell";
 import logoUrl from "@/logo.png";
 
@@ -49,7 +56,6 @@ import {
   type AnaliseLabItemPanelModel,
 } from "./AnaliseLabItemPanel";
 import { AnaliseLabLibrary } from "./AnaliseLabLibrary";
-import { AnaliseLabMarkEditor } from "./AnaliseLabMarkEditor";
 import { AnaliseLabMarkCreateOptions } from "./AnaliseLabMarkCreateOptions";
 import { AnaliseLabMarksLayer } from "./AnaliseLabMarksLayer";
 import type { AnaliseLabTool } from "./AnaliseLabMarkTools";
@@ -63,11 +69,9 @@ import {
   normalizeFolhearModo,
 } from "./analiseLabFolhearModo";
 import { pageSizeMm } from "./analiseLabGeometry";
-import { labelTipo } from "./analiseLabLabels";
 import { buildLibraryDraft } from "./analiseLabLibraryDraft";
 import {
   formatPageSpec,
-  markScopeLabel,
   parsePageSpec,
   togglePagePickSpec,
 } from "./analiseLabPageSpec";
@@ -75,6 +79,7 @@ import { pageNumberToIndex } from "./analiseLabPageSync";
 import { AnaliseLabReplicateDialog } from "./AnaliseLabReplicateDialog";
 import { AnaliseLabSourcePicker } from "./AnaliseLabSourcePicker";
 import {
+  BROWSE_VIEW_PREFS,
   loadViewPrefs,
   normalizeViewPrefs,
   saveViewPrefs,
@@ -87,7 +92,6 @@ interface AnaliseLabPageProps {
 }
 
 type LabTab = "inspecao" | "folhear";
-type LeftPane = "itens" | "marcas";
 
 function isInFlight(status?: string): boolean {
   return status === "pending" || status === "running";
@@ -100,7 +104,6 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [tab, setTab] = useState<LabTab>("inspecao");
-  const [leftPane, setLeftPane] = useState<LeftPane>("itens");
   const [concluirOpen, setConcluirOpen] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -135,6 +138,10 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const [dismissedBalloonIds, setDismissedBalloonIds] = useState<number[]>([]);
   const [occurrenceIndex, setOccurrenceIndex] = useState(0);
   const [replicateVersao, setReplicateVersao] = useState<string | null>(null);
+  const [capaMioloChoiceByVersion, setCapaMioloChoiceByVersion] = useState<
+    Record<string, boolean>
+  >({});
+  const capaMioloPromptCheckedRef = useRef(false);
   const [draftLibraryItem, setDraftLibraryItem] =
     useState<AnaliseLabItemPanelModel | null>(null);
   const draftPayloadRef = useRef<UpdateAnaliseLabItemPayload | null>(null);
@@ -188,9 +195,40 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     },
   });
 
+  const versionsQuery = useQuery({
+    queryKey: queryKeys.analise.versions(ano, osId),
+    queryFn: () => fetchOsVersions(ano, osId),
+    enabled: Boolean(ano && osId),
+    staleTime: 60_000,
+  });
+  const osVersions = versionsQuery.data?.versions ?? [];
+
+  const versionPdfPageQueries = useQueries({
+    queries: osVersions.map((version) => ({
+      queryKey: queryKeys.analise.pdfPages(version.path),
+      queryFn: () => countPdfPagesInFolder(version.path),
+      enabled: Boolean(version.path) && versionsQuery.isSuccess,
+      staleTime: 60_000,
+    })),
+  });
+
+  const versionPdfPerFile = useMemo(() => {
+    const map: Record<string, { name: string; path: string; pages: number }[]> =
+      {};
+    for (let i = 0; i < osVersions.length; i++) {
+      const version = osVersions[i];
+      const query = versionPdfPageQueries[i];
+      if (query?.isSuccess && query.data) {
+        map[`v${version.version}`] = query.data.perFile;
+      }
+    }
+    return map;
+  }, [osVersions, versionPdfPageQueries]);
+
   const info = infoQuery.data;
   const session = info?.session ?? null;
   const hasSession = Boolean(session);
+  const produto = info?.produto ?? "";
   const renderStatus = session?.renderStatus;
   const renderInFlight = optimisticGenerating || isInFlight(renderStatus);
   const renderReady = !optimisticGenerating && renderStatus === "ready";
@@ -232,6 +270,60 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   useEffect(() => {
     if (info?.itens) setLocalItens(info.itens);
   }, [info?.itens]);
+
+  useEffect(() => {
+    capaMioloPromptCheckedRef.current = false;
+    setCapaMioloChoiceByVersion({});
+  }, [ano, osId]);
+
+  useEffect(() => {
+    if (!hasSession || showPicker) return;
+    if (capaMioloPromptCheckedRef.current) return;
+    if (!versionsQuery.isSuccess) return;
+    if (osVersions.length === 0) return;
+    const pdfQueriesReady = osVersions.every((v, i) => {
+      if (!v.path) return true;
+      const q = versionPdfPageQueries[i];
+      return q && !q.isLoading && !q.isFetching;
+    });
+    if (!pdfQueriesReady) return;
+
+    const pending = osVersions.filter((v) => {
+      const key = `v${v.version}`;
+      const files = versionPdfPerFile[key];
+      if (!files?.length) return false;
+      return versionNeedsCapaMioloPrompt(files, {
+        produto,
+        versionLabel: v.label,
+        tratarComoCapaMiolo: capaMioloChoiceByVersion[key],
+      });
+    });
+
+    capaMioloPromptCheckedRef.current = true;
+    if (pending.length === 0) return;
+
+    const choices: Record<string, boolean> = {};
+    for (const v of pending) {
+      const key = `v${v.version}`;
+      const files = versionPdfPerFile[key] ?? [];
+      const wants = window.confirm(
+        `Na pasta «${v.label}» foram encontrados ${files.length} arquivos PDF.\n\n` +
+          `O produto «${produto || "desta OS"}» é tratado como arquivo único (sem capa e miolo separados).\n\n` +
+          `Deseja considerar capa e miolo para os arquivos desta pasta?`,
+      );
+      choices[key] = wants;
+    }
+    setCapaMioloChoiceByVersion((prev) => ({ ...prev, ...choices }));
+  }, [
+    capaMioloChoiceByVersion,
+    hasSession,
+    osVersions,
+    produto,
+    showPicker,
+    versionPdfPageQueries,
+    versionPdfPerFile,
+    versionsQuery.isSuccess,
+  ]);
 
   const marks = localMarks ?? info?.marks ?? [];
   const itens = localItens ?? info?.itens ?? [];
@@ -421,7 +513,6 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
         } else if (updated[0]) {
           setSelectedItemId(updated[0].id);
         }
-        setLeftPane("itens");
         invalidate();
         return updated[0] ?? null;
       }
@@ -455,7 +546,6 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
       } else if (items[0]) {
         setSelectedItemId(items[0].id);
       }
-      setLeftPane("itens");
       invalidate();
       return items[0] ?? null;
     } catch (err) {
@@ -781,6 +871,10 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const itemListProps = {
     items: itens,
     currentVersaoLabel: session?.versaoLabel,
+    versions: osVersions,
+    versionPdfPerFile,
+    produto,
+    capaMioloChoiceByVersion,
     selectedId: selectedItemId,
     onSelect: selectItem,
     onDelete: (id: number) => void handleDeleteItem(id),
@@ -822,7 +916,6 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     setSelectedMarkId(id);
     setPagePickTarget(null);
     setTool("select");
-    setLeftPane("marcas");
     const mark = marks.find((m) => m.id === id);
     if (mark?.itemId != null && mark.itemId !== selectedItemId) {
       setSelectedItemId(mark.itemId);
@@ -1264,76 +1357,11 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         </div>
                       </div>
                       <div className="flex min-h-0 flex-1 flex-col">
-                        <div className="flex shrink-0 gap-0.5 border-b border-sagra-border p-1">
-                          {(
-                            [
-                              ["itens", "Itens"],
-                              ["marcas", "Marcas"],
-                            ] as const
-                          ).map(([id, label]) => (
-                            <button
-                              key={id}
-                              type="button"
-                              onClick={() => setLeftPane(id)}
-                              className={
-                                leftPane === id
-                                  ? "flex-1 rounded bg-primary-green/15 px-1 py-1 text-[11px] font-semibold text-primary-green"
-                                  : "flex-1 rounded px-1 py-1 text-[11px] text-neutral-600 hover:bg-neutral-50"
-                              }
-                            >
-                              {label}
-                            </button>
-                          ))}
+                        <div className="shrink-0 border-b border-sagra-border px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-600">
+                          Problemas registrados
                         </div>
                         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2">
-                          {leftPane === "itens" ? (
-                            <AnaliseLabItemList {...itemListProps} />
-                          ) : null}
-                          {leftPane === "marcas" ? (
-                            <div className="flex min-h-0 flex-1 flex-col gap-2">
-                              {selectedMark ? (
-                                <AnaliseLabMarkEditor
-                                  mark={selectedMark}
-                                  busy={actionBusy}
-                                  onSave={(p) => void handleUpdateMark(p)}
-                                  onCancel={() => setSelectedMarkId(null)}
-                                  onDelete={() =>
-                                    void handleDeleteMark(selectedMark.id)
-                                  }
-                                />
-                              ) : null}
-                              <ul className="space-y-0.5 text-xs">
-                                {marks.map((m) => (
-                                  <li
-                                    key={m.id}
-                                    className={
-                                      selectedMarkId === m.id
-                                        ? "flex items-center gap-1 rounded border border-primary-green bg-primary-green/5 px-1 py-0.5"
-                                        : "flex items-center gap-1 rounded px-1 py-0.5 hover:bg-neutral-50"
-                                    }
-                                  >
-                                    <button
-                                      type="button"
-                                      className="min-w-0 flex-1 truncate text-left"
-                                      onClick={() => selectMarkFromCanvas(m.id)}
-                                    >
-                                      {labelTipo(m.tipo)}
-                                      {m.rotulo ? ` · ${m.rotulo}` : ""}
-                                      {` · ${markScopeLabel(m)}`}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={actionBusy}
-                                      className="text-sagra-danger"
-                                      onClick={() => void handleDeleteMark(m.id)}
-                                    >
-                                      <Trash2 className="size-3" aria-hidden />
-                                    </button>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          ) : null}
+                          <AnaliseLabItemList {...itemListProps} />
                         </div>
                       </div>
                     </aside>
@@ -1578,10 +1606,35 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                           selectedMarkId={selectedMarkId}
                           markTools={markToolsProps}
                           hideMarkOptions
-                          prefs={viewPrefs}
-                          onPrefsChange={(next) =>
-                            setViewPrefs(normalizeViewPrefs(next))
-                          }
+                          hideViewAids
+                          prefs={BROWSE_VIEW_PREFS}
+                          onPrefsChange={() => undefined}
+                          stageGutterRight={balloonGutter}
+                          renderStageOverlay={(ctx) => (
+                            <AnaliseLabBalloonLayer
+                              items={folhearBalloonItems}
+                              marks={marks}
+                              pages={pages}
+                              visiblePages={ctx.visiblePages}
+                              pageSize={ctx.pageSize}
+                              slotWidth={ctx.slotWidth}
+                              gutterRight={ctx.gutterRight || balloonGutter}
+                              isSpread={ctx.isSpread}
+                              flipping={ctx.flipping}
+                              selectedItemId={selectedItemId}
+                              dismissedIds={dismissedBalloonIds}
+                              pageRectsOverride={ctx.pageRectsOverride}
+                              onDismiss={(id) =>
+                                setDismissedBalloonIds((prev) =>
+                                  prev.includes(id) ? prev : [...prev, id],
+                                )
+                              }
+                              onGoToOccurrence={(itemId, page) => {
+                                setSelectedItemId(itemId);
+                                goToPage(page);
+                              }}
+                            />
+                          )}
                           onSelectMark={selectMarkFromCanvas}
                           onCreateGeometryMark={() => undefined}
                           onCreateFaixaDrag={() => undefined}
@@ -1644,6 +1697,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
         open={Boolean(replicateVersao)}
         versaoLabel={replicateVersao || ""}
         items={itens}
+        versions={osVersions}
         busy={actionBusy}
         onClose={() => setReplicateVersao(null)}
         onConfirm={(payload) => void handleReplicateItems(payload)}

@@ -10,6 +10,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   Copy,
+  ExternalLink,
   GripVertical,
   Lock,
   LockOpen,
@@ -19,12 +20,17 @@ import {
 import { useMemo } from "react";
 
 import type { AnaliseLabItem } from "@/api/analiseLab";
+import type { OsVersionItem } from "@/features/analise/types";
+import type { VersionPdfFile } from "@/features/analise/versionPdfClassify";
+import { openPathLocally } from "@/lib/sagraLocalOpener";
+
 import { markScopeLabel } from "./analiseLabPageSpec";
 import {
   buildLabItemsTree,
   canDropLabItem,
   labComponentDropId,
   labItemDragId,
+  type LabVersionPdfPerFile,
   parseLabComponentDropId,
   parseLabItemDragId,
   reorderIdsAfterDrop,
@@ -33,6 +39,10 @@ import {
 interface AnaliseLabItemListProps {
   items: AnaliseLabItem[];
   currentVersaoLabel?: string;
+  versions?: OsVersionItem[];
+  versionPdfPerFile?: LabVersionPdfPerFile;
+  produto?: string | null;
+  capaMioloChoiceByVersion?: Record<string, boolean>;
   selectedId: number | null;
   onSelect: (id: number) => void;
   onDelete?: (id: number) => void;
@@ -48,6 +58,10 @@ interface AnaliseLabItemListProps {
 export function AnaliseLabItemList({
   items,
   currentVersaoLabel = "",
+  versions = [],
+  versionPdfPerFile,
+  produto,
+  capaMioloChoiceByVersion,
   selectedId,
   onSelect,
   onDelete,
@@ -60,8 +74,23 @@ export function AnaliseLabItemList({
   busy,
 }: AnaliseLabItemListProps) {
   const tree = useMemo(
-    () => buildLabItemsTree(items, currentVersaoLabel),
-    [currentVersaoLabel, items],
+    () =>
+      buildLabItemsTree(
+        items,
+        currentVersaoLabel,
+        versions,
+        versionPdfPerFile,
+        produto,
+        capaMioloChoiceByVersion,
+      ),
+    [
+      capaMioloChoiceByVersion,
+      currentVersaoLabel,
+      items,
+      produto,
+      versionPdfPerFile,
+      versions,
+    ],
   );
 
   const sensors = useSensors(
@@ -106,11 +135,19 @@ export function AnaliseLabItemList({
         targetComponente = parsedComp.componente;
         targetIsComponent = true;
       } else if (parsedItem != null) {
-        const overItem = items.find((i) => i.id === parsedItem);
-        if (!overItem) return;
-        targetVersao = overItem.versaoLabel || "(sem versão)";
-        targetComponente = overItem.componente || "Outros";
-        overItemId = overItem.id;
+        const host = tree
+          .flatMap((v) =>
+            v.components.map((c) => ({
+              versaoLabel: v.label,
+              componente: c.label,
+              items: c.items,
+            })),
+          )
+          .find((c) => c.items.some((i) => i.id === parsedItem));
+        if (!host) return;
+        targetVersao = host.versaoLabel;
+        targetComponente = host.componente;
+        overItemId = parsedItem;
         targetIsComponent = false;
       } else {
         return;
@@ -136,14 +173,11 @@ export function AnaliseLabItemList({
     }
 
     if (!onReorder) return;
-    const componentIds = items
-      .filter(
-        (i) =>
-          (i.versaoLabel || "(sem versão)") === targetVersao &&
-          (i.componente || "Outros") === targetComponente,
-      )
-      .sort((a, b) => (a.ordem || 0) - (b.ordem || 0) || a.id - b.id)
-      .map((i) => i.id);
+    const componentIds =
+      tree
+        .find((v) => v.label === targetVersao)
+        ?.components.find((c) => c.label === targetComponente)
+        ?.items.map((i) => i.id) ?? [];
 
     const nextLocal = reorderIdsAfterDrop({
       componentItemIds: componentIds,
@@ -152,13 +186,14 @@ export function AnaliseLabItemList({
       targetIsComponent,
     });
 
-    // Build global order: keep other items, replace this component block.
     const otherIds = items
       .filter((i) => !componentIds.includes(i.id))
       .sort((a, b) => (a.ordem || 0) - (b.ordem || 0) || a.id - b.id)
       .map((i) => i.id);
     onReorder([...otherIds, ...nextLocal]);
   };
+
+  const empty = tree.length === 0 && items.length === 0;
 
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
@@ -193,6 +228,24 @@ export function AnaliseLabItemList({
                 <div className="text-[11px] font-medium text-neutral-600">
                   {comp.label}
                 </div>
+                {(comp.versionFiles?.length
+                  ? comp.versionFiles
+                  : comp.versionFile
+                    ? [comp.versionFile]
+                    : []
+                ).map((file) =>
+                  file.ausente ? (
+                    <VersionPdfAbsentRow
+                      key={`${comp.key}-absent-${file.componente}`}
+                      componente={file.componente}
+                    />
+                  ) : (
+                    <VersionPdfOpenRow
+                      key={`${comp.key}-open-${file.path || file.name}`}
+                      file={file}
+                    />
+                  ),
+                )}
                 <ul className="space-y-0.5">
                   {comp.items.map((item) => (
                     <ItemRow
@@ -238,11 +291,50 @@ export function AnaliseLabItemList({
             ))}
           </div>
         ))}
-        {!items.length ? (
+        {empty ? (
           <p className="text-neutral-400">Nenhum problema registrado.</p>
         ) : null}
       </div>
     </DndContext>
+  );
+}
+
+function VersionPdfAbsentRow({ componente }: { componente: string }) {
+  return (
+    <div className="mb-0.5 border-b border-slate-100 bg-amber-50/40 py-1 pl-2 pr-1">
+      <span
+        className="text-[11px] italic text-amber-900/90"
+        title={`Arquivo de ${componente} não encontrado`}
+      >
+        (ausente)
+      </span>
+    </div>
+  );
+}
+
+function VersionPdfOpenRow({ file }: { file: VersionPdfFile }) {
+  const handleOpen = async () => {
+    const ok = await openPathLocally(file.path, "file");
+    if (!ok) {
+      window.alert(
+        `Não foi possível abrir o arquivo localmente.\n\nVerifique se o serviço SAGRA Folder Opener está em execução.\n\n${file.name}`,
+      );
+    }
+  };
+
+  return (
+    <div className="mb-0.5 border-b border-slate-100 bg-white py-1 pl-2 pr-1">
+      <button
+        type="button"
+        onClick={() => void handleOpen()}
+        title={file.name}
+        className="inline-flex max-w-full items-center gap-1.5 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-secondary-blue hover:bg-blue-50"
+      >
+        <ExternalLink className="size-3 shrink-0" aria-hidden />
+        <span className="truncate">Abrir arquivo</span>
+        <span className="tabular-nums text-slate-500">({file.pages} pág.)</span>
+      </button>
+    </div>
   );
 }
 

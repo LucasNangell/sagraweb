@@ -50,6 +50,8 @@ interface AnaliseLabToolbarProps {
   onToggleViewMode: () => void;
   /** Oculta a 2ª barra (opções movidas para o painel do problema). */
   hideMarkOptions?: boolean;
+  /** Oculta réguas/grade/guias/offset (modo Folhear browse). */
+  hideViewAids?: boolean;
 }
 
 export function AnaliseLabToolbar({
@@ -68,6 +70,7 @@ export function AnaliseLabToolbar({
   onFit,
   onToggleViewMode,
   hideMarkOptions = false,
+  hideViewAids = false,
 }: AnaliseLabToolbarProps) {
   const hasGuides =
     prefs.guidesXMm.length > 0 || prefs.guidesYMm.length > 0;
@@ -142,134 +145,144 @@ export function AnaliseLabToolbar({
           </span>
         </div>
 
-        <span className={divider} aria-hidden />
+        {!hideViewAids ? (
+          <>
+            <span className={divider} aria-hidden />
 
-        <div className="flex flex-wrap items-center gap-1">
-          <button
-            type="button"
-            onClick={() => onPrefsChange({ ...prefs, rulers: !prefs.rulers })}
-            className={prefs.rulers ? btnActive : btnIdle}
-            title="Réguas"
-            aria-label="Réguas"
-            aria-pressed={prefs.rulers}
-          >
-            <Ruler className="size-3.5" aria-hidden />
-          </button>
-          <button
-            type="button"
-            onClick={() => onPrefsChange({ ...prefs, grid: !prefs.grid })}
-            className={prefs.grid ? btnActive : btnIdle}
-            title="Linhas de grade"
-            aria-label="Linhas de grade"
-            aria-pressed={prefs.grid}
-          >
-            <Grid3X3 className="size-3.5" aria-hidden />
-          </button>
-          {prefs.grid ? (
-            <>
-              <label className="flex items-center gap-1 text-[11px] text-neutral-600">
-                mm
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={prefs.gridStepMm}
-                  onChange={(e) =>
-                    onPrefsChange({
-                      ...prefs,
-                      gridStepMm: Number(e.target.value) || 10,
-                    })
-                  }
-                  className={`${inputClass} w-12`}
-                />
-              </label>
-              <input
-                type="color"
-                value={prefs.gridColor}
-                onChange={(e) =>
-                  onPrefsChange({ ...prefs, gridColor: e.target.value })
+            <div className="flex flex-wrap items-center gap-1">
+              <button
+                type="button"
+                onClick={() =>
+                  onPrefsChange({ ...prefs, rulers: !prefs.rulers })
                 }
-                className={colorInputClass}
-                title="Cor da grade"
-                aria-label="Cor da grade"
-              />
-            </>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => onPrefsChange({ ...prefs, guides: !prefs.guides })}
-            className={prefs.guides ? btnActive : btnIdle}
-            title="Linhas guia"
-            aria-label="Linhas guia"
-            aria-pressed={prefs.guides}
-          >
-            Guia
-          </button>
-          {prefs.guides ? (
-            <input
-              type="color"
-              value={prefs.guideColor}
-              onChange={(e) =>
-                onPrefsChange({ ...prefs, guideColor: e.target.value })
-              }
-              className={colorInputClass}
-              title="Cor das guias"
-              aria-label="Cor das guias"
-            />
-          ) : null}
-          <button
-            type="button"
-            disabled={!hasGuides}
-            onClick={() =>
-              onPrefsChange({ ...prefs, guidesXMm: [], guidesYMm: [] })
-            }
-            className={`${btnIdle} disabled:opacity-40`}
-            title="Limpar guias"
-          >
-            Limpar
-          </button>
-          <button
-            type="button"
-            onClick={() => onPrefsChange({ ...prefs, offset: !prefs.offset })}
-            className={prefs.offset ? btnActive : btnIdle}
-            title="Offset de corte (auxiliar)"
-            aria-label="Offset de corte"
-            aria-pressed={prefs.offset}
-          >
-            <BetweenHorizontalStart className="size-3.5" aria-hidden />
-          </button>
-          {prefs.offset ? (
-            <>
-              <label className="flex items-center gap-1 text-[11px] text-neutral-600">
-                mm
-                <input
-                  type="number"
-                  min={0.5}
-                  max={100}
-                  step={0.5}
-                  value={prefs.offsetMm}
-                  onChange={(e) =>
-                    onPrefsChange({
-                      ...prefs,
-                      offsetMm: Number(e.target.value) || 7,
-                    })
-                  }
-                  className={`${inputClass} w-12`}
-                />
-              </label>
-              <input
-                type="color"
-                value={prefs.offsetColor}
-                onChange={(e) =>
-                  onPrefsChange({ ...prefs, offsetColor: e.target.value })
+                className={prefs.rulers ? btnActive : btnIdle}
+                title="Réguas"
+                aria-label="Réguas"
+                aria-pressed={prefs.rulers}
+              >
+                <Ruler className="size-3.5" aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={() => onPrefsChange({ ...prefs, grid: !prefs.grid })}
+                className={prefs.grid ? btnActive : btnIdle}
+                title="Linhas de grade"
+                aria-label="Linhas de grade"
+                aria-pressed={prefs.grid}
+              >
+                <Grid3X3 className="size-3.5" aria-hidden />
+              </button>
+              {prefs.grid ? (
+                <>
+                  <label className="flex items-center gap-1 text-[11px] text-neutral-600">
+                    mm
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={prefs.gridStepMm}
+                      onChange={(e) =>
+                        onPrefsChange({
+                          ...prefs,
+                          gridStepMm: Number(e.target.value) || 10,
+                        })
+                      }
+                      className={`${inputClass} w-12`}
+                    />
+                  </label>
+                  <input
+                    type="color"
+                    value={prefs.gridColor}
+                    onChange={(e) =>
+                      onPrefsChange({ ...prefs, gridColor: e.target.value })
+                    }
+                    className={colorInputClass}
+                    title="Cor da grade"
+                    aria-label="Cor da grade"
+                  />
+                </>
+              ) : null}
+              <button
+                type="button"
+                onClick={() =>
+                  onPrefsChange({ ...prefs, guides: !prefs.guides })
                 }
-                className={colorInputClass}
-                title="Cor do offset"
-                aria-label="Cor do offset"
-              />
-            </>
-          ) : null}
-        </div>
+                className={prefs.guides ? btnActive : btnIdle}
+                title="Linhas guia"
+                aria-label="Linhas guia"
+                aria-pressed={prefs.guides}
+              >
+                Guia
+              </button>
+              {prefs.guides ? (
+                <input
+                  type="color"
+                  value={prefs.guideColor}
+                  onChange={(e) =>
+                    onPrefsChange({ ...prefs, guideColor: e.target.value })
+                  }
+                  className={colorInputClass}
+                  title="Cor das guias"
+                  aria-label="Cor das guias"
+                />
+              ) : null}
+              <button
+                type="button"
+                disabled={!hasGuides}
+                onClick={() =>
+                  onPrefsChange({ ...prefs, guidesXMm: [], guidesYMm: [] })
+                }
+                className={`${btnIdle} disabled:opacity-40`}
+                title="Limpar guias"
+              >
+                Limpar
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  onPrefsChange({ ...prefs, offset: !prefs.offset })
+                }
+                className={prefs.offset ? btnActive : btnIdle}
+                title="Offset de corte (auxiliar)"
+                aria-label="Offset de corte"
+                aria-pressed={prefs.offset}
+              >
+                <BetweenHorizontalStart className="size-3.5" aria-hidden />
+              </button>
+              {prefs.offset ? (
+                <>
+                  <label className="flex items-center gap-1 text-[11px] text-neutral-600">
+                    mm
+                    <input
+                      type="number"
+                      min={0.5}
+                      max={100}
+                      step={0.5}
+                      value={prefs.offsetMm}
+                      onChange={(e) =>
+                        onPrefsChange({
+                          ...prefs,
+                          offsetMm: Number(e.target.value) || 7,
+                        })
+                      }
+                      className={`${inputClass} w-12`}
+                    />
+                  </label>
+                  <input
+                    type="color"
+                    value={prefs.offsetColor}
+                    onChange={(e) =>
+                      onPrefsChange({ ...prefs, offsetColor: e.target.value })
+                    }
+                    className={colorInputClass}
+                    title="Cor do offset"
+                    aria-label="Cor do offset"
+                  />
+                </>
+              ) : null}
+            </div>
+          </>
+        ) : null}
       </div>
 
       {showOptions ? <AnaliseLabMarkCreateOptions {...createOptions} /> : null}

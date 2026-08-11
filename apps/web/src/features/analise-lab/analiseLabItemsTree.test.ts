@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { AnaliseLabItem } from "@/api/analiseLab";
+import type { OsVersionItem } from "@/features/analise/types";
 
 import {
   buildLabItemsTree,
@@ -45,8 +46,14 @@ const items: AnaliseLabItem[] = [
   },
 ];
 
+const versions: OsVersionItem[] = [
+  { version: 1, label: "v1 (Original)", path: "C:/os/v1" },
+  { version: 2, label: "v2 (Original)", path: "C:/os/v2" },
+  { version: 3, label: "v3 (Original)", path: "C:/os/v3" },
+];
+
 describe("analiseLabItemsTree", () => {
-  it("groups by version and component", () => {
+  it("groups by version and component without OS versions", () => {
     const tree = buildLabItemsTree(items, "v2");
     expect(tree[0].label).toBe("v2");
     expect(tree[0].readonly).toBe(false);
@@ -55,9 +62,73 @@ describe("analiseLabItemsTree", () => {
     expect(capa?.items.map((i) => i.id)).toEqual([1]);
   });
 
+  it("shows all OS versions including empty ones", () => {
+    const tree = buildLabItemsTree(items, "v2 (Original)", versions);
+    expect(tree.map((v) => v.label)).toEqual([
+      "v2 (Original)",
+      "v1 (Original)",
+      "v3 (Original)",
+    ]);
+    expect(tree.find((v) => v.label === "v3 (Original)")?.itemCount).toBe(0);
+    expect(tree.find((v) => v.label === "v3 (Original)")?.readonly).toBe(true);
+  });
+
+  it("matches fuzzy version labels like Análise", () => {
+    const tree = buildLabItemsTree(items, "v2", versions);
+    const v2 = tree.find((v) => v.key === "v2");
+    expect(v2?.readonly).toBe(false);
+    expect(v2?.itemCount).toBe(2);
+    expect(v2?.components.find((c) => c.label === "Capa")?.items.map((i) => i.id)).toEqual([
+      1,
+    ]);
+  });
+
+  it("attaches classified PDF files to component slots", () => {
+    const tree = buildLabItemsTree(
+      items,
+      "v2 (Original)",
+      versions,
+      {
+        v2: [
+          { name: "capa.pdf", path: "C:/os/v2/capa.pdf", pages: 2 },
+          { name: "miolo.pdf", path: "C:/os/v2/miolo.pdf", pages: 40 },
+        ],
+        v3: [],
+      },
+      "Revista",
+    );
+    const v2 = tree.find((v) => v.key === "v2");
+    const capa = v2?.components.find((c) => c.label === "Capa");
+    expect(capa?.versionFile?.name).toBe("capa.pdf");
+    expect(capa?.versionFile?.ausente).toBeFalsy();
+    const miolo = v2?.components.find((c) => c.label === "Miolo");
+    expect(miolo?.versionFile?.name).toBe("miolo.pdf");
+  });
+
+  it("keeps orphan items with unknown version labels", () => {
+    const withOrphan: AnaliseLabItem[] = [
+      ...items,
+      {
+        id: 9,
+        sessaoId: 1,
+        titulo: "Órfão",
+        htmlSnapshot: "",
+        componente: "Arq. Único",
+        escopo: "pagina",
+        pagina: 1,
+        versaoLabel: "legado-x",
+        ordem: 1,
+      },
+    ];
+    const tree = buildLabItemsTree(withOrphan, "v2 (Original)", versions);
+    expect(tree.find((v) => v.label === "legado-x")?.itemCount).toBe(1);
+  });
+
   it("detects readonly versions", () => {
     expect(isLabVersionReadOnly("v1", "v2")).toBe(true);
     expect(isLabVersionReadOnly("v2", "v2")).toBe(false);
+    expect(isLabVersionReadOnly("v1 (Original)", "v2", versions)).toBe(true);
+    expect(isLabVersionReadOnly("v2", "v2 (Original)", versions)).toBe(false);
   });
 
   it("allows drop only in same writable version", () => {

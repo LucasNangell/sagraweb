@@ -740,6 +740,34 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     return formatPageSpec(nums);
   }, [pages]);
 
+  /** Escopo de páginas do problema aberto — usado por "Todas as páginas" da marca. */
+  const markAllPagesSpec = useMemo(() => {
+    const panelItem =
+      selectedItem ??
+      (draftLibraryItem
+        ? {
+            escopo: draftLibraryItem.escopo,
+            pagina: draftLibraryItem.pagina,
+            paginas: draftLibraryItem.paginas,
+            componente: draftLibraryItem.componente,
+          }
+        : null);
+    if (!panelItem) return "";
+    return formatPageSpec(itemOccurrences(panelItem, pages, parsePageSpec));
+  }, [selectedItem, draftLibraryItem, pages]);
+
+  const selectMarkFromCanvas = (id: number) => {
+    setSelectedMarkId(id);
+    setPagePickTarget(null);
+    setTool("select");
+    setLeftPane("marcas");
+    const mark = marks.find((m) => m.id === id);
+    if (mark?.itemId != null && mark.itemId !== selectedItemId) {
+      setSelectedItemId(mark.itemId);
+      setDraftLibraryItem(null);
+    }
+  };
+
   /** Maior profundidade de sangria gravada — define a folga do Folhear. */
   const maxSangriaMm = marks.reduce((max, m) => {
     if (m.tipo !== "sangria") return max;
@@ -858,11 +886,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     },
     pagePickActive: pagePickTarget === "item",
     onTogglePagePick: () => {
-      setPagePickTarget((prev) => {
-        if (prev === "item") return null;
-        setItemPageSpec("");
-        return "item";
-      });
+      setPagePickTarget((prev) => (prev === "item" ? null : "item"));
     },
     allPagesSpec,
   };
@@ -871,7 +895,6 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     setPagePickTarget((prev) => {
       if (prev === "mark") return null;
       setApplyAllPages(false);
-      setPageSpec("");
       return "mark";
     });
   };
@@ -1186,7 +1209,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                                     <button
                                       type="button"
                                       className="min-w-0 flex-1 truncate text-left"
-                                      onClick={() => setSelectedMarkId(m.id)}
+                                      onClick={() => selectMarkFromCanvas(m.id)}
                                     >
                                       {labelTipo(m.tipo)}
                                       {m.rotulo ? ` · ${m.rotulo}` : ""}
@@ -1226,6 +1249,13 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         }}
                         tool={tool}
                         onToolChange={setTool}
+                        selectedMark={selectedMark}
+                        markAllPagesSpec={markAllPagesSpec}
+                        onUpdateMark={(p) => void handleUpdateMark(p)}
+                        onDeleteSelectedMark={() => {
+                          if (selectedMark)
+                            void handleDeleteMark(selectedMark.id);
+                        }}
                         {...itemPagePickProps}
                       />
                     ) : selectedItem ? (
@@ -1237,6 +1267,13 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         {...itemPagePickProps}
                         tool={tool}
                         onToolChange={setTool}
+                        selectedMark={selectedMark}
+                        markAllPagesSpec={markAllPagesSpec}
+                        onUpdateMark={(p) => void handleUpdateMark(p)}
+                        onDeleteSelectedMark={() => {
+                          if (selectedMark)
+                            void handleDeleteMark(selectedMark.id);
+                        }}
                         onClose={() => {
                           setSelectedItemId(null);
                           setTool("select");
@@ -1342,11 +1379,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                               }
                             : null
                         }
-                        onSelectMark={(id) => {
-                          setSelectedMarkId(id);
-                          setLeftPane("marcas");
-                          setTool("select");
-                        }}
+                        onSelectMark={selectMarkFromCanvas}
                         onCreateGeometryMark={(args) =>
                           void addMark({
                             tipo: args.tipo,

@@ -6,8 +6,10 @@ import type {
   AnaliseLabItemEscopo,
   AnaliseLabMark,
   UpdateAnaliseLabItemPayload,
+  UpdateAnaliseLabMarkPayload,
 } from "@/api/analiseLab";
 import { AnaliseHtmlEditor } from "@/features/analise/components/AnaliseHtmlEditor";
+import { AnaliseLabMarkCompactEditor } from "./AnaliseLabMarkCompactEditor";
 import { labelTipo } from "./analiseLabLabels";
 import {
   markScopeLabel,
@@ -55,6 +57,11 @@ interface AnaliseLabItemPanelProps {
   tool?: AnaliseLabTool;
   onToolChange?: (tool: AnaliseLabTool) => void;
   markToolsSlot?: ReactNode;
+  /** Editor compacto da marca selecionada (abaixo da paleta). */
+  selectedMark?: AnaliseLabMark | null;
+  markAllPagesSpec?: string;
+  onUpdateMark?: (payload: UpdateAnaliseLabMarkPayload) => void;
+  onDeleteSelectedMark?: () => void;
 }
 
 function buildPayload(args: {
@@ -119,6 +126,10 @@ export function AnaliseLabItemPanel({
   tool,
   onToolChange,
   markToolsSlot,
+  selectedMark = null,
+  markAllPagesSpec = "",
+  onUpdateMark,
+  onDeleteSelectedMark,
 }: AnaliseLabItemPanelProps) {
   const isRegister = mode === "register";
   const [titulo, setTitulo] = useState(item.titulo);
@@ -333,6 +344,15 @@ export function AnaliseLabItemPanel({
             busy={busy}
           />
           {markToolsSlot}
+          {selectedMark && onUpdateMark && onDeleteSelectedMark ? (
+            <AnaliseLabMarkCompactEditor
+              mark={selectedMark}
+              allPagesSpec={markAllPagesSpec}
+              busy={busy}
+              onSave={onUpdateMark}
+              onDelete={onDeleteSelectedMark}
+            />
+          ) : null}
         </div>
       ) : null}
 

@@ -54,34 +54,34 @@ describe("resolveFlapProgress", () => {
   it("abre por order", () => {
     const map = resolveFlapProgress(
       [
-        { id: "a", panelId: "tuck_top", order: 1, targetAngleDeg: 110 },
+        { id: "a", panelId: "lid_top", order: 1, targetAngleDeg: 120 },
         { id: "b", panelId: "dust", order: 2, targetAngleDeg: 100 },
       ],
       0.25,
     );
-    expect(map.get("tuck_top")).toBeGreaterThan(0);
-    expect(map.get("tuck_top")).toBeLessThanOrEqual(1);
+    expect(map.get("lid_top")).toBeGreaterThan(0);
+    expect(map.get("lid_top")).toBeLessThanOrEqual(1);
     expect(map.get("dust") ?? 0).toBe(0);
   });
 
   it("totalmente aberto", () => {
     const map = resolveFlapProgress(
       [
-        { id: "a", panelId: "tuck_top", order: 1, targetAngleDeg: 110 },
+        { id: "a", panelId: "lid_top", order: 1, targetAngleDeg: 120 },
         { id: "b", panelId: "dust", order: 2, targetAngleDeg: 100 },
       ],
       1,
     );
-    expect(map.get("tuck_top")).toBe(1);
+    expect(map.get("lid_top")).toBe(1);
     expect(map.get("dust")).toBe(1);
   });
 });
 
 describe("defaultCaixaCrop", () => {
-  it("defaults combined e separate", () => {
-    const c = defaultCaixaCrop("combined");
-    expect(c.sourceKind).toBe("combined");
-    expect(c.template).toBe("tuck_end_reverse");
+  it("defaults model e graph", () => {
+    const c = defaultCaixaCrop("model");
+    expect(c.sourceKind).toBe("model");
+    expect(c.template).toBe("graph");
     expect(c.dimsMm.height).toBeGreaterThan(0);
 
     const s = defaultCaixaCrop("separate");
@@ -90,19 +90,19 @@ describe("defaultCaixaCrop", () => {
 });
 
 describe("pdfSourcesFromRecord caixa", () => {
-  it("combined vs separate", () => {
+  it("model vs separate", () => {
     expect(
       pdfSourcesFromRecord({
         modo: "caixa",
-        arquivoUnico: "caixa.pdf",
+        arquivoUnico: "arte.pdf",
         arquivoCapa: null,
         arquivoMiolo: null,
         pontoRegistro: null,
         dataRegistro: null,
         dataAtualizacao: null,
-        cropJson: { caixa: defaultCaixaCrop("combined") },
+        cropJson: { caixa: defaultCaixaCrop("model") },
       }),
-    ).toEqual([{ id: "unico", label: "Caixa", path: "caixa.pdf" }]);
+    ).toEqual([{ id: "unico", label: "Arte", path: "arte.pdf" }]);
 
     expect(
       pdfSourcesFromRecord({

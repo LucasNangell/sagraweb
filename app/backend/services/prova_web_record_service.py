@@ -477,9 +477,9 @@ def resolve_record_sources(
     if modo == MODE_CAIXA:
         crop = record.get("cropJson") if isinstance(record.get("cropJson"), dict) else {}
         caixa = crop.get("caixa") if isinstance(crop, dict) else None
-        kind = "combined"
+        kind = "model"
         if isinstance(caixa, dict):
-            kind = str(caixa.get("sourceKind") or "combined").strip().lower()
+            kind = str(caixa.get("sourceKind") or "model").strip().lower()
         if kind == "separate":
             faca = resolve_os_relative_pdf(folder, record.get("arquivoCapa") or "")
             arte = resolve_os_relative_pdf(folder, record.get("arquivoMiolo") or "")
@@ -562,9 +562,9 @@ def prova_web_pdf_sources_meta(record: dict[str, Any]) -> list[dict[str, str]]:
     if modo == MODE_CAIXA:
         crop = record.get("cropJson") if isinstance(record.get("cropJson"), dict) else {}
         caixa = crop.get("caixa") if isinstance(crop, dict) else None
-        kind = "combined"
+        kind = "model"
         if isinstance(caixa, dict):
-            kind = str(caixa.get("sourceKind") or "combined").strip().lower()
+            kind = str(caixa.get("sourceKind") or "model").strip().lower()
         if kind == "separate":
             out = []
             if record.get("arquivoCapa"):
@@ -573,7 +573,8 @@ def prova_web_pdf_sources_meta(record: dict[str, Any]) -> list[dict[str, str]]:
                 out.append({"id": "miolo", "label": "Arte"})
             return out
         if record.get("arquivoUnico"):
-            return [{"id": "unico", "label": "Caixa"}]
+            label = "Arte" if kind == "model" else "Caixa"
+            return [{"id": "unico", "label": label}]
         return []
     if record.get("arquivoUnico"):
         label = "Folheto" if modo == MODE_FOLHA_DOBRADA else "PDF"

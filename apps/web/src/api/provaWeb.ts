@@ -203,13 +203,27 @@ export interface ProvaWebCaixaOpenOperation {
   order: number;
   targetAngleDeg: number;
   phaseId?: string;
+  hingeId?: string;
+  movingSide?: "negative" | "positive" | string;
+  towards?: "front" | "back" | string;
 }
 
-/** Config persistida em CropJson.caixa (tuck-end). */
+/** Config persistida em CropJson.caixa (flip-top ou modelo Admin). */
+export interface ProvaWebCaixaArtTransform {
+  /** Translacao em mm no espaço da net/faca. */
+  txMm: number;
+  tyMm: number;
+  scale: number;
+  rotationDeg: number;
+}
+
 export interface ProvaWebCaixaCrop {
-  sourceKind: "combined" | "separate";
-  template: "tuck_end_reverse" | string;
+  sourceKind: "combined" | "separate" | "model";
+  template: "flip_top" | "tuck_end_reverse" | "graph" | string;
   dimsMm: ProvaWebCaixaDimsMm;
+  /** Modelo pré-cadastrado (Admin). */
+  boxModelId?: number | null;
+  artTransform?: ProvaWebCaixaArtTransform;
   facaPage?: number;
   artePage?: number;
   artCrop?: CropSidesMm;
@@ -397,6 +411,20 @@ export interface ProvaWebBoxMockupMeta {
   artRotationDeg?: number;
   ready?: boolean;
   paperThicknessMm?: number;
+  source?: string;
+  boxModelId?: number | null;
+  basePanelId?: string | null;
+  hinges?: Array<{
+    id: string;
+    panelA: string;
+    panelB: string;
+    axis: string;
+    positionMm: number;
+    spanStartMm?: number;
+    spanEndMm?: number;
+  }>;
+  artTransform?: ProvaWebCaixaArtTransform;
+  cutBboxMm?: Record<string, number>;
 }
 
 export interface ProvaWebManifestBase {

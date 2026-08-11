@@ -7,6 +7,8 @@ export {
   ORBIT_SENS_Y,
   type BoxSceneHandle,
 } from "./boxSceneThree";
+export { createGraphBoxScene } from "./boxGraphScene";
+export { boxMockupFromConfig } from "./boxMockupFromConfig";
 export {
   boxDiagonalMm,
   flapAngleDeg,

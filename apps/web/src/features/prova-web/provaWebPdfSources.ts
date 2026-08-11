@@ -45,7 +45,7 @@ export function pdfSourcesFromRecord(
     return [];
   }
   if (modo === "caixa") {
-    const kind = record.cropJson?.caixa?.sourceKind ?? "combined";
+    const kind = record.cropJson?.caixa?.sourceKind ?? "model";
     if (kind === "separate") {
       const out: ProvaWebPdfSource[] = [];
       if (record.arquivoCapa) {
@@ -57,7 +57,13 @@ export function pdfSourcesFromRecord(
       return out;
     }
     if (record.arquivoUnico) {
-      return [{ id: "unico", label: "Caixa", path: record.arquivoUnico }];
+      return [
+        {
+          id: "unico",
+          label: kind === "model" ? "Arte" : "Caixa",
+          path: record.arquivoUnico,
+        },
+      ];
     }
     return [];
   }

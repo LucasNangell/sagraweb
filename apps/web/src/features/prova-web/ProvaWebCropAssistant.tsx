@@ -88,10 +88,11 @@ export function ProvaWebCropAssistant({
   }
 
   if (modo === "caixa") {
+    const sk = initialCropJson?.caixa?.sourceKind;
     const sourceKind =
-      initialCropJson?.caixa?.sourceKind === "separate"
-        ? "separate"
-        : "combined";
+      sk === "separate" || sk === "combined" || sk === "model"
+        ? sk
+        : "model";
     return (
       <ProvaWebBoxWizard
         ano={ano}

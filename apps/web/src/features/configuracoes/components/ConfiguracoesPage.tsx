@@ -6,12 +6,14 @@ import {
   Database,
   IdCard,
   Mail,
+  Package,
   Printer,
   Settings,
   Wallet,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
+import { BoxModelsSection } from "./BoxModelsSection";
 import { CotasGrafSettingsSection } from "./CotasGrafSettingsSection";
 import { CredenciaisDepolModelosSection } from "./CredenciaisDepolModelosSection";
 import { CustosSettingsSection } from "./CustosSettingsSection";
@@ -33,6 +35,7 @@ type ConfigTab =
   | "cotas_graf"
   | "papelaria"
   | "credenciais_depol"
+  | "caixas"
   | "sistema"
   | "custos";
 
@@ -73,6 +76,12 @@ const TAB_META: Record<
     description:
       "Modelos JPG da pasta DEPOL, ativação no pedido e layout do SVG (posição/tamanho em mm) compartilhado com o worker.",
     icon: <IdCard className="size-3.5" aria-hidden />,
+  },
+  caixas: {
+    label: "Caixas (Prova WEB)",
+    description:
+      "Pré-cadastro de facas: painéis, vincos, ângulo e sequência. Usados no mockup 3D da Prova WEB com overlay da arte.",
+    icon: <Package className="size-3.5" aria-hidden />,
   },
   sistema: {
     label: "Sistema",
@@ -194,6 +203,15 @@ export function ConfiguracoesPage() {
             className="configuracoes-tab-panel"
           >
             <CredenciaisDepolModelosSection />
+          </div>
+          <div
+            role="tabpanel"
+            id="config-panel-caixas"
+            aria-labelledby="config-tab-caixas"
+            hidden={activeTab !== "caixas"}
+            className="configuracoes-tab-panel"
+          >
+            <BoxModelsSection />
           </div>
           <div
             role="tabpanel"

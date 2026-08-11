@@ -549,15 +549,17 @@ def save_prova_web(ano: int, os_id: int, body: ProvaWebUpdate, request: Request)
     elif body.modo == MODE_CAIXA:
         crop_json_pre = body.crop_json if isinstance(body.crop_json, dict) else {}
         caixa = crop_json_pre.get("caixa") if isinstance(crop_json_pre, dict) else None
-        kind = "combined"
+        kind = "model"
         if isinstance(caixa, dict):
-            kind = str(caixa.get("sourceKind") or "combined").strip().lower()
+            kind = str(caixa.get("sourceKind") or "model").strip().lower()
         if kind == "separate":
             arquivo_capa = _validated(body.arquivo_capa, "faca")
             arquivo_miolo = _validated(body.arquivo_miolo, "arte")
             arquivo_unico = None
         else:
-            arquivo_unico = _validated(body.arquivo_unico, "caixa")
+            # combined (legado) ou model: arte/PDF em ArquivoUnico
+            label = "arte" if kind == "model" else "caixa"
+            arquivo_unico = _validated(body.arquivo_unico, label)
             arquivo_capa = None
             arquivo_miolo = None
     else:
@@ -913,6 +915,26 @@ class FoldModelUpdateBody(BaseModel):
     config: Optional[dict[str, Any]] = None
     ativo: Optional[bool] = None
     ordem: Optional[int] = None
+
+
+@router.get("/prova-web/box-models")
+def list_prova_web_box_models(request: Request, ativo: bool = Query(True)):
+    """Lista modelos de caixa pré-cadastrados (uso operacional na Prova WEB)."""
+    _require_prova_web(request)
+    from services.prova_web_box_model_service import list_box_models
+
+    return {"models": list_box_models(ativo_only=bool(ativo))}
+
+
+@router.get("/prova-web/box-models/{model_id}")
+def get_prova_web_box_model(model_id: int, request: Request):
+    _require_prova_web(request)
+    from services.prova_web_box_model_service import get_box_model
+
+    model = get_box_model(model_id)
+    if not model or not model.get("ativo"):
+        raise HTTPException(status_code=404, detail="Modelo de caixa não encontrado.")
+    return {"model": model}
 
 
 @router.get("/prova-web/fold-models")

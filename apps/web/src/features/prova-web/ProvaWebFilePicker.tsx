@@ -66,13 +66,15 @@ export function ProvaWebFilePicker({
         : "unico"),
   );
   const [caixaSourceKind, setCaixaSourceKind] = useState<
-    "combined" | "separate"
+    "combined" | "separate" | "model"
   >(
     () =>
       record?.cropJson?.caixa?.sourceKind ??
       (record?.modo === "caixa" && record.arquivoCapa && record.arquivoMiolo
         ? "separate"
-        : "combined"),
+        : record?.modo === "caixa" && record.cropJson?.caixa?.boxModelId
+          ? "model"
+          : "model"),
   );
   const [selUnico, setSelUnico] = useState<string | null>(
     record?.arquivoUnico ?? null,
@@ -116,7 +118,8 @@ export function ProvaWebFilePicker({
     modo === "unico" ||
     modo === "folha_dobrada" ||
     (modo === "espiral" && espiralSourceKind === "unico") ||
-    (modo === "caixa" && caixaSourceKind === "combined");
+    (modo === "caixa" &&
+      (caixaSourceKind === "combined" || caixaSourceKind === "model"));
 
   const canConfirm = usesUnicoSlot
     ? Boolean(selUnico)
@@ -355,7 +358,7 @@ export function ProvaWebFilePicker({
               setSaveError(null);
             }}
             icon={<Package className="size-3.5" aria-hidden />}
-            label="Caixa (tuck-end)"
+            label="Caixa (flip-top)"
           />
         </div>
 
@@ -401,10 +404,24 @@ export function ProvaWebFilePicker({
         {modo === "caixa" && (
           <div className="mt-3 space-y-2">
             <p className="text-[11px] text-neutral-500">
-              Mockup 3D a partir da faca (corte/dobra) + arte. PDF com 2 páginas
-              (faca+arte) ou arquivos separados.
+              Preferência: escolha um modelo cadastrado em Admin → Configurações →
+              Caixas e envie só a arte. Modos legado usam faca+arte por OS.
             </p>
             <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCaixaSourceKind("model");
+                  setSaveError(null);
+                }}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                  caixaSourceKind === "model"
+                    ? "bg-primary-green/15 text-primary-green ring-1 ring-primary-green/40"
+                    : "bg-slate-100 text-neutral-600 hover:bg-slate-200"
+                }`}
+              >
+                Modelo + arte
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -417,7 +434,7 @@ export function ProvaWebFilePicker({
                     : "bg-slate-100 text-neutral-600 hover:bg-slate-200"
                 }`}
               >
-                PDF 2 páginas
+                PDF 2 páginas (legado)
               </button>
               <button
                 type="button"
@@ -431,7 +448,7 @@ export function ProvaWebFilePicker({
                     : "bg-slate-100 text-neutral-600 hover:bg-slate-200"
                 }`}
               >
-                Faca + Arte
+                Faca + Arte (legado)
               </button>
             </div>
           </div>
@@ -457,7 +474,7 @@ export function ProvaWebFilePicker({
         ) : (
           <div className="mt-3">
             <SlotCard
-              label="Prova"
+              label={modo === "caixa" ? "Arte" : "Prova"}
               value={selUnico}
               active
               onClear={() => setSelUnico(null)}

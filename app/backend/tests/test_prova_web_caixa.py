@@ -70,14 +70,34 @@ def test_normalize_and_build_box_mockup() -> None:
             "artePage": 1,
         }
     )
-    assert cfg["template"] == "tuck_end_reverse"
+    assert cfg["template"] == "flip_top"
     assert cfg["dimsMm"]["length"] == 135
     mock = caixa_svc.build_box_mockup(cfg)
     assert mock["ready"] is True
     ids = {p["id"] for p in mock["panels"]}
-    assert "front" in ids and "back" in ids and "tuck_top" in ids
+    assert "front" in ids and "back" in ids
+    assert "lid_top" in ids and "lid_front" in ids
+    assert "dust_right_top" in ids
     assert mock["netWidthMm"] > mock["dimsMm"]["length"]
-    assert len(mock["openOperations"]) >= 4
+    assert any(o["panelId"] == "lid_top" for o in mock["openOperations"])
+
+
+def test_legacy_tuck_template_maps_to_flip_top() -> None:
+    cfg = caixa_svc.normalize_caixa_config(
+        {"template": "tuck_end_reverse", "dimsMm": {"length": 100, "width": 120, "height": 40}}
+    )
+    assert cfg["template"] == "flip_top"
+    # operações antigas com tuck_top são substituídas
+    cfg2 = caixa_svc.normalize_caixa_config(
+        {
+            "template": "tuck_end_reverse",
+            "dimsMm": {"length": 100, "width": 120, "height": 40},
+            "openOperations": [
+                {"id": "op_tuck_top", "panelId": "tuck_top", "order": 1, "targetAngleDeg": 110}
+            ],
+        }
+    )
+    assert any(o["panelId"] == "lid_top" for o in cfg2["openOperations"])
 
 
 def test_caixa_render_emits_box_mockup(
@@ -94,7 +114,7 @@ def test_caixa_render_emits_box_mockup(
     crop = {
         "caixa": {
             "sourceKind": "combined",
-            "template": "tuck_end_reverse",
+            "template": "flip_top",
             "facaPage": 0,
             "artePage": 1,
             "dimsMm": {"length": 135, "width": 190, "height": 49, "glue": 24},

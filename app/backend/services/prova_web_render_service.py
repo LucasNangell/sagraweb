@@ -876,7 +876,73 @@ def ensure_prova_web_pages(
 
         ordered = []
         suggested = None
-        if source_kind == "separate" and len(source_paths) >= 2:
+        caixa_cfg: dict[str, Any]
+
+        if source_kind == "model":
+            from services.prova_web_box_model_service import (
+                bake_art_transform_onto_net,
+                build_box_mockup_from_model_config,
+                get_box_model,
+            )
+
+            model_id = None
+            if isinstance(caixa_raw, dict):
+                try:
+                    model_id = int(caixa_raw.get("boxModelId"))
+                except (TypeError, ValueError):
+                    model_id = None
+            model = get_box_model(model_id) if model_id else None
+            if not model or not model.get("config"):
+                raise ValueError("Modelo de caixa não encontrado ou inativo.")
+            pdf_path = source_paths[0]
+            with fitz.open(pdf_path) as doc:
+                total_source_pages = len(doc)
+                arte_idx = 0
+                if isinstance(caixa_raw, dict) and caixa_raw.get("artePage") is not None:
+                    try:
+                        arte_idx = max(0, int(caixa_raw.get("artePage")))
+                    except (TypeError, ValueError):
+                        arte_idx = 0
+                arte_idx = max(0, min(len(doc) - 1, arte_idx))
+                _check_abort()
+                _progress(0, 1)
+                arte_page = doc.load_page(arte_idx)
+                art_crop = None
+                if isinstance(caixa_raw, dict):
+                    art_crop = caixa_raw.get("artCrop")
+                _apply_mm_crop(arte_page, art_crop)
+                png_arte_raw = os.path.join(cache_dir, "body_0_raw.png")
+                meta_a = _render_page_png(arte_page, matrix, png_arte_raw)
+                png_arte = os.path.join(cache_dir, "body_0.png")
+                art_tf = None
+                if isinstance(caixa_raw, dict) and isinstance(
+                    caixa_raw.get("artTransform"), dict
+                ):
+                    art_tf = caixa_raw["artTransform"]
+                cut = (model["config"] or {}).get("cutBboxMm") or {}
+                baked = bake_art_transform_onto_net(
+                    png_arte_raw,
+                    png_arte,
+                    net_width_mm=float(cut.get("widthMm") or 100),
+                    net_height_mm=float(cut.get("heightMm") or 100),
+                    art_transform=art_tf,
+                    px_per_mm=max(2.0, float(scale) * 2.0),
+                )
+                meta_a = {**meta_a, **baked}
+                ordered.append({**meta_a, "role": ROLE_SHEET_FRONT, "path": png_arte})
+                _progress(1, 1)
+            box_mockup = build_box_mockup_from_model_config(model["config"])
+            box_mockup["boxModelId"] = model_id
+            if isinstance(caixa_raw, dict) and isinstance(
+                caixa_raw.get("artTransform"), dict
+            ):
+                box_mockup["artTransform"] = caixa_raw["artTransform"]
+            caixa_cfg = normalize_caixa_config(
+                {**(caixa_raw if isinstance(caixa_raw, dict) else {}), "sourceKind": "model"},
+                suggested=(model["config"].get("dimsHint") if isinstance(model.get("config"), dict) else None),
+            )
+
+        elif source_kind == "separate" and len(source_paths) >= 2:
             faca_path, arte_path = source_paths[0], source_paths[1]
             with fitz.open(faca_path) as faca_doc:
                 total_source_pages += len(faca_doc)
@@ -903,6 +969,7 @@ def ensure_prova_web_pages(
                 meta_a = _render_page_png(arte_page, matrix, png_arte)
                 ordered.insert(0, {**meta_a, "role": ROLE_SHEET_FRONT, "path": png_arte})
                 _progress(2, 2)
+            box_mockup = build_box_mockup(caixa_cfg)
         else:
             pdf_path = source_paths[0]
             with fitz.open(pdf_path) as doc:
@@ -941,8 +1008,7 @@ def ensure_prova_web_pages(
                     ordered.append({**meta_f, "role": ROLE_SHEET_FACA, "path": png_faca})
                 _progress(len(ordered), max(len(ordered), 1))
                 truncated = len(doc) > 2
-
-        box_mockup = build_box_mockup(caixa_cfg)
+            box_mockup = build_box_mockup(caixa_cfg)
 
     elif mode == MODE_CAPA_MIOLO or (
         mode == MODE_ESPIRAL and espiral_cfg and espiral_cfg["sourceKind"] == "capa_miolo"

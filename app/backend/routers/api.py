@@ -44,6 +44,7 @@ from routers import (
     setor_painel_routes,
     tablet_face_routes,
     admin_system_routes,
+    admin_box_model_routes,
     admin_os_materialized_routes,
     os_arquivos_routes,
     cliente_gabinete_routes,
@@ -872,6 +873,7 @@ app.include_router(user_admin_routes.router)
 app.include_router(setor_painel_routes.router)
 app.include_router(tablet_face_routes.router)
 app.include_router(admin_system_routes.router)
+app.include_router(admin_box_model_routes.router)
 app.include_router(admin_os_materialized_routes.router, prefix="/api")
 
 # Incluir as Rotas (Modularização)
@@ -1158,6 +1160,16 @@ def startup_init():
     except Exception as exc:
         logger.error(
             "Erro ao garantir schema tabProvaWebFoldModel no startup: %s", exc
+        )
+
+    try:
+        from services.prova_web_box_model_service import (
+            ensure_prova_web_box_model_schema,
+        )
+        ensure_prova_web_box_model_schema()
+    except Exception as exc:
+        logger.error(
+            "Erro ao garantir schema tabProvaWebBoxModel no startup: %s", exc
         )
 
     try:

@@ -136,7 +136,7 @@ function PanelShell({
   const title = isFold
     ? "Prova WEB — mockup 3D do folheto (ou folhear frente/verso)"
     : isBox
-      ? "Prova WEB — mockup 3D da caixa (ou folhear arte/faca)"
+      ? "Prova WEB — mockup 3D flip-top da caixa (ou folhear arte/faca)"
       : isSpiral
         ? "Prova WEB — mockup 3D espiral (ou folhear as páginas)"
         : hasMockup

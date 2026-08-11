@@ -353,6 +353,18 @@ def parse_dieline_page(page: Any) -> dict[str, Any]:
                 }
             )
 
+    cut_segments_mm: list[dict[str, Any]] = []
+    for d in cuts:
+        for (p1, p2) in _line_segments(d):
+            cut_segments_mm.append(
+                {
+                    "x1": round(pt_to_mm(p1[0]), 2),
+                    "y1": round(pt_to_mm(p1[1]), 2),
+                    "x2": round(pt_to_mm(p2[0]), 2),
+                    "y2": round(pt_to_mm(p2[1]), 2),
+                }
+            )
+
     return {
         "pageWidthMm": round(page_w_mm, 2),
         "pageHeightMm": round(page_h_mm, 2),
@@ -362,6 +374,7 @@ def parse_dieline_page(page: Any) -> dict[str, Any]:
         "verticalCreasesMm": vertical_mm,
         "horizontalCreasesMm": horizontal_mm,
         "foldSegmentsMm": fold_segments_mm,
+        "cutSegmentsMm": cut_segments_mm,
         "dims": dims,
         "classification": page_looks_like_faca(page),
     }

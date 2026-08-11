@@ -1,5 +1,8 @@
 import type { AnaliseLabItem } from "@/api/analiseLab";
 import type { ClientAnalysisItem } from "@/api/client-portal";
+import type { ProvaWebPageMeta } from "@/api/provaWeb";
+
+import { itemHomesForComponents } from "./analiseLabComponente";
 
 /** Converte itens do Lab para o formato do portal do cliente. */
 export function labItemsToClientItems(
@@ -8,26 +11,37 @@ export function labItemsToClientItems(
     disregardedIds?: ReadonlySet<number>;
     /** Simula “resolvido” após upload do componente. */
     uploadedComponents?: ReadonlySet<string>;
+    pages?: ProvaWebPageMeta[];
+    modo?: string;
   },
 ): ClientAnalysisItem[] {
   const disregarded = overrides?.disregardedIds ?? new Set<number>();
   const uploaded = overrides?.uploadedComponents ?? new Set<string>();
-  return items.map((item) => {
-    const componente = (item.componente || "Outros").trim() || "Outros";
-    const fileUploaded = uploaded.has(componente);
+  const pages = overrides?.pages ?? [];
+  const modo = overrides?.modo || "capa_miolo";
+  const out: ClientAnalysisItem[] = [];
+
+  for (const item of items) {
+    const homes = itemHomesForComponents(item, pages, modo);
     const desconsiderado = disregarded.has(item.id);
-    return {
-      uniqueId: item.id,
-      originalId: item.id,
-      titulo: item.titulo,
-      html: item.htmlSnapshot,
-      obs: item.obs || undefined,
-      componenteOrigem: componente,
-      desconsiderado,
-      resolver: fileUploaded && !desconsiderado,
-      resolucaoObrigatoria: Boolean(item.resolucaoObrigatoria),
-    };
-  });
+    for (const home of homes) {
+      const componente = (home || "Outros").trim() || "Outros";
+      const fileUploaded = uploaded.has(componente);
+      out.push({
+        uniqueId: item.id,
+        originalId: item.id,
+        titulo: item.titulo,
+        html: item.htmlSnapshot,
+        obs: item.obs || undefined,
+        componenteOrigem: componente,
+        desconsiderado,
+        resolver: fileUploaded && !desconsiderado,
+        resolucaoObrigatoria: Boolean(item.resolucaoObrigatoria),
+      });
+    }
+  }
+
+  return out;
 }
 
 export function labClientPreviewStorageKey(ano: number, osId: number): string {

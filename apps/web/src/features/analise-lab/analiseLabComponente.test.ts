@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   componenteForPages,
+  itemHomesForComponents,
   itemOccurrences,
   roleToComponente,
   splitScopeByComponente,
@@ -62,6 +63,23 @@ describe("analiseLabComponente", () => {
         parsePageSpec,
       ),
     ).toEqual([1, 2, 5]);
+  });
+
+  it("lists homes across components for multi-page scope", () => {
+    expect(
+      itemHomesForComponents(
+        { escopo: "paginas", pagina: 1, paginas: "1,3", componente: "Miolo" },
+        pages,
+        "capa_miolo",
+      ).sort(),
+    ).toEqual(["Capa", "Miolo"]);
+    expect(
+      itemHomesForComponents(
+        { escopo: "pagina", pagina: 1, componente: "Capa" },
+        pages,
+        "capa_miolo",
+      ),
+    ).toEqual(["Capa"]);
   });
 });
 

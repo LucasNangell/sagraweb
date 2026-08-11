@@ -1,4 +1,5 @@
 import type { AnaliseLabItem } from "@/api/analiseLab";
+import type { ProvaWebPageMeta } from "@/api/provaWeb";
 import {
   buildComponentLabelsForVersion,
   itemMatchesVersion,
@@ -13,6 +14,8 @@ import {
   versionPdfFilesByComponente,
   versionRequiresCapaMioloSlots,
 } from "@/features/analise/versionPdfClassify";
+
+import { itemHomesForComponents } from "./analiseLabComponente";
 
 export interface LabTreeComponentNode {
   key: string;
@@ -37,8 +40,9 @@ export type LabVersionPdfPerFile = Record<
 
 const COMPONENT_ORDER = ["Capa", "Miolo", "Arq. Único", "Outros"];
 
-export function labItemDragId(itemId: number): string {
-  return `lab-item:${itemId}`;
+export function labItemDragId(itemId: number, componente = ""): string {
+  const comp = (componente || "").trim();
+  return comp ? `lab-item:${itemId}::${comp}` : `lab-item:${itemId}`;
 }
 
 export function labComponentDropId(versaoLabel: string, componente: string): string {
@@ -46,7 +50,7 @@ export function labComponentDropId(versaoLabel: string, componente: string): str
 }
 
 export function parseLabItemDragId(id: string): number | null {
-  const m = /^lab-item:(\d+)$/.exec(id);
+  const m = /^lab-item:(\d+)/.exec(id);
   return m ? Number(m[1]) : null;
 }
 
@@ -101,6 +105,23 @@ function toTreeItemShape(item: AnaliseLabItem): { componenteOrigem?: string } {
   return { componenteOrigem: item.componente };
 }
 
+function groupItemsByHomes(
+  versionItems: AnaliseLabItem[],
+  pages: ProvaWebPageMeta[],
+  modo: string,
+): Map<string, AnaliseLabItem[]> {
+  const byComp = new Map<string, AnaliseLabItem[]>();
+  for (const item of versionItems) {
+    const homes = itemHomesForComponents(item, pages, modo);
+    for (const home of homes) {
+      const label = normalizeComponenteOrigem(home);
+      if (!byComp.has(label)) byComp.set(label, []);
+      byComp.get(label)!.push(item);
+    }
+  }
+  return byComp;
+}
+
 function buildOsVersionNode(
   version: OsVersionItem,
   versionItems: AnaliseLabItem[],
@@ -109,6 +130,8 @@ function buildOsVersionNode(
   versionPdfPerFile?: LabVersionPdfPerFile,
   produto?: string | null,
   capaMioloChoiceByVersion?: Record<string, boolean>,
+  pages: ProvaWebPageMeta[] = [],
+  modo = "capa_miolo",
 ): LabTreeVersionNode {
   const versionKey = `v${version.version}`;
   const classified = classifyVersionPdfFiles(versionPdfPerFile?.[versionKey] ?? [], {
@@ -118,22 +141,25 @@ function buildOsVersionNode(
   });
   const pdfByComponent = versionPdfFilesByComponente(classified);
   const forceCapaMiolo = versionRequiresCapaMioloSlots(produto, version.label);
-  const shaped = versionItems.map(toTreeItemShape);
+  const itemsByHome = groupItemsByHomes(versionItems, pages, modo);
+  const shaped = [
+    ...versionItems.map(toTreeItemShape),
+    ...[...itemsByHome.keys()].map((label) => ({ componenteOrigem: label })),
+  ];
   const componentMode = resolveVersionComponentMode(classified, forceCapaMiolo, shaped);
   const componentLabels = buildComponentLabelsForVersion(
     classified,
     shaped,
     componentMode,
   );
+  for (const label of itemsByHome.keys()) {
+    componentLabels.add(label);
+  }
 
   const components = [...componentLabels].sort(sortComponents).map((label) => ({
     key: `${version.label}::${label}`,
     label,
-    items: sortLabItems(
-      versionItems.filter(
-        (item) => normalizeComponenteOrigem(item.componente) === label,
-      ),
-    ),
+    items: sortLabItems(itemsByHome.get(label) ?? []),
     versionFiles: pdfByComponent[label as AnaliseComponente],
     versionFile: pdfByComponent[label as AnaliseComponente]?.[0],
   }));
@@ -152,13 +178,10 @@ function buildOrphanVersionNode(
   versionItems: AnaliseLabItem[],
   currentVersaoLabel: string,
   versions: OsVersionItem[],
+  pages: ProvaWebPageMeta[] = [],
+  modo = "capa_miolo",
 ): LabTreeVersionNode {
-  const byComp = new Map<string, AnaliseLabItem[]>();
-  for (const item of versionItems) {
-    const c = normalizeComponenteOrigem(item.componente);
-    if (!byComp.has(c)) byComp.set(c, []);
-    byComp.get(c)!.push(item);
-  }
+  const byComp = groupItemsByHomes(versionItems, pages, modo);
 
   const components = [...byComp.entries()]
     .sort(([a], [b]) => sortComponents(a, b))
@@ -184,6 +207,8 @@ export function buildLabItemsTree(
   versionPdfPerFile?: LabVersionPdfPerFile,
   produto?: string | null,
   capaMioloChoiceByVersion?: Record<string, boolean>,
+  pages: ProvaWebPageMeta[] = [],
+  modo = "capa_miolo",
 ): LabTreeVersionNode[] {
   if (versions.length === 0) {
     const byVersao = new Map<string, AnaliseLabItem[]>();
@@ -194,7 +219,14 @@ export function buildLabItemsTree(
     }
     return [...byVersao.entries()]
       .map(([versao, list]) =>
-        buildOrphanVersionNode(versao, list, currentVersaoLabel, versions),
+        buildOrphanVersionNode(
+          versao,
+          list,
+          currentVersaoLabel,
+          versions,
+          pages,
+          modo,
+        ),
       )
       .sort((a, b) => {
         if (a.readonly !== b.readonly) return a.readonly ? 1 : -1;
@@ -216,6 +248,8 @@ export function buildLabItemsTree(
       versionPdfPerFile,
       produto,
       capaMioloChoiceByVersion,
+      pages,
+      modo,
     );
   });
 
@@ -228,7 +262,14 @@ export function buildLabItemsTree(
   }
 
   const orphanNodes = [...orphansByLabel.entries()].map(([label, list]) =>
-    buildOrphanVersionNode(label, list, currentVersaoLabel, versions),
+    buildOrphanVersionNode(
+      label,
+      list,
+      currentVersaoLabel,
+      versions,
+      pages,
+      modo,
+    ),
   );
 
   return [...versionNodes, ...orphanNodes].sort((a, b) => {

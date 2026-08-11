@@ -1,5 +1,9 @@
 import type { ProvaWebPageMeta } from "@/api/provaWeb";
 
+import { normalizeComponenteOrigem } from "@/features/analise/analiseItemsTree";
+
+import { parsePageSpec } from "./analiseLabPageSpec";
+
 export type LabComponente = "Capa" | "Miolo" | "Arq. Único";
 
 export function roleToComponente(
@@ -34,7 +38,7 @@ export function splitScopeByComponente(
 ): Array<{ componente: LabComponente; pages: number[] }> {
   const grouped = componenteForPages(modo, pages, pageNumbers);
   return (Object.entries(grouped) as [LabComponente, number[]][]).map(
-    ([componente, list]) => ({ componente, pages: list }),
+    ([componente, pagesList]) => ({ componente, pages: pagesList }),
   );
 }
 
@@ -70,4 +74,32 @@ export function itemOccurrences(
     }
   }
   return item.pagina >= 1 ? [item.pagina] : [];
+}
+
+/**
+ * Componentes em que o item deve aparecer na lista (display).
+ * Usa páginas do escopo + manifesto; cai no componente armazenado se não houver páginas.
+ */
+export function itemHomesForComponents(
+  item: {
+    escopo: string;
+    pagina: number;
+    paginas?: string | null;
+    componente?: string;
+  },
+  pages: ProvaWebPageMeta[],
+  modo = "capa_miolo",
+): string[] {
+  const stored = normalizeComponenteOrigem(item.componente);
+  if (!pages.length) return [stored];
+
+  const occ = itemOccurrences(item, pages, parsePageSpec);
+  if (!occ.length) return [stored];
+
+  const byComp = componenteForPages(modo, pages, occ);
+  const homes = (Object.entries(byComp) as [LabComponente, number[]][])
+    .filter(([, list]) => list.length > 0)
+    .map(([comp]) => comp);
+
+  return homes.length ? homes : [stored];
 }

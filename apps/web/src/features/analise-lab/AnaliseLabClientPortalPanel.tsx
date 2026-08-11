@@ -343,7 +343,7 @@ export function AnaliseLabClientPortalPanel({
                       );
                       return (
                         <div
-                          key={item.uniqueId}
+                          key={`${item.uniqueId}::${item.componenteOrigem}`}
                           className={cn(
                             "border-b border-slate-100",
                             selectedItemId === item.uniqueId &&

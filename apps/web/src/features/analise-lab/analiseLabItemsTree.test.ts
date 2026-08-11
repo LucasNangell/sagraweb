@@ -177,4 +177,79 @@ describe("analiseLabItemsTree", () => {
       }),
     ).toEqual([1, 2, 9]);
   });
+
+  it("shows multi-page item under each component home", () => {
+    const pages = [
+      { page: 1, role: "cover-front", width: 100, height: 100, widthPt: 100, heightPt: 100 },
+      { page: 2, role: "page", width: 100, height: 100, widthPt: 100, heightPt: 100 },
+      { page: 3, role: "page", width: 100, height: 100, widthPt: 100, heightPt: 100 },
+    ];
+    const multi: AnaliseLabItem[] = [
+      {
+        id: 50,
+        sessaoId: 1,
+        titulo: "Multi",
+        htmlSnapshot: "",
+        componente: "Miolo",
+        escopo: "paginas",
+        pagina: 1,
+        paginas: "1-3",
+        versaoLabel: "v2",
+        ordem: 1,
+      },
+    ];
+    const tree = buildLabItemsTree(
+      multi,
+      "v2 (Original)",
+      versions,
+      undefined,
+      null,
+      undefined,
+      pages,
+      "capa_miolo",
+    );
+    const v2 = tree.find((v) => v.key === "v2");
+    expect(v2?.components.find((c) => c.label === "Capa")?.items.map((i) => i.id)).toEqual([
+      50,
+    ]);
+    expect(v2?.components.find((c) => c.label === "Miolo")?.items.map((i) => i.id)).toEqual([
+      50,
+    ]);
+    expect(v2?.itemCount).toBe(1);
+  });
+
+  it("keeps single-component item only under its home", () => {
+    const pages = [
+      { page: 1, role: "cover-front", width: 100, height: 100, widthPt: 100, heightPt: 100 },
+      { page: 2, role: "page", width: 100, height: 100, widthPt: 100, heightPt: 100 },
+    ];
+    const onlyCapa: AnaliseLabItem[] = [
+      {
+        id: 51,
+        sessaoId: 1,
+        titulo: "Capa only",
+        htmlSnapshot: "",
+        componente: "Capa",
+        escopo: "pagina",
+        pagina: 1,
+        versaoLabel: "v2",
+        ordem: 1,
+      },
+    ];
+    const tree = buildLabItemsTree(
+      onlyCapa,
+      "v2 (Original)",
+      versions,
+      undefined,
+      null,
+      undefined,
+      pages,
+      "capa_miolo",
+    );
+    const v2 = tree.find((v) => v.key === "v2");
+    expect(v2?.components.find((c) => c.label === "Capa")?.items.map((i) => i.id)).toEqual([
+      51,
+    ]);
+    expect(v2?.components.find((c) => c.label === "Miolo")?.items ?? []).toEqual([]);
+  });
 });

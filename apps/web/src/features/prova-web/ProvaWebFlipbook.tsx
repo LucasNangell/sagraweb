@@ -362,7 +362,8 @@ function ProvaWebFlipbookHorizontal({
       parent.style.width = `${w}px`;
       parent.style.height = `${baseSize.height}px`;
       parent.style.maxWidth = `${w}px`;
-      parent.style.marginLeft = isSpread ? "0" : "auto";
+      // Fechado: flush à direita do slot 2p (capa alinhada aos balões).
+      parent.style.margin = isSpread ? "0" : "0 0 0 auto";
     }
     try {
       flip.update();
@@ -540,7 +541,8 @@ function ProvaWebFlipbookHorizontal({
             style={{
               width: bookWidth,
               height: baseSize.height,
-              marginLeft: isSpread ? 0 : "auto",
+              // Anula `.prova-web-book { margin: 0 auto }` — capa flush direita.
+              margin: isSpread ? 0 : "0 0 0 auto",
             }}
           >
             {pages.map((page) => {

@@ -875,6 +875,8 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     versionPdfPerFile,
     produto,
     capaMioloChoiceByVersion,
+    pages,
+    modo: session?.modo || "capa_miolo",
     selectedId: selectedItemId,
     onSelect: selectItem,
     onDelete: (id: number) => void handleDeleteItem(id),
@@ -1115,8 +1117,16 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
       labItemsToClientItems(itens, {
         disregardedIds: new Set(clientDisregardedIds),
         uploadedComponents: new Set(clientUploadedComponents),
+        pages,
+        modo: session?.modo || "capa_miolo",
       }),
-    [itens, clientDisregardedIds, clientUploadedComponents],
+    [
+      itens,
+      clientDisregardedIds,
+      clientUploadedComponents,
+      pages,
+      session?.modo,
+    ],
   );
 
   const folhearBalloonItems = useMemo(

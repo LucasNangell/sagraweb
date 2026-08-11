@@ -20,6 +20,7 @@ import {
 import { useMemo } from "react";
 
 import type { AnaliseLabItem } from "@/api/analiseLab";
+import type { ProvaWebPageMeta } from "@/api/provaWeb";
 import type { OsVersionItem } from "@/features/analise/types";
 import type { VersionPdfFile } from "@/features/analise/versionPdfClassify";
 import { openPathLocally } from "@/lib/sagraLocalOpener";
@@ -43,6 +44,8 @@ interface AnaliseLabItemListProps {
   versionPdfPerFile?: LabVersionPdfPerFile;
   produto?: string | null;
   capaMioloChoiceByVersion?: Record<string, boolean>;
+  pages?: ProvaWebPageMeta[];
+  modo?: string;
   selectedId: number | null;
   onSelect: (id: number) => void;
   onDelete?: (id: number) => void;
@@ -62,6 +65,8 @@ export function AnaliseLabItemList({
   versionPdfPerFile,
   produto,
   capaMioloChoiceByVersion,
+  pages = [],
+  modo = "capa_miolo",
   selectedId,
   onSelect,
   onDelete,
@@ -82,11 +87,15 @@ export function AnaliseLabItemList({
         versionPdfPerFile,
         produto,
         capaMioloChoiceByVersion,
+        pages,
+        modo,
       ),
     [
       capaMioloChoiceByVersion,
       currentVersaoLabel,
       items,
+      modo,
+      pages,
       produto,
       versionPdfPerFile,
       versions,
@@ -249,9 +258,10 @@ export function AnaliseLabItemList({
                 <ul className="space-y-0.5">
                   {comp.items.map((item) => (
                     <ItemRow
-                      key={item.id}
+                      key={`${item.id}::${comp.label}`}
                       item={item}
                       versaoLabel={versao.label}
+                      listComponente={comp.label}
                       readonly={versao.readonly}
                       selected={selectedId === item.id}
                       busy={busy}
@@ -376,6 +386,7 @@ function ComponentDropZone({
 function ItemRow({
   item,
   versaoLabel,
+  listComponente,
   readonly,
   selected,
   busy,
@@ -387,6 +398,7 @@ function ItemRow({
 }: {
   item: AnaliseLabItem;
   versaoLabel: string;
+  listComponente: string;
   readonly: boolean;
   selected: boolean;
   busy?: boolean;
@@ -398,21 +410,21 @@ function ItemRow({
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
-      id: labItemDragId(item.id),
+      id: labItemDragId(item.id, listComponente),
       data: {
         itemId: item.id,
-        componente: item.componente || "Outros",
+        componente: listComponente,
         versaoLabel,
         readonly,
       },
       disabled: readonly || busy,
     });
   const { setNodeRef: setDropRef, isOver } = useDroppable({
-    id: `lab-over-item:${item.id}`,
+    id: `lab-over-item:${item.id}::${listComponente}`,
     data: {
       kind: "item",
       itemId: item.id,
-      componente: item.componente || "Outros",
+      componente: listComponente,
       versaoLabel,
       readonly,
     },

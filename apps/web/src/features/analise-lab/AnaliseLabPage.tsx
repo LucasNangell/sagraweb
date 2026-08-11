@@ -50,10 +50,13 @@ import {
 import { AnaliseLabLibrary } from "./AnaliseLabLibrary";
 import { AnaliseLabMarkEditor } from "./AnaliseLabMarkEditor";
 import { AnaliseLabMarksLayer } from "./AnaliseLabMarksLayer";
+import type { AnaliseLabTool } from "./AnaliseLabMarkTools";
 import {
-  AnaliseLabMarkTools,
-  type AnaliseLabTool,
-} from "./AnaliseLabMarkTools";
+  loadViewPrefs,
+  normalizeViewPrefs,
+  saveViewPrefs,
+  type InspectorViewPrefs,
+} from "./analiseLabViewPrefs";
 import { AnaliseLabReplicateDialog } from "./AnaliseLabReplicateDialog";
 import { AnaliseLabSourcePicker } from "./AnaliseLabSourcePicker";
 import { buildLibraryDraft } from "./analiseLabLibraryDraft";
@@ -70,7 +73,7 @@ interface AnaliseLabPageProps {
 }
 
 type LabTab = "inspecao" | "folhear";
-type LeftPane = "biblioteca" | "itens" | "marcas";
+type LeftPane = "itens" | "marcas";
 
 function isInFlight(status?: string): boolean {
   return status === "pending" || status === "running";
@@ -83,7 +86,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [tab, setTab] = useState<LabTab>("inspecao");
-  const [leftPane, setLeftPane] = useState<LeftPane>("biblioteca");
+  const [leftPane, setLeftPane] = useState<LeftPane>("itens");
   const [concluirOpen, setConcluirOpen] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -102,8 +105,10 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const [espelhar, setEspelhar] = useState(true);
   const [cor, setCor] = useState<AnaliseLabMarkCor>("red");
   const [rotulo, setRotulo] = useState("");
-  const [stepMm, setStepMm] = useState(10);
   const [espessura, setEspessura] = useState(2);
+  const [viewPrefs, setViewPrefs] = useState<InspectorViewPrefs>(() =>
+    loadViewPrefs(ano, osId),
+  );
   const [localMarks, setLocalMarks] = useState<AnaliseLabMark[] | null>(null);
   const [localItens, setLocalItens] = useState<AnaliseLabItem[] | null>(null);
   const [selectedMarkId, setSelectedMarkId] = useState<number | null>(null);
@@ -145,6 +150,14 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   useEffect(() => {
     document.title = `Análise Lab — OS ${osId}/${ano}`;
   }, [ano, osId]);
+
+  useEffect(() => {
+    setViewPrefs(loadViewPrefs(ano, osId));
+  }, [ano, osId]);
+
+  useEffect(() => {
+    saveViewPrefs(ano, osId, viewPrefs);
+  }, [ano, osId, viewPrefs]);
 
   useEffect(() => {
     if (!optimisticGenerating) return;
@@ -707,8 +720,6 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     onCorChange: setCor,
     rotulo,
     onRotuloChange: setRotulo,
-    stepMm,
-    onStepMmChange: setStepMm,
     espessura,
     onEspessuraChange: setEspessura,
     busy: actionBusy,
@@ -722,12 +733,6 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
       void addMark({
         tipo: "faixa",
         geometria: { edge, fromMm, toMm: offsetMm },
-        pagina: pageNumero,
-      }),
-    onAddGrade: () =>
-      void addMark({
-        tipo: "grade",
-        geometria: { stepMm },
         pagina: pageNumero,
       }),
   };
@@ -933,109 +938,102 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                 {tab === "inspecao" ? (
                   <>
                     <aside className="flex w-[332px] shrink-0 flex-col border-r border-sagra-border bg-white">
-                      <div className="flex shrink-0 gap-0.5 border-b border-sagra-border p-1">
-                        {(
-                          [
-                            ["biblioteca", "Biblioteca"],
-                            ["itens", "Itens"],
-                            ["marcas", "Marcas"],
-                          ] as const
-                        ).map(([id, label]) => (
-                          <button
-                            key={id}
-                            type="button"
-                            onClick={() => setLeftPane(id)}
-                            className={
-                              leftPane === id
-                                ? "flex-1 rounded bg-primary-green/15 px-1 py-1 text-[11px] font-semibold text-primary-green"
-                                : "flex-1 rounded px-1 py-1 text-[11px] text-neutral-600 hover:bg-neutral-50"
+                      <div className="flex min-h-0 flex-1 flex-col border-b border-sagra-border p-2">
+                        <label className="mb-2 flex shrink-0 flex-col gap-0.5 text-[11px] text-neutral-500">
+                          Ao registrar
+                          <select
+                            value={itemEscopoDefault}
+                            onChange={(e) =>
+                              setItemEscopoDefault(
+                                e.target.value as AnaliseLabItemEscopo,
+                              )
                             }
+                            className="rounded border border-sagra-border px-1 py-0.5 text-xs"
                           >
-                            {label}
-                          </button>
-                        ))}
+                            <option value="pagina">Página atual</option>
+                            <option value="paginas">Spec de páginas</option>
+                            <option value="arquivo">Arquivo todo</option>
+                          </select>
+                        </label>
+                        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                          <AnaliseLabLibrary
+                            busy={actionBusy}
+                            onRegister={openLibraryDraft}
+                          />
+                        </div>
                       </div>
-                      <div className="flex min-h-0 flex-1 flex-col p-2">
-                        {leftPane === "biblioteca" ? (
-                          <div className="flex min-h-0 flex-1 flex-col gap-2">
-                            <label className="flex shrink-0 flex-col gap-0.5 text-[11px] text-neutral-500">
-                              Ao registrar
-                              <select
-                                value={itemEscopoDefault}
-                                onChange={(e) =>
-                                  setItemEscopoDefault(
-                                    e.target.value as AnaliseLabItemEscopo,
-                                  )
-                                }
-                                className="rounded border border-sagra-border px-1 py-0.5 text-xs"
-                              >
-                                <option value="pagina">Página atual</option>
-                                <option value="paginas">Spec de páginas</option>
-                                <option value="arquivo">Arquivo todo</option>
-                              </select>
-                            </label>
-                            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                              <AnaliseLabLibrary
-                                busy={actionBusy}
-                                onRegister={openLibraryDraft}
-                              />
-                            </div>
-                            <div className="max-h-[45%] min-h-0 shrink overflow-y-auto border-t border-sagra-border pt-2">
-                              <h3 className="mb-1 text-[11px] font-semibold uppercase text-neutral-600">
-                                Ferramentas
-                              </h3>
-                              <AnaliseLabMarkTools {...markToolsProps} />
-                            </div>
-                          </div>
-                        ) : null}
-                        {leftPane === "itens" ? (
-                          <AnaliseLabItemList {...itemListProps} />
-                        ) : null}
-                        {leftPane === "marcas" ? (
-                          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-                            {selectedMark ? (
-                              <AnaliseLabMarkEditor
-                                mark={selectedMark}
-                                busy={actionBusy}
-                                onSave={(p) => void handleUpdateMark(p)}
-                                onCancel={() => setSelectedMarkId(null)}
-                                onDelete={() =>
-                                  void handleDeleteMark(selectedMark.id)
-                                }
-                              />
-                            ) : null}
-                            <ul className="space-y-0.5 text-xs">
-                              {marks.map((m) => (
-                                <li
-                                  key={m.id}
-                                  className={
-                                    selectedMarkId === m.id
-                                      ? "flex items-center gap-1 rounded border border-primary-green bg-primary-green/5 px-1 py-0.5"
-                                      : "flex items-center gap-1 rounded px-1 py-0.5 hover:bg-neutral-50"
+                      <div className="flex min-h-0 flex-1 flex-col">
+                        <div className="flex shrink-0 gap-0.5 border-b border-sagra-border p-1">
+                          {(
+                            [
+                              ["itens", "Itens"],
+                              ["marcas", "Marcas"],
+                            ] as const
+                          ).map(([id, label]) => (
+                            <button
+                              key={id}
+                              type="button"
+                              onClick={() => setLeftPane(id)}
+                              className={
+                                leftPane === id
+                                  ? "flex-1 rounded bg-primary-green/15 px-1 py-1 text-[11px] font-semibold text-primary-green"
+                                  : "flex-1 rounded px-1 py-1 text-[11px] text-neutral-600 hover:bg-neutral-50"
+                              }
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2">
+                          {leftPane === "itens" ? (
+                            <AnaliseLabItemList {...itemListProps} />
+                          ) : null}
+                          {leftPane === "marcas" ? (
+                            <div className="flex min-h-0 flex-1 flex-col gap-2">
+                              {selectedMark ? (
+                                <AnaliseLabMarkEditor
+                                  mark={selectedMark}
+                                  busy={actionBusy}
+                                  onSave={(p) => void handleUpdateMark(p)}
+                                  onCancel={() => setSelectedMarkId(null)}
+                                  onDelete={() =>
+                                    void handleDeleteMark(selectedMark.id)
                                   }
-                                >
-                                  <button
-                                    type="button"
-                                    className="min-w-0 flex-1 truncate text-left"
-                                    onClick={() => setSelectedMarkId(m.id)}
+                                />
+                              ) : null}
+                              <ul className="space-y-0.5 text-xs">
+                                {marks.map((m) => (
+                                  <li
+                                    key={m.id}
+                                    className={
+                                      selectedMarkId === m.id
+                                        ? "flex items-center gap-1 rounded border border-primary-green bg-primary-green/5 px-1 py-0.5"
+                                        : "flex items-center gap-1 rounded px-1 py-0.5 hover:bg-neutral-50"
+                                    }
                                   >
-                                    {labelTipo(m.tipo)}
-                                    {m.rotulo ? ` · ${m.rotulo}` : ""}
-                                    {` · ${markScopeLabel(m)}`}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={actionBusy}
-                                    className="text-sagra-danger"
-                                    onClick={() => void handleDeleteMark(m.id)}
-                                  >
-                                    <Trash2 className="size-3" aria-hidden />
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : null}
+                                    <button
+                                      type="button"
+                                      className="min-w-0 flex-1 truncate text-left"
+                                      onClick={() => setSelectedMarkId(m.id)}
+                                    >
+                                      {labelTipo(m.tipo)}
+                                      {m.rotulo ? ` · ${m.rotulo}` : ""}
+                                      {` · ${markScopeLabel(m)}`}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={actionBusy}
+                                      className="text-sagra-danger"
+                                      onClick={() => void handleDeleteMark(m.id)}
+                                    >
+                                      <Trash2 className="size-3" aria-hidden />
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
                     </aside>
 
@@ -1075,6 +1073,11 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         espessura={espessura}
                         sangriaMm={offsetMm}
                         selectedMarkId={selectedMarkId}
+                        markTools={markToolsProps}
+                        prefs={viewPrefs}
+                        onPrefsChange={(next) =>
+                          setViewPrefs(normalizeViewPrefs(next))
+                        }
                         onCreateGeometryMark={(args) =>
                           void addMark({
                             tipo: args.tipo,
@@ -1135,7 +1138,6 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         onDelete={() => void handleDeleteItem(selectedItem.id)}
                         onStartLinking={() => {
                           setLinkingItemId(selectedItem.id);
-                          setLeftPane("biblioteca");
                         }}
                         onStopLinking={() => setLinkingItemId(null)}
                         onUnlinkMark={(markId) => {

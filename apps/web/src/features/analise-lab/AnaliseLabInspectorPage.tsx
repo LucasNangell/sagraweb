@@ -17,11 +17,13 @@ import {
   sangriaFromDrag,
   sangriaSvgRect,
 } from "./analiseLabGeometry";
+import { gridLinesMm } from "./analiseLabViewPrefs";
 
 type RulerDrag = {
   axis: "x" | "y";
   startMm: number;
   currentMm: number;
+  mode: "faixa" | "guide";
 };
 
 type TextDraft = {
@@ -44,9 +46,20 @@ interface AnaliseLabInspectorPageProps {
   sangriaMm?: number;
   selectedMarkId?: number | null;
   showLeftRuler: boolean;
+  showRulers?: boolean;
+  grid?: boolean;
+  gridStepMm?: number;
+  guides?: boolean;
+  guidesXMm?: number[];
+  guidesYMm?: number[];
+  /** Lado colado ao par na vista dupla — zera margem de sangria nesse lado. */
+  innerEdge?: "left" | "right";
+  tightActiveRing?: boolean;
   interactive: boolean;
   active?: boolean;
   onActivate?: () => void;
+  onAddGuide?: (axis: "x" | "y", mm: number) => void;
+  onRemoveGuide?: (axis: "x" | "y", mm: number) => void;
   onCreateGeometryMark: (args: {
     tipo:
       | "ponto"
@@ -86,9 +99,19 @@ export function AnaliseLabInspectorPage({
   sangriaMm = 5,
   selectedMarkId = null,
   showLeftRuler,
+  showRulers = true,
+  grid = false,
+  gridStepMm = 10,
+  guides = true,
+  guidesXMm = [],
+  guidesYMm = [],
+  innerEdge,
+  tightActiveRing = false,
   interactive,
   active = false,
   onActivate,
+  onAddGuide,
+  onRemoveGuide,
   onCreateGeometryMark,
   onCreateFaixaDrag,
   onCreateSangriaDrag,
@@ -111,15 +134,26 @@ export function AnaliseLabInspectorPage({
   const bleedPadX = Math.ceil(bleedPadMm * sx);
   const bleedPadY = Math.ceil(bleedPadMm * sy);
 
-  const topRulerActive =
+  const topFaixaActive =
     interactive &&
     tool === "faixa" &&
     (edge === "left" || edge === "right" || edge === "all");
-  const leftRulerActive =
+  const leftFaixaActive =
     interactive &&
     showLeftRuler &&
     tool === "faixa" &&
     (edge === "top" || edge === "bottom" || edge === "all");
+  const topGuideActive =
+    interactive && showRulers && tool !== "faixa" && Boolean(onAddGuide);
+  const leftGuideActive =
+    interactive &&
+    showRulers &&
+    showLeftRuler &&
+    tool !== "faixa" &&
+    Boolean(onAddGuide);
+  const topRulerActive = topFaixaActive || topGuideActive;
+  const leftRulerActive = leftFaixaActive || leftGuideActive;
+  const guidesSelectable = interactive && tool === "select" && guides;
 
   const toMm = (clientX: number, clientY: number) => {
     const el = imgRef.current;
@@ -148,7 +182,6 @@ export function AnaliseLabInspectorPage({
       tool === "select" ||
       tool === "offset_corte" ||
       tool === "faixa" ||
-      tool === "grade" ||
       tool === "livre"
     ) {
       return;
@@ -245,54 +278,50 @@ export function AnaliseLabInspectorPage({
     }
   };
 
+  const readRulerMm = (
+    clientX: number,
+    clientY: number,
+    axis: "x" | "y",
+  ): number | null => {
+    const el = imgRef.current;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    if (axis === "x") {
+      return Math.max(
+        0,
+        Math.min(
+          widthMm,
+          ((clientX - rect.left) / Math.max(1, rect.width)) * widthMm,
+        ),
+      );
+    }
+    return Math.max(
+      0,
+      Math.min(
+        heightMm,
+        ((clientY - rect.top) / Math.max(1, rect.height)) * heightMm,
+      ),
+    );
+  };
+
   const startRulerDrag = (e: React.PointerEvent, axis: "x" | "y") => {
-    if (tool !== "faixa" || !interactive) return;
+    if (!interactive) return;
+    const mode: "faixa" | "guide" =
+      tool === "faixa" ? "faixa" : onAddGuide ? "guide" : "faixa";
+    if (mode === "faixa" && tool !== "faixa") return;
+    if (mode === "guide" && !onAddGuide) return;
     e.preventDefault();
     e.stopPropagation();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    const el = imgRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const startMm =
-      axis === "x"
-        ? Math.max(
-            0,
-            Math.min(
-              widthMm,
-              ((e.clientX - rect.left) / Math.max(1, rect.width)) * widthMm,
-            ),
-          )
-        : Math.max(
-            0,
-            Math.min(
-              heightMm,
-              ((e.clientY - rect.top) / Math.max(1, rect.height)) * heightMm,
-            ),
-          );
-    setRulerDrag({ axis, startMm, currentMm: startMm });
+    const startMm = readRulerMm(e.clientX, e.clientY, axis);
+    if (startMm == null) return;
+    setRulerDrag({ axis, startMm, currentMm: startMm, mode });
   };
 
   const moveRulerDrag = (e: React.PointerEvent, axis: "x" | "y") => {
     if (!rulerDrag || rulerDrag.axis !== axis) return;
-    const el = imgRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const currentMm =
-      axis === "x"
-        ? Math.max(
-            0,
-            Math.min(
-              widthMm,
-              ((e.clientX - rect.left) / Math.max(1, rect.width)) * widthMm,
-            ),
-          )
-        : Math.max(
-            0,
-            Math.min(
-              heightMm,
-              ((e.clientY - rect.top) / Math.max(1, rect.height)) * heightMm,
-            ),
-          );
+    const currentMm = readRulerMm(e.clientX, e.clientY, axis);
+    if (currentMm == null) return;
     setRulerDrag({ ...rulerDrag, currentMm });
   };
 
@@ -303,8 +332,14 @@ export function AnaliseLabInspectorPage({
     } catch {
       /* ignore */
     }
+    const drag = rulerDrag;
+    setRulerDrag(null);
+    if (drag.mode === "guide") {
+      onAddGuide?.(drag.axis, drag.currentMm);
+      return;
+    }
     const dragEdge =
-      rulerDrag.axis === "x"
+      drag.axis === "x"
         ? edge === "all"
           ? "left"
           : edge
@@ -313,12 +348,11 @@ export function AnaliseLabInspectorPage({
           : edge;
     const converted = faixaFromDrag(
       dragEdge,
-      rulerDrag.startMm,
-      rulerDrag.currentMm,
+      drag.startMm,
+      drag.currentMm,
       widthMm,
       heightMm,
     );
-    setRulerDrag(null);
     if (!converted || converted.toMm <= converted.fromMm) return;
     onCreateFaixaDrag({ ...converted, pagina: page.page });
   };
@@ -364,21 +398,38 @@ export function AnaliseLabInspectorPage({
     setFreePoints(null);
   };
 
-  const faixaPreview = rulerDrag
-    ? faixaFromDrag(
-        rulerDrag.axis === "x"
-          ? edge === "all"
-            ? "left"
-            : edge
-          : edge === "all"
-            ? "top"
-            : edge,
-        rulerDrag.startMm,
-        rulerDrag.currentMm,
-        widthMm,
-        heightMm,
-      )
-    : null;
+  const faixaPreview =
+    rulerDrag?.mode === "faixa"
+      ? faixaFromDrag(
+          rulerDrag.axis === "x"
+            ? edge === "all"
+              ? "left"
+              : edge
+            : edge === "all"
+              ? "top"
+              : edge,
+          rulerDrag.startMm,
+          rulerDrag.currentMm,
+          widthMm,
+          heightMm,
+        )
+      : null;
+
+  const bleedMargin =
+    tool === "sangria"
+      ? {
+          marginTop: bleedPadY,
+          marginBottom: bleedPadY,
+          marginLeft: innerEdge === "left" ? 0 : bleedPadX,
+          marginRight: innerEdge === "right" ? 0 : bleedPadX,
+        }
+      : undefined;
+
+  const gridX = grid ? gridLinesMm(widthMm, gridStepMm) : [];
+  const gridY = grid ? gridLinesMm(heightMm, gridStepMm) : [];
+  const showGuidesOverlay =
+    (guides && (guidesXMm.length > 0 || guidesYMm.length > 0)) ||
+    rulerDrag?.mode === "guide";
 
   const twoClickPreview =
     draft &&
@@ -408,14 +459,16 @@ export function AnaliseLabInspectorPage({
     <div
       className={
         active
-          ? "relative bg-white shadow ring-2 ring-primary-green ring-offset-2"
+          ? tightActiveRing
+            ? "relative bg-white shadow ring-2 ring-primary-green"
+            : "relative bg-white shadow ring-2 ring-primary-green ring-offset-2"
           : "relative bg-white shadow"
       }
       style={{
         width: displayW,
         height: displayH,
         overflow: "visible",
-        margin: tool === "sangria" ? `${bleedPadY}px ${bleedPadX}px` : undefined,
+        ...bleedMargin,
       }}
       data-lab-page={page.page}
       data-page={page.page}
@@ -430,7 +483,7 @@ export function AnaliseLabInspectorPage({
       onPointerMove={tool === "livre" ? moveFree : undefined}
       onPointerUp={tool === "livre" ? endFree : undefined}
     >
-      {showLeftRuler ? (
+      {showRulers && showLeftRuler ? (
         <div
           className={
             leftRulerActive
@@ -457,31 +510,33 @@ export function AnaliseLabInspectorPage({
           ))}
         </div>
       ) : null}
-      <div
-        className={
-          topRulerActive
-            ? "absolute -top-5 left-0 z-10 h-5 w-full cursor-col-resize border-b border-sky-400 bg-sky-50 text-[9px] text-neutral-500"
-            : "pointer-events-none absolute -top-5 left-0 h-5 w-full border-b border-neutral-300 bg-neutral-100 text-[9px] text-neutral-500"
-        }
-        onPointerDown={
-          topRulerActive ? (e) => startRulerDrag(e, "x") : undefined
-        }
-        onPointerMove={
-          topRulerActive ? (e) => moveRulerDrag(e, "x") : undefined
-        }
-        onPointerUp={topRulerActive ? endRulerDrag : undefined}
-        aria-hidden
-      >
-        {Array.from({ length: Math.floor(widthMm / 10) + 1 }).map((_, i) => (
-          <div
-            key={`rx-${page.page}-${i}`}
-            className="absolute bottom-0 border-l border-neutral-400 pl-0.5"
-            style={{ left: `${(i * 10 * 100) / widthMm}%` }}
-          >
-            {i * 10}
-          </div>
-        ))}
-      </div>
+      {showRulers ? (
+        <div
+          className={
+            topRulerActive
+              ? "absolute -top-5 left-0 z-10 h-5 w-full cursor-col-resize border-b border-sky-400 bg-sky-50 text-[9px] text-neutral-500"
+              : "pointer-events-none absolute -top-5 left-0 h-5 w-full border-b border-neutral-300 bg-neutral-100 text-[9px] text-neutral-500"
+          }
+          onPointerDown={
+            topRulerActive ? (e) => startRulerDrag(e, "x") : undefined
+          }
+          onPointerMove={
+            topRulerActive ? (e) => moveRulerDrag(e, "x") : undefined
+          }
+          onPointerUp={topRulerActive ? endRulerDrag : undefined}
+          aria-hidden
+        >
+          {Array.from({ length: Math.floor(widthMm / 10) + 1 }).map((_, i) => (
+            <div
+              key={`rx-${page.page}-${i}`}
+              className="absolute bottom-0 border-l border-neutral-400 pl-0.5"
+              style={{ left: `${(i * 10 * 100) / widthMm}%` }}
+            >
+              {i * 10}
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {loadSrc ? (
         <img
@@ -507,6 +562,140 @@ export function AnaliseLabInspectorPage({
         includeMedidas
         selectedMarkId={selectedMarkId}
       />
+
+      {grid || showGuidesOverlay ? (
+        <svg
+          className={
+            guidesSelectable
+              ? "absolute inset-0 h-full w-full"
+              : "pointer-events-none absolute inset-0 h-full w-full"
+          }
+          viewBox={`0 0 ${displayW} ${displayH}`}
+          aria-hidden
+        >
+          {gridX.map((x) => (
+            <line
+              key={`gx-${page.page}-${x}`}
+              x1={(x / widthMm) * displayW}
+              y1={0}
+              x2={(x / widthMm) * displayW}
+              y2={displayH}
+              stroke="#94a3b8"
+              strokeWidth={0.5}
+              opacity={0.55}
+              pointerEvents="none"
+            />
+          ))}
+          {gridY.map((y) => (
+            <line
+              key={`gy-${page.page}-${y}`}
+              x1={0}
+              y1={(y / heightMm) * displayH}
+              x2={displayW}
+              y2={(y / heightMm) * displayH}
+              stroke="#94a3b8"
+              strokeWidth={0.5}
+              opacity={0.55}
+              pointerEvents="none"
+            />
+          ))}
+          {guides
+            ? guidesXMm.map((x) => {
+                const xPx = (x / widthMm) * displayW;
+                return (
+                  <g key={`gux-${page.page}-${x}`}>
+                    {guidesSelectable ? (
+                      <line
+                        x1={xPx}
+                        y1={0}
+                        x2={xPx}
+                        y2={displayH}
+                        stroke="#2563eb"
+                        strokeWidth={8}
+                        strokeOpacity={0.01}
+                        className="cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveGuide?.("x", x);
+                        }}
+                      />
+                    ) : null}
+                    <line
+                      x1={xPx}
+                      y1={0}
+                      x2={xPx}
+                      y2={displayH}
+                      stroke="#2563eb"
+                      strokeWidth={1}
+                      strokeDasharray="5 4"
+                      pointerEvents="none"
+                    />
+                  </g>
+                );
+              })
+            : null}
+          {guides
+            ? guidesYMm.map((y) => {
+                const yPx = (y / heightMm) * displayH;
+                return (
+                  <g key={`guy-${page.page}-${y}`}>
+                    {guidesSelectable ? (
+                      <line
+                        x1={0}
+                        y1={yPx}
+                        x2={displayW}
+                        y2={yPx}
+                        stroke="#2563eb"
+                        strokeWidth={8}
+                        strokeOpacity={0.01}
+                        className="cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveGuide?.("y", y);
+                        }}
+                      />
+                    ) : null}
+                    <line
+                      x1={0}
+                      y1={yPx}
+                      x2={displayW}
+                      y2={yPx}
+                      stroke="#2563eb"
+                      strokeWidth={1}
+                      strokeDasharray="5 4"
+                      pointerEvents="none"
+                    />
+                  </g>
+                );
+              })
+            : null}
+          {rulerDrag?.mode === "guide" ? (
+            rulerDrag.axis === "x" ? (
+              <line
+                x1={(rulerDrag.currentMm / widthMm) * displayW}
+                y1={0}
+                x2={(rulerDrag.currentMm / widthMm) * displayW}
+                y2={displayH}
+                stroke="#2563eb"
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+                pointerEvents="none"
+              />
+            ) : (
+              <line
+                x1={0}
+                y1={(rulerDrag.currentMm / heightMm) * displayH}
+                x2={displayW}
+                y2={(rulerDrag.currentMm / heightMm) * displayH}
+                stroke="#2563eb"
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+                pointerEvents="none"
+              />
+            )
+          ) : null}
+        </svg>
+      ) : null}
 
       {rulerDrag && faixaPreview ? (
         <svg

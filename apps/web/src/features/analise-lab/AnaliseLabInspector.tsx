@@ -1,11 +1,4 @@
-import {
-  Columns2,
-  Loader2,
-  Maximize,
-  Square,
-  ZoomIn,
-  ZoomOut,
-} from "lucide-react";
+import { Loader2 } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -23,6 +16,10 @@ import type { ProvaWebPageMeta } from "@/api/provaWeb";
 
 import { AnaliseLabInspectorPage } from "./AnaliseLabInspectorPage";
 import type { AnaliseLabTool } from "./AnaliseLabMarkTools";
+import {
+  AnaliseLabToolbar,
+  type AnaliseLabToolbarMarkProps,
+} from "./AnaliseLabToolbar";
 import { formatMm, pageSizeMm } from "./analiseLabGeometry";
 import {
   anchorScrollAfterZoom,
@@ -36,6 +33,11 @@ import {
   zoomStep,
   type InspectorViewMode,
 } from "./analiseLabFit";
+import {
+  addGuideMm,
+  removeGuideMm,
+  type InspectorViewPrefs,
+} from "./analiseLabViewPrefs";
 
 interface AnaliseLabInspectorProps {
   pages: ProvaWebPageMeta[];
@@ -50,6 +52,10 @@ interface AnaliseLabInspectorProps {
   rotulo: string;
   espessura: number;
   selectedMarkId?: number | null;
+  sangriaMm?: number;
+  markTools: AnaliseLabToolbarMarkProps;
+  prefs: InspectorViewPrefs;
+  onPrefsChange: (prefs: InspectorViewPrefs) => void;
   onCreateGeometryMark: (args: {
     tipo:
       | "ponto"
@@ -67,7 +73,6 @@ interface AnaliseLabInspectorProps {
     toMm: number;
     pagina: number;
   }) => void;
-  sangriaMm?: number;
   onCreateSangriaDrag?: (args: {
     fromMm: number;
     toMm: number;
@@ -91,6 +96,9 @@ export function AnaliseLabInspector({
   espessura,
   sangriaMm = 5,
   selectedMarkId = null,
+  markTools,
+  prefs,
+  onPrefsChange,
   onCreateGeometryMark,
   onCreateFaixaDrag,
   onCreateSangriaDrag,
@@ -126,8 +134,10 @@ export function AnaliseLabInspector({
         height: p.height || 1130,
       }),
     );
-    return fitZoom(sizes, avail);
-  }, [avail, firstRowPages, pages]);
+    return fitZoom(sizes, avail, {
+      gutterPx: viewMode === "dupla" ? 0 : undefined,
+    });
+  }, [avail, firstRowPages, pages, viewMode]);
 
   useEffect(() => {
     if (fitMode) setZoom(fitBase);
@@ -161,7 +171,6 @@ export function AnaliseLabInspector({
     [onPageChange],
   );
 
-  // Lazy load via IntersectionObserver (não controla página ativa).
   useEffect(() => {
     const root = scrollerRef.current;
     if (!root || !rows.length) return;
@@ -196,8 +205,6 @@ export function AnaliseLabInspector({
     return () => observer.disconnect();
   }, [rows]);
 
-  // Página ativa = linha sob o centro; na vista dupla, mantém a página
-  // clicada enquanto a linha continuar visível.
   useEffect(() => {
     const root = scrollerRef.current;
     if (!root || !rows.length) return;
@@ -239,7 +246,6 @@ export function AnaliseLabInspector({
       const root = scrollerRef.current;
       if (!el || !root) return false;
       suppressScrollSyncRef.current = true;
-      // Instantâneo: smooth falhava na troca Folhear→Inspeção (sync voltava à pág. 1).
       el.scrollIntoView({ behavior: "auto", block: "start" });
       setActivePage(pageNumber);
       const release = () => {
@@ -256,8 +262,6 @@ export function AnaliseLabInspector({
     [rows],
   );
 
-  // Navega apenas quando o nonce muda (evita laço pageTarget ↔ onPageChange).
-  // Só consome o nonce após scroll bem-sucedido (refs de linha prontas).
   useEffect(() => {
     if (!pageTarget?.page) return;
     if (lastNonceRef.current === pageTarget.nonce) return;
@@ -312,7 +316,6 @@ export function AnaliseLabInspector({
     [],
   );
 
-  // Ctrl+scroll = zoom; scroll sozinho = rolagem contínua.
   useEffect(() => {
     const root = scrollerRef.current;
     if (!root) return;
@@ -330,7 +333,6 @@ export function AnaliseLabInspector({
     return () => root.removeEventListener("wheel", onWheel);
   }, [applyZoom]);
 
-  // Ctrl + / - / 0
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey)) return;
@@ -359,6 +361,20 @@ export function AnaliseLabInspector({
     return () => window.removeEventListener("keydown", onKey);
   }, [applyZoom, fitBase]);
 
+  const handleAddGuide = useCallback(
+    (axis: "x" | "y", mm: number) => {
+      onPrefsChange(addGuideMm(prefs, axis, mm));
+    },
+    [onPrefsChange, prefs],
+  );
+
+  const handleRemoveGuide = useCallback(
+    (axis: "x" | "y", mm: number) => {
+      onPrefsChange(removeGuideMm(prefs, axis, mm));
+    },
+    [onPrefsChange, prefs],
+  );
+
   if (!pages.length) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-neutral-500">
@@ -372,78 +388,31 @@ export function AnaliseLabInspector({
     activeMeta?.widthPt || 0,
     activeMeta?.heightPt || 0,
   );
+  const duplexTight = viewMode === "dupla";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-200/70">
-      <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 border-b border-sagra-border bg-white px-3 py-2">
-        <span className="tabular-nums text-xs text-neutral-700">
-          Página {activePage} / {pages.length}
-        </span>
-        <button
-          type="button"
-          onClick={() => applyZoom(zoomStep(zoom, -1))}
-          className="rounded border border-sagra-border p-1.5"
-          title="Diminuir zoom (Ctrl+-)"
-        >
-          <ZoomOut className="size-4" aria-hidden />
-        </button>
-        <button
-          type="button"
-          onClick={() => applyZoom(zoomStep(zoom, 1))}
-          className="rounded border border-sagra-border p-1.5"
-          title="Aumentar zoom (Ctrl++)"
-        >
-          <ZoomIn className="size-4" aria-hidden />
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setFitMode(true);
-            setZoom(fitBase);
-          }}
-          className={
-            fitMode
-              ? "rounded border border-primary-green bg-primary-green/10 p-1.5 text-primary-green"
-              : "rounded border border-sagra-border p-1.5"
-          }
-          title="Ajustar à área (Ctrl+0)"
-        >
-          <Maximize className="size-4" aria-hidden />
-        </button>
-        <button
-          type="button"
-          onClick={() => applyZoom(1)}
-          className="rounded border border-sagra-border px-2 py-1 text-[11px] font-medium"
-          title="100%"
-        >
-          100%
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            setViewMode((m) => (m === "simples" ? "dupla" : "simples"))
-          }
-          className={
-            viewMode === "dupla"
-              ? "rounded border border-primary-green bg-primary-green/10 p-1.5 text-primary-green"
-              : "rounded border border-sagra-border p-1.5"
-          }
-          title={
-            viewMode === "dupla"
-              ? "Página dupla (ativada)"
-              : "Ativar página dupla"
-          }
-        >
-          {viewMode === "dupla" ? (
-            <Columns2 className="size-4" aria-hidden />
-          ) : (
-            <Square className="size-4" aria-hidden />
-          )}
-        </button>
-        <span className="tabular-nums text-xs text-neutral-500">
-          {Math.round(zoom * 100)}% · {formatMm(widthMm)} × {formatMm(heightMm)}
-        </span>
-      </div>
+      <AnaliseLabToolbar
+        mark={markTools}
+        prefs={prefs}
+        onPrefsChange={onPrefsChange}
+        activePage={activePage}
+        pageCount={pages.length}
+        zoom={zoom}
+        fitMode={fitMode}
+        viewMode={viewMode}
+        sizeLabel={`${formatMm(widthMm)} × ${formatMm(heightMm)}`}
+        onZoomOut={() => applyZoom(zoomStep(zoom, -1))}
+        onZoomIn={() => applyZoom(zoomStep(zoom, 1))}
+        onZoom100={() => applyZoom(1)}
+        onFit={() => {
+          setFitMode(true);
+          setZoom(fitBase);
+        }}
+        onToggleViewMode={() =>
+          setViewMode((m) => (m === "simples" ? "dupla" : "simples"))
+        }
+      />
 
       <div ref={scrollerRef} className="relative min-h-0 flex-1 overflow-auto p-4">
         <div className="mx-auto flex flex-col gap-8">
@@ -455,31 +424,53 @@ export function AnaliseLabInspector({
                 if (el) rowRefs.current.set(rowIdx, el);
                 else rowRefs.current.delete(rowIdx);
               }}
-              className="flex items-start justify-center gap-4 overflow-visible"
+              className={
+                duplexTight
+                  ? "flex items-start justify-center gap-0 overflow-visible"
+                  : "flex items-start justify-center gap-4 overflow-visible"
+              }
             >
-              {row.map((page, pageInRow) => (
-                <AnaliseLabInspectorPage
-                  key={page.page}
-                  page={page}
-                  zoom={zoom}
-                  loadSrc={loadedPages.has(page.page)}
-                  resolveUrl={resolveUrl}
-                  marks={marks}
-                  tool={tool}
-                  edge={edge}
-                  cor={cor}
-                  espessura={espessura}
-                  sangriaMm={sangriaMm}
-                  selectedMarkId={selectedMarkId}
-                  showLeftRuler={pageInRow === 0}
-                  interactive
-                  active={activePage === page.page}
-                  onActivate={() => activatePage(page.page)}
-                  onCreateGeometryMark={onCreateGeometryMark}
-                  onCreateFaixaDrag={onCreateFaixaDrag}
-                  onCreateSangriaDrag={onCreateSangriaDrag}
-                />
-              ))}
+              {row.map((page, pageInRow) => {
+                const paired = duplexTight && row.length === 2;
+                const innerEdge = paired
+                  ? pageInRow === 0
+                    ? "right"
+                    : "left"
+                  : undefined;
+                return (
+                  <AnaliseLabInspectorPage
+                    key={page.page}
+                    page={page}
+                    zoom={zoom}
+                    loadSrc={loadedPages.has(page.page)}
+                    resolveUrl={resolveUrl}
+                    marks={marks}
+                    tool={tool}
+                    edge={edge}
+                    cor={cor}
+                    espessura={espessura}
+                    sangriaMm={sangriaMm}
+                    selectedMarkId={selectedMarkId}
+                    showLeftRuler={pageInRow === 0}
+                    showRulers={prefs.rulers}
+                    grid={prefs.grid}
+                    gridStepMm={prefs.gridStepMm}
+                    guides={prefs.guides}
+                    guidesXMm={prefs.guidesXMm}
+                    guidesYMm={prefs.guidesYMm}
+                    innerEdge={innerEdge}
+                    tightActiveRing={paired}
+                    interactive
+                    active={activePage === page.page}
+                    onActivate={() => activatePage(page.page)}
+                    onAddGuide={handleAddGuide}
+                    onRemoveGuide={handleRemoveGuide}
+                    onCreateGeometryMark={onCreateGeometryMark}
+                    onCreateFaixaDrag={onCreateFaixaDrag}
+                    onCreateSangriaDrag={onCreateSangriaDrag}
+                  />
+                );
+              })}
             </div>
           ))}
         </div>

@@ -4,6 +4,8 @@ export interface DashboardColumnConfig {
   id: string;
   title: string;
   statuses: string[];
+  /** Omitido/vazio = herda config.sector */
+  sector?: string;
 }
 
 export interface DashboardConfig {

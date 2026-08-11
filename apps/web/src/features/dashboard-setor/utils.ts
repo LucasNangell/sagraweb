@@ -2,6 +2,7 @@ import type { PcpQueueItem } from "@/api/pcp";
 
 import { DASHBOARD_NEW_HIGHLIGHT_MS } from "./constants";
 import type {
+  DashboardColumnConfig,
   DashboardConfig,
   DashboardDisplayColumn,
   DashboardOsItem,
@@ -142,6 +143,41 @@ export function osBelongsToDashboardSector(
   return itemSetor === sector.trim();
 }
 
+export function osBelongsToAnyDashboardSector(
+  item: PcpQueueItem,
+  sectors: string[],
+): boolean {
+  return sectors.some((sector) => osBelongsToDashboardSector(item, sector));
+}
+
+/** Resolve o setor efetivo da coluna (override ou herança do painel). */
+export function resolveColumnSector(
+  col: Pick<DashboardColumnConfig, "sector">,
+  boardSector: string,
+): string {
+  const override = (col.sector ?? "").trim();
+  return override || boardSector.trim();
+}
+
+/** Setores únicos monitorados pelo painel (board + overrides de coluna). */
+export function collectDashboardSectors(config: DashboardConfig): string[] {
+  const seen = new Set<string>();
+  const sectors: string[] = [];
+  const push = (raw: string) => {
+    const sector = raw.trim();
+    if (!sector || seen.has(sector)) {
+      return;
+    }
+    seen.add(sector);
+    sectors.push(sector);
+  };
+  push(config.sector);
+  for (const col of config.columns) {
+    push(resolveColumnSector(col, config.sector));
+  }
+  return sectors;
+}
+
 /** Remove OS principal e Sub OS associadas do mapa incremental. */
 export function removeOsKeysFromMap(
   itemsMap: Map<string, PcpQueueItem>,
@@ -248,13 +284,18 @@ function resolvePcpOrder(raw: number | null | undefined): number | null {
 
 function findColumnId(
   config: DashboardConfig,
-  situacao: string,
+  item: PcpQueueItem,
 ): string | null {
-  const colIndex = config.columns.findIndex((col) =>
-    col.statuses.some((statusFilter) =>
+  const situacao = item.situacao ?? "";
+  const colIndex = config.columns.findIndex((col) => {
+    const columnSector = resolveColumnSector(col, config.sector);
+    if (!osBelongsToDashboardSector(item, columnSector)) {
+      return false;
+    }
+    return col.statuses.some((statusFilter) =>
       matchesColumnStatus(situacao, statusFilter),
-    ),
-  );
+    );
+  });
   return colIndex !== -1 ? config.columns[colIndex]!.id : null;
 }
 
@@ -365,8 +406,7 @@ export function processDashboardData(
   for (const os of rawData) {
     const uniqueKey = dashboardItemKey(os);
     incomingIds.add(uniqueKey);
-    const situacao = os.situacao ?? "";
-    const currentColumnId = findColumnId(config, situacao);
+    const currentColumnId = findColumnId(config, os);
 
     let item: DashboardOsItem;
     if (masterOpsMap.has(uniqueKey)) {
@@ -445,6 +485,7 @@ export function buildDashboardConfigSignature(config: DashboardConfig): string {
       id: col.id,
       title: col.title,
       statuses: col.statuses,
+      sector: (col.sector ?? "").trim() || undefined,
     })),
   });
 }

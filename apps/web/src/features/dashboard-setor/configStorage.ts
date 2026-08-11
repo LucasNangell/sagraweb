@@ -2,6 +2,7 @@ import {
   DASHBOARD_CONFIG_STORAGE_KEY,
   DEFAULT_DASHBOARD_CONFIG,
 } from "./constants";
+import { normalizeDashboardColumns } from "./normalizeConfig";
 import type { DashboardConfig } from "./types";
 
 export function loadDashboardConfig(): DashboardConfig {
@@ -12,15 +13,10 @@ export function loadDashboardConfig(): DashboardConfig {
 
   try {
     const parsed = JSON.parse(saved) as Partial<DashboardConfig>;
-    const columns =
-      parsed.columns && parsed.columns.length > 0
-        ? parsed.columns
-        : DEFAULT_DASHBOARD_CONFIG.columns;
-
     return normalizeDashboardConfig({
       sector: parsed.sector || DEFAULT_DASHBOARD_CONFIG.sector,
-      columnCount: parsed.columnCount ?? columns.length,
-      columns,
+      columnCount: parsed.columnCount ?? parsed.columns?.length ?? 0,
+      columns: normalizeDashboardColumns(parsed.columns),
     });
   } catch {
     return normalizeDashboardConfig(DEFAULT_DASHBOARD_CONFIG);
@@ -39,7 +35,7 @@ export function clearDashboardConfigCache(): void {
 }
 
 function normalizeDashboardConfig(config: DashboardConfig): DashboardConfig {
-  const columns = config.columns.length > 0 ? config.columns : DEFAULT_DASHBOARD_CONFIG.columns;
+  const columns = normalizeDashboardColumns(config.columns);
   return {
     sector: config.sector || DEFAULT_DASHBOARD_CONFIG.sector,
     columnCount: columns.length,

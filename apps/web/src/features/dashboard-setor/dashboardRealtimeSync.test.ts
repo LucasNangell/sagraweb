@@ -74,4 +74,41 @@ describe("applyOsPatchToItemsMap", () => {
     expect(result.map.get("5001-2026-sub-1")?.situacao).toBe("Recebido");
     expect(result.map.get("5001-2026-sub-2")).toEqual(subOs2);
   });
+
+  it("aceita item de setor secundário na lista monitorada", () => {
+    const map = new Map<string, PcpQueueItem>();
+    const incoming: PcpQueueItem = {
+      nr_os: 55,
+      ano: 2026,
+      situacao: "Em Execução",
+      setor: "Papelaria",
+    };
+    const result = applyOsPatchToItemsMap(
+      map,
+      ["SEFOC", "Papelaria"],
+      55,
+      2026,
+      [incoming],
+    );
+    expect(result.changed).toBe(true);
+    expect(result.map.get("55-2026")?.setor).toBe("Papelaria");
+  });
+
+  it("ignora item de setor fora da lista", () => {
+    const map = new Map<string, PcpQueueItem>();
+    const incoming: PcpQueueItem = {
+      nr_os: 55,
+      ano: 2026,
+      situacao: "Em Execução",
+      setor: "SEPAC",
+    };
+    const result = applyOsPatchToItemsMap(
+      map,
+      ["SEFOC", "Papelaria"],
+      55,
+      2026,
+      [incoming],
+    );
+    expect(result.map.size).toBe(0);
+  });
 });

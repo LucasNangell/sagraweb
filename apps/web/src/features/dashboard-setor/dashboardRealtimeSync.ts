@@ -8,7 +8,7 @@ import {
   dashboardItemKey,
   hashDashboardItems,
   mergePcpOrderIntoItems,
-  osBelongsToDashboardSector,
+  osBelongsToAnyDashboardSector,
   removeOsKeysFromMap,
 } from "./utils";
 import type { DashboardWsMessage } from "./types";
@@ -42,27 +42,52 @@ export function isFinishedSituacao(situacao?: string | null): boolean {
   return FINISHED_SITUACOES.has((situacao ?? "").trim());
 }
 
+function normalizeSectors(sectors: string | string[]): string[] {
+  const raw = Array.isArray(sectors) ? sectors : [sectors];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of raw) {
+    const sector = value.trim();
+    if (!sector || seen.has(sector)) {
+      continue;
+    }
+    seen.add(sector);
+    out.push(sector);
+  }
+  return out;
+}
+
+function itemBelongsToSectors(
+  item: PcpQueueItem,
+  sectors: string[],
+): boolean {
+  return osBelongsToAnyDashboardSector(item, sectors);
+}
+
 /**
  * Busca estado atual de uma OS (e Sub OS relacionadas, se necessário) para patch incremental.
  */
 export async function fetchDashboardItemsForOsEvent(
-  sector: string,
+  sectors: string | string[],
   nrOs: number,
   ano: number,
   options?: { includeSubOs?: boolean; subOsId?: number | null },
 ): Promise<PcpQueueItem[]> {
+  const sectorList = normalizeSectors(sectors);
   const includeSubOs = options?.includeSubOs === true;
   const main = await fetchDashboardOsByKey(nrOs, ano);
 
   if (!includeSubOs) {
-    if (!main || !osBelongsToDashboardSector(main, sector)) {
+    if (!main || !itemBelongsToSectors(main, sectorList)) {
       return [];
     }
     return [main];
   }
 
-  const pcpItems = await fetchPcpQueueForDashboard(sector);
-  const related = pcpItems.filter((item) => {
+  const pcpLists = await Promise.all(
+    sectorList.map((sector) => fetchPcpQueueForDashboard(sector)),
+  );
+  const related = pcpLists.flat().filter((item) => {
     if (item.row_kind === "sub_os") {
       const parentNr = item.parent_nr_os ?? item.nr_os;
       const parentAno = item.parent_ano ?? item.ano;
@@ -80,7 +105,7 @@ export async function fetchDashboardItemsForOsEvent(
   const result: PcpQueueItem[] = [];
   const mainFromPcp = related.find((item) => item.row_kind !== "sub_os");
 
-  if (main && osBelongsToDashboardSector(main, sector)) {
+  if (main && itemBelongsToSectors(main, sectorList)) {
     result.push({
       ...main,
       pcp_ordem: mainFromPcp?.pcp_ordem ?? main.pcp_ordem ?? null,
@@ -89,15 +114,22 @@ export async function fetchDashboardItemsForOsEvent(
     });
   } else if (
     mainFromPcp &&
-    osBelongsToDashboardSector(mainFromPcp, sector)
+    itemBelongsToSectors(mainFromPcp, sectorList)
   ) {
     result.push(mainFromPcp);
   }
 
+  const seenSubKeys = new Set<string>();
   for (const sub of related.filter((item) => item.row_kind === "sub_os")) {
-    if (osBelongsToDashboardSector(sub, sector)) {
-      result.push(sub);
+    if (!itemBelongsToSectors(sub, sectorList)) {
+      continue;
     }
+    const key = dashboardItemKey(sub);
+    if (seenSubKeys.has(key)) {
+      continue;
+    }
+    seenSubKeys.add(key);
+    result.push(sub);
   }
 
   return result;
@@ -108,12 +140,13 @@ export async function fetchDashboardItemsForOsEvent(
  */
 export function applyOsPatchToItemsMap(
   itemsMap: Map<string, PcpQueueItem>,
-  sector: string,
+  sectors: string | string[],
   nrOs: number,
   ano: number,
   incoming: PcpQueueItem[],
   options?: { subOsId?: number | null },
 ): { map: Map<string, PcpQueueItem>; changed: boolean } {
+  const sectorList = normalizeSectors(sectors);
   const beforeSig = hashDashboardItems(itemsMap.values());
   const next = new Map(itemsMap);
 
@@ -124,7 +157,7 @@ export function applyOsPatchToItemsMap(
   }
 
   for (const item of incoming) {
-    if (!osBelongsToDashboardSector(item, sector)) {
+    if (!itemBelongsToSectors(item, sectorList)) {
       continue;
     }
     const key = dashboardItemKey(item);
@@ -143,9 +176,25 @@ export function applyOsPatchToItemsMap(
 
 export async function mergePcpOrderFromQueue(
   itemsMap: Map<string, PcpQueueItem>,
-  sector: string,
+  sectors: string | string[],
 ): Promise<{ map: Map<string, PcpQueueItem>; changed: boolean }> {
-  const pcpItems = await fetchPcpQueueForDashboard(sector);
+  const sectorList = normalizeSectors(sectors);
+  const pcpLists = await Promise.all(
+    sectorList.map((sector) => fetchPcpQueueForDashboard(sector)),
+  );
+  const seen = new Set<string>();
+  const pcpItems: PcpQueueItem[] = [];
+  for (const list of pcpLists) {
+    for (const item of list) {
+      const key = dashboardItemKey(item);
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      pcpItems.push(item);
+    }
+  }
+
   const { items, changed } = mergePcpOrderIntoItems(
     [...itemsMap.values()],
     pcpItems,

@@ -3,14 +3,18 @@ import { describe, expect, it } from "vitest";
 import type { PcpQueueItem } from "@/api/pcp";
 
 import {
+  collectDashboardSectors,
   formatQueueDisplayLabel,
   formatQueueDisplaySituacao,
   matchesColumnStatus,
   mergeDashboardQueueSources,
   mergePcpOrderIntoItems,
   osBelongsToDashboardSector,
+  processDashboardData,
   removeOsKeysFromMap,
+  resolveColumnSector,
 } from "./utils";
+import type { DashboardConfig } from "./types";
 
 const subOs: PcpQueueItem = {
   nr_os: 568,
@@ -186,5 +190,72 @@ describe("mergePcpOrderIntoItems", () => {
     expect(merged.items[0].pcp_ordem).toBe(3);
     expect(merged.items[0].situacao).toBe("Recebido");
     expect(merged.changed).toBe(true);
+  });
+});
+
+describe("resolveColumnSector / collectDashboardSectors", () => {
+  it("herda setor do painel quando coluna não tem override", () => {
+    expect(resolveColumnSector({}, "SEFOC")).toBe("SEFOC");
+    expect(resolveColumnSector({ sector: "  " }, "SEFOC")).toBe("SEFOC");
+    expect(resolveColumnSector({ sector: "Papelaria" }, "SEFOC")).toBe(
+      "Papelaria",
+    );
+  });
+
+  it("deduplica board + overrides de coluna", () => {
+    const config: DashboardConfig = {
+      sector: "SEFOC",
+      columnCount: 3,
+      columns: [
+        { id: "a", title: "A", statuses: ["Recebido"] },
+        { id: "b", title: "B", statuses: ["Em Execução"], sector: "Papelaria" },
+        { id: "c", title: "C", statuses: ["Pronto"], sector: "SEFOC" },
+      ],
+    };
+    expect(collectDashboardSectors(config)).toEqual(["SEFOC", "Papelaria"]);
+  });
+});
+
+describe("processDashboardData column sector override", () => {
+  const config: DashboardConfig = {
+    sector: "SEFOC",
+    columnCount: 2,
+    columns: [
+      {
+        id: "sefoca",
+        title: "Execução SEFOC",
+        statuses: ["Em Execução"],
+      },
+      {
+        id: "papelaria",
+        title: "Execução Papelaria",
+        statuses: ["Em Execução"],
+        sector: "Papelaria",
+      },
+    ],
+  };
+
+  it("coluna sem sector herda e filtra pelo board", () => {
+    const raw: PcpQueueItem[] = [
+      { nr_os: 1, ano: 2026, situacao: "Em Execução", setor: "SEFOC" },
+      { nr_os: 2, ano: 2026, situacao: "Em Execução", setor: "Papelaria" },
+    ];
+    const processed = processDashboardData(raw, config, new Map(), {
+      isInitialLoad: true,
+    });
+    expect(processed.columns[0]!.items.map((i) => i.nr_os)).toEqual([1]);
+    expect(processed.columns[1]!.items.map((i) => i.nr_os)).toEqual([2]);
+  });
+
+  it("mesmo andamento não mistura setores entre colunas", () => {
+    const raw: PcpQueueItem[] = [
+      { nr_os: 10, ano: 2026, situacao: "Em Execução", setor: "Papelaria" },
+    ];
+    const processed = processDashboardData(raw, config, new Map(), {
+      isInitialLoad: true,
+    });
+    expect(processed.columns[0]!.items).toHaveLength(0);
+    expect(processed.columns[1]!.items).toHaveLength(1);
+    expect(processed.columns[1]!.title).toBe("Execução Papelaria");
   });
 });

@@ -22,6 +22,7 @@ import {
 } from "../constants";
 import {
   buildDashboardConfigSignature,
+  collectDashboardSectors,
   dashboardItemKey,
   emptyDisplayColumns,
   hashDashboardBoard,
@@ -44,20 +45,25 @@ interface UseDashboardSetorDataOptions {
   onNewItems?: () => void;
 }
 
-function wsEventAffectsSector(
+function wsEventAffectsSectors(
   data: DashboardWsMessage,
-  sector: string,
+  sectors: string[],
 ): boolean {
   const eventSetor = (data.setor ?? "").trim();
   if (!eventSetor) {
     return true;
   }
-  const cfg = sector.trim();
-  if (eventSetor === cfg) {
-    return true;
-  }
-  if (cfg === "Gravação" && eventSetor === "SEFOC") {
-    return true;
+  for (const sector of sectors) {
+    const cfg = sector.trim();
+    if (!cfg) {
+      continue;
+    }
+    if (eventSetor === cfg) {
+      return true;
+    }
+    if (cfg === "Gravação" && eventSetor === "SEFOC") {
+      return true;
+    }
   }
   return false;
 }
@@ -208,8 +214,9 @@ export function useDashboardSetorData({
       }
 
       try {
+        const sectors = collectDashboardSectors(configRef.current);
         const raw = await fetchDashboardSectorData(
-          configRef.current.sector,
+          sectors,
           isInitialLoad
             ? (partialItems) => {
                 if (generation !== fetchGenerationRef.current) {
@@ -300,7 +307,7 @@ export function useDashboardSetorData({
 
     isPatchingRef.current = true;
     const generation = fetchGenerationRef.current;
-    const sector = configRef.current.sector;
+    const sectors = collectDashboardSectors(configRef.current);
     let changed = false;
 
     try {
@@ -313,7 +320,7 @@ export function useDashboardSetorData({
           const includeSubOs = shouldFetchSubOsForEvent(message);
           const subOsId = toOptionalNumber(message.sub_os_id);
           const incoming = await fetchDashboardItemsForOsEvent(
-            sector,
+            sectors,
             parsed.nrOs,
             parsed.ano,
             {
@@ -327,7 +334,7 @@ export function useDashboardSetorData({
 
           const patchResult = applyOsPatchToItemsMap(
             itemsMapRef.current,
-            sector,
+            sectors,
             parsed.nrOs,
             parsed.ano,
             incoming,
@@ -341,7 +348,7 @@ export function useDashboardSetorData({
       if (needsPcpMerge) {
         const mergeResult = await mergePcpOrderFromQueue(
           itemsMapRef.current,
-          sector,
+          sectors,
         );
         if (generation !== fetchGenerationRef.current) {
           return;
@@ -429,7 +436,12 @@ export function useDashboardSetorData({
       }
 
       if (data.type === "system_update" || data.type === "pcp_queue_update") {
-        if (!wsEventAffectsSector(data, configRef.current.sector)) {
+        if (
+          !wsEventAffectsSectors(
+            data,
+            collectDashboardSectors(configRef.current),
+          )
+        ) {
           return;
         }
         if (data.type === "pcp_queue_update") {

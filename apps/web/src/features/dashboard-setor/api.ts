@@ -3,7 +3,7 @@ import { apiFetch } from "@/lib/api";
 
 import type { OsSearchResponse } from "@/features/os/types";
 
-import { mergeDashboardQueueSources } from "./utils";
+import { dashboardItemKey, mergeDashboardQueueSources } from "./utils";
 
 /** Evita respostas stale do cache HTTP (PCP envia max-age=8). */
 const DASHBOARD_FETCH_INIT: RequestInit = { cache: "no-store" };
@@ -94,11 +94,45 @@ export async function fetchDashboardOsByKey(
   return mapSearchRowToQueueItem(row);
 }
 
-/**
- * Carrega fila do painel: primeiro /os/search (rápido, materializada), depois
- * /pcp/queue só para ordem PCP (sem previsões ML no backend).
- */
-export async function fetchDashboardSectorData(
+function normalizeSectorsInput(
+  sectorOrSectors: string | string[],
+): string[] {
+  const raw = Array.isArray(sectorOrSectors)
+    ? sectorOrSectors
+    : [sectorOrSectors];
+  const seen = new Set<string>();
+  const sectors: string[] = [];
+  for (const value of raw) {
+    const sector = value.trim();
+    if (!sector || seen.has(sector)) {
+      continue;
+    }
+    seen.add(sector);
+    sectors.push(sector);
+  }
+  return sectors;
+}
+
+/** Une listas de setores distintos, preservando a primeira ocorrência da chave. */
+export function mergeDashboardSectorItemLists(
+  lists: PcpQueueItem[][],
+): PcpQueueItem[] {
+  const seen = new Set<string>();
+  const merged: PcpQueueItem[] = [];
+  for (const list of lists) {
+    for (const item of list) {
+      const key = dashboardItemKey(item);
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      merged.push(item);
+    }
+  }
+  return merged;
+}
+
+async function fetchSingleDashboardSectorData(
   sector: string,
   onProgress?: DashboardFetchProgress,
 ): Promise<PcpQueueItem[]> {
@@ -109,7 +143,56 @@ export async function fetchDashboardSectorData(
     const pcpResult = await fetchPcpQueueForDashboard(sector);
     return mergeDashboardQueueSources(searchItems, pcpResult);
   } catch (queueErr) {
-    console.warn("[DashboardSetor] Fila PCP indisponível — exibindo só busca:", queueErr);
+    console.warn(
+      "[DashboardSetor] Fila PCP indisponível — exibindo só busca:",
+      queueErr,
+    );
     return searchItems;
   }
+}
+
+/**
+ * Carrega fila do painel para um ou mais setores: /os/search (materializada),
+ * depois /pcp/queue para ordem PCP. Sectores extras rodam em paralelo.
+ */
+export async function fetchDashboardSectorData(
+  sectorOrSectors: string | string[],
+  onProgress?: DashboardFetchProgress,
+): Promise<PcpQueueItem[]> {
+  const sectors = normalizeSectorsInput(sectorOrSectors);
+  if (sectors.length === 0) {
+    return [];
+  }
+  if (sectors.length === 1) {
+    return fetchSingleDashboardSectorData(sectors[0]!, onProgress);
+  }
+
+  const searchPartials: PcpQueueItem[][] = sectors.map(() => []);
+  const emitPartial = () => {
+    if (!onProgress) {
+      return;
+    }
+    onProgress(mergeDashboardSectorItemLists(searchPartials));
+  };
+
+  const settled = await Promise.all(
+    sectors.map(async (sector, index) => {
+      const searchItems = await fetchMaterializedDashboardQueue(sector);
+      searchPartials[index] = searchItems;
+      emitPartial();
+
+      try {
+        const pcpResult = await fetchPcpQueueForDashboard(sector);
+        return mergeDashboardQueueSources(searchItems, pcpResult);
+      } catch (queueErr) {
+        console.warn(
+          "[DashboardSetor] Fila PCP indisponível — exibindo só busca:",
+          queueErr,
+        );
+        return searchItems;
+      }
+    }),
+  );
+
+  return mergeDashboardSectorItemLists(settled);
 }

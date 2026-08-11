@@ -122,9 +122,16 @@ export function DashboardSetorSettingsModal({
   ) => {
     setTempConfig((prev) => ({
       ...prev,
-      columns: prev.columns.map((col, i) =>
-        i === idx ? { ...col, ...patch } : col,
-      ),
+      columns: prev.columns.map((col, i) => {
+        if (i !== idx) {
+          return col;
+        }
+        const next: DashboardColumnConfig = { ...col, ...patch };
+        if ("sector" in patch && !(patch.sector ?? "").trim()) {
+          delete next.sector;
+        }
+        return next;
+      }),
     }));
   };
 
@@ -231,6 +238,33 @@ export function DashboardSetorSettingsModal({
                       updateColumn(idx, { title: e.target.value })
                     }
                   />
+                </div>
+                <div className="dashboard-setor-column-sector-field">
+                  <label htmlFor={`col-sector-${col.id}`}>
+                    Setor desta coluna
+                  </label>
+                  <select
+                    id={`col-sector-${col.id}`}
+                    className="dashboard-setor-form-control dashboard-setor-column-sector-input"
+                    value={(col.sector ?? "").trim()}
+                    onChange={(e) => {
+                      const next = e.target.value.trim();
+                      updateColumn(
+                        idx,
+                        next ? { sector: next } : { sector: undefined },
+                      );
+                    }}
+                  >
+                    <option value="">Mesmo do painel</option>
+                    {(setoresList.length === 0 && (col.sector ?? "").trim()
+                      ? [(col.sector ?? "").trim()]
+                      : setoresList
+                    ).map((setor) => (
+                      <option key={setor} value={setor}>
+                        {setor}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <button
                   type="button"

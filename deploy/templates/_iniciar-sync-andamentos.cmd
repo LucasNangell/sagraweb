@@ -10,6 +10,7 @@ if "%ROOT%"=="" (
 
 set "BACKEND=%ROOT%\app\backend"
 set "SERVICES=%ROOT%\app\services"
+set "SYNC_SERVICE=%ROOT%\sync_andamentos_service.py"
 set "SYNC_OLD=%ROOT%\sync_andamentos_v2_Old.py"
 set "SYNC_NEW=%SERVICES%\sync_andamentos_v2.py"
 set "SYNC_TARGET="
@@ -35,7 +36,9 @@ if errorlevel 1 (
     exit /b 1
 )
 
-if exist "%SYNC_OLD%" (
+if exist "%SYNC_SERVICE%" (
+    set "SYNC_TARGET=%SYNC_SERVICE%"
+) else if exist "%SYNC_OLD%" (
     set "SYNC_TARGET=%SYNC_OLD%"
 ) else if exist "%SYNC_NEW%" (
     set "SYNC_TARGET=%SYNC_NEW%"
@@ -43,6 +46,7 @@ if exist "%SYNC_OLD%" (
 
 if not defined SYNC_TARGET (
     echo [ERRO] Script nao encontrado:
+    echo        - %SYNC_SERVICE%
     echo        - %SYNC_OLD%
     echo        - %SYNC_NEW%
     pause
@@ -56,6 +60,7 @@ echo  SAGRA sync_andamentos
 echo  Raiz: %ROOT%
 echo  Script: %SYNC_TARGET%
 echo  Log:  %ROOT%\logs\sync\sync_andamentos.log
+echo  Heartbeat: %ROOT%\logs\sync\sync_heartbeat.json
 echo  Ctrl+C para encerrar esta janela.
 echo.
 

@@ -398,6 +398,54 @@ def get_session_by_id(session_id: int) -> Optional[dict[str, Any]]:
     return _map_session_row(rows[0])
 
 
+def list_active_externa_by_juntada(juntada_grupo_id: str) -> list[dict[str, Any]]:
+    """Sessões externas ativas (pendente/iniciada) do mesmo JuntadaGrupoId."""
+    gid = (juntada_grupo_id or "").strip()
+    if not gid:
+        return []
+    rows = db.execute_query(
+        """
+        SELECT * FROM tab_os_gravacao_externa
+        WHERE JuntadaGrupoId = %s AND Status IN ('pendente', 'iniciada')
+        ORDER BY OsNro ASC, OsAno ASC, Id ASC
+        """,
+        (gid,),
+    )
+    return [_map_session_row(r) for r in rows or []]
+
+
+def list_concluida_aguardando_entrega_by_juntada(
+    juntada_grupo_id: str,
+) -> list[dict[str, Any]]:
+    """Sessões concluídas ainda sem entrega do mesmo JuntadaGrupoId."""
+    gid = (juntada_grupo_id or "").strip()
+    if not gid:
+        return []
+    rows = db.execute_query(
+        """
+        SELECT * FROM tab_os_gravacao_externa
+        WHERE JuntadaGrupoId = %s
+          AND Status = 'concluida'
+          AND EntregaLancadaEm IS NULL
+        ORDER BY OsNro ASC, OsAno ASC, Id ASC
+        """,
+        (gid,),
+    )
+    return [_map_session_row(r) for r in rows or []]
+
+
+def _resolve_active_externa_targets(
+    session: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Âncora + irmãs ativas da juntada (ou só a sessão corrente)."""
+    juntada_id = session.get("juntada_grupo_id")
+    if juntada_id:
+        targets = list_active_externa_by_juntada(str(juntada_id))
+        if targets:
+            return targets
+    return [session]
+
+
 def _fetch_arquivos(session_id: int) -> list[dict[str, Any]]:
     rows = db.execute_query(
         """
@@ -922,6 +970,74 @@ def render_session_composite_preview(
     )
 
 
+def _iniciar_uma_sessao_cursor(
+    cursor,
+    *,
+    session: dict[str, Any],
+    ponto_fmt: str,
+    need_andamento: bool,
+    obs: str,
+) -> str | None:
+    """Atualiza status e opcionalmente insere andamento Recebido para uma sessão."""
+    from routers.os_audit_service import log_andamento_added
+    from services.andamento_operacional import insert_andamento_as_ultimo
+
+    os_id = int(session["os_nro"])
+    ano = int(session["os_ano"])
+    session_id = int(session["id"])
+
+    if session["status"] != "iniciada":
+        cursor.execute(
+            """
+            UPDATE tab_os_gravacao_externa
+            SET Status = 'iniciada',
+                IniciadoPorPonto = %s,
+                IniciadoEm = NOW()
+            WHERE Id = %s
+            """,
+            (ponto_fmt, session_id),
+        )
+
+    if not need_andamento:
+        return None
+
+    base_prefix = f"{os_id:05d}{ano}-"
+    cursor.execute(
+        "SELECT MAX(CodStatus) as max_cod FROM tabAndamento WHERE CodStatus LIKE %s",
+        (f"{base_prefix}%",),
+    )
+    res = cursor.fetchone()
+    next_seq = 1
+    if res and res.get("max_cod"):
+        try:
+            next_seq = int(str(res["max_cod"]).split("-")[-1]) + 1
+        except ValueError:
+            next_seq = 1
+    new_cod = f"{base_prefix}{next_seq:02d}"
+    insert_andamento_as_ultimo(
+        cursor,
+        cod_status=new_cod,
+        nro=os_id,
+        ano=ano,
+        situacao=SITUACAO_RECEBIDO,
+        setor=SETOR_GRAV_EXTERNA,
+        obs=obs,
+        ponto=ponto_fmt,
+    )
+    log_andamento_added(
+        cursor,
+        nro=os_id,
+        ano=ano,
+        cod_status=new_cod,
+        situacao=SITUACAO_RECEBIDO,
+        setor=SETOR_GRAV_EXTERNA,
+        obs=obs,
+        ponto=ponto_fmt,
+        origem="gravacao_externa_iniciar",
+    )
+    return new_cod
+
+
 def iniciar_gravacao(
     *,
     ano: int,
@@ -933,92 +1049,57 @@ def iniciar_gravacao(
         raise HTTPException(status_code=404, detail="Sessão de Gravação Externa não encontrada.")
 
     ponto_fmt = format_ponto(_clean_ponto(operador_ponto))
-    situacao_atual, setor_atual = _get_ultimo_operacional(ano, os_id)
-    ja_recebido = (
-        str(situacao_atual or "").strip() == SITUACAO_RECEBIDO
-        and str(setor_atual or "").strip() == SETOR_GRAV_EXTERNA
-    )
-    if session["status"] == "iniciada" and ja_recebido:
-        return build_session_detail(session)
+    targets = _resolve_active_externa_targets(session)
 
-    rows = db.execute_query(
-        "SELECT * FROM tab_os_gravacao_externa WHERE Id = %s LIMIT 1",
-        (session["id"],),
-    )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Sessão de Gravação Externa não encontrada.")
-    session_row = rows[0]
-    origem_pendente_id = session_row.get("OrigemPendenteId")
-    chapas = _fetch_chapas_origem_pendente(
-        int(origem_pendente_id) if origem_pendente_id else None
-    )
-
+    # Avaliação prévia por OS (idempotência); chapas/obs por origem da sessão.
     from routers.andamento_helpers import format_andamento_obs, format_gravacao_recebido_obs
-    from routers.os_audit_service import log_andamento_added
-    from services.andamento_operacional import insert_andamento_as_ultimo
 
-    obs = format_andamento_obs(format_gravacao_recebido_obs(chapas))
-    base_prefix = f"{os_id:05d}{ano}-"
-    need_andamento = not ja_recebido
+    work: list[tuple[dict[str, Any], bool, str]] = []
+    any_status_change = False
+    for target in targets:
+        t_ano = int(target["os_ano"])
+        t_nro = int(target["os_nro"])
+        situacao_atual, setor_atual = _get_ultimo_operacional(t_ano, t_nro)
+        ja_recebido = (
+            str(situacao_atual or "").strip() == SITUACAO_RECEBIDO
+            and str(setor_atual or "").strip() == SETOR_GRAV_EXTERNA
+        )
+        if target["status"] == "iniciada" and ja_recebido:
+            continue
+        if target["status"] != "iniciada":
+            any_status_change = True
+        chapas = _fetch_chapas_origem_pendente(target.get("origem_pendente_id"))
+        obs = format_andamento_obs(format_gravacao_recebido_obs(chapas))
+        work.append((target, not ja_recebido, obs))
+
+    if not work:
+        updated = get_active_session(ano, os_id) or session
+        updated["status"] = "iniciada"
+        return build_session_detail(updated)
 
     def tx(cursor):
-        if session["status"] != "iniciada":
-            cursor.execute(
-                """
-                UPDATE tab_os_gravacao_externa
-                SET Status = 'iniciada',
-                    IniciadoPorPonto = %s,
-                    IniciadoEm = NOW()
-                WHERE Id = %s
-                """,
-                (ponto_fmt, session["id"]),
-            )
-        new_cod = None
-        if need_andamento:
-            cursor.execute(
-                "SELECT MAX(CodStatus) as max_cod FROM tabAndamento WHERE CodStatus LIKE %s",
-                (f"{base_prefix}%",),
-            )
-            res = cursor.fetchone()
-            next_seq = 1
-            if res and res.get("max_cod"):
-                try:
-                    next_seq = int(str(res["max_cod"]).split("-")[-1]) + 1
-                except ValueError:
-                    next_seq = 1
-            new_cod = f"{base_prefix}{next_seq:02d}"
-            insert_andamento_as_ultimo(
+        codes: list[tuple[int, int, str]] = []
+        for target, need_andamento, obs in work:
+            new_cod = _iniciar_uma_sessao_cursor(
                 cursor,
-                cod_status=new_cod,
-                nro=os_id,
-                ano=ano,
-                situacao=SITUACAO_RECEBIDO,
-                setor=SETOR_GRAV_EXTERNA,
+                session=target,
+                ponto_fmt=ponto_fmt,
+                need_andamento=need_andamento,
                 obs=obs,
-                ponto=ponto_fmt,
             )
-            log_andamento_added(
-                cursor,
-                nro=os_id,
-                ano=ano,
-                cod_status=new_cod,
-                situacao=SITUACAO_RECEBIDO,
-                setor=SETOR_GRAV_EXTERNA,
-                obs=obs,
-                ponto=ponto_fmt,
-                origem="gravacao_externa_iniciar",
-            )
-        return new_cod
+            if new_cod:
+                codes.append((int(target["os_ano"]), int(target["os_nro"]), new_cod))
+        return codes
 
-    new_cod = db.execute_transaction([tx])[0]
-    if new_cod:
-        _notify_iniciar_gravacao(ano=ano, os_id=os_id, new_cod=str(new_cod))
+    codes = db.execute_transaction([tx])[0]
+    for a, n, new_cod in codes:
+        _notify_iniciar_gravacao(ano=a, os_id=n, new_cod=str(new_cod))
 
     updated = get_active_session(ano, os_id) or session
     updated["status"] = "iniciada"
 
     launcher = str(session.get("lancado_por_ponto") or "")
-    if session["status"] != "iniciada":
+    if any_status_change or session["status"] != "iniciada":
         send_gravacao_notification_email(
             event="iniciada",
             ano=ano,
@@ -1488,6 +1569,130 @@ def _concluir_gravacao_sem_sessao(
     )
 
 
+def _concluir_uma_sessao_cursor(
+    cursor,
+    *,
+    session: dict[str, Any],
+    ponto_andamento: str,
+    obs: str,
+) -> str:
+    """Marca sessão concluída e insere andamento Gravação Ext. Concluída."""
+    from routers.os_audit_service import log_andamento_added
+    from services.andamento_operacional import insert_andamento_as_ultimo
+
+    os_id = int(session["os_nro"])
+    ano = int(session["os_ano"])
+    session_id = int(session["id"])
+
+    cursor.execute(
+        """
+        UPDATE tab_os_gravacao_externa
+        SET Status = 'concluida',
+            ConcluidaEm = NOW(),
+            ConcluidaPorPonto = %s
+        WHERE Id = %s
+        """,
+        (ponto_andamento, session_id),
+    )
+
+    base_prefix = f"{os_id:05d}{ano}-"
+    cursor.execute(
+        "SELECT MAX(CodStatus) as max_cod FROM tabAndamento WHERE CodStatus LIKE %s",
+        (f"{base_prefix}%",),
+    )
+    res = cursor.fetchone()
+    next_seq = 1
+    if res and res.get("max_cod"):
+        try:
+            next_seq = int(str(res["max_cod"]).split("-")[-1]) + 1
+        except ValueError:
+            next_seq = 1
+    new_cod = f"{base_prefix}{next_seq:02d}"
+
+    insert_andamento_as_ultimo(
+        cursor,
+        cod_status=new_cod,
+        nro=os_id,
+        ano=ano,
+        situacao=SITUACAO_GRAV_CONCLUIDA,
+        setor=SETOR_GRAVACAO_CONCLUIDA,
+        obs=obs,
+        ponto=ponto_andamento,
+    )
+    log_andamento_added(
+        cursor,
+        nro=os_id,
+        ano=ano,
+        cod_status=new_cod,
+        situacao=SITUACAO_GRAV_CONCLUIDA,
+        setor=SETOR_GRAVACAO_CONCLUIDA,
+        obs=obs,
+        ponto=ponto_andamento,
+        origem="gravacao_externa_concluir",
+    )
+    return new_cod
+
+
+def _run_concluir_targets(
+    *,
+    targets: list[dict[str, Any]],
+    ponto_andamento: str,
+    email_ano: int,
+    email_os_id: int,
+    email_launcher: str,
+    email_launcher_nome: Any,
+    push_session: dict[str, Any],
+) -> list[tuple[int, int, str]]:
+    """Conclui várias sessões ativas na mesma TX e notifica cada OS."""
+    from routers.andamento_helpers import format_andamento_obs, format_gravacao_concluida_obs
+
+    prepared: list[tuple[dict[str, Any], str]] = []
+    for target in targets:
+        if target.get("status") not in ("iniciada", "pendente"):
+            continue
+        chapas = _fetch_chapas_origem_pendente(target.get("origem_pendente_id"))
+        obs = format_andamento_obs(format_gravacao_concluida_obs(chapas))
+        prepared.append((target, obs))
+
+    if not prepared:
+        return []
+
+    def tx(cursor):
+        codes: list[tuple[int, int, str]] = []
+        for target, obs in prepared:
+            new_cod = _concluir_uma_sessao_cursor(
+                cursor,
+                session=target,
+                ponto_andamento=ponto_andamento,
+                obs=obs,
+            )
+            codes.append((int(target["os_ano"]), int(target["os_nro"]), new_cod))
+        return codes
+
+    codes = db.execute_transaction([tx])[0]
+    for a, n, new_cod in codes:
+        _notify_concluir_gravacao(ano=a, os_id=n, new_cod=str(new_cod))
+
+    send_gravacao_notification_email(
+        event="concluida",
+        ano=email_ano,
+        os_id=email_os_id,
+        target_ponto=email_launcher,
+        target_nome=email_launcher_nome,
+        operador_ponto=ponto_andamento,
+    )
+
+    from services.gravacao_externa_realtime_service import push_gravacao_externa_concluida
+
+    push_gravacao_externa_concluida(
+        gravacao_externa_id=int(push_session["id"]),
+        os_ano=email_ano,
+        os_nro=email_os_id,
+        lancado_por_ponto=email_launcher,
+    )
+    return codes
+
+
 def concluir_gravacao(
     *,
     ano: int,
@@ -1495,114 +1700,73 @@ def concluir_gravacao(
     operador_ponto: str,
 ) -> dict[str, Any]:
     session = get_active_session(ano, os_id)
-    if not session:
-        return _concluir_gravacao_sem_sessao(
-            ano=ano, os_id=os_id, operador_ponto=operador_ponto
-        )
-    if session["status"] == "concluida":
-        return build_session_detail(session)
-    if session["status"] not in ("iniciada", "pendente"):
-        raise HTTPException(
-            status_code=400,
-            detail="A gravação precisa estar pendente ou iniciada para ser concluída.",
-        )
-
-    rows = db.execute_query(
-        "SELECT * FROM tab_os_gravacao_externa WHERE Id = %s LIMIT 1",
-        (session["id"],),
-    )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Sessão de Gravação Externa não encontrada.")
-    session_row = rows[0]
-    origem_pendente_id = session_row.get("OrigemPendenteId")
-    launcher = str(session.get("lancado_por_ponto") or session_row.get("LancadoPorPonto") or "")
-
     ponto_andamento = format_ponto(_clean_ponto(operador_ponto))
-    chapas = _fetch_chapas_origem_pendente(
-        int(origem_pendente_id) if origem_pendente_id else None
+
+    if session:
+        if session["status"] not in ("iniciada", "pendente", "concluida"):
+            raise HTTPException(
+                status_code=400,
+                detail="A gravação precisa estar pendente ou iniciada para ser concluída.",
+            )
+
+        targets = _resolve_active_externa_targets(session)
+        # Se âncora já veio como concluida (mock/edge) e há juntada, só as irmãs ativas.
+        if session["status"] == "concluida":
+            juntada_id = session.get("juntada_grupo_id")
+            if not juntada_id:
+                return build_session_detail(session)
+            sisters = [
+                t
+                for t in list_active_externa_by_juntada(str(juntada_id))
+                if int(t["id"]) != int(session["id"])
+            ]
+            if not sisters:
+                return build_session_detail(session)
+            targets = sisters
+
+        if not targets:
+            return build_session_detail(session)
+
+        launcher = str(session.get("lancado_por_ponto") or "")
+        _run_concluir_targets(
+            targets=targets,
+            ponto_andamento=ponto_andamento,
+            email_ano=ano,
+            email_os_id=os_id,
+            email_launcher=launcher,
+            email_launcher_nome=session.get("lancado_por_nome"),
+            push_session=session,
+        )
+
+        concluded = get_session_by_id(int(session["id"]))
+        if not concluded:
+            concluded = {**session, "status": "concluida"}
+        return build_session_detail(concluded)
+
+    # Sem sessão ativa: reparar irmãs se a âncora já estiver concluída no grupo.
+    concluded_anchor = get_concluida_session(ano, os_id)
+    if concluded_anchor and concluded_anchor.get("juntada_grupo_id"):
+        sisters = list_active_externa_by_juntada(
+            str(concluded_anchor["juntada_grupo_id"])
+        )
+        if sisters:
+            launcher = str(concluded_anchor.get("lancado_por_ponto") or "")
+            _run_concluir_targets(
+                targets=sisters,
+                ponto_andamento=ponto_andamento,
+                email_ano=ano,
+                email_os_id=os_id,
+                email_launcher=launcher,
+                email_launcher_nome=concluded_anchor.get("lancado_por_nome"),
+                push_session=concluded_anchor,
+            )
+            refreshed = get_session_by_id(int(concluded_anchor["id"])) or concluded_anchor
+            return build_session_detail(refreshed)
+        return build_session_detail(concluded_anchor)
+
+    return _concluir_gravacao_sem_sessao(
+        ano=ano, os_id=os_id, operador_ponto=operador_ponto
     )
-
-    from routers.andamento_helpers import format_andamento_obs, format_gravacao_concluida_obs
-    from routers.os_audit_service import log_andamento_added
-    from services.andamento_operacional import insert_andamento_as_ultimo
-
-    obs = format_andamento_obs(format_gravacao_concluida_obs(chapas))
-    base_prefix = f"{os_id:05d}{ano}-"
-
-    def tx(cursor):
-        cursor.execute(
-            """
-            UPDATE tab_os_gravacao_externa
-            SET Status = 'concluida',
-                ConcluidaEm = NOW(),
-                ConcluidaPorPonto = %s
-            WHERE Id = %s
-            """,
-            (ponto_andamento, session["id"]),
-        )
-
-        cursor.execute(
-            "SELECT MAX(CodStatus) as max_cod FROM tabAndamento WHERE CodStatus LIKE %s",
-            (f"{base_prefix}%",),
-        )
-        res = cursor.fetchone()
-        next_seq = 1
-        if res and res.get("max_cod"):
-            try:
-                next_seq = int(str(res["max_cod"]).split("-")[-1]) + 1
-            except ValueError:
-                next_seq = 1
-        new_cod = f"{base_prefix}{next_seq:02d}"
-
-        insert_andamento_as_ultimo(
-            cursor,
-            cod_status=new_cod,
-            nro=os_id,
-            ano=ano,
-            situacao=SITUACAO_GRAV_CONCLUIDA,
-            setor=SETOR_GRAVACAO_CONCLUIDA,
-            obs=obs,
-            ponto=ponto_andamento,
-        )
-        log_andamento_added(
-            cursor,
-            nro=os_id,
-            ano=ano,
-            cod_status=new_cod,
-            situacao=SITUACAO_GRAV_CONCLUIDA,
-            setor=SETOR_GRAVACAO_CONCLUIDA,
-            obs=obs,
-            ponto=ponto_andamento,
-            origem="gravacao_externa_concluir",
-        )
-        return new_cod
-
-    new_cod = str(db.execute_transaction([tx])[0])
-    _notify_concluir_gravacao(ano=ano, os_id=os_id, new_cod=new_cod)
-
-    send_gravacao_notification_email(
-        event="concluida",
-        ano=ano,
-        os_id=os_id,
-        target_ponto=launcher,
-        target_nome=session.get("lancado_por_nome"),
-        operador_ponto=ponto_andamento,
-    )
-
-    from services.gravacao_externa_realtime_service import push_gravacao_externa_concluida
-
-    push_gravacao_externa_concluida(
-        gravacao_externa_id=int(session["id"]),
-        os_ano=ano,
-        os_nro=os_id,
-        lancado_por_ponto=launcher,
-    )
-
-    concluded = get_session_by_id(int(session["id"]))
-    if not concluded:
-        concluded = _map_session_row(session_row)
-        concluded["status"] = "concluida"
-    return build_session_detail(concluded)
 
 
 def get_concluida_session(ano: int, os_id: int) -> Optional[dict[str, Any]]:
@@ -1653,13 +1817,17 @@ def list_os_gravacao_aguardando_entrega(
         params["search"] = term
 
     count_sql = f"""
-        SELECT COUNT(*) AS cnt
-        FROM tab_os_gravacao_externa ge
-        INNER JOIN tabProtocolos p
-            ON p.NroProtocolo = ge.OsNro AND p.AnoProtocolo = ge.OsAno
-        {filters}
+        SELECT COUNT(*) AS cnt FROM (
+            SELECT COALESCE(ge.JuntadaGrupoId, CONCAT(ge.OsAno, '-', ge.OsNro)) AS gkey
+            FROM tab_os_gravacao_externa ge
+            INNER JOIN tabProtocolos p
+                ON p.NroProtocolo = ge.OsNro AND p.AnoProtocolo = ge.OsAno
+            {filters}
+            GROUP BY gkey
+        ) t
     """
-    count_row = db.execute_query(count_sql, params)
+    count_params = {k: v for k, v in params.items() if k not in ("limit", "offset")}
+    count_row = db.execute_query(count_sql, count_params)
     total = int((count_row[0] if count_row else {}).get("cnt") or 0)
 
     list_sql = f"""
@@ -1677,6 +1845,7 @@ def list_os_gravacao_aguardando_entrega(
             ge.ConcluidaPorPonto AS concluida_por_ponto,
             ge.CriadoEm AS gravacao_criado_em,
             ge.OrigemPendenteId AS origem_pendente_id,
+            ge.JuntadaGrupoId AS juntada_grupo_id,
             (
                 SELECT d.TipoPublicacaoLink
                 FROM tabDetalhesServico d
@@ -1696,13 +1865,15 @@ def list_os_gravacao_aguardando_entrega(
             ON p.NroProtocolo = ge.OsNro AND p.AnoProtocolo = ge.OsAno
         {filters}
         ORDER BY ge.ConcluidaEm DESC, ge.Id DESC
-        LIMIT %(limit)s OFFSET %(offset)s
+        LIMIT 2000
     """
-    rows = db.execute_query(list_sql, params)
+    list_params = {k: v for k, v in params.items() if k not in ("limit", "offset")}
+    rows = db.execute_query(list_sql, list_params)
     items: list[dict[str, Any]] = []
-    for row in rows:
+    for row in rows or []:
         origem = row.get("origem_pendente_id")
         chapas = _fetch_chapas_origem_pendente(int(origem) if origem else None)
+        juntada = row.get("juntada_grupo_id")
         items.append(
             {
                 "nr_os": int(row["nr_os"]),
@@ -1721,11 +1892,15 @@ def list_os_gravacao_aguardando_entrega(
                 "concluida_em": row.get("concluida_em"),
                 "concluida_por_ponto": row.get("concluida_por_ponto"),
                 "gravacao_criado_em": row.get("gravacao_criado_em"),
+                "juntada_grupo_id": str(juntada).strip() if juntada else None,
                 "chapas_por_maquina": chapas,
                 "total_chapas": sum(int(c.get("quantidade") or 0) for c in chapas),
             }
         )
-    return items, total
+    from services.gravacao_pendente_service import _aggregate_list_items_by_juntada
+
+    aggregated = _aggregate_list_items_by_juntada(items)
+    return aggregated[offset : offset + limit], total
 
 
 def _notify_entrega_chapas(*, ano: int, os_id: int, new_cod: str) -> None:
@@ -1739,6 +1914,76 @@ def _notify_entrega_chapas(*, ano: int, os_id: int, new_cod: str) -> None:
         source="gravacao_externa_entrega",
         operation="insert",
     )
+
+
+def _entrega_uma_sessao_cursor(
+    cursor,
+    *,
+    session: dict[str, Any],
+    recebido_fmt: str,
+    recebido_nome: str,
+    obs: str,
+) -> str:
+    """Lança entrega e andamento Recebido/Gravação para uma sessão concluída."""
+    from routers.os_audit_service import log_andamento_added
+    from services.andamento_operacional import insert_andamento_as_ultimo
+
+    os_id = int(session["os_nro"])
+    ano = int(session["os_ano"])
+    session_id = int(session["id"])
+
+    cursor.execute(
+        """
+        UPDATE tab_os_gravacao_externa
+        SET EntregaLancadaEm = NOW(),
+            RecebidoPorPonto = %s,
+            RecebidoPorNome = %s
+        WHERE Id = %s AND EntregaLancadaEm IS NULL
+        """,
+        (recebido_fmt, recebido_nome, session_id),
+    )
+    if cursor.rowcount == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Recebimento de chapas já foi lançado para esta OS.",
+        )
+
+    base_prefix = f"{os_id:05d}{ano}-"
+    cursor.execute(
+        "SELECT MAX(CodStatus) as max_cod FROM tabAndamento WHERE CodStatus LIKE %s",
+        (f"{base_prefix}%",),
+    )
+    res = cursor.fetchone()
+    next_seq = 1
+    if res and res.get("max_cod"):
+        try:
+            next_seq = int(str(res["max_cod"]).split("-")[-1]) + 1
+        except ValueError:
+            next_seq = 1
+    new_cod = f"{base_prefix}{next_seq:02d}"
+
+    insert_andamento_as_ultimo(
+        cursor,
+        cod_status=new_cod,
+        nro=os_id,
+        ano=ano,
+        situacao=SITUACAO_RECEBIDO,
+        setor=SETOR_ENTREGA_CHAPAS,
+        obs=obs,
+        ponto=recebido_fmt,
+    )
+    log_andamento_added(
+        cursor,
+        nro=os_id,
+        ano=ano,
+        cod_status=new_cod,
+        situacao=SITUACAO_RECEBIDO,
+        setor=SETOR_ENTREGA_CHAPAS,
+        obs=obs,
+        ponto=recebido_fmt,
+        origem="gravacao_externa_entrega",
+    )
+    return new_cod
 
 
 def lancar_entrega_chapas(
@@ -1781,70 +2026,40 @@ def lancar_entrega_chapas(
             detail="Nome de quem recebeu deve ter no máximo 128 caracteres.",
         )
 
-    chapas = _fetch_chapas_origem_pendente(session.get("origem_pendente_id"))
-    from routers.andamento_helpers import format_andamento_obs, format_gravacao_entrega_obs
-    from routers.os_audit_service import log_andamento_added
-    from services.andamento_operacional import insert_andamento_as_ultimo
+    juntada_id = session.get("juntada_grupo_id")
+    if juntada_id:
+        targets = list_concluida_aguardando_entrega_by_juntada(str(juntada_id)) or [
+            session
+        ]
+    else:
+        targets = [session]
 
-    obs = format_andamento_obs(format_gravacao_entrega_obs(chapas))
-    base_prefix = f"{os_id:05d}{ano}-"
+    from routers.andamento_helpers import format_andamento_obs, format_gravacao_entrega_obs
+
+    prepared: list[tuple[dict[str, Any], str]] = []
+    for target in targets:
+        chapas = _fetch_chapas_origem_pendente(target.get("origem_pendente_id"))
+        obs = format_andamento_obs(format_gravacao_entrega_obs(chapas))
+        prepared.append((target, obs))
+
     session_id = int(session["id"])
 
     def tx(cursor):
-        cursor.execute(
-            """
-            UPDATE tab_os_gravacao_externa
-            SET EntregaLancadaEm = NOW(),
-                RecebidoPorPonto = %s,
-                RecebidoPorNome = %s
-            WHERE Id = %s AND EntregaLancadaEm IS NULL
-            """,
-            (recebido_fmt, recebido_nome, session_id),
-        )
-        if cursor.rowcount == 0:
-            raise HTTPException(
-                status_code=400,
-                detail="Recebimento de chapas já foi lançado para esta OS.",
+        codes: list[tuple[int, int, str]] = []
+        for target, obs in prepared:
+            new_cod = _entrega_uma_sessao_cursor(
+                cursor,
+                session=target,
+                recebido_fmt=recebido_fmt,
+                recebido_nome=recebido_nome,
+                obs=obs,
             )
+            codes.append((int(target["os_ano"]), int(target["os_nro"]), new_cod))
+        return codes
 
-        cursor.execute(
-            "SELECT MAX(CodStatus) as max_cod FROM tabAndamento WHERE CodStatus LIKE %s",
-            (f"{base_prefix}%",),
-        )
-        res = cursor.fetchone()
-        next_seq = 1
-        if res and res.get("max_cod"):
-            try:
-                next_seq = int(str(res["max_cod"]).split("-")[-1]) + 1
-            except ValueError:
-                next_seq = 1
-        new_cod = f"{base_prefix}{next_seq:02d}"
-
-        insert_andamento_as_ultimo(
-            cursor,
-            cod_status=new_cod,
-            nro=os_id,
-            ano=ano,
-            situacao=SITUACAO_RECEBIDO,
-            setor=SETOR_ENTREGA_CHAPAS,
-            obs=obs,
-            ponto=recebido_fmt,
-        )
-        log_andamento_added(
-            cursor,
-            nro=os_id,
-            ano=ano,
-            cod_status=new_cod,
-            situacao=SITUACAO_RECEBIDO,
-            setor=SETOR_ENTREGA_CHAPAS,
-            obs=obs,
-            ponto=recebido_fmt,
-            origem="gravacao_externa_entrega",
-        )
-        return new_cod
-
-    new_cod = str(db.execute_transaction([tx])[0])
-    _notify_entrega_chapas(ano=ano, os_id=os_id, new_cod=new_cod)
+    codes = db.execute_transaction([tx])[0]
+    for a, n, new_cod in codes:
+        _notify_entrega_chapas(ano=a, os_id=n, new_cod=str(new_cod))
 
     updated = get_session_by_id(session_id)
     if not updated:

@@ -560,6 +560,8 @@ def _aggregate_list_items_by_juntada(
                 "lancado_por_nome",
                 "fornecedor_ponto",
                 "gravacao_criado_em",
+                "concluida_em",
+                "concluida_por_ponto",
                 "chapas_por_maquina",
                 "total_chapas",
             ):

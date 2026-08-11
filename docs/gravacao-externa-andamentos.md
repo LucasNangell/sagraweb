@@ -49,7 +49,9 @@ Chapas por máquina:
 | Ao clicar em **Enviar para Gravação Externa** na aba Gravação pendente (com fornecedor, se aplicável). | Marca a sessão pendente como `enviada`, cria sessão em `tab_os_gravacao_externa` e move a OS para **OPs em andamento**. |
 
 ## 3. Recebido (NOVO)
-> **Nota:** **Iniciar gravação** (operador/fornecedor) agora deve gerar o andamento "Recebido" no setor "Grav. Externa" e atualizar o status da sessão para `Recebido`. 
+> **Nota:** **Iniciar gravação** (operador/fornecedor) agora deve gerar o andamento "Recebido" no setor "Grav. Externa" e atualizar o status da sessão para `Recebido`.
+>
+> **Juntada:** se a sessão tiver `JuntadaGrupoId`, iniciar aplica o mesmo status/andamento a **todas** as OSs ativas do grupo.
 
 | Campo | Valor |
 |--------|--------|
@@ -89,6 +91,7 @@ Chapas por máquina:
 |---------------------|-----------------|
 | Ao confirmar **Gravação concluída** (com sessão `iniciada`, ou sem sessão para operador com permissão). | Sessão externa passa a `concluida` e a OS entra na lista **Aguardando retirada**. | Se a OS estiver no Setor "Grav. Externa" e o usuário tentar lançar algum andamento manualmente, sem ser pelo botão de gravação concluída, o sistema deve exibir um modal com os mesmos campos que são exibidos quando clica no botão gravação concluída, para preencher as informações e lançar o andamento corretamente e atualizar a lista de controle de chapas gravadas, assim ele registra o andamento "Gravação Ext. Concluída" antes de registrar o andamento que o usuário estava tentando fazer.
 
+> **Juntada:** concluir replica `Gravação Ext. Concluída` e marca `concluida` em **todas** as sessões ativas do mesmo `JuntadaGrupoId`. A lista Aguardando retirada exibe o grupo agregado.
 
 ---
 
@@ -111,6 +114,8 @@ Chapas por máquina:
 | Quando é registrado | Ação do usuário |
 |---------------------|-----------------|
 | Ao lançar o **recebimento / entrega de chapas** no modal da lista Aguardando retirada. | Preenche `EntregaLancadaEm` na sessão; a OS **sai** de Aguardando retirada (filtro: `Status = concluida` e `EntregaLancadaEm IS NULL`). |
+
+> **Juntada:** a entrega aplica recebimento e andamento a **todas** as sessões concluídas do grupo ainda sem `EntregaLancadaEm`.
 
 ---
 

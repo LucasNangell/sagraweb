@@ -257,10 +257,36 @@ Copy-Item (Join-Path $PSScriptRoot "..\templates\deploy-release-prod.bat") (Join
 Copy-Item (Join-Path $PSScriptRoot "..\templates\publicar-release.ps1") (Join-Path $Release "publicar-release.ps1") -Force
 Copy-Item (Join-Path $PSScriptRoot "..\templates\publicar-release.bat") (Join-Path $Release "publicar-release.bat") -Force
 
+# Sync 24/7 — NSSM service + watchdog externo
+$syncServiceScripts = @(
+    "instalar-servico-sync.ps1",
+    "parar-servico-sync.ps1",
+    "desinstalar-servico-sync.ps1",
+    "status-servico-sync.ps1",
+    "watchdog-sync.ps1",
+    "instalar-watchdog-sync.ps1"
+)
+foreach ($name in $syncServiceScripts) {
+    $src = Join-Path $PSScriptRoot "..\templates\$name"
+    if (Test-Path -LiteralPath $src) {
+        Copy-Item -LiteralPath $src (Join-Path $Release $name) -Force
+    } else {
+        Write-Warning "Template ausente: $src"
+    }
+}
+
+$syncService = Join-Path $Root "sync_andamentos_service.py"
+if (Test-Path -LiteralPath $syncService) {
+    Copy-Item -LiteralPath $syncService (Join-Path $Release "sync_andamentos_service.py") -Force
+    Write-Host "sync_andamentos_service.py incluido na raiz do pacote"
+} else {
+    Write-Warning "sync_andamentos_service.py nao encontrado em $Root"
+}
+
 $syncOld = Join-Path $Root "sync_andamentos_v2_Old.py"
 if (Test-Path -LiteralPath $syncOld) {
     Copy-Item -LiteralPath $syncOld (Join-Path $Release "sync_andamentos_v2_Old.py") -Force
-    Write-Host "sync_andamentos_v2_Old.py incluido na raiz do pacote"
+    Write-Host "sync_andamentos_v2_Old.py incluido na raiz do pacote (obrigatorio para o service)"
 } else {
     Write-Warning "sync_andamentos_v2_Old.py nao encontrado em $Root - sync usara fallback app/services/sync_andamentos_v2.py"
 }

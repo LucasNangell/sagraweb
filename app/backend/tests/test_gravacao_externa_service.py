@@ -255,24 +255,18 @@ def test_iniciar_gravacao_uses_email_without_inapp_notification(
 ):
     session = {
         "id": 7,
+        "os_ano": 2026,
+        "os_nro": 100,
         "status": "pendente",
         "lancado_por_ponto": "918.713",
         "lancado_por_nome": "Usuário",
+        "origem_pendente_id": None,
+        "juntada_grupo_id": None,
     }
     mock_get_active.side_effect = [session, {**session, "status": "iniciada"}]
     mock_build.return_value = {"status": "iniciada"}
     mock_db.execute_query.side_effect = [
         [{"situacao": "Saída p/", "setor": "Grav. Externa"}],  # ultimo operacional
-        [
-            {
-                "Id": 7,
-                "OsAno": 2026,
-                "OsNro": 100,
-                "OrigemPendenteId": None,
-                "Status": "pendente",
-                "LancadoPorPonto": "918.713",
-            }
-        ],
     ]
 
     captured: dict = {}
@@ -328,22 +322,13 @@ def test_concluir_gravacao_inserts_andamento_with_operador_ponto(
         "cod_status": "001002026-02",
         "lancado_por_ponto": "111.111",
         "status": "iniciada",
+        "origem_pendente_id": 5,
+        "juntada_grupo_id": None,
     }
     mock_build_detail.return_value = {"status": "concluida"}
     mock_get_session.return_value = {**session, "status": "concluida"}
 
     mock_db.execute_query.side_effect = [
-        [
-            {
-                "Id": 7,
-                "OsAno": 2026,
-                "OsNro": 100,
-                "CodStatus": "001002026-02",
-                "LancadoPorPonto": "111.111",
-                "OrigemPendenteId": 5,
-                "Status": "iniciada",
-            }
-        ],
         [{"Maquina": "M1", "QuantidadeChapas": 5}],
     ]
 
@@ -393,7 +378,7 @@ def test_concluir_gravacao_inserts_andamento_with_operador_ponto(
 @patch("services.gravacao_externa_service.build_session_detail")
 @patch("services.gravacao_externa_service.get_active_session")
 def test_concluir_gravacao_idempotent_when_already_concluded(mock_get, mock_build):
-    session = {"id": 1, "status": "concluida"}
+    session = {"id": 1, "status": "concluida", "juntada_grupo_id": None}
     mock_get.return_value = session
     mock_build.return_value = session
 
@@ -415,11 +400,13 @@ def test_concluir_gravacao_rejects_unknown_status(mock_get):
 
 @patch("services.gravacao_externa_service._notify_concluir_gravacao")
 @patch("services.gravacao_externa_service._get_ultimo_operacional")
+@patch("services.gravacao_externa_service.get_concluida_session", return_value=None)
 @patch("services.gravacao_externa_service.get_active_session", return_value=None)
 @patch("services.gravacao_externa_service.db")
 def test_concluir_gravacao_sem_sessao_insere_andamento(
     mock_db,
     _mock_get_session,
+    _mock_get_concluida,
     mock_operacional,
     mock_notify,
 ):
@@ -464,8 +451,11 @@ def test_concluir_gravacao_sem_sessao_insere_andamento(
 
 
 @patch("services.gravacao_externa_service._get_ultimo_operacional")
+@patch("services.gravacao_externa_service.get_concluida_session", return_value=None)
 @patch("services.gravacao_externa_service.get_active_session", return_value=None)
-def test_concluir_gravacao_sem_sessao_requires_situacao(mock_get, mock_operacional):
+def test_concluir_gravacao_sem_sessao_requires_situacao(
+    mock_get, _mock_concluida, mock_operacional
+):
     mock_operacional.return_value = ("Gravação", "SEFOC")
 
     with pytest.raises(Exception) as exc:

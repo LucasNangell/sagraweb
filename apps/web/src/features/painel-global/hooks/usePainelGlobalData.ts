@@ -34,7 +34,7 @@ interface PainelWsMessage {
   overwriteConfig?: boolean;
 }
 
-const POLL_MS = 300_000;
+const POLL_MS = 60_000;
 const WS_FETCH_DEBOUNCE_MS = 500;
 
 export function usePainelGlobalData() {

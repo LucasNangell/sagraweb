@@ -181,6 +181,19 @@ export function useOsRealtimeSync({
     }
   }, [triggerSafeRefresh, wsStatus]);
 
+  // Safety poll mesmo com WS conectado: cobre sync/notify silenciosos ou eventos perdidos.
+  useEffect(() => {
+    if (wsStatus !== "connected") {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      if (!document.hidden) {
+        triggerSafeRefresh();
+      }
+    }, 20_000);
+    return () => window.clearInterval(timer);
+  }, [triggerSafeRefresh, wsStatus]);
+
   useEffect(() => {
     if (wsStatus === "connected") {
       return;
@@ -199,7 +212,7 @@ export function useOsRealtimeSync({
         if (!document.hidden) {
           triggerSafeRefresh();
         }
-        delayMs = Math.min(Math.round(delayMs * 1.5), 30_000);
+        delayMs = Math.min(Math.round(delayMs * 1.5), 15_000);
         schedule();
       }, delayMs);
     };

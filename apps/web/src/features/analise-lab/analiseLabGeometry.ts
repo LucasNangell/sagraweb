@@ -92,11 +92,103 @@ export function faixaFromDrag(
   return null;
 }
 
+/**
+ * Sangria fora do papel: profundidade P → from=-P, to=0.
+ * aMm/bMm = trecho no eixo paralelo à borda (Y para left/right, X para top/bottom).
+ */
+export function sangriaFromDrag(
+  edge: EdgeKey,
+  depthMm: number,
+  aMm: number,
+  bMm: number,
+  pageWidthMm: number,
+  pageHeightMm: number,
+): {
+  fromMm: number;
+  toMm: number;
+  alongFromMm: number;
+  alongToMm: number;
+} | null {
+  const depth = Math.abs(Number(depthMm) || 0);
+  if (depth < 0.5 || depth > 50) return null;
+  const lo = Math.min(aMm, bMm);
+  const hi = Math.max(aMm, bMm);
+  if (hi - lo < 0.5) return null;
+  const e = String(edge || "left");
+  const vertical = e === "left" || e === "right";
+  const maxAlong = vertical ? pageHeightMm : pageWidthMm;
+  const alongFromMm = clamp(lo, -50, maxAlong + 50);
+  const alongToMm = clamp(hi, -50, maxAlong + 50);
+  if (alongToMm - alongFromMm < 0.5) return null;
+  return {
+    fromMm: -round3(depth),
+    toMm: 0,
+    alongFromMm: round3(alongFromMm),
+    alongToMm: round3(alongToMm),
+  };
+}
+
+function round3(n: number): number {
+  return Math.round(n * 1000) / 1000;
+}
+
+/** Retângulo SVG (px) da sangria a partir da geometria mm. */
+export function sangriaSvgRect(
+  edge: string,
+  fromMm: number,
+  toMm: number,
+  alongFromMm: number,
+  alongToMm: number,
+  displayWidth: number,
+  displayHeight: number,
+  sx: number,
+  sy: number,
+): { x: number; y: number; width: number; height: number } {
+  const from = Number(fromMm) || 0;
+  const to = Number(toMm) || 0;
+  const a0 = Math.min(Number(alongFromMm) || 0, Number(alongToMm) || 0);
+  const a1 = Math.max(Number(alongFromMm) || 0, Number(alongToMm) || 0);
+  const e = String(edge || "left");
+  if (e === "top") {
+    return {
+      x: a0 * sx,
+      y: from * sy,
+      width: Math.max(1, (a1 - a0) * sx),
+      height: Math.max(1, (to - from) * sy),
+    };
+  }
+  if (e === "bottom") {
+    return {
+      x: a0 * sx,
+      y: displayHeight - to * sy,
+      width: Math.max(1, (a1 - a0) * sx),
+      height: Math.max(1, (to - from) * sy),
+    };
+  }
+  if (e === "left") {
+    return {
+      x: from * sx,
+      y: a0 * sy,
+      width: Math.max(1, (to - from) * sx),
+      height: Math.max(1, (a1 - a0) * sy),
+    };
+  }
+  // right
+  return {
+    x: displayWidth - to * sx,
+    y: a0 * sy,
+    width: Math.max(1, (to - from) * sx),
+    height: Math.max(1, (a1 - a0) * sy),
+  };
+}
+
 export interface MarkGeometryLike {
   edge?: string;
   offsetMm?: number;
   fromMm?: number;
   toMm?: number;
+  alongFromMm?: number;
+  alongToMm?: number;
   xMm?: number;
   yMm?: number;
   wMm?: number;
@@ -127,7 +219,9 @@ export function shouldMirrorMark(
   pageNumber: number,
 ): boolean {
   if (!mark.espelhar) return false;
-  const origem = Math.max(1, Number(mark.paginaOrigem) || 1);
+  const origem = Number(mark.paginaOrigem);
+  // Sem página de referência (legado / origem 0), não espelha — a geometria gravada é a do técnico.
+  if (!Number.isFinite(origem) || origem < 1) return false;
   return pageNumber % 2 !== origem % 2;
 }
 
@@ -139,7 +233,7 @@ export function resolveMarkGeometry(
   const g = { ...mark.geometria };
   if (!shouldMirrorMark(mark, pageNumber)) return g;
 
-  if (mark.tipo === "offset_corte" || mark.tipo === "faixa") {
+  if (mark.tipo === "offset_corte" || mark.tipo === "faixa" || mark.tipo === "sangria") {
     return { ...g, edge: mirrorEdge(String(g.edge || "top")) };
   }
   if (mark.tipo === "retangulo" || mark.tipo === "circulo") {

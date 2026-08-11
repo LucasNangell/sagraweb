@@ -4,49 +4,49 @@ overview: Trazer para o Análise Lab as ações por item que existem na /analise
 todos:
   - id: backend-schema
     content: Adicionar CorrigidoSefoc/ObsCorrecaoSefoc em tabAnaliseLabItem (schema + _ensure_column) e expor no service
-    status: in_progress
+    status: completed
   - id: backend-replicar
     content: build_replica_payload, replicate_items (com copiar_marcas) e reorder_items no analise_lab_items_service
-    status: pending
+    status: completed
   - id: backend-rotas
     content: Rotas PATCH com corrigido_sefoc, POST itens/replicar e POST itens/reordenar
-    status: pending
+    status: completed
   - id: backend-mirror
     content: Propagar ResolucaoObrigatoria e CorrigidoSefoc no mirror_items_to_analise
-    status: pending
+    status: completed
   - id: front-api
     content: Tipos e funções novas em api/analiseLab.ts (replicar, reordenar, flags)
-    status: pending
+    status: completed
   - id: front-tree
     content: analiseLabItemsTree.ts e AnaliseLabItemList com DnD entre componentes, reordenacao e acoes por item
-    status: pending
+    status: completed
   - id: front-replicar
     content: AnaliseLabReplicateDialog e botoes Replicar / Replicar todos para versoes anteriores
-    status: pending
+    status: completed
   - id: front-painel
     content: Checkboxes de resolucao obrigatoria e corrigido (com obs) no AnaliseLabItemPanel
-    status: pending
+    status: completed
   - id: front-handlers
     content: Handlers otimistas em AnaliseLabPage para mover, reordenar, togglar e replicar
-    status: pending
+    status: completed
   - id: front-zoom
     content: Helpers de zoom em analiseLabFit e Ctrl+scroll / Ctrl +- no inspector
-    status: pending
+    status: completed
   - id: front-scroll-fix
     content: Corrigir laco pageTarget/onPageChange e deteccao de linha ativa na visualizacao dupla
-    status: pending
+    status: completed
   - id: folhear-gutter
     content: Reservar faixa direita no palco do flipbook e deslocar o preview para a esquerda
-    status: pending
+    status: completed
   - id: folhear-baloes
     content: Baloes sempre na coluna direita, sem linha pontilhada quando o item nao tem marca
-    status: pending
+    status: completed
   - id: folhear-html
     content: Render do HTML do problema no balao sem estilos do banco, preservando paragrafos e quebras
-    status: pending
+    status: completed
   - id: testes
     content: Pytest dos helpers puros, vitest de tree, zoom, packing dos baloes e limpeza de HTML, e rodar a regressao
-    status: pending
+    status: completed
 isProject: false
 ---
 

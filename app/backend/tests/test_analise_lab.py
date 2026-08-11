@@ -90,6 +90,59 @@ def test_validate_geometry_rejects_bad_drawing_payloads() -> None:
         )
 
 
+def test_validate_geometry_sangria() -> None:
+    g = lab._validate_geometry(
+        "sangria",
+        {
+            "edge": "left",
+            "fromMm": -5,
+            "toMm": 0,
+            "alongFromMm": 40,
+            "alongToMm": 120,
+        },
+    )
+    assert g == {
+        "edge": "left",
+        "fromMm": -5.0,
+        "toMm": 0.0,
+        "alongFromMm": 40.0,
+        "alongToMm": 120.0,
+    }
+    with pytest.raises(ValueError, match="profundidade"):
+        lab._validate_geometry(
+            "sangria",
+            {
+                "edge": "left",
+                "fromMm": 0,
+                "toMm": 5,
+                "alongFromMm": 0,
+                "alongToMm": 10,
+            },
+        )
+    with pytest.raises(ValueError, match="trecho"):
+        lab._validate_geometry(
+            "sangria",
+            {
+                "edge": "top",
+                "fromMm": -5,
+                "toMm": 0,
+                "alongFromMm": 20,
+                "alongToMm": 10,
+            },
+        )
+    with pytest.raises(ValueError, match="Borda"):
+        lab._validate_geometry(
+            "sangria",
+            {
+                "edge": "all",
+                "fromMm": -5,
+                "toMm": 0,
+                "alongFromMm": 0,
+                "alongToMm": 10,
+            },
+        )
+
+
 def test_add_mark_rejects_invalid_tipo(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(ValueError, match="Tipo"):
         lab.add_mark(
@@ -217,3 +270,41 @@ def test_build_lab_consolidated_html_sections() -> None:
     assert "Capa" in html
     assert "Miolo" in html
     assert "Sangria" in html or "Fonte" in html
+
+
+def test_build_replica_payload_copies_fields_and_resets_flags() -> None:
+    from services import analise_lab_items_service as items
+
+    source = {
+        "titulo": "Sangria",
+        "htmlSnapshot": "<p>x</p>",
+        "obs": "nota",
+        "componente": "Capa",
+        "escopo": "paginas",
+        "pagina": 1,
+        "paginas": "1-3",
+        "idProblemaPadrao": 42,
+        "resolucaoObrigatoria": True,
+        "corrigidoSefoc": True,
+        "obsCorrecaoSefoc": "interno",
+        "itemAnaliseId": 99,
+    }
+    payload = items.build_replica_payload(source, versao_label="v2 (Nova)")
+    assert payload["titulo"] == "Sangria"
+    assert payload["html_snapshot"] == "<p>x</p>"
+    assert payload["obs"] == "nota"
+    assert payload["componente"] == "Capa"
+    assert payload["escopo"] == "paginas"
+    assert payload["pagina"] == 1
+    assert payload["paginas"] == "1-3"
+    assert payload["id_problema_padrao"] == 42
+    assert payload["resolucao_obrigatoria"] is True
+    assert payload["versao_label"] == "v2 (Nova)"
+    assert "item_analise_id" not in payload
+    assert "corrigido_sefoc" not in payload
+
+
+def test_normalize_reorder_ids_filters_foreign() -> None:
+    from services import analise_lab_items_service as items
+
+    assert items.normalize_reorder_ids([3, 1, 9, 1, 2], {1, 2, 3}) == [3, 1, 2]

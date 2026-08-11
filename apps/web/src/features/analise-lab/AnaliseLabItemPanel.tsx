@@ -11,22 +11,41 @@ import { AnaliseHtmlEditor } from "@/features/analise/components/AnaliseHtmlEdit
 import { labelTipo } from "./analiseLabLabels";
 import { markScopeLabel, validatePageSpec } from "./analiseLabPageSpec";
 
+export type AnaliseLabItemPanelMode = "edit" | "register";
+
+export interface AnaliseLabItemPanelModel {
+  id?: number;
+  titulo: string;
+  htmlSnapshot: string;
+  obs?: string | null;
+  componente: string;
+  escopo: AnaliseLabItemEscopo | string;
+  pagina: number;
+  paginas?: string | null;
+  resolucaoObrigatoria?: boolean;
+  corrigidoSefoc?: boolean;
+  obsCorrecaoSefoc?: string | null;
+  idProblemaPadrao?: number | null;
+}
+
 interface AnaliseLabItemPanelProps {
-  item: AnaliseLabItem;
+  item: AnaliseLabItemPanelModel;
+  mode?: AnaliseLabItemPanelMode;
   marks: AnaliseLabMark[];
   linkingActive: boolean;
   busy?: boolean;
   onSave: (payload: UpdateAnaliseLabItemPayload) => void;
   onClose: () => void;
-  onDelete: () => void;
-  onStartLinking: () => void;
-  onStopLinking: () => void;
-  onUnlinkMark: (markId: number) => void;
-  onDeleteMark: (markId: number) => void;
+  onDelete?: () => void;
+  onStartLinking?: () => void;
+  onStopLinking?: () => void;
+  onUnlinkMark?: (markId: number) => void;
+  onDeleteMark?: (markId: number) => void;
 }
 
 export function AnaliseLabItemPanel({
   item,
+  mode = "edit",
   marks,
   linkingActive,
   busy,
@@ -38,6 +57,7 @@ export function AnaliseLabItemPanel({
   onUnlinkMark,
   onDeleteMark,
 }: AnaliseLabItemPanelProps) {
+  const isRegister = mode === "register";
   const [titulo, setTitulo] = useState(item.titulo);
   const [html, setHtml] = useState(item.htmlSnapshot || "");
   const [obs, setObs] = useState(item.obs || "");
@@ -48,6 +68,15 @@ export function AnaliseLabItemPanel({
     item.paginas || (item.pagina > 0 ? String(item.pagina) : ""),
   );
   const [componente, setComponente] = useState(item.componente);
+  const [resolucaoObrigatoria, setResolucaoObrigatoria] = useState(
+    Boolean(item.resolucaoObrigatoria),
+  );
+  const [corrigidoSefoc, setCorrigidoSefoc] = useState(
+    Boolean(item.corrigidoSefoc),
+  );
+  const [obsCorrecaoSefoc, setObsCorrecaoSefoc] = useState(
+    item.obsCorrecaoSefoc || "",
+  );
 
   useEffect(() => {
     setTitulo(item.titulo);
@@ -56,6 +85,9 @@ export function AnaliseLabItemPanel({
     setEscopo((item.escopo as AnaliseLabItemEscopo) || "pagina");
     setPageSpec(item.paginas || (item.pagina > 0 ? String(item.pagina) : ""));
     setComponente(item.componente);
+    setResolucaoObrigatoria(Boolean(item.resolucaoObrigatoria));
+    setCorrigidoSefoc(Boolean(item.corrigidoSefoc));
+    setObsCorrecaoSefoc(item.obsCorrecaoSefoc || "");
   }, [item]);
 
   const pageError = useMemo(() => {
@@ -64,14 +96,16 @@ export function AnaliseLabItemPanel({
   }, [escopo, pageSpec]);
 
   const linkedMarks = useMemo(
-    () => marks.filter((m) => m.itemId === item.id),
+    () => (item.id == null ? [] : marks.filter((m) => m.itemId === item.id)),
     [item.id, marks],
   );
 
   return (
     <aside className="flex w-[544px] max-w-[45vw] shrink-0 flex-col gap-2 overflow-y-auto border-l border-sagra-border bg-white p-3 text-sm">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase text-neutral-600">Problema</h2>
+        <h2 className="text-xs font-semibold uppercase text-neutral-600">
+          {isRegister ? "Novo problema" : "Problema"}
+        </h2>
         <button type="button" className="text-xs text-neutral-500" onClick={onClose}>
           Fechar
         </button>
@@ -159,74 +193,113 @@ export function AnaliseLabItemPanel({
         />
       </label>
 
-      <div className="space-y-1.5 rounded border border-sagra-border bg-neutral-50 p-2">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-[11px] font-semibold uppercase text-neutral-600">
-            Marca vinculada
-          </h3>
+      <div className="space-y-2 rounded border border-sagra-border bg-neutral-50 p-2 text-xs">
+        <label className="flex items-center gap-2 text-neutral-700">
+          <input
+            type="checkbox"
+            checked={resolucaoObrigatoria}
+            onChange={(e) => setResolucaoObrigatoria(e.target.checked)}
+            disabled={busy}
+          />
+          Resolução obrigatória
+        </label>
+        {!isRegister ? (
+          <>
+            <label className="flex items-center gap-2 text-neutral-700">
+              <input
+                type="checkbox"
+                checked={corrigidoSefoc}
+                onChange={(e) => setCorrigidoSefoc(e.target.checked)}
+                disabled={busy}
+              />
+              Corrigido (controle interno)
+            </label>
+            {corrigidoSefoc ? (
+              <label className="flex flex-col gap-1 text-neutral-600">
+                Observação da correção (interno)
+                <textarea
+                  value={obsCorrecaoSefoc}
+                  onChange={(e) => setObsCorrecaoSefoc(e.target.value)}
+                  rows={2}
+                  className="rounded border border-sagra-border bg-white px-2 py-1.5"
+                  disabled={busy}
+                />
+              </label>
+            ) : null}
+          </>
+        ) : null}
+      </div>
+
+      {!isRegister ? (
+        <div className="space-y-1.5 rounded border border-sagra-border bg-neutral-50 p-2">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-[11px] font-semibold uppercase text-neutral-600">
+              Marca vinculada
+            </h3>
+            {linkingActive ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-900"
+                onClick={onStopLinking}
+              >
+                <Unlink className="size-3" aria-hidden />
+                Concluir marcação
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={busy}
+                className="inline-flex items-center gap-1 rounded bg-secondary-blue px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
+                onClick={onStartLinking}
+              >
+                <Link2 className="size-3" aria-hidden />
+                Marcar no arquivo
+              </button>
+            )}
+          </div>
           {linkingActive ? (
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-900"
-              onClick={onStopLinking}
-            >
-              <Unlink className="size-3" aria-hidden />
-              Concluir marcação
-            </button>
+            <p className="text-[11px] text-amber-800">
+              Próximas marcas serão vinculadas a este problema.
+            </p>
+          ) : null}
+          {linkedMarks.length ? (
+            <ul className="space-y-0.5 text-[11px]">
+              {linkedMarks.map((m) => (
+                <li
+                  key={m.id}
+                  className="flex items-center gap-1 rounded bg-white px-1 py-0.5"
+                >
+                  <span className="min-w-0 flex-1 truncate">
+                    {labelTipo(m.tipo)}
+                    {m.rotulo ? ` · ${m.rotulo}` : ""}
+                    {` · ${markScopeLabel(m)}`}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-neutral-500 hover:text-neutral-800"
+                    title="Desvincular"
+                    disabled={busy}
+                    onClick={() => onUnlinkMark?.(m.id)}
+                  >
+                    <Unlink className="size-3" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    className="text-sagra-danger"
+                    title="Excluir marca"
+                    disabled={busy}
+                    onClick={() => onDeleteMark?.(m.id)}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
           ) : (
-            <button
-              type="button"
-              disabled={busy}
-              className="inline-flex items-center gap-1 rounded bg-secondary-blue px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
-              onClick={onStartLinking}
-            >
-              <Link2 className="size-3" aria-hidden />
-              Marcar no arquivo
-            </button>
+            <p className="text-[11px] text-neutral-500">Nenhuma marca vinculada.</p>
           )}
         </div>
-        {linkingActive ? (
-          <p className="text-[11px] text-amber-800">
-            Próximas marcas serão vinculadas a este problema.
-          </p>
-        ) : null}
-        {linkedMarks.length ? (
-          <ul className="space-y-0.5 text-[11px]">
-            {linkedMarks.map((m) => (
-              <li
-                key={m.id}
-                className="flex items-center gap-1 rounded bg-white px-1 py-0.5"
-              >
-                <span className="min-w-0 flex-1 truncate">
-                  {labelTipo(m.tipo)}
-                  {m.rotulo ? ` · ${m.rotulo}` : ""}
-                  {` · ${markScopeLabel(m)}`}
-                </span>
-                <button
-                  type="button"
-                  className="text-neutral-500 hover:text-neutral-800"
-                  title="Desvincular"
-                  disabled={busy}
-                  onClick={() => onUnlinkMark(m.id)}
-                >
-                  <Unlink className="size-3" aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  className="text-sagra-danger"
-                  title="Excluir marca"
-                  disabled={busy}
-                  onClick={() => onDeleteMark(m.id)}
-                >
-                  ×
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-[11px] text-neutral-500">Nenhuma marca vinculada.</p>
-        )}
-      </div>
+      ) : null}
 
       <div className="flex gap-1">
         <button
@@ -240,6 +313,12 @@ export function AnaliseLabItemPanel({
               obs: obs || null,
               componente,
               escopo,
+              resolucao_obrigatoria: resolucaoObrigatoria,
+              corrigido_sefoc: isRegister ? false : corrigidoSefoc,
+              obs_correcao_sefoc:
+                !isRegister && corrigidoSefoc
+                  ? obsCorrecaoSefoc || null
+                  : null,
             };
             if (escopo === "arquivo") {
               payload.pagina = 0;
@@ -254,17 +333,36 @@ export function AnaliseLabItemPanel({
             onSave(payload);
           }}
         >
-          Salvar
+          {isRegister ? "Registrar" : "Salvar"}
         </button>
-        <button
-          type="button"
-          disabled={busy}
-          className="rounded border border-sagra-danger/40 px-2 py-1.5 text-xs text-sagra-danger"
-          onClick={onDelete}
-        >
-          Excluir
-        </button>
+        {!isRegister && onDelete ? (
+          <button
+            type="button"
+            disabled={busy}
+            className="rounded border border-sagra-danger/40 px-2 py-1.5 text-xs text-sagra-danger"
+            onClick={onDelete}
+          >
+            Excluir
+          </button>
+        ) : null}
       </div>
     </aside>
   );
+}
+
+export function toPanelModel(item: AnaliseLabItem): AnaliseLabItemPanelModel {
+  return {
+    id: item.id,
+    titulo: item.titulo,
+    htmlSnapshot: item.htmlSnapshot,
+    obs: item.obs,
+    componente: item.componente,
+    escopo: item.escopo,
+    pagina: item.pagina,
+    paginas: item.paginas,
+    resolucaoObrigatoria: item.resolucaoObrigatoria,
+    corrigidoSefoc: item.corrigidoSefoc,
+    obsCorrecaoSefoc: item.obsCorrecaoSefoc,
+    idProblemaPadrao: item.idProblemaPadrao,
+  };
 }

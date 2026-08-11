@@ -25,6 +25,26 @@ export function spreadLeftPage(
   return pages[left]?.page ?? pages[pageIndex]!.page;
 }
 
+/**
+ * Ao sincronizar Inspeção → Folhear, mantém a página pedida se ela estiver no
+ * spread visível; caso contrário usa a da esquerda.
+ */
+export function preferredSyncPage(
+  visiblePages: Array<{ page: number }>,
+  preferredPage?: number | null,
+): number | null {
+  if (!visiblePages.length) return null;
+  const preferred = Number(preferredPage);
+  if (
+    Number.isFinite(preferred) &&
+    preferred >= 1 &&
+    visiblePages.some((p) => p.page === preferred)
+  ) {
+    return preferred;
+  }
+  return visiblePages[0]?.page ?? null;
+}
+
 export function clampPanelPosition(
   x: number,
   y: number,

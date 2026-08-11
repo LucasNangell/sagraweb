@@ -41,7 +41,9 @@ export interface ProvaWebViewerShellProps {
     slotWidth: number;
     isSpread: boolean;
     flipping: boolean;
+    gutterRight: number;
   }) => ReactNode;
+  stageGutterRight?: number;
   pageTarget?: { page: number; nonce: number } | null;
   onPageChange?: (page: number) => void;
 }
@@ -60,6 +62,7 @@ export function ProvaWebViewerShell({
   buildPdfUrl: buildPdfUrlProp,
   renderPageOverlay,
   renderStageOverlay,
+  stageGutterRight,
   pageTarget,
   onPageChange,
 }: ProvaWebViewerShellProps) {
@@ -118,6 +121,7 @@ export function ProvaWebViewerShell({
         buildPageUrl={buildPageUrl}
         renderPageOverlay={renderPageOverlay}
         renderStageOverlay={renderStageOverlay}
+        stageGutterRight={stageGutterRight}
         pageTarget={pageTarget}
         onPageChange={onPageChange}
       />
@@ -185,6 +189,7 @@ export function ProvaWebViewerShell({
           buildPageUrl={buildPageUrl}
           renderPageOverlay={renderPageOverlay}
           renderStageOverlay={renderStageOverlay}
+          stageGutterRight={stageGutterRight}
           pageTarget={pageTarget}
           onPageChange={onPageChange}
         />

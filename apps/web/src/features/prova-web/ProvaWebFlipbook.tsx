@@ -32,6 +32,23 @@ import { ProvaWebSpiralVerticalPager } from "./ProvaWebSpiralVerticalPager";
 import { shouldUseVerticalSpiralPager } from "./spiralFlipMode";
 import "./prova-web.css";
 
+/** Mantém a página pedida se ela estiver no spread; senão a da esquerda. */
+function preferredSyncPage(
+  visiblePages: ProvaWebPageMeta[],
+  preferredPage?: number | null,
+): number | null {
+  if (!visiblePages.length) return null;
+  const preferred = Number(preferredPage);
+  if (
+    Number.isFinite(preferred) &&
+    preferred >= 1 &&
+    visiblePages.some((p) => p.page === preferred)
+  ) {
+    return preferred;
+  }
+  return visiblePages[0]?.page ?? null;
+}
+
 interface ProvaWebFlipbookProps {
   ano: number;
   osId: number;
@@ -50,7 +67,10 @@ interface ProvaWebFlipbookProps {
     slotWidth: number;
     isSpread: boolean;
     flipping: boolean;
+    gutterRight: number;
   }) => ReactNode;
+  /** Reserva faixa à direita do palco (ex.: balões do Análise Lab). */
+  stageGutterRight?: number;
   /** Navega para a página lógica (manifest.page) quando o nonce muda. */
   pageTarget?: { page: number; nonce: number } | null;
   /** Página lógica visível (esquerda do spread) após virar ou aplicar alvo. */
@@ -64,6 +84,7 @@ export function ProvaWebFlipbook({
   buildPageUrl,
   renderPageOverlay,
   renderStageOverlay,
+  stageGutterRight = 0,
   pageTarget,
   onPageChange,
 }: ProvaWebFlipbookProps) {
@@ -86,6 +107,7 @@ export function ProvaWebFlipbook({
       buildPageUrl={buildPageUrl}
       renderPageOverlay={renderPageOverlay}
       renderStageOverlay={renderStageOverlay}
+      stageGutterRight={stageGutterRight}
       pageTarget={pageTarget}
       onPageChange={onPageChange}
     />
@@ -99,6 +121,7 @@ function ProvaWebFlipbookHorizontal({
   buildPageUrl,
   renderPageOverlay,
   renderStageOverlay,
+  stageGutterRight = 0,
   pageTarget,
   onPageChange,
 }: ProvaWebFlipbookProps) {
@@ -120,10 +143,10 @@ function ProvaWebFlipbookHorizontal({
   pageTargetRef.current = pageTarget;
 
   const reportVisiblePage = useCallback(
-    (idx: number) => {
+    (idx: number, preferredPage?: number | null) => {
       const visible = resolveVisiblePages(pages, idx);
-      const left = visible[0]?.page;
-      if (left != null) onPageChangeRef.current?.(left);
+      const page = preferredSyncPage(visible, preferredPage);
+      if (page != null) onPageChangeRef.current?.(page);
     },
     [pages],
   );
@@ -194,8 +217,9 @@ function ProvaWebFlipbookHorizontal({
     const measure = () => {
       const padX = 32;
       const padY = 16;
+      const gutter = Math.max(0, stageGutterRight || 0);
       setStageSize({
-        w: Math.max(0, el.clientWidth - padX),
+        w: Math.max(0, el.clientWidth - padX - gutter),
         h: Math.max(0, el.clientHeight - padY),
       });
     };
@@ -203,7 +227,7 @@ function ProvaWebFlipbookHorizontal({
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [cssFullscreen, isFullscreen]);
+  }, [cssFullscreen, isFullscreen, stageGutterRight]);
 
   // Reset + seed quando o manifesto muda (evita wipe sem re-seed).
   useEffect(() => {
@@ -245,15 +269,16 @@ function ProvaWebFlipbookHorizontal({
     });
 
     flip.loadFromHTML(el.querySelectorAll<HTMLElement>(".prova-web-page"));
+    let alive = true;
     flip.on("flip", (e) => {
+      if (!alive) return;
       const idx = Number(e.data);
       const safe = Number.isFinite(idx) ? idx : 0;
       setPageIndex(safe);
-      const visible = resolveVisiblePages(pages, safe);
-      const left = visible[0]?.page;
-      if (left != null) onPageChangeRef.current?.(left);
+      reportVisiblePage(safe);
     });
     flip.on("changeState", (e) => {
+      if (!alive) return;
       const state = String(e.data || "");
       setFlipping(state === "flipping" || state === "user_fold");
     });
@@ -273,12 +298,11 @@ function ProvaWebFlipbookHorizontal({
         }
         setPageIndex(idx);
       }
-      const visible = resolveVisiblePages(pages, idx);
-      const left = visible[0]?.page;
-      if (left != null) onPageChangeRef.current?.(left);
+      reportVisiblePage(idx, target.page);
     }
 
     return () => {
+      alive = false;
       flipRef.current = null;
       try {
         flip.destroy();
@@ -299,14 +323,17 @@ function ProvaWebFlipbookHorizontal({
       ? pages.indexOf(hit)
       : Math.max(0, Math.min(total - 1, pageTarget.page - 1));
     const visible = resolveVisiblePages(pages, pageIndexRef.current);
-    if (visible[0]?.page === pageTarget.page) return;
+    if (visible.some((p) => p.page === pageTarget.page)) {
+      reportVisiblePage(pageIndexRef.current, pageTarget.page);
+      return;
+    }
     try {
       flip.turnToPage(idx);
     } catch {
       /* ignore */
     }
     setPageIndex(idx);
-    reportVisiblePage(idx);
+    reportVisiblePage(idx, pageTarget.page);
   }, [pageTarget?.nonce, pageTarget?.page, pages, reportVisiblePage, total]);
 
   // Reaplica dimensões contain sem perder página; capa fica na metade direita do slot.
@@ -360,6 +387,8 @@ function ProvaWebFlipbookHorizontal({
   const onStageWheel = useCallback(
     (event: React.WheelEvent) => {
       if (zoomOpen) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest?.("[data-analise-lab-balloon]")) return;
       event.preventDefault();
       if (Math.abs(event.deltaY) < 6) return;
       const now = performance.now();
@@ -481,6 +510,9 @@ function ProvaWebFlipbookHorizontal({
       <div
         ref={stageRef}
         className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-4 py-2"
+        style={{
+          paddingRight: Math.max(16, 16 + Math.max(0, stageGutterRight || 0)),
+        }}
         onWheel={onStageWheel}
       >
         {/* Slot 2p fixo: capa/contracapa na metade direita (sem salto ao abrir). */}
@@ -546,6 +578,7 @@ function ProvaWebFlipbookHorizontal({
                 slotWidth,
                 isSpread,
                 flipping,
+                gutterRight: Math.max(0, stageGutterRight || 0),
               })
             : null}
         </div>

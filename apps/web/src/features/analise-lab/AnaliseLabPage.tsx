@@ -18,7 +18,9 @@ import {
   deleteAnaliseLabMark,
   fetchAnaliseLabInfo,
   fetchAnaliseLabManifest,
+  reorderAnaliseLabItems,
   reprocessAnaliseLab,
+  replicateAnaliseLabItems,
   saveAnaliseLab,
   updateAnaliseLabItem,
   updateAnaliseLabMark,
@@ -28,6 +30,7 @@ import {
   type AnaliseLabMarkCor,
   type AnaliseLabEdge,
   type SaveAnaliseLabPayload,
+  type UpdateAnaliseLabItemPayload,
   type UpdateAnaliseLabMarkPayload,
 } from "@/api/analiseLab";
 import type { ProvaWebCropJson } from "@/api/provaWeb";
@@ -39,7 +42,11 @@ import { AnaliseLabBalloonLayer } from "./AnaliseLabBalloonLayer";
 import { AnaliseLabConcluir } from "./AnaliseLabConcluir";
 import { AnaliseLabInspector } from "./AnaliseLabInspector";
 import { AnaliseLabItemList } from "./AnaliseLabItemList";
-import { AnaliseLabItemPanel } from "./AnaliseLabItemPanel";
+import {
+  AnaliseLabItemPanel,
+  toPanelModel,
+  type AnaliseLabItemPanelModel,
+} from "./AnaliseLabItemPanel";
 import { AnaliseLabLibrary } from "./AnaliseLabLibrary";
 import { AnaliseLabMarkEditor } from "./AnaliseLabMarkEditor";
 import { AnaliseLabMarksLayer } from "./AnaliseLabMarksLayer";
@@ -47,7 +54,9 @@ import {
   AnaliseLabMarkTools,
   type AnaliseLabTool,
 } from "./AnaliseLabMarkTools";
+import { AnaliseLabReplicateDialog } from "./AnaliseLabReplicateDialog";
 import { AnaliseLabSourcePicker } from "./AnaliseLabSourcePicker";
+import { buildLibraryDraft } from "./analiseLabLibraryDraft";
 import { itemOccurrences } from "./analiseLabComponente";
 import { pageSizeMm } from "./analiseLabGeometry";
 import { parsePageSpec } from "./analiseLabPageSpec";
@@ -92,7 +101,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const [pageSpec, setPageSpec] = useState("1");
   const [espelhar, setEspelhar] = useState(true);
   const [cor, setCor] = useState<AnaliseLabMarkCor>("red");
-  const [rotulo, setRotulo] = useState("corte 7mm");
+  const [rotulo, setRotulo] = useState("");
   const [stepMm, setStepMm] = useState(10);
   const [espessura, setEspessura] = useState(2);
   const [localMarks, setLocalMarks] = useState<AnaliseLabMark[] | null>(null);
@@ -102,6 +111,9 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const [linkingItemId, setLinkingItemId] = useState<number | null>(null);
   const [dismissedBalloonIds, setDismissedBalloonIds] = useState<number[]>([]);
   const [occurrenceIndex, setOccurrenceIndex] = useState(0);
+  const [replicateVersao, setReplicateVersao] = useState<string | null>(null);
+  const [draftLibraryItem, setDraftLibraryItem] =
+    useState<AnaliseLabItemPanelModel | null>(null);
   const [itemEscopoDefault, setItemEscopoDefault] =
     useState<AnaliseLabItemEscopo>("pagina");
 
@@ -249,10 +261,13 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const canEspelharTipo = (tipo: string) =>
     tipo === "offset_corte" ||
     tipo === "faixa" ||
+    tipo === "sangria" ||
     tipo === "retangulo" ||
     tipo === "seta" ||
     tipo === "circulo" ||
-    tipo === "texto";
+    tipo === "texto" ||
+    tipo === "ponto" ||
+    tipo === "livre";
 
   const resolveScope = () => {
     if (applyAllPages) {
@@ -278,15 +293,16 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
           multi = false;
         }
       }
+      const drawnPage = Math.max(1, payload.pagina ?? pageNumero);
       const res = await createAnaliseLabMark(ano, osId, {
-        pagina: payload.pagina ?? scope.pagina,
-        paginas: scope.paginas,
+        pagina: applyAllPages ? 0 : (payload.pagina ?? scope.pagina),
+        paginas: applyAllPages ? null : scope.paginas,
         tipo: payload.tipo as "offset_corte",
         geometria: payload.geometria,
         rotulo: rotulo || null,
         cor,
         espelhar: canEspelharTipo(payload.tipo) && espelhar && multi,
-        pagina_origem: pageNumero,
+        pagina_origem: drawnPage,
         item_id: linkingItemId,
       });
       setLocalMarks((prev) => [...(prev ?? []), res.mark]);
@@ -335,39 +351,94 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     }
   };
 
-  const registerProblema = async (
-    problema: ProblemaPadrao,
+  const openLibraryDraft = (problema: ProblemaPadrao) => {
+    setDraftLibraryItem(
+      buildLibraryDraft({
+        problema,
+        escopo: itemEscopoDefault,
+        pagina: pageNumero,
+        pageSpec,
+      }),
+    );
+    setSelectedItemId(null);
+    setLinkingItemId(null);
+  };
+
+  const registerDraftItem = async (
+    payload: UpdateAnaliseLabItemPayload,
     confirmSplit = false,
   ) => {
+    if (!draftLibraryItem?.idProblemaPadrao) return;
     setActionBusy(true);
     setActionError(null);
     try {
-      const escopo = itemEscopoDefault;
-      const res = await createAnaliseLabItem(ano, osId, {
-        id_problema: problema.ID,
-        escopo,
-        pagina: pageNumero,
-        paginas: escopo === "paginas" ? pageSpec : null,
-        versao_label: session?.versaoLabel,
-        confirm_split: confirmSplit,
-      });
-      if (res.needsConfirm && res.splitPreview) {
-        const lines = Object.entries(res.splitPreview)
-          .map(([c, p]) => `${c}: ${p}`)
-          .join("\n");
-        const ok = window.confirm(
-          `Este escopo atinge Capa e Miolo. Registrar dois problemas?\n\n${lines}`,
-        );
-        if (ok) {
-          await registerProblema(problema, true);
+      const escopo = (payload.escopo || draftLibraryItem.escopo) as AnaliseLabItemEscopo;
+      // Escopo arquivo: usa o fluxo da biblioteca (split Capa/Miolo) e depois aplica o HTML limpo.
+      if (escopo === "arquivo") {
+        const res = await createAnaliseLabItem(ano, osId, {
+          id_problema: draftLibraryItem.idProblemaPadrao,
+          escopo,
+          pagina: 0,
+          paginas: null,
+          versao_label: session?.versaoLabel,
+          confirm_split: confirmSplit,
+        });
+        if (res.needsConfirm && res.splitPreview) {
+          const lines = Object.entries(res.splitPreview)
+            .map(([c, p]) => `${c}: ${p}`)
+            .join("\n");
+          const ok = window.confirm(
+            `Este escopo atinge Capa e Miolo. Registrar dois problemas?\n\n${lines}`,
+          );
+          if (ok) {
+            await registerDraftItem(payload, true);
+          }
+          return;
         }
+        const updated: AnaliseLabItem[] = [];
+        for (const created of res.items || []) {
+          const patch = await updateAnaliseLabItem(ano, osId, created.id, {
+            titulo: payload.titulo,
+            html_snapshot: payload.html_snapshot,
+            obs: payload.obs,
+            resolucao_obrigatoria: payload.resolucao_obrigatoria,
+          });
+          updated.push(patch.item);
+        }
+        setLocalItens((prev) => [...(prev ?? []), ...updated]);
+        if (updated[0]) {
+          setSelectedItemId(updated[0].id);
+          setLeftPane("itens");
+        }
+        setDraftLibraryItem(null);
+        invalidate();
         return;
       }
-      setLocalItens((prev) => [...(prev ?? []), ...(res.items || [])]);
-      if (res.items?.[0]) {
-        setSelectedItemId(res.items[0].id);
+
+      const res = await createAnaliseLabItem(ano, osId, {
+        id_problema: draftLibraryItem.idProblemaPadrao,
+        titulo: payload.titulo,
+        html_snapshot: payload.html_snapshot,
+        escopo,
+        pagina: payload.pagina,
+        paginas: payload.paginas || null,
+        componente: payload.componente,
+        obs: payload.obs,
+        versao_label: session?.versaoLabel,
+      });
+      let items = res.items || [];
+      if (items[0] && payload.resolucao_obrigatoria) {
+        const patch = await updateAnaliseLabItem(ano, osId, items[0].id, {
+          resolucao_obrigatoria: true,
+        });
+        items = [patch.item];
+      }
+      setLocalItens((prev) => [...(prev ?? []), ...items]);
+      if (items[0]) {
+        setSelectedItemId(items[0].id);
         setLeftPane("itens");
       }
+      setDraftLibraryItem(null);
       invalidate();
     } catch (err) {
       setActionError(
@@ -394,6 +465,149 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     }
   };
 
+  const handleMoveItemComponent = async (
+    itemId: number,
+    componente: string,
+  ) => {
+    const before = itens;
+    setLocalItens((prev) =>
+      (prev ?? itens).map((i) =>
+        i.id === itemId ? { ...i, componente } : i,
+      ),
+    );
+    setActionBusy(true);
+    try {
+      const res = await updateAnaliseLabItem(ano, osId, itemId, { componente });
+      setLocalItens((prev) =>
+        (prev ?? []).map((i) => (i.id === itemId ? res.item : i)),
+      );
+      invalidate();
+    } catch (err) {
+      setLocalItens(before);
+      setActionError(
+        err instanceof Error ? err.message : "Erro ao mover item.",
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleReorderItems = async (orderedIds: number[]) => {
+    const before = itens;
+    const orderMap = new Map(orderedIds.map((id, idx) => [id, idx + 1]));
+    setLocalItens((prev) =>
+      (prev ?? itens)
+        .map((i) =>
+          orderMap.has(i.id) ? { ...i, ordem: orderMap.get(i.id)! } : i,
+        )
+        .sort((a, b) => (a.ordem || 0) - (b.ordem || 0) || a.id - b.id),
+    );
+    setActionBusy(true);
+    try {
+      const res = await reorderAnaliseLabItems(ano, osId, orderedIds);
+      setLocalItens(res.itens);
+      invalidate();
+    } catch (err) {
+      setLocalItens(before);
+      setActionError(
+        err instanceof Error ? err.message : "Erro ao reordenar itens.",
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleToggleResolucao = async (itemId: number, next: boolean) => {
+    const before = itens;
+    setLocalItens((prev) =>
+      (prev ?? itens).map((i) =>
+        i.id === itemId ? { ...i, resolucaoObrigatoria: next } : i,
+      ),
+    );
+    setActionBusy(true);
+    try {
+      const res = await updateAnaliseLabItem(ano, osId, itemId, {
+        resolucao_obrigatoria: next,
+      });
+      setLocalItens((prev) =>
+        (prev ?? []).map((i) => (i.id === itemId ? res.item : i)),
+      );
+      invalidate();
+    } catch (err) {
+      setLocalItens(before);
+      setActionError(
+        err instanceof Error
+          ? err.message
+          : "Erro ao atualizar resolução obrigatória.",
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleToggleCorrigido = async (itemId: number, next: boolean) => {
+    const before = itens;
+    setLocalItens((prev) =>
+      (prev ?? itens).map((i) =>
+        i.id === itemId
+          ? {
+              ...i,
+              corrigidoSefoc: next,
+              obsCorrecaoSefoc: next ? i.obsCorrecaoSefoc : null,
+            }
+          : i,
+      ),
+    );
+    setActionBusy(true);
+    try {
+      const res = await updateAnaliseLabItem(ano, osId, itemId, {
+        corrigido_sefoc: next,
+        ...(next ? {} : { obs_correcao_sefoc: null }),
+      });
+      setLocalItens((prev) =>
+        (prev ?? []).map((i) => (i.id === itemId ? res.item : i)),
+      );
+      invalidate();
+    } catch (err) {
+      setLocalItens(before);
+      setActionError(
+        err instanceof Error ? err.message : "Erro ao marcar corrigido.",
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleReplicateItems = async (args: {
+    itemIds: number[];
+    copiarMarcas: boolean;
+  }) => {
+    setActionBusy(true);
+    try {
+      const res = await replicateAnaliseLabItems(ano, osId, {
+        item_ids: args.itemIds,
+        copiar_marcas: args.copiarMarcas,
+      });
+      setLocalItens((prev) => [...(prev ?? itens), ...res.items]);
+      setReplicateVersao(null);
+      if (args.copiarMarcas) {
+        setLocalMarks(null);
+      }
+      invalidate();
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Erro ao replicar itens.",
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const balloonGutter = useMemo(() => {
+    if (typeof window === "undefined") return 320;
+    return Math.min(360, Math.max(260, Math.round(window.innerWidth * 0.28)));
+  }, []);
+
   const occurrences = useMemo(() => {
     if (!selectedItem) return [];
     return itemOccurrences(selectedItem, pages, parsePageSpec);
@@ -415,6 +629,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   }, [occurrenceIndex, selectedItemId]);
 
   const selectItem = (id: number) => {
+    setDraftLibraryItem(null);
     setSelectedItemId(id);
     const item = itens.find((i) => i.id === id);
     if (item) {
@@ -422,6 +637,25 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
       if (occ[0]) goToPage(occ[0]);
       setOccurrenceIndex(0);
     }
+  };
+
+  const itemListProps = {
+    items: itens,
+    currentVersaoLabel: session?.versaoLabel,
+    selectedId: selectedItemId,
+    onSelect: selectItem,
+    onDelete: (id: number) => void handleDeleteItem(id),
+    onMoveComponent: (itemId: number, componente: string) =>
+      void handleMoveItemComponent(itemId, componente),
+    onReorder: (ids: number[]) => void handleReorderItems(ids),
+    onToggleResolucao: (itemId: number, next: boolean) =>
+      void handleToggleResolucao(itemId, next),
+    onToggleCorrigido: (itemId: number, next: boolean) =>
+      void handleToggleCorrigido(itemId, next),
+    onReplicateItem: (itemId: number) =>
+      void handleReplicateItems({ itemIds: [itemId], copiarMarcas: false }),
+    onReplicateVersion: (versaoLabel: string) => setReplicateVersao(versaoLabel),
+    busy: actionBusy,
   };
 
   const linkingItem =
@@ -482,16 +716,19 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
       void addMark({
         tipo: "offset_corte",
         geometria: { edge, offsetMm },
+        pagina: pageNumero,
       }),
     onAddFaixa: () =>
       void addMark({
         tipo: "faixa",
         geometria: { edge, fromMm, toMm: offsetMm },
+        pagina: pageNumero,
       }),
     onAddGrade: () =>
       void addMark({
         tipo: "grade",
         geometria: { stepMm },
+        pagina: pageNumero,
       }),
   };
 
@@ -524,7 +761,10 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
           <div className="flex shrink-0 items-center gap-1.5">
             <button
               type="button"
-              onClick={() => setTab("inspecao")}
+              onClick={() => {
+                setPageNonce((n) => n + 1);
+                setTab("inspecao");
+              }}
               className={
                 tab === "inspecao"
                   ? "rounded-md bg-primary-green/30 px-2 py-1.5 text-sm"
@@ -734,13 +974,13 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                                 <option value="arquivo">Arquivo todo</option>
                               </select>
                             </label>
-                            <div className="min-h-0 flex-1 overflow-hidden">
+                            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                               <AnaliseLabLibrary
                                 busy={actionBusy}
-                                onRegister={(p) => void registerProblema(p)}
+                                onRegister={openLibraryDraft}
                               />
                             </div>
-                            <div className="max-h-[45%] min-h-0 shrink-0 overflow-y-auto border-t border-sagra-border pt-2">
+                            <div className="max-h-[45%] min-h-0 shrink overflow-y-auto border-t border-sagra-border pt-2">
                               <h3 className="mb-1 text-[11px] font-semibold uppercase text-neutral-600">
                                 Ferramentas
                               </h3>
@@ -749,14 +989,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                           </div>
                         ) : null}
                         {leftPane === "itens" ? (
-                          <AnaliseLabItemList
-                            items={itens}
-                            currentVersaoLabel={session?.versaoLabel}
-                            selectedId={selectedItemId}
-                            onSelect={selectItem}
-                            onDelete={(id) => void handleDeleteItem(id)}
-                            busy={actionBusy}
-                          />
+                          <AnaliseLabItemList {...itemListProps} />
                         ) : null}
                         {leftPane === "marcas" ? (
                           <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
@@ -840,6 +1073,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         cor={cor}
                         rotulo={rotulo}
                         espessura={espessura}
+                        sangriaMm={offsetMm}
                         selectedMarkId={selectedMarkId}
                         onCreateGeometryMark={(args) =>
                           void addMark({
@@ -859,12 +1093,36 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                             },
                           })
                         }
+                        onCreateSangriaDrag={(args) =>
+                          void addMark({
+                            tipo: "sangria",
+                            pagina: args.pagina,
+                            geometria: {
+                              edge: edge === "all" ? "left" : edge,
+                              fromMm: args.fromMm,
+                              toMm: args.toMm,
+                              alongFromMm: args.alongFromMm,
+                              alongToMm: args.alongToMm,
+                            },
+                          })
+                        }
                       />
                     </div>
 
-                    {selectedItem ? (
+                    {draftLibraryItem ? (
                       <AnaliseLabItemPanel
-                        item={selectedItem}
+                        item={draftLibraryItem}
+                        mode="register"
+                        marks={marks}
+                        linkingActive={false}
+                        busy={actionBusy}
+                        onClose={() => setDraftLibraryItem(null)}
+                        onSave={(p) => void registerDraftItem(p)}
+                      />
+                    ) : selectedItem ? (
+                      <AnaliseLabItemPanel
+                        item={toPanelModel(selectedItem)}
+                        mode="edit"
                         marks={marks}
                         linkingActive={linkingItemId === selectedItem.id}
                         busy={actionBusy}
@@ -944,13 +1202,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                       <h2 className="mb-1 text-xs font-semibold uppercase text-neutral-600">
                         Problemas
                       </h2>
-                      <AnaliseLabItemList
-                        items={itens}
-                        currentVersaoLabel={session?.versaoLabel}
-                        selectedId={selectedItemId}
-                        onSelect={selectItem}
-                        busy={actionBusy}
-                      />
+                      <AnaliseLabItemList {...itemListProps} />
                     </aside>
                     <ProvaWebViewerShell
                       ano={ano}
@@ -964,6 +1216,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                           manifestQuery.data.cacheKey,
                         )
                       }
+                      stageGutterRight={balloonGutter}
                       renderPageOverlay={renderPageOverlay}
                       renderStageOverlay={(ctx) => (
                         <AnaliseLabBalloonLayer
@@ -973,6 +1226,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                           visiblePages={ctx.visiblePages}
                           pageSize={ctx.pageSize}
                           slotWidth={ctx.slotWidth}
+                          gutterRight={ctx.gutterRight || balloonGutter}
                           isSpread={ctx.isSpread}
                           flipping={ctx.flipping}
                           selectedItemId={selectedItemId}
@@ -998,6 +1252,15 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
           </>
         ) : null}
       </main>
+
+      <AnaliseLabReplicateDialog
+        open={Boolean(replicateVersao)}
+        versaoLabel={replicateVersao || ""}
+        items={itens}
+        busy={actionBusy}
+        onClose={() => setReplicateVersao(null)}
+        onConfirm={(payload) => void handleReplicateItems(payload)}
+      />
 
       <AnaliseLabConcluir
         ano={ano}

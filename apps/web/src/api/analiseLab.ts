@@ -17,6 +17,7 @@ export type AnaliseLabRenderStatus =
 export type AnaliseLabMarkTipo =
   | "offset_corte"
   | "faixa"
+  | "sangria"
   | "retangulo"
   | "ponto"
   | "medida"
@@ -95,6 +96,8 @@ export interface AnaliseLabItem {
   versaoLabel: string;
   ordem: number;
   resolucaoObrigatoria?: boolean;
+  corrigidoSefoc?: boolean;
+  obsCorrecaoSefoc?: string | null;
   itemAnaliseId?: number | null;
 }
 
@@ -304,6 +307,8 @@ export interface UpdateAnaliseLabItemPayload {
   paginas?: string | null;
   resolucao_obrigatoria?: boolean;
   ordem?: number;
+  corrigido_sefoc?: boolean;
+  obs_correcao_sefoc?: string | null;
 }
 
 export async function createAnaliseLabItem(
@@ -343,6 +348,30 @@ export async function deleteAnaliseLabItem(
 ): Promise<{ ok: boolean }> {
   return apiFetch(`/os/${ano}/${osId}/analise-lab/itens/${itemId}`, {
     method: "DELETE",
+  });
+}
+
+export async function replicateAnaliseLabItems(
+  ano: number,
+  osId: number,
+  payload: { item_ids: number[]; copiar_marcas?: boolean },
+): Promise<{ ok: boolean; items: AnaliseLabItem[] }> {
+  return apiFetch(`/os/${ano}/${osId}/analise-lab/itens/replicar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function reorderAnaliseLabItems(
+  ano: number,
+  osId: number,
+  ordem: number[],
+): Promise<{ ok: boolean; itens: AnaliseLabItem[] }> {
+  return apiFetch(`/os/${ano}/${osId}/analise-lab/itens/reordenar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ordem }),
   });
 }
 

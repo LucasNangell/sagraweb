@@ -5,6 +5,7 @@ import {
   distanceMm,
   formatMm,
   resolveMarkGeometry,
+  sangriaSvgRect,
 } from "./analiseLabGeometry";
 import { isMarkVisibleOnPage } from "./analiseLabPageSpec";
 
@@ -135,6 +136,46 @@ function drawFaixa(
   );
 }
 
+function drawSangria(
+  key: string,
+  edge: string,
+  from: number,
+  to: number,
+  alongFrom: number,
+  alongTo: number,
+  color: string,
+  selected: boolean,
+  displayWidth: number,
+  displayHeight: number,
+  sx: number,
+  sy: number,
+): ReactNode {
+  const r = sangriaSvgRect(
+    edge,
+    from,
+    to,
+    alongFrom,
+    alongTo,
+    displayWidth,
+    displayHeight,
+    sx,
+    sy,
+  );
+  return (
+    <rect
+      key={key}
+      x={r.x}
+      y={r.y}
+      width={r.width}
+      height={r.height}
+      fill={color}
+      fillOpacity={selected ? 0.32 : 0.22}
+      stroke={color}
+      strokeWidth={selected ? 2 : 1}
+    />
+  );
+}
+
 export function AnaliseLabMarksLayer({
   marks,
   pageNumber,
@@ -158,7 +199,8 @@ export function AnaliseLabMarksLayer({
 
   return (
     <svg
-      className="pointer-events-none absolute inset-0 h-full w-full"
+      className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
+      style={{ overflow: "visible" }}
       viewBox={`0 0 ${displayWidth} ${displayHeight}`}
       aria-hidden
     >
@@ -210,6 +252,52 @@ export function AnaliseLabMarksLayer({
                   sy,
                 ),
               )}
+            </g>
+          );
+        }
+        if (mark.tipo === "sangria") {
+          const edge = String(g.edge || "left");
+          const from = Number(g.fromMm) || 0;
+          const to = Number(g.toMm) || 0;
+          const alongFrom = Number(g.alongFromMm) || 0;
+          const alongTo = Number(g.alongToMm) || 0;
+          const r = sangriaSvgRect(
+            edge,
+            from,
+            to,
+            alongFrom,
+            alongTo,
+            displayWidth,
+            displayHeight,
+            sx,
+            sy,
+          );
+          return (
+            <g key={mark.id}>
+              {drawSangria(
+                String(mark.id),
+                edge,
+                from,
+                to,
+                alongFrom,
+                alongTo,
+                color,
+                selected,
+                displayWidth,
+                displayHeight,
+                sx,
+                sy,
+              )}
+              {mark.rotulo ? (
+                <text
+                  x={r.x + 2}
+                  y={r.y + 12}
+                  fill={color}
+                  fontSize={11}
+                >
+                  {mark.rotulo}
+                </text>
+              ) : null}
             </g>
           );
         }

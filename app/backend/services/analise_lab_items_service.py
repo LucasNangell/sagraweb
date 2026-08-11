@@ -22,7 +22,8 @@ ESCOPOS = frozenset({"pagina", "paginas", "arquivo"})
 _SELECT_ITEM = """
     ID, SessaoID, ID_ProblemaPadrao, Titulo, HtmlSnapshot, Obs,
     Componente, Escopo, Pagina, Paginas, VersaoLabel, Ordem,
-    ResolucaoObrigatoria, ItemAnaliseID, PontoRegistro,
+    ResolucaoObrigatoria, CorrigidoSefoc, ObsCorrecaoSefoc,
+    ItemAnaliseID, PontoRegistro,
     DataRegistro, DataAtualizacao
 """
 
@@ -54,6 +55,8 @@ def _row_to_item(row: dict[str, Any]) -> dict[str, Any]:
         "versaoLabel": (row.get("VersaoLabel") or "").strip(),
         "ordem": int(row.get("Ordem") or 0),
         "resolucaoObrigatoria": bool(int(row.get("ResolucaoObrigatoria") or 0)),
+        "corrigidoSefoc": bool(int(row.get("CorrigidoSefoc") or 0)),
+        "obsCorrecaoSefoc": (row.get("ObsCorrecaoSefoc") or "").strip() or None,
         "itemAnaliseId": (
             int(row["ItemAnaliseID"]) if row.get("ItemAnaliseID") is not None else None
         ),
@@ -258,6 +261,8 @@ def update_item(
     resolucao_obrigatoria: Optional[bool] = None,
     ordem: Optional[int] = None,
     item_analise_id: Optional[int] = None,
+    corrigido_sefoc: Optional[bool] = None,
+    obs_correcao_sefoc: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
     current = get_item(item_id)
     if not current:
@@ -301,12 +306,23 @@ def update_item(
         if item_analise_id is not None
         else current.get("itemAnaliseId")
     )
+    if corrigido_sefoc is not None:
+        corrigido = bool(corrigido_sefoc)
+    else:
+        corrigido = bool(current.get("corrigidoSefoc"))
+    if not corrigido:
+        obs_corr = None
+    elif obs_correcao_sefoc is not None:
+        obs_corr = (obs_correcao_sefoc or "").strip() or None
+    else:
+        obs_corr = current.get("obsCorrecaoSefoc")
     db.execute_query(
         """
         UPDATE tabAnaliseLabItem
         SET Titulo = %s, HtmlSnapshot = %s, Obs = %s, Componente = %s,
             Escopo = %s, Pagina = %s, Paginas = %s, Ordem = %s,
-            ResolucaoObrigatoria = %s, ItemAnaliseID = %s
+            ResolucaoObrigatoria = %s, CorrigidoSefoc = %s, ObsCorrecaoSefoc = %s,
+            ItemAnaliseID = %s
         WHERE ID = %s
         """,
         (
@@ -319,11 +335,134 @@ def update_item(
             paginas_n,
             ordem_n,
             1 if reso else 0,
+            1 if corrigido else 0,
+            obs_corr,
             analise_id,
             int(item_id),
         ),
     )
     return get_item(item_id)
+
+
+def build_replica_payload(
+    item: dict[str, Any],
+    *,
+    versao_label: str,
+) -> dict[str, Any]:
+    """Monta kwargs para add_item a partir de um item existente (versão atual)."""
+    return {
+        "titulo": item.get("titulo") or "Problema técnico",
+        "html_snapshot": item.get("htmlSnapshot") or "",
+        "componente": item.get("componente") or "Arq. Único",
+        "escopo": item.get("escopo") or "pagina",
+        "pagina": int(item.get("pagina") or 0),
+        "paginas": item.get("paginas"),
+        "versao_label": (versao_label or "").strip()[:128],
+        "id_problema_padrao": item.get("idProblemaPadrao"),
+        "obs": item.get("obs"),
+        "resolucao_obrigatoria": bool(item.get("resolucaoObrigatoria")),
+    }
+
+
+def normalize_reorder_ids(
+    ordered_ids: list[int],
+    session_item_ids: set[int],
+) -> list[int]:
+    """Mantém a ordem pedida, filtrando ids que não pertencem à sessão."""
+    seen: set[int] = set()
+    out: list[int] = []
+    for raw in ordered_ids:
+        item_id = int(raw)
+        if item_id in seen or item_id not in session_item_ids:
+            continue
+        seen.add(item_id)
+        out.append(item_id)
+    return out
+
+
+def reorder_items(sessao_id: int, ordered_ids: list[int]) -> list[dict[str, Any]]:
+    current = list_items(sessao_id)
+    session_ids = {int(i["id"]) for i in current}
+    normalized = normalize_reorder_ids(ordered_ids, session_ids)
+    for idx, item_id in enumerate(normalized, start=1):
+        db.execute_query(
+            "UPDATE tabAnaliseLabItem SET Ordem = %(ord)s WHERE ID = %(id)s AND SessaoID = %(sid)s",
+            {"ord": idx, "id": int(item_id), "sid": int(sessao_id)},
+        )
+    remaining = [i for i in current if int(i["id"]) not in set(normalized)]
+    next_ord = len(normalized) + 1
+    for item in remaining:
+        db.execute_query(
+            "UPDATE tabAnaliseLabItem SET Ordem = %(ord)s WHERE ID = %(id)s AND SessaoID = %(sid)s",
+            {"ord": next_ord, "id": int(item["id"]), "sid": int(sessao_id)},
+        )
+        next_ord += 1
+    return list_items(sessao_id)
+
+
+def _copy_marks_for_item(
+    sessao_id: int,
+    *,
+    source_item_id: int,
+    target_item_id: int,
+    ponto: Optional[int] = None,
+) -> int:
+    from services import analise_lab_service as marks_svc
+
+    marks = [
+        m
+        for m in marks_svc.list_marks(sessao_id)
+        if m.get("itemId") == int(source_item_id)
+    ]
+    copied = 0
+    for mark in marks:
+        marks_svc.add_mark(
+            sessao_id,
+            pagina=int(mark.get("pagina") or 0),
+            tipo=str(mark.get("tipo") or ""),
+            geometria=dict(mark.get("geometria") or {}),
+            rotulo=mark.get("rotulo"),
+            cor=str(mark.get("cor") or "red"),
+            ponto=ponto,
+            espelhar=bool(mark.get("espelhar")),
+            pagina_origem=int(mark.get("paginaOrigem") or 0),
+            paginas=mark.get("paginas"),
+            item_id=int(target_item_id),
+        )
+        copied += 1
+    return copied
+
+
+def replicate_items(
+    sessao_id: int,
+    item_ids: list[int],
+    *,
+    versao_label: str,
+    copiar_marcas: bool = False,
+    ponto: Optional[int] = None,
+) -> list[dict[str, Any]]:
+    """Replica itens de versões anteriores para a versão atual da sessão."""
+    created: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for raw_id in item_ids:
+        item_id = int(raw_id)
+        if item_id in seen:
+            continue
+        seen.add(item_id)
+        source = get_item(item_id)
+        if not source or int(source["sessaoId"]) != int(sessao_id):
+            raise ValueError(f"Item {item_id} não encontrado nesta sessão.")
+        payload = build_replica_payload(source, versao_label=versao_label)
+        new_item = add_item(sessao_id, ponto=ponto, **payload)
+        if copiar_marcas:
+            _copy_marks_for_item(
+                sessao_id,
+                source_item_id=item_id,
+                target_item_id=int(new_item["id"]),
+                ponto=ponto,
+            )
+        created.append(new_item)
+    return created
 
 
 def delete_item(item_id: int) -> bool:

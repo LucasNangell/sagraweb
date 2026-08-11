@@ -20,10 +20,11 @@ export interface BalloonAnchor {
 }
 
 export interface PackedBalloon extends BalloonAnchor {
-  side: "left" | "right";
+  side: "right";
   topPx: number;
   bubbleX: number;
   bubbleY: number;
+  balloonWidth: number;
   anchorX: number;
   anchorY: number;
 }
@@ -160,49 +161,62 @@ export function packBalloons(
     gap: number;
     pageRects: Record<
       number,
-      { left: number; top: number; width: number; height: number; widthMm: number; heightMm: number }
+      {
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+        widthMm: number;
+        heightMm: number;
+      }
     >;
     slotWidth: number;
+    gutterRight?: number;
+    balloonWidth?: number;
   },
 ): PackedBalloon[] {
-  const { stageHeight, balloonHeight, gap, pageRects, slotWidth } = opts;
-  const bySide: Record<"left" | "right", BalloonAnchor[]> = {
-    left: [],
-    right: [],
-  };
-  for (const a of anchors) {
-    const rect = pageRects[a.page];
-    if (!rect) continue;
-    const mid = rect.left + rect.width / 2;
-    const side: "left" | "right" = mid < slotWidth / 2 ? "left" : "right";
-    bySide[side].push(a);
-  }
+  const {
+    stageHeight,
+    balloonHeight,
+    gap,
+    pageRects,
+    slotWidth,
+    gutterRight = 280,
+    balloonWidth,
+  } = opts;
+  const width = Math.max(
+    180,
+    balloonWidth ?? Math.max(180, gutterRight - 24),
+  );
+  const list = anchors
+    .slice()
+    .sort((a, b) => a.page - b.page || a.yMm - b.yMm || a.itemId - b.itemId);
 
   const packed: PackedBalloon[] = [];
-  for (const side of ["left", "right"] as const) {
-    const list = bySide[side].slice().sort((a, b) => a.yMm - b.yMm);
-    let cursor = 8;
-    for (const a of list) {
-      const rect = pageRects[a.page];
-      if (!rect) continue;
-      const anchorX = (a.xMm / Math.max(1, rect.widthMm)) * rect.width + rect.left;
-      const anchorY =
-        (a.yMm / Math.max(1, rect.heightMm)) * rect.height + rect.top;
-      const desired = Math.max(8, Math.min(stageHeight - balloonHeight - 8, anchorY - balloonHeight / 2));
-      const top = Math.max(cursor, desired);
-      cursor = top + balloonHeight + gap;
-      const bubbleX =
-        side === "left" ? Math.max(4, rect.left - 220) : rect.left + rect.width + 8;
-      packed.push({
-        ...a,
-        side,
-        topPx: top,
-        bubbleX,
-        bubbleY: top,
-        anchorX,
-        anchorY,
-      });
-    }
+  let cursor = 8;
+  for (const a of list) {
+    const rect = pageRects[a.page];
+    if (!rect) continue;
+    const anchorX =
+      (a.xMm / Math.max(1, rect.widthMm)) * rect.width + rect.left;
+    const anchorY =
+      (a.yMm / Math.max(1, rect.heightMm)) * rect.height + rect.top;
+    const desired = Math.max(
+      8,
+      Math.min(stageHeight - balloonHeight - 8, anchorY - balloonHeight / 2),
+    );
+    const top = Math.max(cursor, desired);
+    cursor = top + balloonHeight + gap;
+    packed.push({
+      ...a,
+      side: "right",
+      topPx: top,
+      bubbleX: slotWidth + 12,
+      bubbleY: top,
+      balloonWidth: width,
+      anchorX,
+      anchorY,
+    });
   }
   return packed;
 }

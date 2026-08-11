@@ -19,6 +19,7 @@ interface AnaliseLabBalloonLayerProps {
   visiblePages: ProvaWebPageMeta[];
   pageSize: { width: number; height: number };
   slotWidth: number;
+  gutterRight?: number;
   isSpread: boolean;
   flipping: boolean;
   selectedItemId?: number | null;
@@ -38,6 +39,7 @@ export function AnaliseLabBalloonLayer({
   visiblePages,
   pageSize,
   slotWidth,
+  gutterRight = 280,
   isSpread,
   flipping,
   selectedItemId = null,
@@ -108,8 +110,9 @@ export function AnaliseLabBalloonLayer({
         gap: GAP,
         pageRects,
         slotWidth,
+        gutterRight,
       }),
-    [anchors, pageRects, pageSize.height, slotWidth],
+    [anchors, gutterRight, pageRects, pageSize.height, slotWidth],
   );
 
   if (flipping || !packed.length) return null;
@@ -118,42 +121,36 @@ export function AnaliseLabBalloonLayer({
   const overflow = Math.max(0, packed.length - MAX_VISIBLE);
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-20">
+    <div
+      className="pointer-events-none absolute inset-0 z-20"
+      style={{ right: -gutterRight }}
+    >
       <svg
         className="pointer-events-none absolute inset-0 h-full w-full"
         aria-hidden
       >
-        {visible.map((b) => (
-          <g key={`line-${b.itemId}-${b.page}`}>
-            <line
-              x1={b.anchorX}
-              y1={b.anchorY}
-              x2={b.bubbleX + (b.side === "left" ? 210 : 0)}
-              y2={b.bubbleY + 20}
-              stroke="#64748b"
-              strokeWidth={1.25}
-              strokeDasharray="4 3"
-            />
-            <circle
-              cx={b.anchorX}
-              cy={b.anchorY}
-              r={selectedItemId === b.itemId ? 7 : 5}
-              fill={selectedItemId === b.itemId ? "#16a34a" : "#2563eb"}
-              fillOpacity={0.9}
-            />
-            {!b.hasMark ? (
-              <text
-                x={b.anchorX + 8}
-                y={b.anchorY - 6}
-                fill="#334155"
-                fontSize={11}
-                fontWeight={700}
-              >
-                {b.refNumber}
-              </text>
-            ) : null}
-          </g>
-        ))}
+        {visible
+          .filter((b) => b.hasMark)
+          .map((b) => (
+            <g key={`line-${b.itemId}-${b.page}`}>
+              <line
+                x1={b.anchorX}
+                y1={b.anchorY}
+                x2={b.bubbleX}
+                y2={b.bubbleY + 20}
+                stroke="#64748b"
+                strokeWidth={1.25}
+                strokeDasharray="4 3"
+              />
+              <circle
+                cx={b.anchorX}
+                cy={b.anchorY}
+                r={selectedItemId === b.itemId ? 7 : 5}
+                fill={selectedItemId === b.itemId ? "#16a34a" : "#2563eb"}
+                fillOpacity={0.9}
+              />
+            </g>
+          ))}
       </svg>
 
       {visible.map((b) => {
@@ -164,6 +161,7 @@ export function AnaliseLabBalloonLayer({
             key={`ball-${b.itemId}-${b.page}`}
             item={b.item}
             refNumber={b.refNumber}
+            width={b.balloonWidth}
             highlighted={selectedItemId === b.itemId}
             occurrences={occ}
             occurrenceIndex={occIdx}
@@ -184,7 +182,8 @@ export function AnaliseLabBalloonLayer({
       {!expanded && overflow > 0 ? (
         <button
           type="button"
-          className="pointer-events-auto absolute bottom-2 right-2 rounded-full bg-secondary-blue px-2.5 py-1 text-[11px] font-semibold text-white shadow"
+          className="pointer-events-auto absolute bottom-2 rounded-full bg-secondary-blue px-2.5 py-1 text-[11px] font-semibold text-white shadow"
+          style={{ right: 8 }}
           onClick={() => setExpanded(true)}
         >
           +{overflow} problemas

@@ -14,6 +14,8 @@ import {
   faixaFromDrag,
   formatMm,
   pageSizeMm,
+  sangriaFromDrag,
+  sangriaSvgRect,
 } from "./analiseLabGeometry";
 
 type RulerDrag = {
@@ -38,9 +40,13 @@ interface AnaliseLabInspectorPageProps {
   edge: AnaliseLabEdge;
   cor: AnaliseLabMarkCor;
   espessura: number;
+  /** Profundidade da sangria (mm) — usada só com tool=sangria. */
+  sangriaMm?: number;
   selectedMarkId?: number | null;
   showLeftRuler: boolean;
   interactive: boolean;
+  active?: boolean;
+  onActivate?: () => void;
   onCreateGeometryMark: (args: {
     tipo:
       | "ponto"
@@ -58,6 +64,13 @@ interface AnaliseLabInspectorPageProps {
     toMm: number;
     pagina: number;
   }) => void;
+  onCreateSangriaDrag?: (args: {
+    fromMm: number;
+    toMm: number;
+    alongFromMm: number;
+    alongToMm: number;
+    pagina: number;
+  }) => void;
 }
 
 export function AnaliseLabInspectorPage({
@@ -70,11 +83,15 @@ export function AnaliseLabInspectorPage({
   edge,
   cor: _cor,
   espessura,
+  sangriaMm = 5,
   selectedMarkId = null,
   showLeftRuler,
   interactive,
+  active = false,
+  onActivate,
   onCreateGeometryMark,
   onCreateFaixaDrag,
+  onCreateSangriaDrag,
 }: AnaliseLabInspectorPageProps) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [draft, setDraft] = useState<{ xMm: number; yMm: number } | null>(null);
@@ -86,6 +103,13 @@ export function AnaliseLabInspectorPage({
   const { widthMm, heightMm } = pageSizeMm(page.widthPt || 0, page.heightPt || 0);
   const displayW = Math.round((page.width || 800) * zoom);
   const displayH = Math.round((page.height || 1130) * zoom);
+
+  const sangriaEdge = edge === "all" ? "left" : edge;
+  const bleedPadMm = tool === "sangria" ? Math.abs(sangriaMm || 5) + 2 : 0;
+  const sx = displayW / Math.max(1e-6, widthMm);
+  const sy = displayH / Math.max(1e-6, heightMm);
+  const bleedPadX = Math.ceil(bleedPadMm * sx);
+  const bleedPadY = Math.ceil(bleedPadMm * sy);
 
   const topRulerActive =
     interactive &&
@@ -105,6 +129,13 @@ export function AnaliseLabInspectorPage({
     const yPx = clientY - rect.top;
     const xMm = (xPx / Math.max(1, rect.width)) * widthMm;
     const yMm = (yPx / Math.max(1, rect.height)) * heightMm;
+    if (tool === "sangria") {
+      const margin = Math.abs(sangriaMm || 5) + 10;
+      return {
+        xMm: Math.max(-margin, Math.min(widthMm + margin, xMm)),
+        yMm: Math.max(-margin, Math.min(heightMm + margin, yMm)),
+      };
+    }
     return {
       xMm: Math.max(0, Math.min(widthMm, xMm)),
       yMm: Math.max(0, Math.min(heightMm, yMm)),
@@ -141,6 +172,23 @@ export function AnaliseLabInspectorPage({
 
     if (!draft) {
       setDraft(pt);
+      return;
+    }
+
+    if (tool === "sangria") {
+      const vertical = sangriaEdge === "left" || sangriaEdge === "right";
+      const converted = sangriaFromDrag(
+        sangriaEdge,
+        sangriaMm,
+        vertical ? draft.yMm : draft.xMm,
+        vertical ? pt.yMm : pt.xMm,
+        widthMm,
+        heightMm,
+      );
+      if (converted && onCreateSangriaDrag) {
+        onCreateSangriaDrag({ ...converted, pagina: page.page });
+      }
+      setDraft(null);
       return;
     }
 
@@ -338,13 +386,40 @@ export function AnaliseLabInspectorPage({
     (tool === "medida" ||
       tool === "retangulo" ||
       tool === "seta" ||
-      tool === "circulo");
+      tool === "circulo" ||
+      tool === "sangria");
+
+  const sangriaPreview =
+    tool === "sangria" && draft && hoverMm
+      ? (() => {
+          const vertical = sangriaEdge === "left" || sangriaEdge === "right";
+          return sangriaFromDrag(
+            sangriaEdge,
+            sangriaMm,
+            vertical ? draft.yMm : draft.xMm,
+            vertical ? hoverMm.y : hoverMm.x,
+            widthMm,
+            heightMm,
+          );
+        })()
+      : null;
 
   return (
     <div
-      className="relative bg-white shadow"
-      style={{ width: displayW, height: displayH }}
+      className={
+        active
+          ? "relative bg-white shadow ring-2 ring-primary-green ring-offset-2"
+          : "relative bg-white shadow"
+      }
+      style={{
+        width: displayW,
+        height: displayH,
+        overflow: "visible",
+        margin: tool === "sangria" ? `${bleedPadY}px ${bleedPadX}px` : undefined,
+      }}
+      data-lab-page={page.page}
       data-page={page.page}
+      onPointerDownCapture={() => onActivate?.()}
       onClick={handleClick}
       onMouseMove={(e) => {
         const pt = toMm(e.clientX, e.clientY);
@@ -479,11 +554,29 @@ export function AnaliseLabInspectorPage({
 
       {twoClickPreview && draft && hoverMm ? (
         <svg
-          className="pointer-events-none absolute inset-0 h-full w-full"
+          className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
           viewBox={`0 0 ${displayW} ${displayH}`}
           aria-hidden
         >
-          {tool === "medida" || tool === "seta" ? (
+          {tool === "sangria" && sangriaPreview ? (
+            <rect
+              {...sangriaSvgRect(
+                sangriaEdge,
+                sangriaPreview.fromMm,
+                sangriaPreview.toMm,
+                sangriaPreview.alongFromMm,
+                sangriaPreview.alongToMm,
+                displayW,
+                displayH,
+                sx,
+                sy,
+              )}
+              fill="rgba(14,165,233,0.25)"
+              stroke="#0ea5e9"
+              strokeWidth={1.5}
+              strokeDasharray="4 3"
+            />
+          ) : tool === "medida" || tool === "seta" ? (
             <>
               <line
                 x1={(draft.xMm / widthMm) * displayW}

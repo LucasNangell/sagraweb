@@ -131,6 +131,7 @@ describe("analiseLabBalloons", () => {
       balloonHeight: 200,
       gap: 10,
       slotWidth: 600,
+      gutterRight: 300,
       pageRects: {
         2: {
           left: 300,
@@ -143,6 +144,8 @@ describe("analiseLabBalloons", () => {
       },
     });
     expect(packed).toHaveLength(2);
+    expect(packed.every((b) => b.side === "right")).toBe(true);
+    expect(packed.every((b) => b.bubbleX === 612)).toBe(true);
     expect(packed[1].topPx).toBeGreaterThanOrEqual(
       packed[0].topPx + 200 + 10,
     );

@@ -42,6 +42,7 @@ MARK_TYPES = frozenset(
     {
         "offset_corte",
         "faixa",
+        "sangria",
         "retangulo",
         "ponto",
         "medida",
@@ -56,6 +57,7 @@ MARK_COLORS = frozenset(
     {"red", "orange", "yellow", "green", "blue", "purple", "black", "white"}
 )
 MARK_EDGES = frozenset({"top", "right", "bottom", "left", "all"})
+MARK_EDGES_SANGRIA = frozenset({"top", "right", "bottom", "left"})
 
 _SELECT_SESSAO = """
     ID, NroProtocolo, AnoProtocolo, VersaoLabel, Modo,
@@ -550,6 +552,31 @@ def _validate_geometry(tipo: str, geom: dict[str, Any]) -> dict[str, Any]:
         if from_mm < 0 or to_mm < 0 or to_mm <= from_mm or to_mm > 500:
             raise ValueError("Faixa inválida.")
         return {"edge": edge, "fromMm": round(from_mm, 3), "toMm": round(to_mm, 3)}
+    if tipo == "sangria":
+        edge = str(geom.get("edge") or "").strip().lower()
+        if edge not in MARK_EDGES_SANGRIA:
+            raise ValueError("Borda inválida.")
+        from_mm = float(geom.get("fromMm") or 0)
+        to_mm = float(geom.get("toMm") if geom.get("toMm") is not None else 0)
+        along_from = float(geom.get("alongFromMm") or 0)
+        along_to = float(geom.get("alongToMm") or 0)
+        # Somente fora do papel: fromMm ∈ [-50, 0), toMm = 0.
+        if from_mm < -50 or from_mm >= 0:
+            raise ValueError("Sangria inválida (profundidade).")
+        if abs(to_mm) > 1e-9:
+            raise ValueError("Sangria inválida (toMm deve ser 0).")
+        if along_to <= along_from:
+            raise ValueError("Sangria inválida (trecho).")
+        for v in (along_from, along_to):
+            if v < -50 or v > 550:
+                raise ValueError("Sangria inválida (trecho fora do intervalo).")
+        return {
+            "edge": edge,
+            "fromMm": round(from_mm, 3),
+            "toMm": 0.0,
+            "alongFromMm": round(along_from, 3),
+            "alongToMm": round(along_to, 3),
+        }
     if tipo == "retangulo":
         x = float(geom.get("xMm") or 0)
         y = float(geom.get("yMm") or 0)

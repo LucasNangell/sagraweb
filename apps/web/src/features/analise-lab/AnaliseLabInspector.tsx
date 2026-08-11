@@ -25,11 +25,15 @@ import { AnaliseLabInspectorPage } from "./AnaliseLabInspectorPage";
 import type { AnaliseLabTool } from "./AnaliseLabMarkTools";
 import { formatMm, pageSizeMm } from "./analiseLabGeometry";
 import {
+  anchorScrollAfterZoom,
   buildSpreadRows,
   findRowIndexForPage,
   fitZoom,
   loadInspectorViewMode,
+  nextZoomFromWheel,
+  resolveActivePageFromScroll,
   saveInspectorViewMode,
+  zoomStep,
   type InspectorViewMode,
 } from "./analiseLabFit";
 
@@ -63,6 +67,14 @@ interface AnaliseLabInspectorProps {
     toMm: number;
     pagina: number;
   }) => void;
+  sangriaMm?: number;
+  onCreateSangriaDrag?: (args: {
+    fromMm: number;
+    toMm: number;
+    alongFromMm: number;
+    alongToMm: number;
+    pagina: number;
+  }) => void;
 }
 
 export function AnaliseLabInspector({
@@ -77,13 +89,18 @@ export function AnaliseLabInspector({
   cor,
   rotulo: _rotulo,
   espessura,
+  sangriaMm = 5,
   selectedMarkId = null,
   onCreateGeometryMark,
   onCreateFaixaDrag,
+  onCreateSangriaDrag,
 }: AnaliseLabInspectorProps) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<Map<number, HTMLDivElement>>(new Map());
-  const suppressObserverRef = useRef(false);
+  const suppressScrollSyncRef = useRef(false);
+  const lastNonceRef = useRef<number | null>(null);
+  const activePageRef = useRef(pages[0]?.page ?? 1);
+  const zoomRef = useRef(1);
   const [viewMode, setViewMode] = useState<InspectorViewMode>(() =>
     loadInspectorViewMode(),
   );
@@ -92,6 +109,9 @@ export function AnaliseLabInspector({
   const [avail, setAvail] = useState({ width: 800, height: 1000 });
   const [loadedPages, setLoadedPages] = useState<Set<number>>(() => new Set());
   const [activePage, setActivePage] = useState(pages[0]?.page ?? 1);
+
+  zoomRef.current = zoom;
+  activePageRef.current = activePage;
 
   const rows = useMemo(
     () => buildSpreadRows(pages, viewMode),
@@ -132,83 +152,134 @@ export function AnaliseLabInspector({
     saveInspectorViewMode(viewMode);
   }, [viewMode]);
 
-  // Lazy load + active page via intersection observer on rows
+  const emitPageChange = useCallback(
+    (page: number) => {
+      if (page === activePageRef.current) return;
+      setActivePage(page);
+      onPageChange(page);
+    },
+    [onPageChange],
+  );
+
+  // Lazy load via IntersectionObserver (não controla página ativa).
   useEffect(() => {
     const root = scrollerRef.current;
     if (!root || !rows.length) return;
-    const ratios = new Map<number, number>();
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
           const rowIdx = Number(
             (entry.target as HTMLElement).dataset.rowIndex || -1,
           );
           if (rowIdx < 0) continue;
-          ratios.set(rowIdx, entry.isIntersecting ? entry.intersectionRatio : 0);
-          if (entry.isIntersecting) {
-            const row = rows[rowIdx];
-            if (row) {
-              setLoadedPages((prev) => {
-                const next = new Set(prev);
-                for (const p of row) next.add(p.page);
-                // prefetch neighbors
-                for (const n of [rowIdx - 1, rowIdx + 1]) {
-                  const neighbor = rows[n];
-                  if (neighbor) {
-                    for (const p of neighbor) next.add(p.page);
-                  }
-                }
-                return next;
-              });
+          const row = rows[rowIdx];
+          if (!row) continue;
+          setLoadedPages((prev) => {
+            const next = new Set(prev);
+            for (const p of row) next.add(p.page);
+            for (const n of [rowIdx - 1, rowIdx + 1]) {
+              const neighbor = rows[n];
+              if (neighbor) {
+                for (const p of neighbor) next.add(p.page);
+              }
             }
-          }
-        }
-        if (suppressObserverRef.current) return;
-        let bestIdx = 0;
-        let bestRatio = -1;
-        for (const [idx, ratio] of ratios) {
-          if (ratio > bestRatio) {
-            bestRatio = ratio;
-            bestIdx = idx;
-          }
-        }
-        const row = rows[bestIdx];
-        const page = row?.[0]?.page;
-        if (page != null) {
-          setActivePage(page);
-          onPageChange(page);
+            return next;
+          });
         }
       },
-      { root, rootMargin: "100% 0px", threshold: [0, 0.15, 0.35, 0.55, 0.75] },
+      { root, rootMargin: "100% 0px", threshold: [0, 0.1] },
     );
     for (const [idx, el] of rowRefs.current) {
       if (idx < rows.length) observer.observe(el);
     }
     return () => observer.disconnect();
-  }, [onPageChange, rows]);
+  }, [rows]);
+
+  // Página ativa = linha sob o centro; na vista dupla, mantém a página
+  // clicada enquanto a linha continuar visível.
+  useEffect(() => {
+    const root = scrollerRef.current;
+    if (!root || !rows.length) return;
+    let raf = 0;
+    const syncActive = () => {
+      if (suppressScrollSyncRef.current) return;
+      const page = resolveActivePageFromScroll({
+        rows,
+        rowElements: rowRefs.current,
+        scrollTop: root.scrollTop,
+        viewportHeight: root.clientHeight,
+        currentPage: activePageRef.current,
+      });
+      if (page != null) emitPageChange(page);
+    };
+    const onScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(syncActive);
+    };
+    root.addEventListener("scroll", onScroll, { passive: true });
+    syncActive();
+    return () => {
+      cancelAnimationFrame(raf);
+      root.removeEventListener("scroll", onScroll);
+    };
+  }, [emitPageChange, rows]);
+
+  const activatePage = useCallback(
+    (page: number) => {
+      emitPageChange(page);
+    },
+    [emitPageChange],
+  );
 
   const scrollToPage = useCallback(
     (pageNumber: number) => {
       const rowIdx = findRowIndexForPage(rows, pageNumber);
       const el = rowRefs.current.get(rowIdx);
-      if (!el) return;
-      suppressObserverRef.current = true;
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      const root = scrollerRef.current;
+      if (!el || !root) return false;
+      suppressScrollSyncRef.current = true;
+      // Instantâneo: smooth falhava na troca Folhear→Inspeção (sync voltava à pág. 1).
+      el.scrollIntoView({ behavior: "auto", block: "start" });
       setActivePage(pageNumber);
-      window.setTimeout(() => {
-        suppressObserverRef.current = false;
-      }, 500);
+      const release = () => {
+        suppressScrollSyncRef.current = false;
+      };
+      const onScrollEnd = () => {
+        root.removeEventListener("scrollend", onScrollEnd);
+        release();
+      };
+      root.addEventListener("scrollend", onScrollEnd, { once: true });
+      window.setTimeout(release, 120);
+      return true;
     },
     [rows],
   );
 
+  // Navega apenas quando o nonce muda (evita laço pageTarget ↔ onPageChange).
+  // Só consome o nonce após scroll bem-sucedido (refs de linha prontas).
   useEffect(() => {
     if (!pageTarget?.page) return;
-    scrollToPage(pageTarget.page);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageTarget?.nonce, pageTarget?.page]);
+    if (lastNonceRef.current === pageTarget.nonce) return;
+    let cancelled = false;
+    let tries = 0;
+    const attempt = () => {
+      if (cancelled) return;
+      if (scrollToPage(pageTarget.page)) {
+        lastNonceRef.current = pageTarget.nonce;
+        return;
+      }
+      if (tries < 30) {
+        tries += 1;
+        requestAnimationFrame(attempt);
+      }
+    };
+    attempt();
+    return () => {
+      cancelled = true;
+    };
+  }, [pageTarget?.nonce, pageTarget?.page, scrollToPage]);
 
-  // Seed first pages as loaded
   useEffect(() => {
     if (!pages.length) return;
     setLoadedPages((prev) => {
@@ -217,6 +288,76 @@ export function AnaliseLabInspector({
       return next;
     });
   }, [pages]);
+
+  const applyZoom = useCallback(
+    (next: number, pointer?: { x: number; y: number }) => {
+      const root = scrollerRef.current;
+      const oldZoom = zoomRef.current;
+      const newZoom = next;
+      setFitMode(false);
+      setZoom(newZoom);
+      if (!root || !pointer || oldZoom === newZoom) return;
+      const anchored = anchorScrollAfterZoom({
+        scrollLeft: root.scrollLeft,
+        scrollTop: root.scrollTop,
+        pointer,
+        oldZoom,
+        newZoom,
+      });
+      requestAnimationFrame(() => {
+        root.scrollLeft = anchored.scrollLeft;
+        root.scrollTop = anchored.scrollTop;
+      });
+    },
+    [],
+  );
+
+  // Ctrl+scroll = zoom; scroll sozinho = rolagem contínua.
+  useEffect(() => {
+    const root = scrollerRef.current;
+    if (!root) return;
+    const onWheel = (event: WheelEvent) => {
+      const next = nextZoomFromWheel(zoomRef.current, event.deltaY, event.ctrlKey);
+      if (next == null) return;
+      event.preventDefault();
+      const rect = root.getBoundingClientRect();
+      applyZoom(next, {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      });
+    };
+    root.addEventListener("wheel", onWheel, { passive: false });
+    return () => root.removeEventListener("wheel", onWheel);
+  }, [applyZoom]);
+
+  // Ctrl + / - / 0
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (event.key === "=" || event.key === "+") {
+        event.preventDefault();
+        applyZoom(zoomStep(zoomRef.current, 1));
+      } else if (event.key === "-") {
+        event.preventDefault();
+        applyZoom(zoomStep(zoomRef.current, -1));
+      } else if (event.key === "0") {
+        event.preventDefault();
+        setFitMode(true);
+        setZoom(fitBase);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [applyZoom, fitBase]);
 
   if (!pages.length) {
     return (
@@ -240,23 +381,17 @@ export function AnaliseLabInspector({
         </span>
         <button
           type="button"
-          onClick={() => {
-            setFitMode(false);
-            setZoom((z) => Math.max(0.25, z - 0.1));
-          }}
+          onClick={() => applyZoom(zoomStep(zoom, -1))}
           className="rounded border border-sagra-border p-1.5"
-          title="Diminuir zoom"
+          title="Diminuir zoom (Ctrl+-)"
         >
           <ZoomOut className="size-4" aria-hidden />
         </button>
         <button
           type="button"
-          onClick={() => {
-            setFitMode(false);
-            setZoom((z) => Math.min(3, z + 0.1));
-          }}
+          onClick={() => applyZoom(zoomStep(zoom, 1))}
           className="rounded border border-sagra-border p-1.5"
-          title="Aumentar zoom"
+          title="Aumentar zoom (Ctrl++)"
         >
           <ZoomIn className="size-4" aria-hidden />
         </button>
@@ -271,16 +406,13 @@ export function AnaliseLabInspector({
               ? "rounded border border-primary-green bg-primary-green/10 p-1.5 text-primary-green"
               : "rounded border border-sagra-border p-1.5"
           }
-          title="Ajustar à área"
+          title="Ajustar à área (Ctrl+0)"
         >
           <Maximize className="size-4" aria-hidden />
         </button>
         <button
           type="button"
-          onClick={() => {
-            setFitMode(false);
-            setZoom(1);
-          }}
+          onClick={() => applyZoom(1)}
           className="rounded border border-sagra-border px-2 py-1 text-[11px] font-medium"
           title="100%"
         >
@@ -323,7 +455,7 @@ export function AnaliseLabInspector({
                 if (el) rowRefs.current.set(rowIdx, el);
                 else rowRefs.current.delete(rowIdx);
               }}
-              className="flex items-start justify-center gap-4"
+              className="flex items-start justify-center gap-4 overflow-visible"
             >
               {row.map((page, pageInRow) => (
                 <AnaliseLabInspectorPage
@@ -337,11 +469,15 @@ export function AnaliseLabInspector({
                   edge={edge}
                   cor={cor}
                   espessura={espessura}
+                  sangriaMm={sangriaMm}
                   selectedMarkId={selectedMarkId}
                   showLeftRuler={pageInRow === 0}
                   interactive
+                  active={activePage === page.page}
+                  onActivate={() => activatePage(page.page)}
                   onCreateGeometryMark={onCreateGeometryMark}
                   onCreateFaixaDrag={onCreateFaixaDrag}
+                  onCreateSangriaDrag={onCreateSangriaDrag}
                 />
               ))}
             </div>

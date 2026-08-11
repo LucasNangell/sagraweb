@@ -26,6 +26,7 @@ export const COLOR_LABELS: Record<string, string> = {
 export const TIPO_LABELS: Record<string, string> = {
   offset_corte: "Offset de corte",
   faixa: "Faixa",
+  sangria: "Sangria",
   retangulo: "Retângulo",
   ponto: "Ponto",
   medida: "Medida",
@@ -42,6 +43,13 @@ export const EDGE_OPTIONS: AnaliseLabEdge[] = [
   "bottom",
   "left",
   "all",
+];
+
+export const EDGE_OPTIONS_SANGRIA: AnaliseLabEdge[] = [
+  "top",
+  "right",
+  "bottom",
+  "left",
 ];
 
 export const COLOR_OPTIONS: AnaliseLabMarkCor[] = [

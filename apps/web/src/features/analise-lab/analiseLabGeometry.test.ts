@@ -11,6 +11,7 @@ import {
   ptToMm,
   pxPerMm,
   resolveMarkGeometry,
+  sangriaFromDrag,
   shouldMirrorMark,
 } from "./analiseLabGeometry";
 
@@ -99,6 +100,33 @@ describe("analiseLabGeometry", () => {
     ]);
   });
 
+  it("does not mirror when paginaOrigem is missing or zero", () => {
+    const legacy = {
+      pagina: 0,
+      espelhar: true,
+      paginaOrigem: 0,
+      tipo: "retangulo",
+      geometria: { xMm: 10, yMm: 5, wMm: 20, hMm: 8 },
+    };
+    expect(shouldMirrorMark(legacy, 1)).toBe(false);
+    expect(shouldMirrorMark(legacy, 2)).toBe(false);
+    expect(resolveMarkGeometry(legacy, 2, 200).xMm).toBe(10);
+  });
+
+  it("keeps drawn-page geometry as reference for opposite-parity pages only", () => {
+    const rect = {
+      pagina: 0,
+      espelhar: true,
+      paginaOrigem: 4,
+      tipo: "retangulo",
+      geometria: { xMm: 10, yMm: 5, wMm: 20, hMm: 8 },
+    };
+    expect(shouldMirrorMark(rect, 4)).toBe(false);
+    expect(shouldMirrorMark(rect, 3)).toBe(true);
+    expect(resolveMarkGeometry(rect, 4, 200).xMm).toBe(10);
+    expect(resolveMarkGeometry(rect, 3, 200).xMm).toBe(170);
+  });
+
   it("converts drag interval to faixa De/Até by edge", () => {
     expect(faixaFromDrag("left", 5, 15, 210, 297)).toEqual({
       fromMm: 5,
@@ -117,5 +145,36 @@ describe("analiseLabGeometry", () => {
       toMm: 10,
     });
     expect(faixaFromDrag("left", 10, 10.2, 210, 297)).toBeNull();
+  });
+
+  it("builds outside-only sangria from along-edge drag", () => {
+    expect(sangriaFromDrag("left", 5, 40, 120, 210, 297)).toEqual({
+      fromMm: -5,
+      toMm: 0,
+      alongFromMm: 40,
+      alongToMm: 120,
+    });
+    expect(sangriaFromDrag("top", 3, 10, 80, 210, 297)?.fromMm).toBe(-3);
+    expect(sangriaFromDrag("left", 5, 10, 10.2, 210, 297)).toBeNull();
+  });
+
+  it("mirrors sangria edge left/right keeping along span", () => {
+    const mark = {
+      pagina: 0,
+      espelhar: true,
+      paginaOrigem: 1,
+      tipo: "sangria",
+      geometria: {
+        edge: "left",
+        fromMm: -5,
+        toMm: 0,
+        alongFromMm: 40,
+        alongToMm: 120,
+      },
+    };
+    expect(shouldMirrorMark(mark, 1)).toBe(false);
+    expect(shouldMirrorMark(mark, 2)).toBe(true);
+    expect(resolveMarkGeometry(mark, 2, 210).edge).toBe("right");
+    expect(resolveMarkGeometry(mark, 2, 210).alongFromMm).toBe(40);
   });
 });

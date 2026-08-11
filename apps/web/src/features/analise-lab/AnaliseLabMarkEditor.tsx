@@ -10,6 +10,7 @@ import { distanceMm, formatMm } from "./analiseLabGeometry";
 import {
   COLOR_OPTIONS,
   EDGE_OPTIONS,
+  EDGE_OPTIONS_SANGRIA,
   labelCor,
   labelEdge,
   labelTipo,
@@ -74,6 +75,7 @@ export function AnaliseLabMarkEditor({
     if (
       mark.tipo !== "offset_corte" &&
       mark.tipo !== "faixa" &&
+      mark.tipo !== "sangria" &&
       mark.tipo !== "retangulo"
     ) {
       return false;
@@ -163,6 +165,64 @@ export function AnaliseLabMarkEditor({
               </label>
             </>
           )}
+        </>
+      )}
+
+      {mark.tipo === "sangria" && (
+        <>
+          <label className="flex flex-col gap-1 text-xs text-neutral-600">
+            Borda
+            <select
+              value={String(geom.edge || "left")}
+              onChange={(e) =>
+                setGeom((g) => ({ ...g, edge: e.target.value as AnaliseLabEdge }))
+              }
+              className="rounded border border-sagra-border px-2 py-1.5"
+            >
+              {EDGE_OPTIONS_SANGRIA.map((e) => (
+                <option key={e} value={e}>
+                  {labelEdge(e)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-neutral-600">
+            Profundidade (mm)
+            <input
+              type="number"
+              min={0.5}
+              max={50}
+              step={0.5}
+              value={Math.abs(Number(geom.fromMm) || 0)}
+              onChange={(e) => {
+                const depth = Math.max(0.5, Number(e.target.value) || 5);
+                setGeom((g) => ({ ...g, fromMm: -depth, toMm: 0 }));
+              }}
+              className="rounded border border-sagra-border px-2 py-1.5"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-neutral-600">
+            Trecho início (mm)
+            <input
+              type="number"
+              step={0.5}
+              value={Number(geom.alongFromMm) || 0}
+              onChange={(e) =>
+                setNum("alongFromMm", Number(e.target.value) || 0)
+              }
+              className="rounded border border-sagra-border px-2 py-1.5"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-neutral-600">
+            Trecho fim (mm)
+            <input
+              type="number"
+              step={0.5}
+              value={Number(geom.alongToMm) || 0}
+              onChange={(e) => setNum("alongToMm", Number(e.target.value) || 0)}
+              className="rounded border border-sagra-border px-2 py-1.5"
+            />
+          </label>
         </>
       )}
 

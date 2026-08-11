@@ -1,6 +1,7 @@
 import {
   ArrowUpRight,
   Circle,
+  Droplets,
   Grid3X3,
   MousePointer2,
   Pencil,
@@ -17,6 +18,7 @@ import type {
 import {
   COLOR_OPTIONS,
   EDGE_OPTIONS,
+  EDGE_OPTIONS_SANGRIA,
   labelCor,
   labelEdge,
 } from "./analiseLabLabels";
@@ -29,6 +31,7 @@ export type AnaliseLabTool =
   | "select"
   | "offset_corte"
   | "faixa"
+  | "sangria"
   | "retangulo"
   | "ponto"
   | "medida"
@@ -42,6 +45,7 @@ const TOOLS: Array<{ id: AnaliseLabTool; label: string; icon: ReactNode }> = [
   { id: "select", label: "Selecionar", icon: <MousePointer2 className="size-3.5" /> },
   { id: "offset_corte", label: "Offset", icon: <Ruler className="size-3.5" /> },
   { id: "faixa", label: "Faixa", icon: <Square className="size-3.5" /> },
+  { id: "sangria", label: "Sangria", icon: <Droplets className="size-3.5" /> },
   { id: "retangulo", label: "Retângulo", icon: <Square className="size-3.5" /> },
   { id: "circulo", label: "Círculo", icon: <Circle className="size-3.5" /> },
   { id: "seta", label: "Seta", icon: <ArrowUpRight className="size-3.5" /> },
@@ -129,6 +133,7 @@ export function AnaliseLabMarkTools({
     multiPageScope &&
     (tool === "offset_corte" ||
       tool === "faixa" ||
+      tool === "sangria" ||
       tool === "retangulo" ||
       tool === "seta" ||
       tool === "circulo" ||
@@ -136,6 +141,8 @@ export function AnaliseLabMarkTools({
   const insertDisabled = busy || (!applyAllPages && Boolean(pageSpecError));
   const showStroke =
     tool === "seta" || tool === "circulo" || tool === "livre";
+  const sangriaEdge =
+    edge === "all" ? "left" : (edge as AnaliseLabEdge);
 
   return (
     <div className="flex flex-col gap-2 text-sm">
@@ -180,6 +187,7 @@ export function AnaliseLabMarkTools({
           value={rotulo}
           onChange={(e) => onRotuloChange(e.target.value)}
           maxLength={120}
+          placeholder="Opcional"
           className="rounded border border-sagra-border px-2 py-1.5"
         />
       </label>
@@ -290,6 +298,41 @@ export function AnaliseLabMarkTools({
         </div>
       )}
 
+      {tool === "sangria" && (
+        <div className="space-y-2 rounded border border-sagra-border bg-neutral-50 p-2">
+          <label className="flex flex-col gap-1 text-xs text-neutral-600">
+            Borda
+            <select
+              value={sangriaEdge}
+              onChange={(e) => onEdgeChange(e.target.value as AnaliseLabEdge)}
+              className="rounded border border-sagra-border px-2 py-1.5"
+            >
+              {EDGE_OPTIONS_SANGRIA.map((e) => (
+                <option key={e} value={e}>
+                  {labelEdge(e)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-neutral-600">
+            Profundidade (mm)
+            <input
+              type="number"
+              min={0.5}
+              max={50}
+              step={0.5}
+              value={offsetMm}
+              onChange={(e) => onOffsetMmChange(Number(e.target.value) || 5)}
+              className="rounded border border-sagra-border px-2 py-1.5"
+            />
+          </label>
+          <p className="text-[11px] text-neutral-500">
+            Arraste na página ao longo da borda para marcar o trecho (fora do
+            papel: −{offsetMm || 5}→0 mm).
+          </p>
+        </div>
+      )}
+
       {tool === "grade" && (
         <div className="space-y-2 rounded border border-sagra-border bg-neutral-50 p-2">
           <label className="flex flex-col gap-1 text-xs text-neutral-600">
@@ -351,6 +394,7 @@ export function toolToTipo(tool: AnaliseLabTool): AnaliseLabMarkTipoOrNull {
 type AnaliseLabMarkTipoOrNull =
   | "offset_corte"
   | "faixa"
+  | "sangria"
   | "retangulo"
   | "ponto"
   | "medida"

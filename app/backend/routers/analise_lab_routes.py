@@ -193,6 +193,17 @@ class AnaliseLabItemUpdate(BaseModel):
     paginas: Optional[str] = Field(None, max_length=255)
     resolucao_obrigatoria: Optional[bool] = None
     ordem: Optional[int] = None
+    corrigido_sefoc: Optional[bool] = None
+    obs_correcao_sefoc: Optional[str] = None
+
+
+class AnaliseLabItemReplicar(BaseModel):
+    item_ids: list[int] = Field(min_length=1)
+    copiar_marcas: bool = False
+
+
+class AnaliseLabItemReordenar(BaseModel):
+    ordem: list[int] = Field(min_length=1)
 
 
 class AnaliseLabConcluir(BaseModel):
@@ -633,7 +644,7 @@ def create_item(ano: int, os_id: int, body: AnaliseLabItemCreate, request: Reque
     if not session:
         raise HTTPException(status_code=404, detail="Sessão do laboratório não encontrada.")
     try:
-        if body.id_problema:
+        if body.id_problema and body.html_snapshot is None:
             try:
                 manifest = _require_ready_manifest(ano, os_id, session)
             except HTTPException:
@@ -673,9 +684,10 @@ def create_item(ano: int, os_id: int, body: AnaliseLabItemCreate, request: Reque
             pagina=body.pagina,
             paginas=body.paginas,
             versao_label=body.versao_label or session.get("versaoLabel") or "",
-            id_problema_padrao=None,
+            id_problema_padrao=int(body.id_problema) if body.id_problema else None,
             obs=body.obs,
             ponto=_session_ponto(request),
+            resolucao_obrigatoria=False,
         )
         return {"ok": True, "items": [item], "needsConfirm": False}
     except ValueError as exc:
@@ -709,10 +721,51 @@ def patch_item(
             paginas=body.paginas,
             resolucao_obrigatoria=body.resolucao_obrigatoria,
             ordem=body.ordem,
+            corrigido_sefoc=body.corrigido_sefoc,
+            obs_correcao_sefoc=body.obs_correcao_sefoc,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"ok": True, "item": item}
+
+
+@router.post("/os/{ano}/{os_id}/analise-lab/itens/replicar")
+def replicar_itens(
+    ano: int,
+    os_id: int,
+    body: AnaliseLabItemReplicar,
+    request: Request,
+):
+    _require_analise(request)
+    session = lab.get_session(ano, os_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão do laboratório não encontrada.")
+    try:
+        items = lab_items.replicate_items(
+            session["id"],
+            body.item_ids,
+            versao_label=session.get("versaoLabel") or "",
+            copiar_marcas=body.copiar_marcas,
+            ponto=_session_ponto(request),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "items": items}
+
+
+@router.post("/os/{ano}/{os_id}/analise-lab/itens/reordenar")
+def reordenar_itens(
+    ano: int,
+    os_id: int,
+    body: AnaliseLabItemReordenar,
+    request: Request,
+):
+    _require_analise(request)
+    session = lab.get_session(ano, os_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão do laboratório não encontrada.")
+    items = lab_items.reorder_items(session["id"], body.ordem)
+    return {"ok": True, "itens": items}
 
 
 @router.delete("/os/{ano}/{os_id}/analise-lab/itens/{item_id}")

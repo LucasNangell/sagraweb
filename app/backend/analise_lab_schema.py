@@ -75,6 +75,8 @@ CREATE TABLE IF NOT EXISTS tabAnaliseLabItem (
     VersaoLabel VARCHAR(128) NOT NULL DEFAULT '',
     Ordem INT NOT NULL DEFAULT 0,
     ResolucaoObrigatoria TINYINT(1) NOT NULL DEFAULT 0,
+    CorrigidoSefoc TINYINT(1) NOT NULL DEFAULT 0,
+    ObsCorrecaoSefoc TEXT NULL,
     ItemAnaliseID INT NULL,
     PontoRegistro INT NULL,
     DataRegistro DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -150,6 +152,18 @@ def ensure_analise_lab_schema() -> None:
                 "tabAnaliseLabMarca",
                 "ItemID",
                 "ItemID INT NULL",
+            )
+            _ensure_column(
+                cursor,
+                "tabAnaliseLabItem",
+                "CorrigidoSefoc",
+                "CorrigidoSefoc TINYINT(1) NOT NULL DEFAULT 0",
+            )
+            _ensure_column(
+                cursor,
+                "tabAnaliseLabItem",
+                "ObsCorrecaoSefoc",
+                "ObsCorrecaoSefoc TEXT NULL",
             )
         logger.info("Schema Análise Lab garantido (Sessao/Marca/Item).")
     except Exception as exc:

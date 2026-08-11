@@ -66,6 +66,47 @@ export function findRowIndexForPage<T extends { page: number }>(
   return 0;
 }
 
+/**
+ * Página ativa no scroll da inspeção.
+ * - Linha = mais próxima do centro vertical.
+ * - Na mesma linha (vista dupla), mantém a página atual se ainda estiver nela
+ *   (clique na ímpar não é sobrescrito pelo par da esquerda).
+ * - Ao entrar numa linha nova, usa a página da esquerda.
+ */
+export function resolveActivePageFromScroll<T extends { page: number }>(args: {
+  rows: T[][];
+  rowElements: Map<number, HTMLElement>;
+  scrollTop: number;
+  viewportHeight: number;
+  currentPage?: number | null;
+}): number | null {
+  const { rows, rowElements, scrollTop, viewportHeight, currentPage } = args;
+  if (!rows.length) return null;
+  const mid = scrollTop + viewportHeight / 2;
+  let bestIdx = 0;
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (const [idx, el] of rowElements) {
+    if (idx >= rows.length) continue;
+    const top = el.offsetTop;
+    const bottom = top + el.offsetHeight;
+    const center = (top + bottom) / 2;
+    const dist = mid >= top && mid <= bottom ? 0 : Math.abs(center - mid);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestIdx = idx;
+    }
+  }
+  const row = rows[bestIdx];
+  if (!row?.length) return null;
+  if (
+    currentPage != null &&
+    row.some((p) => p.page === currentPage)
+  ) {
+    return currentPage;
+  }
+  return row[0]?.page ?? null;
+}
+
 export const INSPECTOR_VIEW_STORAGE_KEY = "analise-lab:inspector-view";
 
 export function loadInspectorViewMode(): InspectorViewMode {
@@ -84,4 +125,47 @@ export function saveInspectorViewMode(modo: InspectorViewMode): void {
   } catch {
     /* ignore */
   }
+}
+
+const ZOOM_MIN = 0.25;
+const ZOOM_MAX = 3;
+
+export function clampZoom(zoom: number): number {
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom));
+}
+
+/** Zoom via Ctrl+scroll: fator exponencial baseado em deltaY. */
+export function nextZoomFromWheel(
+  zoom: number,
+  deltaY: number,
+  ctrlKey: boolean,
+): number | null {
+  if (!ctrlKey) return null;
+  const factor = Math.exp(-deltaY * 0.0015);
+  return clampZoom(zoom * factor);
+}
+
+export function zoomStep(zoom: number, dir: 1 | -1): number {
+  const step = dir > 0 ? 1.1 : 1 / 1.1;
+  return clampZoom(zoom * step);
+}
+
+export function anchorScrollAfterZoom(args: {
+  scrollLeft: number;
+  scrollTop: number;
+  pointer: { x: number; y: number };
+  oldZoom: number;
+  newZoom: number;
+}): { scrollLeft: number; scrollTop: number } {
+  const { scrollLeft, scrollTop, pointer, oldZoom, newZoom } = args;
+  if (oldZoom <= 0 || newZoom <= 0 || oldZoom === newZoom) {
+    return { scrollLeft, scrollTop };
+  }
+  const ratio = newZoom / oldZoom;
+  const contentX = scrollLeft + pointer.x;
+  const contentY = scrollTop + pointer.y;
+  return {
+    scrollLeft: contentX * ratio - pointer.x,
+    scrollTop: contentY * ratio - pointer.y,
+  };
 }

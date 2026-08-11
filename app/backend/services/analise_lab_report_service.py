@@ -159,6 +159,11 @@ def mirror_items_to_analise(
     usuario: str = "",
 ) -> int:
     """Espelha itens do Lab em tabAnaliseItens; retorna id_analise."""
+    from routers import analise_routes as classic
+
+    classic._refresh_analise_item_versao_column_flag()
+    classic._refresh_analise_item_corrigido_column_flag()
+
     versao = (sessao.get("versaoLabel") or "").strip()
     id_analise = _ensure_analise_header(ano, os_id, versao, usuario)
     lab_items = items_svc.list_items(int(sessao["id"]))
@@ -166,14 +171,15 @@ def mirror_items_to_analise(
 
     for item in lab_items:
         mirrored_id = item.get("itemAnaliseId")
-        payload = (
-            int(id_analise),
-            item.get("idProblemaPadrao"),
-            item.get("componente") or "Arq. Único",
-            item.get("versaoLabel") or versao,
-            item.get("obs"),
-            item.get("htmlSnapshot") or "",
-        )
+        id_padrao = item.get("idProblemaPadrao")
+        componente = item.get("componente") or "Arq. Único"
+        versao_item = item.get("versaoLabel") or versao
+        obs = item.get("obs")
+        html = item.get("htmlSnapshot") or ""
+        reso = 1 if item.get("resolucaoObrigatoria") else 0
+        corrigido = 1 if item.get("corrigidoSefoc") else 0
+        obs_corr = item.get("obsCorrecaoSefoc") if corrigido else None
+
         if mirrored_id:
             exists = db.execute_query(
                 "SELECT ID FROM tabAnaliseItens WHERE ID=%s AND ID_Analise=%s",
@@ -185,27 +191,51 @@ def mirror_items_to_analise(
                         """
                         UPDATE tabAnaliseItens
                         SET ID_ProblemaPadrao=%s, Componente=%s, Versao=%s,
-                            Obs=%s, HTML_Snapshot=%s
+                            Obs=%s, HTML_Snapshot=%s,
+                            ResolucaoObrigatoria=%s,
+                            CorrigidoSefoc=%s, ObsCorrecaoSefoc=%s
                         WHERE ID=%s
                         """,
                         (
-                            payload[1],
-                            payload[2],
-                            payload[3],
-                            payload[4],
-                            payload[5],
+                            id_padrao,
+                            componente,
+                            versao_item,
+                            obs,
+                            html,
+                            reso,
+                            corrigido,
+                            obs_corr,
                             int(mirrored_id),
                         ),
                     )
                 except Exception:
-                    db.execute_query(
-                        """
-                        UPDATE tabAnaliseItens
-                        SET ID_ProblemaPadrao=%s, Componente=%s, Obs=%s, HTML_Snapshot=%s
-                        WHERE ID=%s
-                        """,
-                        (payload[1], payload[2], payload[4], payload[5], int(mirrored_id)),
-                    )
+                    try:
+                        db.execute_query(
+                            """
+                            UPDATE tabAnaliseItens
+                            SET ID_ProblemaPadrao=%s, Componente=%s, Versao=%s,
+                                Obs=%s, HTML_Snapshot=%s, ResolucaoObrigatoria=%s
+                            WHERE ID=%s
+                            """,
+                            (
+                                id_padrao,
+                                componente,
+                                versao_item,
+                                obs,
+                                html,
+                                reso,
+                                int(mirrored_id),
+                            ),
+                        )
+                    except Exception:
+                        db.execute_query(
+                            """
+                            UPDATE tabAnaliseItens
+                            SET ID_ProblemaPadrao=%s, Componente=%s, Obs=%s, HTML_Snapshot=%s
+                            WHERE ID=%s
+                            """,
+                            (id_padrao, componente, obs, html, int(mirrored_id)),
+                        )
                 keep_ids.add(int(mirrored_id))
                 continue
 
@@ -213,20 +243,50 @@ def mirror_items_to_analise(
             db.execute_query(
                 """
                 INSERT INTO tabAnaliseItens
-                    (ID_Analise, ID_ProblemaPadrao, Componente, Versao, Obs, HTML_Snapshot)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                    (ID_Analise, ID_ProblemaPadrao, Componente, Versao, Obs, HTML_Snapshot,
+                     ResolucaoObrigatoria, CorrigidoSefoc, ObsCorrecaoSefoc)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
-                payload,
+                (
+                    int(id_analise),
+                    id_padrao,
+                    componente,
+                    versao_item,
+                    obs,
+                    html,
+                    reso,
+                    corrigido,
+                    obs_corr,
+                ),
             )
         except Exception:
-            db.execute_query(
-                """
-                INSERT INTO tabAnaliseItens
-                    (ID_Analise, ID_ProblemaPadrao, Componente, Obs, HTML_Snapshot)
-                VALUES (%s, %s, %s, %s, %s)
-                """,
-                (payload[0], payload[1], payload[2], payload[4], payload[5]),
-            )
+            try:
+                db.execute_query(
+                    """
+                    INSERT INTO tabAnaliseItens
+                        (ID_Analise, ID_ProblemaPadrao, Componente, Versao, Obs, HTML_Snapshot,
+                         ResolucaoObrigatoria)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        int(id_analise),
+                        id_padrao,
+                        componente,
+                        versao_item,
+                        obs,
+                        html,
+                        reso,
+                    ),
+                )
+            except Exception:
+                db.execute_query(
+                    """
+                    INSERT INTO tabAnaliseItens
+                        (ID_Analise, ID_ProblemaPadrao, Componente, Obs, HTML_Snapshot)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (int(id_analise), id_padrao, componente, obs, html),
+                )
         last = db.execute_query(
             "SELECT MAX(ID) AS ID FROM tabAnaliseItens WHERE ID_Analise=%s",
             (id_analise,),

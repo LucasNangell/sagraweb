@@ -204,6 +204,7 @@ export function packBalloons(
     slotWidth: number;
     gutterRight?: number;
     balloonWidth?: number;
+    heightsByItemId?: Record<number, number>;
   },
 ): PackedBalloon[] {
   const {
@@ -214,6 +215,7 @@ export function packBalloons(
     slotWidth,
     gutterRight = 280,
     balloonWidth,
+    heightsByItemId,
   } = opts;
   const width = Math.max(
     180,
@@ -227,6 +229,7 @@ export function packBalloons(
   });
 
   const packed: PackedBalloon[] = [];
+  const usedHeights: number[] = [];
   let cursor = 8;
   for (const a of list) {
     const leaders: PackedBalloon["leaders"] = [];
@@ -263,12 +266,14 @@ export function packBalloons(
           ? fallbackRect.top + fallbackRect.height * 0.12
           : 0;
 
+    const h = heightsByItemId?.[a.itemId] ?? balloonHeight;
     const desired = Math.max(
       8,
-      Math.min(stageHeight - balloonHeight - 8, meanY - balloonHeight / 2),
+      Math.min(stageHeight - h - 8, meanY - h / 2),
     );
     const top = Math.max(cursor, desired);
-    cursor = top + balloonHeight + gap;
+    cursor = top + h + gap;
+    usedHeights.push(h);
     packed.push({
       ...a,
       side: "right",
@@ -279,5 +284,22 @@ export function packBalloons(
       leaders,
     });
   }
+
+  // Compact: se o stack extrapola o stage, sobe o conjunto preservando gaps.
+  if (packed.length > 0) {
+    const lastIdx = packed.length - 1;
+    const lastBottom = packed[lastIdx]!.topPx + usedHeights[lastIdx]!;
+    const overflow = lastBottom - (stageHeight - 8);
+    if (overflow > 0) {
+      const shift = Math.min(overflow, packed[0]!.topPx - 8);
+      if (shift > 0) {
+        for (const b of packed) {
+          b.topPx -= shift;
+          b.bubbleY -= shift;
+        }
+      }
+    }
+  }
+
   return packed;
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AnaliseLabItem, AnaliseLabMark } from "@/api/analiseLab";
 import type { ProvaWebPageMeta } from "@/api/provaWeb";
@@ -61,6 +61,10 @@ export function AnaliseLabBalloonLayer({
   pageRectsOverride,
 }: AnaliseLabBalloonLayerProps) {
   const [expanded, setExpanded] = useState(false);
+  const [heightsByItemId, setHeightsByItemId] = useState<
+    Record<number, number>
+  >({});
+  const observersRef = useRef<Map<number, ResizeObserver>>(new Map());
 
   const anchors = useMemo(() => {
     const all = buildPageBalloons({
@@ -142,14 +146,74 @@ export function AnaliseLabBalloonLayer({
         pageRects,
         slotWidth,
         gutterRight,
+        heightsByItemId,
       }),
-    [anchors, gutterRight, pageRects, slotWidth, stageHeight],
+    [anchors, gutterRight, heightsByItemId, pageRects, slotWidth, stageHeight],
   );
-
-  if (flipping || !packed.length) return null;
 
   const visible = expanded ? packed : packed.slice(0, MAX_VISIBLE);
   const overflow = Math.max(0, packed.length - MAX_VISIBLE);
+  const visibleIdsKey = visible.map((b) => b.itemId).join(",");
+
+  useEffect(() => {
+    const keep = new Set(
+      visibleIdsKey
+        ? visibleIdsKey.split(",").map((id) => Number(id))
+        : [],
+    );
+    setHeightsByItemId((prev) => {
+      let changed = false;
+      const next: Record<number, number> = {};
+      for (const [key, value] of Object.entries(prev)) {
+        const id = Number(key);
+        if (keep.has(id)) next[id] = value;
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+    for (const [id, observer] of observersRef.current) {
+      if (!keep.has(id)) {
+        observer.disconnect();
+        observersRef.current.delete(id);
+      }
+    }
+  }, [visibleIdsKey]);
+
+  useEffect(() => {
+    return () => {
+      for (const observer of observersRef.current.values()) {
+        observer.disconnect();
+      }
+      observersRef.current.clear();
+    };
+  }, []);
+
+  const setBalloonNodeRef = useCallback(
+    (itemId: number, el: HTMLDivElement | null) => {
+      const prev = observersRef.current.get(itemId);
+      if (prev) {
+        prev.disconnect();
+        observersRef.current.delete(itemId);
+      }
+      if (!el) return;
+
+      const recordHeight = () => {
+        const h = el.offsetHeight;
+        setHeightsByItemId((prevHeights) => {
+          if (prevHeights[itemId] === h) return prevHeights;
+          return { ...prevHeights, [itemId]: h };
+        });
+      };
+
+      const ro = new ResizeObserver(recordHeight);
+      ro.observe(el);
+      observersRef.current.set(itemId, ro);
+      recordHeight();
+    },
+    [],
+  );
+
+  if (flipping || !packed.length) return null;
 
   return (
     <div
@@ -190,6 +254,7 @@ export function AnaliseLabBalloonLayer({
         return (
           <AnaliseLabProblemBalloon
             key={`ball-${b.itemId}`}
+            ref={(el) => setBalloonNodeRef(b.itemId, el)}
             item={b.item}
             refNumber={b.refNumber}
             width={b.balloonWidth}

@@ -277,4 +277,46 @@ describe("analiseLabBalloons", () => {
       packed[0]!.topPx + 200 + 10,
     );
   });
+
+  it("packs using heightsByItemId without overlap", () => {
+    const gap = 10;
+    const heightsByItemId: Record<number, number> = {
+      1: 120,
+      2: 80,
+      3: 200,
+    };
+    const anchors: BalloonAnchor[] = [1, 2, 3].map((id) => ({
+      itemId: id,
+      page: 2,
+      refNumber: id,
+      hasMark: false,
+      markAnchors: [],
+      item: item({ id, pagina: 2 }),
+    }));
+    const packed = packBalloons(anchors, {
+      stageHeight: 800,
+      balloonHeight: 200,
+      gap,
+      slotWidth: 600,
+      gutterRight: 300,
+      heightsByItemId,
+      pageRects: {
+        2: {
+          left: 300,
+          top: 0,
+          width: 300,
+          height: 800,
+          widthMm: 210,
+          heightMm: 297,
+        },
+      },
+    });
+    expect(packed).toHaveLength(3);
+    for (let i = 0; i < packed.length - 1; i++) {
+      const h = heightsByItemId[packed[i]!.itemId]!;
+      expect(packed[i + 1]!.topPx).toBeGreaterThanOrEqual(
+        packed[i]!.topPx + h + gap,
+      );
+    }
+  });
 });

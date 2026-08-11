@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { useMemo } from "react";
+import { forwardRef, useMemo } from "react";
 
 import type { AnaliseLabItem } from "@/api/analiseLab";
 
@@ -17,17 +17,23 @@ interface AnaliseLabProblemBalloonProps {
   style?: React.CSSProperties;
 }
 
-export function AnaliseLabProblemBalloon({
-  item,
-  refNumber,
-  width = 280,
-  highlighted = false,
-  occurrences,
-  occurrenceIndex,
-  onOccurrenceChange,
-  onClose,
-  style,
-}: AnaliseLabProblemBalloonProps) {
+export const AnaliseLabProblemBalloon = forwardRef<
+  HTMLDivElement,
+  AnaliseLabProblemBalloonProps
+>(function AnaliseLabProblemBalloon(
+  {
+    item,
+    refNumber,
+    width = 280,
+    highlighted = false,
+    occurrences,
+    occurrenceIndex,
+    onOccurrenceChange,
+    onClose,
+    style,
+  },
+  ref,
+) {
   const total = occurrences.length;
   const page = occurrences[occurrenceIndex] ?? item.pagina;
   const bodyHtml = useMemo(
@@ -37,6 +43,7 @@ export function AnaliseLabProblemBalloon({
 
   return (
     <div
+      ref={ref}
       data-analise-lab-balloon
       className={
         highlighted
@@ -124,4 +131,4 @@ export function AnaliseLabProblemBalloon({
       </div>
     </div>
   );
-}
+});

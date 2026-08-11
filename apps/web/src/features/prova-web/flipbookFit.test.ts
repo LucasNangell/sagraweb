@@ -72,4 +72,20 @@ describe("flipbookFit", () => {
     expect(forSpread.width).toBeLessThanOrEqual(alone.width);
     expect(forSpread.height).toBeLessThanOrEqual(alone.height);
   });
+
+  it("bleedFraction reduz a página mantendo a proporção", () => {
+    const base = { pageW: 420, pageH: 595, availW: 700, availH: 500 };
+    const plain = computeFlipbookPageSize({ ...base, spread: true });
+    const bleed = computeFlipbookPageSize({
+      ...base,
+      spread: true,
+      bleedFraction: 0.05,
+    });
+    expect(bleed.width).toBeLessThan(plain.width);
+    expect(bleed.height).toBeLessThan(plain.height);
+    expect(bleed.width / bleed.height).toBeCloseTo(420 / 595, 2);
+    // Sobra espaço para a sangria de 5% em cada lado.
+    expect(bleed.width * 2 * 1.1).toBeLessThanOrEqual(1000);
+    expect(bleed.height * 1.1).toBeLessThanOrEqual(700);
+  });
 });

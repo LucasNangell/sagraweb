@@ -35,6 +35,7 @@ import {
 } from "./analiseLabFit";
 import {
   addGuideMm,
+  moveGuideMm,
   removeGuideMm,
   type InspectorViewPrefs,
 } from "./analiseLabViewPrefs";
@@ -56,6 +57,12 @@ interface AnaliseLabInspectorProps {
   markTools: AnaliseLabToolbarMarkProps;
   prefs: InspectorViewPrefs;
   onPrefsChange: (prefs: InspectorViewPrefs) => void;
+  pagePick?: {
+    label: string;
+    pages: number[];
+    onTogglePage: (page: number) => void;
+    onFinish: () => void;
+  } | null;
   onCreateGeometryMark: (args: {
     tipo:
       | "ponto"
@@ -99,6 +106,7 @@ export function AnaliseLabInspector({
   markTools,
   prefs,
   onPrefsChange,
+  pagePick = null,
   onCreateGeometryMark,
   onCreateFaixaDrag,
   onCreateSangriaDrag,
@@ -375,6 +383,13 @@ export function AnaliseLabInspector({
     [onPrefsChange, prefs],
   );
 
+  const handleMoveGuide = useCallback(
+    (axis: "x" | "y", fromMm: number, toMm: number) => {
+      onPrefsChange(moveGuideMm(prefs, axis, fromMm, toMm));
+    },
+    [onPrefsChange, prefs],
+  );
+
   if (!pages.length) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-neutral-500">
@@ -413,6 +428,25 @@ export function AnaliseLabInspector({
           setViewMode((m) => (m === "simples" ? "dupla" : "simples"))
         }
       />
+
+      {pagePick ? (
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-sky-200 bg-sky-50 px-3 py-1.5 text-xs text-sky-950">
+          <span>
+            {pagePick.label} — clique nas páginas para incluir ou remover.{" "}
+            <strong>
+              {pagePick.pages.length} selecionada
+              {pagePick.pages.length === 1 ? "" : "s"}
+            </strong>
+          </span>
+          <button
+            type="button"
+            className="rounded border border-sky-300 bg-white px-2 py-0.5 font-semibold"
+            onClick={pagePick.onFinish}
+          >
+            Concluir
+          </button>
+        </div>
+      ) : null}
 
       <div ref={scrollerRef} className="relative min-h-0 flex-1 overflow-auto p-4">
         <div className="mx-auto flex flex-col gap-8">
@@ -458,6 +492,11 @@ export function AnaliseLabInspector({
                     guides={prefs.guides}
                     guidesXMm={prefs.guidesXMm}
                     guidesYMm={prefs.guidesYMm}
+                    gridColor={prefs.gridColor}
+                    guideColor={prefs.guideColor}
+                    pagePickActive={Boolean(pagePick)}
+                    pagePicked={pagePick?.pages.includes(page.page) ?? false}
+                    onTogglePickPage={pagePick?.onTogglePage}
                     innerEdge={innerEdge}
                     tightActiveRing={paired}
                     interactive
@@ -465,6 +504,7 @@ export function AnaliseLabInspector({
                     onActivate={() => activatePage(page.page)}
                     onAddGuide={handleAddGuide}
                     onRemoveGuide={handleRemoveGuide}
+                    onMoveGuide={handleMoveGuide}
                     onCreateGeometryMark={onCreateGeometryMark}
                     onCreateFaixaDrag={onCreateFaixaDrag}
                     onCreateSangriaDrag={onCreateSangriaDrag}

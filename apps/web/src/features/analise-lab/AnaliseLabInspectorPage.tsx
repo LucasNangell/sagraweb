@@ -32,6 +32,13 @@ type TextDraft = {
   value: string;
 };
 
+type GuideDrag = {
+  axis: "x" | "y";
+  originMm: number;
+  currentMm: number;
+  outside: boolean;
+};
+
 interface AnaliseLabInspectorPageProps {
   page: ProvaWebPageMeta;
   zoom: number;
@@ -52,6 +59,11 @@ interface AnaliseLabInspectorPageProps {
   guides?: boolean;
   guidesXMm?: number[];
   guidesYMm?: number[];
+  gridColor?: string;
+  guideColor?: string;
+  pagePickActive?: boolean;
+  pagePicked?: boolean;
+  onTogglePickPage?: (page: number) => void;
   /** Lado colado ao par na vista dupla — zera margem de sangria nesse lado. */
   innerEdge?: "left" | "right";
   tightActiveRing?: boolean;
@@ -60,6 +72,7 @@ interface AnaliseLabInspectorPageProps {
   onActivate?: () => void;
   onAddGuide?: (axis: "x" | "y", mm: number) => void;
   onRemoveGuide?: (axis: "x" | "y", mm: number) => void;
+  onMoveGuide?: (axis: "x" | "y", fromMm: number, toMm: number) => void;
   onCreateGeometryMark: (args: {
     tipo:
       | "ponto"
@@ -105,6 +118,11 @@ export function AnaliseLabInspectorPage({
   guides = true,
   guidesXMm = [],
   guidesYMm = [],
+  gridColor = "#94a3b8",
+  guideColor = "#2563eb",
+  pagePickActive = false,
+  pagePicked = false,
+  onTogglePickPage,
   innerEdge,
   tightActiveRing = false,
   interactive,
@@ -112,6 +130,7 @@ export function AnaliseLabInspectorPage({
   onActivate,
   onAddGuide,
   onRemoveGuide,
+  onMoveGuide,
   onCreateGeometryMark,
   onCreateFaixaDrag,
   onCreateSangriaDrag,
@@ -120,6 +139,7 @@ export function AnaliseLabInspectorPage({
   const [draft, setDraft] = useState<{ xMm: number; yMm: number } | null>(null);
   const [hoverMm, setHoverMm] = useState<{ x: number; y: number } | null>(null);
   const [rulerDrag, setRulerDrag] = useState<RulerDrag | null>(null);
+  const [guideDrag, setGuideDrag] = useState<GuideDrag | null>(null);
   const [textDraft, setTextDraft] = useState<TextDraft | null>(null);
   const [freePoints, setFreePoints] = useState<number[][] | null>(null);
 
@@ -136,24 +156,32 @@ export function AnaliseLabInspectorPage({
 
   const topFaixaActive =
     interactive &&
+    !pagePickActive &&
     tool === "faixa" &&
     (edge === "left" || edge === "right" || edge === "all");
   const leftFaixaActive =
     interactive &&
+    !pagePickActive &&
     showLeftRuler &&
     tool === "faixa" &&
     (edge === "top" || edge === "bottom" || edge === "all");
   const topGuideActive =
-    interactive && showRulers && tool !== "faixa" && Boolean(onAddGuide);
+    interactive &&
+    !pagePickActive &&
+    showRulers &&
+    tool !== "faixa" &&
+    Boolean(onAddGuide);
   const leftGuideActive =
     interactive &&
+    !pagePickActive &&
     showRulers &&
     showLeftRuler &&
     tool !== "faixa" &&
     Boolean(onAddGuide);
   const topRulerActive = topFaixaActive || topGuideActive;
   const leftRulerActive = leftFaixaActive || leftGuideActive;
-  const guidesSelectable = interactive && tool === "select" && guides;
+  const guidesSelectable =
+    interactive && !pagePickActive && tool === "select" && guides;
 
   const toMm = (clientX: number, clientY: number) => {
     const el = imgRef.current;
@@ -177,12 +205,17 @@ export function AnaliseLabInspectorPage({
   };
 
   const handleClick = (e: React.MouseEvent) => {
-    if (!interactive || rulerDrag || freePoints) return;
+    if (!interactive || rulerDrag || guideDrag || freePoints) return;
+    if (pagePickActive) {
+      onTogglePickPage?.(page.page);
+      return;
+    }
     if (
       tool === "select" ||
       tool === "offset_corte" ||
       tool === "faixa" ||
-      tool === "livre"
+      tool === "livre" ||
+      (tool === "sangria" && edge === "all")
     ) {
       return;
     }
@@ -357,8 +390,54 @@ export function AnaliseLabInspectorPage({
     onCreateFaixaDrag({ ...converted, pagina: page.page });
   };
 
+  const startGuideDrag = (
+    e: React.PointerEvent,
+    axis: "x" | "y",
+    originMm: number,
+  ) => {
+    if (!guidesSelectable || !onMoveGuide) return;
+    e.preventDefault();
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    setGuideDrag({ axis, originMm, currentMm: originMm, outside: false });
+  };
+
+  const moveGuideDrag = (e: React.PointerEvent) => {
+    if (!guideDrag) return;
+    const el = imgRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const raw =
+      guideDrag.axis === "x"
+        ? ((e.clientX - rect.left) / Math.max(1, rect.width)) * widthMm
+        : ((e.clientY - rect.top) / Math.max(1, rect.height)) * heightMm;
+    const limit = guideDrag.axis === "x" ? widthMm : heightMm;
+    setGuideDrag({
+      ...guideDrag,
+      currentMm: Math.max(0, Math.min(limit, raw)),
+      outside: raw < -2 || raw > limit + 2,
+    });
+  };
+
+  const endGuideDrag = (e: React.PointerEvent) => {
+    if (!guideDrag) return;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    const drag = guideDrag;
+    setGuideDrag(null);
+    if (drag.outside) {
+      onRemoveGuide?.(drag.axis, drag.originMm);
+      return;
+    }
+    if (Math.abs(drag.currentMm - drag.originMm) < 0.05) return;
+    onMoveGuide?.(drag.axis, drag.originMm, drag.currentMm);
+  };
+
   const startFree = (e: React.PointerEvent) => {
-    if (!interactive || tool !== "livre") return;
+    if (!interactive || pagePickActive || tool !== "livre") return;
     e.preventDefault();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     const pt = toMm(e.clientX, e.clientY);
@@ -430,6 +509,7 @@ export function AnaliseLabInspectorPage({
   const showGuidesOverlay =
     (guides && (guidesXMm.length > 0 || guidesYMm.length > 0)) ||
     rulerDrag?.mode === "guide";
+  const guideHitPointer = guidesSelectable && Boolean(onMoveGuide);
 
   const twoClickPreview =
     draft &&
@@ -455,15 +535,21 @@ export function AnaliseLabInspectorPage({
         })()
       : null;
 
+  const ringClass = pagePickActive
+    ? pagePicked
+      ? "ring-2 ring-sky-500"
+      : "ring-1 ring-dashed ring-sky-300"
+    : active
+      ? tightActiveRing
+        ? "ring-2 ring-primary-green"
+        : "ring-2 ring-primary-green ring-offset-2"
+      : "";
+
   return (
     <div
-      className={
-        active
-          ? tightActiveRing
-            ? "relative bg-white shadow ring-2 ring-primary-green"
-            : "relative bg-white shadow ring-2 ring-primary-green ring-offset-2"
-          : "relative bg-white shadow"
-      }
+      className={`relative bg-white shadow ${ringClass}${
+        pagePickActive ? " cursor-pointer" : ""
+      }`}
       style={{
         width: displayW,
         height: displayH,
@@ -483,6 +569,17 @@ export function AnaliseLabInspectorPage({
       onPointerMove={tool === "livre" ? moveFree : undefined}
       onPointerUp={tool === "livre" ? endFree : undefined}
     >
+      {pagePickActive ? (
+        <span
+          className={
+            pagePicked
+              ? "pointer-events-none absolute right-1 top-1 z-20 rounded bg-sky-600 px-1.5 py-0.5 text-[10px] font-semibold text-white"
+              : "pointer-events-none absolute right-1 top-1 z-20 rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 ring-1 ring-sky-300"
+          }
+        >
+          {pagePicked ? `Pág. ${page.page} ✓` : `Pág. ${page.page}`}
+        </span>
+      ) : null}
       {showRulers && showLeftRuler ? (
         <div
           className={
@@ -580,7 +677,7 @@ export function AnaliseLabInspectorPage({
               y1={0}
               x2={(x / widthMm) * displayW}
               y2={displayH}
-              stroke="#94a3b8"
+              stroke={gridColor}
               strokeWidth={0.5}
               opacity={0.55}
               pointerEvents="none"
@@ -593,7 +690,7 @@ export function AnaliseLabInspectorPage({
               y1={(y / heightMm) * displayH}
               x2={displayW}
               y2={(y / heightMm) * displayH}
-              stroke="#94a3b8"
+              stroke={gridColor}
               strokeWidth={0.5}
               opacity={0.55}
               pointerEvents="none"
@@ -601,20 +698,26 @@ export function AnaliseLabInspectorPage({
           ))}
           {guides
             ? guidesXMm.map((x) => {
-                const xPx = (x / widthMm) * displayW;
+                const dragging =
+                  guideDrag?.axis === "x" && guideDrag.originMm === x;
+                const valueMm = dragging ? guideDrag.currentMm : x;
+                const xPx = (valueMm / widthMm) * displayW;
                 return (
                   <g key={`gux-${page.page}-${x}`}>
-                    {guidesSelectable ? (
+                    {guideHitPointer ? (
                       <line
                         x1={xPx}
                         y1={0}
                         x2={xPx}
                         y2={displayH}
-                        stroke="#2563eb"
+                        stroke={guideColor}
                         strokeWidth={8}
                         strokeOpacity={0.01}
-                        className="cursor-pointer"
-                        onClick={(e) => {
+                        className="cursor-col-resize"
+                        onPointerDown={(e) => startGuideDrag(e, "x", x)}
+                        onPointerMove={moveGuideDrag}
+                        onPointerUp={endGuideDrag}
+                        onDoubleClick={(e) => {
                           e.stopPropagation();
                           onRemoveGuide?.("x", x);
                         }}
@@ -625,9 +728,10 @@ export function AnaliseLabInspectorPage({
                       y1={0}
                       x2={xPx}
                       y2={displayH}
-                      stroke="#2563eb"
-                      strokeWidth={1}
+                      stroke={guideColor}
+                      strokeWidth={dragging ? 1.5 : 1}
                       strokeDasharray="5 4"
+                      strokeOpacity={dragging && guideDrag.outside ? 0.35 : 1}
                       pointerEvents="none"
                     />
                   </g>
@@ -636,20 +740,26 @@ export function AnaliseLabInspectorPage({
             : null}
           {guides
             ? guidesYMm.map((y) => {
-                const yPx = (y / heightMm) * displayH;
+                const dragging =
+                  guideDrag?.axis === "y" && guideDrag.originMm === y;
+                const valueMm = dragging ? guideDrag.currentMm : y;
+                const yPx = (valueMm / heightMm) * displayH;
                 return (
                   <g key={`guy-${page.page}-${y}`}>
-                    {guidesSelectable ? (
+                    {guideHitPointer ? (
                       <line
                         x1={0}
                         y1={yPx}
                         x2={displayW}
                         y2={yPx}
-                        stroke="#2563eb"
+                        stroke={guideColor}
                         strokeWidth={8}
                         strokeOpacity={0.01}
-                        className="cursor-pointer"
-                        onClick={(e) => {
+                        className="cursor-row-resize"
+                        onPointerDown={(e) => startGuideDrag(e, "y", y)}
+                        onPointerMove={moveGuideDrag}
+                        onPointerUp={endGuideDrag}
+                        onDoubleClick={(e) => {
                           e.stopPropagation();
                           onRemoveGuide?.("y", y);
                         }}
@@ -660,9 +770,10 @@ export function AnaliseLabInspectorPage({
                       y1={yPx}
                       x2={displayW}
                       y2={yPx}
-                      stroke="#2563eb"
-                      strokeWidth={1}
+                      stroke={guideColor}
+                      strokeWidth={dragging ? 1.5 : 1}
                       strokeDasharray="5 4"
+                      strokeOpacity={dragging && guideDrag.outside ? 0.35 : 1}
                       pointerEvents="none"
                     />
                   </g>
@@ -676,7 +787,7 @@ export function AnaliseLabInspectorPage({
                 y1={0}
                 x2={(rulerDrag.currentMm / widthMm) * displayW}
                 y2={displayH}
-                stroke="#2563eb"
+                stroke={guideColor}
                 strokeWidth={1.5}
                 strokeDasharray="4 3"
                 pointerEvents="none"
@@ -687,7 +798,7 @@ export function AnaliseLabInspectorPage({
                 y1={(rulerDrag.currentMm / heightMm) * displayH}
                 x2={displayW}
                 y2={(rulerDrag.currentMm / heightMm) * displayH}
-                stroke="#2563eb"
+                stroke={guideColor}
                 strokeWidth={1.5}
                 strokeDasharray="4 3"
                 pointerEvents="none"

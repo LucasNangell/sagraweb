@@ -1,4 +1,4 @@
-import { Link2, Unlink } from "lucide-react";
+import { Link2, MousePointerClick, Unlink } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import type {
@@ -41,6 +41,11 @@ interface AnaliseLabItemPanelProps {
   onStopLinking?: () => void;
   onUnlinkMark?: (markId: number) => void;
   onDeleteMark?: (markId: number) => void;
+  /** Spec de páginas controlado pelo pai (modo de seleção por clique). */
+  pageSpecOverride?: string | null;
+  onPageSpecChange?: (spec: string) => void;
+  pagePickActive?: boolean;
+  onTogglePagePick?: (currentSpec: string) => void;
 }
 
 export function AnaliseLabItemPanel({
@@ -56,6 +61,10 @@ export function AnaliseLabItemPanel({
   onStopLinking,
   onUnlinkMark,
   onDeleteMark,
+  pageSpecOverride = null,
+  onPageSpecChange,
+  pagePickActive = false,
+  onTogglePagePick,
 }: AnaliseLabItemPanelProps) {
   const isRegister = mode === "register";
   const [titulo, setTitulo] = useState(item.titulo);
@@ -64,9 +73,14 @@ export function AnaliseLabItemPanel({
   const [escopo, setEscopo] = useState<AnaliseLabItemEscopo>(
     (item.escopo as AnaliseLabItemEscopo) || "pagina",
   );
-  const [pageSpec, setPageSpec] = useState(
+  const [localPageSpec, setLocalPageSpec] = useState(
     item.paginas || (item.pagina > 0 ? String(item.pagina) : ""),
   );
+  const pageSpec = pageSpecOverride ?? localPageSpec;
+  const setPageSpec = (value: string) => {
+    setLocalPageSpec(value);
+    onPageSpecChange?.(value);
+  };
   const [componente, setComponente] = useState(item.componente);
   const [resolucaoObrigatoria, setResolucaoObrigatoria] = useState(
     Boolean(item.resolucaoObrigatoria),
@@ -83,7 +97,9 @@ export function AnaliseLabItemPanel({
     setHtml(item.htmlSnapshot || "");
     setObs(item.obs || "");
     setEscopo((item.escopo as AnaliseLabItemEscopo) || "pagina");
-    setPageSpec(item.paginas || (item.pagina > 0 ? String(item.pagina) : ""));
+    setLocalPageSpec(
+      item.paginas || (item.pagina > 0 ? String(item.pagina) : ""),
+    );
     setComponente(item.componente);
     setResolucaoObrigatoria(Boolean(item.resolucaoObrigatoria));
     setCorrigidoSefoc(Boolean(item.corrigidoSefoc));
@@ -99,6 +115,26 @@ export function AnaliseLabItemPanel({
     () => (item.id == null ? [] : marks.filter((m) => m.itemId === item.id)),
     [item.id, marks],
   );
+
+  const pagePickButton = onTogglePagePick ? (
+    <button
+      type="button"
+      title="Selecionar páginas clicando no documento"
+      aria-label="Selecionar páginas clicando no documento"
+      aria-pressed={pagePickActive}
+      onClick={() => {
+        if (!pagePickActive && escopo !== "paginas") setEscopo("paginas");
+        onTogglePagePick(pageSpec);
+      }}
+      className={
+        pagePickActive
+          ? "inline-flex size-8 shrink-0 items-center justify-center rounded border border-sky-500 bg-sky-50 text-sky-700"
+          : "inline-flex size-8 shrink-0 items-center justify-center rounded border border-sagra-border bg-white text-neutral-600 hover:bg-neutral-50"
+      }
+    >
+      <MousePointerClick className="size-4" aria-hidden />
+    </button>
+  ) : null;
 
   return (
     <aside className="flex w-[544px] max-w-[45vw] shrink-0 flex-col gap-2 overflow-y-auto border-l border-sagra-border bg-white p-3 text-sm">
@@ -147,31 +183,42 @@ export function AnaliseLabItemPanel({
       </label>
 
       {escopo === "paginas" ? (
-        <label className="flex flex-col gap-1 text-xs text-neutral-600">
-          Páginas
-          <input
-            value={pageSpec}
-            onChange={(e) => setPageSpec(e.target.value)}
-            placeholder="1-15,20,23"
-            className="rounded border border-sagra-border px-2 py-1.5"
-          />
+        <div className="flex flex-col gap-1 text-xs text-neutral-600">
+          <span>Páginas</span>
+          <div className="flex items-center gap-1">
+            <input
+              value={pageSpec}
+              onChange={(e) => setPageSpec(e.target.value)}
+              placeholder="1-15,20,23"
+              className="min-w-0 flex-1 rounded border border-sagra-border px-2 py-1.5"
+            />
+            {pagePickButton}
+          </div>
+          {pagePickActive ? (
+            <span className="text-[11px] text-sky-700">
+              Clique nas páginas do documento para incluir ou remover.
+            </span>
+          ) : null}
           {pageError ? (
             <span className="text-[11px] text-sagra-danger">{pageError}</span>
           ) : null}
-        </label>
+        </div>
       ) : null}
 
       {escopo === "pagina" ? (
-        <label className="flex flex-col gap-1 text-xs text-neutral-600">
-          Página
-          <input
-            type="number"
-            min={1}
-            value={Number(pageSpec) || item.pagina || 1}
-            onChange={(e) => setPageSpec(String(Number(e.target.value) || 1))}
-            className="rounded border border-sagra-border px-2 py-1.5"
-          />
-        </label>
+        <div className="flex flex-col gap-1 text-xs text-neutral-600">
+          <span>Página</span>
+          <div className="flex items-center gap-1">
+            <input
+              type="number"
+              min={1}
+              value={Number(pageSpec) || item.pagina || 1}
+              onChange={(e) => setPageSpec(String(Number(e.target.value) || 1))}
+              className="min-w-0 flex-1 rounded border border-sagra-border px-2 py-1.5"
+            />
+            {pagePickButton}
+          </div>
+        </div>
       ) : null}
 
       <div className="max-h-[60vh] overflow-auto rounded border border-sagra-border">

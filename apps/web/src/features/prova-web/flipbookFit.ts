@@ -62,6 +62,8 @@ export function mergeLoadedWindow(
 /**
  * Tamanho de **uma** página para caber no estágio (contain).
  * `spread`: duas páginas lado a lado (largura útil = 2× pageW).
+ * `bleedFraction`: reserva proporcional em cada lado para conteúdo desenhado
+ * fora do papel (sangria), reduzindo a página sem alterar sua proporção.
  */
 export function computeFlipbookPageSize(args: {
   pageW: number;
@@ -69,13 +71,16 @@ export function computeFlipbookPageSize(args: {
   availW: number;
   availH: number;
   spread: boolean;
+  bleedFraction?: number;
 }): { width: number; height: number } {
   const pageW = Math.max(1, args.pageW);
   const pageH = Math.max(1, args.pageH);
   const availW = Math.max(1, args.availW);
   const availH = Math.max(1, args.availH);
-  const needW = args.spread ? pageW * 2 : pageW;
-  const needH = pageH;
+  const bleed = Math.min(0.25, Math.max(0, args.bleedFraction || 0));
+  const inflate = 1 + bleed * 2;
+  const needW = (args.spread ? pageW * 2 : pageW) * inflate;
+  const needH = pageH * inflate;
   const scale = Math.min(1, availW / needW, availH / needH);
   return {
     width: Math.max(120, Math.round(pageW * scale)),

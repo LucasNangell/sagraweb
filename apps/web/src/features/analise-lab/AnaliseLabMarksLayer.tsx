@@ -5,6 +5,7 @@ import {
   distanceMm,
   formatMm,
   resolveMarkGeometry,
+  sangriaAllRects,
   sangriaSvgRect,
 } from "./analiseLabGeometry";
 import { isMarkVisibleOnPage } from "./analiseLabPageSpec";
@@ -35,6 +36,8 @@ interface AnaliseLabMarksLayerProps {
   displayHeight: number;
   includeMedidas?: boolean;
   selectedMarkId?: number | null;
+  /** Área extra fora do papel (mm) para desenhar sangria sem corte. */
+  bleedMm?: number;
 }
 
 function drawOffset(
@@ -185,9 +188,12 @@ export function AnaliseLabMarksLayer({
   displayHeight,
   includeMedidas = true,
   selectedMarkId = null,
+  bleedMm = 0,
 }: AnaliseLabMarksLayerProps) {
   const sx = pageWidthMm > 0 ? displayWidth / pageWidthMm : 1;
   const sy = pageHeightMm > 0 ? displayHeight / pageHeightMm : 1;
+  const bleedX = Math.max(0, bleedMm) * sx;
+  const bleedY = Math.max(0, bleedMm) * sy;
 
   const visible = marks.filter((m) => {
     if (!isMarkVisibleOnPage(m, pageNumber)) return false;
@@ -199,9 +205,17 @@ export function AnaliseLabMarksLayer({
 
   return (
     <svg
-      className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
-      style={{ overflow: "visible" }}
-      viewBox={`0 0 ${displayWidth} ${displayHeight}`}
+      className="pointer-events-none absolute overflow-visible"
+      style={{
+        overflow: "visible",
+        left: -bleedX,
+        top: -bleedY,
+        width: displayWidth + bleedX * 2,
+        height: displayHeight + bleedY * 2,
+      }}
+      viewBox={`${-bleedX} ${-bleedY} ${displayWidth + bleedX * 2} ${
+        displayHeight + bleedY * 2
+      }`}
       aria-hidden
     >
       {visible.map((mark) => {
@@ -261,6 +275,44 @@ export function AnaliseLabMarksLayer({
           const to = Number(g.toMm) || 0;
           const alongFrom = Number(g.alongFromMm) || 0;
           const alongTo = Number(g.alongToMm) || 0;
+          if (edge === "all") {
+            const rects = sangriaAllRects(
+              Math.abs(from),
+              pageWidthMm,
+              pageHeightMm,
+              displayWidth,
+              displayHeight,
+              sx,
+              sy,
+            );
+            return (
+              <g key={mark.id}>
+                {rects.map((rect) => (
+                  <rect
+                    key={`${mark.id}-${rect.edge}`}
+                    x={rect.x}
+                    y={rect.y}
+                    width={rect.width}
+                    height={rect.height}
+                    fill={color}
+                    fillOpacity={selected ? 0.32 : 0.22}
+                    stroke={color}
+                    strokeWidth={selected ? 2 : 1}
+                  />
+                ))}
+                {mark.rotulo ? (
+                  <text
+                    x={2}
+                    y={-Math.abs(from) * sy - 3}
+                    fill={color}
+                    fontSize={11}
+                  >
+                    {mark.rotulo}
+                  </text>
+                ) : null}
+              </g>
+            );
+          }
           const r = sangriaSvgRect(
             edge,
             from,

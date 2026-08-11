@@ -50,6 +50,7 @@ export const EDGE_OPTIONS_SANGRIA: AnaliseLabEdge[] = [
   "right",
   "bottom",
   "left",
+  "all",
 ];
 
 export const COLOR_OPTIONS: AnaliseLabMarkCor[] = [

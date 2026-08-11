@@ -684,21 +684,9 @@ export function AnalisePage({ search }: AnalisePageProps) {
       setReadOnlyMode(!canEdit);
       setReadOnlyReason(blockedReason);
 
+      // Recebido só via ramo canPromptStartAnalise (confirm). Não registrar
+      // andamento ao abrir em visualização ("Ver problemas" / "Revisar").
       if (!DISABLE_ENTRY_SIDE_EFFECTS) {
-        if (
-          isSefocUser &&
-          last.situacao !== "Problemas Técnicos" &&
-          last.situacao !== "Recebido" &&
-          !canPromptStartAnalise(last.situacao)
-        ) {
-          await startAnalise({
-            os_id: osId,
-            ano,
-            ponto,
-            usuario: ponto,
-          });
-        }
-
         const ensured = await ensureAnalise({
           nro_os: osId,
           ano_os: ano,

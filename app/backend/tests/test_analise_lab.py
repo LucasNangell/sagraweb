@@ -134,12 +134,31 @@ def test_validate_geometry_sangria() -> None:
         lab._validate_geometry(
             "sangria",
             {
-                "edge": "all",
+                "edge": "diagonal",
                 "fromMm": -5,
                 "toMm": 0,
                 "alongFromMm": 0,
                 "alongToMm": 10,
             },
+        )
+
+
+def test_validate_geometry_sangria_all_edges() -> None:
+    g = lab._validate_geometry(
+        "sangria",
+        {"edge": "all", "fromMm": -5, "toMm": 0},
+    )
+    assert g == {
+        "edge": "all",
+        "fromMm": -5.0,
+        "toMm": 0.0,
+        "alongFromMm": 0.0,
+        "alongToMm": 0.0,
+    }
+    with pytest.raises(ValueError, match="toMm"):
+        lab._validate_geometry(
+            "sangria",
+            {"edge": "all", "fromMm": -5, "toMm": 2},
         )
 
 

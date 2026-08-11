@@ -57,7 +57,7 @@ MARK_COLORS = frozenset(
     {"red", "orange", "yellow", "green", "blue", "purple", "black", "white"}
 )
 MARK_EDGES = frozenset({"top", "right", "bottom", "left", "all"})
-MARK_EDGES_SANGRIA = frozenset({"top", "right", "bottom", "left"})
+MARK_EDGES_SANGRIA = frozenset({"top", "right", "bottom", "left", "all"})
 
 _SELECT_SESSAO = """
     ID, NroProtocolo, AnoProtocolo, VersaoLabel, Modo,
@@ -565,6 +565,15 @@ def _validate_geometry(tipo: str, geom: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("Sangria inválida (profundidade).")
         if abs(to_mm) > 1e-9:
             raise ValueError("Sangria inválida (toMm deve ser 0).")
+        if edge == "all":
+            # Moldura completa: o trecho é a página inteira em cada borda.
+            return {
+                "edge": edge,
+                "fromMm": round(from_mm, 3),
+                "toMm": 0.0,
+                "alongFromMm": 0.0,
+                "alongToMm": 0.0,
+            }
         if along_to <= along_from:
             raise ValueError("Sangria inválida (trecho).")
         for v in (along_from, along_to):

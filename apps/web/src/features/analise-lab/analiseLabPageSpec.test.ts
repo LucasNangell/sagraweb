@@ -20,6 +20,26 @@ describe("analiseLabPageSpec", () => {
     expect(formatPageSpec(parsePageSpec("1-5,3-8"))).toBe("1-8");
   });
 
+  it("alterna páginas do modo de seleção por clique", () => {
+    const toggle = (spec: string, page: number) => {
+      const pages = spec ? parsePageSpec(spec) : [];
+      const next = pages.includes(page)
+        ? pages.filter((p) => p !== page)
+        : [...pages, page];
+      return formatPageSpec(next);
+    };
+    let spec = toggle("", 3);
+    expect(spec).toBe("3");
+    spec = toggle(spec, 1);
+    spec = toggle(spec, 2);
+    expect(spec).toBe("1-3");
+    spec = toggle(spec, 2);
+    expect(spec).toBe("1,3");
+    spec = toggle(spec, 1);
+    spec = toggle(spec, 3);
+    expect(spec).toBe("");
+  });
+
   it("rejects invalid specs", () => {
     expect(validatePageSpec("0")).toMatch(/>= 1/);
     expect(validatePageSpec("5-1")).toMatch(/inválido/i);

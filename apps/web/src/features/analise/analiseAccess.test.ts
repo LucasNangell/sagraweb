@@ -97,6 +97,33 @@ describe("analiseAccess", () => {
     ).toBeNull();
   });
 
+  it("Ver problemas when PT exists but current situacao does not allow edit", () => {
+    // Typical "Ver problemas": history has Problemas Técnicos, current status
+    // is neither editable nor PT — bootstrap must not call startAnalise.
+    const canEdit = canEditAnalisePreview({
+      userSetor: "SEFOC",
+      situacao: "Em aprovação",
+      lastPonto: "10",
+      currentPonto: "10",
+    });
+    expect(canEdit).toBe(false);
+    expect(canPromptStartAnalise("Em aprovação")).toBe(false);
+    expect(
+      resolveAnaliseButtonMode({
+        canEdit,
+        hasProblemasTecnicos: true,
+        currentSituacao: "Em aprovação",
+      }),
+    ).toBe("ver");
+    expect(
+      resolveAnaliseButtonMode({
+        canEdit: true,
+        hasProblemasTecnicos: false,
+        currentSituacao: "Em Execução",
+      }),
+    ).toBe("fazer");
+  });
+
   it("analiseButtonCaption", () => {
     expect(analiseButtonCaption("fazer")).toBe("Fazer análise");
     expect(analiseButtonCaption("revisar")).toBe("Revisar análise");

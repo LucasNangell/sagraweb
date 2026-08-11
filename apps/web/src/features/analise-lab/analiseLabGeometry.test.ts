@@ -11,11 +11,29 @@ import {
   ptToMm,
   pxPerMm,
   resolveMarkGeometry,
+  sangriaAllRects,
   sangriaFromDrag,
   shouldMirrorMark,
 } from "./analiseLabGeometry";
 
 describe("analiseLabGeometry", () => {
+  it("sangriaAllRects forma moldura fechada nos cantos", () => {
+    // 100 × 200 mm renderizados 1 px/mm, sangria de 5 mm.
+    const rects = sangriaAllRects(5, 100, 200, 100, 200, 1, 1);
+    expect(rects.map((r) => r.edge)).toEqual([
+      "top",
+      "right",
+      "bottom",
+      "left",
+    ]);
+    const [top, right, bottom, left] = rects;
+    expect(top).toMatchObject({ x: -5, y: -5, width: 110, height: 5 });
+    expect(right).toMatchObject({ x: 100, y: -5, width: 5, height: 210 });
+    expect(bottom).toMatchObject({ x: -5, y: 200, width: 110, height: 5 });
+    expect(left).toMatchObject({ x: -5, y: -5, width: 5, height: 210 });
+    expect(sangriaAllRects(0, 100, 200, 100, 200, 1, 1)).toEqual([]);
+  });
+
   it("converts pt to mm", () => {
     expect(ptToMm(72)).toBeCloseTo(25.4, 5);
   });

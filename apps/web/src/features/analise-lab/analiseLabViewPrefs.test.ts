@@ -5,6 +5,7 @@ import {
   DEFAULT_VIEW_PREFS,
   gridLinesMm,
   loadViewPrefs,
+  moveGuideMm,
   normalizeViewPrefs,
   removeGuideMm,
   saveViewPrefs,
@@ -53,10 +54,24 @@ describe("analiseLabViewPrefs", () => {
       rulers: true,
       grid: true,
       gridStepMm: 5,
+      gridColor: DEFAULT_VIEW_PREFS.gridColor,
       guides: true,
+      guideColor: DEFAULT_VIEW_PREFS.guideColor,
       guidesXMm: [10, 20.6],
       guidesYMm: [5],
     });
+  });
+
+  it("normaliza cores de grade e guia", () => {
+    expect(normalizeViewPrefs({ gridColor: "#FF00AA" }).gridColor).toBe(
+      "#ff00aa",
+    );
+    expect(normalizeViewPrefs({ guideColor: "vermelho" }).guideColor).toBe(
+      DEFAULT_VIEW_PREFS.guideColor,
+    );
+    expect(normalizeViewPrefs({ gridColor: "#abc" }).gridColor).toBe(
+      DEFAULT_VIEW_PREFS.gridColor,
+    );
   });
 
   it("builds grid lines excluding edges", () => {
@@ -72,5 +87,14 @@ describe("analiseLabViewPrefs", () => {
     expect(prefs.guidesXMm).toEqual([12.3]);
     prefs = removeGuideMm(prefs, "x", 12.3);
     expect(prefs.guidesXMm).toEqual([]);
+  });
+
+  it("move uma guia da origem para o destino", () => {
+    let prefs = normalizeViewPrefs({ guidesXMm: [10, 50], guidesYMm: [30] });
+    prefs = moveGuideMm(prefs, "x", 10, 42.5);
+    expect(prefs.guidesXMm).toEqual([42.5, 50]);
+    expect(prefs.guidesYMm).toEqual([30]);
+    prefs = moveGuideMm(prefs, "y", 30, Number.NaN);
+    expect(prefs.guidesYMm).toEqual([30]);
   });
 });

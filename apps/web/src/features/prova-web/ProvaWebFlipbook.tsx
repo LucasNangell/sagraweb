@@ -71,6 +71,11 @@ interface ProvaWebFlipbookProps {
   }) => ReactNode;
   /** Reserva faixa à direita do palco (ex.: balões do Análise Lab). */
   stageGutterRight?: number;
+  /**
+   * Reserva proporcional em volta da página para overlays fora do papel
+   * (sangria): reduz o preview e libera o overflow da página.
+   */
+  pageBleedFraction?: number;
   /** Navega para a página lógica (manifest.page) quando o nonce muda. */
   pageTarget?: { page: number; nonce: number } | null;
   /** Página lógica visível (esquerda do spread) após virar ou aplicar alvo. */
@@ -85,6 +90,7 @@ export function ProvaWebFlipbook({
   renderPageOverlay,
   renderStageOverlay,
   stageGutterRight = 0,
+  pageBleedFraction = 0,
   pageTarget,
   onPageChange,
 }: ProvaWebFlipbookProps) {
@@ -108,6 +114,7 @@ export function ProvaWebFlipbook({
       renderPageOverlay={renderPageOverlay}
       renderStageOverlay={renderStageOverlay}
       stageGutterRight={stageGutterRight}
+      pageBleedFraction={pageBleedFraction}
       pageTarget={pageTarget}
       onPageChange={onPageChange}
     />
@@ -122,6 +129,7 @@ function ProvaWebFlipbookHorizontal({
   renderPageOverlay,
   renderStageOverlay,
   stageGutterRight = 0,
+  pageBleedFraction = 0,
   pageTarget,
   onPageChange,
 }: ProvaWebFlipbookProps) {
@@ -197,13 +205,14 @@ function ProvaWebFlipbookHorizontal({
     // Sempre contain do miolo (2p): capa e espelho compartilham a mesma geometria
     // → capa já cabe na metade direita sem salto ao abrir.
     return computeFlipbookPageSize({
+      bleedFraction: pageBleedFraction,
       pageW: pageMeta.width,
       pageH: pageMeta.height,
       availW: stageSize.w,
       availH: stageSize.h,
       spread: true,
     });
-  }, [stageSize, pageMeta]);
+  }, [stageSize, pageMeta, pageBleedFraction]);
 
   /** Slot estável de 2 páginas (centrado no estágio). */
   const slotWidth = baseSize.width * 2;
@@ -539,7 +548,11 @@ function ProvaWebFlipbookHorizontal({
               return (
                 <div
                   key={page.page}
-                  className="prova-web-page"
+                  className={
+                    pageBleedFraction > 0
+                      ? "prova-web-page prova-web-page--bleed"
+                      : "prova-web-page"
+                  }
                   data-density={
                     page.role === "cover-front" || page.role === "cover-back"
                       ? "hard"

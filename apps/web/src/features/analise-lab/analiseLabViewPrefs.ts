@@ -4,7 +4,9 @@ export interface InspectorViewPrefs {
   rulers: boolean;
   grid: boolean;
   gridStepMm: number;
+  gridColor: string;
   guides: boolean;
+  guideColor: string;
   guidesXMm: number[];
   guidesYMm: number[];
 }
@@ -13,10 +15,20 @@ export const DEFAULT_VIEW_PREFS: InspectorViewPrefs = {
   rulers: true,
   grid: false,
   gridStepMm: 10,
+  gridColor: "#94a3b8",
   guides: true,
+  guideColor: "#2563eb",
   guidesXMm: [],
   guidesYMm: [],
 };
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/;
+
+function normalizeColor(raw: unknown, fallback: string): string {
+  if (typeof raw !== "string") return fallback;
+  const value = raw.trim().toLowerCase();
+  return HEX_COLOR.test(value) ? value : fallback;
+}
 
 function storageKey(ano: number, osId: number): string {
   return `analise-lab:view:${ano}:${osId}`;
@@ -50,7 +62,12 @@ export function normalizeViewPrefs(
     gridStepMm: clampStep(
       partial.gridStepMm ?? DEFAULT_VIEW_PREFS.gridStepMm,
     ),
+    gridColor: normalizeColor(partial.gridColor, DEFAULT_VIEW_PREFS.gridColor),
     guides: partial.guides !== false,
+    guideColor: normalizeColor(
+      partial.guideColor,
+      DEFAULT_VIEW_PREFS.guideColor,
+    ),
     guidesXMm: normalizeGuideList(partial.guidesXMm),
     guidesYMm: normalizeGuideList(partial.guidesYMm),
   };
@@ -121,4 +138,20 @@ export function removeGuideMm(
     ...prefs,
     [key]: prefs[key].filter((g) => Math.abs(g - mm) >= toleranceMm),
   };
+}
+
+export function moveGuideMm(
+  prefs: InspectorViewPrefs,
+  axis: "x" | "y",
+  fromMm: number,
+  toMm: number,
+  toleranceMm = 0.3,
+): InspectorViewPrefs {
+  if (!Number.isFinite(toMm)) return prefs;
+  return addGuideMm(
+    removeGuideMm(prefs, axis, fromMm, toleranceMm),
+    axis,
+    toMm,
+    toleranceMm,
+  );
 }

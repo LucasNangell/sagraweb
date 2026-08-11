@@ -62,7 +62,7 @@ import { AnaliseLabSourcePicker } from "./AnaliseLabSourcePicker";
 import { buildLibraryDraft } from "./analiseLabLibraryDraft";
 import { itemOccurrences } from "./analiseLabComponente";
 import { pageSizeMm } from "./analiseLabGeometry";
-import { parsePageSpec } from "./analiseLabPageSpec";
+import { formatPageSpec, parsePageSpec } from "./analiseLabPageSpec";
 import { pageNumberToIndex } from "./analiseLabPageSync";
 import { labelTipo } from "./analiseLabLabels";
 import { markScopeLabel } from "./analiseLabPageSpec";
@@ -105,7 +105,12 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const [espelhar, setEspelhar] = useState(true);
   const [cor, setCor] = useState<AnaliseLabMarkCor>("red");
   const [rotulo, setRotulo] = useState("");
+  const [sangriaMm, setSangriaMm] = useState(5);
   const [espessura, setEspessura] = useState(2);
+  const [pagePickTarget, setPagePickTarget] = useState<"item" | "mark" | null>(
+    null,
+  );
+  const [itemPageSpec, setItemPageSpec] = useState("");
   const [viewPrefs, setViewPrefs] = useState<InspectorViewPrefs>(() =>
     loadViewPrefs(ano, osId),
   );
@@ -676,6 +681,25 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
       ? null
       : (itens.find((i) => i.id === linkingItemId) ?? null);
 
+  /** Maior profundidade de sangria gravada — define a folga do Folhear. */
+  const maxSangriaMm = marks.reduce((max, m) => {
+    if (m.tipo !== "sangria") return max;
+    const from = Number(
+      (m.geometria as { fromMm?: number } | null)?.fromMm ?? 0,
+    );
+    return Math.max(max, Math.abs(Number.isFinite(from) ? from : 0));
+  }, 0);
+
+  const firstPageMeta = pages[0];
+  const bleedFraction =
+    maxSangriaMm > 0 && firstPageMeta
+      ? Math.min(
+          0.2,
+          maxSangriaMm /
+            Math.max(1, pageSizeMm(firstPageMeta.widthPt, 0).widthMm),
+        )
+      : 0;
+
   const renderPageOverlay = (
     page: {
       page: number;
@@ -697,8 +721,52 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
         displayHeight={size.height}
         includeMedidas={false}
         selectedMarkId={selectedMarkId}
+        bleedMm={maxSangriaMm}
       />
     );
+  };
+
+  const pickedPages = (() => {
+    if (!pagePickTarget) return [];
+    const spec = pagePickTarget === "item" ? itemPageSpec : pageSpec;
+    try {
+      return parsePageSpec(spec);
+    } catch {
+      return [];
+    }
+  })();
+
+  const togglePickPage = (page: number) => {
+    if (!pagePickTarget) return;
+    const next = pickedPages.includes(page)
+      ? pickedPages.filter((p) => p !== page)
+      : [...pickedPages, page];
+    const spec = formatPageSpec(next);
+    if (pagePickTarget === "item") setItemPageSpec(spec);
+    else setPageSpec(spec);
+  };
+
+  const itemPagePickProps = {
+    pageSpecOverride: pagePickTarget === "item" ? itemPageSpec : null,
+    onPageSpecChange: (spec: string) => {
+      if (pagePickTarget === "item") setItemPageSpec(spec);
+    },
+    pagePickActive: pagePickTarget === "item",
+    onTogglePagePick: (currentSpec: string) => {
+      setPagePickTarget((prev) => {
+        if (prev === "item") return null;
+        setItemPageSpec(currentSpec);
+        return "item";
+      });
+    },
+  };
+
+  const toggleMarkPagePick = () => {
+    setPagePickTarget((prev) => {
+      if (prev === "mark") return null;
+      setApplyAllPages(false);
+      return "mark";
+    });
   };
 
   const markToolsProps = {
@@ -710,10 +778,17 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     onOffsetMmChange: setOffsetMm,
     fromMm,
     onFromMmChange: setFromMm,
+    sangriaMm,
+    onSangriaMmChange: setSangriaMm,
     applyAllPages,
-    onApplyAllPagesChange: setApplyAllPages,
+    onApplyAllPagesChange: (v: boolean) => {
+      setApplyAllPages(v);
+      if (v && pagePickTarget === "mark") setPagePickTarget(null);
+    },
     pageSpec,
     onPageSpecChange: setPageSpec,
+    pagePickActive: pagePickTarget === "mark",
+    onTogglePagePick: toggleMarkPagePick,
     espelhar,
     onEspelharChange: setEspelhar,
     cor,
@@ -733,6 +808,18 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
       void addMark({
         tipo: "faixa",
         geometria: { edge, fromMm, toMm: offsetMm },
+        pagina: pageNumero,
+      }),
+    onAddSangriaAll: () =>
+      void addMark({
+        tipo: "sangria",
+        geometria: {
+          edge: "all",
+          fromMm: -Math.abs(sangriaMm || 5),
+          toMm: 0,
+          alongFromMm: 0,
+          alongToMm: 0,
+        },
         pagina: pageNumero,
       }),
   };
@@ -1071,12 +1158,25 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         cor={cor}
                         rotulo={rotulo}
                         espessura={espessura}
-                        sangriaMm={offsetMm}
+                        sangriaMm={sangriaMm}
                         selectedMarkId={selectedMarkId}
                         markTools={markToolsProps}
                         prefs={viewPrefs}
                         onPrefsChange={(next) =>
                           setViewPrefs(normalizeViewPrefs(next))
+                        }
+                        pagePick={
+                          pagePickTarget
+                            ? {
+                                label:
+                                  pagePickTarget === "item"
+                                    ? "Selecionando páginas do problema"
+                                    : "Selecionando páginas da marca",
+                                pages: pickedPages,
+                                onTogglePage: togglePickPage,
+                                onFinish: () => setPagePickTarget(null),
+                              }
+                            : null
                         }
                         onCreateGeometryMark={(args) =>
                           void addMark({
@@ -1119,8 +1219,12 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         marks={marks}
                         linkingActive={false}
                         busy={actionBusy}
-                        onClose={() => setDraftLibraryItem(null)}
+                        onClose={() => {
+                          setDraftLibraryItem(null);
+                          if (pagePickTarget === "item") setPagePickTarget(null);
+                        }}
                         onSave={(p) => void registerDraftItem(p)}
+                        {...itemPagePickProps}
                       />
                     ) : selectedItem ? (
                       <AnaliseLabItemPanel
@@ -1129,8 +1233,10 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         marks={marks}
                         linkingActive={linkingItemId === selectedItem.id}
                         busy={actionBusy}
+                        {...itemPagePickProps}
                         onClose={() => {
                           setSelectedItemId(null);
+                          if (pagePickTarget === "item") setPagePickTarget(null);
                           if (linkingItemId === selectedItem.id) {
                             setLinkingItemId(null);
                           }
@@ -1219,6 +1325,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         )
                       }
                       stageGutterRight={balloonGutter}
+                      pageBleedFraction={bleedFraction}
                       renderPageOverlay={renderPageOverlay}
                       renderStageOverlay={(ctx) => (
                         <AnaliseLabBalloonLayer

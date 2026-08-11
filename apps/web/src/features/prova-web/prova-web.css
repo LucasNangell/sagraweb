@@ -26,6 +26,11 @@
   overflow: hidden;
 }
 
+/* Overlays desenhados fora do papel (sangria do Análise Lab) precisam escapar. */
+.prova-web-page--bleed {
+  overflow: visible;
+}
+
 .prova-web-page[data-density="hard"] {
   background: #f4f2ee;
 }

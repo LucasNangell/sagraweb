@@ -182,6 +182,48 @@ export function sangriaSvgRect(
   };
 }
 
+/**
+ * Sangria em todas as bordas: 4 faixas com o trecho estendido para além dos
+ * cantos, formando uma moldura fechada em volta do papel.
+ */
+export function sangriaAllRects(
+  depthMm: number,
+  pageWidthMm: number,
+  pageHeightMm: number,
+  displayWidth: number,
+  displayHeight: number,
+  sx: number,
+  sy: number,
+): Array<{
+  edge: EdgeKey;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}> {
+  const depth = Math.abs(Number(depthMm) || 0);
+  if (depth <= 0) return [];
+  const edges: EdgeKey[] = ["top", "right", "bottom", "left"];
+  return edges.map((edge) => {
+    const vertical = edge === "left" || edge === "right";
+    const along = vertical ? pageHeightMm : pageWidthMm;
+    return {
+      edge,
+      ...sangriaSvgRect(
+        edge,
+        -depth,
+        0,
+        -depth,
+        along + depth,
+        displayWidth,
+        displayHeight,
+        sx,
+        sy,
+      ),
+    };
+  });
+}
+
 export interface MarkGeometryLike {
   edge?: string;
   offsetMm?: number;

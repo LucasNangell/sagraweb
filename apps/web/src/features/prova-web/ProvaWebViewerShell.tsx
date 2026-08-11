@@ -44,6 +44,8 @@ export interface ProvaWebViewerShellProps {
     gutterRight: number;
   }) => ReactNode;
   stageGutterRight?: number;
+  /** Reserva proporcional em volta da página para overlays fora do papel. */
+  pageBleedFraction?: number;
   pageTarget?: { page: number; nonce: number } | null;
   onPageChange?: (page: number) => void;
 }
@@ -63,6 +65,7 @@ export function ProvaWebViewerShell({
   renderPageOverlay,
   renderStageOverlay,
   stageGutterRight,
+  pageBleedFraction,
   pageTarget,
   onPageChange,
 }: ProvaWebViewerShellProps) {
@@ -122,6 +125,7 @@ export function ProvaWebViewerShell({
         renderPageOverlay={renderPageOverlay}
         renderStageOverlay={renderStageOverlay}
         stageGutterRight={stageGutterRight}
+        pageBleedFraction={pageBleedFraction}
         pageTarget={pageTarget}
         onPageChange={onPageChange}
       />
@@ -190,6 +194,7 @@ export function ProvaWebViewerShell({
           renderPageOverlay={renderPageOverlay}
           renderStageOverlay={renderStageOverlay}
           stageGutterRight={stageGutterRight}
+          pageBleedFraction={pageBleedFraction}
           pageTarget={pageTarget}
           onPageChange={onPageChange}
         />

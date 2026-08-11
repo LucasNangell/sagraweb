@@ -6,10 +6,12 @@ import {
   fitZoom,
   anchorScrollAfterZoom,
   nextZoomFromWheel,
+  pageDisplaySize,
   resolveActivePageFromScroll,
   stepRowPage,
   zoomStep,
 } from "./analiseLabFit";
+import { pageSizeMm } from "./analiseLabGeometry";
 
 describe("analiseLabFit", () => {
   it("fits by width when taller aspect", () => {
@@ -134,5 +136,34 @@ describe("analiseLabFit", () => {
     expect(stepRowPage(dupla, 2, 1)).toBe(4);
     expect(stepRowPage(dupla, 3, -1)).toBe(1);
     expect(stepRowPage(dupla, 4, 1)).toBeNull();
+  });
+
+  it("pageDisplaySize preserva aspecto Pt mesmo com raster inconsistente", () => {
+    const size = pageDisplaySize(
+      { width: 1000, height: 500, widthPt: 595, heightPt: 842 },
+      1,
+    );
+    // Altura = round(1000 * 842/595) — não 500 do raster
+    expect(size.width).toBe(1000);
+    expect(size.height).toBe(Math.round(1000 * (842 / 595)));
+    expect(size.height / size.width).toBeCloseTo(842 / 595, 3);
+  });
+
+  it("pageDisplaySize aplica zoom uniforme (sx ≈ sy em mm)", () => {
+    const page = { width: 800, height: 999, widthPt: 595.28, heightPt: 841.89 };
+    const z = 1.5;
+    const { width, height } = pageDisplaySize(page, z);
+    const { widthMm, heightMm } = pageSizeMm(page.widthPt, page.heightPt);
+    const sx = width / widthMm;
+    const sy = height / heightMm;
+    expect(sx).toBeCloseTo(sy, 2);
+    const base = pageDisplaySize(page, 1);
+    expect(width).toBe(Math.round(base.width * z));
+    expect(height).toBe(Math.round(base.height * z));
+  });
+
+  it("pageDisplaySize sem Pt usa aspecto do raster", () => {
+    const size = pageDisplaySize({ width: 600, height: 900 }, 2);
+    expect(size).toEqual({ width: 1200, height: 1800 });
   });
 });

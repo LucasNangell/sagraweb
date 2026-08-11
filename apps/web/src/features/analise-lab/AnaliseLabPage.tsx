@@ -49,6 +49,7 @@ import {
 } from "./AnaliseLabItemPanel";
 import { AnaliseLabLibrary } from "./AnaliseLabLibrary";
 import { AnaliseLabMarkEditor } from "./AnaliseLabMarkEditor";
+import { AnaliseLabMarkCreateOptions } from "./AnaliseLabMarkCreateOptions";
 import { AnaliseLabMarksLayer } from "./AnaliseLabMarksLayer";
 import type { AnaliseLabTool } from "./AnaliseLabMarkTools";
 import {
@@ -62,6 +63,9 @@ import { AnaliseLabSourcePicker } from "./AnaliseLabSourcePicker";
 import { buildLibraryDraft } from "./analiseLabLibraryDraft";
 import { itemOccurrences, roleToComponente } from "./analiseLabComponente";
 import { pageSizeMm } from "./analiseLabGeometry";
+import {
+  normalizeFolhearModo,
+} from "./analiseLabFolhearModo";
 import {
   formatPageSpec,
   parsePageSpec,
@@ -322,8 +326,10 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const registerDraftItem = async (
     payload: UpdateAnaliseLabItemPayload,
     confirmSplit = false,
+    opts?: { closePanel?: boolean },
   ): Promise<AnaliseLabItem | null> => {
     if (!draftLibraryItem?.idProblemaPadrao) return null;
+    const closePanel = opts?.closePanel ?? true;
     setActionBusy(true);
     setActionError(null);
     try {
@@ -347,7 +353,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
             `Este escopo atinge Capa e Miolo. Registrar dois problemas?\n\n${lines}`,
           );
           if (ok) {
-            return await registerDraftItem(payload, true);
+            return await registerDraftItem(payload, true, opts);
           }
           return null;
         }
@@ -362,12 +368,17 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
           updated.push(patch.item);
         }
         setLocalItens((prev) => [...(prev ?? []), ...updated]);
-        if (updated[0]) {
-          setSelectedItemId(updated[0].id);
-          setLeftPane("itens");
-        }
         setDraftLibraryItem(null);
         draftPayloadRef.current = null;
+        if (closePanel) {
+          setSelectedItemId(null);
+          setTool("select");
+          setSelectedMarkId(null);
+          setPagePickTarget((prev) => (prev === "item" ? null : prev));
+        } else if (updated[0]) {
+          setSelectedItemId(updated[0].id);
+        }
+        setLeftPane("itens");
         invalidate();
         return updated[0] ?? null;
       }
@@ -391,12 +402,17 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
         items = [patch.item];
       }
       setLocalItens((prev) => [...(prev ?? []), ...items]);
-      if (items[0]) {
-        setSelectedItemId(items[0].id);
-        setLeftPane("itens");
-      }
       setDraftLibraryItem(null);
       draftPayloadRef.current = null;
+      if (closePanel) {
+        setSelectedItemId(null);
+        setTool("select");
+        setSelectedMarkId(null);
+        setPagePickTarget((prev) => (prev === "item" ? null : prev));
+      } else if (items[0]) {
+        setSelectedItemId(items[0].id);
+      }
+      setLeftPane("itens");
       invalidate();
       return items[0] ?? null;
     } catch (err) {
@@ -412,7 +428,9 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const ensureItemId = async (): Promise<number | null> => {
     if (selectedItemId) return selectedItemId;
     if (draftLibraryItem && draftPayloadRef.current) {
-      const item = await registerDraftItem(draftPayloadRef.current);
+      const item = await registerDraftItem(draftPayloadRef.current, false, {
+        closePanel: false,
+      });
       return item?.id ?? null;
     }
     return null;
@@ -443,6 +461,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
         }
       }
       const drawnPage = Math.max(1, payload.pagina ?? pageNumero);
+      setItemPageSpec((prev) => togglePagePickSpec(prev || "", drawnPage));
       let markPaginas = applyAllPages ? null : scope.paginas;
       let markPagina = applyAllPages ? 0 : (payload.pagina ?? scope.pagina);
       if (pagePickTarget === "mark") {
@@ -880,7 +899,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   };
 
   const itemPagePickProps = {
-    pageSpecOverride: pagePickTarget === "item" ? itemPageSpec : null,
+    pageSpecOverride: itemPageSpec,
     onPageSpecChange: (spec: string) => {
       setItemPageSpec(spec);
     },
@@ -947,6 +966,30 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
         pagina: pageNumero,
       }),
   };
+
+  const problemPanelOpen = Boolean(selectedItem || draftLibraryItem);
+
+  const folhearModo = normalizeFolhearModo(
+    session?.folhearModo,
+    session?.modo,
+  );
+
+  const closeProblemPanel = () => {
+    setSelectedItemId(null);
+    setDraftLibraryItem(null);
+    draftPayloadRef.current = null;
+    setTool("select");
+    setSelectedMarkId(null);
+    setPagePickTarget((prev) => (prev === "item" ? null : prev));
+  };
+
+  const markCreateSlot =
+    tool !== "select" ? (
+      <AnaliseLabMarkCreateOptions
+        {...markToolsProps}
+        className="flex flex-wrap items-center gap-1.5 rounded border border-sagra-border bg-white p-1.5"
+      />
+    ) : null;
 
   return (
     <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-sagra-bg text-sagra-text">
@@ -1082,6 +1125,12 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
             initialArquivoMiolo={session?.arquivoMiolo}
             initialCropJson={
               (session?.cropJson as ProvaWebCropJson | null | undefined) ?? null
+            }
+            initialFolhearModo={
+              session?.folhearModo === "flipbook" ||
+              session?.folhearModo === "folhas"
+                ? session.folhearModo
+                : null
             }
             onGenerateStarted={handleGenerateStarted}
             onGenerate={(p) => void handleGenerate(p)}
@@ -1249,6 +1298,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         }}
                         tool={tool}
                         onToolChange={setTool}
+                        markToolsSlot={markCreateSlot}
                         selectedMark={selectedMark}
                         markAllPagesSpec={markAllPagesSpec}
                         onUpdateMark={(p) => void handleUpdateMark(p)}
@@ -1267,6 +1317,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         {...itemPagePickProps}
                         tool={tool}
                         onToolChange={setTool}
+                        markToolsSlot={markCreateSlot}
                         selectedMark={selectedMark}
                         markAllPagesSpec={markAllPagesSpec}
                         onUpdateMark={(p) => void handleUpdateMark(p)}
@@ -1274,12 +1325,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                           if (selectedMark)
                             void handleDeleteMark(selectedMark.id);
                         }}
-                        onClose={() => {
-                          setSelectedItemId(null);
-                          setTool("select");
-                          setSelectedMarkId(null);
-                          if (pagePickTarget === "item") setPagePickTarget(null);
-                        }}
+                        onClose={closeProblemPanel}
                         onDelete={() => void handleDeleteItem(selectedItem.id)}
                         onUnlinkMark={(markId) => {
                           void (async () => {
@@ -1325,6 +1371,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                                 ),
                               );
                               invalidate();
+                              closeProblemPanel();
                             } catch (err) {
                               setActionError(
                                 err instanceof Error
@@ -1362,6 +1409,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         sangriaMm={sangriaMm}
                         selectedMarkId={selectedMarkId}
                         markTools={markToolsProps}
+                        hideMarkOptions={problemPanelOpen}
                         prefs={viewPrefs}
                         onPrefsChange={(next) =>
                           setViewPrefs(normalizeViewPrefs(next))
@@ -1422,48 +1470,85 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                       </h2>
                       <AnaliseLabItemList {...itemListProps} />
                     </aside>
-                    <ProvaWebViewerShell
-                      ano={ano}
-                      osId={osId}
-                      manifest={manifestQuery.data}
-                      buildPageUrl={(page) =>
-                        analiseLabPageUrl(
-                          ano,
-                          osId,
-                          page,
-                          manifestQuery.data.cacheKey,
-                        )
-                      }
-                      stageGutterRight={balloonGutter}
-                      pageBleedFraction={bleedFraction}
-                      renderPageOverlay={renderPageOverlay}
-                      renderStageOverlay={(ctx) => (
-                        <AnaliseLabBalloonLayer
-                          items={itens}
-                          marks={marks}
+                    {folhearModo === "folhas" ? (
+                      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                        <AnaliseLabInspector
                           pages={pages}
-                          visiblePages={ctx.visiblePages}
-                          pageSize={ctx.pageSize}
-                          slotWidth={ctx.slotWidth}
-                          gutterRight={ctx.gutterRight || balloonGutter}
-                          isSpread={ctx.isSpread}
-                          flipping={ctx.flipping}
-                          selectedItemId={selectedItemId}
-                          dismissedIds={dismissedBalloonIds}
-                          onDismiss={(id) =>
-                            setDismissedBalloonIds((prev) =>
-                              prev.includes(id) ? prev : [...prev, id],
+                          pageTarget={{ page: currentPage, nonce: pageNonce }}
+                          onPageChange={(page) => setCurrentPage(page)}
+                          resolveUrl={(page) =>
+                            analiseLabPageUrl(
+                              ano,
+                              osId,
+                              page,
+                              manifestQuery.data.cacheKey,
                             )
                           }
-                          onGoToOccurrence={(itemId, page) => {
-                            setSelectedItemId(itemId);
-                            goToPage(page);
-                          }}
+                          marks={marks}
+                          tool="select"
+                          edge={edge}
+                          applyAllPages={applyAllPages}
+                          cor={cor}
+                          rotulo={rotulo}
+                          espessura={espessura}
+                          sangriaMm={sangriaMm}
+                          selectedMarkId={selectedMarkId}
+                          markTools={markToolsProps}
+                          hideMarkOptions
+                          prefs={viewPrefs}
+                          onPrefsChange={(next) =>
+                            setViewPrefs(normalizeViewPrefs(next))
+                          }
+                          onSelectMark={selectMarkFromCanvas}
+                          onCreateGeometryMark={() => undefined}
+                          onCreateFaixaDrag={() => undefined}
+                          onCreateSangriaDrag={() => undefined}
                         />
-                      )}
-                      pageTarget={{ page: currentPage, nonce: pageNonce }}
-                      onPageChange={(page) => setCurrentPage(page)}
-                    />
+                      </div>
+                    ) : (
+                      <ProvaWebViewerShell
+                        ano={ano}
+                        osId={osId}
+                        manifest={manifestQuery.data}
+                        buildPageUrl={(page) =>
+                          analiseLabPageUrl(
+                            ano,
+                            osId,
+                            page,
+                            manifestQuery.data.cacheKey,
+                          )
+                        }
+                        stageGutterRight={balloonGutter}
+                        pageBleedFraction={bleedFraction}
+                        renderPageOverlay={renderPageOverlay}
+                        renderStageOverlay={(ctx) => (
+                          <AnaliseLabBalloonLayer
+                            items={itens}
+                            marks={marks}
+                            pages={pages}
+                            visiblePages={ctx.visiblePages}
+                            pageSize={ctx.pageSize}
+                            slotWidth={ctx.slotWidth}
+                            gutterRight={ctx.gutterRight || balloonGutter}
+                            isSpread={ctx.isSpread}
+                            flipping={ctx.flipping}
+                            selectedItemId={selectedItemId}
+                            dismissedIds={dismissedBalloonIds}
+                            onDismiss={(id) =>
+                              setDismissedBalloonIds((prev) =>
+                                prev.includes(id) ? prev : [...prev, id],
+                              )
+                            }
+                            onGoToOccurrence={(itemId, page) => {
+                              setSelectedItemId(itemId);
+                              goToPage(page);
+                            }}
+                          />
+                        )}
+                        pageTarget={{ page: currentPage, nonce: pageNonce }}
+                        onPageChange={(page) => setCurrentPage(page)}
+                      />
+                    )}
                   </>
                 )}
               </div>

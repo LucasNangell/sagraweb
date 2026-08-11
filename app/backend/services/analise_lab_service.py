@@ -38,6 +38,23 @@ RENDER_STATUSES = frozenset(
 )
 RENDER_IN_FLIGHT = frozenset({RENDER_PENDING, RENDER_RUNNING})
 
+FOLHEAR_FLIPBOOK = "flipbook"
+FOLHEAR_FOLHAS = "folhas"
+FOLHEAR_MODOS = frozenset({FOLHEAR_FLIPBOOK, FOLHEAR_FOLHAS})
+
+
+def default_folhear_modo(modo: str) -> str:
+    """capa_miolo → flipbook; demais → folhas."""
+    return FOLHEAR_FLIPBOOK if (modo or "").strip() == MODE_CAPA_MIOLO else FOLHEAR_FOLHAS
+
+
+def _normalize_folhear_modo(raw: Any, modo: Any = None) -> str:
+    value = (raw or "").strip().lower() if isinstance(raw, str) else ""
+    if value in FOLHEAR_MODOS:
+        return value
+    return default_folhear_modo(str(modo or MODE_UNICO))
+
+
 MARK_TYPES = frozenset(
     {
         "offset_corte",
@@ -63,7 +80,7 @@ _SELECT_SESSAO = """
     ID, NroProtocolo, AnoProtocolo, VersaoLabel, Modo,
     ArquivoUnico, ArquivoCapa, ArquivoMiolo, CropJson, PastaRender,
     RenderStatus, RenderError, RenderProgress,
-    RenderStartedAt, RenderFinishedAt, CropVersao, PontoRegistro,
+    RenderStartedAt, RenderFinishedAt, CropVersao, FolhearModo, PontoRegistro,
     DataRegistro, DataAtualizacao
 """
 
@@ -207,6 +224,9 @@ def _row_to_session(row: dict[str, Any]) -> dict[str, Any]:
         "renderStartedAt": _iso(row.get("RenderStartedAt")),
         "renderFinishedAt": _iso(row.get("RenderFinishedAt")),
         "cropVersao": int(row.get("CropVersao") or 1),
+        "folhearModo": _normalize_folhear_modo(
+            row.get("FolhearModo"), row.get("Modo")
+        ),
         "pontoRegistro": row.get("PontoRegistro"),
         "dataRegistro": _iso(row.get("DataRegistro")),
         "dataAtualizacao": _iso(row.get("DataAtualizacao")),
@@ -260,10 +280,12 @@ def upsert_session(
     arquivo_miolo: Optional[str],
     crop_json: Optional[dict[str, Any]],
     ponto: Optional[int],
+    folhear_modo: Optional[str] = None,
 ) -> dict[str, Any]:
     crop_payload = (
         json.dumps(crop_json, ensure_ascii=False) if crop_json is not None else None
     )
+    folhear = _normalize_folhear_modo(folhear_modo, modo)
     existing = get_session(ano, os_id)
     if existing:
         prev_canon = _canonicalize_crop_json(existing.get("cropJson"))
@@ -280,7 +302,7 @@ def upsert_session(
                 CropJson = %s, PastaRender = %s,
                 RenderStatus = %s, RenderError = NULL, RenderProgress = NULL,
                 RenderStartedAt = NULL, RenderFinishedAt = NULL,
-                CropVersao = %s, PontoRegistro = %s
+                CropVersao = %s, FolhearModo = %s, PontoRegistro = %s
             WHERE NroProtocolo = %s AND AnoProtocolo = %s
             """,
             (
@@ -293,6 +315,7 @@ def upsert_session(
                 LAB_PASTA_RENDER,
                 RENDER_PENDING,
                 next_crop_versao,
+                folhear,
                 ponto,
                 os_id,
                 ano,
@@ -304,8 +327,8 @@ def upsert_session(
             INSERT INTO tabAnaliseLabSessao
                 (NroProtocolo, AnoProtocolo, VersaoLabel, Modo,
                  ArquivoUnico, ArquivoCapa, ArquivoMiolo, CropJson,
-                 PastaRender, RenderStatus, CropVersao, PontoRegistro)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 PastaRender, RenderStatus, CropVersao, FolhearModo, PontoRegistro)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 os_id,
@@ -319,6 +342,7 @@ def upsert_session(
                 LAB_PASTA_RENDER,
                 RENDER_PENDING,
                 1,
+                folhear,
                 ponto,
             ),
         )

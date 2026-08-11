@@ -15,6 +15,12 @@ import { defaultCapaCrop, ProvaWebCoverWizard } from "@/features/prova-web/Prova
 import { ProvaWebCropPanel } from "@/features/prova-web/ProvaWebCropPanel";
 import type { ProvaWebCropSource } from "@/features/prova-web/provaWebCropSource";
 
+import {
+  defaultFolhearModo,
+  normalizeFolhearModo,
+  type AnaliseLabFolhearModo,
+} from "./analiseLabFolhearModo";
+
 export interface AnaliseLabCropAssistantProps {
   ano: number;
   osId: number;
@@ -24,11 +30,15 @@ export interface AnaliseLabCropAssistantProps {
   arquivoMiolo: string | null;
   saving?: boolean;
   onBack: () => void;
-  onConfirm: (cropJson: ProvaWebCropJson) => void;
+  onConfirm: (
+    cropJson: ProvaWebCropJson,
+    folhearModo: AnaliseLabFolhearModo,
+  ) => void;
   formato?: string | null;
   formatoAlturaMm?: number | null;
   formatoLarguraMm?: number | null;
   initialCropJson?: ProvaWebCropJson | null;
+  initialFolhearModo?: AnaliseLabFolhearModo | null;
 }
 
 export function AnaliseLabCropAssistant({
@@ -45,6 +55,7 @@ export function AnaliseLabCropAssistant({
   formatoAlturaMm = null,
   formatoLarguraMm = null,
   initialCropJson = null,
+  initialFolhearModo = null,
 }: AnaliseLabCropAssistantProps) {
   const cropSource = useMemo<ProvaWebCropSource>(
     () => ({
@@ -72,21 +83,26 @@ export function AnaliseLabCropAssistant({
       : defaultCapaCrop("spread"),
   );
   const [pageIndex, setPageIndex] = useState(0);
+  const [folhearModo, setFolhearModo] = useState<AnaliseLabFolhearModo>(() =>
+    initialFolhearModo
+      ? normalizeFolhearModo(initialFolhearModo, modo)
+      : defaultFolhearModo(modo),
+  );
 
   const stableUnico = useCallback((c: CropSidesMm) => setUnicoCrop(c), []);
   const stableMiolo = useCallback((c: CropSidesMm) => setMioloCrop(c), []);
 
   const handleGenerate = () => {
     if (modo === "unico") {
-      onConfirm({ unico: unicoCrop });
+      onConfirm({ unico: unicoCrop }, folhearModo);
       return;
     }
-    onConfirm({ miolo: mioloCrop, capa });
+    onConfirm({ miolo: mioloCrop, capa }, folhearModo);
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 p-4">
-      <div className="flex items-start justify-between gap-3">
+    <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-4 overflow-hidden p-4">
+      <div className="flex shrink-0 items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-neutral-800">
             Configuração de corte
@@ -177,6 +193,50 @@ export function AnaliseLabCropAssistant({
             </section>
           </>
         ) : null}
+
+        <section className="rounded-2xl border border-sagra-border bg-white p-4 shadow-sm">
+          <h3 className="text-sm font-semibold text-neutral-800">
+            Como exibir no Folhear?
+          </h3>
+          <p className="mt-0.5 text-xs text-neutral-500">
+            Flipbook vira as páginas como livro; folhas separadas lista cada
+            página na vertical, como na aba Inspeção.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <label
+              className={
+                folhearModo === "flipbook"
+                  ? "inline-flex cursor-pointer items-center gap-2 rounded-lg border border-primary-green bg-primary-green/10 px-3 py-2 text-sm text-primary-green"
+                  : "inline-flex cursor-pointer items-center gap-2 rounded-lg border border-sagra-border bg-white px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50"
+              }
+            >
+              <input
+                type="radio"
+                name="folhear-modo"
+                className="sr-only"
+                checked={folhearModo === "flipbook"}
+                onChange={() => setFolhearModo("flipbook")}
+              />
+              Flipbook
+            </label>
+            <label
+              className={
+                folhearModo === "folhas"
+                  ? "inline-flex cursor-pointer items-center gap-2 rounded-lg border border-primary-green bg-primary-green/10 px-3 py-2 text-sm text-primary-green"
+                  : "inline-flex cursor-pointer items-center gap-2 rounded-lg border border-sagra-border bg-white px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50"
+              }
+            >
+              <input
+                type="radio"
+                name="folhear-modo"
+                className="sr-only"
+                checked={folhearModo === "folhas"}
+                onChange={() => setFolhearModo("folhas")}
+              />
+              Folhas separadas
+            </label>
+          </div>
+        </section>
       </div>
 
       <div className="flex shrink-0 justify-end gap-2 border-t border-sagra-border pt-3">

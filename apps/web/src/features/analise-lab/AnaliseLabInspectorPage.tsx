@@ -19,6 +19,7 @@ import {
   sangriaSvgRect,
 } from "./analiseLabGeometry";
 import { gridLinesMm } from "./analiseLabViewPrefs";
+import { pageDisplaySize } from "./analiseLabFit";
 
 type RulerDrag = {
   axis: "x" | "y";
@@ -153,8 +154,7 @@ export function AnaliseLabInspectorPage({
   const [freePoints, setFreePoints] = useState<number[][] | null>(null);
 
   const { widthMm, heightMm } = pageSizeMm(page.widthPt || 0, page.heightPt || 0);
-  const displayW = Math.round((page.width || 800) * zoom);
-  const displayH = Math.round((page.height || 1130) * zoom);
+  const { width: displayW, height: displayH } = pageDisplaySize(page, zoom);
 
   const sangriaEdge = edge === "all" ? "left" : edge;
   const bleedPadMm = tool === "sangria" ? Math.abs(sangriaMm || 5) + 2 : 0;
@@ -665,7 +665,7 @@ export function AnaliseLabInspectorPage({
           ref={imgRef}
           src={resolveUrl(page.page)}
           alt={`Página ${page.page}`}
-          className="block h-full w-full select-none"
+          className="block h-full w-full select-none object-contain"
           draggable={false}
         />
       ) : (

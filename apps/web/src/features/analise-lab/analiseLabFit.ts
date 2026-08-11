@@ -12,6 +12,39 @@ export interface FitAvail {
   height: number;
 }
 
+/** Metadados mínimos para dimensionar a página na inspeção. */
+export interface PageDisplayMeta {
+  width?: number | null;
+  height?: number | null;
+  widthPt?: number | null;
+  heightPt?: number | null;
+}
+
+/**
+ * Tamanho de exibição com zoom uniforme e aspecto canônico.
+ * Prefere widthPt/heightPt; senão usa o raster width/height.
+ */
+export function pageDisplaySize(
+  page: PageDisplayMeta,
+  zoom = 1,
+): FitPageSize {
+  const baseW = Math.max(1, page.width || 800);
+  const wPt = page.widthPt || 0;
+  const hPt = page.heightPt || 0;
+  let aspectHOverW: number;
+  if (wPt > 0 && hPt > 0) {
+    aspectHOverW = hPt / wPt;
+  } else {
+    aspectHOverW = Math.max(1, page.height || 1130) / baseW;
+  }
+  const baseH = Math.max(1, Math.round(baseW * aspectHOverW));
+  const z = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  return {
+    width: Math.max(1, Math.round(baseW * z)),
+    height: Math.max(1, Math.round(baseH * z)),
+  };
+}
+
 const GUTTER_PX = 16;
 const RULER_TOP_PX = 20;
 const RULER_LEFT_PX = 24;

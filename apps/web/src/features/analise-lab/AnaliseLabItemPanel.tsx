@@ -344,7 +344,10 @@ export function AnaliseLabItemPanel({
             busy={busy}
           />
           {markToolsSlot}
-          {selectedMark && onUpdateMark && onDeleteSelectedMark ? (
+          {selectedMark &&
+          tool === "select" &&
+          onUpdateMark &&
+          onDeleteSelectedMark ? (
             <AnaliseLabMarkCompactEditor
               mark={selectedMark}
               allPagesSpec={markAllPagesSpec}

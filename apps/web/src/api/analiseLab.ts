@@ -61,6 +61,7 @@ export interface AnaliseLabSession {
   renderStartedAt?: string | null;
   renderFinishedAt?: string | null;
   cropVersao?: number;
+  folhearModo?: "flipbook" | "folhas";
 }
 
 export interface AnaliseLabMark {
@@ -135,6 +136,7 @@ export interface SaveAnaliseLabPayload {
   arquivo_capa?: string | null;
   arquivo_miolo?: string | null;
   crop_json?: ProvaWebCropJson | null;
+  folhear_modo?: "flipbook" | "folhas";
 }
 
 export interface CreateAnaliseLabMarkPayload {

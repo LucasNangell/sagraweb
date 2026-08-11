@@ -11,6 +11,7 @@ import {
 import type { ProvaWebCropJson } from "@/api/provaWeb";
 
 import { AnaliseLabCropAssistant } from "./AnaliseLabCropAssistant";
+import type { AnaliseLabFolhearModo } from "./analiseLabFolhearModo";
 
 interface AnaliseLabSourcePickerProps {
   ano: number;
@@ -25,6 +26,7 @@ interface AnaliseLabSourcePickerProps {
   initialArquivoCapa?: string | null;
   initialArquivoMiolo?: string | null;
   initialCropJson?: ProvaWebCropJson | null;
+  initialFolhearModo?: AnaliseLabFolhearModo | null;
   onGenerate: (payload: SaveAnaliseLabPayload) => void;
   onGenerateStarted?: () => void;
 }
@@ -42,6 +44,7 @@ export function AnaliseLabSourcePicker({
   initialArquivoCapa = null,
   initialArquivoMiolo = null,
   initialCropJson = null,
+  initialFolhearModo = null,
   onGenerate,
   onGenerateStarted,
 }: AnaliseLabSourcePickerProps) {
@@ -96,31 +99,35 @@ export function AnaliseLabSourcePicker({
 
   if (phase === "crop") {
     return (
-      <AnaliseLabCropAssistant
-        ano={ano}
-        osId={osId}
-        modo={modo}
-        arquivoUnico={selUnico}
-        arquivoCapa={selCapa}
-        arquivoMiolo={selMiolo}
-        saving={saving}
-        onBack={() => setPhase("pick")}
-        formato={formato}
-        formatoAlturaMm={formatoAlturaMm}
-        formatoLarguraMm={formatoLarguraMm}
-        initialCropJson={initialCropJson}
-        onConfirm={(cropJson) => {
-          onGenerateStarted?.();
-          onGenerate({
-            versao_label: versaoLabel,
-            modo,
-            arquivo_unico: modo === "unico" ? selUnico : null,
-            arquivo_capa: modo === "capa_miolo" ? selCapa : null,
-            arquivo_miolo: modo === "capa_miolo" ? selMiolo : null,
-            crop_json: cropJson,
-          });
-        }}
-      />
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <AnaliseLabCropAssistant
+          ano={ano}
+          osId={osId}
+          modo={modo}
+          arquivoUnico={selUnico}
+          arquivoCapa={selCapa}
+          arquivoMiolo={selMiolo}
+          saving={saving}
+          onBack={() => setPhase("pick")}
+          formato={formato}
+          formatoAlturaMm={formatoAlturaMm}
+          formatoLarguraMm={formatoLarguraMm}
+          initialCropJson={initialCropJson}
+          initialFolhearModo={initialFolhearModo}
+          onConfirm={(cropJson, folhearModo) => {
+            onGenerateStarted?.();
+            onGenerate({
+              versao_label: versaoLabel,
+              modo,
+              arquivo_unico: modo === "unico" ? selUnico : null,
+              arquivo_capa: modo === "capa_miolo" ? selCapa : null,
+              arquivo_miolo: modo === "capa_miolo" ? selMiolo : null,
+              crop_json: cropJson,
+              folhear_modo: folhearModo,
+            });
+          }}
+        />
+      </div>
     );
   }
 

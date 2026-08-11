@@ -145,6 +145,7 @@ class AnaliseLabSave(BaseModel):
     arquivo_capa: Optional[str] = Field(None, max_length=512)
     arquivo_miolo: Optional[str] = Field(None, max_length=512)
     crop_json: Optional[dict[str, Any]] = None
+    folhear_modo: Optional[Literal["flipbook", "folhas"]] = None
 
 
 class AnaliseLabMarkCreate(BaseModel):
@@ -382,6 +383,7 @@ def save_analise_lab(ano: int, os_id: int, body: AnaliseLabSave, request: Reques
         arquivo_miolo=arquivo_miolo,
         crop_json=crop_json,
         ponto=_session_ponto(request),
+        folhear_modo=body.folhear_modo,
     )
     try:
         enqueue_analise_lab_render(ano, os_id)

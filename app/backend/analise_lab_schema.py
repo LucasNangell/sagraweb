@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS tabAnaliseLabSessao (
     RenderStartedAt DATETIME NULL,
     RenderFinishedAt DATETIME NULL,
     CropVersao INT NOT NULL DEFAULT 1,
+    FolhearModo VARCHAR(16) NOT NULL DEFAULT 'flipbook',
     PontoRegistro INT NULL,
     DataRegistro DATETIME DEFAULT CURRENT_TIMESTAMP,
     DataAtualizacao DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -122,6 +123,12 @@ def ensure_analise_lab_schema() -> None:
                 "tabAnaliseLabSessao",
                 "CropVersao",
                 "CropVersao INT NOT NULL DEFAULT 1",
+            )
+            _ensure_column(
+                cursor,
+                "tabAnaliseLabSessao",
+                "FolhearModo",
+                "FolhearModo VARCHAR(16) NOT NULL DEFAULT 'flipbook'",
             )
             _ensure_column(
                 cursor,

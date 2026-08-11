@@ -28,6 +28,7 @@ import {
   fitZoom,
   loadInspectorViewMode,
   nextZoomFromWheel,
+  pageDisplaySize,
   resolveActivePageFromScroll,
   saveInspectorViewMode,
   stepRowPage,
@@ -56,6 +57,8 @@ interface AnaliseLabInspectorProps {
   selectedMarkId?: number | null;
   sangriaMm?: number;
   markTools: AnaliseLabToolbarMarkProps;
+  /** Com painel do problema aberto, opções da marca ficam no painel. */
+  hideMarkOptions?: boolean;
   prefs: InspectorViewPrefs;
   onPrefsChange: (prefs: InspectorViewPrefs) => void;
   pagePick?: {
@@ -106,6 +109,7 @@ export function AnaliseLabInspector({
   sangriaMm = 5,
   selectedMarkId = null,
   markTools,
+  hideMarkOptions = false,
   prefs,
   onPrefsChange,
   pagePick = null,
@@ -140,10 +144,7 @@ export function AnaliseLabInspector({
   const firstRowPages = rows[0] ?? [];
   const fitBase = useMemo(() => {
     const sizes = (firstRowPages.length ? firstRowPages : pages.slice(0, 1)).map(
-      (p) => ({
-        width: p.width || 800,
-        height: p.height || 1130,
-      }),
+      (p) => pageDisplaySize(p, 1),
     );
     return fitZoom(sizes, avail, {
       gutterPx: viewMode === "dupla" ? 0 : undefined,
@@ -426,6 +427,7 @@ export function AnaliseLabInspector({
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-200/70">
       <AnaliseLabToolbar
         mark={markTools}
+        hideMarkOptions={hideMarkOptions}
         prefs={prefs}
         onPrefsChange={onPrefsChange}
         activePage={activePage}

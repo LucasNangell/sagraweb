@@ -1,4 +1,5 @@
 import {
+  BetweenHorizontalStart,
   Columns2,
   Grid3X3,
   Maximize,
@@ -26,10 +27,7 @@ import {
   parsePageSpec,
   validatePageSpec,
 } from "./analiseLabPageSpec";
-import {
-  TOOLS,
-  type AnaliseLabTool,
-} from "./AnaliseLabMarkTools";
+import type { AnaliseLabTool } from "./AnaliseLabMarkTools";
 import type { InspectorViewMode } from "./analiseLabFit";
 import type { InspectorViewPrefs } from "./analiseLabViewPrefs";
 
@@ -71,7 +69,6 @@ export interface AnaliseLabToolbarMarkProps {
   onRotuloChange: (v: string) => void;
   espessura: number;
   onEspessuraChange: (v: number) => void;
-  onAddOffset: () => void;
   onAddFaixa: () => void;
   onAddSangriaAll: () => void;
   busy?: boolean;
@@ -112,7 +109,6 @@ export function AnaliseLabToolbar({
 }: AnaliseLabToolbarProps) {
   const {
     tool,
-    onToolChange,
     edge,
     onEdgeChange,
     offsetMm,
@@ -135,7 +131,6 @@ export function AnaliseLabToolbar({
     onRotuloChange,
     espessura,
     onEspessuraChange,
-    onAddOffset,
     onAddFaixa,
     onAddSangriaAll,
     busy = false,
@@ -143,8 +138,10 @@ export function AnaliseLabToolbar({
 
   const pageSpecError = useMemo(() => {
     if (applyAllPages) return null;
+    if (pagePickActive && !pageSpec.trim()) return null;
+    if (!pageSpec.trim()) return "Informe as páginas.";
     return validatePageSpec(pageSpec);
-  }, [applyAllPages, pageSpec]);
+  }, [applyAllPages, pageSpec, pagePickActive]);
 
   const multiPageScope = useMemo(() => {
     if (applyAllPages) return true;
@@ -158,14 +155,15 @@ export function AnaliseLabToolbar({
 
   const showMirror =
     multiPageScope &&
-    (tool === "offset_corte" ||
-      tool === "faixa" ||
+    (tool === "faixa" ||
       tool === "sangria" ||
       tool === "retangulo" ||
       tool === "seta" ||
       tool === "circulo" ||
       tool === "texto");
-  const insertDisabled = busy || (!applyAllPages && Boolean(pageSpecError));
+  const insertDisabled =
+    busy ||
+    (!applyAllPages && (Boolean(pageSpecError) || !pageSpec.trim()));
   const showStroke =
     tool === "seta" || tool === "circulo" || tool === "livre";
   const sangriaAll = edge === "all";
@@ -176,28 +174,6 @@ export function AnaliseLabToolbar({
   return (
     <div className="shrink-0">
       <div className="flex flex-wrap items-center gap-1.5 border-b border-sagra-border bg-white px-2 py-1.5">
-        <div className="flex flex-wrap items-center gap-0.5">
-          {TOOLS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              disabled={busy}
-              title={t.label}
-              aria-label={t.label}
-              onClick={() => onToolChange(t.id)}
-              className={
-                tool === t.id
-                  ? "inline-flex size-7 items-center justify-center rounded bg-primary-green text-white"
-                  : "inline-flex size-7 items-center justify-center rounded border border-sagra-border bg-white text-neutral-700 hover:bg-neutral-50"
-              }
-            >
-              {t.icon}
-            </button>
-          ))}
-        </div>
-
-        <span className={divider} aria-hidden />
-
         <div className="flex flex-wrap items-center gap-1">
           <span className="tabular-nums text-[11px] text-neutral-700">
             Pág. {activePage}/{pageCount}
@@ -345,13 +321,54 @@ export function AnaliseLabToolbar({
           >
             Limpar
           </button>
+          <button
+            type="button"
+            onClick={() => onPrefsChange({ ...prefs, offset: !prefs.offset })}
+            className={prefs.offset ? btnActive : btnIdle}
+            title="Offset de corte (auxiliar)"
+            aria-label="Offset de corte"
+            aria-pressed={prefs.offset}
+          >
+            <BetweenHorizontalStart className="size-3.5" aria-hidden />
+          </button>
+          {prefs.offset ? (
+            <>
+              <label className="flex items-center gap-1 text-[11px] text-neutral-600">
+                mm
+                <input
+                  type="number"
+                  min={0.5}
+                  max={100}
+                  step={0.5}
+                  value={prefs.offsetMm}
+                  onChange={(e) =>
+                    onPrefsChange({
+                      ...prefs,
+                      offsetMm: Number(e.target.value) || 7,
+                    })
+                  }
+                  className={`${inputClass} w-12`}
+                />
+              </label>
+              <input
+                type="color"
+                value={prefs.offsetColor}
+                onChange={(e) =>
+                  onPrefsChange({ ...prefs, offsetColor: e.target.value })
+                }
+                className={colorInputClass}
+                title="Cor do offset"
+                aria-label="Cor do offset"
+              />
+            </>
+          ) : null}
         </div>
       </div>
 
       {showOptions ? (
         <div className="flex flex-wrap items-center gap-1.5 border-b border-sagra-border bg-neutral-50 px-2 py-1.5">
           <div className="flex flex-wrap items-center gap-1">
-            {(tool === "offset_corte" || tool === "faixa") && (
+            {tool === "faixa" && (
               <>
                 <label className="flex items-center gap-1 text-[11px] text-neutral-600">
                   Borda
@@ -369,23 +386,21 @@ export function AnaliseLabToolbar({
                     ))}
                   </select>
                 </label>
-                {tool === "faixa" ? (
-                  <label className="flex items-center gap-1 text-[11px] text-neutral-600">
-                    De
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.5}
-                      value={fromMm}
-                      onChange={(e) =>
-                        onFromMmChange(Number(e.target.value) || 0)
-                      }
-                      className={`${inputClass} w-14`}
-                    />
-                  </label>
-                ) : null}
                 <label className="flex items-center gap-1 text-[11px] text-neutral-600">
-                  {tool === "offset_corte" ? "Offset" : "Até"}
+                  De
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    value={fromMm}
+                    onChange={(e) =>
+                      onFromMmChange(Number(e.target.value) || 0)
+                    }
+                    className={`${inputClass} w-14`}
+                  />
+                </label>
+                <label className="flex items-center gap-1 text-[11px] text-neutral-600">
+                  Até
                   <input
                     type="number"
                     min={0}
@@ -400,7 +415,7 @@ export function AnaliseLabToolbar({
                 <button
                   type="button"
                   disabled={insertDisabled}
-                  onClick={tool === "offset_corte" ? onAddOffset : onAddFaixa}
+                  onClick={onAddFaixa}
                   className={btnPrimary}
                 >
                   Inserir
@@ -521,7 +536,7 @@ export function AnaliseLabToolbar({
                   <input
                     value={pageSpec}
                     onChange={(e) => onPageSpecChange(e.target.value)}
-                    placeholder="1-15,20"
+                    placeholder={pagePickActive ? "Clique nas páginas" : "1-15,20"}
                     className={`${inputClass} w-24 ${pageSpecError ? "border-sagra-danger" : ""}`}
                     title={pageSpecError ?? undefined}
                   />

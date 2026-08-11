@@ -69,6 +69,24 @@ export function formatPageSpec(pages: Iterable<number>): string {
   return parts.join(",");
 }
 
+/** Alterna uma página no modo de seleção por clique; tolerante a spec vazio. */
+export function togglePagePickSpec(spec: string, page: number): string {
+  const n = Math.trunc(page);
+  if (!Number.isFinite(n) || n < 1) return spec || "";
+  let pages: number[] = [];
+  if ((spec || "").trim()) {
+    try {
+      pages = parsePageSpec(spec);
+    } catch {
+      pages = [];
+    }
+  }
+  const next = pages.includes(n)
+    ? pages.filter((p) => p !== n)
+    : [...pages, n];
+  return formatPageSpec(next);
+}
+
 export function validatePageSpec(spec: string): string | null {
   try {
     parsePageSpec(spec);

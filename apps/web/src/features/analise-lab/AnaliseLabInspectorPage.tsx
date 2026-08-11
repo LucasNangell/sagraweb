@@ -9,6 +9,7 @@ import type { ProvaWebPageMeta } from "@/api/provaWeb";
 
 import { AnaliseLabMarksLayer } from "./AnaliseLabMarksLayer";
 import type { AnaliseLabTool } from "./AnaliseLabMarkTools";
+import { hitTestMarkAt } from "./analiseLabHitTest";
 import {
   distanceMm,
   faixaFromDrag,
@@ -61,9 +62,13 @@ interface AnaliseLabInspectorPageProps {
   guidesYMm?: number[];
   gridColor?: string;
   guideColor?: string;
+  offset?: boolean;
+  offsetMm?: number;
+  offsetColor?: string;
   pagePickActive?: boolean;
   pagePicked?: boolean;
   onTogglePickPage?: (page: number) => void;
+  onSelectMark?: (markId: number) => void;
   /** Lado colado ao par na vista dupla — zera margem de sangria nesse lado. */
   innerEdge?: "left" | "right";
   tightActiveRing?: boolean;
@@ -120,9 +125,13 @@ export function AnaliseLabInspectorPage({
   guidesYMm = [],
   gridColor = "#94a3b8",
   guideColor = "#2563eb",
+  offset = false,
+  offsetMm = 7,
+  offsetColor = "#dc2626",
   pagePickActive = false,
   pagePicked = false,
   onTogglePickPage,
+  onSelectMark,
   innerEdge,
   tightActiveRing = false,
   interactive,
@@ -210,8 +219,23 @@ export function AnaliseLabInspectorPage({
       onTogglePickPage?.(page.page);
       return;
     }
+    if (tool === "select") {
+      const pt = toMm(e.clientX, e.clientY);
+      if (!pt || !onSelectMark) return;
+      const tolMm = 6 / Math.max(sx, 1e-6);
+      const hit = hitTestMarkAt({
+        marks,
+        pageNumber: page.page,
+        pageWidthMm: widthMm,
+        pageHeightMm: heightMm,
+        xMm: pt.xMm,
+        yMm: pt.yMm,
+        tolMm,
+      });
+      if (hit != null) onSelectMark(hit);
+      return;
+    }
     if (
-      tool === "select" ||
       tool === "offset_corte" ||
       tool === "faixa" ||
       tool === "livre" ||
@@ -508,7 +532,8 @@ export function AnaliseLabInspectorPage({
   const gridY = grid ? gridLinesMm(heightMm, gridStepMm) : [];
   const showGuidesOverlay =
     (guides && (guidesXMm.length > 0 || guidesYMm.length > 0)) ||
-    rulerDrag?.mode === "guide";
+    rulerDrag?.mode === "guide" ||
+    offset;
   const guideHitPointer = guidesSelectable && Boolean(onMoveGuide);
 
   const twoClickPreview =
@@ -696,6 +721,45 @@ export function AnaliseLabInspectorPage({
               pointerEvents="none"
             />
           ))}
+          {offset && offsetMm > 0
+            ? (
+                [
+                  {
+                    x1: 0,
+                    y1: (offsetMm / heightMm) * displayH,
+                    x2: displayW,
+                    y2: (offsetMm / heightMm) * displayH,
+                  },
+                  {
+                    x1: 0,
+                    y1: displayH - (offsetMm / heightMm) * displayH,
+                    x2: displayW,
+                    y2: displayH - (offsetMm / heightMm) * displayH,
+                  },
+                  {
+                    x1: (offsetMm / widthMm) * displayW,
+                    y1: 0,
+                    x2: (offsetMm / widthMm) * displayW,
+                    y2: displayH,
+                  },
+                  {
+                    x1: displayW - (offsetMm / widthMm) * displayW,
+                    y1: 0,
+                    x2: displayW - (offsetMm / widthMm) * displayW,
+                    y2: displayH,
+                  },
+                ] as const
+              ).map((line, i) => (
+                <line
+                  key={`off-${page.page}-${i}`}
+                  {...line}
+                  stroke={offsetColor}
+                  strokeWidth={1.25}
+                  strokeDasharray="6 4"
+                  pointerEvents="none"
+                />
+              ))
+            : null}
           {guides
             ? guidesXMm.map((x) => {
                 const dragging =

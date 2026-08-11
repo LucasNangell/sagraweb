@@ -175,6 +175,30 @@ def test_add_mark_rejects_invalid_tipo(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
 
+def test_delete_item_removes_linked_marks(monkeypatch: pytest.MonkeyPatch) -> None:
+    import services.analise_lab_items_service as items
+
+    sqls: list[str] = []
+
+    monkeypatch.setattr(
+        items,
+        "get_item",
+        lambda item_id: {"id": item_id, "sessaoId": 1},
+    )
+
+    def fake_execute(sql: str, params=None):  # type: ignore[no-untyped-def]
+        sqls.append(" ".join(sql.split()))
+        return []
+
+    monkeypatch.setattr(items.db, "execute_query", fake_execute)
+    assert items.delete_item(42) is True
+    assert any(
+        "DELETE FROM tabAnaliseLabMarca" in s and "ItemID" in s for s in sqls
+    )
+    assert any("DELETE FROM tabAnaliseLabItem" in s for s in sqls)
+    assert not any("SET ItemID = NULL" in s for s in sqls)
+
+
 def test_canonicalize_crop_json_stable() -> None:
     a = lab._canonicalize_crop_json({"unico": {"top": 1, "left": 2, "right": 3, "bottom": 4}})
     b = lab._canonicalize_crop_json({"unico": {"left": 2, "bottom": 4, "right": 3, "top": 1}})

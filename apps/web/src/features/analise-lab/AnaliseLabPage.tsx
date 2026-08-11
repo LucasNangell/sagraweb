@@ -8,7 +8,7 @@ import {
   ScanSearch,
   Trash2,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   analiseLabPageUrl,
@@ -60,9 +60,13 @@ import {
 import { AnaliseLabReplicateDialog } from "./AnaliseLabReplicateDialog";
 import { AnaliseLabSourcePicker } from "./AnaliseLabSourcePicker";
 import { buildLibraryDraft } from "./analiseLabLibraryDraft";
-import { itemOccurrences } from "./analiseLabComponente";
+import { itemOccurrences, roleToComponente } from "./analiseLabComponente";
 import { pageSizeMm } from "./analiseLabGeometry";
-import { formatPageSpec, parsePageSpec } from "./analiseLabPageSpec";
+import {
+  formatPageSpec,
+  parsePageSpec,
+  togglePagePickSpec,
+} from "./analiseLabPageSpec";
 import { pageNumberToIndex } from "./analiseLabPageSync";
 import { labelTipo } from "./analiseLabLabels";
 import { markScopeLabel } from "./analiseLabPageSpec";
@@ -96,12 +100,12 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     setPageNonce((n) => n + 1);
   };
 
-  const [tool, setTool] = useState<AnaliseLabTool>("offset_corte");
+  const [tool, setTool] = useState<AnaliseLabTool>("select");
   const [edge, setEdge] = useState<AnaliseLabEdge>("top");
   const [offsetMm, setOffsetMm] = useState(7);
   const [fromMm, setFromMm] = useState(0);
-  const [applyAllPages, setApplyAllPages] = useState(true);
-  const [pageSpec, setPageSpec] = useState("1");
+  const [applyAllPages, setApplyAllPages] = useState(false);
+  const [pageSpec, setPageSpec] = useState("");
   const [espelhar, setEspelhar] = useState(true);
   const [cor, setCor] = useState<AnaliseLabMarkCor>("red");
   const [rotulo, setRotulo] = useState("");
@@ -118,14 +122,13 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const [localItens, setLocalItens] = useState<AnaliseLabItem[] | null>(null);
   const [selectedMarkId, setSelectedMarkId] = useState<number | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
-  const [linkingItemId, setLinkingItemId] = useState<number | null>(null);
   const [dismissedBalloonIds, setDismissedBalloonIds] = useState<number[]>([]);
   const [occurrenceIndex, setOccurrenceIndex] = useState(0);
   const [replicateVersao, setReplicateVersao] = useState<string | null>(null);
   const [draftLibraryItem, setDraftLibraryItem] =
     useState<AnaliseLabItemPanelModel | null>(null);
-  const [itemEscopoDefault, setItemEscopoDefault] =
-    useState<AnaliseLabItemEscopo>("pagina");
+  const draftPayloadRef = useRef<UpdateAnaliseLabItemPayload | null>(null);
+  const markScopeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const infoQuery = useQuery({
     queryKey: ["analise-lab-info", ano, osId],
@@ -266,6 +269,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const pageNumero = pages[pageIndex]?.page ?? currentPage;
 
   useEffect(() => {
+    if (pagePickTarget) return;
     if (!applyAllPages) {
       setPageSpec((prev) => {
         if (!prev.trim() || /^\d+$/.test(prev.trim())) {
@@ -274,10 +278,9 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
         return prev;
       });
     }
-  }, [applyAllPages, pageNumero]);
+  }, [applyAllPages, pageNumero, pagePickTarget]);
 
   const canEspelharTipo = (tipo: string) =>
-    tipo === "offset_corte" ||
     tipo === "faixa" ||
     tipo === "sangria" ||
     tipo === "retangulo" ||
@@ -291,7 +294,128 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     if (applyAllPages) {
       return { pagina: 0, paginas: null as string | null };
     }
-    return { pagina: pageNumero, paginas: pageSpec };
+    return { pagina: pageNumero, paginas: pageSpec || String(pageNumero) };
+  };
+
+  const openLibraryDraft = (problema: ProblemaPadrao) => {
+    const pageMeta = pages.find((p) => p.page === pageNumero) ?? pages[0];
+    const componente = roleToComponente(
+      pageMeta?.role || "page",
+      session?.modo || "unico",
+    );
+    setDraftLibraryItem(
+      buildLibraryDraft({
+        problema,
+        escopo: "pagina",
+        pagina: pageNumero,
+        pageSpec: String(pageNumero),
+        componente,
+      }),
+    );
+    setItemPageSpec(String(pageNumero));
+    setSelectedItemId(null);
+    setSelectedMarkId(null);
+    setTool("select");
+    setPagePickTarget(null);
+  };
+
+  const registerDraftItem = async (
+    payload: UpdateAnaliseLabItemPayload,
+    confirmSplit = false,
+  ): Promise<AnaliseLabItem | null> => {
+    if (!draftLibraryItem?.idProblemaPadrao) return null;
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      const escopo = (payload.escopo ||
+        draftLibraryItem.escopo) as AnaliseLabItemEscopo;
+      // Escopo arquivo: usa o fluxo da biblioteca (split Capa/Miolo) e depois aplica o HTML limpo.
+      if (escopo === "arquivo") {
+        const res = await createAnaliseLabItem(ano, osId, {
+          id_problema: draftLibraryItem.idProblemaPadrao,
+          escopo,
+          pagina: 0,
+          paginas: null,
+          versao_label: session?.versaoLabel,
+          confirm_split: confirmSplit,
+        });
+        if (res.needsConfirm && res.splitPreview) {
+          const lines = Object.entries(res.splitPreview)
+            .map(([c, p]) => `${c}: ${p}`)
+            .join("\n");
+          const ok = window.confirm(
+            `Este escopo atinge Capa e Miolo. Registrar dois problemas?\n\n${lines}`,
+          );
+          if (ok) {
+            return await registerDraftItem(payload, true);
+          }
+          return null;
+        }
+        const updated: AnaliseLabItem[] = [];
+        for (const created of res.items || []) {
+          const patch = await updateAnaliseLabItem(ano, osId, created.id, {
+            titulo: payload.titulo,
+            html_snapshot: payload.html_snapshot,
+            obs: payload.obs,
+            resolucao_obrigatoria: payload.resolucao_obrigatoria,
+          });
+          updated.push(patch.item);
+        }
+        setLocalItens((prev) => [...(prev ?? []), ...updated]);
+        if (updated[0]) {
+          setSelectedItemId(updated[0].id);
+          setLeftPane("itens");
+        }
+        setDraftLibraryItem(null);
+        draftPayloadRef.current = null;
+        invalidate();
+        return updated[0] ?? null;
+      }
+
+      const res = await createAnaliseLabItem(ano, osId, {
+        id_problema: draftLibraryItem.idProblemaPadrao,
+        titulo: payload.titulo,
+        html_snapshot: payload.html_snapshot,
+        escopo,
+        pagina: payload.pagina,
+        paginas: payload.paginas || null,
+        componente: payload.componente,
+        obs: payload.obs,
+        versao_label: session?.versaoLabel,
+      });
+      let items = res.items || [];
+      if (items[0] && payload.resolucao_obrigatoria) {
+        const patch = await updateAnaliseLabItem(ano, osId, items[0].id, {
+          resolucao_obrigatoria: true,
+        });
+        items = [patch.item];
+      }
+      setLocalItens((prev) => [...(prev ?? []), ...items]);
+      if (items[0]) {
+        setSelectedItemId(items[0].id);
+        setLeftPane("itens");
+      }
+      setDraftLibraryItem(null);
+      draftPayloadRef.current = null;
+      invalidate();
+      return items[0] ?? null;
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Erro ao registrar problema.",
+      );
+      return null;
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const ensureItemId = async (): Promise<number | null> => {
+    if (selectedItemId) return selectedItemId;
+    if (draftLibraryItem && draftPayloadRef.current) {
+      const item = await registerDraftItem(draftPayloadRef.current);
+      return item?.id ?? null;
+    }
+    return null;
   };
 
   const addMark = async (payload: {
@@ -302,6 +426,13 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     setActionBusy(true);
     setActionError(null);
     try {
+      const itemId = await ensureItemId();
+      if (itemId == null) {
+        setActionError(
+          "Selecione ou registre um problema técnico antes de inserir a marca.",
+        );
+        return;
+      }
       const scope = resolveScope();
       let multi = applyAllPages;
       if (!multi && scope.paginas) {
@@ -312,18 +443,28 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
         }
       }
       const drawnPage = Math.max(1, payload.pagina ?? pageNumero);
+      let markPaginas = applyAllPages ? null : scope.paginas;
+      let markPagina = applyAllPages ? 0 : (payload.pagina ?? scope.pagina);
+      if (pagePickTarget === "mark") {
+        const seed = togglePagePickSpec(pageSpec, drawnPage);
+        setPageSpec(seed);
+        markPaginas = seed || String(drawnPage);
+        markPagina = 1;
+        multi = (seed ? parsePageSpec(seed) : [drawnPage]).length > 1;
+      }
       const res = await createAnaliseLabMark(ano, osId, {
-        pagina: applyAllPages ? 0 : (payload.pagina ?? scope.pagina),
-        paginas: applyAllPages ? null : scope.paginas,
+        pagina: markPagina,
+        paginas: markPaginas,
         tipo: payload.tipo as "offset_corte",
         geometria: payload.geometria,
         rotulo: rotulo || null,
         cor,
         espelhar: canEspelharTipo(payload.tipo) && espelhar && multi,
         pagina_origem: drawnPage,
-        item_id: linkingItemId,
+        item_id: itemId,
       });
       setLocalMarks((prev) => [...(prev ?? []), res.mark]);
+      setSelectedMarkId(res.mark.id);
       invalidate();
     } catch (err) {
       setActionError(
@@ -369,110 +510,21 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     }
   };
 
-  const openLibraryDraft = (problema: ProblemaPadrao) => {
-    setDraftLibraryItem(
-      buildLibraryDraft({
-        problema,
-        escopo: itemEscopoDefault,
-        pagina: pageNumero,
-        pageSpec,
-      }),
-    );
-    setSelectedItemId(null);
-    setLinkingItemId(null);
-  };
-
-  const registerDraftItem = async (
-    payload: UpdateAnaliseLabItemPayload,
-    confirmSplit = false,
-  ) => {
-    if (!draftLibraryItem?.idProblemaPadrao) return;
-    setActionBusy(true);
-    setActionError(null);
-    try {
-      const escopo = (payload.escopo || draftLibraryItem.escopo) as AnaliseLabItemEscopo;
-      // Escopo arquivo: usa o fluxo da biblioteca (split Capa/Miolo) e depois aplica o HTML limpo.
-      if (escopo === "arquivo") {
-        const res = await createAnaliseLabItem(ano, osId, {
-          id_problema: draftLibraryItem.idProblemaPadrao,
-          escopo,
-          pagina: 0,
-          paginas: null,
-          versao_label: session?.versaoLabel,
-          confirm_split: confirmSplit,
-        });
-        if (res.needsConfirm && res.splitPreview) {
-          const lines = Object.entries(res.splitPreview)
-            .map(([c, p]) => `${c}: ${p}`)
-            .join("\n");
-          const ok = window.confirm(
-            `Este escopo atinge Capa e Miolo. Registrar dois problemas?\n\n${lines}`,
-          );
-          if (ok) {
-            await registerDraftItem(payload, true);
-          }
-          return;
-        }
-        const updated: AnaliseLabItem[] = [];
-        for (const created of res.items || []) {
-          const patch = await updateAnaliseLabItem(ano, osId, created.id, {
-            titulo: payload.titulo,
-            html_snapshot: payload.html_snapshot,
-            obs: payload.obs,
-            resolucao_obrigatoria: payload.resolucao_obrigatoria,
-          });
-          updated.push(patch.item);
-        }
-        setLocalItens((prev) => [...(prev ?? []), ...updated]);
-        if (updated[0]) {
-          setSelectedItemId(updated[0].id);
-          setLeftPane("itens");
-        }
-        setDraftLibraryItem(null);
-        invalidate();
-        return;
-      }
-
-      const res = await createAnaliseLabItem(ano, osId, {
-        id_problema: draftLibraryItem.idProblemaPadrao,
-        titulo: payload.titulo,
-        html_snapshot: payload.html_snapshot,
-        escopo,
-        pagina: payload.pagina,
-        paginas: payload.paginas || null,
-        componente: payload.componente,
-        obs: payload.obs,
-        versao_label: session?.versaoLabel,
-      });
-      let items = res.items || [];
-      if (items[0] && payload.resolucao_obrigatoria) {
-        const patch = await updateAnaliseLabItem(ano, osId, items[0].id, {
-          resolucao_obrigatoria: true,
-        });
-        items = [patch.item];
-      }
-      setLocalItens((prev) => [...(prev ?? []), ...items]);
-      if (items[0]) {
-        setSelectedItemId(items[0].id);
-        setLeftPane("itens");
-      }
-      setDraftLibraryItem(null);
-      invalidate();
-    } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : "Erro ao registrar problema.",
-      );
-    } finally {
-      setActionBusy(false);
-    }
-  };
-
   const handleDeleteItem = async (id: number) => {
     setActionBusy(true);
     try {
       await deleteAnaliseLabItem(ano, osId, id);
       setLocalItens((prev) => (prev ?? []).filter((i) => i.id !== id));
+      setLocalMarks((prev) =>
+        (prev ?? []).filter((m) => m.itemId !== id),
+      );
       if (selectedItemId === id) setSelectedItemId(null);
+      if (
+        selectedMarkId != null &&
+        marks.find((m) => m.id === selectedMarkId)?.itemId === id
+      ) {
+        setSelectedMarkId(null);
+      }
       invalidate();
     } catch (err) {
       setActionError(
@@ -648,9 +700,16 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
 
   const selectItem = (id: number) => {
     setDraftLibraryItem(null);
+    draftPayloadRef.current = null;
     setSelectedItemId(id);
+    setSelectedMarkId(null);
+    setTool("select");
+    setPagePickTarget(null);
     const item = itens.find((i) => i.id === id);
     if (item) {
+      setItemPageSpec(
+        item.paginas || (item.pagina > 0 ? String(item.pagina) : ""),
+      );
       const occ = itemOccurrences(item, pages, parsePageSpec);
       if (occ[0]) goToPage(occ[0]);
       setOccurrenceIndex(0);
@@ -676,10 +735,10 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     busy: actionBusy,
   };
 
-  const linkingItem =
-    linkingItemId == null
-      ? null
-      : (itens.find((i) => i.id === linkingItemId) ?? null);
+  const allPagesSpec = useMemo(() => {
+    const nums = pages.map((p) => p.page).filter((n) => n >= 1);
+    return formatPageSpec(nums);
+  }, [pages]);
 
   /** Maior profundidade de sangria gravada — define a folga do Folhear. */
   const maxSangriaMm = marks.reduce((max, m) => {
@@ -730,41 +789,89 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     if (!pagePickTarget) return [];
     const spec = pagePickTarget === "item" ? itemPageSpec : pageSpec;
     try {
-      return parsePageSpec(spec);
+      return spec.trim() ? parsePageSpec(spec) : [];
     } catch {
       return [];
     }
   })();
 
+  const flushMarkScope = (markId: number, spec: string, markTipo: string) => {
+    if (markScopeTimerRef.current) clearTimeout(markScopeTimerRef.current);
+    markScopeTimerRef.current = setTimeout(() => {
+      void (async () => {
+        try {
+          let pageCount = 0;
+          try {
+            pageCount = spec.trim() ? parsePageSpec(spec).length : 0;
+          } catch {
+            pageCount = 0;
+          }
+          const res = await updateAnaliseLabMark(ano, osId, markId, {
+            pagina: 1,
+            paginas: spec || null,
+            espelhar:
+              canEspelharTipo(markTipo) && espelhar && pageCount > 1,
+          });
+          setLocalMarks((prev) =>
+            (prev ?? []).map((m) => (m.id === markId ? res.mark : m)),
+          );
+          invalidate();
+        } catch (err) {
+          setActionError(
+            err instanceof Error
+              ? err.message
+              : "Erro ao atualizar páginas da marca.",
+          );
+          invalidate();
+        }
+      })();
+    }, 300);
+  };
+
   const togglePickPage = (page: number) => {
     if (!pagePickTarget) return;
-    const next = pickedPages.includes(page)
-      ? pickedPages.filter((p) => p !== page)
-      : [...pickedPages, page];
-    const spec = formatPageSpec(next);
-    if (pagePickTarget === "item") setItemPageSpec(spec);
-    else setPageSpec(spec);
+    if (pagePickTarget === "item") {
+      setItemPageSpec((prev) => togglePagePickSpec(prev, page));
+      return;
+    }
+    const next = togglePagePickSpec(pageSpec, page);
+    setPageSpec(next);
+    if (selectedMarkId != null) {
+      const mark = marks.find((m) => m.id === selectedMarkId);
+      if (mark) {
+        setLocalMarks((prev) =>
+          (prev ?? []).map((m) =>
+            m.id === selectedMarkId
+              ? { ...m, pagina: 1, paginas: next || null }
+              : m,
+          ),
+        );
+        flushMarkScope(selectedMarkId, next, mark.tipo);
+      }
+    }
   };
 
   const itemPagePickProps = {
     pageSpecOverride: pagePickTarget === "item" ? itemPageSpec : null,
     onPageSpecChange: (spec: string) => {
-      if (pagePickTarget === "item") setItemPageSpec(spec);
+      setItemPageSpec(spec);
     },
     pagePickActive: pagePickTarget === "item",
-    onTogglePagePick: (currentSpec: string) => {
+    onTogglePagePick: () => {
       setPagePickTarget((prev) => {
         if (prev === "item") return null;
-        setItemPageSpec(currentSpec);
+        setItemPageSpec("");
         return "item";
       });
     },
+    allPagesSpec,
   };
 
   const toggleMarkPagePick = () => {
     setPagePickTarget((prev) => {
       if (prev === "mark") return null;
       setApplyAllPages(false);
+      setPageSpec("");
       return "mark";
     });
   };
@@ -798,12 +905,6 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     espessura,
     onEspessuraChange: setEspessura,
     busy: actionBusy,
-    onAddOffset: () =>
-      void addMark({
-        tipo: "offset_corte",
-        geometria: { edge, offsetMm },
-        pagina: pageNumero,
-      }),
     onAddFaixa: () =>
       void addMark({
         tipo: "faixa",
@@ -1026,22 +1127,6 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                   <>
                     <aside className="flex w-[332px] shrink-0 flex-col border-r border-sagra-border bg-white">
                       <div className="flex min-h-0 flex-1 flex-col border-b border-sagra-border p-2">
-                        <label className="mb-2 flex shrink-0 flex-col gap-0.5 text-[11px] text-neutral-500">
-                          Ao registrar
-                          <select
-                            value={itemEscopoDefault}
-                            onChange={(e) =>
-                              setItemEscopoDefault(
-                                e.target.value as AnaliseLabItemEscopo,
-                              )
-                            }
-                            className="rounded border border-sagra-border px-1 py-0.5 text-xs"
-                          >
-                            <option value="pagina">Página atual</option>
-                            <option value="paginas">Spec de páginas</option>
-                            <option value="arquivo">Arquivo todo</option>
-                          </select>
-                        </label>
                         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                           <AnaliseLabLibrary
                             busy={actionBusy}
@@ -1124,106 +1209,23 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                       </div>
                     </aside>
 
-                    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                      {linkingItem ? (
-                        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-950">
-                          <span>
-                            Marcando para: <strong>{linkingItem.titulo}</strong>
-                          </span>
-                          <button
-                            type="button"
-                            className="rounded border border-amber-300 bg-white px-2 py-0.5 font-semibold"
-                            onClick={() => setLinkingItemId(null)}
-                          >
-                            Concluir
-                          </button>
-                        </div>
-                      ) : null}
-                      <AnaliseLabInspector
-                        pages={pages}
-                        pageTarget={{ page: currentPage, nonce: pageNonce }}
-                        onPageChange={(page) => setCurrentPage(page)}
-                        resolveUrl={(page) =>
-                          analiseLabPageUrl(
-                            ano,
-                            osId,
-                            page,
-                            manifestQuery.data.cacheKey,
-                          )
-                        }
-                        marks={marks}
-                        tool={tool}
-                        edge={edge}
-                        applyAllPages={applyAllPages}
-                        cor={cor}
-                        rotulo={rotulo}
-                        espessura={espessura}
-                        sangriaMm={sangriaMm}
-                        selectedMarkId={selectedMarkId}
-                        markTools={markToolsProps}
-                        prefs={viewPrefs}
-                        onPrefsChange={(next) =>
-                          setViewPrefs(normalizeViewPrefs(next))
-                        }
-                        pagePick={
-                          pagePickTarget
-                            ? {
-                                label:
-                                  pagePickTarget === "item"
-                                    ? "Selecionando páginas do problema"
-                                    : "Selecionando páginas da marca",
-                                pages: pickedPages,
-                                onTogglePage: togglePickPage,
-                                onFinish: () => setPagePickTarget(null),
-                              }
-                            : null
-                        }
-                        onCreateGeometryMark={(args) =>
-                          void addMark({
-                            tipo: args.tipo,
-                            geometria: args.geometria,
-                            pagina: args.pagina,
-                          })
-                        }
-                        onCreateFaixaDrag={(args) =>
-                          void addMark({
-                            tipo: "faixa",
-                            pagina: args.pagina,
-                            geometria: {
-                              edge,
-                              fromMm: args.fromMm,
-                              toMm: args.toMm,
-                            },
-                          })
-                        }
-                        onCreateSangriaDrag={(args) =>
-                          void addMark({
-                            tipo: "sangria",
-                            pagina: args.pagina,
-                            geometria: {
-                              edge: edge === "all" ? "left" : edge,
-                              fromMm: args.fromMm,
-                              toMm: args.toMm,
-                              alongFromMm: args.alongFromMm,
-                              alongToMm: args.alongToMm,
-                            },
-                          })
-                        }
-                      />
-                    </div>
-
                     {draftLibraryItem ? (
                       <AnaliseLabItemPanel
                         item={draftLibraryItem}
                         mode="register"
                         marks={marks}
-                        linkingActive={false}
                         busy={actionBusy}
                         onClose={() => {
                           setDraftLibraryItem(null);
+                          draftPayloadRef.current = null;
                           if (pagePickTarget === "item") setPagePickTarget(null);
                         }}
                         onSave={(p) => void registerDraftItem(p)}
+                        onPayloadChange={(p) => {
+                          draftPayloadRef.current = p;
+                        }}
+                        tool={tool}
+                        onToolChange={setTool}
                         {...itemPagePickProps}
                       />
                     ) : selectedItem ? (
@@ -1231,21 +1233,17 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         item={toPanelModel(selectedItem)}
                         mode="edit"
                         marks={marks}
-                        linkingActive={linkingItemId === selectedItem.id}
                         busy={actionBusy}
                         {...itemPagePickProps}
+                        tool={tool}
+                        onToolChange={setTool}
                         onClose={() => {
                           setSelectedItemId(null);
+                          setTool("select");
+                          setSelectedMarkId(null);
                           if (pagePickTarget === "item") setPagePickTarget(null);
-                          if (linkingItemId === selectedItem.id) {
-                            setLinkingItemId(null);
-                          }
                         }}
                         onDelete={() => void handleDeleteItem(selectedItem.id)}
-                        onStartLinking={() => {
-                          setLinkingItemId(selectedItem.id);
-                        }}
-                        onStopLinking={() => setLinkingItemId(null)}
                         onUnlinkMark={(markId) => {
                           void (async () => {
                             setActionBusy(true);
@@ -1303,6 +1301,85 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         }}
                       />
                     ) : null}
+
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                      <AnaliseLabInspector
+                        pages={pages}
+                        pageTarget={{ page: currentPage, nonce: pageNonce }}
+                        onPageChange={(page) => setCurrentPage(page)}
+                        resolveUrl={(page) =>
+                          analiseLabPageUrl(
+                            ano,
+                            osId,
+                            page,
+                            manifestQuery.data.cacheKey,
+                          )
+                        }
+                        marks={marks}
+                        tool={tool}
+                        edge={edge}
+                        applyAllPages={applyAllPages}
+                        cor={cor}
+                        rotulo={rotulo}
+                        espessura={espessura}
+                        sangriaMm={sangriaMm}
+                        selectedMarkId={selectedMarkId}
+                        markTools={markToolsProps}
+                        prefs={viewPrefs}
+                        onPrefsChange={(next) =>
+                          setViewPrefs(normalizeViewPrefs(next))
+                        }
+                        pagePick={
+                          pagePickTarget
+                            ? {
+                                label:
+                                  pagePickTarget === "item"
+                                    ? "Selecionando páginas do problema"
+                                    : "Selecionando páginas da marca",
+                                pages: pickedPages,
+                                onTogglePage: togglePickPage,
+                                onFinish: () => setPagePickTarget(null),
+                              }
+                            : null
+                        }
+                        onSelectMark={(id) => {
+                          setSelectedMarkId(id);
+                          setLeftPane("marcas");
+                          setTool("select");
+                        }}
+                        onCreateGeometryMark={(args) =>
+                          void addMark({
+                            tipo: args.tipo,
+                            geometria: args.geometria,
+                            pagina: args.pagina,
+                          })
+                        }
+                        onCreateFaixaDrag={(args) =>
+                          void addMark({
+                            tipo: "faixa",
+                            pagina: args.pagina,
+                            geometria: {
+                              edge,
+                              fromMm: args.fromMm,
+                              toMm: args.toMm,
+                            },
+                          })
+                        }
+                        onCreateSangriaDrag={(args) =>
+                          void addMark({
+                            tipo: "sangria",
+                            pagina: args.pagina,
+                            geometria: {
+                              edge: edge === "all" ? "left" : edge,
+                              fromMm: args.fromMm,
+                              toMm: args.toMm,
+                              alongFromMm: args.alongFromMm,
+                              alongToMm: args.alongToMm,
+                            },
+                          })
+                        }
+                      />
+                    </div>
                   </>
                 ) : (
                   <>

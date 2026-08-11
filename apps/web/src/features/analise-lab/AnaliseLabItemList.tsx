@@ -205,7 +205,15 @@ export function AnaliseLabItemList({
                       onSelect={() => onSelect(item.id)}
                       onDelete={
                         onDelete && !versao.readonly
-                          ? () => onDelete(item.id)
+                          ? () => {
+                              if (
+                                window.confirm(
+                                  "Excluir este problema técnico e todas as marcas vinculadas?",
+                                )
+                              ) {
+                                onDelete(item.id);
+                              }
+                            }
                           : undefined
                       }
                       onToggleResolucao={

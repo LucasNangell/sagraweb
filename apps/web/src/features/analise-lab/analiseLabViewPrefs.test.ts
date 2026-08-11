@@ -59,6 +59,9 @@ describe("analiseLabViewPrefs", () => {
       guideColor: DEFAULT_VIEW_PREFS.guideColor,
       guidesXMm: [10, 20.6],
       guidesYMm: [5],
+      offset: false,
+      offsetMm: DEFAULT_VIEW_PREFS.offsetMm,
+      offsetColor: DEFAULT_VIEW_PREFS.offsetColor,
     });
   });
 
@@ -71,6 +74,20 @@ describe("analiseLabViewPrefs", () => {
     );
     expect(normalizeViewPrefs({ gridColor: "#abc" }).gridColor).toBe(
       DEFAULT_VIEW_PREFS.gridColor,
+    );
+  });
+
+  it("normaliza offset auxiliar", () => {
+    expect(normalizeViewPrefs({ offset: true, offsetMm: 12.34 })).toEqual(
+      expect.objectContaining({
+        offset: true,
+        offsetMm: 12.3,
+        offsetColor: DEFAULT_VIEW_PREFS.offsetColor,
+      }),
+    );
+    expect(normalizeViewPrefs({ offsetMm: 0 }).offsetMm).toBe(0.5);
+    expect(normalizeViewPrefs({ offsetColor: "#ABCDEF" }).offsetColor).toBe(
+      "#abcdef",
     );
   });
 

@@ -30,6 +30,7 @@ import {
   nextZoomFromWheel,
   resolveActivePageFromScroll,
   saveInspectorViewMode,
+  stepRowPage,
   zoomStep,
   type InspectorViewMode,
 } from "./analiseLabFit";
@@ -63,6 +64,7 @@ interface AnaliseLabInspectorProps {
     onTogglePage: (page: number) => void;
     onFinish: () => void;
   } | null;
+  onSelectMark?: (markId: number) => void;
   onCreateGeometryMark: (args: {
     tipo:
       | "ponto"
@@ -107,6 +109,7 @@ export function AnaliseLabInspector({
   prefs,
   onPrefsChange,
   pagePick = null,
+  onSelectMark,
   onCreateGeometryMark,
   onCreateFaixaDrag,
   onCreateSangriaDrag,
@@ -248,13 +251,13 @@ export function AnaliseLabInspector({
   );
 
   const scrollToPage = useCallback(
-    (pageNumber: number) => {
+    (pageNumber: number, block: ScrollLogicalPosition = "start") => {
       const rowIdx = findRowIndexForPage(rows, pageNumber);
       const el = rowRefs.current.get(rowIdx);
       const root = scrollerRef.current;
       if (!el || !root) return false;
       suppressScrollSyncRef.current = true;
-      el.scrollIntoView({ behavior: "auto", block: "start" });
+      el.scrollIntoView({ behavior: "auto", block });
       setActivePage(pageNumber);
       const release = () => {
         suppressScrollSyncRef.current = false;
@@ -343,7 +346,6 @@ export function AnaliseLabInspector({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey)) return;
       const target = event.target as HTMLElement | null;
       if (
         target &&
@@ -351,6 +353,21 @@ export function AnaliseLabInspector({
           target.tagName === "TEXTAREA" ||
           target.isContentEditable)
       ) {
+        return;
+      }
+      if (!(event.ctrlKey || event.metaKey)) {
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+          event.preventDefault();
+          const next = stepRowPage(
+            rows,
+            activePageRef.current,
+            event.key === "ArrowLeft" ? -1 : 1,
+          );
+          if (next != null) {
+            emitPageChange(next);
+            scrollToPage(next, "center");
+          }
+        }
         return;
       }
       if (event.key === "=" || event.key === "+") {
@@ -367,7 +384,7 @@ export function AnaliseLabInspector({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [applyZoom, fitBase]);
+  }, [applyZoom, emitPageChange, fitBase, rows, scrollToPage]);
 
   const handleAddGuide = useCallback(
     (axis: "x" | "y", mm: number) => {
@@ -494,9 +511,13 @@ export function AnaliseLabInspector({
                     guidesYMm={prefs.guidesYMm}
                     gridColor={prefs.gridColor}
                     guideColor={prefs.guideColor}
+                    offset={prefs.offset}
+                    offsetMm={prefs.offsetMm}
+                    offsetColor={prefs.offsetColor}
                     pagePickActive={Boolean(pagePick)}
                     pagePicked={pagePick?.pages.includes(page.page) ?? false}
                     onTogglePickPage={pagePick?.onTogglePage}
+                    onSelectMark={onSelectMark}
                     innerEdge={innerEdge}
                     tightActiveRing={paired}
                     interactive

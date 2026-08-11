@@ -169,3 +169,17 @@ export function anchorScrollAfterZoom(args: {
     scrollTop: contentY * ratio - pointer.y,
   };
 }
+
+/** Primeira página da linha vizinha (←/→), ou null nos extremos. */
+export function stepRowPage<T extends { page: number }>(
+  rows: T[][],
+  currentPage: number,
+  dir: -1 | 1,
+): number | null {
+  if (!rows.length) return null;
+  const idx = findRowIndexForPage(rows, currentPage);
+  const nextIdx = idx + dir;
+  if (nextIdx < 0 || nextIdx >= rows.length) return null;
+  const row = rows[nextIdx];
+  return row?.[0]?.page ?? null;
+}

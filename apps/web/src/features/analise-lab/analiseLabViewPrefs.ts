@@ -9,6 +9,10 @@ export interface InspectorViewPrefs {
   guideColor: string;
   guidesXMm: number[];
   guidesYMm: number[];
+  /** Offset de corte auxiliar (não persiste no banco). */
+  offset: boolean;
+  offsetMm: number;
+  offsetColor: string;
 }
 
 export const DEFAULT_VIEW_PREFS: InspectorViewPrefs = {
@@ -20,6 +24,9 @@ export const DEFAULT_VIEW_PREFS: InspectorViewPrefs = {
   guideColor: "#2563eb",
   guidesXMm: [],
   guidesYMm: [],
+  offset: false,
+  offsetMm: 7,
+  offsetColor: "#dc2626",
 };
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/;
@@ -37,6 +44,11 @@ function storageKey(ano: number, osId: number): string {
 function clampStep(step: number): number {
   if (!Number.isFinite(step)) return DEFAULT_VIEW_PREFS.gridStepMm;
   return Math.min(100, Math.max(1, Math.round(step)));
+}
+
+function clampOffsetMm(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_VIEW_PREFS.offsetMm;
+  return Math.min(100, Math.max(0.5, Math.round(value * 10) / 10));
 }
 
 function normalizeGuideList(raw: unknown): number[] {
@@ -70,6 +82,14 @@ export function normalizeViewPrefs(
     ),
     guidesXMm: normalizeGuideList(partial.guidesXMm),
     guidesYMm: normalizeGuideList(partial.guidesYMm),
+    offset: Boolean(partial.offset),
+    offsetMm: clampOffsetMm(
+      partial.offsetMm ?? DEFAULT_VIEW_PREFS.offsetMm,
+    ),
+    offsetColor: normalizeColor(
+      partial.offsetColor,
+      DEFAULT_VIEW_PREFS.offsetColor,
+    ),
   };
 }
 

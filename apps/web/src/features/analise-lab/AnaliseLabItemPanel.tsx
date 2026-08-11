@@ -1,5 +1,5 @@
-import { Link2, MousePointerClick, Unlink } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { MousePointerClick, Unlink } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import type {
   AnaliseLabItem,
@@ -9,7 +9,13 @@ import type {
 } from "@/api/analiseLab";
 import { AnaliseHtmlEditor } from "@/features/analise/components/AnaliseHtmlEditor";
 import { labelTipo } from "./analiseLabLabels";
-import { markScopeLabel, validatePageSpec } from "./analiseLabPageSpec";
+import {
+  markScopeLabel,
+  parsePageSpec,
+  validatePageSpec,
+} from "./analiseLabPageSpec";
+import { AnaliseLabToolPalette } from "./AnaliseLabToolPalette";
+import type { AnaliseLabTool } from "./AnaliseLabMarkTools";
 
 export type AnaliseLabItemPanelMode = "edit" | "register";
 
@@ -32,13 +38,10 @@ interface AnaliseLabItemPanelProps {
   item: AnaliseLabItemPanelModel;
   mode?: AnaliseLabItemPanelMode;
   marks: AnaliseLabMark[];
-  linkingActive: boolean;
   busy?: boolean;
   onSave: (payload: UpdateAnaliseLabItemPayload) => void;
   onClose: () => void;
   onDelete?: () => void;
-  onStartLinking?: () => void;
-  onStopLinking?: () => void;
   onUnlinkMark?: (markId: number) => void;
   onDeleteMark?: (markId: number) => void;
   /** Spec de páginas controlado pelo pai (modo de seleção por clique). */
@@ -46,25 +49,76 @@ interface AnaliseLabItemPanelProps {
   onPageSpecChange?: (spec: string) => void;
   pagePickActive?: boolean;
   onTogglePagePick?: (currentSpec: string) => void;
+  allPagesSpec?: string;
+  onPayloadChange?: (payload: UpdateAnaliseLabItemPayload) => void;
+  /** Paleta de marcas abaixo do HTML. */
+  tool?: AnaliseLabTool;
+  onToolChange?: (tool: AnaliseLabTool) => void;
+  markToolsSlot?: ReactNode;
+}
+
+function buildPayload(args: {
+  titulo: string;
+  html: string;
+  obs: string;
+  componente: string;
+  pageSpec: string;
+  resolucaoObrigatoria: boolean;
+  corrigidoSefoc: boolean;
+  obsCorrecaoSefoc: string;
+  isRegister: boolean;
+  fallbackPagina: number;
+}): UpdateAnaliseLabItemPayload {
+  let pages: number[] = [];
+  try {
+    pages = args.pageSpec.trim() ? parsePageSpec(args.pageSpec) : [];
+  } catch {
+    pages = [];
+  }
+  const escopo: AnaliseLabItemEscopo =
+    pages.length > 1 ? "paginas" : "pagina";
+  const payload: UpdateAnaliseLabItemPayload = {
+    titulo: args.titulo,
+    html_snapshot: args.html,
+    obs: args.obs || null,
+    componente: args.componente,
+    escopo,
+    resolucao_obrigatoria: args.resolucaoObrigatoria,
+    corrigido_sefoc: args.isRegister ? false : args.corrigidoSefoc,
+    obs_correcao_sefoc:
+      !args.isRegister && args.corrigidoSefoc
+        ? args.obsCorrecaoSefoc || null
+        : null,
+  };
+  if (escopo === "paginas") {
+    payload.paginas = args.pageSpec;
+    payload.pagina = 1;
+  } else {
+    payload.pagina = pages[0] || args.fallbackPagina || 1;
+    payload.paginas = "";
+  }
+  return payload;
 }
 
 export function AnaliseLabItemPanel({
   item,
   mode = "edit",
   marks,
-  linkingActive,
   busy,
   onSave,
   onClose,
   onDelete,
-  onStartLinking,
-  onStopLinking,
   onUnlinkMark,
   onDeleteMark,
   pageSpecOverride = null,
   onPageSpecChange,
   pagePickActive = false,
   onTogglePagePick,
+  allPagesSpec = "",
+  onPayloadChange,
+  tool,
+  onToolChange,
+  markToolsSlot,
 }: AnaliseLabItemPanelProps) {
   const isRegister = mode === "register";
   const [titulo, setTitulo] = useState(item.titulo);
@@ -106,15 +160,49 @@ export function AnaliseLabItemPanel({
     setObsCorrecaoSefoc(item.obsCorrecaoSefoc || "");
   }, [item]);
 
+  const allPagesActive =
+    Boolean(allPagesSpec) && pageSpec.trim() === allPagesSpec.trim();
+
   const pageError = useMemo(() => {
-    if (escopo !== "paginas") return null;
+    if (pagePickActive && !pageSpec.trim()) return null;
+    if (!pageSpec.trim()) return "Informe as páginas.";
     return validatePageSpec(pageSpec);
-  }, [escopo, pageSpec]);
+  }, [pageSpec, pagePickActive]);
 
   const linkedMarks = useMemo(
     () => (item.id == null ? [] : marks.filter((m) => m.itemId === item.id)),
     [item.id, marks],
   );
+
+  useEffect(() => {
+    if (!onPayloadChange) return;
+    onPayloadChange(
+      buildPayload({
+        titulo,
+        html,
+        obs,
+        componente,
+        pageSpec,
+        resolucaoObrigatoria,
+        corrigidoSefoc,
+        obsCorrecaoSefoc,
+        isRegister,
+        fallbackPagina: item.pagina || 1,
+      }),
+    );
+  }, [
+    onPayloadChange,
+    titulo,
+    html,
+    obs,
+    componente,
+    pageSpec,
+    resolucaoObrigatoria,
+    corrigidoSefoc,
+    obsCorrecaoSefoc,
+    isRegister,
+    item.pagina,
+  ]);
 
   const pagePickButton = onTogglePagePick ? (
     <button
@@ -122,10 +210,7 @@ export function AnaliseLabItemPanel({
       title="Selecionar páginas clicando no documento"
       aria-label="Selecionar páginas clicando no documento"
       aria-pressed={pagePickActive}
-      onClick={() => {
-        if (!pagePickActive && escopo !== "paginas") setEscopo("paginas");
-        onTogglePagePick(pageSpec);
-      }}
+      onClick={() => onTogglePagePick(pageSpec)}
       className={
         pagePickActive
           ? "inline-flex size-8 shrink-0 items-center justify-center rounded border border-sky-500 bg-sky-50 text-sky-700"
@@ -137,7 +222,7 @@ export function AnaliseLabItemPanel({
   ) : null;
 
   return (
-    <aside className="flex w-[544px] max-w-[45vw] shrink-0 flex-col gap-2 overflow-y-auto border-l border-sagra-border bg-white p-3 text-sm">
+    <aside className="flex w-[420px] max-w-[38vw] shrink-0 flex-col gap-2 overflow-y-auto border-r border-sagra-border bg-white p-3 text-sm">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-xs font-semibold uppercase text-neutral-600">
           {isRegister ? "Novo problema" : "Problema"}
@@ -147,6 +232,7 @@ export function AnaliseLabItemPanel({
         </button>
       </div>
 
+      {/* Campos ocultos temporariamente — mantidos no estado / payload.
       <label className="flex flex-col gap-1 text-xs text-neutral-600">
         Título
         <input
@@ -181,47 +267,53 @@ export function AnaliseLabItemPanel({
           <option value="arquivo">Arquivo / componente inteiro</option>
         </select>
       </label>
+      */}
 
-      {escopo === "paginas" ? (
-        <div className="flex flex-col gap-1 text-xs text-neutral-600">
-          <span>Páginas</span>
-          <div className="flex items-center gap-1">
-            <input
-              value={pageSpec}
-              onChange={(e) => setPageSpec(e.target.value)}
-              placeholder="1-15,20,23"
-              className="min-w-0 flex-1 rounded border border-sagra-border px-2 py-1.5"
-            />
-            {pagePickButton}
-          </div>
-          {pagePickActive ? (
-            <span className="text-[11px] text-sky-700">
-              Clique nas páginas do documento para incluir ou remover.
-            </span>
-          ) : null}
-          {pageError ? (
-            <span className="text-[11px] text-sagra-danger">{pageError}</span>
+      <div className="flex flex-col gap-1 text-xs text-neutral-600">
+        <span>Páginas</span>
+        <div className="flex items-center gap-1">
+          <input
+            value={pageSpec}
+            onChange={(e) => setPageSpec(e.target.value)}
+            placeholder="1-15,20,23"
+            disabled={allPagesActive}
+            className="min-w-0 flex-1 rounded border border-sagra-border px-2 py-1.5 disabled:bg-neutral-50"
+          />
+          {pagePickButton}
+          {allPagesSpec ? (
+            <label className="flex shrink-0 items-center gap-1 text-[11px] text-neutral-700">
+              <input
+                type="checkbox"
+                checked={allPagesActive}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setPageSpec(allPagesSpec);
+                    if (pagePickActive) onTogglePagePick?.(pageSpec);
+                  } else {
+                    setPageSpec("");
+                  }
+                }}
+              />
+              Todas as páginas
+            </label>
           ) : null}
         </div>
-      ) : null}
+        {pagePickActive && !pageSpec.trim() ? (
+          <span className="text-[11px] text-sky-700">
+            Clique nas páginas do documento para incluir ou remover.
+          </span>
+        ) : null}
+        {pagePickActive && pageSpec.trim() ? (
+          <span className="text-[11px] text-sky-700">
+            Clique nas páginas do documento para incluir ou remover.
+          </span>
+        ) : null}
+        {pageError ? (
+          <span className="text-[11px] text-sagra-danger">{pageError}</span>
+        ) : null}
+      </div>
 
-      {escopo === "pagina" ? (
-        <div className="flex flex-col gap-1 text-xs text-neutral-600">
-          <span>Página</span>
-          <div className="flex items-center gap-1">
-            <input
-              type="number"
-              min={1}
-              value={Number(pageSpec) || item.pagina || 1}
-              onChange={(e) => setPageSpec(String(Number(e.target.value) || 1))}
-              className="min-w-0 flex-1 rounded border border-sagra-border px-2 py-1.5"
-            />
-            {pagePickButton}
-          </div>
-        </div>
-      ) : null}
-
-      <div className="max-h-[60vh] overflow-auto rounded border border-sagra-border">
+      <div className="max-h-[40vh] overflow-auto rounded border border-sagra-border">
         <AnaliseHtmlEditor
           html={html}
           onChange={setHtml}
@@ -229,6 +321,20 @@ export function AnaliseLabItemPanel({
           itemTitulo={titulo}
         />
       </div>
+
+      {tool != null && onToolChange ? (
+        <div className="space-y-1.5 rounded border border-sagra-border bg-neutral-50 p-2">
+          <h3 className="text-[11px] font-semibold uppercase text-neutral-600">
+            Marcas
+          </h3>
+          <AnaliseLabToolPalette
+            tool={tool}
+            onToolChange={onToolChange}
+            busy={busy}
+          />
+          {markToolsSlot}
+        </div>
+      ) : null}
 
       <label className="flex flex-col gap-1 text-xs text-neutral-600">
         Observação
@@ -279,36 +385,9 @@ export function AnaliseLabItemPanel({
 
       {!isRegister ? (
         <div className="space-y-1.5 rounded border border-sagra-border bg-neutral-50 p-2">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="text-[11px] font-semibold uppercase text-neutral-600">
-              Marca vinculada
-            </h3>
-            {linkingActive ? (
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-900"
-                onClick={onStopLinking}
-              >
-                <Unlink className="size-3" aria-hidden />
-                Concluir marcação
-              </button>
-            ) : (
-              <button
-                type="button"
-                disabled={busy}
-                className="inline-flex items-center gap-1 rounded bg-secondary-blue px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50"
-                onClick={onStartLinking}
-              >
-                <Link2 className="size-3" aria-hidden />
-                Marcar no arquivo
-              </button>
-            )}
-          </div>
-          {linkingActive ? (
-            <p className="text-[11px] text-amber-800">
-              Próximas marcas serão vinculadas a este problema.
-            </p>
-          ) : null}
+          <h3 className="text-[11px] font-semibold uppercase text-neutral-600">
+            Marca vinculada
+          </h3>
           {linkedMarks.length ? (
             <ul className="space-y-0.5 text-[11px]">
               {linkedMarks.map((m) => (
@@ -321,15 +400,17 @@ export function AnaliseLabItemPanel({
                     {m.rotulo ? ` · ${m.rotulo}` : ""}
                     {` · ${markScopeLabel(m)}`}
                   </span>
-                  <button
-                    type="button"
-                    className="text-neutral-500 hover:text-neutral-800"
-                    title="Desvincular"
-                    disabled={busy}
-                    onClick={() => onUnlinkMark?.(m.id)}
-                  >
-                    <Unlink className="size-3" aria-hidden />
-                  </button>
+                  {onUnlinkMark ? (
+                    <button
+                      type="button"
+                      className="text-neutral-500 hover:text-neutral-800"
+                      title="Desvincular"
+                      disabled={busy}
+                      onClick={() => onUnlinkMark(m.id)}
+                    >
+                      <Unlink className="size-3" aria-hidden />
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="text-sagra-danger"
@@ -351,33 +432,23 @@ export function AnaliseLabItemPanel({
       <div className="flex gap-1">
         <button
           type="button"
-          disabled={busy || Boolean(pageError)}
+          disabled={busy || Boolean(pageError) || !pageSpec.trim()}
           className="flex-1 rounded bg-secondary-blue px-2 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
           onClick={() => {
-            const payload: UpdateAnaliseLabItemPayload = {
-              titulo,
-              html_snapshot: html,
-              obs: obs || null,
-              componente,
-              escopo,
-              resolucao_obrigatoria: resolucaoObrigatoria,
-              corrigido_sefoc: isRegister ? false : corrigidoSefoc,
-              obs_correcao_sefoc:
-                !isRegister && corrigidoSefoc
-                  ? obsCorrecaoSefoc || null
-                  : null,
-            };
-            if (escopo === "arquivo") {
-              payload.pagina = 0;
-              payload.paginas = "";
-            } else if (escopo === "paginas") {
-              payload.paginas = pageSpec;
-              payload.pagina = 1;
-            } else {
-              payload.pagina = Number(pageSpec) || item.pagina || 1;
-              payload.paginas = "";
-            }
-            onSave(payload);
+            onSave(
+              buildPayload({
+                titulo,
+                html,
+                obs,
+                componente,
+                pageSpec,
+                resolucaoObrigatoria,
+                corrigidoSefoc,
+                obsCorrecaoSefoc,
+                isRegister,
+                fallbackPagina: item.pagina || 1,
+              }),
+            );
           }}
         >
           {isRegister ? "Registrar" : "Salvar"}
@@ -387,7 +458,15 @@ export function AnaliseLabItemPanel({
             type="button"
             disabled={busy}
             className="rounded border border-sagra-danger/40 px-2 py-1.5 text-xs text-sagra-danger"
-            onClick={onDelete}
+            onClick={() => {
+              if (
+                window.confirm(
+                  "Excluir este problema técnico e todas as marcas vinculadas?",
+                )
+              ) {
+                onDelete();
+              }
+            }}
           >
             Excluir
           </button>

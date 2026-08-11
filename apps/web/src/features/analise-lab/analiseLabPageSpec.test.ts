@@ -5,6 +5,7 @@ import {
   isMarkVisibleOnPage,
   parsePageSpec,
   pageSpecIncludes,
+  togglePagePickSpec,
   validatePageSpec,
 } from "./analiseLabPageSpec";
 
@@ -20,24 +21,21 @@ describe("analiseLabPageSpec", () => {
     expect(formatPageSpec(parsePageSpec("1-5,3-8"))).toBe("1-8");
   });
 
-  it("alterna páginas do modo de seleção por clique", () => {
-    const toggle = (spec: string, page: number) => {
-      const pages = spec ? parsePageSpec(spec) : [];
-      const next = pages.includes(page)
-        ? pages.filter((p) => p !== page)
-        : [...pages, page];
-      return formatPageSpec(next);
-    };
-    let spec = toggle("", 3);
+  it("togglePagePickSpec começa vazio e alterna páginas", () => {
+    let spec = togglePagePickSpec("", 3);
     expect(spec).toBe("3");
-    spec = toggle(spec, 1);
-    spec = toggle(spec, 2);
+    spec = togglePagePickSpec(spec, 1);
+    spec = togglePagePickSpec(spec, 2);
     expect(spec).toBe("1-3");
-    spec = toggle(spec, 2);
+    spec = togglePagePickSpec(spec, 2);
     expect(spec).toBe("1,3");
-    spec = toggle(spec, 1);
-    spec = toggle(spec, 3);
+    spec = togglePagePickSpec(spec, 1);
+    spec = togglePagePickSpec(spec, 3);
     expect(spec).toBe("");
+  });
+
+  it("formatPageSpec de todas as páginas", () => {
+    expect(formatPageSpec([1, 2, 3, 4, 5])).toBe("1-5");
   });
 
   it("rejects invalid specs", () => {

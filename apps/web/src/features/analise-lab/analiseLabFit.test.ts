@@ -7,6 +7,7 @@ import {
   anchorScrollAfterZoom,
   nextZoomFromWheel,
   resolveActivePageFromScroll,
+  stepRowPage,
   zoomStep,
 } from "./analiseLabFit";
 
@@ -120,5 +121,18 @@ describe("analiseLabFit", () => {
     });
     expect(next.scrollLeft).toBe(250);
     expect(next.scrollTop).toBe(440);
+  });
+
+  it("stepRowPage avança / volta entre linhas e para nos extremos", () => {
+    const pages = [1, 2, 3, 4, 5].map((page) => ({ page }));
+    const simples = buildSpreadRows(pages, "simples");
+    expect(stepRowPage(simples, 1, 1)).toBe(2);
+    expect(stepRowPage(simples, 1, -1)).toBeNull();
+    expect(stepRowPage(simples, 5, 1)).toBeNull();
+    const dupla = buildSpreadRows(pages, "dupla");
+    expect(stepRowPage(dupla, 1, 1)).toBe(2);
+    expect(stepRowPage(dupla, 2, 1)).toBe(4);
+    expect(stepRowPage(dupla, 3, -1)).toBe(1);
+    expect(stepRowPage(dupla, 4, 1)).toBeNull();
   });
 });

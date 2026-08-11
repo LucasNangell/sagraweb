@@ -31,6 +31,9 @@ export function AnaliseLabLibrary({ busy, onRegister }: AnaliseLabLibraryProps) 
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+      <h2 className="shrink-0 text-xs font-semibold uppercase text-neutral-600">
+        Itens disponíveis
+      </h2>
       <input
         value={search}
         onChange={(e) => setSearch(e.target.value)}

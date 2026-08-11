@@ -1,6 +1,5 @@
 import {
   ArrowUpRight,
-  BetweenHorizontalStart,
   Circle,
   Dot,
   Droplets,
@@ -26,17 +25,13 @@ export type AnaliseLabTool =
   | "texto"
   | "livre";
 
+/** Ferramentas graváveis na barra/paleta (Offset auxiliar sai daqui). */
 export const TOOLS: Array<{
   id: AnaliseLabTool;
   label: string;
   icon: ReactNode;
 }> = [
   { id: "select", label: "Selecionar", icon: <MousePointer2 className="size-3.5" /> },
-  {
-    id: "offset_corte",
-    label: "Offset",
-    icon: <BetweenHorizontalStart className="size-3.5" />,
-  },
   { id: "faixa", label: "Faixa", icon: <StretchHorizontal className="size-3.5" /> },
   { id: "sangria", label: "Sangria", icon: <Droplets className="size-3.5" /> },
   { id: "retangulo", label: "Retângulo", icon: <Square className="size-3.5" /> },
@@ -49,7 +44,7 @@ export const TOOLS: Array<{
 ];
 
 export function toolToTipo(tool: AnaliseLabTool): AnaliseLabMarkTipoOrNull {
-  if (tool === "select") return null;
+  if (tool === "select" || tool === "offset_corte") return null;
   return tool;
 }
 

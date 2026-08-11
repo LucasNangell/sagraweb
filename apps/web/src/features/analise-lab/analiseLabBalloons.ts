@@ -8,15 +8,21 @@ import {
 } from "./analiseLabGeometry";
 import { isMarkVisibleOnPage } from "./analiseLabPageSpec";
 
-export interface BalloonAnchor {
-  itemId: number;
+export interface BalloonMarkAnchor {
   page: number;
-  refNumber: number;
+  markId: number;
   xMm: number;
   yMm: number;
+}
+
+export interface BalloonAnchor {
+  itemId: number;
+  /** Página de referência para nav/ocorrências (primeira âncora ou primeira occ no viewport). */
+  page: number;
+  refNumber: number;
   hasMark: boolean;
   item: AnaliseLabItem;
-  mark?: AnaliseLabMark | null;
+  markAnchors: BalloonMarkAnchor[];
 }
 
 export interface PackedBalloon extends BalloonAnchor {
@@ -25,8 +31,12 @@ export interface PackedBalloon extends BalloonAnchor {
   bubbleX: number;
   bubbleY: number;
   balloonWidth: number;
-  anchorX: number;
-  anchorY: number;
+  leaders: Array<{
+    markId: number;
+    page: number;
+    anchorX: number;
+    anchorY: number;
+  }>;
 }
 
 export function markAnchorMm(
@@ -95,16 +105,29 @@ export function markAnchorMm(
   }
 }
 
+type PageSizeFn = (
+  widthPt: number,
+  heightPt: number,
+) => { widthMm: number; heightMm: number };
+
+function pageMetaSize(
+  meta: ProvaWebPageMeta | undefined,
+  pageSizeMm: PageSizeFn,
+): { widthMm: number; heightMm: number } {
+  return pageSizeMm(meta?.widthPt || 0, meta?.heightPt || 0);
+}
+
+/**
+ * Um balão por problema no viewport: congrega todas as marcas visíveis
+ * nas páginas atuais (spread incluso).
+ */
 export function buildPageBalloons(args: {
   items: AnaliseLabItem[];
   marks: AnaliseLabMark[];
   pages: ProvaWebPageMeta[];
   visiblePages: ProvaWebPageMeta[];
   parsePageSpec: (spec: string) => number[];
-  pageSizeMm: (
-    widthPt: number,
-    heightPt: number,
-  ) => { widthMm: number; heightMm: number };
+  pageSizeMm: PageSizeFn;
 }): BalloonAnchor[] {
   const {
     items,
@@ -114,42 +137,50 @@ export function buildPageBalloons(args: {
     parsePageSpec,
     pageSizeMm,
   } = args;
+  if (!visiblePages.length) return [];
+
+  const visibleSet = new Set(visiblePages.map((p) => p.page));
   const out: BalloonAnchor[] = [];
   let ref = 1;
-  for (const pageMeta of visiblePages) {
-    const { widthMm, heightMm } = pageSizeMm(
-      pageMeta.widthPt || 0,
-      pageMeta.heightPt || 0,
-    );
-    for (const item of items) {
-      const occ = itemOccurrences(item, pages, parsePageSpec);
-      if (!occ.includes(pageMeta.page)) continue;
-      const linked = marks.find(
-        (m) =>
-          m.itemId === item.id && isMarkVisibleOnPage(m, pageMeta.page),
+
+  for (const item of items) {
+    const occ = itemOccurrences(item, pages, parsePageSpec);
+    const occInView = occ.filter((n) => visibleSet.has(n));
+    if (!occInView.length) continue;
+
+    const markAnchors: BalloonMarkAnchor[] = [];
+    for (const mark of marks) {
+      if (mark.itemId !== item.id) continue;
+      const pageOnView = visiblePages.find((p) =>
+        isMarkVisibleOnPage(mark, p.page),
       );
-      let xMm = widthMm * 0.88;
-      let yMm = heightMm * 0.1;
-      let hasMark = false;
-      if (linked) {
-        const a = markAnchorMm(linked, pageMeta.page, widthMm, heightMm);
-        xMm = a.xMm;
-        yMm = a.yMm;
-        hasMark = true;
-      }
-      out.push({
-        itemId: item.id,
-        page: pageMeta.page,
-        refNumber: ref,
-        xMm,
-        yMm,
-        hasMark,
-        item,
-        mark: linked ?? null,
+      if (!pageOnView) continue;
+      const { widthMm, heightMm } = pageMetaSize(pageOnView, pageSizeMm);
+      const a = markAnchorMm(mark, pageOnView.page, widthMm, heightMm);
+      markAnchors.push({
+        page: pageOnView.page,
+        markId: mark.id,
+        xMm: a.xMm,
+        yMm: a.yMm,
       });
-      ref += 1;
     }
+
+    const refPage =
+      markAnchors[0]?.page ??
+      occInView[0] ??
+      visiblePages[0]!.page;
+
+    out.push({
+      itemId: item.id,
+      page: refPage,
+      refNumber: ref,
+      hasMark: markAnchors.length > 0,
+      item,
+      markAnchors,
+    });
+    ref += 1;
   }
+
   return out;
 }
 
@@ -188,22 +219,53 @@ export function packBalloons(
     180,
     balloonWidth ?? Math.max(180, gutterRight - 24),
   );
-  const list = anchors
-    .slice()
-    .sort((a, b) => a.page - b.page || a.yMm - b.yMm || a.itemId - b.itemId);
+
+  const list = anchors.slice().sort((a, b) => {
+    const ay = a.markAnchors[0]?.yMm ?? 0;
+    const by = b.markAnchors[0]?.yMm ?? 0;
+    return a.page - b.page || ay - by || a.itemId - b.itemId;
+  });
 
   const packed: PackedBalloon[] = [];
   let cursor = 8;
   for (const a of list) {
-    const rect = pageRects[a.page];
-    if (!rect) continue;
-    const anchorX =
-      (a.xMm / Math.max(1, rect.widthMm)) * rect.width + rect.left;
-    const anchorY =
-      (a.yMm / Math.max(1, rect.heightMm)) * rect.height + rect.top;
+    const leaders: PackedBalloon["leaders"] = [];
+    let sumY = 0;
+    let countY = 0;
+
+    for (const ma of a.markAnchors) {
+      const rect = pageRects[ma.page];
+      if (!rect) continue;
+      const anchorX =
+        (ma.xMm / Math.max(1, rect.widthMm)) * rect.width + rect.left;
+      const anchorY =
+        (ma.yMm / Math.max(1, rect.heightMm)) * rect.height + rect.top;
+      leaders.push({
+        markId: ma.markId,
+        page: ma.page,
+        anchorX,
+        anchorY,
+      });
+      sumY += anchorY;
+      countY += 1;
+    }
+
+    // Sem marcas: ainda precisa de um page rect para posicionar o box.
+    const fallbackRect =
+      pageRects[a.page] ??
+      Object.values(pageRects)[0];
+    if (!leaders.length && !fallbackRect) continue;
+
+    const meanY =
+      countY > 0
+        ? sumY / countY
+        : fallbackRect
+          ? fallbackRect.top + fallbackRect.height * 0.12
+          : 0;
+
     const desired = Math.max(
       8,
-      Math.min(stageHeight - balloonHeight - 8, anchorY - balloonHeight / 2),
+      Math.min(stageHeight - balloonHeight - 8, meanY - balloonHeight / 2),
     );
     const top = Math.max(cursor, desired);
     cursor = top + balloonHeight + gap;
@@ -214,8 +276,7 @@ export function packBalloons(
       bubbleX: slotWidth + 12,
       bubbleY: top,
       balloonWidth: width,
-      anchorX,
-      anchorY,
+      leaders,
     });
   }
   return packed;

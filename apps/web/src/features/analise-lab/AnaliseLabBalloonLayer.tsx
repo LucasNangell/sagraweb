@@ -129,13 +129,12 @@ export function AnaliseLabBalloonLayer({
         className="pointer-events-none absolute inset-0 h-full w-full"
         aria-hidden
       >
-        {visible
-          .filter((b) => b.hasMark)
-          .map((b) => (
-            <g key={`line-${b.itemId}-${b.page}`}>
+        {visible.map((b) =>
+          b.leaders.map((leader) => (
+            <g key={`line-${b.itemId}-${leader.markId}`}>
               <line
-                x1={b.anchorX}
-                y1={b.anchorY}
+                x1={leader.anchorX}
+                y1={leader.anchorY}
                 x2={b.bubbleX}
                 y2={b.bubbleY + 20}
                 stroke="#64748b"
@@ -143,14 +142,15 @@ export function AnaliseLabBalloonLayer({
                 strokeDasharray="4 3"
               />
               <circle
-                cx={b.anchorX}
-                cy={b.anchorY}
+                cx={leader.anchorX}
+                cy={leader.anchorY}
                 r={selectedItemId === b.itemId ? 7 : 5}
                 fill={selectedItemId === b.itemId ? "#16a34a" : "#2563eb"}
                 fillOpacity={0.9}
               />
             </g>
-          ))}
+          )),
+        )}
       </svg>
 
       {visible.map((b) => {
@@ -158,7 +158,7 @@ export function AnaliseLabBalloonLayer({
         const occIdx = Math.max(0, occ.indexOf(b.page));
         return (
           <AnaliseLabProblemBalloon
-            key={`ball-${b.itemId}-${b.page}`}
+            key={`ball-${b.itemId}`}
             item={b.item}
             refNumber={b.refNumber}
             width={b.balloonWidth}

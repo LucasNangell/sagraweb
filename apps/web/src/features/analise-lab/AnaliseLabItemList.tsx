@@ -8,27 +8,37 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
+import { cn } from "@sagra/ui";
 import {
+  ChevronDown,
   Copy,
   ExternalLink,
+  FolderOpen,
   GripVertical,
+  Layers,
   Lock,
   LockOpen,
   Trash2,
   Wrench,
 } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { AnaliseLabItem } from "@/api/analiseLab";
 import type { ProvaWebPageMeta } from "@/api/provaWeb";
+import {
+  itemMatchesVersion,
+  resolveItemVersion,
+} from "@/features/analise/analiseItemsTree";
 import type { OsVersionItem } from "@/features/analise/types";
 import type { VersionPdfFile } from "@/features/analise/versionPdfClassify";
 import { openPathLocally } from "@/lib/sagraLocalOpener";
 
 import { markScopeLabel } from "./analiseLabPageSpec";
 import {
+  allLabTreeNodeKeys,
   buildLabItemsTree,
   canDropLabItem,
+  labComponentCollapseKey,
   labComponentDropId,
   labItemDragId,
   type LabVersionPdfPerFile,
@@ -101,6 +111,45 @@ export function AnaliseLabItemList({
       versions,
     ],
   );
+
+  const versionSig = versions.map((v) => `${v.version}:${v.label}`).join("|");
+  const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  useEffect(() => {
+    if (tree.length === 0) return;
+    setCollapsedNodes(allLabTreeNodeKeys(tree));
+    // Seed somente quando a lista de pastas Original muda.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- versionSig
+  }, [versionSig]);
+
+  useEffect(() => {
+    if (!currentVersaoLabel || tree.length === 0) return;
+    const matched =
+      resolveItemVersion(currentVersaoLabel, versions) ??
+      versions.find((v) => itemMatchesVersion(currentVersaoLabel, v)) ??
+      null;
+    const activeKey = matched
+      ? `v${matched.version}`
+      : (tree.find((v) => !v.readonly)?.key ?? null);
+    if (!activeKey) return;
+    setCollapsedNodes((prev) => {
+      if (!prev.has(activeKey)) return prev;
+      const next = new Set(prev);
+      next.delete(activeKey);
+      return next;
+    });
+  }, [currentVersaoLabel, versionSig, versions, tree]);
+
+  const toggleNode = (nodeKey: string) => {
+    setCollapsedNodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(nodeKey)) next.delete(nodeKey);
+      else next.add(nodeKey);
+      return next;
+    });
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -206,103 +255,188 @@ export function AnaliseLabItemList({
 
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto text-xs">
-        {tree.map((versao) => (
-          <div key={versao.key}>
-            <div className="mb-0.5 flex items-center gap-1 font-semibold uppercase tracking-wide text-neutral-500">
-              <span className="min-w-0 flex-1 truncate">
-                {versao.label}
-                {versao.readonly ? " · leitura" : ""}
-              </span>
-              {versao.readonly && onReplicateVersion ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  className="inline-flex shrink-0 items-center gap-0.5 rounded bg-secondary-blue/10 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-secondary-blue hover:bg-secondary-blue/20 disabled:opacity-50"
-                  onClick={() => onReplicateVersion(versao.label)}
-                  title="Replicar todos desta versão"
-                >
-                  <Copy className="size-3" aria-hidden />
-                  Replicar todos
-                </button>
-              ) : null}
-            </div>
-            {versao.components.map((comp) => (
-              <ComponentDropZone
-                key={comp.key}
-                versaoLabel={versao.label}
-                componente={comp.label}
-                readonly={versao.readonly}
+      <div className="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto text-xs">
+        {tree.map((versao) => {
+          const versionCollapsed = collapsedNodes.has(versao.key);
+          return (
+            <div key={versao.key}>
+              <button
+                type="button"
+                onClick={() => toggleNode(versao.key)}
+                className="flex w-full items-center justify-between border-l-4 border-secondary-blue bg-slate-100 px-2 py-1.5 text-left text-xs font-bold text-slate-700 hover:bg-slate-200/80"
               >
-                <div className="text-[11px] font-medium text-neutral-600">
-                  {comp.label}
-                </div>
-                {(comp.versionFiles?.length
-                  ? comp.versionFiles
-                  : comp.versionFile
-                    ? [comp.versionFile]
-                    : []
-                ).map((file) =>
-                  file.ausente ? (
-                    <VersionPdfAbsentRow
-                      key={`${comp.key}-absent-${file.componente}`}
-                      componente={file.componente}
-                    />
-                  ) : (
-                    <VersionPdfOpenRow
-                      key={`${comp.key}-open-${file.path || file.name}`}
-                      file={file}
-                    />
-                  ),
-                )}
-                <ul className="space-y-0.5">
-                  {comp.items.map((item) => (
-                    <ItemRow
-                      key={`${item.id}::${comp.label}`}
-                      item={item}
-                      versaoLabel={versao.label}
-                      listComponente={comp.label}
-                      readonly={versao.readonly}
-                      selected={selectedId === item.id}
-                      busy={busy}
-                      onSelect={() => onSelect(item.id)}
-                      onDelete={
-                        onDelete && !versao.readonly
-                          ? () => {
-                              if (
-                                window.confirm(
-                                  "Excluir este problema técnico e todas as marcas vinculadas?",
-                                )
-                              ) {
-                                onDelete(item.id);
-                              }
-                            }
-                          : undefined
-                      }
-                      onToggleResolucao={
-                        onToggleResolucao && !versao.readonly
-                          ? (next) => onToggleResolucao(item.id, next)
-                          : undefined
-                      }
-                      onToggleCorrigido={
-                        onToggleCorrigido && !versao.readonly
-                          ? (next) => onToggleCorrigido(item.id, next)
-                          : undefined
-                      }
-                      onReplicate={
-                        versao.readonly && onReplicateItem
-                          ? () => onReplicateItem(item.id)
-                          : undefined
-                      }
-                    />
-                  ))}
-                </ul>
-              </ComponentDropZone>
-            ))}
-          </div>
-        ))}
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <Layers
+                    className="size-3.5 shrink-0 text-secondary-blue"
+                    aria-hidden
+                  />
+                  <span className="truncate">
+                    {versao.label}
+                    {versao.readonly ? " · leitura" : ""}
+                  </span>
+                </span>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  {versao.readonly && onReplicateVersion ? (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className="inline-flex items-center gap-0.5 rounded bg-secondary-blue/10 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-secondary-blue hover:bg-secondary-blue/20"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!busy) onReplicateVersion(versao.label);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          if (!busy) onReplicateVersion(versao.label);
+                        }
+                      }}
+                      title="Replicar todos desta versão"
+                    >
+                      <Copy className="size-3" aria-hidden />
+                      Replicar
+                    </span>
+                  ) : null}
+                  <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                    {versao.itemCount} item
+                    {versao.itemCount === 1 ? "" : "s"}
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "size-4 transition-transform",
+                      versionCollapsed && "-rotate-90",
+                    )}
+                    aria-hidden
+                  />
+                </span>
+              </button>
+
+              {!versionCollapsed
+                ? versao.components.map((comp) => {
+                    const hasPdf =
+                      Boolean(comp.versionFile) ||
+                      Boolean(comp.versionFiles?.length);
+                    if (comp.items.length === 0 && !hasPdf) return null;
+
+                    const componentKey = labComponentCollapseKey(
+                      versao.key,
+                      comp.key,
+                    );
+                    const componentCollapsed = collapsedNodes.has(componentKey);
+
+                    return (
+                      <div
+                        key={comp.key}
+                        className="border-l-2 border-slate-200"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleNode(componentKey)}
+                          className="flex w-full items-center justify-between bg-slate-50 px-2 py-1 pl-4 text-left text-[11px] font-bold uppercase tracking-wide text-slate-600 hover:bg-slate-100"
+                        >
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <FolderOpen
+                              className="size-3 shrink-0 text-primary-green"
+                              aria-hidden
+                            />
+                            {comp.label}
+                          </span>
+                          <span className="flex shrink-0 items-center gap-1.5">
+                            <span className="text-[10px] font-normal normal-case text-slate-500">
+                              {comp.items.length}
+                            </span>
+                            <ChevronDown
+                              className={cn(
+                                "size-3.5 transition-transform",
+                                componentCollapsed && "-rotate-90",
+                              )}
+                              aria-hidden
+                            />
+                          </span>
+                        </button>
+
+                        {!componentCollapsed ? (
+                          <ComponentDropZone
+                            versaoLabel={versao.label}
+                            componente={comp.label}
+                            readonly={versao.readonly}
+                          >
+                            {(comp.versionFiles?.length
+                              ? comp.versionFiles
+                              : comp.versionFile
+                                ? [comp.versionFile]
+                                : []
+                            ).map((file) =>
+                              file.ausente ? (
+                                <VersionPdfAbsentRow
+                                  key={`${comp.key}-absent-${file.componente}`}
+                                  componente={file.componente}
+                                />
+                              ) : (
+                                <VersionPdfOpenRow
+                                  key={`${comp.key}-open-${file.path || file.name}`}
+                                  file={file}
+                                />
+                              ),
+                            )}
+                            <ul className="space-y-0.5 px-1 pb-1">
+                              {comp.items.map((item) => (
+                                <ItemRow
+                                  key={`${item.id}::${comp.label}`}
+                                  item={item}
+                                  versaoLabel={versao.label}
+                                  listComponente={comp.label}
+                                  readonly={versao.readonly}
+                                  selected={selectedId === item.id}
+                                  busy={busy}
+                                  onSelect={() => onSelect(item.id)}
+                                  onDelete={
+                                    onDelete && !versao.readonly
+                                      ? () => {
+                                          if (
+                                            window.confirm(
+                                              "Excluir este problema técnico e todas as marcas vinculadas?",
+                                            )
+                                          ) {
+                                            onDelete(item.id);
+                                          }
+                                        }
+                                      : undefined
+                                  }
+                                  onToggleResolucao={
+                                    onToggleResolucao && !versao.readonly
+                                      ? (next) =>
+                                          onToggleResolucao(item.id, next)
+                                      : undefined
+                                  }
+                                  onToggleCorrigido={
+                                    onToggleCorrigido && !versao.readonly
+                                      ? (next) =>
+                                          onToggleCorrigido(item.id, next)
+                                      : undefined
+                                  }
+                                  onReplicate={
+                                    versao.readonly && onReplicateItem
+                                      ? () => onReplicateItem(item.id)
+                                      : undefined
+                                  }
+                                />
+                              ))}
+                            </ul>
+                          </ComponentDropZone>
+                        ) : null}
+                      </div>
+                    );
+                  })
+                : null}
+            </div>
+          );
+        })}
         {empty ? (
-          <p className="text-neutral-400">Nenhum problema registrado.</p>
+          <p className="p-3 text-center text-neutral-400">
+            Nenhum problema registrado.
+          </p>
         ) : null}
       </div>
     </DndContext>
@@ -311,7 +445,7 @@ export function AnaliseLabItemList({
 
 function VersionPdfAbsentRow({ componente }: { componente: string }) {
   return (
-    <div className="mb-0.5 border-b border-slate-100 bg-amber-50/40 py-1 pl-2 pr-1">
+    <div className="mb-0.5 border-b border-slate-100 bg-amber-50/40 py-1 pl-4 pr-1">
       <span
         className="text-[11px] italic text-amber-900/90"
         title={`Arquivo de ${componente} não encontrado`}
@@ -333,7 +467,7 @@ function VersionPdfOpenRow({ file }: { file: VersionPdfFile }) {
   };
 
   return (
-    <div className="mb-0.5 border-b border-slate-100 bg-white py-1 pl-2 pr-1">
+    <div className="mb-0.5 border-b border-slate-100 bg-white py-1 pl-4 pr-1">
       <button
         type="button"
         onClick={() => void handleOpen()}
@@ -374,8 +508,8 @@ function ComponentDropZone({
       ref={setNodeRef}
       className={
         isOver
-          ? "mb-1 rounded border border-dashed border-primary-green bg-primary-green/5 pl-1"
-          : "mb-1 pl-1"
+          ? "rounded border border-dashed border-primary-green bg-primary-green/5"
+          : undefined
       }
     >
       {children}

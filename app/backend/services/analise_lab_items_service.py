@@ -601,3 +601,195 @@ def register_from_library(
         created.append(item)
 
     return {"needsConfirm": False, "items": created, "splitPreview": None}
+
+
+def _normalize_classic_componente(raw: str) -> str:
+    value = (raw or "").strip()
+    if value in COMPONENTES:
+        return value
+    lower = value.lower()
+    if lower == "encarte":
+        return "Arq. Único"
+    if "capa" in lower and "miolo" not in lower:
+        return "Capa"
+    if "miolo" in lower:
+        return "Miolo"
+    return "Arq. Único"
+
+
+def _classic_items_for_os(ano: int, os_id: int) -> list[dict[str, Any]]:
+    """Lê itens de tabAnaliseItens da OS; [] se não houver análise clássica."""
+    header = db.execute_query(
+        "SELECT ID FROM tabAnalises WHERE OS=%s AND Ano=%s LIMIT 1",
+        (int(os_id), int(ano)),
+    )
+    if not header:
+        return []
+    id_analise = int(header[0]["ID"])
+
+    # Tenta select completo; cai para colunas mínimas se o schema antigo falhar.
+    queries = [
+        """
+        SELECT i.ID AS id, i.ID_ProblemaPadrao AS idProblemaPadrao,
+               i.Obs AS obs, i.HTML_Snapshot AS html,
+               i.Componente AS componente, i.Versao AS versaoLabel,
+               i.ResolucaoObrigatoria AS resolucaoObrigatoria,
+               i.CorrigidoSefoc AS corrigidoSefoc,
+               i.ObsCorrecaoSefoc AS obsCorrecaoSefoc,
+               COALESCE(NULLIF(TRIM(p.TituloPT), ''), CONCAT('Item #', i.ID)) AS titulo
+        FROM tabAnaliseItens i
+        LEFT JOIN tabProblemasPadrao p ON i.ID_ProblemaPadrao = p.ID
+        WHERE i.ID_Analise = %s
+        ORDER BY i.ID ASC
+        """,
+        """
+        SELECT i.ID AS id, i.ID_ProblemaPadrao AS idProblemaPadrao,
+               i.Obs AS obs, i.HTML_Snapshot AS html,
+               i.Componente AS componente, i.Versao AS versaoLabel,
+               i.ResolucaoObrigatoria AS resolucaoObrigatoria,
+               0 AS corrigidoSefoc, NULL AS obsCorrecaoSefoc,
+               COALESCE(NULLIF(TRIM(p.TituloPT), ''), CONCAT('Item #', i.ID)) AS titulo
+        FROM tabAnaliseItens i
+        LEFT JOIN tabProblemasPadrao p ON i.ID_ProblemaPadrao = p.ID
+        WHERE i.ID_Analise = %s
+        ORDER BY i.ID ASC
+        """,
+        """
+        SELECT i.ID AS id, i.ID_ProblemaPadrao AS idProblemaPadrao,
+               i.Obs AS obs, i.HTML_Snapshot AS html,
+               i.Componente AS componente, NULL AS versaoLabel,
+               COALESCE(i.ResolucaoObrigatoria, 0) AS resolucaoObrigatoria,
+               0 AS corrigidoSefoc, NULL AS obsCorrecaoSefoc,
+               COALESCE(NULLIF(TRIM(p.TituloPT), ''), CONCAT('Item #', i.ID)) AS titulo
+        FROM tabAnaliseItens i
+        LEFT JOIN tabProblemasPadrao p ON i.ID_ProblemaPadrao = p.ID
+        WHERE i.ID_Analise = %s
+        ORDER BY i.ID ASC
+        """,
+    ]
+    last_exc: Exception | None = None
+    for sql in queries:
+        try:
+            rows = db.execute_query(sql, (id_analise,))
+            return list(rows or [])
+        except Exception as exc:
+            last_exc = exc
+            continue
+    if last_exc:
+        logger.warning(
+            "Falha ao ler tabAnaliseItens para OS %s/%s: %s",
+            os_id,
+            ano,
+            last_exc,
+        )
+    return []
+
+
+def import_classic_items(sessao_id: int, ano: int, os_id: int) -> int:
+    """
+    Importa itens clássicos faltantes para a sessão Lab (idempotente).
+
+    - Não sobrescreve linhas Lab já existentes.
+    - Só importa itens cujo ID_Analise pertence à mesma OS.
+    - Grava ItemAnaliseID para sincronizar no concluir.
+    """
+    sid = int(sessao_id)
+    session = get_session_by_id(sid)
+    if not session:
+        return 0
+    if int(session.get("nroProtocolo") or 0) != int(os_id) or int(
+        session.get("anoProtocolo") or 0
+    ) != int(ano):
+        logger.warning(
+            "import_classic_items: sessão %s não pertence à OS %s/%s",
+            sid,
+            os_id,
+            ano,
+        )
+        return 0
+
+    classic_rows = _classic_items_for_os(ano, os_id)
+    if not classic_rows:
+        return 0
+
+    classic_ids = [int(r["id"]) for r in classic_rows if r.get("id") is not None]
+    if not classic_ids:
+        return 0
+
+    placeholders = ", ".join(["%s"] * len(classic_ids))
+    already = db.execute_query(
+        f"""
+        SELECT ItemAnaliseID AS id
+        FROM tabAnaliseLabItem
+        WHERE ItemAnaliseID IN ({placeholders})
+        """,
+        tuple(classic_ids),
+    )
+    already_ids = {
+        int(r["id"]) for r in (already or []) if r.get("id") is not None
+    }
+
+    created = 0
+    ordem = _next_ordem(sid)
+    for row in classic_rows:
+        classic_id = int(row.get("id") or 0)
+        if classic_id <= 0 or classic_id in already_ids:
+            continue
+
+        titulo = (row.get("titulo") or "").strip() or f"Item #{classic_id}"
+        componente = _normalize_classic_componente(str(row.get("componente") or ""))
+        versao_label = (row.get("versaoLabel") or session.get("versaoLabel") or "").strip()[
+            :128
+        ]
+        obs = (row.get("obs") or "").strip() or None
+        html = row.get("html") or ""
+        id_padrao = row.get("idProblemaPadrao")
+        reso = 1 if int(row.get("resolucaoObrigatoria") or 0) else 0
+        corrigido = 1 if int(row.get("corrigidoSefoc") or 0) else 0
+        obs_corr = (row.get("obsCorrecaoSefoc") or "").strip() or None
+        if not corrigido:
+            obs_corr = None
+
+        try:
+            db.execute_query(
+                """
+                INSERT INTO tabAnaliseLabItem
+                    (SessaoID, ID_ProblemaPadrao, Titulo, HtmlSnapshot, Obs,
+                     Componente, Escopo, Pagina, Paginas, VersaoLabel, Ordem,
+                     ResolucaoObrigatoria, CorrigidoSefoc, ObsCorrecaoSefoc,
+                     ItemAnaliseID)
+                VALUES (%s, %s, %s, %s, %s, %s, 'arquivo', 0, NULL, %s, %s,
+                        %s, %s, %s, %s)
+                """,
+                (
+                    sid,
+                    int(id_padrao) if id_padrao is not None else None,
+                    titulo[:255],
+                    html,
+                    obs,
+                    componente,
+                    versao_label,
+                    ordem,
+                    reso,
+                    corrigido,
+                    obs_corr,
+                    classic_id,
+                ),
+            )
+            already_ids.add(classic_id)
+            ordem += 1
+            created += 1
+        except Exception as exc:
+            # UNIQUE / race: outro request já importou — trata como existente.
+            msg = str(exc).lower()
+            if "duplicate" in msg or "uq_lab_item_analise" in msg:
+                already_ids.add(classic_id)
+                continue
+            logger.warning(
+                "Falha ao importar item clássico %s para sessão %s: %s",
+                classic_id,
+                sid,
+                exc,
+            )
+    return created
+

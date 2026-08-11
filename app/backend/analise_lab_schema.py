@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS tabAnaliseLabItem (
     DataRegistro DATETIME DEFAULT CURRENT_TIMESTAMP,
     DataAtualizacao DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_lab_item_sessao (SessaoID, VersaoLabel, Componente),
+    UNIQUE KEY uq_lab_item_analise_id (ItemAnaliseID),
     CONSTRAINT fk_lab_item_sessao FOREIGN KEY (SessaoID)
         REFERENCES tabAnaliseLabSessao(ID) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -103,11 +104,34 @@ def _column_exists(cursor, table: str, column: str) -> bool:
     return bool(row and int(row.get("c") or 0) > 0)
 
 
+def _index_exists(cursor, table: str, index_name: str) -> bool:
+    cursor.execute(
+        """
+        SELECT COUNT(*) AS c FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = %s
+          AND INDEX_NAME = %s
+        """,
+        (table, index_name),
+    )
+    row = cursor.fetchone()
+    return bool(row and int(row.get("c") or 0) > 0)
+
+
 def _ensure_column(cursor, table: str, column: str, ddl: str) -> None:
     if _column_exists(cursor, table, column):
         return
     cursor.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
     logger.info("Análise Lab: coluna %s.%s adicionada.", table, column)
+
+
+def _ensure_unique_index(cursor, table: str, index_name: str, columns_sql: str) -> None:
+    if _index_exists(cursor, table, index_name):
+        return
+    cursor.execute(
+        f"ALTER TABLE {table} ADD UNIQUE KEY {index_name} ({columns_sql})"
+    )
+    logger.info("Análise Lab: índice %s.%s adicionado.", table, index_name)
 
 
 def ensure_analise_lab_schema() -> None:
@@ -171,6 +195,12 @@ def ensure_analise_lab_schema() -> None:
                 "tabAnaliseLabItem",
                 "ObsCorrecaoSefoc",
                 "ObsCorrecaoSefoc TEXT NULL",
+            )
+            _ensure_unique_index(
+                cursor,
+                "tabAnaliseLabItem",
+                "uq_lab_item_analise_id",
+                "ItemAnaliseID",
             )
         logger.info("Schema Análise Lab garantido (Sessao/Marca/Item).")
     except Exception as exc:

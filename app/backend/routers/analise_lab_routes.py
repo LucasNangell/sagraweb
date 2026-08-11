@@ -217,6 +217,16 @@ def get_analise_lab(ano: int, os_id: int, request: Request):
     _require_analise(request)
     folder = _os_folder(ano, os_id)
     session = lab.get_session(ano, os_id)
+    if session:
+        try:
+            lab_items.import_classic_items(session["id"], ano, os_id)
+        except Exception as exc:
+            logger.warning(
+                "Análise Lab: falha ao importar itens clássicos (%s/%s): %s",
+                os_id,
+                ano,
+                exc,
+            )
     marks = lab.list_marks(session["id"]) if session else []
     itens = lab_items.list_items(session["id"]) if session else []
     return {
@@ -394,6 +404,16 @@ def save_analise_lab(ano: int, os_id: int, body: AnaliseLabSave, request: Reques
         ) from exc
 
     session = lab.get_session(ano, os_id)
+    if session:
+        try:
+            lab_items.import_classic_items(session["id"], ano, os_id)
+        except Exception as exc:
+            logger.warning(
+                "Análise Lab: falha ao importar itens clássicos no save (%s/%s): %s",
+                os_id,
+                ano,
+                exc,
+            )
     return {
         "ok": True,
         "session": session,

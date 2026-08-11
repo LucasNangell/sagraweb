@@ -6,7 +6,9 @@ import type { OsVersionItem } from "@/features/analise/types";
 import {
   buildLabItemsTree,
   canDropLabItem,
+  allLabTreeNodeKeys,
   isLabVersionReadOnly,
+  labComponentCollapseKey,
   reorderIdsAfterDrop,
 } from "./analiseLabItemsTree";
 
@@ -55,22 +57,33 @@ const versions: OsVersionItem[] = [
 describe("analiseLabItemsTree", () => {
   it("groups by version and component without OS versions", () => {
     const tree = buildLabItemsTree(items, "v2");
-    expect(tree[0].label).toBe("v2");
-    expect(tree[0].readonly).toBe(false);
+    const v2 = tree.find((v) => v.label === "v2");
+    expect(v2?.readonly).toBe(false);
     expect(tree.find((v) => v.label === "v1")?.readonly).toBe(true);
-    const capa = tree[0].components.find((c) => c.label === "Capa");
+    const capa = v2?.components.find((c) => c.label === "Capa");
     expect(capa?.items.map((i) => i.id)).toEqual([1]);
   });
 
-  it("shows all OS versions including empty ones", () => {
+  it("shows all OS versions in Original folder order", () => {
     const tree = buildLabItemsTree(items, "v2 (Original)", versions);
     expect(tree.map((v) => v.label)).toEqual([
-      "v2 (Original)",
       "v1 (Original)",
+      "v2 (Original)",
       "v3 (Original)",
     ]);
     expect(tree.find((v) => v.label === "v3 (Original)")?.itemCount).toBe(0);
     expect(tree.find((v) => v.label === "v3 (Original)")?.readonly).toBe(true);
+  });
+
+  it("builds collapse keys matching UI", () => {
+    const tree = buildLabItemsTree(items, "v2", versions);
+    const keys = allLabTreeNodeKeys(tree);
+    expect(keys.has("v1")).toBe(true);
+    expect(keys.has("v2")).toBe(true);
+    const v2 = tree.find((v) => v.key === "v2");
+    const capa = v2?.components.find((c) => c.label === "Capa");
+    expect(capa).toBeTruthy();
+    expect(keys.has(labComponentCollapseKey(v2!.key, capa!.key))).toBe(true);
   });
 
   it("matches fuzzy version labels like Análise", () => {

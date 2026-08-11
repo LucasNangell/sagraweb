@@ -228,10 +228,7 @@ export function buildLabItemsTree(
           modo,
         ),
       )
-      .sort((a, b) => {
-        if (a.readonly !== b.readonly) return a.readonly ? 1 : -1;
-        return a.label.localeCompare(b.label, "pt-BR");
-      });
+      .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
   }
 
   const matchedIds = new Set<number>();
@@ -261,21 +258,40 @@ export function buildLabItemsTree(
     orphansByLabel.get(label)!.push(item);
   }
 
-  const orphanNodes = [...orphansByLabel.entries()].map(([label, list]) =>
-    buildOrphanVersionNode(
-      label,
-      list,
-      currentVersaoLabel,
-      versions,
-      pages,
-      modo,
-    ),
-  );
+  const orphanNodes = [...orphansByLabel.entries()]
+    .map(([label, list]) =>
+      buildOrphanVersionNode(
+        label,
+        list,
+        currentVersaoLabel,
+        versions,
+        pages,
+        modo,
+      ),
+    )
+    .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
 
-  return [...versionNodes, ...orphanNodes].sort((a, b) => {
-    if (a.readonly !== b.readonly) return a.readonly ? 1 : -1;
-    return a.label.localeCompare(b.label, "pt-BR");
-  });
+  // Preserva ordem das pastas Original da OS (como Análise); órfãos no fim.
+  return [...versionNodes, ...orphanNodes];
+}
+
+/** Chaves de versão e componente usadas no colapso da lista Lab. */
+export function allLabTreeNodeKeys(tree: LabTreeVersionNode[]): Set<string> {
+  const keys = new Set<string>();
+  for (const version of tree) {
+    keys.add(version.key);
+    for (const comp of version.components) {
+      keys.add(labComponentCollapseKey(version.key, comp.key));
+    }
+  }
+  return keys;
+}
+
+export function labComponentCollapseKey(
+  versionKey: string,
+  componentKey: string,
+): string {
+  return `${versionKey}::${componentKey}`;
 }
 
 export function canDropLabItem(args: {

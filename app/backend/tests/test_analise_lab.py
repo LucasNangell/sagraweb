@@ -351,3 +351,167 @@ def test_normalize_reorder_ids_filters_foreign() -> None:
     from services import analise_lab_items_service as items
 
     assert items.normalize_reorder_ids([3, 1, 9, 1, 2], {1, 2, 3}) == [3, 1, 2]
+
+
+def test_normalize_classic_componente() -> None:
+    from services import analise_lab_items_service as items
+
+    assert items._normalize_classic_componente("Capa") == "Capa"
+    assert items._normalize_classic_componente("Miolo") == "Miolo"
+    assert items._normalize_classic_componente("Arq. Único") == "Arq. Único"
+    assert items._normalize_classic_componente("encarte") == "Arq. Único"
+    assert items._normalize_classic_componente("capa frente") == "Capa"
+    assert items._normalize_classic_componente("outro") == "Arq. Único"
+
+
+def test_import_classic_items_creates_linked_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    from services import analise_lab_items_service as items
+
+    inserts: list[tuple] = []
+    queries: list[tuple] = []
+
+    def fake_exec(sql, params=None):
+        queries.append((sql, params))
+        s = " ".join(sql.split())
+        if "FROM tabAnalises" in s:
+            return [{"ID": 10}]
+        if "FROM tabAnaliseItens" in s:
+            return [
+                {
+                    "id": 101,
+                    "idProblemaPadrao": 5,
+                    "obs": "obs",
+                    "html": "<p>h</p>",
+                    "componente": "Capa",
+                    "versaoLabel": "v1 (Original)",
+                    "resolucaoObrigatoria": 1,
+                    "corrigidoSefoc": 0,
+                    "obsCorrecaoSefoc": None,
+                    "titulo": "Sangria",
+                }
+            ]
+        if "ItemAnaliseID IN" in s:
+            return []
+        if "MAX(Ordem)" in s:
+            return [{"m": 2}]
+        if "INSERT INTO tabAnaliseLabItem" in s:
+            inserts.append(params)
+            return []
+        return []
+
+    monkeypatch.setattr(items.db, "execute_query", fake_exec)
+    monkeypatch.setattr(
+        items,
+        "get_session_by_id",
+        lambda sid: {
+            "id": sid,
+            "nroProtocolo": 100,
+            "anoProtocolo": 2026,
+            "versaoLabel": "v2 (Original)",
+        },
+    )
+
+    created = items.import_classic_items(7, 2026, 100)
+    assert created == 1
+    assert len(inserts) == 1
+    # SessaoID, id_padrao, titulo, html, obs, componente, versao, ordem, reso, corrigido, obs_corr, classic_id
+    assert inserts[0][0] == 7
+    assert inserts[0][2] == "Sangria"
+    assert inserts[0][5] == "Capa"
+    assert inserts[0][6] == "v1 (Original)"
+    assert inserts[0][-1] == 101
+
+
+def test_import_classic_items_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
+    from services import analise_lab_items_service as items
+
+    inserts = 0
+
+    def fake_exec(sql, params=None):
+        nonlocal inserts
+        s = " ".join(sql.split())
+        if "FROM tabAnalises" in s:
+            return [{"ID": 10}]
+        if "FROM tabAnaliseItens" in s:
+            return [
+                {
+                    "id": 101,
+                    "idProblemaPadrao": None,
+                    "obs": None,
+                    "html": "",
+                    "componente": "Miolo",
+                    "versaoLabel": "v1",
+                    "resolucaoObrigatoria": 0,
+                    "corrigidoSefoc": 0,
+                    "obsCorrecaoSefoc": None,
+                    "titulo": "T",
+                }
+            ]
+        if "ItemAnaliseID IN" in s:
+            return [{"id": 101}]
+        if "INSERT INTO tabAnaliseLabItem" in s:
+            inserts += 1
+            return []
+        return []
+
+    monkeypatch.setattr(items.db, "execute_query", fake_exec)
+    monkeypatch.setattr(
+        items,
+        "get_session_by_id",
+        lambda sid: {
+            "id": sid,
+            "nroProtocolo": 100,
+            "anoProtocolo": 2026,
+            "versaoLabel": "v1",
+        },
+    )
+
+    assert items.import_classic_items(7, 2026, 100) == 0
+    assert inserts == 0
+
+
+def test_import_classic_items_no_classic(monkeypatch: pytest.MonkeyPatch) -> None:
+    from services import analise_lab_items_service as items
+
+    monkeypatch.setattr(
+        items.db,
+        "execute_query",
+        lambda sql, params=None: [],
+    )
+    monkeypatch.setattr(
+        items,
+        "get_session_by_id",
+        lambda sid: {
+            "id": sid,
+            "nroProtocolo": 1,
+            "anoProtocolo": 2026,
+            "versaoLabel": "v1",
+        },
+    )
+    assert items.import_classic_items(1, 2026, 1) == 0
+
+
+def test_import_classic_items_rejects_session_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from services import analise_lab_items_service as items
+
+    called = {"classic": False}
+
+    def fake_exec(sql, params=None):
+        called["classic"] = True
+        return [{"ID": 1}]
+
+    monkeypatch.setattr(items.db, "execute_query", fake_exec)
+    monkeypatch.setattr(
+        items,
+        "get_session_by_id",
+        lambda sid: {
+            "id": sid,
+            "nroProtocolo": 999,
+            "anoProtocolo": 2026,
+            "versaoLabel": "v1",
+        },
+    )
+    assert items.import_classic_items(1, 2026, 100) == 0
+    assert called["classic"] is False

@@ -246,6 +246,7 @@ class HistoryItem(BaseModel):
     gravacao_pendente_juntadas: Optional[List[GravacaoPendenteJuntadaInput]] = None
     face_token: Optional[str] = None
     from_tablet: Optional[bool] = False
+    replicar_alvo: Optional[str] = None  # "juntada" | "vinculo" (default)
 
 
 def _apply_protocolo_tab_on_andamento(cursor, nro: int, ano: int, item: HistoryItem, *, ponto: str) -> None:
@@ -1403,17 +1404,16 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
             item.obs,
         )
         if gp_juntadas:
-            from services.gravacao_pendente_service import format_os_list_label
+            from routers.andamento_helpers import with_juntada_obs_prefix
+            from services.gravacao_pendente_service import format_juntada_membros_label
 
-            labels = [format_os_list_label(id, ano)] + [
-                format_os_list_label(nr, a) for a, nr in gp_juntadas
+            membros = [{"nr_os": id, "ano": ano}] + [
+                {"nr_os": nr, "ano": a} for a, nr in gp_juntadas
             ]
-            juntada_line = "OSs juntadas: " + (
-                f"{labels[0]} e {labels[1]}"
-                if len(labels) == 2
-                else f"{', '.join(labels[:-1])} e {labels[-1]}"
+            obs_body = with_juntada_obs_prefix(
+                obs_body,
+                format_juntada_membros_label(membros),
             )
-            obs_body = f"{juntada_line}\n\n{obs_body}" if obs_body else juntada_line
         obs_formatada = format_andamento_obs(obs_body)
 
     def transaction_logic(cursor):
@@ -1665,11 +1665,26 @@ def check_vinculo_replicacao(
     situacao: str = Query(...),
     setor: str = Query(...),
 ):
-    """Verifica se andamento/setor exige confirmação de replicação ao grupo vinculado."""
+    """Verifica se andamento exige confirmação de replicação (juntada ou vínculo)."""
     try:
+        from services.gravacao_pendente_service import resolve_juntada_grupo_for_os
         from services.os_vinculo_grupo_service import check_replicacao_andamento
 
+        juntada = resolve_juntada_grupo_for_os(id, ano)
+        if juntada:
+            return VinculoReplicacaoCheckResponse.model_validate(
+                {
+                    "requires_confirmation": True,
+                    "legacy": False,
+                    "origem": "juntada",
+                    "juntada_grupo_id": juntada["juntada_grupo_id"],
+                    "membros": juntada["membros_vinculo"],
+                }
+            )
+
         result = check_replicacao_andamento(id, ano, situacao, setor)
+        if result.get("requires_confirmation"):
+            result = {**result, "origem": "vinculo"}
         return VinculoReplicacaoCheckResponse.model_validate(result)
     except Exception as e:
         logger.error("Error checking vinculo replicacao: %s", e)
@@ -1780,28 +1795,48 @@ def delete_vinculo(ano: int, id: int, v_num: int, v_ano: int):
 
 @router.post("/os/{ano}/{id}/history/replicate", response_model=HistoryReplicateResponse)
 def replicate_history(ano: int, id: int, item: HistoryItem):
-    """Replicar andamento para todas OSs vinculadas (incluindo a atual)."""
+    """Replicar andamento para OSs do vínculo ou da juntada (incluindo a atual)."""
+    alvo = (item.replicar_alvo or "vinculo").strip().lower()
+    pre_targets: set[tuple[int, int]] | None = None
+    if alvo == "juntada":
+        from services.gravacao_pendente_service import resolve_juntada_grupo_for_os
+
+        juntada = resolve_juntada_grupo_for_os(id, ano)
+        if not juntada:
+            raise HTTPException(
+                status_code=400,
+                detail="OS não possui juntada de gravação ativa com outras OSs.",
+            )
+        pre_targets = {(id, ano)}
+        for m in juntada["membros"]:
+            pre_targets.add((int(m["nr_os"]), int(m["ano"])))
+
     def transaction_logic(cursor):
-        # Find linked OSs
-        cursor.execute("SELECT os_principal_numero as principal_num, os_principal_ano as principal_ano, os_vinculada_numero as vinc_num, os_vinculada_ano as vinc_ano FROM tabOSVinculadas WHERE (os_principal_numero = %s AND os_principal_ano = %s) OR (os_vinculada_numero = %s AND os_vinculada_ano = %s)", (id, ano, id, ano))
-        rows = cursor.fetchall()
+        targets: set[tuple[int, int]]
+        if pre_targets is not None:
+            targets = set(pre_targets)
+        else:
+            targets = {(id, ano)}
+            cursor.execute(
+                "SELECT os_principal_numero as principal_num, os_principal_ano as principal_ano, "
+                "os_vinculada_numero as vinc_num, os_vinculada_ano as vinc_ano "
+                "FROM tabOSVinculadas WHERE (os_principal_numero = %s AND os_principal_ano = %s) "
+                "OR (os_vinculada_numero = %s AND os_vinculada_ano = %s)",
+                (id, ano, id, ano),
+            )
+            rows = cursor.fetchall()
+            for r in rows:
+                if r["principal_num"] == id and r["principal_ano"] == ano:
+                    targets.add((r["vinc_num"], r["vinc_ano"]))
+                else:
+                    targets.add((r["principal_num"], r["principal_ano"]))
 
-        targets = set()
-        targets.add((id, ano))
-        for r in rows:
-            if r['principal_num'] == id and r['principal_ano'] == ano:
-                targets.add((r['vinc_num'], r['vinc_ano']))
-            else:
-                targets.add((r['principal_num'], r['principal_ano']))
-
-        clean_user = ''.join(filter(str.isdigit, item.usuario)) if item.usuario else ''
+        clean_user = "".join(filter(str.isdigit, item.usuario)) if item.usuario else ""
         obs_formatada = format_andamento_obs(item.obs)
         ponto_formatado = format_ponto(clean_user)
 
         inserted = []
-        # For each target, insert history similar to add_os_history
-        for (t_num, t_ano) in targets:
-            # Reset UltimoStatus
+        for t_num, t_ano in targets:
             cursor.execute(
                 "UPDATE tabAndamento SET UltimoStatus = 0 "
                 "WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s AND UltimoStatus = 1",
@@ -1809,12 +1844,14 @@ def replicate_history(ano: int, id: int, item: HistoryItem):
             )
 
             base_prefix = f"{t_num:05d}{t_ano}-"
-            cursor.execute(f"SELECT MAX(CodStatus) as max_cod FROM tabAndamento WHERE CodStatus LIKE '{base_prefix}%'")
+            cursor.execute(
+                f"SELECT MAX(CodStatus) as max_cod FROM tabAndamento WHERE CodStatus LIKE '{base_prefix}%'"
+            )
             res = cursor.fetchone()
             next_seq = 1
-            if res and res.get('max_cod'):
+            if res and res.get("max_cod"):
                 try:
-                    existing_suffix = res['max_cod'].split('-')[-1]
+                    existing_suffix = res["max_cod"].split("-")[-1]
                     next_seq = int(existing_suffix) + 1
                 except Exception:
                     next_seq = 1
@@ -1823,17 +1860,27 @@ def replicate_history(ano: int, id: int, item: HistoryItem):
 
             cursor.execute(
                 "INSERT INTO tabAndamento (CodStatus, NroProtocoloLink, AnoProtocoloLink, SituacaoLink, SetorLink, `Data`, UltimoStatus, `Observaçao`, Ponto) VALUES (%s, %s, %s, %s, %s, NOW(), 1, %s, %s)",
-                (new_cod, t_num, t_ano, item.situacao, item.setor, obs_formatada, ponto_formatado)
+                (
+                    new_cod,
+                    t_num,
+                    t_ano,
+                    item.situacao,
+                    item.setor,
+                    obs_formatada,
+                    ponto_formatado,
+                ),
             )
-            inserted.append({
-                "cod_status": new_cod,
-                "nro": t_num,
-                "ano": t_ano,
-                "situacao": item.situacao,
-                "setor": item.setor,
-                "obs": obs_formatada,
-                "ponto": ponto_formatado,
-            })
+            inserted.append(
+                {
+                    "cod_status": new_cod,
+                    "nro": t_num,
+                    "ano": t_ano,
+                    "situacao": item.situacao,
+                    "setor": item.setor,
+                    "obs": obs_formatada,
+                    "ponto": ponto_formatado,
+                }
+            )
             log_andamento_added(
                 cursor,
                 nro=t_num,
@@ -1843,7 +1890,7 @@ def replicate_history(ano: int, id: int, item: HistoryItem):
                 setor=item.setor,
                 obs=obs_formatada,
                 ponto=ponto_formatado,
-                origem="API_REPLICATE",
+                origem="API_REPLICATE_JUNTADA" if alvo == "juntada" else "API_REPLICATE",
             )
             _apply_protocolo_tab_on_andamento(
                 cursor,

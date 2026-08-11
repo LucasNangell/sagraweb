@@ -607,6 +607,16 @@
   font-size: 0.9rem;
 }
 
+.dashboard-setor-hide-empty-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  color: var(--ds-text-secondary);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
 .dashboard-setor-btn {
   padding: 0.5rem 1rem;
   border: none;

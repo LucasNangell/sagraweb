@@ -80,6 +80,16 @@ def preserve_line_breaks(text: str) -> str:
     return text.replace('\r\n', '\n').replace('\r', '\n')
 
 
+def with_juntada_obs_prefix(obs_body: str, membros_label: str) -> str:
+    """Prefixa o corpo da observação com a linha de OSs juntadas."""
+    label = str(membros_label or "").strip()
+    body = str(obs_body or "")
+    if not label:
+        return body
+    line = f"OSs juntadas: {label}"
+    return f"{line}\n\n{body}" if body else line
+
+
 def format_gravacao_pendente_obs(
     chapas: list[dict],
     user_obs: str = "",

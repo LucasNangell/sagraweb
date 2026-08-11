@@ -6,6 +6,8 @@ interface OsDecisaoSaidaModalProps {
   situacao?: string;
   setor?: string;
   membros?: OsVinculoGrupoMembro[];
+  /** "juntada" adapta o texto para OSs juntadas na gravação. */
+  origem?: "juntada" | "vinculo" | null;
   onClose: () => void;
   onConfirm: (choice: "all" | "single") => void;
 }
@@ -16,6 +18,7 @@ export function OsDecisaoSaidaModal({
   situacao,
   setor,
   membros = [],
+  origem = "vinculo",
   onClose,
   onConfirm,
 }: OsDecisaoSaidaModalProps) {
@@ -23,9 +26,8 @@ export function OsDecisaoSaidaModal({
     return null;
   }
 
-  const grupoLabel = membros
-    .map((m) => `${m.numero}/${m.ano}`)
-    .join(", ");
+  const isJuntada = origem === "juntada";
+  const grupoLabel = membros.map((m) => `${m.numero}/${m.ano}`).join(", ");
   const andamentoLabel =
     situacao && setor ? `"${situacao}" (${setor})` : "este andamento";
 
@@ -41,22 +43,37 @@ export function OsDecisaoSaidaModal({
           id="decisao-saida-title"
           className="text-lg font-semibold text-primary-green"
         >
-          Atenção: OS em grupo vinculado
+          {isJuntada
+            ? "Atenção: OS em juntada de gravação"
+            : "Atenção: OS em grupo vinculado"}
         </h3>
         <p className="mt-2 text-sm text-neutral-700">
           {currentOs ? (
             <>
-              A OS <strong>{currentOs.numero}/{currentOs.ano}</strong> pertence a
-              um grupo com as OSs{" "}
-              <strong>{grupoLabel || "—"}</strong>.
+              A OS <strong>
+                {currentOs.numero}/{currentOs.ano}
+              </strong>{" "}
+              {isJuntada ? (
+                <>
+                  foi juntada com as OSs{" "}
+                  <strong>{grupoLabel || "—"}</strong>.
+                </>
+              ) : (
+                <>
+                  pertence a um grupo com as OSs{" "}
+                  <strong>{grupoLabel || "—"}</strong>.
+                </>
+              )}
             </>
+          ) : isJuntada ? (
+            <>Esta OS faz parte de uma juntada de gravação.</>
           ) : (
             <>Esta OS pertence a um grupo vinculado.</>
           )}
         </p>
         <p className="mt-2 text-sm text-neutral-700">
-          O andamento {andamentoLabel} pode ser replicado a todas as OSs do grupo.
-          Deseja aplicar para:
+          O andamento {andamentoLabel} pode ser replicado a todas as OSs{" "}
+          {isJuntada ? "juntadas" : "do grupo"}. Deseja aplicar para:
         </p>
         <form
           className="mt-4 space-y-2 text-sm"
@@ -69,7 +86,8 @@ export function OsDecisaoSaidaModal({
         >
           <label className="flex cursor-pointer items-center gap-2">
             <input type="radio" name="decisao_sa" value="all" defaultChecked />
-            Todas as OSs do grupo ({grupoLabel || "vinculadas"})
+            Todas as OSs {isJuntada ? "juntadas" : "do grupo"} (
+            {grupoLabel || (isJuntada ? "juntadas" : "vinculadas")})
           </label>
           <label className="flex cursor-pointer items-center gap-2">
             <input type="radio" name="decisao_sa" value="single" />

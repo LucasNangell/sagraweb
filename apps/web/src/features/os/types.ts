@@ -228,6 +228,8 @@ export interface HistoryPayload {
   /** Painel tablet: token do reconhecimento facial (sobrescreve usuario no backend). */
   face_token?: string;
   from_tablet?: boolean;
+  /** Alvo da replicação em grupo: juntada de gravação ou vínculo. */
+  replicar_alvo?: "juntada" | "vinculo";
 }
 
 /** GET /api/os/{ano}/{id}/audit-log */
@@ -267,7 +269,9 @@ export interface OsVinculoGrupoConfig {
 export interface OsVinculoReplicacaoCheck {
   requires_confirmation: boolean;
   legacy?: boolean;
+  origem?: "juntada" | "vinculo" | null;
   grupo_id?: number | null;
+  juntada_grupo_id?: string | null;
   situacao_grupo?: string | null;
   setor_grupo?: string | null;
   criado_por_ponto?: string | null;

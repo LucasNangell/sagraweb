@@ -21,7 +21,10 @@ import {
 } from "@/features/gravacao-externa/utils/downloadGravacaoExternaZipAll";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useMatchMedia } from "@/hooks/useMatchMedia";
-import { formatOsJuntadaLabel } from "../utils/formatOsJuntadaLabel";
+import {
+  formatOsCardSubtitle,
+  formatOsJuntadaLabel,
+} from "../utils/formatOsJuntadaLabel";
 import { GravacaoExternaActions, GravacaoExternaStatusBadge } from "./GravacaoExternaActions";
 import { GravacaoExternaChatPanel } from "./GravacaoExternaChatPanel";
 import { GravacaoExternaEntregaModal } from "./GravacaoExternaEntregaModal";
@@ -353,8 +356,7 @@ export function GravacaoExternaTab() {
                       />
                     </div>
                     <p className="mt-0.5 truncate text-xs text-neutral-600">
-                      {item.solicitante || "—"}
-                      {item.produto ? ` · ${item.produto}` : ""}
+                      {formatOsCardSubtitle(item)}
                     </p>
                   </button>
                 </li>

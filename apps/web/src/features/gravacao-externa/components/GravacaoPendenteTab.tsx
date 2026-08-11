@@ -36,7 +36,10 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useAccessControl } from "@/features/auth/useAccessControl";
 import { useMatchMedia } from "@/hooks/useMatchMedia";
 import { formatDateBr, formatDateTimeBr } from "@/lib/format";
-import { formatOsJuntadaLabel } from "../utils/formatOsJuntadaLabel";
+import {
+  formatOsCardSubtitle,
+  formatOsJuntadaLabel,
+} from "../utils/formatOsJuntadaLabel";
 import { GravacaoFornecedorSelectModal } from "./GravacaoFornecedorSelectModal";
 import { GravacaoPendenteControleEditModal } from "./GravacaoPendenteControleEditModal";
 import { GravacaoPendenteHistoricoCota } from "./GravacaoPendenteHistoricoCota";
@@ -291,8 +294,7 @@ export function GravacaoPendenteTab() {
                       <PendenteStatusBadge status={item.gravacao_pendente_status} />
                     </div>
                     <p className="mt-0.5 truncate text-xs text-neutral-600">
-                      {item.solicitante || "—"}
-                      {item.produto ? ` · ${item.produto}` : ""}
+                      {formatOsCardSubtitle(item)}
                     </p>
                   </button>
                 </li>

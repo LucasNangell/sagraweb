@@ -4,6 +4,8 @@ Fluxo feliz, da entrada em **Gravação Pendente** até a OS sair da lista **Agu
 
 > Observação: todo texto de `Observaçao` é prefixado automaticamente com a hora no momento do registro (`HHhMM` + quebra de linha), via `format_andamento_obs`.
 
+> **Juntada:** em **todas** as etapas abaixo, se a OS fizer parte de um `JuntadaGrupoId`, o corpo da observação começa com `OSs juntadas: OS A e OS B` (formato via `with_juntada_obs_prefix` / `format_juntada_membros_label`), seguido do bloco habitual (chapas e texto da etapa).
+
 ---
 
 ## 1. Gravação Pendente
@@ -40,6 +42,8 @@ Se o operador informar texto livre no formulário, ele entra abaixo das chapas. 
 
 ```
 HHhMM
+[OSs juntadas: …]   ← se juntada
+
 Chapas por máquina:
 - <máquina>: <qtd>
 ```
@@ -61,6 +65,8 @@ Chapas por máquina:
 
 ```
 HHhMM
+[OSs juntadas: …]   ← se juntada
+
 Arquivos baixados: 
 
 Chapas por máquina:
@@ -79,6 +85,8 @@ Chapas por máquina:
 
 ```
 HHhMM
+[OSs juntadas: …]   ← se juntada
+
 Gravação concluída. Aguardando retirada de:
 
 Chapas por máquina:
@@ -105,6 +113,8 @@ Chapas por máquina:
 
 ```
 HHhMM
+[OSs juntadas: …]   ← se juntada
+
 Chapas recebidas:
 
 Chapas por máquina:
@@ -119,12 +129,20 @@ Chapas por máquina:
 
 ---
 
+## Lançamento manual com juntada
+
+Quando a OS já faz parte de uma juntada (sessões em pendente/externa com `JuntadaGrupoId` e irmãs), qualquer **novo lançamento manual** de andamento na OS principal pergunta se deve replicar o mesmo andamento (situação, setor e observação) nas demais OSs juntadas — mesmo fluxo/modal usado para vínculo de OSs (`origem: juntada`). O lançamento inicial de **Gravação Pendente** (modal com arquivos/chapas/juntadas) já replica na criação e não passa por essa pergunta.
+
+Nas listas de cards em `/gravacao-externa` (pendente, em andamento e aguardando retirada), o subtítulo do card agregado mostra **Juntada de OPs** no lugar de solicitante · produto.
+
+---
+
 ## Resumo em ordem
 
 ```
-1. Gravação Pendente         | SEGEP         | Chapas por máquina: …          → lançamento + arquivos
-2. Saída p/                  | Grav. Externa | Chapas por máquina: …          → Enviar para Externa
-3. Recebido                  | Grav. Externa | Arquivos baixados: …           → Iniciar gravação
-4. Gravação Ext. Concluída    | SEGEP         | Gravação concluída. Aguardando… → Gravação concluída
-5. Recebido                  | Gravação      | Chapas recebidas: …            → recebimento (sai da lista)
+1. Gravação Pendente         | SEGEP         | [OSs juntadas…] Chapas por máquina: …          → lançamento + arquivos
+2. Saída p/                  | Grav. Externa | [OSs juntadas…] Chapas por máquina: …          → Enviar para Externa
+3. Recebido                  | Grav. Externa | [OSs juntadas…] Arquivos baixados: …           → Iniciar gravação
+4. Gravação Ext. Concluída    | SEGEP         | [OSs juntadas…] Gravação concluída. Aguardando… → Gravação concluída
+5. Recebido                  | Gravação      | [OSs juntadas…] Chapas recebidas: …            → recebimento (sai da lista)
 ```

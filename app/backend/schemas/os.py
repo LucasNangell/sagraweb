@@ -176,7 +176,9 @@ class VinculoGrupoConfigResponse(BaseModel):
 class VinculoReplicacaoCheckResponse(BaseModel):
     requires_confirmation: bool = False
     legacy: bool = False
+    origem: Optional[str] = None  # "juntada" | "vinculo" | None
     grupo_id: Optional[int] = None
+    juntada_grupo_id: Optional[str] = None
     situacao_grupo: Optional[str] = None
     setor_grupo: Optional[str] = None
     criado_por_ponto: Optional[str] = None

@@ -1052,7 +1052,12 @@ def iniciar_gravacao(
     targets = _resolve_active_externa_targets(session)
 
     # Avaliação prévia por OS (idempotência); chapas/obs por origem da sessão.
-    from routers.andamento_helpers import format_andamento_obs, format_gravacao_recebido_obs
+    from routers.andamento_helpers import (
+        format_andamento_obs,
+        format_gravacao_recebido_obs,
+        with_juntada_obs_prefix,
+    )
+    from services.gravacao_pendente_service import juntada_membros_label
 
     work: list[tuple[dict[str, Any], bool, str]] = []
     any_status_change = False
@@ -1069,7 +1074,12 @@ def iniciar_gravacao(
         if target["status"] != "iniciada":
             any_status_change = True
         chapas = _fetch_chapas_origem_pendente(target.get("origem_pendente_id"))
-        obs = format_andamento_obs(format_gravacao_recebido_obs(chapas))
+        obs = format_andamento_obs(
+            with_juntada_obs_prefix(
+                format_gravacao_recebido_obs(chapas),
+                juntada_membros_label(target.get("juntada_grupo_id")),
+            )
+        )
         work.append((target, not ja_recebido, obs))
 
     if not work:
@@ -1644,14 +1654,24 @@ def _run_concluir_targets(
     push_session: dict[str, Any],
 ) -> list[tuple[int, int, str]]:
     """Conclui várias sessões ativas na mesma TX e notifica cada OS."""
-    from routers.andamento_helpers import format_andamento_obs, format_gravacao_concluida_obs
+    from routers.andamento_helpers import (
+        format_andamento_obs,
+        format_gravacao_concluida_obs,
+        with_juntada_obs_prefix,
+    )
+    from services.gravacao_pendente_service import juntada_membros_label
 
     prepared: list[tuple[dict[str, Any], str]] = []
     for target in targets:
         if target.get("status") not in ("iniciada", "pendente"):
             continue
         chapas = _fetch_chapas_origem_pendente(target.get("origem_pendente_id"))
-        obs = format_andamento_obs(format_gravacao_concluida_obs(chapas))
+        obs = format_andamento_obs(
+            with_juntada_obs_prefix(
+                format_gravacao_concluida_obs(chapas),
+                juntada_membros_label(target.get("juntada_grupo_id")),
+            )
+        )
         prepared.append((target, obs))
 
     if not prepared:
@@ -2034,12 +2054,22 @@ def lancar_entrega_chapas(
     else:
         targets = [session]
 
-    from routers.andamento_helpers import format_andamento_obs, format_gravacao_entrega_obs
+    from routers.andamento_helpers import (
+        format_andamento_obs,
+        format_gravacao_entrega_obs,
+        with_juntada_obs_prefix,
+    )
+    from services.gravacao_pendente_service import juntada_membros_label
 
     prepared: list[tuple[dict[str, Any], str]] = []
     for target in targets:
         chapas = _fetch_chapas_origem_pendente(target.get("origem_pendente_id"))
-        obs = format_andamento_obs(format_gravacao_entrega_obs(chapas))
+        obs = format_andamento_obs(
+            with_juntada_obs_prefix(
+                format_gravacao_entrega_obs(chapas),
+                juntada_membros_label(target.get("juntada_grupo_id")),
+            )
+        )
         prepared.append((target, obs))
 
     session_id = int(session["id"])
@@ -2073,8 +2103,10 @@ def repair_legacy_gravacao_externa_andamentos() -> list[dict[str, Any]]:
         format_andamento_obs,
         format_gravacao_envio_externa_obs,
         format_gravacao_recebido_obs,
+        with_juntada_obs_prefix,
     )
     from services.andamento_operacional import ultimo_operacional_cod_subquery
+    from services.gravacao_pendente_service import juntada_membros_label
 
     ultimo_cod = ultimo_operacional_cod_subquery("ge.OsNro", "ge.OsAno")
     rows = db.execute_query(
@@ -2085,6 +2117,7 @@ def repair_legacy_gravacao_externa_andamentos() -> list[dict[str, Any]]:
             ge.OsAno AS os_ano,
             ge.Status AS ge_status,
             ge.OrigemPendenteId AS origem_pendente_id,
+            ge.JuntadaGrupoId AS juntada_grupo_id,
             a.CodStatus AS cod_status
         FROM tab_os_gravacao_externa ge
         INNER JOIN tabAndamento a
@@ -2105,14 +2138,27 @@ def repair_legacy_gravacao_externa_andamentos() -> list[dict[str, Any]]:
             continue
         origem = row.get("origem_pendente_id")
         chapas = _fetch_chapas_origem_pendente(int(origem) if origem else None)
+        juntada_label = juntada_membros_label(
+            str(row.get("juntada_grupo_id") or "").strip() or None
+        )
         if status == "iniciada":
             new_sit = SITUACAO_RECEBIDO
             new_setor = SETOR_GRAV_EXTERNA
-            obs = format_andamento_obs(format_gravacao_recebido_obs(chapas))
+            obs = format_andamento_obs(
+                with_juntada_obs_prefix(
+                    format_gravacao_recebido_obs(chapas),
+                    juntada_label,
+                )
+            )
         else:
             new_sit = SITUACAO_SAIDA_P
             new_setor = SETOR_GRAV_EXTERNA
-            obs = format_andamento_obs(format_gravacao_envio_externa_obs(chapas))
+            obs = format_andamento_obs(
+                with_juntada_obs_prefix(
+                    format_gravacao_envio_externa_obs(chapas),
+                    juntada_label,
+                )
+            )
 
         def tx(cursor, *, _cod=cod_status, _sit=new_sit, _setor=new_setor, _obs=obs):
             cursor.execute(

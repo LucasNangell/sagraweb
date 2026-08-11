@@ -175,6 +175,9 @@ export function OsHistoryPanel({
   const [pendingGrupoMembros, setPendingGrupoMembros] = useState<
     OsVinculoGrupoMembro[]
   >([]);
+  const [pendingReplicacaoOrigem, setPendingReplicacaoOrigem] = useState<
+    "juntada" | "vinculo" | null
+  >(null);
   const [andamentoTarget, setAndamentoTarget] = useState<AndamentoTargetKey>("");
   const [confirmMainOs, setConfirmMainOs] = useState(false);
   const [entregaModalOpen, setEntregaModalOpen] = useState(false);
@@ -551,16 +554,25 @@ export function OsHistoryPanel({
           cod_status: selectedHistory.CodStatus,
         });
       } else {
-        const replicacao = await checkOsVinculoReplicacao(
-          selected.ano,
-          selected.nr_os,
-          form.situacao,
-          form.setor,
-        );
-        if (replicacao.requires_confirmation) {
-          setPendingGrupoMembros(replicacao.membros ?? []);
-          setPendingSaida(payload);
-          return;
+        const isGravacaoPendenteLaunch =
+          Array.isArray(payload.gravacao_pendente_arquivos) ||
+          Array.isArray(payload.gravacao_pendente_chapas) ||
+          Array.isArray(payload.gravacao_pendente_juntadas);
+        if (!isGravacaoPendenteLaunch) {
+          const replicacao = await checkOsVinculoReplicacao(
+            selected.ano,
+            selected.nr_os,
+            form.situacao,
+            form.setor,
+          );
+          if (replicacao.requires_confirmation) {
+            setPendingGrupoMembros(replicacao.membros ?? []);
+            setPendingReplicacaoOrigem(
+              replicacao.origem === "juntada" ? "juntada" : "vinculo",
+            );
+            setPendingSaida(payload);
+            return;
+          }
         }
         await addMutation.mutateAsync(payload);
       }
@@ -681,23 +693,37 @@ export function OsHistoryPanel({
     if (!selected || !pendingSaida) {
       return;
     }
+    const origem = pendingReplicacaoOrigem;
+    const payload = pendingSaida;
     setPendingSaida(null);
     setPendingGrupoMembros([]);
+    setPendingReplicacaoOrigem(null);
     try {
       if (choice === "all") {
-        await replicateMutation.mutateAsync(pendingSaida);
-        window.alert("Andamento replicado para o grupo.");
-      } else {
-        await addMutation.mutateAsync(pendingSaida);
-        await createVinculoExcecao(selected.ano, selected.nr_os, {
-          observacao: "Andamento divergente aplicado apenas a esta OS",
-          usuario_ponto: pendingSaida.usuario,
-          situacao: pendingSaida.situacao,
-          setor: pendingSaida.setor,
+        await replicateMutation.mutateAsync({
+          ...payload,
+          replicar_alvo: origem === "juntada" ? "juntada" : "vinculo",
         });
         window.alert(
-          "Andamento salvo apenas nesta OS. O criador do vínculo foi notificado.",
+          origem === "juntada"
+            ? "Andamento replicado para as OSs juntadas."
+            : "Andamento replicado para o grupo.",
         );
+      } else {
+        await addMutation.mutateAsync(payload);
+        if (origem === "vinculo") {
+          await createVinculoExcecao(selected.ano, selected.nr_os, {
+            observacao: "Andamento divergente aplicado apenas a esta OS",
+            usuario_ponto: payload.usuario,
+            situacao: payload.situacao,
+            setor: payload.setor,
+          });
+          window.alert(
+            "Andamento salvo apenas nesta OS. O criador do vínculo foi notificado.",
+          );
+        } else {
+          window.alert("Andamento salvo apenas nesta OS.");
+        }
       }
       resetForm();
     } catch (e) {
@@ -1130,9 +1156,11 @@ export function OsHistoryPanel({
         situacao={pendingSaida?.situacao}
         setor={pendingSaida?.setor}
         membros={pendingGrupoMembros}
+        origem={pendingReplicacaoOrigem}
         onClose={() => {
           setPendingSaida(null);
           setPendingGrupoMembros([]);
+          setPendingReplicacaoOrigem(null);
         }}
         onConfirm={(choice) => void handleDecisao(choice)}
       />

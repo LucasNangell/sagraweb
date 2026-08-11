@@ -20,3 +20,17 @@ export function formatOsJuntadaLabel(
   if (labels.length === 2) return `${labels[0]} e ${labels[1]}`;
   return `${labels.slice(0, -1).join(", ")} e ${labels[labels.length - 1]}`;
 }
+
+/** Subtítulo do card nas listas de /gravacao-externa. */
+export function formatOsCardSubtitle(item: {
+  juntada_grupo_id?: string | null;
+  membros?: { nr_os: number; ano: number }[] | null;
+  solicitante?: string | null;
+  produto?: string | null;
+}): string {
+  if (item.juntada_grupo_id && (item.membros?.length ?? 0) > 1) {
+    return "Juntada de OPs";
+  }
+  const base = item.solicitante || "—";
+  return item.produto ? `${base} · ${item.produto}` : base;
+}

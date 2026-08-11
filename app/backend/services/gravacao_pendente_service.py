@@ -510,6 +510,88 @@ def format_juntada_membros_label(membros: list[dict[str, Any]]) -> str:
     return f"{', '.join(labels[:-1])} e {labels[-1]}"
 
 
+def list_juntada_membros(juntada_grupo_id: str) -> list[dict[str, Any]]:
+    """Membros únicos (nr_os/ano) de um JuntadaGrupoId em pendente ou externa."""
+    gid = (juntada_grupo_id or "").strip()
+    if not gid:
+        return []
+    rows = db.execute_query(
+        """
+        SELECT OsNro AS nr_os, OsAno AS ano
+        FROM tab_os_gravacao_pendente
+        WHERE JuntadaGrupoId = %s AND Status <> 'cancelada'
+        UNION
+        SELECT OsNro AS nr_os, OsAno AS ano
+        FROM tab_os_gravacao_externa
+        WHERE JuntadaGrupoId = %s AND Status <> 'cancelada'
+        ORDER BY nr_os ASC, ano ASC
+        """,
+        (gid, gid),
+    )
+    seen: set[tuple[int, int]] = set()
+    result: list[dict[str, Any]] = []
+    for row in rows or []:
+        try:
+            nr = int(row["nr_os"])
+            ano = int(row["ano"])
+        except (TypeError, ValueError, KeyError):
+            continue
+        key = (nr, ano)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append({"nr_os": nr, "ano": ano})
+    return result
+
+
+def juntada_membros_label(juntada_grupo_id: str | None) -> str:
+    """Label '01209/26 e 01350/26' para prefixo de observação, ou string vazia."""
+    gid = (juntada_grupo_id or "").strip()
+    if not gid:
+        return ""
+    return format_juntada_membros_label(list_juntada_membros(gid))
+
+
+def resolve_juntada_grupo_for_os(nro: int, ano: int) -> dict[str, Any] | None:
+    """Retorna juntada mais recente da OS com irmãs, ou None."""
+    rows = db.execute_query(
+        """
+        SELECT JuntadaGrupoId AS juntada_grupo_id, CriadoEm AS criado_em
+        FROM tab_os_gravacao_pendente
+        WHERE OsNro = %s AND OsAno = %s
+          AND JuntadaGrupoId IS NOT NULL
+          AND TRIM(JuntadaGrupoId) <> ''
+          AND Status <> 'cancelada'
+        UNION ALL
+        SELECT JuntadaGrupoId AS juntada_grupo_id, CriadoEm AS criado_em
+        FROM tab_os_gravacao_externa
+        WHERE OsNro = %s AND OsAno = %s
+          AND JuntadaGrupoId IS NOT NULL
+          AND TRIM(JuntadaGrupoId) <> ''
+          AND Status <> 'cancelada'
+        ORDER BY criado_em DESC
+        LIMIT 1
+        """,
+        (nro, ano, nro, ano),
+    )
+    if not rows:
+        return None
+    gid = str(rows[0].get("juntada_grupo_id") or "").strip()
+    if not gid:
+        return None
+    membros = list_juntada_membros(gid)
+    others = [m for m in membros if not (m["nr_os"] == nro and m["ano"] == ano)]
+    if not others:
+        return None
+    return {
+        "juntada_grupo_id": gid,
+        "membros": membros,
+        "membros_vinculo": [
+            {"numero": int(m["nr_os"]), "ano": int(m["ano"])} for m in membros
+        ],
+    }
+
+
 def _aggregate_list_items_by_juntada(
     items: list[dict[str, Any]],
     *,
@@ -656,19 +738,12 @@ def repair_orphan_pendente_andamentos() -> list[dict[str, Any]]:
         chapas = _fetch_pendente_chapas(int(row["Id"]))
         juntada_id = row.get("JuntadaGrupoId")
         obs_body = format_gravacao_pendente_obs(chapas)
-        if juntada_id:
-            members = list_active_pendente_by_juntada(str(juntada_id))
-            labels = [format_os_list_label(int(m["os_nro"]), int(m["os_ano"])) for m in members]
-            if labels:
-                if len(labels) == 1:
-                    juntada_line = f"OSs juntadas: {labels[0]}"
-                elif len(labels) == 2:
-                    juntada_line = f"OSs juntadas: {labels[0]} e {labels[1]}"
-                else:
-                    juntada_line = (
-                        f"OSs juntadas: {', '.join(labels[:-1])} e {labels[-1]}"
-                    )
-                obs_body = f"{juntada_line}\n\n{obs_body}"
+        from routers.andamento_helpers import with_juntada_obs_prefix
+
+        obs_body = with_juntada_obs_prefix(
+            obs_body,
+            juntada_membros_label(str(juntada_id) if juntada_id else None),
+        )
         obs = format_andamento_obs(obs_body)
 
         def tx(cursor, *, _cod=cod_status, _os=os_id, _ano=ano, _ponto=ponto_fmt, _obs=obs):
@@ -2010,7 +2085,11 @@ def _enviar_uma_pendente_para_externa_cursor(
             detail=f"OS {os_id}/{ano}: lançamento já enviado para Gravação Externa.",
         )
 
-    from routers.andamento_helpers import format_andamento_obs, format_gravacao_envio_externa_obs
+    from routers.andamento_helpers import (
+        format_andamento_obs,
+        format_gravacao_envio_externa_obs,
+        with_juntada_obs_prefix,
+    )
     from routers.os_audit_service import log_andamento_added
     from services.andamento_operacional import insert_andamento_as_ultimo, next_cod_status_for_os
 
@@ -2032,7 +2111,11 @@ def _enviar_uma_pendente_para_externa_cursor(
             }
         )
 
-    obs = format_andamento_obs(format_gravacao_envio_externa_obs(chapas_rows))
+    obs_body = with_juntada_obs_prefix(
+        format_gravacao_envio_externa_obs(chapas_rows),
+        juntada_membros_label(pendente.get("juntada_grupo_id")),
+    )
+    obs = format_andamento_obs(obs_body)
     new_cod = next_cod_status_for_os(cursor, os_id, ano)
     insert_andamento_as_ultimo(
         cursor,
@@ -2210,7 +2293,8 @@ def repair_orphan_gravacao_externa_sessions() -> list[dict[str, Any]]:
     """Recria andamento Gravação Externa quando a sessão existe mas o CodStatus sumiu do MySQL."""
     rows = db.execute_query(
         """
-        SELECT ge.Id, ge.OsNro, ge.OsAno, ge.CodStatus, ge.LancadoPorPonto, ge.LancadoPorNome
+        SELECT ge.Id, ge.OsNro, ge.OsAno, ge.CodStatus, ge.LancadoPorPonto, ge.LancadoPorNome,
+               ge.JuntadaGrupoId
         FROM tab_os_gravacao_externa ge
         WHERE ge.Status IN ('pendente', 'iniciada')
           AND NOT EXISTS (
@@ -2229,16 +2313,33 @@ def repair_orphan_gravacao_externa_sessions() -> list[dict[str, Any]]:
         if not cod_status:
             continue
         ponto_fmt = format_ponto(_clean_ponto(str(row.get("LancadoPorPonto") or "")))
+        juntada_label = juntada_membros_label(
+            str(row.get("JuntadaGrupoId") or "").strip() or None
+        )
 
-        def tx(cursor, *, _cod=cod_status, _os=os_id, _ano=ano, _ponto=ponto_fmt):
+        def tx(
+            cursor,
+            *,
+            _cod=cod_status,
+            _os=os_id,
+            _ano=ano,
+            _ponto=ponto_fmt,
+            _juntada_label=juntada_label,
+        ):
             from routers.andamento_helpers import (
                 format_andamento_obs,
                 format_gravacao_envio_externa_obs,
+                with_juntada_obs_prefix,
             )
             from routers.os_audit_service import log_andamento_added
             from services.andamento_operacional import insert_andamento_as_ultimo
 
-            obs = format_andamento_obs(format_gravacao_envio_externa_obs([]))
+            obs = format_andamento_obs(
+                with_juntada_obs_prefix(
+                    format_gravacao_envio_externa_obs([]),
+                    _juntada_label,
+                )
+            )
             insert_andamento_as_ultimo(
                 cursor,
                 cod_status=_cod,

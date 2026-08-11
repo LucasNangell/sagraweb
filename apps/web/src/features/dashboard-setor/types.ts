@@ -6,6 +6,8 @@ export interface DashboardColumnConfig {
   statuses: string[];
   /** Omitido/vazio = herda config.sector */
   sector?: string;
+  /** Se true, coluna não aparece no board quando items.length === 0 */
+  hideWhenEmpty?: boolean;
 }
 
 export interface DashboardConfig {

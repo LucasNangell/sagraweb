@@ -6,6 +6,7 @@ import {
   collectDashboardSectors,
   formatQueueDisplayLabel,
   formatQueueDisplaySituacao,
+  getVisibleDashboardColumns,
   matchesColumnStatus,
   mergeDashboardQueueSources,
   mergePcpOrderIntoItems,
@@ -14,7 +15,7 @@ import {
   removeOsKeysFromMap,
   resolveColumnSector,
 } from "./utils";
-import type { DashboardConfig } from "./types";
+import type { DashboardConfig, DashboardDisplayColumn } from "./types";
 
 const subOs: PcpQueueItem = {
   nr_os: 568,
@@ -257,5 +258,73 @@ describe("processDashboardData column sector override", () => {
     expect(processed.columns[0]!.items).toHaveLength(0);
     expect(processed.columns[1]!.items).toHaveLength(1);
     expect(processed.columns[1]!.title).toBe("Execução Papelaria");
+  });
+});
+
+describe("getVisibleDashboardColumns", () => {
+  const base = (patch: Partial<DashboardDisplayColumn>): DashboardDisplayColumn => ({
+    id: patch.id ?? "col",
+    title: patch.title ?? "Coluna",
+    statuses: patch.statuses ?? [],
+    items: patch.items ?? [],
+    hideWhenEmpty: patch.hideWhenEmpty,
+    sector: patch.sector,
+  });
+
+  it("sem flag permanece mesmo vazia", () => {
+    const cols = [base({ id: "a", items: [] })];
+    expect(getVisibleDashboardColumns(cols).map((c) => c.id)).toEqual(["a"]);
+  });
+
+  it("com flag e vazia é filtrada", () => {
+    const cols = [base({ id: "a", hideWhenEmpty: true, items: [] })];
+    expect(getVisibleDashboardColumns(cols)).toEqual([]);
+  });
+
+  it("com flag e items permanece", () => {
+    const cols = [
+      base({
+        id: "a",
+        hideWhenEmpty: true,
+        items: [
+          {
+            nr_os: 1,
+            ano: 2026,
+            uniqueKey: "1-2026",
+            priorityType: null,
+            isNew: false,
+            displaySituacao: "Recebido",
+            pcp_ordem: null,
+          },
+        ],
+      }),
+    ];
+    expect(getVisibleDashboardColumns(cols).map((c) => c.id)).toEqual(["a"]);
+  });
+
+  it("misturado: só elegíveis saem na lista", () => {
+    const cols = [
+      base({ id: "always", items: [] }),
+      base({ id: "hidden", hideWhenEmpty: true, items: [] }),
+      base({
+        id: "shown",
+        hideWhenEmpty: true,
+        items: [
+          {
+            nr_os: 2,
+            ano: 2026,
+            uniqueKey: "2-2026",
+            priorityType: null,
+            isNew: false,
+            displaySituacao: "Em Execução",
+            pcp_ordem: null,
+          },
+        ],
+      }),
+    ];
+    expect(getVisibleDashboardColumns(cols).map((c) => c.id)).toEqual([
+      "always",
+      "shown",
+    ]);
   });
 });

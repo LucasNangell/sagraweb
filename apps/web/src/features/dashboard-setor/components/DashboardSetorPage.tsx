@@ -16,7 +16,7 @@ import { useDashboardFreshness } from "../hooks/useDashboardFreshness";
 import { useDashboardSetorData } from "../hooks/useDashboardSetorData";
 import { usePriorityAlert } from "../hooks/usePriorityAlert";
 import { useScreenWakeLock } from "../hooks/useScreenWakeLock";
-import { buildDashboardConfigSignature, formatQueueDisplayLabel } from "../utils";
+import { buildDashboardConfigSignature, formatQueueDisplayLabel, getVisibleDashboardColumns } from "../utils";
 import type { DashboardConfig } from "../types";
 import { DashboardSetorSettingsModal } from "./DashboardSetorSettingsModal";
 import "../dashboard-setor.css";
@@ -95,6 +95,9 @@ export function DashboardSetorPage() {
     fetchError,
   });
 
+  const visibleColumns = getVisibleDashboardColumns(columns);
+  const visibleColumnCount = Math.max(visibleColumns.length, 1);
+
   const applyConfig = useCallback(
     (next: DashboardConfig) => {
       const normalized = {
@@ -155,9 +158,9 @@ export function DashboardSetorPage() {
 
       <main
         className="dashboard-setor-board"
-        data-columns={String(config.columnCount)}
+        data-columns={String(visibleColumnCount)}
       >
-        {columns.map((col, index) => (
+        {visibleColumns.map((col, index) => (
           <div key={col.id} className="dashboard-setor-column">
             <div
               className={[

@@ -477,6 +477,15 @@ export function emptyDisplayColumns(
   return config.columns.map((col) => ({ ...col, items: [] }));
 }
 
+/** Colunas a renderizar no board (respeita hideWhenEmpty). */
+export function getVisibleDashboardColumns(
+  columns: DashboardDisplayColumn[],
+): DashboardDisplayColumn[] {
+  return columns.filter(
+    (col) => !col.hideWhenEmpty || col.items.length > 0,
+  );
+}
+
 export function buildDashboardConfigSignature(config: DashboardConfig): string {
   return JSON.stringify({
     sector: config.sector,
@@ -486,6 +495,7 @@ export function buildDashboardConfigSignature(config: DashboardConfig): string {
       title: col.title,
       statuses: col.statuses,
       sector: (col.sector ?? "").trim() || undefined,
+      hideWhenEmpty: col.hideWhenEmpty === true ? true : undefined,
     })),
   });
 }

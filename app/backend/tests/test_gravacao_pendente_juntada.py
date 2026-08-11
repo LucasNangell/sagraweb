@@ -29,6 +29,63 @@ def test_format_juntada_membros_label():
     )
 
 
+def test_with_juntada_obs_prefix():
+    from routers.andamento_helpers import with_juntada_obs_prefix
+
+    assert with_juntada_obs_prefix("Chapas", "") == "Chapas"
+    assert with_juntada_obs_prefix("Chapas", "01209/26 e 01350/26") == (
+        "OSs juntadas: 01209/26 e 01350/26\n\nChapas"
+    )
+    assert with_juntada_obs_prefix("", "01209/26 e 01350/26") == (
+        "OSs juntadas: 01209/26 e 01350/26"
+    )
+
+
+@patch("services.gravacao_pendente_service.db")
+def test_resolve_juntada_grupo_for_os(mock_db):
+    from services.gravacao_pendente_service import resolve_juntada_grupo_for_os
+
+    mock_db.execute_query.side_effect = [
+        [{"juntada_grupo_id": "g1", "criado_em": "2026-01-01"}],
+        [
+            {"nr_os": 100, "ano": 2026},
+            {"nr_os": 200, "ano": 2026},
+        ],
+    ]
+    result = resolve_juntada_grupo_for_os(100, 2026)
+    assert result is not None
+    assert result["juntada_grupo_id"] == "g1"
+    assert len(result["membros"]) == 2
+    assert result["membros_vinculo"] == [
+        {"numero": 100, "ano": 2026},
+        {"numero": 200, "ano": 2026},
+    ]
+
+
+@patch("services.gravacao_pendente_service.db")
+def test_resolve_juntada_grupo_for_os_solo(mock_db):
+    from services.gravacao_pendente_service import resolve_juntada_grupo_for_os
+
+    mock_db.execute_query.side_effect = [
+        [{"juntada_grupo_id": "g1", "criado_em": "2026-01-01"}],
+        [{"nr_os": 100, "ano": 2026}],
+    ]
+    assert resolve_juntada_grupo_for_os(100, 2026) is None
+
+
+@patch("services.gravacao_pendente_service.list_juntada_membros")
+def test_juntada_membros_label(mock_list):
+    from services.gravacao_pendente_service import juntada_membros_label
+
+    mock_list.return_value = [
+        {"nr_os": 1209, "ano": 2026},
+        {"nr_os": 1350, "ano": 2026},
+    ]
+    assert juntada_membros_label("g1") == "01209/26 e 01350/26"
+    assert juntada_membros_label(None) == ""
+    assert juntada_membros_label("") == ""
+
+
 def test_aggregate_list_items_by_juntada():
     from services.gravacao_pendente_service import _aggregate_list_items_by_juntada
 

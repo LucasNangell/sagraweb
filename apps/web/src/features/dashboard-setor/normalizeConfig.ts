@@ -11,6 +11,7 @@ function normalizeColumn(
     title: col.title || `Coluna ${index + 1}`,
     statuses: Array.isArray(col.statuses) ? col.statuses : [],
     ...(sector ? { sector } : {}),
+    ...(col.hideWhenEmpty === true ? { hideWhenEmpty: true } : {}),
   };
 }
 

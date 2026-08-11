@@ -130,6 +130,9 @@ export function DashboardSetorSettingsModal({
         if ("sector" in patch && !(patch.sector ?? "").trim()) {
           delete next.sector;
         }
+        if ("hideWhenEmpty" in patch && patch.hideWhenEmpty !== true) {
+          delete next.hideWhenEmpty;
+        }
         return next;
       }),
     }));
@@ -293,6 +296,22 @@ export function DashboardSetorSettingsModal({
                   </label>
                 ))}
               </div>
+
+              <label className="dashboard-setor-hide-empty-option">
+                <input
+                  type="checkbox"
+                  checked={col.hideWhenEmpty === true}
+                  onChange={(e) =>
+                    updateColumn(
+                      idx,
+                      e.target.checked
+                        ? { hideWhenEmpty: true }
+                        : { hideWhenEmpty: undefined },
+                    )
+                  }
+                />
+                Ocultar quando vazia
+              </label>
             </div>
           ))}
         </div>

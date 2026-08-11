@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formatOsCardSubtitle,
   formatOsJuntadaLabel,
   formatOsListLabel,
 } from "./formatOsJuntadaLabel";
@@ -32,5 +33,32 @@ describe("formatOsJuntadaLabel", () => {
 
   it("usa fallback quando membros vazios", () => {
     expect(formatOsJuntadaLabel([], { nr_os: 100, ano: 2026 })).toBe("00100/26");
+  });
+});
+
+describe("formatOsCardSubtitle", () => {
+  it("mostra Juntada de OPs quando houver grupo com 2+ membros", () => {
+    expect(
+      formatOsCardSubtitle({
+        juntada_grupo_id: "g1",
+        membros: [
+          { nr_os: 1, ano: 2026 },
+          { nr_os: 2, ano: 2026 },
+        ],
+        solicitante: "Cliente",
+        produto: "Revista",
+      }),
+    ).toBe("Juntada de OPs");
+  });
+
+  it("mantém solicitante · produto fora de juntada", () => {
+    expect(
+      formatOsCardSubtitle({
+        juntada_grupo_id: null,
+        membros: [{ nr_os: 1, ano: 2026 }],
+        solicitante: "Cliente",
+        produto: "Revista",
+      }),
+    ).toBe("Cliente · Revista");
   });
 });

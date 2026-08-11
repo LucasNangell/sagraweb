@@ -1,7 +1,7 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-  Inicia a API SAGRA em segundo plano (sem pause) — uso em deploy remoto / tarefa agendada.
+  Inicia a API SAGRA em segundo plano (sem pause) - uso em deploy remoto / tarefa agendada.
 #>
 param(
     [string]$Root = ""
@@ -53,17 +53,30 @@ $stderr = Join-Path $logDir "uvicorn_stderr.log"
 
 Push-Location $backend
 try {
-    python -c "from config_manager import config_manager; config_manager.write_client_config_js()" 2>$null
+    # Com ErrorActionPreference=Stop, stderr do python (ex.: warning dotenv) vira
+    # NativeCommandError mesmo com 2>$null. Isolar as chamadas curtas.
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & python -c "from config_manager import config_manager; config_manager.write_client_config_js()" 2>&1 | Out-Null
+    } catch {
+        # write_client_config_js e best-effort; nao aborta o start da API
+        Write-Warning "write_client_config_js: $_"
+    }
+
     $syncCmd = Join-Path $Root "_iniciar-sync-andamentos.cmd"
     $startSync = "0"
     try {
-        $raw = (& python -c "from config_manager import config_manager; print(1 if config_manager.is_sync_andamentos_enabled() else 0)" 2>$null)
-        if ($raw) {
-            $startSync = ($raw | Select-Object -Last 1).ToString().Trim()
+        $raw = & python -c "from config_manager import config_manager; print(1 if config_manager.is_sync_andamentos_enabled() else 0)" 2>&1
+        $line = @($raw | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | ForEach-Object { "$_" }) | Select-Object -Last 1
+        if ($line) {
+            $startSync = $line.ToString().Trim()
         }
     } catch {
         $startSync = "0"
     }
+    $ErrorActionPreference = $prevEap
+
     if ($startSync -eq "1") {
         if (Test-Path -LiteralPath $syncCmd) {
             $syncArg = "title SAGRA-SYNC-ANDAMENTOS && call `"$syncCmd`" `"$Root`""

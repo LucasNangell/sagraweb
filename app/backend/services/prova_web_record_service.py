@@ -15,6 +15,7 @@ from typing import Any, Optional
 
 from database import db
 from services.prova_web_render_service import (
+    MODE_CAIXA,
     MODE_CAPA_MIOLO,
     MODE_ESPIRAL,
     MODE_FOLHA_DOBRADA,
@@ -473,6 +474,18 @@ def resolve_record_sources(
             return MODE_ESPIRAL, [capa, miolo]
         unico = resolve_os_relative_pdf(folder, record.get("arquivoUnico") or "")
         return MODE_ESPIRAL, [unico]
+    if modo == MODE_CAIXA:
+        crop = record.get("cropJson") if isinstance(record.get("cropJson"), dict) else {}
+        caixa = crop.get("caixa") if isinstance(crop, dict) else None
+        kind = "combined"
+        if isinstance(caixa, dict):
+            kind = str(caixa.get("sourceKind") or "combined").strip().lower()
+        if kind == "separate":
+            faca = resolve_os_relative_pdf(folder, record.get("arquivoCapa") or "")
+            arte = resolve_os_relative_pdf(folder, record.get("arquivoMiolo") or "")
+            return MODE_CAIXA, [faca, arte]
+        unico = resolve_os_relative_pdf(folder, record.get("arquivoUnico") or "")
+        return MODE_CAIXA, [unico]
     # unico e folha_dobrada usam ArquivoUnico
     unico = resolve_os_relative_pdf(folder, record.get("arquivoUnico") or "")
     if modo == MODE_FOLHA_DOBRADA:
@@ -507,7 +520,7 @@ def resolve_prova_web_pdf_parte(
 
     parte_n = (parte or "").strip().lower() or None
     if modo == MODE_CAPA_MIOLO or (
-        modo == MODE_ESPIRAL and len(paths) >= 2
+        modo in (MODE_ESPIRAL, MODE_CAIXA) and len(paths) >= 2
     ):
         if parte_n == "capa":
             path = paths[0]
@@ -545,6 +558,22 @@ def prova_web_pdf_sources_meta(record: dict[str, Any]) -> list[dict[str, str]]:
             return out
         if record.get("arquivoUnico"):
             return [{"id": "unico", "label": "Espiral"}]
+        return []
+    if modo == MODE_CAIXA:
+        crop = record.get("cropJson") if isinstance(record.get("cropJson"), dict) else {}
+        caixa = crop.get("caixa") if isinstance(crop, dict) else None
+        kind = "combined"
+        if isinstance(caixa, dict):
+            kind = str(caixa.get("sourceKind") or "combined").strip().lower()
+        if kind == "separate":
+            out = []
+            if record.get("arquivoCapa"):
+                out.append({"id": "capa", "label": "Faca"})
+            if record.get("arquivoMiolo"):
+                out.append({"id": "miolo", "label": "Arte"})
+            return out
+        if record.get("arquivoUnico"):
+            return [{"id": "unico", "label": "Caixa"}]
         return []
     if record.get("arquivoUnico"):
         label = "Folheto" if modo == MODE_FOLHA_DOBRADA else "PDF"

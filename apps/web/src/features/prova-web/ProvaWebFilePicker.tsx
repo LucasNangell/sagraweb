@@ -5,6 +5,7 @@ import {
   FileText,
   Folder,
   Loader2,
+  Package,
   RefreshCw,
   Sheet,
   X,
@@ -23,6 +24,7 @@ import {
 
 import { ProvaWebCropAssistant } from "./ProvaWebCropAssistant";
 import { ProvaWebExistingModal } from "./ProvaWebExistingModal";
+import { defaultCaixaCrop } from "./ProvaWebBoxWizard";
 import { defaultEspiralCrop } from "./ProvaWebSpiralWizard";
 
 interface ProvaWebFilePickerProps {
@@ -63,6 +65,15 @@ export function ProvaWebFilePicker({
         ? "capa_miolo"
         : "unico"),
   );
+  const [caixaSourceKind, setCaixaSourceKind] = useState<
+    "combined" | "separate"
+  >(
+    () =>
+      record?.cropJson?.caixa?.sourceKind ??
+      (record?.modo === "caixa" && record.arquivoCapa && record.arquivoMiolo
+        ? "separate"
+        : "combined"),
+  );
   const [selUnico, setSelUnico] = useState<string | null>(
     record?.arquivoUnico ?? null,
   );
@@ -99,11 +110,13 @@ export function ProvaWebFilePicker({
 
   const usesCapaMioloSlots =
     modo === "capa_miolo" ||
-    (modo === "espiral" && espiralSourceKind === "capa_miolo");
+    (modo === "espiral" && espiralSourceKind === "capa_miolo") ||
+    (modo === "caixa" && caixaSourceKind === "separate");
   const usesUnicoSlot =
     modo === "unico" ||
     modo === "folha_dobrada" ||
-    (modo === "espiral" && espiralSourceKind === "unico");
+    (modo === "espiral" && espiralSourceKind === "unico") ||
+    (modo === "caixa" && caixaSourceKind === "combined");
 
   const canConfirm = usesUnicoSlot
     ? Boolean(selUnico)
@@ -157,7 +170,15 @@ export function ProvaWebFilePicker({
                   sourceKind: espiralSourceKind,
                 },
               }
-            : cropJson,
+            : modo === "caixa"
+              ? {
+                  ...cropJson,
+                  caixa: {
+                    ...(cropJson.caixa ?? defaultCaixaCrop(caixaSourceKind)),
+                    sourceKind: caixaSourceKind,
+                  },
+                }
+              : cropJson,
       });
       finishSaved(res.record, res.portalUrl);
     } catch (err) {
@@ -217,7 +238,16 @@ export function ProvaWebFilePicker({
                     sourceKind: espiralSourceKind,
                   },
                 }
-              : (record?.cropJson ?? null)
+              : modo === "caixa"
+                ? {
+                    ...(record?.cropJson ?? {}),
+                    caixa: {
+                      ...(record?.cropJson?.caixa ??
+                        defaultCaixaCrop(caixaSourceKind)),
+                      sourceKind: caixaSourceKind,
+                    },
+                  }
+                : (record?.cropJson ?? null)
           }
           onBack={() => {
             setPhase("pick");
@@ -318,6 +348,15 @@ export function ProvaWebFilePicker({
             icon={<CircleDot className="size-3.5" aria-hidden />}
             label="Espiral / wire-o"
           />
+          <ModeButton
+            active={modo === "caixa"}
+            onClick={() => {
+              setModo("caixa");
+              setSaveError(null);
+            }}
+            icon={<Package className="size-3.5" aria-hidden />}
+            label="Caixa (tuck-end)"
+          />
         </div>
 
         {modo === "espiral" && (
@@ -359,17 +398,56 @@ export function ProvaWebFilePicker({
           </div>
         )}
 
+        {modo === "caixa" && (
+          <div className="mt-3 space-y-2">
+            <p className="text-[11px] text-neutral-500">
+              Mockup 3D a partir da faca (corte/dobra) + arte. PDF com 2 páginas
+              (faca+arte) ou arquivos separados.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCaixaSourceKind("combined");
+                  setSaveError(null);
+                }}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                  caixaSourceKind === "combined"
+                    ? "bg-primary-green/15 text-primary-green ring-1 ring-primary-green/40"
+                    : "bg-slate-100 text-neutral-600 hover:bg-slate-200"
+                }`}
+              >
+                PDF 2 páginas
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCaixaSourceKind("separate");
+                  setSaveError(null);
+                }}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                  caixaSourceKind === "separate"
+                    ? "bg-primary-green/15 text-primary-green ring-1 ring-primary-green/40"
+                    : "bg-slate-100 text-neutral-600 hover:bg-slate-200"
+                }`}
+              >
+                Faca + Arte
+              </button>
+            </div>
+          </div>
+        )}
+
         {usesCapaMioloSlots ? (
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             <SlotCard
-              label="Capa"
+              label={modo === "caixa" ? "Faca" : "Capa"}
               value={selCapa}
               active={activeSlot === "capa"}
               onActivate={() => setActiveSlot("capa")}
               onClear={() => setSelCapa(null)}
             />
             <SlotCard
-              label="Miolo"
+              label={modo === "caixa" ? "Arte" : "Miolo"}
               value={selMiolo}
               active={activeSlot === "miolo"}
               onActivate={() => setActiveSlot("miolo")}

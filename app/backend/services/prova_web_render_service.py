@@ -1,7 +1,7 @@
 """
 Renderização das páginas da Prova WEB (flipbook).
 
-PyMuPDF rasteriza cada página com crop em mm (ou TrimBox legado) em ~150 dpi.
+PyMuPDF rasteriza cada página com crop em mm (ou TrimBox legado) em ~216 dpi.
 O resultado fica em Sefoc/AdminDocs/WEB/ProvaN na pasta da OS.
 """
 from __future__ import annotations
@@ -23,7 +23,7 @@ from services.prova_web_crop_service import (
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_RENDER_SCALE = 2.0  # 2.0 => ~144 dpi
+_DEFAULT_RENDER_SCALE = 3.0  # 3.0 => ~216 dpi
 _MIN_RENDER_SCALE = 1.0
 _MAX_RENDER_SCALE = 4.0
 _MAX_PAGES = 400
@@ -46,6 +46,7 @@ MODE_UNICO = "unico"
 MODE_CAPA_MIOLO = "capa_miolo"
 MODE_FOLHA_DOBRADA = "folha_dobrada"
 MODE_ESPIRAL = "espiral"
+MODE_CAIXA = "caixa"
 
 
 class ProvaWebRenderCancelled(Exception):
@@ -62,6 +63,7 @@ ROLE_COVER_BACK_INSIDE = "cover-back-inside"
 ROLE_COVER_BACK = "cover-back"
 ROLE_SHEET_FRONT = "sheet-front"
 ROLE_SHEET_BACK = "sheet-back"
+ROLE_SHEET_FACA = "sheet-faca"
 
 _COVER_ROLES = frozenset(
     {
@@ -851,12 +853,98 @@ def ensure_prova_web_pages(
     book_mockup: Optional[dict[str, Any]] = None
     fold_mockup: Optional[dict[str, Any]] = None
     spiral_mockup: Optional[dict[str, Any]] = None
+    box_mockup: Optional[dict[str, Any]] = None
     espiral_cfg: Optional[dict[str, Any]] = None
 
     if mode == MODE_ESPIRAL:
         espiral_cfg = _espiral_config(crop_json)
 
-    if mode == MODE_CAPA_MIOLO or (
+    if mode == MODE_CAIXA:
+        from services.prova_web_caixa_service import (
+            build_box_mockup,
+            normalize_caixa_config,
+        )
+        from services.prova_web_dieline_service import (
+            detect_page_roles,
+            parse_dieline_page,
+        )
+
+        caixa_raw = crop_json.get("caixa") if isinstance(crop_json, dict) else None
+        source_kind = "combined"
+        if isinstance(caixa_raw, dict):
+            source_kind = str(caixa_raw.get("sourceKind") or "combined").strip().lower()
+
+        ordered = []
+        suggested = None
+        if source_kind == "separate" and len(source_paths) >= 2:
+            faca_path, arte_path = source_paths[0], source_paths[1]
+            with fitz.open(faca_path) as faca_doc:
+                total_source_pages += len(faca_doc)
+                faca_page = faca_doc.load_page(0)
+                parsed = parse_dieline_page(faca_page)
+                suggested = parsed.get("dims")
+                _check_abort()
+                _progress(0, 2)
+                png_faca = os.path.join(cache_dir, "body_faca.png")
+                meta_f = _render_page_png(faca_page, matrix, png_faca)
+                ordered.append({**meta_f, "role": ROLE_SHEET_FACA, "path": png_faca})
+            with fitz.open(arte_path) as arte_doc:
+                total_source_pages += len(arte_doc)
+                caixa_cfg = normalize_caixa_config(
+                    caixa_raw if isinstance(caixa_raw, dict) else None,
+                    suggested=suggested,
+                )
+                arte_idx = int(caixa_cfg.get("artePage") or 0)
+                arte_idx = max(0, min(len(arte_doc) - 1, arte_idx))
+                arte_page = arte_doc.load_page(arte_idx)
+                _apply_mm_crop(arte_page, caixa_cfg.get("artCrop"))
+                _check_abort()
+                png_arte = os.path.join(cache_dir, "body_0.png")
+                meta_a = _render_page_png(arte_page, matrix, png_arte)
+                ordered.insert(0, {**meta_a, "role": ROLE_SHEET_FRONT, "path": png_arte})
+                _progress(2, 2)
+        else:
+            pdf_path = source_paths[0]
+            with fitz.open(pdf_path) as doc:
+                total_source_pages = len(doc)
+                roles = detect_page_roles(doc)
+                caixa_cfg = normalize_caixa_config(
+                    caixa_raw if isinstance(caixa_raw, dict) else None,
+                    suggested=None,
+                )
+                faca_idx = int(caixa_cfg.get("facaPage", roles["facaPage"]))
+                arte_idx = int(caixa_cfg.get("artePage", roles["artePage"]))
+                faca_idx = max(0, min(len(doc) - 1, faca_idx))
+                arte_idx = max(0, min(len(doc) - 1, arte_idx))
+                parsed = parse_dieline_page(doc.load_page(faca_idx))
+                caixa_cfg = normalize_caixa_config(
+                    {
+                        **(caixa_raw if isinstance(caixa_raw, dict) else {}),
+                        "facaPage": faca_idx,
+                        "artePage": arte_idx,
+                    },
+                    suggested=parsed.get("dims"),
+                )
+                _check_abort()
+                _progress(0, 2)
+                arte_page = doc.load_page(arte_idx)
+                _apply_mm_crop(arte_page, caixa_cfg.get("artCrop"))
+                png_arte = os.path.join(cache_dir, "body_0.png")
+                meta_a = _render_page_png(arte_page, matrix, png_arte)
+                ordered.append({**meta_a, "role": ROLE_SHEET_FRONT, "path": png_arte})
+                _progress(1, 2)
+                if faca_idx != arte_idx:
+                    _check_abort()
+                    faca_page = doc.load_page(faca_idx)
+                    png_faca = os.path.join(cache_dir, "body_1.png")
+                    meta_f = _render_page_png(faca_page, matrix, png_faca)
+                    ordered.append({**meta_f, "role": ROLE_SHEET_FACA, "path": png_faca})
+                _progress(len(ordered), max(len(ordered), 1))
+                truncated = len(doc) > 2
+
+        box_mockup = build_box_mockup(caixa_cfg)
+
+    elif mode == MODE_CAPA_MIOLO or (
         mode == MODE_ESPIRAL and espiral_cfg and espiral_cfg["sourceKind"] == "capa_miolo"
     ):
         capa_path, miolo_path = source_paths[0], source_paths[1]
@@ -1070,6 +1158,8 @@ def ensure_prova_web_pages(
         manifest["foldMockup"] = fold_mockup
     if spiral_mockup:
         manifest["spiralMockup"] = spiral_mockup
+    if box_mockup:
+        manifest["boxMockup"] = box_mockup
 
     with open(manifest_path, "w", encoding="utf-8") as fh:
         json.dump(manifest, fh, ensure_ascii=False)

@@ -8,6 +8,7 @@ import {
   type ProvaWebCropJson,
   type ProvaWebModo,
 } from "@/api/provaWeb";
+import { ProvaWebBoxWizard } from "./ProvaWebBoxWizard";
 import { defaultCapaCrop, ProvaWebCoverWizard } from "./ProvaWebCoverWizard";
 import { ProvaWebCropPanel } from "./ProvaWebCropPanel";
 import { ProvaWebFoldWizard } from "./ProvaWebFoldWizard";
@@ -81,6 +82,27 @@ export function ProvaWebCropAssistant({
         formato={formato}
         formatoAlturaMm={formatoAlturaMm}
         formatoLarguraMm={formatoLarguraMm}
+        initialCropJson={initialCropJson}
+      />
+    );
+  }
+
+  if (modo === "caixa") {
+    const sourceKind =
+      initialCropJson?.caixa?.sourceKind === "separate"
+        ? "separate"
+        : "combined";
+    return (
+      <ProvaWebBoxWizard
+        ano={ano}
+        osId={osId}
+        sourceKind={sourceKind}
+        arquivoUnico={arquivoUnico}
+        arquivoCapa={arquivoCapa}
+        arquivoMiolo={arquivoMiolo}
+        saving={saving}
+        onBack={onBack}
+        onConfirm={onConfirm}
         initialCropJson={initialCropJson}
       />
     );

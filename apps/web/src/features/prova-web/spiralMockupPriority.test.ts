@@ -6,17 +6,23 @@ import { pdfSourcesFromRecord } from "./provaWebPdfSources";
 /** Espelha a prioridade do ViewerShell sem montar React. */
 function pickMockupKind(meta: {
   foldMockup?: { panels?: unknown[] } | null;
+  boxMockup?: { panels?: unknown[]; dimsMm?: unknown } | null;
   spiralMockup?: { pageWidthMm?: number } | null;
   bookMockup?: { lombadaMm?: number } | null;
-}): "fold" | "spiral" | "book" | "none" {
+}): "fold" | "box" | "spiral" | "book" | "none" {
   const isFold = Boolean(meta.foldMockup?.panels?.length);
-  const isSpiral = !isFold && Boolean(meta.spiralMockup?.pageWidthMm);
+  const isBox =
+    !isFold && Boolean(meta.boxMockup?.panels?.length && meta.boxMockup.dimsMm);
+  const isSpiral =
+    !isFold && !isBox && Boolean(meta.spiralMockup?.pageWidthMm);
   const isBook =
     !isFold &&
+    !isBox &&
     !isSpiral &&
     Boolean(meta.bookMockup) &&
     (meta.bookMockup?.lombadaMm ?? 0) > 0;
   if (isFold) return "fold";
+  if (isBox) return "box";
   if (isSpiral) return "spiral";
   if (isBook) return "book";
   return "none";
@@ -33,7 +39,7 @@ describe("viewer mockup priority", () => {
     ).toBe("fold");
   });
 
-  it("espiral vence livro quando não há fold", () => {
+  it("espiral vence livro quando não há fold/box", () => {
     expect(
       pickMockupKind({
         spiralMockup: { pageWidthMm: 210 },
@@ -42,7 +48,7 @@ describe("viewer mockup priority", () => {
     ).toBe("spiral");
   });
 
-  it("livro só quando não há fold/espiral e lombada > 0", () => {
+  it("livro só quando não há fold/box/espiral e lombada > 0", () => {
     expect(pickMockupKind({ bookMockup: { lombadaMm: 8 } })).toBe("book");
     expect(pickMockupKind({ bookMockup: { lombadaMm: 0 } })).toBe("none");
   });

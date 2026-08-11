@@ -1,6 +1,11 @@
 import { apiFetch, apiUrl } from "@/lib/api";
 
-export type ProvaWebModo = "unico" | "capa_miolo" | "folha_dobrada" | "espiral";
+export type ProvaWebModo =
+  | "unico"
+  | "capa_miolo"
+  | "folha_dobrada"
+  | "espiral"
+  | "caixa";
 
 export type CropSource = "trimbox" | "bleedbox" | "manual" | "marcas" | "formato";
 
@@ -185,12 +190,43 @@ export interface ProvaWebEspiralCrop {
   capa?: ProvaWebCapaCrop;
 }
 
+export interface ProvaWebCaixaDimsMm {
+  length: number;
+  width: number;
+  height: number;
+  glue?: number;
+}
+
+export interface ProvaWebCaixaOpenOperation {
+  id: string;
+  panelId: string;
+  order: number;
+  targetAngleDeg: number;
+  phaseId?: string;
+}
+
+/** Config persistida em CropJson.caixa (tuck-end). */
+export interface ProvaWebCaixaCrop {
+  sourceKind: "combined" | "separate";
+  template: "tuck_end_reverse" | string;
+  dimsMm: ProvaWebCaixaDimsMm;
+  facaPage?: number;
+  artePage?: number;
+  artCrop?: CropSidesMm;
+  artRotationDeg?: 0 | 90 | 180 | 270;
+  openOperations?: ProvaWebCaixaOpenOperation[];
+  net?: Record<string, unknown> | null;
+  suggestedConfidence?: number | null;
+  ready?: boolean;
+}
+
 export interface ProvaWebCropJson {
   unico?: CropSidesMm;
   miolo?: CropSidesMm;
   capa?: ProvaWebCapaCrop;
   folheto?: ProvaWebFolhetoCrop;
   espiral?: ProvaWebEspiralCrop;
+  caixa?: ProvaWebCaixaCrop;
 }
 
 export interface ProvaWebRenderProgress {
@@ -334,6 +370,35 @@ export interface ProvaWebSpiralMockupMeta {
   blockThicknessMm?: number;
 }
 
+export interface ProvaWebBoxPanel {
+  id: string;
+  role: string;
+  xMm: number;
+  yMm: number;
+  wMm: number;
+  hMm: number;
+  parentId?: string | null;
+  hinge?: "left" | "right" | "top" | "bottom" | null;
+  bodyAngleDeg?: number;
+  flap?: boolean;
+  u0: number;
+  v0: number;
+  u1: number;
+  v1: number;
+}
+
+export interface ProvaWebBoxMockupMeta {
+  template: string;
+  dimsMm: ProvaWebCaixaDimsMm;
+  netWidthMm: number;
+  netHeightMm: number;
+  panels: ProvaWebBoxPanel[];
+  openOperations: ProvaWebCaixaOpenOperation[];
+  artRotationDeg?: number;
+  ready?: boolean;
+  paperThicknessMm?: number;
+}
+
 export interface ProvaWebManifestBase {
   mode: ProvaWebModo;
   cacheKey: string;
@@ -350,6 +415,8 @@ export interface ProvaWebManifestBase {
   foldMockup?: ProvaWebFoldMockupMeta;
   /** Presente no modo espiral. */
   spiralMockup?: ProvaWebSpiralMockupMeta;
+  /** Presente no modo caixa. */
+  boxMockup?: ProvaWebBoxMockupMeta;
   /** Aba PDF no portal (ids sem path UNC). */
   pdfSources?: Array<{ id: "unico" | "capa" | "miolo" | string; label: string }>;
 }
@@ -559,6 +626,67 @@ export async function fetchProvaWebCropMeta(
   }
   return apiFetch<ProvaWebCropMetaResponse>(
     `/os/${ano}/${osId}/prova-web/crop-meta?${q.toString()}`,
+  );
+}
+
+export interface ProvaWebDielineSuggestion {
+  dimsMm: Partial<ProvaWebCaixaDimsMm> & {
+    length?: number;
+    width?: number;
+    height?: number;
+    glue?: number;
+  };
+  confidence?: number;
+  ready?: boolean;
+  artCrop?: CropSidesMm;
+  cutBboxMm?: Record<string, number> | null;
+  verticalCreasesMm?: number[];
+  horizontalCreasesMm?: number[];
+  facaPage?: number;
+  artePage?: number;
+}
+
+export interface ProvaWebDielineMetaResponse {
+  ano: number;
+  os: number;
+  path: string;
+  parsed: {
+    cutCount: number;
+    foldCount: number;
+    pageCount: number;
+    facaPage: number;
+    artePage: number;
+    cutBboxMm?: Record<string, number> | null;
+    verticalCreasesMm?: number[];
+    horizontalCreasesMm?: number[];
+    dims?: {
+      lengthMm: number;
+      widthMm: number;
+      heightMm: number;
+      glueMm: number;
+      confidence: number;
+      ready: boolean;
+    };
+    foldSegmentsMm?: Array<{
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+    }>;
+  };
+  suggestion: ProvaWebDielineSuggestion;
+}
+
+export async function fetchProvaWebDielineMeta(
+  ano: number,
+  osId: number,
+  relativePath: string,
+  opts?: { page?: number },
+): Promise<ProvaWebDielineMetaResponse> {
+  const q = new URLSearchParams({ path: relativePath });
+  if (opts?.page != null) q.set("page", String(opts.page));
+  return apiFetch<ProvaWebDielineMetaResponse>(
+    `/os/${ano}/${osId}/prova-web/dieline-meta?${q.toString()}`,
   );
 }
 

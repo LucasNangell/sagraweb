@@ -10,6 +10,7 @@ import {
 } from "@/api/provaWeb";
 
 import { ProvaWebBookMockup3D } from "./ProvaWebBookMockup3D";
+import { ProvaWebBoxMockup3D } from "./ProvaWebBoxMockup3D";
 import { ProvaWebFlipbook } from "./ProvaWebFlipbook";
 import { ProvaWebFoldMockup3D } from "./ProvaWebFoldMockup3D";
 import { ProvaWebPdfPanel } from "./ProvaWebPdfPanel";
@@ -72,19 +73,23 @@ export function ProvaWebViewerShell({
   const foldMockup = manifest.foldMockup;
   const bookMockup = manifest.bookMockup;
   const spiralMockup = manifest.spiralMockup;
+  const boxMockup = manifest.boxMockup;
   const isFold = Boolean(foldMockup?.panels?.length);
-  const isSpiral = !isFold && Boolean(spiralMockup?.pageWidthMm);
+  const isBox =
+    !isFold && Boolean(boxMockup?.panels?.length && boxMockup.dimsMm);
+  const isSpiral = !isFold && !isBox && Boolean(spiralMockup?.pageWidthMm);
   const isBook =
     !isFold &&
+    !isBox &&
     !isSpiral &&
     Boolean(bookMockup) &&
     (bookMockup?.lombadaMm ?? 0) > 0;
-  const showMockupTab = isFold || isSpiral || isBook;
+  const showMockupTab = isFold || isBox || isSpiral || isBook;
   const showPdfTab = pdfSources.length > 0;
   const showTabBar = showMockupTab || showPdfTab;
 
   const [tab, setTab] = useState<ViewerTab>(
-    isFold || isSpiral ? "mockup" : "folhear",
+    isFold || isBox || isSpiral ? "mockup" : "folhear",
   );
 
   const resolvedPageUrl = useCallback(
@@ -135,7 +140,7 @@ export function ProvaWebViewerShell({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex shrink-0 items-center justify-center gap-1 border-b border-sagra-border bg-white px-3 py-2">
-        {isFold || isSpiral ? (
+        {isFold || isBox || isSpiral ? (
           <>
             <TabButton
               active={tab === "mockup"}
@@ -202,6 +207,12 @@ export function ProvaWebViewerShell({
         <ProvaWebFoldMockup3D
           pages={manifest.pages}
           foldMockup={foldMockup}
+          pageUrl={resolvedPageUrl}
+        />
+      ) : isBox && boxMockup ? (
+        <ProvaWebBoxMockup3D
+          pages={manifest.pages}
+          boxMockup={boxMockup}
           pageUrl={resolvedPageUrl}
         />
       ) : isSpiral && spiralMockup ? (

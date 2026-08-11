@@ -37,9 +37,18 @@ import {
   type InspectorViewMode,
 } from "./analiseLabFit";
 import {
+  type AreaMeasure,
+  type InspectMeasureMode,
+  type RulerMeasure,
+} from "./analiseLabInspectMeasure";
+import {
   addGuideMm,
-  moveGuideMm,
-  removeGuideMm,
+  moveGuideById,
+  parallelGuideDistanceMm,
+  removeGuideById,
+  removeGuidesByIds,
+  setGuideColorById,
+  type GuideLine,
   type InspectorViewPrefs,
 } from "./analiseLabViewPrefs";
 
@@ -179,9 +188,38 @@ export function AnaliseLabInspector({
       }
     >;
   } | null>(null);
+  const [selectedGuideIds, setSelectedGuideIds] = useState<string[]>([]);
+  const [measureMode, setMeasureMode] = useState<InspectMeasureMode>("off");
+  const [measureArea, setMeasureArea] = useState<AreaMeasure | null>(null);
+  const [measureRuler, setMeasureRuler] = useState<RulerMeasure | null>(null);
 
   zoomRef.current = zoom;
   activePageRef.current = activePage;
+
+  useEffect(() => {
+    setMeasureArea(null);
+    setMeasureRuler(null);
+  }, [activePage, measureMode]);
+
+  useEffect(() => {
+    if (hideViewAids) {
+      setMeasureMode("off");
+      setSelectedGuideIds([]);
+      setMeasureArea(null);
+      setMeasureRuler(null);
+    }
+  }, [hideViewAids]);
+
+  useEffect(() => {
+    const known = new Set([
+      ...prefs.guidesX.map((g) => g.id),
+      ...prefs.guidesY.map((g) => g.id),
+    ]);
+    setSelectedGuideIds((prev) => {
+      const next = prev.filter((id) => known.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [prefs.guidesX, prefs.guidesY]);
 
   const rows = useMemo(
     () => buildSpreadRows(pages, viewMode),
@@ -561,19 +599,144 @@ export function AnaliseLabInspector({
     [onPrefsChange, prefs],
   );
 
-  const handleRemoveGuide = useCallback(
-    (axis: "x" | "y", mm: number) => {
-      onPrefsChange(removeGuideMm(prefs, axis, mm));
+  const handleRemoveGuideById = useCallback(
+    (id: string) => {
+      onPrefsChange(removeGuideById(prefs, id));
+      setSelectedGuideIds((prev) => prev.filter((x) => x !== id));
     },
     [onPrefsChange, prefs],
   );
 
-  const handleMoveGuide = useCallback(
-    (axis: "x" | "y", fromMm: number, toMm: number) => {
-      onPrefsChange(moveGuideMm(prefs, axis, fromMm, toMm));
+  const handleMoveGuideById = useCallback(
+    (id: string, toMm: number) => {
+      onPrefsChange(moveGuideById(prefs, id, toMm));
     },
     [onPrefsChange, prefs],
   );
+
+  const handleSelectGuides = useCallback(
+    (ids: string[], opts?: { additive?: boolean }) => {
+      setSelectedGuideIds((prev) => {
+        if (!opts?.additive) return ids.slice(0, 2);
+        const next = [...prev];
+        for (const id of ids) {
+          const i = next.indexOf(id);
+          if (i >= 0) next.splice(i, 1);
+          else {
+            if (next.length >= 2) next.shift();
+            next.push(id);
+          }
+        }
+        return next.slice(0, 2);
+      });
+    },
+    [],
+  );
+
+  const handleDeleteSelectedGuides = useCallback(() => {
+    if (!selectedGuideIds.length) return;
+    onPrefsChange(removeGuidesByIds(prefs, selectedGuideIds));
+    setSelectedGuideIds([]);
+  }, [onPrefsChange, prefs, selectedGuideIds]);
+
+  const handleSelectedGuideColorChange = useCallback(
+    (color: string) => {
+      const id = selectedGuideIds[0];
+      if (!id) return;
+      onPrefsChange(setGuideColorById(prefs, id, color));
+    },
+    [onPrefsChange, prefs, selectedGuideIds],
+  );
+
+  const handleMeasureCommit = useCallback(
+    (
+      next:
+        | { mode: "area"; value: AreaMeasure }
+        | { mode: "ruler"; value: RulerMeasure }
+        | null,
+    ) => {
+      if (!next) {
+        setMeasureArea(null);
+        setMeasureRuler(null);
+        return;
+      }
+      if (next.mode === "area") {
+        setMeasureArea(next.value);
+        setMeasureRuler(null);
+      } else {
+        setMeasureRuler(next.value);
+        setMeasureArea(null);
+      }
+    },
+    [],
+  );
+
+  const findGuideById = useCallback(
+    (id: string): GuideLine | null =>
+      prefs.guidesX.find((g) => g.id === id) ??
+      prefs.guidesY.find((g) => g.id === id) ??
+      null,
+    [prefs.guidesX, prefs.guidesY],
+  );
+
+  const selectedGuideColor =
+    selectedGuideIds.length === 1
+      ? findGuideById(selectedGuideIds[0]!)?.color ?? null
+      : null;
+
+  const guideDistanceLabel = useMemo(() => {
+    if (selectedGuideIds.length !== 2) return null;
+    const dist = parallelGuideDistanceMm(
+      prefs,
+      selectedGuideIds[0]!,
+      selectedGuideIds[1]!,
+    );
+    if (dist == null) return null;
+    return `Δ = ${formatMm(dist)}`;
+  }, [prefs, selectedGuideIds]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (hideViewAids) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (event.key === "Escape") {
+        if (measureMode !== "off") {
+          event.preventDefault();
+          setMeasureMode("off");
+          setMeasureArea(null);
+          setMeasureRuler(null);
+          return;
+        }
+        if (selectedGuideIds.length) {
+          event.preventDefault();
+          setSelectedGuideIds([]);
+        }
+        return;
+      }
+      if (
+        (event.key === "Delete" || event.key === "Backspace") &&
+        selectedGuideIds.length
+      ) {
+        event.preventDefault();
+        handleDeleteSelectedGuides();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [
+    handleDeleteSelectedGuides,
+    hideViewAids,
+    measureMode,
+    selectedGuideIds.length,
+  ]);
 
   if (!pages.length) {
     return (
@@ -614,6 +777,13 @@ export function AnaliseLabInspector({
         onToggleViewMode={() =>
           setViewMode((m) => (m === "simples" ? "dupla" : "simples"))
         }
+        measureMode={measureMode}
+        onMeasureModeChange={setMeasureMode}
+        selectedGuideIds={selectedGuideIds}
+        selectedGuideColor={selectedGuideColor}
+        onSelectedGuideColorChange={handleSelectedGuideColorChange}
+        onDeleteSelectedGuides={handleDeleteSelectedGuides}
+        guideDistanceLabel={guideDistanceLabel}
       />
 
       {pagePick ? (
@@ -681,15 +851,21 @@ export function AnaliseLabInspector({
                     sangriaMm={sangriaMm}
                     selectedMarkId={selectedMarkId}
                     showLeftRuler={pageInRow === 0}
-                    showRulers={prefs.rulers}
-                    grid={prefs.grid}
+                    showRulers={!hideViewAids && prefs.rulers}
+                    grid={!hideViewAids && prefs.grid}
                     gridStepMm={prefs.gridStepMm}
-                    guides={prefs.guides}
-                    guidesXMm={prefs.guidesXMm}
-                    guidesYMm={prefs.guidesYMm}
+                    guides={!hideViewAids && prefs.guides}
+                    guidesX={prefs.guidesX}
+                    guidesY={prefs.guidesY}
                     gridColor={prefs.gridColor}
                     guideColor={prefs.guideColor}
-                    offset={prefs.offset}
+                    selectedGuideIds={selectedGuideIds}
+                    onSelectGuides={handleSelectGuides}
+                    measureMode={hideViewAids ? "off" : measureMode}
+                    measureArea={measureArea}
+                    measureRuler={measureRuler}
+                    onMeasureCommit={handleMeasureCommit}
+                    offset={!hideViewAids && prefs.offset}
                     offsetMm={prefs.offsetMm}
                     offsetColor={prefs.offsetColor}
                     pagePickActive={Boolean(pagePick)}
@@ -702,8 +878,8 @@ export function AnaliseLabInspector({
                     active={activePage === page.page}
                     onActivate={() => activatePage(page.page)}
                     onAddGuide={handleAddGuide}
-                    onRemoveGuide={handleRemoveGuide}
-                    onMoveGuide={handleMoveGuide}
+                    onRemoveGuideById={handleRemoveGuideById}
+                    onMoveGuideById={handleMoveGuideById}
                     onCreateGeometryMark={onCreateGeometryMark}
                     onCreateFaixaDrag={onCreateFaixaDrag}
                     onCreateSangriaDrag={onCreateSangriaDrag}

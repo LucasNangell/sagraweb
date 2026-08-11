@@ -3,14 +3,17 @@ import {
   Columns2,
   Grid3X3,
   Maximize,
+  MoveDiagonal,
   Ruler,
   Square,
+  Trash2,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
 
 import type { AnaliseLabTool } from "./AnaliseLabMarkTools";
 import type { InspectorViewMode } from "./analiseLabFit";
+import type { InspectMeasureMode } from "./analiseLabInspectMeasure";
 import type { InspectorViewPrefs } from "./analiseLabViewPrefs";
 import {
   AnaliseLabMarkCreateOptions,
@@ -52,6 +55,13 @@ interface AnaliseLabToolbarProps {
   hideMarkOptions?: boolean;
   /** Oculta réguas/grade/guias/offset (modo Folhear browse). */
   hideViewAids?: boolean;
+  measureMode?: InspectMeasureMode;
+  onMeasureModeChange?: (mode: InspectMeasureMode) => void;
+  selectedGuideIds?: string[];
+  selectedGuideColor?: string | null;
+  onSelectedGuideColorChange?: (color: string) => void;
+  onDeleteSelectedGuides?: () => void;
+  guideDistanceLabel?: string | null;
 }
 
 export function AnaliseLabToolbar({
@@ -71,15 +81,28 @@ export function AnaliseLabToolbar({
   onToggleViewMode,
   hideMarkOptions = false,
   hideViewAids = false,
+  measureMode = "off",
+  onMeasureModeChange,
+  selectedGuideIds = [],
+  selectedGuideColor = null,
+  onSelectedGuideColorChange,
+  onDeleteSelectedGuides,
+  guideDistanceLabel = null,
 }: AnaliseLabToolbarProps) {
-  const hasGuides =
-    prefs.guidesXMm.length > 0 || prefs.guidesYMm.length > 0;
+  const hasGuides = prefs.guidesX.length > 0 || prefs.guidesY.length > 0;
   const showOptions = !hideMarkOptions && mark.tool !== "select";
+  const hasSelection = selectedGuideIds.length > 0;
+  const singleSelection = selectedGuideIds.length === 1;
 
   const {
-    onToolChange: _onToolChange,
+    onToolChange,
     ...createOptions
   } = mark;
+
+  const setMeasureMode = (mode: InspectMeasureMode) => {
+    onMeasureModeChange?.(mode);
+    if (mode !== "off") onToolChange("select");
+  };
 
   return (
     <div className="shrink-0">
@@ -141,7 +164,7 @@ export function AnaliseLabToolbar({
             )}
           </button>
           <span className="tabular-nums text-[11px] text-neutral-500">
-            {Math.round(zoom * 100)}% · {sizeLabel}
+            {Math.round(zoom * 100)}%
           </span>
         </div>
 
@@ -215,28 +238,88 @@ export function AnaliseLabToolbar({
                 Guia
               </button>
               {prefs.guides ? (
-                <input
-                  type="color"
-                  value={prefs.guideColor}
-                  onChange={(e) =>
-                    onPrefsChange({ ...prefs, guideColor: e.target.value })
-                  }
-                  className={colorInputClass}
-                  title="Cor das guias"
-                  aria-label="Cor das guias"
-                />
+                <>
+                  <input
+                    type="color"
+                    value={prefs.guideColor}
+                    onChange={(e) =>
+                      onPrefsChange({ ...prefs, guideColor: e.target.value })
+                    }
+                    className={colorInputClass}
+                    title="Cor das novas guias"
+                    aria-label="Cor das novas guias"
+                  />
+                  {singleSelection && selectedGuideColor != null ? (
+                    <input
+                      type="color"
+                      value={selectedGuideColor}
+                      onChange={(e) =>
+                        onSelectedGuideColorChange?.(e.target.value)
+                      }
+                      className={colorInputClass}
+                      title="Cor da guia selecionada"
+                      aria-label="Cor da guia selecionada"
+                    />
+                  ) : null}
+                </>
+              ) : null}
+              {hasSelection ? (
+                <button
+                  type="button"
+                  onClick={onDeleteSelectedGuides}
+                  className={btnIdle}
+                  title="Excluir guia selecionada"
+                  aria-label="Excluir guia selecionada"
+                >
+                  <Trash2 className="size-3.5" aria-hidden />
+                </button>
               ) : null}
               <button
                 type="button"
                 disabled={!hasGuides}
                 onClick={() =>
-                  onPrefsChange({ ...prefs, guidesXMm: [], guidesYMm: [] })
+                  onPrefsChange({ ...prefs, guidesX: [], guidesY: [] })
                 }
                 className={`${btnIdle} disabled:opacity-40`}
                 title="Limpar guias"
               >
                 Limpar
               </button>
+              {guideDistanceLabel ? (
+                <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-sky-800">
+                  {guideDistanceLabel}
+                </span>
+              ) : null}
+
+              <span className={divider} aria-hidden />
+
+              <button
+                type="button"
+                onClick={() =>
+                  setMeasureMode(measureMode === "area" ? "off" : "area")
+                }
+                className={measureMode === "area" ? btnActive : btnIdle}
+                title="Medir área (retângulo)"
+                aria-label="Medir área"
+                aria-pressed={measureMode === "area"}
+              >
+                <Square className="size-3.5" aria-hidden />
+                <span className="ml-1 hidden sm:inline">Área</span>
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setMeasureMode(measureMode === "ruler" ? "off" : "ruler")
+                }
+                className={measureMode === "ruler" ? btnActive : btnIdle}
+                title="Régua (distância entre 2 pontos)"
+                aria-label="Régua"
+                aria-pressed={measureMode === "ruler"}
+              >
+                <MoveDiagonal className="size-3.5" aria-hidden />
+                <span className="ml-1 hidden sm:inline">Régua</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() =>
@@ -282,6 +365,12 @@ export function AnaliseLabToolbar({
               ) : null}
             </div>
           </>
+        ) : null}
+
+        {!hideViewAids ? (
+          <span className="ml-auto tabular-nums text-[11px] font-semibold text-neutral-700">
+            Pág. {sizeLabel}
+          </span>
         ) : null}
       </div>
 

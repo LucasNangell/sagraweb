@@ -150,8 +150,10 @@ def _load_dotenv_file() -> None:
         load_dotenv(ENV_FILE, override=True)
         logging.getLogger(__name__).debug("Arquivo .env carregado: %s", ENV_FILE)
     except ImportError:
-        logging.warning(
-            "python-dotenv não instalado. Execute: pip install python-dotenv"
+        # Fallback manual existe; warning no stderr quebrava publicar-release
+        # (PowerShell Stop + NativeCommandError). Mantem debug only.
+        logging.getLogger(__name__).debug(
+            "python-dotenv nao instalado; usando parser manual do .env"
         )
         _load_dotenv_manual()
     except Exception as exc:

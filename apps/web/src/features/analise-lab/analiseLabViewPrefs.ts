@@ -1,14 +1,21 @@
 /** Preferências visuais locais da Inspeção (réguas, grade, guias) — por OS. */
 
+export interface GuideLine {
+  id: string;
+  posMm: number;
+  color: string;
+}
+
 export interface InspectorViewPrefs {
   rulers: boolean;
   grid: boolean;
   gridStepMm: number;
   gridColor: string;
   guides: boolean;
+  /** Cor de pintura para novas guias (não recolore existentes). */
   guideColor: string;
-  guidesXMm: number[];
-  guidesYMm: number[];
+  guidesX: GuideLine[];
+  guidesY: GuideLine[];
   /** Offset de corte auxiliar (não persiste no banco). */
   offset: boolean;
   offsetMm: number;
@@ -22,8 +29,8 @@ export const DEFAULT_VIEW_PREFS: InspectorViewPrefs = {
   gridColor: "#94a3b8",
   guides: true,
   guideColor: "#2563eb",
-  guidesXMm: [],
-  guidesYMm: [],
+  guidesX: [],
+  guidesY: [],
   offset: false,
   offsetMm: 7,
   offsetColor: "#dc2626",
@@ -35,12 +42,19 @@ export const BROWSE_VIEW_PREFS: InspectorViewPrefs = {
   rulers: false,
   grid: false,
   guides: false,
-  guidesXMm: [],
-  guidesYMm: [],
+  guidesX: [],
+  guidesY: [],
   offset: false,
 };
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/;
+
+let guideIdSeq = 0;
+
+export function newGuideId(): string {
+  guideIdSeq += 1;
+  return `g-${Date.now().toString(36)}-${guideIdSeq}`;
+}
 
 function normalizeColor(raw: unknown, fallback: string): string {
   if (typeof raw !== "string") return fallback;
@@ -62,23 +76,73 @@ function clampOffsetMm(value: number): number {
   return Math.min(100, Math.max(0.5, Math.round(value * 10) / 10));
 }
 
-function normalizeGuideList(raw: unknown): number[] {
-  if (!Array.isArray(raw)) return [];
-  const out: number[] = [];
-  for (const v of raw) {
-    const n = typeof v === "number" ? v : Number(v);
-    if (!Number.isFinite(n)) continue;
-    out.push(Math.round(n * 10) / 10);
+function roundPosMm(mm: number): number {
+  return Math.round(mm * 10) / 10;
+}
+
+/**
+ * Aceita formato novo (GuideLine[]) ou legado (number[] / guidesXMm).
+ * Atribui cor padrão às linhas migradas.
+ */
+export function normalizeGuideLines(
+  raw: unknown,
+  paintColor: string,
+  legacyRaw?: unknown,
+): GuideLine[] {
+  const source = Array.isArray(raw)
+    ? raw
+    : Array.isArray(legacyRaw)
+      ? legacyRaw
+      : null;
+  if (!source) return [];
+
+  const out: GuideLine[] = [];
+  const seenPos = new Set<number>();
+  for (const entry of source) {
+    if (typeof entry === "number" || typeof entry === "string") {
+      const n = Number(entry);
+      if (!Number.isFinite(n)) continue;
+      const posMm = roundPosMm(n);
+      if (seenPos.has(posMm)) continue;
+      seenPos.add(posMm);
+      out.push({ id: newGuideId(), posMm, color: paintColor });
+      continue;
+    }
+    if (!entry || typeof entry !== "object") continue;
+    const obj = entry as { id?: unknown; posMm?: unknown; color?: unknown };
+    const pos = Number(obj.posMm);
+    if (!Number.isFinite(pos)) continue;
+    const posMm = roundPosMm(pos);
+    if (seenPos.has(posMm)) continue;
+    seenPos.add(posMm);
+    const id =
+      typeof obj.id === "string" && obj.id.trim()
+        ? obj.id.trim()
+        : newGuideId();
+    out.push({
+      id,
+      posMm,
+      color: normalizeColor(obj.color, paintColor),
+    });
   }
-  return out.sort((a, b) => a - b);
+  return out.sort((a, b) => a.posMm - b.posMm);
 }
 
 export function normalizeViewPrefs(
-  partial?: Partial<InspectorViewPrefs> | null,
+  partial?:
+    | (Partial<InspectorViewPrefs> & {
+        guidesXMm?: unknown;
+        guidesYMm?: unknown;
+      })
+    | null,
 ): InspectorViewPrefs {
   if (!partial || typeof partial !== "object") {
-    return { ...DEFAULT_VIEW_PREFS, guidesXMm: [], guidesYMm: [] };
+    return { ...DEFAULT_VIEW_PREFS, guidesX: [], guidesY: [] };
   }
+  const guideColor = normalizeColor(
+    partial.guideColor,
+    DEFAULT_VIEW_PREFS.guideColor,
+  );
   return {
     rulers: partial.rulers !== false,
     grid: Boolean(partial.grid),
@@ -87,12 +151,17 @@ export function normalizeViewPrefs(
     ),
     gridColor: normalizeColor(partial.gridColor, DEFAULT_VIEW_PREFS.gridColor),
     guides: partial.guides !== false,
-    guideColor: normalizeColor(
-      partial.guideColor,
-      DEFAULT_VIEW_PREFS.guideColor,
+    guideColor,
+    guidesX: normalizeGuideLines(
+      partial.guidesX,
+      guideColor,
+      (partial as { guidesXMm?: unknown }).guidesXMm,
     ),
-    guidesXMm: normalizeGuideList(partial.guidesXMm),
-    guidesYMm: normalizeGuideList(partial.guidesYMm),
+    guidesY: normalizeGuideLines(
+      partial.guidesY,
+      guideColor,
+      (partial as { guidesYMm?: unknown }).guidesYMm,
+    ),
     offset: Boolean(partial.offset),
     offsetMm: clampOffsetMm(
       partial.offsetMm ?? DEFAULT_VIEW_PREFS.offsetMm,
@@ -148,13 +217,16 @@ export function addGuideMm(
   toleranceMm = 0.3,
 ): InspectorViewPrefs {
   if (!Number.isFinite(mm)) return prefs;
-  const value = Math.round(mm * 10) / 10;
-  const key = axis === "x" ? "guidesXMm" : "guidesYMm";
+  const value = roundPosMm(mm);
+  const key = axis === "x" ? "guidesX" : "guidesY";
   const list = prefs[key];
-  if (list.some((g) => Math.abs(g - value) < toleranceMm)) return prefs;
+  if (list.some((g) => Math.abs(g.posMm - value) < toleranceMm)) return prefs;
   return {
     ...prefs,
-    [key]: [...list, value].sort((a, b) => a - b),
+    [key]: [
+      ...list,
+      { id: newGuideId(), posMm: value, color: prefs.guideColor },
+    ].sort((a, b) => a.posMm - b.posMm),
   };
 }
 
@@ -164,10 +236,49 @@ export function removeGuideMm(
   mm: number,
   toleranceMm = 0.3,
 ): InspectorViewPrefs {
-  const key = axis === "x" ? "guidesXMm" : "guidesYMm";
+  const key = axis === "x" ? "guidesX" : "guidesY";
   return {
     ...prefs,
-    [key]: prefs[key].filter((g) => Math.abs(g - mm) >= toleranceMm),
+    [key]: prefs[key].filter((g) => Math.abs(g.posMm - mm) >= toleranceMm),
+  };
+}
+
+export function removeGuideById(
+  prefs: InspectorViewPrefs,
+  id: string,
+): InspectorViewPrefs {
+  return {
+    ...prefs,
+    guidesX: prefs.guidesX.filter((g) => g.id !== id),
+    guidesY: prefs.guidesY.filter((g) => g.id !== id),
+  };
+}
+
+export function removeGuidesByIds(
+  prefs: InspectorViewPrefs,
+  ids: Iterable<string>,
+): InspectorViewPrefs {
+  const drop = new Set(ids);
+  if (drop.size === 0) return prefs;
+  return {
+    ...prefs,
+    guidesX: prefs.guidesX.filter((g) => !drop.has(g.id)),
+    guidesY: prefs.guidesY.filter((g) => !drop.has(g.id)),
+  };
+}
+
+export function setGuideColorById(
+  prefs: InspectorViewPrefs,
+  id: string,
+  color: string,
+): InspectorViewPrefs {
+  const nextColor = normalizeColor(color, prefs.guideColor);
+  const mapList = (list: GuideLine[]) =>
+    list.map((g) => (g.id === id ? { ...g, color: nextColor } : g));
+  return {
+    ...prefs,
+    guidesX: mapList(prefs.guidesX),
+    guidesY: mapList(prefs.guidesY),
   };
 }
 
@@ -179,10 +290,74 @@ export function moveGuideMm(
   toleranceMm = 0.3,
 ): InspectorViewPrefs {
   if (!Number.isFinite(toMm)) return prefs;
-  return addGuideMm(
-    removeGuideMm(prefs, axis, fromMm, toleranceMm),
-    axis,
-    toMm,
-    toleranceMm,
-  );
+  const key = axis === "x" ? "guidesX" : "guidesY";
+  const list = prefs[key];
+  const idx = list.findIndex((g) => Math.abs(g.posMm - fromMm) < toleranceMm);
+  if (idx < 0) return prefs;
+  const value = roundPosMm(toMm);
+  if (
+    list.some(
+      (g, i) => i !== idx && Math.abs(g.posMm - value) < toleranceMm,
+    )
+  ) {
+    return prefs;
+  }
+  const next = list.slice();
+  next[idx] = { ...next[idx]!, posMm: value };
+  return {
+    ...prefs,
+    [key]: next.sort((a, b) => a.posMm - b.posMm),
+  };
+}
+
+export function moveGuideById(
+  prefs: InspectorViewPrefs,
+  id: string,
+  toMm: number,
+  toleranceMm = 0.3,
+): InspectorViewPrefs {
+  if (!Number.isFinite(toMm)) return prefs;
+  const value = roundPosMm(toMm);
+  const tryAxis = (
+    key: "guidesX" | "guidesY",
+  ): InspectorViewPrefs | null => {
+    const list = prefs[key];
+    const idx = list.findIndex((g) => g.id === id);
+    if (idx < 0) return null;
+    if (
+      list.some(
+        (g, i) => i !== idx && Math.abs(g.posMm - value) < toleranceMm,
+      )
+    ) {
+      return prefs;
+    }
+    const next = list.slice();
+    next[idx] = { ...next[idx]!, posMm: value };
+    return {
+      ...prefs,
+      [key]: next.sort((a, b) => a.posMm - b.posMm),
+    };
+  };
+  return tryAxis("guidesX") ?? tryAxis("guidesY") ?? prefs;
+}
+
+/** Distância em mm entre duas guias paralelas; null se eixos mistos / ids inválidos. */
+export function parallelGuideDistanceMm(
+  prefs: InspectorViewPrefs,
+  idA: string,
+  idB: string,
+): number | null {
+  const find = (
+    id: string,
+  ): { axis: "x" | "y"; posMm: number } | null => {
+    const x = prefs.guidesX.find((g) => g.id === id);
+    if (x) return { axis: "x", posMm: x.posMm };
+    const y = prefs.guidesY.find((g) => g.id === id);
+    if (y) return { axis: "y", posMm: y.posMm };
+    return null;
+  };
+  const a = find(idA);
+  const b = find(idB);
+  if (!a || !b || a.axis !== b.axis) return null;
+  return Math.round(Math.abs(a.posMm - b.posMm) * 10) / 10;
 }

@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from database import db
 from services.prova_web_crop_service import build_pdf_crop_meta
+from services.prova_web_dieline_service import parse_dieline_pdf
 from services.prova_web_record_service import (
     RENDER_ERROR,
     RENDER_PENDING,
@@ -43,6 +44,7 @@ from services.prova_web_job_service import (
     enqueue_prova_web_render,
 )
 from services.prova_web_render_service import (
+    MODE_CAIXA,
     MODE_CAPA_MIOLO,
     MODE_ESPIRAL,
     delete_web_render_dir,
@@ -208,7 +210,7 @@ def _papelaria_mockup_meta(ano: int, os_id: int) -> dict[str, Any]:
 
 
 class ProvaWebUpdate(BaseModel):
-    modo: Literal["unico", "capa_miolo", "folha_dobrada", "espiral"]
+    modo: Literal["unico", "capa_miolo", "folha_dobrada", "espiral", "caixa"]
     arquivo_unico: Optional[str] = Field(None, max_length=512)
     arquivo_capa: Optional[str] = Field(None, max_length=512)
     arquivo_miolo: Optional[str] = Field(None, max_length=512)
@@ -473,6 +475,42 @@ def get_prova_web_crop_meta(
     return {"ano": ano, "os": os_id, "path": path.replace("\\", "/"), **meta}
 
 
+@router.get("/os/{ano}/{os_id}/prova-web/dieline-meta")
+def get_prova_web_dieline_meta(
+    ano: int,
+    os_id: int,
+    request: Request,
+    path: str = Query(..., min_length=1, max_length=512),
+    page: Optional[int] = Query(None, ge=0),
+):
+    """Extrai corte/dobra e dims tuck-end sugeridas de um PDF de faca."""
+    _require_prova_web(request)
+    folder = _require_os_folder(ano, os_id)
+    try:
+        full = resolve_os_relative_pdf(folder, path)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        parsed = parse_dieline_pdf(full, page_index=page)
+        from services.prova_web_caixa_service import suggest_from_dieline
+
+        suggestion = suggest_from_dieline(parsed)
+    except Exception as exc:
+        logger.error("Prova WEB dieline-meta falhou (%s/%s): %s", os_id, ano, exc)
+        raise HTTPException(
+            status_code=500, detail="Falha ao ler a faca do PDF."
+        ) from exc
+    return {
+        "ano": ano,
+        "os": os_id,
+        "path": path.replace("\\", "/"),
+        "parsed": parsed,
+        "suggestion": suggestion,
+    }
+
+
 @router.put("/os/{ano}/{os_id}/prova-web")
 def save_prova_web(ano: int, os_id: int, body: ProvaWebUpdate, request: Request):
     _require_prova_web(request)
@@ -506,6 +544,20 @@ def save_prova_web(ano: int, os_id: int, body: ProvaWebUpdate, request: Request)
             arquivo_unico = None
         else:
             arquivo_unico = _validated(body.arquivo_unico, "prova")
+            arquivo_capa = None
+            arquivo_miolo = None
+    elif body.modo == MODE_CAIXA:
+        crop_json_pre = body.crop_json if isinstance(body.crop_json, dict) else {}
+        caixa = crop_json_pre.get("caixa") if isinstance(crop_json_pre, dict) else None
+        kind = "combined"
+        if isinstance(caixa, dict):
+            kind = str(caixa.get("sourceKind") or "combined").strip().lower()
+        if kind == "separate":
+            arquivo_capa = _validated(body.arquivo_capa, "faca")
+            arquivo_miolo = _validated(body.arquivo_miolo, "arte")
+            arquivo_unico = None
+        else:
+            arquivo_unico = _validated(body.arquivo_unico, "caixa")
             arquivo_capa = None
             arquivo_miolo = None
     else:

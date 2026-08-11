@@ -44,6 +44,23 @@ export function pdfSourcesFromRecord(
     }
     return [];
   }
+  if (modo === "caixa") {
+    const kind = record.cropJson?.caixa?.sourceKind ?? "combined";
+    if (kind === "separate") {
+      const out: ProvaWebPdfSource[] = [];
+      if (record.arquivoCapa) {
+        out.push({ id: "capa", label: "Faca", path: record.arquivoCapa });
+      }
+      if (record.arquivoMiolo) {
+        out.push({ id: "miolo", label: "Arte", path: record.arquivoMiolo });
+      }
+      return out;
+    }
+    if (record.arquivoUnico) {
+      return [{ id: "unico", label: "Caixa", path: record.arquivoUnico }];
+    }
+    return [];
+  }
   if (record.arquivoUnico) {
     return [
       {

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type {
   AnaliseLabEdge,
@@ -18,7 +18,16 @@ import {
   sangriaFromDrag,
   sangriaSvgRect,
 } from "./analiseLabGeometry";
-import { gridLinesMm } from "./analiseLabViewPrefs";
+import {
+  type AreaMeasure,
+  type InspectMeasureMode,
+  type MmPoint,
+  distanceMm as measureDistanceMm,
+  rectFromPoints,
+  rulerFromPoints,
+  type RulerMeasure,
+} from "./analiseLabInspectMeasure";
+import { gridLinesMm, type GuideLine } from "./analiseLabViewPrefs";
 import { pageDisplaySize } from "./analiseLabFit";
 
 type RulerDrag = {
@@ -36,6 +45,7 @@ type TextDraft = {
 
 type GuideDrag = {
   axis: "x" | "y";
+  guideId: string;
   originMm: number;
   currentMm: number;
   outside: boolean;
@@ -59,10 +69,22 @@ interface AnaliseLabInspectorPageProps {
   grid?: boolean;
   gridStepMm?: number;
   guides?: boolean;
-  guidesXMm?: number[];
-  guidesYMm?: number[];
+  guidesX?: GuideLine[];
+  guidesY?: GuideLine[];
   gridColor?: string;
+  /** Cor de pintura para prévia de guia nova. */
   guideColor?: string;
+  selectedGuideIds?: string[];
+  onSelectGuides?: (ids: string[], opts?: { additive?: boolean }) => void;
+  measureMode?: InspectMeasureMode;
+  measureArea?: AreaMeasure | null;
+  measureRuler?: RulerMeasure | null;
+  onMeasureCommit?: (
+    next:
+      | { mode: "area"; value: AreaMeasure }
+      | { mode: "ruler"; value: RulerMeasure }
+      | null,
+  ) => void;
   offset?: boolean;
   offsetMm?: number;
   offsetColor?: string;
@@ -78,7 +100,9 @@ interface AnaliseLabInspectorPageProps {
   onActivate?: () => void;
   onAddGuide?: (axis: "x" | "y", mm: number) => void;
   onRemoveGuide?: (axis: "x" | "y", mm: number) => void;
+  onRemoveGuideById?: (id: string) => void;
   onMoveGuide?: (axis: "x" | "y", fromMm: number, toMm: number) => void;
+  onMoveGuideById?: (id: string, toMm: number) => void;
   onCreateGeometryMark: (args: {
     tipo:
       | "ponto"
@@ -122,10 +146,16 @@ export function AnaliseLabInspectorPage({
   grid = false,
   gridStepMm = 10,
   guides = true,
-  guidesXMm = [],
-  guidesYMm = [],
+  guidesX = [],
+  guidesY = [],
   gridColor = "#94a3b8",
   guideColor = "#2563eb",
+  selectedGuideIds = [],
+  onSelectGuides,
+  measureMode = "off",
+  measureArea = null,
+  measureRuler = null,
+  onMeasureCommit,
   offset = false,
   offsetMm = 7,
   offsetColor = "#dc2626",
@@ -140,7 +170,9 @@ export function AnaliseLabInspectorPage({
   onActivate,
   onAddGuide,
   onRemoveGuide,
+  onRemoveGuideById,
   onMoveGuide,
+  onMoveGuideById,
   onCreateGeometryMark,
   onCreateFaixaDrag,
   onCreateSangriaDrag,
@@ -152,6 +184,11 @@ export function AnaliseLabInspectorPage({
   const [guideDrag, setGuideDrag] = useState<GuideDrag | null>(null);
   const [textDraft, setTextDraft] = useState<TextDraft | null>(null);
   const [freePoints, setFreePoints] = useState<number[][] | null>(null);
+  const [measureDraft, setMeasureDraft] = useState<MmPoint | null>(null);
+
+  useEffect(() => {
+    setMeasureDraft(null);
+  }, [measureMode, page.page]);
 
   const { widthMm, heightMm } = pageSizeMm(page.widthPt || 0, page.heightPt || 0);
   const { width: displayW, height: displayH } = pageDisplaySize(page, zoom);
@@ -190,7 +227,11 @@ export function AnaliseLabInspectorPage({
   const topRulerActive = topFaixaActive || topGuideActive;
   const leftRulerActive = leftFaixaActive || leftGuideActive;
   const guidesSelectable =
-    interactive && !pagePickActive && tool === "select" && guides;
+    interactive &&
+    !pagePickActive &&
+    guides &&
+    measureMode === "off" &&
+    (tool === "select" || Boolean(onSelectGuides));
 
   const toMm = (clientX: number, clientY: number) => {
     const el = imgRef.current;
@@ -219,6 +260,30 @@ export function AnaliseLabInspectorPage({
       onTogglePickPage?.(page.page);
       return;
     }
+
+    if (measureMode === "area" || measureMode === "ruler") {
+      const pt = toMm(e.clientX, e.clientY);
+      if (!pt) return;
+      if (!measureDraft) {
+        setMeasureDraft(pt);
+        onMeasureCommit?.(null);
+        return;
+      }
+      if (measureMode === "area") {
+        onMeasureCommit?.({
+          mode: "area",
+          value: rectFromPoints(measureDraft, pt),
+        });
+      } else {
+        onMeasureCommit?.({
+          mode: "ruler",
+          value: rulerFromPoints(measureDraft, pt),
+        });
+      }
+      setMeasureDraft(null);
+      return;
+    }
+
     if (tool === "select") {
       const pt = toMm(e.clientX, e.clientY);
       if (!pt || !onSelectMark) return;
@@ -232,7 +297,10 @@ export function AnaliseLabInspectorPage({
         yMm: pt.yMm,
         tolMm,
       });
-      if (hit != null) onSelectMark(hit);
+      if (hit != null) {
+        onSelectMark(hit);
+        onSelectGuides?.([]);
+      }
       return;
     }
     if (
@@ -417,13 +485,21 @@ export function AnaliseLabInspectorPage({
   const startGuideDrag = (
     e: React.PointerEvent,
     axis: "x" | "y",
-    originMm: number,
+    guide: GuideLine,
   ) => {
-    if (!guidesSelectable || !onMoveGuide) return;
+    if (!guidesSelectable || (!onMoveGuide && !onMoveGuideById)) return;
     e.preventDefault();
     e.stopPropagation();
+    const additive = e.ctrlKey || e.metaKey;
+    onSelectGuides?.([guide.id], { additive });
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    setGuideDrag({ axis, originMm, currentMm: originMm, outside: false });
+    setGuideDrag({
+      axis,
+      guideId: guide.id,
+      originMm: guide.posMm,
+      currentMm: guide.posMm,
+      outside: false,
+    });
   };
 
   const moveGuideDrag = (e: React.PointerEvent) => {
@@ -453,10 +529,12 @@ export function AnaliseLabInspectorPage({
     const drag = guideDrag;
     setGuideDrag(null);
     if (drag.outside) {
+      onRemoveGuideById?.(drag.guideId);
       onRemoveGuide?.(drag.axis, drag.originMm);
       return;
     }
     if (Math.abs(drag.currentMm - drag.originMm) < 0.05) return;
+    onMoveGuideById?.(drag.guideId, drag.currentMm);
     onMoveGuide?.(drag.axis, drag.originMm, drag.currentMm);
   };
 
@@ -531,10 +609,13 @@ export function AnaliseLabInspectorPage({
   const gridX = grid ? gridLinesMm(widthMm, gridStepMm) : [];
   const gridY = grid ? gridLinesMm(heightMm, gridStepMm) : [];
   const showGuidesOverlay =
-    (guides && (guidesXMm.length > 0 || guidesYMm.length > 0)) ||
+    (guides && (guidesX.length > 0 || guidesY.length > 0)) ||
     rulerDrag?.mode === "guide" ||
-    offset;
-  const guideHitPointer = guidesSelectable && Boolean(onMoveGuide);
+    offset ||
+    measureMode !== "off" ||
+    Boolean(measureArea || measureRuler || measureDraft);
+  const guideHitPointer =
+    guidesSelectable && Boolean(onMoveGuide || onMoveGuideById);
 
   const twoClickPreview =
     draft &&
@@ -761,29 +842,31 @@ export function AnaliseLabInspectorPage({
               ))
             : null}
           {guides
-            ? guidesXMm.map((x) => {
+            ? guidesX.map((guide) => {
                 const dragging =
-                  guideDrag?.axis === "x" && guideDrag.originMm === x;
-                const valueMm = dragging ? guideDrag.currentMm : x;
+                  guideDrag?.guideId === guide.id && guideDrag.axis === "x";
+                const valueMm = dragging ? guideDrag.currentMm : guide.posMm;
                 const xPx = (valueMm / widthMm) * displayW;
+                const selected = selectedGuideIds.includes(guide.id);
                 return (
-                  <g key={`gux-${page.page}-${x}`}>
+                  <g key={`gux-${page.page}-${guide.id}`}>
                     {guideHitPointer ? (
                       <line
                         x1={xPx}
                         y1={0}
                         x2={xPx}
                         y2={displayH}
-                        stroke={guideColor}
+                        stroke={guide.color}
                         strokeWidth={8}
                         strokeOpacity={0.01}
                         className="cursor-col-resize"
-                        onPointerDown={(e) => startGuideDrag(e, "x", x)}
+                        onPointerDown={(e) => startGuideDrag(e, "x", guide)}
                         onPointerMove={moveGuideDrag}
                         onPointerUp={endGuideDrag}
                         onDoubleClick={(e) => {
                           e.stopPropagation();
-                          onRemoveGuide?.("x", x);
+                          onRemoveGuideById?.(guide.id);
+                          onRemoveGuide?.("x", guide.posMm);
                         }}
                       />
                     ) : null}
@@ -792,8 +875,8 @@ export function AnaliseLabInspectorPage({
                       y1={0}
                       x2={xPx}
                       y2={displayH}
-                      stroke={guideColor}
-                      strokeWidth={dragging ? 1.5 : 1}
+                      stroke={guide.color}
+                      strokeWidth={selected || dragging ? 2 : 1}
                       strokeDasharray="5 4"
                       strokeOpacity={dragging && guideDrag.outside ? 0.35 : 1}
                       pointerEvents="none"
@@ -803,29 +886,31 @@ export function AnaliseLabInspectorPage({
               })
             : null}
           {guides
-            ? guidesYMm.map((y) => {
+            ? guidesY.map((guide) => {
                 const dragging =
-                  guideDrag?.axis === "y" && guideDrag.originMm === y;
-                const valueMm = dragging ? guideDrag.currentMm : y;
+                  guideDrag?.guideId === guide.id && guideDrag.axis === "y";
+                const valueMm = dragging ? guideDrag.currentMm : guide.posMm;
                 const yPx = (valueMm / heightMm) * displayH;
+                const selected = selectedGuideIds.includes(guide.id);
                 return (
-                  <g key={`guy-${page.page}-${y}`}>
+                  <g key={`guy-${page.page}-${guide.id}`}>
                     {guideHitPointer ? (
                       <line
                         x1={0}
                         y1={yPx}
                         x2={displayW}
                         y2={yPx}
-                        stroke={guideColor}
+                        stroke={guide.color}
                         strokeWidth={8}
                         strokeOpacity={0.01}
                         className="cursor-row-resize"
-                        onPointerDown={(e) => startGuideDrag(e, "y", y)}
+                        onPointerDown={(e) => startGuideDrag(e, "y", guide)}
                         onPointerMove={moveGuideDrag}
                         onPointerUp={endGuideDrag}
                         onDoubleClick={(e) => {
                           e.stopPropagation();
-                          onRemoveGuide?.("y", y);
+                          onRemoveGuideById?.(guide.id);
+                          onRemoveGuide?.("y", guide.posMm);
                         }}
                       />
                     ) : null}
@@ -834,8 +919,8 @@ export function AnaliseLabInspectorPage({
                       y1={yPx}
                       x2={displayW}
                       y2={yPx}
-                      stroke={guideColor}
-                      strokeWidth={dragging ? 1.5 : 1}
+                      stroke={guide.color}
+                      strokeWidth={selected || dragging ? 2 : 1}
                       strokeDasharray="5 4"
                       strokeOpacity={dragging && guideDrag.outside ? 0.35 : 1}
                       pointerEvents="none"
@@ -1004,6 +1089,99 @@ export function AnaliseLabInspectorPage({
           )}
         </svg>
       ) : null}
+
+      {(() => {
+        const liveHover =
+          measureDraft && hoverMm
+            ? { xMm: hoverMm.x, yMm: hoverMm.y }
+            : null;
+        const area =
+          measureMode === "area"
+            ? measureArea ??
+              (measureDraft && liveHover
+                ? rectFromPoints(measureDraft, liveHover)
+                : null)
+            : measureArea;
+        const ruler =
+          measureMode === "ruler"
+            ? measureRuler ??
+              (measureDraft && liveHover
+                ? rulerFromPoints(measureDraft, liveHover)
+                : null)
+            : measureRuler;
+        if (!area && !ruler && !measureDraft) return null;
+        return (
+          <svg
+            className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
+            viewBox={`0 0 ${displayW} ${displayH}`}
+            aria-hidden
+          >
+            {area ? (
+              <>
+                <rect
+                  x={(area.xMm / widthMm) * displayW}
+                  y={(area.yMm / heightMm) * displayH}
+                  width={(area.wMm / widthMm) * displayW}
+                  height={(area.hMm / heightMm) * displayH}
+                  fill="rgba(14,165,233,0.12)"
+                  stroke="#0ea5e9"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                />
+                <text
+                  x={((area.xMm + area.wMm / 2) / widthMm) * displayW}
+                  y={((area.yMm + area.hMm / 2) / heightMm) * displayH}
+                  fill="#0369a1"
+                  fontSize={12}
+                  fontWeight={600}
+                  textAnchor="middle"
+                >
+                  {formatMm(area.wMm)} × {formatMm(area.hMm)}
+                </text>
+              </>
+            ) : null}
+            {ruler ? (
+              <>
+                <line
+                  x1={(ruler.x1Mm / widthMm) * displayW}
+                  y1={(ruler.y1Mm / heightMm) * displayH}
+                  x2={(ruler.x2Mm / widthMm) * displayW}
+                  y2={(ruler.y2Mm / heightMm) * displayH}
+                  stroke="#0ea5e9"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                />
+                <text
+                  x={
+                    (((ruler.x1Mm + ruler.x2Mm) / 2) / widthMm) * displayW + 4
+                  }
+                  y={
+                    (((ruler.y1Mm + ruler.y2Mm) / 2) / heightMm) * displayH - 4
+                  }
+                  fill="#0369a1"
+                  fontSize={12}
+                  fontWeight={600}
+                >
+                  {formatMm(
+                    measureDistanceMm(
+                      { xMm: ruler.x1Mm, yMm: ruler.y1Mm },
+                      { xMm: ruler.x2Mm, yMm: ruler.y2Mm },
+                    ),
+                  )}
+                </text>
+              </>
+            ) : null}
+            {measureDraft && !area && !ruler ? (
+              <circle
+                cx={(measureDraft.xMm / widthMm) * displayW}
+                cy={(measureDraft.yMm / heightMm) * displayH}
+                r={4}
+                fill="#0ea5e9"
+              />
+            ) : null}
+          </svg>
+        );
+      })()}
 
       {freePoints && freePoints.length > 1 ? (
         <svg

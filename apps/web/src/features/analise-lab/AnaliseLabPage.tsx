@@ -39,6 +39,7 @@ import { ProvaWebViewerShell } from "@/features/prova-web/ProvaWebViewerShell";
 import logoUrl from "@/logo.png";
 
 import { AnaliseLabBalloonLayer } from "./AnaliseLabBalloonLayer";
+import { AnaliseLabClientPortalPanel } from "./AnaliseLabClientPortalPanel";
 import { AnaliseLabConcluir } from "./AnaliseLabConcluir";
 import { AnaliseLabInspector } from "./AnaliseLabInspector";
 import { AnaliseLabItemList } from "./AnaliseLabItemList";
@@ -53,27 +54,32 @@ import { AnaliseLabMarkCreateOptions } from "./AnaliseLabMarkCreateOptions";
 import { AnaliseLabMarksLayer } from "./AnaliseLabMarksLayer";
 import type { AnaliseLabTool } from "./AnaliseLabMarkTools";
 import {
+  labItemsToClientItems,
+  loadLabClientPreviewState,
+  saveLabClientPreviewState,
+} from "./analiseLabClientPreview";
+import { itemOccurrences, roleToComponente } from "./analiseLabComponente";
+import {
+  normalizeFolhearModo,
+} from "./analiseLabFolhearModo";
+import { pageSizeMm } from "./analiseLabGeometry";
+import { labelTipo } from "./analiseLabLabels";
+import { buildLibraryDraft } from "./analiseLabLibraryDraft";
+import {
+  formatPageSpec,
+  markScopeLabel,
+  parsePageSpec,
+  togglePagePickSpec,
+} from "./analiseLabPageSpec";
+import { pageNumberToIndex } from "./analiseLabPageSync";
+import { AnaliseLabReplicateDialog } from "./AnaliseLabReplicateDialog";
+import { AnaliseLabSourcePicker } from "./AnaliseLabSourcePicker";
+import {
   loadViewPrefs,
   normalizeViewPrefs,
   saveViewPrefs,
   type InspectorViewPrefs,
 } from "./analiseLabViewPrefs";
-import { AnaliseLabReplicateDialog } from "./AnaliseLabReplicateDialog";
-import { AnaliseLabSourcePicker } from "./AnaliseLabSourcePicker";
-import { buildLibraryDraft } from "./analiseLabLibraryDraft";
-import { itemOccurrences, roleToComponente } from "./analiseLabComponente";
-import { pageSizeMm } from "./analiseLabGeometry";
-import {
-  normalizeFolhearModo,
-} from "./analiseLabFolhearModo";
-import {
-  formatPageSpec,
-  parsePageSpec,
-  togglePagePickSpec,
-} from "./analiseLabPageSpec";
-import { pageNumberToIndex } from "./analiseLabPageSync";
-import { labelTipo } from "./analiseLabLabels";
-import { markScopeLabel } from "./analiseLabPageSpec";
 
 interface AnaliseLabPageProps {
   ano: number;
@@ -133,6 +139,43 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     useState<AnaliseLabItemPanelModel | null>(null);
   const draftPayloadRef = useRef<UpdateAnaliseLabItemPayload | null>(null);
   const markScopeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [clientPreviewNome, setClientPreviewNome] = useState("");
+  const [clientPreviewPonto, setClientPreviewPonto] = useState("");
+  const [clientDisregardedIds, setClientDisregardedIds] = useState<number[]>(
+    [],
+  );
+  const [clientUploadedComponents, setClientUploadedComponents] = useState<
+    string[]
+  >([]);
+  const [clientPreviewReady, setClientPreviewReady] = useState(false);
+
+  useEffect(() => {
+    const saved = loadLabClientPreviewState(ano, osId);
+    setClientPreviewNome(saved.nome);
+    setClientPreviewPonto(saved.ponto);
+    setClientDisregardedIds(saved.disregardedIds);
+    setClientUploadedComponents(saved.uploadedComponents);
+    setClientPreviewReady(true);
+  }, [ano, osId]);
+
+  useEffect(() => {
+    if (!clientPreviewReady) return;
+    saveLabClientPreviewState(ano, osId, {
+      nome: clientPreviewNome,
+      ponto: clientPreviewPonto,
+      disregardedIds: clientDisregardedIds,
+      uploadedComponents: clientUploadedComponents,
+    });
+  }, [
+    ano,
+    osId,
+    clientPreviewReady,
+    clientPreviewNome,
+    clientPreviewPonto,
+    clientDisregardedIds,
+    clientUploadedComponents,
+  ]);
 
   const infoQuery = useQuery({
     queryKey: ["analise-lab-info", ano, osId],
@@ -974,6 +1017,20 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     session?.modo,
   );
 
+  const clientPreviewItems = useMemo(
+    () =>
+      labItemsToClientItems(itens, {
+        disregardedIds: new Set(clientDisregardedIds),
+        uploadedComponents: new Set(clientUploadedComponents),
+      }),
+    [itens, clientDisregardedIds, clientUploadedComponents],
+  );
+
+  const folhearBalloonItems = useMemo(
+    () => itens.filter((i) => !clientDisregardedIds.includes(i.id)),
+    [itens, clientDisregardedIds],
+  );
+
   const closeProblemPanel = () => {
     setSelectedItemId(null);
     setDraftLibraryItem(null);
@@ -1464,12 +1521,38 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                   </>
                 ) : (
                   <>
-                    <aside className="flex w-[332px] shrink-0 flex-col border-r border-sagra-border bg-white p-2">
-                      <h2 className="mb-1 text-xs font-semibold uppercase text-neutral-600">
-                        Problemas
-                      </h2>
-                      <AnaliseLabItemList {...itemListProps} />
-                    </aside>
+                    <div className="relative flex min-h-0 shrink-0">
+                      <AnaliseLabClientPortalPanel
+                        osId={osId}
+                        ano={ano}
+                        titulo={info?.titulo}
+                        produto={info?.produto}
+                        versaoLabel={session?.versaoLabel}
+                        items={clientPreviewItems}
+                        uploadedComponents={clientUploadedComponents}
+                        selectedItemId={selectedItemId}
+                        onSelectItem={selectItem}
+                        clientNome={clientPreviewNome}
+                        clientPonto={clientPreviewPonto}
+                        onClientNomeChange={setClientPreviewNome}
+                        onClientPontoChange={setClientPreviewPonto}
+                        onDisregard={(item) => {
+                          setClientDisregardedIds((prev) =>
+                            prev.includes(item.uniqueId)
+                              ? prev
+                              : [...prev, item.uniqueId],
+                          );
+                        }}
+                        onUploadFiles={(componente) => {
+                          setClientUploadedComponents((prev) =>
+                            prev.includes(componente)
+                              ? prev
+                              : [...prev, componente],
+                          );
+                        }}
+                        busy={actionBusy}
+                      />
+                    </div>
                     {folhearModo === "folhas" ? (
                       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                         <AnaliseLabInspector
@@ -1523,7 +1606,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         renderPageOverlay={renderPageOverlay}
                         renderStageOverlay={(ctx) => (
                           <AnaliseLabBalloonLayer
-                            items={itens}
+                            items={folhearBalloonItems}
                             marks={marks}
                             pages={pages}
                             visiblePages={ctx.visiblePages}

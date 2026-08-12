@@ -1729,6 +1729,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                               isSpread={ctx.isSpread}
                               flipping={ctx.flipping}
                               selectedItemId={selectedItemId}
+                              activePage={currentPage}
                               dismissedIds={dismissedBalloonIds}
                               pageRectsOverride={ctx.pageRectsOverride}
                               onDismiss={(id) =>
@@ -1776,6 +1777,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                             isSpread={ctx.isSpread}
                             flipping={ctx.flipping}
                             selectedItemId={selectedItemId}
+                            activePage={currentPage}
                             dismissedIds={dismissedBalloonIds}
                             onDismiss={(id) =>
                               setDismissedBalloonIds((prev) =>

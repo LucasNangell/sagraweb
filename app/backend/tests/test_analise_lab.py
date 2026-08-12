@@ -564,3 +564,63 @@ def test_autorizar_impressao_drives_resolucao_obrigatoria_rule() -> None:
     autorizar_on = next(r for r in rows_on if r["tipo"] == prov.TIPO_AUTORIZAR)
     assert (not autorizar_off["selecionada"]) is True
     assert (not autorizar_on["selecionada"]) is False
+
+
+def test_dedupe_autorizar_rows_collapses_livre_and_sistema() -> None:
+    from services import analise_lab_providencias_service as prov
+
+    rows = prov.dedupe_autorizar_rows(
+        [
+            {
+                "texto": prov.AUTORIZAR_TEXTO,
+                "tipo": prov.TIPO_LIVRE,
+                "selecionada": True,
+                "origem": prov.ORIGEM_BIBLIOTECA,
+            },
+            {
+                "texto": prov.AUTORIZAR_TEXTO,
+                "tipo": prov.TIPO_AUTORIZAR,
+                "selecionada": False,
+                "origem": prov.ORIGEM_SISTEMA,
+            },
+            {
+                "texto": "Revisar PDF",
+                "tipo": prov.TIPO_LIVRE,
+                "selecionada": True,
+                "origem": prov.ORIGEM_MANUAL,
+            },
+        ]
+    )
+    autorizar = [
+        r
+        for r in rows
+        if r["tipo"] == prov.TIPO_AUTORIZAR or prov.is_autorizar_texto(r["texto"])
+    ]
+    assert len(autorizar) == 1
+    assert autorizar[0]["tipo"] == prov.TIPO_AUTORIZAR
+    assert autorizar[0]["selecionada"] is False
+    assert len(rows) == 2
+
+
+def test_dedupe_autorizar_rows_collapses_multiple_sistema() -> None:
+    from services import analise_lab_providencias_service as prov
+
+    rows = prov.dedupe_autorizar_rows(
+        [
+            {
+                "texto": prov.AUTORIZAR_TEXTO,
+                "tipo": prov.TIPO_AUTORIZAR,
+                "selecionada": True,
+                "origem": prov.ORIGEM_SISTEMA,
+            },
+            {
+                "texto": prov.AUTORIZAR_TEXTO,
+                "tipo": prov.TIPO_AUTORIZAR,
+                "selecionada": False,
+                "origem": prov.ORIGEM_SISTEMA,
+            },
+        ]
+    )
+    assert len(rows) == 1
+    assert rows[0]["tipo"] == prov.TIPO_AUTORIZAR
+    assert rows[0]["selecionada"] is False

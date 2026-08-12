@@ -1,13 +1,18 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import type { AnaliseLabItem, AnaliseLabMark } from "@/api/analiseLab";
 import type { ProvaWebPageMeta } from "@/api/provaWeb";
 
 import { AnaliseLabProblemBalloon } from "./AnaliseLabProblemBalloon";
 import {
+  BALLOON_EXPAND_H,
+  BALLOON_PREFERRED_H,
   buildPageBalloons,
+  computeFitBalloonHeight,
   itemBalloonOccurrencePages,
+  occurrenceIndexForActivePage,
   packBalloons,
+  type PackedBalloon,
 } from "./analiseLabBalloons";
 import { pageSizeMm } from "./analiseLabGeometry";
 import { parsePageSpec } from "./analiseLabPageSpec";
@@ -23,6 +28,8 @@ interface AnaliseLabBalloonLayerProps {
   isSpread: boolean;
   flipping: boolean;
   selectedItemId?: number | null;
+  /** Página atual do Folhear (para o contador 1/N do balão). */
+  activePage?: number;
   dismissedIds: number[];
   onDismiss: (itemId: number) => void;
   onGoToOccurrence: (itemId: number, page: number) => void;
@@ -40,8 +47,6 @@ interface AnaliseLabBalloonLayerProps {
   >;
 }
 
-/** Altura colapsada usada no pack (hover/focus não reempacota). */
-export const BALLOON_COLLAPSED_H = 130;
 const GAP = 8;
 
 export function AnaliseLabBalloonLayer({
@@ -55,6 +60,7 @@ export function AnaliseLabBalloonLayer({
   isSpread,
   flipping,
   selectedItemId = null,
+  activePage,
   dismissedIds,
   onDismiss,
   onGoToOccurrence,
@@ -133,64 +139,95 @@ export function AnaliseLabBalloonLayer({
     return pageSize.height;
   }, [pageRectsOverride, pageSize.height]);
 
+  const fitHeight = useMemo(
+    () =>
+      computeFitBalloonHeight(
+        stageHeight,
+        anchors.length,
+        GAP,
+        BALLOON_PREFERRED_H,
+      ),
+    [anchors.length, stageHeight],
+  );
+
   const packed = useMemo(
     () =>
       packBalloons(anchors, {
         stageHeight,
-        balloonHeight: BALLOON_COLLAPSED_H,
+        balloonHeight: BALLOON_PREFERRED_H,
         gap: GAP,
         pageRects,
         slotWidth,
         gutterRight,
+        fitToStage: true,
       }),
     [anchors, gutterRight, pageRects, slotWidth, stageHeight],
   );
 
-  if (flipping || !packed.length) return null;
+  // Congela o layout durante a animação do flipbook para o balão não piscar
+  // quando o mesmo problema continua na página seguinte.
+  const stableLayoutRef = useRef<{
+    packed: PackedBalloon[];
+    fitHeight: number;
+  }>({ packed: [], fitHeight: BALLOON_PREFERRED_H });
+  if (!flipping) {
+    stableLayoutRef.current = { packed, fitHeight };
+  }
+  const displayPacked = flipping ? stableLayoutRef.current.packed : packed;
+  const displayFit = flipping ? stableLayoutRef.current.fitHeight : fitHeight;
+
+  if (!displayPacked.length) return null;
 
   return (
     <div
       className="pointer-events-none absolute inset-0 z-20"
       style={{ right: -gutterRight }}
     >
-      <svg
-        className="pointer-events-none absolute inset-0 h-full w-full"
-        aria-hidden
-      >
-        {packed.map((b) =>
-          b.leaders.map((leader) => (
-            <g key={`line-${b.itemId}-${leader.markId}`}>
-              <line
-                x1={leader.anchorX}
-                y1={leader.anchorY}
-                x2={b.bubbleX}
-                y2={b.bubbleY + 20}
-                stroke="#64748b"
-                strokeWidth={1.25}
-                strokeDasharray="4 3"
-              />
-              <circle
-                cx={leader.anchorX}
-                cy={leader.anchorY}
-                r={selectedItemId === b.itemId ? 7 : 5}
-                fill={selectedItemId === b.itemId ? "#16a34a" : "#2563eb"}
-                fillOpacity={0.9}
-              />
-            </g>
-          )),
-        )}
-      </svg>
+      {!flipping ? (
+        <svg
+          className="pointer-events-none absolute inset-0 h-full w-full"
+          aria-hidden
+        >
+          {displayPacked.map((b) =>
+            b.leaders.map((leader) => (
+              <g key={`line-${b.itemId}-${leader.markId}`}>
+                <line
+                  x1={leader.anchorX}
+                  y1={leader.anchorY}
+                  x2={b.bubbleX}
+                  y2={b.bubbleY + 20}
+                  stroke="#64748b"
+                  strokeWidth={1.25}
+                  strokeDasharray="4 3"
+                />
+                <circle
+                  cx={leader.anchorX}
+                  cy={leader.anchorY}
+                  r={selectedItemId === b.itemId ? 7 : 5}
+                  fill={selectedItemId === b.itemId ? "#16a34a" : "#2563eb"}
+                  fillOpacity={0.9}
+                />
+              </g>
+            )),
+          )}
+        </svg>
+      ) : null}
 
-      {packed.map((b, stackIndex) => {
+      {displayPacked.map((b, stackIndex) => {
         const occ = itemBalloonOccurrencePages(
           b.item,
           marks,
           pages,
           parsePageSpec,
         );
-        const occIdx = Math.max(0, occ.indexOf(b.page));
-        const raised =
-          hoveredItemId === b.itemId || selectedItemId === b.itemId;
+        const occIdx = occurrenceIndexForActivePage(
+          occ,
+          activePage ?? b.page,
+          visiblePages.map((p) => p.page),
+          b.page,
+        );
+        // Só hover/focus sobe e expande — seleção destaca sem sobrepor vizinhos.
+        const raised = hoveredItemId === b.itemId;
         return (
           <AnaliseLabProblemBalloon
             key={`ball-${b.itemId}`}
@@ -199,7 +236,8 @@ export function AnaliseLabBalloonLayer({
             width={b.balloonWidth}
             highlighted={selectedItemId === b.itemId}
             collapsed={!raised}
-            collapsedHeight={BALLOON_COLLAPSED_H}
+            restHeight={displayFit}
+            expandHeight={BALLOON_EXPAND_H}
             stackIndex={stackIndex}
             occurrences={occ}
             occurrenceIndex={occIdx}
@@ -215,7 +253,7 @@ export function AnaliseLabBalloonLayer({
               position: "absolute",
               left: b.bubbleX,
               top: b.bubbleY,
-              zIndex: raised ? 40 + stackIndex : 10 + stackIndex,
+              zIndex: raised ? 1000 : 10 + stackIndex,
             }}
           />
         );

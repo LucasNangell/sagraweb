@@ -26,6 +26,10 @@ function normalizeLabel(value: string): string {
     .toLowerCase();
 }
 
+export function isAutorizarTexto(texto: string): boolean {
+  return normalizeLabel(texto || "") === normalizeLabel(AUTORIZAR_IMPRESSAO_TEXTO);
+}
+
 export function resolucaoObrigatoriaFromProvidencias(
   rows: Array<{ tipo: string; selecionada: boolean }>,
 ): boolean {
@@ -34,21 +38,53 @@ export function resolucaoObrigatoriaFromProvidencias(
   return !autorizar.selecionada;
 }
 
-export function ensureAutorizarDraft(
+/** Uma linha sistema autorizar; remove livres/duplicatas com o mesmo texto. */
+export function dedupeAutorizarDraft(
   rows: ProvidenciaDraft[],
 ): ProvidenciaDraft[] {
-  if (rows.some((r) => r.tipo === PROVIDENCIA_TIPO_AUTORIZAR)) return rows;
-  return [
-    ...rows,
-    {
+  const kept: ProvidenciaDraft[] = [];
+  let autorizar: ProvidenciaDraft | null = null;
+  for (const raw of rows) {
+    const isAut =
+      raw.tipo === PROVIDENCIA_TIPO_AUTORIZAR || isAutorizarTexto(raw.texto);
+    if (isAut) {
+      if (!autorizar) {
+        autorizar = {
+          key: raw.key || "sistema-autorizar",
+          id: raw.id,
+          texto: AUTORIZAR_IMPRESSAO_TEXTO,
+          tipo: PROVIDENCIA_TIPO_AUTORIZAR,
+          ordem: raw.ordem,
+          selecionada: raw.selecionada,
+          origem: "sistema",
+        };
+      } else if (raw.tipo === PROVIDENCIA_TIPO_AUTORIZAR) {
+        autorizar.selecionada = raw.selecionada;
+        if (raw.id != null) autorizar.id = raw.id;
+      }
+      continue;
+    }
+    if (!(raw.texto || "").trim()) continue;
+    kept.push(raw);
+  }
+  if (!autorizar) {
+    autorizar = {
       key: "sistema-autorizar",
       texto: AUTORIZAR_IMPRESSAO_TEXTO,
       tipo: PROVIDENCIA_TIPO_AUTORIZAR,
-      ordem: rows.length,
+      ordem: kept.length,
       selecionada: false,
       origem: "sistema",
-    },
-  ];
+    };
+  }
+  const out = [...kept, autorizar];
+  return out.map((r, i) => ({ ...r, ordem: i }));
+}
+
+export function ensureAutorizarDraft(
+  rows: ProvidenciaDraft[],
+): ProvidenciaDraft[] {
+  return dedupeAutorizarDraft(rows);
 }
 
 /** Extrai textos de `.action-item` (ou `<li>` após “Providências”). */
@@ -100,11 +136,10 @@ export function parseProvidenciasFromHtml(html: string): string[] {
 
 /** Seed de rascunho a partir do HTML da biblioteca + linha sistema. */
 export function seedProvidenciasDraft(html: string): ProvidenciaDraft[] {
-  const autorizarNorm = normalizeLabel(AUTORIZAR_IMPRESSAO_TEXTO);
   const rows: ProvidenciaDraft[] = [];
   let ordem = 0;
   for (const texto of parseProvidenciasFromHtml(html)) {
-    if (normalizeLabel(texto) === autorizarNorm) continue;
+    if (isAutorizarTexto(texto)) continue;
     rows.push({
       key: `bib-${ordem}`,
       texto,
@@ -119,7 +154,7 @@ export function seedProvidenciasDraft(html: string): ProvidenciaDraft[] {
 }
 
 export function draftsToProvidenciasPayload(rows: ProvidenciaDraft[]) {
-  return rows.map((r, i) => ({
+  return dedupeAutorizarDraft(rows).map((r, i) => ({
     ...(r.id != null ? { id: r.id } : {}),
     texto: r.texto,
     tipo: r.tipo,

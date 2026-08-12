@@ -114,7 +114,80 @@ def normalize_label(value: str) -> str:
     return re.sub(r"\s+", " ", s).strip().lower()
 
 
-def list_for_item(lab_item_id: int) -> list[dict[str, Any]]:
+def is_autorizar_texto(texto: str) -> bool:
+    return normalize_label(texto or "") == normalize_label(AUTORIZAR_TEXTO)
+
+
+def dedupe_autorizar_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Uma única linha sistema autorizar_impressao; remove livres com o mesmo texto."""
+    kept: list[dict[str, Any]] = []
+    autorizar: Optional[dict[str, Any]] = None
+    for raw in rows or []:
+        tipo = (raw.get("tipo") or TIPO_LIVRE).strip() or TIPO_LIVRE
+        texto = (raw.get("texto") or "").strip()
+        if tipo == TIPO_AUTORIZAR or is_autorizar_texto(texto):
+            sel = bool(raw.get("selecionada", False))
+            if autorizar is None:
+                autorizar = {
+                    "texto": AUTORIZAR_TEXTO,
+                    "tipo": TIPO_AUTORIZAR,
+                    "origem": ORIGEM_SISTEMA,
+                    "selecionada": sel,
+                }
+                if raw.get("id") is not None:
+                    autorizar["id"] = raw["id"]
+                if raw.get("labItemId") is not None:
+                    autorizar["labItemId"] = raw["labItemId"]
+            elif tipo == TIPO_AUTORIZAR:
+                autorizar["selecionada"] = sel
+            continue
+        if not texto:
+            continue
+        kept.append(dict(raw))
+    if autorizar is None:
+        autorizar = {
+            "texto": AUTORIZAR_TEXTO,
+            "tipo": TIPO_AUTORIZAR,
+            "ordem": len(kept),
+            "selecionada": False,
+            "origem": ORIGEM_SISTEMA,
+        }
+    kept.append(autorizar)
+    for i, row in enumerate(kept):
+        row["ordem"] = i
+    return kept
+
+
+def _has_autorizar_dupes(rows: list[dict[str, Any]]) -> bool:
+    likes = [
+        r
+        for r in rows
+        if (r.get("tipo") or "") == TIPO_AUTORIZAR
+        or is_autorizar_texto(r.get("texto") or "")
+    ]
+    return len(likes) > 1
+
+
+def _rewrite_providencias(
+    lab_item_id: int, rows: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    db.execute_query(
+        "DELETE FROM tabAnaliseLabItemProvidencia WHERE LabItemID = %s",
+        (int(lab_item_id),),
+    )
+    for i, row in enumerate(rows):
+        _insert_row(
+            lab_item_id,
+            texto=row.get("texto") or AUTORIZAR_TEXTO,
+            tipo=row.get("tipo") or TIPO_LIVRE,
+            ordem=int(row.get("ordem", i)),
+            selecionada=bool(row.get("selecionada", True)),
+            origem=row.get("origem") or ORIGEM_MANUAL,
+        )
+    return list_for_item_raw(lab_item_id)
+
+
+def list_for_item_raw(lab_item_id: int) -> list[dict[str, Any]]:
     rows = db.execute_query(
         f"""
         SELECT {_SELECT}
@@ -125,6 +198,20 @@ def list_for_item(lab_item_id: int) -> list[dict[str, Any]]:
         {"id": int(lab_item_id)},
     )
     return [_row_to_prov(r) for r in (rows or [])]
+
+
+def list_for_item(lab_item_id: int) -> list[dict[str, Any]]:
+    rows = list_for_item_raw(lab_item_id)
+    if not rows:
+        return rows
+    needs = _has_autorizar_dupes(rows) or not any(
+        r["tipo"] == TIPO_AUTORIZAR for r in rows
+    )
+    if not needs:
+        return rows
+    cleaned = _rewrite_providencias(lab_item_id, dedupe_autorizar_rows(rows))
+    sync_resolucao_obrigatoria(lab_item_id)
+    return cleaned
 
 
 def list_for_items(lab_item_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
@@ -145,6 +232,13 @@ def list_for_items(lab_item_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
     for row in rows or []:
         item_id = int(row.get("LabItemID") or 0)
         out.setdefault(item_id, []).append(_row_to_prov(row))
+    for item_id, item_rows in list(out.items()):
+        if not item_rows:
+            continue
+        if _has_autorizar_dupes(item_rows) or not any(
+            r["tipo"] == TIPO_AUTORIZAR for r in item_rows
+        ):
+            out[item_id] = list_for_item(item_id)
     return out
 
 
@@ -176,7 +270,7 @@ def _insert_row(
 
 def seed_for_item(lab_item_id: int, html_snapshot: str) -> list[dict[str, Any]]:
     """Cria seed a partir do HTML + linha sistema autorizar impressão."""
-    existing = list_for_item(lab_item_id)
+    existing = list_for_item_raw(lab_item_id)
     if existing:
         ensure_autorizar_row(lab_item_id)
         sync_resolucao_obrigatoria(lab_item_id)
@@ -185,7 +279,7 @@ def seed_for_item(lab_item_id: int, html_snapshot: str) -> list[dict[str, Any]]:
     parsed = parse_providencias_from_html(html_snapshot or "")
     ordem = 0
     for text in parsed:
-        if normalize_label(text) == normalize_label(AUTORIZAR_TEXTO):
+        if is_autorizar_texto(text):
             continue
         _insert_row(
             lab_item_id,
@@ -206,27 +300,18 @@ def seed_for_item(lab_item_id: int, html_snapshot: str) -> list[dict[str, Any]]:
     )
     sync_resolucao_obrigatoria(lab_item_id)
     project_html_snapshot(lab_item_id)
-    return list_for_item(lab_item_id)
+    return list_for_item_raw(lab_item_id)
 
 
 def ensure_autorizar_row(lab_item_id: int) -> None:
-    rows = list_for_item(lab_item_id)
-    if any(r["tipo"] == TIPO_AUTORIZAR for r in rows):
-        return
-    max_ordem = max((r["ordem"] for r in rows), default=-1)
-    _insert_row(
-        lab_item_id,
-        texto=AUTORIZAR_TEXTO,
-        tipo=TIPO_AUTORIZAR,
-        ordem=max_ordem + 1,
-        selecionada=False,
-        origem=ORIGEM_SISTEMA,
-    )
+    rows = list_for_item_raw(lab_item_id)
+    if _has_autorizar_dupes(rows) or not any(r["tipo"] == TIPO_AUTORIZAR for r in rows):
+        _rewrite_providencias(lab_item_id, dedupe_autorizar_rows(rows))
 
 
 def sync_resolucao_obrigatoria(lab_item_id: int) -> bool:
     """Selecionada=0 em autorizar_impressao ⇒ ResolucaoObrigatoria=1."""
-    rows = list_for_item(lab_item_id)
+    rows = list_for_item_raw(lab_item_id)
     autorizar = next((r for r in rows if r["tipo"] == TIPO_AUTORIZAR), None)
     obrig = True if autorizar is None else (not autorizar["selecionada"])
     db.execute_query(
@@ -304,39 +389,37 @@ def replace_for_item(
 ) -> list[dict[str, Any]]:
     """Substitui o conjunto de providências do item (exceto força linha sistema)."""
     cleaned: list[dict[str, Any]] = []
-    has_autorizar = False
     for i, raw in enumerate(providencias or []):
         tipo = (raw.get("tipo") or TIPO_LIVRE).strip() or TIPO_LIVRE
         texto = (raw.get("texto") or "").strip()
-        if tipo == TIPO_AUTORIZAR:
-            has_autorizar = True
-            texto = AUTORIZAR_TEXTO
-            origem = ORIGEM_SISTEMA
-        else:
-            if not texto:
-                continue
-            origem = (raw.get("origem") or ORIGEM_MANUAL).strip() or ORIGEM_MANUAL
-            if origem == ORIGEM_SISTEMA:
-                origem = ORIGEM_MANUAL
+        if tipo == TIPO_AUTORIZAR or is_autorizar_texto(texto):
+            cleaned.append(
+                {
+                    "texto": AUTORIZAR_TEXTO,
+                    "tipo": TIPO_AUTORIZAR,
+                    "ordem": int(
+                        raw.get("ordem") if raw.get("ordem") is not None else i
+                    ),
+                    "selecionada": bool(raw.get("selecionada", False)),
+                    "origem": ORIGEM_SISTEMA,
+                }
+            )
+            continue
+        if not texto:
+            continue
+        origem = (raw.get("origem") or ORIGEM_MANUAL).strip() or ORIGEM_MANUAL
+        if origem == ORIGEM_SISTEMA:
+            origem = ORIGEM_MANUAL
         cleaned.append(
             {
                 "texto": texto,
-                "tipo": tipo,
+                "tipo": TIPO_LIVRE,
                 "ordem": int(raw.get("ordem") if raw.get("ordem") is not None else i),
                 "selecionada": bool(raw.get("selecionada", True)),
                 "origem": origem,
             }
         )
-    if not has_autorizar:
-        cleaned.append(
-            {
-                "texto": AUTORIZAR_TEXTO,
-                "tipo": TIPO_AUTORIZAR,
-                "ordem": len(cleaned),
-                "selecionada": False,
-                "origem": ORIGEM_SISTEMA,
-            }
-        )
+    cleaned = dedupe_autorizar_rows(cleaned)
 
     db.execute_query(
         "DELETE FROM tabAnaliseLabItemProvidencia WHERE LabItemID = %s",
@@ -353,4 +436,4 @@ def replace_for_item(
         )
     sync_resolucao_obrigatoria(lab_item_id)
     project_html_snapshot(lab_item_id)
-    return list_for_item(lab_item_id)
+    return list_for_item_raw(lab_item_id)

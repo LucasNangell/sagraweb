@@ -4,13 +4,13 @@ overview: Restaurar balões com altura natural (sem stack colapsado de 130px), e
 todos:
   - id: balloon-fit
     content: Altura preferida + fit uniforme + hover expand/z-index; remover colapso fixo 130
-    status: pending
+    status: completed
   - id: dedupe-autorizar
     content: Dedupe Autorizar impressão no backend (seed/replace/list) e no front (draft/painel)
-    status: pending
+    status: completed
   - id: tests-fit-dedupe
     content: Atualizar/criar testes de pack fit e dedupe autorizar
-    status: pending
+    status: completed
 isProject: false
 ---
 

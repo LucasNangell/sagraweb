@@ -149,6 +149,33 @@ export function itemBalloonOccurrencePages(
 }
 
 /**
+ * Índice da ocorrência a exibir no balão.
+ * Usa a página ativa (navegação); se ela não estiver na lista, a última
+ * ocorrência ainda visível no viewport (importante em spread).
+ */
+export function occurrenceIndexForActivePage(
+  occurrences: number[],
+  activePage: number,
+  visiblePageNums: number[],
+  fallbackPage?: number,
+): number {
+  if (!occurrences.length) return 0;
+  const fromActive = occurrences.indexOf(activePage);
+  if (fromActive >= 0) return fromActive;
+  const vis = new Set(visiblePageNums);
+  let best = -1;
+  for (let i = 0; i < occurrences.length; i++) {
+    if (vis.has(occurrences[i]!)) best = i;
+  }
+  if (best >= 0) return best;
+  if (fallbackPage != null) {
+    const fb = occurrences.indexOf(fallbackPage);
+    if (fb >= 0) return fb;
+  }
+  return 0;
+}
+
+/**
  * Um balão por problema no viewport: congrega todas as marcas visíveis
  * nas páginas atuais (spread incluso).
  */
@@ -216,6 +243,31 @@ export function buildPageBalloons(args: {
   return out;
 }
 
+/** Altura preferida (layout anterior) e limites para encolher quando N não cabe. */
+export const BALLOON_PREFERRED_H = 200;
+export const BALLOON_MIN_H = 72;
+export const BALLOON_EXPAND_H = 420;
+
+/** Altura uniforme para N balões caberem no stage (sem reempacotar no hover). */
+export function computeFitBalloonHeight(
+  stageHeight: number,
+  count: number,
+  gap: number,
+  preferred: number = BALLOON_PREFERRED_H,
+  minH: number = BALLOON_MIN_H,
+): number {
+  if (count <= 0) return preferred;
+  const margins = 16; // 8 top + 8 bottom
+  const available = Math.max(1, stageHeight - margins);
+  const gaps = Math.max(0, count - 1) * gap;
+  const needed = count * preferred + gaps;
+  if (needed <= available) return preferred;
+  const fit = Math.floor((available - gaps) / count);
+  // Preferir minH, mas se ainda não couber, encolher abaixo do mínimo.
+  if (fit >= minH) return Math.min(preferred, fit);
+  return Math.max(1, fit);
+}
+
 export function packBalloons(
   anchors: BalloonAnchor[],
   opts: {
@@ -237,6 +289,8 @@ export function packBalloons(
     gutterRight?: number;
     balloonWidth?: number;
     heightsByItemId?: Record<number, number>;
+    /** Se true (default), ignora balloonHeight fixo e usa fit uniforme quando heightsByItemId ausente. */
+    fitToStage?: boolean;
   },
 ): PackedBalloon[] {
   const {
@@ -248,6 +302,7 @@ export function packBalloons(
     gutterRight = 280,
     balloonWidth,
     heightsByItemId,
+    fitToStage = true,
   } = opts;
   const width = Math.max(
     180,
@@ -259,6 +314,11 @@ export function packBalloons(
     const by = b.markAnchors[0]?.yMm ?? 0;
     return a.page - b.page || ay - by || a.itemId - b.itemId;
   });
+
+  const uniformH =
+    !heightsByItemId && fitToStage
+      ? computeFitBalloonHeight(stageHeight, list.length, gap, balloonHeight)
+      : balloonHeight;
 
   const packed: PackedBalloon[] = [];
   const usedHeights: number[] = [];
@@ -298,7 +358,7 @@ export function packBalloons(
           ? fallbackRect.top + fallbackRect.height * 0.12
           : 0;
 
-    const h = heightsByItemId?.[a.itemId] ?? balloonHeight;
+    const h = heightsByItemId?.[a.itemId] ?? uniformH;
     const desired = Math.max(
       8,
       Math.min(stageHeight - h - 8, meanY - h / 2),

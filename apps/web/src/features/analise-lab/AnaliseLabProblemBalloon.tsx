@@ -6,6 +6,7 @@ import type {
   AnaliseLabItemProvidencia,
 } from "@/api/analiseLab";
 
+import { BALLOON_EXPAND_H, BALLOON_PREFERRED_H } from "./analiseLabBalloons";
 import { toBalloonHtml } from "./analiseLabBalloonHtml";
 
 interface AnaliseLabProblemBalloonProps {
@@ -13,8 +14,11 @@ interface AnaliseLabProblemBalloonProps {
   refNumber: number;
   width?: number;
   highlighted?: boolean;
-  /** Empilhado: mostra só a prévia até hover/focus. */
+  /** Em repouso: usa restHeight; no hover/focus expande. */
   collapsed?: boolean;
+  restHeight?: number;
+  expandHeight?: number;
+  /** @deprecated use restHeight */
   collapsedHeight?: number;
   stackIndex?: number;
   occurrences: number[];
@@ -35,8 +39,10 @@ export const AnaliseLabProblemBalloon = forwardRef<
     width = 280,
     highlighted = false,
     collapsed = false,
-    collapsedHeight = 130,
-    stackIndex = 0,
+    restHeight,
+    expandHeight = BALLOON_EXPAND_H,
+    collapsedHeight,
+    stackIndex: _stackIndex = 0,
     occurrences,
     occurrenceIndex,
     onOccurrenceChange,
@@ -51,7 +57,10 @@ export const AnaliseLabProblemBalloon = forwardRef<
   const total = occurrences.length;
   const page = occurrences[occurrenceIndex] ?? item.pagina;
   const bodyHtml = useMemo(
-    () => toBalloonHtml(item.htmlSnapshot || "", item.titulo, { stripProvidencias: true }),
+    () =>
+      toBalloonHtml(item.htmlSnapshot || "", item.titulo, {
+        stripProvidencias: true,
+      }),
     [item.htmlSnapshot, item.titulo],
   );
   const selectedProvidencias = useMemo(
@@ -62,6 +71,8 @@ export const AnaliseLabProblemBalloon = forwardRef<
     [item.providencias],
   );
 
+  const rest = restHeight ?? collapsedHeight ?? BALLOON_PREFERRED_H;
+  // Expansão só por interação explícita (hover/focus via collapsed=false, ou Ver providências).
   const expanded = !collapsed || focused || showProvidencias;
 
   return (
@@ -71,18 +82,18 @@ export const AnaliseLabProblemBalloon = forwardRef<
       tabIndex={0}
       className={
         highlighted
-          ? "pointer-events-auto overflow-hidden rounded-xl border-2 border-primary-green bg-white shadow-xl transition-[max-height,box-shadow] duration-150"
-          : "pointer-events-auto overflow-hidden rounded-xl border border-sagra-border bg-white shadow-lg transition-[max-height,box-shadow] duration-150"
+          ? "pointer-events-auto flex flex-col overflow-hidden rounded-xl border-2 border-primary-green bg-white shadow-xl transition-[height,max-height,box-shadow] duration-150"
+          : "pointer-events-auto flex flex-col overflow-hidden rounded-xl border border-sagra-border bg-white shadow-lg transition-[height,max-height,box-shadow] duration-150"
       }
       style={{
         ...style,
         width,
-        maxHeight: expanded ? 420 : collapsedHeight,
+        // Em repouso: altura fixa = slot do pack (sem sobrepor vizinhos).
+        height: expanded ? undefined : rest,
+        maxHeight: expanded ? expandHeight : rest,
         boxShadow: expanded
           ? "0 12px 28px rgba(15, 23, 42, 0.28)"
-          : stackIndex > 0
-            ? "0 4px 12px rgba(15, 23, 42, 0.18)"
-            : undefined,
+          : undefined,
       }}
       onMouseEnter={() => {
         onHoverChange?.(true);
@@ -103,7 +114,7 @@ export const AnaliseLabProblemBalloon = forwardRef<
         event.stopPropagation();
       }}
     >
-      <div className="flex items-start gap-2 border-b border-sagra-border bg-slate-50 px-2.5 py-2">
+      <div className="flex shrink-0 items-start gap-2 border-b border-sagra-border bg-slate-50 px-2.5 py-2">
         <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-secondary-blue text-[11px] font-bold text-white">
           {refNumber}
         </span>
@@ -129,7 +140,7 @@ export const AnaliseLabProblemBalloon = forwardRef<
       </div>
 
       {total > 1 ? (
-        <div className="flex items-center justify-between gap-1 border-b border-sagra-border px-2 py-1">
+        <div className="flex shrink-0 items-center justify-between gap-1 border-b border-sagra-border px-2 py-1">
           <button
             type="button"
             disabled={occurrenceIndex <= 0}
@@ -156,8 +167,7 @@ export const AnaliseLabProblemBalloon = forwardRef<
 
       <div
         className={
-          "overflow-auto px-2.5 py-2 text-[11px] leading-snug text-neutral-800 " +
-          (expanded ? "max-h-[220px] " : "max-h-[48px] ") +
+          "min-h-0 flex-1 overflow-auto px-2.5 py-2 text-[11px] leading-snug text-neutral-800 " +
           "[&_p]:mb-1.5 [&_ul]:mb-1.5 [&_ul]:list-disc [&_ul]:pl-4 " +
           "[&_ol]:mb-1.5 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:my-0.5 " +
           "[&_h1]:mb-1 [&_h1]:text-xs [&_h1]:font-semibold " +
@@ -179,7 +189,7 @@ export const AnaliseLabProblemBalloon = forwardRef<
       </div>
 
       {selectedProvidencias.length > 0 ? (
-        <div className="border-t border-sagra-border px-2.5 py-1.5">
+        <div className="shrink-0 border-t border-sagra-border px-2.5 py-1.5">
           <button
             type="button"
             className="text-[10px] font-semibold text-secondary-blue hover:underline"

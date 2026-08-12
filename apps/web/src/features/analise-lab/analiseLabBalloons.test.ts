@@ -5,7 +5,9 @@ import type { ProvaWebPageMeta } from "@/api/provaWeb";
 
 import {
   buildPageBalloons,
+  computeFitBalloonHeight,
   markAnchorMm,
+  occurrenceIndexForActivePage,
   packBalloons,
   type BalloonAnchor,
 } from "./analiseLabBalloons";
@@ -381,8 +383,10 @@ describe("analiseLabBalloons", () => {
     }
   });
 
-  it("packs more than 3 balloons with collapsed height (no overflow chip)", () => {
-    const collapsedH = 130;
+  it("packs more than 3 balloons and shrinks height to fit the stage", () => {
+    const preferred = 200;
+    const gap = 8;
+    const stageHeight = 400;
     const anchors: BalloonAnchor[] = [1, 2, 3, 4, 5].map((id) => ({
       itemId: id,
       page: 2,
@@ -391,10 +395,19 @@ describe("analiseLabBalloons", () => {
       markAnchors: [],
       item: item({ id, pagina: 2 }),
     }));
+    const fitH = computeFitBalloonHeight(
+      stageHeight,
+      anchors.length,
+      gap,
+      preferred,
+    );
+    expect(fitH).toBeLessThan(preferred);
+    expect(fitH).toBeGreaterThanOrEqual(1);
+
     const packed = packBalloons(anchors, {
-      stageHeight: 900,
-      balloonHeight: collapsedH,
-      gap: 8,
+      stageHeight,
+      balloonHeight: preferred,
+      gap,
       slotWidth: 600,
       gutterRight: 300,
       pageRects: {
@@ -402,17 +415,36 @@ describe("analiseLabBalloons", () => {
           left: 300,
           top: 0,
           width: 300,
-          height: 900,
+          height: stageHeight,
           widthMm: 210,
           heightMm: 297,
         },
       },
     });
     expect(packed).toHaveLength(5);
+    const last = packed[packed.length - 1]!;
+    expect(last.topPx + fitH).toBeLessThanOrEqual(stageHeight);
     for (let i = 0; i < packed.length - 1; i++) {
       expect(packed[i + 1]!.topPx).toBeGreaterThanOrEqual(
-        packed[i]!.topPx + collapsedH + 8,
+        packed[i]!.topPx + fitH + gap,
       );
     }
+  });
+});
+
+describe("occurrenceIndexForActivePage", () => {
+  it("uses activePage when it is in the occurrence list", () => {
+    expect(occurrenceIndexForActivePage([1, 2, 3, 4], 3, [2, 3])).toBe(2);
+  });
+
+  it("falls back to last visible occurrence when activePage is absent", () => {
+    expect(occurrenceIndexForActivePage([1, 2, 3, 4], 99, [1, 2])).toBe(1);
+  });
+
+  it("advances past a page already in the spread (next arrow)", () => {
+    const occ = [1, 2, 3, 4];
+    const idx = occurrenceIndexForActivePage(occ, 2, [1, 2]);
+    expect(idx).toBe(1);
+    expect(occ[idx + 1]).toBe(3);
   });
 });

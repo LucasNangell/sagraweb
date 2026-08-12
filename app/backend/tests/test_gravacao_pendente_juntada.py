@@ -239,3 +239,54 @@ def test_insert_pendente_session_with_juntada_grupo_id():
     assert "JuntadaGrupoId" in insert_sql
     insert_params = next(p for s, p in captured if "INSERT INTO tab_os_gravacao_pendente" in s)
     assert "grupo-uuid-1" in insert_params
+
+
+@patch("services.os_vinculo_grupo_service.check_replicacao_andamento")
+@patch("services.gravacao_pendente_service.resolve_juntada_grupo_for_os")
+def test_check_vinculo_replicacao_entregue_skips_juntada(
+    mock_resolve_juntada, mock_check_vinculo
+):
+    """Entregue em juntada não pede confirmação de juntada; cai no check de vínculo."""
+    from routers.os_routes import check_vinculo_replicacao
+
+    mock_resolve_juntada.return_value = {
+        "juntada_grupo_id": "g1",
+        "membros_vinculo": [
+            {"numero": 100, "ano": 2026},
+            {"numero": 200, "ano": 2026},
+        ],
+    }
+    mock_check_vinculo.return_value = {
+        "requires_confirmation": False,
+        "membros": [],
+    }
+
+    result = check_vinculo_replicacao(
+        ano=2026, id=100, situacao="Entregue", setor="SEFOC"
+    )
+    assert result.requires_confirmation is False
+    mock_check_vinculo.assert_called_once_with(100, 2026, "Entregue", "SEFOC")
+
+
+@patch("services.os_vinculo_grupo_service.check_replicacao_andamento")
+@patch("services.gravacao_pendente_service.resolve_juntada_grupo_for_os")
+def test_check_vinculo_replicacao_other_situacao_uses_juntada(
+    mock_resolve_juntada, mock_check_vinculo
+):
+    from routers.os_routes import check_vinculo_replicacao
+
+    mock_resolve_juntada.return_value = {
+        "juntada_grupo_id": "g1",
+        "membros_vinculo": [
+            {"numero": 100, "ano": 2026},
+            {"numero": 200, "ano": 2026},
+        ],
+    }
+
+    result = check_vinculo_replicacao(
+        ano=2026, id=100, situacao="Em Execução", setor="SEFOC"
+    )
+    assert result.requires_confirmation is True
+    assert result.origem == "juntada"
+    assert result.juntada_grupo_id == "g1"
+    mock_check_vinculo.assert_not_called()

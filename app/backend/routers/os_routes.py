@@ -1665,13 +1665,18 @@ def check_vinculo_replicacao(
     situacao: str = Query(...),
     setor: str = Query(...),
 ):
-    """Verifica se andamento exige confirmação de replicação (juntada ou vínculo)."""
+    """Verifica se andamento exige confirmação de replicação (juntada ou vínculo).
+
+    Entregue em juntada de gravação não pede confirmação de grupo — entrega
+    é por OS. Se houver vínculo, o check de vinculação segue normalmente.
+    """
     try:
         from services.gravacao_pendente_service import resolve_juntada_grupo_for_os
         from services.os_vinculo_grupo_service import check_replicacao_andamento
 
+        situacao_norm = (situacao or "").strip()
         juntada = resolve_juntada_grupo_for_os(id, ano)
-        if juntada:
+        if juntada and situacao_norm != "Entregue":
             return VinculoReplicacaoCheckResponse.model_validate(
                 {
                     "requires_confirmation": True,

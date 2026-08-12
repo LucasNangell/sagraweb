@@ -101,8 +101,29 @@ export function stripLeadingTitleBlock(
   }
 }
 
+/** Remove barras/listas de providências do HTML (exibidas via UI estruturada). */
+export function stripProvidenciasBlocks(root: HTMLElement): void {
+  for (const el of [...root.querySelectorAll(".providencias-bar, .action-list")]) {
+    el.remove();
+  }
+  for (const el of [...root.querySelectorAll("*")]) {
+    const text = normalizeLabelText(el.textContent || "");
+    if (text === "providencias" || text.startsWith("providencias ")) {
+      const next = el.nextElementSibling;
+      if (next && (next.classList.contains("action-list") || next.tagName === "UL" || next.tagName === "OL")) {
+        next.remove();
+      }
+      el.remove();
+    }
+  }
+}
+
 /** HTML limpo para o balão: sem estilos do banco, com estrutura preservada. */
-export function toBalloonHtml(html: string, itemTitulo?: string): string {
+export function toBalloonHtml(
+  html: string,
+  itemTitulo?: string,
+  opts?: { stripProvidencias?: boolean },
+): string {
   const { bodyHtml } = prepareAnaliseShadowContent(html || "", itemTitulo);
   if (!bodyHtml.trim()) return "";
   if (typeof DOMParser === "undefined") {
@@ -117,6 +138,10 @@ export function toBalloonHtml(html: string, itemTitulo?: string): string {
   );
   const root = doc.getElementById("root");
   if (!root) return "";
+
+  if (opts?.stripProvidencias) {
+    stripProvidenciasBlocks(root);
+  }
 
   const walk = (node: Node) => {
     if (node.nodeType !== Node.ELEMENT_NODE) return;

@@ -89,6 +89,23 @@ CREATE TABLE IF NOT EXISTS tabAnaliseLabItem (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 """
 
+_CREATE_TAB_PROVIDENCIA_SQL = """
+CREATE TABLE IF NOT EXISTS tabAnaliseLabItemProvidencia (
+    ID INT AUTO_INCREMENT PRIMARY KEY,
+    LabItemID INT NOT NULL,
+    Texto TEXT NOT NULL,
+    Tipo VARCHAR(64) NOT NULL DEFAULT 'livre',
+    Ordem INT NOT NULL DEFAULT 0,
+    Selecionada TINYINT(1) NOT NULL DEFAULT 1,
+    Origem VARCHAR(16) NOT NULL DEFAULT 'manual',
+    DataRegistro DATETIME DEFAULT CURRENT_TIMESTAMP,
+    DataAtualizacao DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_lab_prov_item (LabItemID, Ordem),
+    CONSTRAINT fk_lab_prov_item FOREIGN KEY (LabItemID)
+        REFERENCES tabAnaliseLabItem(ID) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+"""
+
 
 def _column_exists(cursor, table: str, column: str) -> bool:
     cursor.execute(
@@ -142,6 +159,7 @@ def ensure_analise_lab_schema() -> None:
             cursor.execute(_CREATE_TAB_SESSAO_SQL)
             cursor.execute(_CREATE_TAB_MARCA_SQL)
             cursor.execute(_CREATE_TAB_ITEM_SQL)
+            cursor.execute(_CREATE_TAB_PROVIDENCIA_SQL)
             _ensure_column(
                 cursor,
                 "tabAnaliseLabSessao",
@@ -202,7 +220,7 @@ def ensure_analise_lab_schema() -> None:
                 "uq_lab_item_analise_id",
                 "ItemAnaliseID",
             )
-        logger.info("Schema Análise Lab garantido (Sessao/Marca/Item).")
+        logger.info("Schema Análise Lab garantido (Sessao/Marca/Item/Providencia).")
     except Exception as exc:
         logger.error("Erro ao garantir schema Análise Lab: %s", exc)
         raise

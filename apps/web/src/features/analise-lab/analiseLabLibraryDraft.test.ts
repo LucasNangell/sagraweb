@@ -27,6 +27,33 @@ describe("buildLibraryDraft", () => {
     expect(draft.paginas).toBe("7");
     expect(draft.htmlSnapshot).toContain("Texto do problema");
     expect(draft.id).toBeUndefined();
+    expect(draft.providencias?.some((p) => p.tipo === "autorizar_impressao")).toBe(
+      true,
+    );
+    expect(draft.resolucaoObrigatoria).toBe(true);
+  });
+
+  it("seeds providencias from library HTML action-items", () => {
+    const draft = buildLibraryDraft({
+      problema: baseProblema({
+        ProbTecHTML: `
+          <p>Desc</p>
+          <ul class="action-list">
+            <li class="action-item">Revisar PDF</li>
+          </ul>
+        `,
+      }),
+      escopo: "pagina",
+      pagina: 1,
+      pageSpec: "1",
+    });
+    expect(draft.htmlSnapshot.toLowerCase()).not.toContain("revisar pdf");
+    expect(draft.providencias?.map((p) => p.texto)).toEqual(
+      expect.arrayContaining([
+        "Revisar PDF",
+        "Autorizar impressão desconsiderando o problema",
+      ]),
+    );
   });
 
   it("uses pageSpec for multi-page escopo", () => {

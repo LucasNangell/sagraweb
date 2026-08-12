@@ -83,6 +83,23 @@ export interface AnaliseLabMark {
 export type AnaliseLabItemEscopo = "pagina" | "paginas" | "arquivo";
 export type AnaliseLabComponente = "Capa" | "Miolo" | "Arq. Único";
 
+export type AnaliseLabProvidenciaTipo = "livre" | "autorizar_impressao" | string;
+export type AnaliseLabProvidenciaOrigem =
+  | "biblioteca"
+  | "sistema"
+  | "manual"
+  | string;
+
+export interface AnaliseLabItemProvidencia {
+  id: number;
+  labItemId: number;
+  texto: string;
+  tipo: AnaliseLabProvidenciaTipo;
+  ordem: number;
+  selecionada: boolean;
+  origem: AnaliseLabProvidenciaOrigem;
+}
+
 export interface AnaliseLabItem {
   id: number;
   sessaoId: number;
@@ -100,6 +117,7 @@ export interface AnaliseLabItem {
   corrigidoSefoc?: boolean;
   obsCorrecaoSefoc?: string | null;
   itemAnaliseId?: number | null;
+  providencias?: AnaliseLabItemProvidencia[];
 }
 
 export interface AnaliseLabInfo {
@@ -341,6 +359,33 @@ export async function updateAnaliseLabItem(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+}
+
+export async function saveAnaliseLabItemProvidencias(
+  ano: number,
+  osId: number,
+  itemId: number,
+  providencias: Array<{
+    id?: number;
+    texto: string;
+    tipo?: string;
+    ordem?: number;
+    selecionada?: boolean;
+    origem?: string;
+  }>,
+): Promise<{
+  ok: boolean;
+  providencias: AnaliseLabItemProvidencia[];
+  item: AnaliseLabItem;
+}> {
+  return apiFetch(
+    `/os/${ano}/${osId}/analise-lab/itens/${itemId}/providencias`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ providencias }),
+    },
+  );
 }
 
 export async function deleteAnaliseLabItem(

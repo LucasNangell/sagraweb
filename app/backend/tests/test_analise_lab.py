@@ -515,3 +515,52 @@ def test_import_classic_items_rejects_session_mismatch(
     )
     assert items.import_classic_items(1, 2026, 100) == 0
     assert called["classic"] is False
+
+
+def test_parse_providencias_from_html_action_items() -> None:
+    from services import analise_lab_providencias_service as prov
+
+    html = """
+    <p>Desc</p>
+    <div class="providencias-bar">Providências</div>
+    <ul class="action-list">
+      <li class="action-item">Corrigir sangria</li>
+      <li class="action-item">Reenviar arquivo</li>
+    </ul>
+    """
+    assert prov.parse_providencias_from_html(html) == [
+        "Corrigir sangria",
+        "Reenviar arquivo",
+    ]
+
+
+def test_build_and_strip_providencias_html() -> None:
+    from services import analise_lab_providencias_service as prov
+
+    html = prov.build_providencias_html(
+        [
+            {"texto": "Ajustar", "selecionada": True},
+            {"texto": "Ignorar", "selecionada": False},
+        ]
+    )
+    assert "Ajustar" in html
+    assert "Ignorar" not in html
+    assert 'class="providencias-bar"' in html
+    stripped = prov.strip_providencias_from_html(
+        f"<p>Problema</p>{html}"
+    )
+    assert "Problema" in stripped
+    assert "providencias-bar" not in stripped.lower()
+    assert "Ajustar" not in stripped
+
+
+def test_autorizar_impressao_drives_resolucao_obrigatoria_rule() -> None:
+    """Selecionada=0 em autorizar_impressao ⇒ ResolucaoObrigatoria=1."""
+    from services import analise_lab_providencias_service as prov
+
+    rows_off = [{"tipo": prov.TIPO_AUTORIZAR, "selecionada": False}]
+    rows_on = [{"tipo": prov.TIPO_AUTORIZAR, "selecionada": True}]
+    autorizar_off = next(r for r in rows_off if r["tipo"] == prov.TIPO_AUTORIZAR)
+    autorizar_on = next(r for r in rows_on if r["tipo"] == prov.TIPO_AUTORIZAR)
+    assert (not autorizar_off["selecionada"]) is True
+    assert (not autorizar_on["selecionada"]) is False

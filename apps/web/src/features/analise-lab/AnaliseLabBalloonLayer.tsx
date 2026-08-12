@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 
 import type { AnaliseLabItem, AnaliseLabMark } from "@/api/analiseLab";
 import type { ProvaWebPageMeta } from "@/api/provaWeb";
@@ -40,9 +40,9 @@ interface AnaliseLabBalloonLayerProps {
   >;
 }
 
-const MAX_VISIBLE = 3;
-const BALLOON_H = 260;
-const GAP = 10;
+/** Altura colapsada usada no pack (hover/focus não reempacota). */
+export const BALLOON_COLLAPSED_H = 130;
+const GAP = 8;
 
 export function AnaliseLabBalloonLayer({
   items,
@@ -60,11 +60,7 @@ export function AnaliseLabBalloonLayer({
   onGoToOccurrence,
   pageRectsOverride,
 }: AnaliseLabBalloonLayerProps) {
-  const [expanded, setExpanded] = useState(false);
-  const [heightsByItemId, setHeightsByItemId] = useState<
-    Record<number, number>
-  >({});
-  const observersRef = useRef<Map<number, ResizeObserver>>(new Map());
+  const [hoveredItemId, setHoveredItemId] = useState<number | null>(null);
 
   const anchors = useMemo(() => {
     const all = buildPageBalloons({
@@ -141,76 +137,13 @@ export function AnaliseLabBalloonLayer({
     () =>
       packBalloons(anchors, {
         stageHeight,
-        balloonHeight: BALLOON_H,
+        balloonHeight: BALLOON_COLLAPSED_H,
         gap: GAP,
         pageRects,
         slotWidth,
         gutterRight,
-        heightsByItemId,
       }),
-    [anchors, gutterRight, heightsByItemId, pageRects, slotWidth, stageHeight],
-  );
-
-  const visible = expanded ? packed : packed.slice(0, MAX_VISIBLE);
-  const overflow = Math.max(0, packed.length - MAX_VISIBLE);
-  const visibleIdsKey = visible.map((b) => b.itemId).join(",");
-
-  useEffect(() => {
-    const keep = new Set(
-      visibleIdsKey
-        ? visibleIdsKey.split(",").map((id) => Number(id))
-        : [],
-    );
-    setHeightsByItemId((prev) => {
-      let changed = false;
-      const next: Record<number, number> = {};
-      for (const [key, value] of Object.entries(prev)) {
-        const id = Number(key);
-        if (keep.has(id)) next[id] = value;
-        else changed = true;
-      }
-      return changed ? next : prev;
-    });
-    for (const [id, observer] of observersRef.current) {
-      if (!keep.has(id)) {
-        observer.disconnect();
-        observersRef.current.delete(id);
-      }
-    }
-  }, [visibleIdsKey]);
-
-  useEffect(() => {
-    return () => {
-      for (const observer of observersRef.current.values()) {
-        observer.disconnect();
-      }
-      observersRef.current.clear();
-    };
-  }, []);
-
-  const setBalloonNodeRef = useCallback(
-    (itemId: number, el: HTMLDivElement | null) => {
-      const prev = observersRef.current.get(itemId);
-      if (prev) {
-        prev.disconnect();
-        observersRef.current.delete(itemId);
-      }
-      if (!el) return;
-
-      const recordHeight = () => {
-        const h = el.offsetHeight;
-        setHeightsByItemId((prevHeights) => {
-          if (prevHeights[itemId] === h) return prevHeights;
-          return { ...prevHeights, [itemId]: h };
-        });
-      };
-
-      const ro = new ResizeObserver(recordHeight);
-      ro.observe(el);
-      observersRef.current.set(itemId, ro);
-      recordHeight();
-    },
-    [],
+    [anchors, gutterRight, pageRects, slotWidth, stageHeight],
   );
 
   if (flipping || !packed.length) return null;
@@ -224,7 +157,7 @@ export function AnaliseLabBalloonLayer({
         className="pointer-events-none absolute inset-0 h-full w-full"
         aria-hidden
       >
-        {visible.map((b) =>
+        {packed.map((b) =>
           b.leaders.map((leader) => (
             <g key={`line-${b.itemId}-${leader.markId}`}>
               <line
@@ -248,7 +181,7 @@ export function AnaliseLabBalloonLayer({
         )}
       </svg>
 
-      {visible.map((b) => {
+      {packed.map((b, stackIndex) => {
         const occ = itemBalloonOccurrencePages(
           b.item,
           marks,
@@ -256,14 +189,18 @@ export function AnaliseLabBalloonLayer({
           parsePageSpec,
         );
         const occIdx = Math.max(0, occ.indexOf(b.page));
+        const raised =
+          hoveredItemId === b.itemId || selectedItemId === b.itemId;
         return (
           <AnaliseLabProblemBalloon
             key={`ball-${b.itemId}`}
-            ref={(el) => setBalloonNodeRef(b.itemId, el)}
             item={b.item}
             refNumber={b.refNumber}
             width={b.balloonWidth}
             highlighted={selectedItemId === b.itemId}
+            collapsed={!raised}
+            collapsedHeight={BALLOON_COLLAPSED_H}
+            stackIndex={stackIndex}
             occurrences={occ}
             occurrenceIndex={occIdx}
             onOccurrenceChange={(idx) => {
@@ -271,25 +208,18 @@ export function AnaliseLabBalloonLayer({
               if (page) onGoToOccurrence(b.itemId, page);
             }}
             onClose={() => onDismiss(b.itemId)}
+            onHoverChange={(active) =>
+              setHoveredItemId(active ? b.itemId : null)
+            }
             style={{
               position: "absolute",
               left: b.bubbleX,
               top: b.bubbleY,
+              zIndex: raised ? 40 + stackIndex : 10 + stackIndex,
             }}
           />
         );
       })}
-
-      {!expanded && overflow > 0 ? (
-        <button
-          type="button"
-          className="pointer-events-auto absolute bottom-2 rounded-full bg-secondary-blue px-2.5 py-1 text-[11px] font-semibold text-white shadow"
-          style={{ right: 8 }}
-          onClick={() => setExpanded(true)}
-        >
-          +{overflow} problemas
-        </button>
-      ) : null}
     </div>
   );
 }

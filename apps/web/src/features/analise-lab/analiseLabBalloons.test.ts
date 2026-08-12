@@ -380,4 +380,39 @@ describe("analiseLabBalloons", () => {
       );
     }
   });
+
+  it("packs more than 3 balloons with collapsed height (no overflow chip)", () => {
+    const collapsedH = 130;
+    const anchors: BalloonAnchor[] = [1, 2, 3, 4, 5].map((id) => ({
+      itemId: id,
+      page: 2,
+      refNumber: id,
+      hasMark: false,
+      markAnchors: [],
+      item: item({ id, pagina: 2 }),
+    }));
+    const packed = packBalloons(anchors, {
+      stageHeight: 900,
+      balloonHeight: collapsedH,
+      gap: 8,
+      slotWidth: 600,
+      gutterRight: 300,
+      pageRects: {
+        2: {
+          left: 300,
+          top: 0,
+          width: 300,
+          height: 900,
+          widthMm: 210,
+          heightMm: 297,
+        },
+      },
+    });
+    expect(packed).toHaveLength(5);
+    for (let i = 0; i < packed.length - 1; i++) {
+      expect(packed[i + 1]!.topPx).toBeGreaterThanOrEqual(
+        packed[i]!.topPx + collapsedH + 8,
+      );
+    }
+  });
 });

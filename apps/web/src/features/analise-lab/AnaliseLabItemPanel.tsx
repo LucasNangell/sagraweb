@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type {
   AnaliseLabItem,
   AnaliseLabItemEscopo,
+  AnaliseLabItemProvidencia,
   AnaliseLabMark,
   UpdateAnaliseLabItemPayload,
   UpdateAnaliseLabMarkPayload,
@@ -16,6 +17,14 @@ import {
   pagesSpecToItemScope,
   validatePageSpec,
 } from "./analiseLabPageSpec";
+import {
+  AUTORIZAR_IMPRESSAO_TEXTO,
+  ensureAutorizarDraft,
+  PROVIDENCIA_TIPO_AUTORIZAR,
+  PROVIDENCIA_TIPO_LIVRE,
+  resolucaoObrigatoriaFromProvidencias,
+  type ProvidenciaDraft,
+} from "./analiseLabProvidencias";
 import { AnaliseLabToolPalette } from "./AnaliseLabToolPalette";
 import type { AnaliseLabTool } from "./AnaliseLabMarkTools";
 
@@ -34,6 +43,7 @@ export interface AnaliseLabItemPanelModel {
   corrigidoSefoc?: boolean;
   obsCorrecaoSefoc?: string | null;
   idProblemaPadrao?: number | null;
+  providencias?: AnaliseLabItemProvidencia[];
 }
 
 interface AnaliseLabItemPanelProps {
@@ -42,6 +52,8 @@ interface AnaliseLabItemPanelProps {
   marks: AnaliseLabMark[];
   busy?: boolean;
   onSave: (payload: UpdateAnaliseLabItemPayload) => void;
+  onSaveProvidencias?: (rows: ProvidenciaDraft[]) => void;
+  onProvidenciasChange?: (rows: ProvidenciaDraft[]) => void;
   onClose: () => void;
   onDelete?: () => void;
   onUnlinkMark?: (markId: number) => void;
@@ -62,6 +74,21 @@ interface AnaliseLabItemPanelProps {
   markAllPagesSpec?: string;
   onUpdateMark?: (payload: UpdateAnaliseLabMarkPayload) => void;
   onDeleteSelectedMark?: () => void;
+}
+
+function toProvidenciaDrafts(
+  rows: AnaliseLabItemProvidencia[] | undefined,
+): ProvidenciaDraft[] {
+  const mapped = (rows ?? []).map((p, i) => ({
+    key: String(p.id),
+    id: p.id,
+    texto: p.texto,
+    tipo: p.tipo,
+    ordem: p.ordem ?? i,
+    selecionada: p.selecionada,
+    origem: p.origem,
+  }));
+  return ensureAutorizarDraft(mapped);
 }
 
 function buildPayload(args: {
@@ -101,6 +128,8 @@ export function AnaliseLabItemPanel({
   marks,
   busy,
   onSave,
+  onSaveProvidencias,
+  onProvidenciasChange,
   onClose,
   onDelete,
   onUnlinkMark,
@@ -135,9 +164,10 @@ export function AnaliseLabItemPanel({
     onPageSpecChange?.(value);
   };
   const [componente, setComponente] = useState(item.componente);
-  const [resolucaoObrigatoria, setResolucaoObrigatoria] = useState(
-    Boolean(item.resolucaoObrigatoria),
+  const [providencias, setProvidencias] = useState<ProvidenciaDraft[]>(() =>
+    toProvidenciaDrafts(item.providencias),
   );
+  const resolucaoObrigatoria = resolucaoObrigatoriaFromProvidencias(providencias);
   const [corrigidoSefoc, setCorrigidoSefoc] = useState(
     Boolean(item.corrigidoSefoc),
   );
@@ -154,7 +184,7 @@ export function AnaliseLabItemPanel({
       item.paginas || (item.pagina > 0 ? String(item.pagina) : ""),
     );
     setComponente(item.componente);
-    setResolucaoObrigatoria(Boolean(item.resolucaoObrigatoria));
+    setProvidencias(toProvidenciaDrafts(item.providencias));
     setCorrigidoSefoc(Boolean(item.corrigidoSefoc));
     setObsCorrecaoSefoc(item.obsCorrecaoSefoc || "");
   }, [item]);
@@ -202,6 +232,10 @@ export function AnaliseLabItemPanel({
     isRegister,
     item.pagina,
   ]);
+
+  useEffect(() => {
+    onProvidenciasChange?.(providencias);
+  }, [onProvidenciasChange, providencias]);
 
   const pagePickButton = onTogglePagePick ? (
     <button
@@ -358,15 +392,102 @@ export function AnaliseLabItemPanel({
       </label>
 
       <div className="space-y-2 rounded border border-sagra-border bg-neutral-50 p-2 text-xs">
-        <label className="flex items-center gap-2 text-neutral-700">
-          <input
-            type="checkbox"
-            checked={resolucaoObrigatoria}
-            onChange={(e) => setResolucaoObrigatoria(e.target.checked)}
-            disabled={busy}
-          />
-          Resolução obrigatória
-        </label>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-[11px] font-semibold uppercase text-neutral-600">
+            Providências
+          </h3>
+          {resolucaoObrigatoria ? (
+            <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold uppercase text-black">
+              Resolução obrigatória
+            </span>
+          ) : null}
+        </div>
+        <ul className="space-y-1.5">
+          {providencias.map((row) => {
+            const isSistema = row.tipo === PROVIDENCIA_TIPO_AUTORIZAR;
+            return (
+              <li
+                key={row.key}
+                className="flex items-start gap-1.5 rounded border border-sagra-border bg-white px-1.5 py-1"
+              >
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={row.selecionada}
+                  disabled={busy}
+                  title={
+                    isSistema
+                      ? "Desmarcado = resolução obrigatória"
+                      : "Incluir no registro"
+                  }
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setProvidencias((prev) =>
+                      prev.map((p) =>
+                        p.key === row.key
+                          ? { ...p, selecionada: checked }
+                          : p,
+                      ),
+                    );
+                  }}
+                />
+                <input
+                  type="text"
+                  value={isSistema ? AUTORIZAR_IMPRESSAO_TEXTO : row.texto}
+                  readOnly={isSistema}
+                  disabled={busy || isSistema}
+                  className="min-w-0 flex-1 rounded border border-sagra-border px-1.5 py-1 text-[11px] disabled:bg-neutral-50"
+                  onChange={(e) => {
+                    const texto = e.target.value;
+                    setProvidencias((prev) =>
+                      prev.map((p) =>
+                        p.key === row.key ? { ...p, texto } : p,
+                      ),
+                    );
+                  }}
+                />
+                {!isSistema ? (
+                  <button
+                    type="button"
+                    className="mt-0.5 text-sagra-danger"
+                    disabled={busy}
+                    title="Remover"
+                    onClick={() =>
+                      setProvidencias((prev) =>
+                        prev.filter((p) => p.key !== row.key),
+                      )
+                    }
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+        <button
+          type="button"
+          disabled={busy}
+          className="rounded border border-sagra-border bg-white px-2 py-1 text-[11px] font-medium text-secondary-blue hover:bg-blue-50"
+          onClick={() =>
+            setProvidencias((prev) =>
+              ensureAutorizarDraft([
+                ...prev.filter((p) => p.tipo !== PROVIDENCIA_TIPO_AUTORIZAR),
+                {
+                  key: `new-${Date.now()}`,
+                  texto: "",
+                  tipo: PROVIDENCIA_TIPO_LIVRE,
+                  ordem: prev.length,
+                  selecionada: true,
+                  origem: "manual",
+                },
+                ...prev.filter((p) => p.tipo === PROVIDENCIA_TIPO_AUTORIZAR),
+              ]),
+            )
+          }
+        >
+          Adicionar providência
+        </button>
         {!isRegister ? (
           <>
             <label className="flex items-center gap-2 text-neutral-700">
@@ -446,20 +567,20 @@ export function AnaliseLabItemPanel({
           disabled={busy || Boolean(pageError) || !pageSpec.trim()}
           className="flex-1 rounded bg-secondary-blue px-2 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
           onClick={() => {
-            onSave(
-              buildPayload({
-                titulo,
-                html,
-                obs,
-                componente,
-                pageSpec,
-                resolucaoObrigatoria,
-                corrigidoSefoc,
-                obsCorrecaoSefoc,
-                isRegister,
-                fallbackPagina: item.pagina || 1,
-              }),
-            );
+            const payload = buildPayload({
+              titulo,
+              html,
+              obs,
+              componente,
+              pageSpec,
+              resolucaoObrigatoria,
+              corrigidoSefoc,
+              obsCorrecaoSefoc,
+              isRegister,
+              fallbackPagina: item.pagina || 1,
+            });
+            onSaveProvidencias?.(providencias);
+            onSave(payload);
           }}
         >
           {isRegister ? "Registrar" : "Salvar"}
@@ -501,5 +622,6 @@ export function toPanelModel(item: AnaliseLabItem): AnaliseLabItemPanelModel {
     corrigidoSefoc: item.corrigidoSefoc,
     obsCorrecaoSefoc: item.obsCorrecaoSefoc,
     idProblemaPadrao: item.idProblemaPadrao,
+    providencias: item.providencias,
   };
 }

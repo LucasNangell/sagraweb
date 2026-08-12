@@ -26,6 +26,7 @@ import {
   reprocessAnaliseLab,
   replicateAnaliseLabItems,
   saveAnaliseLab,
+  saveAnaliseLabItemProvidencias,
   updateAnaliseLabItem,
   updateAnaliseLabMark,
   type AnaliseLabItem,
@@ -70,6 +71,10 @@ import {
 } from "./analiseLabFolhearModo";
 import { pageSizeMm } from "./analiseLabGeometry";
 import { buildLibraryDraft } from "./analiseLabLibraryDraft";
+import {
+  draftsToProvidenciasPayload,
+  type ProvidenciaDraft,
+} from "./analiseLabProvidencias";
 import {
   ensurePageInSpec,
   formatPageSpec,
@@ -147,6 +152,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const [draftLibraryItem, setDraftLibraryItem] =
     useState<AnaliseLabItemPanelModel | null>(null);
   const draftPayloadRef = useRef<UpdateAnaliseLabItemPayload | null>(null);
+  const draftProvidenciasRef = useRef<ProvidenciaDraft[] | null>(null);
   const markScopeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [clientPreviewNome, setClientPreviewNome] = useState("");
@@ -467,11 +473,22 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   ): Promise<AnaliseLabItem | null> => {
     if (!draftLibraryItem?.idProblemaPadrao) return null;
     const closePanel = opts?.closePanel ?? true;
+    const pendingProvidencias = draftProvidenciasRef.current;
     setActionBusy(true);
     setActionError(null);
     try {
       const escopo = (payload.escopo ||
         draftLibraryItem.escopo) as AnaliseLabItemEscopo;
+      const applyProvidencias = async (item: AnaliseLabItem) => {
+        if (!pendingProvidencias?.length) return item;
+        const res = await saveAnaliseLabItemProvidencias(
+          ano,
+          osId,
+          item.id,
+          draftsToProvidenciasPayload(pendingProvidencias),
+        );
+        return res.item;
+      };
       // Escopo arquivo: usa o fluxo da biblioteca (split Capa/Miolo) e depois aplica o HTML limpo.
       if (escopo === "arquivo") {
         const res = await createAnaliseLabItem(ano, osId, {
@@ -502,11 +519,12 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
             obs: payload.obs,
             resolucao_obrigatoria: payload.resolucao_obrigatoria,
           });
-          updated.push(patch.item);
+          updated.push(await applyProvidencias(patch.item));
         }
         setLocalItens((prev) => [...(prev ?? []), ...updated]);
         setDraftLibraryItem(null);
         draftPayloadRef.current = null;
+        draftProvidenciasRef.current = null;
         if (closePanel) {
           setSelectedItemId(null);
           setTool("select");
@@ -537,9 +555,13 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
         });
         items = [patch.item];
       }
+      if (items[0]) {
+        items = [await applyProvidencias(items[0])];
+      }
       setLocalItens((prev) => [...(prev ?? []), ...items]);
       setDraftLibraryItem(null);
       draftPayloadRef.current = null;
+      draftProvidenciasRef.current = null;
       if (closePanel) {
         setSelectedItemId(null);
         setTool("select");
@@ -900,6 +922,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const selectItem = (id: number) => {
     setDraftLibraryItem(null);
     draftPayloadRef.current = null;
+    draftProvidenciasRef.current = null;
     setSelectedItemId(id);
     setSelectedMarkId(null);
     setTool("select");
@@ -1185,6 +1208,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     setSelectedItemId(null);
     setDraftLibraryItem(null);
     draftPayloadRef.current = null;
+    draftProvidenciasRef.current = null;
     setTool("select");
     setSelectedMarkId(null);
     setPagePickTarget((prev) => (prev === "item" ? null : prev));
@@ -1432,9 +1456,16 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         onClose={() => {
                           setDraftLibraryItem(null);
                           draftPayloadRef.current = null;
+                          draftProvidenciasRef.current = null;
                           if (pagePickTarget === "item") setPagePickTarget(null);
                         }}
                         onSave={(p) => void registerDraftItem(p)}
+                        onSaveProvidencias={(rows) => {
+                          draftProvidenciasRef.current = rows;
+                        }}
+                        onProvidenciasChange={(rows) => {
+                          draftProvidenciasRef.current = rows;
+                        }}
                         onPayloadChange={(p) => {
                           draftPayloadRef.current = p;
                         }}
@@ -1507,11 +1538,24 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                                 selectedItem.id,
                                 p,
                               );
+                              let nextItem = res.item;
+                              const pending = draftProvidenciasRef.current;
+                              if (pending) {
+                                const prov =
+                                  await saveAnaliseLabItemProvidencias(
+                                    ano,
+                                    osId,
+                                    selectedItem.id,
+                                    draftsToProvidenciasPayload(pending),
+                                  );
+                                nextItem = prov.item;
+                              }
                               setLocalItens((prev) =>
                                 (prev ?? []).map((i) =>
-                                  i.id === selectedItem.id ? res.item : i,
+                                  i.id === selectedItem.id ? nextItem : i,
                                 ),
                               );
+                              draftProvidenciasRef.current = null;
                               invalidate();
                               closeProblemPanel();
                             } catch (err) {
@@ -1524,6 +1568,12 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                               setActionBusy(false);
                             }
                           })();
+                        }}
+                        onSaveProvidencias={(rows) => {
+                          draftProvidenciasRef.current = rows;
+                        }}
+                        onProvidenciasChange={(rows) => {
+                          draftProvidenciasRef.current = rows;
                         }}
                       />
                     ) : null}

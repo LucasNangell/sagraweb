@@ -4,6 +4,10 @@ import type { AnaliseLabItemEscopo } from "@/api/analiseLab";
 
 import { toBalloonHtml } from "./analiseLabBalloonHtml";
 import type { AnaliseLabItemPanelModel } from "./AnaliseLabItemPanel";
+import {
+  resolucaoObrigatoriaFromProvidencias,
+  seedProvidenciasDraft,
+} from "./analiseLabProvidencias";
 
 export function buildLibraryDraft(args: {
   problema: ProblemaPadrao;
@@ -13,6 +17,16 @@ export function buildLibraryDraft(args: {
   componente?: string;
 }): AnaliseLabItemPanelModel {
   const titulo = (args.problema.TituloPT || "").trim() || "Problema técnico";
+  const rawHtml = args.problema.ProbTecHTML || "";
+  const providencias = seedProvidenciasDraft(rawHtml).map((p, i) => ({
+    id: -(i + 1),
+    labItemId: 0,
+    texto: p.texto,
+    tipo: p.tipo as "livre" | "autorizar_impressao" | string,
+    ordem: p.ordem,
+    selecionada: p.selecionada,
+    origem: p.origem as "biblioteca" | "sistema" | "manual" | string,
+  }));
   const pagina =
     args.escopo === "arquivo"
       ? 0
@@ -22,7 +36,7 @@ export function buildLibraryDraft(args: {
   return {
     idProblemaPadrao: args.problema.ID,
     titulo,
-    htmlSnapshot: toBalloonHtml(args.problema.ProbTecHTML || "", titulo),
+    htmlSnapshot: toBalloonHtml(rawHtml, titulo, { stripProvidencias: true }),
     obs: null,
     componente: args.componente || "Arq. Único",
     escopo: args.escopo,
@@ -33,8 +47,9 @@ export function buildLibraryDraft(args: {
         : args.escopo === "pagina"
           ? String(pagina)
           : null,
-    resolucaoObrigatoria: false,
+    resolucaoObrigatoria: resolucaoObrigatoriaFromProvidencias(providencias),
     corrigidoSefoc: false,
     obsCorrecaoSefoc: null,
+    providencias,
   };
 }

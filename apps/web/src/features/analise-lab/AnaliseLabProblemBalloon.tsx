@@ -1,7 +1,10 @@
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { forwardRef, useMemo } from "react";
+import { forwardRef, useMemo, useState } from "react";
 
-import type { AnaliseLabItem } from "@/api/analiseLab";
+import type {
+  AnaliseLabItem,
+  AnaliseLabItemProvidencia,
+} from "@/api/analiseLab";
 
 import { toBalloonHtml } from "./analiseLabBalloonHtml";
 
@@ -10,10 +13,15 @@ interface AnaliseLabProblemBalloonProps {
   refNumber: number;
   width?: number;
   highlighted?: boolean;
+  /** Empilhado: mostra só a prévia até hover/focus. */
+  collapsed?: boolean;
+  collapsedHeight?: number;
+  stackIndex?: number;
   occurrences: number[];
   occurrenceIndex: number;
   onOccurrenceChange: (index: number) => void;
   onClose: () => void;
+  onHoverChange?: (active: boolean) => void;
   style?: React.CSSProperties;
 }
 
@@ -26,34 +34,72 @@ export const AnaliseLabProblemBalloon = forwardRef<
     refNumber,
     width = 280,
     highlighted = false,
+    collapsed = false,
+    collapsedHeight = 130,
+    stackIndex = 0,
     occurrences,
     occurrenceIndex,
     onOccurrenceChange,
     onClose,
+    onHoverChange,
     style,
   },
   ref,
 ) {
+  const [showProvidencias, setShowProvidencias] = useState(false);
+  const [focused, setFocused] = useState(false);
   const total = occurrences.length;
   const page = occurrences[occurrenceIndex] ?? item.pagina;
   const bodyHtml = useMemo(
-    () => toBalloonHtml(item.htmlSnapshot || "", item.titulo),
+    () => toBalloonHtml(item.htmlSnapshot || "", item.titulo, { stripProvidencias: true }),
     [item.htmlSnapshot, item.titulo],
   );
+  const selectedProvidencias = useMemo(
+    () =>
+      (item.providencias ?? []).filter(
+        (p: AnaliseLabItemProvidencia) => p.selecionada,
+      ),
+    [item.providencias],
+  );
+
+  const expanded = !collapsed || focused || showProvidencias;
 
   return (
     <div
       ref={ref}
       data-analise-lab-balloon
+      tabIndex={0}
       className={
         highlighted
-          ? "pointer-events-auto overflow-hidden rounded-xl border-2 border-primary-green bg-white shadow-xl"
-          : "pointer-events-auto overflow-hidden rounded-xl border border-sagra-border bg-white shadow-lg"
+          ? "pointer-events-auto overflow-hidden rounded-xl border-2 border-primary-green bg-white shadow-xl transition-[max-height,box-shadow] duration-150"
+          : "pointer-events-auto overflow-hidden rounded-xl border border-sagra-border bg-white shadow-lg transition-[max-height,box-shadow] duration-150"
       }
-      style={{ ...style, width }}
+      style={{
+        ...style,
+        width,
+        maxHeight: expanded ? 420 : collapsedHeight,
+        boxShadow: expanded
+          ? "0 12px 28px rgba(15, 23, 42, 0.28)"
+          : stackIndex > 0
+            ? "0 4px 12px rgba(15, 23, 42, 0.18)"
+            : undefined,
+      }}
+      onMouseEnter={() => {
+        onHoverChange?.(true);
+      }}
+      onMouseLeave={() => {
+        if (!focused && !showProvidencias) onHoverChange?.(false);
+      }}
+      onFocus={() => {
+        setFocused(true);
+        onHoverChange?.(true);
+      }}
+      onBlur={(e) => {
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+        setFocused(false);
+        if (!showProvidencias) onHoverChange?.(false);
+      }}
       onWheel={(event) => {
-        // O estágio do folhear usa wheel para virar página; sobre o balão
-        // o scroll deve só rolar o conteúdo.
         event.stopPropagation();
       }}
     >
@@ -69,6 +115,7 @@ export const AnaliseLabProblemBalloon = forwardRef<
             {item.componente}
             {item.escopo === "arquivo" ? " · arquivo" : ""}
             {page ? ` · pág. ${page}` : ""}
+            {item.resolucaoObrigatoria ? " · obrigatória" : ""}
           </p>
         </div>
         <button
@@ -109,7 +156,8 @@ export const AnaliseLabProblemBalloon = forwardRef<
 
       <div
         className={
-          "max-h-[220px] overflow-auto px-2.5 py-2 text-[11px] leading-snug text-neutral-800 " +
+          "overflow-auto px-2.5 py-2 text-[11px] leading-snug text-neutral-800 " +
+          (expanded ? "max-h-[220px] " : "max-h-[48px] ") +
           "[&_p]:mb-1.5 [&_ul]:mb-1.5 [&_ul]:list-disc [&_ul]:pl-4 " +
           "[&_ol]:mb-1.5 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:my-0.5 " +
           "[&_h1]:mb-1 [&_h1]:text-xs [&_h1]:font-semibold " +
@@ -129,6 +177,25 @@ export const AnaliseLabProblemBalloon = forwardRef<
           <p className="text-neutral-400">(Sem conteúdo)</p>
         )}
       </div>
+
+      {selectedProvidencias.length > 0 ? (
+        <div className="border-t border-sagra-border px-2.5 py-1.5">
+          <button
+            type="button"
+            className="text-[10px] font-semibold text-secondary-blue hover:underline"
+            onClick={() => setShowProvidencias((v) => !v)}
+          >
+            {showProvidencias ? "Ocultar providências" : "Ver providências"}
+          </button>
+          {showProvidencias ? (
+            <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] text-neutral-800">
+              {selectedProvidencias.map((p) => (
+                <li key={p.id}>{p.texto}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 });

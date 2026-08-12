@@ -12,6 +12,7 @@ from services.analise_lab_service import (
     get_session_by_id,
     parse_page_spec,
 )
+from services import analise_lab_providencias_service as lab_prov
 from services.prova_web_render_service import MODE_CAPA_MIOLO, MODE_UNICO
 
 logger = logging.getLogger(__name__)
@@ -158,7 +159,17 @@ def list_items(sessao_id: int) -> list[dict[str, Any]]:
         """,
         {"sid": int(sessao_id)},
     )
-    return [_row_to_item(r) for r in (rows or [])]
+    items = [_row_to_item(r) for r in (rows or [])]
+    by_id = lab_prov.list_for_items([i["id"] for i in items])
+    for item in items:
+        provs = by_id.get(int(item["id"])) or []
+        if not provs:
+            provs = lab_prov.seed_for_item(int(item["id"]), item.get("htmlSnapshot") or "")
+            item["resolucaoObrigatoria"] = lab_prov.sync_resolucao_obrigatoria(
+                int(item["id"])
+            )
+        item["providencias"] = provs
+    return items
 
 
 def get_item(item_id: int) -> Optional[dict[str, Any]]:
@@ -173,7 +184,13 @@ def get_item(item_id: int) -> Optional[dict[str, Any]]:
     )
     if not rows:
         return None
-    return _row_to_item(rows[0])
+    item = _row_to_item(rows[0])
+    provs = lab_prov.list_for_item(int(item["id"]))
+    if not provs:
+        provs = lab_prov.seed_for_item(int(item["id"]), item.get("htmlSnapshot") or "")
+    item["providencias"] = provs
+    item["resolucaoObrigatoria"] = lab_prov.sync_resolucao_obrigatoria(int(item["id"]))
+    return item
 
 
 def _next_ordem(sessao_id: int) -> int:
@@ -245,7 +262,12 @@ def add_item(
     )
     if not rows:
         raise RuntimeError("Falha ao gravar item.")
-    return _row_to_item(rows[0])
+    item = _row_to_item(rows[0])
+    item["providencias"] = lab_prov.seed_for_item(
+        int(item["id"]), item.get("htmlSnapshot") or ""
+    )
+    item["resolucaoObrigatoria"] = lab_prov.sync_resolucao_obrigatoria(int(item["id"]))
+    return item
 
 
 def update_item(

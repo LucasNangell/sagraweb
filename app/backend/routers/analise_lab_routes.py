@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from services import analise_lab_service as lab
 from services import analise_lab_items_service as lab_items
+from services import analise_lab_providencias_service as lab_prov
 from services import analise_lab_report_service as lab_report
 from services.analise_lab_job_service import (
     cancel_analise_lab_render,
@@ -196,6 +197,19 @@ class AnaliseLabItemUpdate(BaseModel):
     ordem: Optional[int] = None
     corrigido_sefoc: Optional[bool] = None
     obs_correcao_sefoc: Optional[str] = None
+
+
+class AnaliseLabProvidenciaIn(BaseModel):
+    id: Optional[int] = None
+    texto: str = ""
+    tipo: str = "livre"
+    ordem: int = 0
+    selecionada: bool = True
+    origem: Optional[str] = None
+
+
+class AnaliseLabProvidenciasReplace(BaseModel):
+    providencias: list[AnaliseLabProvidenciaIn] = Field(default_factory=list)
 
 
 class AnaliseLabItemReplicar(BaseModel):
@@ -748,7 +762,35 @@ def patch_item(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"ok": True, "item": item}
+    # Reanexa providências após update
+    refreshed = lab_items.get_item(item_id)
+    return {"ok": True, "item": refreshed or item}
+
+
+@router.put("/os/{ano}/{os_id}/analise-lab/itens/{item_id}/providencias")
+def put_item_providencias(
+    ano: int,
+    os_id: int,
+    item_id: int,
+    body: AnaliseLabProvidenciasReplace,
+    request: Request,
+):
+    _require_analise(request)
+    session = lab.get_session(ano, os_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão do laboratório não encontrada.")
+    current = lab_items.get_item(item_id)
+    if not current or int(current["sessaoId"]) != int(session["id"]):
+        raise HTTPException(status_code=404, detail="Item não encontrado.")
+    try:
+        rows = lab_prov.replace_for_item(
+            item_id,
+            [p.model_dump() for p in body.providencias],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    item = lab_items.get_item(item_id)
+    return {"ok": True, "providencias": rows, "item": item}
 
 
 @router.post("/os/{ano}/{os_id}/analise-lab/itens/replicar")

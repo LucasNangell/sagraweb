@@ -1,8 +1,11 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Library } from "lucide-react";
 
 import { fetchProblemasPadrao } from "@/api/analise";
 import type { ProblemaPadrao } from "@/features/analise/types";
+
+import { AnaliseLabLibraryManageModal } from "./AnaliseLabLibraryManageModal";
 
 interface AnaliseLabLibraryProps {
   busy?: boolean;
@@ -11,6 +14,7 @@ interface AnaliseLabLibraryProps {
 
 export function AnaliseLabLibrary({ busy, onRegister }: AnaliseLabLibraryProps) {
   const [search, setSearch] = useState("");
+  const [manageOpen, setManageOpen] = useState(false);
   const libraryQuery = useQuery({
     queryKey: ["problemas-padrao"],
     queryFn: fetchProblemasPadrao,
@@ -34,12 +38,24 @@ export function AnaliseLabLibrary({ busy, onRegister }: AnaliseLabLibraryProps) 
       <h2 className="shrink-0 text-xs font-semibold uppercase text-neutral-600">
         Itens disponíveis
       </h2>
-      <input
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Buscar problema…"
-        className="rounded border border-sagra-border px-2 py-1 text-xs"
-      />
+      <div className="flex shrink-0 items-center gap-1">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar problema…"
+          className="min-w-0 flex-1 rounded border border-sagra-border px-2 py-1 text-xs"
+        />
+        <button
+          type="button"
+          title="Gerenciar biblioteca"
+          aria-label="Gerenciar biblioteca"
+          disabled={busy}
+          onClick={() => setManageOpen(true)}
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded border border-sagra-border bg-white text-neutral-600 hover:bg-neutral-50 disabled:opacity-50"
+        >
+          <Library className="size-4" aria-hidden />
+        </button>
+      </div>
       <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
         {filtered.map((p) => (
           <li key={p.ID}>
@@ -58,6 +74,10 @@ export function AnaliseLabLibrary({ busy, onRegister }: AnaliseLabLibraryProps) 
           <li className="px-1 text-[11px] text-neutral-400">Nenhum resultado.</li>
         ) : null}
       </ul>
+      <AnaliseLabLibraryManageModal
+        open={manageOpen}
+        onClose={() => setManageOpen(false)}
+      />
     </div>
   );
 }

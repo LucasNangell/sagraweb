@@ -554,19 +554,25 @@ def test_build_and_strip_providencias_html() -> None:
     assert "Ajustar" not in stripped
 
 
-def test_autorizar_impressao_drives_resolucao_obrigatoria_rule() -> None:
-    """Selecionada=0 em autorizar_impressao ⇒ ResolucaoObrigatoria=1."""
+def test_autorizar_impressao_no_longer_drives_resolucao() -> None:
+    """ResolucaoObrigatoria é independente da providência autorizar."""
     from services import analise_lab_providencias_service as prov
 
-    rows_off = [{"tipo": prov.TIPO_AUTORIZAR, "selecionada": False}]
-    rows_on = [{"tipo": prov.TIPO_AUTORIZAR, "selecionada": True}]
-    autorizar_off = next(r for r in rows_off if r["tipo"] == prov.TIPO_AUTORIZAR)
-    autorizar_on = next(r for r in rows_on if r["tipo"] == prov.TIPO_AUTORIZAR)
-    assert (not autorizar_off["selecionada"]) is True
-    assert (not autorizar_on["selecionada"]) is False
+    cleaned = prov.dedupe_autorizar_rows(
+        [
+            {
+                "tipo": prov.TIPO_AUTORIZAR,
+                "selecionada": False,
+                "texto": prov.AUTORIZAR_TEXTO,
+            },
+            {"tipo": prov.TIPO_LIVRE, "selecionada": True, "texto": "Revisar"},
+        ]
+    )
+    assert all(r["tipo"] != prov.TIPO_AUTORIZAR for r in cleaned)
+    assert [r["texto"] for r in cleaned] == ["Revisar"]
 
 
-def test_dedupe_autorizar_rows_collapses_livre_and_sistema() -> None:
+def test_dedupe_autorizar_rows_removes_sistema() -> None:
     from services import analise_lab_providencias_service as prov
 
     rows = prov.dedupe_autorizar_rows(
@@ -596,10 +602,9 @@ def test_dedupe_autorizar_rows_collapses_livre_and_sistema() -> None:
         for r in rows
         if r["tipo"] == prov.TIPO_AUTORIZAR or prov.is_autorizar_texto(r["texto"])
     ]
-    assert len(autorizar) == 1
-    assert autorizar[0]["tipo"] == prov.TIPO_AUTORIZAR
-    assert autorizar[0]["selecionada"] is False
-    assert len(rows) == 2
+    assert autorizar == []
+    assert len(rows) == 1
+    assert rows[0]["texto"] == "Revisar PDF"
 
 
 def test_dedupe_autorizar_rows_collapses_multiple_sistema() -> None:
@@ -621,6 +626,4 @@ def test_dedupe_autorizar_rows_collapses_multiple_sistema() -> None:
             },
         ]
     )
-    assert len(rows) == 1
-    assert rows[0]["tipo"] == prov.TIPO_AUTORIZAR
-    assert rows[0]["selecionada"] is False
+    assert rows == []

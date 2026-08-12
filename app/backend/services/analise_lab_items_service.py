@@ -165,9 +165,6 @@ def list_items(sessao_id: int) -> list[dict[str, Any]]:
         provs = by_id.get(int(item["id"])) or []
         if not provs:
             provs = lab_prov.seed_for_item(int(item["id"]), item.get("htmlSnapshot") or "")
-            item["resolucaoObrigatoria"] = lab_prov.sync_resolucao_obrigatoria(
-                int(item["id"])
-            )
         item["providencias"] = provs
     return items
 
@@ -189,7 +186,6 @@ def get_item(item_id: int) -> Optional[dict[str, Any]]:
     if not provs:
         provs = lab_prov.seed_for_item(int(item["id"]), item.get("htmlSnapshot") or "")
     item["providencias"] = provs
-    item["resolucaoObrigatoria"] = lab_prov.sync_resolucao_obrigatoria(int(item["id"]))
     return item
 
 

@@ -3,6 +3,7 @@
 export const AUTORIZAR_IMPRESSAO_TEXTO =
   "Autorizar impressão desconsiderando o problema";
 
+/** Legado — não inserir mais; filtrado se ainda existir no banco/HTML. */
 export const PROVIDENCIA_TIPO_AUTORIZAR = "autorizar_impressao";
 export const PROVIDENCIA_TIPO_LIVRE = "livre";
 
@@ -30,61 +31,41 @@ export function isAutorizarTexto(texto: string): boolean {
   return normalizeLabel(texto || "") === normalizeLabel(AUTORIZAR_IMPRESSAO_TEXTO);
 }
 
-export function resolucaoObrigatoriaFromProvidencias(
-  rows: Array<{ tipo: string; selecionada: boolean }>,
-): boolean {
-  const autorizar = rows.find((r) => r.tipo === PROVIDENCIA_TIPO_AUTORIZAR);
-  if (!autorizar) return true;
-  return !autorizar.selecionada;
+export function isAutorizarProvidencia(row: {
+  tipo?: string;
+  texto?: string;
+}): boolean {
+  return (
+    (row.tipo || "") === PROVIDENCIA_TIPO_AUTORIZAR ||
+    isAutorizarTexto(row.texto || "")
+  );
 }
 
-/** Uma linha sistema autorizar; remove livres/duplicatas com o mesmo texto. */
+/** Remove a providência de sistema legada; reordena. Mantém linhas vazias em edição. */
+export function stripAutorizarDraft(
+  rows: ProvidenciaDraft[],
+): ProvidenciaDraft[] {
+  return (rows || [])
+    .filter((r) => !isAutorizarProvidencia(r))
+    .map((r, i) => ({
+      ...r,
+      tipo: r.tipo === PROVIDENCIA_TIPO_AUTORIZAR ? PROVIDENCIA_TIPO_LIVRE : (r.tipo || PROVIDENCIA_TIPO_LIVRE),
+      ordem: i,
+    }));
+}
+
+/** @deprecated use stripAutorizarDraft — mantido para callers antigos. */
 export function dedupeAutorizarDraft(
   rows: ProvidenciaDraft[],
 ): ProvidenciaDraft[] {
-  const kept: ProvidenciaDraft[] = [];
-  let autorizar: ProvidenciaDraft | null = null;
-  for (const raw of rows) {
-    const isAut =
-      raw.tipo === PROVIDENCIA_TIPO_AUTORIZAR || isAutorizarTexto(raw.texto);
-    if (isAut) {
-      if (!autorizar) {
-        autorizar = {
-          key: raw.key || "sistema-autorizar",
-          id: raw.id,
-          texto: AUTORIZAR_IMPRESSAO_TEXTO,
-          tipo: PROVIDENCIA_TIPO_AUTORIZAR,
-          ordem: raw.ordem,
-          selecionada: raw.selecionada,
-          origem: "sistema",
-        };
-      } else if (raw.tipo === PROVIDENCIA_TIPO_AUTORIZAR) {
-        autorizar.selecionada = raw.selecionada;
-        if (raw.id != null) autorizar.id = raw.id;
-      }
-      continue;
-    }
-    if (!(raw.texto || "").trim()) continue;
-    kept.push(raw);
-  }
-  if (!autorizar) {
-    autorizar = {
-      key: "sistema-autorizar",
-      texto: AUTORIZAR_IMPRESSAO_TEXTO,
-      tipo: PROVIDENCIA_TIPO_AUTORIZAR,
-      ordem: kept.length,
-      selecionada: false,
-      origem: "sistema",
-    };
-  }
-  const out = [...kept, autorizar];
-  return out.map((r, i) => ({ ...r, ordem: i }));
+  return stripAutorizarDraft(rows);
 }
 
+/** @deprecated use stripAutorizarDraft */
 export function ensureAutorizarDraft(
   rows: ProvidenciaDraft[],
 ): ProvidenciaDraft[] {
-  return dedupeAutorizarDraft(rows);
+  return stripAutorizarDraft(rows);
 }
 
 /** Extrai textos de `.action-item` (ou `<li>` após “Providências”). */
@@ -134,7 +115,7 @@ export function parseProvidenciasFromHtml(html: string): string[] {
   return texts;
 }
 
-/** Seed de rascunho a partir do HTML da biblioteca + linha sistema. */
+/** Seed de rascunho a partir do HTML da biblioteca (sem linha de sistema). */
 export function seedProvidenciasDraft(html: string): ProvidenciaDraft[] {
   const rows: ProvidenciaDraft[] = [];
   let ordem = 0;
@@ -150,16 +131,97 @@ export function seedProvidenciasDraft(html: string): ProvidenciaDraft[] {
     });
     ordem += 1;
   }
-  return ensureAutorizarDraft(rows);
+  return rows;
 }
 
 export function draftsToProvidenciasPayload(rows: ProvidenciaDraft[]) {
-  return dedupeAutorizarDraft(rows).map((r, i) => ({
-    ...(r.id != null ? { id: r.id } : {}),
-    texto: r.texto,
-    tipo: r.tipo,
-    ordem: i,
-    selecionada: r.selecionada,
-    origem: r.origem,
-  }));
+  return stripAutorizarDraft(rows)
+    .filter((r) => (r.texto || "").trim())
+    .map((r, i) => ({
+      ...(r.id != null ? { id: r.id } : {}),
+      texto: r.texto.trim(),
+      tipo: PROVIDENCIA_TIPO_LIVRE,
+      ordem: i,
+      selecionada: r.selecionada,
+      origem: r.origem === "sistema" ? "manual" : r.origem,
+    }));
+}
+
+function escapeHtmlText(value: string): string {
+  return (value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Textos livres a persistir no HTML do modelo da biblioteca. */
+export function libraryProvidenciaTextsFromDrafts(
+  rows: ProvidenciaDraft[],
+): string[] {
+  return stripAutorizarDraft(rows).map((r) => r.texto.trim());
+}
+
+/**
+ * Atualiza/insere bloco `.action-list` com providências padrão no HTML do modelo.
+ */
+export function applyProvidenciasToHtml(
+  html: string,
+  texts: string[],
+): string {
+  const cleaned = (html || "").trim();
+  const items = texts
+    .map((t) => t.trim())
+    .filter((t) => t && !isAutorizarTexto(t));
+
+  let withoutProv = cleaned;
+  if (typeof DOMParser !== "undefined") {
+    const doc = new DOMParser().parseFromString(
+      `<div id="root">${cleaned}</div>`,
+      "text/html",
+    );
+    const root = doc.getElementById("root") ?? doc.body;
+    for (const el of [
+      ...root.querySelectorAll(".providencias-bar, .action-list"),
+    ]) {
+      el.remove();
+    }
+    for (const el of [...root.querySelectorAll("*")]) {
+      const t = normalizeLabel(el.textContent || "");
+      if (t === "providencias" || t.startsWith("providencias ")) {
+        const next = el.nextElementSibling;
+        if (
+          next &&
+          (next.tagName === "UL" ||
+            next.tagName === "OL" ||
+            next.classList.contains("action-list"))
+        ) {
+          next.remove();
+        }
+        el.remove();
+      }
+    }
+    withoutProv = root.innerHTML.trim();
+  } else {
+    withoutProv = cleaned
+      .replace(
+        /<div[^>]*class="[^"]*providencias-bar[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
+        "",
+      )
+      .replace(
+        /<ul[^>]*class="[^"]*action-list[^"]*"[^>]*>[\s\S]*?<\/ul>/gi,
+        "",
+      )
+      .trim();
+  }
+
+  if (!items.length) {
+    return withoutProv;
+  }
+
+  const lis = items
+    .map((t) => `<li class="action-item">${escapeHtmlText(t)}</li>`)
+    .join("");
+  const block = `<div class="providencias-bar">Providências</div><ul class="action-list">${lis}</ul>`;
+  return withoutProv ? `${withoutProv}\n${block}` : block;
 }

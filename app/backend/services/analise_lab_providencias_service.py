@@ -119,40 +119,20 @@ def is_autorizar_texto(texto: str) -> bool:
 
 
 def dedupe_autorizar_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Uma única linha sistema autorizar_impressao; remove livres com o mesmo texto."""
+    """Remove providência de sistema autorizar_impressao (legado); só livres."""
     kept: list[dict[str, Any]] = []
-    autorizar: Optional[dict[str, Any]] = None
     for raw in rows or []:
         tipo = (raw.get("tipo") or TIPO_LIVRE).strip() or TIPO_LIVRE
         texto = (raw.get("texto") or "").strip()
         if tipo == TIPO_AUTORIZAR or is_autorizar_texto(texto):
-            sel = bool(raw.get("selecionada", False))
-            if autorizar is None:
-                autorizar = {
-                    "texto": AUTORIZAR_TEXTO,
-                    "tipo": TIPO_AUTORIZAR,
-                    "origem": ORIGEM_SISTEMA,
-                    "selecionada": sel,
-                }
-                if raw.get("id") is not None:
-                    autorizar["id"] = raw["id"]
-                if raw.get("labItemId") is not None:
-                    autorizar["labItemId"] = raw["labItemId"]
-            elif tipo == TIPO_AUTORIZAR:
-                autorizar["selecionada"] = sel
             continue
         if not texto:
             continue
-        kept.append(dict(raw))
-    if autorizar is None:
-        autorizar = {
-            "texto": AUTORIZAR_TEXTO,
-            "tipo": TIPO_AUTORIZAR,
-            "ordem": len(kept),
-            "selecionada": False,
-            "origem": ORIGEM_SISTEMA,
-        }
-    kept.append(autorizar)
+        row = dict(raw)
+        row["tipo"] = TIPO_LIVRE
+        if (row.get("origem") or "") == ORIGEM_SISTEMA:
+            row["origem"] = ORIGEM_MANUAL
+        kept.append(row)
     for i, row in enumerate(kept):
         row["ordem"] = i
     return kept
@@ -165,7 +145,7 @@ def _has_autorizar_dupes(rows: list[dict[str, Any]]) -> bool:
         if (r.get("tipo") or "") == TIPO_AUTORIZAR
         or is_autorizar_texto(r.get("texto") or "")
     ]
-    return len(likes) > 1
+    return len(likes) > 0
 
 
 def _rewrite_providencias(
@@ -178,7 +158,7 @@ def _rewrite_providencias(
     for i, row in enumerate(rows):
         _insert_row(
             lab_item_id,
-            texto=row.get("texto") or AUTORIZAR_TEXTO,
+            texto=row.get("texto") or "",
             tipo=row.get("tipo") or TIPO_LIVRE,
             ordem=int(row.get("ordem", i)),
             selecionada=bool(row.get("selecionada", True)),
@@ -204,14 +184,10 @@ def list_for_item(lab_item_id: int) -> list[dict[str, Any]]:
     rows = list_for_item_raw(lab_item_id)
     if not rows:
         return rows
-    needs = _has_autorizar_dupes(rows) or not any(
-        r["tipo"] == TIPO_AUTORIZAR for r in rows
-    )
-    if not needs:
+    if not _has_autorizar_dupes(rows):
         return rows
-    cleaned = _rewrite_providencias(lab_item_id, dedupe_autorizar_rows(rows))
-    sync_resolucao_obrigatoria(lab_item_id)
-    return cleaned
+    # Remove linhas legadas autorizar_impressao sem alterar ResolucaoObrigatoria.
+    return _rewrite_providencias(lab_item_id, dedupe_autorizar_rows(rows))
 
 
 def list_for_items(lab_item_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
@@ -235,9 +211,7 @@ def list_for_items(lab_item_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
     for item_id, item_rows in list(out.items()):
         if not item_rows:
             continue
-        if _has_autorizar_dupes(item_rows) or not any(
-            r["tipo"] == TIPO_AUTORIZAR for r in item_rows
-        ):
+        if _has_autorizar_dupes(item_rows):
             out[item_id] = list_for_item(item_id)
     return out
 
@@ -269,12 +243,12 @@ def _insert_row(
 
 
 def seed_for_item(lab_item_id: int, html_snapshot: str) -> list[dict[str, Any]]:
-    """Cria seed a partir do HTML + linha sistema autorizar impressão."""
+    """Cria seed a partir do HTML (sem linha de sistema autorizar)."""
     existing = list_for_item_raw(lab_item_id)
     if existing:
-        ensure_autorizar_row(lab_item_id)
-        sync_resolucao_obrigatoria(lab_item_id)
-        return list_for_item(lab_item_id)
+        if _has_autorizar_dupes(existing):
+            return _rewrite_providencias(lab_item_id, dedupe_autorizar_rows(existing))
+        return existing
 
     parsed = parse_providencias_from_html(html_snapshot or "")
     ordem = 0
@@ -290,39 +264,29 @@ def seed_for_item(lab_item_id: int, html_snapshot: str) -> list[dict[str, Any]]:
             origem=ORIGEM_BIBLIOTECA,
         )
         ordem += 1
-    _insert_row(
-        lab_item_id,
-        texto=AUTORIZAR_TEXTO,
-        tipo=TIPO_AUTORIZAR,
-        ordem=ordem,
-        selecionada=False,  # default: resolução obrigatória
-        origem=ORIGEM_SISTEMA,
-    )
-    sync_resolucao_obrigatoria(lab_item_id)
     project_html_snapshot(lab_item_id)
     return list_for_item_raw(lab_item_id)
 
 
 def ensure_autorizar_row(lab_item_id: int) -> None:
+    """Legado no-op: não força mais a linha autorizar_impressao."""
     rows = list_for_item_raw(lab_item_id)
-    if _has_autorizar_dupes(rows) or not any(r["tipo"] == TIPO_AUTORIZAR for r in rows):
+    if _has_autorizar_dupes(rows):
         _rewrite_providencias(lab_item_id, dedupe_autorizar_rows(rows))
 
 
 def sync_resolucao_obrigatoria(lab_item_id: int) -> bool:
-    """Selecionada=0 em autorizar_impressao ⇒ ResolucaoObrigatoria=1."""
-    rows = list_for_item_raw(lab_item_id)
-    autorizar = next((r for r in rows if r["tipo"] == TIPO_AUTORIZAR), None)
-    obrig = True if autorizar is None else (not autorizar["selecionada"])
-    db.execute_query(
-        """
-        UPDATE tabAnaliseLabItem
-        SET ResolucaoObrigatoria = %s
-        WHERE ID = %s
-        """,
-        (1 if obrig else 0, int(lab_item_id)),
+    """
+    Não deriva mais ResolucaoObrigatoria da providência autorizar.
+    Retorna o valor atual gravado no item.
+    """
+    rows = db.execute_query(
+        "SELECT ResolucaoObrigatoria FROM tabAnaliseLabItem WHERE ID = %s LIMIT 1",
+        (int(lab_item_id),),
     )
-    return obrig
+    if not rows:
+        return False
+    return bool(int(rows[0].get("ResolucaoObrigatoria") or 0))
 
 
 def build_providencias_html(providencias: list[dict[str, Any]]) -> str:
@@ -387,23 +351,12 @@ def replace_for_item(
     lab_item_id: int,
     providencias: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Substitui o conjunto de providências do item (exceto força linha sistema)."""
+    """Substitui o conjunto de providências do item (sem linha autorizar de sistema)."""
     cleaned: list[dict[str, Any]] = []
     for i, raw in enumerate(providencias or []):
         tipo = (raw.get("tipo") or TIPO_LIVRE).strip() or TIPO_LIVRE
         texto = (raw.get("texto") or "").strip()
         if tipo == TIPO_AUTORIZAR or is_autorizar_texto(texto):
-            cleaned.append(
-                {
-                    "texto": AUTORIZAR_TEXTO,
-                    "tipo": TIPO_AUTORIZAR,
-                    "ordem": int(
-                        raw.get("ordem") if raw.get("ordem") is not None else i
-                    ),
-                    "selecionada": bool(raw.get("selecionada", False)),
-                    "origem": ORIGEM_SISTEMA,
-                }
-            )
             continue
         if not texto:
             continue
@@ -434,6 +387,5 @@ def replace_for_item(
             selecionada=bool(row.get("selecionada")),
             origem=row["origem"],
         )
-    sync_resolucao_obrigatoria(lab_item_id)
     project_html_snapshot(lab_item_id)
     return list_for_item_raw(lab_item_id)

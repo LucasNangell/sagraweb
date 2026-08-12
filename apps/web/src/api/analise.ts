@@ -34,6 +34,29 @@ export async function addProblemaPadrao(payload: {
   });
 }
 
+export async function updateProblemaPadrao(
+  id: number,
+  payload: {
+    titulo: string;
+    html_snapshot: string;
+    categoria?: string;
+  },
+): Promise<{ status: string; id: number; titulo: string; categoria: string }> {
+  return apiFetch(`/analise/problemas-padrao/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteProblemaPadrao(
+  id: number,
+): Promise<{ status: string; id: number }> {
+  return apiFetch(`/analise/problemas-padrao/${id}`, {
+    method: "DELETE",
+  });
+}
+
 export async function ensureAnalise(payload: {
   nro_os: number;
   ano_os: number;

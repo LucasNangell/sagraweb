@@ -1,6 +1,5 @@
 import { cn } from "@sagra/ui";
 import {
-  Eye,
   ListChecks,
   Loader2,
   Lock,
@@ -10,7 +9,6 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { ClientAnalysisItem } from "@/api/client-portal";
-import { AnaliseHtmlViewer } from "@/features/analise/components/AnaliseHtmlViewer";
 import {
   buildUploadedComponentSet,
   canDisregardItem,
@@ -43,7 +41,7 @@ export interface AnaliseLabClientPortalPanelProps {
   previewBanner?: string;
 }
 
-/** Painel estilo portal do cliente (lista + detalhe + identidade + upload). */
+/** Painel estilo portal do cliente (lista + identidade + upload). */
 export function AnaliseLabClientPortalPanel({
   osId,
   ano,
@@ -78,10 +76,6 @@ export function AnaliseLabClientPortalPanel({
     [uploadedComponents],
   );
   const grouped = useMemo(() => groupByComponente(items), [items]);
-  const selectedItem = useMemo(
-    () => items.find((i) => i.uniqueId === selectedItemId) ?? null,
-    [items, selectedItemId],
-  );
 
   useEffect(() => {
     if (!items.length) return;
@@ -279,7 +273,7 @@ export function AnaliseLabClientPortalPanel({
           isPortalLocked && "pointer-events-none opacity-60",
         )}
       >
-        <section className="flex min-h-0 flex-[1.2] flex-col overflow-hidden border-b border-sagra-border bg-white">
+        <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
           <header className="flex shrink-0 items-center justify-between border-b border-sagra-border bg-slate-50 px-2 py-1.5 text-xs font-bold text-slate-700">
             <span className="flex items-center gap-1.5">
               <ListChecks className="size-3.5 text-secondary-blue" />
@@ -409,39 +403,6 @@ export function AnaliseLabClientPortalPanel({
                   </div>
                 );
               })
-            )}
-          </div>
-        </section>
-
-        <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-100">
-          <header className="flex shrink-0 items-center gap-1.5 border-b border-sagra-border bg-slate-50 px-2 py-1.5 text-xs font-bold text-slate-700">
-            <Eye className="size-3.5 text-secondary-blue" />
-            Detalhe do problema
-          </header>
-          <div className="min-h-0 flex-1 overflow-y-auto p-2">
-            {!selectedItem ? (
-              <p className="py-8 text-center text-xs text-slate-500">
-                Selecione um item na lista para visualizar.
-              </p>
-            ) : (
-              <div className="rounded border border-slate-200 bg-white p-2 shadow-sm">
-                <p className="mb-1.5 text-[10px] font-bold text-slate-500">
-                  SIMULAÇÃO ({selectedItem.componenteOrigem || "Geral"}) —{" "}
-                  {itemStatusLabel(selectedItem)}
-                </p>
-                <AnaliseHtmlViewer
-                  html={selectedItem.html || ""}
-                  className="rounded border border-dashed border-slate-300 bg-slate-50 p-1.5 text-xs"
-                />
-                <div className="mt-2 border-t border-dashed border-slate-200 pt-1.5">
-                  <p className="text-[9px] font-bold text-slate-500">
-                    Observação técnica
-                  </p>
-                  <p className="mt-0.5 rounded border-l-4 border-amber-400 bg-amber-50 px-1.5 py-1 text-xs text-amber-900">
-                    {selectedItem.obs || "(Vazio)"}
-                  </p>
-                </div>
-              </div>
             )}
           </div>
         </section>

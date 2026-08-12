@@ -1,5 +1,5 @@
 import { MousePointerClick, Unlink } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type {
   AnaliseLabItem,
@@ -11,6 +11,12 @@ import type {
 } from "@/api/analiseLab";
 import { AnaliseHtmlEditor } from "@/features/analise/components/AnaliseHtmlEditor";
 import { AnaliseLabMarkCompactEditor } from "./AnaliseLabMarkCompactEditor";
+import {
+  buildItemPanelDirtySnapshot,
+  confirmDiscardUnsavedChanges,
+  shouldReportItemPanelDirty,
+  type ItemPanelDirtySnapshot,
+} from "./analiseLabItemPanelDirty";
 import { labelTipo } from "./analiseLabLabels";
 import {
   markScopeLabel,
@@ -18,11 +24,8 @@ import {
   validatePageSpec,
 } from "./analiseLabPageSpec";
 import {
-  AUTORIZAR_IMPRESSAO_TEXTO,
-  ensureAutorizarDraft,
-  PROVIDENCIA_TIPO_AUTORIZAR,
   PROVIDENCIA_TIPO_LIVRE,
-  resolucaoObrigatoriaFromProvidencias,
+  stripAutorizarDraft,
   type ProvidenciaDraft,
 } from "./analiseLabProvidencias";
 import { AnaliseLabToolPalette } from "./AnaliseLabToolPalette";
@@ -56,6 +59,8 @@ interface AnaliseLabItemPanelProps {
   onProvidenciasChange?: (rows: ProvidenciaDraft[]) => void;
   onClose: () => void;
   onDelete?: () => void;
+  /** Notifica o pai se há alterações não salvas (para troca de item / close externo). */
+  onDirtyChange?: (dirty: boolean) => void;
   onUnlinkMark?: (markId: number) => void;
   onDeleteMark?: (markId: number) => void;
   /** Spec de páginas controlado pelo pai (modo de seleção por clique). */
@@ -88,7 +93,7 @@ function toProvidenciaDrafts(
     selecionada: p.selecionada,
     origem: p.origem,
   }));
-  return ensureAutorizarDraft(mapped);
+  return stripAutorizarDraft(mapped);
 }
 
 function buildPayload(args: {
@@ -132,6 +137,7 @@ export function AnaliseLabItemPanel({
   onProvidenciasChange,
   onClose,
   onDelete,
+  onDirtyChange,
   onUnlinkMark,
   onDeleteMark,
   pageSpecOverride = null,
@@ -158,8 +164,17 @@ export function AnaliseLabItemPanel({
   const [localPageSpec, setLocalPageSpec] = useState(
     item.paginas || (item.pagina > 0 ? String(item.pagina) : ""),
   );
+  const baselineRef = useRef<ItemPanelDirtySnapshot | null>(null);
+  const skipBaselineOnceRef = useRef(false);
+  /** True só após o técnico alterar um campo (ignora normalização do HTML no load). */
+  const userEditedRef = useRef(false);
+  const htmlInteractiveRef = useRef(false);
+  const touch = () => {
+    userEditedRef.current = true;
+  };
   const pageSpec = pageSpecOverride ?? localPageSpec;
   const setPageSpec = (value: string) => {
+    touch();
     setLocalPageSpec(value);
     onPageSpecChange?.(value);
   };
@@ -167,7 +182,9 @@ export function AnaliseLabItemPanel({
   const [providencias, setProvidencias] = useState<ProvidenciaDraft[]>(() =>
     toProvidenciaDrafts(item.providencias),
   );
-  const resolucaoObrigatoria = resolucaoObrigatoriaFromProvidencias(providencias);
+  const [resolucaoObrigatoria, setResolucaoObrigatoria] = useState(
+    Boolean(item.resolucaoObrigatoria),
+  );
   const [corrigidoSefoc, setCorrigidoSefoc] = useState(
     Boolean(item.corrigidoSefoc),
   );
@@ -185,9 +202,73 @@ export function AnaliseLabItemPanel({
     );
     setComponente(item.componente);
     setProvidencias(toProvidenciaDrafts(item.providencias));
+    setResolucaoObrigatoria(Boolean(item.resolucaoObrigatoria));
     setCorrigidoSefoc(Boolean(item.corrigidoSefoc));
     setObsCorrecaoSefoc(item.obsCorrecaoSefoc || "");
+    skipBaselineOnceRef.current = true;
+    userEditedRef.current = false;
+    htmlInteractiveRef.current = false;
   }, [item]);
+
+  const currentSnapshot = useMemo(
+    () =>
+      buildItemPanelDirtySnapshot({
+        titulo,
+        html,
+        obs,
+        componente,
+        escopo,
+        pageSpec,
+        resolucaoObrigatoria,
+        corrigidoSefoc,
+        obsCorrecaoSefoc,
+        providencias,
+      }),
+    [
+      titulo,
+      html,
+      obs,
+      componente,
+      escopo,
+      pageSpec,
+      resolucaoObrigatoria,
+      corrigidoSefoc,
+      obsCorrecaoSefoc,
+      providencias,
+    ],
+  );
+
+  useEffect(() => {
+    // Enquanto o técnico não editou, reancora o baseline (HTML do editor etc.).
+    if (
+      skipBaselineOnceRef.current ||
+      baselineRef.current == null ||
+      !userEditedRef.current
+    ) {
+      baselineRef.current = currentSnapshot;
+      skipBaselineOnceRef.current = false;
+      onDirtyChange?.(false);
+      return;
+    }
+    onDirtyChange?.(
+      shouldReportItemPanelDirty(true, baselineRef.current, currentSnapshot),
+    );
+  }, [currentSnapshot, onDirtyChange]);
+
+  const requestClose = () => {
+    if (
+      shouldReportItemPanelDirty(
+        userEditedRef.current,
+        baselineRef.current,
+        currentSnapshot,
+      ) &&
+      !confirmDiscardUnsavedChanges()
+    ) {
+      return;
+    }
+    onDirtyChange?.(false);
+    onClose();
+  };
 
   const allPagesActive =
     Boolean(allPagesSpec) && pageSpec.trim() === allPagesSpec.trim();
@@ -243,7 +324,10 @@ export function AnaliseLabItemPanel({
       title="Selecionar páginas clicando no documento"
       aria-label="Selecionar páginas clicando no documento"
       aria-pressed={pagePickActive}
-      onClick={() => onTogglePagePick(pageSpec)}
+      onClick={() => {
+        touch();
+        onTogglePagePick(pageSpec);
+      }}
       className={
         pagePickActive
           ? "inline-flex size-8 shrink-0 items-center justify-center rounded border border-sky-500 bg-sky-50 text-sky-700"
@@ -260,7 +344,7 @@ export function AnaliseLabItemPanel({
         <h2 className="text-xs font-semibold uppercase text-neutral-600">
           {isRegister ? "Novo problema" : "Problema"}
         </h2>
-        <button type="button" className="text-xs text-neutral-500" onClick={onClose}>
+        <button type="button" className="text-xs text-neutral-500" onClick={requestClose}>
           Fechar
         </button>
       </div>
@@ -320,6 +404,7 @@ export function AnaliseLabItemPanel({
                 checked={allPagesActive}
                 onChange={(e) => {
                   if (e.target.checked) {
+                    touch();
                     setPageSpec(allPagesSpec);
                     if (pagePickActive) onTogglePagePick?.(pageSpec);
                   } else {
@@ -346,10 +431,18 @@ export function AnaliseLabItemPanel({
         ) : null}
       </div>
 
-      <div className="max-h-[40vh] overflow-auto rounded border border-sagra-border">
+      <div
+        className="max-h-[40vh] overflow-auto rounded border border-sagra-border"
+        onFocusCapture={() => {
+          htmlInteractiveRef.current = true;
+        }}
+      >
         <AnaliseHtmlEditor
           html={html}
-          onChange={setHtml}
+          onChange={(next) => {
+            setHtml(next);
+            if (htmlInteractiveRef.current) touch();
+          }}
           readOnly={busy}
           itemTitulo={titulo}
         />
@@ -385,7 +478,10 @@ export function AnaliseLabItemPanel({
         Observação
         <textarea
           value={obs}
-          onChange={(e) => setObs(e.target.value)}
+          onChange={(e) => {
+            touch();
+            setObs(e.target.value);
+          }}
           rows={2}
           className="rounded border border-sagra-border px-2 py-1.5"
         />
@@ -396,15 +492,21 @@ export function AnaliseLabItemPanel({
           <h3 className="text-[11px] font-semibold uppercase text-neutral-600">
             Providências
           </h3>
-          {resolucaoObrigatoria ? (
-            <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold uppercase text-black">
-              Resolução obrigatória
-            </span>
-          ) : null}
+          <label className="flex items-center gap-1.5 text-[11px] font-medium text-neutral-700">
+            <input
+              type="checkbox"
+              checked={resolucaoObrigatoria}
+              disabled={busy}
+              onChange={(e) => {
+                touch();
+                setResolucaoObrigatoria(e.target.checked);
+              }}
+            />
+            Resolução obrigatória
+          </label>
         </div>
         <ul className="space-y-1.5">
           {providencias.map((row) => {
-            const isSistema = row.tipo === PROVIDENCIA_TIPO_AUTORIZAR;
             return (
               <li
                 key={row.key}
@@ -415,12 +517,9 @@ export function AnaliseLabItemPanel({
                   className="mt-1"
                   checked={row.selecionada}
                   disabled={busy}
-                  title={
-                    isSistema
-                      ? "Desmarcado = resolução obrigatória"
-                      : "Incluir no registro"
-                  }
+                  title="Incluir no registro"
                   onChange={(e) => {
+                    touch();
                     const checked = e.target.checked;
                     setProvidencias((prev) =>
                       prev.map((p) =>
@@ -431,13 +530,16 @@ export function AnaliseLabItemPanel({
                     );
                   }}
                 />
-                <input
-                  type="text"
-                  value={isSistema ? AUTORIZAR_IMPRESSAO_TEXTO : row.texto}
-                  readOnly={isSistema}
-                  disabled={busy || isSistema}
-                  className="min-w-0 flex-1 rounded border border-sagra-border px-1.5 py-1 text-[11px] disabled:bg-neutral-50"
+                <textarea
+                  value={row.texto}
+                  disabled={busy}
+                  rows={Math.min(
+                    6,
+                    Math.max(2, (row.texto || "").split(/\n/).length, Math.ceil((row.texto || "").length / 42)),
+                  )}
+                  className="min-w-0 flex-1 resize-y rounded border border-sagra-border px-1.5 py-1 text-[11px] leading-snug whitespace-pre-wrap break-words disabled:bg-neutral-50"
                   onChange={(e) => {
+                    touch();
                     const texto = e.target.value;
                     setProvidencias((prev) =>
                       prev.map((p) =>
@@ -446,21 +548,20 @@ export function AnaliseLabItemPanel({
                     );
                   }}
                 />
-                {!isSistema ? (
-                  <button
-                    type="button"
-                    className="mt-0.5 text-sagra-danger"
-                    disabled={busy}
-                    title="Remover"
-                    onClick={() =>
-                      setProvidencias((prev) =>
-                        prev.filter((p) => p.key !== row.key),
-                      )
-                    }
-                  >
-                    ×
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  className="mt-0.5 text-sagra-danger"
+                  disabled={busy}
+                  title="Remover"
+                  onClick={() => {
+                    touch();
+                    setProvidencias((prev) =>
+                      prev.filter((p) => p.key !== row.key),
+                    );
+                  }}
+                >
+                  ×
+                </button>
               </li>
             );
           })}
@@ -469,10 +570,11 @@ export function AnaliseLabItemPanel({
           type="button"
           disabled={busy}
           className="rounded border border-sagra-border bg-white px-2 py-1 text-[11px] font-medium text-secondary-blue hover:bg-blue-50"
-          onClick={() =>
+          onClick={() => {
+            touch();
             setProvidencias((prev) =>
-              ensureAutorizarDraft([
-                ...prev.filter((p) => p.tipo !== PROVIDENCIA_TIPO_AUTORIZAR),
+              stripAutorizarDraft([
+                ...prev,
                 {
                   key: `new-${Date.now()}`,
                   texto: "",
@@ -481,10 +583,9 @@ export function AnaliseLabItemPanel({
                   selecionada: true,
                   origem: "manual",
                 },
-                ...prev.filter((p) => p.tipo === PROVIDENCIA_TIPO_AUTORIZAR),
               ]),
-            )
-          }
+            );
+          }}
         >
           Adicionar providência
         </button>
@@ -494,7 +595,10 @@ export function AnaliseLabItemPanel({
               <input
                 type="checkbox"
                 checked={corrigidoSefoc}
-                onChange={(e) => setCorrigidoSefoc(e.target.checked)}
+                onChange={(e) => {
+                  touch();
+                  setCorrigidoSefoc(e.target.checked);
+                }}
                 disabled={busy}
               />
               Corrigido (controle interno)
@@ -504,7 +608,10 @@ export function AnaliseLabItemPanel({
                 Observação da correção (interno)
                 <textarea
                   value={obsCorrecaoSefoc}
-                  onChange={(e) => setObsCorrecaoSefoc(e.target.value)}
+                  onChange={(e) => {
+                    touch();
+                    setObsCorrecaoSefoc(e.target.value);
+                  }}
                   rows={2}
                   className="rounded border border-sagra-border bg-white px-2 py-1.5"
                   disabled={busy}

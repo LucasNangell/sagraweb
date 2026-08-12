@@ -909,6 +909,88 @@ def add_problema_padrao(req: LibraryItemAddRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class LibraryItemUpdateRequest(BaseModel):
+    titulo: str
+    html_snapshot: str
+    categoria: Optional[str] = "Geral"
+
+
+@router.put("/analise/problemas-padrao/{item_id}")
+def update_problema_padrao(item_id: int, req: LibraryItemUpdateRequest):
+    try:
+        existing = db.execute_query(
+            "SELECT ID FROM tabProblemasPadrao WHERE ID = %s LIMIT 1",
+            (item_id,),
+        )
+        if not existing:
+            raise HTTPException(status_code=404, detail="Item da biblioteca não encontrado.")
+        titulo = (req.titulo or "").strip()
+        if not titulo:
+            raise HTTPException(status_code=400, detail="Título obrigatório.")
+        safe_html = sanitize_html_snapshot(req.html_snapshot) or ""
+        categoria = (req.categoria or "Geral").strip() or "Geral"
+        db.execute_query(
+            """
+            UPDATE tabProblemasPadrao
+            SET TituloPT = %s, ProbTecHTML = %s, Categoria = %s
+            WHERE ID = %s
+            """,
+            (titulo, safe_html, categoria, item_id),
+        )
+        return {
+            "status": "success",
+            "id": item_id,
+            "titulo": titulo,
+            "categoria": categoria,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao atualizar problema padrão {item_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/analise/problemas-padrao/{item_id}")
+def delete_problema_padrao(item_id: int):
+    try:
+        existing = db.execute_query(
+            "SELECT ID, TituloPT FROM tabProblemasPadrao WHERE ID = %s LIMIT 1",
+            (item_id,),
+        )
+        if not existing:
+            raise HTTPException(status_code=404, detail="Item da biblioteca não encontrado.")
+
+        # Desvincula referências (sem FK formal em vários ambientes).
+        try:
+            db.execute_query(
+                "UPDATE tabAnaliseLabItem SET ID_ProblemaPadrao = NULL WHERE ID_ProblemaPadrao = %s",
+                (item_id,),
+            )
+        except Exception:
+            pass
+        try:
+            db.execute_query(
+                "UPDATE tabAnaliseItens SET ID_ProblemaPadrao = NULL WHERE ID_ProblemaPadrao = %s",
+                (item_id,),
+            )
+        except Exception:
+            pass
+
+        db.execute_query("DELETE FROM tabProblemasPadrao WHERE ID = %s", (item_id,))
+        return {"status": "success", "id": item_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        err = str(e)
+        logger.error(f"Erro ao excluir problema padrão {item_id}: {e}")
+        if "foreign key" in err.lower() or "1451" in err:
+            raise HTTPException(
+                status_code=409,
+                detail="Não é possível excluir: o item está vinculado a análises existentes.",
+            )
+        raise HTTPException(status_code=500, detail=err)
+
+
 @router.get("/analise/problemas-padrao")
 def get_problemas_padrao():
     rows = db.execute_query(

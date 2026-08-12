@@ -4,6 +4,7 @@ import {
   formatPageSpec,
   ensurePageInSpec,
   isMarkVisibleOnPage,
+  itemPagesSpecFromMarks,
   parsePageSpec,
   pageSpecIncludes,
   pagesSpecToItemScope,
@@ -41,6 +42,36 @@ describe("analiseLabPageSpec", () => {
     expect(ensurePageInSpec("5", 8)).toBe("5,8");
     expect(ensurePageInSpec("", 3)).toBe("3");
     expect(ensurePageInSpec("1-3", 2)).toBe("1-3");
+  });
+
+  it("itemPagesSpecFromMarks usa só páginas com marcas (não o spec livre do item)", () => {
+    expect(
+      itemPagesSpecFromMarks(
+        [
+          {
+            itemId: 1,
+            pagina: 5,
+            paginaOrigem: 5,
+            paginas: null,
+          },
+          {
+            itemId: 1,
+            pagina: 8,
+            paginaOrigem: 8,
+            paginas: null,
+          },
+          {
+            itemId: 2,
+            pagina: 1,
+            paginaOrigem: 1,
+            paginas: null,
+          },
+        ],
+        1,
+        [5],
+      ),
+    ).toBe("5,8");
+    expect(itemPagesSpecFromMarks([], 1, [3])).toBe("3");
   });
 
   it("pagesSpecToItemScope deriva escopo", () => {

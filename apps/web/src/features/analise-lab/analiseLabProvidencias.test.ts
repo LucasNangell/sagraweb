@@ -6,8 +6,8 @@ import {
   parseProvidenciasFromHtml,
   PROVIDENCIA_TIPO_AUTORIZAR,
   PROVIDENCIA_TIPO_LIVRE,
-  resolucaoObrigatoriaFromProvidencias,
   seedProvidenciasDraft,
+  stripAutorizarDraft,
 } from "./analiseLabProvidencias";
 
 describe("parseProvidenciasFromHtml", () => {
@@ -28,53 +28,33 @@ describe("parseProvidenciasFromHtml", () => {
 });
 
 describe("seedProvidenciasDraft", () => {
-  it("seeds biblioteca rows plus sistema autorizar", () => {
+  it("seeds only biblioteca rows without sistema autorizar", () => {
     const rows = seedProvidenciasDraft(`
       <ul class="action-list">
         <li class="action-item">Ajustar margem</li>
+        <li class="action-item">${AUTORIZAR_IMPRESSAO_TEXTO}</li>
       </ul>
     `);
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       texto: "Ajustar margem",
       origem: "biblioteca",
       selecionada: true,
+      tipo: PROVIDENCIA_TIPO_LIVRE,
     });
-    expect(rows[1]).toMatchObject({
-      texto: AUTORIZAR_IMPRESSAO_TEXTO,
-      tipo: PROVIDENCIA_TIPO_AUTORIZAR,
-      origem: "sistema",
-      selecionada: false,
-    });
-  });
-
-  it("does not duplicate autorizar when HTML already has that action-item", () => {
-    const rows = seedProvidenciasDraft(`
-      <ul class="action-list">
-        <li class="action-item">Revisar PDF</li>
-        <li class="action-item">${AUTORIZAR_IMPRESSAO_TEXTO}</li>
-      </ul>
-    `);
-    const autorizar = rows.filter(
-      (r) =>
-        r.tipo === PROVIDENCIA_TIPO_AUTORIZAR ||
-        r.texto === AUTORIZAR_IMPRESSAO_TEXTO,
-    );
-    expect(autorizar).toHaveLength(1);
-    expect(autorizar[0]?.tipo).toBe(PROVIDENCIA_TIPO_AUTORIZAR);
   });
 });
 
-describe("dedupeAutorizarDraft", () => {
-  it("collapses livre + sistema with the same text into one sistema row", () => {
-    const rows = dedupeAutorizarDraft([
+describe("stripAutorizarDraft", () => {
+  it("removes autorizar sistema and keeps empty livres while editing", () => {
+    const rows = stripAutorizarDraft([
       {
         key: "1",
-        texto: AUTORIZAR_IMPRESSAO_TEXTO,
+        texto: "Revisar PDF",
         tipo: PROVIDENCIA_TIPO_LIVRE,
         ordem: 0,
         selecionada: true,
-        origem: "biblioteca",
+        origem: "manual",
       },
       {
         key: "2",
@@ -86,37 +66,30 @@ describe("dedupeAutorizarDraft", () => {
       },
       {
         key: "3",
-        texto: "Outra",
+        texto: "",
         tipo: PROVIDENCIA_TIPO_LIVRE,
         ordem: 2,
         selecionada: true,
         origem: "manual",
       },
     ]);
-    expect(rows.filter((r) => r.texto === AUTORIZAR_IMPRESSAO_TEXTO)).toHaveLength(
-      1,
-    );
     expect(rows).toHaveLength(2);
-    expect(
-      rows.find((r) => r.tipo === PROVIDENCIA_TIPO_AUTORIZAR)?.selecionada,
-    ).toBe(false);
-  });
-});
-
-describe("resolucaoObrigatoriaFromProvidencias", () => {
-  it("is true when autorizar impressão is not selected", () => {
-    expect(
-      resolucaoObrigatoriaFromProvidencias([
-        { tipo: PROVIDENCIA_TIPO_AUTORIZAR, selecionada: false },
-      ]),
-    ).toBe(true);
+    expect(rows[0].texto).toBe("Revisar PDF");
+    expect(rows[1].texto).toBe("");
   });
 
-  it("is false when autorizar impressão is selected", () => {
+  it("dedupeAutorizarDraft aliases strip", () => {
     expect(
-      resolucaoObrigatoriaFromProvidencias([
-        { tipo: PROVIDENCIA_TIPO_AUTORIZAR, selecionada: true },
+      dedupeAutorizarDraft([
+        {
+          key: "a",
+          texto: AUTORIZAR_IMPRESSAO_TEXTO,
+          tipo: PROVIDENCIA_TIPO_AUTORIZAR,
+          ordem: 0,
+          selecionada: false,
+          origem: "sistema",
+        },
       ]),
-    ).toBe(false);
+    ).toEqual([]);
   });
 });

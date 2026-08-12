@@ -103,6 +103,44 @@ export function ensurePageInSpec(spec: string, page: number): string {
   return formatPageSpec([...pages, n]);
 }
 
+/**
+ * Páginas do problema derivadas das marcas vinculadas.
+ * Usa a página de desenho (paginaOrigem); em marcas multipágina inclui o spec.
+ */
+export function itemPagesSpecFromMarks(
+  marks: Array<{
+    itemId?: number | null;
+    pagina: number;
+    paginas?: string | null;
+    paginaOrigem?: number | null;
+  }>,
+  itemId: number,
+  extraPages: Iterable<number> = [],
+): string {
+  const pages = new Set<number>();
+  for (const n of extraPages) {
+    const p = Math.trunc(n);
+    if (p >= 1) pages.add(p);
+  }
+  for (const m of marks) {
+    if (m.itemId !== itemId) continue;
+    const origem = Number(m.paginaOrigem || 0);
+    if (origem >= 1) pages.add(origem);
+    else if (m.pagina > 0) pages.add(m.pagina);
+    if (m.paginas?.trim()) {
+      try {
+        const list = parsePageSpec(m.paginas);
+        if (list.length > 1) {
+          for (const n of list) pages.add(n);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  return formatPageSpec(pages);
+}
+
 export type ItemPageScopeFields = {
   escopo: "pagina" | "paginas";
   pagina: number;

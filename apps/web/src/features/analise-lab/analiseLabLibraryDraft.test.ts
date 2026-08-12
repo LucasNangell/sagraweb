@@ -28,9 +28,9 @@ describe("buildLibraryDraft", () => {
     expect(draft.htmlSnapshot).toContain("Texto do problema");
     expect(draft.id).toBeUndefined();
     expect(draft.providencias?.some((p) => p.tipo === "autorizar_impressao")).toBe(
-      true,
+      false,
     );
-    expect(draft.resolucaoObrigatoria).toBe(true);
+    expect(draft.resolucaoObrigatoria).toBe(false);
   });
 
   it("seeds providencias from library HTML action-items", () => {
@@ -48,12 +48,7 @@ describe("buildLibraryDraft", () => {
       pageSpec: "1",
     });
     expect(draft.htmlSnapshot.toLowerCase()).not.toContain("revisar pdf");
-    expect(draft.providencias?.map((p) => p.texto)).toEqual(
-      expect.arrayContaining([
-        "Revisar PDF",
-        "Autorizar impressão desconsiderando o problema",
-      ]),
-    );
+    expect(draft.providencias?.map((p) => p.texto)).toEqual(["Revisar PDF"]);
   });
 
   it("uses pageSpec for multi-page escopo", () => {

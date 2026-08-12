@@ -56,6 +56,7 @@ import {
   toPanelModel,
   type AnaliseLabItemPanelModel,
 } from "./AnaliseLabItemPanel";
+import { confirmDiscardUnsavedChanges } from "./analiseLabItemPanelDirty";
 import { AnaliseLabLibrary } from "./AnaliseLabLibrary";
 import { AnaliseLabMarkCreateOptions } from "./AnaliseLabMarkCreateOptions";
 import { AnaliseLabMarksLayer } from "./AnaliseLabMarksLayer";
@@ -76,8 +77,8 @@ import {
   type ProvidenciaDraft,
 } from "./analiseLabProvidencias";
 import {
-  ensurePageInSpec,
   formatPageSpec,
+  itemPagesSpecFromMarks,
   pagesSpecToItemScope,
   parsePageSpec,
   togglePagePickSpec,
@@ -153,6 +154,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     useState<AnaliseLabItemPanelModel | null>(null);
   const draftPayloadRef = useRef<UpdateAnaliseLabItemPayload | null>(null);
   const draftProvidenciasRef = useRef<ProvidenciaDraft[] | null>(null);
+  const panelDirtyRef = useRef(false);
   const markScopeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [clientPreviewNome, setClientPreviewNome] = useState("");
@@ -445,6 +447,10 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   };
 
   const openLibraryDraft = (problema: ProblemaPadrao) => {
+    if (panelDirtyRef.current && !confirmDiscardUnsavedChanges()) {
+      return;
+    }
+    panelDirtyRef.current = false;
     const pageMeta = pages.find((p) => p.page === pageNumero) ?? pages[0];
     const componente = roleToComponente(
       pageMeta?.role || "page",
@@ -613,6 +619,36 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     return item?.id ?? null;
   };
 
+  const syncItemPagesFromMarks = async (
+    itemId: number,
+    marksForItem: AnaliseLabMark[],
+    extraPages: number[] = [],
+  ) => {
+    const nextItemSpec = itemPagesSpecFromMarks(
+      marksForItem,
+      itemId,
+      extraPages,
+    );
+    if (!nextItemSpec) return;
+    setItemPageSpec(nextItemSpec);
+    const itemScope = pagesSpecToItemScope(nextItemSpec, extraPages[0] ?? 1);
+    const current = itens.find((i) => i.id === itemId);
+    const needsPatch =
+      !current ||
+      current.escopo !== itemScope.escopo ||
+      current.pagina !== itemScope.pagina ||
+      (current.paginas || "") !== (itemScope.paginas || "");
+    if (!needsPatch) return;
+    const res = await updateAnaliseLabItem(ano, osId, itemId, {
+      escopo: itemScope.escopo,
+      pagina: itemScope.pagina,
+      paginas: itemScope.paginas,
+    });
+    setLocalItens((prev) =>
+      (prev ?? itens).map((i) => (i.id === itemId ? res.item : i)),
+    );
+  };
+
   const addMark = async (payload: {
     tipo: AnaliseLabMark["tipo"];
     geometria: Record<string, number | string | number[][]>;
@@ -622,7 +658,15 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     setActionError(null);
     try {
       const drawnPage = Math.max(1, payload.pagina ?? pageNumero);
-      const nextItemSpec = ensurePageInSpec(itemPageSpec || "", drawnPage);
+      // Com marcas: páginas do problema = só páginas onde há marcas (não mantém
+      // a página atual pré-selecionada se não houver marca nela).
+      const nextItemSpec = itemPagesSpecFromMarks(
+        selectedItemId != null
+          ? marks.filter((m) => m.itemId === selectedItemId)
+          : [],
+        selectedItemId ?? 0,
+        [drawnPage],
+      );
       setItemPageSpec(nextItemSpec);
       const itemScope = pagesSpecToItemScope(nextItemSpec, drawnPage);
 
@@ -702,9 +746,16 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     setActionError(null);
     try {
       const res = await updateAnaliseLabMark(ano, osId, selectedMarkId, payload);
-      setLocalMarks((prev) =>
-        (prev ?? []).map((m) => (m.id === selectedMarkId ? res.mark : m)),
+      const nextMarks = (localMarks ?? marks).map((m) =>
+        m.id === selectedMarkId ? res.mark : m,
       );
+      setLocalMarks(nextMarks);
+      if (res.mark.itemId) {
+        await syncItemPagesFromMarks(
+          res.mark.itemId,
+          nextMarks.filter((m) => m.itemId === res.mark.itemId),
+        );
+      }
       invalidate();
     } catch (err) {
       setActionError(
@@ -718,9 +769,17 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const handleDeleteMark = async (id: number) => {
     setActionBusy(true);
     try {
+      const removed = marks.find((m) => m.id === id);
       await deleteAnaliseLabMark(ano, osId, id);
-      setLocalMarks((prev) => (prev ?? []).filter((m) => m.id !== id));
+      const nextMarks = (localMarks ?? marks).filter((m) => m.id !== id);
+      setLocalMarks(nextMarks);
       if (selectedMarkId === id) setSelectedMarkId(null);
+      if (removed?.itemId) {
+        const remaining = nextMarks.filter((m) => m.itemId === removed.itemId);
+        if (remaining.length > 0) {
+          await syncItemPagesFromMarks(removed.itemId, remaining);
+        }
+      }
       invalidate();
     } catch (err) {
       setActionError(
@@ -920,6 +979,12 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   }, [occurrenceIndex, selectedItemId]);
 
   const selectItem = (id: number) => {
+    if (id !== selectedItemId || draftLibraryItem) {
+      if (panelDirtyRef.current && !confirmDiscardUnsavedChanges()) {
+        return;
+      }
+    }
+    panelDirtyRef.current = false;
     setDraftLibraryItem(null);
     draftPayloadRef.current = null;
     draftProvidenciasRef.current = null;
@@ -990,6 +1055,10 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     setTool("select");
     const mark = marks.find((m) => m.id === id);
     if (mark?.itemId != null && mark.itemId !== selectedItemId) {
+      if (panelDirtyRef.current && !confirmDiscardUnsavedChanges()) {
+        return;
+      }
+      panelDirtyRef.current = false;
       setSelectedItemId(mark.itemId);
       setDraftLibraryItem(null);
     }
@@ -1205,6 +1274,10 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   );
 
   const closeProblemPanel = () => {
+    if (panelDirtyRef.current && !confirmDiscardUnsavedChanges()) {
+      return;
+    }
+    panelDirtyRef.current = false;
     setSelectedItemId(null);
     setDraftLibraryItem(null);
     draftPayloadRef.current = null;
@@ -1454,10 +1527,20 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         marks={marks}
                         busy={actionBusy}
                         onClose={() => {
+                          if (
+                            panelDirtyRef.current &&
+                            !confirmDiscardUnsavedChanges()
+                          ) {
+                            return;
+                          }
+                          panelDirtyRef.current = false;
                           setDraftLibraryItem(null);
                           draftPayloadRef.current = null;
                           draftProvidenciasRef.current = null;
                           if (pagePickTarget === "item") setPagePickTarget(null);
+                        }}
+                        onDirtyChange={(dirty) => {
+                          panelDirtyRef.current = dirty;
                         }}
                         onSave={(p) => void registerDraftItem(p)}
                         onSaveProvidencias={(rows) => {
@@ -1499,6 +1582,9 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                             void handleDeleteMark(selectedMark.id);
                         }}
                         onClose={closeProblemPanel}
+                        onDirtyChange={(dirty) => {
+                          panelDirtyRef.current = dirty;
+                        }}
                         onDelete={() => void handleDeleteItem(selectedItem.id)}
                         onUnlinkMark={(markId) => {
                           void (async () => {
@@ -1510,11 +1596,24 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                                 markId,
                                 { item_id: null },
                               );
-                              setLocalMarks((prev) =>
-                                (prev ?? []).map((m) =>
-                                  m.id === markId ? res.mark : m,
-                                ),
+                              const prevItemId = marks.find(
+                                (m) => m.id === markId,
+                              )?.itemId;
+                              const nextMarks = (localMarks ?? marks).map((m) =>
+                                m.id === markId ? res.mark : m,
                               );
+                              setLocalMarks(nextMarks);
+                              if (prevItemId) {
+                                const remaining = nextMarks.filter(
+                                  (m) => m.itemId === prevItemId,
+                                );
+                                if (remaining.length > 0) {
+                                  await syncItemPagesFromMarks(
+                                    prevItemId,
+                                    remaining,
+                                  );
+                                }
+                              }
                               invalidate();
                             } catch (err) {
                               setActionError(
@@ -1556,6 +1655,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                                 ),
                               );
                               draftProvidenciasRef.current = null;
+                              panelDirtyRef.current = false;
                               invalidate();
                               closeProblemPanel();
                             } catch (err) {

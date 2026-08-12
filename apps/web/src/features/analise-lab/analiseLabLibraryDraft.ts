@@ -4,10 +4,7 @@ import type { AnaliseLabItemEscopo } from "@/api/analiseLab";
 
 import { toBalloonHtml } from "./analiseLabBalloonHtml";
 import type { AnaliseLabItemPanelModel } from "./AnaliseLabItemPanel";
-import {
-  resolucaoObrigatoriaFromProvidencias,
-  seedProvidenciasDraft,
-} from "./analiseLabProvidencias";
+import { seedProvidenciasDraft } from "./analiseLabProvidencias";
 
 export function buildLibraryDraft(args: {
   problema: ProblemaPadrao;
@@ -22,10 +19,10 @@ export function buildLibraryDraft(args: {
     id: -(i + 1),
     labItemId: 0,
     texto: p.texto,
-    tipo: p.tipo as "livre" | "autorizar_impressao" | string,
+    tipo: p.tipo as "livre" | string,
     ordem: p.ordem,
     selecionada: p.selecionada,
-    origem: p.origem as "biblioteca" | "sistema" | "manual" | string,
+    origem: p.origem as "biblioteca" | "manual" | string,
   }));
   const pagina =
     args.escopo === "arquivo"
@@ -47,7 +44,7 @@ export function buildLibraryDraft(args: {
         : args.escopo === "pagina"
           ? String(pagina)
           : null,
-    resolucaoObrigatoria: resolucaoObrigatoriaFromProvidencias(providencias),
+    resolucaoObrigatoria: false,
     corrigidoSefoc: false,
     obsCorrecaoSefoc: null,
     providencias,

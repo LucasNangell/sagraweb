@@ -1274,73 +1274,125 @@ class AndamentosSynchronizer:
 
     def ensure_mysql_ultimo_status_from_mdb(self, nro: int, ano: int) -> bool:
         """
-        Replica UltimoStatus do MDB apenas para CodStatus presentes no MDB.
-        Andamentos só-MySQL (Web ainda não replicou no Access) não são alterados.
+        Autoridade MySQL: recalcula UltimoStatus operacional e espelha no MDB.
+        Não copia flags do Access.
         """
-        changed = False
         try:
-            mdb_conn = self.conn_mgr.get_mdb_by_nro(nro)
-            mdb_cur = mdb_conn.cursor()
-            mdb_cur.execute(
-                """
-                SELECT CodStatus, UltimoStatus
-                FROM tabandamento
-                WHERE NroProtocoloLink = ? AND AnoProtocoloLink = ?
-                ORDER BY CodStatus
-                """,
-                (nro, ano),
+            promoted = self._recalc_mysql_ultimo_status_operacional(nro, ano)
+            self._push_ultimo_status_to_mdb(nro, ano, promoted)
+            return bool(promoted)
+        except Exception as e:
+            self.logger.logger.error(
+                f"[ERRO] Erro ao alinhar UltimoStatus MySQL+MDB em {nro}/{ano}: {e}"
             )
-            source_rows = mdb_cur.fetchall()
-            mdb_cur.close()
+            return False
 
-            if not source_rows:
-                return False
-
-            mdb_cods = {row.CodStatus for row in source_rows}
-            cods_true = {row.CodStatus for row in source_rows if getattr(row, "UltimoStatus", False)}
+    def _recalc_mysql_ultimo_status_operacional(self, nro: int, ano: int):
+        try:
+            from services.andamento_operacional import recalc_ultimo_status_operacional
 
             conn = self.conn_mgr.get_mysql()
             cur = conn.cursor(dictionary=True)
-            at = mysql_andamento_table()
+            try:
+                promoted = recalc_ultimo_status_operacional(cur, nro, ano)
+                conn.commit()
+                return promoted
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                cur.close()
+        except ImportError:
+            pass
 
-            placeholders = ", ".join(["%s"] * len(mdb_cods))
+        conn = self.conn_mgr.get_mysql()
+        cur = conn.cursor(dictionary=True)
+        at = mysql_andamento_table()
+        try:
             cur.execute(
                 f"""
-                SELECT CodStatus, UltimoStatus FROM {at}
+                UPDATE {at} SET UltimoStatus = FALSE
                 WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s
-                  AND CodStatus IN ({placeholders})
                 """,
-                (nro, ano, *tuple(mdb_cods)),
+                (nro, ano),
             )
-            mysql_rows = {r["CodStatus"]: bool(r["UltimoStatus"]) for r in cur.fetchall()}
-
-            to_false = [c for c in mdb_cods if c not in cods_true and mysql_rows.get(c) is True]
-            to_true = [c for c in cods_true if mysql_rows.get(c) is not True]
-
-            if to_false:
-                ph = ", ".join(["%s"] * len(to_false))
+            cur.execute(
+                f"""
+                SELECT a.CodStatus
+                FROM {at} a
+                WHERE a.NroProtocoloLink = %s AND a.AnoProtocoloLink = %s
+                  AND NOT EXISTS (
+                      SELECT 1 FROM tab_os_sub_os_andamento m
+                      WHERE m.cod_status_espelho IS NOT NULL
+                        AND m.cod_status_espelho != ''
+                        AND m.cod_status_espelho COLLATE utf8mb4_general_ci
+                            = a.CodStatus COLLATE utf8mb4_general_ci
+                  )
+                ORDER BY a.`Data` DESC,
+                         CAST(SUBSTRING_INDEX(a.CodStatus, '-', -1) AS UNSIGNED) DESC,
+                         a.CodStatus DESC
+                LIMIT 1
+                """,
+                (nro, ano),
+            )
+            row = cur.fetchone()
+            promoted = row.get("CodStatus") if row else None
+            if promoted:
                 cur.execute(
-                    f"UPDATE {at} SET UltimoStatus = FALSE WHERE CodStatus IN ({ph})",
-                    tuple(to_false),
+                    f"UPDATE {at} SET UltimoStatus = TRUE WHERE CodStatus = %s",
+                    (promoted,),
                 )
-                changed = True
-
-            if to_true:
-                ph = ", ".join(["%s"] * len(to_true))
-                cur.execute(
-                    f"UPDATE {at} SET UltimoStatus = TRUE WHERE CodStatus IN ({ph})",
-                    tuple(to_true),
-                )
-                changed = True
-
-            if changed:
-                conn.commit()
+            conn.commit()
+            return str(promoted) if promoted else None
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
             cur.close()
-        except Exception as e:
-            self.logger.logger.error(
-                f"[ERRO] Erro ao replicar UltimoStatus do MDB para MySQL em {nro}/{ano}: {e}"
+
+    def _push_ultimo_status_to_mdb(self, nro: int, ano: int, promoted):
+        if not SYNC_ALLOW_MDB_WRITE:
+            self.logger.logger.warning(
+                "[ULTIMO] SYNC_ALLOW_MDB_WRITE=false — MDB não alinhado OS %s/%s (promovido=%s)",
+                nro,
+                ano,
+                promoted,
             )
-        return changed
+            return
+        try:
+            from routers.mdb_writer import push_os_ultimo_status_to_mdb
+
+            push_os_ultimo_status_to_mdb(nro, ano, promoted_cod=promoted)
+            return
+        except Exception as exc:
+            self.logger.logger.warning(
+                "[ULTIMO] push via mdb_writer falhou OS %s/%s: %s — fallback local",
+                nro,
+                ano,
+                exc,
+            )
+
+        mdb_conn = self.conn_mgr.get_mdb_by_nro(nro)
+        cur = mdb_conn.cursor()
+        try:
+            cur.execute(
+                """
+                UPDATE tabandamento SET UltimoStatus = ?
+                WHERE NroProtocoloLink = ? AND AnoProtocoloLink = ?
+                """,
+                (False, nro, ano),
+            )
+            if promoted:
+                cur.execute(
+                    "UPDATE tabandamento SET UltimoStatus = ? WHERE CodStatus = ?",
+                    (True, promoted),
+                )
+            mdb_conn.commit()
+        except Exception:
+            mdb_conn.rollback()
+            raise
+        finally:
+            cur.close()
     
     def insert_mysql(self, andamento: Dict, origem: str) -> bool:
         """Insere registro no MySQL, mas apenas se NÃO estiver na lista de exclusões."""
@@ -1378,15 +1430,7 @@ class AndamentosSynchronizer:
                 self.logger.logger.info(f"[SYNC] CodStatus {codstatus} já existente no MySQL (ignorado insert).")
                 return False
 
-            # OTIMIZAÇÃO: Desmarca o UltimoStatus dos andamentos anteriores na mesma transação
-            # garantindo que a marcação do novo seja simultânea e evitando 2 registros com UltimoStatus=TRUE
-            if andamento.get('UltimoStatus'):
-                cursor.execute(f"""
-                    UPDATE {at}
-                    SET UltimoStatus = FALSE 
-                    WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s
-                """, (nro, ano))
-
+            # UltimoStatus NÃO vem do MDB — insert com 0; ensure_* redefine o canônico.
             cursor.execute(f"""
                 INSERT INTO {at}
                 (CodStatus, NroProtocoloLink, AnoProtocoloLink, SituacaoLink,
@@ -1395,7 +1439,7 @@ class AndamentosSynchronizer:
             """, (
                 andamento['CodStatus'], nro, ano,
                 andamento['SituacaoLink'], andamento['SetorLink'], andamento['Data'],
-                andamento['UltimoStatus'], andamento['Observaçao'],
+                False, andamento['Observaçao'],
                 andamento['Ponto']
             ))
             
@@ -1607,60 +1651,8 @@ class AndamentosSynchronizer:
             )
     
     def update_ultimo_status(self, nro: int, ano: int):
-        """Garante que apenas o último CodStatus tem UltimoStatus=TRUE (MySQL; MDB só se SYNC_ALLOW_MDB_WRITE)."""
-        try:
-            at = mysql_andamento_table()
-            # MySQL
-            conn = self.conn_mgr.get_mysql()
-            cursor = conn.cursor()
-
-            cursor.execute(f"""
-                UPDATE {at}
-                SET UltimoStatus = FALSE 
-                WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s
-            """, (nro, ano))
-
-            cursor.execute(f"""
-                UPDATE {at}
-                SET UltimoStatus = TRUE 
-                WHERE CodStatus = (
-                    SELECT MAX(CodStatus) 
-                    FROM (SELECT CodStatus FROM {at}
-                          WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s) AS sub
-                )
-            """, (nro, ano))
-
-            conn.commit()
-            cursor.close()
-
-            if not SYNC_ALLOW_MDB_WRITE:
-                return
-
-            # MDB correspondente (somente com flag explícita)
-            mdb_conn = self.conn_mgr.get_mdb_by_nro(nro)
-            cursor_mdb = mdb_conn.cursor()
-            
-            cursor_mdb.execute("""
-                UPDATE tabandamento 
-                SET UltimoStatus = FALSE 
-                WHERE NroProtocoloLink = ? AND AnoProtocoloLink = ?
-            """, (nro, ano))
-            
-            cursor_mdb.execute("""
-                UPDATE tabandamento 
-                SET UltimoStatus = TRUE 
-                WHERE CodStatus = (
-                    SELECT MAX(CodStatus) 
-                    FROM tabandamento 
-                    WHERE NroProtocoloLink = ? AND AnoProtocoloLink = ?
-                )
-            """, (nro, ano))
-            
-            mdb_conn.commit()
-            cursor_mdb.close()
-            
-        except Exception as e:
-            self.logger.logger.error(f"[ERRO] Erro ao atualizar UltimoStatus para {nro}/{ano}: {e}")
+        """Alinha UltimoStatus no MySQL e no MDB (mesma regra do ensure_*)."""
+        self.ensure_mysql_ultimo_status_from_mdb(nro, ano)
 
     def update_mysql(self, andamento: Dict, origem: str) -> bool:
         """Atualiza registro no MySQL por detecção de alterações."""
@@ -1673,14 +1665,7 @@ class AndamentosSynchronizer:
             cursor = conn.cursor()
             at = mysql_andamento_table()
 
-            # Se o status do andamento atualizado for UltimoStatus, desmarca os outros
-            if andamento.get('UltimoStatus'):
-                cursor.execute(f"""
-                    UPDATE {at}
-                    SET UltimoStatus = FALSE 
-                    WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s AND CodStatus != %s
-                """, (nro, ano, codstatus))
-
+            # Não aplica UltimoStatus do MDB — ensure_* é a autoridade do flag.
             cursor.execute(f"""
                 UPDATE {at}
                 SET NroProtocoloLink = %s,
@@ -1688,14 +1673,13 @@ class AndamentosSynchronizer:
                     SituacaoLink = %s,
                     SetorLink = %s,
                     Data = %s,
-                    UltimoStatus = %s,
                     Observaçao = %s,
                     Ponto = %s
                 WHERE CodStatus = %s
             """, (
                 nro, ano,
                 andamento['SituacaoLink'], andamento['SetorLink'], andamento['Data'],
-                andamento['UltimoStatus'], andamento['Observaçao'],
+                andamento['Observaçao'],
                 andamento['Ponto'], codstatus
             ))
             
@@ -1745,9 +1729,8 @@ class AndamentosSynchronizer:
             
         if normalize_date(mdb_rec.get('Data')) != normalize_date(mysql_rec.get('Data')):
             return True
-            
-        if bool(mdb_rec.get('UltimoStatus')) != bool(mysql_rec.get('UltimoStatus')):
-            return True
+
+        # UltimoStatus é autoridade MySQL — diferença de flag NÃO dispara update MDB→MySQL.
             
         if normalize_str(mdb_obs) != normalize_str(mysql_obs):
             return True

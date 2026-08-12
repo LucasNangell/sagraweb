@@ -4,9 +4,12 @@ Identificação robusta via tab_os_sub_os_andamento.cod_status_espelho.
 """
 from __future__ import annotations
 
+import logging
 from typing import List, Optional
 
 from database import db
+
+logger = logging.getLogger(__name__)
 
 # tabAndamento.CodStatus usa utf8mb4_general_ci (legado); tabelas Sub OS usam unicode_ci.
 _COD_STATUS_COLLATE = "utf8mb4_general_ci"
@@ -23,21 +26,33 @@ MIRROR_EXCLUDE_CLAUSE = f"""
     )
 """
 
+# Data mais recente; desempate por sufixo numérico do CodStatus (não lexicográfico).
+ULTIMO_ORDER_BY_SQL = (
+    "ORDER BY a.`Data` DESC, "
+    "CAST(SUBSTRING_INDEX(a.CodStatus, '-', -1) AS UNSIGNED) DESC, "
+    "a.CodStatus DESC"
+)
+
 
 def mirror_exclude_clause_for(alias: str) -> str:
     return MIRROR_EXCLUDE_CLAUSE.replace("a.", f"{alias}.")
 
 
+def ultimo_order_by_for(alias: str) -> str:
+    return ULTIMO_ORDER_BY_SQL.replace("a.", f"{alias}.")
+
+
 def ultimo_operacional_cod_subquery(nro_expr: str, ano_expr: str) -> str:
     """Subquery do CodStatus do último andamento operacional (mesma regra do recalc)."""
     mirror = mirror_exclude_clause_for("a2")
+    order = ultimo_order_by_for("a2")
     return f"""(
         SELECT a2.CodStatus
         FROM tabAndamento a2
         WHERE a2.NroProtocoloLink = {nro_expr}
           AND a2.AnoProtocoloLink = {ano_expr}
           AND {mirror}
-        ORDER BY a2.`Data` DESC, a2.CodStatus DESC
+        {order}
         LIMIT 1
     )"""
 
@@ -55,6 +70,26 @@ def get_mirror_cod_statuses_for_os(nro: int, ano: int) -> List[str]:
         (nro, ano),
     )
     return [str(r["cod"]).strip() for r in (rows or []) if r.get("cod")]
+
+
+def get_ultimo_operacional_cod_mysql(nro: int, ano: int) -> Optional[str]:
+    """CodStatus com UltimoStatus=1 operacional no MySQL (exclui espelhos)."""
+    rows = db.execute_query(
+        f"""
+        SELECT a.CodStatus
+        FROM tabAndamento a
+        WHERE a.NroProtocoloLink = %s AND a.AnoProtocoloLink = %s
+          AND a.UltimoStatus = 1
+          AND {MIRROR_EXCLUDE_CLAUSE}
+        {ULTIMO_ORDER_BY_SQL}
+        LIMIT 1
+        """,
+        (nro, ano),
+    )
+    if not rows:
+        return None
+    cod = rows[0].get("CodStatus")
+    return str(cod) if cod else None
 
 
 def next_cod_status_for_os(cursor, nro: int, ano: int) -> str:
@@ -75,24 +110,30 @@ def next_cod_status_for_os(cursor, nro: int, ano: int) -> str:
             return
 
     cursor.execute(
-        "SELECT MAX(CodStatus) AS max_cod FROM tabAndamento WHERE CodStatus LIKE %s",
+        "SELECT CodStatus FROM tabAndamento WHERE CodStatus LIKE %s",
         (like_pattern,),
     )
-    row = cursor.fetchone() or {}
-    _bump_from_cod(row.get("max_cod") if isinstance(row, dict) else None)
+    for row in cursor.fetchall() or []:
+        if isinstance(row, dict):
+            _bump_from_cod(row.get("CodStatus"))
+        else:
+            _bump_from_cod(row[0] if row else None)
 
     for table in ("tab_os_gravacao_pendente", "tab_os_gravacao_externa"):
         try:
             cursor.execute(
                 f"""
-                SELECT MAX(CodStatus) AS max_cod
+                SELECT CodStatus
                 FROM {table}
                 WHERE OsNro = %s AND OsAno = %s AND CodStatus LIKE %s
                 """,
                 (nro, ano, like_pattern),
             )
-            srow = cursor.fetchone() or {}
-            _bump_from_cod(srow.get("max_cod") if isinstance(srow, dict) else None)
+            for srow in cursor.fetchall() or []:
+                if isinstance(srow, dict):
+                    _bump_from_cod(srow.get("CodStatus"))
+                else:
+                    _bump_from_cod(srow[0] if srow else None)
         except Exception:
             # Tabela pode não existir em ambientes antigos de teste.
             pass
@@ -113,12 +154,12 @@ def insert_andamento_as_ultimo(
 ) -> str:
     """
     Insere andamento como único UltimoStatus=1 da OS (padrão POST /os/.../history).
-    Demote prévio de UltimoStatus=1, depois INSERT já com UltimoStatus=1.
+    Zera todos os UltimoStatus da OS, depois INSERT já com UltimoStatus=1.
     """
     cursor.execute(
         """
         UPDATE tabAndamento SET UltimoStatus = 0
-        WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s AND UltimoStatus = 1
+        WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s
         """,
         (nro, ano),
     )
@@ -143,7 +184,7 @@ def recalc_ultimo_status_operacional(cursor, nro: int, ano: int) -> Optional[str
     cursor.execute(
         """
         UPDATE tabAndamento SET UltimoStatus = 0
-        WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s AND UltimoStatus = 1
+        WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s
         """,
         (nro, ano),
     )
@@ -154,7 +195,7 @@ def recalc_ultimo_status_operacional(cursor, nro: int, ano: int) -> Optional[str
         FROM tabAndamento a
         WHERE a.NroProtocoloLink = %s AND a.AnoProtocoloLink = %s
           AND {MIRROR_EXCLUDE_CLAUSE}
-        ORDER BY a.`Data` DESC, a.CodStatus DESC
+        {ULTIMO_ORDER_BY_SQL}
         LIMIT 1
         """,
         (nro, ano),
@@ -185,9 +226,7 @@ def recalc_ultimo_status_operacional(cursor, nro: int, ano: int) -> Optional[str
             cursor=cursor,
         )
     except Exception as exc:
-        import logging
-
-        logging.getLogger(__name__).warning(
+        logger.warning(
             "Falha ao atualizar materializada operacional OS %s/%s: %s",
             nro,
             ano,
@@ -195,3 +234,40 @@ def recalc_ultimo_status_operacional(cursor, nro: int, ano: int) -> Optional[str
         )
 
     return str(cod)
+
+
+def align_ultimo_status_mysql_then_mdb(
+    nro: int,
+    ano: int,
+    *,
+    cursor=None,
+    push_mdb: bool = True,
+) -> Optional[str]:
+    """
+    Recalcula UltimoStatus no MySQL e espelha o flag canônico no MDB.
+    Se `cursor` for passado, usa a transação aberta (sem commit próprio).
+    """
+    if cursor is not None:
+        promoted = recalc_ultimo_status_operacional(cursor, nro, ano)
+    else:
+
+        def _txn(cur):
+            return recalc_ultimo_status_operacional(cur, nro, ano)
+
+        promoted = db.execute_transaction([_txn])[0]
+
+    if push_mdb:
+        try:
+            from routers.mdb_writer import push_os_ultimo_status_to_mdb
+
+            push_os_ultimo_status_to_mdb(nro, ano, promoted_cod=promoted)
+        except Exception as exc:
+            logger.warning(
+                "Falha ao espelhar UltimoStatus no MDB OS %s/%s (promovido=%s): %s",
+                nro,
+                ano,
+                promoted,
+                exc,
+            )
+
+    return promoted

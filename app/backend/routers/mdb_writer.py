@@ -732,11 +732,38 @@ def _ensure_protocolo_in_mdb(cursor, nro: int, ano: int) -> tuple[int, int]:
     return protocolo.NroProtocolo, protocolo.AnoProtocolo
 
 
-def _fix_ultimo_status_mdb(cursor, nro: int, ano: int) -> None:
-    """Alinha UltimoStatus no MDB — exclui espelhos de Sub OS (fonte: MySQL)."""
-    from services.andamento_operacional import get_mirror_cod_statuses_for_os
+def _cod_status_seq_key(cod: object) -> tuple:
+    """Chave de desempate alinhada ao MySQL (sufixo numérico, depois string)."""
+    text = str(cod or "")
+    try:
+        seq = int(text.rsplit("-", 1)[-1])
+    except ValueError:
+        seq = -1
+    return (seq, text)
 
-    mirror_cods = get_mirror_cod_statuses_for_os(nro, ano)
+
+def _fix_ultimo_status_mdb(
+    cursor,
+    nro: int,
+    ano: int,
+    *,
+    promoted_cod: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Alinha UltimoStatus no MDB com o canônico do MySQL.
+    Prefere `promoted_cod` / UltimoStatus=1 do MySQL; fallback: Data + sufixo numérico
+    no Access, excluindo espelhos Sub OS.
+    """
+    from services.andamento_operacional import (
+        get_mirror_cod_statuses_for_os,
+        get_ultimo_operacional_cod_mysql,
+    )
+
+    target = (promoted_cod or "").strip() or None
+    if not target:
+        target = get_ultimo_operacional_cod_mysql(nro, ano)
+
+    mirror_cods = set(get_mirror_cod_statuses_for_os(nro, ano))
 
     cursor.execute(
         """
@@ -746,33 +773,75 @@ def _fix_ultimo_status_mdb(cursor, nro: int, ano: int) -> None:
         (to_mdb_bool(False), nro, ano),
     )
 
-    if mirror_cods:
-        placeholders = ", ".join("?" * len(mirror_cods))
-        cursor.execute(
-            f"""
-            SELECT TOP 1 CodStatus FROM tabAndamento
-            WHERE NroProtocoloLink = ? AND AnoProtocoloLink = ?
-              AND CodStatus NOT IN ({placeholders})
-            ORDER BY Data DESC, CodStatus DESC
-            """,
-            (nro, ano, *mirror_cods),
-        )
-    else:
+    if target:
         cursor.execute(
             """
-            SELECT TOP 1 CodStatus FROM tabAndamento
-            WHERE NroProtocoloLink = ? AND AnoProtocoloLink = ?
-            ORDER BY Data DESC, CodStatus DESC
+            SELECT COUNT(*) FROM tabAndamento
+            WHERE CodStatus = ? AND NroProtocoloLink = ? AND AnoProtocoloLink = ?
             """,
-            (nro, ano),
+            (target, nro, ano),
+        )
+        count_row = cursor.fetchone()
+        exists = int(count_row[0] if count_row is not None else 0) > 0
+        if exists and target not in mirror_cods:
+            cursor.execute(
+                "UPDATE tabAndamento SET UltimoStatus = ? WHERE CodStatus = ?",
+                (to_mdb_bool(True), target),
+            )
+            return target
+
+    cursor.execute(
+        """
+        SELECT CodStatus, Data FROM tabAndamento
+        WHERE NroProtocoloLink = ? AND AnoProtocoloLink = ?
+        """,
+        (nro, ano),
+    )
+    candidates = []
+    for row in cursor.fetchall() or []:
+        cod = getattr(row, "CodStatus", None)
+        if not cod or str(cod).strip() in mirror_cods:
+            continue
+        data = getattr(row, "Data", None)
+        candidates.append((data or datetime.min, _cod_status_seq_key(cod), str(cod)))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    chosen = candidates[0][2]
+    cursor.execute(
+        "UPDATE tabAndamento SET UltimoStatus = ? WHERE CodStatus = ?",
+        (to_mdb_bool(True), chosen),
+    )
+    return chosen
+
+
+def push_os_ultimo_status_to_mdb(
+    nro: int,
+    ano: int,
+    *,
+    promoted_cod: Optional[str] = None,
+) -> Optional[str]:
+    """Espelha o UltimoStatus canônico (MySQL) em toda a OS no MDB."""
+    operation = "fix_ultimo_status"
+    _ensure_mdb_write_enabled(operation, promoted_cod or "", nro, ano)
+    _log_mdb_write_start(operation, promoted_cod or "", nro, ano)
+    stage = f"fix_ultimo_status_{nro}_{ano}"
+    result: dict[str, Optional[str]] = {"cod": None}
+
+    def _work(_conn, cursor):
+        result["cod"] = _fix_ultimo_status_mdb(
+            cursor, nro, ano, promoted_cod=promoted_cod
         )
 
-    latest = cursor.fetchone()
-    if latest and latest.CodStatus:
-        cursor.execute(
-            "UPDATE tabAndamento SET UltimoStatus = ? WHERE CodStatus = ?",
-            (to_mdb_bool(True), latest.CodStatus),
-        )
+    try:
+        _execute_mdb_transaction(nro, stage, _work)
+    except Exception as exc:
+        _log_mdb_write_error(operation, promoted_cod or "", nro, ano, exc)
+        raise
+    _log_mdb_write_ok(operation, result["cod"] or promoted_cod or "", nro, ano)
+    return result["cod"]
 def _write_os_to_mdb_cursor(
     cursor,
     nro: int,
@@ -908,6 +977,8 @@ def sync_andamento_from_mysql_to_mdb(
     def _work(_conn, cursor):
         nro_fk, ano_fk = _ensure_protocolo_in_mdb(cursor, nro, ano)
         _upsert_andamento_row(cursor, rows[0], nro_fk, ano_fk)
+        # Sempre realinha a OS inteira — upsert de uma linha não basta.
+        _fix_ultimo_status_mdb(cursor, nro_fk, ano_fk)
         if proto_extra is not None:
             mdb_path = get_mdb_path(nro)
             written = _write_protocolo_andamento_extra(
@@ -989,9 +1060,9 @@ def sync_andamento_delete_to_mdb(cod_status: str, nro: int, ano: int) -> bool:
                 cod_status,
                 get_mdb_path(nro),
             )
-            return
-
-        cursor.execute("DELETE FROM tabAndamento WHERE CodStatus = ?", (cod_status,))
+        else:
+            cursor.execute("DELETE FROM tabAndamento WHERE CodStatus = ?", (cod_status,))
+        # Sempre realinha flags — mesmo se a linha já não existia no Access.
         _fix_ultimo_status_mdb(cursor, nro, ano)
 
     try:

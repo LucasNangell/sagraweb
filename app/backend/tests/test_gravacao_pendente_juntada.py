@@ -146,23 +146,12 @@ def test_next_cod_status_avoids_session_reuse():
     from services.andamento_operacional import next_cod_status_for_os
 
     cursor = MagicMock()
-
-    def execute(sql, params=None):
-        return None
-
-    def fetchone():
-        # Sequência de fetchone: andamento max 07, pendente max 08, externa None
-        if not hasattr(fetchone, "n"):
-            fetchone.n = 0
-        fetchone.n += 1
-        if fetchone.n == 1:
-            return {"max_cod": "060592026-07"}
-        if fetchone.n == 2:
-            return {"max_cod": "060592026-08"}
-        return {"max_cod": None}
-
-    cursor.execute.side_effect = execute
-    cursor.fetchone.side_effect = fetchone
+    # tabAndamento: -07; gravacao_pendente: -08; gravacao_externa: vazio
+    cursor.fetchall.side_effect = [
+        [{"CodStatus": "060592026-07"}],
+        [{"CodStatus": "060592026-08"}],
+        [],
+    ]
     assert next_cod_status_for_os(cursor, 6059, 2026) == "060592026-09"
 
 

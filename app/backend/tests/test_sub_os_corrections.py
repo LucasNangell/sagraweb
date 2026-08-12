@@ -48,6 +48,7 @@ class TestRecalcUltimoStatusOperacional:
         assert "cod_status_espelho" in execute_sql.lower()
         assert "not exists" in execute_sql.lower()
         assert "collate" in execute_sql.lower()
+        assert "substring_index" in execute_sql.lower()
         cursor.execute.assert_any_call(
             "UPDATE tabAndamento SET UltimoStatus = 1 WHERE CodStatus = %s",
             ("000882026-02",),

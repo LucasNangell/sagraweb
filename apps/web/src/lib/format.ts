@@ -1,9 +1,35 @@
+/**
+ * Parse date-only / civil calendar values without UTC shift.
+ * `YYYY-MM-DD` (and ISO prefixes before `T`/` `) → local Date(y, m-1, d).
+ * Other strings fall back to `new Date(value)`.
+ */
+function parseCivilDate(value: string): Date | null {
+  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(year, month - 1, day);
+    if (
+      Number.isNaN(date.getTime()) ||
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) {
+      return null;
+    }
+    return date;
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 export function formatDateBr(value: string | null | undefined): string {
   if (!value) {
     return "";
   }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
+  const date = parseCivilDate(value);
+  if (!date) {
     return String(value);
   }
   return date.toLocaleDateString("pt-BR");
@@ -77,8 +103,8 @@ export function formatDateForInput(
   if (!value) {
     return "";
   }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
+  const date = parseCivilDate(value);
+  if (!date) {
     return "";
   }
   const year = date.getFullYear();

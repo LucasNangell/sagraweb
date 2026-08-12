@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   formatPageSpec,
+  ensurePageInSpec,
   isMarkVisibleOnPage,
   parsePageSpec,
   pageSpecIncludes,
+  pagesSpecToItemScope,
   togglePagePickSpec,
   validatePageSpec,
 } from "./analiseLabPageSpec";
@@ -32,6 +34,31 @@ describe("analiseLabPageSpec", () => {
     spec = togglePagePickSpec(spec, 1);
     spec = togglePagePickSpec(spec, 3);
     expect(spec).toBe("");
+  });
+
+  it("ensurePageInSpec faz union sem remover", () => {
+    expect(ensurePageInSpec("7", 7)).toBe("7");
+    expect(ensurePageInSpec("5", 8)).toBe("5,8");
+    expect(ensurePageInSpec("", 3)).toBe("3");
+    expect(ensurePageInSpec("1-3", 2)).toBe("1-3");
+  });
+
+  it("pagesSpecToItemScope deriva escopo", () => {
+    expect(pagesSpecToItemScope("7", 1)).toEqual({
+      escopo: "pagina",
+      pagina: 7,
+      paginas: "",
+    });
+    expect(pagesSpecToItemScope("5,8", 1)).toEqual({
+      escopo: "paginas",
+      pagina: 1,
+      paginas: "5,8",
+    });
+    expect(pagesSpecToItemScope("", 4)).toEqual({
+      escopo: "pagina",
+      pagina: 4,
+      paginas: "",
+    });
   });
 
   it("formatPageSpec de todas as páginas", () => {

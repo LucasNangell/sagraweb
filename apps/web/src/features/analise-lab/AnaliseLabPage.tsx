@@ -71,7 +71,9 @@ import {
 import { pageSizeMm } from "./analiseLabGeometry";
 import { buildLibraryDraft } from "./analiseLabLibraryDraft";
 import {
+  ensurePageInSpec,
   formatPageSpec,
+  pagesSpecToItemScope,
   parsePageSpec,
   togglePagePickSpec,
 } from "./analiseLabPageSpec";
@@ -558,15 +560,35 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     }
   };
 
-  const ensureItemId = async (): Promise<number | null> => {
+  const ensureItemId = async (
+    pageScope?: ReturnType<typeof pagesSpecToItemScope>,
+  ): Promise<number | null> => {
     if (selectedItemId) return selectedItemId;
-    if (draftLibraryItem && draftPayloadRef.current) {
-      const item = await registerDraftItem(draftPayloadRef.current, false, {
-        closePanel: false,
-      });
-      return item?.id ?? null;
-    }
-    return null;
+    if (!draftLibraryItem?.idProblemaPadrao) return null;
+
+    const base: UpdateAnaliseLabItemPayload = draftPayloadRef.current ?? {
+      titulo: draftLibraryItem.titulo,
+      html_snapshot: draftLibraryItem.htmlSnapshot,
+      obs: draftLibraryItem.obs ?? null,
+      componente: draftLibraryItem.componente,
+      escopo: (draftLibraryItem.escopo as AnaliseLabItemEscopo) || "pagina",
+      pagina: draftLibraryItem.pagina || 1,
+      paginas: draftLibraryItem.paginas || "",
+      resolucao_obrigatoria: Boolean(draftLibraryItem.resolucaoObrigatoria),
+    };
+    const merged: UpdateAnaliseLabItemPayload = pageScope
+      ? {
+          ...base,
+          escopo: pageScope.escopo,
+          pagina: pageScope.pagina,
+          paginas: pageScope.paginas,
+        }
+      : base;
+    draftPayloadRef.current = merged;
+    const item = await registerDraftItem(merged, false, {
+      closePanel: false,
+    });
+    return item?.id ?? null;
   };
 
   const addMark = async (payload: {
@@ -577,13 +599,40 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     setActionBusy(true);
     setActionError(null);
     try {
-      const itemId = await ensureItemId();
+      const drawnPage = Math.max(1, payload.pagina ?? pageNumero);
+      const nextItemSpec = ensurePageInSpec(itemPageSpec || "", drawnPage);
+      setItemPageSpec(nextItemSpec);
+      const itemScope = pagesSpecToItemScope(nextItemSpec, drawnPage);
+
+      let itemId: number | null = selectedItemId;
+      if (itemId == null) {
+        itemId = await ensureItemId(itemScope);
+      } else {
+        const current = itens.find((i) => i.id === itemId);
+        const needsPatch =
+          !current ||
+          current.escopo !== itemScope.escopo ||
+          current.pagina !== itemScope.pagina ||
+          (current.paginas || "") !== (itemScope.paginas || "");
+        if (needsPatch) {
+          const res = await updateAnaliseLabItem(ano, osId, itemId, {
+            escopo: itemScope.escopo,
+            pagina: itemScope.pagina,
+            paginas: itemScope.paginas,
+          });
+          setLocalItens((prev) =>
+            (prev ?? itens).map((i) => (i.id === itemId ? res.item : i)),
+          );
+        }
+      }
+
       if (itemId == null) {
         setActionError(
           "Selecione ou registre um problema técnico antes de inserir a marca.",
         );
         return;
       }
+
       const scope = resolveScope();
       let multi = applyAllPages;
       if (!multi && scope.paginas) {
@@ -593,8 +642,6 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
           multi = false;
         }
       }
-      const drawnPage = Math.max(1, payload.pagina ?? pageNumero);
-      setItemPageSpec((prev) => togglePagePickSpec(prev || "", drawnPage));
       let markPaginas = applyAllPages ? null : scope.paginas;
       let markPagina = applyAllPages ? 0 : (payload.pagina ?? scope.pagina);
       if (pagePickTarget === "mark") {

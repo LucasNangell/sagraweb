@@ -234,6 +234,67 @@ describe("analiseLabBalloons", () => {
     expect(packed[0]!.leaders).toEqual([]);
   });
 
+  it("mostra balão na página da marca mesmo fora do escopo do item", () => {
+    const items = [item({ id: 50, pagina: 1, escopo: "pagina" })];
+    const marks: AnaliseLabMark[] = [
+      {
+        id: 501,
+        sessaoId: 1,
+        pagina: 3,
+        tipo: "ponto",
+        geometria: { xMm: 10, yMm: 10 },
+        cor: "red",
+        itemId: 50,
+      },
+    ];
+    const balloons = buildPageBalloons({
+      items,
+      marks,
+      pages,
+      visiblePages: [pages[2]!],
+      parsePageSpec,
+      pageSizeMm,
+    });
+    expect(balloons).toHaveLength(1);
+    expect(balloons[0]!.itemId).toBe(50);
+    expect(balloons[0]!.page).toBe(3);
+    expect(balloons[0]!.hasMark).toBe(true);
+  });
+
+  it("um balão no spread quando marcas do item estão nas páginas visíveis", () => {
+    const items = [item({ id: 51, pagina: 1, escopo: "pagina" })];
+    const marks: AnaliseLabMark[] = [
+      {
+        id: 601,
+        sessaoId: 1,
+        pagina: 2,
+        tipo: "ponto",
+        geometria: { xMm: 10, yMm: 10 },
+        cor: "red",
+        itemId: 51,
+      },
+      {
+        id: 602,
+        sessaoId: 1,
+        pagina: 3,
+        tipo: "ponto",
+        geometria: { xMm: 20, yMm: 20 },
+        cor: "red",
+        itemId: 51,
+      },
+    ];
+    const balloons = buildPageBalloons({
+      items,
+      marks,
+      pages,
+      visiblePages: [pages[1]!, pages[2]!],
+      parsePageSpec,
+      pageSizeMm,
+    });
+    expect(balloons).toHaveLength(1);
+    expect(balloons[0]!.markAnchors.map((a) => a.page).sort()).toEqual([2, 3]);
+  });
+
   it("packs balloons without overlap", () => {
     const anchors: BalloonAnchor[] = [
       {

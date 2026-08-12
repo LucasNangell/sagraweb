@@ -4,9 +4,9 @@ import type { AnaliseLabItem, AnaliseLabMark } from "@/api/analiseLab";
 import type { ProvaWebPageMeta } from "@/api/provaWeb";
 
 import { AnaliseLabProblemBalloon } from "./AnaliseLabProblemBalloon";
-import { itemOccurrences } from "./analiseLabComponente";
 import {
   buildPageBalloons,
+  itemBalloonOccurrencePages,
   packBalloons,
 } from "./analiseLabBalloons";
 import { pageSizeMm } from "./analiseLabGeometry";
@@ -249,7 +249,12 @@ export function AnaliseLabBalloonLayer({
       </svg>
 
       {visible.map((b) => {
-        const occ = itemOccurrences(b.item, pages, parsePageSpec);
+        const occ = itemBalloonOccurrencePages(
+          b.item,
+          marks,
+          pages,
+          parsePageSpec,
+        );
         const occIdx = Math.max(0, occ.indexOf(b.page));
         return (
           <AnaliseLabProblemBalloon

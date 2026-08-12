@@ -118,6 +118,37 @@ function pageMetaSize(
 }
 
 /**
+ * Páginas de navegação do balão: união do escopo do item com páginas das marcas.
+ */
+export function itemBalloonOccurrencePages(
+  item: AnaliseLabItem,
+  marks: AnaliseLabMark[],
+  pages: ProvaWebPageMeta[],
+  parsePageSpec: (spec: string) => number[],
+): number[] {
+  const set = new Set(itemOccurrences(item, pages, parsePageSpec));
+  for (const mark of marks) {
+    if (mark.itemId !== item.id) continue;
+    if (mark.paginas?.trim()) {
+      try {
+        for (const n of parsePageSpec(mark.paginas)) {
+          if (n >= 1) set.add(n);
+        }
+      } catch {
+        /* ignore */
+      }
+    } else if (mark.pagina === 0) {
+      for (const p of pages) {
+        if (p.page >= 1) set.add(p.page);
+      }
+    } else if (mark.pagina >= 1) {
+      set.add(mark.pagina);
+    }
+  }
+  return [...set].sort((a, b) => a - b);
+}
+
+/**
  * Um balão por problema no viewport: congrega todas as marcas visíveis
  * nas páginas atuais (spread incluso).
  */
@@ -146,7 +177,6 @@ export function buildPageBalloons(args: {
   for (const item of items) {
     const occ = itemOccurrences(item, pages, parsePageSpec);
     const occInView = occ.filter((n) => visibleSet.has(n));
-    if (!occInView.length) continue;
 
     const markAnchors: BalloonMarkAnchor[] = [];
     for (const mark of marks) {
@@ -164,6 +194,8 @@ export function buildPageBalloons(args: {
         yMm: a.yMm,
       });
     }
+
+    if (!occInView.length && !markAnchors.length) continue;
 
     const refPage =
       markAnchors[0]?.page ??

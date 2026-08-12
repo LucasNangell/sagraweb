@@ -13,7 +13,7 @@ import { AnaliseLabMarkCompactEditor } from "./AnaliseLabMarkCompactEditor";
 import { labelTipo } from "./analiseLabLabels";
 import {
   markScopeLabel,
-  parsePageSpec,
+  pagesSpecToItemScope,
   validatePageSpec,
 } from "./analiseLabPageSpec";
 import { AnaliseLabToolPalette } from "./AnaliseLabToolPalette";
@@ -76,20 +76,15 @@ function buildPayload(args: {
   isRegister: boolean;
   fallbackPagina: number;
 }): UpdateAnaliseLabItemPayload {
-  let pages: number[] = [];
-  try {
-    pages = args.pageSpec.trim() ? parsePageSpec(args.pageSpec) : [];
-  } catch {
-    pages = [];
-  }
-  const escopo: AnaliseLabItemEscopo =
-    pages.length > 1 ? "paginas" : "pagina";
+  const scope = pagesSpecToItemScope(args.pageSpec, args.fallbackPagina);
   const payload: UpdateAnaliseLabItemPayload = {
     titulo: args.titulo,
     html_snapshot: args.html,
     obs: args.obs || null,
     componente: args.componente,
-    escopo,
+    escopo: scope.escopo,
+    pagina: scope.pagina,
+    paginas: scope.paginas,
     resolucao_obrigatoria: args.resolucaoObrigatoria,
     corrigido_sefoc: args.isRegister ? false : args.corrigidoSefoc,
     obs_correcao_sefoc:
@@ -97,13 +92,6 @@ function buildPayload(args: {
         ? args.obsCorrecaoSefoc || null
         : null,
   };
-  if (escopo === "paginas") {
-    payload.paginas = args.pageSpec;
-    payload.pagina = 1;
-  } else {
-    payload.pagina = pages[0] || args.fallbackPagina || 1;
-    payload.paginas = "";
-  }
   return payload;
 }
 

@@ -87,6 +87,53 @@ export function togglePagePickSpec(spec: string, page: number): string {
   return formatPageSpec(next);
 }
 
+/** Inclui a página no spec sem remover (union). Tolerante a spec vazio. */
+export function ensurePageInSpec(spec: string, page: number): string {
+  const n = Math.trunc(page);
+  if (!Number.isFinite(n) || n < 1) return spec || "";
+  let pages: number[] = [];
+  if ((spec || "").trim()) {
+    try {
+      pages = parsePageSpec(spec);
+    } catch {
+      pages = [];
+    }
+  }
+  if (pages.includes(n)) return formatPageSpec(pages);
+  return formatPageSpec([...pages, n]);
+}
+
+export type ItemPageScopeFields = {
+  escopo: "pagina" | "paginas";
+  pagina: number;
+  paginas: string;
+};
+
+/** Mesmas regras do painel: 1 página → escopo pagina; 2+ → paginas. */
+export function pagesSpecToItemScope(
+  pageSpec: string,
+  fallbackPagina = 1,
+): ItemPageScopeFields {
+  let pages: number[] = [];
+  try {
+    pages = (pageSpec || "").trim() ? parsePageSpec(pageSpec) : [];
+  } catch {
+    pages = [];
+  }
+  if (pages.length > 1) {
+    return {
+      escopo: "paginas",
+      pagina: 1,
+      paginas: (pageSpec || "").trim() || formatPageSpec(pages),
+    };
+  }
+  return {
+    escopo: "pagina",
+    pagina: pages[0] || Math.max(1, Math.trunc(fallbackPagina) || 1),
+    paginas: "",
+  };
+}
+
 export function validatePageSpec(spec: string): string | null {
   try {
     parsePageSpec(spec);

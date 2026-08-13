@@ -1,4 +1,4 @@
-﻿# Watchdog externo (2a camada): verifica servico + heartbeat e reinicia se necessario.
+# Watchdog externo (2a camada): verifica servico + heartbeat e reinicia se necessario.
 # Projetado para rodar como Tarefa Agendada (SYSTEM) a cada 2 minutos.
 param(
     [string]$Root = "",
@@ -73,21 +73,8 @@ if (-not $svc) {
 }
 
 if ($svc.Status -ne "Running") {
-    Write-WatchLog "Servico status=$($svc.Status) - iniciando"
-    if (-not $DryRun) {
-        try {
-            $nssm = Resolve-Nssm -Hint $NssmPath -RootPath $Root
-            if ($nssm) {
-                & $nssm start $ServiceName
-            } else {
-                Start-Service -Name $ServiceName -ErrorAction Stop
-            }
-            Write-WatchLog "Start solicitado"
-        } catch {
-            Write-WatchLog "Falha ao iniciar: $_"
-            exit 1
-        }
-    }
+    # Manual-only: nao inicia servico parado. Operador sobe quando quiser.
+    Write-WatchLog "Servico status=$($svc.Status) - sem auto-start (inicio manual)"
     exit 0
 }
 

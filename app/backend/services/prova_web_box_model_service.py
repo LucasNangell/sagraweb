@@ -10,10 +10,21 @@ import threading
 from typing import Any, Dict, List, Optional
 
 from database import db
-from services.prova_web_box_panel_graph import build_panel_graph_from_parsed
 from services.prova_web_dieline_service import parse_dieline_pdf
 
 logger = logging.getLogger(__name__)
+
+
+def _build_panel_graph_from_parsed(parsed: dict[str, Any]) -> dict[str, Any]:
+    """Import tardio: shapely nao pode derrubar a API inteira no boot."""
+    try:
+        from services.prova_web_box_panel_graph import build_panel_graph_from_parsed
+    except ImportError as exc:
+        raise RuntimeError(
+            "Dependencia shapely ausente no Python da API. "
+            'Instale com: python -m pip install "shapely>=2.0,<3.0"'
+        ) from exc
+    return build_panel_graph_from_parsed(parsed)
 
 _lock = threading.Lock()
 
@@ -369,7 +380,7 @@ def parse_faca_to_box_config(
 
     if looks_like_svg(faca_bytes, filename):
         parsed = parse_dieline_svg(faca_bytes)
-        graph = build_panel_graph_from_parsed(parsed)
+        graph = _build_panel_graph_from_parsed(parsed)
         return normalize_box_model_config(graph)
 
     import os
@@ -380,7 +391,7 @@ def parse_faca_to_box_config(
         path = tmp.name
     try:
         parsed = parse_dieline_pdf(path, page_index=page_index)
-        graph = build_panel_graph_from_parsed(parsed)
+        graph = _build_panel_graph_from_parsed(parsed)
         return normalize_box_model_config(graph)
     finally:
         try:

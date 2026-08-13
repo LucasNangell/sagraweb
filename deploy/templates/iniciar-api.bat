@@ -116,18 +116,8 @@ if exist "%PREP_LOGS_PS%" (
     powershell -NoProfile -ExecutionPolicy Bypass -File "%PREP_LOGS_PS%" -Root "%ROOT%" -Quiet
 )
 
-rem Sync MDB^<^>MySQL em janela separada (se sync_andamentos_enabled=true e MYSQL_ONLY=false)
-set "SYNC_CMD=%ROOT%\_iniciar-sync-andamentos.cmd"
-set "START_SYNC=0"
-for /f "delims=" %%S in ('python -c "from config_manager import config_manager; print(1 if config_manager.is_sync_andamentos_enabled() else 0)" 2^>nul') do set "START_SYNC=%%S"
-if "!START_SYNC!"=="1" (
-    if exist "!SYNC_CMD!" (
-        echo [SYNC] Abrindo sync_andamentos_v2 em nova janela...
-        start "SAGRA-SYNC-ANDAMENTOS" cmd /k call "!SYNC_CMD!" "!ROOT!"
-    ) else (
-        echo [AVISO] _iniciar-sync-andamentos.cmd nao encontrado — sync nao iniciado.
-    )
-)
+rem Sync de andamentos NAO inicia com a API.
+rem Inicie manualmente: _iniciar-sync-andamentos.cmd  (ou nssm start SAGRA-SyncAndamentos)
 
 rem Escuta em 127.0.0.1: o Nginx repassa o IP real via X-Forwarded-For
 python -m uvicorn routers.api:app --host 127.0.0.1 --port %PORT% --proxy-headers --forwarded-allow-ips=127.0.0.1,10.1.1.73

@@ -1,4 +1,4 @@
-﻿# Instala/atualiza o servico Windows SAGRA-SyncAndamentos via NSSM.
+# Instala/atualiza o servico Windows SAGRA-SyncAndamentos via NSSM.
 # Requer elevacao (Administrador). Idempotente.
 param(
     [string]$Root = "",
@@ -229,7 +229,8 @@ if ($existing) {
 & $nssm set $ServiceName AppDirectory $Root
 & $nssm set $ServiceName DisplayName $DisplayName
 & $nssm set $ServiceName Description "Sincronizacao unidirecional MDB->MySQL (andamentos) com watchdog e restart automatico."
-& $nssm set $ServiceName Start SERVICE_AUTO_START
+# Manual: NAO sobe com o Windows nem com a API. Operador inicia quando quiser.
+& $nssm set $ServiceName Start SERVICE_DEMAND_START
 & $nssm set $ServiceName AppStdout $stdoutLog
 & $nssm set $ServiceName AppStderr $stderrLog
 & $nssm set $ServiceName AppRotateFiles 1
@@ -323,7 +324,7 @@ if ($Start) {
         }
     }
 } else {
-    Write-Host "Servico instalado. Para iniciar: nssm start $ServiceName   ou   -Start"
+    Write-Host "Servico instalado (Start=Manual / DEMAND). Para iniciar: nssm start $ServiceName   ou   -Start"
 }
 
 Write-Host "Pronto."

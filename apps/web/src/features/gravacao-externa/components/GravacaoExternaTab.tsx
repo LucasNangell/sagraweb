@@ -545,11 +545,15 @@ export function GravacaoExternaTab() {
                 {downloadBusy ? (
                   <Loader2 className="size-3.5 animate-spin" aria-hidden />
                 ) : null}
-                {downloadBusy ? "Preparando…" : "Baixar todos"}
+                {downloadPhase === "saving"
+                  ? "Salvando…"
+                  : downloadBusy
+                    ? "Preparando…"
+                    : "Baixar todos"}
               </button>
             ) : null}
           </div>
-          {downloadPhase === "preparing" || downloadPhase === "saving" ? (
+          {downloadPhase === "preparing" ? (
             <div
               className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
               role="status"
@@ -562,6 +566,19 @@ export function GravacaoExternaTab() {
               </p>
             </div>
           ) : null}
+          {downloadPhase === "saving" ? (
+            <div
+              className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
+              role="status"
+              aria-live="polite"
+            >
+              <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-amber-700" />
+              <p>
+                <span className="font-semibold">Salvando o ZIP no local escolhido…</span>{" "}
+                Não feche esta aba até concluir.
+              </p>
+            </div>
+          ) : null}
           {downloadPhase === "started" ? (
             <div
               className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900"
@@ -569,7 +586,7 @@ export function GravacaoExternaTab() {
               aria-live="polite"
             >
               Download iniciado pelo navegador. Acompanhe a barra de downloads do
-              navegador.
+              navegador até o ZIP terminar por completo.
             </div>
           ) : null}
           {downloadPhase === "error" && downloadError ? (

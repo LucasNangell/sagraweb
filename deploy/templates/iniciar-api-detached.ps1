@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 .SYNOPSIS
   Inicia a API SAGRA em segundo plano (sem pause) - uso em deploy remoto / tarefa agendada.
@@ -64,25 +64,9 @@ try {
         Write-Warning "write_client_config_js: $_"
     }
 
-    $syncCmd = Join-Path $Root "_iniciar-sync-andamentos.cmd"
-    $startSync = "0"
-    try {
-        $raw = & python -c "from config_manager import config_manager; print(1 if config_manager.is_sync_andamentos_enabled() else 0)" 2>&1
-        $line = @($raw | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | ForEach-Object { "$_" }) | Select-Object -Last 1
-        if ($line) {
-            $startSync = $line.ToString().Trim()
-        }
-    } catch {
-        $startSync = "0"
-    }
+    # Sync de andamentos NAO inicia com a API (somente manual / nssm start).
     $ErrorActionPreference = $prevEap
 
-    if ($startSync -eq "1") {
-        if (Test-Path -LiteralPath $syncCmd) {
-            $syncArg = "title SAGRA-SYNC-ANDAMENTOS && call `"$syncCmd`" `"$Root`""
-            Start-Process -FilePath "cmd.exe" -ArgumentList "/k", $syncArg -WorkingDirectory $Root -WindowStyle Normal | Out-Null
-        }
-    }
     $args = @(
         "-m", "uvicorn", "routers.api:app",
         "--host", "127.0.0.1",

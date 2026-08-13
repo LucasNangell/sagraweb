@@ -63,6 +63,13 @@ O sync **não** faz parte do ciclo activate/rollback/publicar do Sagra Web:
 
 `SYNC_ANDAMENTOS_ENABLED=false` em produção: a API **não** spawna o bot embutido.
 
+**Inicio 100% manual:** a API (`iniciar-api.bat` / `iniciar-api-detached.ps1` /
+`publicar-release`) **nunca** abre o sync. O serviço NSSM usa
+`SERVICE_DEMAND_START` (não sobe com o Windows). O watchdog externo **não** inicia
+serviço parado — só reinicia se já estiver Running e o heartbeat estiver stale.
+
+Para subir o sync: `_iniciar-sync-andamentos.cmd` **ou** `nssm start SAGRA-SyncAndamentos`.
+
 **Recomendado:** instalar o NSSM com `AppDirectory` em pasta **fixa fora de `current`**
 (ex. `C:\Sistemas CGraf\Sagra Web\sync-runtime`), copiando para lá
 `sync_andamentos_service.py`, `sync_andamentos_v2_Old.py` e deps necessárias.

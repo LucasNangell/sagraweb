@@ -48,12 +48,12 @@ export function ProvaWebBoxMockup3D({
     rotX: number;
   } | null>(null);
   const rotRef = useRef({ x: DEFAULT_ROT_X, y: DEFAULT_ROT_Y });
-  const openRef = useRef(0);
+  const openRef = useRef(100);
   const zoomRef = useRef(1);
 
   const [rotX, setRotX] = useState(DEFAULT_ROT_X);
   const [rotY, setRotY] = useState(DEFAULT_ROT_Y);
-  const [openPct, setOpenPct] = useState(0);
+  const [openPct, setOpenPct] = useState(100);
   const [zoom, setZoom] = useState(1);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -278,7 +278,7 @@ export function ProvaWebBoxMockup3D({
             engage();
             applyOrbit(DEFAULT_ROT_X, DEFAULT_ROT_Y);
             applyZoom(1);
-            applyOpen(0);
+            applyOpen(100);
           }}
         >
           <RotateCcw className="size-4" aria-hidden />

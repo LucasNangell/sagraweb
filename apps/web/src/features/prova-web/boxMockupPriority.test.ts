@@ -75,6 +75,20 @@ describe("resolveFlapProgress", () => {
     expect(map.get("lid_top")).toBe(1);
     expect(map.get("dust")).toBe(1);
   });
+
+  it("ao fechar (close01), order 1 avança antes da order 2", () => {
+    // Espelha boxGraphScene: close01 = 1 - open01
+    const close01 = 0.25;
+    const map = resolveFlapProgress(
+      [
+        { id: "a", panelId: "p1", order: 1, targetAngleDeg: 90 },
+        { id: "b", panelId: "p2", order: 2, targetAngleDeg: 90 },
+      ],
+      close01,
+    );
+    expect(map.get("p1")).toBeGreaterThan(0);
+    expect(map.get("p2") ?? 0).toBe(0);
+  });
 });
 
 describe("defaultCaixaCrop", () => {

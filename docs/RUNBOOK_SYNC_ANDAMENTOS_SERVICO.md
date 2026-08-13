@@ -17,7 +17,16 @@ no Windows Server, com:
 | `tabProtocolos` / `tabDetalhesServico` | Somente **MDB → MySQL** |
 
 **UltimoStatus:** autoridade MySQL = **maior CodStatus** operacional (exclui espelhos Sub OS);
-espelhado no MDB após mutações. Heal one-shot: `scripts/heal_ultimo_status_andamentos.py`.
+espelhado no MDB após mutações. Heal one-shot **na VM de produção** (não no DEV):
+
+```text
+cd "C:\Sistemas CGraf\Sagra Web\current"
+python scripts/heal_ultimo_status_andamentos.py --dry-run
+python scripts/heal_ultimo_status_andamentos.py --apply --yes
+python scripts/heal_ultimo_status_andamentos.py --apply --yes --push-mdb
+```
+
+O script força `ENV=production` e aborta se o MySQL for localhost.
 
 A lógica base permanece em [`sync_andamentos_v2_Old.py`](../sync_andamentos_v2_Old.py).
 O runner [`sync_andamentos_service.py`](../sync_andamentos_service.py) subclassifica conexões,

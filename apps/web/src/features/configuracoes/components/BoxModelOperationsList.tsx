@@ -5,6 +5,10 @@ import type {
   BoxModelHinge,
   BoxModelOperation,
 } from "@/api/boxModels";
+import {
+  buildParentMapFromBase,
+  movingPanelForHinge,
+} from "@/features/prova-web/box-engine/boxPanelTree";
 
 function panelLabel(config: BoxModelConfig, panelId: string): string {
   const p = config.panels.find((x) => x.id === panelId);
@@ -16,11 +20,14 @@ function makeOp(
   hinge: BoxModelHinge,
 ): BoxModelOperation {
   const maxOrder = Math.max(0, ...config.operations.map((o) => o.order));
+  const parentMap = buildParentMapFromBase(
+    config.basePanelId,
+    config.hinges ?? [],
+  );
   return {
     id: `op_${hinge.id}_${maxOrder + 1}`,
     hingeId: hinge.id,
-    panelId:
-      hinge.panelB === config.basePanelId ? hinge.panelA : hinge.panelB,
+    panelId: movingPanelForHinge(hinge, parentMap, config.basePanelId),
     order: maxOrder + 1,
     movingSide: "positive",
     towards: "front",
@@ -95,8 +102,8 @@ export function BoxModelOperationsList({
           Sequência de dobras ({rows.length})
         </p>
         <p className="mt-0.5 text-[11px] text-slate-500">
-          Começa vazia. Clique nas linhas de dobra na faca e adicione na ordem
-          correta. Depois ajuste ângulo, sentido e painel móvel em cada item.
+        Clique nas dobras (ciano). Ângulo +/− define o sentido. Sem operação =
+        painel fica plano no preview.
         </p>
         {rows.length > 0 ? (
           <button
@@ -150,9 +157,12 @@ export function BoxModelOperationsList({
                     </p>
                     {!selected ? (
                       <p className="mt-1 text-[10px] text-slate-500">
-                        {op.targetAngleDeg}° ·{" "}
-                        {op.towards === "front" ? "frente" : "verso"} · lado{" "}
-                        {op.movingSide === "positive" ? "+" : "−"}
+                        {op.targetAngleDeg}°
+                        {op.targetAngleDeg < 0
+                          ? " (sentido −)"
+                          : op.targetAngleDeg > 0
+                            ? " (sentido +)"
+                            : ""}
                       </p>
                     ) : null}
                   </button>
@@ -194,9 +204,12 @@ export function BoxModelOperationsList({
                     </label>
                     <label className="block text-[10px] font-medium text-slate-600">
                       Ângulo (°)
+                      <span className="mt-0.5 block font-normal text-slate-500">
+                        + e − dobram para lados opostos
+                      </span>
                       <input
                         type="number"
-                        min={1}
+                        min={-180}
                         max={180}
                         className="mt-0.5 w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-xs"
                         value={op.targetAngleDeg}
@@ -204,12 +217,24 @@ export function BoxModelOperationsList({
                           patchOp(op.id, {
                             targetAngleDeg: Math.min(
                               180,
-                              Math.max(1, Number(e.target.value) || 90),
+                              Math.max(-180, Number(e.target.value) || 0),
                             ),
                           })
                         }
                       />
                     </label>
+                    <div className="flex flex-wrap gap-1 sm:col-span-2">
+                      {([-90, -45, 45, 90] as const).map((a) => (
+                        <button
+                          key={a}
+                          type="button"
+                          className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-700 hover:bg-slate-100"
+                          onClick={() => patchOp(op.id, { targetAngleDeg: a })}
+                        >
+                          {a > 0 ? `+${a}°` : `${a}°`}
+                        </button>
+                      ))}
+                    </div>
                     <label className="block text-[10px] font-medium text-slate-600 sm:col-span-2">
                       Painel que dobra
                       <select
@@ -225,38 +250,6 @@ export function BoxModelOperationsList({
                         <option value={hinge.panelB}>
                           {panelLabel(config, hinge.panelB)}
                         </option>
-                      </select>
-                    </label>
-                    <label className="block text-[10px] font-medium text-slate-600">
-                      Direção
-                      <select
-                        className="mt-0.5 w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-xs"
-                        value={op.towards}
-                        onChange={(e) =>
-                          patchOp(op.id, {
-                            towards: e.target.value as "front" | "back",
-                          })
-                        }
-                      >
-                        <option value="front">para frente (fecha)</option>
-                        <option value="back">para trás</option>
-                      </select>
-                    </label>
-                    <label className="block text-[10px] font-medium text-slate-600">
-                      Lado do vinco
-                      <select
-                        className="mt-0.5 w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-xs"
-                        value={op.movingSide}
-                        onChange={(e) =>
-                          patchOp(op.id, {
-                            movingSide: e.target.value as
-                              | "negative"
-                              | "positive",
-                          })
-                        }
-                      >
-                        <option value="positive">positivo (+)</option>
-                        <option value="negative">negativo (−)</option>
                       </select>
                     </label>
                     <button

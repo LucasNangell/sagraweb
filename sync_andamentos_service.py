@@ -1,7 +1,7 @@
 """
 SAGRA - Sync Andamentos Service (runner resiliente 24/7)
 =======================================================
-Herda a lógica de sincronia de sync_andamentos_v2_Old.py SEM alterá-la.
+Herda sync_andamentos_v2_Old.py e adiciona tabAndamento bidirecional no runner.
 
 Fonte canônica da lógica (produção):
   \\\\cgrafsysvm\\s\\SagraWeb\\sync_andamentos_v2_Old.py
@@ -758,9 +758,10 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
         except ValueError:
             return datetime.min
 
-    def _mysql_wins_lww(self, mysql_rec, mdb_rec) -> bool:
-        d_mysql = self._parse_andamento_data(mysql_rec.get("Data"))
-        d_mdb = self._parse_andamento_data(mdb_rec.get("Data"))
+    @staticmethod
+    def _mysql_wins_lww(mysql_rec, mdb_rec) -> bool:
+        d_mysql = ResilientSynchronizer._parse_andamento_data(mysql_rec.get("Data"))
+        d_mdb = ResilientSynchronizer._parse_andamento_data(mdb_rec.get("Data"))
         return d_mysql >= d_mdb
 
     def update_mdb(self, andamento, conn, destino: str):

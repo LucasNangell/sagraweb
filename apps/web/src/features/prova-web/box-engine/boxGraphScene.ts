@@ -1,6 +1,7 @@
 /**
  * Montagem 3D genérica a partir do grafo net (painéis AABB + hinges).
- * Progresso 0 = dobrado (ângulos-alvo); 1 = aberto (folha plana).
+ * Progresso open01: 1 = aberto (folha plana); 0 = fechado (ângulos-alvo).
+ * Ao fechar (1→0), a sequência Admin order 1, 2, 3… é respeitada.
  */
 import * as THREE from "three";
 
@@ -126,7 +127,7 @@ export async function createGraphBoxScene(
     byId.set(panel.id, { panel, pivot, mesh });
   }
 
-  // Árvore: base no netRoot; filhos anexados pelo parentId na aresta comum
+  // Árvore: BFS a partir da base usando só hinges (trocar base não bagunça)
   const hinges = (
     boxMockup as {
       hinges?: Array<{
@@ -139,31 +140,49 @@ export async function createGraphBoxScene(
     }
   ).hinges;
 
+  const adj = new Map<string, string[]>();
+  for (const h of hinges ?? []) {
+    if (!h.panelA || !h.panelB || h.panelA === h.panelB) continue;
+    const a = adj.get(h.panelA) ?? [];
+    const b = adj.get(h.panelB) ?? [];
+    if (!a.includes(h.panelB)) a.push(h.panelB);
+    if (!b.includes(h.panelA)) b.push(h.panelA);
+    adj.set(h.panelA, a);
+    adj.set(h.panelB, b);
+  }
+
   function attachChild(childId: string, parentId: string) {
     const child = byId.get(childId);
     const parent = byId.get(parentId);
     if (!child || !parent) return;
+    child.panel.parentId = parentId;
     const hinge = (hinges ?? []).find(
       (h) =>
         (h.panelA === childId && h.panelB === parentId) ||
         (h.panelB === childId && h.panelA === parentId),
     );
-    // Posição do pivô filho no espaço do pai = offset net parent→child hinge
     const pc = child.panel;
     const pp = parent.panel;
     let localX = pc.xMm - pp.xMm;
     let localY = -(pc.yMm - pp.yMm);
     if (hinge?.axis === "vertical") {
-      // Hinge na vertical entre panels: pivô na borda compartilhada relativo ao pai
       const sharedX = hinge.positionMm - pp.xMm;
       localX = sharedX;
       localY = -(pc.yMm - pp.yMm);
-      child.mesh.position.set(pc.xMm - hinge.positionMm + pc.wMm / 2, -pc.hMm / 2, thickness / 2);
+      child.mesh.position.set(
+        pc.xMm - hinge.positionMm + pc.wMm / 2,
+        -pc.hMm / 2,
+        thickness / 2,
+      );
     } else if (hinge?.axis === "horizontal") {
       const sharedY = hinge.positionMm - pp.yMm;
       localX = pc.xMm - pp.xMm;
       localY = -sharedY;
-      child.mesh.position.set(pc.wMm / 2, -(pc.yMm - hinge.positionMm + pc.hMm / 2), thickness / 2);
+      child.mesh.position.set(
+        pc.wMm / 2,
+        -(pc.yMm - hinge.positionMm + pc.hMm / 2),
+        thickness / 2,
+      );
     }
     child.pivot.position.set(localX, localY, 0);
     parent.pivot.add(child.pivot);
@@ -172,40 +191,18 @@ export async function createGraphBoxScene(
   const attached = new Set<string>();
   if (baseId && byId.has(baseId)) {
     const base = byId.get(baseId)!;
+    base.panel.parentId = null;
     base.pivot.position.set(base.panel.xMm - cx, -(base.panel.yMm - cy), 0);
     netRoot.add(base.pivot);
     attached.add(baseId);
-    // BFS attach
     const queue = [baseId];
     while (queue.length) {
       const cur = queue.shift()!;
-      for (const p of panels) {
-        if (attached.has(p.id)) continue;
-        if (p.parentId === cur) {
-          attachChild(p.id, cur);
-          attached.add(p.id);
-          queue.push(p.id);
-        }
-      }
-      // Também por hinges se parentId ainda não setado
-      for (const h of hinges ?? []) {
-        const other =
-          h.panelA === cur ? h.panelB : h.panelB === cur ? h.panelA : null;
-        if (!other || attached.has(other)) continue;
-        const childPanel = byId.get(other)?.panel;
-        if (childPanel && !childPanel.parentId) {
-          childPanel.parentId = cur;
-        }
-        if (childPanel?.parentId === cur || !childPanel?.parentId) {
-          if (!attached.has(other)) {
-            if (byId.get(other)?.panel) {
-              byId.get(other)!.panel.parentId = cur;
-            }
-            attachChild(other, cur);
-            attached.add(other);
-            queue.push(other);
-          }
-        }
+      for (const other of adj.get(cur) ?? []) {
+        if (attached.has(other)) continue;
+        attachChild(other, cur);
+        attached.add(other);
+        queue.push(other);
       }
     }
   }
@@ -252,17 +249,29 @@ export async function createGraphBoxScene(
   };
 
   const applyOpen = () => {
-    // 0 = fechado (ângulo alvo); 1 = aberto (0°)
-    const progress = resolveFlapProgress(boxMockup.openOperations ?? [], open01);
+    // open01: 1 = folha plana, 0 = fechado.
+    // A sequência Admin é de montagem (fechar): order 1 dobra primeiro.
+    // resolveFlapProgress(t) anima order 1 no início de t 0→1, então usamos
+    // close01 = 1 - open01 e ângulo = alvo * local.
+    const close01 = 1 - open01;
+    const progress = resolveFlapProgress(
+      boxMockup.openOperations ?? [],
+      close01,
+    );
     for (const [id, entry] of byId) {
       if (id === baseId) {
         entry.pivot.rotation.set(0, 0, 0);
         continue;
       }
-      const local = progress.get(id) ?? 0;
       const op = opsByPanel.get(id);
-      const target = flapAngleDeg(op, 1); // full target
-      const angle = target * (1 - local); // open → flatten
+      // Sem operação configurada → permanece plano (não dobra)
+      if (!op) {
+        entry.pivot.rotation.set(0, 0, 0);
+        continue;
+      }
+      const local = progress.get(id) ?? 0;
+      const target = flapAngleDeg(op, 1); // ângulo com sinal
+      const angle = target * local;
       const hinge = (hinges ?? []).find(
         (h) =>
           (h.panelA === id && h.panelB === entry.panel.parentId) ||

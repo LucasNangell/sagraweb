@@ -77,4 +77,13 @@ describe("boxMockupFromConfig", () => {
     expect(mock.openOperations).toHaveLength(1);
     expect(mock.netWidthMm).toBe(200);
   });
+
+  it("re-raiz a árvore ao trocar a base", () => {
+    const cfg = sampleConfig();
+    cfg.basePanelId = "p1";
+    const mock = boxMockupFromConfig(cfg);
+    expect(mock.panels.find((p) => p.id === "p0")?.parentId).toBe("p1");
+    expect(mock.panels.find((p) => p.id === "p1")?.parentId).toBeNull();
+    expect(mock.openOperations[0]?.panelId).toBe("p0");
+  });
 });

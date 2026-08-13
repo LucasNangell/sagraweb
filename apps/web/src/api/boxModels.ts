@@ -38,6 +38,8 @@ export interface BoxModelEdge {
   y2: number;
   hingeId?: string | null;
   source?: string;
+  /** id/data-name do traço no SVG, quando existir */
+  name?: string;
 }
 
 export interface BoxModelOperation {
@@ -122,7 +124,7 @@ export async function fetchAdminBoxModel(
 }
 
 export function adminBoxModelFacaUrl(id: number): string {
-  return apiUrl(`/admin/system/prova-web/box-models/${id}/faca.pdf`);
+  return apiUrl(`/admin/system/prova-web/box-models/${id}/faca`);
 }
 
 export async function parseAdminBoxFaca(

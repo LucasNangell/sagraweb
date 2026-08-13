@@ -143,6 +143,7 @@ export function BoxModelDielineEditor({
                 }
                 strokeWidth={selected ? 2.6 : isFold ? 1.7 : 1.4}
                 strokeLinecap="round"
+                strokeLinejoin="round"
                 strokeDasharray={isFold ? "3.5 2" : undefined}
               />
               {op ? (
@@ -171,8 +172,8 @@ export function BoxModelDielineEditor({
         })}
       </svg>
       <p className="border-t border-slate-100 px-2 py-1 text-[10px] text-slate-500">
-        Clique numa linha para marcar corte/dobra. Em dobras, use “Adicionar à
-        sequência” (lista começa vazia). Números = ordem definida por você.
+        Só traços do SVG: vermelho/contínuo = corte · ciano/pontilhado = dobra.
+        Clique numa dobra e adicione à sequência.
       </p>
     </div>
   );

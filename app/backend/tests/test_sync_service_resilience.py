@@ -370,3 +370,131 @@ def test_notify_on_update_via_log(tmp_path, monkeypatch):
     assert len(calls) == 1
     assert calls[0]["json"]["action"] == "sync_update"
     assert calls[0]["url"].startswith("http://127.0.0.1:8001/api/")
+
+
+def test_mark_skip_cycle_updates_last_cycle(tmp_hb):
+    hb = tmp_hb
+    hb.mark_skip_cycle("mdb_unavailable")
+    snap = hb.snapshot()
+    assert snap["phase"] == "mdb_unavailable"
+    assert snap["last_cycle_at"]
+    assert snap["cycles"] == 0
+
+
+def test_heartbeat_includes_stats(tmp_hb):
+    hb = tmp_hb
+    hb.mark_cycle_ok({"ins_y2m": 2, "upd_y2m": 1})
+    snap = hb.snapshot()
+    assert snap["stats"]["ins_y2m"] == 2
+    assert snap["stats"]["upd_y2m"] == 1
+    assert "tabandamento_bidi" in snap
+
+
+def test_mysql_wins_lww():
+    assert svc.ResilientSynchronizer._mysql_wins_lww(
+        {"Data": "2026-08-12 12:00:00"},
+        {"Data": "2026-08-12 11:00:00"},
+    )
+    assert svc.ResilientSynchronizer._mysql_wins_lww(
+        {"Data": "2026-08-12 12:00:00"},
+        {"Data": "2026-08-12 12:00:00"},
+    )
+    assert not svc.ResilientSynchronizer._mysql_wins_lww(
+        {"Data": "2026-08-12 10:00:00"},
+        {"Data": "2026-08-12 12:00:00"},
+    )
+
+
+def test_perform_sync_catchup_insert_mdb(tmp_path, monkeypatch):
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    sync._cycle_stats = {
+        "ins_m2y": 0,
+        "upd_m2y": 0,
+        "ins_y2m": 0,
+        "upd_y2m": 0,
+        "del_y": 0,
+        "ultimo_heals": 0,
+        "safety_lock_aborts": 0,
+        "mysql_only_remaining": 0,
+    }
+    mysql_row = {
+        "CodStatus": "000882026-99",
+        "NroProtocoloLink": 886,
+        "AnoProtocoloLink": 2026,
+        "SituacaoLink": "Recebido",
+        "SetorLink": "SEGEP",
+        "Data": "2026-08-12 10:00:00",
+        "UltimoStatus": 1,
+        "Observaçao": "web",
+        "Ponto": "1",
+    }
+    monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
+    monkeypatch.setattr(svc, "SYNC_MYSQL_TO_MDB_CATCHUP", True)
+    sync._mdb_paths_available = MagicMock(return_value=True)
+    sync.read_mysql = MagicMock(return_value=[mysql_row])
+    sync.read_mdb = MagicMock(return_value=[])
+    sync.detect_and_register_deletions = MagicMock(return_value=set())
+    sync.update_cache = MagicMock()
+    sync.insert_mdb = MagicMock()
+    sync.ensure_mysql_ultimo_status_from_mdb = MagicMock()
+    sync._heal_os_batch = MagicMock()
+    sync._heal_broken_ultimo_flags = MagicMock(return_value=0)
+    sync.conn_mgr.get_mdb_by_nro = MagicMock(return_value=MagicMock())
+    sync.conn_mgr.get_mdb_name_by_nro = MagicMock(return_value="OS_Atual")
+    sync.conn_mgr.get_mdb_os = MagicMock()
+    sync.conn_mgr.get_mdb_pap = MagicMock()
+    sync.perform_sync()
+    sync.insert_mdb.assert_called_once()
+    assert sync.insert_mdb.call_args.args[0]["CodStatus"] == "000882026-99"
+    assert sync._hb.snapshot()["stats"]["ins_y2m"] == 1
+
+
+def test_perform_sync_update_mysql_to_mdb_when_newer(tmp_path, monkeypatch):
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    sync._cycle_stats = {
+        "ins_m2y": 0,
+        "upd_m2y": 0,
+        "ins_y2m": 0,
+        "upd_y2m": 0,
+        "del_y": 0,
+        "ultimo_heals": 0,
+        "safety_lock_aborts": 0,
+        "mysql_only_remaining": 0,
+    }
+    mysql_row = {
+        "CodStatus": "000882026-01",
+        "NroProtocoloLink": 886,
+        "AnoProtocoloLink": 2026,
+        "SituacaoLink": "WebEdit",
+        "SetorLink": "SEGEP",
+        "Data": "2026-08-12 15:00:00",
+        "UltimoStatus": 1,
+        "Observaçao": "from mysql",
+        "Ponto": "1",
+    }
+    mdb_row = dict(mysql_row)
+    mdb_row["SituacaoLink"] = "AccessOld"
+    mdb_row["Data"] = "2026-08-12 10:00:00"
+    mdb_row["Observaçao"] = "from mdb"
+    monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
+    monkeypatch.setattr(svc, "SYNC_MYSQL_TO_MDB_CATCHUP", True)
+    sync._mdb_paths_available = MagicMock(return_value=True)
+    sync.read_mysql = MagicMock(return_value=[mysql_row])
+    sync.read_mdb = MagicMock(side_effect=[[mdb_row], []])
+    sync.detect_and_register_deletions = MagicMock(return_value=set())
+    sync.update_cache = MagicMock()
+    sync.update_mdb = MagicMock()
+    sync.update_mysql = MagicMock()
+    sync._andamentos_differ = MagicMock(return_value=True)
+    sync.ensure_mysql_ultimo_status_from_mdb = MagicMock()
+    sync._heal_os_batch = MagicMock()
+    sync._heal_broken_ultimo_flags = MagicMock(return_value=0)
+    sync.conn_mgr.get_mdb_by_nro = MagicMock(return_value=MagicMock())
+    sync.conn_mgr.get_mdb_name_by_nro = MagicMock(return_value="OS_Atual")
+    sync.conn_mgr.get_mdb_os = MagicMock()
+    sync.conn_mgr.get_mdb_pap = MagicMock()
+    sync.perform_sync()
+    sync.update_mdb.assert_called_once()
+    sync.update_mysql.assert_not_called()
+    assert sync._hb.snapshot()["stats"]["upd_y2m"] == 1
+

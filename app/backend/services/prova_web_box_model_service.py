@@ -176,9 +176,9 @@ def normalize_box_model_config(raw: Any) -> Dict[str, Any]:
         side = str(o.get("movingSide") or "positive").strip()
         towards = str(o.get("towards") or "front").strip()
         if side not in _VALID_SIDE:
-            raise ValueError(f"Operação {oid}: movingSide inválido.")
+            side = "positive"
         if towards not in _VALID_TOWARDS:
-            raise ValueError(f"Operação {oid}: towards inválido.")
+            towards = "front"
         try:
             order = int(o.get("order") or (i + 1))
             angle = float(
@@ -194,7 +194,8 @@ def normalize_box_model_config(raw: Any) -> Dict[str, Any]:
             "order": order,
             "movingSide": side,
             "towards": towards,
-            "targetAngleDeg": max(1.0, min(180.0, angle)),
+            # Ângulo com sinal: negativo/positivo = sentido da dobra
+            "targetAngleDeg": max(-180.0, min(180.0, angle)),
         }
         if o.get("phaseId"):
             entry["phaseId"] = str(o["phaseId"])
@@ -212,22 +213,24 @@ def normalize_box_model_config(raw: Any) -> Dict[str, Any]:
         if kind not in ("cut", "fold"):
             kind = "fold"
         try:
-            edges.append(
-                {
-                    "id": eid,
-                    "kind": kind,
-                    "x1": float(e.get("x1") or 0),
-                    "y1": float(e.get("y1") or 0),
-                    "x2": float(e.get("x2") or 0),
-                    "y2": float(e.get("y2") or 0),
-                    "hingeId": (
-                        str(e["hingeId"])
-                        if e.get("hingeId") not in (None, "")
-                        else None
-                    ),
-                    "source": str(e.get("source") or "detected"),
-                }
-            )
+            edge = {
+                "id": eid,
+                "kind": kind,
+                "x1": float(e.get("x1") or 0),
+                "y1": float(e.get("y1") or 0),
+                "x2": float(e.get("x2") or 0),
+                "y2": float(e.get("y2") or 0),
+                "hingeId": (
+                    str(e["hingeId"])
+                    if e.get("hingeId") not in (None, "")
+                    else None
+                ),
+                "source": str(e.get("source") or "detected"),
+            }
+            name = e.get("name")
+            if isinstance(name, str) and name.strip():
+                edge["name"] = name.strip()
+            edges.append(edge)
             edge_ids.add(eid)
         except (TypeError, ValueError):
             continue
@@ -258,17 +261,30 @@ def normalize_box_model_config(raw: Any) -> Dict[str, Any]:
     return out
 
 
-def parse_faca_to_box_config(pdf_bytes: bytes, *, page_index: int = 0) -> Dict[str, Any]:
-    """Parse bytes de PDF → config de grafo de painéis."""
-    if not pdf_bytes:
-        raise ValueError("PDF da faca vazio.")
-    if len(pdf_bytes) > _MAX_PDF_BYTES:
-        raise ValueError("PDF da faca excede 25 MB.")
-    import tempfile
+def parse_faca_to_box_config(
+    faca_bytes: bytes,
+    *,
+    page_index: int = 0,
+    filename: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Parse bytes de SVG (preferido) ou PDF → config de grafo de painéis."""
+    if not faca_bytes:
+        raise ValueError("Arquivo da faca vazio.")
+    if len(faca_bytes) > _MAX_PDF_BYTES:
+        raise ValueError("Arquivo da faca excede 25 MB.")
+
+    from services.prova_web_dieline_svg import looks_like_svg, parse_dieline_svg
+
+    if looks_like_svg(faca_bytes, filename):
+        parsed = parse_dieline_svg(faca_bytes)
+        graph = build_panel_graph_from_parsed(parsed)
+        return normalize_box_model_config(graph)
+
     import os
+    import tempfile
 
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-        tmp.write(pdf_bytes)
+        tmp.write(faca_bytes)
         path = tmp.name
     try:
         parsed = parse_dieline_pdf(path, page_index=page_index)
@@ -445,45 +461,92 @@ def delete_box_model(model_id: int) -> bool:
 
 def build_box_mockup_from_model_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
     """Manifest boxMockup a partir do grafo do modelo Admin."""
+    base_id = cfg.get("basePanelId")
+    hinges = list(cfg.get("hinges") or [])
+
+    # Árvore enraizada na base (só hinges) — trocar base não inverte pais errados
+    adj: dict[str, list[str]] = {}
+    for h in hinges:
+        a, b = h.get("panelA"), h.get("panelB")
+        if not a or not b or a == b:
+            continue
+        adj.setdefault(str(a), []).append(str(b))
+        adj.setdefault(str(b), []).append(str(a))
+    parent_map: dict[str, str] = {}
+    if base_id:
+        seen = {str(base_id)}
+        queue = [str(base_id)]
+        while queue:
+            cur = queue.pop(0)
+            for nb in adj.get(cur, []):
+                if nb in seen:
+                    continue
+                seen.add(nb)
+                parent_map[nb] = cur
+                queue.append(nb)
+
+    def moving_for_hinge(h: Dict[str, Any]) -> Optional[str]:
+        a, b = str(h.get("panelA") or ""), str(h.get("panelB") or "")
+        if parent_map.get(a) == b:
+            return a
+        if parent_map.get(b) == a:
+            return b
+        if a == base_id:
+            return b
+        if b == base_id:
+            return a
+        return b or a or None
+
     panels = []
     for p in cfg.get("panels") or []:
         if not p.get("active", True):
             continue
+        pid = p["id"]
+        parent_id = parent_map.get(pid)
+        hinge_axis = None
+        if parent_id:
+            for h in hinges:
+                if {h.get("panelA"), h.get("panelB")} == {pid, parent_id}:
+                    hinge_axis = "left" if h.get("axis") == "vertical" else "bottom"
+                    break
         panels.append(
             {
-                "id": p["id"],
+                "id": pid,
                 "role": p.get("role") or "panel",
                 "xMm": p["xMm"],
                 "yMm": p["yMm"],
                 "wMm": p["wMm"],
                 "hMm": p["hMm"],
-                "parentId": None,
-                "hinge": None,
+                "parentId": parent_id,
+                "hinge": hinge_axis,
                 "bodyAngleDeg": 0,
-                "flap": p["id"] != cfg.get("basePanelId"),
+                "flap": pid != base_id,
                 "u0": p.get("u0", 0),
                 "v0": p.get("v0", 0),
                 "u1": p.get("u1", 1),
                 "v1": p.get("v1", 1),
-                "label": p.get("label") or p["id"],
+                "label": p.get("label") or pid,
             }
         )
-    # Resolver parent via hinges/operations
-    hinge_by_id = {h["id"]: h for h in (cfg.get("hinges") or [])}
-    parent: dict[str, str] = {}
-    for op in sorted(cfg.get("operations") or [], key=lambda o: int(o.get("order") or 0)):
-        hid = op.get("hingeId")
-        moving = op.get("panelId")
-        h = hinge_by_id.get(hid or "")
-        if not h or not moving:
-            continue
-        other = h["panelB"] if h["panelA"] == moving else h["panelA"]
-        parent[moving] = other
-        for p in panels:
-            if p["id"] == moving:
-                p["parentId"] = other
-                axis = h.get("axis")
-                p["hinge"] = "left" if axis == "vertical" else "bottom"
+
+    hinge_by_id = {h["id"]: h for h in hinges}
+    open_ops = []
+    for o in cfg.get("operations") or []:
+        h = hinge_by_id.get(o.get("hingeId") or "")
+        moving = moving_for_hinge(h) if h else o.get("panelId")
+        open_ops.append(
+            {
+                "id": o["id"],
+                "panelId": moving,
+                "hingeId": o.get("hingeId"),
+                "order": o.get("order"),
+                "targetAngleDeg": o.get("targetAngleDeg", 90),
+                "phaseId": o.get("phaseId"),
+                "movingSide": o.get("movingSide"),
+                "towards": o.get("towards"),
+            }
+        )
+
     cut = cfg.get("cutBboxMm") or {}
     return {
         "template": "graph",
@@ -501,25 +564,14 @@ def build_box_mockup_from_model_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
         "netWidthMm": float(cut.get("widthMm") or 100),
         "netHeightMm": float(cut.get("heightMm") or 100),
         "panels": panels,
-        "hinges": cfg.get("hinges") or [],
-        "openOperations": [
-            {
-                "id": o["id"],
-                "panelId": o.get("panelId"),
-                "hingeId": o.get("hingeId"),
-                "order": o.get("order"),
-                "targetAngleDeg": o.get("targetAngleDeg", 90),
-                "phaseId": o.get("phaseId"),
-                "movingSide": o.get("movingSide"),
-                "towards": o.get("towards"),
-            }
-            for o in (cfg.get("operations") or [])
-        ],
-        "basePanelId": cfg.get("basePanelId"),
+        "hinges": hinges,
+        "openOperations": open_ops,
+        "basePanelId": base_id,
         "cutBboxMm": cut,
         "ready": True,
         "paperThicknessMm": 0.4,
     }
+
 
 
 def bake_art_transform_onto_net(

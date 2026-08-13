@@ -11,6 +11,7 @@ import {
   type BoxModelConfig,
   type ProvaWebBoxModel,
 } from "@/api/boxModels";
+import { withBasePanel } from "@/features/prova-web/box-engine/boxPanelTree";
 
 import {
   ConfigSection,
@@ -21,7 +22,6 @@ import { BoxModelDielineEditor } from "./BoxModelDielineEditor";
 import {
   addHingeToSequence,
   BoxModelOperationsList,
-  setEdgeKind,
 } from "./BoxModelOperationsList";
 import { BoxModelPreview3D } from "./BoxModelPreview3D";
 
@@ -61,7 +61,7 @@ export function BoxModelsSection() {
         ...(d ?? emptyDraft()),
         config,
         file,
-        nome: d?.nome || file.name.replace(/\.pdf$/i, ""),
+        nome: d?.nome || file.name.replace(/\.(svg|pdf)$/i, ""),
       }));
       setSelectedPanelId(res.config.basePanelId);
       setSelectedEdgeId(null);
@@ -145,7 +145,7 @@ export function BoxModelsSection() {
     <ConfigSection>
       <ConfigSectionHeader
         title="Modelos de caixa (Prova WEB)"
-        description="Cadastre a faca: marque corte/dobra e monte a sequência de dobras clicando na ordem desejada. Na Prova, o operador só escolhe o modelo e alinha a arte."
+        description="Cadastre a faca em SVG (contínuo = corte, pontilhado = dobra). Depois monte só a sequência e o ângulo. Na Prova, o operador escolhe o modelo e alinha a arte."
         icon={<Package className="size-4" aria-hidden />}
         actions={
           <button
@@ -227,29 +227,24 @@ export function BoxModelsSection() {
 
         {draft ? (
           <div className="space-y-3">
-            <ol className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-700 sm:grid-cols-4">
+            <ol className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-700 sm:grid-cols-3">
               <li>
-                <span className="font-semibold text-slate-900">1. Faca</span>
+                <span className="font-semibold text-slate-900">1. SVG da faca</span>
                 <span className="mt-0.5 block text-slate-500">
-                  Envie o PDF da faca.
+                  Camadas corte (#ED3237) e dobras (#00AFEF). Nomeie as linhas
+                  (id dobra_… / corte_…). Não desenhe dobra no vão entre flaps.
                 </span>
               </li>
               <li>
                 <span className="font-semibold text-slate-900">2. Base</span>
                 <span className="mt-0.5 block text-slate-500">
-                  Clique no painel parado (azul ★).
+                  Clique no painel que fica parado (azul ★).
                 </span>
               </li>
               <li>
-                <span className="font-semibold text-slate-900">3. Linhas</span>
+                <span className="font-semibold text-slate-900">3. Sequência</span>
                 <span className="mt-0.5 block text-slate-500">
-                  Clique cada linha e marque corte ou dobra.
-                </span>
-              </li>
-              <li>
-                <span className="font-semibold text-slate-900">4. Sequência</span>
-                <span className="mt-0.5 block text-slate-500">
-                  Em cada dobra, “Adicionar à sequência” na ordem correta.
+                  Clique nas dobras (teal) e adicione na ordem; ajuste o ângulo.
                 </span>
               </li>
             </ol>
@@ -278,10 +273,16 @@ export function BoxModelsSection() {
             </div>
 
             <label className="block text-xs text-slate-600">
-              PDF da faca
+              SVG da faca
+              <span className="mt-0.5 block font-normal text-slate-500">
+                Export tip: camada “dobras” (#00AFEF) e “corte” (#ED3237); id em
+                cada traço (ex. dobra_h_tampa). Dobra só onde há material — sem
+                linha contínua atravessando o vão entre flaps. Pontilhado também
+                conta como dobra. Unidades em mm no width/height, ou 1 u = 1 mm.
+              </span>
               <input
                 type="file"
-                accept="application/pdf,.pdf"
+                accept="image/svg+xml,.svg"
                 className="mt-1 block w-full text-xs"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
@@ -290,7 +291,7 @@ export function BoxModelsSection() {
               />
             </label>
             {parseMut.isPending ? (
-              <p className="text-xs text-slate-500">Lendo faca e montando painéis…</p>
+              <p className="text-xs text-slate-500">Lendo SVG e montando painéis…</p>
             ) : null}
 
             {draft.config ? (
@@ -319,46 +320,18 @@ export function BoxModelsSection() {
                     {selectedEdge ? (
                       <div className="space-y-2">
                         <p className="font-semibold text-slate-700">
-                          Linha selecionada
+                          {selectedEdge.kind === "fold"
+                            ? "Dobra selecionada"
+                            : "Corte (não entra na sequência)"}
                         </p>
                         <p className="text-[11px] text-slate-500">
-                          {selectedEdge.id} · origem {selectedEdge.source || "—"}
+                          {selectedEdge.kind === "fold"
+                            ? "Linha pontilhada do SVG"
+                            : "Linha contínua do SVG"}
                           {selectedEdge.hingeId
                             ? ` · junta ${selectedEdge.hingeId}`
-                            : " · sem junta de painéis"}
+                            : ""}
                         </p>
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-                              selectedEdge.kind === "cut"
-                                ? "bg-slate-800 text-white"
-                                : "border border-slate-200 bg-white text-slate-700"
-                            }`}
-                            onClick={() =>
-                              patchConfig((c) =>
-                                setEdgeKind(c, selectedEdge.id, "cut"),
-                              )
-                            }
-                          >
-                            Corte
-                          </button>
-                          <button
-                            type="button"
-                            className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-                              selectedEdge.kind === "fold"
-                                ? "bg-teal-700 text-white"
-                                : "border border-slate-200 bg-white text-slate-700"
-                            }`}
-                            onClick={() =>
-                              patchConfig((c) =>
-                                setEdgeKind(c, selectedEdge.id, "fold"),
-                              )
-                            }
-                          >
-                            Dobra
-                          </button>
-                        </div>
                         {selectedEdge.kind === "fold" && selectedEdge.hingeId ? (
                           <button
                             type="button"
@@ -379,13 +352,12 @@ export function BoxModelsSection() {
                         ) : selectedEdge.kind === "fold" && !selectedEdge.hingeId ? (
                           <p className="text-[11px] text-amber-800">
                             Esta dobra não une dois painéis detectados — não entra
-                            na montagem 3D. Confira se o painel base e a faca
-                            estão corretos.
+                            na montagem 3D.
                           </p>
                         ) : (
                           <p className="text-[11px] text-slate-500">
-                            Corte não entra na sequência. Mude para “Dobra” se
-                            for um vinco.
+                            Selecione uma linha pontilhada (dobra) para incluir na
+                            sequência.
                           </p>
                         )}
                       </div>
@@ -423,10 +395,9 @@ export function BoxModelsSection() {
                               }`}
                               onClick={() => {
                                 if (!selectedPanelId) return;
-                                patchConfig((c) => ({
-                                  ...c,
-                                  basePanelId: selectedPanelId,
-                                }));
+                                patchConfig((c) =>
+                                  withBasePanel(c, selectedPanelId),
+                                );
                               }}
                             >
                               {draft.config.basePanelId === selectedPanelId
@@ -438,7 +409,7 @@ export function BoxModelsSection() {
                       </div>
                     ) : (
                       <p className="text-slate-500">
-                        Clique em um painel ou numa linha (corte/dobra) da faca.
+                        Clique em um painel (base) ou numa dobra pontilhada.
                       </p>
                     )}
                   </div>
@@ -464,7 +435,7 @@ export function BoxModelsSection() {
               </div>
             ) : (
               <p className="text-sm text-slate-500">
-                Envie o PDF da faca para o sistema detectar painéis e linhas.
+                Envie o SVG da faca para detectar cortes, dobras e painéis.
               </p>
             )}
 

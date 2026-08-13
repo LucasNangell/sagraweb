@@ -47,17 +47,32 @@ def admin_get_box_model(
 
 
 @router.get("/api/admin/system/prova-web/box-models/{model_id}/faca.pdf")
+@router.get("/api/admin/system/prova-web/box-models/{model_id}/faca")
 def admin_get_box_model_faca(
     model_id: int,
     _session: SessionData = Depends(require_admin_config_access),
 ):
     model = box_models.get_box_model(model_id, include_pdf=True)
     if not model or not model.get("facaPdf"):
-        raise HTTPException(status_code=404, detail="PDF da faca não encontrado.")
+        raise HTTPException(status_code=404, detail="Arquivo da faca não encontrado.")
     filename = model.get("facaFileName") or f"caixa-modelo-{model_id}.pdf"
+    lower = str(filename).lower()
+    if lower.endswith(".svg"):
+        media = "image/svg+xml"
+    elif lower.endswith(".pdf"):
+        media = "application/pdf"
+    else:
+        # Detect by content
+        blob = model["facaPdf"]
+        head = blob[:64].lstrip().lower() if isinstance(blob, (bytes, bytearray)) else b""
+        media = (
+            "image/svg+xml"
+            if b"<svg" in head or head.startswith(b"<?xml")
+            else "application/pdf"
+        )
     return Response(
         content=model["facaPdf"],
-        media_type="application/pdf",
+        media_type=media,
         headers={"Content-Disposition": f'inline; filename="{filename}"'},
     )
 
@@ -70,7 +85,11 @@ async def admin_parse_faca(
 ):
     data = await arquivo.read()
     try:
-        config = box_models.parse_faca_to_box_config(data, page_index=page)
+        config = box_models.parse_faca_to_box_config(
+            data,
+            page_index=page,
+            filename=arquivo.filename,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -78,9 +97,15 @@ async def admin_parse_faca(
         raise HTTPException(status_code=500, detail="Falha ao ler a faca.") from exc
     return {
         "config": config,
-        "fileName": arquivo.filename or "faca.pdf",
+        "fileName": arquivo.filename or "faca.svg",
         "panelCount": len(config.get("panels") or []),
         "hingeCount": len(config.get("hinges") or []),
+        "foldCount": len(
+            [e for e in (config.get("edges") or []) if e.get("kind") == "fold"]
+        ),
+        "cutCount": len(
+            [e for e in (config.get("edges") or []) if e.get("kind") == "cut"]
+        ),
     }
 
 
@@ -148,7 +173,11 @@ async def admin_replace_box_model_faca(
     config = None
     if reparse:
         try:
-            config = box_models.parse_faca_to_box_config(data, page_index=page)
+            config = box_models.parse_faca_to_box_config(
+                data,
+                page_index=page,
+                filename=arquivo.filename,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:

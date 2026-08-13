@@ -13,7 +13,6 @@ from services.andamento_operacional import (
     assert_or_fix_unico_ultimo_status,
     insert_andamento_as_ultimo,
     recalc_ultimo_status_operacional,
-    select_expected_ultimo_cod,
 )
 
 
@@ -47,8 +46,13 @@ class TestRecalcUltimoStatusOperacional:
         cursor.fetchone.return_value = {"CodStatus": "000882026-10"}
         promoted = recalc_ultimo_status_operacional(cursor, 886, 2026)
         assert promoted == "000882026-10"
-        set_sql = str(cursor.execute.call_args_list[-1].args[0])
-        assert "UltimoStatus = 1" in set_sql
+        sqls = " ".join(str(c.args[0]) for c in cursor.execute.call_args_list)
+        assert "UltimoStatus = 1" in sqls
+        assert any(
+            c.args[1] == ("000882026-10",)
+            for c in cursor.execute.call_args_list
+            if len(c.args) > 1
+        )
 
     def test_sem_andamento_retorna_none(self):
         cursor = MagicMock()

@@ -53,7 +53,8 @@ export function flapAngleDeg(
   op: ProvaWebCaixaOpenOperation | undefined,
   open01: number,
 ): number {
-  const target = op?.targetAngleDeg ?? 100;
+  if (!op) return 0;
+  const target = op.targetAngleDeg ?? 0;
   return target * Math.max(0, Math.min(1, open01));
 }
 

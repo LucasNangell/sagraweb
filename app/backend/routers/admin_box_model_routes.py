@@ -106,6 +106,7 @@ async def admin_parse_faca(
         "cutCount": len(
             [e for e in (config.get("edges") or []) if e.get("kind") == "cut"]
         ),
+        "warnings": list(config.get("parseWarnings") or []),
     }
 
 

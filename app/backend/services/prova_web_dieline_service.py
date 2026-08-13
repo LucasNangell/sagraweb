@@ -81,6 +81,24 @@ def _line_segments(drawing: dict[str, Any]) -> list[tuple[tuple[float, float], t
                     ((x0, y1), (x0, y0)),
                 ]
             )
+        elif kind == "c" and len(item) >= 5:
+            # Cubics do PyMuPDF: (c, p1, p2, p3, p4) — p1=atual, p2/p3=ctrl, p4=fim
+            from services.prova_web_dieline_svg import _cubic_bezier_points
+
+            pts = [item[i] for i in range(1, 5)]
+            p0 = (float(pts[0].x), float(pts[0].y))
+            p1 = (float(pts[1].x), float(pts[1].y))
+            p2 = (float(pts[2].x), float(pts[2].y))
+            p3 = (float(pts[3].x), float(pts[3].y))
+            curve = [p0] + _cubic_bezier_points(p0, p1, p2, p3)
+            for i in range(len(curve) - 1):
+                segs.append((curve[i], curve[i + 1]))
+        elif kind == "qu" and len(item) >= 2:
+            # Quad: lista de pontos do path
+            qpts = list(item[1]) if hasattr(item[1], "__iter__") else []
+            coords = [(float(p.x), float(p.y)) for p in qpts]
+            for i in range(len(coords) - 1):
+                segs.append((coords[i], coords[i + 1]))
     return segs
 
 

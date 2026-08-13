@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="80mm" height="50mm" viewBox="0 0 80 50">
+  <!-- Aba trapezoidal + base retangular; vinco horizontal -->
+  <g id="corte" stroke="#ED3237" fill="none" stroke-width="0.4">
+    <path id="corte_perimetro" data-sagra="cut-outline"
+          d="M 10 10 H 70 V 35 L 55 50 L 25 50 L 10 35 Z"/>
+  </g>
+  <g id="dobras" stroke="#00AFEF" fill="none" stroke-width="0.35" stroke-dasharray="3 2">
+    <line id="dobra_h" x1="10" y1="35" x2="70" y2="35"
+          data-fold-order="1" data-fold-angle="90" data-fold-towards="front"/>
+  </g>
+</svg>

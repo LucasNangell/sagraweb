@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="50mm" height="40mm" viewBox="0 0 50 40">
+  <!-- Contorno aberto: gap proposital no canto inferior direito -->
+  <g id="corte" stroke="#ED3237" fill="none" stroke-width="0.4">
+    <path d="M 5 5 H 45 V 35"/>
+    <path d="M 5 35 V 5"/>
+  </g>
+</svg>

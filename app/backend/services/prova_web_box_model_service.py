@@ -111,7 +111,23 @@ def normalize_box_model_config(raw: Any) -> Dict[str, Any]:
         poly = p.get("polygonMm")
         if not isinstance(poly, list) or len(poly) < 3:
             poly = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
+        else:
+            poly = [
+                [float(pt[0]), float(pt[1])]
+                for pt in poly
+                if isinstance(pt, (list, tuple)) and len(pt) >= 2
+            ]
+            if len(poly) < 3:
+                poly = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
         panel_ids.add(pid)
+        # Área preferencialmente do polígono real
+        area = 0.0
+        npoly = len(poly)
+        for i in range(npoly):
+            x0p, y0p = poly[i]
+            x1p, y1p = poly[(i + 1) % npoly]
+            area += x0p * y1p - x1p * y0p
+        area = abs(area) * 0.5
         entry: Dict[str, Any] = {
             "id": pid,
             "polygonMm": poly,
@@ -119,7 +135,7 @@ def normalize_box_model_config(raw: Any) -> Dict[str, Any]:
             "yMm": round(y, 2),
             "wMm": round(w, 2),
             "hMm": round(h, 2),
-            "areaMm2": round(w * h, 2),
+            "areaMm2": round(area if area > 0 else w * h, 2),
             "role": str(p.get("role") or ""),
             "label": str(p.get("label") or pid),
             "active": bool(p.get("active", True)),
@@ -145,19 +161,83 @@ def normalize_box_model_config(raw: Any) -> Dict[str, Any]:
         if a not in panel_ids or b not in panel_ids:
             raise ValueError(f"Hinge {hid}: painéis inexistentes.")
         hinge_ids.add(hid)
-        hinges.append(
-            {
-                "id": hid,
-                "panelA": a,
-                "panelB": b,
-                "axis": str(h.get("axis") or "vertical"),
-                "positionMm": float(h.get("positionMm") or 0),
-                "spanStartMm": float(h.get("spanStartMm") or 0),
-                "spanEndMm": float(h.get("spanEndMm") or 0),
-                "active": bool(h.get("active", True)),
-                "kind": str(h.get("kind") or "fold"),
-            }
-        )
+        axis = str(h.get("axis") or "vertical")
+        position = float(h.get("positionMm") or 0)
+        span_start = float(h.get("spanStartMm") or 0)
+        span_end = float(h.get("spanEndMm") or 0)
+        segment_mm: Optional[List[List[float]]] = None
+        raw_seg = h.get("segmentMm")
+        if (
+            isinstance(raw_seg, list)
+            and len(raw_seg) >= 2
+            and isinstance(raw_seg[0], (list, tuple))
+            and isinstance(raw_seg[1], (list, tuple))
+        ):
+            try:
+                segment_mm = [
+                    [float(raw_seg[0][0]), float(raw_seg[0][1])],
+                    [float(raw_seg[1][0]), float(raw_seg[1][1])],
+                ]
+            except (TypeError, ValueError, IndexError):
+                segment_mm = None
+        if segment_mm is None:
+            # Retrocompat: deriva segmento a partir de axis + position + span
+            if axis == "vertical":
+                segment_mm = [
+                    [position, span_start],
+                    [position, span_end],
+                ]
+            elif axis == "horizontal":
+                segment_mm = [
+                    [span_start, position],
+                    [span_end, position],
+                ]
+            else:
+                segment_mm = [
+                    [span_start, position],
+                    [span_end, position],
+                ]
+        else:
+            # Deriva axis/position/span a partir do segmento real
+            x1s, y1s = segment_mm[0]
+            x2s, y2s = segment_mm[1]
+            dx = abs(x2s - x1s)
+            dy = abs(y2s - y1s)
+            if dx <= 0.8 and dy > 0.8:
+                axis = "vertical"
+                position = round((x1s + x2s) / 2.0, 2)
+                span_start = round(min(y1s, y2s), 2)
+                span_end = round(max(y1s, y2s), 2)
+            elif dy <= 0.8 and dx > 0.8:
+                axis = "horizontal"
+                position = round((y1s + y2s) / 2.0, 2)
+                span_start = round(min(x1s, x2s), 2)
+                span_end = round(max(x1s, x2s), 2)
+            else:
+                axis = "oblique"
+                if dx >= dy:
+                    position = round((y1s + y2s) / 2.0, 2)
+                    span_start = round(min(x1s, x2s), 2)
+                    span_end = round(max(x1s, x2s), 2)
+                else:
+                    position = round((x1s + x2s) / 2.0, 2)
+                    span_start = round(min(y1s, y2s), 2)
+                    span_end = round(max(y1s, y2s), 2)
+        entry_h: Dict[str, Any] = {
+            "id": hid,
+            "panelA": a,
+            "panelB": b,
+            "axis": axis,
+            "positionMm": position,
+            "spanStartMm": span_start,
+            "spanEndMm": span_end,
+            "segmentMm": segment_mm,
+            "active": bool(h.get("active", True)),
+            "kind": str(h.get("kind") or "fold"),
+        }
+        if isinstance(h.get("name"), str) and h["name"].strip():
+            entry_h["name"] = h["name"].strip()
+        hinges.append(entry_h)
 
     operations: List[Dict[str, Any]] = []
     op_ids: set[str] = set()
@@ -258,6 +338,18 @@ def normalize_box_model_config(raw: Any) -> Dict[str, Any]:
     }
     if isinstance(raw.get("dimsHint"), dict):
         out["dimsHint"] = raw["dimsHint"]
+    outline = raw.get("netOutlineMm")
+    if isinstance(outline, list) and len(outline) >= 3:
+        out["netOutlineMm"] = [
+            [float(pt[0]), float(pt[1])]
+            for pt in outline
+            if isinstance(pt, (list, tuple)) and len(pt) >= 2
+        ]
+    warnings = raw.get("parseWarnings")
+    if isinstance(warnings, list) and warnings:
+        out["parseWarnings"] = [
+            w for w in warnings if isinstance(w, dict) and w.get("code")
+        ]
     return out
 
 
@@ -362,29 +454,34 @@ def create_box_model(
             raise ValueError("PDF da faca excede 25 MB.")
         blob = faca_pdf
         sha = hashlib.sha256(faca_pdf).hexdigest()
-    with _lock:
-        db.execute_query(
+    insert_params = (
+        name,
+        hint_s,
+        int(ordem),
+        json.dumps(normalized, ensure_ascii=False),
+        fname,
+        sha,
+        blob,
+        updated_by_ponto,
+    )
+
+    def _insert(cursor):
+        cursor.execute(
             """
             INSERT INTO tabProvaWebBoxModel
                 (Nome, Hint, Ativo, Ordem, ConfigJson, FacaFileName, FacaSha256, FacaPdf, UpdatedByPonto)
             VALUES (%s, %s, 1, %s, %s, %s, %s, %s, %s)
             """,
-            (
-                name,
-                hint_s,
-                int(ordem),
-                json.dumps(normalized, ensure_ascii=False),
-                fname,
-                sha,
-                blob,
-                updated_by_ponto,
-            ),
+            insert_params,
         )
-        rows = db.execute_query("SELECT LAST_INSERT_ID() AS id")
-        new_id = int(rows[0]["id"]) if rows else 0
+        return int(cursor.lastrowid)
+
+    # lastrowid na mesma conexão — LAST_INSERT_ID() em outra conexão do pool retorna 0
+    with _lock:
+        new_id = int(db.execute_transaction([_insert])[0])
     model = get_box_model(new_id)
     if not model:
-        raise RuntimeError("Falha ao criar modelo de caixa.")
+        raise RuntimeError(f"Falha ao criar modelo de caixa (id={new_id}).")
     return model
 
 
@@ -526,6 +623,7 @@ def build_box_mockup_from_model_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
                 "u1": p.get("u1", 1),
                 "v1": p.get("v1", 1),
                 "label": p.get("label") or pid,
+                "polygonMm": p.get("polygonMm"),
             }
         )
 

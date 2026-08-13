@@ -3,17 +3,17 @@ name: Polígonos e passos paralelos
 overview: Import via contrato SVG Sagra (mais eficiente que CF2/DXF no fluxo Corel); clip célula∩corte → polygonMm no 2D/3D; dobras simultâneas no mesmo order.
 todos:
   - id: svg-contract
-    content: "Contrato SVG Sagra + fast-path (corte_perimetro / camadas); guia Admin + fixture"
-    status: pending
+    content: Contrato SVG Sagra + fast-path (corte_perimetro / camadas); guia Admin + fixture
+    status: completed
   - id: clip-polygons
     content: "Backend: clip célula∩máscara → polygonMm + netOutlineMm; testes curva"
-    status: pending
+    status: completed
   - id: preview-2d-3d
     content: Editor 2D polígonos/outline; mockup+Shape 3D; offset Z anti z-fight
-    status: pending
+    status: completed
   - id: same-order-ui
     content: "UI sequência: mesmo passo, sem renumber forçado, ↑↓ por nível; teste resolveFlapProgress"
-    status: pending
+    status: completed
 isProject: false
 ---
 

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="60mm" height="40mm" viewBox="0 0 60 40">
+  <!-- Contorno curvo + dobra vertical -->
+  <g id="corte" stroke="#ED3237" fill="none" stroke-width="0.4">
+    <path id="corte_perimetro" data-sagra="cut-outline"
+          d="M 5 20 C 5 5 25 5 30 20 S 55 35 55 20 V 35 H 5 Z"/>
+  </g>
+  <g id="dobras" stroke="#00AFEF" fill="none" stroke-width="0.35" stroke-dasharray="3 2">
+    <line id="dobra_v" x1="30" y1="8" x2="30" y2="35"/>
+  </g>
+</svg>

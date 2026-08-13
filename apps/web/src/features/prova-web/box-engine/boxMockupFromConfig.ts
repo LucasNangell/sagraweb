@@ -45,6 +45,7 @@ export function boxMockupFromConfig(
         u1: p.u1 ?? 1,
         v1: p.v1 ?? 1,
         label: p.label || p.id,
+        polygonMm: p.polygonMm,
       };
     });
 

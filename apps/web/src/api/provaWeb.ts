@@ -399,6 +399,9 @@ export interface ProvaWebBoxPanel {
   v0: number;
   u1: number;
   v1: number;
+  /** Contorno real da face (mm, espaço da net). */
+  polygonMm?: number[][];
+  label?: string;
 }
 
 export interface ProvaWebBoxMockupMeta {
@@ -422,6 +425,7 @@ export interface ProvaWebBoxMockupMeta {
     positionMm: number;
     spanStartMm?: number;
     spanEndMm?: number;
+    segmentMm?: number[][];
   }>;
   artTransform?: ProvaWebCaixaArtTransform;
   cutBboxMm?: Record<string, number>;

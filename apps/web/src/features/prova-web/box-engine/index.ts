@@ -16,3 +16,13 @@ export {
   type BoxHinge,
   type BoxPanelDef,
 } from "./boxTypes";
+export {
+  childAttachOffsets,
+  hingeAxisScene,
+  hingeOriginScene,
+  hingeSegmentFromLegacy,
+  netMmToScene,
+  netUv,
+  rotateAroundAxis,
+  easeInOutCubic,
+} from "./boxKinematics";

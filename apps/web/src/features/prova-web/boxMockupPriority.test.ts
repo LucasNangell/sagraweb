@@ -89,6 +89,20 @@ describe("resolveFlapProgress", () => {
     expect(map.get("p1")).toBeGreaterThan(0);
     expect(map.get("p2") ?? 0).toBe(0);
   });
+
+  it("mesmo order = progresso idêntico (dobras simultâneas)", () => {
+    const map = resolveFlapProgress(
+      [
+        { id: "a", panelId: "p1", order: 1, targetAngleDeg: 90 },
+        { id: "b", panelId: "p2", order: 1, targetAngleDeg: 90 },
+        { id: "c", panelId: "p3", order: 2, targetAngleDeg: 90 },
+      ],
+      0.25,
+    );
+    expect(map.get("p1")).toBe(map.get("p2"));
+    expect(map.get("p1")).toBeGreaterThan(0);
+    expect(map.get("p3") ?? 0).toBe(0);
+  });
 });
 
 describe("defaultCaixaCrop", () => {

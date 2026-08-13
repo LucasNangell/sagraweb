@@ -14,9 +14,6 @@ import {
   createBoxScene,
   DEFAULT_ROT_X,
   DEFAULT_ROT_Y,
-  MAX_ROT_X,
-  ORBIT_SENS_X,
-  ORBIT_SENS_Y,
   type BoxSceneHandle,
 } from "./box-engine";
 import { useIdleYawSpin } from "./useIdleYawSpin";
@@ -40,19 +37,10 @@ export function ProvaWebBoxMockup3D({
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<BoxSceneHandle | null>(null);
-  const dragRef = useRef<{
-    pointerId: number;
-    x: number;
-    y: number;
-    rotY: number;
-    rotX: number;
-  } | null>(null);
   const rotRef = useRef({ x: DEFAULT_ROT_X, y: DEFAULT_ROT_Y });
   const openRef = useRef(100);
   const zoomRef = useRef(1);
 
-  const [rotX, setRotX] = useState(DEFAULT_ROT_X);
-  const [rotY, setRotY] = useState(DEFAULT_ROT_Y);
   const [openPct, setOpenPct] = useState(100);
   const [zoom, setZoom] = useState(1);
   const [ready, setReady] = useState(false);
@@ -69,8 +57,6 @@ export function ProvaWebBoxMockup3D({
 
   const applyOrbit = useCallback((rx: number, ry: number) => {
     rotRef.current = { x: rx, y: ry };
-    setRotX(rx);
-    setRotY(ry);
     sceneRef.current?.setOrbit(rx, ry);
   }, []);
 
@@ -131,40 +117,8 @@ export function ProvaWebBoxMockup3D({
     };
   }, [artUrl, boxMockup]);
 
-  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+  const onPointerDown = () => {
     engage();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    dragRef.current = {
-      pointerId: event.pointerId,
-      x: event.clientX,
-      y: event.clientY,
-      rotY: rotRef.current.y,
-      rotX: rotRef.current.x,
-    };
-  };
-
-  const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    const dx = event.clientX - drag.x;
-    const dy = event.clientY - drag.y;
-    const nextY = drag.rotY + dx * ORBIT_SENS_Y;
-    const nextX = Math.max(
-      -MAX_ROT_X,
-      Math.min(MAX_ROT_X, drag.rotX + dy * ORBIT_SENS_X),
-    );
-    applyOrbit(nextX, nextY);
-  };
-
-  const endDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    dragRef.current = null;
-    try {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    } catch {
-      // already released
-    }
   };
 
   const onWheel = (event: React.WheelEvent) => {
@@ -293,9 +247,6 @@ export function ProvaWebBoxMockup3D({
         ref={stageRef}
         className="prova-web-box-mockup__stage"
         onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
         onWheel={onWheel}
       >
         <canvas ref={canvasRef} className="prova-web-box-mockup__canvas" />

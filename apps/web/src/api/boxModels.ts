@@ -21,12 +21,15 @@ export interface BoxModelHinge {
   id: string;
   panelA: string;
   panelB: string;
-  axis: "vertical" | "horizontal" | string;
+  axis: "vertical" | "horizontal" | "oblique" | string;
   positionMm: number;
   spanStartMm: number;
   spanEndMm: number;
+  /** Segmento real da dobra em mm (qualquer ângulo). */
+  segmentMm?: [[number, number], [number, number]] | number[][];
   active?: boolean;
   kind?: "cut" | "fold" | string;
+  name?: string;
 }
 
 export interface BoxModelEdge {
@@ -84,7 +87,15 @@ export interface BoxModelConfig {
     x2: number;
     y2: number;
   }>;
+  /** Contorno da peça (mm) — segue cortes curvos do SVG. */
+  netOutlineMm?: number[][];
   dimsHint?: Record<string, unknown>;
+  /** Avisos estruturados do parse (contorno aberto, dobra órfã, etc.). */
+  parseWarnings?: Array<{
+    code: string;
+    message: string;
+    pointMm?: [number, number] | number[] | null;
+  }>;
 }
 
 export interface ProvaWebBoxModel {
@@ -130,7 +141,17 @@ export function adminBoxModelFacaUrl(id: number): string {
 export async function parseAdminBoxFaca(
   file: File,
   page = 0,
-): Promise<{ config: BoxModelConfig; fileName: string }> {
+): Promise<{
+  config: BoxModelConfig;
+  fileName: string;
+  warnings?: Array<{
+    code: string;
+    message: string;
+    pointMm?: [number, number] | number[] | null;
+  }>;
+  panelCount?: number;
+  hingeCount?: number;
+}> {
   const form = new FormData();
   form.append("arquivo", file);
   form.append("page", String(page));

@@ -318,6 +318,34 @@ def _stroke_name(el: ET.Element, attrs: dict[str, str]) -> Optional[str]:
     return None
 
 
+def _fold_meta_from_el(el: ET.Element, attrs: dict[str, str]) -> dict[str, Any]:
+    """Atributos opcionais de sequência embutidos no SVG (contrato Sagra)."""
+    meta: dict[str, Any] = {}
+    order = el.get("data-fold-order") or attrs.get("data-fold-order")
+    if order is not None and str(order).strip() != "":
+        try:
+            meta["foldOrder"] = int(str(order).strip())
+        except ValueError:
+            pass
+    angle = el.get("data-fold-angle") or attrs.get("data-fold-angle")
+    if angle is not None and str(angle).strip() != "":
+        try:
+            meta["foldAngleDeg"] = float(str(angle).strip())
+        except ValueError:
+            pass
+    towards = (
+        el.get("data-fold-towards") or attrs.get("data-fold-towards") or ""
+    ).strip().lower()
+    if towards in ("front", "back"):
+        meta["foldTowards"] = towards
+    side = (
+        el.get("data-fold-side") or attrs.get("data-fold-side") or ""
+    ).strip().lower()
+    if side in ("positive", "negative"):
+        meta["foldMovingSide"] = side
+    return meta
+
+
 def _is_dashed_attr(attrs: dict[str, str]) -> bool:
     dash = (attrs.get("stroke-dasharray") or "").strip().lower()
     if not dash or dash in ("none", "0", "0 0"):
@@ -774,6 +802,90 @@ def looks_like_svg(data: bytes, filename: Optional[str] = None) -> bool:
     return head.startswith(b"<?xml") or head.startswith(b"<svg") or b"<svg" in head
 
 
+def _is_cut_outline_el(el: ET.Element, attrs: dict[str, str], layer_blob: str) -> bool:
+    sagra = (el.get("data-sagra") or attrs.get("data-sagra") or "").strip().lower()
+    if sagra in ("cut-outline", "corte_perimetro", "outline"):
+        return True
+    eid = (el.get("id") or attrs.get("id") or "").strip().lower()
+    if eid in ("corte_perimetro", "cut_outline", "cut-outline"):
+        return True
+    return "corte_perimetro" in layer_blob
+
+
+def _is_explicit_panel_el(el: ET.Element, attrs: dict[str, str], layer_blob: str) -> bool:
+    sagra = (el.get("data-sagra") or attrs.get("data-sagra") or "").strip().lower()
+    if sagra == "panel":
+        return True
+    return "paineis" in layer_blob or "painéis" in layer_blob or " panels" in f" {layer_blob}"
+
+
+def _polyline_mm_from_el(
+    el: ET.Element,
+    tag: str,
+    attrs: dict[str, str],
+    transforms: list[tuple[str, list[float]]],
+    to_mm,
+) -> list[tuple[float, float]]:
+    """Extrai polyline fechada/aberta em mm a partir do elemento SVG."""
+    segs_uu: list[tuple[tuple[float, float], tuple[float, float]]] = []
+    pts_out: list[tuple[float, float]] = []
+
+    if tag == "line":
+        try:
+            x1 = float(el.get("x1") or attrs.get("x1") or 0)
+            y1 = float(el.get("y1") or attrs.get("y1") or 0)
+            x2 = float(el.get("x2") or attrs.get("x2") or 0)
+            y2 = float(el.get("y2") or attrs.get("y2") or 0)
+        except ValueError:
+            return []
+        segs_uu.append(((x1, y1), (x2, y2)))
+    elif tag in ("polyline", "polygon"):
+        pts_raw = el.get("points") or attrs.get("points") or ""
+        nums = [float(x) for x in _NUM.findall(pts_raw)]
+        pts = [(nums[i], nums[i + 1]) for i in range(0, len(nums) - 1, 2)]
+        if tag == "polygon" and pts and pts[0] != pts[-1]:
+            pts.append(pts[0])
+        for i in range(len(pts) - 1):
+            segs_uu.append((pts[i], pts[i + 1]))
+    elif tag == "path":
+        d = el.get("d") or attrs.get("d") or ""
+        for pl in _path_to_polylines(d):
+            for i in range(len(pl) - 1):
+                segs_uu.append((pl[i], pl[i + 1]))
+            if pl:
+                # Preferir a polyline mais longa do path
+                cand = [to_mm(p[0], p[1], transforms) for p in pl]
+                if len(cand) > len(pts_out):
+                    pts_out = cand
+    elif tag == "rect":
+        try:
+            x = float(el.get("x") or attrs.get("x") or 0)
+            y = float(el.get("y") or attrs.get("y") or 0)
+            w = float(el.get("width") or attrs.get("width") or 0)
+            h = float(el.get("height") or attrs.get("height") or 0)
+        except ValueError:
+            return []
+        segs_uu.extend(
+            [
+                ((x, y), (x + w, y)),
+                ((x + w, y), (x + w, y + h)),
+                ((x + w, y + h), (x, y + h)),
+                ((x, y + h), (x, y)),
+            ]
+        )
+
+    if pts_out:
+        return pts_out
+    if not segs_uu:
+        return []
+    # Encadeia pontos a partir dos segmentos
+    pts_out = [to_mm(segs_uu[0][0][0], segs_uu[0][0][1], transforms)]
+    for a, b in segs_uu:
+        pb = to_mm(b[0], b[1], transforms)
+        pts_out.append(pb)
+    return pts_out
+
+
 def parse_dieline_svg(svg_bytes: bytes) -> dict[str, Any]:
     """Parse SVG → mesmo contrato de parse_dieline_page (coordenadas em mm)."""
     if not svg_bytes:
@@ -817,8 +929,13 @@ def parse_dieline_svg(svg_bytes: bytes) -> dict[str, Any]:
         return (tx - vb_x) * sx, (ty - vb_y) * sy
 
     raw_cut: list[tuple[tuple[float, float], tuple[float, float], Optional[str]]] = []
-    raw_fold: list[tuple[tuple[float, float], tuple[float, float], Optional[str]]] = []
+    # fold: (a, b, name, meta) — meta carrega data-fold-* do SVG
+    raw_fold: list[
+        tuple[tuple[float, float], tuple[float, float], Optional[str], dict[str, Any]]
+    ] = []
     unlabeled: list[tuple[tuple[float, float], tuple[float, float]]] = []
+    net_outline_mm: list[list[float]] = []
+    explicit_panels: list[dict[str, Any]] = []
 
     shape_tags = {"path", "line", "polyline", "polygon", "rect", "circle", "ellipse"}
 
@@ -830,13 +947,44 @@ def parse_dieline_svg(svg_bytes: bytes) -> dict[str, Any]:
         layer_blob = _layer_blob(el, parent_map)
         stroke = (attrs.get("stroke") or "").strip().lower()
         kind_override = _kind_from_attrs(attrs, layer_blob=layer_blob)
-        # Sem stroke e sem camada nomeada → ignora (fills decorativos)
-        if stroke in ("none", "") and not kind_override:
-            continue
+        is_outline = _is_cut_outline_el(el, attrs, layer_blob)
+        is_panel = _is_explicit_panel_el(el, attrs, layer_blob)
 
         transforms = _collect_ancestor_transforms(el, parent_map)
-        segs_uu: list[tuple[tuple[float, float], tuple[float, float]]] = []
         stroke_name = _stroke_name(el, attrs)
+        fold_meta = _fold_meta_from_el(el, attrs)
+
+        # Painéis explícitos (fill fechado) — contrato Sagra
+        if is_panel and tag in ("path", "polygon", "polyline", "rect"):
+            pts = _polyline_mm_from_el(el, tag, attrs, transforms, to_mm)
+            if len(pts) >= 3:
+                poly = [[round(p[0], 2), round(p[1], 2)] for p in pts]
+                if poly[0] != poly[-1]:
+                    poly.append(poly[0][:])
+                pid = (
+                    el.get("data-panel-id")
+                    or attrs.get("data-panel-id")
+                    or el.get("id")
+                    or f"panel_{len(explicit_panels) + 1}"
+                )
+                explicit_panels.append(
+                    {"id": str(pid), "polygonMm": poly, "label": str(pid)}
+                )
+            # Continua: pode também ser stroke de corte se houver
+
+        # Contorno canônico
+        if is_outline and tag in ("path", "polygon", "polyline", "rect"):
+            pts = _polyline_mm_from_el(el, tag, attrs, transforms, to_mm)
+            if len(pts) >= 3 and len(pts) > len(net_outline_mm):
+                net_outline_mm = [[round(p[0], 2), round(p[1], 2)] for p in pts]
+                if net_outline_mm[0] != net_outline_mm[-1]:
+                    net_outline_mm.append(net_outline_mm[0][:])
+
+        # Sem stroke e sem camada nomeada → ignora (fills decorativos)
+        if stroke in ("none", "") and not kind_override and not is_outline:
+            continue
+
+        segs_uu: list[tuple[tuple[float, float], tuple[float, float]]] = []
 
         if tag == "line":
             try:
@@ -876,7 +1024,6 @@ def parse_dieline_svg(svg_bytes: bytes) -> dict[str, Any]:
                     ]
                 )
             else:
-                # Retângulo com cantos arredondados (arcos)
                 pts = (
                     [(x + rx, y)]
                     + _arc_to_points(x + w - rx, y, rx, ry, 0, False, True, x + w, y + ry)
@@ -884,7 +1031,6 @@ def parse_dieline_svg(svg_bytes: bytes) -> dict[str, Any]:
                     + _arc_to_points(x + rx, y + h, rx, ry, 0, False, True, x, y + h - ry)
                     + _arc_to_points(x, y + ry, rx, ry, 0, False, True, x + rx, y)
                 )
-                # Fecha
                 if pts and pts[0] != pts[-1]:
                     pts.append(pts[0])
                 segs_uu.extend(_polyline_segments(pts))
@@ -897,7 +1043,10 @@ def parse_dieline_svg(svg_bytes: bytes) -> dict[str, Any]:
                 continue
             if r < 0.2:
                 continue
-            steps = max(_CURVE_MIN_STEPS, min(_CURVE_MAX_STEPS, int(math.ceil(2 * math.pi * r / _CURVE_STEP_MM))))
+            steps = max(
+                _CURVE_MIN_STEPS,
+                min(_CURVE_MAX_STEPS, int(math.ceil(2 * math.pi * r / _CURVE_STEP_MM))),
+            )
             pts = [
                 (
                     cx0 + r * math.cos(2 * math.pi * i / steps),
@@ -947,9 +1096,11 @@ def parse_dieline_svg(svg_bytes: bytes) -> dict[str, Any]:
 
         dashed = _is_dashed_attr(attrs)
         kind = kind_override or ("fold" if dashed else None)
+        if is_outline and not kind:
+            kind = "cut"
         if kind == "fold":
             for a, b in segs_mm:
-                raw_fold.append((a, b, stroke_name))
+                raw_fold.append((a, b, stroke_name, fold_meta))
         elif kind == "cut":
             for a, b in segs_mm:
                 raw_cut.append((a, b, stroke_name))
@@ -958,11 +1109,11 @@ def parse_dieline_svg(svg_bytes: bytes) -> dict[str, Any]:
 
     heur_folds, leftover = _merge_colinear_short_dashes(unlabeled)
     for a, b in heur_folds:
-        raw_fold.append((a, b, None))
+        raw_fold.append((a, b, None, {}))
     for a, b in leftover:
         raw_cut.append((a, b, None))
 
-    def _as_dicts(
+    def _as_dicts_cut(
         segs: list[tuple[tuple[float, float], tuple[float, float], Optional[str]]],
     ) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
@@ -978,8 +1129,33 @@ def parse_dieline_svg(svg_bytes: bytes) -> dict[str, Any]:
             out.append(item)
         return out
 
-    fold_segments_mm = _as_dicts(raw_fold)
-    cut_segments_mm = _as_dicts(raw_cut)
+    def _as_dicts_fold(
+        segs: list[
+            tuple[
+                tuple[float, float],
+                tuple[float, float],
+                Optional[str],
+                dict[str, Any],
+            ]
+        ],
+    ) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for a, b, name, meta in segs:
+            item: dict[str, Any] = {
+                "x1": round(a[0], 2),
+                "y1": round(a[1], 2),
+                "x2": round(b[0], 2),
+                "y2": round(b[1], 2),
+            }
+            if name:
+                item["name"] = name
+            if isinstance(meta, dict):
+                item.update(meta)
+            out.append(item)
+        return out
+
+    fold_segments_mm = _as_dicts_fold(raw_fold)
+    cut_segments_mm = _as_dicts_cut(raw_cut)
     vertical_mm, horizontal_mm = _fold_axes_from_segs(fold_segments_mm)
 
     all_x: list[float] = []
@@ -987,6 +1163,9 @@ def parse_dieline_svg(svg_bytes: bytes) -> dict[str, Any]:
     for s in cut_segments_mm + fold_segments_mm:
         all_x.extend([s["x1"], s["x2"]])
         all_y.extend([s["y1"], s["y2"]])
+    for p in net_outline_mm:
+        all_x.append(p[0])
+        all_y.append(p[1])
     if all_x and all_y:
         x0, x1 = min(all_x), max(all_x)
         y0, y1 = min(all_y), max(all_y)
@@ -1020,7 +1199,7 @@ def parse_dieline_svg(svg_bytes: bytes) -> dict[str, Any]:
 
     dims = estimate_tuck_end_dims(vertical_mm, horizontal_mm)
 
-    return {
+    result: dict[str, Any] = {
         "pageWidthMm": round(page_w, 2),
         "pageHeightMm": round(page_h, 2),
         "cutCount": len(cut_segments_mm),
@@ -1039,3 +1218,8 @@ def parse_dieline_svg(svg_bytes: bytes) -> dict[str, Any]:
             "isFaca": len(fold_segments_mm) >= 2 and len(cut_segments_mm) >= 1,
         },
     }
+    if len(net_outline_mm) >= 3:
+        result["netOutlineMm"] = net_outline_mm
+    if explicit_panels:
+        result["explicitPanelsMm"] = explicit_panels
+    return result

@@ -18,6 +18,7 @@ function panelLabel(config: BoxModelConfig, panelId: string): string {
 function makeOp(
   config: BoxModelConfig,
   hinge: BoxModelHinge,
+  order?: number,
 ): BoxModelOperation {
   const maxOrder = Math.max(0, ...config.operations.map((o) => o.order));
   const parentMap = buildParentMapFromBase(
@@ -25,14 +26,19 @@ function makeOp(
     config.hinges ?? [],
   );
   return {
-    id: `op_${hinge.id}_${maxOrder + 1}`,
+    id: `op_${hinge.id}_${Date.now().toString(36)}`,
     hingeId: hinge.id,
     panelId: movingPanelForHinge(hinge, parentMap, config.basePanelId),
-    order: maxOrder + 1,
+    order: order ?? maxOrder + 1,
     movingSide: "positive",
     towards: "front",
     targetAngleDeg: 90,
   };
+}
+
+/** Níveis distintos de order, ordenados. */
+function distinctOrders(ops: BoxModelOperation[]): number[] {
+  return [...new Set(ops.map((o) => o.order))].sort((a, b) => a - b);
 }
 
 export interface BoxModelOperationsListProps {
@@ -50,7 +56,11 @@ export function BoxModelOperationsList({
   onChange,
 }: BoxModelOperationsListProps) {
   const hingeById = new Map(config.hinges.map((h) => [h.id, h]));
-  const rows = [...config.operations].sort((a, b) => a.order - b.order);
+  const rows = [...config.operations].sort((a, b) => {
+    if (a.order !== b.order) return a.order - b.order;
+    return a.id.localeCompare(b.id);
+  });
+  const levels = distinctOrders(config.operations);
 
   const patchOp = (opId: string, patch: Partial<BoxModelOperation>) => {
     onChange({
@@ -62,28 +72,47 @@ export function BoxModelOperationsList({
   };
 
   const removeOp = (opId: string) => {
-    const next = config.operations
-      .filter((o) => o.id !== opId)
-      .sort((a, b) => a.order - b.order)
-      .map((o, i) => ({ ...o, order: i + 1 }));
-    onChange({ ...config, operations: next });
-  };
-
-  const swapOrder = (opId: string, dir: -1 | 1) => {
-    const sorted = [...config.operations].sort((a, b) => a.order - b.order);
-    const i = sorted.findIndex((o) => o.id === opId);
-    const j = i + dir;
-    if (i < 0 || j < 0 || j >= sorted.length) return;
-    const a = sorted[i]!;
-    const b = sorted[j]!;
-    const orderA = a.order;
+    // Não renumerar — preserva grupos no mesmo passo
     onChange({
       ...config,
-      operations: config.operations.map((o) => {
-        if (o.id === a.id) return { ...o, order: b.order };
-        if (o.id === b.id) return { ...o, order: orderA };
-        return o;
-      }),
+      operations: config.operations.filter((o) => o.id !== opId),
+    });
+  };
+
+  /** Move a dobra para o nível de ordem vizinho (mantém grupos). */
+  const moveLevel = (opId: string, dir: -1 | 1) => {
+    const op = config.operations.find((o) => o.id === opId);
+    if (!op) return;
+    const i = levels.indexOf(op.order);
+    if (i < 0) return;
+    if (dir < 0 && i === 0) {
+      // Cria passo anterior
+      const newOrder = op.order - 1;
+      onChange({
+        ...config,
+        operations: config.operations.map((o) =>
+          o.id === opId ? { ...o, order: newOrder } : o,
+        ),
+      });
+      return;
+    }
+    if (dir > 0 && i === levels.length - 1) {
+      const newOrder = op.order + 1;
+      onChange({
+        ...config,
+        operations: config.operations.map((o) =>
+          o.id === opId ? { ...o, order: newOrder } : o,
+        ),
+      });
+      return;
+    }
+    const targetOrder = levels[i + dir];
+    if (targetOrder == null) return;
+    onChange({
+      ...config,
+      operations: config.operations.map((o) =>
+        o.id === opId ? { ...o, order: targetOrder } : o,
+      ),
     });
   };
 
@@ -95,23 +124,26 @@ export function BoxModelOperationsList({
     });
   };
 
+  let lastOrder: number | null = null;
+
   return (
     <div className="flex min-h-0 flex-col rounded-lg border border-slate-200 bg-white">
       <div className="border-b border-slate-100 px-3 py-2">
         <p className="text-xs font-semibold text-slate-800">
-          Sequência de dobras ({rows.length})
+          Sequência de dobras ({rows.length}
+          {levels.length !== rows.length ? ` · ${levels.length} passos` : ""})
         </p>
         <p className="mt-0.5 text-[11px] text-slate-500">
-        Clique nas dobras (ciano). Ângulo +/− define o sentido. Sem operação =
-        painel fica plano no preview.
+          Mesmo número de passo = dobram juntas. Ângulo +/− define o sentido.
         </p>
         {rows.length > 0 ? (
           <button
             type="button"
             className="mt-2 rounded border border-slate-200 px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-50"
             onClick={renumber}
+            title="Força um passo por dobra (1…N)"
           >
-            Renumerar 1…N
+            Renumerar 1…N (únicos)
           </button>
         ) : null}
       </div>
@@ -132,8 +164,17 @@ export function BoxModelOperationsList({
         {rows.map((op) => {
           const hinge = hingeById.get(op.hingeId);
           const selected = op.hingeId === selectedHingeId;
+          const showStepHeader = op.order !== lastOrder;
+          lastOrder = op.order;
+          const peers = rows.filter((r) => r.order === op.order).length;
           return (
             <li key={op.id}>
+              {showStepHeader ? (
+                <p className="mb-1 px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  Passo {op.order}
+                  {peers > 1 ? ` · ${peers} dobras` : ""}
+                </p>
+              ) : null}
               <div
                 className={`rounded-lg border px-2.5 py-2 transition ${
                   selected
@@ -144,124 +185,84 @@ export function BoxModelOperationsList({
                 <div className="flex items-start gap-2">
                   <button
                     type="button"
-                    className="min-w-0 flex-1 text-left"
+                    className="mt-0.5 rounded bg-teal-700 px-1.5 py-0.5 text-[11px] font-bold text-white"
                     onClick={() => onSelectHinge(op.hingeId)}
                   >
-                    <p className="text-[11px] font-semibold text-slate-800">
-                      #{op.order} · {panelLabel(config, op.panelId)}
+                    {op.order}
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium text-slate-800">
+                      {panelLabel(config, op.panelId)}
                     </p>
-                    <p className="truncate text-[10px] text-slate-500">
+                    <p className="text-[10px] text-slate-500">
                       {hinge
-                        ? `${hinge.axis} · ${panelLabel(config, hinge.panelA)} ↔ ${panelLabel(config, hinge.panelB)}`
+                        ? `${hinge.axis} @ ${hinge.positionMm.toFixed(0)} mm`
                         : op.hingeId}
                     </p>
-                    {!selected ? (
-                      <p className="mt-1 text-[10px] text-slate-500">
-                        {op.targetAngleDeg}°
-                        {op.targetAngleDeg < 0
-                          ? " (sentido −)"
-                          : op.targetAngleDeg > 0
-                            ? " (sentido +)"
-                            : ""}
-                      </p>
-                    ) : null}
-                  </button>
-                  <div className="flex shrink-0 flex-col gap-0.5">
+                  </div>
+                  <div className="flex flex-col gap-0.5">
                     <button
                       type="button"
                       className="rounded border border-slate-200 bg-white p-0.5 text-slate-600 hover:bg-slate-100"
-                      title="Subir"
-                      onClick={() => swapOrder(op.id, -1)}
+                      aria-label="Passo anterior"
+                      onClick={() => moveLevel(op.id, -1)}
                     >
                       <ChevronUp className="size-3.5" aria-hidden />
                     </button>
                     <button
                       type="button"
                       className="rounded border border-slate-200 bg-white p-0.5 text-slate-600 hover:bg-slate-100"
-                      title="Descer"
-                      onClick={() => swapOrder(op.id, 1)}
+                      aria-label="Próximo passo"
+                      onClick={() => moveLevel(op.id, 1)}
                     >
                       <ChevronDown className="size-3.5" aria-hidden />
                     </button>
                   </div>
                 </div>
 
-                {selected && hinge ? (
-                  <div className="mt-2 grid gap-2 border-t border-amber-200/80 pt-2 sm:grid-cols-2">
-                    <label className="block text-[10px] font-medium text-slate-600">
-                      Ordem
-                      <input
-                        type="number"
-                        min={1}
-                        className="mt-0.5 w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-xs"
-                        value={op.order}
-                        onChange={(e) =>
-                          patchOp(op.id, {
-                            order: Math.max(1, Number(e.target.value) || 1),
-                          })
-                        }
-                      />
-                    </label>
-                    <label className="block text-[10px] font-medium text-slate-600">
-                      Ângulo (°)
-                      <span className="mt-0.5 block font-normal text-slate-500">
-                        + e − dobram para lados opostos
-                      </span>
-                      <input
-                        type="number"
-                        min={-180}
-                        max={180}
-                        className="mt-0.5 w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-xs"
-                        value={op.targetAngleDeg}
-                        onChange={(e) =>
-                          patchOp(op.id, {
-                            targetAngleDeg: Math.min(
-                              180,
-                              Math.max(-180, Number(e.target.value) || 0),
-                            ),
-                          })
-                        }
-                      />
-                    </label>
-                    <div className="flex flex-wrap gap-1 sm:col-span-2">
-                      {([-90, -45, 45, 90] as const).map((a) => (
-                        <button
-                          key={a}
-                          type="button"
-                          className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-700 hover:bg-slate-100"
-                          onClick={() => patchOp(op.id, { targetAngleDeg: a })}
-                        >
-                          {a > 0 ? `+${a}°` : `${a}°`}
-                        </button>
-                      ))}
-                    </div>
-                    <label className="block text-[10px] font-medium text-slate-600 sm:col-span-2">
-                      Painel que dobra
-                      <select
-                        className="mt-0.5 w-full rounded border border-slate-200 bg-white px-1.5 py-1 text-xs"
-                        value={op.panelId}
-                        onChange={(e) =>
-                          patchOp(op.id, { panelId: e.target.value })
-                        }
-                      >
-                        <option value={hinge.panelA}>
-                          {panelLabel(config, hinge.panelA)}
-                        </option>
-                        <option value={hinge.panelB}>
-                          {panelLabel(config, hinge.panelB)}
-                        </option>
-                      </select>
-                    </label>
-                    <button
-                      type="button"
-                      className="inline-flex items-center justify-center gap-1 rounded border border-red-200 bg-white px-2 py-1 text-[11px] text-red-700 hover:bg-red-50 sm:col-span-2"
-                      onClick={() => removeOp(op.id)}
-                    >
-                      <Trash2 className="size-3" aria-hidden />
-                      Remover da sequência
-                    </button>
-                  </div>
-                ) : null}
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <label className="text-[10px] text-slate-600">
+                    Passo
+                    <input
+                      type="number"
+                      min={1}
+                      className="mt-0.5 w-full rounded border border-slate-200 px-1.5 py-1 text-xs"
+                      value={op.order}
+                      onChange={(e) =>
+                        patchOp(op.id, {
+                          order: Math.max(1, Number(e.target.value) || 1),
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="text-[10px] text-slate-600">
+                    Ângulo (°)
+                    <input
+                      type="number"
+                      min={-180}
+                      max={180}
+                      step={5}
+                      className="mt-0.5 w-full rounded border border-slate-200 px-1.5 py-1 text-xs"
+                      value={op.targetAngleDeg}
+                      onChange={(e) =>
+                        patchOp(op.id, {
+                          targetAngleDeg: Number(e.target.value) || 0,
+                        })
+                      }
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-2 flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-[10px] text-slate-700 hover:bg-slate-100"
+                    onClick={() => removeOp(op.id)}
+                  >
+                    <Trash2 className="size-3" aria-hidden />
+                    Remover
+                  </button>
+                </div>
               </div>
             </li>
           );
@@ -274,13 +275,18 @@ export function BoxModelOperationsList({
 export function addHingeToSequence(
   config: BoxModelConfig,
   hingeId: string,
+  opts?: { sameStepAs?: number | null },
 ): BoxModelConfig {
   if (config.operations.some((o) => o.hingeId === hingeId)) return config;
   const hinge = config.hinges.find((h) => h.id === hingeId);
   if (!hinge || hinge.active === false || hinge.kind === "cut") return config;
+  const order =
+    opts?.sameStepAs != null && opts.sameStepAs > 0
+      ? opts.sameStepAs
+      : undefined;
   return {
     ...config,
-    operations: [...config.operations, makeOp(config, hinge)],
+    operations: [...config.operations, makeOp(config, hinge, order)],
   };
 }
 
@@ -302,13 +308,9 @@ export function setEdgeKind(
         : h,
     );
     if (kind === "cut") {
-      operations = config.operations
-        .filter((o) => o.hingeId !== edge.hingeId)
-        .sort((a, b) => a.order - b.order)
-        .map((o, i) => ({ ...o, order: i + 1 }));
+      operations = config.operations.filter((o) => o.hingeId !== edge.hingeId);
     }
   }
-  // Atualiza segments de preview
   const foldSegmentsMm = edges
     .filter((e) => e.kind === "fold")
     .map((e) => ({ x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2 }));

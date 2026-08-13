@@ -51,12 +51,22 @@ export function BoxModelsSection() {
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [selectedHingeId, setSelectedHingeId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [parseWarnings, setParseWarnings] = useState<
+    Array<{
+      code: string;
+      message: string;
+      pointMm?: [number, number] | number[] | null;
+    }>
+  >([]);
+  const [focusPointMm, setFocusPointMm] = useState<
+    [number, number] | number[] | null
+  >(null);
 
   const parseMut = useMutation({
     mutationFn: (file: File) => parseAdminBoxFaca(file),
     onSuccess: (res, file) => {
-      // Garante sequência vazia mesmo se o backend antigo sugerir ops
-      const config = { ...res.config, operations: [] };
+      // Mantém operations do SVG (data-fold-order) quando presentes
+      const config = res.config;
       setDraft((d) => ({
         ...(d ?? emptyDraft()),
         config,
@@ -66,6 +76,10 @@ export function BoxModelsSection() {
       setSelectedPanelId(res.config.basePanelId);
       setSelectedEdgeId(null);
       setSelectedHingeId(null);
+      setParseWarnings(
+        res.warnings ?? res.config.parseWarnings ?? [],
+      );
+      setFocusPointMm(null);
       setError(null);
     },
     onError: (err) => {
@@ -118,6 +132,8 @@ export function BoxModelsSection() {
     });
     setSelectedPanelId(model.config.basePanelId);
     setSelectedEdgeId(null);
+    setParseWarnings([]);
+    setFocusPointMm(null);
     setSelectedHingeId(null);
     setError(null);
   };
@@ -145,13 +161,17 @@ export function BoxModelsSection() {
     <ConfigSection>
       <ConfigSectionHeader
         title="Modelos de caixa (Prova WEB)"
-        description="Cadastre a faca em SVG (contínuo = corte, pontilhado = dobra). Depois monte só a sequência e o ângulo. Na Prova, o operador escolhe o modelo e alinha a arte."
+        description="Cadastre a faca em SVG (contrato Sagra: corte_perimetro + camadas corte/dobras). Monte a sequência; mesmo passo = dobras simultâneas."
         icon={<Package className="size-4" aria-hidden />}
         actions={
           <button
             type="button"
             className="inline-flex items-center gap-1 rounded-lg bg-primary-green px-2.5 py-1.5 text-xs font-semibold text-white"
-            onClick={() => setDraft(emptyDraft())}
+            onClick={() => {
+              setDraft(emptyDraft());
+              setParseWarnings([]);
+              setFocusPointMm(null);
+            }}
           >
             <Plus className="size-3.5" aria-hidden />
             Novo modelo
@@ -231,8 +251,9 @@ export function BoxModelsSection() {
               <li>
                 <span className="font-semibold text-slate-900">1. SVG da faca</span>
                 <span className="mt-0.5 block text-slate-500">
-                  Camadas corte (#ED3237) e dobras (#00AFEF). Nomeie as linhas
-                  (id dobra_… / corte_…). Não desenhe dobra no vão entre flaps.
+                  Contrato Sagra: camadas corte (#ED3237) e dobras (#00AFEF); path
+                  id=corte_perimetro (fechado, com curvas); ids nas dobras. Opcional:
+                  camada paineis.
                 </span>
               </li>
               <li>
@@ -244,7 +265,7 @@ export function BoxModelsSection() {
               <li>
                 <span className="font-semibold text-slate-900">3. Sequência</span>
                 <span className="mt-0.5 block text-slate-500">
-                  Clique nas dobras (teal) e adicione na ordem; ajuste o ângulo.
+                  Adicione dobras; “Mesmo passo” faz várias dobrarem juntas.
                 </span>
               </li>
             </ol>
@@ -275,10 +296,9 @@ export function BoxModelsSection() {
             <label className="block text-xs text-slate-600">
               SVG da faca
               <span className="mt-0.5 block font-normal text-slate-500">
-                Export tip: camada “dobras” (#00AFEF) e “corte” (#ED3237); id em
-                cada traço (ex. dobra_h_tampa). Dobra só onde há material — sem
-                linha contínua atravessando o vão entre flaps. Pontilhado também
-                conta como dobra. Unidades em mm no width/height, ou 1 u = 1 mm.
+                Contrato Sagra: mm no width/height; camada “corte” #ED3237 + path
+                id=&quot;corte_perimetro&quot; (fechado); camada “dobras” #00AFEF com ids;
+                sem dobra no vão. Opcional: camada “paineis” (data-sagra=panel).
               </span>
               <input
                 type="file"
@@ -301,6 +321,7 @@ export function BoxModelsSection() {
                     config={draft.config}
                     selectedPanelId={selectedPanelId}
                     selectedEdgeId={selectedEdgeId}
+                    focusPointMm={focusPointMm}
                     onSelectPanel={(id) => {
                       setSelectedPanelId(id);
                       setSelectedEdgeId(null);
@@ -315,6 +336,35 @@ export function BoxModelsSection() {
                       setSelectedHingeId(edge?.hingeId ?? null);
                     }}
                   />
+
+                  {parseWarnings.length > 0 ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
+                      <p className="mb-1.5 font-semibold">
+                        Avisos da importação ({parseWarnings.length})
+                      </p>
+                      <ul className="space-y-1">
+                        {parseWarnings.map((w, i) => (
+                          <li key={`${w.code}-${i}`}>
+                            <button
+                              type="button"
+                              className="text-left underline-offset-2 hover:underline"
+                              onClick={() => {
+                                if (w.pointMm && w.pointMm.length >= 2) {
+                                  setFocusPointMm(w.pointMm);
+                                }
+                              }}
+                            >
+                              <span className="font-mono text-[10px] text-amber-700">
+                                {w.code}
+                              </span>
+                              {" — "}
+                              {w.message}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
 
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
                     {selectedEdge ? (
@@ -333,22 +383,47 @@ export function BoxModelsSection() {
                             : ""}
                         </p>
                         {selectedEdge.kind === "fold" && selectedEdge.hingeId ? (
-                          <button
-                            type="button"
-                            disabled={alreadyInSequence}
-                            className="inline-flex items-center gap-1 rounded-lg bg-primary-green px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-                            onClick={() => {
-                              if (!selectedEdge.hingeId) return;
-                              patchConfig((c) =>
-                                addHingeToSequence(c, selectedEdge.hingeId!),
-                              );
-                            }}
-                          >
-                            <Plus className="size-3.5" aria-hidden />
-                            {alreadyInSequence
-                              ? "Já está na sequência"
-                              : "Adicionar à sequência"}
-                          </button>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              disabled={alreadyInSequence}
+                              className="inline-flex items-center gap-1 rounded-lg bg-primary-green px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                              onClick={() => {
+                                if (!selectedEdge.hingeId) return;
+                                patchConfig((c) =>
+                                  addHingeToSequence(c, selectedEdge.hingeId!),
+                                );
+                              }}
+                            >
+                              <Plus className="size-3.5" aria-hidden />
+                              {alreadyInSequence
+                                ? "Já está na sequência"
+                                : "Novo passo"}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={
+                                alreadyInSequence ||
+                                (draft.config?.operations?.length ?? 0) === 0
+                              }
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
+                              onClick={() => {
+                                if (!selectedEdge.hingeId || !draft.config)
+                                  return;
+                                const last = Math.max(
+                                  0,
+                                  ...draft.config.operations.map((o) => o.order),
+                                );
+                                patchConfig((c) =>
+                                  addHingeToSequence(c, selectedEdge.hingeId!, {
+                                    sameStepAs: last || 1,
+                                  }),
+                                );
+                              }}
+                            >
+                              Mesmo passo
+                            </button>
+                          </div>
                         ) : selectedEdge.kind === "fold" && !selectedEdge.hingeId ? (
                           <p className="text-[11px] text-amber-800">
                             Esta dobra não une dois painéis detectados — não entra

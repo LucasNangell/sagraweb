@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="70mm" height="50mm" viewBox="0 0 70 50">
+  <!-- Vinco diagonal entre dois triângulos -->
+  <g id="corte" stroke="#ED3237" fill="none" stroke-width="0.4">
+    <path id="corte_perimetro" data-sagra="cut-outline"
+          d="M 10 10 H 60 V 40 H 10 Z"/>
+  </g>
+  <g id="dobras" stroke="#00AFEF" fill="none" stroke-width="0.35" stroke-dasharray="3 2">
+    <line id="dobra_diag" x1="10" y1="10" x2="60" y2="40"
+          data-fold-order="1" data-fold-angle="90"/>
+  </g>
+</svg>

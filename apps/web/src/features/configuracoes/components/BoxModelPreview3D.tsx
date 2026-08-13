@@ -5,16 +5,12 @@ import type { BoxModelConfig } from "@/api/boxModels";
 
 import {
   createBoxScene,
-  ORBIT_SENS_X,
-  ORBIT_SENS_Y,
   type BoxSceneHandle,
 } from "@/features/prova-web/box-engine";
 import { boxMockupFromConfig } from "@/features/prova-web/box-engine/boxMockupFromConfig";
 
 /** Vista inicial: quase de cima (faca plana). */
 const DEFAULT_ORBIT = { x: 68, y: 0 };
-/** Limite de pitch maior que a Prova — permite ver fundo/lados. */
-const ADMIN_MAX_ROT_X = 88;
 
 /**
  * Slider: 0 = Aberto (plano), 100 = Fechado (ângulos-alvo).
@@ -26,18 +22,9 @@ function foldPctToOpen01(foldPct: number): number {
 
 export function BoxModelPreview3D({ config }: { config: BoxModelConfig }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const stageRef = useRef<HTMLDivElement>(null);
   const [foldPct, setFoldPct] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const handleRef = useRef<BoxSceneHandle | null>(null);
-  const rotRef = useRef({ ...DEFAULT_ORBIT });
-  const dragRef = useRef<{
-    pointerId: number;
-    x: number;
-    y: number;
-    rotX: number;
-    rotY: number;
-  } | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -46,7 +33,6 @@ export function BoxModelPreview3D({ config }: { config: BoxModelConfig }) {
     let handle: BoxSceneHandle | null = null;
     setError(null);
     setFoldPct(0);
-    rotRef.current = { ...DEFAULT_ORBIT };
     void (async () => {
       try {
         const mockup = boxMockupFromConfig(config);
@@ -78,44 +64,7 @@ export function BoxModelPreview3D({ config }: { config: BoxModelConfig }) {
     handleRef.current?.setOpen01(foldPctToOpen01(foldPct));
   }, [foldPct]);
 
-  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    dragRef.current = {
-      pointerId: event.pointerId,
-      x: event.clientX,
-      y: event.clientY,
-      rotX: rotRef.current.x,
-      rotY: rotRef.current.y,
-    };
-  };
-
-  const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    const dx = event.clientX - drag.x;
-    const dy = event.clientY - drag.y;
-    const nextY = drag.rotY + dx * ORBIT_SENS_Y;
-    const nextX = Math.max(
-      -ADMIN_MAX_ROT_X,
-      Math.min(ADMIN_MAX_ROT_X, drag.rotX + dy * ORBIT_SENS_X),
-    );
-    rotRef.current = { x: nextX, y: nextY };
-    handleRef.current?.setOrbit(nextX, nextY);
-  };
-
-  const endDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    dragRef.current = null;
-    try {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    } catch {
-      // already released
-    }
-  };
-
   const resetView = () => {
-    rotRef.current = { ...DEFAULT_ORBIT };
     setFoldPct(0);
     handleRef.current?.setOrbit(DEFAULT_ORBIT.x, DEFAULT_ORBIT.y);
     handleRef.current?.setOpen01(foldPctToOpen01(0));
@@ -137,14 +86,7 @@ export function BoxModelPreview3D({ config }: { config: BoxModelConfig }) {
           Resetar vista
         </button>
       </div>
-      <div
-        ref={stageRef}
-        className="relative h-56 cursor-grab overflow-hidden rounded bg-white active:cursor-grabbing"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-      >
+      <div className="relative h-56 cursor-grab overflow-hidden rounded bg-white active:cursor-grabbing">
         <canvas ref={canvasRef} className="size-full" />
         {error ? (
           <p className="absolute inset-0 flex items-center justify-center p-2 text-center text-[11px] text-red-600">

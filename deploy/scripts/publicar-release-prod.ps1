@@ -105,3 +105,5 @@ Write-DeployLog -ProdPath $ProdPath -Message "publicar-release-prod OK: $Release
 Write-DeployStep "Concluido"
 Write-Host "Release publicada: $currentRoot" -ForegroundColor Green
 Write-Host "Teste: home, login, /papelaria" -ForegroundColor Green
+# Independencia: publicar reinicia so a API - NAO start/stop SAGRA-SyncAndamentos (NSSM).
+Write-Host "Sync andamentos (NSSM): intacto - publicar nao toca o servico." -ForegroundColor DarkGray

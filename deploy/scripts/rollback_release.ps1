@@ -95,3 +95,5 @@ if ($health.Ok) {
 }
 
 Write-DeployStep "Rollback concluido"
+# Independencia: rollback NAO start/stop/reinicia SAGRA-SyncAndamentos (NSSM).
+Write-Host "Sync andamentos (NSSM): intacto - rollback nao toca o servico." -ForegroundColor DarkGray

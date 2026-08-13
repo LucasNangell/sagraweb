@@ -247,9 +247,34 @@ export function OsHomePage() {
 
   const handleRefresh = useCallback(async () => {
     setManualRefresh(true);
+    const REFRESH_TIMEOUT_MS = 30_000;
+    let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     try {
-      await searchQuery.refetch();
+      await Promise.race([
+        searchQuery.refetch().then(() => undefined),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(() => {
+            timedOut = true;
+            resolve();
+          }, REFRESH_TIMEOUT_MS);
+        }),
+      ]);
+      if (timedOut) {
+        window.alert(
+          "A atualização da lista está demorando. Tente novamente em alguns segundos.",
+        );
+      }
+    } catch (err) {
+      window.alert(
+        err instanceof Error
+          ? err.message
+          : "Não foi possível atualizar a lista de OSs.",
+      );
     } finally {
+      if (timer != null) {
+        clearTimeout(timer);
+      }
       setManualRefresh(false);
     }
   }, [searchQuery]);

@@ -59,3 +59,5 @@ if (-not $SkipHealthCheck) {
 
 Write-DeployStep "Concluido"
 Write-Host "Release ativa em: $(Join-Path $ProdPath 'current')" -ForegroundColor Green
+# Independencia: este script NAO start/stop/reinicia SAGRA-SyncAndamentos (NSSM).
+Write-Host "Sync andamentos (NSSM): intacto - publish/activate nao toca o servico." -ForegroundColor DarkGray

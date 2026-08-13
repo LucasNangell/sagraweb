@@ -40,10 +40,17 @@ async function fetchAndStoreOsSearch(
 /**
  * Recarrega a lista da home. Prioriza refetch() do useOsSearch montado;
  * fallback: GET /os/search + setQueryData quando a home não está montada.
+ *
+ * Single-flight + trailing: se vários eventos pedirem refresh enquanto um
+ * GET /os/search ainda corre, só uma request fica em voo e no máximo mais uma
+ * roda ao terminar (evita stampede no pool MySQL).
  */
-export async function silentRefreshOsSearch(
+let osSearchRefreshInFlight: Promise<void> | null = null;
+let osSearchRefreshQueued = false;
+
+async function runSilentRefreshOsSearchOnce(
   queryClient: QueryClient,
-  filters?: OsSearchFilters,
+  filters: OsSearchFilters | undefined,
   options?: { skipCrossTabLock?: boolean },
 ): Promise<void> {
   if (
@@ -66,6 +73,30 @@ export async function silentRefreshOsSearch(
   }
 
   await fetchAndStoreOsSearch(queryClient, resolved);
+}
+
+export async function silentRefreshOsSearch(
+  queryClient: QueryClient,
+  filters?: OsSearchFilters,
+  options?: { skipCrossTabLock?: boolean },
+): Promise<void> {
+  if (osSearchRefreshInFlight) {
+    osSearchRefreshQueued = true;
+    await osSearchRefreshInFlight;
+    return;
+  }
+
+  const run = async () => {
+    do {
+      osSearchRefreshQueued = false;
+      await runSilentRefreshOsSearchOnce(queryClient, filters, options);
+    } while (osSearchRefreshQueued);
+  };
+
+  osSearchRefreshInFlight = run().finally(() => {
+    osSearchRefreshInFlight = null;
+  });
+  await osSearchRefreshInFlight;
 }
 
 /** Atualiza painéis de detalhes e histórico sem estado de loading inicial. */

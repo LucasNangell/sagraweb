@@ -86,6 +86,9 @@ powershell -File deploy\scripts\rollback_release.ps1 -ListReleases
 powershell -File deploy\scripts\rollback_release.ps1 -ConfirmProductionSwitch -ToRelease "initial_20260611_192811"
 ```
 
+**Independente do sync:** activate / rollback / publicar **nao** start/stop do servico Windows
+`SAGRA-SyncAndamentos` (NSSM). Ver `docs/RUNBOOK_SYNC_ANDAMENTOS_SERVICO.md`.
+
 ---
 
 ## 6. Validacao

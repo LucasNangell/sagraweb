@@ -51,14 +51,36 @@ Flags de emergência (env):
   - `instalar-servico-sync.ps1`, `parar-servico-sync.ps1`, `desinstalar-servico-sync.ps1`,
     `status-servico-sync.ps1`, `watchdog-sync.ps1`, `instalar-watchdog-sync.ps1`
 
+## Independência do deploy web
+
+O sync **não** faz parte do ciclo activate/rollback/publicar do Sagra Web:
+
+| Script | Efeito no `SAGRA-SyncAndamentos` |
+|--------|----------------------------------|
+| `activate-release.ps1` | Nenhum (só junction `current` + health) |
+| `rollback_release.ps1` | Nenhum |
+| `publicar-release-prod.ps1` | Nenhum (reinicia **somente** a API) |
+
+`SYNC_ANDAMENTOS_ENABLED=false` em produção: a API **não** spawna o bot embutido.
+
+**Recomendado:** instalar o NSSM com `AppDirectory` em pasta **fixa fora de `current`**
+(ex. `C:\Sistemas CGraf\Sagra Web\sync-runtime`), copiando para lá
+`sync_andamentos_service.py`, `sync_andamentos_v2_Old.py` e deps necessárias.
+Assim um flip de release **não** troca os arquivos do processo do sync.
+Logs podem continuar em `shared\logs\sync` (junction) se `SYNC_LOG_DIR` / `preparar-logs` apontarem para o shared.
+
+Não altere a lógica de sincronização ao publicar o web; atualize o sync só quando houver
+release explícita do bot (parada manual + cópia + `instalar-servico-sync.ps1`).
+
 ## Instalação (produção)
 
-Abra PowerShell **como Administrador** na pasta ativa **`current`** (não na raiz do site):
-
-`C:\Sistemas CGraf\Sagra Web\current`
+Preferência: pasta fixa `sync-runtime` (independente de `current`). Alternativa legada: `current`.
 
 ```powershell
-cd "C:\Sistemas CGraf\Sagra Web\current"
+# Exemplo com runtime fixo (recomendado)
+$SyncRoot = "C:\Sistemas CGraf\Sagra Web\sync-runtime"
+# Copie sync_andamentos_service.py + sync_andamentos_v2_Old.py (+ scripts *.ps1 do sync) para $SyncRoot
+cd $SyncRoot
 
 # 0) Garanta pyodbc + mysql-connector no MESMO python do servico
 #    (primeira vez, ou se o status mostrar ModuleNotFoundError)
@@ -152,14 +174,16 @@ quando `phase=mdb_unavailable`).
 nssm restart SAGRA-SyncAndamentos
 ```
 
-## Atualização / deploy
+## Atualização / deploy (somente do bot — separado do web)
 
-1. Pare o serviço: `.\parar-servico-sync.ps1`
-2. Publique o release (copie `sync_andamentos_service.py` **e** `sync_andamentos_v2_Old.py`)
+Publicar/rollback do **web não atualiza nem reinicia** este serviço. Para atualizar o sync:
+
+1. Pare o serviço: `.\parar-servico-sync.ps1` (no `AppDirectory` do NSSM)
+2. Copie `sync_andamentos_service.py` **e** `sync_andamentos_v2_Old.py` para o runtime fixo (não dependa de `current`)
 3. Reaplique a config NSSM se os scripts mudaram: `.\instalar-servico-sync.ps1 -Start`
 4. Confira: `.\status-servico-sync.ps1`
 
-Não é necessário reinstalar o watchdog externo se o caminho do release for o mesmo.
+Não é necessário reinstalar o watchdog externo se o `AppDirectory` for o mesmo.
 
 ## Códigos de saída
 

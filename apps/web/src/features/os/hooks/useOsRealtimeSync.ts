@@ -96,8 +96,9 @@ export function useOsRealtimeSync({
     [immediateListRefresh],
   );
 
+  /** Evita stampede: no mínimo 5s entre silent refreshes do mesmo cliente. */
   const triggerSafeRefresh = useCallback(
-    (minIntervalMs = 2_500) => {
+    (minIntervalMs = 5_000) => {
       const now = Date.now();
       if (now - lastRefreshAtRef.current < minIntervalMs) {
         return;
@@ -190,7 +191,7 @@ export function useOsRealtimeSync({
       if (!document.hidden) {
         triggerSafeRefresh();
       }
-    }, 20_000);
+    }, 45_000);
     return () => window.clearInterval(timer);
   }, [triggerSafeRefresh, wsStatus]);
 

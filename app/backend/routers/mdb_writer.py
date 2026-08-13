@@ -751,8 +751,8 @@ def _fix_ultimo_status_mdb(
 ) -> Optional[str]:
     """
     Alinha UltimoStatus no MDB com o canônico do MySQL.
-    Prefere `promoted_cod` / UltimoStatus=1 do MySQL; fallback: Data + sufixo numérico
-    no Access, excluindo espelhos Sub OS.
+    Prefere `promoted_cod` / UltimoStatus=1 do MySQL; fallback: maior CodStatus
+    (sufixo numérico) no Access, excluindo espelhos Sub OS.
     """
     from services.andamento_operacional import (
         get_mirror_cod_statuses_for_os,
@@ -803,7 +803,8 @@ def _fix_ultimo_status_mdb(
         if not cod or str(cod).strip() in mirror_cods:
             continue
         data = getattr(row, "Data", None)
-        candidates.append((data or datetime.min, _cod_status_seq_key(cod), str(cod)))
+        # Maior sufixo primeiro; Data só como desempate (alinhado ao MySQL).
+        candidates.append((_cod_status_seq_key(cod), data or datetime.min, str(cod)))
 
     if not candidates:
         return None

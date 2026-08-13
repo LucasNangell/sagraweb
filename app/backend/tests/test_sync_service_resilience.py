@@ -297,6 +297,16 @@ def _make_sync_for_notify(tmp_path, monkeypatch):
         sync._notify_fail_ts = 0.0
         sync._mdb_missing_warn_ts = 0.0
         sync._mdb_missing_warn_interval = 60.0
+        sync._cycle_stats = {
+            "ins_m2y": 0,
+            "upd_m2y": 0,
+            "ins_y2m": 0,
+            "upd_y2m": 0,
+            "del_y": 0,
+            "ultimo_heals": 0,
+            "safety_lock_aborts": 0,
+            "mysql_only_remaining": 0,
+        }
         sync._install_reliable_notify()
         return sync
 

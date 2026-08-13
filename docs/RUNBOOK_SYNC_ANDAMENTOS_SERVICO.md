@@ -2,17 +2,31 @@
 
 ## Objetivo
 
-Manter a sincronização unidirecional **MDB → MySQL** (`tabandamento`) rodando de forma
-ininterrupta no Windows Server, com:
+Manter a sincronização de **`tabAndamento` bidirecional** (MDB ↔ MySQL) rodando 24/7
+no Windows Server, com:
 
 1. **Auto-recuperação interna** (reconexão MDB/MySQL, backoff)
-2. **Watchdog interno** (stall → exit 17 → NSSM reinicia)
-3. **Watchdog externo** (Task Scheduler SYSTEM a cada 2 min)
+2. **Watchdog interno** (stall → exit 17 → NSSM reinicia; `mdb_unavailable` não reinicia)
+3. **Watchdog externo** (Task Scheduler SYSTEM a cada 2 min; ignora `phase=mdb_unavailable`)
 
-A lógica de sincronia continua em [`sync_andamentos_v2_Old.py`](../sync_andamentos_v2_Old.py)
-(fonte canônica em produção: `\\cgrafsysvm\s\SagraWeb\sync_andamentos_v2_Old.py`).
-O runner resiliente é [`sync_andamentos_service.py`](../sync_andamentos_service.py)
-e **não** altera esse módulo — apenas subclassifica pontos de conexão/supervisão.
+**Contrato de tabelas:**
+
+| Tabela | Direção |
+|--------|---------|
+| `tabAndamento` | Bidirecional (INSERT/UPDATE; delete MySQL quando MDB confirma ausência) |
+| `tabProtocolos` / `tabDetalhesServico` | Somente **MDB → MySQL** |
+
+**UltimoStatus:** autoridade MySQL = **maior CodStatus** operacional (exclui espelhos Sub OS);
+espelhado no MDB após mutações. Heal one-shot: `scripts/heal_ultimo_status_andamentos.py`.
+
+A lógica base permanece em [`sync_andamentos_v2_Old.py`](../sync_andamentos_v2_Old.py).
+O runner [`sync_andamentos_service.py`](../sync_andamentos_service.py) subclassifica conexões,
+supervisão e o ciclo bidirecional de `tabAndamento`.
+
+Flags de emergência (env):
+
+- `SYNC_TABANDAMENTO_BIDI=true` (default)
+- `SYNC_MYSQL_TO_MDB_CATCHUP=true` (default) — se `false`, desliga sentido MySQL→MDB
 
 ## Pré-requisitos
 
@@ -21,7 +35,7 @@ e **não** altera esse módulo — apenas subclassifica pontos de conexão/super
 - Driver ODBC **Microsoft Access Driver (\*.mdb, \*.accdb)**
 - [NSSM](https://nssm.cc/download) (`nssm.exe`) — copie para `deploy\tools\nssm.exe` na raiz
   do release **ou** passe `-NssmPath`
-- Conta do serviço com acesso de leitura aos `.mdb` (UNC/`I:\`) e ao MySQL local
+- Conta do serviço com acesso de leitura/escrita aos `.mdb` (UNC/`I:\`) e ao MySQL local
 - Scripts na raiz do release:
   - `sync_andamentos_service.py`
   - `sync_andamentos_v2_Old.py` (**obrigatório** — módulo herdado)
@@ -68,11 +82,10 @@ Rode uma vez em console (modo debug) e compare inserts/updates com o script anti
 _iniciar-sync-andamentos.cmd
 ```
 
-O launcher prefere, nesta ordem:
+O launcher prefere, nesta ordem (não cai em `app\services\sync_andamentos_v2.py`):
 
 1. `sync_andamentos_service.py`
 2. `sync_andamentos_v2_Old.py`
-3. `app\services\sync_andamentos_v2.py`
 
 Cheque `logs\sync\sync_andamentos.log` e a tabela MySQL `log_sync_andamentos`.
 
@@ -98,12 +111,24 @@ Cheque `logs\sync\sync_andamentos.log` e a tabela MySQL `log_sync_andamentos`.
   "consecutive_errors": 0,
   "last_error": null,
   "stall_seconds": 0.2,
+  "tabandamento_bidi": true,
+  "stats": {
+    "ins_m2y": 0,
+    "upd_m2y": 0,
+    "ins_y2m": 1,
+    "upd_y2m": 0,
+    "del_y": 0,
+    "ultimo_heals": 0,
+    "safety_lock_aborts": 0,
+    "mysql_only_remaining": 0
+  },
   "written_at": "..."
 }
 ```
 
 Regra prática: se `written_at` / `last_cycle_at` estiver há mais de ~3 minutos,
-algo está errado (o watchdog externo reinicia o serviço nesse caso).
+algo está errado (o watchdog externo reinicia o serviço nesse caso — **exceto**
+quando `phase=mdb_unavailable`).
 
 ## Operação diária
 

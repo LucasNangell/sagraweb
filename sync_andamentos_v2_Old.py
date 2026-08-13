@@ -971,9 +971,9 @@ class AndamentosSynchronizer:
                         AND m.cod_status_espelho COLLATE utf8mb4_general_ci
                             = a.CodStatus COLLATE utf8mb4_general_ci
                   )
-                ORDER BY a.`Data` DESC,
-                         CAST(SUBSTRING_INDEX(a.CodStatus, '-', -1) AS UNSIGNED) DESC,
-                         a.CodStatus DESC
+                ORDER BY CAST(SUBSTRING_INDEX(a.CodStatus, '-', -1) AS UNSIGNED) DESC,
+                         a.CodStatus DESC,
+                         a.`Data` DESC
                 LIMIT 1
                 """,
                 (nro, ano),

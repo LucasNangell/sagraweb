@@ -26,11 +26,11 @@ MIRROR_EXCLUDE_CLAUSE = f"""
     )
 """
 
-# Data mais recente; desempate por sufixo numérico do CodStatus (não lexicográfico).
+# Maior CodStatus operacional (sufixo numérico); Data só como desempate.
 ULTIMO_ORDER_BY_SQL = (
-    "ORDER BY a.`Data` DESC, "
-    "CAST(SUBSTRING_INDEX(a.CodStatus, '-', -1) AS UNSIGNED) DESC, "
-    "a.CodStatus DESC"
+    "ORDER BY CAST(SUBSTRING_INDEX(a.CodStatus, '-', -1) AS UNSIGNED) DESC, "
+    "a.CodStatus DESC, "
+    "a.`Data` DESC"
 )
 
 
@@ -175,20 +175,8 @@ def insert_andamento_as_ultimo(
     return str(cod_status)
 
 
-def recalc_ultimo_status_operacional(cursor, nro: int, ano: int) -> Optional[str]:
-    """
-    Promove o andamento operacional mais recente a UltimoStatus=1.
-    Nunca promove espelhos de Sub OS (cod_status_espelho).
-    Retorna CodStatus promovido ou None.
-    """
-    cursor.execute(
-        """
-        UPDATE tabAndamento SET UltimoStatus = 0
-        WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s
-        """,
-        (nro, ano),
-    )
-
+def select_expected_ultimo_cod(cursor, nro: int, ano: int) -> Optional[str]:
+    """CodStatus operacional canônico (maior sufixo), sem alterar flags."""
     cursor.execute(
         f"""
         SELECT a.CodStatus
@@ -203,8 +191,77 @@ def recalc_ultimo_status_operacional(cursor, nro: int, ano: int) -> Optional[str
     row = cursor.fetchone()
     if not row:
         return None
-
     cod = row.get("CodStatus") if isinstance(row, dict) else row[0]
+    return str(cod) if cod else None
+
+
+def assert_or_fix_unico_ultimo_status(cursor, nro: int, ano: int) -> Optional[str]:
+    """
+    Garante exatamente um UltimoStatus=1 por OS, no maior CodStatus operacional.
+    Se já estiver correto, não regrava. Caso contrário, heal via recalc.
+    """
+    expected = select_expected_ultimo_cod(cursor, nro, ano)
+    cursor.execute(
+        """
+        SELECT CodStatus
+        FROM tabAndamento
+        WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s
+          AND UltimoStatus = 1
+        """,
+        (nro, ano),
+    )
+    marked = []
+    for row in cursor.fetchall() or []:
+        cod = row.get("CodStatus") if isinstance(row, dict) else row[0]
+        if cod:
+            marked.append(str(cod))
+
+    if expected is None:
+        if not marked:
+            return None
+        logger.warning(
+            "[ULTIMO_HEAL] OS %s/%s sem andamento operacional mas flags=%s — zerando",
+            nro,
+            ano,
+            marked,
+        )
+        cursor.execute(
+            """
+            UPDATE tabAndamento SET UltimoStatus = 0
+            WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s
+            """,
+            (nro, ano),
+        )
+        return None
+
+    if len(marked) == 1 and marked[0] == expected:
+        return expected
+
+    logger.warning(
+        "[ULTIMO_HEAL] OS %s/%s invariante quebrado (marked=%s expected=%s) — corrigindo",
+        nro,
+        ano,
+        marked,
+        expected,
+    )
+    return recalc_ultimo_status_operacional(cursor, nro, ano)
+
+
+def recalc_ultimo_status_operacional(cursor, nro: int, ano: int) -> Optional[str]:
+    """
+    Promove o andamento operacional de maior CodStatus a UltimoStatus=1.
+    Nunca promove espelhos de Sub OS (cod_status_espelho).
+    Retorna CodStatus promovido ou None.
+    """
+    cursor.execute(
+        """
+        UPDATE tabAndamento SET UltimoStatus = 0
+        WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s
+        """,
+        (nro, ano),
+    )
+
+    cod = select_expected_ultimo_cod(cursor, nro, ano)
     if not cod:
         return None
 

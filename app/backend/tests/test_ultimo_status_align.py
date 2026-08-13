@@ -10,8 +10,10 @@ import pytest
 from services.andamento_operacional import (
     ULTIMO_ORDER_BY_SQL,
     align_ultimo_status_mysql_then_mdb,
+    assert_or_fix_unico_ultimo_status,
     insert_andamento_as_ultimo,
     recalc_ultimo_status_operacional,
+    select_expected_ultimo_cod,
 )
 
 
@@ -30,9 +32,23 @@ class TestRecalcUltimoStatusOperacional:
             str(c.args[0]) for c in cursor.execute.call_args_list
         )
 
-    def test_order_by_usa_sufixo_numerico(self):
+    def test_order_by_prioriza_sufixo_antes_de_data(self):
         assert "SUBSTRING_INDEX" in ULTIMO_ORDER_BY_SQL
         assert "UNSIGNED" in ULTIMO_ORDER_BY_SQL
+        # Sufixo deve vir antes de Data no ORDER BY
+        idx_sufixo = ULTIMO_ORDER_BY_SQL.index("SUBSTRING_INDEX")
+        idx_data = ULTIMO_ORDER_BY_SQL.index("`Data`")
+        assert idx_sufixo < idx_data
+
+    def test_promove_maior_codstatus_mesmo_com_data_antiga(self):
+        """Simula SELECT esperado retornando maior sufixo."""
+        cursor = MagicMock()
+        # select_expected / recalc: fetchone = maior CodStatus
+        cursor.fetchone.return_value = {"CodStatus": "000882026-10"}
+        promoted = recalc_ultimo_status_operacional(cursor, 886, 2026)
+        assert promoted == "000882026-10"
+        set_sql = str(cursor.execute.call_args_list[-1].args[0])
+        assert "UltimoStatus = 1" in set_sql
 
     def test_sem_andamento_retorna_none(self):
         cursor = MagicMock()
@@ -54,6 +70,38 @@ class TestRecalcUltimoStatusOperacional:
         first_sql = str(cursor.execute.call_args_list[0].args[0])
         assert "UltimoStatus = 0" in first_sql
         assert "AND UltimoStatus = 1" not in first_sql.replace("\n", " ")
+
+
+class TestAssertOrFixUnicoUltimo:
+    def test_ja_correto_nao_regrava(self):
+        cursor = MagicMock()
+        # select_expected
+        cursor.fetchone.return_value = {"CodStatus": "000882026-05"}
+        # marked flags
+        cursor.fetchall.return_value = [{"CodStatus": "000882026-05"}]
+        result = assert_or_fix_unico_ultimo_status(cursor, 886, 2026)
+        assert result == "000882026-05"
+        # Nao deve ter UPDATE de heal alem do SELECT
+        sqls = [str(c.args[0]) for c in cursor.execute.call_args_list]
+        assert not any("UltimoStatus = 0" in s for s in sqls)
+
+    def test_dois_flags_dispara_heal(self):
+        cursor = MagicMock()
+        cursor.fetchone.side_effect = [
+            {"CodStatus": "000882026-05"},  # expected
+            {"CodStatus": "000882026-05"},  # select_expected dentro do recalc
+        ]
+        cursor.fetchall.return_value = [
+            {"CodStatus": "000882026-03"},
+            {"CodStatus": "000882026-05"},
+        ]
+        with patch(
+            "services.andamento_operacional.recalc_ultimo_status_operacional",
+            return_value="000882026-05",
+        ) as recalc:
+            result = assert_or_fix_unico_ultimo_status(cursor, 886, 2026)
+        assert result == "000882026-05"
+        recalc.assert_called_once()
 
 
 class TestAlignUltimoStatusMysqlThenMdb:
@@ -111,7 +159,7 @@ class TestFixUltimoStatusMdb:
             for s in sqls
         )
 
-    def test_fallback_escolhe_maior_data_e_sufixo(self):
+    def test_fallback_escolhe_maior_sufixo(self):
         from routers.mdb_writer import _fix_ultimo_status_mdb
 
         cursor = MagicMock()
@@ -132,8 +180,8 @@ class TestFixUltimoStatusMdb:
         ):
             chosen = _fix_ultimo_status_mdb(cursor, 886, 2026, promoted_cod=None)
 
-        # Data mais nova (01-02) vence sufixo
-        assert chosen == "000882026-50"
+        # Maior sufixo (100) vence Data mais nova do -50
+        assert chosen == "000882026-100"
 
 
 class TestSyncAndamentoUpsertFixesOs:

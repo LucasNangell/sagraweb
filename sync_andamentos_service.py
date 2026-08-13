@@ -115,6 +115,10 @@ SYNC_BACKOFF_MAX = _env_float("SYNC_BACKOFF_MAX", 60.0)
 # Mantido por compatibilidade; o notify sempre usa base interna (uvicorn).
 SYNC_NOTIFY_INTERNAL_BASE = _env_bool("SYNC_NOTIFY_INTERNAL_BASE", True)
 SYNC_NOTIFY_FAIL_LOG_INTERVAL = _env_float("SYNC_NOTIFY_FAIL_LOG_INTERVAL", 60.0)
+# tabAndamento bidirecional (INSERT/UPDATE MySQL↔MDB). Protocolos/Detalhes seguem só MDB→MySQL.
+SYNC_TABANDAMENTO_BIDI = _env_bool("SYNC_TABANDAMENTO_BIDI", True)
+# Alias legado do plano de catch-up (se False, desliga o sentido MySQL→MDB).
+SYNC_MYSQL_TO_MDB_CATCHUP = _env_bool("SYNC_MYSQL_TO_MDB_CATCHUP", True)
 SYNC_MUTEX_NAME = os.getenv("SYNC_MUTEX_NAME", r"Global\SagraSyncAndamentos")
 SYNC_LOG_DIR = os.getenv("SYNC_LOG_DIR", "").strip()
 SYNC_LOG_MAX_BYTES = _env_int("SYNC_LOG_MAX_BYTES", 10 * 1024 * 1024)
@@ -223,19 +227,38 @@ class HeartbeatWriter:
         self.consecutive_errors = 0
         self.last_error: Optional[str] = None
         self.stall_seconds = 0.0
+        self.stats: Dict[str, Any] = {
+            "ins_m2y": 0,
+            "upd_m2y": 0,
+            "ins_y2m": 0,
+            "upd_y2m": 0,
+            "del_y": 0,
+            "ultimo_heals": 0,
+            "safety_lock_aborts": 0,
+            "mysql_only_remaining": 0,
+        }
 
     def mark_progress(self, phase: str) -> None:
         with self.lock:
             self.phase = phase
             self.last_progress_mono = time.monotonic()
 
-    def mark_cycle_ok(self) -> None:
+    def mark_cycle_ok(self, stats: Optional[Dict[str, Any]] = None) -> None:
         with self.lock:
             self.cycles += 1
             self.consecutive_errors = 0
             self.last_error = None
             self.last_cycle_at = datetime.now(timezone.utc).isoformat()
             self.phase = "idle"
+            self.last_progress_mono = time.monotonic()
+            if stats:
+                self.stats.update(stats)
+
+    def mark_skip_cycle(self, phase: str = "mdb_unavailable") -> None:
+        """Skip intencional (share fora): atualiza last_cycle_at para nao storm-restart."""
+        with self.lock:
+            self.phase = phase
+            self.last_cycle_at = datetime.now(timezone.utc).isoformat()
             self.last_progress_mono = time.monotonic()
 
     def mark_cycle_error(self, error: str) -> None:
@@ -258,6 +281,8 @@ class HeartbeatWriter:
                 "consecutive_errors": self.consecutive_errors,
                 "last_error": self.last_error,
                 "stall_seconds": round(stall, 1),
+                "stats": dict(self.stats),
+                "tabandamento_bidi": SYNC_TABANDAMENTO_BIDI and SYNC_MYSQL_TO_MDB_CATCHUP,
                 "written_at": datetime.now(timezone.utc).isoformat(),
             }
 
@@ -383,6 +408,16 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
         self._mdb_missing_warn_ts = 0.0
         self._mdb_missing_warn_interval = 60.0
         self._notify_fail_ts = 0.0
+        self._cycle_stats = {
+            "ins_m2y": 0,
+            "upd_m2y": 0,
+            "ins_y2m": 0,
+            "upd_y2m": 0,
+            "del_y": 0,
+            "ultimo_heals": 0,
+            "safety_lock_aborts": 0,
+            "mysql_only_remaining": 0,
+        }
 
         # Sempre patch: Old usa get_api_base() relativo (/sagra/api) que quebra requests.
         self._install_reliable_notify()
@@ -620,21 +655,253 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             return True
 
     # ------------------------------------------------------------------
-    # perform_sync com heartbeat + abort MySQL
+    # UltimoStatus + update MySQL->MDB
+    # ------------------------------------------------------------------
+
+    def ensure_mysql_ultimo_status_from_mdb(self, nro: int, ano: int):
+        """Recalc canonico (maior CodStatus) + heal invariante + espelho MDB."""
+        try:
+            promoted = self._recalc_mysql_ultimo_status_operacional(nro, ano)
+            healed = self._assert_or_fix_ultimo_mysql(nro, ano)
+            if healed and healed != promoted:
+                self._cycle_stats["ultimo_heals"] = (
+                    self._cycle_stats.get("ultimo_heals", 0) + 1
+                )
+                promoted = healed
+            self._push_ultimo_status_to_mdb(nro, ano, promoted)
+            return promoted
+        except Exception as e:
+            self.logger.logger.error(
+                f"[ERRO] Erro ao alinhar UltimoStatus MySQL+MDB em {nro}/{ano}: {e}"
+            )
+            return None
+
+    def _assert_or_fix_ultimo_mysql(self, nro: int, ano: int):
+        try:
+            from services.andamento_operacional import assert_or_fix_unico_ultimo_status
+
+            conn = self.conn_mgr.get_mysql()
+            cur = conn.cursor(dictionary=True)
+            try:
+                promoted = assert_or_fix_unico_ultimo_status(cur, nro, ano)
+                conn.commit()
+                return promoted
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                cur.close()
+        except ImportError:
+            return None
+
+    def _heal_os_batch(self, os_keys):
+        for nro, ano in os_keys:
+            self.ensure_mysql_ultimo_status_from_mdb(int(nro), int(ano))
+
+    def _heal_broken_ultimo_flags(self, limit: int = 50) -> int:
+        try:
+            conn = self.conn_mgr.get_mysql()
+            cur = conn.cursor(dictionary=True)
+            data_limite = self.get_data_limite()
+            cur.execute(
+                """
+                SELECT NroProtocoloLink AS nro, AnoProtocoloLink AS ano,
+                       SUM(UltimoStatus = 1) AS flags
+                FROM tabandamento
+                WHERE Data >= %s AND AnoProtocoloLink >= 2024
+                GROUP BY NroProtocoloLink, AnoProtocoloLink
+                HAVING flags <> 1
+                LIMIT %s
+                """,
+                (data_limite, limit),
+            )
+            rows = cur.fetchall() or []
+            cur.close()
+        except Exception as e:
+            self._svc_log.warning("[ULTIMO] scan de flags falhou: %s", e)
+            return 0
+
+        heals = 0
+        for row in rows:
+            nro = row.get("nro") if isinstance(row, dict) else row[0]
+            ano = row.get("ano") if isinstance(row, dict) else row[1]
+            if nro is None or ano is None:
+                continue
+            self.ensure_mysql_ultimo_status_from_mdb(int(nro), int(ano))
+            heals += 1
+            self._cycle_stats["ultimo_heals"] = (
+                self._cycle_stats.get("ultimo_heals", 0) + 1
+            )
+        return heals
+
+    @staticmethod
+    def _parse_andamento_data(val):
+        if val is None:
+            return datetime.min
+        if isinstance(val, datetime):
+            return val.replace(tzinfo=None) if val.tzinfo else val
+        text = str(val).strip()
+        if not text:
+            return datetime.min
+        for fmt in (
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M:%S.%f",
+            "%d/%m/%Y %H:%M:%S",
+            "%Y-%m-%d",
+        ):
+            try:
+                return datetime.strptime(text[:26], fmt)
+            except ValueError:
+                continue
+        try:
+            return datetime.fromisoformat(text.replace("Z", ""))
+        except ValueError:
+            return datetime.min
+
+    def _mysql_wins_lww(self, mysql_rec, mdb_rec) -> bool:
+        d_mysql = self._parse_andamento_data(mysql_rec.get("Data"))
+        d_mdb = self._parse_andamento_data(mdb_rec.get("Data"))
+        return d_mysql >= d_mdb
+
+    def update_mdb(self, andamento, conn, destino: str):
+        try:
+            codstatus = andamento["CodStatus"]
+            cursor = conn.cursor()
+            obs = andamento.get("Observaçao", "") or ""
+            if obs:
+                obs = str(obs).replace("\n", "\r\n")
+            cursor.execute(
+                """
+                UPDATE tabandamento
+                SET NroProtocoloLink = ?,
+                    AnoProtocoloLink = ?,
+                    SituacaoLink = ?,
+                    SetorLink = ?,
+                    Data = ?,
+                    Observaçao = ?,
+                    Ponto = ?
+                WHERE CodStatus = ?
+                """,
+                (
+                    andamento["NroProtocoloLink"],
+                    andamento["AnoProtocoloLink"],
+                    andamento["SituacaoLink"],
+                    andamento["SetorLink"],
+                    andamento["Data"],
+                    obs,
+                    andamento["Ponto"],
+                    codstatus,
+                ),
+            )
+            conn.commit()
+            cursor.close()
+            self.logger.log(
+                "UPDATE",
+                "MySQL",
+                destino,
+                codstatus,
+                andamento.get("NroProtocoloLink"),
+                andamento.get("AnoProtocoloLink"),
+                "Andamento atualizado por alteracao no MySQL",
+            )
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            self.logger.log(
+                "UPDATE",
+                "MySQL",
+                destino,
+                andamento.get("CodStatus"),
+                andamento.get("NroProtocoloLink"),
+                andamento.get("AnoProtocoloLink"),
+                sucesso=False,
+                erro=str(e),
+            )
+            self._invalidate_for_conn(conn)
+
+    def detect_and_register_deletions(self, mysql_codes, mdb_all_codes):
+        excluidos_confirmados = set()
+        try:
+            conn = self.conn_mgr.get_mysql()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT codstatus, nro, ano, origem FROM cache_andamentos_mdb WHERE ano >= 2024"
+            )
+            cache = {row[0]: row for row in cursor.fetchall()}
+            cursor.close()
+
+            cache_codes = set(cache.keys())
+            candidatos_exclusao = cache_codes - mdb_all_codes
+            if not candidatos_exclusao:
+                return set()
+
+            for code in candidatos_exclusao:
+                if code not in cache:
+                    continue
+                _, nro, ano, origem = cache[code]
+                if not self.verify_mdb_existence(code, origem):
+                    excluidos_confirmados.add(code)
+
+            if len(excluidos_confirmados) > 5:
+                msg = (
+                    f"[SAFETY LOCK] Tentativa de excluir {len(excluidos_confirmados)} "
+                    "registros de uma vez. ABORTANDO para evitar perda de dados."
+                )
+                self.logger.logger.critical(msg)
+                self.logger.logger.critical(
+                    f"Registros abortados: {list(excluidos_confirmados)}"
+                )
+                self._svc_log.error(msg)
+                self._cycle_stats["safety_lock_aborts"] = (
+                    self._cycle_stats.get("safety_lock_aborts", 0) + 1
+                )
+                return set()
+
+            for code in excluidos_confirmados:
+                if code not in cache:
+                    continue
+                _, nro, ano, origem = cache[code]
+                self.mark_as_deleted(
+                    code, nro, ano, origem, motivo="Exclusao confirmada no MDB"
+                )
+                self.logger.logger.info(
+                    f"[DETECCAO] CodStatus {code} excluido do MDB {origem} (Verificado)."
+                )
+            return excluidos_confirmados
+        except Exception as e:
+            self.logger.logger.error(f"[ERRO] Erro ao detectar exclusoes: {e}")
+            return set()
+
+    # ------------------------------------------------------------------
+    # perform_sync: tabAndamento bidirecional + heartbeat
     # ------------------------------------------------------------------
 
     def perform_sync(self):
         self._hb.mark_progress("perform_sync")
+        self._cycle_stats = {
+            "ins_m2y": 0,
+            "upd_m2y": 0,
+            "ins_y2m": 0,
+            "upd_y2m": 0,
+            "del_y": 0,
+            "ultimo_heals": 0,
+            "safety_lock_aborts": 0,
+            "mysql_only_remaining": 0,
+        }
+        touched_os = set()
+        bidi = SYNC_TABANDAMENTO_BIDI and SYNC_MYSQL_TO_MDB_CATCHUP
         try:
             if not self._mdb_paths_available():
-                self._hb.mark_progress("mdb_unavailable")
+                self._hb.mark_skip_cycle("mdb_unavailable")
                 return
 
             self._hb.mark_progress("read_mysql")
             mysql_data = self.read_mysql()
             if mysql_data is _MYSQL_READ_FAILED:
                 self._svc_log.error(
-                    "[ABORT] Falha na leitura do MySQL. Ciclo de sincronização abortado."
+                    "[ABORT] Falha na leitura do MySQL. Ciclo de sincronizacao abortado."
                 )
                 self._hb.mark_cycle_error("mysql_read_failed")
                 return
@@ -643,7 +910,7 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             mdb_os_data = self.read_mdb(self.conn_mgr.get_mdb_os())
             if mdb_os_data is None:
                 self.logger.logger.error(
-                    "[ABORT] Falha na leitura do MDB OS_Atual. Ciclo de sincronização abortado."
+                    "[ABORT] Falha na leitura do MDB OS_Atual. Ciclo de sincronizacao abortado."
                 )
                 self._hb.mark_cycle_error("mdb_os_read_failed")
                 return
@@ -652,13 +919,11 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             mdb_pap_data = self.read_mdb(self.conn_mgr.get_mdb_pap())
             if mdb_pap_data is None:
                 self.logger.logger.error(
-                    "[ABORT] Falha na leitura do MDB Papelaria. Ciclo de sincronização abortado."
+                    "[ABORT] Falha na leitura do MDB Papelaria. Ciclo de sincronizacao abortado."
                 )
                 self._hb.mark_cycle_error("mdb_pap_read_failed")
                 return
 
-            # Daqui em diante: mesma lógica do legado (copiada para poder
-            # marcar fases no heartbeat sem alterar o módulo Old).
             mysql_codes = {a["CodStatus"] for a in mysql_data}
             mdb_os_codes = {a["CodStatus"] for a in mdb_os_data}
             mdb_pap_codes = {a["CodStatus"] for a in mdb_pap_data}
@@ -670,33 +935,31 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             self._hb.mark_progress("update_cache")
             self.update_cache(mdb_os_data, mdb_pap_data)
 
-            self._hb.mark_progress("inserts")
+            self._hb.mark_progress("inserts_m2y")
             novos_no_mdb = mdb_all_codes - mysql_codes
             for code in novos_no_mdb:
-                if self.is_deleted(code):
-                    continue
-
                 and_ = None
                 origem = None
-
                 for a in mdb_os_data:
                     if a["CodStatus"] == code:
                         and_ = a
                         origem = "OS_Atual"
                         break
-
                 if not and_:
                     for a in mdb_pap_data:
                         if a["CodStatus"] == code:
                             and_ = a
                             origem = "Papelaria"
                             break
-
                 if and_:
                     self.sync_os_data_from_mdb(
                         and_["NroProtocoloLink"], and_["AnoProtocoloLink"], origem
                     )
                     self.insert_mysql(and_, origem)
+                    self._cycle_stats["ins_m2y"] += 1
+                    touched_os.add(
+                        (and_["NroProtocoloLink"], and_["AnoProtocoloLink"])
+                    )
                     self.ensure_mysql_ultimo_status_from_mdb(
                         and_["NroProtocoloLink"], and_["AnoProtocoloLink"]
                     )
@@ -707,31 +970,71 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                 mysql_rec = next((a for a in mysql_data if a["CodStatus"] == code), None)
                 mdb_rec = None
                 origem = None
-
                 for a in mdb_os_data:
                     if a["CodStatus"] == code:
                         mdb_rec = a
                         origem = "OS_Atual"
                         break
-
                 if not mdb_rec:
                     for a in mdb_pap_data:
                         if a["CodStatus"] == code:
                             mdb_rec = a
                             origem = "Papelaria"
                             break
+                if not (mdb_rec and mysql_rec):
+                    continue
+                if not self._andamentos_differ(mdb_rec, mysql_rec):
+                    continue
 
-                if mdb_rec and mysql_rec:
-                    if self._andamentos_differ(mdb_rec, mysql_rec):
-                        self.sync_os_data_from_mdb(
-                            mdb_rec["NroProtocoloLink"],
-                            mdb_rec["AnoProtocoloLink"],
-                            origem,
+                nro = mysql_rec["NroProtocoloLink"]
+                ano = mysql_rec["AnoProtocoloLink"]
+                touched_os.add((nro, ano))
+
+                if bidi and self._mysql_wins_lww(mysql_rec, mdb_rec):
+                    mdb_conn = self.conn_mgr.get_mdb_by_nro(nro)
+                    destino = self.conn_mgr.get_mdb_name_by_nro(nro)
+                    self.update_mdb(mysql_rec, mdb_conn, destino)
+                    self._cycle_stats["upd_y2m"] += 1
+                    self._svc_log.info(
+                        "[BI] UPDATE MySQL->MDB CodStatus=%s OS=%s/%s", code, nro, ano
+                    )
+                else:
+                    self.sync_os_data_from_mdb(nro, ano, origem)
+                    self.update_mysql(mdb_rec, origem)
+                    self._cycle_stats["upd_m2y"] += 1
+
+                self.ensure_mysql_ultimo_status_from_mdb(nro, ano)
+
+            if bidi:
+                self._hb.mark_progress("inserts_y2m")
+                novos_no_mysql = mysql_codes - mdb_all_codes
+                for code in novos_no_mysql:
+                    and_ = next((a for a in mysql_data if a["CodStatus"] == code), None)
+                    if not and_:
+                        continue
+                    nro = and_["NroProtocoloLink"]
+                    ano = and_["AnoProtocoloLink"]
+                    try:
+                        mdb_conn = self.conn_mgr.get_mdb_by_nro(nro)
+                        destino = self.conn_mgr.get_mdb_name_by_nro(nro)
+                        self.insert_mdb(and_, mdb_conn, destino)
+                        self._cycle_stats["ins_y2m"] += 1
+                        touched_os.add((nro, ano))
+                        self._svc_log.info(
+                            "[CATCHUP] MySQL->MDB INSERT CodStatus=%s OS=%s/%s destino=%s",
+                            code,
+                            nro,
+                            ano,
+                            destino,
                         )
-                        self.update_mysql(mdb_rec, origem)
-                        self.ensure_mysql_ultimo_status_from_mdb(
-                            mdb_rec["NroProtocoloLink"], mdb_rec["AnoProtocoloLink"]
+                        self.ensure_mysql_ultimo_status_from_mdb(nro, ano)
+                    except Exception as e:
+                        self._svc_log.warning(
+                            "[CATCHUP] falha MySQL->MDB CodStatus=%s: %s", code, e
                         )
+
+                remaining = len(mysql_codes - mdb_all_codes) - self._cycle_stats["ins_y2m"]
+                self._cycle_stats["mysql_only_remaining"] = max(0, remaining)
 
             self._hb.mark_progress("deletes")
             if excluidos:
@@ -739,9 +1042,17 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                     and_ = next((a for a in mysql_data if a["CodStatus"] == code), None)
                     if and_:
                         self.delete_mysql(code, and_)
+                        self._cycle_stats["del_y"] += 1
+                        touched_os.add(
+                            (and_["NroProtocoloLink"], and_["AnoProtocoloLink"])
+                        )
                         self.ensure_mysql_ultimo_status_from_mdb(
                             and_["NroProtocoloLink"], and_["AnoProtocoloLink"]
                         )
+
+            self._hb.mark_progress("ultimo_heal")
+            self._heal_os_batch(touched_os)
+            self._heal_broken_ultimo_flags(limit=30)
 
             if not hasattr(self, "_format_counter"):
                 self._format_counter = 0
@@ -752,7 +1063,7 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                 self.apply_formatting_to_recent_records()
                 self._format_counter = 0
 
-            self._hb.mark_cycle_ok()
+            self._hb.mark_cycle_ok(self._cycle_stats)
 
         except Exception as e:
             self.logger.logger.error(f"[ERRO] Erro no ciclo de sincronizacao: {e}")
@@ -765,6 +1076,8 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             except Exception:
                 self.conn_mgr.invalidate_mysql()
 
+    # ------------------------------------------------------------------
+    # Watchdog
     # ------------------------------------------------------------------
     # Watchdog
     # ------------------------------------------------------------------
@@ -798,6 +1111,10 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                 self._hb.write()
                 snap = self._hb.snapshot()
                 stall = snap["stall_seconds"]
+                phase = snap.get("phase") or ""
+                # Skip intencional de share MDB: nao tratar como stall fatal.
+                if phase == "mdb_unavailable":
+                    continue
                 if stall >= SYNC_STALL_TIMEOUT:
                     self._svc_log.critical(
                         "[WATCHDOG] STALL detectado: phase=%s stall=%.1fs - "
@@ -867,7 +1184,11 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
 
     def run_continuous(self):
         self._svc_log.info("=" * 70)
-        self._svc_log.info("[INICIO] SYNC SERVICE (MDB -> MySQL) resiliente")
+        self._svc_log.info("[INICIO] SYNC SERVICE tabAndamento BIDIRECIONAL resiliente")
+        self._svc_log.info(
+            "[INFO] tabAndamento bi=%s | Protocolos/Detalhes so MDB->MySQL",
+            SYNC_TABANDAMENTO_BIDI and SYNC_MYSQL_TO_MDB_CATCHUP,
+        )
         self._svc_log.info(
             "[INFO] Monitorando ultimos %s dias | intervalo=%ss | stall=%ss",
             self.config.dias_monitoramento,

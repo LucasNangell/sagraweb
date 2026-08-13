@@ -12,7 +12,6 @@ set "BACKEND=%ROOT%\app\backend"
 set "SERVICES=%ROOT%\app\services"
 set "SYNC_SERVICE=%ROOT%\sync_andamentos_service.py"
 set "SYNC_OLD=%ROOT%\sync_andamentos_v2_Old.py"
-set "SYNC_NEW=%SERVICES%\sync_andamentos_v2.py"
 set "SYNC_TARGET="
 set "ENV_FILE=%ROOT%\config\.env"
 set "PYTHONPATH=%BACKEND%;%SERVICES%"
@@ -40,15 +39,11 @@ if exist "%SYNC_SERVICE%" (
     set "SYNC_TARGET=%SYNC_SERVICE%"
 ) else if exist "%SYNC_OLD%" (
     set "SYNC_TARGET=%SYNC_OLD%"
-) else if exist "%SYNC_NEW%" (
-    set "SYNC_TARGET=%SYNC_NEW%"
-)
-
-if not defined SYNC_TARGET (
-    echo [ERRO] Script nao encontrado:
+) else (
+    echo [ERRO] Script de sync nao encontrado:
     echo        - %SYNC_SERVICE%
     echo        - %SYNC_OLD%
-    echo        - %SYNC_NEW%
+    echo        Nao use app\services\sync_andamentos_v2.py em producao.
     pause
     exit /b 1
 )

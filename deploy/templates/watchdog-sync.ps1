@@ -120,6 +120,11 @@ if (-not $ref) {
 }
 
 $age = ((Get-Date).ToUniversalTime() - $ref).TotalSeconds
+$phase = [string]$hb.phase
+if ($phase -eq "mdb_unavailable") {
+    Write-WatchLog ("OK skip-share phase=mdb_unavailable heartbeat_age={0:N0}s cycles={1} (sem restart)" -f $age, $hb.cycles)
+    exit 0
+}
 if ($age -gt $StaleSeconds) {
     Restart-SyncService ("heartbeat velho: age={0:N0}s limite={1}s phase={2}" -f $age, $StaleSeconds, $hb.phase)
     exit 0

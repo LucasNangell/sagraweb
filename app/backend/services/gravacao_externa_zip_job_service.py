@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -21,12 +20,9 @@ from config_manager import PROJECT_ROOT
 from database import db
 from services.gravacao_externa_service import (
     ZipBuildCancelled,
-    ZipFileWriteError,
-    ZipFilesPrecheckError,
     _fetch_arquivos,
     compute_arquivos_signature,
     get_session_by_id,
-    precheck_session_arquivos_zip,
     session_zip_filename,
     write_session_arquivos_zip,
 )
@@ -42,301 +38,6 @@ _DEFAULT_MAX_WORKERS = 1
 _PROGRESS_MIN_INTERVAL_S = 0.75
 _DEFAULT_TTL_HOURS = 24
 _DEFAULT_CACHE_MAX_GB = 20.0
-_DEFAULT_MIN_FREE_GB = 5.0
-_ZIP_ENTRY_OVERHEAD_BYTES = 64 * 1024
-
-
-class ZipSpaceError(Exception):
-    """Espaço insuficiente no volume do cache de ZIP."""
-
-    def __init__(
-        self,
-        *,
-        needed_bytes: int,
-        free_bytes: int,
-        reserve_bytes: int,
-        cache_dir: str,
-        volume: str,
-    ) -> None:
-        self.needed_bytes = int(needed_bytes)
-        self.free_bytes = int(free_bytes)
-        self.reserve_bytes = int(reserve_bytes)
-        self.cache_dir = str(cache_dir)
-        self.volume = str(volume)
-        super().__init__(
-            f"Sem espaço em {volume} ({cache_dir}): necessário {_format_gb(needed_bytes)}, "
-            f"livre {_format_gb(free_bytes)}."
-        )
-
-
-def _format_gb(num_bytes: int) -> str:
-    gb = max(0, int(num_bytes)) / (1024 ** 3)
-    if gb >= 10:
-        return f"{gb:.1f} GB"
-    if gb >= 1:
-        return f"{gb:.2f} GB"
-    mb = max(0, int(num_bytes)) / (1024 ** 2)
-    if mb >= 1:
-        return f"{mb:.0f} MB"
-    return f"{max(0, int(num_bytes))} B"
-
-
-def _min_free_bytes() -> int:
-    raw = (os.environ.get("SAGRA_GE_ZIP_MIN_FREE_GB") or "").strip()
-    try:
-        gb = float(raw) if raw else _DEFAULT_MIN_FREE_GB
-    except ValueError:
-        gb = _DEFAULT_MIN_FREE_GB
-    return int(max(0.5, gb) * (1024 ** 3))
-
-
-def _volume_label(path: Path) -> str:
-    try:
-        drive = path.drive
-        if drive:
-            return drive.upper()
-    except OSError:
-        pass
-    return str(path.anchor or path)
-
-
-def _disk_stats_for(path: Path) -> dict[str, Any]:
-    usage = shutil.disk_usage(str(path))
-    return {
-        "cache_dir": str(path),
-        "volume": _volume_label(path),
-        "total_bytes": int(usage.total),
-        "free_bytes": int(usage.free),
-        "used_bytes": int(usage.total - usage.free),
-    }
-
-
-def estimate_zip_bytes(arquivos: list[dict[str, Any]], session: dict[str, Any] | None = None) -> int:
-    total = 0
-    for arquivo in arquivos:
-        size = int(arquivo.get("tamanho_bytes") or 0)
-        if size <= 0 and session is not None:
-            try:
-                from services.gravacao_externa_service import resolve_arquivo_absolute_path
-
-                path = resolve_arquivo_absolute_path(session, arquivo)
-                if os.path.isfile(path):
-                    size = int(os.path.getsize(path))
-            except Exception:
-                size = 0
-        total += max(0, size) + _ZIP_ENTRY_OVERHEAD_BYTES
-    return max(total, _ZIP_ENTRY_OVERHEAD_BYTES)
-
-
-def _purge_orphan_parts(cache: Path) -> int:
-    removed = 0
-    for leftover in cache.glob("*.zip.part"):
-        _unlink_quiet(str(leftover))
-        removed += 1
-    return removed
-
-
-def _zip_row_file_size(row: dict[str, Any]) -> int:
-    path = row.get("arquivo_path")
-    size = int(row.get("tamanho_bytes") or 0)
-    if path and os.path.isfile(path):
-        try:
-            size = int(os.path.getsize(path))
-        except OSError:
-            pass
-    return max(0, size)
-
-
-def ensure_space_for(
-    needed_bytes: int,
-    *,
-    session_id: int | None = None,
-    aggressive: bool = False,
-) -> None:
-    """Garante espaço livre no volume do cache (reserva + ZIP estimado)."""
-    cache = zip_cache_dir()
-    reserve = _min_free_bytes()
-    target_free = int(needed_bytes) + reserve
-
-    def _free_now() -> int:
-        return int(shutil.disk_usage(str(cache)).free)
-
-    free = _free_now()
-    if free >= target_free:
-        return
-
-    purge_expired_zips()
-    _purge_orphan_parts(cache)
-    free = _free_now()
-    if free >= target_free:
-        return
-
-    ready = list_zip_jobs(statuses=[ZIP_READY])
-    sized: list[tuple[dict[str, Any], int]] = []
-    for row in ready:
-        if session_id is not None and int(row["gravacao_externa_id"]) == int(session_id):
-            continue
-        sized.append((row, _zip_row_file_size(row)))
-    sized.sort(key=lambda item: str(item[0].get("ultimo_acesso_em") or ""))
-
-    for row, size in sized:
-        if free >= target_free:
-            break
-        _purge_row(row)
-        free += size
-
-    if free >= target_free:
-        return
-
-    if aggressive:
-        for row, size in sized:
-            if free >= target_free:
-                break
-            if int(row["gravacao_externa_id"]) == int(session_id or -1):
-                continue
-            _purge_row(row)
-            free += size
-
-    if free >= target_free:
-        return
-
-    stats = _disk_stats_for(cache)
-    raise ZipSpaceError(
-        needed_bytes=int(needed_bytes),
-        free_bytes=int(free),
-        reserve_bytes=int(reserve),
-        cache_dir=str(stats["cache_dir"]),
-        volume=str(stats["volume"]),
-    )
-
-
-def _describe_zip_failure(
-    exc: BaseException,
-    *,
-    session_id: int | None = None,
-    cache_dir: str | None = None,
-) -> tuple[str, str, str]:
-    cache_path = Path(cache_dir or str(zip_cache_dir()))
-    stats = _disk_stats_for(cache_path)
-    volume = str(stats["volume"])
-    folder = str(stats["cache_dir"])
-
-    if isinstance(exc, ZipSpaceError):
-        msg = (
-            f"[SEM_ESPACO] Sem espaço no volume {exc.volume} para montar o ZIP "
-            f"(pasta {exc.cache_dir}). Necessário {_format_gb(exc.needed_bytes + exc.reserve_bytes)}, "
-            f"livre {_format_gb(exc.free_bytes)}."
-        )
-        detail = (
-            f"needed_bytes={exc.needed_bytes};reserve_bytes={exc.reserve_bytes};"
-            f"free_bytes={exc.free_bytes};cache_dir={exc.cache_dir};volume={exc.volume}"
-        )
-        return "SEM_ESPACO", msg, detail
-
-    if isinstance(exc, ZipFilesPrecheckError):
-        parts: list[str] = []
-        for nome, path in exc.missing:
-            parts.append(f'"{nome}" em {path}')
-        for nome, path, reason in exc.inaccessible:
-            loc = f" ({path})" if path else ""
-            parts.append(f'"{nome}"{loc}: {reason}')
-        joined = "; ".join(parts[:5])
-        extra = ""
-        total_issues = len(exc.missing) + len(exc.inaccessible)
-        if total_issues > 5:
-            extra = f" (+{total_issues - 5} outros)"
-        msg = (
-            f"[ARQUIVO_AUSENTE] {total_issues} arquivo(s) indisponível(is) de {exc.total} "
-            f"antes de montar o ZIP: {joined}{extra}."
-        )
-        detail = f"missing={len(exc.missing)};inaccessible={len(exc.inaccessible)};total={exc.total}"
-        return "ARQUIVO_AUSENTE", msg, detail
-
-    if isinstance(exc, ZipFileWriteError):
-        inner = exc.original
-        code, base_msg, inner_detail = _describe_zip_failure(inner, session_id=session_id, cache_dir=folder)
-        msg = (
-            f"{base_msg} Falhou no arquivo {exc.index}/{exc.total} "
-            f'"{exc.nome}" ({exc.caminho}).'
-        )
-        detail = (
-            f"file_index={exc.index};file_total={exc.total};file_name={exc.nome};"
-            f"file_path={exc.caminho};{inner_detail}"
-        )
-        return code, msg, detail
-
-    if isinstance(exc, HTTPException):
-        detail_text = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
-        lower = detail_text.lower()
-        if "não encontrado" in lower or "nao encontrado" in lower:
-            return "ARQUIVO_AUSENTE", f"[ARQUIVO_AUSENTE] {detail_text}", detail_text
-        if "acesso negado" in lower or "permiss" in lower:
-            return "ACESSO_NEGADO", f"[ACESSO_NEGADO] {detail_text}", detail_text
-        return "CAMINHO_INVALIDO", f"[CAMINHO_INVALIDO] {detail_text}", detail_text
-
-    winerr = getattr(exc, "winerror", None)
-    errno = getattr(exc, "errno", None)
-    if errno == 28 or winerr == 112:
-        msg = (
-            f"[SEM_ESPACO] Sem espaço no volume {volume} para montar o ZIP (pasta {folder}). "
-            f"Livre {_format_gb(int(stats['free_bytes']))}."
-        )
-        return "SEM_ESPACO", msg, f"errno={errno};winerror={winerr};free_bytes={stats['free_bytes']}"
-
-    if winerr == 5 or errno == 13:
-        msg = f"[ACESSO_NEGADO] Permissão negada ao gravar o ZIP em {folder}."
-        return "ACESSO_NEGADO", msg, str(exc)
-
-    if winerr in (53, 59, 64, 1231) or errno in (53, 54, 111):
-        msg = f"[FALHA_REDE_ARQUIVO] Falha de rede ao ler arquivo de origem: {exc}"
-        return "FALHA_REDE_ARQUIVO", msg, str(exc)
-
-    exc_name = type(exc).__name__.lower()
-    if "operationalerror" in exc_name or "database" in exc_name:
-        return "BANCO_INDISPONIVEL", f"[BANCO_INDISPONIVEL] Falha ao consultar o banco: {exc}", str(exc)
-
-    if isinstance(exc, PermissionError):
-        msg = f"[PASTA_ZIP_INVALIDA] Sem permissão de escrita em {folder}."
-        return "PASTA_ZIP_INVALIDA", msg, str(exc)
-
-    if isinstance(exc, OSError) and "No space left on device" in str(exc):
-        msg = (
-            f"[SEM_ESPACO] Sem espaço no volume {volume} para montar o ZIP (pasta {folder}). "
-            f"Livre {_format_gb(int(stats['free_bytes']))}."
-        )
-        return "SEM_ESPACO", msg, str(exc)
-
-    msg = f"[ERRO_INESPERADO] Falha ao gerar o ZIP dos arquivos: {exc}"
-    sid = f";session_id={session_id}" if session_id is not None else ""
-    return "ERRO_INESPERADO", msg, f"{type(exc).__name__}: {exc}{sid}"
-
-
-def _finalize_error_from_exception(
-    session_id: int,
-    signature: str,
-    exc: BaseException,
-) -> None:
-    codigo, mensagem, detalhe = _describe_zip_failure(exc, session_id=session_id)
-    _finalize_error(session_id, signature, mensagem, erro_codigo=codigo, erro_detalhe=detalhe)
-
-
-def log_zip_cache_startup_info() -> None:
-    try:
-        cache = zip_cache_dir()
-        stats = _disk_stats_for(cache)
-        logger.info(
-            "ZIP GE: cache em %s (%s) — livre %s / total %s",
-            stats["cache_dir"],
-            stats["volume"],
-            _format_gb(int(stats["free_bytes"])),
-            _format_gb(int(stats["total_bytes"])),
-        )
-        test_file = cache / ".write_test"
-        test_file.write_bytes(b"ok")
-        test_file.unlink(missing_ok=True)
-    except Exception as exc:
-        codigo, msg, _detail = _describe_zip_failure(exc)
-        logger.error("ZIP GE: pasta de cache inválida (%s): %s", codigo, msg)
 
 
 def _max_workers() -> int:
@@ -409,8 +110,6 @@ def _map_zip_row(row: dict[str, Any]) -> dict[str, Any]:
         "assinatura": assinatura,
         "status": str(row.get("Status") or ZIP_PENDING),
         "erro": row.get("Erro"),
-        "erro_codigo": row.get("ErroCodigo"),
-        "erro_detalhe": row.get("ErroDetalhe"),
         "arquivo_path": row.get("ArquivoPath"),
         "nome_arquivo": row.get("NomeArquivo"),
         "tamanho_bytes": int(row["TamanhoBytes"]) if row.get("TamanhoBytes") is not None else None,
@@ -435,8 +134,6 @@ def public_zip_status(row: dict[str, Any]) -> dict[str, Any]:
         "arquivos_prontos": row.get("arquivos_prontos") or 0,
         "bytes_prontos": row.get("bytes_prontos") or 0,
         "erro": row.get("erro"),
-        "erro_codigo": row.get("erro_codigo"),
-        "erro_detalhe": row.get("erro_detalhe"),
         "etag": row.get("etag") if row.get("status") == ZIP_READY else None,
     }
 
@@ -487,8 +184,6 @@ def _upsert_pending(session_id: int, signature: str, filename: str, total_arquiv
               Assinatura = VALUES(Assinatura),
               Status = VALUES(Status),
               Erro = NULL,
-              ErroCodigo = NULL,
-              ErroDetalhe = NULL,
               ArquivoPath = NULL,
               NomeArquivo = VALUES(NomeArquivo),
               TamanhoBytes = NULL,
@@ -513,7 +208,7 @@ def _claim_zip_job(session_id: int, signature: str) -> bool:
         cursor.execute(
             """
             UPDATE tab_os_gravacao_externa_zip
-            SET Status = %s, Erro = NULL, ErroCodigo = NULL, ErroDetalhe = NULL
+            SET Status = %s, Erro = NULL
             WHERE GravacaoExternaId = %s
               AND Assinatura = %s
               AND Status = %s
@@ -562,8 +257,6 @@ def _finalize_ready(
             UPDATE tab_os_gravacao_externa_zip
             SET Status = %s,
                 Erro = NULL,
-                ErroCodigo = NULL,
-                ErroDetalhe = NULL,
                 ArquivoPath = %s,
                 NomeArquivo = %s,
                 TamanhoBytes = %s,
@@ -595,35 +288,16 @@ def _finalize_ready(
     return bool(updated["ok"])
 
 
-def _finalize_error(
-    session_id: int,
-    signature: str,
-    message: str,
-    *,
-    erro_codigo: str | None = None,
-    erro_detalhe: str | None = None,
-) -> None:
+def _finalize_error(session_id: int, signature: str, message: str) -> None:
     db.execute_query(
         """
         UPDATE tab_os_gravacao_externa_zip
-        SET Status = %s,
-            Erro = %s,
-            ErroCodigo = %s,
-            ErroDetalhe = %s
+        SET Status = %s, Erro = %s
         WHERE GravacaoExternaId = %s
           AND Assinatura = %s
           AND Status IN (%s, %s)
         """,
-        (
-            ZIP_ERROR,
-            (message or "Falha ao gerar o ZIP.")[:512],
-            (erro_codigo or None),
-            (erro_detalhe or None),
-            int(session_id),
-            signature,
-            ZIP_GENERATING,
-            ZIP_PENDING,
-        ),
+        (ZIP_ERROR, (message or "Falha ao gerar o ZIP.")[:512], int(session_id), signature, ZIP_GENERATING, ZIP_PENDING),
     )
 
 
@@ -688,12 +362,7 @@ def purge_expired_zips() -> dict[str, int]:
     """Remove ZIPs expirados e aplica teto LRU por UltimoAcessoEm."""
     expired = 0
     evicted = 0
-    parts_removed = 0
     ttl = zip_ttl_hours()
-    try:
-        parts_removed = _purge_orphan_parts(zip_cache_dir())
-    except Exception as exc:
-        logger.warning("Purga de .part órfãos ZIP GE falhou: %s", exc)
     try:
         rows = db.execute_query(
             """
@@ -738,7 +407,7 @@ def purge_expired_zips() -> dict[str, int]:
     except Exception as exc:
         logger.warning("Purga LRU de ZIP Gravação Externa falhou: %s", exc)
 
-    return {"expired": expired, "evicted": evicted, "parts_removed": parts_removed}
+    return {"expired": expired, "evicted": evicted}
 
 
 class _ZipJobRuntime:
@@ -828,20 +497,14 @@ class _ZipJobRuntime:
                 return
             session = get_session_by_id(session_id)
             if not session:
-                _finalize_error(session_id, signature, "Sessão não encontrada.", erro_codigo="ERRO_INESPERADO")
+                _finalize_error(session_id, signature, "Sessão não encontrada.")
                 return
-
-            arquivos = _fetch_arquivos(session_id)
-            needed = estimate_zip_bytes(arquivos, session)
-            ensure_space_for(needed, session_id=session_id)
-            precheck_session_arquivos_zip(session, arquivos)
 
             result = write_session_arquivos_zip(
                 session,
                 str(part),
                 on_progress=_on_progress,
                 should_abort=_abort,
-                skip_precheck=True,
             )
             if _abort():
                 _unlink_quiet(str(part))
@@ -873,14 +536,13 @@ class _ZipJobRuntime:
             if _abort():
                 return
             detail = exc.detail if isinstance(exc.detail, str) else "Falha ao gerar o ZIP."
-            codigo, msg, detalhe = _describe_zip_failure(exc, session_id=session_id)
-            _finalize_error(session_id, signature, msg or detail, erro_codigo=codigo, erro_detalhe=detalhe)
+            _finalize_error(session_id, signature, detail)
         except Exception as exc:
             _unlink_quiet(str(part))
             logger.exception("ZIP GE: falha no job sessão %s: %s", session_id, exc)
             if _abort():
                 return
-            _finalize_error_from_exception(session_id, signature, exc)
+            _finalize_error(session_id, signature, "Falha ao gerar o ZIP dos arquivos.")
 
 
 _runtime = _ZipJobRuntime()
@@ -909,21 +571,6 @@ def enqueue_zip_job(session: dict[str, Any]) -> dict[str, Any]:
         elif existing["status"] == ZIP_PENDING:
             _runtime.enqueue(session_id, signature)
             return public_zip_status(existing)
-        elif existing["status"] == ZIP_ERROR:
-            pass
-
-    try:
-        needed = estimate_zip_bytes(arquivos, session)
-        ensure_space_for(needed, session_id=session_id)
-        precheck_session_arquivos_zip(session, arquivos)
-    except Exception as exc:
-        codigo, msg, detalhe = _describe_zip_failure(exc, session_id=session_id)
-        if existing and existing.get("assinatura") == signature:
-            _finalize_error(session_id, signature, msg, erro_codigo=codigo, erro_detalhe=detalhe)
-            row = get_zip_row(session_id)
-            if row:
-                return public_zip_status(row)
-        raise HTTPException(status_code=507, detail=msg) from exc
 
     if existing and existing.get("arquivo_path"):
         _unlink_quiet(str(existing["arquivo_path"]))
@@ -960,59 +607,19 @@ def resolve_ready_zip(session: dict[str, Any]) -> Optional[dict[str, Any]]:
     return row
 
 
-def get_zip_diagnostics() -> dict[str, Any]:
-    cache = zip_cache_dir()
-    stats = _disk_stats_for(cache)
-    ready = list_zip_jobs(statuses=[ZIP_READY])
-    errors = list_zip_jobs(statuses=[ZIP_ERROR])
-    cache_bytes = 0
-    cache_files = 0
-    for row in ready:
-        size = _zip_row_file_size(row)
-        if row.get("arquivo_path") and os.path.isfile(str(row["arquivo_path"])):
-            cache_bytes += size
-            cache_files += 1
-    for leftover in cache.glob("*.zip.part"):
-        cache_files += 1
-    return {
-        "cache_dir": stats["cache_dir"],
-        "volume": stats["volume"],
-        "total_bytes": stats["total_bytes"],
-        "free_bytes": stats["free_bytes"],
-        "used_bytes": stats["used_bytes"],
-        "reserve_bytes": _min_free_bytes(),
-        "cache_max_bytes": zip_cache_max_bytes(),
-        "cache_files": cache_files,
-        "cache_bytes": cache_bytes,
-        "jobs_ready": len(ready),
-        "jobs_error": len(errors),
-        "recent_errors": [
-            {
-                "gravacao_externa_id": row["gravacao_externa_id"],
-                "erro": row.get("erro"),
-                "erro_codigo": row.get("erro_codigo"),
-                "erro_detalhe": row.get("erro_detalhe"),
-            }
-            for row in errors[:10]
-        ],
-    }
-
-
 def start_zip_job_runtime() -> None:
     _runtime.start()
-    log_zip_cache_startup_info()
 
 
 def recover_zip_jobs() -> dict[str, Any]:
     """No startup: gerando órfãos → pendente; reenfileira pendente; limpa .part."""
     _runtime.start()
-    log_zip_cache_startup_info()
     reset = 0
     enqueued = 0
-    parts_removed = 0
     try:
         cache = zip_cache_dir()
-        parts_removed = _purge_orphan_parts(cache)
+        for leftover in cache.glob("*.zip.part"):
+            _unlink_quiet(str(leftover))
         reset = _reset_generating_to_pending()
         pending = list_zip_jobs(statuses=[ZIP_PENDING])
         for job in pending:
@@ -1021,4 +628,4 @@ def recover_zip_jobs() -> dict[str, Any]:
         purge_expired_zips()
     except Exception as exc:
         logger.error("ZIP GE: falha na recuperação de jobs: %s", exc, exc_info=True)
-    return {"resetRunning": reset, "enqueued": enqueued, "partsRemoved": parts_removed}
+    return {"resetRunning": reset, "enqueued": enqueued}

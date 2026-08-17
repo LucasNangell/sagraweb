@@ -37,7 +37,6 @@ from services.gravacao_externa_service import (
 from services.gravacao_externa_zip_job_service import (
     ZIP_READY,
     enqueue_zip_job,
-    get_zip_diagnostics,
     get_zip_job_status,
     mark_zip_downloaded,
     resolve_ready_zip,
@@ -154,24 +153,7 @@ class GravacaoExternaZipStatusResponse(BaseModel):
     arquivos_prontos: int = 0
     bytes_prontos: int = 0
     erro: Optional[str] = None
-    erro_codigo: Optional[str] = None
-    erro_detalhe: Optional[str] = None
     etag: Optional[str] = None
-
-
-class GravacaoExternaZipDiagnosticsResponse(BaseModel):
-    cache_dir: str
-    volume: str
-    total_bytes: int
-    free_bytes: int
-    used_bytes: int
-    reserve_bytes: int
-    cache_max_bytes: int
-    cache_files: int
-    cache_bytes: int
-    jobs_ready: int
-    jobs_error: int
-    recent_errors: List[dict]
 
 
 def _get_request_session(request: Request) -> SessionData:
@@ -266,16 +248,6 @@ def _caller_fornecedor_ponto(request: Request) -> Optional[str]:
     if fetch_user_fornecedor(ponto):
         return format_ponto(_clean_ponto(ponto)) or str(ponto).strip()
     return None
-
-
-@router.get(
-    "/gravacao-externa/zip/diagnostico",
-    response_model=GravacaoExternaZipDiagnosticsResponse,
-)
-def get_gravacao_externa_zip_diagnostico(request: Request):
-    _require_view_permission(request)
-    _require_operator_permission(request)
-    return GravacaoExternaZipDiagnosticsResponse.model_validate(get_zip_diagnostics())
 
 
 @router.get("/gravacao-externa/os", response_model=GravacaoExternaOsListResponse)

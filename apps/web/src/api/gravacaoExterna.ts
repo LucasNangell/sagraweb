@@ -209,8 +209,6 @@ export type GravacaoExternaZipStatus = {
   arquivos_prontos: number;
   bytes_prontos: number;
   erro?: string | null;
-  erro_codigo?: string | null;
-  erro_detalhe?: string | null;
   etag?: string | null;
 };
 

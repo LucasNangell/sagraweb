@@ -723,41 +723,6 @@ class ZipBuildCancelled(Exception):
     """Job de ZIP substituído ou cancelado no meio da montagem."""
 
 
-class ZipFileWriteError(Exception):
-    """Falha ao copiar um arquivo específico para o ZIP."""
-
-    def __init__(
-        self,
-        index: int,
-        total: int,
-        nome: str,
-        caminho: str,
-        original: BaseException,
-    ) -> None:
-        self.index = int(index)
-        self.total = int(total)
-        self.nome = str(nome or "arquivo")
-        self.caminho = str(caminho or "")
-        self.original = original
-        super().__init__(str(original))
-
-
-class ZipFilesPrecheckError(Exception):
-    """Arquivos ausentes ou inacessíveis detectados antes de abrir o ZIP."""
-
-    def __init__(
-        self,
-        *,
-        missing: list[tuple[str, str]],
-        inaccessible: list[tuple[str, str, str]],
-        total: int,
-    ) -> None:
-        self.missing = list(missing)
-        self.inaccessible = list(inaccessible)
-        self.total = int(total)
-        super().__init__("Pré-checagem de arquivos do ZIP falhou.")
-
-
 def session_zip_filename(session: dict[str, Any]) -> str:
     os_nro = int(session["os_nro"])
     os_ano = int(session["os_ano"])
@@ -780,61 +745,17 @@ def compute_arquivos_signature(arquivos: list[dict[str, Any]]) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def precheck_session_arquivos_zip(
-    session: dict[str, Any],
-    arquivos: list[dict[str, Any]] | None = None,
-    *,
-    max_report: int = 5,
-) -> None:
-    """Valida arquivos antes de abrir o ZIP (ausentes / inacessíveis)."""
-    items = arquivos if arquivos is not None else _fetch_arquivos(int(session["id"]))
-    if not items:
-        raise HTTPException(status_code=404, detail="Nenhum arquivo para download.")
-
-    missing: list[tuple[str, str]] = []
-    inaccessible: list[tuple[str, str, str]] = []
-    for arquivo in items:
-        nome = str(arquivo.get("nome") or "arquivo").strip() or "arquivo"
-        try:
-            path = resolve_arquivo_absolute_path(session, arquivo)
-        except HTTPException as exc:
-            detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
-            inaccessible.append((nome, "", detail))
-            continue
-        except OSError as exc:
-            inaccessible.append((nome, path if "path" in locals() else "", str(exc)))
-            continue
-        if not os.path.isfile(path):
-            missing.append((nome, path))
-            continue
-        try:
-            with open(path, "rb"):
-                pass
-        except OSError as exc:
-            inaccessible.append((nome, path, str(exc)))
-
-    if missing or inaccessible:
-        raise ZipFilesPrecheckError(
-            missing=missing[:max_report],
-            inaccessible=inaccessible[:max_report],
-            total=len(items),
-        )
-
-
 def write_session_arquivos_zip(
     session: dict[str, Any],
     dest_path: str,
     *,
     on_progress: Callable[[int, int, int], None] | None = None,
     should_abort: Callable[[], bool] | None = None,
-    skip_precheck: bool = False,
 ) -> dict[str, Any]:
     """Empacota os arquivos da sessão em dest_path (ZIP_STORED, Zip64)."""
     arquivos = _fetch_arquivos(int(session["id"]))
     if not arquivos:
         raise HTTPException(status_code=404, detail="Nenhum arquivo para download.")
-    if not skip_precheck:
-        precheck_session_arquivos_zip(session, arquivos)
 
     total = len(arquivos)
     bytes_prontos = 0
@@ -849,6 +770,11 @@ def write_session_arquivos_zip(
             if should_abort is not None and should_abort():
                 raise ZipBuildCancelled()
             path = resolve_arquivo_absolute_path(session, arquivo)
+            if not os.path.isfile(path):
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Arquivo não encontrado: {arquivo.get('nome') or path}",
+                )
             nome = str(arquivo.get("nome") or Path(path).name).strip() or "arquivo"
             candidate = nome
             counter = 1
@@ -857,17 +783,7 @@ def write_session_arquivos_zip(
                 candidate = f"{stem}_{counter}{ext}"
                 counter += 1
             used_names.add(candidate)
-            try:
-                if not os.path.isfile(path):
-                    raise HTTPException(
-                        status_code=404,
-                        detail=f"Arquivo não encontrado: {nome}",
-                    )
-                archive.write(path, arcname=candidate)
-            except HTTPException:
-                raise
-            except Exception as exc:
-                raise ZipFileWriteError(index + 1, total, nome, path, exc) from exc
+            archive.write(path, arcname=candidate)
             try:
                 bytes_prontos += int(os.path.getsize(path))
             except OSError:

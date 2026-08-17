@@ -16,11 +16,8 @@ import { useAuthStore } from "@/features/auth/authStore";
 import { useAccessControl } from "@/features/auth/useAccessControl";
 import {
   downloadGravacaoExternaZipAll,
-  downloadErrorToInfo,
-  formatDownloadErrorStage,
   type DownloadAllPhase,
   type DownloadAllProgress,
-  type DownloadErrorInfo,
 } from "@/features/gravacao-externa/utils/downloadGravacaoExternaZipAll";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useMatchMedia } from "@/hooks/useMatchMedia";
@@ -53,20 +50,6 @@ function formatDownloadBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
-function formatDownloadErrorDetails(info: DownloadErrorInfo): string {
-  const lines = [
-    `Etapa: ${formatDownloadErrorStage(info.stage)}`,
-    info.codigo ? `Código: ${info.codigo}` : null,
-    `Mensagem: ${info.message}`,
-    info.detalhe ? `Detalhe: ${info.detalhe}` : null,
-    info.status != null ? `HTTP: ${info.status}` : null,
-    info.url ? `Endpoint: ${info.url}` : null,
-    info.byteRange ? `Bloco: ${info.byteRange}` : null,
-    info.attempt != null ? `Tentativa: ${info.attempt}` : null,
-  ].filter(Boolean);
-  return lines.join("\n");
 }
 
 function GravacaoRealtimeToast({
@@ -115,7 +98,6 @@ export function GravacaoExternaTab() {
   const [previewSelection, setPreviewSelection] = useState<PreviewSelection | null>(null);
   const [downloadPhase, setDownloadPhase] = useState<DownloadAllPhase>("idle");
   const [downloadError, setDownloadError] = useState<string | null>(null);
-  const [downloadErrorInfo, setDownloadErrorInfo] = useState<DownloadErrorInfo | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<DownloadAllProgress | null>(null);
   const [entregaModalOpen, setEntregaModalOpen] = useState(false);
   const downloadAbortRef = useRef<AbortController | null>(null);
@@ -186,7 +168,6 @@ export function GravacaoExternaTab() {
     setPreviewSelection(null);
     setDownloadPhase("idle");
     setDownloadError(null);
-    setDownloadErrorInfo(null);
     setDownloadProgress(null);
     setEntregaModalOpen(false);
   };
@@ -263,13 +244,11 @@ export function GravacaoExternaTab() {
     setDownloadPhase("idle");
     setDownloadProgress(null);
     setDownloadError(null);
-    setDownloadErrorInfo(null);
   };
 
   const handleDownloadAll = async () => {
     if (!selected || downloadBusy) return;
     setDownloadError(null);
-    setDownloadErrorInfo(null);
     setDownloadProgress(null);
     downloadAbortRef.current?.abort();
     const controller = new AbortController();
@@ -301,16 +280,9 @@ export function GravacaoExternaTab() {
       void andamentoQuery.refetch();
     } catch (e) {
       if (controller.signal.aborted) return;
-      const info = downloadErrorToInfo(e);
       setDownloadPhase("error");
-      setDownloadErrorInfo(
-        info ?? {
-          stage: "rede",
-          message: e instanceof Error ? e.message : "Não foi possível baixar os arquivos.",
-        },
-      );
       setDownloadError(
-        info?.message ?? (e instanceof Error ? e.message : "Não foi possível baixar os arquivos."),
+        e instanceof Error ? e.message : "Não foi possível baixar os arquivos.",
       );
     }
   };
@@ -711,34 +683,10 @@ export function GravacaoExternaTab() {
           ) : null}
           {downloadPhase === "error" && downloadError ? (
             <div
-              className="space-y-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800"
+              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800"
               role="alert"
             >
-              <p className="font-semibold">
-                {formatDownloadErrorStage(downloadErrorInfo?.stage ?? "preparo")}
-              </p>
-              <p>{downloadError}</p>
-              {downloadErrorInfo ? (
-                <details className="rounded border border-red-100 bg-white/70 px-2 py-1">
-                  <summary className="cursor-pointer font-medium text-red-900">
-                    Detalhes técnicos
-                  </summary>
-                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words text-[11px] leading-relaxed text-red-900">
-                    {formatDownloadErrorDetails(downloadErrorInfo)}
-                  </pre>
-                  <button
-                    type="button"
-                    className="mt-2 rounded border border-red-200 bg-white px-2 py-0.5 text-[11px] font-medium text-red-800 hover:bg-red-100"
-                    onClick={() => {
-                      void navigator.clipboard?.writeText(
-                        formatDownloadErrorDetails(downloadErrorInfo),
-                      );
-                    }}
-                  >
-                    Copiar detalhes
-                  </button>
-                </details>
-              ) : null}
+              {downloadError}
             </div>
           ) : null}
           <div className="min-h-0 flex-1 overflow-y-auto">

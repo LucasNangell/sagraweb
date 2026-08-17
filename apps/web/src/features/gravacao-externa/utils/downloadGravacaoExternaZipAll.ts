@@ -9,8 +9,6 @@ import {
 
 export type DownloadAllPhase = "idle" | "preparing" | "saving" | "started" | "error";
 
-export type DownloadErrorStage = "preparo" | "rede" | "salvar";
-
 export type DownloadAllProgress = {
   phase: DownloadAllPhase;
   arquivosProntos?: number;
@@ -19,68 +17,25 @@ export type DownloadAllProgress = {
   totalBytes?: number;
 };
 
-export type DownloadErrorInfo = {
-  stage: DownloadErrorStage;
-  message: string;
-  codigo?: string | null;
-  detalhe?: string | null;
-  status?: number;
-  url?: string;
-  byteRange?: string;
-  attempt?: number;
-};
-
 const DEFAULT_CHUNK_SIZE = 16 * 1024 * 1024;
 const DEFAULT_CHUNK_TIMEOUT_MS = 90_000;
 const DEFAULT_POLL_INTERVAL_MS = 2_000;
 const DEFAULT_MAX_CHUNK_RETRIES = 5;
 
-function isHtmlResponse(text: string): boolean {
-  const head = text.trimStart().slice(0, 64).toLowerCase();
-  return head.startsWith("<!doctype html") || head.startsWith("<html");
-}
-
-async function parseDownloadError(res: Response, url: string): Promise<ApiDownloadError> {
+async function parseDownloadError(res: Response): Promise<string> {
   const text = await res.text().catch(() => res.statusText);
-  if (isHtmlResponse(text)) {
-    return new ApiDownloadError(
-      `O proxy (nginx/Cloudflare) devolveu página de erro HTTP ${res.status} em ${url}.`,
-      {
-        stage: "rede",
-        status: res.status,
-        url,
-        detalhe: text.replace(/\s+/g, " ").trim().slice(0, 300),
-      },
-    );
-  }
   try {
     const data = JSON.parse(text) as { detail?: unknown; message?: string };
     if (typeof data.detail === "string" && data.detail.trim()) {
-      return new ApiDownloadError(data.detail, {
-        stage: "rede",
-        status: res.status,
-        url,
-        detalhe: data.detail,
-      });
+      return data.detail;
     }
     if (typeof data.message === "string" && data.message.trim()) {
-      return new ApiDownloadError(data.message, {
-        stage: "rede",
-        status: res.status,
-        url,
-        detalhe: data.message,
-      });
+      return data.message;
     }
   } catch {
     /* ignore */
   }
-  const snippet = text.replace(/\s+/g, " ").trim().slice(0, 200) || `Erro ${res.status}`;
-  return new ApiDownloadError(snippet, {
-    stage: "rede",
-    status: res.status,
-    url,
-    detalhe: snippet,
-  });
+  return text.replace(/\s+/g, " ").trim().slice(0, 200) || `Erro ${res.status}`;
 }
 
 type SaveFilePickerOptions = {
@@ -127,53 +82,11 @@ function isGestureOrSecurityError(err: unknown): boolean {
   return /user gesture|user activation/i.test(err.message);
 }
 
-export class ApiDownloadError extends Error {
-  readonly stage: DownloadErrorStage;
-  readonly codigo?: string | null;
-  readonly detalhe?: string | null;
-  readonly status?: number;
-  readonly url?: string;
-  readonly byteRange?: string;
-  readonly attempt?: number;
-
-  constructor(message: string, info: Partial<DownloadErrorInfo> = {}) {
+class ApiDownloadError extends Error {
+  constructor(message: string) {
     super(message);
     this.name = "ApiDownloadError";
-    this.stage = info.stage ?? "rede";
-    this.codigo = info.codigo;
-    this.detalhe = info.detalhe;
-    this.status = info.status;
-    this.url = info.url;
-    this.byteRange = info.byteRange;
-    this.attempt = info.attempt;
   }
-}
-
-export function formatDownloadErrorStage(stage: DownloadErrorStage): string {
-  switch (stage) {
-    case "preparo":
-      return "Erro ao preparar o ZIP";
-    case "salvar":
-      return "Erro ao salvar o ZIP";
-    default:
-      return "Erro de rede no download";
-  }
-}
-
-export function downloadErrorToInfo(err: unknown): DownloadErrorInfo | null {
-  if (!(err instanceof ApiDownloadError)) {
-    return null;
-  }
-  return {
-    stage: err.stage,
-    message: err.message,
-    codigo: err.codigo,
-    detalhe: err.detalhe,
-    status: err.status,
-    url: err.url,
-    byteRange: err.byteRange,
-    attempt: err.attempt,
-  };
 }
 
 async function abortWritable(writable: FileSystemWritableFileStream | null): Promise<void> {
@@ -251,11 +164,7 @@ async function waitForZipReady(opts: {
   while (job.status !== "pronto") {
     throwIfAborted(opts.signal);
     if (job.status === "erro") {
-      throw new ApiDownloadError(job.erro?.trim() || "Falha ao preparar o ZIP.", {
-        stage: "preparo",
-        codigo: job.erro_codigo,
-        detalhe: job.erro_detalhe,
-      });
+      throw new ApiDownloadError(job.erro?.trim() || "Falha ao preparar o ZIP.");
     }
     await sleep(opts.pollIntervalMs, opts.signal);
     job = await getGravacaoExternaZipStatus(opts.ano, opts.nrOs);
@@ -322,7 +231,6 @@ async function downloadZipInChunks(opts: {
   while (total <= 0 || offset < total) {
     throwIfAborted(opts.signal);
     const end = opts.chunkSize > 0 ? offset + opts.chunkSize - 1 : offset;
-    const byteRange = `bytes=${offset}-${end}`;
     let lastError: unknown;
     let succeeded = false;
     for (let attempt = 1; attempt <= opts.maxChunkRetries; attempt += 1) {
@@ -336,17 +244,9 @@ async function downloadZipInChunks(opts: {
           timeoutMs: opts.chunkTimeoutMs,
           signal: opts.signal,
         });
-        if (
-          res.status === 409 ||
-          (res.status >= 400 && res.status !== 504 && res.status !== 502 && res.status !== 503)
-        ) {
-          const parsed = await parseDownloadError(res, opts.url);
-          throw new ApiDownloadError(parsed.message, {
-            ...downloadErrorToInfo(parsed),
-            stage: "salvar",
-            byteRange,
-            attempt,
-          });
+        if (res.status === 409 || (res.status >= 400 && res.status !== 504 && res.status !== 502 && res.status !== 503)) {
+          const message = await parseDownloadError(res);
+          throw new ApiDownloadError(message);
         }
         if (!res.ok && res.status !== 206) {
           throw new Error(`HTTP ${res.status}`);
@@ -355,7 +255,6 @@ async function downloadZipInChunks(opts: {
           if (offset > 0) {
             throw new ApiDownloadError(
               "O ZIP foi atualizado no servidor. Clique em Baixar todos novamente.",
-              { stage: "salvar", url: opts.url, byteRange },
             );
           }
           if (!res.body) {
@@ -395,13 +294,6 @@ async function downloadZipInChunks(opts: {
         lastError instanceof Error ? lastError.message : "Falha de rede no download.";
       throw new ApiDownloadError(
         `Não foi possível baixar o ZIP (${message}). Verifique a conexão e tente novamente.`,
-        {
-          stage: "salvar",
-          url: opts.url,
-          byteRange,
-          attempt: opts.maxChunkRetries,
-          detalhe: message,
-        },
       );
     }
     if (total <= 0) {

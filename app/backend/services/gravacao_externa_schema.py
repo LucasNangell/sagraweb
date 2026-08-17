@@ -61,6 +61,8 @@ CREATE TABLE IF NOT EXISTS tab_os_gravacao_externa_zip (
   Assinatura CHAR(64) NOT NULL,
   Status VARCHAR(16) NOT NULL DEFAULT 'pendente',
   Erro VARCHAR(512) DEFAULT NULL,
+  ErroCodigo VARCHAR(48) DEFAULT NULL,
+  ErroDetalhe TEXT DEFAULT NULL,
   ArquivoPath VARCHAR(1024) DEFAULT NULL,
   NomeArquivo VARCHAR(255) DEFAULT NULL,
   TamanhoBytes BIGINT DEFAULT NULL,
@@ -183,6 +185,16 @@ def _apply_externa_migrations() -> None:
             "tab_os_gravacao_externa_arquivo",
             "Maquina",
             "ALTER TABLE tab_os_gravacao_externa_arquivo ADD COLUMN Maquina VARCHAR(128) DEFAULT NULL",
+        ),
+        (
+            "tab_os_gravacao_externa_zip",
+            "ErroCodigo",
+            "ALTER TABLE tab_os_gravacao_externa_zip ADD COLUMN ErroCodigo VARCHAR(48) DEFAULT NULL",
+        ),
+        (
+            "tab_os_gravacao_externa_zip",
+            "ErroDetalhe",
+            "ALTER TABLE tab_os_gravacao_externa_zip ADD COLUMN ErroDetalhe TEXT DEFAULT NULL",
         ),
     )
     for table, column, ddl in migrations:

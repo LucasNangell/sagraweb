@@ -73,9 +73,37 @@ vi.mock("../hooks/useGravacaoExternaRealtime", () => ({
 }));
 
 const downloadMock = vi.fn();
-vi.mock("@/features/gravacao-externa/utils/downloadGravacaoExternaZipAll", () => ({
-  downloadGravacaoExternaZipAll: (...args: unknown[]) => downloadMock(...args),
-}));
+vi.mock("@/features/gravacao-externa/utils/downloadGravacaoExternaZipAll", () => {
+  class ApiDownloadError extends Error {
+    stage: string;
+    codigo?: string;
+    detalhe?: string;
+    constructor(message: string, info: { stage?: string; codigo?: string; detalhe?: string } = {}) {
+      super(message);
+      this.name = "ApiDownloadError";
+      this.stage = info.stage ?? "preparo";
+      this.codigo = info.codigo;
+      this.detalhe = info.detalhe;
+    }
+  }
+  return {
+    downloadGravacaoExternaZipAll: (...args: unknown[]) => downloadMock(...args),
+    downloadErrorToInfo: (err: unknown) => {
+      if (err instanceof ApiDownloadError) {
+        return {
+          stage: err.stage,
+          message: err.message,
+          codigo: err.codigo,
+          detalhe: err.detalhe,
+        };
+      }
+      return null;
+    },
+    formatDownloadErrorStage: (stage: string) =>
+      stage === "preparo" ? "Erro ao preparar o ZIP" : "Erro de rede no download",
+    ApiDownloadError,
+  };
+});
 
 vi.mock("./GravacaoExternaPreview", () => ({
   GravacaoExternaArquivosPanel: () => <div>arquivos-panel</div>,
@@ -92,6 +120,7 @@ vi.mock("./GravacaoExternaChatPanel", () => ({
 }));
 
 import { GravacaoExternaTab } from "./GravacaoExternaTab";
+import { ApiDownloadError } from "@/features/gravacao-externa/utils/downloadGravacaoExternaZipAll";
 
 describe("GravacaoExternaTab download-all", () => {
   beforeEach(() => {
@@ -127,5 +156,28 @@ describe("GravacaoExternaTab download-all", () => {
     fireEvent.click(screen.getByRole("button", { name: /01209\/24/i }));
     await screen.findByText("arquivos-panel");
     expect(screen.queryByRole("button", { name: /Baixar todos/i })).toBeNull();
+  });
+
+  it("shows technical details when download fails", async () => {
+    downloadMock.mockImplementation(async (opts: { onPhase?: (p: string) => void }) => {
+      opts.onPhase?.("preparing");
+      opts.onPhase?.("error");
+      throw new ApiDownloadError("[SEM_ESPACO] Sem espaço no volume F:", {
+        stage: "preparo",
+        codigo: "SEM_ESPACO",
+        detalhe: "needed_bytes=5000000000;free_bytes=500000000",
+      });
+    });
+
+    render(<GravacaoExternaTab />);
+    fireEvent.click(screen.getByRole("button", { name: /01209\/24/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Baixar todos/i }));
+
+    await waitFor(() => {
+      const alert = screen.getByRole("alert");
+      expect(alert.textContent).toMatch(/Erro ao preparar o ZIP/i);
+      expect(alert.textContent).toMatch(/Detalhes técnicos/i);
+      expect(alert.textContent).toMatch(/SEM_ESPACO/);
+    });
   });
 });

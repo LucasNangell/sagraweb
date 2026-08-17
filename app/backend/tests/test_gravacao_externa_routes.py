@@ -177,6 +177,8 @@ def test_post_zip_returns_202_when_generating(gravacao_client):
         "arquivos_prontos": 0,
         "bytes_prontos": 0,
         "erro": None,
+        "erro_codigo": None,
+        "erro_detalhe": None,
         "etag": None,
     }
     with patch(
@@ -244,6 +246,42 @@ def test_zip_download_returns_206_for_range(gravacao_client):
             os.unlink(tmp_path)
         except OSError:
             pass
+
+
+def test_zip_diagnostico_requires_operator(gravacao_client):
+    diag = {
+        "cache_dir": "F:\\SagraWeb\\gravacao_externa_zips",
+        "volume": "F:",
+        "total_bytes": 1000,
+        "free_bytes": 500,
+        "used_bytes": 500,
+        "reserve_bytes": 100,
+        "cache_max_bytes": 200000,
+        "cache_files": 1,
+        "cache_bytes": 10,
+        "jobs_ready": 1,
+        "jobs_error": 0,
+        "recent_errors": [],
+    }
+    with patch(
+        "routers.gravacao_externa_routes._has_view_permission",
+        return_value=True,
+    ), patch(
+        "routers.gravacao_externa_routes._has_operator_permission",
+        return_value=True,
+    ), patch(
+        "routers.gravacao_externa_routes.get_zip_diagnostics",
+        return_value=diag,
+    ):
+        response = gravacao_client.get(
+            "/api/gravacao-externa/zip/diagnostico",
+            cookies=_auth_cookies(),
+        )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["cache_dir"] == diag["cache_dir"]
+    assert body["volume"] == "F:"
 
 
 def test_list_os_requires_view_not_operator(gravacao_client):

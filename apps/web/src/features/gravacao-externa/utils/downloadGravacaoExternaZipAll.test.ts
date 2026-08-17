@@ -12,7 +12,7 @@ import {
   startGravacaoExternaZip,
 } from "@/api/gravacaoExterna";
 
-import { downloadGravacaoExternaZipAll } from "./downloadGravacaoExternaZipAll";
+import { downloadGravacaoExternaZipAll, ApiDownloadError } from "./downloadGravacaoExternaZipAll";
 
 const startZip = vi.mocked(startGravacaoExternaZip);
 const getZipStatus = vi.mocked(getGravacaoExternaZipStatus);
@@ -74,7 +74,9 @@ describe("downloadGravacaoExternaZipAll", () => {
     startZip.mockResolvedValue({
       ...readyJob(),
       status: "erro",
-      erro: "Arquivo não encontrado: a.tif",
+      erro: "[ARQUIVO_AUSENTE] Arquivo não encontrado: a.tif",
+      erro_codigo: "ARQUIVO_AUSENTE",
+      erro_detalhe: "missing=1;total=1",
     });
 
     await expect(
@@ -85,7 +87,14 @@ describe("downloadGravacaoExternaZipAll", () => {
         pollIntervalMs: 0,
         onPhase: (p) => phases.push(p),
       }),
-    ).rejects.toThrow(/Arquivo não encontrado/);
+    ).rejects.toSatisfy((err: unknown) => {
+      expect(err).toBeInstanceOf(ApiDownloadError);
+      const apiErr = err as ApiDownloadError;
+      expect(apiErr.message).toMatch(/Arquivo não encontrado/);
+      expect(apiErr.codigo).toBe("ARQUIVO_AUSENTE");
+      expect(apiErr.stage).toBe("preparo");
+      return true;
+    });
 
     expect(phases[0]).toBe("preparing");
     expect(phases.at(-1)).toBe("error");
@@ -214,6 +223,42 @@ describe("downloadGravacaoExternaZipAll", () => {
     controller.abort();
     await pending;
     expect(phases.at(-1)).toBe("idle");
+  });
+
+  it("reports proxy html error on failed chunk download", async () => {
+    Object.defineProperty(window, "showSaveFilePicker", {
+      configurable: true,
+      value: vi.fn().mockResolvedValue({
+        createWritable: vi.fn().mockResolvedValue({
+          write: vi.fn(),
+          close: vi.fn(),
+          abort: vi.fn(),
+        }),
+      }),
+    });
+    startZip.mockResolvedValue(readyJob({ tamanho_bytes: 100 }));
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response("<html><body>403 Forbidden</body></html>", {
+        status: 403,
+        headers: { "Content-Type": "text/html" },
+      }),
+    );
+
+    await expect(
+      downloadGravacaoExternaZipAll({
+        ano: 2024,
+        nrOs: 1,
+        fallbackFilename: "x.zip",
+        pollIntervalMs: 0,
+        chunkSize: 16,
+        maxChunkRetries: 1,
+      }),
+    ).rejects.toSatisfy((err: unknown) => {
+      expect(err).toBeInstanceOf(ApiDownloadError);
+      expect((err as ApiDownloadError).message).toMatch(/proxy \(nginx\/Cloudflare\)/i);
+      expect((err as ApiDownloadError).status).toBe(403);
+      return true;
+    });
   });
 
   it("falls back to native download on SecurityError from picker", async () => {

@@ -143,7 +143,7 @@ class TestOsSearchMaterializedAndamento:
         assert "tab_os_ultimo_andamento_operacional" in sql
         assert "ROW_NUMBER()" not in sql
         assert "a_op.situacao" in sql
-        assert "a_live" not in sql
+        assert "a_live.SituacaoLink" in sql
 
     @patch("services.os_search_service._prefer_materialized_andamento", return_value=False)
     @patch(_MAT_POPULATED, return_value=True)
@@ -173,8 +173,7 @@ class TestOsSearchMaterializedAndamento:
         assert "LEFT JOIN tab_os_ultimo_andamento_operacional" in sql
         assert "INNER JOIN tabProtocolos" not in sql
         assert "subfx_setor" in sql
-        assert "a_op.setor" in sql
-        assert "a_live" not in sql
+        assert "a_live.SetorLink" in sql
 
 
 class TestOsSearchActiveFilter:
@@ -188,7 +187,7 @@ class TestOsSearchActiveFilter:
         sql = str(mock_db.execute_query.call_args.args[0])
         assert "IS NULL OR" in sql
         assert "'Entregue'" in sql
-        assert "a_op.situacao" in sql
+        assert "a_live.SituacaoLink" in sql
 
     @patch("services.os_search_service._prefer_materialized_andamento", return_value=False)
     @patch(_MAT_POPULATED, return_value=True)
@@ -199,7 +198,7 @@ class TestOsSearchActiveFilter:
         execute_os_search(solicitante="Gab", simple_pagination=True)
         sql = str(mock_db.execute_query.call_args.args[0])
         assert "IS NULL OR" in sql
-        assert "a_op.SituacaoLink" in sql
+        assert "a_live.SituacaoLink" in sql
 
     @patch("services.os_search_service._prefer_materialized_andamento", return_value=True)
     @patch(_MAT_POPULATED, return_value=True)
@@ -372,6 +371,134 @@ class TestOsSearchSimplePagination:
         assert mock_db.execute_query.call_count == 1
 
 
+class TestOsSearchDisplayedAndamentoFilter:
+    @patch("services.os_search_service._prefer_materialized_andamento", return_value=False)
+    @patch(_MAT_POPULATED, return_value=True)
+    @patch("services.os_search_service.db")
+    @patch(
+        "services.os_search_service._enrich_operacional_from_live",
+        side_effect=lambda rows: [
+            {
+                **r,
+                "situacao": "Na Fila",
+                "setor": "Impressão",
+            }
+            for r in rows
+        ],
+    )
+    @patch("services.os_search_service._enrich_rows_with_details", side_effect=lambda r: r)
+    def test_paginated_search_drops_rows_after_live_enrich_mismatch(
+        self, _enrich, _live, mock_db, _pop, _prefer
+    ):
+        mock_db.execute_query.return_value = [
+            {
+                "nr_os": 100,
+                "ano": 2026,
+                "situacao": "Em Execução",
+                "setor": "SEFOC",
+                "has_sub_os": False,
+            }
+        ]
+        result = execute_os_search(
+            simple_pagination=True,
+            include_finished=True,
+            situacao=["Em Execução"],
+            setor=["SEFOC"],
+        )
+        assert result["data"] == []
+
+    @patch("services.os_search_service._prefer_materialized_andamento", return_value=False)
+    @patch(_MAT_POPULATED, return_value=True)
+    @patch("services.os_search_service.db")
+    @patch(
+        "services.os_search_service._enrich_operacional_from_live",
+        side_effect=lambda rows: [
+            {
+                **r,
+                "situacao": "Em Execução",
+                "setor": "SEFOC",
+            }
+            for r in rows
+        ],
+    )
+    @patch("services.os_search_service._enrich_rows_with_details", side_effect=lambda r: r)
+    def test_paginated_search_keeps_rows_when_live_enrich_matches(
+        self, _enrich, _live, mock_db, _pop, _prefer
+    ):
+        mock_db.execute_query.return_value = [
+            {
+                "nr_os": 100,
+                "ano": 2026,
+                "situacao": "Em Execução",
+                "setor": "SEFOC",
+                "has_sub_os": False,
+            }
+        ]
+        result = execute_os_search(
+            simple_pagination=True,
+            include_finished=True,
+            situacao=["Em Execução"],
+            setor=["SEFOC"],
+        )
+        assert len(result["data"]) == 1
+        assert result["data"][0]["nr_os"] == 100
+
+    @patch("services.os_search_service._prefer_materialized_andamento", return_value=False)
+    @patch(_MAT_POPULATED, return_value=True)
+    @patch("services.os_search_service.db")
+    @patch(
+        "services.os_search_service._enrich_operacional_from_live",
+        side_effect=lambda rows: [
+            {
+                **r,
+                "situacao": "Na Fila",
+                "setor": "SEFOC",
+            }
+            for r in rows
+        ],
+    )
+    @patch("services.os_search_service._enrich_rows_with_details", side_effect=lambda r: r)
+    def test_exact_os_lookup_does_not_keep_row_via_sub_os(
+        self, _enrich, _live, mock_db, _pop, _prefer
+    ):
+        mock_db.execute_query.return_value = [
+            {
+                "nr_os": 2244,
+                "ano": 2026,
+                "prioridade": "Normal",
+                "has_sub_os": True,
+            }
+        ]
+        result = execute_os_search(
+            nr_os=2244,
+            situacao=["Em Execução"],
+            setor=["SEFOC"],
+            exact_os_lookup=True,
+            simple_pagination=True,
+            include_finished=True,
+        )
+        assert result["data"] == []
+
+    @patch("services.os_search_service._prefer_materialized_andamento", return_value=True)
+    @patch(_MAT_POPULATED, return_value=True)
+    @patch("services.os_search_service.db")
+    @patch("services.os_search_service._enrich_rows_with_details", side_effect=lambda r: r)
+    def test_paginated_situacao_filter_uses_live_scalar_like_nr_os_lookup(
+        self, _enrich, mock_db, _pop, _prefer
+    ):
+        """Lista sem Nr OS deve filtrar o mesmo UltimoStatus=1 live do lookup exato."""
+        mock_db.execute_query.return_value = []
+        execute_os_search(
+            simple_pagination=True,
+            include_finished=True,
+            situacao=["Comentário"],
+        )
+        sql = str(mock_db.execute_query.call_args.args[0])
+        assert "a_live.SituacaoLink" in sql
+        assert "subfx_sit_0" in sql
+        assert "a_op.nro_protocolo IS NULL" not in sql
+
+
 class TestLegacyAndamentoJoinExport:
     def test_materialized_join_exposed(self):
         sql = _materialized_andamento_join_sql()
@@ -379,7 +506,12 @@ class TestLegacyAndamentoJoinExport:
         assert "ROW_NUMBER()" not in sql
 
     def test_legacy_live_join_still_available(self):
-        sql = _legacy_andamento_join_sql()
+        with patch(
+            "services.os_search_service.get_andamento_table",
+            return_value="tabAndamento",
+        ):
+            sql = _legacy_andamento_join_sql()
         assert "ROW_NUMBER()" in sql
         assert "UltimoStatus = 1" in sql
+        assert "FROM tabAndamento AS a2" in sql
         assert "cod_status_espelho" in sql.lower()

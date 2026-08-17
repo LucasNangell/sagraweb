@@ -1,4 +1,4 @@
-"""Filtros setor/situação: tabAndamento live primário; materializada com opt-in."""
+"""Filtros setor/situação: live UltimoStatus=1 (mesma fonte do enrich)."""
 
 from __future__ import annotations
 
@@ -32,12 +32,12 @@ def test_search_setor_filter_uses_tabandamento_live_by_default(
     assert "INNER JOIN tabProtocolos" not in sql
     assert "ROW_NUMBER()" in sql
     assert "UltimoStatus = 1" in sql
-    assert "a_op.SituacaoLink" in sql
-    assert "a_op.SetorLink" in sql
+    assert "a_live.SituacaoLink" in sql
+    assert "a_live.SetorLink" in sql
     assert "subfx_setor" in sql
     assert "subfx_sit" in sql
-    assert "a_gap.SetorLink" in sql
-    assert "tab_os_ultimo_andamento_operacional" in sql
+    assert "a_gap.SetorLink" not in sql
+    assert "INNER JOIN tab_os_sub_os_andamento sa" not in sql
     mock_live_enrich.assert_called_once()
 
 
@@ -46,7 +46,7 @@ def test_search_setor_filter_uses_tabandamento_live_by_default(
 @patch("services.os_search_service.db")
 @patch("services.os_search_service._enrich_rows_with_details", side_effect=lambda r: r)
 @patch("services.os_search_service._enrich_operacional_from_live", side_effect=lambda r: r)
-def test_search_setor_filter_tabandamento_gap_when_live_join_null(
+def test_search_setor_filter_uses_live_scalar_not_join_gap(
     _live_enrich, _enrich, mock_db, _pop, _prefer
 ):
     mock_db.execute_query.return_value = []
@@ -54,8 +54,8 @@ def test_search_setor_filter_tabandamento_gap_when_live_join_null(
     execute_os_search(simple_pagination=True, setor=["SEFOC"])
 
     sql = str(mock_db.execute_query.call_args.args[0])
-    assert "a_op.SituacaoLink IS NULL" in sql
-    assert "a_gap.SetorLink" in sql
+    assert "a_live.SetorLink" in sql
+    assert "a_op.SituacaoLink IS NULL" not in sql
     assert "UltimoStatus = 1" in sql
 
 
@@ -64,7 +64,7 @@ def test_search_setor_filter_tabandamento_gap_when_live_join_null(
 @patch("services.os_search_service.db")
 @patch("services.os_search_service._enrich_rows_with_details", side_effect=lambda r: r)
 @patch("services.os_search_service._enrich_operacional_from_live", side_effect=lambda r: r)
-def test_search_setor_filter_uses_materialized_when_opt_in(
+def test_search_setor_filter_uses_live_scalar_when_materialized_opt_in(
     mock_live_enrich, _enrich, mock_db, _pop, _prefer
 ):
     mock_db.execute_query.return_value = []
@@ -73,15 +73,16 @@ def test_search_setor_filter_uses_materialized_when_opt_in(
         simple_pagination=True,
         include_finished=False,
         setor=["SEFOC"],
-        situacao=["Saída p/", "Recebido"],
+        situacao=["Saída p/", "Recebido", "Comentário"],
     )
 
     sql = str(mock_db.execute_query.call_args.args[0])
     assert "tab_os_ultimo_andamento_operacional" in sql
-    assert "a_op.setor" in sql
-    assert "a_op.situacao" in sql
-    assert "a_op.nro_protocolo IS NULL" in sql
+    assert "a_live.SituacaoLink" in sql
+    assert "a_live.SetorLink" in sql
+    assert "a_op.nro_protocolo IS NULL" not in sql
     assert "ROW_NUMBER()" not in sql
+    assert "INNER JOIN tab_os_sub_os_andamento sa" not in sql
     mock_live_enrich.assert_called_once()
 
 
@@ -100,3 +101,4 @@ def test_search_setor_filter_falls_back_to_live_when_materialized_empty(
     sql = str(mock_db.execute_query.call_args.args[0])
     assert "ROW_NUMBER()" in sql
     assert "UltimoStatus = 1" in sql
+    assert "a_live.SetorLink" in sql

@@ -41,6 +41,20 @@ class TestBuildMainOrSubOsFilterSql:
     def test_vazio_sem_filtro(self):
         assert build_main_or_sub_os_filter_sql(setores=[], situacoes=[], params={}) == ""
 
+    def test_sem_sub_os_quando_flag_desligada(self):
+        params = {}
+        sql = build_main_or_sub_os_filter_sql(
+            setores=["SIELT"],
+            situacoes=["Em Execução"],
+            params=params,
+            include_sub_os=False,
+        )
+        assert "a.SetorLink IN" in sql
+        assert "a.SituacaoLink IN" in sql
+        assert "tab_os_sub_os" not in sql
+        assert "tab_os_sub_os_andamento" not in sql
+        assert params["subfx_setor_0"] == "SIELT"
+
 
 class TestAnnotateSearchSubOsMatches:
     def test_marca_quando_main_nao_bate(self):

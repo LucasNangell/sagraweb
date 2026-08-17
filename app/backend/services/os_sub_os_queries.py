@@ -44,10 +44,13 @@ def build_main_or_sub_os_filter_sql(
     tabandamento_gap_fallback: bool = False,
     materialized_supplement_fallback: bool = False,
     mirror_exclude_clause: Optional[str] = None,
+    include_sub_os: bool = True,
 ) -> str:
     """
-    Fragmento SQL: AND ((filtros no andamento principal) OR EXISTS(Sub OS com ultimo_status=1)).
-    Usado em /os/search quando há filtro de setor e/ou situação.
+    Fragmento SQL: AND (filtros no andamento principal [OR EXISTS Sub OS]).
+
+    /os/search usa include_sub_os=False — a lista exibe o andamento da OS
+    principal; Sub OS entra nos painéis via /pcp/queue.
 
     materialized_gap_fallback: OS sem linha materializada, com UltimoStatus=1 em tabAndamento.
     tabandamento_gap_fallback: join live sem linha, confirma via EXISTS em tabAndamento.
@@ -72,21 +75,25 @@ def build_main_or_sub_os_filter_sql(
     if clean_setores:
         ph = ", ".join(f"%({prefix}_setor_{i})s" for i in range(len(clean_setores)))
         main_parts.append(f"{main_setor_sql} IN ({ph})")
-        sub_parts.append(f"sa.setor IN ({ph})")
+        if include_sub_os:
+            sub_parts.append(f"sa.setor IN ({ph})")
         for i, val in enumerate(clean_setores):
             params[f"{prefix}_setor_{i}"] = val
 
     if clean_situacoes:
         ph = ", ".join(f"%({prefix}_sit_{i})s" for i in range(len(clean_situacoes)))
         main_parts.append(f"{main_situacao_sql} IN ({ph})")
-        sub_parts.append(f"sa.situacao IN ({ph})")
+        if include_sub_os:
+            sub_parts.append(f"sa.situacao IN ({ph})")
         for i, val in enumerate(clean_situacoes):
             params[f"{prefix}_sit_{i}"] = val
 
     main_sql = " AND ".join(main_parts)
-    sub_where = " AND ".join(sub_parts)
-    manual_sql = MANUAL_ANDAMENTO_SQL.replace("sa.", "sa_m.")
-    exists_sql = f"""
+    exists_sql = ""
+    if include_sub_os:
+        sub_where = " AND ".join(sub_parts)
+        manual_sql = MANUAL_ANDAMENTO_SQL.replace("sa.", "sa_m.")
+        exists_sql = f"""
         EXISTS (
             SELECT 1
             FROM tab_os_sub_os s
@@ -168,7 +175,9 @@ def build_main_or_sub_os_filter_sql(
                     f"(a_op.SituacaoLink IS NULL AND ({mat_exists}) AND ({gap_exists})))"
                 )
 
-    return f" AND (({effective_main}) OR {exists_sql})"
+    if include_sub_os and exists_sql:
+        return f" AND (({effective_main}) OR {exists_sql})"
+    return f" AND ({effective_main})"
 
 
 def annotate_search_sub_os_matches(

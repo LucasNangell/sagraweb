@@ -15,7 +15,6 @@ from services.andamento_operacional import MIRROR_EXCLUDE_CLAUSE
 from services.os_sub_os_queries import (
     annotate_search_sub_os_matches,
     build_main_or_sub_os_filter_sql,
-    pairs_matching_sub_os_filters,
 )
 from services.os_componentes_service import sub_os_listable_count_scalar_sql
 from services.os_text_search_utils import (
@@ -117,13 +116,18 @@ OS_SEARCH_PRIO_ORDER_DESC = f"""
 
 def _live_operacional_scalar(field: str) -> str:
     """
-    Subquery escalar — mesma lógica do painel PCP (/pcp/queue).
-    Fonte confiável: tabAndamento/tabandamento com UltimoStatus=1.
+    Subquery escalar — mesma regra de fetch_operacional_rows_batch / enrich.
+    Fonte: tabela canônica, UltimoStatus=1, espelhos Sub OS excluídos.
     """
     tbl = get_andamento_table()
     mirror = MIRROR_EXCLUDE_CLAUSE.replace("a.CodStatus", "a_live.CodStatus")
+    value_expr = (
+        f"TRIM(a_live.{field})"
+        if field in ("SituacaoLink", "SetorLink")
+        else f"a_live.{field}"
+    )
     return f"""(
-        SELECT a_live.{field}
+        SELECT {value_expr}
         FROM {tbl} AS a_live
         WHERE a_live.NroProtocoloLink = p.NroProtocolo
           AND a_live.AnoProtocoloLink = p.AnoProtocolo
@@ -143,7 +147,8 @@ LEFT JOIN {MATERIALIZED_TABLE} AS a_op
 
 
 def _live_andamento_join_sql() -> str:
-    """Join em tabAndamento (UltimoStatus=1, espelhos Sub OS excluídos) — fonte primária da busca."""
+    """Join no andamento canônico (UltimoStatus=1, espelhos Sub OS excluídos)."""
+    tbl = get_andamento_table()
     mirror_exclude = MIRROR_EXCLUDE_CLAUSE.replace("a.CodStatus", "a2.CodStatus")
     return f"""
 LEFT JOIN (
@@ -168,7 +173,7 @@ LEFT JOIN (
                 PARTITION BY a2.NroProtocoloLink, a2.AnoProtocoloLink
                 ORDER BY a2.`Data` DESC, a2.CodStatus DESC
             ) AS _rn
-        FROM tabAndamento AS a2
+        FROM {tbl} AS a2
         WHERE a2.UltimoStatus = 1
           AND {mirror_exclude.strip()}
     ) AS ranked
@@ -187,12 +192,13 @@ def _resolve_filter_operacional_columns(
     live_setor_col: str,
 ) -> Tuple[str, str, bool, bool]:
     """
-    Colunas SQL para filtros de setor/situação e flags de fallback.
-    Padrão: colunas do join live em tabAndamento; materializada só se uses_materialized.
+    Filtros de setor/situação usam o live UltimoStatus=1 (mesma fonte do enrich).
+    Join/materializada continuam só para SELECT/ordem. Sem gap fallback: o
+    escalar live já é a fonte de inclusão — senão a lista omite OSs que o
+    lookup por Nr OS ainda encontra.
     """
-    if uses_materialized:
-        return situacao_col, setor_col, True, False
-    return situacao_col, setor_col, False, True
+    del uses_materialized, situacao_col, setor_col
+    return live_situacao_col, live_setor_col, False, False
 
 
 def _resolve_andamento_join() -> Tuple[str, str, str, bool]:
@@ -599,6 +605,26 @@ def _main_matches_situacao_setor(
     return True
 
 
+def _filter_rows_by_displayed_andamento(
+    rows: List[Dict[str, Any]],
+    *,
+    situacoes: Optional[List[str]] = None,
+    setores: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """Mantém linhas cujo situacao/setor live (coluna visível) casa com o filtro."""
+    clean_situacao = [s.strip() for s in (situacoes or []) if s and s.strip()]
+    clean_setor = [s.strip() for s in (setores or []) if s and s.strip()]
+    if not clean_situacao and not clean_setor:
+        return rows
+    return [
+        row
+        for row in rows
+        if _main_matches_situacao_setor(
+            row, situacoes=clean_situacao, setores=clean_setor
+        )
+    ]
+
+
 def _filter_exact_lookup_choice_filters(
     rows: List[Dict[str, Any]],
     *,
@@ -611,12 +637,11 @@ def _filter_exact_lookup_choice_filters(
     """
     Aplica filtros de escolha após enrich no fast path Nr OS.
     Mantém SQL indexável; opera no conjunto pequeno já carregado.
+    Situação/setor usam a coluna visível da OS principal (sem inclusão via Sub OS).
     """
     if not rows:
         return rows
 
-    clean_situacao = [s.strip() for s in (situacao or []) if s and s.strip()]
-    clean_setor = [s.strip() for s in (setor or []) if s and s.strip()]
     clean_prio = [s.strip() for s in (prioridade or []) if s and s.strip()]
 
     filtered: List[Dict[str, Any]] = []
@@ -634,46 +659,11 @@ def _filter_exact_lookup_choice_filters(
                 continue
         filtered.append(row)
 
-    if not clean_situacao and not clean_setor:
-        return filtered
-
-    need_sub_check: List[Tuple[int, int]] = []
-    for row in filtered:
-        if _main_matches_situacao_setor(
-            row, situacoes=clean_situacao, setores=clean_setor
-        ):
-            continue
-        if not row.get("has_sub_os"):
-            continue
-        nro, ano = row.get("nr_os"), row.get("ano")
-        if nro is not None and ano is not None:
-            need_sub_check.append((int(nro), int(ano)))
-
-    sub_matches = (
-        pairs_matching_sub_os_filters(
-            need_sub_check,
-            setores=clean_setor or None,
-            situacoes=clean_situacao or None,
-        )
-        if need_sub_check
-        else set()
+    return _filter_rows_by_displayed_andamento(
+        filtered,
+        situacoes=situacao,
+        setores=setor,
     )
-
-    out: List[Dict[str, Any]] = []
-    for row in filtered:
-        if _main_matches_situacao_setor(
-            row, situacoes=clean_situacao, setores=clean_setor
-        ):
-            out.append(row)
-            continue
-        nro, ano = row.get("nr_os"), row.get("ano")
-        if (
-            nro is not None
-            and ano is not None
-            and (int(nro), int(ano)) in sub_matches
-        ):
-            out.append(row)
-    return out
 
 
 def _fulltext_match_parts(
@@ -1078,6 +1068,7 @@ def execute_os_search(
                 mirror_exclude_clause=MIRROR_EXCLUDE_CLAUSE.replace(
                     "a.CodStatus", "a_gap.CodStatus"
                 ),
+                include_sub_os=False,
             )
 
         if prioridade:
@@ -1233,6 +1224,12 @@ def execute_os_search(
             prioridade=prioridade,
             include_os=include_os,
             include_sp=include_sp,
+        )
+    else:
+        data_results = _filter_rows_by_displayed_andamento(
+            data_results,
+            situacoes=clean_situacao or None,
+            setores=clean_setor or None,
         )
 
     # Exact lookup / driver sem materializada: filtro de finalizadas após enrich.

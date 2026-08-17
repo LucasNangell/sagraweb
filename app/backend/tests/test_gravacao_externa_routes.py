@@ -97,6 +97,13 @@ def test_download_all_arquivos_returns_zip(gravacao_client):
     fd, tmp_path = tempfile.mkstemp(suffix=".zip")
     os.write(fd, b"PK\x03\x04fake-zip-content")
     os.close(fd)
+    ready = {
+        "gravacao_externa_id": 2,
+        "assinatura": "abc123",
+        "arquivo_path": tmp_path,
+        "nome_arquivo": "gravacao_externa_OS_01209_2024.zip",
+        "status": "pronto",
+    }
 
     with patch(
         "routers.gravacao_externa_routes.get_active_session",
@@ -108,9 +115,11 @@ def test_download_all_arquivos_returns_zip(gravacao_client):
         "routers.gravacao_externa_routes.iniciar_gravacao",
         return_value={"status": "iniciada"},
     ) as mock_iniciar, patch(
-        "routers.gravacao_externa_routes.build_session_arquivos_zip",
-        return_value=(tmp_path, "gravacao_externa_OS_01209_2024.zip"),
-    ) as build_zip:
+        "routers.gravacao_externa_routes.resolve_ready_zip",
+        return_value=ready,
+    ), patch(
+        "routers.gravacao_externa_routes.mark_zip_downloaded",
+    ):
         response = gravacao_client.get(
             "/api/gravacao-externa/2024/1209/arquivos/download-all",
             cookies=_auth_cookies(),
@@ -120,8 +129,121 @@ def test_download_all_arquivos_returns_zip(gravacao_client):
     assert response.headers["content-type"] == "application/zip"
     assert "attachment" in response.headers.get("content-disposition", "")
     assert b"PK\x03\x04fake-zip-content" in response.content
-    build_zip.assert_called_once_with(session)
     mock_iniciar.assert_called_once()
+
+
+def test_download_all_returns_409_when_zip_not_ready(gravacao_client):
+    session = {
+        "id": 2,
+        "os_ano": 2024,
+        "os_nro": 1209,
+        "status": "iniciada",
+    }
+    with patch(
+        "routers.gravacao_externa_routes.get_active_session",
+        return_value=session,
+    ), patch(
+        "routers.gravacao_externa_routes._has_operator_permission",
+        return_value=True,
+    ), patch(
+        "routers.gravacao_externa_routes.resolve_ready_zip",
+        return_value=None,
+    ), patch(
+        "routers.gravacao_externa_routes.enqueue_zip_job",
+        return_value={"status": "gerando"},
+    ) as enqueue:
+        response = gravacao_client.get(
+            "/api/gravacao-externa/2024/1209/arquivos/download-all",
+            cookies=_auth_cookies(),
+        )
+
+    assert response.status_code == 409
+    enqueue.assert_called_once()
+
+
+def test_post_zip_returns_202_when_generating(gravacao_client):
+    session = {
+        "id": 2,
+        "os_ano": 2024,
+        "os_nro": 1209,
+        "status": "pendente",
+    }
+    job = {
+        "status": "gerando",
+        "assinatura": "abc",
+        "nome_arquivo": "gravacao_externa_OS_01209_2024.zip",
+        "tamanho_bytes": None,
+        "total_arquivos": 2,
+        "arquivos_prontos": 0,
+        "bytes_prontos": 0,
+        "erro": None,
+        "etag": None,
+    }
+    with patch(
+        "routers.gravacao_externa_routes.get_active_session",
+        return_value=session,
+    ), patch(
+        "routers.gravacao_externa_routes._has_operator_permission",
+        return_value=True,
+    ), patch(
+        "routers.gravacao_externa_routes.iniciar_gravacao",
+        return_value={"status": "iniciada"},
+    ), patch(
+        "routers.gravacao_externa_routes.enqueue_zip_job",
+        return_value=job,
+    ):
+        response = gravacao_client.post(
+            "/api/gravacao-externa/2024/1209/arquivos/zip",
+            cookies=_auth_cookies(),
+        )
+
+    assert response.status_code == 202, response.text
+    assert response.json()["status"] == "gerando"
+    assert response.json()["total_arquivos"] == 2
+
+
+def test_zip_download_returns_206_for_range(gravacao_client):
+    payload = b"0123456789abcdef"
+    fd, tmp_path = tempfile.mkstemp(suffix=".zip")
+    os.write(fd, payload)
+    os.close(fd)
+    ready = {
+        "gravacao_externa_id": 2,
+        "assinatura": "deadbeef",
+        "arquivo_path": tmp_path,
+        "nome_arquivo": "pack.zip",
+        "status": "pronto",
+    }
+    session = {"id": 2, "os_ano": 2024, "os_nro": 1209, "status": "iniciada"}
+
+    try:
+        with patch(
+            "routers.gravacao_externa_routes.get_active_session",
+            return_value=session,
+        ), patch(
+            "routers.gravacao_externa_routes._has_operator_permission",
+            return_value=True,
+        ), patch(
+            "routers.gravacao_externa_routes.resolve_ready_zip",
+            return_value=ready,
+        ), patch(
+            "routers.gravacao_externa_routes.mark_zip_downloaded",
+        ):
+            response = gravacao_client.get(
+                "/api/gravacao-externa/2024/1209/arquivos/zip/download",
+                cookies=_auth_cookies(),
+                headers={"Range": "bytes=0-3"},
+            )
+
+        assert response.status_code == 206, response.text
+        assert response.content == b"0123"
+        assert "bytes 0-3/" in response.headers.get("content-range", "")
+        assert response.headers.get("etag") == '"deadbeef"'
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
 
 
 def test_list_os_requires_view_not_operator(gravacao_client):
@@ -296,8 +418,16 @@ def test_download_all_skips_iniciar_when_already_iniciada(gravacao_client):
     ), patch(
         "routers.gravacao_externa_routes.iniciar_gravacao",
     ) as mock_iniciar, patch(
-        "routers.gravacao_externa_routes.build_session_arquivos_zip",
-        return_value=(tmp_path, "gravacao_externa_OS_01209_2024.zip"),
+        "routers.gravacao_externa_routes.resolve_ready_zip",
+        return_value={
+            "gravacao_externa_id": 2,
+            "assinatura": "abc",
+            "arquivo_path": tmp_path,
+            "nome_arquivo": "gravacao_externa_OS_01209_2024.zip",
+            "status": "pronto",
+        },
+    ), patch(
+        "routers.gravacao_externa_routes.mark_zip_downloaded",
     ):
         response = gravacao_client.get(
             "/api/gravacao-externa/2024/1209/arquivos/download-all",

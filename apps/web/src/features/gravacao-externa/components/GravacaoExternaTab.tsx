@@ -1,9 +1,8 @@
 import { cn } from "@sagra/ui";
 import { ArrowLeft, CheckCircle2, Loader2, PackageCheck, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { GravacaoExternaOsItem } from "@/api/gravacaoExterna";
-import { gravacaoExternaDownloadAllUrl } from "@/api/gravacaoExterna";
 import {
   useConcluirGravacaoExternaMutation,
   GRAVACAO_EXTERNA_SAFETY_POLL_MS,
@@ -18,6 +17,7 @@ import { useAccessControl } from "@/features/auth/useAccessControl";
 import {
   downloadGravacaoExternaZipAll,
   type DownloadAllPhase,
+  type DownloadAllProgress,
 } from "@/features/gravacao-externa/utils/downloadGravacaoExternaZipAll";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useMatchMedia } from "@/hooks/useMatchMedia";
@@ -43,6 +43,13 @@ function formatOsListLabel(item: GravacaoExternaOsItem): string {
 
 function listItemHasSession(item: GravacaoExternaOsItem): boolean {
   return item.gravacao_status !== "sem_sessao" && item.gravacao_externa_id != null;
+}
+
+function formatDownloadBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 function GravacaoRealtimeToast({
@@ -91,7 +98,15 @@ export function GravacaoExternaTab() {
   const [previewSelection, setPreviewSelection] = useState<PreviewSelection | null>(null);
   const [downloadPhase, setDownloadPhase] = useState<DownloadAllPhase>("idle");
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<DownloadAllProgress | null>(null);
   const [entregaModalOpen, setEntregaModalOpen] = useState(false);
+  const downloadAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      downloadAbortRef.current?.abort();
+    };
+  }, []);
 
   const listFilters = {
     ano: ano ?? undefined,
@@ -153,6 +168,7 @@ export function GravacaoExternaTab() {
     setPreviewSelection(null);
     setDownloadPhase("idle");
     setDownloadError(null);
+    setDownloadProgress(null);
     setEntregaModalOpen(false);
   };
 
@@ -222,27 +238,48 @@ export function GravacaoExternaTab() {
   const downloadBusy =
     downloadPhase === "preparing" || downloadPhase === "saving";
 
+  const handleCancelDownload = () => {
+    downloadAbortRef.current?.abort();
+    downloadAbortRef.current = null;
+    setDownloadPhase("idle");
+    setDownloadProgress(null);
+    setDownloadError(null);
+  };
+
   const handleDownloadAll = async () => {
     if (!selected || downloadBusy) return;
     setDownloadError(null);
-    const url = gravacaoExternaDownloadAllUrl(selected.ano, selected.nr_os);
+    setDownloadProgress(null);
+    downloadAbortRef.current?.abort();
+    const controller = new AbortController();
+    downloadAbortRef.current = controller;
     const fallbackFilename = `gravacao_externa_OS_${String(selected.nr_os).padStart(5, "0")}_${selected.ano}.zip`;
     try {
-      await downloadGravacaoExternaZipAll(url, {
+      await downloadGravacaoExternaZipAll({
+        ano: selected.ano,
+        nrOs: selected.nr_os,
         fallbackFilename,
+        signal: controller.signal,
+        onProgress: (progress) => {
+          if (controller.signal.aborted) return;
+          setDownloadProgress(progress);
+        },
         onPhase: (phase) => {
+          if (controller.signal.aborted) return;
           setDownloadPhase(phase);
           if (phase === "started") {
             window.setTimeout(() => {
+              if (controller.signal.aborted) return;
               setDownloadPhase((current) => (current === "started" ? "idle" : current));
             }, 4000);
           }
         },
       });
-      // Download auto-inicia a gravação no backend; refresca status dos botões.
+      if (controller.signal.aborted) return;
       void detailQuery.refetch();
       void andamentoQuery.refetch();
     } catch (e) {
+      if (controller.signal.aborted) return;
       setDownloadPhase("error");
       setDownloadError(
         e instanceof Error ? e.message : "Não foi possível baixar os arquivos.",
@@ -535,48 +572,103 @@ export function GravacaoExternaTab() {
               Arquivos ({arquivos.length})
             </h3>
             {arquivos.length > 0 && canDownload ? (
-              <button
-                type="button"
-                disabled={downloadBusy}
-                onClick={() => void handleDownloadAll()}
-                className="inline-flex items-center gap-1 rounded border border-neutral-300 bg-white px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-60"
-                title="Baixar todos os arquivos em ZIP"
-              >
+              <div className="flex items-center gap-1">
                 {downloadBusy ? (
-                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  <button
+                    type="button"
+                    onClick={handleCancelDownload}
+                    className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+                  >
+                    Cancelar
+                  </button>
                 ) : null}
-                {downloadPhase === "saving"
-                  ? "Salvando…"
-                  : downloadBusy
-                    ? "Preparando…"
-                    : "Baixar todos"}
-              </button>
+                <button
+                  type="button"
+                  disabled={downloadBusy}
+                  onClick={() => void handleDownloadAll()}
+                  className="inline-flex items-center gap-1 rounded border border-neutral-300 bg-white px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-60"
+                  title="Baixar todos os arquivos em ZIP"
+                >
+                  {downloadBusy ? (
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  ) : null}
+                  {downloadPhase === "error"
+                    ? "Tentar novamente"
+                    : downloadPhase === "saving"
+                      ? "Salvando…"
+                      : downloadBusy
+                        ? "Preparando…"
+                        : "Baixar todos"}
+                </button>
+              </div>
             ) : null}
           </div>
           {downloadPhase === "preparing" ? (
             <div
-              className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
+              className="space-y-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
               role="status"
               aria-live="polite"
             >
-              <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-amber-700" />
-              <p>
-                <span className="font-semibold">Preparando arquivos para download…</span>{" "}
-                Volumes grandes podem levar vários minutos.
-              </p>
+              <div className="flex items-start gap-2">
+                <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-amber-700" />
+                <p>
+                  <span className="font-semibold">Preparando arquivos para download…</span>{" "}
+                  {downloadProgress?.totalArquivos
+                    ? `${downloadProgress.arquivosProntos ?? 0} de ${downloadProgress.totalArquivos} arquivos.`
+                    : "Aguarde a montagem do ZIP."}
+                </p>
+              </div>
+              {downloadProgress?.totalArquivos ? (
+                <div className="h-1.5 overflow-hidden rounded bg-amber-100">
+                  <div
+                    className="h-full bg-amber-600 transition-all"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        Math.round(
+                          ((downloadProgress.arquivosProntos ?? 0) /
+                            Math.max(1, downloadProgress.totalArquivos)) *
+                            100,
+                        ),
+                      )}%`,
+                    }}
+                  />
+                </div>
+              ) : null}
             </div>
           ) : null}
           {downloadPhase === "saving" ? (
             <div
-              className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
+              className="space-y-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
               role="status"
               aria-live="polite"
             >
-              <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-amber-700" />
-              <p>
-                <span className="font-semibold">Salvando o ZIP no local escolhido…</span>{" "}
-                Não feche esta aba até concluir.
-              </p>
+              <div className="flex items-start gap-2">
+                <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-amber-700" />
+                <p>
+                  <span className="font-semibold">Salvando o ZIP no local escolhido…</span>{" "}
+                  {downloadProgress?.totalBytes
+                    ? `${formatDownloadBytes(downloadProgress.bytesReceived ?? 0)} de ${formatDownloadBytes(downloadProgress.totalBytes)}.`
+                    : "Não feche esta aba até concluir."}
+                </p>
+              </div>
+              {downloadProgress?.totalBytes ? (
+                <div className="h-1.5 overflow-hidden rounded bg-amber-100">
+                  <div
+                    className="h-full bg-amber-600 transition-all"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        Math.round(
+                          ((downloadProgress.bytesReceived ?? 0) /
+                            Math.max(1, downloadProgress.totalBytes)) *
+                            100,
+                        ),
+                      )}%`,
+                    }}
+                  />
+                </div>
+              ) : null}
             </div>
           ) : null}
           {downloadPhase === "started" ? (

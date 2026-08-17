@@ -200,6 +200,41 @@ export function gravacaoExternaDownloadUrl(
   return apiUrl(`/gravacao-externa/${ano}/${nrOs}/arquivos/${arquivoId}/download`);
 }
 
+export type GravacaoExternaZipStatus = {
+  status: "pendente" | "gerando" | "pronto" | "erro" | string;
+  assinatura: string;
+  nome_arquivo?: string | null;
+  tamanho_bytes?: number | null;
+  total_arquivos: number;
+  arquivos_prontos: number;
+  bytes_prontos: number;
+  erro?: string | null;
+  etag?: string | null;
+};
+
+export async function startGravacaoExternaZip(
+  ano: number,
+  nrOs: number,
+): Promise<GravacaoExternaZipStatus> {
+  return apiFetch<GravacaoExternaZipStatus>(
+    `/gravacao-externa/${ano}/${nrOs}/arquivos/zip`,
+    { method: "POST" },
+  );
+}
+
+export async function getGravacaoExternaZipStatus(
+  ano: number,
+  nrOs: number,
+): Promise<GravacaoExternaZipStatus> {
+  return apiFetch<GravacaoExternaZipStatus>(
+    `/gravacao-externa/${ano}/${nrOs}/arquivos/zip`,
+  );
+}
+
+export function gravacaoExternaZipDownloadUrl(ano: number, nrOs: number): string {
+  return apiUrl(`/gravacao-externa/${ano}/${nrOs}/arquivos/zip/download`);
+}
+
 export function gravacaoExternaDownloadAllUrl(ano: number, nrOs: number): string {
   return apiUrl(`/gravacao-externa/${ano}/${nrOs}/arquivos/download-all`);
 }

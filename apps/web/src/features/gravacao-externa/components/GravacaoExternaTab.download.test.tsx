@@ -98,10 +98,7 @@ describe("GravacaoExternaTab download-all", () => {
     canOperatePerm = true;
     downloadMock.mockReset();
     downloadMock.mockImplementation(
-      async (
-        _url: string,
-        opts: { onPhase?: (p: string) => void },
-      ) => {
+      async (opts: { onPhase?: (p: string) => void }) => {
         opts.onPhase?.("preparing");
         await new Promise((r) => setTimeout(r, 30));
         opts.onPhase?.("idle");

@@ -54,6 +54,31 @@ CREATE TABLE IF NOT EXISTS tab_os_gravacao_externa_mensagem (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
 """
 
+_ZIP_SQL = """
+CREATE TABLE IF NOT EXISTS tab_os_gravacao_externa_zip (
+  Id INT NOT NULL AUTO_INCREMENT,
+  GravacaoExternaId INT NOT NULL,
+  Assinatura CHAR(64) NOT NULL,
+  Status VARCHAR(16) NOT NULL DEFAULT 'pendente',
+  Erro VARCHAR(512) DEFAULT NULL,
+  ArquivoPath VARCHAR(1024) DEFAULT NULL,
+  NomeArquivo VARCHAR(255) DEFAULT NULL,
+  TamanhoBytes BIGINT DEFAULT NULL,
+  TotalArquivos INT NOT NULL DEFAULT 0,
+  ArquivosProntos INT NOT NULL DEFAULT 0,
+  BytesProntos BIGINT NOT NULL DEFAULT 0,
+  CriadoEm DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  ProntoEm DATETIME DEFAULT NULL,
+  ExpiraEm DATETIME DEFAULT NULL,
+  UltimoAcessoEm DATETIME DEFAULT NULL,
+  PRIMARY KEY (Id),
+  UNIQUE KEY uniq_ge_zip_sessao (GravacaoExternaId),
+  KEY idx_ge_zip_status (Status),
+  KEY idx_ge_zip_expira (ExpiraEm),
+  KEY idx_ge_zip_acesso (UltimoAcessoEm)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+"""
+
 _CATALOG_SEEDED = False
 
 
@@ -182,6 +207,7 @@ def ensure_gravacao_externa_schema() -> None:
         db.execute_query(_SESSION_SQL)
         db.execute_query(_ARQUIVO_SQL)
         db.execute_query(_MENSAGEM_SQL)
+        db.execute_query(_ZIP_SQL)
         _apply_externa_migrations()
         if not _CATALOG_SEEDED:
             _seed_situacao_catalog()

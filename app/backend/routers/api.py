@@ -1074,6 +1074,9 @@ def startup_init():
     try:
         from services.gravacao_externa_schema import ensure_gravacao_externa_schema
         ensure_gravacao_externa_schema()
+        from services.gravacao_externa_zip_job_service import recover_zip_jobs
+
+        recover_zip_jobs()
     except Exception as exc:
         logger.error("Erro ao garantir schema Gravação Externa no startup: %s", exc)
 

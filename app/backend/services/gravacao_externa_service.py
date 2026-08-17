@@ -1,6 +1,7 @@
 """Serviço de Gravação Externa — sessões, arquivos e mensagens."""
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import logging
@@ -8,7 +9,7 @@ import os
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from fastapi import HTTPException
 from PIL import Image
@@ -718,48 +719,104 @@ def resolve_arquivo_absolute_path(session: dict[str, Any], arquivo: dict[str, An
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+class ZipBuildCancelled(Exception):
+    """Job de ZIP substituído ou cancelado no meio da montagem."""
+
+
+def session_zip_filename(session: dict[str, Any]) -> str:
+    os_nro = int(session["os_nro"])
+    os_ano = int(session["os_ano"])
+    return f"gravacao_externa_OS_{os_nro:05d}_{os_ano}.zip"
+
+
+def compute_arquivos_signature(arquivos: list[dict[str, Any]]) -> str:
+    payload = [
+        [
+            int(arquivo.get("id") or 0),
+            str(arquivo.get("relative") or ""),
+            str(arquivo.get("absolute_path") or ""),
+            str(arquivo.get("nome") or ""),
+            int(arquivo.get("tamanho_bytes") or 0),
+            int(arquivo.get("ordem") or 0),
+        ]
+        for arquivo in arquivos
+    ]
+    raw = json.dumps(payload, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def write_session_arquivos_zip(
+    session: dict[str, Any],
+    dest_path: str,
+    *,
+    on_progress: Callable[[int, int, int], None] | None = None,
+    should_abort: Callable[[], bool] | None = None,
+) -> dict[str, Any]:
+    """Empacota os arquivos da sessão em dest_path (ZIP_STORED, Zip64)."""
+    arquivos = _fetch_arquivos(int(session["id"]))
+    if not arquivos:
+        raise HTTPException(status_code=404, detail="Nenhum arquivo para download.")
+
+    total = len(arquivos)
+    bytes_prontos = 0
+    used_names: set[str] = set()
+    with zipfile.ZipFile(
+        dest_path,
+        "w",
+        compression=zipfile.ZIP_STORED,
+        allowZip64=True,
+    ) as archive:
+        for index, arquivo in enumerate(arquivos):
+            if should_abort is not None and should_abort():
+                raise ZipBuildCancelled()
+            path = resolve_arquivo_absolute_path(session, arquivo)
+            if not os.path.isfile(path):
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Arquivo não encontrado: {arquivo.get('nome') or path}",
+                )
+            nome = str(arquivo.get("nome") or Path(path).name).strip() or "arquivo"
+            candidate = nome
+            counter = 1
+            while candidate in used_names:
+                stem, ext = os.path.splitext(nome)
+                candidate = f"{stem}_{counter}{ext}"
+                counter += 1
+            used_names.add(candidate)
+            archive.write(path, arcname=candidate)
+            try:
+                bytes_prontos += int(os.path.getsize(path))
+            except OSError:
+                bytes_prontos += int(arquivo.get("tamanho_bytes") or 0)
+            if on_progress is not None:
+                on_progress(index + 1, total, bytes_prontos)
+
+    tamanho = int(os.path.getsize(dest_path)) if os.path.isfile(dest_path) else bytes_prontos
+    return {
+        "filename": session_zip_filename(session),
+        "tamanho_bytes": tamanho,
+        "total_arquivos": total,
+        "bytes_prontos": bytes_prontos,
+    }
+
+
 def build_session_arquivos_zip(session: dict[str, Any]) -> tuple[str, str]:
     """Empacota todos os arquivos da sessão em um ZIP (ZIP_STORED em disco).
 
     Returns:
         (tmp_path, download_filename) — caller must delete tmp_path after send.
     """
-    arquivos = _fetch_arquivos(int(session["id"]))
-    if not arquivos:
-        raise HTTPException(status_code=404, detail="Nenhum arquivo para download.")
-
     fd, tmp_path = tempfile.mkstemp(suffix=".zip", prefix="gravacao_externa_")
     os.close(fd)
     try:
-        used_names: set[str] = set()
-        with zipfile.ZipFile(tmp_path, "w", compression=zipfile.ZIP_STORED) as archive:
-            for arquivo in arquivos:
-                path = resolve_arquivo_absolute_path(session, arquivo)
-                if not os.path.isfile(path):
-                    raise HTTPException(
-                        status_code=404,
-                        detail=f"Arquivo não encontrado: {arquivo.get('nome') or path}",
-                    )
-                nome = str(arquivo.get("nome") or Path(path).name).strip() or "arquivo"
-                candidate = nome
-                counter = 1
-                while candidate in used_names:
-                    stem, ext = os.path.splitext(nome)
-                    candidate = f"{stem}_{counter}{ext}"
-                    counter += 1
-                used_names.add(candidate)
-                archive.write(path, arcname=candidate)
+        result = write_session_arquivos_zip(session, tmp_path)
     except Exception:
         try:
             os.unlink(tmp_path)
         except OSError:
             pass
         raise
-
-    os_nro = int(session["os_nro"])
-    os_ano = int(session["os_ano"])
-    filename = f"gravacao_externa_OS_{os_nro:05d}_{os_ano}.zip"
-    return tmp_path, filename
+    return tmp_path, str(result["filename"])
 
 
 def _downscale_image_for_preview(img: Image.Image, max_edge: int) -> Image.Image:

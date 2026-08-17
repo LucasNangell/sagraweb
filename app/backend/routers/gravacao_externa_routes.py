@@ -2,14 +2,12 @@
 from __future__ import annotations
 
 import logging
-import os
 from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
-from starlette.background import BackgroundTask
 
 from security.session_auth import SessionData, require_session
 
@@ -18,7 +16,6 @@ from routers.setor_painel_routes import fetch_user_fornecedor
 from services.gravacao_externa_service import (
     ALLOWED_EXTENSIONS,
     add_mensagem,
-    build_session_arquivos_zip,
     build_session_detail,
     concluir_gravacao,
     get_active_session,
@@ -36,6 +33,14 @@ from services.gravacao_externa_service import (
     update_session_arquivos,
     user_can_access_session,
     _fetch_arquivos,
+)
+from services.gravacao_externa_zip_job_service import (
+    ZIP_READY,
+    enqueue_zip_job,
+    get_zip_job_status,
+    mark_zip_downloaded,
+    resolve_ready_zip,
+    zip_etag,
 )
 from services.os_vinculo_grupo_service import _clean_ponto
 
@@ -137,6 +142,18 @@ class GravacaoExternaArquivoInput(BaseModel):
 
 class GravacaoExternaArquivosUpdate(BaseModel):
     arquivos: List[GravacaoExternaArquivoInput] = Field(..., min_length=1)
+
+
+class GravacaoExternaZipStatusResponse(BaseModel):
+    status: str
+    assinatura: str
+    nome_arquivo: Optional[str] = None
+    tamanho_bytes: Optional[int] = None
+    total_arquivos: int = 0
+    arquivos_prontos: int = 0
+    bytes_prontos: int = 0
+    erro: Optional[str] = None
+    etag: Optional[str] = None
 
 
 def _get_request_session(request: Request) -> SessionData:
@@ -419,31 +436,78 @@ def post_gravacao_externa_mensagem(
     return GravacaoExternaMensagemItem.model_validate(msg)
 
 
+def _require_zip_session(request: Request, ano: int, os_id: int) -> dict:
+    session = get_active_session(ano, os_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada.")
+    _require_operator_or_assigned_fornecedor(request, session)
+    return session
+
+
+def _zip_file_response(row: dict) -> FileResponse:
+    mark_zip_downloaded(int(row["gravacao_externa_id"]))
+    return FileResponse(
+        str(row["arquivo_path"]),
+        media_type="application/zip",
+        filename=str(row.get("nome_arquivo") or "arquivos.zip"),
+        content_disposition_type="attachment",
+        headers={
+            "etag": zip_etag(str(row["assinatura"])),
+            "Cache-Control": "private, max-age=0, must-revalidate",
+        },
+    )
+
+
+@router.post(
+    "/gravacao-externa/{ano}/{id}/arquivos/zip",
+    response_model=GravacaoExternaZipStatusResponse,
+)
+def post_gravacao_externa_zip(request: Request, ano: int, id: int):
+    session = _require_zip_session(request, ano, id)
+    _maybe_iniciar_on_download(request, ano, id, session)
+    job = enqueue_zip_job(session)
+    payload = GravacaoExternaZipStatusResponse.model_validate(job)
+    status_code = 200 if job.get("status") == ZIP_READY else 202
+    return JSONResponse(status_code=status_code, content=payload.model_dump())
+
+
+@router.get(
+    "/gravacao-externa/{ano}/{id}/arquivos/zip",
+    response_model=GravacaoExternaZipStatusResponse,
+)
+def get_gravacao_externa_zip(request: Request, ano: int, id: int):
+    session = _require_zip_session(request, ano, id)
+    job = get_zip_job_status(session)
+    return GravacaoExternaZipStatusResponse.model_validate(job)
+
+
+@router.get("/gravacao-externa/{ano}/{id}/arquivos/zip/download")
+def download_gravacao_externa_zip(request: Request, ano: int, id: int):
+    session = _require_zip_session(request, ano, id)
+    row = resolve_ready_zip(session)
+    if not row:
+        raise HTTPException(
+            status_code=409,
+            detail="O ZIP ainda está sendo preparado. Aguarde e tente novamente.",
+        )
+    return _zip_file_response(row)
+
+
 @router.get("/gravacao-externa/{ano}/{id}/arquivos/download-all")
 def download_all_gravacao_externa_arquivos(
     request: Request,
     ano: int,
     id: int,
 ):
-    session = get_active_session(ano, id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Sessão não encontrada.")
-    _require_operator_or_assigned_fornecedor(request, session)
+    session = _require_zip_session(request, ano, id)
     _maybe_iniciar_on_download(request, ano, id, session)
-    zip_path, filename = build_session_arquivos_zip(session)
-
-    def _cleanup_zip() -> None:
-        try:
-            os.unlink(zip_path)
-        except OSError:
-            logger.warning("Não foi possível remover ZIP temporário: %s", zip_path)
-
-    return FileResponse(
-        zip_path,
-        media_type="application/zip",
-        filename=filename,
-        content_disposition_type="attachment",
-        background=BackgroundTask(_cleanup_zip),
+    row = resolve_ready_zip(session)
+    if row:
+        return _zip_file_response(row)
+    enqueue_zip_job(session)
+    raise HTTPException(
+        status_code=409,
+        detail="O ZIP ainda está sendo preparado. Aguarde e tente novamente.",
     )
 
 

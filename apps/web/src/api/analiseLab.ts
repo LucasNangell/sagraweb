@@ -1,5 +1,6 @@
 import { apiFetch, apiUrl } from "@/lib/api";
 import type {
+  CropSidesMm,
   ProvaWebCropJson,
   ProvaWebCropMetaResponse,
   ProvaWebManifestBase,
@@ -53,6 +54,7 @@ export interface AnaliseLabSession {
   arquivoUnico: string | null;
   arquivoCapa: string | null;
   arquivoMiolo: string | null;
+  fontes?: AnaliseLabFonte[] | null;
   cropJson?: ProvaWebCropJson | Record<string, unknown> | null;
   pastaRender: string;
   renderStatus: AnaliseLabRenderStatus;
@@ -82,6 +84,19 @@ export interface AnaliseLabMark {
 
 export type AnaliseLabItemEscopo = "pagina" | "paginas" | "arquivo";
 export type AnaliseLabComponente = "Capa" | "Miolo" | "Arq. Único";
+
+export type AnaliseLabCropScope =
+  | "page"
+  | "file"
+  | "component"
+  | "all"
+  | "miolo_central";
+
+export interface AnaliseLabFonte {
+  path: string;
+  componente: AnaliseLabComponente;
+  ordem: number;
+}
 
 export type AnaliseLabProvidenciaTipo = "livre" | "autorizar_impressao" | string;
 export type AnaliseLabProvidenciaOrigem =
@@ -145,6 +160,7 @@ export interface AnaliseLabFileEntry {
 
 export interface AnaliseLabManifest extends ProvaWebManifestBase {
   session: AnaliseLabSession;
+  labWarnings?: string[];
 }
 
 export interface SaveAnaliseLabPayload {
@@ -153,8 +169,19 @@ export interface SaveAnaliseLabPayload {
   arquivo_unico?: string | null;
   arquivo_capa?: string | null;
   arquivo_miolo?: string | null;
+  fontes?: AnaliseLabFonte[];
   crop_json?: ProvaWebCropJson | null;
   folhear_modo?: "flipbook" | "folhas";
+}
+
+export interface PatchAnaliseLabCropPayload {
+  crop?: CropSidesMm | null;
+  scope?: AnaliseLabCropScope | null;
+  path?: string | null;
+  source_page?: number | null;
+  source_sequence?: number | null;
+  componente?: AnaliseLabComponente | string | null;
+  capa?: ProvaWebCropJson["capa"] | null;
 }
 
 export interface CreateAnaliseLabMarkPayload {
@@ -207,6 +234,22 @@ export async function saveAnaliseLab(
 }> {
   return apiFetch(`/os/${ano}/${osId}/analise-lab`, {
     method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function patchAnaliseLabCrop(
+  ano: number,
+  osId: number,
+  payload: PatchAnaliseLabCropPayload,
+): Promise<{
+  ok: boolean;
+  session: AnaliseLabSession;
+  renderStatus?: AnaliseLabRenderStatus;
+}> {
+  return apiFetch(`/os/${ano}/${osId}/analise-lab/crop`, {
+    method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });

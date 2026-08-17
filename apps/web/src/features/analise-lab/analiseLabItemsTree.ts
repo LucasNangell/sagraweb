@@ -1,4 +1,4 @@
-import type { AnaliseLabItem } from "@/api/analiseLab";
+import type { AnaliseLabFonte, AnaliseLabItem } from "@/api/analiseLab";
 import type { ProvaWebPageMeta } from "@/api/provaWeb";
 import {
   buildComponentLabelsForVersion,
@@ -16,6 +16,31 @@ import {
 } from "@/features/analise/versionPdfClassify";
 
 import { itemHomesForComponents } from "./analiseLabComponente";
+
+export function fontesToVersionFiles(
+  fontes: AnaliseLabFonte[] | null | undefined,
+  pdfIndex: { name: string; path: string; pages: number }[] = [],
+): VersionPdfFile[] {
+  if (!fontes?.length) return [];
+  const byPath = new Map(
+    pdfIndex.map((file) => [file.path.replace(/\\/g, "/"), file]),
+  );
+  return fontes
+    .slice()
+    .sort(
+      (a, b) =>
+        a.ordem - b.ordem || a.path.localeCompare(b.path, "pt-BR"),
+    )
+    .map((fonte) => {
+      const hit = byPath.get(fonte.path.replace(/\\/g, "/"));
+      return {
+        name: hit?.name || fonte.path.split("/").pop() || fonte.path,
+        path: fonte.path,
+        pages: hit?.pages ?? 0,
+        componente: fonte.componente as AnaliseComponente,
+      };
+    });
+}
 
 export interface LabTreeComponentNode {
   key: string;
@@ -132,13 +157,20 @@ function buildOsVersionNode(
   capaMioloChoiceByVersion?: Record<string, boolean>,
   pages: ProvaWebPageMeta[] = [],
   modo = "capa_miolo",
+  sessionFontes?: AnaliseLabFonte[] | null,
 ): LabTreeVersionNode {
   const versionKey = `v${version.version}`;
-  const classified = classifyVersionPdfFiles(versionPdfPerFile?.[versionKey] ?? [], {
-    versionLabel: version.label,
-    produto,
-    tratarComoCapaMiolo: capaMioloChoiceByVersion?.[versionKey],
-  });
+  const folderFiles = versionPdfPerFile?.[versionKey] ?? [];
+  const useSession =
+    Boolean(sessionFontes?.length) &&
+    itemMatchesVersion(currentVersaoLabel, version);
+  const classified = useSession
+    ? fontesToVersionFiles(sessionFontes, folderFiles)
+    : classifyVersionPdfFiles(folderFiles, {
+        versionLabel: version.label,
+        produto,
+        tratarComoCapaMiolo: capaMioloChoiceByVersion?.[versionKey],
+      });
   const pdfByComponent = versionPdfFilesByComponente(classified);
   const forceCapaMiolo = versionRequiresCapaMioloSlots(produto, version.label);
   const itemsByHome = groupItemsByHomes(versionItems, pages, modo);
@@ -209,6 +241,7 @@ export function buildLabItemsTree(
   capaMioloChoiceByVersion?: Record<string, boolean>,
   pages: ProvaWebPageMeta[] = [],
   modo = "capa_miolo",
+  sessionFontes?: AnaliseLabFonte[] | null,
 ): LabTreeVersionNode[] {
   if (versions.length === 0) {
     const byVersao = new Map<string, AnaliseLabItem[]>();
@@ -247,6 +280,7 @@ export function buildLabItemsTree(
       capaMioloChoiceByVersion,
       pages,
       modo,
+      sessionFontes,
     );
   });
 

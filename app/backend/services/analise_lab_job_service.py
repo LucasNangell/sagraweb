@@ -144,20 +144,33 @@ class _LabJobRuntime:
             folder = _get_os_folder_path(ano, os_id)
             if not folder or not os.path.isdir(folder):
                 raise FileNotFoundError("Pasta da OS não encontrada na rede.")
-            mode, sources = lab.resolve_session_sources(ano, os_id, session)
-            pasta = session.get("pastaRender") or LAB_PASTA_RENDER
+            from services.analise_lab_sources_service import (
+                prepare_lab_render,
+                write_page_map,
+            )
 
+            pasta = session.get("pastaRender") or LAB_PASTA_RENDER
+            prepared = prepare_lab_render(session, folder)
             ensure_prova_web_pages(
                 ano,
                 os_id,
-                mode=mode,
-                source_paths=sources,
+                mode=prepared["mode"],
+                source_paths=prepared["source_paths"],
                 os_folder=folder,
                 pasta_render=pasta,
-                crop_json=session.get("cropJson"),
+                crop_json=prepared["crop_json"],
                 progress_callback=_on_progress,
                 should_abort=_abort,
             )
+            try:
+                write_page_map(folder, pasta, prepared["page_map"])
+            except Exception:
+                logger.warning(
+                    "Análise Lab: falha ao gravar pageMap (%s/%s)",
+                    os_id,
+                    ano,
+                    exc_info=True,
+                )
 
             if _abort():
                 lab.finalize_render(

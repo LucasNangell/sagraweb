@@ -27,8 +27,10 @@ import {
   replicateAnaliseLabItems,
   saveAnaliseLab,
   saveAnaliseLabItemProvidencias,
+  patchAnaliseLabCrop,
   updateAnaliseLabItem,
   updateAnaliseLabMark,
+  type AnaliseLabCropScope,
   type AnaliseLabItem,
   type AnaliseLabItemEscopo,
   type AnaliseLabMark,
@@ -39,7 +41,11 @@ import {
   type UpdateAnaliseLabMarkPayload,
 } from "@/api/analiseLab";
 import { queryKeys } from "@/api/query-keys";
-import type { ProvaWebCropJson } from "@/api/provaWeb";
+import type {
+  CropSidesMm,
+  ProvaWebCapaCrop,
+  ProvaWebCropJson,
+} from "@/api/provaWeb";
 import { countPdfPagesInFolder } from "@/features/analise/pdfPageCount";
 import type { ProblemaPadrao } from "@/features/analise/types";
 import { versionNeedsCapaMioloPrompt } from "@/features/analise/versionPdfClassify";
@@ -49,6 +55,7 @@ import logoUrl from "@/logo.png";
 import { AnaliseLabBalloonLayer } from "./AnaliseLabBalloonLayer";
 import { AnaliseLabClientPortalPanel } from "./AnaliseLabClientPortalPanel";
 import { AnaliseLabConcluir } from "./AnaliseLabConcluir";
+import { AnaliseLabCropToolPanel } from "./AnaliseLabCropToolPanel";
 import { AnaliseLabInspector } from "./AnaliseLabInspector";
 import { AnaliseLabItemList } from "./AnaliseLabItemList";
 import {
@@ -112,6 +119,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [tab, setTab] = useState<LabTab>("inspecao");
+  const [cropOpen, setCropOpen] = useState(false);
   const [concluirOpen, setConcluirOpen] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -361,7 +369,30 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   });
 
   const pages = manifestQuery.data?.pages ?? [];
+  const labWarnings = manifestQuery.data?.labWarnings ?? [];
   const pageIndex = pageNumberToIndex(pages, currentPage);
+  const activeInspectPage = pages.find((p) => p.page === currentPage) ?? pages[0];
+  const cropJson = (session?.cropJson as ProvaWebCropJson | null | undefined) ?? null;
+  const cropSourcePath =
+    activeInspectPage?.sourcePath ||
+    (session?.modo === "unico"
+      ? session.arquivoUnico
+      : activeInspectPage?.role?.startsWith("cover")
+        ? session?.arquivoCapa
+        : session?.arquivoMiolo) ||
+    null;
+  const cropSourcePage = activeInspectPage?.sourcePage ?? 1;
+  const cropSequencePage =
+    activeInspectPage?.sourceSequence ?? cropSourcePage;
+  const cropComponente =
+    activeInspectPage?.componente ||
+    roleToComponente(activeInspectPage?.role || "page", session?.modo || "unico");
+  const cropDisabled =
+    Boolean(activeInspectPage?.blank) || !cropSourcePath;
+  const cropIsSpreadHalf =
+    (cropJson?.capa?.layout === "spread" &&
+      Boolean(activeInspectPage?.role?.startsWith("cover"))) ||
+    false;
 
   const progress = session?.renderProgress;
   const progressLabel =
@@ -409,6 +440,40 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
       setPickerOpen(true);
       setActionError(
         err instanceof Error ? err.message : "Erro ao iniciar o laboratório.",
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleApplyCrop = async (payload: {
+    crop: CropSidesMm;
+    scope: AnaliseLabCropScope;
+    path: string;
+    sourcePage: number;
+    sequencePage?: number | null;
+    componente: string;
+    capa?: ProvaWebCapaCrop | null;
+  }) => {
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      await patchAnaliseLabCrop(ano, osId, {
+        crop: payload.crop,
+        scope: payload.scope,
+        path: payload.path,
+        source_page: payload.sourcePage,
+        source_sequence: payload.sequencePage ?? undefined,
+        componente: payload.componente,
+        capa: payload.capa ?? undefined,
+      });
+      setCropOpen(false);
+      setOptimisticGenerating(true);
+      queryClient.removeQueries({ queryKey: ["analise-lab-manifest", ano, osId] });
+      invalidate();
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Erro ao aplicar o crop.",
       );
     } finally {
       setActionBusy(false);
@@ -1012,6 +1077,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     capaMioloChoiceByVersion,
     pages,
     modo: session?.modo || "capa_miolo",
+    sessionFontes: session?.fontes ?? null,
     selectedId: selectedItemId,
     onSelect: selectItem,
     onDelete: (id: number) => void handleDeleteItem(id),
@@ -1341,6 +1407,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
               type="button"
               onClick={() => {
                 setPageNonce((n) => n + 1);
+                setCropOpen(false);
                 setTab("folhear");
               }}
               className={
@@ -1386,6 +1453,12 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
         </p>
       ) : null}
 
+      {labWarnings.length > 0 && !showPicker && renderReady ? (
+        <p className="shrink-0 bg-amber-50 px-4 py-2 text-center text-sm text-amber-900">
+          {labWarnings.join(" ")}
+        </p>
+      ) : null}
+
       <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {infoQuery.isLoading ? (
           <Centered>
@@ -1417,19 +1490,14 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
             ano={ano}
             osId={osId}
             saving={actionBusy}
-            formato={info.formato}
-            formatoAlturaMm={info.formatoAlturaMm}
-            formatoLarguraMm={info.formatoLarguraMm}
             initialVersaoLabel={session?.versaoLabel}
             initialModo={
               session?.modo === "capa_miolo" ? "capa_miolo" : "unico"
             }
+            initialFontes={session?.fontes ?? null}
             initialArquivoUnico={session?.arquivoUnico}
             initialArquivoCapa={session?.arquivoCapa}
             initialArquivoMiolo={session?.arquivoMiolo}
-            initialCropJson={
-              (session?.cropJson as ProvaWebCropJson | null | undefined) ?? null
-            }
             initialFolhearModo={
               session?.folhearModo === "flipbook" ||
               session?.folhearModo === "folhas"
@@ -1702,6 +1770,40 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         selectedMarkId={selectedMarkId}
                         markTools={markToolsProps}
                         hideMarkOptions={problemPanelOpen}
+                        cropActive={cropOpen}
+                        cropDisabled={cropDisabled}
+                        onToggleCrop={() => {
+                          setCropOpen((open) => !open);
+                          setTool("select");
+                        }}
+                        cropPanel={
+                          cropOpen && cropSourcePath ? (
+                            <AnaliseLabCropToolPanel
+                              ano={ano}
+                              osId={osId}
+                              sourcePath={cropSourcePath}
+                              sourcePage={cropSourcePage}
+                              sequencePage={cropSequencePage}
+                              componente={cropComponente}
+                              isSpreadHalf={cropIsSpreadHalf}
+                              cropJson={cropJson}
+                              modo={session?.modo || "unico"}
+                              capaPath={
+                                session?.fontes?.find((f) => f.componente === "Capa")
+                                  ?.path || session?.arquivoCapa || null
+                              }
+                              mioloPath={
+                                session?.fontes?.find((f) => f.componente === "Miolo")
+                                  ?.path || session?.arquivoMiolo || null
+                              }
+                              formato={info.formato}
+                              formatoAlturaMm={info.formatoAlturaMm}
+                              formatoLarguraMm={info.formatoLarguraMm}
+                              saving={actionBusy}
+                              onApply={(p) => void handleApplyCrop(p)}
+                            />
+                          ) : null
+                        }
                         prefs={viewPrefs}
                         onPrefsChange={(next) =>
                           setViewPrefs(normalizeViewPrefs(next))

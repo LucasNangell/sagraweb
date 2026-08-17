@@ -238,6 +238,14 @@ export interface ProvaWebCaixaCrop {
   ready?: boolean;
 }
 
+export interface ProvaWebLabCropJson {
+  all?: CropSidesMm | null;
+  files?: Record<string, CropSidesMm>;
+  pages?: Record<string, CropSidesMm>;
+  /** Miolo: ímpar recorta esquerda, par recorta direita (lombada). */
+  mioloCentral?: boolean;
+}
+
 export interface ProvaWebCropJson {
   unico?: CropSidesMm;
   miolo?: CropSidesMm;
@@ -245,6 +253,8 @@ export interface ProvaWebCropJson {
   folheto?: ProvaWebFolhetoCrop;
   espiral?: ProvaWebEspiralCrop;
   caixa?: ProvaWebCaixaCrop;
+  /** Overrides do Análise Lab (página/arquivo/todos). Ignorado pela Prova WEB. */
+  lab?: ProvaWebLabCropJson;
 }
 
 export interface ProvaWebRenderProgress {
@@ -333,6 +343,13 @@ export interface ProvaWebPageMeta {
   url: string;
   /** Página gerada em branco para completar capa ou paridade do livro. */
   blank?: boolean;
+  /** PDF de origem (Análise Lab, após concatenação). */
+  sourcePath?: string | null;
+  /** Página 1-based no PDF de origem. */
+  sourcePage?: number | null;
+  /** Índice 1-based no componente concatenado (miolo/capa/único). */
+  sourceSequence?: number | null;
+  componente?: string | null;
 }
 
 /** Manifest de renderização — comum ao visualizador interno e ao portal do cliente. */

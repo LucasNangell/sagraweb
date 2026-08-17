@@ -78,7 +78,7 @@ MARK_EDGES_SANGRIA = frozenset({"top", "right", "bottom", "left", "all"})
 
 _SELECT_SESSAO = """
     ID, NroProtocolo, AnoProtocolo, VersaoLabel, Modo,
-    ArquivoUnico, ArquivoCapa, ArquivoMiolo, CropJson, PastaRender,
+    ArquivoUnico, ArquivoCapa, ArquivoMiolo, FontesJson, CropJson, PastaRender,
     RenderStatus, RenderError, RenderProgress,
     RenderStartedAt, RenderFinishedAt, CropVersao, FolhearModo, PontoRegistro,
     DataRegistro, DataAtualizacao
@@ -171,18 +171,27 @@ def _normalize_paginas(
 
 
 def _parse_json_object(raw: Any) -> Optional[dict[str, Any]]:
+    data = _parse_json_value(raw)
+    return data if isinstance(data, dict) else None
+
+
+def _parse_json_array(raw: Any) -> Optional[list[Any]]:
+    data = _parse_json_value(raw)
+    return data if isinstance(data, list) else None
+
+
+def _parse_json_value(raw: Any) -> Any:
     if raw is None or raw == "":
         return None
-    if isinstance(raw, dict):
+    if isinstance(raw, (dict, list)):
         return raw
     if isinstance(raw, (bytes, bytearray)):
         raw = raw.decode("utf-8", errors="replace")
     if isinstance(raw, str):
         try:
-            data = json.loads(raw)
+            return json.loads(raw)
         except json.JSONDecodeError:
             return None
-        return data if isinstance(data, dict) else None
     return None
 
 
@@ -215,6 +224,7 @@ def _row_to_session(row: dict[str, Any]) -> dict[str, Any]:
         "arquivoUnico": (row.get("ArquivoUnico") or "").strip() or None,
         "arquivoCapa": (row.get("ArquivoCapa") or "").strip() or None,
         "arquivoMiolo": (row.get("ArquivoMiolo") or "").strip() or None,
+        "fontes": _parse_json_array(row.get("FontesJson")),
         "cropJson": _parse_json_object(row.get("CropJson")),
         "pastaRender": (row.get("PastaRender") or LAB_PASTA_RENDER).strip()
         or LAB_PASTA_RENDER,
@@ -281,9 +291,13 @@ def upsert_session(
     crop_json: Optional[dict[str, Any]],
     ponto: Optional[int],
     folhear_modo: Optional[str] = None,
+    fontes: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     crop_payload = (
         json.dumps(crop_json, ensure_ascii=False) if crop_json is not None else None
+    )
+    fontes_payload = (
+        json.dumps(fontes, ensure_ascii=False) if fontes is not None else None
     )
     folhear = _normalize_folhear_modo(folhear_modo, modo)
     existing = get_session(ano, os_id)
@@ -299,7 +313,7 @@ def upsert_session(
             UPDATE tabAnaliseLabSessao
             SET VersaoLabel = %s, Modo = %s,
                 ArquivoUnico = %s, ArquivoCapa = %s, ArquivoMiolo = %s,
-                CropJson = %s, PastaRender = %s,
+                FontesJson = %s, CropJson = %s, PastaRender = %s,
                 RenderStatus = %s, RenderError = NULL, RenderProgress = NULL,
                 RenderStartedAt = NULL, RenderFinishedAt = NULL,
                 CropVersao = %s, FolhearModo = %s, PontoRegistro = %s
@@ -311,6 +325,7 @@ def upsert_session(
                 arquivo_unico,
                 arquivo_capa,
                 arquivo_miolo,
+                fontes_payload,
                 crop_payload,
                 LAB_PASTA_RENDER,
                 RENDER_PENDING,
@@ -326,9 +341,9 @@ def upsert_session(
             """
             INSERT INTO tabAnaliseLabSessao
                 (NroProtocolo, AnoProtocolo, VersaoLabel, Modo,
-                 ArquivoUnico, ArquivoCapa, ArquivoMiolo, CropJson,
+                 ArquivoUnico, ArquivoCapa, ArquivoMiolo, FontesJson, CropJson,
                  PastaRender, RenderStatus, CropVersao, FolhearModo, PontoRegistro)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 os_id,
@@ -338,6 +353,7 @@ def upsert_session(
                 arquivo_unico,
                 arquivo_capa,
                 arquivo_miolo,
+                fontes_payload,
                 crop_payload,
                 LAB_PASTA_RENDER,
                 RENDER_PENDING,
@@ -349,6 +365,47 @@ def upsert_session(
     record = get_session(ano, os_id)
     if not record:
         raise RuntimeError("Falha ao gravar sessão do Análise Lab.")
+    return record
+
+
+def update_session_crop(
+    ano: int,
+    os_id: int,
+    *,
+    crop_json: Optional[dict[str, Any]],
+    ponto: Optional[int],
+) -> dict[str, Any]:
+    existing = get_session(ano, os_id)
+    if not existing:
+        raise FileNotFoundError("Sessão do laboratório não encontrada.")
+    prev_canon = _canonicalize_crop_json(existing.get("cropJson"))
+    next_canon = _canonicalize_crop_json(crop_json)
+    crop_changed = prev_canon != next_canon
+    next_crop_versao = int(existing.get("cropVersao") or 1) + (1 if crop_changed else 0)
+    crop_payload = (
+        json.dumps(crop_json, ensure_ascii=False) if crop_json is not None else None
+    )
+    db.execute_query(
+        """
+        UPDATE tabAnaliseLabSessao
+        SET CropJson = %s, CropVersao = %s,
+            RenderStatus = %s, RenderError = NULL, RenderProgress = NULL,
+            RenderStartedAt = NULL, RenderFinishedAt = NULL,
+            PontoRegistro = %s
+        WHERE NroProtocolo = %s AND AnoProtocolo = %s
+        """,
+        (
+            crop_payload,
+            next_crop_versao,
+            RENDER_PENDING,
+            ponto,
+            os_id,
+            ano,
+        ),
+    )
+    record = get_session(ano, os_id)
+    if not record:
+        raise RuntimeError("Falha ao atualizar o crop do Análise Lab.")
     return record
 
 
@@ -483,17 +540,25 @@ def resolve_session_sources(
     ano: int, os_id: int, session: dict[str, Any]
 ) -> tuple[str, list[str]]:
     from routers.os_routes import _get_os_folder_path
+    from services.analise_lab_sources_service import (
+        derive_legacy_paths,
+        fontes_from_session,
+        validate_fontes_for_modo,
+    )
 
     folder = _get_os_folder_path(ano, os_id)
     if not folder or not os.path.isdir(folder):
         raise FileNotFoundError("Pasta da OS não encontrada na rede.")
     modo = session.get("modo") or MODE_UNICO
+    fontes = fontes_from_session(session)
+    validate_fontes_for_modo(fontes, modo)
+    unico, capa, miolo = derive_legacy_paths(fontes, modo)
     if modo == MODE_CAPA_MIOLO:
-        capa = resolve_os_relative_pdf(folder, session.get("arquivoCapa") or "")
-        miolo = resolve_os_relative_pdf(folder, session.get("arquivoMiolo") or "")
-        return MODE_CAPA_MIOLO, [capa, miolo]
-    unico = resolve_os_relative_pdf(folder, session.get("arquivoUnico") or "")
-    return MODE_UNICO, [unico]
+        return MODE_CAPA_MIOLO, [
+            resolve_os_relative_pdf(folder, capa or ""),
+            resolve_os_relative_pdf(folder, miolo or ""),
+        ]
+    return MODE_UNICO, [resolve_os_relative_pdf(folder, unico or "")]
 
 
 def _row_to_mark(row: dict[str, Any]) -> dict[str, Any]:

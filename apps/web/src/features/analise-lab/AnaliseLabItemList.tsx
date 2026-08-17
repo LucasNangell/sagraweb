@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import type { AnaliseLabItem } from "@/api/analiseLab";
+import type { AnaliseLabFonte, AnaliseLabItem } from "@/api/analiseLab";
 import type { ProvaWebPageMeta } from "@/api/provaWeb";
 import {
   itemMatchesVersion,
@@ -56,6 +56,7 @@ interface AnaliseLabItemListProps {
   capaMioloChoiceByVersion?: Record<string, boolean>;
   pages?: ProvaWebPageMeta[];
   modo?: string;
+  sessionFontes?: AnaliseLabFonte[] | null;
   selectedId: number | null;
   onSelect: (id: number) => void;
   onDelete?: (id: number) => void;
@@ -77,6 +78,7 @@ export function AnaliseLabItemList({
   capaMioloChoiceByVersion,
   pages = [],
   modo = "capa_miolo",
+  sessionFontes = null,
   selectedId,
   onSelect,
   onDelete,
@@ -99,6 +101,7 @@ export function AnaliseLabItemList({
         capaMioloChoiceByVersion,
         pages,
         modo,
+        sessionFontes,
       ),
     [
       capaMioloChoiceByVersion,
@@ -107,6 +110,7 @@ export function AnaliseLabItemList({
       modo,
       pages,
       produto,
+      sessionFontes,
       versionPdfPerFile,
       versions,
     ],

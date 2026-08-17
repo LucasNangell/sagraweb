@@ -96,6 +96,36 @@ describe("analiseLabItemsTree", () => {
     ]);
   });
 
+  it("lists all session fontes on the current version in order", () => {
+    const tree = buildLabItemsTree(
+      items,
+      "v2 (Original)",
+      versions,
+      {
+        v2: [
+          { name: "capa.pdf", path: "Original/capa.pdf", pages: 2 },
+          { name: "miolo_a.pdf", path: "Original/miolo_a.pdf", pages: 10 },
+          { name: "miolo_b.pdf", path: "Original/miolo_b.pdf", pages: 12 },
+        ],
+      },
+      "Livro",
+      undefined,
+      [],
+      "capa_miolo",
+      [
+        { path: "Original/capa.pdf", componente: "Capa", ordem: 0 },
+        { path: "Original/miolo_a.pdf", componente: "Miolo", ordem: 0 },
+        { path: "Original/miolo_b.pdf", componente: "Miolo", ordem: 1 },
+      ],
+    );
+    const v2 = tree.find((v) => v.key === "v2");
+    const miolo = v2?.components.find((c) => c.label === "Miolo");
+    expect(miolo?.versionFiles?.map((f) => f.name)).toEqual([
+      "miolo_a.pdf",
+      "miolo_b.pdf",
+    ]);
+  });
+
   it("attaches classified PDF files to component slots", () => {
     const tree = buildLabItemsTree(
       items,

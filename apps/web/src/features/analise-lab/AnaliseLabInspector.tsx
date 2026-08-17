@@ -71,6 +71,10 @@ interface AnaliseLabInspectorProps {
   hideMarkOptions?: boolean;
   /** Folhear browse: sem réguas/grade/guias/offset. */
   hideViewAids?: boolean;
+  cropActive?: boolean;
+  cropDisabled?: boolean;
+  onToggleCrop?: () => void;
+  cropPanel?: ReactNode;
   prefs: InspectorViewPrefs;
   onPrefsChange: (prefs: InspectorViewPrefs) => void;
   pagePick?: {
@@ -144,6 +148,10 @@ export function AnaliseLabInspector({
   markTools,
   hideMarkOptions = false,
   hideViewAids = false,
+  cropActive = false,
+  cropDisabled = false,
+  onToggleCrop,
+  cropPanel = null,
   prefs,
   onPrefsChange,
   pagePick = null,
@@ -759,6 +767,9 @@ export function AnaliseLabInspector({
         mark={markTools}
         hideMarkOptions={hideMarkOptions}
         hideViewAids={hideViewAids}
+        cropActive={cropActive}
+        cropDisabled={cropDisabled}
+        onToggleCrop={onToggleCrop}
         prefs={prefs}
         onPrefsChange={onPrefsChange}
         activePage={activePage}
@@ -785,6 +796,7 @@ export function AnaliseLabInspector({
         onDeleteSelectedGuides={handleDeleteSelectedGuides}
         guideDistanceLabel={guideDistanceLabel}
       />
+      {cropPanel}
 
       {pagePick ? (
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-sky-200 bg-sky-50 px-3 py-1.5 text-xs text-sky-950">

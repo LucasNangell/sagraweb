@@ -1,6 +1,7 @@
 import {
   BetweenHorizontalStart,
   Columns2,
+  Crop,
   Grid3X3,
   Maximize,
   MoveDiagonal,
@@ -55,6 +56,9 @@ interface AnaliseLabToolbarProps {
   hideMarkOptions?: boolean;
   /** Oculta réguas/grade/guias/offset (modo Folhear browse). */
   hideViewAids?: boolean;
+  cropActive?: boolean;
+  cropDisabled?: boolean;
+  onToggleCrop?: () => void;
   measureMode?: InspectMeasureMode;
   onMeasureModeChange?: (mode: InspectMeasureMode) => void;
   selectedGuideIds?: string[];
@@ -81,6 +85,9 @@ export function AnaliseLabToolbar({
   onToggleViewMode,
   hideMarkOptions = false,
   hideViewAids = false,
+  cropActive = false,
+  cropDisabled = false,
+  onToggleCrop,
   measureMode = "off",
   onMeasureModeChange,
   selectedGuideIds = [],
@@ -318,6 +325,22 @@ export function AnaliseLabToolbar({
               >
                 <MoveDiagonal className="size-3.5" aria-hidden />
                 <span className="ml-1 hidden sm:inline">Régua</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  onToggleCrop?.();
+                  if (!cropActive) setMeasureMode("off");
+                }}
+                disabled={cropDisabled || !onToggleCrop}
+                className={`${cropActive ? btnActive : btnIdle} disabled:opacity-40`}
+                title="Recortar PDF de origem"
+                aria-label="Crop"
+                aria-pressed={cropActive}
+              >
+                <Crop className="size-3.5" aria-hidden />
+                <span className="ml-1 hidden sm:inline">Crop</span>
               </button>
 
               <button

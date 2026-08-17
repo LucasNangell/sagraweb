@@ -19,6 +19,7 @@ from services import analise_lab_service as lab
 from services import analise_lab_items_service as lab_items
 from services import analise_lab_providencias_service as lab_prov
 from services import analise_lab_report_service as lab_report
+from services import analise_lab_sources_service as lab_src
 from services.analise_lab_job_service import (
     cancel_analise_lab_render,
     enqueue_analise_lab_render,
@@ -26,11 +27,9 @@ from services.analise_lab_job_service import (
 from services.prova_web_crop_service import build_pdf_crop_meta
 from services.prova_web_render_service import (
     LAB_PASTA_RENDER,
-    MODE_CAPA_MIOLO,
     delete_web_render_dir,
     resolve_os_relative_pdf,
     resolve_rendered_page_path,
-    try_load_cached_manifest,
 )
 
 logger = logging.getLogger(__name__)
@@ -139,14 +138,31 @@ def _rel_path_under_os(os_folder: str, full_path: str) -> str:
     return rel
 
 
+class AnaliseLabFonteIn(BaseModel):
+    path: str = Field(..., min_length=1, max_length=512)
+    componente: Literal["Capa", "Miolo", "Arq. Único"]
+    ordem: int = Field(0, ge=0, le=500)
+
+
 class AnaliseLabSave(BaseModel):
     versao_label: str = Field(..., min_length=1, max_length=128)
     modo: Literal["unico", "capa_miolo"] = "unico"
     arquivo_unico: Optional[str] = Field(None, max_length=512)
     arquivo_capa: Optional[str] = Field(None, max_length=512)
     arquivo_miolo: Optional[str] = Field(None, max_length=512)
+    fontes: Optional[list[AnaliseLabFonteIn]] = None
     crop_json: Optional[dict[str, Any]] = None
     folhear_modo: Optional[Literal["flipbook", "folhas"]] = None
+
+
+class AnaliseLabCropPatch(BaseModel):
+    crop: Optional[dict[str, Any]] = None
+    scope: Optional[Literal["page", "file", "component", "all", "miolo_central"]] = None
+    path: Optional[str] = Field(None, max_length=512)
+    source_page: Optional[int] = Field(None, ge=1)
+    source_sequence: Optional[int] = Field(None, ge=1)
+    componente: Optional[str] = Field(None, max_length=24)
+    capa: Optional[dict[str, Any]] = None
 
 
 class AnaliseLabMarkCreate(BaseModel):
@@ -371,14 +387,29 @@ def save_analise_lab(ano: int, os_id: int, body: AnaliseLabSave, request: Reques
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return raw.replace("\\", "/")
 
-    if body.modo == MODE_CAPA_MIOLO:
-        arquivo_capa = _validated(body.arquivo_capa, "capa")
-        arquivo_miolo = _validated(body.arquivo_miolo, "miolo")
-        arquivo_unico = None
-    else:
-        arquivo_unico = _validated(body.arquivo_unico, "prova")
-        arquivo_capa = None
-        arquivo_miolo = None
+    try:
+        if body.fontes:
+            fontes = lab_src.normalize_fontes(
+                [item.model_dump() for item in body.fontes],
+                modo=body.modo,
+            )
+        else:
+            fontes = lab_src.fontes_from_legacy(
+                modo=body.modo,
+                arquivo_unico=body.arquivo_unico,
+                arquivo_capa=body.arquivo_capa,
+                arquivo_miolo=body.arquivo_miolo,
+            )
+        lab_src.validate_fontes_for_modo(fontes, body.modo)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    for fonte in fontes:
+        _validated(fonte["path"], fonte["componente"].lower())
+
+    arquivo_unico, arquivo_capa, arquivo_miolo = lab_src.derive_legacy_paths(
+        fontes, body.modo
+    )
 
     crop_json = body.crop_json if isinstance(body.crop_json, dict) else None
     if crop_json is not None:
@@ -386,6 +417,8 @@ def save_analise_lab(ano: int, os_id: int, body: AnaliseLabSave, request: Reques
             crop_json = json.loads(json.dumps(crop_json, ensure_ascii=False))
         except (TypeError, ValueError) as exc:
             raise HTTPException(status_code=400, detail="crop_json inválido.") from exc
+    else:
+        crop_json = lab_src.identity_lab_crop_json(body.modo)
 
     existing = lab.get_session(ano, os_id)
     if existing:
@@ -408,6 +441,7 @@ def save_analise_lab(ano: int, os_id: int, body: AnaliseLabSave, request: Reques
         crop_json=crop_json,
         ponto=_session_ponto(request),
         folhear_modo=body.folhear_modo,
+        fontes=fontes,
     )
     try:
         enqueue_analise_lab_render(ano, os_id)
@@ -428,6 +462,83 @@ def save_analise_lab(ano: int, os_id: int, body: AnaliseLabSave, request: Reques
                 ano,
                 exc,
             )
+    return {
+        "ok": True,
+        "session": session,
+        "renderStatus": (session or {}).get("renderStatus"),
+    }
+
+
+@router.patch("/os/{ano}/{os_id}/analise-lab/crop")
+def patch_analise_lab_crop(
+    ano: int, os_id: int, body: AnaliseLabCropPatch, request: Request
+):
+    _require_analise(request)
+    session = lab.get_session(ano, os_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão do laboratório não encontrada.")
+    if lab.is_render_in_flight(session):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "A geração já está em andamento.",
+                "renderStatus": session.get("renderStatus"),
+            },
+        )
+    if body.crop is None and body.capa is None:
+        raise HTTPException(status_code=400, detail="Informe crop ou configuração de capa.")
+    if (body.crop is None) != (body.scope is None):
+        raise HTTPException(
+            status_code=400, detail="Informe crop e escopo juntos."
+        )
+
+    crop_json = session.get("cropJson")
+    if not isinstance(crop_json, dict):
+        crop_json = lab_src.identity_lab_crop_json(session.get("modo") or "unico")
+    fontes = lab_src.fontes_from_session(session)
+
+    try:
+        if body.crop is not None and body.scope is not None:
+            crop_json = lab_src.apply_crop_scope(
+                crop_json,
+                scope=body.scope,
+                crop=body.crop,
+                path=body.path,
+                source_page=body.source_page,
+                sequence_page=body.source_sequence,
+                componente=body.componente,
+                fontes=fontes,
+            )
+        if body.capa is not None:
+            crop_json = lab_src.merge_capa_config(crop_json, body.capa)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    folder = _require_os_folder(ano, os_id)
+    cancel_analise_lab_render(ano, os_id)
+    try:
+        delete_web_render_dir(folder, LAB_PASTA_RENDER)
+    except Exception as exc:
+        logger.warning(
+            "Análise Lab: falha ao limpar pasta no crop (%s/%s): %s", os_id, ano, exc
+        )
+
+    session = lab.update_session_crop(
+        ano,
+        os_id,
+        crop_json=crop_json,
+        ponto=_session_ponto(request),
+    )
+    try:
+        enqueue_analise_lab_render(ano, os_id)
+    except Exception as exc:
+        logger.error(
+            "Análise Lab: falha ao enfileirar crop (%s/%s): %s", os_id, ano, exc
+        )
+        raise HTTPException(
+            status_code=500, detail="Falha ao iniciar a geração do laboratório."
+        ) from exc
+    session = lab.get_session(ano, os_id)
     return {
         "ok": True,
         "session": session,
@@ -515,22 +626,20 @@ def _require_ready_manifest(ano: int, os_id: int, session: dict[str, Any]) -> di
         )
 
     folder = _require_os_folder(ano, os_id)
-    try:
-        mode, sources = lab.resolve_session_sources(ano, os_id, session)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
     pasta = session.get("pastaRender") or LAB_PASTA_RENDER
-    cached = try_load_cached_manifest(
-        mode=mode,
-        source_paths=sources,
-        os_folder=folder,
-        pasta_render=pasta,
-        crop_json=session.get("cropJson"),
-    )
+    cached = lab_src.load_ready_lab_manifest(folder, pasta)
     if cached:
-        return cached
+        page_map = lab_src.load_page_map(folder, pasta)
+        pages = lab_src.enrich_manifest_pages(
+            list(cached.get("pages") or []),
+            page_map,
+            modo=session.get("modo") or "unico",
+            crop_json=session.get("cropJson")
+            if isinstance(session.get("cropJson"), dict)
+            else None,
+        )
+        warnings = list((page_map or {}).get("warnings") or [])
+        return {**cached, "pages": pages, "labWarnings": warnings}
     lab.mark_render_pending(ano, os_id)
     enqueue_analise_lab_render(ano, os_id)
     raise HTTPException(

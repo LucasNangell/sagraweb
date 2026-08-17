@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS tabAnaliseLabSessao (
     ArquivoUnico VARCHAR(512) NULL,
     ArquivoCapa VARCHAR(512) NULL,
     ArquivoMiolo VARCHAR(512) NULL,
+    FontesJson JSON NULL,
     CropJson JSON NULL,
     PastaRender VARCHAR(64) NOT NULL DEFAULT 'AnaliseLab',
     RenderStatus VARCHAR(16) NOT NULL DEFAULT 'pending',
@@ -160,6 +161,12 @@ def ensure_analise_lab_schema() -> None:
             cursor.execute(_CREATE_TAB_MARCA_SQL)
             cursor.execute(_CREATE_TAB_ITEM_SQL)
             cursor.execute(_CREATE_TAB_PROVIDENCIA_SQL)
+            _ensure_column(
+                cursor,
+                "tabAnaliseLabSessao",
+                "FontesJson",
+                "FontesJson JSON NULL",
+            )
             _ensure_column(
                 cursor,
                 "tabAnaliseLabSessao",

@@ -18,6 +18,13 @@ import {
 import { BoxModelDielineEditor } from "@/features/configuracoes/components/BoxModelDielineEditor";
 import { useProvaWebPdfPageRaster } from "./useProvaWebPdfPageRaster";
 
+const IDENTITY_TF: ProvaWebCaixaArtTransform = {
+  txMm: 0,
+  tyMm: 0,
+  scale: 1,
+  rotationDeg: 0,
+};
+
 export function defaultCaixaCrop(
   sourceKind: "combined" | "separate" | "model" = "model",
 ): ProvaWebCaixaCrop {
@@ -26,9 +33,11 @@ export function defaultCaixaCrop(
     template: sourceKind === "model" ? "graph" : "flip_top",
     dimsMm: { length: 120, width: 160, height: 40, glue: 20 },
     boxModelId: null,
-    artTransform: { txMm: 0, tyMm: 0, scale: 1, rotationDeg: 0 },
+    artTransform: { ...IDENTITY_TF },
+    artInsideTransform: { ...IDENTITY_TF },
     facaPage: 0,
     artePage: 0,
+    arteInsidePage: 1,
     artCrop: emptyCropSides("manual"),
     artRotationDeg: 0,
     ready: true,
@@ -48,6 +57,8 @@ export interface ProvaWebBoxWizardProps {
   initialCropJson?: ProvaWebCropJson | null;
 }
 
+type ArtSide = "outside" | "inside";
+
 export function ProvaWebBoxWizard({
   ano,
   osId,
@@ -65,8 +76,14 @@ export function ProvaWebBoxWizard({
     initial?.boxModelId ?? null,
   );
   const [transform, setTransform] = useState<ProvaWebCaixaArtTransform>(
-    initial?.artTransform ?? { txMm: 0, tyMm: 0, scale: 1, rotationDeg: 0 },
+    initial?.artTransform ?? { ...IDENTITY_TF },
   );
+  const [insideTransform, setInsideTransform] =
+    useState<ProvaWebCaixaArtTransform>(
+      initial?.artInsideTransform ??
+        initial?.artTransform ?? { ...IDENTITY_TF },
+    );
+  const [artSide, setArtSide] = useState<ArtSide>("outside");
   const [error, setError] = useState<string | null>(null);
   const dragRef = useRef<{
     x: number;
@@ -101,13 +118,23 @@ export function ProvaWebBoxWizard({
     enabled: Boolean(artePath),
   });
 
+  const pageCount = cropMetaQuery.data?.pageCount ?? 1;
+  const hasInside = pageCount >= 2;
+  const activeSide: ArtSide =
+    artSide === "inside" && hasInside ? "inside" : "outside";
+  const activeTransform =
+    activeSide === "inside" ? insideTransform : transform;
+  const setActiveTransform =
+    activeSide === "inside" ? setInsideTransform : setTransform;
+  const pageIndex = activeSide === "inside" ? 1 : 0;
+
   const pageW = cropMetaQuery.data?.widthMm ?? 210;
   const pageH = cropMetaQuery.data?.heightMm ?? 297;
   const artRaster = useProvaWebPdfPageRaster({
     ano,
     osId,
     relativePath: artePath ?? "",
-    pageIndex: 0,
+    pageIndex,
     crop: emptyCropSides("manual"),
     pageWidthMm: pageW,
     pageHeightMm: pageH,
@@ -144,11 +171,16 @@ export function ProvaWebBoxWizard({
         height: Number(dimsHint?.heightMm ?? 40),
         glue: Number(dimsHint?.glueMm ?? 20),
       },
+      artePage: 0,
       artTransform: transform,
       artCrop: emptyCropSides("manual"),
       artRotationDeg: 0,
       ready: true,
     };
+    if (hasInside) {
+      caixa.arteInsidePage = 1;
+      caixa.artInsideTransform = insideTransform;
+    }
     onConfirm({ caixa });
   };
 
@@ -170,8 +202,8 @@ export function ProvaWebBoxWizard({
               Caixa — modelo + registro da arte
             </h2>
             <p className="mt-1 text-xs text-neutral-500">
-              Escolha o modelo pré-cadastrado (faca) e alinhe a arte arrastando /
-              com a escala. Arte: {artePath || "—"}.
+              Escolha o modelo pré-cadastrado (faca) e alinhe a arte. Externa =
+              fora da caixa · Interna = verso (dentro). Arte: {artePath || "—"}.
             </p>
           </div>
         </div>
@@ -211,9 +243,49 @@ export function ProvaWebBoxWizard({
 
         {config && netStyle ? (
           <div className="mt-4 space-y-3">
+            {hasInside ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-medium text-neutral-600">
+                  Lado
+                </span>
+                <div className="inline-flex rounded-lg border border-sagra-border p-0.5 text-xs">
+                  <button
+                    type="button"
+                    className={`rounded-md px-2.5 py-1 font-medium ${
+                      activeSide === "outside"
+                        ? "bg-primary-green text-white"
+                        : "text-neutral-600 hover:bg-neutral-50"
+                    }`}
+                    onClick={() => setArtSide("outside")}
+                  >
+                    Externa
+                  </button>
+                  <button
+                    type="button"
+                    className={`rounded-md px-2.5 py-1 font-medium ${
+                      activeSide === "inside"
+                        ? "bg-primary-green text-white"
+                        : "text-neutral-600 hover:bg-neutral-50"
+                    }`}
+                    onClick={() => setArtSide("inside")}
+                  >
+                    Interna
+                  </button>
+                </div>
+                <span className="text-[10px] text-neutral-500">
+                  PDF com {pageCount} páginas — pág. {pageIndex + 1} ativa
+                </span>
+              </div>
+            ) : (
+              <p className="text-[10px] text-neutral-500">
+                PDF com 1 página: só arte externa (interno = papel kraft). Para
+                duplex, use um PDF com 2 páginas (frente + verso).
+              </p>
+            )}
             <p className="text-xs font-medium text-neutral-600">
-              Registro da arte sobre a faca (arraste a arte; use os controles de
-              escala/rotação)
+              Registro da arte{" "}
+              {activeSide === "inside" ? "interna" : "externa"} sobre a faca
+              (arraste; use escala/rotação)
             </p>
             <div
               className="relative mx-auto w-full max-w-xl overflow-hidden rounded-xl border border-sagra-border bg-slate-100"
@@ -223,17 +295,19 @@ export function ProvaWebBoxWizard({
                 dragRef.current = {
                   x: e.clientX,
                   y: e.clientY,
-                  tx: transform.txMm,
-                  ty: transform.tyMm,
+                  tx: activeTransform.txMm,
+                  ty: activeTransform.tyMm,
                 };
               }}
               onPointerMove={(e) => {
                 const d = dragRef.current;
                 if (!d) return;
-                const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                const rect = (
+                  e.currentTarget as HTMLDivElement
+                ).getBoundingClientRect();
                 const dx = ((e.clientX - d.x) / rect.width) * netStyle.w;
                 const dy = ((e.clientY - d.y) / rect.height) * netStyle.h;
-                setTransform((t) => ({
+                setActiveTransform((t) => ({
                   ...t,
                   txMm: d.tx + dx,
                   tyMm: d.ty + dy,
@@ -248,6 +322,7 @@ export function ProvaWebBoxWizard({
             >
               <div className="pointer-events-none absolute inset-0 opacity-90">
                 <BoxModelDielineEditor
+                  variant="registration"
                   config={config}
                   selectedPanelId={config.basePanelId}
                   selectedEdgeId={null}
@@ -258,13 +333,15 @@ export function ProvaWebBoxWizard({
               <div
                 className="absolute inset-0 flex items-center justify-center"
                 style={{
-                  transform: `translate(${(transform.txMm / netStyle.w) * 100}%, ${(transform.tyMm / netStyle.h) * 100}%) rotate(${transform.rotationDeg}deg) scale(${transform.scale})`,
+                  transform: `translate(${(activeTransform.txMm / netStyle.w) * 100}%, ${(activeTransform.tyMm / netStyle.h) * 100}%) rotate(${activeTransform.rotationDeg}deg) scale(${activeTransform.scale})`,
                 }}
               >
                 {artRaster.raster ? (
                   <img
                     src={artRaster.raster.dataUrl}
-                    alt="Arte"
+                    alt={
+                      activeSide === "inside" ? "Arte interna" : "Arte externa"
+                    }
                     className="max-h-full max-w-full object-contain opacity-80"
                     draggable={false}
                   />
@@ -288,9 +365,9 @@ export function ProvaWebBoxWizard({
                   min={0.4}
                   max={2.5}
                   step={0.01}
-                  value={transform.scale}
+                  value={activeTransform.scale}
                   onChange={(e) =>
-                    setTransform((t) => ({
+                    setActiveTransform((t) => ({
                       ...t,
                       scale: Number(e.target.value),
                     }))
@@ -305,9 +382,9 @@ export function ProvaWebBoxWizard({
                   min={-180}
                   max={180}
                   step={1}
-                  value={transform.rotationDeg}
+                  value={activeTransform.rotationDeg}
                   onChange={(e) =>
-                    setTransform((t) => ({
+                    setActiveTransform((t) => ({
                       ...t,
                       rotationDeg: Number(e.target.value),
                     }))
@@ -318,9 +395,7 @@ export function ProvaWebBoxWizard({
               <button
                 type="button"
                 className="rounded-lg border border-sagra-border px-2.5 py-1.5 text-xs"
-                onClick={() =>
-                  setTransform({ txMm: 0, tyMm: 0, scale: 1, rotationDeg: 0 })
-                }
+                onClick={() => setActiveTransform({ ...IDENTITY_TF })}
               >
                 Resetar registro
               </button>

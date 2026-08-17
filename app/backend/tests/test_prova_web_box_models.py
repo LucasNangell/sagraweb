@@ -330,6 +330,46 @@ def test_bake_art_transform_onto_net(tmp_path: Path) -> None:
     assert meta["height"] == 100
     with Image.open(out) as img:
         assert img.size == (200, 100)
+        # Com tx=+5mm @ 2px/mm, o centro da arte desloca 10px à direita
+        # Arte contain em 200x100 → 200x100; pixel vermelho perto do centro+10
+        px = img.getpixel((110, 50))
+        assert px[0] > 150  # vermelho dominante
+
+
+def test_bake_art_transform_offset_moves_content(tmp_path: Path) -> None:
+    from PIL import Image
+
+    arte = tmp_path / "arte.png"
+    Image.new("RGB", (20, 20), (0, 200, 0)).save(arte)
+    out0 = tmp_path / "c0.png"
+    out1 = tmp_path / "c1.png"
+    bake_art_transform_onto_net(
+        str(arte),
+        str(out0),
+        net_width_mm=100,
+        net_height_mm=100,
+        art_transform={"txMm": 0, "tyMm": 0, "scale": 0.2, "rotationDeg": 0},
+        px_per_mm=1.0,
+    )
+    bake_art_transform_onto_net(
+        str(arte),
+        str(out1),
+        net_width_mm=100,
+        net_height_mm=100,
+        art_transform={"txMm": 30, "tyMm": 0, "scale": 0.2, "rotationDeg": 0},
+        px_per_mm=1.0,
+    )
+    with Image.open(out0) as a, Image.open(out1) as b:
+        def is_green(px: tuple[int, ...]) -> bool:
+            return px[1] > 150 and px[0] < 80
+
+        def is_white(px: tuple[int, ...]) -> bool:
+            return px[0] > 200 and px[1] > 200 and px[2] > 200
+
+        assert is_green(a.getpixel((50, 50)))
+        assert is_white(b.getpixel((50, 50)))
+        assert is_green(b.getpixel((80, 50)))
+        assert is_white(a.getpixel((80, 50)))
 
 
 @pytest.mark.skipif(not FIXTURE_SVG.is_file(), reason="fixture SVG ausente")

@@ -316,6 +316,24 @@ def normalize_caixa_config(
         except (TypeError, ValueError):
             art_transform = {"txMm": 0.0, "tyMm": 0.0, "scale": 1.0, "rotationDeg": 0.0}
 
+    art_inside_transform = None
+    raw_inside_tf = src.get("artInsideTransform")
+    if isinstance(raw_inside_tf, dict):
+        try:
+            art_inside_transform = {
+                "txMm": float(raw_inside_tf.get("txMm") or 0),
+                "tyMm": float(raw_inside_tf.get("tyMm") or 0),
+                "scale": max(0.1, min(5.0, float(raw_inside_tf.get("scale") or 1))),
+                "rotationDeg": float(raw_inside_tf.get("rotationDeg") or 0),
+            }
+        except (TypeError, ValueError):
+            art_inside_transform = {
+                "txMm": 0.0,
+                "tyMm": 0.0,
+                "scale": 1.0,
+                "rotationDeg": 0.0,
+            }
+
     dims_in = src.get("dimsMm") if isinstance(src.get("dimsMm"), dict) else {}
     length = _clamp_dim(
         dims_in.get("length", dims_in.get("lengthMm", sug_dims.get("lengthMm", 120))),
@@ -338,6 +356,15 @@ def normalize_caixa_config(
     arte_page = int(src.get("artePage") if src.get("artePage") is not None else 1)
     faca_page = max(0, faca_page)
     arte_page = max(0, arte_page)
+    arte_inside_page = None
+    if src.get("arteInsidePage") is not None:
+        try:
+            arte_inside_page = max(0, int(src.get("arteInsidePage")))
+        except (TypeError, ValueError):
+            arte_inside_page = None
+    if arte_inside_page is None and source_kind == SOURCE_MODEL:
+        # Default: página 1 = interna quando o PDF tiver verso
+        arte_inside_page = 1
 
     crop_raw = src.get("artCrop") if isinstance(src.get("artCrop"), dict) else src.get("crop")
     art_crop = normalize_crop_sides(crop_raw) if crop_raw else empty_crop("manual")
@@ -375,6 +402,7 @@ def normalize_caixa_config(
         "template": template,
         "boxModelId": box_model_id_i,
         "artTransform": art_transform,
+        "artInsideTransform": art_inside_transform,
         "dimsMm": {
             "length": length,
             "width": width,
@@ -383,6 +411,7 @@ def normalize_caixa_config(
         },
         "facaPage": faca_page,
         "artePage": arte_page,
+        "arteInsidePage": arte_inside_page,
         "artCrop": art_crop,
         "artRotationDeg": rot_i,
         "openOperations": open_ops,

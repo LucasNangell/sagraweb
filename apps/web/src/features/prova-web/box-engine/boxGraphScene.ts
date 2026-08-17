@@ -20,10 +20,7 @@ import {
 import { boxDiagonalMm, flapAngleDeg, resolveFlapProgress } from "./boxTypes";
 import type { BoxSceneHandle } from "./boxSceneThree";
 import { tweenValue, type TweenHandle } from "./boxTween";
-import {
-  addStudioLights,
-  configureRenderer,
-} from "../fold-engine/foldMaterials";
+import { configureRenderer } from "../fold-engine/foldMaterials";
 
 type GraphHinge = {
   id: string;
@@ -55,16 +52,12 @@ function loadTexture(url: string | null): Promise<THREE.Texture | null> {
 function makeFaceMaterial(
   texture: THREE.Texture | null,
   depth: number,
-): THREE.MeshPhysicalMaterial {
-  const mat = new THREE.MeshPhysicalMaterial({
+): THREE.MeshBasicMaterial {
+  // Unlit: prova de arte precisa de cor fiel, sem sombreamento de estúdio.
+  const mat = new THREE.MeshBasicMaterial({
     color: texture ? 0xffffff : 0xd6dde6,
     map: texture ?? null,
-    roughness: 0.72,
-    metalness: 0.02,
-    sheen: 0.35,
-    sheenRoughness: 0.55,
-    sheenColor: new THREE.Color(0xf5f0e6),
-    side: THREE.DoubleSide,
+    side: THREE.FrontSide,
     polygonOffset: true,
     polygonOffsetFactor: -Math.max(1, depth),
     polygonOffsetUnits: -Math.max(1, depth),
@@ -77,11 +70,58 @@ function makeFaceMaterial(
   return mat;
 }
 
-function makeKraftMaterial(depth: number): THREE.MeshPhysicalMaterial {
-  return new THREE.MeshPhysicalMaterial({
+/**
+ * ExtrudeGeometry do Three.js só cria grupos 0 (faces planas) e 1 (laterais).
+ * Reparte top/bottom para materiais [fora=0, kraft=1, dentro=2].
+ */
+export function assignExtrudeDuplexGroups(
+  geometry: THREE.BufferGeometry,
+  thickness: number,
+): void {
+  const pos = geometry.getAttribute("position");
+  if (!pos || pos.count < 3) return;
+
+  const midZ = thickness * 0.5;
+  const sideTol = Math.max(1e-6, thickness * 0.25);
+  const vCount = pos.count;
+
+  geometry.clearGroups();
+
+  let runStart = 0;
+  let runMat = -1;
+
+  const flush = (end: number) => {
+    if (runMat < 0 || end <= runStart) return;
+    geometry.addGroup(runStart, end - runStart, runMat);
+  };
+
+  for (let i = 0; i < vCount; i += 3) {
+    const z0 = pos.getZ(i);
+    const z1 = pos.getZ(i + 1);
+    const z2 = pos.getZ(i + 2);
+    const zMin = Math.min(z0, z1, z2);
+    const zMax = Math.max(z0, z1, z2);
+    const avgZ = (z0 + z1 + z2) / 3;
+    let mat: number;
+    if (zMax - zMin > sideTol) {
+      mat = 1; // lateral (kraft)
+    } else if (avgZ < midZ) {
+      mat = 2; // fundo = face interna
+    } else {
+      mat = 0; // topo = face externa
+    }
+    if (mat !== runMat) {
+      flush(i);
+      runStart = i;
+      runMat = mat;
+    }
+  }
+  flush(vCount);
+}
+
+function makeKraftMaterial(depth: number): THREE.MeshBasicMaterial {
+  return new THREE.MeshBasicMaterial({
     color: 0xc4a574,
-    roughness: 0.92,
-    metalness: 0,
     side: THREE.DoubleSide,
     polygonOffset: true,
     polygonOffsetFactor: -Math.max(1, depth),
@@ -160,11 +200,13 @@ function panelGeometry(
       shape.lineTo(s.x, s.y);
     }
     shape.closePath();
-    return new THREE.ExtrudeGeometry(shape, {
+    const geo = new THREE.ExtrudeGeometry(shape, {
       depth: thickness,
       bevelEnabled: false,
       UVGenerator: uvgen,
     });
+    assignExtrudeDuplexGroups(geo, thickness);
+    return geo;
   }
   // Fallback AABB → retângulo em coords da net
   const shape = new THREE.Shape();
@@ -181,11 +223,13 @@ function panelGeometry(
     shape.lineTo(s.x, s.y);
   }
   shape.closePath();
-  return new THREE.ExtrudeGeometry(shape, {
+  const geo = new THREE.ExtrudeGeometry(shape, {
     depth: thickness,
     bevelEnabled: false,
     UVGenerator: uvgen,
   });
+  assignExtrudeDuplexGroups(geo, thickness);
+  return geo;
 }
 
 function resolveHingeSegment(h: GraphHinge | undefined): HingeSegmentMm | null {
@@ -197,6 +241,7 @@ export async function createGraphBoxScene(
   canvas: HTMLCanvasElement,
   boxMockup: ProvaWebBoxMockupMeta,
   artUrl: string | null,
+  artInsideUrl: string | null = null,
 ): Promise<BoxSceneHandle> {
   const thickness = Math.max(0.15, boxMockup.paperThicknessMm ?? 0.4);
   const renderer = new THREE.WebGLRenderer({
@@ -204,10 +249,9 @@ export async function createGraphBoxScene(
     antialias: true,
     alpha: true,
   });
-  configureRenderer(renderer, "studio");
+  configureRenderer(renderer, "faithful");
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.enabled = false;
 
   const scene = new THREE.Scene();
   const root = new THREE.Group();
@@ -228,32 +272,13 @@ export async function createGraphBoxScene(
       },
     }),
   );
-  addStudioLights(scene, diagonal);
-
-  // Luz de sombra dedicada
-  const key = new THREE.DirectionalLight(0xffffff, 0.55);
-  key.position.set(diagonal * 0.6, diagonal * 0.9, diagonal * 0.7);
-  key.castShadow = true;
-  key.shadow.mapSize.set(1024, 1024);
-  key.shadow.camera.near = 1;
-  key.shadow.camera.far = diagonal * 6;
-  const extent = diagonal * 1.2;
-  key.shadow.camera.left = -extent;
-  key.shadow.camera.right = extent;
-  key.shadow.camera.top = extent;
-  key.shadow.camera.bottom = -extent;
-  scene.add(key);
-
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(diagonal * 4, diagonal * 4),
-    new THREE.ShadowMaterial({ opacity: 0.22 }),
-  );
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -diagonal * 0.35;
-  ground.receiveShadow = true;
-  scene.add(ground);
+  // Luz mínima só para leitura espacial; faces da arte são MeshBasic (unlit).
+  scene.add(new THREE.AmbientLight(0xffffff, 1));
 
   const texture = await loadTexture(artUrl);
+  const textureInside = artInsideUrl
+    ? await loadTexture(artInsideUrl)
+    : null;
   const panels = (boxMockup.panels ?? []).filter((p) => p.wMm > 0 && p.hMm > 0);
   const baseId =
     boxMockup.basePanelId ||
@@ -286,9 +311,23 @@ export async function createGraphBoxScene(
   };
   const byId = new Map<string, Entry>();
 
-  const faceMat = makeFaceMaterial(texture, 1);
+  const faceOutMat = makeFaceMaterial(texture, 1);
   const kraftMat = makeKraftMaterial(1);
-  const materials = [faceMat, kraftMat, faceMat];
+  // Face interna: arte do verso (U espelhado) ou kraft se não houver
+  let faceInMat: THREE.MeshBasicMaterial;
+  if (textureInside) {
+    faceInMat = makeFaceMaterial(textureInside, 1);
+    const map = faceInMat.map;
+    if (map) {
+      // Duplex turn: espelha U para alinhar o verso à net
+      map.repeat.x = -1;
+      map.offset.x = 1;
+      map.needsUpdate = true;
+    }
+  } else {
+    faceInMat = makeKraftMaterial(1);
+  }
+  const materials = [faceOutMat, kraftMat, faceInMat];
 
   for (const panel of panels) {
     const pivot = new THREE.Object3D();
@@ -302,8 +341,6 @@ export async function createGraphBoxScene(
       cutY0,
     );
     const mesh = new THREE.Mesh(geo, materials);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
     mesh.position.set(0, 0, 0);
     pivot.add(mesh);
     byId.set(panel.id, {
@@ -394,34 +431,6 @@ export async function createGraphBoxScene(
     netRoot.add(entry.pivot);
   }
 
-  // Vincos visíveis (arestas de dobra)
-  const creasePositions: number[] = [];
-  for (const h of hinges) {
-    const seg = resolveHingeSegment(h);
-    if (!seg) continue;
-    const a = netMmToScene(seg[0][0], seg[0][1], frame);
-    const b = netMmToScene(seg[1][0], seg[1][1], frame);
-    creasePositions.push(a.x, a.y, thickness + 0.02, b.x, b.y, thickness + 0.02);
-  }
-  let creaseLines: THREE.LineSegments | null = null;
-  if (creasePositions.length >= 6) {
-    const cGeo = new THREE.BufferGeometry();
-    cGeo.setAttribute(
-      "position",
-      new THREE.Float32BufferAttribute(creasePositions, 3),
-    );
-    creaseLines = new THREE.LineSegments(
-      cGeo,
-      new THREE.LineBasicMaterial({
-        color: 0x2a6f7a,
-        transparent: true,
-        opacity: 0.55,
-        depthWrite: false,
-      }),
-    );
-    netRoot.add(creaseLines);
-  }
-
   const opsByPanel = new Map<string, ProvaWebCaixaOpenOperation>();
   for (const op of boxMockup.openOperations ?? []) {
     if (op.panelId) opsByPanel.set(op.panelId, op);
@@ -441,32 +450,49 @@ export async function createGraphBoxScene(
   controls.dampingFactor = 0.08;
   controls.enablePan = false;
   controls.enableZoom = false; // zoom/open ficam nos controles da UI
-  controls.minPolarAngle = THREE.MathUtils.degToRad(5);
-  controls.maxPolarAngle = THREE.MathUtils.degToRad(175);
+  // Liberdade quase total: limites apertados “travam” o eixo perto do zênite/nadir.
+  controls.minPolarAngle = 0.05;
+  controls.maxPolarAngle = Math.PI - 0.05;
+  controls.rotateSpeed = 0.85;
   controls.addEventListener("change", () => {
+    // Mantém rotX/rotY alinhados ao OrbitControls (zoom/idle não “pulam”).
+    const offset = new THREE.Vector3().subVectors(
+      camera.position,
+      controls.target,
+    );
+    if (offset.lengthSq() > 1e-8) {
+      const spherical = new THREE.Spherical().setFromVector3(offset);
+      rotX = 90 - THREE.MathUtils.radToDeg(spherical.phi);
+      rotY = THREE.MathUtils.radToDeg(spherical.theta);
+    }
     needsRender = true;
   });
 
-  const fitView = () => {
-    const dist = diagonal * 1.8 * zoom;
-    camera.position.set(
-      dist * 0.15,
-      dist * 0.35,
-      dist,
-    );
-    camera.near = Math.max(0.1, dist / 200);
-    camera.far = dist * 40;
-    camera.updateProjectionMatrix();
-    controls.target.set(0, 0, 0);
-    controls.update();
-    needsRender = true;
+  /** Coloca o centro do bbox atual da net na origem — âncora de órbita previsível. */
+  const centerNetAtOrigin = () => {
+    netRoot.position.set(0, 0, 0);
+    netRoot.updateWorldMatrix(true, true);
+    const box = new THREE.Box3().setFromObject(netRoot);
+    if (box.isEmpty()) return;
+    const c = box.getCenter(new THREE.Vector3());
+    netRoot.position.set(-c.x, -c.y, -c.z);
+  };
+
+  const orbitDistance = () => {
+    netRoot.updateWorldMatrix(true, true);
+    const box = new THREE.Box3().setFromObject(netRoot);
+    if (box.isEmpty()) return Math.max(40, diagonal * 1.8) / zoom;
+    const size = box.getSize(new THREE.Vector3());
+    const radius = Math.max(size.x, size.y, size.z, 1) * 0.55;
+    const fov = THREE.MathUtils.degToRad(camera.fov);
+    return ((radius * 1.35) / Math.tan(fov / 2)) / zoom;
   };
 
   const applyOrbit = () => {
-    // Mantém API setOrbit: converte pitch/yaw em posição esférica
-    const dist = camera.position.length() || diagonal * 1.8 * zoom;
+    const dist = orbitDistance();
     const phi = THREE.MathUtils.degToRad(90 - rotX);
     const theta = THREE.MathUtils.degToRad(rotY);
+    // Órbita sempre em torno da origem (net já recentrada).
     camera.position.set(
       dist * Math.sin(phi) * Math.sin(theta),
       dist * Math.cos(phi),
@@ -475,6 +501,15 @@ export async function createGraphBoxScene(
     controls.target.set(0, 0, 0);
     controls.update();
     needsRender = true;
+  };
+
+  const fitView = () => {
+    centerNetAtOrigin();
+    const dist = orbitDistance();
+    camera.near = Math.max(0.1, dist / 200);
+    camera.far = Math.max(dist * 40, diagonal * 40);
+    camera.updateProjectionMatrix();
+    applyOrbit();
   };
 
   const applyOpen = () => {
@@ -502,10 +537,12 @@ export async function createGraphBoxScene(
         angle,
       );
     }
+    // Reancora no centro visual após dobrar (evita órbita num canto/vértice).
+    centerNetAtOrigin();
+    controls.target.set(0, 0, 0);
     needsRender = true;
   };
 
-  applyOrbit();
   applyOpen();
   fitView();
 
@@ -569,17 +606,13 @@ export async function createGraphBoxScene(
       ro.disconnect();
       controls.dispose();
       texture?.dispose();
-      creaseLines?.geometry.dispose();
-      if (creaseLines) {
-        (creaseLines.material as THREE.Material).dispose();
-      }
-      ground.geometry.dispose();
-      (ground.material as THREE.Material).dispose();
+      textureInside?.dispose();
       for (const e of byId.values()) {
         e.mesh.geometry.dispose();
       }
-      faceMat.dispose();
+      faceOutMat.dispose();
       kraftMat.dispose();
+      faceInMat.dispose();
       renderer.dispose();
     },
   };

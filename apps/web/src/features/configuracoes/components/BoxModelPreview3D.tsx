@@ -9,8 +9,8 @@ import {
 } from "@/features/prova-web/box-engine";
 import { boxMockupFromConfig } from "@/features/prova-web/box-engine/boxMockupFromConfig";
 
-/** Vista inicial: quase de cima (faca plana). */
-const DEFAULT_ORBIT = { x: 68, y: 0 };
+/** Vista inicial: levemente inclinada (evita trava polar do OrbitControls). */
+const DEFAULT_ORBIT = { x: 52, y: -28 };
 
 /**
  * Slider: 0 = Aberto (plano), 100 = Fechado (ângulos-alvo).

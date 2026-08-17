@@ -82,6 +82,37 @@ def test_normalize_and_build_box_mockup() -> None:
     assert any(o["panelId"] == "lid_top" for o in mock["openOperations"])
 
 
+def test_normalize_model_duplex_art_fields() -> None:
+    cfg = caixa_svc.normalize_caixa_config(
+        {
+            "sourceKind": "model",
+            "boxModelId": 7,
+            "artePage": 0,
+            "arteInsidePage": 1,
+            "artTransform": {"txMm": 2, "tyMm": 3, "scale": 1.1, "rotationDeg": 5},
+            "artInsideTransform": {
+                "txMm": -1,
+                "tyMm": 0,
+                "scale": 1.0,
+                "rotationDeg": 0,
+            },
+            "dimsMm": {"length": 100, "width": 80, "height": 40, "glue": 15},
+        }
+    )
+    assert cfg["sourceKind"] == "model"
+    assert cfg["template"] == "graph"
+    assert cfg["artePage"] == 0
+    assert cfg["arteInsidePage"] == 1
+    assert cfg["artTransform"]["txMm"] == 2
+    assert cfg["artInsideTransform"]["txMm"] == -1
+
+
+def test_normalize_model_defaults_arte_inside_page() -> None:
+    cfg = caixa_svc.normalize_caixa_config({"sourceKind": "model", "boxModelId": 1})
+    assert cfg["arteInsidePage"] == 1
+    assert cfg["artInsideTransform"] is None
+
+
 def test_legacy_tuck_template_maps_to_flip_top() -> None:
     cfg = caixa_svc.normalize_caixa_config(
         {"template": "tuck_end_reverse", "dimsMm": {"length": 100, "width": 120, "height": 40}}

@@ -48,6 +48,12 @@ async function fetchAndStoreOsSearch(
 let osSearchRefreshInFlight: Promise<void> | null = null;
 let osSearchRefreshQueued = false;
 
+/** Test helper: limpa single-flight entre casos de vitest. */
+export function resetSilentOsSearchRefreshStateForTests(): void {
+  osSearchRefreshInFlight = null;
+  osSearchRefreshQueued = false;
+}
+
 async function runSilentRefreshOsSearchOnce(
   queryClient: QueryClient,
   filters: OsSearchFilters | undefined,
@@ -80,23 +86,21 @@ export async function silentRefreshOsSearch(
   filters?: OsSearchFilters,
   options?: { skipCrossTabLock?: boolean },
 ): Promise<void> {
-  if (osSearchRefreshInFlight) {
-    osSearchRefreshQueued = true;
-    await osSearchRefreshInFlight;
-    return;
+  osSearchRefreshQueued = true;
+  if (!osSearchRefreshInFlight) {
+    osSearchRefreshInFlight = (async () => {
+      while (osSearchRefreshQueued) {
+        osSearchRefreshQueued = false;
+        await runSilentRefreshOsSearchOnce(queryClient, filters, options);
+      }
+    })().finally(() => {
+      osSearchRefreshInFlight = null;
+    });
   }
-
-  const run = async () => {
-    do {
-      osSearchRefreshQueued = false;
-      await runSilentRefreshOsSearchOnce(queryClient, filters, options);
-    } while (osSearchRefreshQueued);
-  };
-
-  osSearchRefreshInFlight = run().finally(() => {
-    osSearchRefreshInFlight = null;
-  });
   await osSearchRefreshInFlight;
+  if (osSearchRefreshQueued) {
+    await silentRefreshOsSearch(queryClient, filters, options);
+  }
 }
 
 /** Atualiza painéis de detalhes e histórico sem estado de loading inicial. */

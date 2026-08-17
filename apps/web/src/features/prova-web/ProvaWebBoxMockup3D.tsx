@@ -53,7 +53,12 @@ export function ProvaWebBoxMockup3D({
       null,
     [pages],
   );
+  const artInside = useMemo(
+    () => pages.find((p) => p.role === "sheet-back" && !p.blank) ?? null,
+    [pages],
+  );
   const artUrl = art ? pageUrl(art) : null;
+  const artInsideUrl = artInside ? pageUrl(artInside) : null;
 
   const applyOrbit = useCallback((rx: number, ry: number) => {
     rotRef.current = { x: rx, y: ry };
@@ -90,7 +95,12 @@ export function ProvaWebBoxMockup3D({
     setError(null);
     void (async () => {
       try {
-        handle = await createBoxScene(canvas, boxMockup, artUrl);
+        handle = await createBoxScene(
+          canvas,
+          boxMockup,
+          artUrl,
+          artInsideUrl,
+        );
         if (cancelled) {
           handle.dispose();
           return;
@@ -115,7 +125,7 @@ export function ProvaWebBoxMockup3D({
       handle?.dispose();
       sceneRef.current = null;
     };
-  }, [artUrl, boxMockup]);
+  }, [artUrl, artInsideUrl, boxMockup]);
 
   const onPointerDown = () => {
     engage();

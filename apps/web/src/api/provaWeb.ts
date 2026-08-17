@@ -224,8 +224,12 @@ export interface ProvaWebCaixaCrop {
   /** Modelo pré-cadastrado (Admin). */
   boxModelId?: number | null;
   artTransform?: ProvaWebCaixaArtTransform;
+  /** Alinhamento da arte interna (verso), quando o PDF tem 2+ páginas. */
+  artInsideTransform?: ProvaWebCaixaArtTransform;
   facaPage?: number;
   artePage?: number;
+  /** Página do PDF usada como arte interna (default 1). */
+  arteInsidePage?: number;
   artCrop?: CropSidesMm;
   artRotationDeg?: 0 | 90 | 180 | 270;
   openOperations?: ProvaWebCaixaOpenOperation[];
@@ -428,6 +432,7 @@ export interface ProvaWebBoxMockupMeta {
     segmentMm?: number[][];
   }>;
   artTransform?: ProvaWebCaixaArtTransform;
+  artInsideTransform?: ProvaWebCaixaArtTransform;
   cutBboxMm?: Record<string, number>;
 }
 

@@ -904,8 +904,28 @@ def ensure_prova_web_pages(
                     except (TypeError, ValueError):
                         arte_idx = 0
                 arte_idx = max(0, min(len(doc) - 1, arte_idx))
+
+                arte_inside_idx = None
+                if len(doc) >= 2:
+                    raw_inside = None
+                    if isinstance(caixa_raw, dict):
+                        raw_inside = caixa_raw.get("arteInsidePage")
+                    try:
+                        arte_inside_idx = (
+                            1 if raw_inside is None else max(0, int(raw_inside))
+                        )
+                    except (TypeError, ValueError):
+                        arte_inside_idx = 1
+                    arte_inside_idx = max(0, min(len(doc) - 1, arte_inside_idx))
+                    if arte_inside_idx == arte_idx:
+                        # Evita bake duplicado da mesma página
+                        arte_inside_idx = 1 if arte_idx == 0 and len(doc) > 1 else None
+                        if arte_inside_idx == arte_idx:
+                            arte_inside_idx = None
+
+                steps = 2 if arte_inside_idx is not None else 1
                 _check_abort()
-                _progress(0, 1)
+                _progress(0, steps)
                 arte_page = doc.load_page(arte_idx)
                 art_crop = None
                 if isinstance(caixa_raw, dict):
@@ -920,23 +940,56 @@ def ensure_prova_web_pages(
                 ):
                     art_tf = caixa_raw["artTransform"]
                 cut = (model["config"] or {}).get("cutBboxMm") or {}
+                net_w = float(cut.get("widthMm") or 100)
+                net_h = float(cut.get("heightMm") or 100)
+                px_per_mm = max(2.0, float(scale) * 2.0)
                 baked = bake_art_transform_onto_net(
                     png_arte_raw,
                     png_arte,
-                    net_width_mm=float(cut.get("widthMm") or 100),
-                    net_height_mm=float(cut.get("heightMm") or 100),
+                    net_width_mm=net_w,
+                    net_height_mm=net_h,
                     art_transform=art_tf,
-                    px_per_mm=max(2.0, float(scale) * 2.0),
+                    px_per_mm=px_per_mm,
                 )
                 meta_a = {**meta_a, **baked}
                 ordered.append({**meta_a, "role": ROLE_SHEET_FRONT, "path": png_arte})
-                _progress(1, 1)
+
+                if arte_inside_idx is not None:
+                    _check_abort()
+                    _progress(1, steps)
+                    inside_page = doc.load_page(arte_inside_idx)
+                    _apply_mm_crop(inside_page, art_crop)
+                    png_inside_raw = os.path.join(cache_dir, "body_1_raw.png")
+                    meta_b = _render_page_png(inside_page, matrix, png_inside_raw)
+                    png_inside = os.path.join(cache_dir, "body_1.png")
+                    art_inside_tf = art_tf
+                    if isinstance(caixa_raw, dict) and isinstance(
+                        caixa_raw.get("artInsideTransform"), dict
+                    ):
+                        art_inside_tf = caixa_raw["artInsideTransform"]
+                    baked_b = bake_art_transform_onto_net(
+                        png_inside_raw,
+                        png_inside,
+                        net_width_mm=net_w,
+                        net_height_mm=net_h,
+                        art_transform=art_inside_tf,
+                        px_per_mm=px_per_mm,
+                    )
+                    meta_b = {**meta_b, **baked_b}
+                    ordered.append(
+                        {**meta_b, "role": ROLE_SHEET_BACK, "path": png_inside}
+                    )
+                _progress(steps, steps)
             box_mockup = build_box_mockup_from_model_config(model["config"])
             box_mockup["boxModelId"] = model_id
             if isinstance(caixa_raw, dict) and isinstance(
                 caixa_raw.get("artTransform"), dict
             ):
                 box_mockup["artTransform"] = caixa_raw["artTransform"]
+            if isinstance(caixa_raw, dict) and isinstance(
+                caixa_raw.get("artInsideTransform"), dict
+            ):
+                box_mockup["artInsideTransform"] = caixa_raw["artInsideTransform"]
             caixa_cfg = normalize_caixa_config(
                 {**(caixa_raw if isinstance(caixa_raw, dict) else {}), "sourceKind": "model"},
                 suggested=(model["config"].get("dimsHint") if isinstance(model.get("config"), dict) else None),

@@ -54,15 +54,25 @@ function Stop-ProcessTree([int]$ProcId) {
     & taskkill.exe /F /PID $ProcId /T 2>$null | Out-Null
 }
 
-function Stop-SagraServices {
+function Test-IsSyncOrWatchdogService($svc) {
+    $blob = "$($svc.Name) $($svc.DisplayName)"
+    return $blob -match '(?i)SyncAndamentos|Watchdog'
+}
+
+function Stop-SagraApiServices {
+    # Nunca para SAGRA-SyncAndamentos nem watchdog. So servicos da API (uvicorn/NSSM web).
     $stopped = $false
     Get-Service -ErrorAction SilentlyContinue | Where-Object {
         $_.Status -eq 'Running' -and (
-            $_.Name -match 'sagra|SAGRA' -or
-            $_.DisplayName -match 'sagra|SAGRA'
+            $_.Name -match '(?i)sagra' -or
+            $_.DisplayName -match '(?i)sagra'
         )
     } | ForEach-Object {
-        Write-Info "Parando servico Windows: $($_.Name) ($($_.DisplayName))"
+        if (Test-IsSyncOrWatchdogService $_) {
+            Write-Info "Mantendo servico (sync/watchdog): $($_.Name) ($($_.DisplayName))"
+            return
+        }
+        Write-Info "Parando servico Windows (API): $($_.Name) ($($_.DisplayName))"
         Stop-Service -Name $_.Name -Force -ErrorAction SilentlyContinue
         $stopped = $true
     }
@@ -85,7 +95,7 @@ if (-not (Test-IsAdmin)) {
 
 Write-Info "Parando SAGRA Web na porta $Port..."
 
-Stop-SagraServices
+Stop-SagraApiServices
 Stop-UvicornProcesses
 
 foreach ($procId in (Get-ListenerPids -ListenPort $Port)) {

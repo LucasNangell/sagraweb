@@ -111,6 +111,8 @@ describe("defaultCaixaCrop", () => {
     expect(c.sourceKind).toBe("model");
     expect(c.template).toBe("graph");
     expect(c.dimsMm.height).toBeGreaterThan(0);
+    expect(c.arteInsidePage).toBe(1);
+    expect(c.artInsideTransform?.scale).toBe(1);
 
     const s = defaultCaixaCrop("separate");
     expect(s.sourceKind).toBe("separate");

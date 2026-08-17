@@ -101,10 +101,11 @@ export async function createBoxScene(
   canvas: HTMLCanvasElement,
   boxMockup: ProvaWebBoxMockupMeta,
   artUrl: string | null,
+  artInsideUrl: string | null = null,
 ): Promise<BoxSceneHandle> {
   if (boxMockup.template === "graph" || (boxMockup as { source?: string }).source === "box_model") {
     const { createGraphBoxScene } = await import("./boxGraphScene");
-    return createGraphBoxScene(canvas, boxMockup, artUrl);
+    return createGraphBoxScene(canvas, boxMockup, artUrl, artInsideUrl);
   }
   return createFlipTopBoxScene(canvas, boxMockup, artUrl ?? "");
 }

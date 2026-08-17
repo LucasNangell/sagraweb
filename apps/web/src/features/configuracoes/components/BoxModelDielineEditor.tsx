@@ -11,6 +11,11 @@ export interface BoxModelDielineEditorProps {
   /** Aviso em destaque (ex.: clique em warning da lista). */
   focusPointMm?: [number, number] | number[] | null;
   onFocusPointConsumed?: () => void;
+  /**
+   * registration: bbox exato da faca, sem toolbar/pad — alinhado ao bake 3D.
+   * edit: editor Admin com camadas e padding.
+   */
+  variant?: "edit" | "registration";
 }
 
 function polyPoints(poly: number[][] | undefined): string | null {
@@ -38,9 +43,11 @@ export function BoxModelDielineEditor({
   onSelectPanel,
   onSelectEdge,
   focusPointMm,
+  variant = "edit",
 }: BoxModelDielineEditorProps) {
   const cut = config.cutBboxMm;
-  const pad = 8;
+  const registration = variant === "registration";
+  const pad = registration ? 0 : 8;
   const vbX = (cut?.x0Mm ?? 0) - pad;
   const vbY = (cut?.y0Mm ?? 0) - pad;
   const vbW = (cut?.widthMm ?? 100) + pad * 2;
@@ -55,8 +62,8 @@ export function BoxModelDielineEditor({
     cuts: true,
     folds: true,
     faces: true,
-    hinges: true,
-    ids: true,
+    hinges: !registration,
+    ids: !registration,
   });
 
   const toggle = (key: DiagLayer) =>
@@ -77,7 +84,14 @@ export function BoxModelDielineEditor({
       : null;
 
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+    <div
+      className={
+        registration
+          ? "h-full w-full overflow-hidden bg-white"
+          : "overflow-hidden rounded-lg border border-slate-200 bg-white"
+      }
+    >
+      {registration ? null : (
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-2 py-1.5 text-[10px] text-slate-600">
         <span className="mr-1 font-semibold text-slate-500">Camadas</span>
         {(
@@ -107,9 +121,15 @@ export function BoxModelDielineEditor({
           Base
         </span>
       </div>
+      )}
       <svg
         viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
-        className="mx-auto max-h-[420px] w-full"
+        className={
+          registration
+            ? "h-full w-full"
+            : "mx-auto max-h-[420px] w-full"
+        }
+        preserveAspectRatio={registration ? "none" : "xMidYMid meet"}
         role="img"
         aria-label="Faca com painéis, cortes e dobras"
       >

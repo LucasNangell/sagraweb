@@ -78,3 +78,33 @@ describe("boxKinematics", () => {
     expect(easeInOutCubic(0.5)).toBeCloseTo(0.5);
   });
 });
+
+describe("boxGraphScene duplex materials", () => {
+  it("createBoxScene accepts optional artInsideUrl (signature)", async () => {
+    const { createBoxScene } = await import("./boxSceneThree");
+    expect(createBoxScene.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("assignExtrudeDuplexGroups maps top/side/bottom to materials 0/1/2", async () => {
+    const THREE = await import("three");
+    const { assignExtrudeDuplexGroups } = await import("./boxGraphScene");
+    const shape = new THREE.Shape();
+    shape.moveTo(0, 0);
+    shape.lineTo(10, 0);
+    shape.lineTo(10, 8);
+    shape.lineTo(0, 8);
+    shape.closePath();
+    const thickness = 0.4;
+    const geo = new THREE.ExtrudeGeometry(shape, {
+      depth: thickness,
+      bevelEnabled: false,
+    });
+    assignExtrudeDuplexGroups(geo, thickness);
+    const mats = new Set(geo.groups.map((g) => g.materialIndex));
+    expect(mats.has(0)).toBe(true); // face externa
+    expect(mats.has(1)).toBe(true); // kraft
+    expect(mats.has(2)).toBe(true); // face interna
+    const covered = geo.groups.reduce((n, g) => n + g.count, 0);
+    expect(covered).toBe(geo.getAttribute("position").count);
+  });
+});

@@ -111,6 +111,29 @@ export function isLabVersionReadOnly(
   return versao !== current;
 }
 
+/** Itens da versão carregada na sessão Lab (Folhear). Sem rótulo fica de fora. */
+export function itemsForCurrentLabVersion(
+  items: AnaliseLabItem[],
+  currentVersaoLabel: string,
+  versions: OsVersionItem[] = [],
+): AnaliseLabItem[] {
+  const current = (currentVersaoLabel || "").trim();
+  if (!current) return [];
+  const currentVersion =
+    versions.length > 0 ? resolveItemVersion(current, versions) : null;
+  return items.filter((item) => {
+    const stored = (item.versaoLabel || "").trim();
+    if (!stored) return false;
+    if (currentVersion) return itemMatchesVersion(stored, currentVersion);
+    if (stored === current) return true;
+    const storedLower = stored.toLowerCase();
+    const currentLower = current.toLowerCase();
+    return (
+      storedLower.includes(currentLower) || currentLower.includes(storedLower)
+    );
+  });
+}
+
 function sortComponents(a: string, b: string): number {
   const ia = COMPONENT_ORDER.indexOf(a);
   const ib = COMPONENT_ORDER.indexOf(b);

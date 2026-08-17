@@ -8,6 +8,7 @@ import {
   canDropLabItem,
   allLabTreeNodeKeys,
   isLabVersionReadOnly,
+  itemsForCurrentLabVersion,
   labComponentCollapseKey,
   reorderIdsAfterDrop,
 } from "./analiseLabItemsTree";
@@ -294,5 +295,24 @@ describe("analiseLabItemsTree", () => {
       51,
     ]);
     expect(v2?.components.find((c) => c.label === "Miolo")?.items ?? []).toEqual([]);
+  });
+
+  it("keeps only items of the session version for Folhear", () => {
+    const unlabeled: AnaliseLabItem = {
+      ...items[0],
+      id: 4,
+      titulo: "Sem versão",
+      versaoLabel: "",
+    };
+    const mixed = [...items, unlabeled];
+    expect(
+      itemsForCurrentLabVersion(mixed, "v2", versions).map((i) => i.id),
+    ).toEqual([1, 2]);
+    expect(
+      itemsForCurrentLabVersion(mixed, "v2 (Original)", versions).map((i) => i.id),
+    ).toEqual([1, 2]);
+    expect(
+      itemsForCurrentLabVersion(mixed, "v2").map((i) => i.id),
+    ).toEqual([1, 2]);
   });
 });

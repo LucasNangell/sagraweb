@@ -90,6 +90,7 @@ import {
   parsePageSpec,
   togglePagePickSpec,
 } from "./analiseLabPageSpec";
+import { itemsForCurrentLabVersion } from "./analiseLabItemsTree";
 import { pageNumberToIndex } from "./analiseLabPageSync";
 import { AnaliseLabReplicateDialog } from "./AnaliseLabReplicateDialog";
 import { AnaliseLabSourcePicker } from "./AnaliseLabSourcePicker";
@@ -1130,8 +1131,32 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     }
   };
 
+  const folhearVersionItems = useMemo(
+    () =>
+      itemsForCurrentLabVersion(
+        itens,
+        session?.versaoLabel || "",
+        osVersions,
+      ),
+    [itens, osVersions, session?.versaoLabel],
+  );
+  const folhearBalloonItems = useMemo(
+    () =>
+      folhearVersionItems.filter((i) => !clientDisregardedIds.includes(i.id)),
+    [clientDisregardedIds, folhearVersionItems],
+  );
+  const folhearItemIds = useMemo(
+    () => new Set(folhearVersionItems.map((i) => i.id)),
+    [folhearVersionItems],
+  );
+  const folhearMarks = useMemo(
+    () =>
+      marks.filter((m) => m.itemId != null && folhearItemIds.has(m.itemId)),
+    [folhearItemIds, marks],
+  );
+
   /** Maior profundidade de sangria gravada — define a folga do Folhear. */
-  const maxSangriaMm = marks.reduce((max, m) => {
+  const maxSangriaMm = folhearMarks.reduce((max, m) => {
     if (m.tipo !== "sangria") return max;
     const from = Number(
       (m.geometria as { fromMm?: number } | null)?.fromMm ?? 0,
@@ -1162,7 +1187,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     const { widthMm, heightMm } = pageSizeMm(page.widthPt, page.heightPt);
     return (
       <AnaliseLabMarksLayer
-        marks={marks}
+        marks={folhearMarks}
         pageNumber={page.page}
         pageWidthMm={widthMm}
         pageHeightMm={heightMm}
@@ -1319,24 +1344,19 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
 
   const clientPreviewItems = useMemo(
     () =>
-      labItemsToClientItems(itens, {
+      labItemsToClientItems(folhearVersionItems, {
         disregardedIds: new Set(clientDisregardedIds),
         uploadedComponents: new Set(clientUploadedComponents),
         pages,
         modo: session?.modo || "capa_miolo",
       }),
     [
-      itens,
+      folhearVersionItems,
       clientDisregardedIds,
       clientUploadedComponents,
       pages,
       session?.modo,
     ],
-  );
-
-  const folhearBalloonItems = useMemo(
-    () => itens.filter((i) => !clientDisregardedIds.includes(i.id)),
-    [itens, clientDisregardedIds],
   );
 
   const closeProblemPanel = () => {
@@ -1904,7 +1924,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                               manifestQuery.data.cacheKey,
                             )
                           }
-                          marks={marks}
+                          marks={folhearMarks}
                           tool="select"
                           edge={edge}
                           applyAllPages={applyAllPages}
@@ -1922,7 +1942,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                           renderStageOverlay={(ctx) => (
                             <AnaliseLabBalloonLayer
                               items={folhearBalloonItems}
-                              marks={marks}
+                              marks={folhearMarks}
                               pages={pages}
                               visiblePages={ctx.visiblePages}
                               pageSize={ctx.pageSize}
@@ -1970,7 +1990,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                         renderStageOverlay={(ctx) => (
                           <AnaliseLabBalloonLayer
                             items={folhearBalloonItems}
-                            marks={marks}
+                            marks={folhearMarks}
                             pages={pages}
                             visiblePages={ctx.visiblePages}
                             pageSize={ctx.pageSize}

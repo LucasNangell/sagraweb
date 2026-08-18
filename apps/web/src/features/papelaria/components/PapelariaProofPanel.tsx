@@ -11,7 +11,11 @@ import { queryKeys } from "@/api/query-keys";
 import { useQuery } from "@tanstack/react-query";
 
 import { useMatchMedia } from "@/hooks/useMatchMedia";
-import { getPapelariaMockupConfig } from "../mockup";
+import {
+  getPapelariaMockupConfig,
+  PAPELARIA_MOCKUP_SCENE_BASE_PX,
+  PAPELARIA_MOCKUP_SCENE_BASE_PX_NARROW,
+} from "../mockup";
 import {
   buildRuntimePreviewConfig,
   getGroupedTemplateIds,
@@ -318,7 +322,11 @@ export function PapelariaProofPanel({
                     pages={pageUrls}
                     config={mockupResolved.config}
                     isFallback={mockupResolved.isFallback}
-                    sceneBasePx={isNarrowViewport ? 220 : 280}
+                    sceneBasePx={
+                      isNarrowViewport
+                        ? PAPELARIA_MOCKUP_SCENE_BASE_PX_NARROW
+                        : PAPELARIA_MOCKUP_SCENE_BASE_PX
+                    }
                   />
                   {mockupResolved.isInvalid && (
                     <p className="absolute bottom-2 left-2 right-2 rounded bg-amber-50 px-2 py-1 text-center text-[10px] text-amber-800">

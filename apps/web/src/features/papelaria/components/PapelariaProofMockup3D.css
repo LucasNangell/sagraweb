@@ -191,16 +191,18 @@
   }
 }
 
-/* Portal — mockup 3D cabe no painel (escala via ResolveSceneBasePx); sem popout de layout */
+/* Portal — mockup no tamanho da Papelaria, centralizado na área de visualização */
 .proof-mockup-root--portal-fit {
   height: 100%;
   min-height: 0;
   overflow: hidden;
   overscroll-behavior: none;
+  padding: 1.25rem 1rem;
 }
 
 .proof-mockup-root--portal-fit .proof-mockup-perspective {
-  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-height: 0;
-  overflow: hidden;
 }

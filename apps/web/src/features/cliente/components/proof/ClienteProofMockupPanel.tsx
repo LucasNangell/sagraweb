@@ -7,10 +7,13 @@ import type { ProofPreviewPagesData } from "@/api/proof-portal";
 import { proofPreviewPageUrls } from "@/api/proof-portal";
 import { PapelariaProofMockup3D } from "@/features/papelaria/components/PapelariaProofMockup3D";
 import {
+  capPortalMockupSceneBasePx,
   configUsesFold,
   getPapelariaMockupConfig,
+  PAPELARIA_MOCKUP_SCENE_BASE_PX,
   resolveSceneBasePx,
 } from "@/features/papelaria/mockup";
+import { useMatchMedia } from "@/hooks/useMatchMedia";
 
 /** Padding interno de .proof-mockup-root (1.25rem 1rem 1.75rem). */
 const MOCKUP_ROOT_PAD_X = 32;
@@ -39,7 +42,8 @@ function ClienteProofMockupPanelReady({
   className,
 }: ReadyProps) {
   const stageRef = useRef<HTMLDivElement>(null);
-  const [sceneBasePx, setSceneBasePx] = useState(280);
+  const isNarrowViewport = useMatchMedia("(max-width: 767px)");
+  const [sceneBasePx, setSceneBasePx] = useState(PAPELARIA_MOCKUP_SCENE_BASE_PX);
 
   const pageUrls = proofPreviewPageUrls(previewData);
   const mockupResolved = getPapelariaMockupConfig({
@@ -55,7 +59,7 @@ function ClienteProofMockupPanelReady({
 
   useEffect(() => {
     if (!fillHeight) {
-      setSceneBasePx(280);
+      setSceneBasePx(capPortalMockupSceneBasePx(PAPELARIA_MOCKUP_SCENE_BASE_PX, isNarrowViewport));
       return;
     }
 
@@ -66,22 +70,21 @@ function ClienteProofMockupPanelReady({
 
     const updateSize = () => {
       const rect = stage.getBoundingClientRect();
-      setSceneBasePx(
-        resolveSceneBasePx(
-          mockupResolved.config,
-          hasFold ? foldOpen : 0,
-          rect.width - MOCKUP_ROOT_PAD_X,
-          rect.height - MOCKUP_ROOT_PAD_Y,
-          0.82,
-        ),
+      const fitted = resolveSceneBasePx(
+        mockupResolved.config,
+        hasFold ? foldOpen : 0,
+        rect.width - MOCKUP_ROOT_PAD_X,
+        rect.height - MOCKUP_ROOT_PAD_Y,
+        0.82,
       );
+      setSceneBasePx(capPortalMockupSceneBasePx(fitted, isNarrowViewport));
     };
 
     updateSize();
     const observer = new ResizeObserver(updateSize);
     observer.observe(stage);
     return () => observer.disconnect();
-  }, [fillHeight, mockupResolved.config, hasFold, foldOpen]);
+  }, [fillHeight, mockupResolved.config, hasFold, foldOpen, isNarrowViewport]);
 
   return (
     <MockupPanelShell fillHeight={fillHeight} className={className} stageRef={stageRef}>

@@ -45,7 +45,7 @@ export const OS_CONTEXT_MENU_ITEMS: OsContextMenuItem[] = [
   },
   {
     id: "folder",
-    label: "Abrir Pasta de Rede",
+    label: "Abrir Pasta",
     permission: "ctx_abrir_pasta",
     requiresRow: true,
   },

@@ -10,6 +10,7 @@ import {
   faceLayoutStyle,
   normalizeCrop,
   paginasUsadas,
+  PAPELARIA_MOCKUP_SCENE_BASE_PX,
   resolvePageUrl,
   sceneDimensionsPx,
 } from "../mockup";
@@ -21,7 +22,7 @@ export type PapelariaProofMockup3DProps = {
   config: PapelariaMockupConfig;
   isFallback?: boolean;
   className?: string;
-  /** Referência em px para dimensionar a cena (padrão 280). */
+  /** Referência em px para dimensionar a cena (padrão da Papelaria). */
   sceneBasePx?: number;
 };
 
@@ -76,7 +77,7 @@ export function PapelariaProofMockup3D({
   config,
   isFallback = false,
   className,
-  sceneBasePx = 280,
+  sceneBasePx = PAPELARIA_MOCKUP_SCENE_BASE_PX,
 }: PapelariaProofMockup3DProps) {
   const [isHover, setIsHover] = useState(false);
   const imagePages = pages.filter(Boolean);

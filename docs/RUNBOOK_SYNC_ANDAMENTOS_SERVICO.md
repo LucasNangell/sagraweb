@@ -36,6 +36,32 @@ Flags de emergência (env):
 
 - `SYNC_TABANDAMENTO_BIDI=true` (default)
 - `SYNC_MYSQL_TO_MDB_CATCHUP=true` (default) — se `false`, desliga sentido MySQL→MDB
+- `SYNC_CONFLICT_WINNER=mdb` (default) — desempate quando os dois lados mudaram no mesmo ciclo;
+  use `mysql` só como escape hatch
+
+### Conflito de UPDATE (mesmo CodStatus)
+
+Não use a coluna de negócio `Data` como relógio. O serviço guarda o hash do último
+payload convergido em `sync_andamento_baseline` (MySQL). Quem divergiu do baseline vence:
+
+| Situação | Vencedor |
+|----------|----------|
+| Só MDB mudou | MDB → `update_mysql` |
+| Só MySQL mudou | MySQL → `update_mdb` |
+| Ambos mudaram no mesmo ciclo | `SYNC_CONFLICT_WINNER` (default **MDB**) |
+| Sem baseline (primeiro ciclo / linha nova divergente) | **MDB** (mesmo default) |
+| Payloads iguais | nenhum UPDATE; semeia/atualiza o baseline |
+
+`UltimoStatus` continua fora do payload (autoridade MySQL, heal após mutação).
+
+Para zerar o baseline (ex. após correção manual em massa):
+
+```sql
+TRUNCATE TABLE sync_andamento_baseline;
+```
+
+Reinicie o serviço em seguida. O próximo ciclo semeia de novo; linhas ainda divergentes
+adotam o MDB como verdade.
 
 ## Pré-requisitos
 
@@ -134,6 +160,7 @@ Cheque `logs\sync\sync_andamentos.log` e a tabela MySQL `log_sync_andamentos`.
 | Log principal (rotativo 10 MB × 5) | `logs\sync\sync_andamentos.log` |
 | Log espelho | `logs\sync\synlog.txt` |
 | Heartbeat JSON | `logs\sync\sync_heartbeat.json` |
+| Baseline de conflito (MySQL) | tabela `sync_andamento_baseline` |
 | Stdout/stderr do NSSM | `logs\sync\service_stdout.log`, `service_stderr.log` |
 | Log do watchdog externo | `logs\sync\watchdog_external.log` |
 
@@ -158,7 +185,9 @@ Cheque `logs\sync\sync_andamentos.log` e a tabela MySQL `log_sync_andamentos`.
     "del_y": 0,
     "ultimo_heals": 0,
     "safety_lock_aborts": 0,
-    "mysql_only_remaining": 0
+    "mysql_only_remaining": 0,
+    "conflitos": 0,
+    "baseline_rows": 0
   },
   "written_at": "..."
 }
@@ -215,6 +244,7 @@ Não é necessário reinstalar o watchdog externo se o `AppDirectory` for o mesm
 | `SYNC_NOTIFY_INTERNAL_BASE` | `1` (default) | Notify via `get_api_internal_base()` (uvicorn loopback) |
 | `SAGRA_NOTIFY_SECRET` | (opcional) | Mesmo secret da API; o instalador copia de `config\.env` |
 | `SAGRA_API_INTERNAL_BASE` | (opcional) | Override da URL interna, ex. `http://127.0.0.1:8001/api` |
+| `SYNC_CONFLICT_WINNER` | `mdb` | Desempate de conflito real / sem baseline (`mdb` ou `mysql`) |
 
 Configure via `nssm set SAGRA-SyncAndamentos AppEnvironmentExtra ...` ou no `.env`
 carregado pelo processo (o serviço herda o `AppDirectory` da raiz).
@@ -257,4 +287,6 @@ Se a home/painel não atualizar: procure `[NOTIFY] falha` em `logs\sync\sync_and
 | `[SKIP] MDB indisponivel` contínuo | Share/`I:` fora ou conta sem acesso | Verifique UNC e credenciais da conta do serviço |
 | `mysql-connector` / `dotenv` ImportError | Dep não instalada | `pip install --no-user python-dotenv mysql-connector-python` |
 | Home/painel demora a refletir MDB | Notify falhando ou serviço antigo | Reinicie o serviço; confira `[NOTIFY]` no log |
+| Edição no Access some sozinha | Serviço antigo ainda usa `Data` como LWW | Atualize `sync_andamentos_service.py`; confira `[CONFLITO]` / `upd_m2y` no heartbeat |
+| Após TRUNCATE do baseline o Access “ganha tudo” | Esperado no primeiro ciclo sem hash | Só trunque se quiser reseed; divergências adotam o MDB |
 | Logs ainda em `app\services\` | Rodando o script Old sem o service | Confirme que o serviço aponta para `sync_andamentos_service.py` |

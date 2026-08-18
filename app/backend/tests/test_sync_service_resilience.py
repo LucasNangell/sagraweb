@@ -297,16 +297,11 @@ def _make_sync_for_notify(tmp_path, monkeypatch):
         sync._notify_fail_ts = 0.0
         sync._mdb_missing_warn_ts = 0.0
         sync._mdb_missing_warn_interval = 60.0
-        sync._cycle_stats = {
-            "ins_m2y": 0,
-            "upd_m2y": 0,
-            "ins_y2m": 0,
-            "upd_y2m": 0,
-            "del_y": 0,
-            "ultimo_heals": 0,
-            "safety_lock_aborts": 0,
-            "mysql_only_remaining": 0,
-        }
+        sync._cycle_stats = svc._empty_cycle_stats()
+        sync._init_baseline_state()
+        sync._baseline_loaded = True
+        sync._flush_baseline = MagicMock()
+        sync.sync_os_data_from_mdb = MagicMock()
         sync._install_reliable_notify()
         return sync
 
@@ -390,102 +385,35 @@ def test_heartbeat_includes_stats(tmp_hb):
     assert "tabandamento_bidi" in snap
 
 
-def test_mysql_wins_lww():
-    assert svc.ResilientSynchronizer._mysql_wins_lww(
-        {"Data": "2026-08-12 12:00:00"},
-        {"Data": "2026-08-12 11:00:00"},
-    )
-    assert svc.ResilientSynchronizer._mysql_wins_lww(
-        {"Data": "2026-08-12 12:00:00"},
-        {"Data": "2026-08-12 12:00:00"},
-    )
-    assert not svc.ResilientSynchronizer._mysql_wins_lww(
-        {"Data": "2026-08-12 10:00:00"},
-        {"Data": "2026-08-12 12:00:00"},
-    )
-
-
-def test_perform_sync_catchup_insert_mdb(tmp_path, monkeypatch):
-    sync = _make_sync_for_notify(tmp_path, monkeypatch)
-    sync._cycle_stats = {
-        "ins_m2y": 0,
-        "upd_m2y": 0,
-        "ins_y2m": 0,
-        "upd_y2m": 0,
-        "del_y": 0,
-        "ultimo_heals": 0,
-        "safety_lock_aborts": 0,
-        "mysql_only_remaining": 0,
-    }
-    mysql_row = {
-        "CodStatus": "000882026-99",
+def _sample_andamento(**overrides):
+    row = {
+        "CodStatus": "000882026-01",
         "NroProtocoloLink": 886,
         "AnoProtocoloLink": 2026,
         "SituacaoLink": "Recebido",
         "SetorLink": "SEGEP",
         "Data": "2026-08-12 10:00:00",
         "UltimoStatus": 1,
-        "Observaçao": "web",
+        "Observaçao": "original",
         "Ponto": "1",
     }
-    monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
-    monkeypatch.setattr(svc, "SYNC_MYSQL_TO_MDB_CATCHUP", True)
-    sync._mdb_paths_available = MagicMock(return_value=True)
-    sync.read_mysql = MagicMock(return_value=[mysql_row])
-    sync.read_mdb = MagicMock(return_value=[])
-    sync.detect_and_register_deletions = MagicMock(return_value=set())
-    sync.update_cache = MagicMock()
-    sync.insert_mdb = MagicMock()
-    sync.ensure_mysql_ultimo_status_from_mdb = MagicMock()
-    sync._heal_os_batch = MagicMock()
-    sync._heal_broken_ultimo_flags = MagicMock(return_value=0)
-    sync.conn_mgr.get_mdb_by_nro = MagicMock(return_value=MagicMock())
-    sync.conn_mgr.get_mdb_name_by_nro = MagicMock(return_value="OS_Atual")
-    sync.conn_mgr.get_mdb_os = MagicMock()
-    sync.conn_mgr.get_mdb_pap = MagicMock()
-    sync.perform_sync()
-    sync.insert_mdb.assert_called_once()
-    assert sync.insert_mdb.call_args.args[0]["CodStatus"] == "000882026-99"
-    assert sync._hb.snapshot()["stats"]["ins_y2m"] == 1
+    row.update(overrides)
+    return row
 
 
-def test_perform_sync_update_mysql_to_mdb_when_newer(tmp_path, monkeypatch):
-    sync = _make_sync_for_notify(tmp_path, monkeypatch)
-    sync._cycle_stats = {
-        "ins_m2y": 0,
-        "upd_m2y": 0,
-        "ins_y2m": 0,
-        "upd_y2m": 0,
-        "del_y": 0,
-        "ultimo_heals": 0,
-        "safety_lock_aborts": 0,
-        "mysql_only_remaining": 0,
-    }
-    mysql_row = {
-        "CodStatus": "000882026-01",
-        "NroProtocoloLink": 886,
-        "AnoProtocoloLink": 2026,
-        "SituacaoLink": "WebEdit",
-        "SetorLink": "SEGEP",
-        "Data": "2026-08-12 15:00:00",
-        "UltimoStatus": 1,
-        "Observaçao": "from mysql",
-        "Ponto": "1",
-    }
-    mdb_row = dict(mysql_row)
-    mdb_row["SituacaoLink"] = "AccessOld"
-    mdb_row["Data"] = "2026-08-12 10:00:00"
-    mdb_row["Observaçao"] = "from mdb"
-    monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
-    monkeypatch.setattr(svc, "SYNC_MYSQL_TO_MDB_CATCHUP", True)
+def _wire_perform_sync(sync, mysql_rows, mdb_os_rows, mdb_pap_rows=None):
+    pap = [] if mdb_pap_rows is None else mdb_pap_rows
     sync._mdb_paths_available = MagicMock(return_value=True)
-    sync.read_mysql = MagicMock(return_value=[mysql_row])
-    sync.read_mdb = MagicMock(side_effect=[[mdb_row], []])
+    sync.read_mysql = MagicMock(return_value=mysql_rows)
+    sync.read_mdb = MagicMock(side_effect=[mdb_os_rows, pap])
     sync.detect_and_register_deletions = MagicMock(return_value=set())
     sync.update_cache = MagicMock()
     sync.update_mdb = MagicMock()
     sync.update_mysql = MagicMock()
-    sync._andamentos_differ = MagicMock(return_value=True)
+    sync.insert_mdb = MagicMock()
+    sync.insert_mysql = MagicMock()
+    sync.delete_mysql = MagicMock()
+    sync.sync_os_data_from_mdb = MagicMock()
     sync.ensure_mysql_ultimo_status_from_mdb = MagicMock()
     sync._heal_os_batch = MagicMock()
     sync._heal_broken_ultimo_flags = MagicMock(return_value=0)
@@ -493,6 +421,116 @@ def test_perform_sync_update_mysql_to_mdb_when_newer(tmp_path, monkeypatch):
     sync.conn_mgr.get_mdb_name_by_nro = MagicMock(return_value="OS_Atual")
     sync.conn_mgr.get_mdb_os = MagicMock()
     sync.conn_mgr.get_mdb_pap = MagicMock()
+
+
+def test_andamentos_differ_formats_both_sides(tmp_path, monkeypatch):
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    mdb = _sample_andamento(Observaçao="texto sem hora", Ponto="1234567")
+    mysql = _sample_andamento(
+        Observaçao="10h00\r\ntexto sem hora",
+        Ponto="1234.567",
+    )
+    assert sync._andamentos_differ(mdb, mysql) is False
+    mysql_changed = dict(mysql)
+    mysql_changed["Observaçao"] = "10h00\r\noutra obs"
+    assert sync._andamentos_differ(mdb, mysql_changed) is True
+
+
+def test_perform_sync_mdb_obs_edit_same_data_updates_mysql(tmp_path, monkeypatch):
+    """Regressão: edição só de Observaçao no Access, Data igual, não pode reverter o MDB."""
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    mysql_row = _sample_andamento()
+    mdb_row = _sample_andamento(Observaçao="editado no access")
+    monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
+    monkeypatch.setattr(svc, "SYNC_MYSQL_TO_MDB_CATCHUP", True)
+    _wire_perform_sync(sync, [mysql_row], [mdb_row])
+    sync.perform_sync()
+    sync.update_mysql.assert_called_once()
+    sync.update_mdb.assert_not_called()
+    assert sync._hb.snapshot()["stats"]["upd_m2y"] == 1
+    assert sync._hb.snapshot()["stats"]["upd_y2m"] == 0
+
+
+def test_perform_sync_mysql_change_against_baseline_updates_mdb(tmp_path, monkeypatch):
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    orig = _sample_andamento()
+    mysql_row = _sample_andamento(Observaçao="from mysql")
+    mdb_row = dict(orig)
+    monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
+    monkeypatch.setattr(svc, "SYNC_MYSQL_TO_MDB_CATCHUP", True)
+    sync._baseline[orig["CodStatus"]] = sync._payload_hash(orig)
+    _wire_perform_sync(sync, [mysql_row], [mdb_row])
+    sync.perform_sync()
+    sync.update_mdb.assert_called_once()
+    sync.update_mysql.assert_not_called()
+    assert sync._hb.snapshot()["stats"]["upd_y2m"] == 1
+
+
+def test_perform_sync_both_changed_mdb_wins(tmp_path, monkeypatch):
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    orig = _sample_andamento()
+    mysql_row = _sample_andamento(Observaçao="from mysql")
+    mdb_row = _sample_andamento(Observaçao="from mdb")
+    monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
+    monkeypatch.setattr(svc, "SYNC_MYSQL_TO_MDB_CATCHUP", True)
+    monkeypatch.setattr(svc, "SYNC_CONFLICT_WINNER", "mdb")
+    sync._baseline[orig["CodStatus"]] = sync._payload_hash(orig)
+    _wire_perform_sync(sync, [mysql_row], [mdb_row])
+    sync.perform_sync()
+    sync.update_mysql.assert_called_once()
+    sync.update_mdb.assert_not_called()
+    assert sync._hb.snapshot()["stats"]["upd_m2y"] == 1
+    assert sync._hb.snapshot()["stats"]["conflitos"] == 1
+
+
+def test_perform_sync_no_baseline_mdb_wins(tmp_path, monkeypatch):
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    mysql_row = _sample_andamento(Observaçao="from mysql")
+    mdb_row = _sample_andamento(Observaçao="from mdb")
+    monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
+    monkeypatch.setattr(svc, "SYNC_MYSQL_TO_MDB_CATCHUP", True)
+    _wire_perform_sync(sync, [mysql_row], [mdb_row])
+    sync.perform_sync()
+    sync.update_mysql.assert_called_once()
+    sync.update_mdb.assert_not_called()
+    assert sync._hb.snapshot()["stats"]["upd_m2y"] == 1
+
+
+def test_perform_sync_equal_rows_seed_baseline_no_update(tmp_path, monkeypatch):
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    row = _sample_andamento()
+    monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
+    monkeypatch.setattr(svc, "SYNC_MYSQL_TO_MDB_CATCHUP", True)
+    _wire_perform_sync(sync, [row], [dict(row)])
+    sync.perform_sync()
+    sync.update_mysql.assert_not_called()
+    sync.update_mdb.assert_not_called()
+    assert row["CodStatus"] in sync._baseline
+    assert sync._baseline[row["CodStatus"]] == sync._payload_hash(row)
+
+
+def test_perform_sync_catchup_insert_mdb(tmp_path, monkeypatch):
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    mysql_row = _sample_andamento(CodStatus="000882026-99", Observaçao="web")
+    monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
+    monkeypatch.setattr(svc, "SYNC_MYSQL_TO_MDB_CATCHUP", True)
+    _wire_perform_sync(sync, [mysql_row], [])
+    sync.perform_sync()
+    sync.insert_mdb.assert_called_once()
+    assert sync.insert_mdb.call_args.args[0]["CodStatus"] == "000882026-99"
+    assert sync._hb.snapshot()["stats"]["ins_y2m"] == 1
+    assert mysql_row["CodStatus"] in sync._baseline
+
+
+def test_perform_sync_update_mysql_to_mdb_when_mysql_changed(tmp_path, monkeypatch):
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    orig = _sample_andamento(SituacaoLink="AccessOld", Observaçao="from mdb")
+    mysql_row = _sample_andamento(SituacaoLink="WebEdit", Observaçao="from mysql")
+    mdb_row = dict(orig)
+    monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
+    monkeypatch.setattr(svc, "SYNC_MYSQL_TO_MDB_CATCHUP", True)
+    sync._baseline[orig["CodStatus"]] = sync._payload_hash(orig)
+    _wire_perform_sync(sync, [mysql_row], [mdb_row])
     sync.perform_sync()
     sync.update_mdb.assert_called_once()
     sync.update_mysql.assert_not_called()

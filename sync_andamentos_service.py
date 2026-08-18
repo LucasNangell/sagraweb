@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import ctypes
 import faulthandler
+import hashlib
 import importlib.util
 import json
 import logging
@@ -119,13 +120,32 @@ SYNC_NOTIFY_FAIL_LOG_INTERVAL = _env_float("SYNC_NOTIFY_FAIL_LOG_INTERVAL", 60.0
 SYNC_TABANDAMENTO_BIDI = _env_bool("SYNC_TABANDAMENTO_BIDI", True)
 # Alias legado do plano de catch-up (se False, desliga o sentido MySQL→MDB).
 SYNC_MYSQL_TO_MDB_CATCHUP = _env_bool("SYNC_MYSQL_TO_MDB_CATCHUP", True)
+# Desempate quando ambos os lados mudaram (ou não há baseline): mdb | mysql.
+_raw_conflict = (os.getenv("SYNC_CONFLICT_WINNER") or "mdb").strip().lower()
+SYNC_CONFLICT_WINNER = _raw_conflict if _raw_conflict in ("mdb", "mysql") else "mdb"
 SYNC_MUTEX_NAME = os.getenv("SYNC_MUTEX_NAME", r"Global\SagraSyncAndamentos")
 SYNC_LOG_DIR = os.getenv("SYNC_LOG_DIR", "").strip()
 SYNC_LOG_MAX_BYTES = _env_int("SYNC_LOG_MAX_BYTES", 10 * 1024 * 1024)
 SYNC_LOG_BACKUP_COUNT = _env_int("SYNC_LOG_BACKUP_COUNT", 5)
+_BASELINE_PRUNE_EVERY = 50
 
 # Sentinel para distinguir "MySQL retornou lista vazia" de "falha de leitura"
 _MYSQL_READ_FAILED = object()
+
+
+def _empty_cycle_stats() -> Dict[str, int]:
+    return {
+        "ins_m2y": 0,
+        "upd_m2y": 0,
+        "ins_y2m": 0,
+        "upd_y2m": 0,
+        "del_y": 0,
+        "ultimo_heals": 0,
+        "safety_lock_aborts": 0,
+        "mysql_only_remaining": 0,
+        "conflitos": 0,
+        "baseline_rows": 0,
+    }
 
 
 # ===========================================================================
@@ -227,16 +247,7 @@ class HeartbeatWriter:
         self.consecutive_errors = 0
         self.last_error: Optional[str] = None
         self.stall_seconds = 0.0
-        self.stats: Dict[str, Any] = {
-            "ins_m2y": 0,
-            "upd_m2y": 0,
-            "ins_y2m": 0,
-            "upd_y2m": 0,
-            "del_y": 0,
-            "ultimo_heals": 0,
-            "safety_lock_aborts": 0,
-            "mysql_only_remaining": 0,
-        }
+        self.stats: Dict[str, Any] = _empty_cycle_stats()
 
     def mark_progress(self, phase: str) -> None:
         with self.lock:
@@ -408,16 +419,8 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
         self._mdb_missing_warn_ts = 0.0
         self._mdb_missing_warn_interval = 60.0
         self._notify_fail_ts = 0.0
-        self._cycle_stats = {
-            "ins_m2y": 0,
-            "upd_m2y": 0,
-            "ins_y2m": 0,
-            "upd_y2m": 0,
-            "del_y": 0,
-            "ultimo_heals": 0,
-            "safety_lock_aborts": 0,
-            "mysql_only_remaining": 0,
-        }
+        self._cycle_stats = _empty_cycle_stats()
+        self._init_baseline_state()
 
         # Sempre patch: Old usa get_api_base() relativo (/sagra/api) que quebra requests.
         self._install_reliable_notify()
@@ -734,6 +737,19 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             )
         return heals
 
+    # ------------------------------------------------------------------
+    # Payload canônico / baseline / direção de UPDATE
+    # ------------------------------------------------------------------
+
+    def _init_baseline_state(self) -> None:
+        self._baseline: Dict[str, str] = {}
+        self._baseline_dirty: Dict[str, str] = {}
+        self._baseline_deleted: Set[str] = set()
+        self._baseline_loaded = False
+        self._baseline_prune_counter = 0
+        self._conflict_log_cache: Dict[str, float] = {}
+        self._conflict_log_interval = 300
+
     @staticmethod
     def _parse_andamento_data(val):
         if val is None:
@@ -759,10 +775,195 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             return datetime.min
 
     @staticmethod
-    def _mysql_wins_lww(mysql_rec, mdb_rec) -> bool:
-        d_mysql = ResilientSynchronizer._parse_andamento_data(mysql_rec.get("Data"))
-        d_mdb = ResilientSynchronizer._parse_andamento_data(mdb_rec.get("Data"))
-        return d_mysql >= d_mdb
+    def _norm_str(val) -> str:
+        if val is None:
+            return ""
+        return str(val).strip()
+
+    def _norm_date(self, val) -> str:
+        if not val:
+            return ""
+        if isinstance(val, datetime):
+            dt = val.replace(tzinfo=None) if val.tzinfo else val
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
+        dt = self._parse_andamento_data(val)
+        if dt == datetime.min:
+            return str(val).strip()[:19]
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+    def _data_for_format(self, val):
+        if not val:
+            return None
+        if isinstance(val, datetime):
+            return val.replace(tzinfo=None) if val.tzinfo else val
+        dt = self._parse_andamento_data(val)
+        if dt == datetime.min:
+            return None
+        return dt
+
+    def _canonical_payload(self, rec: Dict) -> Dict[str, Any]:
+        data_raw = rec.get("Data")
+        data_fmt = self._data_for_format(data_raw)
+        obs = self.format_observacao(rec.get("Observaçao"), data_fmt)
+        ponto = self.format_ponto(rec.get("Ponto"))
+        try:
+            nro = int(rec.get("NroProtocoloLink") or 0)
+        except (TypeError, ValueError):
+            nro = 0
+        try:
+            ano = int(rec.get("AnoProtocoloLink") or 0)
+        except (TypeError, ValueError):
+            ano = 0
+        return {
+            "nro": nro,
+            "ano": ano,
+            "situacao": self._norm_str(rec.get("SituacaoLink")),
+            "setor": self._norm_str(rec.get("SetorLink")),
+            "data": self._norm_date(data_raw),
+            "obs": self._norm_str(obs),
+            "ponto": self._norm_str(ponto),
+        }
+
+    def _payload_hash(self, rec: Dict) -> str:
+        blob = json.dumps(
+            self._canonical_payload(rec),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+    def _andamentos_differ(self, mdb_rec: Dict, mysql_rec: Dict) -> bool:
+        return self._payload_hash(mdb_rec) != self._payload_hash(mysql_rec)
+
+    def _ambiguous_winner(self) -> str:
+        return "mysql" if SYNC_CONFLICT_WINNER == "mysql" else "mdb"
+
+    def _log_conflict(self, code: str) -> None:
+        now = time.time()
+        last = self._conflict_log_cache.get(code, 0.0)
+        if now - last < self._conflict_log_interval:
+            return
+        self._conflict_log_cache[code] = now
+        winner = "MDB" if self._ambiguous_winner() == "mdb" else "MySQL"
+        self._svc_log.warning(
+            "[CONFLITO] CodStatus=%s ambos alterados - %s vence", code, winner
+        )
+
+    def _resolve_update_direction(self, code: str, mdb_rec: Dict, mysql_rec: Dict) -> str:
+        """'mdb' = MDB vence (update_mysql); 'mysql' = MySQL vence (update_mdb); 'equal'."""
+        mdb_hash = self._payload_hash(mdb_rec)
+        mysql_hash = self._payload_hash(mysql_rec)
+        if mdb_hash == mysql_hash:
+            return "equal"
+        baseline = self._baseline.get(code)
+        if not baseline:
+            return self._ambiguous_winner()
+        mdb_changed = mdb_hash != baseline
+        mysql_changed = mysql_hash != baseline
+        if mdb_changed and not mysql_changed:
+            return "mdb"
+        if mysql_changed and not mdb_changed:
+            return "mysql"
+        self._cycle_stats["conflitos"] = self._cycle_stats.get("conflitos", 0) + 1
+        self._log_conflict(code)
+        return self._ambiguous_winner()
+
+    def _ensure_baseline_ready(self) -> None:
+        if self._baseline_loaded:
+            return
+        try:
+            self._create_baseline_table()
+            self._load_baseline_cache()
+            self._baseline_loaded = True
+            self._svc_log.info("[BASELINE] carregado: %s linhas", len(self._baseline))
+        except Exception as e:
+            self._svc_log.warning("[BASELINE] indisponivel neste ciclo: %s", e)
+
+    def _create_baseline_table(self) -> None:
+        conn = self.conn_mgr.get_mysql()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sync_andamento_baseline (
+                CodStatus VARCHAR(50) NOT NULL PRIMARY KEY,
+                payload_hash CHAR(64) NOT NULL,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            """
+        )
+        conn.commit()
+        cursor.close()
+
+    def _load_baseline_cache(self) -> None:
+        conn = self.conn_mgr.get_mysql()
+        cursor = conn.cursor()
+        cursor.execute("SELECT CodStatus, payload_hash FROM sync_andamento_baseline")
+        self._baseline = {row[0]: row[1] for row in cursor.fetchall()}
+        cursor.close()
+        self._baseline_dirty.clear()
+        self._baseline_deleted.clear()
+
+    def _mark_baseline(self, code: str, payload_hash: str) -> None:
+        if not code or not payload_hash:
+            return
+        if self._baseline.get(code) == payload_hash:
+            self._baseline_deleted.discard(code)
+            return
+        self._baseline[code] = payload_hash
+        self._baseline_dirty[code] = payload_hash
+        self._baseline_deleted.discard(code)
+
+    def _forget_baseline(self, code: str) -> None:
+        if not code:
+            return
+        self._baseline.pop(code, None)
+        self._baseline_dirty.pop(code, None)
+        self._baseline_deleted.add(code)
+
+    def _maybe_prune_baseline(self, live_codes: Set) -> None:
+        self._baseline_prune_counter += 1
+        if self._baseline_prune_counter < _BASELINE_PRUNE_EVERY:
+            return
+        self._baseline_prune_counter = 0
+        stale = [c for c in self._baseline if c not in live_codes]
+        for code in stale:
+            self._forget_baseline(code)
+        if stale:
+            self._svc_log.info("[BASELINE] poda: %s linhas fora da janela", len(stale))
+
+    def _flush_baseline(self) -> None:
+        if not self._baseline_dirty and not self._baseline_deleted:
+            return
+        try:
+            conn = self.conn_mgr.get_mysql()
+            cursor = conn.cursor()
+            to_delete = [
+                c for c in self._baseline_deleted if c not in self._baseline_dirty
+            ]
+            if to_delete:
+                cursor.executemany(
+                    "DELETE FROM sync_andamento_baseline WHERE CodStatus = %s",
+                    [(c,) for c in to_delete],
+                )
+            if self._baseline_dirty:
+                cursor.executemany(
+                    """
+                    INSERT INTO sync_andamento_baseline (CodStatus, payload_hash)
+                    VALUES (%s, %s)
+                    ON DUPLICATE KEY UPDATE payload_hash = VALUES(payload_hash)
+                    """,
+                    list(self._baseline_dirty.items()),
+                )
+            conn.commit()
+            cursor.close()
+            self._baseline_dirty.clear()
+            self._baseline_deleted.clear()
+        except Exception as e:
+            self._svc_log.warning("[BASELINE] flush falhou: %s", e)
+            if self._is_mysql_conn_error(e):
+                self.conn_mgr.invalidate_mysql()
 
     def update_mdb(self, andamento, conn, destino: str):
         try:
@@ -881,16 +1082,7 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
 
     def perform_sync(self):
         self._hb.mark_progress("perform_sync")
-        self._cycle_stats = {
-            "ins_m2y": 0,
-            "upd_m2y": 0,
-            "ins_y2m": 0,
-            "upd_y2m": 0,
-            "del_y": 0,
-            "ultimo_heals": 0,
-            "safety_lock_aborts": 0,
-            "mysql_only_remaining": 0,
-        }
+        self._cycle_stats = _empty_cycle_stats()
         touched_os = set()
         bidi = SYNC_TABANDAMENTO_BIDI and SYNC_MYSQL_TO_MDB_CATCHUP
         try:
@@ -925,6 +1117,8 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                 self._hb.mark_cycle_error("mdb_pap_read_failed")
                 return
 
+            self._ensure_baseline_ready()
+
             mysql_codes = {a["CodStatus"] for a in mysql_data}
             mdb_os_codes = {a["CodStatus"] for a in mdb_os_data}
             mdb_pap_codes = {a["CodStatus"] for a in mdb_pap_data}
@@ -957,6 +1151,7 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                         and_["NroProtocoloLink"], and_["AnoProtocoloLink"], origem
                     )
                     self.insert_mysql(and_, origem)
+                    self._mark_baseline(code, self._payload_hash(and_))
                     self._cycle_stats["ins_m2y"] += 1
                     touched_os.add(
                         (and_["NroProtocoloLink"], and_["AnoProtocoloLink"])
@@ -985,16 +1180,26 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                 if not (mdb_rec and mysql_rec):
                     continue
                 if not self._andamentos_differ(mdb_rec, mysql_rec):
+                    self._mark_baseline(code, self._payload_hash(mdb_rec))
                     continue
 
                 nro = mysql_rec["NroProtocoloLink"]
                 ano = mysql_rec["AnoProtocoloLink"]
                 touched_os.add((nro, ano))
 
-                if bidi and self._mysql_wins_lww(mysql_rec, mdb_rec):
+                direction = "mdb"
+                if bidi:
+                    direction = self._resolve_update_direction(code, mdb_rec, mysql_rec)
+
+                if direction == "equal":
+                    self._mark_baseline(code, self._payload_hash(mdb_rec))
+                    continue
+
+                if bidi and direction == "mysql":
                     mdb_conn = self.conn_mgr.get_mdb_by_nro(nro)
                     destino = self.conn_mgr.get_mdb_name_by_nro(nro)
                     self.update_mdb(mysql_rec, mdb_conn, destino)
+                    self._mark_baseline(code, self._payload_hash(mysql_rec))
                     self._cycle_stats["upd_y2m"] += 1
                     self._svc_log.info(
                         "[BI] UPDATE MySQL->MDB CodStatus=%s OS=%s/%s", code, nro, ano
@@ -1002,6 +1207,7 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                 else:
                     self.sync_os_data_from_mdb(nro, ano, origem)
                     self.update_mysql(mdb_rec, origem)
+                    self._mark_baseline(code, self._payload_hash(mdb_rec))
                     self._cycle_stats["upd_m2y"] += 1
 
                 self.ensure_mysql_ultimo_status_from_mdb(nro, ano)
@@ -1019,6 +1225,7 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                         mdb_conn = self.conn_mgr.get_mdb_by_nro(nro)
                         destino = self.conn_mgr.get_mdb_name_by_nro(nro)
                         self.insert_mdb(and_, mdb_conn, destino)
+                        self._mark_baseline(code, self._payload_hash(and_))
                         self._cycle_stats["ins_y2m"] += 1
                         touched_os.add((nro, ano))
                         self._svc_log.info(
@@ -1043,6 +1250,7 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                     and_ = next((a for a in mysql_data if a["CodStatus"] == code), None)
                     if and_:
                         self.delete_mysql(code, and_)
+                        self._forget_baseline(code)
                         self._cycle_stats["del_y"] += 1
                         touched_os.add(
                             (and_["NroProtocoloLink"], and_["AnoProtocoloLink"])
@@ -1064,6 +1272,9 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                 self.apply_formatting_to_recent_records()
                 self._format_counter = 0
 
+            self._maybe_prune_baseline(mysql_codes | mdb_all_codes)
+            self._flush_baseline()
+            self._cycle_stats["baseline_rows"] = len(self._baseline)
             self._hb.mark_cycle_ok(self._cycle_stats)
 
         except Exception as e:
@@ -1187,8 +1398,9 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
         self._svc_log.info("=" * 70)
         self._svc_log.info("[INICIO] SYNC SERVICE tabAndamento BIDIRECIONAL resiliente")
         self._svc_log.info(
-            "[INFO] tabAndamento bi=%s | Protocolos/Detalhes so MDB->MySQL",
+            "[INFO] tabAndamento bi=%s | conflito=%s | Protocolos/Detalhes so MDB->MySQL",
             SYNC_TABANDAMENTO_BIDI and SYNC_MYSQL_TO_MDB_CATCHUP,
+            SYNC_CONFLICT_WINNER,
         )
         self._svc_log.info(
             "[INFO] Monitorando ultimos %s dias | intervalo=%ss | stall=%ss",

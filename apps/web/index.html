@@ -12,21 +12,6 @@
     <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
     <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png" />
-    <script>
-      (function () {
-        var p = location.pathname;
-        if (
-          p === "/sagra" ||
-          (p.startsWith("/sagra/") && !p.startsWith("/sagra/api"))
-        ) {
-          location.replace(
-            (p === "/sagra" ? "/" : p.slice(6) || "/") +
-              location.search +
-              location.hash,
-          );
-        }
-      })();
-    </script>
   </head>
   <body>
     <div id="root"></div>

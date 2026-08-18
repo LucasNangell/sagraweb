@@ -1,5 +1,5 @@
 {
-  "id": "/painel/tablet/",
+  "id": "/sagra/painel/tablet/",
   "name": "Painel OS",
   "short_name": "Painel OS",
   "description": "Painel de Ordens de Serviço — tablet",
@@ -9,24 +9,24 @@
   "orientation": "any",
   "theme_color": "#0f172a",
   "background_color": "#0f172a",
-  "scope": "/",
-  "start_url": "/painel/tablet",
+  "scope": "/sagra/painel/tablet/",
+  "start_url": "/sagra/painel/tablet/",
   "categories": ["business", "productivity"],
   "icons": [
     {
-      "src": "/icons/painel-os-192.png",
+      "src": "/sagra/icons/painel-os-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/painel-os-512.png",
+      "src": "/sagra/icons/painel-os-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/painel-os-maskable-512.png",
+      "src": "/sagra/icons/painel-os-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

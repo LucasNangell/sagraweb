@@ -16,6 +16,17 @@ _BLOCKED_STATIC_SUFFIXES = {
 _SW_NO_CACHE = "no-cache, no-store, must-revalidate"
 
 
+def strip_spa_base_prefix(path: str) -> str:
+    """Vite dist fica na raiz; o browser pede /sagra/assets/... quando BASE=/sagra/."""
+    norm = (path or "").replace("\\", "/").lstrip("/")
+    lower = norm.lower()
+    if lower == "sagra":
+        return ""
+    if lower.startswith("sagra/"):
+        return norm[len("sagra/") :]
+    return norm
+
+
 def is_service_worker_script_path(path: str) -> bool:
     """sw.js e workbox-*.js devem sempre revalidar no browser."""
     name = Path(path.replace("\\", "/")).name.lower()
@@ -145,14 +156,15 @@ class SpaStaticFiles(SafeStaticFiles):
             raise
 
     async def get_response(self, path: str, scope):
-        norm = path.replace("\\", "/").lstrip("/")
+        lookup = strip_spa_base_prefix(path)
+        norm = lookup.replace("\\", "/").lstrip("/")
         legacy_resp = await self._try_legacy(norm, scope)
         if legacy_resp is not None:
             apply_sw_cache_headers(norm, legacy_resp)
             return legacy_resp
 
         try:
-            response = await super().get_response(path, scope)
+            response = await super().get_response(lookup or "index.html", scope)
         except HTTPException as exc:
             if exc.status_code != 404:
                 raise

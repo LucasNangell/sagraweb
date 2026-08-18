@@ -2,6 +2,7 @@
 Controle de acesso às páginas SPA (HTML) — uma porta, decisão no servidor.
 
 Complementa APIAccessMiddleware (rotas /api/*).
+A SPA pública vive em /sagra/; normalize_spa_path remove esse prefixo.
 """
 from __future__ import annotations
 

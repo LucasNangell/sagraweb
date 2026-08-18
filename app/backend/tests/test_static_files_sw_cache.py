@@ -1,7 +1,15 @@
 """Testes de paths de service worker e headers de cache."""
 from __future__ import annotations
 
-from static_files import is_service_worker_script_path
+from static_files import is_service_worker_script_path, strip_spa_base_prefix
+
+
+def test_strip_spa_base_prefix():
+    assert strip_spa_base_prefix("assets/index.js") == "assets/index.js"
+    assert strip_spa_base_prefix("sagra/assets/index.js") == "assets/index.js"
+    assert strip_spa_base_prefix("/sagra/sw.js") == "sw.js"
+    assert strip_spa_base_prefix("sagra") == ""
+    assert strip_spa_base_prefix("sagra/") == ""
 
 
 def test_is_service_worker_script_path():

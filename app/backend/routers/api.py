@@ -233,7 +233,7 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
         # 1. IP não cadastrado (exceto rotas públicas: login, portal, painel)
         if perms is None:
             if is_trusted_public_host(request):
-                # cgraf.online e intranet: SPA na raiz; /sagra/* legado redireciona no Worker/HTML
+                # cgraf.online e intranet: SPA em /sagra/; Nginx nao reescreve o prefixo para a raiz
                 prefix = api_url_prefix(request)
                 login_path = f"{prefix}/login" if prefix else "/login"
                 redirect_q = app_path if app_path not in ("/", "/login", "/index.html") else ""

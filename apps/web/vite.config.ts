@@ -12,7 +12,7 @@ import { defineConfig } from "vite";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-/** Producao (intranet + cgraf.online): VITE_BASE_PATH=/ na raiz; API em /sagra/api */
+/** Producao (intranet + cgraf.online): VITE_BASE_PATH=/sagra/; API em /sagra/api */
 const basePath = process.env["VITE_BASE_PATH"]?.trim() || "/";
 
 const pwaScope = basePath.endsWith("/") ? basePath : `${basePath}/`;
@@ -23,6 +23,14 @@ const pwaNavigateDenylist: RegExp[] = [
   /^\/sagra\/api\//,
   /^\/ws(\/|$)/,
   /^\/sagra\/ws(\/|$)/,
+  /^\/meet(\/|$)/,
+  /^\/host(\/|$)/,
+  /^\/client(\/|$)/,
+  /^\/shared(\/|$)/,
+  /^\/vendor(\/|$)/,
+  /^\/saagi(\/|$)/,
+  /^\/apogee(\/|$)/,
+  /^\/backup(\/|$)/,
   /\.html$/,
   /\/[^/]+\.[^/]+$/,
 ];
@@ -167,7 +175,7 @@ export default defineConfig(({ mode }) => {
         "icons/painel-os-maskable-512.png",
       ],
       manifest: {
-        id: pwaScope,
+        id: "/sagra-web",
         name: "SAGRA Web",
         short_name: "SAGRA",
         description: "Sistema SAGRA Web — DEAPA",
@@ -205,7 +213,7 @@ export default defineConfig(({ mode }) => {
         importScripts: ["push-sw.js"],
         clientsClaim: true,
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
-        globIgnores: ["**/pdf.worker*.mjs"],
+        globIgnores: ["**/pdf.worker*.mjs", "**/sw-root-unregister.js"],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         navigateFallback: "index.html",
         navigateFallbackDenylist: pwaNavigateDenylist,

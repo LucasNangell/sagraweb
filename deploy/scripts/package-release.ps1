@@ -152,9 +152,9 @@ if (-not $SkipBuild) {
     Write-Step "Build SPA (Vite)"
     Push-Location (Join-Path $Root "apps\web")
     $env:NODE_ENV = "production"
-    $env:VITE_BASE_PATH = "/"
+    $env:VITE_BASE_PATH = "/sagra/"
     $env:VITE_API_PREFIX = "/sagra/api"
-    Write-Host "Build SPA: base / (intranet raiz); API em /sagra/api (OBS usa /api)"
+    Write-Host "Build SPA: base /sagra/; API em /sagra/api (OBS usa /api)"
     pnpm exec vite build
     if ($LASTEXITCODE -ne 0) {
         Pop-Location

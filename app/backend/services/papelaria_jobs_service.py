@@ -33,6 +33,7 @@ TIPO_JOB_EXPORT_EXISTING_CDR = "export_existing_cdr"
 TIPO_JOB_CREDENCIAIS_DEPOL = "credenciais_depol"
 
 CDR_BACKUP_NAME_FRAGMENT = "cópia_de_segurança"
+INPUT_CDR_DADOS_KEY = "__input_cdr"
 
 TERMINAL_STATUSES = frozenset({STATUS_COMPLETED, STATUS_FAILED, STATUS_CANCELLED})
 CANCELLABLE_STATUSES = frozenset({STATUS_PENDING, STATUS_PROCESSING})
@@ -251,6 +252,8 @@ def _sanitize_dados(dados: dict[str, Any]) -> dict[str, str]:
                 raise ValueError("Lista de exclusões deve ser uma lista.")
             cleaned[key_stripped] = value.strip()
             continue
+        if key_stripped == INPUT_CDR_DADOS_KEY:
+            continue
         if value is None:
             cleaned[key.strip()] = ""
             continue
@@ -435,8 +438,9 @@ def create_export_existing_cdr_job(
     modelo_id: int,
     dados: dict[str, Any],
     solicitado_por: str,
+    arquivo_cdr: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Enfileira exportação de PDF a partir de um .cdr existente na pasta Sefoc."""
+    """Enfileira exportação de PDF a partir de um .cdr existente na pasta da OS."""
     ensure_papelaria_jobs_tables()
     from services import papelaria_models_service as models_svc
 
@@ -445,9 +449,10 @@ def create_export_existing_cdr_job(
     if not modelo:
         raise LookupError("Modelo não encontrado ou inativo.")
 
-    cdr_path = discover_os_cdr_absolute_path(ano, nro)
+    chosen = select_os_usable_cdr(ano, nro, arquivo_cdr)
 
     dados_clean = _sanitize_dados(dados)
+    dados_clean[INPUT_CDR_DADOS_KEY] = chosen["relative_path"]
     if "gabinete" in dados_clean and dados_clean["gabinete"]:
         dados_clean["gabinete"] = models_svc.normalizar_gabinete(dados_clean["gabinete"])
     if "uf" in dados_clean and dados_clean["uf"]:
@@ -494,7 +499,7 @@ def create_export_existing_cdr_job(
 
     append_job_log(
         job_id,
-        f"Exportação de prova a partir do Corel existente ({os.path.basename(cdr_path)}).",
+        f"Exportação de prova a partir do Corel existente ({chosen['filename']}).",
         "info",
     )
     warning = _product_match_warning(produto_os, produto_job)
@@ -1414,6 +1419,8 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
         except json.JSONDecodeError:
             logger.warning("Job %s: exclusões inválidas — ignorado.", job_id)
 
+    input_cdr_rel = dados.pop(INPUT_CDR_DADOS_KEY, None)
+
     preview_config: dict[str, Any] | None = None
     preview_raw = modelo.get("preview_config_json")
     if preview_raw:
@@ -1451,9 +1458,10 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
     }
 
     if job["tipo_job"] == TIPO_JOB_EXPORT_EXISTING_CDR:
-        payload["input_cdr_path"] = discover_os_cdr_absolute_path(
+        payload["input_cdr_path"] = resolve_export_input_cdr_path(
             job["ano_protocolo"],
             job["nro_protocolo"],
+            input_cdr_rel,
         )
 
     return payload
@@ -1558,9 +1566,11 @@ def complete_job(
     pdf_abs = os.path.normpath(os.path.join(output_dir, pdf_rel))
 
     if job.get("tipo_job") == TIPO_JOB_EXPORT_EXISTING_CDR:
-        cdr_abs = discover_os_cdr_absolute_path(
+        dados_job = job.get("dados") or {}
+        cdr_abs = resolve_export_input_cdr_path(
             job["ano_protocolo"],
             job["nro_protocolo"],
+            dados_job.get(INPUT_CDR_DADOS_KEY) if isinstance(dados_job, dict) else None,
         )
         cdr_rel = os.path.basename(cdr_abs)
         paths_to_check = (pdf_abs,)
@@ -2031,11 +2041,36 @@ def _is_usable_os_cdr_filename(filename: str) -> bool:
     return not _is_backup_cdr_filename(filename)
 
 
-def discover_os_cdr_absolute_path(ano: int, nro: int) -> str:
+def _normalize_os_relative_cdr(value: str) -> str:
+    text = (value or "").strip().replace("\\", "/")
+    if not text or text.startswith("/") or text.startswith("./"):
+        raise ValueError("Nome de arquivo Corel inválido.")
+    parts = [p for p in text.split("/") if p]
+    if not parts or any(p in (".", "..") for p in parts) or ":" in text:
+        raise ValueError("Nome de arquivo Corel inválido.")
+    return "/".join(parts)
+
+
+def _assert_file_under_os_root(path: str, os_root: str) -> str:
+    real_file = os.path.realpath(path)
+    real_base = os.path.realpath(os_root)
+    if not real_base.endswith(os.sep):
+        real_base = real_base + os.sep
+    if not real_file.startswith(real_base):
+        raise ValueError("Caminho de arquivo inválido.")
+    return real_file
+
+
+def _relative_cdr_from_os_root(os_root: str, abs_path: str) -> str:
+    rel = os.path.relpath(abs_path, os_root).replace("\\", "/")
+    return _normalize_os_relative_cdr(rel)
+
+
+def list_os_usable_cdrs(ano: int, nro: int) -> list[dict[str, Any]]:
     """
-    Localiza um .cdr utilizável na pasta da OS (Sefoc e raiz da OS).
+    Lista .cdr utilizáveis na pasta da OS (Sefoc, Sefoc/Papelaria e raiz).
     Ignora arquivos cujo nome contém 'Cópia_de_segurança'.
-    Prefere {prefix}-BaseSefoc.cdr; senão, o mais recente na pasta.
+    Ordena preferindo {prefix}-BaseSefoc.cdr e, em seguida, o mais recente.
     """
     from routers.os_routes import _get_os_folder_path
 
@@ -2043,10 +2078,12 @@ def discover_os_cdr_absolute_path(ano: int, nro: int) -> str:
     if not os_path:
         raise LookupError("Pasta da OS não encontrada na rede.")
 
+    os_root = os.path.normpath(os_path)
     sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
     prefix = get_os_folder_basename(ano, nro)
     standard_name = f"{prefix}-BaseSefoc.cdr"
     ranked: list[tuple[int, float, str]] = []
+    seen: set[str] = set()
 
     def _scan(directory: str, *, priority_offset: int) -> None:
         if not os.path.isdir(directory):
@@ -2057,30 +2094,146 @@ def discover_os_cdr_absolute_path(ano: int, nro: int) -> str:
             path = os.path.normpath(os.path.join(directory, fname))
             if not os.path.isfile(path):
                 continue
+            try:
+                real = _assert_file_under_os_root(path, os_root)
+            except ValueError:
+                continue
+            if real in seen:
+                continue
+            seen.add(real)
             priority = priority_offset + (0 if fname == standard_name else 1)
             try:
                 mtime = os.path.getmtime(path)
             except OSError:
                 mtime = 0.0
-            ranked.append((priority, mtime, path))
+            ranked.append((priority, mtime, real))
 
     _scan(sefoc_dir, priority_offset=0)
     _scan(os.path.join(sefoc_dir, "Papelaria"), priority_offset=10)
-    _scan(os.path.normpath(os_path), priority_offset=20)
+    _scan(os_root, priority_offset=20)
 
-    if not ranked:
+    ranked.sort(key=lambda item: (item[0], -item[1]))
+    result: list[dict[str, Any]] = []
+    for _priority, mtime, abs_path in ranked:
+        result.append(
+            {
+                "filename": os.path.basename(abs_path),
+                "relative_path": _relative_cdr_from_os_root(os_root, abs_path),
+                "absolute_path": abs_path,
+                "mtime": mtime,
+            }
+        )
+    return result
+
+
+def select_os_usable_cdr(
+    ano: int,
+    nro: int,
+    arquivo_cdr: Optional[str] = None,
+) -> dict[str, Any]:
+    """Escolhe um CDR da pasta da OS; exige arquivo_cdr se houver mais de um."""
+    files = list_os_usable_cdrs(ano, nro)
+    if not files:
         raise FileNotFoundError(
             "Nenhum arquivo Corel (.cdr) utilizável encontrado na pasta da OS. "
             "Arquivos de cópia de segurança são ignorados."
         )
 
-    ranked.sort(key=lambda item: (item[0], -item[1]))
-    return ranked[0][2]
+    requested = (arquivo_cdr or "").strip()
+    if requested:
+        needle = _normalize_os_relative_cdr(requested)
+        matches = [item for item in files if item["relative_path"] == needle]
+        if not matches:
+            basename = os.path.basename(needle).lower()
+            by_name = [
+                item for item in files if item["filename"].lower() == basename
+            ]
+            if len(by_name) == 1:
+                matches = by_name
+        if not matches:
+            raise ValueError(
+                "O arquivo Corel informado não foi encontrado na pasta da OS."
+            )
+        return matches[0]
+
+    if len(files) > 1:
+        raise ValueError(
+            "Há mais de um arquivo Corel na pasta da OS. Informe qual deve ser usado."
+        )
+    return files[0]
+
+
+def resolve_os_relative_cdr_path(ano: int, nro: int, relative_path: str) -> str:
+    """Resolve um caminho relativo à pasta da OS para um .cdr existente."""
+    from routers.os_routes import _get_os_folder_path
+
+    os_path = _get_os_folder_path(ano, nro)
+    if not os_path:
+        raise LookupError("Pasta da OS não encontrada na rede.")
+    os_root = os.path.normpath(os_path)
+    rel = _normalize_os_relative_cdr(relative_path)
+    abs_path = os.path.normpath(os.path.join(os_root, rel.replace("/", os.sep)))
+    real = _assert_file_under_os_root(abs_path, os_root)
+    if not os.path.isfile(real):
+        raise FileNotFoundError(
+            f"Corel da OS não encontrado: {os.path.basename(real)}"
+        )
+    if not _is_usable_os_cdr_filename(os.path.basename(real)):
+        raise ValueError("Arquivo Corel inválido.")
+    return real
+
+
+def resolve_export_input_cdr_path(
+    ano: int,
+    nro: int,
+    relative_path: Optional[str],
+) -> str:
+    """Caminho absoluto do CDR persistido no job; rediscovery só para jobs antigos."""
+    if relative_path and str(relative_path).strip():
+        return resolve_os_relative_cdr_path(ano, nro, str(relative_path))
+    return discover_os_cdr_absolute_path(ano, nro)
+
+
+def discover_os_cdr_absolute_path(ano: int, nro: int) -> str:
+    """
+    Localiza um .cdr utilizável na pasta da OS (Sefoc e raiz da OS).
+    Ignora arquivos cujo nome contém 'Cópia_de_segurança'.
+    Prefere {prefix}-BaseSefoc.cdr; senão, o mais recente na pasta.
+    """
+    files = list_os_usable_cdrs(ano, nro)
+    if not files:
+        raise FileNotFoundError(
+            "Nenhum arquivo Corel (.cdr) utilizável encontrado na pasta da OS. "
+            "Arquivos de cópia de segurança são ignorados."
+        )
+    return files[0]["absolute_path"]
 
 
 def resolve_os_cdr_absolute_path(ano: int, nro: int) -> str:
     """Caminho absoluto de um .cdr utilizável na pasta Sefoc da OS."""
     return discover_os_cdr_absolute_path(ano, nro)
+
+
+def list_os_cdr_path_payload(ano: int, nro: int) -> dict[str, Any]:
+    files = list_os_usable_cdrs(ano, nro)
+    if not files:
+        raise FileNotFoundError(
+            "Nenhum arquivo Corel (.cdr) utilizável encontrado na pasta da OS. "
+            "Arquivos de cópia de segurança são ignorados."
+        )
+    chosen = files[0]
+    return {
+        "path": chosen["absolute_path"],
+        "filename": chosen["filename"],
+        "files": [
+            {
+                "filename": item["filename"],
+                "relative_path": item["relative_path"],
+                "mtime": item["mtime"],
+            }
+            for item in files
+        ],
+    }
 
 
 def _resolve_prova_pdf_by_version(sefoc_dir: str, prefix: str, nro: int, version: int) -> tuple[str, str]:

@@ -48,6 +48,7 @@ class PapelariaExportExistingCdrPayload(BaseModel):
     modelo_id: int = Field(..., ge=1)
     dados: Dict[str, Any] = Field(default_factory=dict)
     lancar_andamento: bool = False
+    arquivo_cdr: Optional[str] = Field(None, max_length=255)
 
 
 class PapelariaOsActionPayload(BaseModel):
@@ -610,8 +611,7 @@ def obter_caminho_cdr_os(
     try:
         from services import papelaria_jobs_service as jobs_svc
 
-        path = jobs_svc.resolve_os_cdr_absolute_path(ano, nro)
-        return {"path": path, "filename": os.path.basename(path)}
+        return jobs_svc.list_os_cdr_path_payload(ano, nro)
     except LookupError as e:
         raise HTTPException(404, str(e))
     except FileNotFoundError as e:
@@ -708,6 +708,7 @@ def gerar_prova_cdr_existente_os(
             modelo_id=payload.modelo_id,
             dados=payload.dados,
             solicitado_por=str(session.ponto),
+            arquivo_cdr=payload.arquivo_cdr,
         )
     except LookupError as e:
         raise HTTPException(404, str(e))

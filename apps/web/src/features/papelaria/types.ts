@@ -108,6 +108,18 @@ export type PapelariaJobStatus =
 
 export type PapelariaProvaRevisao = "pending" | "approved" | "discarded";
 
+export interface PapelariaOsCdrFile {
+  filename: string;
+  relative_path: string;
+  mtime: number;
+}
+
+export interface PapelariaOsCdrPath {
+  path: string;
+  filename: string;
+  files?: PapelariaOsCdrFile[];
+}
+
 export interface PapelariaJobLogEntry {
   id: number;
   nivel: string;

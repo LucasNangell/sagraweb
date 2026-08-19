@@ -9,6 +9,7 @@ import type {
   PapelariaJob,
   PapelariaModel,
   PapelariaOsContext,
+  PapelariaOsCdrPath,
   PapelariaPreviewPagesResponse,
   PapelariaPreviewPayload,
 } from "@/features/papelaria/types";
@@ -91,8 +92,8 @@ export async function createPapelariaJob(
 export async function fetchPapelariaCdrPath(
   ano: number,
   nro: number,
-): Promise<{ path: string; filename: string }> {
-  return apiFetch<{ path: string; filename: string }>(
+): Promise<PapelariaOsCdrPath> {
+  return apiFetch<PapelariaOsCdrPath>(
     `/papelaria/os/${ano}/${nro}/cdr-path`,
   );
 }
@@ -131,6 +132,7 @@ export async function gerarProvaCdrExistentePapelariaOs(payload: {
   modelo_id: number;
   dados?: Record<string, string>;
   lancar_andamento?: boolean;
+  arquivo_cdr?: string;
 }): Promise<PapelariaJob> {
   return apiFetch<PapelariaJob>(
     `/papelaria/os/${payload.ano}/${payload.nro}/gerar-prova-cdr-existente`,

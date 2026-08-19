@@ -1155,7 +1155,7 @@ class TestExportExistingCdrJob:
             return_value=MODEL_SAMPLE,
         ), patch.object(
             svc,
-            "discover_os_cdr_absolute_path",
+            "select_os_usable_cdr",
             side_effect=FileNotFoundError("Corel não encontrado"),
         ):
             with pytest.raises(FileNotFoundError, match="Corel"):
@@ -1170,11 +1170,13 @@ class TestExportExistingCdrJob:
     def test_cria_job_sem_validar_campos_obrigatorios(self, monkeypatch):
         from services import papelaria_jobs_service as svc
 
+        captured = {}
+
         class _FakeCursor:
             lastrowid = 55
 
             def execute(self, sql, params=None):
-                pass
+                captured["params"] = params
 
         def fake_transaction(operations):
             cursor = _FakeCursor()
@@ -1193,7 +1195,7 @@ class TestExportExistingCdrJob:
                         "Produto": "Ct Visita",
                         "ModeloID": 1,
                         "ArquivoModelo": "CtVisitaFV.cdr",
-                        "DadosJson": "{}",
+                        "DadosJson": captured.get("params", {}).get("dados") or "{}",
                         "Status": "pending",
                         "Prioridade": 0,
                         "OrdemFila": 4,
@@ -1224,8 +1226,13 @@ class TestExportExistingCdrJob:
             return_value=MODEL_SAMPLE,
         ), patch.object(
             svc,
-            "discover_os_cdr_absolute_path",
-            return_value=r"\\server\os\Sefoc\05024-Nome-BaseSefoc.cdr",
+            "select_os_usable_cdr",
+            return_value={
+                "filename": "layout_pronto.cdr",
+                "relative_path": "Sefoc/layout_pronto.cdr",
+                "absolute_path": r"\\server\os\Sefoc\layout_pronto.cdr",
+                "mtime": 1.0,
+            },
         ):
             job = svc.create_export_existing_cdr_job(
                 ano=2026,
@@ -1233,19 +1240,102 @@ class TestExportExistingCdrJob:
                 modelo_id=1,
                 dados={},
                 solicitado_por="918713",
+                arquivo_cdr="Sefoc/layout_pronto.cdr",
             )
 
         assert job["id"] == 55
         assert job["tipo_job"] == svc.TIPO_JOB_EXPORT_EXISTING_CDR
         assert job["status"] == "pending"
+        assert job["dados"][svc.INPUT_CDR_DADOS_KEY] == "Sefoc/layout_pronto.cdr"
 
-    def test_build_worker_payload_inclui_input_cdr_path(self, monkeypatch, tmp_path):
+    def test_recusa_cdr_fora_da_lista(self, monkeypatch):
+        from services import papelaria_jobs_service as svc
+
+        monkeypatch.setattr(
+            svc.db,
+            "execute_query",
+            lambda sql, params=None: (
+                [{"NroProtocolo": 5954, "AnoProtocolo": 2026, "produto": "Ct Visita"}]
+                if "tabProtocolos" in sql
+                else []
+            ),
+        )
+        with patch(
+            "services.papelaria_models_service.get_modelo_by_id",
+            return_value=MODEL_SAMPLE,
+        ), patch.object(
+            svc,
+            "list_os_usable_cdrs",
+            return_value=[
+                {
+                    "filename": "layout_pronto.cdr",
+                    "relative_path": "Sefoc/layout_pronto.cdr",
+                    "absolute_path": r"\\server\os\Sefoc\layout_pronto.cdr",
+                    "mtime": 1.0,
+                }
+            ],
+        ):
+            with pytest.raises(ValueError, match="não foi encontrado"):
+                svc.create_export_existing_cdr_job(
+                    ano=2026,
+                    nro=5954,
+                    modelo_id=1,
+                    dados={},
+                    solicitado_por="918713",
+                    arquivo_cdr="Sefoc/outro.cdr",
+                )
+
+    def test_exige_escolha_quando_ha_varios_cdrs(self, monkeypatch):
+        from services import papelaria_jobs_service as svc
+
+        monkeypatch.setattr(
+            svc.db,
+            "execute_query",
+            lambda sql, params=None: (
+                [{"NroProtocolo": 5954, "AnoProtocolo": 2026, "produto": "Ct Visita"}]
+                if "tabProtocolos" in sql
+                else []
+            ),
+        )
+        with patch(
+            "services.papelaria_models_service.get_modelo_by_id",
+            return_value=MODEL_SAMPLE,
+        ), patch.object(
+            svc,
+            "list_os_usable_cdrs",
+            return_value=[
+                {
+                    "filename": "a.cdr",
+                    "relative_path": "Sefoc/a.cdr",
+                    "absolute_path": r"\\server\os\Sefoc\a.cdr",
+                    "mtime": 2.0,
+                },
+                {
+                    "filename": "b.cdr",
+                    "relative_path": "Sefoc/b.cdr",
+                    "absolute_path": r"\\server\os\Sefoc\b.cdr",
+                    "mtime": 1.0,
+                },
+            ],
+        ):
+            with pytest.raises(ValueError, match="mais de um arquivo Corel"):
+                svc.create_export_existing_cdr_job(
+                    ano=2026,
+                    nro=5954,
+                    modelo_id=1,
+                    dados={},
+                    solicitado_por="918713",
+                )
+
+    def test_build_worker_payload_usa_cdr_persistido(self, monkeypatch, tmp_path):
         from services import papelaria_jobs_service as svc
 
         sefoc = tmp_path / "Sefoc"
         sefoc.mkdir()
-        cdr_path = sefoc / "05024-Nome-BaseSefoc.cdr"
-        cdr_path.write_bytes(b"cdr")
+        base = sefoc / "05024-Nome-BaseSefoc.cdr"
+        base.write_bytes(b"std")
+        chosen = sefoc / "layout_pronto.cdr"
+        chosen.write_bytes(b"ok")
 
         job = {
             "id": 77,
@@ -1255,7 +1345,7 @@ class TestExportExistingCdrJob:
             "produto": "Ct Visita",
             "modelo_id": 1,
             "arquivo_modelo": "CtVisitaFV.cdr",
-            "dados": {},
+            "dados": {svc.INPUT_CDR_DADOS_KEY: "Sefoc/layout_pronto.cdr"},
             "tentativas": 0,
         }
 
@@ -1265,10 +1355,10 @@ class TestExportExistingCdrJob:
             "resolve_os_papelaria_dir",
             lambda ano, nro, create=False: str(sefoc),
         )
+        monkeypatch.setattr(svc, "get_os_folder_basename", lambda ano, nro: "05024-Nome")
         monkeypatch.setattr(
-            svc,
-            "discover_os_cdr_absolute_path",
-            lambda ano, nro: str(cdr_path),
+            "routers.os_routes._get_os_folder_path",
+            lambda ano, nro: str(tmp_path),
         )
         with patch(
             "services.papelaria_models_service.get_modelo_by_id",
@@ -1277,7 +1367,8 @@ class TestExportExistingCdrJob:
             payload = svc.build_worker_job_payload(77)
 
         assert payload["tipo_job"] == svc.TIPO_JOB_EXPORT_EXISTING_CDR
-        assert payload["input_cdr_path"] == str(cdr_path)
+        assert payload["input_cdr_path"] == str(chosen.resolve())
+        assert svc.INPUT_CDR_DADOS_KEY not in payload["dados"]
         assert payload["output_pdf_name"].endswith(".pdf")
 
 
@@ -1340,3 +1431,39 @@ class TestDiscoverOsCdr:
 
         path = svc.discover_os_cdr_absolute_path(2026, 5954)
         assert path == str(root_cdr)
+
+    def test_lista_varios_cdrs_e_payload_inclui_files(self, monkeypatch, tmp_path):
+        from services import papelaria_jobs_service as svc
+
+        sefoc = tmp_path / "Sefoc"
+        sefoc.mkdir()
+        standard = sefoc / "05024-Nome-BaseSefoc.cdr"
+        standard.write_bytes(b"std")
+        (sefoc / "layout_pronto.cdr").write_bytes(b"ok")
+        self._mock_os_paths(monkeypatch, tmp_path, sefoc)
+
+        files = svc.list_os_usable_cdrs(2026, 5954)
+        assert [item["filename"] for item in files] == [
+            "05024-Nome-BaseSefoc.cdr",
+            "layout_pronto.cdr",
+        ]
+        payload = svc.list_os_cdr_path_payload(2026, 5954)
+        assert payload["filename"] == "05024-Nome-BaseSefoc.cdr"
+        assert len(payload["files"]) == 2
+        assert payload["files"][1]["relative_path"] == "Sefoc/layout_pronto.cdr"
+
+    def test_select_usa_arquivo_informado(self, monkeypatch, tmp_path):
+        from services import papelaria_jobs_service as svc
+
+        sefoc = tmp_path / "Sefoc"
+        sefoc.mkdir()
+        (sefoc / "05024-Nome-BaseSefoc.cdr").write_bytes(b"std")
+        pronto = sefoc / "layout_pronto.cdr"
+        pronto.write_bytes(b"ok")
+        self._mock_os_paths(monkeypatch, tmp_path, sefoc)
+
+        chosen = svc.select_os_usable_cdr(
+            2026, 5954, arquivo_cdr="Sefoc/layout_pronto.cdr"
+        )
+        assert chosen["filename"] == "layout_pronto.cdr"
+        assert chosen["absolute_path"] == str(pronto.resolve())

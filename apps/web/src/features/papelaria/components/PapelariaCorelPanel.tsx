@@ -41,6 +41,7 @@ import type {
   PapelariaField,
   PapelariaJob,
   PapelariaJobStatus,
+  PapelariaOsCdrFile,
 } from "../types";
 
 type Props = {
@@ -112,6 +113,23 @@ function jobStatusClass(status: PapelariaJobStatus): string {
   }
 }
 
+function usableCdrFiles(
+  data:
+    | {
+        filename: string;
+        files?: PapelariaOsCdrFile[];
+      }
+    | null
+    | undefined,
+): PapelariaOsCdrFile[] {
+  if (!data) return [];
+  if (data.files?.length) return data.files;
+  if (data.filename) {
+    return [{ filename: data.filename, relative_path: data.filename, mtime: 0 }];
+  }
+  return [];
+}
+
 export function validateRequiredFields(
   fields: PapelariaField[] | undefined,
   values: Record<string, string>,
@@ -148,6 +166,9 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
     "gerar" | "corel" | "export" | null
   >(null);
   const [folderCheckPending, setFolderCheckPending] = useState(false);
+  const [exportCdrRel, setExportCdrRel] = useState<string | null>(null);
+  const [cdrPickerOpen, setCdrPickerOpen] = useState(false);
+  const [cdrPickerChoice, setCdrPickerChoice] = useState("");
   const autoSelectDone = useRef(false);
   const [mobilePanel, setMobilePanel] = useState<"form" | "preview">("form");
 
@@ -555,12 +576,18 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
 
   const runExportCdrExistente = (lancarAndamento: boolean) => {
     if (!selectedModelId) return;
+    const arquivoCdr = exportCdrRel?.trim();
+    if (!arquivoCdr) {
+      setFormError("Selecione o arquivo Corel que deve ser usado na prova.");
+      return;
+    }
     exportCdrMutation.mutate({
       ano: anoNum,
       nro: nroNum,
       modelo_id: selectedModelId,
       dados: dadosForJob,
       lancar_andamento: lancarAndamento,
+      arquivo_cdr: arquivoCdr,
     });
     setCorelEditMode(false);
   };
@@ -596,10 +623,29 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
       setFormError("Selecione um modelo antes de gerar a prova.");
       return;
     }
-    if (!cdrPathQuery.data) {
+    const files = usableCdrFiles(cdrPathQuery.data);
+    if (files.length === 0) {
       setFormError("Nenhum arquivo Corel utilizável encontrado na pasta desta OS.");
       return;
     }
+    setFormError(null);
+    if (files.length === 1) {
+      setExportCdrRel(files[0].relative_path);
+      void ensureOsFolderThen("export");
+      return;
+    }
+    setCdrPickerChoice(files[0].relative_path);
+    setCdrPickerOpen(true);
+  };
+
+  const handleConfirmCdrPicker = () => {
+    const choice = cdrPickerChoice.trim();
+    if (!choice) {
+      setFormError("Selecione o arquivo Corel que deve ser usado na prova.");
+      return;
+    }
+    setExportCdrRel(choice);
+    setCdrPickerOpen(false);
     setFormError(null);
     void ensureOsFolderThen("export");
   };
@@ -671,7 +717,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
     exportCdrMutation.isPending ||
     (!!activeJob &&
       (activeJob.status === "pending" || activeJob.status === "processing"));
-  const cdrExistente = cdrPathQuery.data;
+  const cdrFiles = usableCdrFiles(cdrPathQuery.data);
 
   const mobilePanelClass = (panel: "form" | "preview") =>
     cn(
@@ -927,7 +973,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
                       clique em Finalizar para montar a visualização e aprovar.
                     </p>
                   ) : null}
-                  {cdrExistente ? (
+                  {cdrFiles.length > 0 ? (
                     <>
                       <button
                         type="button"
@@ -950,10 +996,20 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
                         Gerar prova do Corel pronto
                       </button>
                       <p className="text-[10px] leading-relaxed text-neutral-600">
-                        Usa o arquivo{" "}
-                        <span className="font-mono">{cdrExistente.filename}</span> da
-                        pasta da OS (qualquer .cdr, exceto cópia de segurança) — não
-                        recria o Corel a partir do modelo.
+                        {cdrFiles.length === 1 ? (
+                          <>
+                            Usa o arquivo{" "}
+                            <span className="font-mono">{cdrFiles[0].filename}</span> da
+                            pasta da OS (qualquer .cdr, exceto cópia de segurança) — não
+                            recria o Corel a partir do modelo.
+                          </>
+                        ) : (
+                          <>
+                            Há {cdrFiles.length} arquivos .cdr na pasta da OS. O
+                            sistema perguntará qual usar e exportará PDF/mockup sem
+                            alterar o Corel.
+                          </>
+                        )}
                       </p>
                     </>
                   ) : null}
@@ -1006,6 +1062,60 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
           />
         </div>
       </div>
+
+      {cdrPickerOpen ? (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+            <h3 className="text-center text-lg font-bold text-slate-800">
+              Qual arquivo Corel usar?
+            </h3>
+            <p className="mt-2 text-center text-sm text-slate-600">
+              Há mais de um .cdr na pasta desta OS. Escolha o arquivo pronto para
+              gerar a prova (PDF e mockup), sem alterar o Corel.
+            </p>
+            <div className="mt-4 max-h-56 space-y-2 overflow-y-auto">
+              {cdrFiles.map((file) => (
+                <label
+                  key={file.relative_path}
+                  className="flex cursor-pointer items-start gap-2 rounded border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
+                >
+                  <input
+                    type="radio"
+                    name="cdr-picker"
+                    className="mt-0.5"
+                    checked={cdrPickerChoice === file.relative_path}
+                    onChange={() => setCdrPickerChoice(file.relative_path)}
+                  />
+                  <span>
+                    <span className="block font-mono text-xs text-slate-900">
+                      {file.filename}
+                    </span>
+                    <span className="block text-[11px] text-slate-500">
+                      {file.relative_path}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                className="flex-1 rounded border border-slate-300 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                onClick={() => setCdrPickerOpen(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="flex-1 rounded bg-secondary-blue py-2 text-sm font-semibold text-white hover:bg-secondary-blue/90"
+                onClick={handleConfirmCdrPicker}
+              >
+                Usar este arquivo
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {andamentoModal ? (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 p-4">

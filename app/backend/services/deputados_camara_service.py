@@ -418,6 +418,18 @@ def _buscar_deputado_via_api(
     return _parse_deputado(dep_id, escolhido, detail)
 
 
+def _cache_tem_dados_oficiais(dep: DeputadoCamara) -> bool:
+    """Cache local só serve para prefill se tiver sexo e partido/UF da API."""
+    sexo = (dep.sexo or "").strip().upper()
+    if sexo not in ("F", "M"):
+        return False
+    if not (dep.partido or "").strip():
+        return False
+    if not (dep.uf or "").strip():
+        return False
+    return True
+
+
 def buscar_deputado_por_nome(nome: str) -> Optional[DeputadoCamara]:
     nome = (nome or "").strip()
     if len(nome) < 3:
@@ -425,7 +437,7 @@ def buscar_deputado_por_nome(nome: str) -> Optional[DeputadoCamara]:
 
     ensure_deputados_cache_email_columns()
     cached = _ler_cache_deputado(nome)
-    if cached:
+    if cached and _cache_tem_dados_oficiais(cached):
         logger.debug("Deputado '%s' obtido do cache local", nome)
         return cached
 
@@ -436,6 +448,10 @@ def buscar_deputado_por_nome(nome: str) -> Optional[DeputadoCamara]:
             return dep
     except Exception as exc:
         logger.warning("API Câmara indisponível para '%s': %s", nome, exc)
+
+    if cached:
+        logger.debug("Deputado '%s' obtido do cache local (incompleto)", nome)
+        return cached
 
     stale = _ler_cache_deputado(nome, ignore_freshness=True)
     if stale:
@@ -568,16 +584,10 @@ def _extrair_anexo(gabinete: str) -> str:
 def _inferir_genero_cargo(sexo: str) -> str:
     s = (sexo or "").strip().upper()
     if s == "F":
-        return "Deputada Federal"
+        return "Deputada"
     if s == "M":
-        return "Deputado Federal"
-    return "Deputado Federal"
-
-
-def _email_heuristico_para_nome(nome: str) -> str:
-    """Mesma heurística usada em build_prefill_corel quando a API não responde."""
-    slug = re.sub(r"[^a-z0-9]", "", (nome or "").split()[0].lower()) if nome else ""
-    return f"dep.{slug}@camara.leg.br" if slug else ""
+        return "Deputado"
+    return ""
 
 
 def _mesclar_campo(destino: dict[str, str], chave: str, valor: str) -> None:
@@ -589,17 +599,10 @@ def _mesclar_campo(destino: dict[str, str], chave: str, valor: str) -> None:
         destino[chave] = novo
 
 
-def _mesclar_email_api(destino: dict[str, str], email_api: str) -> None:
-    novo = (email_api or "").strip().lower()
-    if not novo:
-        return
-    atual = (destino.get("email") or "").strip().lower()
-    if not atual:
-        destino["email"] = novo
-        return
-    guess = _email_heuristico_para_nome(destino.get("nome_deputado") or "")
-    if guess and atual == guess.lower():
-        destino["email"] = novo
+def _aplicar_campo_api(destino: dict[str, str], chave: str, valor: str) -> None:
+    novo = (valor or "").strip()
+    if novo:
+        destino[chave] = novo
 
 
 def aplicar_deputado_em_campos_corel(
@@ -608,34 +611,27 @@ def aplicar_deputado_em_campos_corel(
 ) -> dict[str, str]:
     """
     Mescla dados da API dadosabertos.camara.leg.br nos campos do formulário Corel.
-    Preenche apenas campos vazios (ou e-mail heurístico), sem apagar dados da OS.
+    Nome, gênero, partido, UF, anexo, gabinete e e-mail: a API prevalece.
     """
     out = dict(dados)
     nome_api = (dep.nome_eleitoral or dep.nome or "").strip()
-    if nome_api:
-        _mesclar_campo(out, "nome_deputado", nome_api)
+    _aplicar_campo_api(out, "nome_deputado", nome_api)
 
-    genero_atual = (out.get("genero") or "").strip()
     genero_api = _inferir_genero_cargo(dep.sexo)
-    if not genero_atual:
-        out["genero"] = genero_api
-    elif genero_atual == "Deputado Federal" and genero_api == "Deputada Federal":
+    if genero_api:
         out["genero"] = genero_api
 
-    _mesclar_campo(out, "partido", dep.partido)
-    _mesclar_campo(out, "uf", dep.uf.upper() if dep.uf else "")
+    _aplicar_campo_api(out, "partido", dep.partido)
+    _aplicar_campo_api(out, "uf", dep.uf.upper() if dep.uf else "")
 
     if dep.gabinete:
         anexo = _extrair_anexo(dep.gabinete)
-        if anexo:
-            _mesclar_campo(out, "anexo", anexo)
-        numero_gab = _extrair_numero_gabinete(dep.gabinete)
-        if numero_gab:
-            _mesclar_campo(out, "gabinete", numero_gab)
+        _aplicar_campo_api(out, "anexo", anexo)
+        _aplicar_campo_api(out, "gabinete", _extrair_numero_gabinete(dep.gabinete))
 
     email_dep, _email_gab = resolver_emails_deputado(dep.email)
     email_final = email_dep or (dep.email or "").strip().lower()
-    _mesclar_email_api(out, email_final)
+    _aplicar_campo_api(out, "email", email_final)
 
     if dep.ramal:
         _mesclar_campo(out, "contato_assessor", dep.formatar_fones_camara())

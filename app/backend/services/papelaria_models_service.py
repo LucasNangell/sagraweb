@@ -1202,7 +1202,7 @@ def build_prefill_corel(ano: int, nro: int) -> dict[str, str]:
 
     dados: dict[str, str] = {
         "nome_deputado": nome,
-        "genero": "Deputado Federal",
+        "genero": "",
         "partido": partido,
         "uf": uf.upper() if uf else "",
         "anexo": anexo,
@@ -1225,6 +1225,9 @@ def build_prefill_corel(ano: int, nro: int) -> dict[str, str]:
                 dados = aplicar_deputado_em_campos_corel(dados, dep)
         except Exception as exc:
             logger.warning("Prefill deputado (Corel) via API Câmara falhou: %s", exc)
+
+    if not (dados.get("genero") or "").strip():
+        dados["genero"] = "Deputado"
 
     return dados
 

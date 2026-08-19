@@ -84,25 +84,29 @@ class TestAplicarDeputadoCamposCorel:
         assert out["email"] == "dep.jonasdonizette@camara.leg.br"
         assert "3215" in out["contato_assessor"]
 
-    def test_nao_sobrescreve_dados_os(self):
+    def test_api_prevalece_sobre_dados_os(self):
         from services.deputados_camara_service import aplicar_deputado_em_campos_corel
 
-        dep = self._dep_fake(partido="PT", uf="DF")
+        dep = self._dep_fake()
         out = aplicar_deputado_em_campos_corel(
             {
                 "nome_deputado": "Nome da OS",
+                "genero": "Deputado Federal",
                 "partido": "PL",
                 "uf": "MG",
+                "anexo": "III",
                 "gabinete": "123",
                 "email": "dep.os@camara.leg.br",
             },
             dep,
         )
-        assert out["nome_deputado"] == "Nome da OS"
-        assert out["partido"] == "PL"
-        assert out["uf"] == "MG"
-        assert out["gabinete"] == "123"
-        assert out["email"] == "dep.os@camara.leg.br"
+        assert out["nome_deputado"] == "Jonas Donizette"
+        assert out["genero"] == "Deputado Federal"
+        assert out["partido"] == "PSB"
+        assert out["uf"] == "SP"
+        assert out["anexo"] == "IV"
+        assert out["gabinete"] == "716"
+        assert out["email"] == "dep.jonasdonizette@camara.leg.br"
 
     def test_substitui_email_inferido(self):
         from services.deputados_camara_service import aplicar_deputado_em_campos_corel
@@ -123,6 +127,57 @@ class TestAplicarDeputadoCamposCorel:
         dep = self._dep_fake(sexo="F", nome_eleitoral="Maria Silva")
         out = aplicar_deputado_em_campos_corel({"genero": "Deputado Federal"}, dep)
         assert out["genero"] == "Deputada Federal"
+
+    def test_sexo_vazio_nao_forca_genero(self):
+        from services.deputados_camara_service import aplicar_deputado_em_campos_corel
+
+        dep = self._dep_fake(sexo="")
+        out = aplicar_deputado_em_campos_corel({"genero": "Deputada Federal"}, dep)
+        assert out["genero"] == "Deputada Federal"
+
+
+class TestBuscarDeputadoPorNomeCache:
+    def test_cache_incompleto_consulta_api(self, monkeypatch):
+        from services import deputados_camara_service as svc
+
+        incompleto = MagicMock()
+        incompleto.sexo = ""
+        incompleto.partido = ""
+        incompleto.uf = ""
+        monkeypatch.setattr(svc, "ensure_deputados_cache_email_columns", lambda: None)
+        monkeypatch.setattr(svc, "_ler_cache_deputado", lambda nome, ignore_freshness=False: incompleto)
+
+        api_dep = MagicMock()
+        api_dep.sexo = "F"
+        api_dep.partido = "PT"
+        api_dep.uf = "BA"
+        api_mock = MagicMock(return_value=api_dep)
+        monkeypatch.setattr(svc, "_buscar_deputado_via_api", api_mock)
+        gravar = MagicMock()
+        monkeypatch.setattr(svc, "_gravar_cache", gravar)
+
+        result = svc.buscar_deputado_por_nome("Maria Silva")
+
+        api_mock.assert_called_once_with("Maria Silva")
+        gravar.assert_called_once_with(api_dep)
+        assert result is api_dep
+
+    def test_cache_completo_nao_consulta_api(self, monkeypatch):
+        from services import deputados_camara_service as svc
+
+        completo = MagicMock()
+        completo.sexo = "M"
+        completo.partido = "PSB"
+        completo.uf = "SP"
+        monkeypatch.setattr(svc, "ensure_deputados_cache_email_columns", lambda: None)
+        monkeypatch.setattr(svc, "_ler_cache_deputado", lambda nome, ignore_freshness=False: completo)
+        api_mock = MagicMock()
+        monkeypatch.setattr(svc, "_buscar_deputado_via_api", api_mock)
+
+        result = svc.buscar_deputado_por_nome("Jonas Donizette")
+
+        api_mock.assert_not_called()
+        assert result is completo
 
 
 class TestObterEmailsDeputado:

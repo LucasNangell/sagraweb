@@ -32,6 +32,37 @@ class TestPapelariaUtilitarios:
         )
         assert out == "João — PT/DF"
 
+    def test_parse_inline_bold_e_substitui_sem_asteriscos(self):
+        from services.papelaria_models_service import (
+            extrair_variaveis,
+            parse_inline_bold,
+            substituir_variaveis,
+        )
+
+        plain, ranges = parse_inline_bold("**{nome}**")
+        assert plain == "{nome}"
+        assert ranges == [(0, 6)]
+
+        plain, ranges = parse_inline_bold("Gabinete **Maria** — PT")
+        assert plain == "Gabinete Maria — PT"
+        assert ranges == [(9, 14)]
+
+        plain, ranges = parse_inline_bold("hello **world")
+        assert plain == "hello **world"
+        assert ranges == []
+
+        plain, ranges = parse_inline_bold("")
+        assert plain == ""
+        assert ranges == []
+
+        out = substituir_variaveis(
+            "Gabinete {artigo} {genero_curto}\n**{nome_deputado}**",
+            {"genero": "Deputada Federal", "nome_deputado": "Maria Silva"},
+        )
+        assert out == "Gabinete da Deputada\nMaria Silva"
+        assert "**" not in (out or "")
+        assert extrair_variaveis("**{nome_deputado}**") == {"nome_deputado"}
+
     def test_substituir_artigo_genero_curto(self):
         from services.papelaria_models_service import (
             _COREL_CABECALHO,

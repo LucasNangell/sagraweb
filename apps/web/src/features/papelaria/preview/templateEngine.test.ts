@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { applyPreviewTemplate } from "./templateEngine";
+import { applyPreviewTemplate, applyPreviewTemplateRuns, parseInlineBold } from "./templateEngine";
 
 describe("applyPreviewTemplate", () => {
   it("substitui variáveis simples e compostas", () => {
@@ -48,5 +48,32 @@ describe("applyPreviewTemplate", () => {
         nome_deputado: "Maria",
       }),
     ).toBe("Gabinete da Deputada Maria");
+  });
+
+  it("remove ** e aplica negrito só no trecho marcado", () => {
+    expect(parseInlineBold("**{nome}**")).toEqual({
+      plain: "{nome}",
+      ranges: [{ start: 0, end: 6 }],
+    });
+    expect(
+      applyPreviewTemplate("Gabinete {artigo}\n**{nome_deputado}**", {
+        genero: "Deputada Federal",
+        nome_deputado: "Maria Silva",
+      }),
+    ).toBe("Gabinete da\nMaria Silva");
+
+    const runs = applyPreviewTemplateRuns("Oi **{nome_deputado}**!", {
+      nome_deputado: "Ana",
+    });
+    expect(runs).toEqual([
+      [
+        { text: "Oi ", bold: false },
+        { text: "Ana", bold: true },
+        { text: "!", bold: false },
+      ],
+    ]);
+
+    expect(applyPreviewTemplate("hello **world", {})).toBe("hello **world");
+    expect(applyPreviewTemplate("", {})).toBe("");
   });
 });

@@ -100,10 +100,37 @@ def enriquecer_variaveis_derivadas(dados):
     return out
 
 
+def parse_inline_bold(texto):
+    """Remove pares `**...**` e devolve texto plano + intervalos 0-based em negrito."""
+    plain_parts = []
+    ranges = []
+    plain_len = 0
+    i = 0
+    n = len(texto)
+    while i < n:
+        if texto.startswith("**", i):
+            close = texto.find("**", i + 2)
+            if close < 0:
+                plain_parts.append(texto[i:])
+                break
+            inner = texto[i + 2 : close]
+            if inner:
+                start = plain_len
+                plain_parts.append(inner)
+                plain_len += len(inner)
+                ranges.append((start, start + len(inner)))
+            i = close + 2
+            continue
+        plain_parts.append(texto[i])
+        plain_len += 1
+        i += 1
+    return "".join(plain_parts), ranges
+
+
 def substituir_variaveis(texto_modelo, dados):
     """
     Substitui variáveis no formato {variavel}.
-    Preserva quebras de linha.
+    Preserva quebras de linha. Remove marcação **negrito**.
     """
     if texto_modelo is None:
         return None
@@ -121,7 +148,9 @@ def substituir_variaveis(texto_modelo, dados):
         return str(resolvidos.get(nome_var, ""))
 
     texto = re.sub(r"\{([^{}]+)\}", trocar, texto)
-    return normalizar_quebras_para_corel(texto)
+    texto = texto.replace("\r\n", "\n").replace("\r", "\n")
+    plain, _ranges = parse_inline_bold(texto)
+    return normalizar_quebras_para_corel(plain)
 
 
 def extrair_variaveis(texto):

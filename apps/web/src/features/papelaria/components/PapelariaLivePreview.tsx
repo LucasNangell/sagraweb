@@ -11,15 +11,13 @@ import { apiUrl } from "@/api/client";
 
 import {
 
-  applyPreviewTemplate,
+  applyPreviewTemplateRuns,
 
   getGroupedElementIds,
 
   nearestPreviewPositionSlot,
 
   resolveSvgTextPosition,
-
-  splitMultilineText,
 
   type PapelariaPreviewConfig,
 
@@ -406,9 +404,7 @@ function PapelariaLivePreviewFaceCanvas({
 
             if (el.tipo !== "texto") return null;
 
-            const text = applyPreviewTemplate(el.template, values);
-
-            const lines = splitMultilineText(text);
+            const lineRuns = applyPreviewTemplateRuns(el.template ?? "", values);
 
             const pos = resolveSvgTextPosition(el);
 
@@ -418,6 +414,7 @@ function PapelariaLivePreviewFaceCanvas({
 
               el.letterSpacing !== undefined ? `${el.letterSpacing}px` : undefined;
 
+            const baseWeight = el.fontWeight ?? 400;
 
 
             return (
@@ -436,7 +433,7 @@ function PapelariaLivePreviewFaceCanvas({
 
                 fontSize={el.fontSize}
 
-                fontWeight={el.fontWeight ?? 400}
+                fontWeight={baseWeight}
 
                 fontStyle={el.fontStyle ?? "normal"}
 
@@ -448,11 +445,25 @@ function PapelariaLivePreviewFaceCanvas({
 
               >
 
-                {lines.map((line, idx) => (
+                {lineRuns.map((runs, idx) => (
 
                   <tspan key={idx} x={pos.x} dy={idx === 0 ? 0 : lineHeight}>
 
-                    {line || "\u00A0"}
+                    {runs.map((run, ridx) => (
+
+                      <tspan
+
+                        key={ridx}
+
+                        fontWeight={run.bold ? 700 : baseWeight}
+
+                      >
+
+                        {run.text || (runs.length === 1 ? "\u00A0" : "")}
+
+                      </tspan>
+
+                    ))}
 
                   </tspan>
 

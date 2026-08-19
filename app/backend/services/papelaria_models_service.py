@@ -140,10 +140,34 @@ def extrair_variaveis(texto: Optional[str]) -> set[str]:
     return variaveis - VARIAVEIS_DERIVADAS
 
 
-def substituir_variaveis(texto_modelo: Optional[str], dados: dict[str, Any]) -> Optional[str]:
-    if texto_modelo is None:
-        return None
+def parse_inline_bold(texto: str) -> tuple[str, list[tuple[int, int]]]:
+    """Remove pares `**...**` e devolve texto plano + intervalos 0-based em negrito."""
+    plain_parts: list[str] = []
+    ranges: list[tuple[int, int]] = []
+    plain_len = 0
+    i = 0
+    n = len(texto)
+    while i < n:
+        if texto.startswith("**", i):
+            close = texto.find("**", i + 2)
+            if close < 0:
+                plain_parts.append(texto[i:])
+                break
+            inner = texto[i + 2 : close]
+            if inner:
+                start = plain_len
+                plain_parts.append(inner)
+                plain_len += len(inner)
+                ranges.append((start, start + len(inner)))
+            i = close + 2
+            continue
+        plain_parts.append(texto[i])
+        plain_len += 1
+        i += 1
+    return "".join(plain_parts), ranges
 
+
+def _substituir_placeholders(texto_modelo: str, dados: dict[str, Any]) -> str:
     resolvidos = enriquecer_variaveis_derivadas(dados)
 
     def trocar(match: re.Match[str]) -> str:
@@ -152,8 +176,17 @@ def substituir_variaveis(texto_modelo: Optional[str], dados: dict[str, Any]) -> 
             nome_var = "nome_assessor"
         return str(resolvidos.get(nome_var, ""))
 
-    texto = re.sub(r"\{([^{}]+)\}", trocar, str(texto_modelo))
-    return normalizar_quebras_para_corel(texto).replace(chr(13), "\n")
+    return re.sub(r"\{([^{}]+)\}", trocar, texto_modelo)
+
+
+def substituir_variaveis(texto_modelo: Optional[str], dados: dict[str, Any]) -> Optional[str]:
+    if texto_modelo is None:
+        return None
+
+    texto = _substituir_placeholders(str(texto_modelo), dados)
+    texto = texto.replace("\r\n", "\n").replace("\r", "\n")
+    plain, _ranges = parse_inline_bold(texto)
+    return normalizar_quebras_para_corel(plain).replace(chr(13), "\n")
 
 
 def normalize_corel_object_name(nome: str) -> str:

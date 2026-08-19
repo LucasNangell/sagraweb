@@ -264,10 +264,34 @@ def enriquecer_variaveis_derivadas(dados: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def substituir_variaveis(texto_modelo: Optional[str], dados: dict[str, Any]) -> Optional[str]:
-    if texto_modelo is None:
-        return None
+def parse_inline_bold(texto: str) -> tuple[str, list[tuple[int, int]]]:
+    """Remove pares `**...**` e devolve texto plano + intervalos 0-based em negrito."""
+    plain_parts: list[str] = []
+    ranges: list[tuple[int, int]] = []
+    plain_len = 0
+    i = 0
+    n = len(texto)
+    while i < n:
+        if texto.startswith("**", i):
+            close = texto.find("**", i + 2)
+            if close < 0:
+                plain_parts.append(texto[i:])
+                break
+            inner = texto[i + 2 : close]
+            if inner:
+                start = plain_len
+                plain_parts.append(inner)
+                plain_len += len(inner)
+                ranges.append((start, start + len(inner)))
+            i = close + 2
+            continue
+        plain_parts.append(texto[i])
+        plain_len += 1
+        i += 1
+    return "".join(plain_parts), ranges
 
+
+def _substituir_placeholders(texto_modelo: str, dados: dict[str, Any]) -> str:
     resolvidos = enriquecer_variaveis_derivadas(dados)
 
     def trocar(match: re.Match[str]) -> str:
@@ -276,8 +300,27 @@ def substituir_variaveis(texto_modelo: Optional[str], dados: dict[str, Any]) -> 
             nome_var = "nome_assessor"
         return str(resolvidos.get(nome_var, ""))
 
-    texto = re.sub(r"\{([^{}]+)\}", trocar, str(texto_modelo))
-    return normalizar_quebras_para_corel(texto)
+    return re.sub(r"\{([^{}]+)\}", trocar, texto_modelo)
+
+
+def substituir_variaveis_com_estilo(
+    texto_modelo: Optional[str], dados: dict[str, Any]
+) -> Optional[tuple[str, list[tuple[int, int]]]]:
+    if texto_modelo is None:
+        return None
+    texto = _substituir_placeholders(str(texto_modelo), dados)
+    texto = texto.replace("\r\n", "\n").replace("\r", "\n")
+    plain, ranges = parse_inline_bold(texto)
+    return normalizar_quebras_para_corel(plain), ranges
+
+
+def substituir_variaveis(texto_modelo: Optional[str], dados: dict[str, Any]) -> Optional[str]:
+    if texto_modelo is None:
+        return None
+    styled = substituir_variaveis_com_estilo(texto_modelo, dados)
+    if styled is None:
+        return None
+    return styled[0]
 
 
 def extrair_variaveis(texto: Optional[str]) -> set[str]:
@@ -703,6 +746,91 @@ def alterar_texto(shape, novo_texto: str, logs: list[str]) -> None:
     )
 
 
+def _set_textrange_bold(text_range: Any) -> None:
+    try:
+        text_range.Bold = True
+        return
+    except Exception:
+        pass
+    try:
+        text_range.Bold = -1
+        return
+    except Exception:
+        pass
+    font = getattr(text_range, "Font", None)
+    if font is not None:
+        font.Bold = True
+
+
+def aplicar_negrito_inline(
+    shape: Any,
+    ranges: list[tuple[int, int]],
+    logs: list[str],
+    *,
+    plain_texto: str = "",
+) -> None:
+    """Aplica Bold em intervalos 0-based do texto plano (Index COM 1-based)."""
+    if not ranges:
+        return
+    nome = getattr(shape, "Name", "?")
+    try:
+        story = shape.Text.Story
+    except Exception as exc:
+        logs.append(f"Aviso: Story indisponível para negrito em '{nome}': {exc}")
+        return
+
+    try:
+        story_len = int(story.Length)
+    except Exception:
+        story_len = len(plain_texto.replace("\n", "\r"))
+
+    for start, end in ranges:
+        if end <= start:
+            continue
+        first = start + 1
+        count = end - start
+        if story_len > 0 and first + count - 1 > story_len:
+            logs.append(
+                f"Aviso: negrito Characters({first},{count}) além do Story "
+                f"(len={story_len}) em '{nome}' — ignorado."
+            )
+            continue
+        applied = False
+        errors: list[str] = []
+        try:
+            _set_textrange_bold(story.Characters(first, count))
+            applied = True
+        except Exception as exc:
+            errors.append(f"Characters: {exc}")
+        if not applied:
+            try:
+                last = first + count - 1
+                _set_textrange_bold(story.Range(first, last))
+                applied = True
+            except Exception as exc:
+                errors.append(f"Range: {exc}")
+        if not applied:
+            logs.append(
+                f"Aviso: não foi possível aplicar negrito em '{nome}' "
+                f"[{start}:{end}] ({'; '.join(errors)})"
+            )
+
+
+def aplicar_texto_modelo(
+    shape: Any,
+    texto_modelo: Optional[str],
+    dados: dict[str, Any],
+    logs: list[str],
+) -> None:
+    styled = substituir_variaveis_com_estilo(texto_modelo, dados)
+    if styled is None:
+        alterar_texto(shape, "", logs)
+        return
+    plain, ranges = styled
+    alterar_texto(shape, plain, logs)
+    aplicar_negrito_inline(shape, ranges, logs, plain_texto=plain)
+
+
 def inspecionar_cdr(
     caminho_cdr: str,
     *,
@@ -785,20 +913,18 @@ def aplicar_campo(
             numero_pagina = ocorrencia["pagina"]
             shape = ocorrencia["shape"]
             if numero_pagina == 1:
-                texto_final = substituir_variaveis(frente_verso[1], dados)
+                aplicar_texto_modelo(shape, frente_verso[1], dados, logs)
             elif numero_pagina == 2:
-                texto_final = substituir_variaveis(frente_verso[2], dados)
+                aplicar_texto_modelo(shape, frente_verso[2], dados, logs)
             else:
-                texto_final = substituir_variaveis(frente_verso[1], dados)
-            alterar_texto(shape, texto_final or "", logs)
+                aplicar_texto_modelo(shape, frente_verso[1], dados, logs)
         logs.append(
             f"Campo '{nome_campo_corel}' aplicado em {len(ocorrencias)} ocorrência(s) (Frente/Verso)."
         )
         return
 
-    texto_final = substituir_variaveis(texto_modelo, dados)
     for ocorrencia in ocorrencias:
-        alterar_texto(ocorrencia["shape"], texto_final or "", logs)
+        aplicar_texto_modelo(ocorrencia["shape"], texto_modelo, dados, logs)
     logs.append(
         f"Campo '{nome_campo_corel}' aplicado em {len(ocorrencias)} ocorrência(s)."
     )
@@ -957,6 +1083,7 @@ def criar_campo_dinamico_texto(
     align: str,
     shape_name: str,
     logs: list[str],
+    bold_ranges: Optional[list[tuple[int, int]]] = None,
 ) -> None:
     page = doc.Pages.Item(page_num)
     layer = _resolve_layer_prova_sefoc(page)
@@ -979,6 +1106,8 @@ def criar_campo_dinamico_texto(
     except Exception:
         pass
     _set_paragraph_align(shape, align)
+    if bold_ranges:
+        aplicar_negrito_inline(shape, bold_ranges, logs, plain_texto=texto)
     logs.append(f"Campo dinâmico '{shape_name}' criado na página {page_num}.")
 
 
@@ -1048,7 +1177,8 @@ def aplicar_campos_dinamicos(
         )
 
         template_text = tpl.get("template") or f"{{{tpl.get('variavel', template_id)}}}"
-        texto_final = substituir_variaveis(str(template_text), dados) or ""
+        styled = substituir_variaveis_com_estilo(str(template_text), dados)
+        texto_final, bold_ranges = styled if styled else ("", [])
 
         criar_campo_dinamico_texto(
             doc,
@@ -1063,6 +1193,7 @@ def aplicar_campos_dinamicos(
             align=align,
             shape_name=f"Dyn_{template_id}",
             logs=logs,
+            bold_ranges=bold_ranges,
         )
 
 

@@ -8,7 +8,7 @@ export type {
   PreviewPositionSlotId,
 } from "./types";
 export { CAMPOS_DINAMICOS_LAYOUT_KEY } from "./types";
-export { applyPreviewTemplate, isDerivedPreviewVariable } from "./templateEngine";
+export { applyPreviewTemplate, applyPreviewTemplateRuns, isDerivedPreviewVariable } from "./templateEngine";
 export { resolveSvgTextPosition, splitMultilineText } from "./textAlignment";
 export {
   formatPreviewConfigJson,

@@ -1,5 +1,7 @@
 import type { PapelariaField } from "../types";
 
+import { isDerivedPreviewVariable } from "./templateEngine";
+
 import type { PapelariaPreviewConfig, PapelariaPreviewFace } from "./types";
 
 const FIELD_RE = /\{([^{}]+)\}/g;
@@ -14,7 +16,9 @@ export function extractFieldKeysFromTemplate(template: string): string[] {
   let match: RegExpExecArray | null;
   const re = new RegExp(FIELD_RE.source, "g");
   while ((match = re.exec(template)) !== null) {
-    keys.push(normalizeFieldKey(match[1]));
+    const key = normalizeFieldKey(match[1]);
+    if (isDerivedPreviewVariable(key)) continue;
+    keys.push(key);
   }
   return keys;
 }

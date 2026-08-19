@@ -348,9 +348,11 @@ def _split_frente_verso_template(template: str) -> tuple[str, str] | None:
 
 
 def _build_dynamic_templates_for_variaveis(variaveis: list[str]) -> list[dict[str, Any]]:
+    from services.papelaria_models_service import VARIAVEIS_DERIVADAS
+
     result: list[dict[str, Any]] = []
     seen: set[str] = set()
-    vars_set = set(variaveis)
+    vars_set = {v for v in variaveis if v not in VARIAVEIS_DERIVADAS}
 
     for tpl in _COMMON_DYNAMIC_TEMPLATES:
         variavel = str(tpl.get("variavel") or "")
@@ -364,6 +366,8 @@ def _build_dynamic_templates_for_variaveis(variaveis: list[str]) -> list[dict[st
         seen.add(tpl_id)
 
     for variavel in variaveis:
+        if variavel in VARIAVEIS_DERIVADAS:
+            continue
         if variavel in seen:
             continue
         if any(str(t.get("variavel")) == variavel for t in _COMMON_DYNAMIC_TEMPLATES):

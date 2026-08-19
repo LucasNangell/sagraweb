@@ -1,3 +1,4 @@
+import { isDerivedPreviewVariable } from "./templateEngine";
 import {
   defaultSlotForTemplate,
   slotToElementRect,
@@ -190,7 +191,7 @@ function extractVariaveisFromTemplate(texto: string): string[] {
   for (const match of matches) {
     let nome = match[1]?.trim() ?? "";
     if (nome === "nome_acessor") nome = "nome_assessor";
-    if (nome) out.add(nome);
+    if (nome && !isDerivedPreviewVariable(nome)) out.add(nome);
   }
   return [...out];
 }
@@ -257,6 +258,7 @@ function buildDynamicTemplatesForVariaveis(
   }
 
   for (const variavel of variaveis) {
+    if (isDerivedPreviewVariable(variavel)) continue;
     if (seen.has(variavel)) continue;
     const known = COMMON_DYNAMIC_FIELD_TEMPLATES.find((t) => t.variavel === variavel);
     if (known) continue;
@@ -314,7 +316,7 @@ const COREL_CONTATO_PT = "Fones: (61) 3215-5{gabinete}\n3215-3{gabinete}\n{email
 const COREL_CONTATO_EN = "Phones: (61) 3215-5{gabinete}\n3215-3{gabinete}\n{email}";
 const COREL_RODAPE_PT =
   "Câmara dos Deputados | Anexo {anexo} - Gabinete {gabinete} | CEP 70160-900 - Brasília/DF\nTels (61) 3215-5{gabinete}/3{gabinete} | {email}";
-const COREL_CABECALHO = "Gabinete do Deputado\n{nome_deputado}\n- {partido}/{uf}";
+const COREL_CABECALHO = "Gabinete {artigo} {genero_curto}\n{nome_deputado}\n- {partido}/{uf}";
 
 const COREL_CAMPO_TEMPLATES: Record<string, string> = {
   nomedep: "{nome_deputado}",

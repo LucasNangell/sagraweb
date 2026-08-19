@@ -22,4 +22,31 @@ describe("applyPreviewTemplate", () => {
       }),
     ).toBe("Maria da Silva Santos Oliveira");
   });
+
+  it("deriva artigo e genero_curto a partir de genero", () => {
+    const tpl = "Gabinete {artigo} {genero_curto} {nome_deputado}";
+    expect(
+      applyPreviewTemplate(tpl, {
+        genero: "Deputado Federal",
+        nome_deputado: "João",
+      }),
+    ).toBe("Gabinete do Deputado João");
+    expect(
+      applyPreviewTemplate(tpl, {
+        genero: "Deputada Federal",
+        nome_deputado: "Maria",
+      }),
+    ).toBe("Gabinete da Deputada Maria");
+    expect(
+      applyPreviewTemplate(tpl, { nome_deputado: "João" }),
+    ).toBe("Gabinete do Deputado João");
+    expect(
+      applyPreviewTemplate(tpl, {
+        genero: "Deputada Federal",
+        artigo: "do",
+        genero_curto: "Deputado",
+        nome_deputado: "Maria",
+      }),
+    ).toBe("Gabinete da Deputada Maria");
+  });
 });

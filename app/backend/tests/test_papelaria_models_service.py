@@ -32,6 +32,46 @@ class TestPapelariaUtilitarios:
         )
         assert out == "João — PT/DF"
 
+    def test_substituir_artigo_genero_curto(self):
+        from services.papelaria_models_service import (
+            _COREL_CABECALHO,
+            extrair_variaveis,
+            substituir_variaveis,
+        )
+
+        tpl = "Gabinete {artigo} {genero_curto} {nome_deputado}"
+        assert extrair_variaveis(tpl) == {"nome_deputado"}
+        assert "{artigo}" in _COREL_CABECALHO
+        assert "{genero_curto}" in _COREL_CABECALHO
+
+        assert (
+            substituir_variaveis(tpl, {"genero": "Deputado Federal", "nome_deputado": "João"})
+            == "Gabinete do Deputado João"
+        )
+        assert (
+            substituir_variaveis(tpl, {"genero": "Deputada Federal", "nome_deputado": "Maria"})
+            == "Gabinete da Deputada Maria"
+        )
+        assert (
+            substituir_variaveis(tpl, {"genero": "", "nome_deputado": "João"})
+            == "Gabinete do Deputado João"
+        )
+        assert (
+            substituir_variaveis(
+                tpl,
+                {"genero": "Deputada Federal", "artigo": "do", "genero_curto": "Deputado", "nome_deputado": "Maria"},
+            )
+            == "Gabinete da Deputada Maria"
+        )
+
+    def test_campos_formulario_ignora_variaveis_derivadas(self):
+        from services.papelaria_models_service import build_campos_formulario
+
+        keys = {f["key"] for f in build_campos_formulario(["nome_deputado", "artigo", "genero_curto"])}
+        assert keys == {"nome_deputado"}
+        assert "artigo" not in keys
+        assert "genero_curto" not in keys
+
     def test_dividir_frente_verso(self):
         from services.papelaria_models_service import dividir_frente_verso
 
@@ -77,6 +117,25 @@ class TestPapelariaUtilitarios:
         assert "gabinete" in form_keys
         assert "email" in form_keys
         assert "{" in campos["Contato"]
+
+    def test_cabecalho_canonico_nao_expõe_variaveis_derivadas(self):
+        from services.papelaria_models_service import (
+            _COREL_CABECALHO,
+            build_campos_formulario,
+            normalize_campos_from_inspect,
+            resolve_canonical_campo_template,
+        )
+
+        assert resolve_canonical_campo_template("Cabecalho", "Gabinete do Deputado\nFulano") == _COREL_CABECALHO
+        campos, variaveis, _labels = normalize_campos_from_inspect(
+            {"Cabecalho": "Gabinete do Deputado\nFulano"}
+        )
+        assert campos["Cabecalho"] == _COREL_CABECALHO
+        assert "artigo" not in variaveis
+        assert "genero_curto" not in variaveis
+        assert "nome_deputado" in variaveis
+        form_keys = {f["key"] for f in build_campos_formulario(variaveis)}
+        assert form_keys == {"nome_deputado", "partido", "uf"}
 
     def test_resolve_nome_exibicao_customizado(self, monkeypatch):
         from services import papelaria_models_service as svc

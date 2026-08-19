@@ -64,7 +64,10 @@ _COREL_RODAPE_PT = (
     "Câmara dos Deputados | Anexo {anexo} - Gabinete {gabinete} | "
     "CEP 70160-900 - Brasília/DF\nTels (61) 3215-5{gabinete}/3{gabinete} | {email}"
 )
-_COREL_CABECALHO = "Gabinete do Deputado\n{nome_deputado}\n- {partido}/{uf}"
+_COREL_CABECALHO = "Gabinete {artigo} {genero_curto}\n{nome_deputado}\n- {partido}/{uf}"
+_CABECALHO_LEGADO = "Gabinete do Deputado"
+_CABECALHO_DERIVADO = "Gabinete {artigo} {genero_curto}"
+VARIAVEIS_DERIVADAS = frozenset({"artigo", "genero_curto"})
 
 COREL_CAMPO_TEMPLATES_CANONICOS: dict[str, str] = {
     "nomedep": "{nome_deputado}",
@@ -119,6 +122,14 @@ def normalizar_quebras_para_corel(texto: Optional[str]) -> str:
     return texto.replace("\n", chr(13))
 
 
+def enriquecer_variaveis_derivadas(dados: dict[str, Any]) -> dict[str, Any]:
+    out = dict(dados)
+    feminino = "deputada" in str(out.get("genero") or "").lower()
+    out["artigo"] = "da" if feminino else "do"
+    out["genero_curto"] = "Deputada" if feminino else "Deputado"
+    return out
+
+
 def extrair_variaveis(texto: Optional[str]) -> set[str]:
     if not texto:
         return set()
@@ -126,18 +137,20 @@ def extrair_variaveis(texto: Optional[str]) -> set[str]:
     if "nome_acessor" in variaveis:
         variaveis.remove("nome_acessor")
         variaveis.add("nome_assessor")
-    return variaveis
+    return variaveis - VARIAVEIS_DERIVADAS
 
 
 def substituir_variaveis(texto_modelo: Optional[str], dados: dict[str, Any]) -> Optional[str]:
     if texto_modelo is None:
         return None
 
+    resolvidos = enriquecer_variaveis_derivadas(dados)
+
     def trocar(match: re.Match[str]) -> str:
         nome_var = match.group(1).strip()
         if nome_var == "nome_acessor":
             nome_var = "nome_assessor"
-        return str(dados.get(nome_var, ""))
+        return str(resolvidos.get(nome_var, ""))
 
     texto = re.sub(r"\{([^{}]+)\}", trocar, str(texto_modelo))
     return normalizar_quebras_para_corel(texto).replace(chr(13), "\n")
@@ -231,11 +244,11 @@ def _order_variaveis_list(variaveis: list[str]) -> list[str]:
     ordenadas: list[str] = []
     seen: set[str] = set()
     for var in ORDEM_VARIAVEIS:
-        if var in variaveis and var not in seen:
+        if var in variaveis and var not in seen and var not in VARIAVEIS_DERIVADAS:
             ordenadas.append(var)
             seen.add(var)
     for var in sorted(variaveis):
-        if var not in seen:
+        if var not in seen and var not in VARIAVEIS_DERIVADAS:
             ordenadas.append(var)
             seen.add(var)
     return ordenadas
@@ -333,8 +346,32 @@ def ensure_papelaria_modelos_table() -> None:
             except Exception as exc:
                 logger.warning("Migração coluna %s em tabPapelariaModelos: %s", col, exc)
 
+    _migrate_cabecalho_genero_placeholders()
     _table_ready = True
     logger.info("Tabela tabPapelariaModelos verificada/criada")
+
+
+def _migrate_cabecalho_genero_placeholders() -> None:
+    """Atualiza cabeçalhos legados 'Gabinete do Deputado' para placeholders derivados."""
+    for col in ("PreviewConfigJson", "CamposJson", "ConfigCampos"):
+        if not _table_has_column(col):
+            continue
+        try:
+            db.execute_query(
+                f"""
+                UPDATE tabPapelariaModelos
+                SET {col} = REPLACE({col}, %(_legado)s, %(_novo)s)
+                WHERE {col} IS NOT NULL
+                  AND {col} LIKE %(_like)s
+                """,
+                {
+                    "_legado": _CABECALHO_LEGADO,
+                    "_novo": _CABECALHO_DERIVADO,
+                    "_like": f"%{_CABECALHO_LEGADO}%",
+                },
+            )
+        except Exception as exc:
+            logger.warning("Migração cabeçalho gênero em %s: %s", col, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -704,7 +741,7 @@ def _build_campos_formulario_com_preview(
         if not isinstance(item, dict):
             continue
         variavel = str(item.get("variavel") or item.get("key") or "").strip()
-        if not variavel or variavel in keys_existentes:
+        if not variavel or variavel in keys_existentes or variavel in VARIAVEIS_DERIVADAS:
             continue
         field_type = item.get("tipo") or ("email" if variavel == "email" else "text")
         base.append(
@@ -979,6 +1016,8 @@ def build_campos_formulario(
 
     fields: list[dict[str, Any]] = []
     for var in ordenadas:
+        if var in VARIAVEIS_DERIVADAS:
+            continue
         field_type = "email" if var == "email" else "text"
         if var in ("contato_assessor", "funcao_assessor"):
             field_type = "textarea"
@@ -1227,7 +1266,7 @@ def build_prefill_corel(ano: int, nro: int) -> dict[str, str]:
             logger.warning("Prefill deputado (Corel) via API Câmara falhou: %s", exc)
 
     if not (dados.get("genero") or "").strip():
-        dados["genero"] = "Deputado"
+        dados["genero"] = "Deputado Federal"
 
     return dados
 

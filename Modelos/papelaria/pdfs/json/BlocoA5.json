@@ -13,7 +13,7 @@
         {
           "id": "Cabecalho",
           "tipo": "texto",
-          "template": "Gabinete do Deputado\n{nome_deputado}\n- {partido}/{uf}",
+          "template": "Gabinete {artigo} {genero_curto}\n{nome_deputado}\n- {partido}/{uf}",
           "x": 201,
           "y": 145,
           "width": 1275,

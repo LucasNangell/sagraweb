@@ -71,7 +71,7 @@ TEMPLATES_PT: dict[str, str] = {
     "NomeAssessor": "{nome_assessor}",
     "ContatoAssessor": "{contato_assessor}",
     "Funcao": "{funcao_assessor}",
-    "Cabecalho": "Gabinete do Deputado\n{nome_deputado}\n- {partido}/{uf}",
+    "Cabecalho": "Gabinete {artigo} {genero_curto}\n{nome_deputado}\n- {partido}/{uf}",
     "Rodape": "Câmara dos Deputados | Anexo {anexo} - Gabinete {gabinete} | CEP 70160-900 - Brasília/DF\nTels (61) 3215-5{gabinete}/3{gabinete} | {email}",
 }
 

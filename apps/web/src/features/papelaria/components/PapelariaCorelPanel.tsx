@@ -33,6 +33,7 @@ import { OsFolderRequiredGateModal } from "@/features/os/components/OsFolderRequ
 import { PapelariaProofPanel } from "./PapelariaProofPanel";
 import {
   mergeDadosWithDynamicLayout,
+  applyPreviewTemplate,
   type ActiveDynamicFieldPlacement,
 } from "../preview";
 import type {
@@ -47,16 +48,6 @@ type Props = {
   osAno: string | null;
 };
 
-function substituirVariaveisPreview(
-  texto: string,
-  dados: Record<string, string>,
-): string {
-  return texto.replace(/\{([^{}]+)\}/g, (_, nome: string) => {
-    const key = nome.trim() === "nome_acessor" ? "nome_assessor" : nome.trim();
-    return dados[key] ?? "";
-  });
-}
-
 function buildPreviaTextual(
   campos: Record<string, string>,
   dados: Record<string, string>,
@@ -69,13 +60,13 @@ function buildPreviaTextual(
     if (fvMatch) {
       out[nome] = [
         "[Frente]",
-        substituirVariaveisPreview(fvMatch[1], dados),
+        applyPreviewTemplate(fvMatch[1], dados),
         "",
         "[Verso]",
-        substituirVariaveisPreview(fvMatch[2], dados),
+        applyPreviewTemplate(fvMatch[2], dados),
       ].join("\n");
     } else {
-      out[nome] = substituirVariaveisPreview(template, dados);
+      out[nome] = applyPreviewTemplate(template, dados);
     }
   }
   return out;

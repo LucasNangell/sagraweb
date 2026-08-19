@@ -253,15 +253,28 @@ def normalizar_quebras_para_corel(texto: Optional[str]) -> str:
     return texto.replace("\n", chr(13))
 
 
+VARIAVEIS_DERIVADAS = frozenset({"artigo", "genero_curto"})
+
+
+def enriquecer_variaveis_derivadas(dados: dict[str, Any]) -> dict[str, Any]:
+    out = dict(dados)
+    feminino = "deputada" in str(out.get("genero") or "").lower()
+    out["artigo"] = "da" if feminino else "do"
+    out["genero_curto"] = "Deputada" if feminino else "Deputado"
+    return out
+
+
 def substituir_variaveis(texto_modelo: Optional[str], dados: dict[str, Any]) -> Optional[str]:
     if texto_modelo is None:
         return None
+
+    resolvidos = enriquecer_variaveis_derivadas(dados)
 
     def trocar(match: re.Match[str]) -> str:
         nome_var = match.group(1).strip()
         if nome_var == "nome_acessor":
             nome_var = "nome_assessor"
-        return str(dados.get(nome_var, ""))
+        return str(resolvidos.get(nome_var, ""))
 
     texto = re.sub(r"\{([^{}]+)\}", trocar, str(texto_modelo))
     return normalizar_quebras_para_corel(texto)
@@ -274,7 +287,7 @@ def extrair_variaveis(texto: Optional[str]) -> set[str]:
     if "nome_acessor" in variaveis:
         variaveis.remove("nome_acessor")
         variaveis.add("nome_assessor")
-    return variaveis
+    return variaveis - VARIAVEIS_DERIVADAS
 
 
 def dividir_frente_verso(texto: Optional[str]) -> Optional[dict[int, str]]:

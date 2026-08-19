@@ -70,4 +70,32 @@ describe("groupFieldsByFace", () => {
     expect(frente?.fields.map((f) => f.key)).toEqual(["nome_deputado", "email"]);
     expect(verso?.fields.map((f) => f.key)).toEqual(["nome_assessor"]);
   });
+
+  it("não exige campos derivados do template no formulário", () => {
+    const withDerived: PapelariaPreviewConfig = {
+      ...config,
+      faces: [
+        {
+          ...config.faces[0],
+          elementos: [
+            {
+              id: "cab",
+              tipo: "texto",
+              template: "Gabinete {artigo} {genero_curto}\n{nome_deputado}",
+              x: 0,
+              y: 0,
+              width: 100,
+              height: 20,
+              fontSize: 12,
+            },
+          ],
+        },
+        config.faces[1],
+      ],
+    };
+    const groups = groupFieldsByFace(fields, withDerived);
+    const frente = groups.find((g) => g.faceId === "frente");
+    expect(frente?.fields.map((f) => f.key)).toEqual(["nome_deputado"]);
+    expect(groups.some((g) => g.fields.some((f) => f.key === "artigo"))).toBe(false);
+  });
 });

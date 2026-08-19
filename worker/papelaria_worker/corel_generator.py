@@ -253,6 +253,36 @@ def normalizar_quebras_para_corel(texto: Optional[str]) -> str:
     return texto.replace("\n", chr(13))
 
 
+def overlay_campos_com_templates_preview(
+    campos: dict[str, Any],
+    preview_config: Optional[dict[str, Any]],
+) -> dict[str, Any]:
+    """Usa o template da prévia (ex.: **negrito**) no objeto Corel de mesmo id."""
+    if not preview_config or not isinstance(campos, dict):
+        return campos
+    overlay: dict[str, str] = {}
+    for face in preview_config.get("faces") or []:
+        if not isinstance(face, dict):
+            continue
+        for el in face.get("elementos") or []:
+            if not isinstance(el, dict):
+                continue
+            eid = str(el.get("id") or "").strip()
+            tpl = el.get("template")
+            if eid and tpl is not None and str(tpl).strip():
+                overlay[eid] = str(tpl)
+    if not overlay:
+        return campos
+    out = dict(campos)
+    lower_to_key = {str(k).lower(): k for k in out}
+    for eid, tpl in overlay.items():
+        if eid in out:
+            out[eid] = tpl
+        elif eid.lower() in lower_to_key:
+            out[lower_to_key[eid.lower()]] = tpl
+    return out
+
+
 VARIAVEIS_DERIVADAS = frozenset({"artigo", "genero_curto"})
 
 
@@ -746,20 +776,74 @@ def alterar_texto(shape, novo_texto: str, logs: list[str]) -> None:
     )
 
 
-def _set_textrange_bold(text_range: Any) -> None:
+def _cdr_tristate_true() -> int:
     try:
-        text_range.Bold = True
-        return
+        import win32com.client
+
+        return int(win32com.client.constants.cdrTrue)
+    except Exception:
+        return -1
+
+
+def _textrange_parece_negrito(text_range: Any) -> bool:
+    try:
+        val = text_range.Bold
+        if val in (True, 1, -1):
+            return True
+        if str(val).lower() in ("true", "cdrtrue"):
+            return True
     except Exception:
         pass
     try:
-        text_range.Bold = -1
-        return
+        font = text_range.Font
+        if bool(getattr(font, "Bold", False)):
+            return True
     except Exception:
         pass
-    font = getattr(text_range, "Font", None)
-    if font is not None:
-        font.Bold = True
+    return False
+
+
+def _set_textrange_bold(text_range: Any) -> bool:
+    cdr_true = _cdr_tristate_true()
+    for val in (cdr_true, True, 1):
+        try:
+            text_range.Bold = val
+            if _textrange_parece_negrito(text_range):
+                return True
+        except Exception:
+            continue
+    try:
+        font_name = str(text_range.Font or "").strip()
+        if font_name and "bold" not in font_name.lower():
+            text_range.Font = f"{font_name} Bold"
+            return True
+    except Exception:
+        pass
+    try:
+        font = text_range.Font
+        font.Bold = cdr_true
+        return _textrange_parece_negrito(text_range)
+    except Exception:
+        return _textrange_parece_negrito(text_range)
+
+
+def _map_plain_index_to_story(plain: str, story_text: str) -> list[int]:
+    """Mapeia cada índice de `plain` (\\r) para índice 0-based em `story_text` (\\r ou \\r\\n)."""
+    mapping: list[int] = []
+    si = 0
+    slen = len(story_text)
+    for ch in plain:
+        if si >= slen:
+            mapping.append(max(0, slen - 1))
+            continue
+        mapping.append(si)
+        if ch == "\r" and story_text[si : si + 2] == "\r\n":
+            si += 2
+        elif ch == "\n" and story_text[si : si + 2] == "\r\n":
+            si += 2
+        else:
+            si += 1
+    return mapping
 
 
 def aplicar_negrito_inline(
@@ -774,21 +858,39 @@ def aplicar_negrito_inline(
         return
     nome = getattr(shape, "Name", "?")
     try:
+        try:
+            shape.CreateSelection()
+        except Exception:
+            pass
         story = shape.Text.Story
     except Exception as exc:
         logs.append(f"Aviso: Story indisponível para negrito em '{nome}': {exc}")
         return
 
     try:
+        story_text = str(story.Text or "")
+    except Exception:
+        story_text = ""
+    our_plain = (plain_texto or "").replace("\n", "\r")
+    index_map = _map_plain_index_to_story(our_plain, story_text) if story_text else []
+
+    try:
         story_len = int(story.Length)
     except Exception:
-        story_len = len(plain_texto.replace("\n", "\r"))
+        story_len = len(story_text) or len(our_plain)
 
+    aplicados = 0
     for start, end in ranges:
         if end <= start:
             continue
-        first = start + 1
-        count = end - start
+        if index_map and start < len(index_map) and (end - 1) < len(index_map):
+            first = index_map[start] + 1
+            last = index_map[end - 1] + 1
+            count = last - first + 1
+        else:
+            first = start + 1
+            count = end - start
+            last = first + count - 1
         if story_len > 0 and first + count - 1 > story_len:
             logs.append(
                 f"Aviso: negrito Characters({first},{count}) além do Story "
@@ -798,22 +900,31 @@ def aplicar_negrito_inline(
         applied = False
         errors: list[str] = []
         try:
-            _set_textrange_bold(story.Characters(first, count))
-            applied = True
+            applied = _set_textrange_bold(story.Characters(first, count))
         except Exception as exc:
             errors.append(f"Characters: {exc}")
         if not applied:
             try:
-                last = first + count - 1
-                _set_textrange_bold(story.Range(first, last))
-                applied = True
+                applied = _set_textrange_bold(story.Range(first, last))
             except Exception as exc:
                 errors.append(f"Range: {exc}")
         if not applied:
+            try:
+                ok_any = False
+                for ci in range(first, first + count):
+                    ok_any = _set_textrange_bold(story.Characters(ci, 1)) or ok_any
+                applied = ok_any
+            except Exception as exc:
+                errors.append(f"Characters/loop: {exc}")
+        if applied:
+            aplicados += 1
+        else:
             logs.append(
                 f"Aviso: não foi possível aplicar negrito em '{nome}' "
-                f"[{start}:{end}] ({'; '.join(errors)})"
+                f"[{start}:{end}] ({'; '.join(errors) or 'Bold ignorado pelo Corel'})"
             )
+    if aplicados:
+        logs.append(f"Negrito parcial aplicado em '{nome}': {aplicados} intervalo(s).")
 
 
 def aplicar_texto_modelo(
@@ -1768,7 +1879,10 @@ def _gerar_arquivo_corel_impl(
                 doc = corel.OpenDocument(os.path.abspath(temp_cdr_path))
                 logs.append(f"Documento aberto — {doc.Pages.Count} página(s).")
 
-                campos = modelo.get("campos") or {}
+                campos = overlay_campos_com_templates_preview(
+                    modelo.get("campos") or {},
+                    preview_config,
+                )
                 if not campos:
                     raise CorelGenerationError("Modelo sem campos configurados.")
 

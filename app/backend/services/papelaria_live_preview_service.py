@@ -180,6 +180,36 @@ def normalize_preview_config_json(raw: Any) -> str | None:
     return json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
 
 
+def overlay_campos_com_templates_preview(
+    campos: dict[str, str],
+    preview_config: dict[str, Any] | None,
+) -> dict[str, str]:
+    """Usa o template da prévia (ex.: **negrito**) no objeto Corel de mesmo id."""
+    if not preview_config or not isinstance(campos, dict):
+        return campos
+    overlay: dict[str, str] = {}
+    for face in preview_config.get("faces") or []:
+        if not isinstance(face, dict):
+            continue
+        for el in face.get("elementos") or []:
+            if not isinstance(el, dict):
+                continue
+            eid = str(el.get("id") or "").strip()
+            tpl = el.get("template")
+            if eid and tpl is not None and str(tpl).strip():
+                overlay[eid] = str(tpl)
+    if not overlay:
+        return campos
+    out = dict(campos)
+    lower_to_key = {str(k).lower(): k for k in out}
+    for eid, tpl in overlay.items():
+        if eid in out:
+            out[eid] = tpl
+        elif eid.lower() in lower_to_key:
+            out[lower_to_key[eid.lower()]] = tpl
+    return out
+
+
 _AUTO_LAYOUT_SLOTS = (
     "top-center",
     "center",

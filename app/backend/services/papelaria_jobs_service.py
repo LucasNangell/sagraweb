@@ -1424,6 +1424,8 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
         except ValueError:
             preview_config = None
 
+    from services.papelaria_live_preview_service import overlay_campos_com_templates_preview
+
     payload: dict[str, Any] = {
         "job_id": job["id"],
         "ano": job["ano_protocolo"],
@@ -1432,7 +1434,10 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
         "produto": job["produto"],
         "modelo_id": job["modelo_id"],
         "arquivo_modelo": job["arquivo_modelo"],
-        "campos": modelo.get("campos") or {},
+        "campos": overlay_campos_com_templates_preview(
+            modelo.get("campos") or {},
+            preview_config,
+        ),
         "dados": dados,
         "campos_dinamicos_layout": campos_dinamicos_layout,
         "exclusoes": exclusoes,

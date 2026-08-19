@@ -302,3 +302,28 @@ class TestPapelariaLivePreviewConfig:
         assert all("{" in v and "}" in v for v in campos.values())
         assert len(labels) == 2
         assert "Instagram" in labels.values()
+
+
+class TestOverlayCamposPreview:
+    def test_preview_template_substitui_campo_corel_mesmo_id(self):
+        from services.papelaria_live_preview_service import overlay_campos_com_templates_preview
+
+        campos = {"Cabecalho": "Gabinete do Deputado\n{nome_deputado}"}
+        preview = {
+            "faces": [
+                {
+                    "id": "frente",
+                    "elementos": [
+                        {
+                            "id": "Cabecalho",
+                            "tipo": "texto",
+                            "template": "Gabinete {artigo} {genero_curto}\n**{nome_deputado}**",
+                        }
+                    ],
+                }
+            ]
+        }
+        out = overlay_campos_com_templates_preview(campos, preview)
+        assert "**{nome_deputado}**" in out["Cabecalho"]
+        assert out["Cabecalho"].startswith("Gabinete {artigo}")
+

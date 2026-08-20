@@ -55,6 +55,47 @@ class ProvaWebRenderCancelled(Exception):
 
 ProgressCallback = Callable[[int, int], None]
 AbortCallback = Callable[[], bool]
+PagePublishedCallback = Callable[[dict[str, Any]], None]
+
+
+def _page_dict_from_entry(number: int, entry: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "page": number,
+        "file": f"page_{number}.png",
+        "width": entry["width"],
+        "height": entry["height"],
+        "widthPt": entry["widthPt"],
+        "heightPt": entry["heightPt"],
+        "role": entry["role"],
+        "blank": bool(entry.get("blank")),
+    }
+
+
+def _materialize_page_file(
+    cache_dir: str, number: int, entry: dict[str, Any]
+) -> dict[str, Any]:
+    """Garante page_N.png a partir do entry e devolve o dict do manifesto."""
+    final_name = f"page_{number}.png"
+    final_path = os.path.join(cache_dir, final_name)
+    src = entry.get("path") or ""
+    if src and os.path.abspath(src) != os.path.abspath(final_path):
+        if os.path.isfile(final_path):
+            try:
+                os.remove(final_path)
+            except OSError:
+                pass
+        os.replace(src, final_path)
+        entry["path"] = final_path
+    elif not src:
+        entry["path"] = final_path
+    return _page_dict_from_entry(number, entry)
+
+
+def _write_manifest_json(manifest_path: str, manifest: dict[str, Any]) -> None:
+    tmp_path = f"{manifest_path}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as fh:
+        json.dump(manifest, fh, ensure_ascii=False)
+    os.replace(tmp_path, manifest_path)
 
 ROLE_COVER_FRONT = "cover-front"
 ROLE_COVER_FRONT_INSIDE = "cover-front-inside"
@@ -809,6 +850,8 @@ def ensure_prova_web_pages(
     crop_json: Optional[dict[str, Any]] = None,
     progress_callback: Optional[ProgressCallback] = None,
     should_abort: Optional[AbortCallback] = None,
+    progressive_publish: bool = False,
+    page_published_callback: Optional[PagePublishedCallback] = None,
 ) -> dict[str, Any]:
     """
     Garante PNGs renderizados em Sefoc/AdminDocs/WEB/{pasta_render} e retorna
@@ -818,6 +861,9 @@ def ensure_prova_web_pages(
     mode == 'capa_miolo': source_paths = [capa, miolo]
     mode == 'espiral': source_paths = [arquivo] ou [capa, miolo] conforme sourceKind
     crop_json None: comportamento legado (TrimBox automático).
+
+    progressive_publish: grava page_N.png + manifesto parcial à medida que
+    cada página final fica pronta (usado pelo Análise Lab).
     """
     import fitz
 
@@ -837,14 +883,57 @@ def ensure_prova_web_pages(
     cache_dir = ensure_web_render_dir(os_folder, pasta_render)
     manifest_path = os.path.join(cache_dir, _MANIFEST_NAME)
 
-    if os.path.isfile(manifest_path):
+    if os.path.isfile(manifest_path) and not progressive_publish:
         try:
             with open(manifest_path, encoding="utf-8") as fh:
                 existing = json.load(fh)
-            if _manifest_matches(existing, mode, source_paths, scale, crop_json):
+            if (
+                not existing.get("partial")
+                and _manifest_matches(existing, mode, source_paths, scale, crop_json)
+            ):
                 return existing
         except (OSError, json.JSONDecodeError):
             pass
+
+    published_pages: list[dict[str, Any]] = []
+
+    def _publish_entry(entry: dict[str, Any], *, expected_total: Optional[int] = None) -> dict[str, Any]:
+        number = len(published_pages) + 1
+        page_meta = _materialize_page_file(cache_dir, number, entry)
+        published_pages.append(page_meta)
+        if progressive_publish:
+            interior = next(
+                (
+                    p
+                    for p in published_pages
+                    if p["role"] in (ROLE_PAGE, ROLE_SHEET_FRONT) and not p["blank"]
+                ),
+                published_pages[0] if published_pages else None,
+            )
+            aspect_ratio = None
+            if interior and interior["height"]:
+                aspect_ratio = round(interior["width"] / interior["height"], 4)
+            partial_manifest: dict[str, Any] = {
+                "mode": mode,
+                "cacheKey": key,
+                "pastaRender": validate_pasta_render(pasta_render),
+                "pages": list(published_pages),
+                "pageCount": len(published_pages),
+                "aspectRatio": aspect_ratio,
+                "totalSourcePages": total_source_pages,
+                "truncated": truncated,
+                "renderScale": scale,
+                "partial": True,
+            }
+            if expected_total is not None:
+                partial_manifest["expectedPageCount"] = int(expected_total)
+            _write_manifest_json(manifest_path, partial_manifest)
+            if page_published_callback:
+                try:
+                    page_published_callback(page_meta)
+                except Exception:
+                    logger.debug("Prova WEB: page_published callback falhou", exc_info=True)
+        return page_meta
 
     _check_abort()
     matrix = fitz.Matrix(scale, scale)
@@ -855,6 +944,7 @@ def ensure_prova_web_pages(
     spiral_mockup: Optional[dict[str, Any]] = None
     box_mockup: Optional[dict[str, Any]] = None
     espiral_cfg: Optional[dict[str, Any]] = None
+    ordered: list[dict[str, Any]] = []
 
     if mode == MODE_ESPIRAL:
         espiral_cfg = _espiral_config(crop_json)
@@ -1080,39 +1170,134 @@ def ensure_prova_web_pages(
         else:
             miolo_crop = _section_crop(crop_json, "miolo")
             capa_cfg = _capa_config(crop_json)
-        body_entries: list[dict[str, Any]] = []
-        with fitz.open(miolo_path) as miolo_doc:
-            total_source_pages += len(miolo_doc)
-            body_count = min(len(miolo_doc), _MAX_PAGES)
-            truncated = len(miolo_doc) > body_count
-            miolo_width_pt: Optional[float] = None
-            _progress(0, body_count)
-            for index in range(body_count):
-                _check_abort()
-                page = miolo_doc.load_page(index)
+
+        if progressive_publish:
+            # Ordem estável: capas 1–2 → miolo → capas finais (+ blank se ímpar).
+            with fitz.open(miolo_path) as miolo_doc:
+                total_source_pages += len(miolo_doc)
+                body_count = min(len(miolo_doc), _MAX_PAGES)
+                truncated = len(miolo_doc) > body_count
+                page0 = miolo_doc.load_page(0)
+                _apply_mm_crop(page0, miolo_crop)
+                miolo_width_pt = float(page0.rect.width)
+
+            _check_abort()
+            with fitz.open(capa_path) as capa_doc:
+                total_source_pages += len(capa_doc)
+                cover_entries, spine_file = _render_cover_pages(
+                    capa_doc, matrix, cache_dir, miolo_width_pt, capa_cfg
+                )
+
+            if mode == MODE_CAPA_MIOLO:
+                book_mockup = _book_mockup_meta(
+                    mode=mode,
+                    capa_cfg=capa_cfg,
+                    cover_entries=cover_entries,
+                    spine_file=spine_file,
+                )
+
+            body_slots = body_count + (1 if body_count % 2 == 1 else 0)
+            expected_total = 2 + body_slots + 2
+            by_role = {e["role"]: e for e in cover_entries}
+
+            def _resolve_cover(role: str, body_ref: Optional[dict[str, Any]]) -> dict[str, Any]:
+                existing = by_role.get(role)
+                if existing:
+                    return existing
+                reference = None
+                for candidate in _BLANK_REFERENCE_ROLES[role]:
+                    reference = by_role.get(candidate)
+                    if reference:
+                        break
+                if reference is None and body_ref is not None:
+                    reference = body_ref
+                if reference is None:
+                    raise ValueError("Não há páginas suficientes para montar a prova.")
+                return _render_blank_png(
+                    cache_dir, f"blank_cover_{role}.png", reference, role
+                )
+
+            # Precisa de uma referência de miolo para blanks de capa se faltarem faces.
+            first_body_ref: Optional[dict[str, Any]] = None
+            with fitz.open(miolo_path) as miolo_doc:
+                page = miolo_doc.load_page(0)
                 _apply_mm_crop(page, miolo_crop)
-                if miolo_width_pt is None:
-                    miolo_width_pt = float(page.rect.width)
-                png_path = os.path.join(cache_dir, f"body_{index}.png")
-                meta = _render_page_png(page, matrix, png_path)
-                body_entries.append({**meta, "role": ROLE_PAGE, "path": png_path})
-                _progress(index + 1, body_count)
+                png0 = os.path.join(cache_dir, "body_0.png")
+                first_body_ref = {
+                    **_render_page_png(page, matrix, png0),
+                    "role": ROLE_PAGE,
+                    "path": png0,
+                }
 
-        _check_abort()
-        with fitz.open(capa_path) as capa_doc:
-            total_source_pages += len(capa_doc)
-            cover_entries, spine_file = _render_cover_pages(
-                capa_doc, matrix, cache_dir, miolo_width_pt, capa_cfg
-            )
+            front_a = _resolve_cover(ROLE_COVER_FRONT, first_body_ref)
+            front_b = _resolve_cover(ROLE_COVER_FRONT_INSIDE, first_body_ref)
+            _publish_entry(front_a, expected_total=expected_total)
+            _publish_entry(front_b, expected_total=expected_total)
 
-        if mode == MODE_CAPA_MIOLO:
-            book_mockup = _book_mockup_meta(
-                mode=mode,
-                capa_cfg=capa_cfg,
-                cover_entries=cover_entries,
-                spine_file=spine_file,
-            )
-        ordered = _assemble_book(cover_entries, body_entries, cache_dir)
+            body_done = 0
+            last_body = first_body_ref
+            with fitz.open(miolo_path) as miolo_doc:
+                _progress(0, body_count)
+                for index in range(body_count):
+                    _check_abort()
+                    if index == 0 and first_body_ref is not None:
+                        entry = first_body_ref
+                    else:
+                        page = miolo_doc.load_page(index)
+                        _apply_mm_crop(page, miolo_crop)
+                        png_path = os.path.join(cache_dir, f"body_{index}.png")
+                        meta = _render_page_png(page, matrix, png_path)
+                        entry = {**meta, "role": ROLE_PAGE, "path": png_path}
+                    last_body = entry
+                    _publish_entry(entry, expected_total=expected_total)
+                    body_done += 1
+                    _progress(body_done, body_count)
+
+            if body_count % 2 == 1 and last_body is not None:
+                blank = _render_blank_png(
+                    cache_dir, "blank_body_pad.png", last_body, ROLE_PAGE
+                )
+                _publish_entry(blank, expected_total=expected_total)
+
+            back_a = _resolve_cover(ROLE_COVER_BACK_INSIDE, last_body)
+            back_b = _resolve_cover(ROLE_COVER_BACK, last_body)
+            _publish_entry(back_a, expected_total=expected_total)
+            _publish_entry(back_b, expected_total=expected_total)
+            ordered = []
+        else:
+            body_entries: list[dict[str, Any]] = []
+            with fitz.open(miolo_path) as miolo_doc:
+                total_source_pages += len(miolo_doc)
+                body_count = min(len(miolo_doc), _MAX_PAGES)
+                truncated = len(miolo_doc) > body_count
+                miolo_width_pt = None
+                _progress(0, body_count)
+                for index in range(body_count):
+                    _check_abort()
+                    page = miolo_doc.load_page(index)
+                    _apply_mm_crop(page, miolo_crop)
+                    if miolo_width_pt is None:
+                        miolo_width_pt = float(page.rect.width)
+                    png_path = os.path.join(cache_dir, f"body_{index}.png")
+                    meta = _render_page_png(page, matrix, png_path)
+                    body_entries.append({**meta, "role": ROLE_PAGE, "path": png_path})
+                    _progress(index + 1, body_count)
+
+            _check_abort()
+            with fitz.open(capa_path) as capa_doc:
+                total_source_pages += len(capa_doc)
+                cover_entries, spine_file = _render_cover_pages(
+                    capa_doc, matrix, cache_dir, miolo_width_pt, capa_cfg
+                )
+
+            if mode == MODE_CAPA_MIOLO:
+                book_mockup = _book_mockup_meta(
+                    mode=mode,
+                    capa_cfg=capa_cfg,
+                    cover_entries=cover_entries,
+                    spine_file=spine_file,
+                )
+            ordered = _assemble_book(cover_entries, body_entries, cache_dir)
     elif mode == MODE_FOLHA_DOBRADA:
         from services.prova_web_fold_service import (
             build_fold_mockup,
@@ -1220,28 +1405,23 @@ def ensure_prova_web_pages(
                     role = ROLE_PAGE
                 png_path = os.path.join(cache_dir, f"body_{index}.png")
                 meta = _render_page_png(page, matrix, png_path)
-                ordered.append({**meta, "role": role, "path": png_path})
+                entry = {**meta, "role": role, "path": png_path}
+                if progressive_publish:
+                    _publish_entry(entry, expected_total=count)
+                else:
+                    ordered.append(entry)
                 _progress(index + 1, count)
 
     _check_abort()
-    pages: list[dict[str, Any]] = []
-    for number, entry in enumerate(ordered, start=1):
-        final_name = f"page_{number}.png"
-        final_path = os.path.join(cache_dir, final_name)
-        if os.path.abspath(entry["path"]) != os.path.abspath(final_path):
-            os.replace(entry["path"], final_path)
-        pages.append(
-            {
-                "page": number,
-                "file": final_name,
-                "width": entry["width"],
-                "height": entry["height"],
-                "widthPt": entry["widthPt"],
-                "heightPt": entry["heightPt"],
-                "role": entry["role"],
-                "blank": bool(entry.get("blank")),
-            }
-        )
+    if progressive_publish and published_pages:
+        pages = list(published_pages)
+    else:
+        pages = []
+        for number, entry in enumerate(ordered, start=1):
+            if progressive_publish:
+                pages.append(_publish_entry(entry))
+            else:
+                pages.append(_materialize_page_file(cache_dir, number, entry))
 
     if mode == MODE_ESPIRAL:
         if espiral_cfg is None:
@@ -1270,6 +1450,7 @@ def ensure_prova_web_pages(
         "totalSourcePages": total_source_pages,
         "truncated": truncated,
         "renderScale": scale,
+        "partial": False,
     }
     if book_mockup:
         manifest["bookMockup"] = book_mockup
@@ -1280,8 +1461,7 @@ def ensure_prova_web_pages(
     if box_mockup:
         manifest["boxMockup"] = box_mockup
 
-    with open(manifest_path, "w", encoding="utf-8") as fh:
-        json.dump(manifest, fh, ensure_ascii=False)
+    _write_manifest_json(manifest_path, manifest)
 
     logger.info(
         "Prova WEB renderizada: OS %s/%s, %s páginas (%s)",

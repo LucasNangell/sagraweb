@@ -67,6 +67,8 @@ export interface ProvaWebCoverWizardProps {
   formatoLarguraMm?: number | null;
   formatoAlturaMm?: number | null;
   cropSource?: ProvaWebCropSource;
+  /** Oculta o painel de crop mm da capa (Lab: evita duplicar com o painel do miolo). */
+  hideCropPanel?: boolean;
 }
 
 export function ProvaWebCoverWizard({
@@ -81,6 +83,7 @@ export function ProvaWebCoverWizard({
   formatoLarguraMm = null,
   formatoAlturaMm = null,
   cropSource,
+  hideCropPanel = false,
 }: ProvaWebCoverWizardProps) {
   const [assignRole, setAssignRole] = useState<CoverRole>("cover-front");
   const seededMetaRef = useRef(false);
@@ -438,36 +441,38 @@ export function ProvaWebCoverWizard({
         </div>
       </section>
 
-      <section className="space-y-2">
-        <h3 className="text-sm font-semibold text-neutral-800">
-          Capa — crop e preview
-        </h3>
-        <ProvaWebCropPanel
-          ano={ano}
-          osId={osId}
-          relativePath={capaPath}
-          title="Crop das faces (bordas externas, mm)"
-          crop={value.crop}
-          onChange={(crop) => onChange({ ...value, crop })}
-          showPageSelector
-          autoSeedCrop={false}
-          formatoLabel={formatoLabel}
-          formatoLarguraMm={formatoLarguraMm}
-          formatoAlturaMm={formatoAlturaMm}
-          seedTargetWidthMm={spreadTarget?.w ?? null}
-          seedTargetHeightMm={spreadTarget?.h ?? null}
-          cropSource={cropSource}
-          coverGuides={
-            value.layout === "spread"
-              ? {
-                  lombadaMm: value.lombadaMm,
-                  orelhaEsquerdaMm: value.orelhaEsquerdaMm ?? 0,
-                  orelhaDireitaMm: value.orelhaDireitaMm ?? 0,
-                }
-              : undefined
-          }
-        />
-      </section>
+      {!hideCropPanel ? (
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold text-neutral-800">
+            Capa — crop e preview
+          </h3>
+          <ProvaWebCropPanel
+            ano={ano}
+            osId={osId}
+            relativePath={capaPath}
+            title="Crop das faces (bordas externas, mm)"
+            crop={value.crop}
+            onChange={(crop) => onChange({ ...value, crop })}
+            showPageSelector
+            autoSeedCrop={false}
+            formatoLabel={formatoLabel}
+            formatoLarguraMm={formatoLarguraMm}
+            formatoAlturaMm={formatoAlturaMm}
+            seedTargetWidthMm={spreadTarget?.w ?? null}
+            seedTargetHeightMm={spreadTarget?.h ?? null}
+            cropSource={cropSource}
+            coverGuides={
+              value.layout === "spread"
+                ? {
+                    lombadaMm: value.lombadaMm,
+                    orelhaEsquerdaMm: value.orelhaEsquerdaMm ?? 0,
+                    orelhaDireitaMm: value.orelhaDireitaMm ?? 0,
+                  }
+                : undefined
+            }
+          />
+        </section>
+      ) : null}
     </div>
   );
 }

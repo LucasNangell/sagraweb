@@ -17,12 +17,71 @@ from services.prova_web_render_service import (
     LAB_PASTA_RENDER,
     ProvaWebRenderCancelled,
     ensure_prova_web_pages,
+    ensure_web_render_dir,
+    resolve_web_render_dir,
 )
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MAX_WORKERS = 1
 _PROGRESS_MIN_INTERVAL_S = 0.75
+_DIRTY_PAGES_NAME = "render_dirty.json"
+
+
+def _dirty_pages_path(os_folder: str, pasta: str) -> str:
+    cache_dir = ensure_web_render_dir(os_folder, pasta)
+    return os.path.join(cache_dir, _DIRTY_PAGES_NAME)
+
+
+def _load_dirty_pages(os_folder: str, pasta: str) -> list[int]:
+    import json
+
+    try:
+        cache_dir = resolve_web_render_dir(os_folder, pasta)
+    except (FileNotFoundError, ValueError, OSError):
+        return []
+    path = os.path.join(cache_dir, _DIRTY_PAGES_NAME)
+    if not os.path.isfile(path):
+        return []
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        pages = data.get("pages") if isinstance(data, dict) else data
+        if not isinstance(pages, list):
+            return []
+        out: list[int] = []
+        for item in pages:
+            try:
+                n = int(item)
+            except (TypeError, ValueError):
+                continue
+            if n >= 1:
+                out.append(n)
+        return sorted(set(out))
+    except (OSError, json.JSONDecodeError, TypeError):
+        return []
+
+
+def write_dirty_pages(os_folder: str, pasta: str, pages: list[int]) -> None:
+    import json
+
+    path = _dirty_pages_path(os_folder, pasta)
+    payload = {"pages": sorted({int(p) for p in pages if int(p) >= 1})}
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False)
+
+
+def _clear_dirty_pages(os_folder: str, pasta: str) -> None:
+    try:
+        cache_dir = resolve_web_render_dir(os_folder, pasta)
+    except (FileNotFoundError, ValueError, OSError):
+        return
+    path = os.path.join(cache_dir, _DIRTY_PAGES_NAME)
+    if os.path.isfile(path):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 def _max_workers() -> int:
@@ -151,17 +210,6 @@ class _LabJobRuntime:
 
             pasta = session.get("pastaRender") or LAB_PASTA_RENDER
             prepared = prepare_lab_render(session, folder)
-            ensure_prova_web_pages(
-                ano,
-                os_id,
-                mode=prepared["mode"],
-                source_paths=prepared["source_paths"],
-                os_folder=folder,
-                pasta_render=pasta,
-                crop_json=prepared["crop_json"],
-                progress_callback=_on_progress,
-                should_abort=_abort,
-            )
             try:
                 write_page_map(folder, pasta, prepared["page_map"])
             except Exception:
@@ -170,6 +218,56 @@ class _LabJobRuntime:
                     os_id,
                     ano,
                     exc_info=True,
+                )
+
+            dirty_pages = _load_dirty_pages(folder, pasta)
+            if dirty_pages:
+                from services.analise_lab_sources_service import rerender_lab_pages
+
+                try:
+                    rerender_lab_pages(
+                        session=session,
+                        os_folder=folder,
+                        pasta_render=pasta,
+                        page_numbers=dirty_pages,
+                        prepared=prepared,
+                        progress_callback=_on_progress,
+                        should_abort=_abort,
+                    )
+                    _clear_dirty_pages(folder, pasta)
+                except ValueError as exc:
+                    if "REGEN_FULL_REQUIRED" not in str(exc):
+                        raise
+                    logger.info(
+                        "Análise Lab: regen parcial indisponível, full (%s/%s)",
+                        os_id,
+                        ano,
+                    )
+                    _clear_dirty_pages(folder, pasta)
+                    ensure_prova_web_pages(
+                        ano,
+                        os_id,
+                        mode=prepared["mode"],
+                        source_paths=prepared["source_paths"],
+                        os_folder=folder,
+                        pasta_render=pasta,
+                        crop_json=prepared["crop_json"],
+                        progress_callback=_on_progress,
+                        should_abort=_abort,
+                        progressive_publish=True,
+                    )
+            else:
+                ensure_prova_web_pages(
+                    ano,
+                    os_id,
+                    mode=prepared["mode"],
+                    source_paths=prepared["source_paths"],
+                    os_folder=folder,
+                    pasta_render=pasta,
+                    crop_json=prepared["crop_json"],
+                    progress_callback=_on_progress,
+                    should_abort=_abort,
+                    progressive_publish=True,
                 )
 
             if _abort():

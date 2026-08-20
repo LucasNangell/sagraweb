@@ -283,6 +283,14 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   }, [optimisticGenerating, renderStatus]);
 
   useEffect(() => {
+    if (renderStatus === "ready") {
+      void queryClient.invalidateQueries({
+        queryKey: ["analise-lab-manifest", ano, osId],
+      });
+    }
+  }, [ano, osId, queryClient, renderStatus]);
+
+  useEffect(() => {
     if (info?.marks) setLocalMarks(info.marks);
   }, [info?.marks]);
 
@@ -364,9 +372,20 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
   const manifestQuery = useQuery({
     queryKey: ["analise-lab-manifest", ano, osId],
     queryFn: () => fetchAnaliseLabManifest(ano, osId),
-    enabled: hasSession && !showPicker && renderReady && !renderError,
-    retry: 1,
-    staleTime: 60_000,
+    enabled: hasSession && !showPicker && !renderError,
+    retry: (failureCount, error) => {
+      // 409 sem páginas ainda: continuar tentando enquanto gera.
+      if (error instanceof Error && /ainda está gerando|ainda não/i.test(error.message)) {
+        return failureCount < 40;
+      }
+      return failureCount < 1;
+    },
+    refetchInterval: (q) => {
+      if (optimisticGenerating || isInFlight(renderStatus)) return 1500;
+      if (q.state.data?.partial) return 1500;
+      return false;
+    },
+    staleTime: renderInFlight ? 0 : 60_000,
   });
 
   const pages = manifestQuery.data?.pages ?? [];
@@ -459,7 +478,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
     setActionBusy(true);
     setActionError(null);
     try {
-      await patchAnaliseLabCrop(ano, osId, {
+      const res = await patchAnaliseLabCrop(ano, osId, {
         crop: payload.crop,
         scope: payload.scope,
         path: payload.path,
@@ -470,7 +489,13 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
       });
       setCropOpen(false);
       setOptimisticGenerating(true);
-      queryClient.removeQueries({ queryKey: ["analise-lab-manifest", ano, osId] });
+      if (!res.partial) {
+        queryClient.removeQueries({ queryKey: ["analise-lab-manifest", ano, osId] });
+      } else {
+        void queryClient.invalidateQueries({
+          queryKey: ["analise-lab-manifest", ano, osId],
+        });
+      }
       invalidate();
     } catch (err) {
       setActionError(
@@ -1531,7 +1556,7 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
 
         {info && !showPicker && (hasSession || optimisticGenerating) ? (
           <>
-            {renderInFlight ? (
+            {renderInFlight && pages.length === 0 ? (
               <Centered>
                 <Loader2 className="size-8 animate-spin text-primary-green" aria-hidden />
                 <p className="text-sm text-neutral-600">
@@ -1545,6 +1570,16 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
                   </p>
                 ) : null}
               </Centered>
+            ) : null}
+
+            {renderInFlight && pages.length > 0 ? (
+              <p className="shrink-0 border-b border-sky-200 bg-sky-50 px-4 py-2 text-center text-sm text-sky-950">
+                Gerando páginas
+                {progressLabel ? ` — ${progressLabel}` : "…"}
+                {" · "}
+                {pages.length} já disponível
+                {pages.length === 1 ? "" : "eis"}
+              </p>
             ) : null}
 
             {renderError ? (
@@ -1578,14 +1613,14 @@ export function AnaliseLabPage({ ano, osId }: AnaliseLabPageProps) {
               </Centered>
             ) : null}
 
-            {renderReady && manifestQuery.isLoading ? (
+            {!renderError && !manifestQuery.data && manifestQuery.isLoading && !renderInFlight ? (
               <Centered>
                 <Loader2 className="size-8 animate-spin text-primary-green" aria-hidden />
                 <p className="text-sm text-neutral-600">Carregando visualização…</p>
               </Centered>
             ) : null}
 
-            {renderReady && manifestQuery.data ? (
+            {!renderError && manifestQuery.data && pages.length > 0 ? (
               <div className="flex min-h-0 flex-1 overflow-hidden">
                 {tab === "inspecao" ? (
                   <>

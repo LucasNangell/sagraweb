@@ -23,6 +23,7 @@ from services import analise_lab_sources_service as lab_src
 from services.analise_lab_job_service import (
     cancel_analise_lab_render,
     enqueue_analise_lab_render,
+    write_dirty_pages,
 )
 from services.prova_web_crop_service import build_pdf_crop_meta
 from services.prova_web_render_service import (
@@ -496,6 +497,9 @@ def patch_analise_lab_crop(
     if not isinstance(crop_json, dict):
         crop_json = lab_src.identity_lab_crop_json(session.get("modo") or "unico")
     fontes = lab_src.fontes_from_session(session)
+    capa_before = (
+        dict(crop_json["capa"]) if isinstance(crop_json.get("capa"), dict) else {}
+    )
 
     try:
         if body.crop is not None and body.scope is not None:
@@ -514,14 +518,91 @@ def patch_analise_lab_crop(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    capa_after = (
+        dict(crop_json["capa"]) if isinstance(crop_json.get("capa"), dict) else {}
+    )
+    structural = lab_src.capa_structural_changed(capa_before, capa_after)
+
     folder = _require_os_folder(ano, os_id)
+    pasta = session.get("pastaRender") or LAB_PASTA_RENDER
     cancel_analise_lab_render(ano, os_id)
-    try:
-        delete_web_render_dir(folder, LAB_PASTA_RENDER)
-    except Exception as exc:
-        logger.warning(
-            "Análise Lab: falha ao limpar pasta no crop (%s/%s): %s", os_id, ano, exc
-        )
+
+    dirty_pages: Optional[list[int]] = None
+    partial = False
+    scope = body.scope
+    componente = body.componente
+    do_full = bool(structural) or scope == "all"
+    if scope is None and body.capa is not None and not structural:
+        # Só crop/mm da capa (sem mudança estrutural).
+        scope = "component"
+        if not componente:
+            componente = "Capa"
+        do_full = False
+
+    if not do_full and scope in ("page", "file", "component", "miolo_central"):
+        cached = lab_src.load_ready_lab_manifest(folder, pasta)
+        page_map = lab_src.load_page_map(folder, pasta)
+        if cached and isinstance(cached.get("pages"), list) and page_map:
+            dirty_set = lab_src.resolve_dirty_lab_pages(
+                scope=scope,
+                path=body.path,
+                source_page=body.source_page,
+                componente=componente,
+                fontes=fontes,
+                page_map=page_map,
+                crop_json=crop_json,
+                modo=session.get("modo") or "unico",
+                manifest_pages=list(cached.get("pages") or []),
+            )
+            # Se também veio capa.crop sem mudança estrutural, incluir páginas da capa.
+            if (
+                body.capa is not None
+                and not structural
+                and isinstance(body.capa.get("crop"), dict)
+                and scope != "component"
+            ):
+                capa_dirty = lab_src.resolve_dirty_lab_pages(
+                    scope="component",
+                    path=None,
+                    source_page=None,
+                    componente="Capa",
+                    fontes=fontes,
+                    page_map=page_map,
+                    crop_json=crop_json,
+                    modo=session.get("modo") or "unico",
+                    manifest_pages=list(cached.get("pages") or []),
+                )
+                if capa_dirty:
+                    dirty_set = (dirty_set or set()) | capa_dirty
+            if dirty_set:
+                dirty_pages = sorted(dirty_set)
+                partial = True
+                for n in dirty_pages:
+                    try:
+                        png = resolve_rendered_page_path(folder, pasta, n)
+                        if os.path.isfile(png):
+                            os.remove(png)
+                    except (FileNotFoundError, ValueError, OSError):
+                        pass
+                try:
+                    write_dirty_pages(folder, pasta, dirty_pages)
+                except Exception as exc:
+                    logger.warning(
+                        "Análise Lab: falha ao gravar dirty pages (%s/%s): %s",
+                        os_id,
+                        ano,
+                        exc,
+                    )
+                    partial = False
+                    dirty_pages = None
+
+    if not partial:
+        try:
+            delete_web_render_dir(folder, LAB_PASTA_RENDER)
+        except Exception as exc:
+            logger.warning(
+                "Análise Lab: falha ao limpar pasta no crop (%s/%s): %s", os_id, ano, exc
+            )
 
     session = lab.update_session_crop(
         ano,
@@ -543,6 +624,8 @@ def patch_analise_lab_crop(
         "ok": True,
         "session": session,
         "renderStatus": (session or {}).get("renderStatus"),
+        "partial": partial,
+        "dirtyPages": dirty_pages or [],
     }
 
 
@@ -597,6 +680,24 @@ def delete_analise_lab(ano: int, os_id: int, request: Request):
     return {"ok": True, "deleted": deleted}
 
 
+def _enrich_lab_manifest(
+    ano: int, os_id: int, session: dict[str, Any], cached: dict[str, Any]
+) -> dict[str, Any]:
+    folder = _require_os_folder(ano, os_id)
+    pasta = session.get("pastaRender") or LAB_PASTA_RENDER
+    page_map = lab_src.load_page_map(folder, pasta)
+    pages = lab_src.enrich_manifest_pages(
+        list(cached.get("pages") or []),
+        page_map,
+        modo=session.get("modo") or "unico",
+        crop_json=session.get("cropJson")
+        if isinstance(session.get("cropJson"), dict)
+        else None,
+    )
+    warnings = list((page_map or {}).get("warnings") or [])
+    return {**cached, "pages": pages, "labWarnings": warnings}
+
+
 def _require_ready_manifest(ano: int, os_id: int, session: dict[str, Any]) -> dict[str, Any]:
     if lab.is_render_in_flight(session):
         raise HTTPException(
@@ -628,18 +729,8 @@ def _require_ready_manifest(ano: int, os_id: int, session: dict[str, Any]) -> di
     folder = _require_os_folder(ano, os_id)
     pasta = session.get("pastaRender") or LAB_PASTA_RENDER
     cached = lab_src.load_ready_lab_manifest(folder, pasta)
-    if cached:
-        page_map = lab_src.load_page_map(folder, pasta)
-        pages = lab_src.enrich_manifest_pages(
-            list(cached.get("pages") or []),
-            page_map,
-            modo=session.get("modo") or "unico",
-            crop_json=session.get("cropJson")
-            if isinstance(session.get("cropJson"), dict)
-            else None,
-        )
-        warnings = list((page_map or {}).get("warnings") or [])
-        return {**cached, "pages": pages, "labWarnings": warnings}
+    if cached and not cached.get("partial"):
+        return _enrich_lab_manifest(ano, os_id, session, cached)
     lab.mark_render_pending(ano, os_id)
     enqueue_analise_lab_render(ano, os_id)
     raise HTTPException(
@@ -651,13 +742,40 @@ def _require_ready_manifest(ano: int, os_id: int, session: dict[str, Any]) -> di
     )
 
 
+def _load_manifest_allow_partial(
+    ano: int, os_id: int, session: dict[str, Any]
+) -> dict[str, Any]:
+    """Manifesto ready ou parcial durante geração."""
+    folder = _require_os_folder(ano, os_id)
+    pasta = session.get("pastaRender") or LAB_PASTA_RENDER
+    cached = lab_src.load_ready_lab_manifest(folder, pasta)
+    if cached and (lab.is_render_ready(session) or cached.get("pages")):
+        enriched = _enrich_lab_manifest(ano, os_id, session, cached)
+        return {
+            **enriched,
+            "partial": bool(cached.get("partial")) or lab.is_render_in_flight(session),
+            "renderStatus": session.get("renderStatus"),
+            "renderProgress": session.get("renderProgress"),
+        }
+    if lab.is_render_in_flight(session):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "O laboratório ainda está gerando as páginas.",
+                "renderStatus": session.get("renderStatus"),
+                "renderProgress": session.get("renderProgress"),
+            },
+        )
+    return _require_ready_manifest(ano, os_id, session)
+
+
 @router.get("/os/{ano}/{os_id}/analise-lab/manifest")
 def get_analise_lab_manifest(ano: int, os_id: int, request: Request):
     _require_analise(request)
     session = lab.get_session(ano, os_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão do laboratório não encontrada.")
-    manifest = _require_ready_manifest(ano, os_id, session)
+    manifest = _load_manifest_allow_partial(ano, os_id, session)
     base = f"/api/os/{ano}/{os_id}/analise-lab/pages"
     pages = [
         {**page, "url": f"{base}/{page['page']}.png"}
@@ -674,12 +792,17 @@ def get_analise_lab_page(ano: int, os_id: int, page: int, request: Request):
     session = lab.get_session(ano, os_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão do laboratório não encontrada.")
-    _require_ready_manifest(ano, os_id, session)
     folder = _require_os_folder(ano, os_id)
     pasta = session.get("pastaRender") or LAB_PASTA_RENDER
     try:
         path = resolve_rendered_page_path(folder, pasta, page)
     except FileNotFoundError as exc:
+        if lab.is_render_in_flight(session):
+            raise HTTPException(
+                status_code=404,
+                detail="Página ainda não gerada.",
+            ) from exc
+        _require_ready_manifest(ano, os_id, session)
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

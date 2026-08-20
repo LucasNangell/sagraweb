@@ -363,11 +363,284 @@ def merge_capa_config(
         "orelhaEsquerdaMm",
         "orelhaDireitaMm",
         "sheets",
+        "crop",
     ):
         if key in capa:
             current[key] = capa[key]
     out["capa"] = current
     return out
+
+
+def capa_structural_changed(
+    before: Optional[dict[str, Any]], after: Optional[dict[str, Any]]
+) -> bool:
+    """True se layout/lombada/orelhas/sheets mudaram (exige regen completa)."""
+    b = before if isinstance(before, dict) else {}
+    a = after if isinstance(after, dict) else {}
+    for key in (
+        "layout",
+        "lombadaMm",
+        "orelhaEsquerdaMm",
+        "orelhaDireitaMm",
+        "sheets",
+    ):
+        if b.get(key) != a.get(key):
+            return True
+    return False
+
+
+def resolve_dirty_lab_pages(
+    *,
+    scope: str,
+    path: Optional[str],
+    source_page: Optional[int],
+    componente: Optional[str],
+    fontes: list[Fonte],
+    page_map: Optional[dict[str, Any]],
+    crop_json: Optional[dict[str, Any]],
+    modo: str,
+    manifest_pages: list[dict[str, Any]],
+) -> Optional[set[int]]:
+    """
+    Retorna números de página do livro a regenerar, ou None para full regen.
+    """
+    if scope == "all":
+        return None
+    if not manifest_pages or not page_map:
+        return None
+
+    enriched = enrich_manifest_pages(
+        list(manifest_pages),
+        page_map,
+        modo=modo,
+        crop_json=crop_json,
+    )
+    dirty: set[int] = set()
+    npath = normalize_rel_path(path or "") if path else ""
+    comp = (componente or "").strip()
+
+    for page in enriched:
+        try:
+            number = int(page.get("page") or 0)
+        except (TypeError, ValueError):
+            continue
+        if number < 1:
+            continue
+        if page.get("blank"):
+            continue
+        role = str(page.get("role") or "")
+        page_path = normalize_rel_path(str(page.get("sourcePath") or ""))
+        page_comp = str(page.get("componente") or "")
+        try:
+            page_src = int(page.get("sourcePage") or 0)
+        except (TypeError, ValueError):
+            page_src = 0
+
+        if scope == "page":
+            if (
+                npath
+                and page_path == npath
+                and source_page is not None
+                and page_src == int(source_page)
+            ):
+                dirty.add(number)
+                # Spread: mesma folha PDF alimenta duas faces.
+                if _capa_is_spread(crop_json) and role.startswith("cover"):
+                    for other in enriched:
+                        if (
+                            normalize_rel_path(str(other.get("sourcePath") or ""))
+                            == npath
+                            and int(other.get("sourcePage") or 0) == int(source_page)
+                        ):
+                            try:
+                                dirty.add(int(other["page"]))
+                            except (TypeError, ValueError, KeyError):
+                                pass
+        elif scope == "file":
+            if npath and page_path == npath:
+                dirty.add(number)
+        elif scope in ("component", "miolo_central"):
+            target = comp or (
+                COMP_MIOLO if scope == "miolo_central" else ""
+            )
+            if target and page_comp == target:
+                dirty.add(number)
+            elif target == COMP_CAPA and role.startswith("cover"):
+                dirty.add(number)
+            elif target == COMP_MIOLO and role == "page":
+                dirty.add(number)
+
+    return dirty if dirty else None
+
+
+def rerender_lab_pages(
+    *,
+    session: dict[str, Any],
+    os_folder: str,
+    pasta_render: str,
+    page_numbers: list[int],
+    prepared: dict[str, Any],
+    progress_callback: Optional[Any] = None,
+    should_abort: Optional[Any] = None,
+) -> dict[str, Any]:
+    """
+    Regenera apenas as páginas indicadas a partir dos PDFs de origem + crop
+    resolvido (sem re-rasterizar o livro inteiro).
+    """
+    import fitz
+
+    from services.prova_web_render_service import (
+        ProvaWebRenderCancelled,
+        _materialize_page_file,
+        _render_page_png,
+        _write_manifest_json,
+        render_scale,
+    )
+
+    def _check_abort() -> None:
+        if should_abort and should_abort():
+            raise ProvaWebRenderCancelled("Render cancelado.")
+
+    def _progress(done: int, total: int) -> None:
+        if progress_callback:
+            try:
+                progress_callback(max(0, int(done)), max(0, int(total)))
+            except Exception:
+                logger.debug("Análise Lab: progresso parcial falhou", exc_info=True)
+
+    modo = (session.get("modo") or MODE_UNICO).strip()
+    crop_json = (
+        session.get("cropJson") if isinstance(session.get("cropJson"), dict) else None
+    )
+    page_map = prepared.get("page_map") or load_page_map(os_folder, pasta_render)
+    manifest = load_ready_lab_manifest(os_folder, pasta_render)
+    if not manifest or not isinstance(manifest.get("pages"), list):
+        raise ValueError("Manifesto indisponível para regeneração parcial.")
+
+    cache_dir = ensure_web_render_dir(os_folder, pasta_render)
+    pages = list(manifest["pages"])
+    enriched = enrich_manifest_pages(
+        pages, page_map, modo=modo, crop_json=crop_json
+    )
+    by_number = {int(p["page"]): p for p in enriched if p.get("page") is not None}
+    targets = sorted({int(n) for n in page_numbers if int(n) >= 1 and int(n) in by_number})
+    if not targets:
+        raise ValueError("Nenhuma página válida para regeneração parcial.")
+
+    scale = render_scale()
+    matrix = fitz.Matrix(scale, scale)
+    total = len(targets)
+    _progress(0, total)
+
+    # Páginas de capa com layout complexo: se alguma dirty for cover, regenera
+    # faces via PDF de origem (spread exige full regen).
+    cover_dirty = [
+        n
+        for n in targets
+        if str(by_number[n].get("role") or "").startswith("cover")
+    ]
+    body_dirty = [n for n in targets if n not in cover_dirty]
+
+    done = 0
+    if cover_dirty:
+        if _capa_is_spread(crop_json):
+            raise ValueError("REGEN_FULL_REQUIRED")
+        for number in cover_dirty:
+            _check_abort()
+            info = by_number[number]
+            if info.get("blank"):
+                done += 1
+                _progress(done, total)
+                continue
+            src_path = info.get("sourcePath")
+            src_page = info.get("sourcePage")
+            comp = info.get("componente") or COMP_CAPA
+            if not src_path or not src_page:
+                raise ValueError(f"Página {number} sem mapeamento de origem.")
+            crop = resolve_page_crop(
+                crop_json,
+                path=str(src_path),
+                source_page=int(src_page),
+                componente=str(comp),
+                sequence_page=info.get("sourceSequence"),
+            )
+            full = resolve_os_relative_pdf(os_folder, str(src_path))
+            with fitz.open(full) as doc:
+                idx = int(src_page) - 1
+                if idx < 0 or idx >= len(doc):
+                    raise ValueError(f"Página de origem inválida para {number}.")
+                page = doc.load_page(idx)
+                _apply_mm_crop(page, crop)
+                tmp = os.path.join(cache_dir, f"_rerender_{number}.png")
+                meta = _render_page_png(page, matrix, tmp)
+                entry = {
+                    **meta,
+                    "role": info.get("role") or "page",
+                    "path": tmp,
+                    "blank": False,
+                }
+                page_meta = _materialize_page_file(cache_dir, number, entry)
+                for i, p in enumerate(pages):
+                    if int(p.get("page") or 0) == number:
+                        pages[i] = {**p, **page_meta}
+                        break
+            done += 1
+            _progress(done, total)
+
+    for number in body_dirty:
+        _check_abort()
+        info = by_number[number]
+        if info.get("blank"):
+            done += 1
+            _progress(done, total)
+            continue
+        src_path = info.get("sourcePath")
+        src_page = info.get("sourcePage")
+        comp = info.get("componente") or (
+            COMP_MIOLO if modo == MODE_CAPA_MIOLO else COMP_UNICO
+        )
+        if not src_path or not src_page:
+            raise ValueError(f"Página {number} sem mapeamento de origem.")
+        crop = resolve_page_crop(
+            crop_json,
+            path=str(src_path),
+            source_page=int(src_page),
+            componente=str(comp),
+            sequence_page=info.get("sourceSequence"),
+        )
+        full = resolve_os_relative_pdf(os_folder, str(src_path))
+        with fitz.open(full) as doc:
+            idx = int(src_page) - 1
+            if idx < 0 or idx >= len(doc):
+                raise ValueError(f"Página de origem inválida para {number}.")
+            page = doc.load_page(idx)
+            _apply_mm_crop(page, crop)
+            tmp = os.path.join(cache_dir, f"_rerender_{number}.png")
+            meta = _render_page_png(page, matrix, tmp)
+            entry = {
+                **meta,
+                "role": info.get("role") or "page",
+                "path": tmp,
+                "blank": False,
+            }
+            page_meta = _materialize_page_file(cache_dir, number, entry)
+            for i, p in enumerate(pages):
+                if int(p.get("page") or 0) == number:
+                    pages[i] = {**p, **page_meta}
+                    break
+        done += 1
+        _progress(done, total)
+
+    manifest = dict(manifest)
+    manifest["pages"] = pages
+    manifest["pageCount"] = len(pages)
+    manifest["partial"] = False
+    # Bust cache visual
+    manifest["cacheKey"] = f"{manifest.get('cacheKey') or 'lab'}-p{'-'.join(map(str, targets))}"
+    path = os.path.join(cache_dir, "manifest.json")
+    _write_manifest_json(path, manifest)
+    _progress(total, total)
+    return manifest
 
 
 def render_identity_crop_json(

@@ -344,3 +344,151 @@ def test_normalize_rejects_duplicate_paths() -> None:
             ],
             modo="capa_miolo",
         )
+
+
+def test_merge_capa_config_persists_crop() -> None:
+    out = src.merge_capa_config(
+        src.identity_lab_crop_json("capa_miolo"),
+        {
+            "layout": "pages",
+            "lombadaMm": 3,
+            "crop": {"top": 2, "right": 4, "bottom": 2, "left": 4},
+        },
+    )
+    assert out["capa"]["lombadaMm"] == 3
+    assert out["capa"]["crop"]["left"] == 4
+    assert out["capa"]["crop"]["right"] == 4
+
+
+def test_capa_structural_changed_ignores_crop_only() -> None:
+    before = {
+        "layout": "pages",
+        "lombadaMm": 0,
+        "crop": {"top": 0, "right": 0, "bottom": 0, "left": 0},
+    }
+    after = {
+        "layout": "pages",
+        "lombadaMm": 0,
+        "crop": {"top": 5, "right": 5, "bottom": 5, "left": 5},
+    }
+    assert src.capa_structural_changed(before, after) is False
+    after2 = {**after, "lombadaMm": 4}
+    assert src.capa_structural_changed(before, after2) is True
+
+
+def test_resolve_dirty_lab_pages_page_and_file() -> None:
+    page_map = {
+        "byComponent": {
+            "Capa": [],
+            "Miolo": [],
+            "Arq. Único": [
+                {
+                    "mergedIndex": 0,
+                    "path": "m.pdf",
+                    "sourcePage": 1,
+                    "componente": "Arq. Único",
+                },
+                {
+                    "mergedIndex": 1,
+                    "path": "m.pdf",
+                    "sourcePage": 2,
+                    "componente": "Arq. Único",
+                },
+                {
+                    "mergedIndex": 2,
+                    "path": "n.pdf",
+                    "sourcePage": 1,
+                    "componente": "Arq. Único",
+                },
+            ],
+        }
+    }
+    manifest_pages = [
+        {"page": 1, "role": "page", "blank": False},
+        {"page": 2, "role": "page", "blank": False},
+        {"page": 3, "role": "page", "blank": False},
+    ]
+    dirty = src.resolve_dirty_lab_pages(
+        scope="page",
+        path="m.pdf",
+        source_page=2,
+        componente="Arq. Único",
+        fontes=[],
+        page_map=page_map,
+        crop_json=None,
+        modo="unico",
+        manifest_pages=manifest_pages,
+    )
+    assert dirty == {2}
+
+    dirty_file = src.resolve_dirty_lab_pages(
+        scope="file",
+        path="m.pdf",
+        source_page=None,
+        componente="Arq. Único",
+        fontes=[],
+        page_map=page_map,
+        crop_json=None,
+        modo="unico",
+        manifest_pages=manifest_pages,
+    )
+    assert dirty_file == {1, 2}
+
+    assert (
+        src.resolve_dirty_lab_pages(
+            scope="all",
+            path=None,
+            source_page=None,
+            componente=None,
+            fontes=[],
+            page_map=page_map,
+            crop_json=None,
+            modo="unico",
+            manifest_pages=manifest_pages,
+        )
+        is None
+    )
+
+
+def test_progressive_publish_writes_partial_manifest(tmp_path: Path) -> None:
+    import fitz
+
+    from services import prova_web_render_service as render_svc
+
+    os_folder = tmp_path / "os"
+    pdf = os_folder / "doc.pdf"
+    os_folder.mkdir()
+    doc = fitz.open()
+    for _ in range(3):
+        doc.new_page(width=200, height=300)
+    doc.save(str(pdf))
+    doc.close()
+
+    published: list[int] = []
+
+    def on_page(meta: dict) -> None:
+        published.append(int(meta["page"]))
+        cache = render_svc.resolve_web_render_dir(str(os_folder), "AnaliseLab")
+        man_path = Path(cache) / "manifest.json"
+        assert man_path.is_file()
+        data = json.loads(man_path.read_text(encoding="utf-8"))
+        assert data.get("partial") is True
+        assert len(data["pages"]) == len(published)
+
+    manifest = render_svc.ensure_prova_web_pages(
+        2026,
+        1,
+        mode="unico",
+        source_paths=[str(pdf)],
+        os_folder=str(os_folder),
+        pasta_render="AnaliseLab",
+        crop_json={"unico": empty_crop()},
+        progressive_publish=True,
+        page_published_callback=on_page,
+    )
+    assert published == [1, 2, 3]
+    assert manifest.get("partial") is False
+    assert manifest["pageCount"] == 3
+    cache = render_svc.resolve_web_render_dir(str(os_folder), "AnaliseLab")
+    assert (Path(cache) / "page_1.png").is_file()
+    assert (Path(cache) / "page_3.png").is_file()

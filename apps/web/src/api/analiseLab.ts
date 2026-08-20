@@ -161,6 +161,10 @@ export interface AnaliseLabFileEntry {
 export interface AnaliseLabManifest extends ProvaWebManifestBase {
   session: AnaliseLabSession;
   labWarnings?: string[];
+  partial?: boolean;
+  renderStatus?: string | null;
+  renderProgress?: AnaliseLabRenderProgress | null;
+  expectedPageCount?: number | null;
 }
 
 export interface SaveAnaliseLabPayload {
@@ -247,6 +251,8 @@ export async function patchAnaliseLabCrop(
   ok: boolean;
   session: AnaliseLabSession;
   renderStatus?: AnaliseLabRenderStatus;
+  partial?: boolean;
+  dirtyPages?: number[];
 }> {
   return apiFetch(`/os/${ano}/${osId}/analise-lab/crop`, {
     method: "PATCH",

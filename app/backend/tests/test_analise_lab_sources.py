@@ -374,6 +374,54 @@ def test_capa_structural_changed_ignores_crop_only() -> None:
     assert src.capa_structural_changed(before, after) is False
     after2 = {**after, "lombadaMm": 4}
     assert src.capa_structural_changed(before, after2) is True
+    # sheets vazios vs ausentes não contam como estrutural em layout pages
+    assert (
+        src.capa_structural_changed(
+            {"layout": "pages"},
+            {"layout": "pages", "sheets": []},
+        )
+        is False
+    )
+
+
+def test_resolve_dirty_lab_pages_by_sequence() -> None:
+    page_map = {
+        "byComponent": {
+            "Capa": [],
+            "Miolo": [],
+            "Arq. Único": [
+                {
+                    "mergedIndex": 0,
+                    "path": "m.pdf",
+                    "sourcePage": 1,
+                    "componente": "Arq. Único",
+                },
+                {
+                    "mergedIndex": 1,
+                    "path": "m.pdf",
+                    "sourcePage": 2,
+                    "componente": "Arq. Único",
+                },
+            ],
+        }
+    }
+    manifest_pages = [
+        {"page": 1, "role": "cover-front", "blank": False},
+        {"page": 2, "role": "page", "blank": False},
+    ]
+    dirty = src.resolve_dirty_lab_pages(
+        scope="page",
+        path="m.pdf",
+        source_page=99,  # path+seq deve prevalecer sobre source_page errado
+        componente="Arq. Único",
+        fontes=[],
+        page_map=page_map,
+        crop_json=None,
+        modo="unico",
+        manifest_pages=manifest_pages,
+        sequence_page=2,
+    )
+    assert dirty == {2}
 
 
 def test_resolve_dirty_lab_pages_page_and_file() -> None:

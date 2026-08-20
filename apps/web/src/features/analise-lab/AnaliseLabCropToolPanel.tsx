@@ -143,7 +143,7 @@ export function AnaliseLabCropToolPanel({
           onChange={setCrop}
           pageIndex={pageIndex}
           onPageIndexChange={setPageIndex}
-          autoSeedCrop={false}
+          autoSeedCrop={true}
           formatoLabel={formato}
           formatoLarguraMm={formatoLarguraMm}
           formatoAlturaMm={formatoAlturaMm}
@@ -230,6 +230,27 @@ export function AnaliseLabCropToolPanel({
                 : crop;
             const applyScope: AnaliseLabCropScope =
               isCapaContext && showCover ? "component" : scope;
+            // Só envia capa no contexto capa, ou se layout/lombada/crop da capa
+            // mudaram de fato (normalizado). Enviar capa em todo apply do miolo
+            // fazia o backend cair em regen completa.
+            const prevCapa = {
+              ...defaultCapaCrop(
+                (cropJson?.capa?.layout as "pages" | "spread" | undefined) ||
+                  "pages",
+              ),
+              ...(cropJson?.capa ?? {}),
+            };
+            const capaSnapshot = (c: typeof capa) =>
+              JSON.stringify({
+                layout: c.layout,
+                lombadaMm: c.lombadaMm ?? 0,
+                orelhaEsquerdaMm: c.orelhaEsquerdaMm ?? 0,
+                orelhaDireitaMm: c.orelhaDireitaMm ?? 0,
+                sheets: c.sheets ?? [],
+                crop: c.crop ?? emptyCropSides(),
+              });
+            const capaChanged =
+              showCover && capaSnapshot(capa) !== capaSnapshot(prevCapa);
             onApply({
               crop: applyCrop,
               scope: applyScope,
@@ -237,7 +258,8 @@ export function AnaliseLabCropToolPanel({
               sourcePage,
               sequencePage,
               componente,
-              capa: showCover ? capa : null,
+              capa:
+                showCover && (isCapaContext || capaChanged) ? capa : null,
             });
           }}
           className="rounded-lg bg-secondary-blue px-3 py-1.5 text-xs font-semibold text-white hover:bg-secondary-blue/90 disabled:opacity-50"

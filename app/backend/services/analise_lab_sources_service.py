@@ -377,16 +377,24 @@ def capa_structural_changed(
     """True se layout/lombada/orelhas/sheets mudaram (exige regen completa)."""
     b = before if isinstance(before, dict) else {}
     a = after if isinstance(after, dict) else {}
-    for key in (
-        "layout",
-        "lombadaMm",
-        "orelhaEsquerdaMm",
-        "orelhaDireitaMm",
-        "sheets",
-    ):
-        if b.get(key) != a.get(key):
+
+    def _num(val: Any) -> float:
+        try:
+            return float(val or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    if (b.get("layout") or "pages") != (a.get("layout") or "pages"):
+        return True
+    for key in ("lombadaMm", "orelhaEsquerdaMm", "orelhaDireitaMm"):
+        if abs(_num(b.get(key)) - _num(a.get(key))) > 1e-6:
             return True
-    return False
+    # sheets: comparar forma canônica (ignora [] vs ausente quando layout pages)
+    b_sheets = b.get("sheets") if isinstance(b.get("sheets"), list) else []
+    a_sheets = a.get("sheets") if isinstance(a.get("sheets"), list) else []
+    if (b.get("layout") or "pages") == "pages" and not b_sheets and not a_sheets:
+        return False
+    return b_sheets != a_sheets
 
 
 def resolve_dirty_lab_pages(
@@ -400,6 +408,7 @@ def resolve_dirty_lab_pages(
     crop_json: Optional[dict[str, Any]],
     modo: str,
     manifest_pages: list[dict[str, Any]],
+    sequence_page: Optional[int] = None,
 ) -> Optional[set[int]]:
     """
     Retorna números de página do livro a regenerar, ou None para full regen.
@@ -418,6 +427,7 @@ def resolve_dirty_lab_pages(
     dirty: set[int] = set()
     npath = normalize_rel_path(path or "") if path else ""
     comp = (componente or "").strip()
+    seq = int(sequence_page) if sequence_page is not None else None
 
     for page in enriched:
         try:
@@ -435,13 +445,17 @@ def resolve_dirty_lab_pages(
             page_src = int(page.get("sourcePage") or 0)
         except (TypeError, ValueError):
             page_src = 0
+        try:
+            page_seq = int(page.get("sourceSequence") or 0)
+        except (TypeError, ValueError):
+            page_seq = 0
 
         if scope == "page":
-            if (
-                npath
-                and page_path == npath
-                and source_page is not None
-                and page_src == int(source_page)
+            path_match = bool(npath) and page_path == npath
+            src_match = source_page is not None and page_src == int(source_page)
+            seq_match = seq is not None and page_seq == seq
+            if (path_match and src_match) or (path_match and seq_match) or (
+                not npath and src_match and (not comp or page_comp == comp)
             ):
                 dirty.add(number)
                 # Spread: mesma folha PDF alimenta duas faces.
@@ -450,7 +464,7 @@ def resolve_dirty_lab_pages(
                         if (
                             normalize_rel_path(str(other.get("sourcePath") or ""))
                             == npath
-                            and int(other.get("sourcePage") or 0) == int(source_page)
+                            and int(other.get("sourcePage") or 0) == int(source_page or 0)
                         ):
                             try:
                                 dirty.add(int(other["page"]))

@@ -521,7 +521,10 @@ def patch_analise_lab_crop(
     capa_after = (
         dict(crop_json["capa"]) if isinstance(crop_json.get("capa"), dict) else {}
     )
-    structural = lab_src.capa_structural_changed(capa_before, capa_after)
+    # Só avalia estrutura da capa quando o cliente enviou capa de propósito.
+    structural = bool(body.capa is not None) and lab_src.capa_structural_changed(
+        capa_before, capa_after
+    )
 
     folder = _require_os_folder(ano, os_id)
     pasta = session.get("pastaRender") or LAB_PASTA_RENDER
@@ -542,6 +545,17 @@ def patch_analise_lab_crop(
     if not do_full and scope in ("page", "file", "component", "miolo_central"):
         cached = lab_src.load_ready_lab_manifest(folder, pasta)
         page_map = lab_src.load_page_map(folder, pasta)
+        if not page_map and cached:
+            try:
+                page_map = lab_src.build_source_page_map(fontes, folder)
+            except Exception as exc:
+                logger.warning(
+                    "Análise Lab: falha ao montar pageMap no crop (%s/%s): %s",
+                    os_id,
+                    ano,
+                    exc,
+                )
+                page_map = None
         if cached and isinstance(cached.get("pages"), list) and page_map:
             dirty_set = lab_src.resolve_dirty_lab_pages(
                 scope=scope,
@@ -553,12 +567,19 @@ def patch_analise_lab_crop(
                 crop_json=crop_json,
                 modo=session.get("modo") or "unico",
                 manifest_pages=list(cached.get("pages") or []),
+                sequence_page=body.source_sequence,
             )
-            # Se também veio capa.crop sem mudança estrutural, incluir páginas da capa.
+            # Incluir capas só se o crop da capa mudou de fato.
+            capa_crop_changed = False
+            if body.capa is not None and isinstance(body.capa.get("crop"), dict):
+                from services.prova_web_crop_service import normalize_crop_sides
+
+                before_c = normalize_crop_sides(capa_before.get("crop"))
+                after_c = normalize_crop_sides(body.capa.get("crop"))
+                capa_crop_changed = before_c != after_c
             if (
-                body.capa is not None
+                capa_crop_changed
                 and not structural
-                and isinstance(body.capa.get("crop"), dict)
                 and scope != "component"
             ):
                 capa_dirty = lab_src.resolve_dirty_lab_pages(
@@ -595,6 +616,14 @@ def patch_analise_lab_crop(
                     )
                     partial = False
                     dirty_pages = None
+            else:
+                logger.info(
+                    "Análise Lab: dirty set vazio no crop seletivo (%s/%s scope=%s); "
+                    "caindo para regen completa",
+                    os_id,
+                    ano,
+                    scope,
+                )
 
     if not partial:
         try:

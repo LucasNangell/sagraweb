@@ -11,6 +11,7 @@ import {
 } from "@/api/provaWeb";
 import { FOLD_LINE_COLORS } from "./provaWebFoldPresets";
 import {
+  centeredCropMm,
   formatOsLabel,
   remainsMatchTarget,
   resolveSeedCrop,
@@ -198,6 +199,19 @@ export function ProvaWebCropPanel({
     void metaQuery.refetch();
   };
 
+  const targetW = seedTargetWidthMm ?? formatoLarguraMm;
+  const targetH = seedTargetHeightMm ?? formatoAlturaMm;
+  const centeredPreview =
+    widthMm > 0 && heightMm > 0 && targetW && targetH
+      ? centeredCropMm(widthMm, heightMm, targetW, targetH, "formato")
+      : null;
+  const canCenterOnFormat = Boolean(centeredPreview);
+
+  const centerOnFormat = () => {
+    if (!centeredPreview) return;
+    onChange(centeredPreview);
+  };
+
   const sourceLabel =
     crop.source === "trimbox"
       ? "TrimBox"
@@ -209,14 +223,25 @@ export function ProvaWebCropPanel({
             ? "Formato OS (centralizado)"
             : "Manual";
 
-  const targetW = seedTargetWidthMm ?? formatoLarguraMm;
-  const targetH = seedTargetHeightMm ?? formatoAlturaMm;
   const matchOs = remainsMatchTarget(remainW, remainH, targetW, targetH);
   const osFormatText = formatOsLabel(
     formatoLabel,
     formatoLarguraMm,
     formatoAlturaMm,
   );
+  const centerTargetLabel =
+    targetW && targetH
+      ? seedTargetWidthMm != null && seedTargetHeightMm != null
+        ? `Alvo capa aberta ${targetW.toFixed(0)}×${targetH.toFixed(0)} mm`
+        : `Formato ${targetW.toFixed(0)}×${targetH.toFixed(0)} mm`
+      : "Informe o formato da OS";
+  const centerDisabledTitle = !targetW || !targetH
+    ? "Formato da OS indisponível"
+    : !widthMm || !heightMm
+      ? "Aguardando metadados do PDF"
+      : !canCenterOnFormat
+        ? "O formato não cabe no MediaBox deste PDF"
+        : centerTargetLabel;
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
@@ -333,6 +358,15 @@ export function ProvaWebCropPanel({
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
+            onClick={centerOnFormat}
+            disabled={!canCenterOnFormat}
+            title={centerDisabledTitle}
+            className="rounded-lg border border-primary-green/40 bg-primary-green/10 px-2.5 py-1.5 text-xs font-medium text-primary-green hover:bg-primary-green/15 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Centralizar no formato
+          </button>
+          <button
+            type="button"
             onClick={equalizeSides}
             className="rounded-lg border border-sagra-border bg-white px-2.5 py-1.5 text-xs text-neutral-700 hover:bg-neutral-100"
           >
@@ -366,6 +400,9 @@ export function ProvaWebCropPanel({
             Zerar
           </button>
         </div>
+        {targetW && targetH ? (
+          <p className="text-[11px] text-neutral-500">{centerTargetLabel}</p>
+        ) : null}
 
         <dl className="space-y-1 rounded-lg bg-slate-50 px-3 py-2 text-xs text-neutral-600">
           <div className="flex justify-between gap-2">

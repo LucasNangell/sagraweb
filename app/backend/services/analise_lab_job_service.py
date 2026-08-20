@@ -209,21 +209,41 @@ class _LabJobRuntime:
             )
 
             pasta = session.get("pastaRender") or LAB_PASTA_RENDER
-            prepared = prepare_lab_render(session, folder)
-            try:
-                write_page_map(folder, pasta, prepared["page_map"])
-            except Exception:
-                logger.warning(
-                    "Análise Lab: falha ao gravar pageMap (%s/%s)",
-                    os_id,
-                    ano,
-                    exc_info=True,
+            dirty_pages = _load_dirty_pages(folder, pasta)
+
+            if dirty_pages:
+                from services.analise_lab_sources_service import (
+                    build_source_page_map,
+                    fontes_from_session,
+                    load_page_map,
+                    rerender_lab_pages,
+                    write_page_map,
                 )
 
-            dirty_pages = _load_dirty_pages(folder, pasta)
-            if dirty_pages:
-                from services.analise_lab_sources_service import rerender_lab_pages
-
+                page_map = load_page_map(folder, pasta)
+                if not page_map:
+                    try:
+                        page_map = build_source_page_map(
+                            fontes_from_session(session), folder
+                        )
+                        write_page_map(folder, pasta, page_map)
+                    except Exception:
+                        logger.warning(
+                            "Análise Lab: falha ao montar pageMap parcial (%s/%s)",
+                            os_id,
+                            ano,
+                            exc_info=True,
+                        )
+                        page_map = {"byComponent": {}}
+                prepared = {
+                    "mode": (session.get("modo") or "unico"),
+                    "source_paths": [],
+                    "crop_json": session.get("cropJson")
+                    if isinstance(session.get("cropJson"), dict)
+                    else None,
+                    "page_map": page_map,
+                    "concatenated": False,
+                }
                 try:
                     rerender_lab_pages(
                         session=session,
@@ -244,6 +264,16 @@ class _LabJobRuntime:
                         ano,
                     )
                     _clear_dirty_pages(folder, pasta)
+                    prepared = prepare_lab_render(session, folder)
+                    try:
+                        write_page_map(folder, pasta, prepared["page_map"])
+                    except Exception:
+                        logger.warning(
+                            "Análise Lab: falha ao gravar pageMap (%s/%s)",
+                            os_id,
+                            ano,
+                            exc_info=True,
+                        )
                     ensure_prova_web_pages(
                         ano,
                         os_id,
@@ -257,6 +287,16 @@ class _LabJobRuntime:
                         progressive_publish=True,
                     )
             else:
+                prepared = prepare_lab_render(session, folder)
+                try:
+                    write_page_map(folder, pasta, prepared["page_map"])
+                except Exception:
+                    logger.warning(
+                        "Análise Lab: falha ao gravar pageMap (%s/%s)",
+                        os_id,
+                        ano,
+                        exc_info=True,
+                    )
                 ensure_prova_web_pages(
                     ano,
                     os_id,

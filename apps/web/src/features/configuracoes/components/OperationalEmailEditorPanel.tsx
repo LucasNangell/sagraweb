@@ -29,6 +29,7 @@ const GRUPO_LABELS: Record<EmailTemplateModelGrupo, string> = {
   prova_os: "Prova OS",
   prova_sp: "Prova SP",
   problema_tecnico: "Problemas técnicos",
+  timbrado_a4_digital: "Timbrado A4 Digital",
 };
 
 const VARIANTE_LABELS: Record<EmailTemplateModelVariante, string> = {
@@ -39,6 +40,9 @@ const VARIANTE_LABELS: Record<EmailTemplateModelVariante, string> = {
 function variantHint(grupo: EmailTemplateModelGrupo, variante: EmailTemplateModelVariante) {
   if (grupo === "problema_tecnico" && variante === "sem_portal") {
     return "Use {TEXTO_AQUI} no ponto onde os problemas técnicos devem aparecer no corpo do e-mail.";
+  }
+  if (grupo === "timbrado_a4_digital") {
+    return "Envio com os 2 DOCX (Cor/PB) da pasta Sefoc — sem portal.";
   }
   if (grupo.startsWith("prova_") && variante === "sem_portal") {
     return "Quando este modelo estiver ativo e «habilitar envio de anexo» estiver ligado, o PDF selecionado da prova será anexado ao e-mail.";
@@ -160,7 +164,10 @@ export function OperationalEmailEditorPanel({
         nome: nome.trim() || `Novo modelo (${VARIANTE_LABELS[creatingVariante]})`,
         assunto,
         html: html.trim() || "<html><body><p>Novo modelo</p></body></html>",
-        anexar_pdf: creatingGrupo.startsWith("prova_") && creatingVariante === "sem_portal",
+        anexar_pdf:
+          (creatingGrupo.startsWith("prova_") ||
+            creatingGrupo === "timbrado_a4_digital") &&
+          creatingVariante === "sem_portal",
       });
     },
     onSuccess: (data) => {

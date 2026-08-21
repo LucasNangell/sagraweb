@@ -1668,6 +1668,30 @@ class TestTimbradoA4DigitalJob:
             "get_os_folder_basename",
             lambda ano, nro: prefix,
         )
+        movements: list[dict] = []
+
+        def fake_add(cursor, nro, ano, situacao, setor, ponto, obs):
+            movements.append(
+                {
+                    "nro": nro,
+                    "ano": ano,
+                    "situacao": situacao,
+                    "setor": setor,
+                    "ponto": ponto,
+                    "obs": obs,
+                }
+            )
+            return "ok"
+
+        monkeypatch.setattr(
+            "routers.analise_routes.add_movement_internal",
+            fake_add,
+        )
+        monkeypatch.setattr(
+            svc.db,
+            "execute_transaction",
+            lambda ops: [op(object()) for op in ops],
+        )
 
         updated = svc.complete_job(
             job_id=88,
@@ -1681,6 +1705,11 @@ class TestTimbradoA4DigitalJob:
         assert updated["prova_revisao"] == svc.PROVA_REVISAO_NA
         assert updated["artefatos"] == names
         assert updated["tem_arquivo_pdf"] is False
+        assert len(movements) == 1
+        assert movements[0]["situacao"] == svc.SITUACAO_ENCAM_DOCUM
+        assert movements[0]["setor"] == svc.SETOR_SEFOC
+        assert movements[0]["obs"] == svc.OBS_ENVIAR_TIMBRADO_DIGITAL
+        assert movements[0]["ponto"] == "918713"
 
     def test_complete_aceita_docx_sem_svg(self, monkeypatch, tmp_path):
         from services import papelaria_jobs_service as svc
@@ -1749,6 +1778,15 @@ class TestTimbradoA4DigitalJob:
             svc,
             "get_os_folder_basename",
             lambda ano, nro: prefix,
+        )
+        monkeypatch.setattr(
+            "routers.analise_routes.add_movement_internal",
+            lambda *a, **k: "ok",
+        )
+        monkeypatch.setattr(
+            svc.db,
+            "execute_transaction",
+            lambda ops: [op(object()) for op in ops],
         )
 
         updated = svc.complete_job(

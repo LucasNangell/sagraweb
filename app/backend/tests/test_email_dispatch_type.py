@@ -1,9 +1,5 @@
-"""Testes — classificação prova vs problemas técnicos por andamento."""
+"""Testes — classificação prova vs problemas técnicos vs Timbrado Digital por andamento."""
 from __future__ import annotations
-
-from unittest.mock import MagicMock
-
-import pytest
 
 
 class TestEmailDispatchTypeService:
@@ -52,6 +48,45 @@ class TestEmailDispatchTypeService:
         )
 
         assert svc.resolve_email_dispatch_type(100, 2026) == "pt"
+
+    def test_timbrado_digital_by_observation(self, monkeypatch):
+        from services import email_dispatch_type_service as svc
+
+        monkeypatch.setattr(svc, "_has_pt_relatorio", lambda os_id, ano: False)
+        monkeypatch.setattr(
+            svc,
+            "fetch_recent_andamentos",
+            lambda os_id, ano, limit=5: [
+                {
+                    "situacao": "Encam. de Docum.",
+                    "observacao": "Enviar Timbrado Digital",
+                },
+            ],
+        )
+
+        assert svc.is_timbrado_digital_dispatch(5954, 2026) is True
+        assert svc.resolve_email_dispatch_type(5954, 2026) == "timbrado_digital"
+
+    def test_timbrado_obs_case_insensitive(self):
+        from services.email_dispatch_type_service import is_timbrado_digital_obs
+
+        assert is_timbrado_digital_obs("enviar TIMBRADO digital") is True
+        assert is_timbrado_digital_obs("Enviar Prova 1") is False
+
+    def test_enviar_prova_does_not_match_timbrado(self, monkeypatch):
+        from services import email_dispatch_type_service as svc
+
+        monkeypatch.setattr(svc, "_has_pt_relatorio", lambda os_id, ano: False)
+        monkeypatch.setattr(
+            svc,
+            "fetch_recent_andamentos",
+            lambda os_id, ano, limit=5: [
+                {"situacao": "Encam. de Docum.", "observacao": "Enviar Prova 2"},
+            ],
+        )
+
+        assert svc.is_timbrado_digital_dispatch(5954, 2026) is False
+        assert svc.resolve_email_dispatch_type(5954, 2026) == "proof"
 
     def test_extract_pt_versao_from_obs(self):
         from services.email_dispatch_type_service import extract_pt_versao_from_obs
@@ -120,3 +155,34 @@ class TestGetPtHtmlDispatchType:
         result = email_routes.get_pt_html(2026, 100)
         assert result["type"] == "proof"
         assert "prova ativa" in result["html"]
+
+    def test_returns_timbrado_digital(self, monkeypatch):
+        from routers import email_routes
+
+        monkeypatch.setattr(
+            email_routes.db,
+            "execute_query",
+            lambda sql, params=None: [],
+        )
+        monkeypatch.setattr(
+            "services.email_dispatch_type_service.resolve_email_dispatch_type",
+            lambda os_id, ano: "timbrado_digital",
+        )
+        monkeypatch.setattr(
+            email_routes,
+            "_build_timbrado_digital_html_preview_payload",
+            lambda os_id, ano: {
+                "html": "<p>Timbrado</p>",
+                "type": "timbrado_digital",
+                "send_mode": "anexo",
+                "anexar_pdf": True,
+                "timbrado_attachments": [
+                    {"name": "x-TimbradoA4Digital-Cor.docx", "role": "cor"},
+                    {"name": "x-TimbradoA4Digital-PB.docx", "role": "pb"},
+                ],
+            },
+        )
+
+        result = email_routes.get_pt_html(2026, 5954)
+        assert result["type"] == "timbrado_digital"
+        assert len(result["timbrado_attachments"]) == 2

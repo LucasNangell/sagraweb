@@ -36,15 +36,13 @@ def _resolve_ews_auth(
     if user and pwd:
         try:
             from requests_ntlm import HttpNtlmAuth
-
-            logger.info("EWS: usando autenticação NTLM (credenciais explícitas)")
-            return HttpNtlmAuth(user, pwd)
-        except ImportError:
-            logger.warning(
-                "Credenciais EWS fornecidas, mas requests_ntlm não está instalado; "
-                "usando SSPI (HttpNegotiateAuth)."
-            )
-            return HttpNegotiateAuth()
+        except ImportError as exc:
+            raise RuntimeError(
+                "Credenciais EWS fornecidas, mas o pacote requests-ntlm não está instalado. "
+                "Instale com: pip install requests-ntlm"
+            ) from exc
+        logger.info("EWS: usando autenticação NTLM (credenciais explícitas)")
+        return HttpNtlmAuth(user, pwd)
 
     _ensure_dotenv_loaded()
     env_user = (os.environ.get("EWS_USERNAME") or os.environ.get("EWS_USER") or "").strip()
@@ -52,14 +50,13 @@ def _resolve_ews_auth(
     if env_user and env_password:
         try:
             from requests_ntlm import HttpNtlmAuth
-
-            logger.info("EWS: usando autenticação NTLM (EWS_USERNAME definido no ambiente)")
-            return HttpNtlmAuth(env_user, env_password)
-        except ImportError:
-            logger.warning(
-                "EWS_USERNAME/EWS_PASSWORD definidos, mas requests_ntlm não está instalado; "
-                "usando SSPI (HttpNegotiateAuth)."
-            )
+        except ImportError as exc:
+            raise RuntimeError(
+                "EWS_USERNAME/EWS_PASSWORD definidos, mas o pacote requests-ntlm não está instalado. "
+                "Instale com: pip install requests-ntlm"
+            ) from exc
+        logger.info("EWS: usando autenticação NTLM (EWS_USERNAME definido no ambiente)")
+        return HttpNtlmAuth(env_user, env_password)
     return HttpNegotiateAuth()
 
 

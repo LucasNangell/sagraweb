@@ -633,7 +633,7 @@ def send_test_email_template(template_id: str, body: EmailTemplateSendTestReques
 
 
 class EmailTemplateModelCreateRequest(BaseModel):
-    grupo: Literal["prova_os", "prova_sp", "problema_tecnico"]
+    grupo: Literal["prova_os", "prova_sp", "problema_tecnico", "timbrado_a4_digital"]
     variante: Literal["portal", "sem_portal"]
     nome: str = Field(..., min_length=1, max_length=120)
     assunto: str = ""

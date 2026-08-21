@@ -159,6 +159,114 @@ def latest_proof_pdf_path(ano: int, os_id: int) -> Optional[str]:
     return max(pdfs, key=os.path.getmtime)
 
 
+_TIMBRADO_COR_RE = re.compile(r"timbradoa4digital-cor\.docx$", re.IGNORECASE)
+_TIMBRADO_PB_RE = re.compile(r"timbradoa4digital-pb\.docx$", re.IGNORECASE)
+
+
+def validate_attachment_file_size(path: str, *, label: str = "arquivo") -> None:
+    """Bloqueia anexo acima do limite configurável (padrão 50 MB)."""
+    try:
+        size = os.path.getsize(path)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Não foi possível ler o tamanho do {label}.",
+        ) from exc
+    limit = _max_attachment_bytes()
+    if size > limit:
+        mb = limit // (1024 * 1024)
+        raise HTTPException(
+            status_code=400,
+            detail=f"O {label} excede o limite de {mb} MB para anexo em e-mail.",
+        )
+
+
+def resolve_timbrado_digital_docx_paths(ano: int, os_id: int) -> dict[str, Any]:
+    """
+    Localiza os DOCX Cor/PB do Timbrado A4 Digital em Sefoc/.
+
+    Prefere o par mais recente (por mtime do Cor, com PB correspondente).
+    """
+    sefoc_path = _sefoc_dir(ano, os_id)
+    if not sefoc_path:
+        raise HTTPException(
+            status_code=404,
+            detail="Pasta Sefoc da OS não encontrada.",
+        )
+
+    cor_candidates: list[tuple[float, str]] = []
+    pb_by_prefix: dict[str, str] = {}
+
+    for path in glob.glob(os.path.join(sefoc_path, "*.docx")):
+        if not os.path.isfile(path):
+            continue
+        name = os.path.basename(path)
+        if not _is_path_under_dir(path, sefoc_path):
+            continue
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            mtime = 0.0
+        lower = name.lower()
+        if _TIMBRADO_COR_RE.search(lower):
+            cor_candidates.append((mtime, path))
+        elif _TIMBRADO_PB_RE.search(lower):
+            # prefixo até -TimbradoA4Digital
+            idx = lower.rfind("-timbradoa4digital-")
+            prefix = name[:idx] if idx >= 0 else name
+            pb_by_prefix[prefix.lower()] = path
+
+    if not cor_candidates:
+        raise HTTPException(
+            status_code=404,
+            detail="DOCX Timbrado A4 Digital (Cor) não encontrado na pasta Sefoc.",
+        )
+
+    cor_candidates.sort(key=lambda item: item[0], reverse=True)
+    chosen_cor = None
+    chosen_pb = None
+    for _mtime, cor_path in cor_candidates:
+        cor_name = os.path.basename(cor_path)
+        lower = cor_name.lower()
+        idx = lower.rfind("-timbradoa4digital-")
+        prefix = cor_name[:idx] if idx >= 0 else cor_name
+        pb_path = pb_by_prefix.get(prefix.lower())
+        if pb_path and os.path.isfile(pb_path):
+            chosen_cor = cor_path
+            chosen_pb = pb_path
+            break
+
+    if not chosen_cor or not chosen_pb:
+        # fallback: Cor mais recente + qualquer PB mais recente
+        chosen_cor = cor_candidates[0][1]
+        pb_all = [
+            (os.path.getmtime(p), p)
+            for p in pb_by_prefix.values()
+            if os.path.isfile(p)
+        ]
+        if not pb_all:
+            raise HTTPException(
+                status_code=404,
+                detail="DOCX Timbrado A4 Digital (PB) não encontrado na pasta Sefoc.",
+            )
+        pb_all.sort(key=lambda item: item[0], reverse=True)
+        chosen_pb = pb_all[0][1]
+
+    validate_attachment_file_size(chosen_cor, label="DOCX Cor")
+    validate_attachment_file_size(chosen_pb, label="DOCX PB")
+
+    return {
+        "cor_path": chosen_cor,
+        "pb_path": chosen_pb,
+        "cor_name": os.path.basename(chosen_cor),
+        "pb_name": os.path.basename(chosen_pb),
+        "files": [
+            {"name": os.path.basename(chosen_cor), "role": "cor"},
+            {"name": os.path.basename(chosen_pb), "role": "pb"},
+        ],
+    }
+
+
 def resolve_proof_pdf_for_token_row(
     proof_row: dict,
     ano: int,

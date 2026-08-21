@@ -312,6 +312,77 @@ def _build_proof_html_preview_payload(
         "template_model_id": (proof_plan.get("model") or {}).get("id"),
     }
 
+
+def _build_timbrado_digital_html_preview_payload(
+    os_id: int,
+    ano: int,
+) -> dict:
+    """Prévia de envio Timbrado A4 Digital (modelo + 2 DOCX)."""
+    from services.email_template_model_service import (
+        render_timbrado_digital_email,
+        resolve_timbrado_digital_send_plan,
+    )
+    from services.proof_files_service import resolve_timbrado_digital_docx_paths
+
+    plan = resolve_timbrado_digital_send_plan()
+    solicitante = "Solicitante"
+    produto = "Produto"
+    try:
+        q_dados = """
+            SELECT
+                p.NomeUsuario as solicitante,
+                d.TipoPublicacaoLink as produto
+            FROM tabProtocolos p
+            LEFT JOIN tabDetalhesServico d ON
+                p.NroProtocolo = d.NroProtocoloLinkDet AND
+                p.AnoProtocolo = d.AnoProtocoloLinkDet
+            WHERE p.NroProtocolo = %(os)s AND p.AnoProtocolo = %(ano)s
+        """
+        res_dados = db.execute_query(q_dados, {"os": os_id, "ano": ano})
+        if res_dados:
+            solicitante = res_dados[0].get("solicitante") or solicitante
+            produto = res_dados[0].get("produto") or produto
+    except Exception as e_det:
+        logger.warning("Erro buscando detalhes OS preview Timbrado Digital: %s", e_det)
+
+    variables = {
+        "nr_os": os_id,
+        "ano": ano,
+        "produto": produto,
+        "solicitante": solicitante,
+        "versao": "1",
+        "link": "",
+        "jobname": str(os_id),
+        "ordernumber": str(ano),
+    }
+    _, final_html = render_timbrado_digital_email(variables, plan=plan)
+
+    attachments_meta: list[dict] = []
+    debug_path = "Caminho não determinado"
+    try:
+        resolved = resolve_timbrado_digital_docx_paths(ano, os_id)
+        attachments_meta = list(resolved.get("files") or [])
+        import os as _os
+
+        os_path = _get_os_folder_path(ano, os_id)
+        debug_path = _os.path.join(os_path, "Sefoc") if os_path else debug_path
+    except Exception as exc:
+        logger.warning("DOCX Timbrado Digital indisponíveis na prévia: %s", exc)
+        debug_path = str(exc)
+
+    return {
+        "html": final_html,
+        "versao": "1",
+        "data": datetime.now().strftime("%Y-%m-%d"),
+        "type": "timbrado_digital",
+        "detected_attachment": ", ".join(f["name"] for f in attachments_meta) or None,
+        "timbrado_attachments": attachments_meta,
+        "debug_path": debug_path,
+        "send_mode": "anexo",
+        "anexar_pdf": True,
+        "template_model_id": (plan.get("model") or {}).get("id"),
+    }
+
 # --- PYDANTIC MODELS ---
 
 class MarkReadRequest(BaseModel):
@@ -421,7 +492,7 @@ def _normalize_content_id(raw: str) -> str:
 
 def _routing_type_key(email_type: str) -> str:
     key = (email_type or "pt").strip().lower()
-    if key in {"proof", "apogee", "reply"}:
+    if key in {"proof", "apogee", "reply", "timbrado_digital"}:
         return key
     return "pt"
 
@@ -1223,6 +1294,14 @@ def _pendencia_andamento_meta(
         else:
             lines.append("- (sem destinatários)")
         return "\n".join(lines), "Aguard. Aprovação"
+    if email_type == "timbrado_digital":
+        recipients = [str(a).strip() for a in (to or []) if str(a).strip()]
+        lines = ["Timbrado Digital enviado para:"]
+        if recipients:
+            lines.extend(f"- {addr}" for addr in recipients)
+        else:
+            lines.append("- (sem destinatários)")
+        return "\n".join(lines), "Aguard. Aprovação"
     if email_type == "reply":
         return "Resposta enviada por e-mail", "Pendência Usuário"
     if email_type == "apogee":
@@ -1392,6 +1471,15 @@ def send_pt_email(request: EmailPTRequest, session: SessionData = Depends(requir
                 request.ano,
             )
             email_type = "pt"
+        elif email_type in ("proof", "pt") and resolve_email_dispatch_type(
+            request.os, request.ano
+        ) == "timbrado_digital":
+            logger.info(
+                "Tipo de envio corrigido para Timbrado Digital (OS %s/%s) com base na observação",
+                request.os,
+                request.ano,
+            )
+            email_type = "timbrado_digital"
 
         # --- PREPARAÇÃO DE DADOS (COMUM) ---
         proof_file_basename = ""
@@ -1559,6 +1647,59 @@ def send_pt_email(request: EmailPTRequest, session: SessionData = Depends(requir
                 )
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        elif email_type == "timbrado_digital":
+            from services.email_template_model_service import (
+                render_timbrado_digital_email,
+                resolve_timbrado_digital_send_plan,
+            )
+            from services.proof_files_service import resolve_timbrado_digital_docx_paths
+
+            plan = resolve_timbrado_digital_send_plan()
+            resolved = resolve_timbrado_digital_docx_paths(request.ano, request.os)
+            attachments_to_send = [resolved["cor_path"], resolved["pb_path"]]
+            proof_file_basename = f"{resolved['cor_name']}; {resolved['pb_name']}"
+            send_mode_label = "anexo"
+            nova_versao = (request.versao or "").strip() or "1"
+
+            q_dados = """
+                SELECT
+                    p.NomeUsuario as solicitante,
+                    d.TipoPublicacaoLink as produto
+                FROM tabProtocolos p
+                LEFT JOIN tabDetalhesServico d ON
+                    p.NroProtocolo = d.NroProtocoloLinkDet AND
+                    p.AnoProtocolo = d.AnoProtocoloLinkDet
+                WHERE p.NroProtocolo = %(os)s AND p.AnoProtocolo = %(ano)s
+            """
+            res_dados = db.execute_query(q_dados, {"os": request.os, "ano": request.ano})
+            solicitante = "Solicitante"
+            produto = "Produto"
+            if res_dados:
+                solicitante = res_dados[0].get("solicitante") or "Solicitante"
+                produto = res_dados[0].get("produto") or "Produto"
+
+            variables = {
+                "nr_os": request.os,
+                "ano": request.ano,
+                "versao": nova_versao,
+                "produto": produto,
+                "solicitante": solicitante,
+                "link": "",
+                "jobname": str(request.os),
+                "ordernumber": str(request.ano),
+            }
+            try:
+                assunto, email_html = render_timbrado_digital_email(
+                    variables, plan=plan
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            logger.info(
+                "Timbrado Digital: envio com anexos DOCX (modelo id=%s): %s",
+                (plan.get("model") or {}).get("id"),
+                proof_file_basename,
+            )
 
         else:
              # --- LÓGICA DE REPLY ---
@@ -1778,6 +1919,12 @@ def send_pt_email(request: EmailPTRequest, session: SessionData = Depends(requir
                     "A prova ficará disponível para visualização no portal pelo link enviado."
                 )
             attachment_names = [os.path.basename(p) for p in attachments_to_send]
+        elif email_type == "timbrado_digital":
+            message = (
+                "E-mail de Timbrado A4 Digital enviado com sucesso. "
+                "Os arquivos Word (Cor e PB) foram anexados."
+            )
+            attachment_names = [os.path.basename(p) for p in attachments_to_send]
         else:
             message = "E-mail enviado com sucesso"
             attachment_names = [os.path.basename(p) for p in attachments_to_send]
@@ -1850,11 +1997,15 @@ def get_pt_html(ano: int, os: int):
 
         versao = result[0].get("Versao") if result else None
 
-        if resolve_email_dispatch_type(os, ano) == "pt":
+        dispatch = resolve_email_dispatch_type(os, ano)
+        if dispatch == "pt":
             try:
                 return _build_pt_html_preview_payload(os, ano, versao=versao)
             except ValueError as exc:
                 raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+        if dispatch == "timbrado_digital":
+            return _build_timbrado_digital_html_preview_payload(os, ano)
 
         return _build_proof_html_preview_payload(os, ano, versao=versao)
 

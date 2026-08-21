@@ -37,6 +37,10 @@ CDR_BACKUP_NAME_FRAGMENT = "cópia_de_segurança"
 INPUT_CDR_DADOS_KEY = "__input_cdr"
 ARTEFATOS_DADOS_KEY = "__artefatos"
 
+OBS_ENVIAR_TIMBRADO_DIGITAL = "Enviar Timbrado Digital"
+SITUACAO_ENCAM_DOCUM = "Encam. de Docum."
+SETOR_SEFOC = "SEFOC"
+
 PRODUTO_TIMBRADO_A4_DIGITAL = "Timbrado A4 (Digital)"
 PROVA_REVISAO_NA = "n_a"
 
@@ -1876,6 +1880,39 @@ def _complete_timbrado_a4_digital_job(
     updated = get_job(job_id)
     if not updated or updated["status"] != STATUS_COMPLETED:
         raise ValueError("Job não pôde ser concluído (status alterado).")
+
+    ponto = (str(job.get("solicitado_por") or "")).strip() or "0"
+    try:
+        from routers.analise_routes import add_movement_internal
+
+        def _encam_tx(cursor):
+            return add_movement_internal(
+                cursor,
+                int(job["nro_protocolo"]),
+                int(job["ano_protocolo"]),
+                SITUACAO_ENCAM_DOCUM,
+                SETOR_SEFOC,
+                ponto,
+                OBS_ENVIAR_TIMBRADO_DIGITAL,
+            )
+
+        db.execute_transaction([_encam_tx])
+        append_job_log(
+            job_id,
+            f"Andamento {SITUACAO_ENCAM_DOCUM} — {OBS_ENVIAR_TIMBRADO_DIGITAL}.",
+            "info",
+        )
+    except Exception as exc:
+        logger.warning(
+            "Job %s: falha ao lançar andamento Timbrado Digital: %s",
+            job_id,
+            exc,
+        )
+        append_job_log(
+            job_id,
+            f"Aviso: andamento Encam. de Docum. não registrado ({exc}).",
+            "warning",
+        )
 
     msg = log_resumo or "Timbrado A4 Digital concluído (DOCX Cor/PB)."
     append_job_log(job_id, msg[:4000], "info")

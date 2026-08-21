@@ -89,7 +89,6 @@ export function EmailPendenciaDetail({
   const os = item?.os ?? null;
   const ano = item?.ano ?? null;
   const isApogee = item ? isApogeePendencia(item) : false;
-  const requiresVersao = !isApogee;
 
   const apogeePreviewHtml = useMemo(() => {
     if (!isApogee || !item?.body) return "";
@@ -104,8 +103,16 @@ export function EmailPendenciaDetail({
   const protocoloQuery = usePendenciaProtocolo(ano, os);
 
   const emailType = isApogee ? "apogee" : (ptQuery.data?.type ?? "pt");
+  const isTimbradoMode =
+    !isApogee &&
+    emailType === "timbrado_digital" &&
+    !ptQuery.isLoading &&
+    !ptQuery.isError;
   const isProofMode =
-    !isApogee && emailType === "proof" && !ptQuery.isLoading && !ptQuery.isError;
+    !isApogee &&
+    emailType === "proof" &&
+    !ptQuery.isLoading &&
+    !ptQuery.isError;
   const proofUsesAttachment =
     isProofMode &&
     (ptQuery.data?.anexar_pdf === true || ptQuery.data?.send_mode === "anexo");
@@ -114,6 +121,8 @@ export function EmailPendenciaDetail({
     (ptQuery.data?.use_inline_body === true || ptQuery.data?.send_mode === "sem_portal");
 
   const proofFilesQuery = useEmailProofFiles(ano, os, isProofMode);
+
+  const requiresVersao = !isApogee && !isTimbradoMode;
 
   const isDeputado =
     protocoloQuery.data?.CategoriaLink?.toUpperCase() === "DEPUTADO";
@@ -259,6 +268,8 @@ export function EmailPendenciaDetail({
     proofFilesQuery.data?.files.length ?? 0,
     selectedProofFile,
   );
+  const timbradoBlocked =
+    isTimbradoMode && !(ptQuery.data?.timbrado_attachments?.length);
 
   const proofFolderRow: OsSearchRow | null =
     item && isProofMode
@@ -287,6 +298,16 @@ export function EmailPendenciaDetail({
     }
     if (emailType === "proof" && !isApogee && !selectedProofFile.trim()) {
       window.alert("Selecione o PDF de prova que será enviado ao cliente.");
+      return;
+    }
+    if (
+      emailType === "timbrado_digital" &&
+      !isApogee &&
+      !(ptQuery.data?.timbrado_attachments?.length)
+    ) {
+      window.alert(
+        "DOCX do Timbrado A4 Digital não encontrados na pasta Sefoc. Gere o Timbrado Digital antes de enviar.",
+      );
       return;
     }
     if (isApogee && !item.body?.trim()) {
@@ -485,7 +506,11 @@ export function EmailPendenciaDetail({
     registeringAndamento ||
     (isApogee
       ? !apogeePreviewHtml
-      : ptQuery.isLoading || ptQuery.isError || !html || (emailType === "proof" && proofBlocked));
+      : ptQuery.isLoading ||
+        ptQuery.isError ||
+        !html ||
+        (emailType === "proof" && proofBlocked) ||
+        (emailType === "timbrado_digital" && timbradoBlocked));
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden lg:flex-row lg:overflow-hidden">
@@ -581,6 +606,24 @@ export function EmailPendenciaDetail({
                   : undefined
               }
             />
+          ) : null}
+
+          {isTimbradoMode ? (
+            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-[11px] font-semibold text-slate-700">
+                Anexos Timbrado A4 Digital
+              </p>
+              <ul className="mt-1 space-y-0.5 font-mono text-[11px] text-slate-600">
+                {(ptQuery.data?.timbrado_attachments ?? []).map((f) => (
+                  <li key={f.name}>{f.name}</li>
+                ))}
+                {!ptQuery.data?.timbrado_attachments?.length ? (
+                  <li className="text-amber-700">
+                    DOCX não encontrados em Sefoc — gere o Timbrado Digital.
+                  </li>
+                ) : null}
+              </ul>
+            </div>
           ) : null}
 
           <label className={cn(emailLabelClass, "mt-3 block")}>

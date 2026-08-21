@@ -60,6 +60,7 @@ const GRUPO_LABELS: Record<EmailTemplateModelGrupo, string> = {
   prova_os: "Prova OS",
   prova_sp: "Prova SP",
   problema_tecnico: "Problemas técnicos",
+  timbrado_a4_digital: "Timbrado A4 Digital",
 };
 
 const VARIANTE_LABELS: Record<EmailTemplateModelVariante, string> = {
@@ -67,7 +68,12 @@ const VARIANTE_LABELS: Record<EmailTemplateModelVariante, string> = {
   sem_portal: "Sem portal",
 };
 
-const OPERATIONAL_GRUPOS: EmailTemplateModelGrupo[] = ["prova_os", "prova_sp", "problema_tecnico"];
+const OPERATIONAL_GRUPOS: EmailTemplateModelGrupo[] = [
+  "prova_os",
+  "prova_sp",
+  "problema_tecnico",
+  "timbrado_a4_digital",
+];
 
 type EmailListSelection =
   | { kind: "system"; id: string }
@@ -872,21 +878,25 @@ export function EmailTemplatesSection() {
                     </button>
                   ))}
                   <div className="flex flex-wrap gap-1 px-1 pb-2">
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50"
-                      onClick={() => startOperationalCreate(grupo, "portal")}
-                    >
-                      <Plus className="size-3" />
-                      Novo (portal)
-                    </button>
+                    {grupo !== "timbrado_a4_digital" ? (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50"
+                        onClick={() => startOperationalCreate(grupo, "portal")}
+                      >
+                        <Plus className="size-3" />
+                        Novo (portal)
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50"
                       onClick={() => startOperationalCreate(grupo, "sem_portal")}
                     >
                       <Plus className="size-3" />
-                      Novo (sem portal)
+                      {grupo === "timbrado_a4_digital"
+                        ? "Novo modelo"
+                        : "Novo (sem portal)"}
                     </button>
                   </div>
                 </div>

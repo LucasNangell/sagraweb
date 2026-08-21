@@ -50,8 +50,9 @@ export interface PtHtmlResponse {
   html: string;
   versao?: string | null;
   data?: string | null;
-  type: "pt" | "proof";
+  type: "pt" | "proof" | "timbrado_digital";
   detected_attachment?: string | null;
+  timbrado_attachments?: { name: string; role?: string }[];
   debug_path?: string | null;
   send_mode?: "portal" | "sem_portal" | "anexo" | string | null;
   anexar_pdf?: boolean;
@@ -154,14 +155,16 @@ export interface EmailExchangeConfig {
   send_mailbox_os_lt_5000: string;
   send_mailbox_os_gte_5000: string;
   send_routing?: {
-    by_type?: Partial<Record<"pt" | "proof" | "apogee" | "reply", string>>;
+    by_type?: Partial<
+      Record<"pt" | "proof" | "timbrado_digital" | "apogee" | "reply", string>
+    >;
   };
   sent_folder_routing?: {
     by_mailbox?: Record<
       string,
       Partial<
         Record<
-          "pt" | "proof" | "apogee" | "reply",
+          "pt" | "proof" | "timbrado_digital" | "apogee" | "reply",
           { id?: string; name: string; parent?: string }
         >
       >
@@ -203,7 +206,7 @@ export interface EmailFoldersResult {
 export interface EmailSendPlanResponse {
   success: boolean;
   plan: {
-    type: "pt" | "proof" | "apogee" | "reply";
+    type: "pt" | "proof" | "timbrado_digital" | "apogee" | "reply";
     mailbox: string;
     mailbox_source: string;
     target_folder: {

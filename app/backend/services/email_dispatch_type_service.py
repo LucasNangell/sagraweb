@@ -1,4 +1,4 @@
-"""Classificação do tipo de envio de e-mail (prova vs problemas técnicos) por OS/ano."""
+"""Classificação do tipo de envio de e-mail (prova vs problemas técnicos vs Timbrado Digital) por OS/ano."""
 from __future__ import annotations
 
 import logging
@@ -9,10 +9,13 @@ from database import db
 
 logger = logging.getLogger(__name__)
 
-EmailDispatchType = Literal["pt", "proof"]
+EmailDispatchType = Literal["pt", "proof", "timbrado_digital"]
 
 SITUACAO_PROBLEMAS_TECNICOS = "Problemas Técnicos"
 SITUACAO_ENCAM_DOCUM = "Encam. de Docum."
+OBS_ENVIAR_TIMBRADO_DIGITAL = "Enviar Timbrado Digital"
+
+
 def _normalize_situacao(value: Any) -> str:
     return str(value or "").strip()
 
@@ -73,6 +76,21 @@ def is_problema_tecnico_dispatch(os_id: int, ano: int) -> bool:
     return previous_sit == SITUACAO_PROBLEMAS_TECNICOS
 
 
+def is_timbrado_digital_obs(observacao: str) -> bool:
+    return OBS_ENVIAR_TIMBRADO_DIGITAL.lower() in _normalize_obs(observacao).lower()
+
+
+def is_timbrado_digital_dispatch(os_id: int, ano: int) -> bool:
+    """Encam. de Docum. atual com observação 'Enviar Timbrado Digital'."""
+    rows = fetch_recent_andamentos(os_id, ano, limit=1)
+    if not rows:
+        return False
+    current = rows[0]
+    if _normalize_situacao(current.get("situacao")) != SITUACAO_ENCAM_DOCUM:
+        return False
+    return is_timbrado_digital_obs(str(current.get("observacao") or ""))
+
+
 def extract_pt_versao_from_obs(observacao: str) -> Optional[str]:
     obs = _normalize_obs(observacao)
     match = re.search(r"ptv\s*([0-9]+(?:\.[0-9]+)?)", obs, re.IGNORECASE)
@@ -85,11 +103,12 @@ def extract_pt_versao_from_obs(observacao: str) -> Optional[str]:
 
 def resolve_email_dispatch_type(os_id: int, ano: int) -> EmailDispatchType:
     """
-    Define se o envio pendente é prova ou problemas técnicos.
+    Define se o envio pendente é PT, Timbrado Digital ou prova.
 
     1. RelatorioEmail/HTML na análise → PT
     2. Encam. de Docum. logo após Problemas Técnicos → PT
-    3. Caso contrário → prova
+    3. Encam. de Docum. com obs Enviar Timbrado Digital → timbrado_digital
+    4. Caso contrário → prova
     """
     if _has_pt_relatorio(os_id, ano):
         return "pt"
@@ -100,6 +119,13 @@ def resolve_email_dispatch_type(os_id: int, ano: int) -> EmailDispatchType:
             ano,
         )
         return "pt"
+    if is_timbrado_digital_dispatch(os_id, ano):
+        logger.info(
+            "Tipo de e-mail Timbrado Digital inferido por observação (OS %s/%s)",
+            os_id,
+            ano,
+        )
+        return "timbrado_digital"
     return "proof"
 
 

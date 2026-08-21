@@ -133,7 +133,7 @@ Se `username` + `password` forem passados ao construtor **ou** se existirem no a
 - `EWS_USERNAME` / `EWS_USER`
 - `EWS_PASSWORD`
 
-→ usa `HttpNtlmAuth` (`requests_ntlm`), desde que o pacote esteja instalado.
+→ usa `HttpNtlmAuth` (`requests_ntlm`). O pacote **`requests-ntlm` é obrigatório** nesse modo; se estiver ausente, a API falha com erro explícito (não faz fallback silencioso para SSPI).
 
 ### 4.2 SSPI (padrão em produção Windows)
 
@@ -148,9 +148,9 @@ Nesse modo, a identidade é a **conta Windows sob a qual o processo da API roda*
 
 ```text
 requests
-requests-negotiate-sspi   # autenticação Windows integrada
+requests-negotiate-sspi   # autenticação Windows integrada (SSPI)
 lxml                      # parse SOAP
-requests-ntlm             # opcional, para credenciais explícitas
+requests-ntlm             # obrigatório quando EWS_USERNAME/EWS_PASSWORD (ou user+password) estão definidos
 ```
 
 Se `EWSService` não puder ser importado, a API retorna HTTP 500 informando dependência ausente.

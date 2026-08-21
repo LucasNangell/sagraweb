@@ -18,7 +18,9 @@ logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 
-VALID_GRUPOS = frozenset({"prova_os", "prova_sp", "problema_tecnico"})
+VALID_GRUPOS = frozenset(
+    {"prova_os", "prova_sp", "problema_tecnico", "timbrado_a4_digital"}
+)
 VALID_VARIANTES = frozenset({"portal", "sem_portal"})
 LEGACY_BY_GRUPO = {
     "prova_os": "proof_os",
@@ -49,6 +51,21 @@ DEFAULT_PROVA_SEM_PORTAL_HTML = (
     "<strong>{{nr_os}}/{{ano}}</strong> — {{produto}}.</p>"
     "<p>Versão: {{versao}}</p>"
     "<p>Atenciosamente,<br>Coordenação Gráfica</p>"
+    "</body></html>"
+)
+
+DEFAULT_TIMBRADO_A4_DIGITAL_SUBJECT = (
+    "CGraf: Timbrado A4 Digital da SP {{nr_os}}/{{ano}}"
+)
+
+DEFAULT_TIMBRADO_A4_DIGITAL_HTML = (
+    "<html><body style=\"font-family:Segoe UI,sans-serif;color:#333;\">"
+    "<p>Segue anexo arquivo Word contendo Timbrado A4 digital, editável, "
+    "solicitado pela SP mencionada no Assunto deste e-mail.</p>"
+    "<p style=\"font-size:12px;color:#666;\">"
+    "OS <strong>{{nr_os}}/{{ano}}</strong> — {{produto}}"
+    "</p>"
+    "<p>Atenciosamente,<br>Coordenação Gráfica — SEFOC</p>"
     "</body></html>"
 )
 
@@ -104,6 +121,16 @@ _SEED_SPECS: List[Dict[str, Any]] = [
         "anexar_pdf": 0,
         "ordem": 20,
         "html_override": DEFAULT_PT_SEM_PORTAL_HTML,
+    },
+    {
+        "grupo": "timbrado_a4_digital",
+        "variante": "sem_portal",
+        "nome": "Timbrado A4 Digital",
+        "ativo": 1,
+        "anexar_pdf": 1,
+        "ordem": 10,
+        "assunto_override": DEFAULT_TIMBRADO_A4_DIGITAL_SUBJECT,
+        "html_override": DEFAULT_TIMBRADO_A4_DIGITAL_HTML,
     },
 ]
 
@@ -183,8 +210,13 @@ def ensure_default_email_template_models() -> None:
         )
         if existing:
             continue
-        legacy_id = LEGACY_BY_GRUPO[grupo]
-        subject, html, mode, preset = _legacy_effective_html_subject(legacy_id)
+        legacy_id = LEGACY_BY_GRUPO.get(grupo)
+        if legacy_id:
+            subject, html, mode, preset = _legacy_effective_html_subject(legacy_id)
+        else:
+            subject, html, mode, preset = "", "", "custom", None
+        if spec.get("assunto_override"):
+            subject = str(spec["assunto_override"])
         if spec.get("html_override"):
             html = spec["html_override"]
             mode = "custom"
@@ -282,6 +314,10 @@ def _validate_model_fields(
                 "Modelos de problemas técnicos sem portal devem conter "
                 f"{PLACEHOLDER_TEXTO}, {{{{conteudo}}}} ou {PLACEHOLDER_HTML_AQUI}."
             )
+    if grupo == "timbrado_a4_digital" and variante != "sem_portal":
+        raise ValueError(
+            "Timbrado A4 Digital usa apenas a variante sem portal (com anexos DOCX)."
+        )
 
 
 def _has_dynamic_placeholder(html: str) -> bool:
@@ -614,6 +650,49 @@ def resolve_pt_send_plan() -> Dict[str, Any]:
     }
 
 
+def resolve_timbrado_digital_send_plan() -> Dict[str, Any]:
+    """Modelo ativo do grupo Timbrado A4 Digital (sempre com anexos DOCX)."""
+    active = resolve_active_email_template_for_grupo("timbrado_a4_digital")
+    if active:
+        return {
+            "grupo": "timbrado_a4_digital",
+            "variante": active.get("variante") or "sem_portal",
+            "model": active,
+            "use_attachment": True,
+            "legacy_fallback": False,
+        }
+    return {
+        "grupo": "timbrado_a4_digital",
+        "variante": "sem_portal",
+        "model": None,
+        "use_attachment": True,
+        "legacy_fallback": True,
+    }
+
+
+def render_timbrado_digital_email(
+    variables: Dict[str, Any],
+    *,
+    plan: Optional[Dict[str, Any]] = None,
+) -> Tuple[str, str]:
+    plan = plan or resolve_timbrado_digital_send_plan()
+    model = plan.get("model")
+    vars_map = dict(variables or {})
+    if model:
+        return render_email_model(model, vars_map, clear_link=True)
+    subject = render_template_string_safe(
+        DEFAULT_TIMBRADO_A4_DIGITAL_SUBJECT, vars_map
+    )
+    html = render_template_string_safe(DEFAULT_TIMBRADO_A4_DIGITAL_HTML, vars_map)
+    return subject, html
+
+
+def render_template_string_safe(template: str, variables: Dict[str, Any]) -> str:
+    from services.email_template_service import render_template_string
+
+    return render_template_string(template, variables).strip()
+
+
 def build_problemas_tecnicos_inner_html(ano: int, os_id: int, versao: Optional[str] = None) -> str:
     """Monta HTML consolidado dos itens de análise (Capa/Miolo)."""
     from routers.analise_routes import build_consolidated_pt_inner_html
@@ -771,11 +850,13 @@ def send_model_test_email(model_id: int, to_email: str, *, updated_by_ponto: Opt
     html = rendered["html"]
 
     grupo = model["grupo"]
-    os_sample = 100 if grupo == "prova_os" else 5001 if grupo == "prova_sp" else 100
-    legacy_key = LEGACY_BY_GRUPO.get(grupo, "proof_os")
+    os_sample = 5001 if grupo in ("prova_sp", "timbrado_a4_digital") else 100
+    legacy_key = LEGACY_BY_GRUPO.get(grupo, "proof_sp" if grupo == "timbrado_a4_digital" else "proof_os")
     from services.email_template_service import get_template_defaults
 
-    mailbox_key = get_template_defaults(LEGACY_BY_GRUPO[grupo]).get("mailbox_key")
+    mailbox_key = get_template_defaults(legacy_key).get("mailbox_key")
+    if grupo == "timbrado_a4_digital":
+        mailbox_key = "os_gte_5000"
     from_mailbox = None
     if mailbox_key:
         from services.email_template_service import get_global_send_mailboxes, MAILBOX_SEPIM, MAILBOX_PAPELARIA

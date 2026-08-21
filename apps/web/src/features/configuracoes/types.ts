@@ -175,7 +175,11 @@ export interface EmailTemplatesConfigResponse {
   sample_variables: Record<string, string>;
 }
 
-export type EmailTemplateModelGrupo = "prova_os" | "prova_sp" | "problema_tecnico";
+export type EmailTemplateModelGrupo =
+  | "prova_os"
+  | "prova_sp"
+  | "problema_tecnico"
+  | "timbrado_a4_digital";
 export type EmailTemplateModelVariante = "portal" | "sem_portal";
 
 export interface EmailTemplateModelRecord {

@@ -89,6 +89,16 @@ export async function createPapelariaJob(
   });
 }
 
+export async function createPapelariaTimbradoA4DigitalJob(
+  payload: PapelariaCreateJobPayload,
+): Promise<PapelariaJob> {
+  return apiFetch<PapelariaJob>("/papelaria/jobs/timbrado-a4-digital", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function fetchPapelariaCdrPath(
   ano: number,
   nro: number,

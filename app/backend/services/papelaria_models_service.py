@@ -1096,6 +1096,11 @@ def _normalizar_cores_os(cores: str) -> str:
     return c
 
 
+def is_relevo_seco_cores(cores: str | None) -> bool:
+    """True quando a variante de cores indica relevo seco."""
+    return _normalizar_cores_os(cores or "") == "relev seco"
+
+
 def _normalizar_frente_verso_os(fv: str) -> str:
     """
     Canonicaliza Frente/Verso da OS para matching com modelos.

@@ -576,6 +576,35 @@ def criar_job_papelaria(
         raise HTTPException(500, "Erro ao criar solicitação de geração.")
 
 
+@router.post("/jobs/timbrado-a4-digital")
+def criar_job_timbrado_a4_digital(
+    payload: PapelariaCreateJobPayload,
+    session: SessionData = Depends(_require_papelaria_access),
+):
+    try:
+        from services import papelaria_jobs_service as jobs_svc
+
+        if payload.lancar_andamento:
+            jobs_svc.register_preparando_prova_andamento(
+                payload.ano, payload.nro, str(session.ponto)
+            )
+
+        return jobs_svc.create_timbrado_a4_digital_job(
+            ano=payload.ano,
+            nro=payload.nro,
+            modelo_id=payload.modelo_id,
+            dados=payload.dados,
+            solicitado_por=str(session.ponto),
+        )
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.exception("Erro ao criar job Timbrado A4 Digital: %s", e)
+        raise HTTPException(500, "Erro ao criar solicitação Timbrado A4 Digital.")
+
+
 @router.get("/os/{ano}/{nro}/jobs")
 def listar_jobs_os(
     ano: int,

@@ -23,8 +23,9 @@ class WorkerClaimPayload(BaseModel):
 
 class WorkerCompletePayload(BaseModel):
     worker_id: str = Field(..., min_length=1, max_length=64)
-    arquivo_cdr: str = Field(..., min_length=1, max_length=255)
-    arquivo_pdf: str = Field(..., min_length=1, max_length=255)
+    arquivo_cdr: str = Field(default="", max_length=255)
+    arquivo_pdf: str = Field(default="", max_length=255)
+    artefatos: list[str] = Field(default_factory=list)
     log_resumo: Optional[str] = Field(None, max_length=4000)
 
 
@@ -100,6 +101,7 @@ def worker_complete_job(job_id: int, payload: WorkerCompletePayload):
             arquivo_cdr=payload.arquivo_cdr,
             arquivo_pdf=payload.arquivo_pdf,
             log_resumo=payload.log_resumo,
+            artefatos=payload.artefatos,
         )
     except LookupError:
         raise HTTPException(404, "Job não encontrado.")

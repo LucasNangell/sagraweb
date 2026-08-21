@@ -11,6 +11,8 @@ worker_id: auto
 
 poll_interval_sec: 8
 models_dir: "\\\\redecamara\\DfsData\\CGraf\\Sefoc\\Laboratorio\\Modelos\\Modelos Corel\\Papelaria\\CSP\\WEB"
+# Templates DOCX Timbrado A4 Digital (default: irmão de models_dir → ..\Timbrado A4 Digital)
+# timbrado_a4_digital_templates_dir: "\\\\redecamara\\DfsData\\CGraf\\Sefoc\\Laboratorio\\Modelos\\Modelos Corel\\Papelaria\\Timbrado A4 Digital"
 # Credenciais DEPOL — caminhos vêm no payload do job (jpg_dir / svg_dir da API);
 # opcionalmente espelhe aqui para referência local:
 # credenciais_depol_jpg_dir: "\\\\redecamara\\DfsData\\CGraf\\Sefoc\\Deputados\\_Temp\\2025\\Credenciais Depol\\JPG"

@@ -27,6 +27,8 @@ import {
   ClienteProofExampleFileModal,
   ClienteProofPortalFloatingActions,
   ClienteProofPortalInstructionBanner,
+  ClienteProofRelevoSecoBanner,
+  isRelevoSecoCores,
 } from "./ClienteProofPortalExtras";
 import {
   ClienteProofPontoInput,
@@ -149,6 +151,9 @@ export function ClienteProofPage({
   const showMockup = isPapelaria && Boolean(proofQuery.data?.hasPdf);
   // Papelaria mantém o mockup 3D; os demais produtos folheiam as páginas.
   const showFlipbook = Boolean(proofQuery.data?.isProvaWeb) && !showMockup;
+  const showRelevoSecoNotice =
+    !showFlipbook &&
+    isRelevoSecoCores(papelaria?.cores ?? proofQuery.data?.cores);
 
   const previewQuery = useQuery({
     queryKey: ["portal", "aprovacao", "preview-pages", token, osId, ano],
@@ -713,6 +718,7 @@ export function ClienteProofPage({
                 : "min-h-0",
           )}
         >
+          {showRelevoSecoNotice ? <ClienteProofRelevoSecoBanner /> : null}
           {editMode && isPapelaria ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 lg:p-5">
               <article className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-sagra-border bg-white shadow-sm">

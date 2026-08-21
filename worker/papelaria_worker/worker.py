@@ -38,6 +38,10 @@ from corel_generator import (
     validar_acesso_job,
 )
 from credenciais_depol_generator import gerar_credenciais_depol
+from timbrado_a4_digital_generator import (
+    gerar_timbrado_a4_digital,
+    resolve_timbrado_a4_digital_templates_dir,
+)
 from auto_update import try_auto_update
 from power import allow_sleep, prevent_sleep
 from system_load import collect_system_load, is_local_load_acceptable
@@ -301,6 +305,27 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
             logging.error("Job #%s — %s", job_id, msg)
             api.fail(job_id, msg, retryable=False)
             return
+    elif tipo_job == "timbrado_a4_digital":
+        caminho_modelo = _resolve_model_path(cfg.models_dir, job["arquivo_modelo"])
+        templates_dir = resolve_timbrado_a4_digital_templates_dir(
+            cfg.models_dir,
+            getattr(cfg, "timbrado_a4_digital_templates_dir", "") or "",
+        )
+        models_cache_dir = os.path.join(cfg.temp_dir, "_models_cache")
+        try:
+            validar_acesso_job(
+                caminho_modelo,
+                output_dir,
+                models_cache_dir=models_cache_dir,
+            )
+            if not os.path.isdir(templates_dir):
+                raise CorelGenerationError(
+                    f"Pasta de templates Timbrado A4 Digital indisponível: {templates_dir}"
+                )
+        except CorelGenerationError as exc:
+            logging.error("Job #%s — pré-validação Timbrado Digital falhou: %s", job_id, exc)
+            api.fail(job_id, str(exc), retryable=False)
+            return
     else:
         caminho_modelo = _resolve_model_path(cfg.models_dir, job["arquivo_modelo"])
         models_cache_dir = os.path.join(cfg.temp_dir, "_models_cache")
@@ -383,6 +408,42 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 job_timeout_sec=cfg.job_timeout_sec,
                 job_id=job_id,
             )
+        elif tipo_job == "timbrado_a4_digital":
+            modelo = {
+                "produto": job.get("produto"),
+                "cores": job.get("cores"),
+                "campos": job.get("campos") or {},
+            }
+            dados = job.get("dados") or {}
+            caminho_modelo = _resolve_model_path(cfg.models_dir, job["arquivo_modelo"])
+            templates_dir = resolve_timbrado_a4_digital_templates_dir(
+                cfg.models_dir,
+                getattr(cfg, "timbrado_a4_digital_templates_dir", "") or "",
+            )
+            api.append_log(
+                job_id,
+                "Iniciando Timbrado A4 Digital (SVG + DOCX Cor/PB)",
+                "info",
+            )
+            result = gerar_timbrado_a4_digital(
+                modelo=modelo,
+                dados=dados,
+                caminho_modelo=caminho_modelo,
+                templates_dir=templates_dir,
+                temp_dir=cfg.temp_dir,
+                output_dir=output_dir,
+                output_cabecalho_svg=str(
+                    job.get("output_cabecalho_svg") or "cabecalho.svg"
+                ),
+                output_rodape_svg=str(job.get("output_rodape_svg") or "rodape.svg"),
+                output_docx_cor=str(job.get("output_docx_cor") or ""),
+                output_docx_pb=str(job.get("output_docx_pb") or ""),
+                corel_visible=cfg.corel_visible,
+                job_timeout_sec=cfg.job_timeout_sec,
+                job_id=job_id,
+                exclusoes=job.get("exclusoes") or [],
+                preview_config=job.get("preview_config"),
+            )
         else:
             modelo = {
                 "produto": job.get("produto"),
@@ -422,12 +483,23 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
 
         log_resumo = "; ".join(result.logs[-5:]) if result.logs else "OK"
         cdr_for_complete = cdr_name
+        artefatos_complete = None
         if tipo_job == "export_existing_cdr":
             input_cdr = (job.get("input_cdr_path") or "").strip()
             if input_cdr:
                 cdr_for_complete = os.path.basename(input_cdr)
+        elif tipo_job == "timbrado_a4_digital":
+            cdr_for_complete = ""
+            pdf_name = ""
+            artefatos_complete = list(getattr(result, "artefatos", []) or [])
         try:
-            api.complete(job_id, cdr_for_complete, pdf_name, log_resumo=log_resumo)
+            api.complete(
+                job_id,
+                cdr_for_complete,
+                pdf_name,
+                log_resumo=log_resumo,
+                artefatos=artefatos_complete,
+            )
         except PapelariaWorkerApiError as exc:
             if exc.status_code == 400 and "cancelado" in str(exc).lower():
                 logging.info("Job #%s já cancelado na API — resultado descartado.", job_id)
@@ -436,8 +508,8 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
         logging.info(
             "Job #%s concluído — %s / %s (pasta: %s)",
             job_id,
-            cdr_for_complete,
-            pdf_name,
+            cdr_for_complete or (artefatos_complete or ["artefatos"])[0],
+            pdf_name or "",
             output_dir,
         )
     except (CorelGenerationError, FileNotFoundError, OSError) as exc:

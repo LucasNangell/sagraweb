@@ -106,7 +106,11 @@ export type PapelariaJobStatus =
   | "failed"
   | "cancelled";
 
-export type PapelariaProvaRevisao = "pending" | "approved" | "discarded";
+export type PapelariaProvaRevisao =
+  | "pending"
+  | "approved"
+  | "discarded"
+  | "n_a";
 
 export interface PapelariaOsCdrFile {
   filename: string;
@@ -154,6 +158,8 @@ export interface PapelariaJob {
   tem_arquivo_cdr: boolean;
   /** pending = aguarda OK do técnico após geração; approved / discarded após revisão. */
   prova_revisao?: PapelariaProvaRevisao | null;
+  /** Artefatos gerados (ex.: Timbrado A4 Digital — SVG/DOCX). */
+  artefatos?: string[];
   warnings?: string[];
   logs?: PapelariaJobLogEntry[];
 }

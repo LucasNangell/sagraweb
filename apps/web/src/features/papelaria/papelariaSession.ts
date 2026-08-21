@@ -63,6 +63,14 @@ export function isPapelariaProduct(product: string | null | undefined): boolean 
   return PAPELARIA_PRODUCTS.some((p) => p.toLowerCase() === pNorm);
 }
 
+/** Match exato do produto OS "Timbrado A4 (Digital)" (não confunde com Timbrado A4). */
+export function isTimbradoA4DigitalProduct(
+  product: string | null | undefined,
+): boolean {
+  if (!product) return false;
+  return product.trim().toLowerCase() === "timbrado a4 (digital)";
+}
+
 export type PapelariaTabId = "cartao" | "corel";
 
 /**

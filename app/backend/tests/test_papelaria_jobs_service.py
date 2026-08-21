@@ -1467,3 +1467,296 @@ class TestDiscoverOsCdr:
         )
         assert chosen["filename"] == "layout_pronto.cdr"
         assert chosen["absolute_path"] == str(pronto.resolve())
+
+
+TIMBRADO_DIGITAL_MODEL = {
+    "id": 24,
+    "produto": "Timbrado A4 (Digital)",
+    "frente_versao": "SF",
+    "cores": "Policromia",
+    "arquivo_modelo": "TimbradoA4.cdr",
+    "campos": {
+        "Cabecalho": "Gabinete {artigo} {genero_curto}\n{nome_deputado}",
+        "Rodape": "{email}",
+    },
+    "campos_formulario": [
+        {"key": "nome_deputado", "label": "Nome", "required": True, "type": "text"},
+        {"key": "email", "label": "E-mail", "required": True, "type": "email"},
+    ],
+    "variaveis": [],
+}
+
+
+class TestTimbradoA4DigitalJob:
+    def test_is_timbrado_a4_digital_produto(self):
+        from services.papelaria_jobs_service import is_timbrado_a4_digital_produto
+
+        assert is_timbrado_a4_digital_produto("Timbrado A4 (Digital)") is True
+        assert is_timbrado_a4_digital_produto("timbrado a4 (digital)") is True
+        assert is_timbrado_a4_digital_produto("Timbrado A4") is False
+        assert is_timbrado_a4_digital_produto("Bloco A5") is False
+
+    def test_rejeita_produto_nao_digital(self, monkeypatch):
+        from services import papelaria_jobs_service as svc
+
+        monkeypatch.setattr(
+            svc.db,
+            "execute_query",
+            lambda sql, params=None: (
+                [{"NroProtocolo": 5954, "AnoProtocolo": 2026, "produto": "Timbrado A4"}]
+                if "tabProtocolos" in sql
+                else []
+            ),
+        )
+        with patch(
+            "services.papelaria_models_service.get_modelo_by_id",
+            return_value=TIMBRADO_DIGITAL_MODEL,
+        ):
+            with pytest.raises(ValueError, match="Timbrado A4 \\(Digital\\)"):
+                svc.create_timbrado_a4_digital_job(
+                    ano=2026,
+                    nro=5954,
+                    modelo_id=24,
+                    dados={"nome_deputado": "Ana", "email": "a@b.com"},
+                    solicitado_por="918713",
+                )
+
+    def test_cria_job_digital(self, monkeypatch):
+        from services import papelaria_jobs_service as svc
+
+        captured = {}
+
+        class _FakeCursor:
+            lastrowid = 88
+
+            def execute(self, sql, params=None):
+                captured["params"] = params
+
+        def fake_transaction(operations):
+            cursor = _FakeCursor()
+            return [op(cursor) for op in operations]
+
+        def fake_query(sql, params=None):
+            if "FROM tabProtocolos" in sql:
+                return [
+                    {
+                        "NroProtocolo": 5954,
+                        "AnoProtocolo": 2026,
+                        "produto": "Timbrado A4 (Digital)",
+                    }
+                ]
+            if "SELECT * FROM tabPapelariaJobs WHERE ID" in sql:
+                return [
+                    {
+                        "ID": 88,
+                        "NroProtocolo": 5954,
+                        "AnoProtocolo": 2026,
+                        "TipoJob": svc.TIPO_JOB_TIMBRADO_A4_DIGITAL,
+                        "Produto": "Timbrado A4 (Digital)",
+                        "ModeloID": 24,
+                        "ArquivoModelo": "TimbradoA4.cdr",
+                        "DadosJson": captured.get("params", {}).get("dados") or "{}",
+                        "Status": "pending",
+                        "Prioridade": 0,
+                        "OrdemFila": 9,
+                        "SolicitadoPor": "918713",
+                        "SolicitadoEm": None,
+                        "IniciadoEm": None,
+                        "ConcluidoEm": None,
+                        "WorkerID": None,
+                        "ArquivoCdrGerado": None,
+                        "ArquivoPdfGerado": None,
+                        "ProvaRevisao": None,
+                        "Erro": None,
+                        "Tentativas": 0,
+                        "Versao": 1,
+                        "JobPaiID": None,
+                    }
+                ]
+            if "MAX(OrdemFila)" in sql:
+                return [{"next_pos": 9}]
+            return []
+
+        monkeypatch.setattr(svc.db, "execute_query", fake_query)
+        monkeypatch.setattr(svc.db, "execute_transaction", fake_transaction)
+        monkeypatch.setattr(svc, "broadcast_job_update", lambda job: None)
+        monkeypatch.setattr(svc, "append_job_log", lambda *a, **k: None)
+
+        with patch(
+            "services.papelaria_models_service.get_modelo_by_id",
+            return_value=TIMBRADO_DIGITAL_MODEL,
+        ):
+            job = svc.create_timbrado_a4_digital_job(
+                ano=2026,
+                nro=5954,
+                modelo_id=24,
+                dados={"nome_deputado": "Ana", "email": "a@b.com"},
+                solicitado_por="918713",
+            )
+
+        assert job["tipo_job"] == svc.TIPO_JOB_TIMBRADO_A4_DIGITAL
+        assert captured["params"]["tipo"] == svc.TIPO_JOB_TIMBRADO_A4_DIGITAL
+
+    def test_complete_sem_prova_revisao_pending(self, monkeypatch, tmp_path):
+        from services import papelaria_jobs_service as svc
+
+        sefoc = tmp_path / "Sefoc"
+        sefoc.mkdir()
+        prefix = "05954-Pasta"
+        names = [
+            f"{prefix}-TimbradoA4Digital-Cor.docx",
+            f"{prefix}-TimbradoA4Digital-PB.docx",
+        ]
+        for name in names:
+            (sefoc / name).write_bytes(b"ok")
+
+        updates = {}
+
+        def fake_query(sql, params=None):
+            if "SELECT * FROM tabPapelariaJobs WHERE ID" in sql:
+                status = updates.get("status", "processing")
+                dados = updates.get(
+                    "dados",
+                    json.dumps({"nome_deputado": "Ana", "email": "a@b.com"}),
+                )
+                return [
+                    {
+                        "ID": 88,
+                        "NroProtocolo": 5954,
+                        "AnoProtocolo": 2026,
+                        "TipoJob": svc.TIPO_JOB_TIMBRADO_A4_DIGITAL,
+                        "Produto": "Timbrado A4 (Digital)",
+                        "ModeloID": 24,
+                        "ArquivoModelo": "TimbradoA4.cdr",
+                        "DadosJson": dados,
+                        "Status": status,
+                        "Prioridade": 0,
+                        "OrdemFila": 9,
+                        "SolicitadoPor": "918713",
+                        "SolicitadoEm": None,
+                        "IniciadoEm": None,
+                        "ConcluidoEm": None,
+                        "WorkerID": "corel-test",
+                        "ArquivoCdrGerado": None,
+                        "ArquivoPdfGerado": None,
+                        "ProvaRevisao": updates.get("prova", None),
+                        "Erro": None,
+                        "Tentativas": 1,
+                        "Versao": 1,
+                        "JobPaiID": None,
+                    }
+                ]
+            if "UPDATE tabPapelariaJobs" in sql:
+                updates["status"] = params["status"]
+                updates["prova"] = params["prova_revisao"]
+                updates["dados"] = params["dados"]
+                return []
+            if "INSERT INTO tabPapelariaJobLog" in sql:
+                return []
+            return []
+
+        monkeypatch.setattr(svc.db, "execute_query", fake_query)
+        monkeypatch.setattr(svc, "broadcast_job_update", lambda job: None)
+        monkeypatch.setattr(svc, "is_job_cancelled", lambda job_id: False)
+        monkeypatch.setattr(
+            svc,
+            "resolve_os_papelaria_dir",
+            lambda ano, nro, create=True: str(sefoc),
+        )
+        monkeypatch.setattr(
+            svc,
+            "get_os_folder_basename",
+            lambda ano, nro: prefix,
+        )
+
+        updated = svc.complete_job(
+            job_id=88,
+            worker_id="corel-test",
+            arquivo_cdr="",
+            arquivo_pdf="",
+            artefatos=names,
+            log_resumo="OK digital",
+        )
+        assert updated["status"] == "completed"
+        assert updated["prova_revisao"] == svc.PROVA_REVISAO_NA
+        assert updated["artefatos"] == names
+        assert updated["tem_arquivo_pdf"] is False
+
+    def test_complete_aceita_docx_sem_svg(self, monkeypatch, tmp_path):
+        from services import papelaria_jobs_service as svc
+
+        sefoc = tmp_path / "Sefoc"
+        sefoc.mkdir()
+        prefix = "05954-Pasta"
+        docx_names = [
+            f"{prefix}-TimbradoA4Digital-Cor.docx",
+            f"{prefix}-TimbradoA4Digital-PB.docx",
+        ]
+        for name in docx_names:
+            (sefoc / name).write_bytes(b"docx")
+
+        updates = {}
+
+        def fake_query(sql, params=None):
+            if "SELECT * FROM tabPapelariaJobs WHERE ID" in sql:
+                status = updates.get("status", "processing")
+                dados = updates.get("dados", "{}")
+                return [
+                    {
+                        "ID": 89,
+                        "NroProtocolo": 5954,
+                        "AnoProtocolo": 2026,
+                        "TipoJob": svc.TIPO_JOB_TIMBRADO_A4_DIGITAL,
+                        "Produto": "Timbrado A4 (Digital)",
+                        "ModeloID": 24,
+                        "ArquivoModelo": "TimbradoA4.cdr",
+                        "DadosJson": dados,
+                        "Status": status,
+                        "Prioridade": 0,
+                        "OrdemFila": 9,
+                        "SolicitadoPor": "918713",
+                        "SolicitadoEm": None,
+                        "IniciadoEm": None,
+                        "ConcluidoEm": None,
+                        "WorkerID": "corel-test",
+                        "ArquivoCdrGerado": None,
+                        "ArquivoPdfGerado": None,
+                        "ProvaRevisao": updates.get("prova", None),
+                        "Erro": None,
+                        "Tentativas": 1,
+                        "Versao": 1,
+                        "JobPaiID": None,
+                    }
+                ]
+            if "UPDATE tabPapelariaJobs" in sql:
+                updates["status"] = params["status"]
+                updates["prova"] = params["prova_revisao"]
+                updates["dados"] = params["dados"]
+                return []
+            if "INSERT INTO tabPapelariaJobLog" in sql:
+                return []
+            return []
+
+        monkeypatch.setattr(svc.db, "execute_query", fake_query)
+        monkeypatch.setattr(svc, "broadcast_job_update", lambda job: None)
+        monkeypatch.setattr(svc, "is_job_cancelled", lambda job_id: False)
+        monkeypatch.setattr(
+            svc,
+            "resolve_os_papelaria_dir",
+            lambda ano, nro, create=True: str(sefoc),
+        )
+        monkeypatch.setattr(
+            svc,
+            "get_os_folder_basename",
+            lambda ano, nro: prefix,
+        )
+
+        updated = svc.complete_job(
+            job_id=89,
+            worker_id="corel-test",
+            arquivo_cdr="",
+            arquivo_pdf="",
+            artefatos=docx_names,
+        )
+        assert updated["status"] == "completed"
+        assert set(updated["artefatos"]) == set(docx_names)

@@ -13,6 +13,8 @@ export interface ProofPortalPapelariaData {
   produto?: string;
   arquivo_modelo?: string;
   frente_verso?: string;
+  /** Variante de cores do modelo/OS (ex.: Relev Seco, Policromia). */
+  cores?: string;
   os_observ?: string;
 }
 
@@ -29,6 +31,8 @@ export interface ProofPortalData {
   isPapelaria?: boolean;
   /** Token de Prova WEB: visualização com folheamento das páginas. */
   isProvaWeb?: boolean;
+  /** Cores da prova Papelaria (também em papelaria.cores quando há job). */
+  cores?: string;
   papelaria?: ProofPortalPapelariaData;
 }
 

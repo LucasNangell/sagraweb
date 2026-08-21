@@ -104,16 +104,20 @@ class PapelariaWorkerApiClient:
         arquivo_cdr: str,
         arquivo_pdf: str,
         log_resumo: Optional[str] = None,
+        artefatos: Optional[list[str]] = None,
     ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "worker_id": self.worker_id,
+            "arquivo_cdr": arquivo_cdr or "",
+            "arquivo_pdf": arquivo_pdf or "",
+            "log_resumo": log_resumo,
+        }
+        if artefatos is not None:
+            body["artefatos"] = list(artefatos)
         return self._request(
             "POST",
             f"/papelaria/jobs/{job_id}/complete",
-            {
-                "worker_id": self.worker_id,
-                "arquivo_cdr": arquivo_cdr,
-                "arquivo_pdf": arquivo_pdf,
-                "log_resumo": log_resumo,
-            },
+            body,
         )
 
     def fail(

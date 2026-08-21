@@ -399,6 +399,11 @@ def get_proof_portal_data(ano: int, os_id: int, token: str = Query(...)):
     }
     if papelaria_edit:
         payload["papelaria"] = papelaria_edit
+    if papelaria_ctx:
+        payload["cores"] = (
+            (papelaria_edit or {}).get("cores")
+            or (papelaria_ctx.get("cores") or "")
+        ).strip()
     return payload
 
 

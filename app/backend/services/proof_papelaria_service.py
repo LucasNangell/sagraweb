@@ -9,10 +9,12 @@ from services.papelaria_jobs_service import STATUS_COMPLETED, list_jobs_for_os
 from services.proof_files_service import resolve_proof_pdf_for_token_row
 
 
-def _os_produto(ano: int, os_id: int) -> str:
+def _os_produto_e_cores(ano: int, os_id: int) -> tuple[str, str]:
     rows = db.execute_query(
         """
-        SELECT d.TipoPublicacaoLink AS produto
+        SELECT d.TipoPublicacaoLink AS produto,
+               d.Cores AS cores,
+               d.CoresDescricao AS cores_descricao
         FROM tabProtocolos p
         LEFT JOIN tabDetalhesServico d
           ON p.NroProtocolo = d.NroProtocoloLinkDet
@@ -23,8 +25,11 @@ def _os_produto(ano: int, os_id: int) -> str:
         {"nro": os_id, "ano": ano},
     )
     if not rows:
-        return ""
-    return (rows[0].get("produto") or "").strip()
+        return "", ""
+    row = rows[0]
+    produto = (row.get("produto") or "").strip()
+    cores = (row.get("cores_descricao") or row.get("cores") or "").strip()
+    return produto, cores
 
 
 def _latest_completed_job(ano: int, os_id: int) -> Optional[dict[str, Any]]:
@@ -59,6 +64,7 @@ def resolve_papelaria_proof_context(
     produto = ""
     arquivo_modelo = ""
     frente_verso = ""
+    cores = ""
     mockup_config_json: Optional[str] = None
     job_id: Optional[int] = None
 
@@ -82,8 +88,15 @@ def resolve_papelaria_proof_context(
                     produto = (modelo.get("produto") or "").strip()
                 if not arquivo_modelo:
                     arquivo_modelo = (modelo.get("arquivo_modelo") or "").strip()
+                cores = (modelo.get("cores") or "").strip()
+        if not cores:
+            cores = (job.get("cores") or "").strip()
     else:
-        produto = _os_produto(ano, os_id)
+        produto, cores = _os_produto_e_cores(ano, os_id)
+
+    if not cores:
+        _, cores_os = _os_produto_e_cores(ano, os_id)
+        cores = cores_os
 
     return {
         "proof_id": proof_id,
@@ -92,6 +105,7 @@ def resolve_papelaria_proof_context(
         "produto": produto,
         "arquivo_modelo": arquivo_modelo,
         "frente_verso": frente_verso,
+        "cores": cores,
         "mockup_config_json": mockup_config_json,
     }
 
@@ -143,6 +157,7 @@ def build_portal_papelaria_edit_payload(
         "produto": ctx.get("produto") or (modelo or {}).get("produto") or "",
         "arquivo_modelo": ctx.get("arquivo_modelo") or "",
         "frente_verso": ctx.get("frente_verso") or "",
+        "cores": ctx.get("cores") or (modelo or {}).get("cores") or "",
         "os_observ": _os_observ(ano, os_id),
     }
 

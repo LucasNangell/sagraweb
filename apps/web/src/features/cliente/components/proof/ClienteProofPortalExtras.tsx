@@ -314,3 +314,23 @@ export function ClienteProofPortalInstructionBanner() {
     </div>
   );
 }
+
+/** Detecta variante de cores de relevo seco (espelha o backend). */
+export function isRelevoSecoCores(cores?: string | null): boolean {
+  return /relev/i.test((cores ?? "").trim());
+}
+
+export function ClienteProofRelevoSecoBanner() {
+  return (
+    <div
+      className="shrink-0 border-b border-amber-400 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-950 sm:px-5"
+      role="status"
+    >
+      <p className="font-semibold text-amber-950">
+        <span className="font-bold uppercase tracking-wide text-amber-900">Importante:</span>{" "}
+        Os contornos e textos em vermelho não serão impressos. São apenas indicadores da posição do
+        relevo seco no produto.
+      </p>
+    </div>
+  );
+}

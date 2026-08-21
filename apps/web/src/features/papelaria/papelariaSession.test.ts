@@ -4,6 +4,7 @@ import { validateRequiredFields } from "./components/PapelariaCorelPanel";
 import {
   isPapelariaCorelOs,
   isPapelariaProduct,
+  isTimbradoA4DigitalProduct,
   resolveInitialPapelariaTab,
   type PapelariaSessionContext,
 } from "./papelariaSession";
@@ -48,6 +49,16 @@ describe("resolveInitialPapelariaTab", () => {
     expect(isPapelariaCorelOs("1234")).toBe(false);
     expect(isPapelariaProduct("Ct Visita")).toBe(true);
     expect(isPapelariaProduct("Folder")).toBe(false);
+  });
+});
+
+describe("isTimbradoA4DigitalProduct", () => {
+  it("reconhece apenas Timbrado A4 (Digital)", () => {
+    expect(isTimbradoA4DigitalProduct("Timbrado A4 (Digital)")).toBe(true);
+    expect(isTimbradoA4DigitalProduct("timbrado a4 (digital)")).toBe(true);
+    expect(isTimbradoA4DigitalProduct("Timbrado A4")).toBe(false);
+    expect(isTimbradoA4DigitalProduct("Bloco A5")).toBe(false);
+    expect(isTimbradoA4DigitalProduct(null)).toBe(false);
   });
 });
 

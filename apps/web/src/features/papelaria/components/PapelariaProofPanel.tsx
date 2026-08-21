@@ -87,8 +87,15 @@ export function PapelariaProofPanel({
 }: Props) {
   const [previewFaceId, setPreviewFaceId] = useState("frente");
   const isNarrowViewport = useMatchMedia("(max-width: 767px)");
+  const isTimbradoDigitalJob =
+    activeJob?.tipo_job === "timbrado_a4_digital";
+  const showDigitalDone =
+    !!activeJob &&
+    isTimbradoDigitalJob &&
+    activeJob.status === "completed";
   const showPdf =
     !!activeJob &&
+    !isTimbradoDigitalJob &&
     activeJob.status === "completed" &&
     activeJob.prova_revisao !== "discarded" &&
     (activeJob.tem_arquivo_pdf || !!activeJob.arquivo_pdf);
@@ -185,8 +192,12 @@ export function PapelariaProofPanel({
         </h2>
         <p className="text-[10px] text-neutral-500">
           {isJobGenerating
-            ? "Aguardando conclusão do worker CorelDRAW..."
-            : needsProvaReview
+            ? isTimbradoDigitalJob
+              ? "Aguardando Timbrado A4 Digital (SVG + DOCX)..."
+              : "Aguardando conclusão do worker CorelDRAW..."
+            : showDigitalDone
+              ? "DOCX Cor/PB e SVGs gerados na pasta Sefoc da OS."
+              : needsProvaReview
               ? "Revise o arquivo gerado e confirme (OK) ou descarte (Cancelar)."
               : showPdf
                 ? activeJob?.prova_revisao === "approved"
@@ -201,11 +212,15 @@ export function PapelariaProofPanel({
           <Loader2 className="size-10 animate-spin text-secondary-blue" aria-hidden />
           <div>
             <p className="text-sm font-medium text-neutral-700">
-              Gerando arquivo Corel/PDF
+              {isTimbradoDigitalJob
+                ? "Gerando Timbrado A4 Digital"
+                : "Gerando arquivo Corel/PDF"}
             </p>
             <p className="mt-1 text-xs text-neutral-500">
               {activeJob?.status === "processing"
-                ? "CorelDRAW em execução no worker..."
+                ? isTimbradoDigitalJob
+                  ? "CorelDRAW e Word em execução no worker..."
+                  : "CorelDRAW em execução no worker..."
                 : "Job na fila — aguardando o worker..."}
             </p>
             {activeJob && (
@@ -229,6 +244,25 @@ export function PapelariaProofPanel({
                   : "Cancelar solicitação"}
             </button>
           )}
+        </div>
+      ) : showDigitalDone && activeJob ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+          <FileText className="size-10 text-emerald-600" aria-hidden />
+          <div>
+            <p className="text-sm font-medium text-neutral-700">
+              Timbrado A4 Digital concluído
+            </p>
+            <p className="mt-1 text-xs text-neutral-500">
+              Arquivos na pasta Sefoc da OS (sem revisão de prova PDF).
+            </p>
+            {activeJob.artefatos && activeJob.artefatos.length > 0 ? (
+              <ul className="mt-3 space-y-1 text-left font-mono text-[11px] text-neutral-600">
+                {activeJob.artefatos.map((name) => (
+                  <li key={name}>{name}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
         </div>
       ) : showPdf && activeJob ? (
         <div className="flex min-h-0 flex-1 flex-col max-md:overflow-visible md:overflow-hidden">

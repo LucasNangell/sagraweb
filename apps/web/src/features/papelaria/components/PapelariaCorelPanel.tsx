@@ -15,6 +15,7 @@ import {
   abrirCorelPapelariaOs,
   cancelPapelariaJob,
   createPapelariaJob,
+  createPapelariaTimbradoA4DigitalJob,
   discardPapelariaJobProva,
   fetchPapelariaCdrPath,
   fetchPapelariaCorelModelo,
@@ -36,6 +37,7 @@ import {
   applyPreviewTemplate,
   type ActiveDynamicFieldPlacement,
 } from "../preview";
+import { isTimbradoA4DigitalProduct } from "../papelariaSession";
 import type {
   PapelariaCorelModelSummary,
   PapelariaField,
@@ -160,10 +162,10 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
   );
   const [corelEditMode, setCorelEditMode] = useState(false);
   const [andamentoModal, setAndamentoModal] = useState<
-    "gerar" | "corel" | "export" | null
+    "gerar" | "digital" | "corel" | "export" | null
   >(null);
   const [folderGateAction, setFolderGateAction] = useState<
-    "gerar" | "corel" | "export" | null
+    "gerar" | "digital" | "corel" | "export" | null
   >(null);
   const [folderCheckPending, setFolderCheckPending] = useState(false);
   const [exportCdrRel, setExportCdrRel] = useState<string | null>(null);
@@ -214,8 +216,12 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       const revisao = query.state.data?.prova_revisao;
+      const tipoJob = query.state.data?.tipo_job;
       if (!status) return 2_000;
       if (status === "pending" || status === "processing") return 2_000;
+      if (tipoJob === "timbrado_a4_digital" || revisao === "n_a") {
+        return false;
+      }
       if (
         status === "completed" &&
         revisao !== "approved" &&
@@ -297,6 +303,29 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
     },
     onError: (err: Error) => {
       setFormError(err.message || "Erro ao criar solicitação.");
+    },
+  });
+
+  const createDigitalJobMutation = useMutation({
+    mutationFn: createPapelariaTimbradoA4DigitalJob,
+    onSuccess: (job) => {
+      if (!job?.id) {
+        setFormError("Job criado, mas a resposta da API veio inválida. Atualize a página.");
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.papelaria.jobsOs(anoNum, nroNum),
+        });
+        return;
+      }
+      setActiveJobId(job.id);
+      setFormError(null);
+      setProvaReviewMessage(null);
+      setMobilePanel("preview");
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.papelaria.jobsOs(anoNum, nroNum),
+      });
+    },
+    onError: (err: Error) => {
+      setFormError(err.message || "Erro ao criar Timbrado A4 Digital.");
     },
   });
 
@@ -531,7 +560,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
   };
 
   const ensureOsFolderThen = async (
-    action: "gerar" | "corel" | "export",
+    action: "gerar" | "digital" | "corel" | "export",
   ) => {
     setFolderCheckPending(true);
     setFormError(null);
@@ -574,6 +603,18 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
     setCorelEditMode(false);
   };
 
+  const runTimbradoA4Digital = (lancarAndamento: boolean) => {
+    if (!selectedModelId) return;
+    createDigitalJobMutation.mutate({
+      ano: anoNum,
+      nro: nroNum,
+      modelo_id: selectedModelId,
+      dados: dadosForJob,
+      lancar_andamento: lancarAndamento,
+    });
+    setCorelEditMode(false);
+  };
+
   const runExportCdrExistente = (lancarAndamento: boolean) => {
     if (!selectedModelId) return;
     const arquivoCdr = exportCdrRel?.trim();
@@ -601,6 +642,8 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
     setAndamentoModal(null);
     if (action === "gerar") {
       runGerarArquivo(lancarAndamento);
+    } else if (action === "digital") {
+      runTimbradoA4Digital(lancarAndamento);
     } else if (action === "corel") {
       runAbrirCorel(lancarAndamento);
     } else if (action === "export") {
@@ -611,6 +654,11 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
   const handleGerarArquivo = () => {
     if (!validateFormForAction()) return;
     void ensureOsFolderThen("gerar");
+  };
+
+  const handleTimbradoA4Digital = () => {
+    if (!validateFormForAction()) return;
+    void ensureOsFolderThen("digital");
   };
 
   const handleAbrirCorel = () => {
@@ -712,8 +760,10 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
 
   const ctx = contextQuery.data!;
   const modelos = ctx.modelos;
+  const showTimbradoA4Digital = isTimbradoA4DigitalProduct(ctx.os.produto);
   const isJobGenerating =
     createJobMutation.isPending ||
+    createDigitalJobMutation.isPending ||
     exportCdrMutation.isPending ||
     (!!activeJob &&
       (activeJob.status === "pending" || activeJob.status === "processing"));
@@ -917,6 +967,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
                       type="button"
                       disabled={
                         createJobMutation.isPending ||
+                        createDigitalJobMutation.isPending ||
                         exportCdrMutation.isPending ||
                         abrirCorelMutation.isPending ||
                         modelDetailQuery.isLoading ||
@@ -934,10 +985,35 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
                         "Gerar arquivo"
                       )}
                     </button>
+                    {showTimbradoA4Digital ? (
+                      <button
+                        type="button"
+                        disabled={
+                          createJobMutation.isPending ||
+                          createDigitalJobMutation.isPending ||
+                          exportCdrMutation.isPending ||
+                          abrirCorelMutation.isPending ||
+                          modelDetailQuery.isLoading ||
+                          folderCheckPending
+                        }
+                        className="inline-flex min-h-9 flex-1 items-center justify-center rounded-lg border border-secondary-blue bg-white px-3 py-2 text-xs font-semibold text-secondary-blue shadow-sm transition hover:bg-secondary-blue/5 disabled:opacity-60"
+                        onClick={handleTimbradoA4Digital}
+                      >
+                        {createDigitalJobMutation.isPending ? (
+                          <span className="inline-flex items-center justify-center gap-2">
+                            <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                            Enviando...
+                          </span>
+                        ) : (
+                          "Timb A4 Digital"
+                        )}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       disabled={
                         createJobMutation.isPending ||
+                        createDigitalJobMutation.isPending ||
                         exportCdrMutation.isPending ||
                         abrirCorelMutation.isPending ||
                         finalizeCorelMutation.isPending ||
@@ -1133,6 +1209,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
                 type="button"
                 disabled={
                   createJobMutation.isPending ||
+                  createDigitalJobMutation.isPending ||
                   exportCdrMutation.isPending ||
                   abrirCorelMutation.isPending
                 }
@@ -1145,6 +1222,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
                 type="button"
                 disabled={
                   createJobMutation.isPending ||
+                  createDigitalJobMutation.isPending ||
                   exportCdrMutation.isPending ||
                   abrirCorelMutation.isPending
                 }

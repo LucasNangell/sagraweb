@@ -96,6 +96,8 @@ class WorkerConfig:
 
     auto_update_check_sec: int = 300
 
+    timbrado_a4_digital_templates_dir: str = ""
+
 
 
     @classmethod
@@ -166,6 +168,10 @@ class WorkerConfig:
             auto_update_check_sec=max(
                 60, int(data.get("auto_update_check_sec", 300))
             ),
+
+            timbrado_a4_digital_templates_dir=str(
+                data.get("timbrado_a4_digital_templates_dir", "")
+            ).strip(),
 
         )
 

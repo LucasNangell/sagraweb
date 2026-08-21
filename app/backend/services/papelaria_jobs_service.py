@@ -31,9 +31,17 @@ TIPO_JOB_CREATE = "create"
 TIPO_JOB_MANUAL_COREL = "manual_corel"
 TIPO_JOB_EXPORT_EXISTING_CDR = "export_existing_cdr"
 TIPO_JOB_CREDENCIAIS_DEPOL = "credenciais_depol"
+TIPO_JOB_TIMBRADO_A4_DIGITAL = "timbrado_a4_digital"
 
 CDR_BACKUP_NAME_FRAGMENT = "cópia_de_segurança"
 INPUT_CDR_DADOS_KEY = "__input_cdr"
+ARTEFATOS_DADOS_KEY = "__artefatos"
+
+PRODUTO_TIMBRADO_A4_DIGITAL = "Timbrado A4 (Digital)"
+PROVA_REVISAO_NA = "n_a"
+
+TIMBRADO_A4_DIGITAL_SVG_CABECALHO = "cabecalho.svg"
+TIMBRADO_A4_DIGITAL_SVG_RODAPE = "rodape.svg"
 
 TERMINAL_STATUSES = frozenset({STATUS_COMPLETED, STATUS_FAILED, STATUS_CANCELLED})
 CANCELLABLE_STATUSES = frozenset({STATUS_PENDING, STATUS_PROCESSING})
@@ -153,10 +161,28 @@ def _row_to_job(row: dict[str, Any], include_logs: bool = False) -> dict[str, An
         "tem_arquivo_pdf": bool(row.get("ArquivoPdfGerado")),
         "tem_arquivo_cdr": bool(row.get("ArquivoCdrGerado")),
         "prova_revisao": _resolve_prova_revisao_from_row(row),
+        "artefatos": _artefatos_from_dados(dados),
     }
     if include_logs:
         job["logs"] = list_job_logs(row["ID"], limit=20)
     return job
+
+
+def _artefatos_from_dados(dados: Any) -> list[str]:
+    if not isinstance(dados, dict):
+        return []
+    raw = dados.get(ARTEFATOS_DADOS_KEY)
+    if not isinstance(raw, list):
+        return []
+    return [str(item) for item in raw if str(item).strip()]
+
+
+def is_timbrado_a4_digital_produto(produto: str) -> bool:
+    from services.papelaria_models_service import normalizar_texto_produto
+
+    return normalizar_texto_produto(produto) == normalizar_texto_produto(
+        PRODUTO_TIMBRADO_A4_DIGITAL
+    )
 
 
 def _resolve_prova_revisao_from_row(row: dict[str, Any]) -> Optional[str]:
@@ -500,6 +526,99 @@ def create_export_existing_cdr_job(
     append_job_log(
         job_id,
         f"Exportação de prova a partir do Corel existente ({chosen['filename']}).",
+        "info",
+    )
+    warning = _product_match_warning(produto_os, produto_job)
+    if warning:
+        append_job_log(job_id, warning, "warning")
+        job["warnings"] = [warning]
+
+    broadcast_job_update(job)
+    return job
+
+
+def create_timbrado_a4_digital_job(
+    ano: int,
+    nro: int,
+    modelo_id: int,
+    dados: dict[str, Any],
+    solicitado_por: str,
+) -> dict[str, Any]:
+    """Enfileira geração dos DOCX Timbrado A4 Digital (SVG cabeçalho/rodapé)."""
+    ensure_papelaria_jobs_tables()
+    from services import papelaria_models_service as models_svc
+
+    os_row = _validate_os_exists(ano, nro)
+    produto_os = (os_row.get("produto") or "").strip()
+    if not is_timbrado_a4_digital_produto(produto_os):
+        raise ValueError(
+            "Geração Timbrado A4 Digital disponível apenas para o produto "
+            f"'{PRODUTO_TIMBRADO_A4_DIGITAL}'."
+        )
+
+    modelo = models_svc.get_modelo_by_id(modelo_id)
+    if not modelo:
+        raise LookupError("Modelo não encontrado ou inativo.")
+
+    campos = modelo.get("campos") or {}
+    campos_norm = {str(k).strip().lower(): k for k in campos}
+    for esperado in ("cabecalho", "rodape"):
+        if esperado not in campos_norm:
+            raise ValueError(
+                "Modelo sem campos Cabecalho/Rodape necessários para Timbrado A4 Digital."
+            )
+
+    dados_clean = _sanitize_dados(dados)
+    missing = _validate_required_fields(modelo, dados_clean)
+    if missing:
+        raise ValueError(f"Campos obrigatórios ausentes: {', '.join(missing)}")
+
+    if "gabinete" in dados_clean and dados_clean["gabinete"]:
+        dados_clean["gabinete"] = models_svc.normalizar_gabinete(dados_clean["gabinete"])
+    if "uf" in dados_clean and dados_clean["uf"]:
+        dados_clean["uf"] = dados_clean["uf"].upper()
+
+    ordem = next_queue_position()
+    produto_job = modelo["produto"]
+
+    insert_params = {
+        "nro": nro,
+        "ano": ano,
+        "tipo": TIPO_JOB_TIMBRADO_A4_DIGITAL,
+        "produto": produto_job,
+        "modelo_id": modelo_id,
+        "arquivo": modelo["arquivo_modelo"],
+        "dados": json.dumps(dados_clean, ensure_ascii=False),
+        "status": STATUS_PENDING,
+        "ordem": ordem,
+        "ponto": solicitado_por,
+        "job_pai": None,
+    }
+
+    def _insert_job(cursor) -> int:
+        cursor.execute(
+            """
+            INSERT INTO tabPapelariaJobs (
+                NroProtocolo, AnoProtocolo, TipoJob, Produto, ModeloID, ArquivoModelo,
+                DadosJson, Status, Prioridade, OrdemFila, SolicitadoPor, Versao, JobPaiID
+            ) VALUES (
+                %(nro)s, %(ano)s, %(tipo)s, %(produto)s, %(modelo_id)s, %(arquivo)s,
+                %(dados)s, %(status)s, 0, %(ordem)s, %(ponto)s, 1, %(job_pai)s
+            )
+            """,
+            insert_params,
+        )
+        return int(cursor.lastrowid)
+
+    results = db.execute_transaction([_insert_job])
+    job_id = int(results[0])
+    job = get_job(job_id)
+    if not job:
+        raise RuntimeError("Falha ao recuperar job criado.")
+
+    append_job_log(
+        job_id,
+        "Job Timbrado A4 Digital criado (SVG + DOCX Cor/PB).",
         "info",
     )
     warning = _product_match_warning(produto_os, produto_job)
@@ -1355,6 +1474,17 @@ def build_output_filenames(ano: int, nro: int) -> tuple[str, str]:
     return cdr_name, pdf_name
 
 
+def build_timbrado_a4_digital_artifact_names(ano: int, nro: int) -> dict[str, str]:
+    """Nomes relativos dos artefatos Timbrado A4 Digital na pasta Sefoc."""
+    prefix = get_os_folder_basename(ano, nro)
+    return {
+        "cabecalho_svg": TIMBRADO_A4_DIGITAL_SVG_CABECALHO,
+        "rodape_svg": TIMBRADO_A4_DIGITAL_SVG_RODAPE,
+        "docx_cor": f"{prefix}-TimbradoA4Digital-Cor.docx",
+        "docx_pb": f"{prefix}-TimbradoA4Digital-PB.docx",
+    }
+
+
 def build_worker_job_payload(job_id: int) -> dict[str, Any]:
     job = get_job(job_id)
     if not job:
@@ -1464,6 +1594,16 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
             input_cdr_rel,
         )
 
+    if job["tipo_job"] == TIPO_JOB_TIMBRADO_A4_DIGITAL:
+        artifacts = build_timbrado_a4_digital_artifact_names(
+            job["ano_protocolo"],
+            job["nro_protocolo"],
+        )
+        payload["output_cabecalho_svg"] = artifacts["cabecalho_svg"]
+        payload["output_rodape_svg"] = artifacts["rodape_svg"]
+        payload["output_docx_cor"] = artifacts["docx_cor"]
+        payload["output_docx_pb"] = artifacts["docx_pb"]
+
     return payload
 
 
@@ -1549,11 +1689,20 @@ def complete_job(
     arquivo_cdr: str,
     arquivo_pdf: str,
     log_resumo: Optional[str] = None,
+    artefatos: Optional[list[str]] = None,
 ) -> dict[str, Any]:
     ensure_papelaria_jobs_tables()
     if is_job_cancelled(job_id):
         raise ValueError("Job foi cancelado pelo usuário.")
     job = _assert_worker_owns_processing_job(job_id, worker_id)
+
+    if job.get("tipo_job") == TIPO_JOB_TIMBRADO_A4_DIGITAL:
+        return _complete_timbrado_a4_digital_job(
+            job,
+            worker_id=worker_id,
+            artefatos=artefatos,
+            log_resumo=log_resumo,
+        )
 
     cdr_rel = _sanitize_relative_filename(arquivo_cdr)
     pdf_rel = _sanitize_relative_filename(arquivo_pdf)
@@ -1624,6 +1773,113 @@ def complete_job(
             depol_svc.on_job_completed(updated)
         except Exception as exc:
             logger.warning("Hook Credenciais DEPOL complete falhou (job %s): %s", job_id, exc)
+    return updated
+
+
+def _complete_timbrado_a4_digital_job(
+    job: dict[str, Any],
+    *,
+    worker_id: str,
+    artefatos: Optional[list[str]],
+    log_resumo: Optional[str],
+) -> dict[str, Any]:
+    job_id = int(job["id"])
+    expected = build_timbrado_a4_digital_artifact_names(
+        job["ano_protocolo"],
+        job["nro_protocolo"],
+    )
+    # Essencial: apenas os 2 DOCX. SVG é opcional (auditoria).
+    required_names = [
+        expected["docx_cor"],
+        expected["docx_pb"],
+    ]
+    optional_names = [
+        expected["cabecalho_svg"],
+        expected["rodape_svg"],
+    ]
+    provided = [
+        _sanitize_relative_filename(str(name))
+        for name in (artefatos or [])
+        if str(name).strip()
+    ]
+    if not provided:
+        provided = list(required_names)
+
+    missing_required = [name for name in required_names if name not in provided]
+    if missing_required:
+        raise ValueError(
+            "Artefatos Timbrado A4 Digital incompletos: "
+            + ", ".join(missing_required)
+        )
+
+    output_dir = resolve_os_papelaria_dir(
+        job["ano_protocolo"],
+        job["nro_protocolo"],
+        create=False,
+    )
+    real_base = os.path.realpath(output_dir)
+    if not real_base.endswith(os.sep):
+        real_base = real_base + os.sep
+
+    for name in required_names:
+        path = os.path.normpath(os.path.join(output_dir, name))
+        real_file = os.path.realpath(path)
+        if not real_file.startswith(real_base):
+            raise ValueError("Caminho de arquivo inválido.")
+        if not os.path.isfile(path):
+            raise FileNotFoundError(
+                f"Arquivo não encontrado no destino: {os.path.basename(path)}"
+            )
+
+    stored_artefatos = list(required_names)
+    for name in optional_names:
+        path = os.path.normpath(os.path.join(output_dir, name))
+        real_file = os.path.realpath(path)
+        if real_file.startswith(real_base) and os.path.isfile(path):
+            if name not in stored_artefatos:
+                stored_artefatos.insert(0, name)
+
+    # Mantém ordem informada pelo worker quando válida (DOCX + SVG opcionais).
+    if provided:
+        ordered = [n for n in provided if n in stored_artefatos or n in required_names]
+        for name in stored_artefatos:
+            if name not in ordered:
+                ordered.append(name)
+        stored_artefatos = ordered
+
+    dados = dict(job.get("dados") or {})
+    dados[ARTEFATOS_DADOS_KEY] = stored_artefatos
+    dados_json = json.dumps(dados, ensure_ascii=False)
+
+    db.execute_query(
+        """
+        UPDATE tabPapelariaJobs
+        SET Status = %(status)s,
+            ArquivoCdrGerado = NULL,
+            ArquivoPdfGerado = NULL,
+            DadosJson = %(dados)s,
+            ProvaRevisao = %(prova_revisao)s,
+            ConcluidoEm = NOW(),
+            Erro = NULL
+        WHERE ID = %(id)s AND Status = %(processing)s AND WorkerID = %(worker_id)s
+        """,
+        {
+            "id": job_id,
+            "status": STATUS_COMPLETED,
+            "dados": dados_json,
+            "prova_revisao": PROVA_REVISAO_NA,
+            "processing": STATUS_PROCESSING,
+            "worker_id": worker_id.strip(),
+        },
+    )
+
+    updated = get_job(job_id)
+    if not updated or updated["status"] != STATUS_COMPLETED:
+        raise ValueError("Job não pôde ser concluído (status alterado).")
+
+    msg = log_resumo or "Timbrado A4 Digital concluído (DOCX Cor/PB)."
+    append_job_log(job_id, msg[:4000], "info")
+    broadcast_job_update(updated)
     return updated
 
 

@@ -23,6 +23,17 @@ class TestPapelariaUtilitarios:
         assert normalizar_gabinete("Anexo IV, Gabinete 45") == "045"
         assert normalizar_gabinete("1234") == "234"
 
+    def test_is_relevo_seco_cores(self):
+        from services.papelaria_models_service import is_relevo_seco_cores
+
+        assert is_relevo_seco_cores("Relev Seco") is True
+        assert is_relevo_seco_cores("Relevo seco") is True
+        assert is_relevo_seco_cores("  relev seco  ") is True
+        assert is_relevo_seco_cores("Policromia") is False
+        assert is_relevo_seco_cores("Port/Inglês") is False
+        assert is_relevo_seco_cores("") is False
+        assert is_relevo_seco_cores(None) is False
+
     def test_substituir_variaveis(self):
         from services.papelaria_models_service import substituir_variaveis
 

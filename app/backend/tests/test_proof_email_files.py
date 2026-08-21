@@ -63,6 +63,61 @@ class TestListProofPdfFiles:
         assert result["files"] == []
         assert result["suggested"] is None
 
+    def test_suggested_prefers_highest_prova_sefoc_over_mtime(self, monkeypatch, tmp_path):
+        from services import proof_files_service as svc
+
+        sefoc = tmp_path / "Sefoc"
+        sefoc.mkdir()
+        older = sefoc / "6093-ProvaSefoc 3.pdf"
+        newer = sefoc / "6093-ProvaSefoc 4.pdf"
+        older.write_bytes(b"%PDF-1.4 v3")
+        newer.write_bytes(b"%PDF-1.4 v4")
+        # Touch older last so mtime alone preferiria a 3
+        os.utime(newer, (1_700_000_000, 1_700_000_000))
+        os.utime(older, (1_800_000_000, 1_800_000_000))
+
+        monkeypatch.setattr(svc, "_sefoc_dir", lambda _a, _o: str(sefoc))
+        result = svc.list_proof_pdf_files(2026, 6093)
+        assert result["suggested"] == "6093-ProvaSefoc 4.pdf"
+
+    def test_suggested_falls_back_to_mtime_without_prova_pattern(self, monkeypatch, tmp_path):
+        from services import proof_files_service as svc
+
+        sefoc = tmp_path / "Sefoc"
+        sefoc.mkdir()
+        a = sefoc / "alpha.pdf"
+        b = sefoc / "beta.pdf"
+        a.write_bytes(b"%PDF-a")
+        b.write_bytes(b"%PDF-b")
+        os.utime(a, (1_700_000_000, 1_700_000_000))
+        os.utime(b, (1_800_000_000, 1_800_000_000))
+
+        monkeypatch.setattr(svc, "_sefoc_dir", lambda _a, _o: str(sefoc))
+        result = svc.list_proof_pdf_files(2026, 100)
+        assert result["suggested"] == "beta.pdf"
+
+
+class TestExtractProvaVersionFromFilename:
+    def test_prova_sefoc_pattern(self):
+        from services.proof_files_service import extract_prova_version_from_filename
+
+        assert (
+            extract_prova_version_from_filename(
+                "6093-26-Nome-ProvaSefoc 4.pdf"
+            )
+            == 4
+        )
+
+    def test_legacy_pattern(self):
+        from services.proof_files_service import extract_prova_version_from_filename
+
+        assert extract_prova_version_from_filename("05024-Prova2_SEFOC.pdf") == 2
+
+    def test_no_pattern(self):
+        from services.proof_files_service import extract_prova_version_from_filename
+
+        assert extract_prova_version_from_filename("prova_livre.pdf") is None
+
 
 class TestResolveProofPdfPath:
     def test_resolves_under_sefoc(self, monkeypatch, tmp_path):
@@ -162,6 +217,52 @@ class TestEnsureProofToken:
         assert token == "new-token-xyz"
         assert any("DataExpiracao = NOW()" in s for s in sql_log)
         assert any(s.startswith("INSERT INTO tabProofTokens") for s in sql_log)
+
+    def test_expires_token_prova3_when_publishing_prova4(self, monkeypatch):
+        """Regressão: reenvio com ProvaSefoc 4 invalida token pendente da 3."""
+        from routers import proof_portal_routes as routes
+
+        sql_log: list[str] = []
+        insert_params: list = []
+
+        def fake_query(sql, params=None):
+            sql_norm = " ".join(sql.split())
+            sql_log.append(sql_norm)
+            if "SELECT ID, Token, Versao, ArquivoProva" in sql_norm:
+                return [
+                    {
+                        "ID": 10,
+                        "Token": "token-prova-3",
+                        "Versao": "3",
+                        "ArquivoProva": "6093-ProvaSefoc 3.pdf",
+                    }
+                ]
+            if sql_norm.startswith("UPDATE tabProofTokens SET DataExpiracao"):
+                return []
+            if sql_norm.startswith("INSERT INTO tabProofTokens"):
+                insert_params.append(params)
+                return []
+            return []
+
+        monkeypatch.setattr(routes.db, "execute_query", fake_query)
+        monkeypatch.setattr(routes.secrets, "token_urlsafe", lambda _n: "token-prova-4")
+
+        token = routes.ensure_proof_token(
+            6093, 2026, "4", "6093-ProvaSefoc 4.pdf", ponto_envio="918713"
+        )
+        assert token == "token-prova-4"
+        assert any("DataExpiracao = NOW()" in s for s in sql_log)
+        assert insert_params
+        # params may be tuple/list/dict depending on call site
+        flat = insert_params[0]
+        if isinstance(flat, dict):
+            assert flat.get("Versao") == "4" or "4" in flat.values()
+            assert any(
+                "ProvaSefoc 4" in str(v) for v in flat.values()
+            )
+        else:
+            assert "4" in flat
+            assert any("ProvaSefoc 4" in str(p) for p in flat)
 
 
 class TestResolveProofPdfForTokenRow:

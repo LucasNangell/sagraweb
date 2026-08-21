@@ -13,6 +13,21 @@ _INVALID_PROOF_NAME = re.compile(r"[/\\]|\.\.")
 
 _MAX_FILENAME_LEN = 512
 
+_PROVA_SEFOC_RE = re.compile(r"ProvaSefoc (\d+)\.pdf$", re.IGNORECASE)
+_PROVA_SEFOC_LEGACY_RE = re.compile(r"Prova(\d+)_SEFOC\.pdf$", re.IGNORECASE)
+
+
+def extract_prova_version_from_filename(filename: str) -> Optional[int]:
+    """Extrai o número x de *-ProvaSefoc {x}.pdf ou legado Prova{x}_SEFOC."""
+    base = os.path.basename((filename or "").strip())
+    match = _PROVA_SEFOC_RE.search(base)
+    if match:
+        return int(match.group(1))
+    match = _PROVA_SEFOC_LEGACY_RE.search(base)
+    if match:
+        return int(match.group(1))
+    return None
+
 
 def _max_attachment_bytes() -> int:
     raw = (os.environ.get("SAGRA_EMAIL_ATTACHMENT_MAX_MB") or "50").strip()
@@ -106,11 +121,15 @@ def resolve_proof_pdf_path(ano: int, os_id: int, filename: str) -> str:
 
 
 def list_proof_pdf_files(ano: int, os_id: int) -> dict[str, Any]:
-    """Lista metadados seguros dos PDFs em Sefoc/ (sem caminho UNC)."""
+    """Lista metadados seguros dos PDFs em Sefoc/ (sem caminho UNC).
+
+    ``suggested`` prefere o maior número ProvaSefoc N; sem padrão, usa mtime.
+    """
     sefoc_path = _sefoc_dir(ano, os_id)
     files: list[dict[str, Any]] = []
     suggested: Optional[str] = None
-    latest_mtime = -1.0
+    best_versioned: Optional[tuple[int, float, str]] = None
+    best_mtime: Optional[tuple[float, str]] = None
 
     if sefoc_path:
         pattern = os.path.join(sefoc_path, "*.pdf")
@@ -134,9 +153,18 @@ def list_proof_pdf_files(ano: int, os_id: int) -> dict[str, Any]:
                     "modified_at": modified_at,
                 }
             )
-            if mtime > latest_mtime:
-                latest_mtime = mtime
-                suggested = name
+            ver = extract_prova_version_from_filename(name)
+            if ver is not None:
+                candidate = (ver, mtime, name)
+                if best_versioned is None or candidate[:2] > best_versioned[:2]:
+                    best_versioned = candidate
+            if best_mtime is None or mtime > best_mtime[0]:
+                best_mtime = (mtime, name)
+
+        if best_versioned is not None:
+            suggested = best_versioned[2]
+        elif best_mtime is not None:
+            suggested = best_mtime[1]
 
     files.sort(key=lambda item: item["name"].lower())
 

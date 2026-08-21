@@ -1559,6 +1559,7 @@ def send_pt_email(request: EmailPTRequest, session: SessionData = Depends(requir
                 resolve_proof_send_plan,
             )
             from services.proof_files_service import (
+                extract_prova_version_from_filename,
                 resolve_proof_pdf_path,
                 validate_proof_pdf_size,
             )
@@ -1575,7 +1576,11 @@ def send_pt_email(request: EmailPTRequest, session: SessionData = Depends(requir
                 request.proof_filename,
             )
             proof_file_basename = os.path.basename(pdf_path)
-            nova_versao = (request.versao or "").strip() or "1"
+            parsed_ver = extract_prova_version_from_filename(proof_file_basename)
+            if parsed_ver is not None:
+                nova_versao = str(parsed_ver)
+            else:
+                nova_versao = (request.versao or "").strip() or "1"
 
             plan = resolve_proof_send_plan(request.os)
             use_attachment = bool(plan.get("use_attachment"))

@@ -167,3 +167,100 @@ class TestSendProofEmailWithoutAttachment:
         assert captured_andamento.get("situacao") == "Aguard. Aprovação"
         assert "P1 enviada para:" in (captured_andamento.get("obs") or "")
         assert "cliente@test.local" in (captured_andamento.get("obs") or "")
+
+    def test_proof_send_derives_versao_from_prova_sefoc_filename(self, monkeypatch, tmp_path):
+        from routers import email_routes
+        from routers.email_routes import EmailPTRequest, send_pt_email
+
+        pdf = tmp_path / "6093-ProvaSefoc 4.pdf"
+        pdf.write_bytes(b"%PDF")
+        token_args: list[tuple] = []
+
+        class FakeEws:
+            def find_folder_id(self, *_a, **_k):
+                return None
+
+            def send_email(self, **kwargs):
+                return None
+
+        cfg = MagicMock()
+        cfg.send_mailbox_os_lt_5000 = "sepim@test.local"
+
+        monkeypatch.setattr(
+            email_routes,
+            "_resolve_ews_for_ponto",
+            lambda _p: (FakeEws(), cfg),
+        )
+        monkeypatch.setattr(
+            "services.proof_files_service.resolve_proof_pdf_path",
+            lambda *_a, **_k: str(pdf),
+        )
+
+        def capture_token(os_id, ano, versao, arquivo, ponto_envio=None):
+            token_args.append((os_id, ano, versao, arquivo, ponto_envio))
+            return "proof-token-v4"
+
+        monkeypatch.setattr(
+            "routers.proof_portal_routes.ensure_proof_token",
+            capture_token,
+        )
+        monkeypatch.setattr(
+            "routers.proof_portal_routes.build_proof_portal_url",
+            lambda os_id, ano, token: f"http://test/portal/aprovacao/{token}?os={os_id}&ano={ano}",
+        )
+        monkeypatch.setattr(
+            email_routes.db,
+            "execute_query",
+            lambda sql, params=None: (
+                [{"solicitante": "Dep", "produto": "Cartaz"}]
+                if "tabProtocolos" in sql
+                else []
+            ),
+        )
+        monkeypatch.setattr(
+            "services.email_template_model_service.resolve_proof_send_plan",
+            lambda _os: {
+                "grupo": "prova_os",
+                "variante": "portal",
+                "model": None,
+                "use_attachment": False,
+                "legacy_fallback": True,
+            },
+        )
+        monkeypatch.setattr(
+            "services.email_template_model_service.render_proof_email",
+            lambda *_a, **_k: ("Assunto", "<a href='x'>link</a>"),
+        )
+        monkeypatch.setattr(
+            "services.email_template_service.get_global_send_mailboxes",
+            lambda: {"os_gte_5000": None, "os_lt_5000": None},
+        )
+        monkeypatch.setattr(
+            "config_manager.config_manager.is_mdb_write_enabled",
+            lambda: False,
+        )
+        monkeypatch.setattr(
+            email_routes.db,
+            "execute_transaction",
+            lambda ops: [ops[0](MagicMock())],
+        )
+
+        session = MagicMock()
+        session.ponto = "918713"
+
+        req = EmailPTRequest(
+            os=6093,
+            ano=2026,
+            versao="3",  # stale UI field — must not win over filename
+            to=["cliente@test.local"],
+            ponto="918713",
+            type="proof",
+            proof_filename="6093-ProvaSefoc 4.pdf",
+            register_andamento=False,
+        )
+
+        result = send_pt_email(req, session)
+        assert result["success"] is True
+        assert token_args == [
+            (6093, 2026, "4", "6093-ProvaSefoc 4.pdf", "918713")
+        ]

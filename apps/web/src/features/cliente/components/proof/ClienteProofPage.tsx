@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 
@@ -438,7 +438,7 @@ export function ClienteProofPage({
           {done === "approved" ? (
             <CheckCircle2 className="mx-auto size-14 text-primary-green" aria-hidden />
           ) : (
-            <XCircle className="mx-auto size-14 text-amber-600" aria-hidden />
+            <CheckCircle2 className="mx-auto size-14 text-secondary-blue" aria-hidden />
           )}
           <h2 className="mt-4 text-xl font-bold text-slate-900">
             {done === "approved" ? "Prova aprovada" : "Solicitações enviadas"}

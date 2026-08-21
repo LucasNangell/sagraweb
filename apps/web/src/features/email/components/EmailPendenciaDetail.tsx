@@ -27,7 +27,11 @@ import {
 } from "./EmailProofFileSelector";
 import { EmailHtmlEditor } from "./EmailHtmlEditor";
 import { emailInputClass, emailLabelClass, emailPanelClass } from "./email-ui";
-import { osRelativePathToProofFilename } from "../utils/proofFilePicker";
+import {
+  extractProvaVersionFromFilename,
+  osRelativePathToProofFilename,
+  shouldAdoptSuggestedProof,
+} from "../utils/proofFilePicker";
 import {
   OsFolderBrowserModal,
   type OsFolderPdfPick,
@@ -221,6 +225,14 @@ export function EmailPendenciaDetail({
   }, [ptQuery.data?.versao, versao]);
 
   useEffect(() => {
+    if (!isProofMode || !selectedProofFile) return;
+    const parsed = extractProvaVersionFromFilename(selectedProofFile);
+    if (parsed != null) {
+      setVersao(String(parsed));
+    }
+  }, [isProofMode, selectedProofFile]);
+
+  useEffect(() => {
     const loaded = ptQuery.data?.html ?? "";
     if (!loaded) return;
     setEditedHtml(loaded);
@@ -234,7 +246,11 @@ export function EmailPendenciaDetail({
       setSelectedProofFile("");
       return;
     }
-    if (selectedProofFile && files.some((f) => f.name === selectedProofFile)) {
+    if (
+      selectedProofFile &&
+      files.some((f) => f.name === selectedProofFile) &&
+      !shouldAdoptSuggestedProof(selectedProofFile, suggested)
+    ) {
       return;
     }
     const auto =

@@ -1454,14 +1454,11 @@ def _max_prova_sefoc_version(sefoc_dir: str, prefix: str, nro: int) -> int:
 
 def extract_prova_version_from_filename(filename: str) -> Optional[int]:
     """Extrai o número x de *-ProvaSefoc {x}.pdf ou legado Prova{x}_SEFOC."""
-    base = os.path.basename((filename or "").strip())
-    match = re.search(r"ProvaSefoc (\d+)\.pdf$", base, re.IGNORECASE)
-    if match:
-        return int(match.group(1))
-    match = re.search(r"Prova(\d+)_SEFOC\.pdf$", base, re.IGNORECASE)
-    if match:
-        return int(match.group(1))
-    return None
+    from services.proof_files_service import (
+        extract_prova_version_from_filename as _extract,
+    )
+
+    return _extract(filename)
 
 
 def build_output_filenames(ano: int, nro: int) -> tuple[str, str]:

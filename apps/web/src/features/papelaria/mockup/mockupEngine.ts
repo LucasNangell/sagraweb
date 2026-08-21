@@ -9,20 +9,9 @@ import type {
 
 const FULL_CROP: PapelariaMockupCrop = { x: 0, y: 0, width: 100, height: 100 };
 
-/** Tamanho de cena da página Papelaria (e teto do mockup no portal). */
+/** Tamanho fixo de cena da página Papelaria (staff). */
 export const PAPELARIA_MOCKUP_SCENE_BASE_PX = 280;
 export const PAPELARIA_MOCKUP_SCENE_BASE_PX_NARROW = 220;
-
-/** Impede o portal de ultrapassar o tamanho da Papelaria; reduz se o painel for menor. */
-export function capPortalMockupSceneBasePx(
-  fitted: number,
-  isNarrow: boolean,
-): number {
-  const cap = isNarrow
-    ? PAPELARIA_MOCKUP_SCENE_BASE_PX_NARROW
-    : PAPELARIA_MOCKUP_SCENE_BASE_PX;
-  return Math.min(cap, fitted);
-}
 
 export function normalizeCrop(crop?: PapelariaMockupCrop): PapelariaMockupCrop {
   return crop ?? FULL_CROP;

@@ -23,7 +23,6 @@ export {
 export {
   buildFaceTransform,
   buildSceneTransform,
-  capPortalMockupSceneBasePx,
   configUsesFold,
   cropToBackgroundStyle,
   faceLayoutStyle,

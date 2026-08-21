@@ -191,7 +191,7 @@
   }
 }
 
-/* Portal — mockup no tamanho da Papelaria, centralizado na área de visualização */
+/* Portal — mockup ajustado à área disponível, centralizado */
 .proof-mockup-root--portal-fit {
   height: 100%;
   min-height: 0;

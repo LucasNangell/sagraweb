@@ -7,17 +7,17 @@ import type { ProofPreviewPagesData } from "@/api/proof-portal";
 import { proofPreviewPageUrls } from "@/api/proof-portal";
 import { PapelariaProofMockup3D } from "@/features/papelaria/components/PapelariaProofMockup3D";
 import {
-  capPortalMockupSceneBasePx,
   configUsesFold,
   getPapelariaMockupConfig,
   PAPELARIA_MOCKUP_SCENE_BASE_PX,
+  PAPELARIA_MOCKUP_SCENE_BASE_PX_NARROW,
   resolveSceneBasePx,
 } from "@/features/papelaria/mockup";
 import { useMatchMedia } from "@/hooks/useMatchMedia";
 
-/** Padding interno de .proof-mockup-root (1.25rem 1rem 1.75rem). */
+/** Padding de .proof-mockup-root--portal-fit (1.25rem 1rem). */
 const MOCKUP_ROOT_PAD_X = 32;
-const MOCKUP_ROOT_PAD_Y = 48;
+const MOCKUP_ROOT_PAD_Y = 40;
 
 interface ClienteProofMockupPanelProps {
   previewData: ProofPreviewPagesData | undefined;
@@ -59,7 +59,11 @@ function ClienteProofMockupPanelReady({
 
   useEffect(() => {
     if (!fillHeight) {
-      setSceneBasePx(capPortalMockupSceneBasePx(PAPELARIA_MOCKUP_SCENE_BASE_PX, isNarrowViewport));
+      setSceneBasePx(
+        isNarrowViewport
+          ? PAPELARIA_MOCKUP_SCENE_BASE_PX_NARROW
+          : PAPELARIA_MOCKUP_SCENE_BASE_PX,
+      );
       return;
     }
 
@@ -77,7 +81,7 @@ function ClienteProofMockupPanelReady({
         rect.height - MOCKUP_ROOT_PAD_Y,
         0.82,
       );
-      setSceneBasePx(capPortalMockupSceneBasePx(fitted, isNarrowViewport));
+      setSceneBasePx(fitted);
     };
 
     updateSize();

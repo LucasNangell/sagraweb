@@ -617,9 +617,22 @@ export function AnaliseLabInspector({
 
   const handleMoveGuideById = useCallback(
     (id: string, toMm: number) => {
-      onPrefsChange(moveGuideById(prefs, id, toMm));
+      const isX = prefs.guidesX.some((g) => g.id === id);
+      const meta = pages.find((p) => p.page === activePageRef.current) ?? pages[0];
+      const size = pageSizeMm(meta?.widthPt || 0, meta?.heightPt || 0);
+      const pageLimit = isX ? size.widthMm : size.heightMm;
+      onPrefsChange(moveGuideById(prefs, id, toMm, 0.3, pageLimit));
     },
-    [onPrefsChange, prefs],
+    [onPrefsChange, pages, prefs],
+  );
+
+  const handleSelectedGuidePosMmChange = useCallback(
+    (mm: number) => {
+      const id = selectedGuideIds[0];
+      if (!id) return;
+      handleMoveGuideById(id, mm);
+    },
+    [handleMoveGuideById, selectedGuideIds],
   );
 
   const handleSelectGuides = useCallback(
@@ -690,6 +703,11 @@ export function AnaliseLabInspector({
   const selectedGuideColor =
     selectedGuideIds.length === 1
       ? findGuideById(selectedGuideIds[0]!)?.color ?? null
+      : null;
+
+  const selectedGuidePosMm =
+    selectedGuideIds.length === 1
+      ? findGuideById(selectedGuideIds[0]!)?.posMm ?? null
       : null;
 
   const guideDistanceLabel = useMemo(() => {
@@ -792,7 +810,9 @@ export function AnaliseLabInspector({
         onMeasureModeChange={setMeasureMode}
         selectedGuideIds={selectedGuideIds}
         selectedGuideColor={selectedGuideColor}
+        selectedGuidePosMm={selectedGuidePosMm}
         onSelectedGuideColorChange={handleSelectedGuideColorChange}
+        onSelectedGuidePosMmChange={handleSelectedGuidePosMmChange}
         onDeleteSelectedGuides={handleDeleteSelectedGuides}
         guideDistanceLabel={guideDistanceLabel}
       />

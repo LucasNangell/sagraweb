@@ -881,6 +881,22 @@ export function AnaliseLabInspectorPage({
                       strokeOpacity={dragging && guideDrag.outside ? 0.35 : 1}
                       pointerEvents="none"
                     />
+                    <text
+                      x={Math.min(displayW - 4, xPx + 4)}
+                      y={14}
+                      fill={guide.color}
+                      fontSize={11}
+                      fontWeight={selected || dragging ? 600 : 500}
+                      pointerEvents="none"
+                      style={{
+                        paintOrder: "stroke",
+                        stroke: "#fff",
+                        strokeWidth: 3,
+                        strokeLinejoin: "round",
+                      }}
+                    >
+                      {valueMm.toFixed(1)} mm
+                    </text>
                   </g>
                 );
               })
@@ -925,33 +941,87 @@ export function AnaliseLabInspectorPage({
                       strokeOpacity={dragging && guideDrag.outside ? 0.35 : 1}
                       pointerEvents="none"
                     />
+                    <text
+                      x={6}
+                      y={Math.max(12, yPx - 4)}
+                      fill={guide.color}
+                      fontSize={11}
+                      fontWeight={selected || dragging ? 600 : 500}
+                      pointerEvents="none"
+                      style={{
+                        paintOrder: "stroke",
+                        stroke: "#fff",
+                        strokeWidth: 3,
+                        strokeLinejoin: "round",
+                      }}
+                    >
+                      {valueMm.toFixed(1)} mm
+                    </text>
                   </g>
                 );
               })
             : null}
           {rulerDrag?.mode === "guide" ? (
             rulerDrag.axis === "x" ? (
-              <line
-                x1={(rulerDrag.currentMm / widthMm) * displayW}
-                y1={0}
-                x2={(rulerDrag.currentMm / widthMm) * displayW}
-                y2={displayH}
-                stroke={guideColor}
-                strokeWidth={1.5}
-                strokeDasharray="4 3"
-                pointerEvents="none"
-              />
+              <g pointerEvents="none">
+                <line
+                  x1={(rulerDrag.currentMm / widthMm) * displayW}
+                  y1={0}
+                  x2={(rulerDrag.currentMm / widthMm) * displayW}
+                  y2={displayH}
+                  stroke={guideColor}
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                />
+                <text
+                  x={Math.min(
+                    displayW - 4,
+                    (rulerDrag.currentMm / widthMm) * displayW + 4,
+                  )}
+                  y={14}
+                  fill={guideColor}
+                  fontSize={11}
+                  fontWeight={600}
+                  style={{
+                    paintOrder: "stroke",
+                    stroke: "#fff",
+                    strokeWidth: 3,
+                    strokeLinejoin: "round",
+                  }}
+                >
+                  {rulerDrag.currentMm.toFixed(1)} mm
+                </text>
+              </g>
             ) : (
-              <line
-                x1={0}
-                y1={(rulerDrag.currentMm / heightMm) * displayH}
-                x2={displayW}
-                y2={(rulerDrag.currentMm / heightMm) * displayH}
-                stroke={guideColor}
-                strokeWidth={1.5}
-                strokeDasharray="4 3"
-                pointerEvents="none"
-              />
+              <g pointerEvents="none">
+                <line
+                  x1={0}
+                  y1={(rulerDrag.currentMm / heightMm) * displayH}
+                  x2={displayW}
+                  y2={(rulerDrag.currentMm / heightMm) * displayH}
+                  stroke={guideColor}
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                />
+                <text
+                  x={6}
+                  y={Math.max(
+                    12,
+                    (rulerDrag.currentMm / heightMm) * displayH - 4,
+                  )}
+                  fill={guideColor}
+                  fontSize={11}
+                  fontWeight={600}
+                  style={{
+                    paintOrder: "stroke",
+                    stroke: "#fff",
+                    strokeWidth: 3,
+                    strokeLinejoin: "round",
+                  }}
+                >
+                  {rulerDrag.currentMm.toFixed(1)} mm
+                </text>
+              </g>
             )
           ) : null}
         </svg>

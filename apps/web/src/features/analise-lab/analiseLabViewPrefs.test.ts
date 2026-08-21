@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   addGuideMm,
+  clampGuidePosMm,
   DEFAULT_VIEW_PREFS,
   gridLinesMm,
   loadViewPrefs,
@@ -177,5 +178,22 @@ describe("analiseLabViewPrefs", () => {
     prefs = addGuideMm(prefs, "x", 50);
     expect(prefs.guidesX.find((g) => g.id === "a")?.color).toBe("#111111");
     expect(prefs.guidesX.find((g) => g.posMm === 50)?.color).toBe("#ff0000");
+  });
+
+  it("clampGuidePosMm limita à página e arredonda 0.1 mm", () => {
+    expect(clampGuidePosMm(12.34, 210)).toBe(12.3);
+    expect(clampGuidePosMm(-5, 210)).toBe(0);
+    expect(clampGuidePosMm(999, 210)).toBe(210);
+    expect(clampGuidePosMm(Number.NaN, 210)).toBe(0);
+  });
+
+  it("moveGuideById com pageSizeMm faz clamp", () => {
+    let prefs = normalizeViewPrefs({
+      guidesX: [{ id: "a", posMm: 10, color: "#111111" }],
+    });
+    prefs = moveGuideById(prefs, "a", 999, 0.3, 210);
+    expect(prefs.guidesX.find((g) => g.id === "a")?.posMm).toBe(210);
+    prefs = moveGuideById(prefs, "a", -3, 0.3, 210);
+    expect(prefs.guidesX.find((g) => g.id === "a")?.posMm).toBe(0);
   });
 });

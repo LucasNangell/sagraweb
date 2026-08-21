@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   BetweenHorizontalStart,
   Columns2,
@@ -63,7 +64,9 @@ interface AnaliseLabToolbarProps {
   onMeasureModeChange?: (mode: InspectMeasureMode) => void;
   selectedGuideIds?: string[];
   selectedGuideColor?: string | null;
+  selectedGuidePosMm?: number | null;
   onSelectedGuideColorChange?: (color: string) => void;
+  onSelectedGuidePosMmChange?: (mm: number) => void;
   onDeleteSelectedGuides?: () => void;
   guideDistanceLabel?: string | null;
 }
@@ -92,7 +95,9 @@ export function AnaliseLabToolbar({
   onMeasureModeChange,
   selectedGuideIds = [],
   selectedGuideColor = null,
+  selectedGuidePosMm = null,
   onSelectedGuideColorChange,
+  onSelectedGuidePosMmChange,
   onDeleteSelectedGuides,
   guideDistanceLabel = null,
 }: AnaliseLabToolbarProps) {
@@ -100,6 +105,26 @@ export function AnaliseLabToolbar({
   const showOptions = !hideMarkOptions && mark.tool !== "select";
   const hasSelection = selectedGuideIds.length > 0;
   const singleSelection = selectedGuideIds.length === 1;
+
+  const [posDraft, setPosDraft] = useState("");
+  const selectedId = singleSelection ? selectedGuideIds[0] : undefined;
+  useEffect(() => {
+    if (selectedId && selectedGuidePosMm != null) {
+      setPosDraft(selectedGuidePosMm.toFixed(1));
+    } else {
+      setPosDraft("");
+    }
+  }, [selectedId, selectedGuidePosMm]);
+
+  const commitGuidePos = () => {
+    if (!singleSelection || selectedGuidePosMm == null) return;
+    const parsed = Number(posDraft.replace(",", "."));
+    if (!Number.isFinite(parsed)) {
+      setPosDraft(selectedGuidePosMm.toFixed(1));
+      return;
+    }
+    onSelectedGuidePosMmChange?.(parsed);
+  };
 
   const {
     onToolChange,
@@ -267,6 +292,30 @@ export function AnaliseLabToolbar({
                       title="Cor da guia selecionada"
                       aria-label="Cor da guia selecionada"
                     />
+                  ) : null}
+                  {singleSelection && selectedGuidePosMm != null ? (
+                    <label
+                      className="inline-flex h-7 items-center gap-1 rounded border border-sagra-border bg-white px-1.5 text-[11px] text-neutral-700"
+                      title="Posição da guia selecionada"
+                    >
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.1}
+                        value={posDraft}
+                        onChange={(e) => setPosDraft(e.target.value)}
+                        onBlur={commitGuidePos}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            (e.target as HTMLInputElement).blur();
+                          }
+                        }}
+                        className="w-14 border-0 bg-transparent p-0 text-[11px] tabular-nums outline-none"
+                        aria-label="Posição da guia em milímetros"
+                      />
+                      <span className="text-neutral-500">mm</span>
+                    </label>
                   ) : null}
                 </>
               ) : null}

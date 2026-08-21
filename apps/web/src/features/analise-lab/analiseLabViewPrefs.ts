@@ -80,6 +80,13 @@ function roundPosMm(mm: number): number {
   return Math.round(mm * 10) / 10;
 }
 
+/** Limita a posição da guia à página (0 … pageSizeMm). */
+export function clampGuidePosMm(mm: number, pageSizeMm: number): number {
+  if (!Number.isFinite(mm)) return 0;
+  const max = Math.max(0, pageSizeMm);
+  return roundPosMm(Math.min(max, Math.max(0, mm)));
+}
+
 /**
  * Aceita formato novo (GuideLine[]) ou legado (number[] / guidesXMm).
  * Atribui cor padrão às linhas migradas.
@@ -315,9 +322,13 @@ export function moveGuideById(
   id: string,
   toMm: number,
   toleranceMm = 0.3,
+  pageSizeMm?: number,
 ): InspectorViewPrefs {
   if (!Number.isFinite(toMm)) return prefs;
-  const value = roundPosMm(toMm);
+  const value =
+    pageSizeMm != null && Number.isFinite(pageSizeMm)
+      ? clampGuidePosMm(toMm, pageSizeMm)
+      : roundPosMm(toMm);
   const tryAxis = (
     key: "guidesX" | "guidesY",
   ): InspectorViewPrefs | null => {

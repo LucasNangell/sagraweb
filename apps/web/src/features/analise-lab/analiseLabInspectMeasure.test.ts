@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  constrainMeasureEndpoint,
   deltaMm,
   distanceMm,
   rectFromPoints,
@@ -37,5 +38,43 @@ describe("analiseLabInspectMeasure", () => {
         y2Mm: 4.57,
       },
     );
+  });
+
+  it("constrainMeasureEndpoint returns cursor when unconstrained", () => {
+    const origin = { xMm: 10, yMm: 20 };
+    const cursor = { xMm: 33.3, yMm: 41.7 };
+    expect(constrainMeasureEndpoint(origin, cursor, false)).toEqual(cursor);
+  });
+
+  it("constrainMeasureEndpoint snaps near-horizontal to dy ≈ 0", () => {
+    const origin = { xMm: 0, yMm: 0 };
+    const end = constrainMeasureEndpoint(
+      origin,
+      { xMm: 100, yMm: 8 },
+      true,
+    );
+    expect(Math.abs(end.yMm - origin.yMm)).toBeLessThan(0.01);
+    expect(end.xMm).toBeCloseTo(100.32, 1);
+  });
+
+  it("constrainMeasureEndpoint snaps near-vertical to dx ≈ 0", () => {
+    const origin = { xMm: 0, yMm: 0 };
+    const end = constrainMeasureEndpoint(
+      origin,
+      { xMm: 7, yMm: 80 },
+      true,
+    );
+    expect(Math.abs(end.xMm - origin.xMm)).toBeLessThan(0.01);
+    expect(end.yMm).toBeCloseTo(80.31, 1);
+  });
+
+  it("constrainMeasureEndpoint snaps near-45° to |dx| ≈ |dy|", () => {
+    const origin = { xMm: 0, yMm: 0 };
+    const end = constrainMeasureEndpoint(
+      origin,
+      { xMm: 50, yMm: 42 },
+      true,
+    );
+    expect(Math.abs(Math.abs(end.xMm) - Math.abs(end.yMm))).toBeLessThan(0.02);
   });
 });

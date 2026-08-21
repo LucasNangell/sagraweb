@@ -368,12 +368,12 @@ export function AnaliseLabToolbar({
                   setMeasureMode(measureMode === "ruler" ? "off" : "ruler")
                 }
                 className={measureMode === "ruler" ? btnActive : btnIdle}
-                title="Régua (distância entre 2 pontos)"
-                aria-label="Régua"
+                title="Dimensões (distância entre 2 pontos)"
+                aria-label="Dimensões"
                 aria-pressed={measureMode === "ruler"}
               >
                 <MoveDiagonal className="size-3.5" aria-hidden />
-                <span className="ml-1 hidden sm:inline">Régua</span>
+                <span className="ml-1 hidden sm:inline">Dimensões</span>
               </button>
 
               <button

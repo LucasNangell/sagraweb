@@ -55,3 +55,26 @@ export function rulerFromPoints(a: MmPoint, b: MmPoint): RulerMeasure {
     y2Mm: Math.round(b.yMm * 100) / 100,
   };
 }
+
+/**
+ * Com constrain (Ctrl/Shift): snap do segundo ponto para H / V / diagonal (45°),
+ * preservando a distância do cursor ao origin.
+ */
+export function constrainMeasureEndpoint(
+  origin: MmPoint,
+  cursor: MmPoint,
+  constrain: boolean,
+): MmPoint {
+  if (!constrain) return cursor;
+  const dx = cursor.xMm - origin.xMm;
+  const dy = cursor.yMm - origin.yMm;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-6) return { xMm: origin.xMm, yMm: origin.yMm };
+  const angle = Math.atan2(dy, dx);
+  const step = Math.PI / 4;
+  const snapped = Math.round(angle / step) * step;
+  return {
+    xMm: Math.round((origin.xMm + Math.cos(snapped) * len) * 100) / 100,
+    yMm: Math.round((origin.yMm + Math.sin(snapped) * len) * 100) / 100,
+  };
+}

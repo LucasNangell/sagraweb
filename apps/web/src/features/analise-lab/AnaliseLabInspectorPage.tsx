@@ -22,6 +22,7 @@ import {
   type AreaMeasure,
   type InspectMeasureMode,
   type MmPoint,
+  constrainMeasureEndpoint,
   distanceMm as measureDistanceMm,
   rectFromPoints,
   rulerFromPoints,
@@ -179,7 +180,11 @@ export function AnaliseLabInspectorPage({
 }: AnaliseLabInspectorPageProps) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [draft, setDraft] = useState<{ xMm: number; yMm: number } | null>(null);
-  const [hoverMm, setHoverMm] = useState<{ x: number; y: number } | null>(null);
+  const [hoverMm, setHoverMm] = useState<{
+    x: number;
+    y: number;
+    constrain: boolean;
+  } | null>(null);
   const [rulerDrag, setRulerDrag] = useState<RulerDrag | null>(null);
   const [guideDrag, setGuideDrag] = useState<GuideDrag | null>(null);
   const [textDraft, setTextDraft] = useState<TextDraft | null>(null);
@@ -189,6 +194,23 @@ export function AnaliseLabInspectorPage({
   useEffect(() => {
     setMeasureDraft(null);
   }, [measureMode, page.page]);
+
+  useEffect(() => {
+    if (measureMode !== "ruler" || !measureDraft) return;
+    const syncConstrain = (e: KeyboardEvent) => {
+      setHoverMm((prev) =>
+        prev
+          ? { ...prev, constrain: e.ctrlKey || e.shiftKey }
+          : prev,
+      );
+    };
+    window.addEventListener("keydown", syncConstrain);
+    window.addEventListener("keyup", syncConstrain);
+    return () => {
+      window.removeEventListener("keydown", syncConstrain);
+      window.removeEventListener("keyup", syncConstrain);
+    };
+  }, [measureMode, measureDraft]);
 
   const { widthMm, heightMm } = pageSizeMm(page.widthPt || 0, page.heightPt || 0);
   const { width: displayW, height: displayH } = pageDisplaySize(page, zoom);
@@ -275,9 +297,14 @@ export function AnaliseLabInspectorPage({
           value: rectFromPoints(measureDraft, pt),
         });
       } else {
+        const end = constrainMeasureEndpoint(
+          measureDraft,
+          pt,
+          e.ctrlKey || e.shiftKey,
+        );
         onMeasureCommit?.({
           mode: "ruler",
-          value: rulerFromPoints(measureDraft, pt),
+          value: rulerFromPoints(measureDraft, end),
         });
       }
       setMeasureDraft(null);
@@ -668,7 +695,12 @@ export function AnaliseLabInspectorPage({
       onClick={handleClick}
       onMouseMove={(e) => {
         const pt = toMm(e.clientX, e.clientY);
-        if (pt) setHoverMm({ x: pt.xMm, y: pt.yMm });
+        if (pt)
+          setHoverMm({
+            x: pt.xMm,
+            y: pt.yMm,
+            constrain: e.ctrlKey || e.shiftKey,
+          });
       }}
       onMouseLeave={() => setHoverMm(null)}
       onPointerDown={tool === "livre" ? startFree : undefined}
@@ -1163,7 +1195,11 @@ export function AnaliseLabInspectorPage({
       {(() => {
         const liveHover =
           measureDraft && hoverMm
-            ? { xMm: hoverMm.x, yMm: hoverMm.y }
+            ? constrainMeasureEndpoint(
+                measureDraft,
+                { xMm: hoverMm.x, yMm: hoverMm.y },
+                measureMode === "ruler" && hoverMm.constrain,
+              )
             : null;
         const area =
           measureMode === "area"

@@ -6,10 +6,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from routers.mdb_writer import (
+    MdbSyncError,
     MdbWriteDisabledError,
+    _execute_mdb_transaction,
     _map_protocolo_cols_for_mdb,
     _resolve_mdb_column,
     _write_protocolo_extra_cols,
+    is_retriable_mdb_error,
     mdb_dest_label,
     sync_andamento_delete_to_mdb,
     sync_andamento_from_mysql_to_mdb,
@@ -238,3 +241,92 @@ class TestOsRoutesMdbSyncBestEffort:
 
         assert calls == []
         mock_overflow.assert_called_once()
+
+
+_LOCK_MSG = (
+    "('HY000', \"[HY000] [Microsoft][ODBC Microsoft Access Driver] "
+    "The Microsoft Access database engine cannot open or write to the file "
+    "'(unknown)'. It is already opened exclusively by another user, or you "
+    "need permission to view and write its data. (-1032)\")"
+)
+
+
+def _cfg_get_retry(key, default=None):
+    values = {
+        "mdb_retry_max_attempts": 5,
+        "mdb_retry_base_wait_seconds": 15,
+        "mdb_retry_rounds": 2,
+        "mdb_retry_second_round_wait_seconds": 120,
+    }
+    return values.get(key, default)
+
+
+class TestExecuteMdbTransactionRetry:
+    def test_retriable_exhausts_two_rounds_with_fixed_waits(self):
+        sleeps: list[float] = []
+        lock_err = RuntimeError(_LOCK_MSG)
+
+        with patch("routers.mdb_writer.config_manager") as mock_cfg, patch(
+            "routers.mdb_writer.time.sleep", side_effect=lambda s: sleeps.append(s)
+        ), patch(
+            "routers.mdb_writer.get_mdb_path", return_value=r"I:\test.mdb"
+        ), patch("routers.mdb_writer.pyodbc.connect", side_effect=lock_err):
+            mock_cfg.get.side_effect = _cfg_get_retry
+            mock_cfg.resolve_mdb_path.side_effect = lambda p: p
+            mock_cfg.get_mdb_connection_string.return_value = "DSN=test"
+
+            with pytest.raises(MdbSyncError) as ei:
+                _execute_mdb_transaction(84, "test_stage", lambda c, cur: None)
+
+        assert ei.value.attempts == 10
+        assert sleeps == [15, 15, 15, 15, 120, 15, 15, 15, 15]
+
+    def test_success_on_second_round_skips_remaining(self):
+        sleeps: list[float] = []
+        lock_err = RuntimeError(_LOCK_MSG)
+        conn = MagicMock()
+        cursor = MagicMock()
+        conn.cursor.return_value = cursor
+        # 5 fails in round 1 + success on first of round 2
+        connect_results = [lock_err] * 5 + [conn]
+
+        with patch("routers.mdb_writer.config_manager") as mock_cfg, patch(
+            "routers.mdb_writer.time.sleep", side_effect=lambda s: sleeps.append(s)
+        ), patch(
+            "routers.mdb_writer.get_mdb_path", return_value=r"I:\test.mdb"
+        ), patch(
+            "routers.mdb_writer.pyodbc.connect", side_effect=connect_results
+        ):
+            mock_cfg.get.side_effect = _cfg_get_retry
+            mock_cfg.resolve_mdb_path.side_effect = lambda p: p
+            mock_cfg.get_mdb_connection_string.return_value = "DSN=test"
+
+            _execute_mdb_transaction(84, "test_stage", lambda c, cur: None)
+
+        assert sleeps == [15, 15, 15, 15, 120]
+        conn.commit.assert_called_once()
+
+    def test_non_retriable_fails_immediately(self):
+        sleeps: list[float] = []
+
+        with patch("routers.mdb_writer.config_manager") as mock_cfg, patch(
+            "routers.mdb_writer.time.sleep", side_effect=lambda s: sleeps.append(s)
+        ), patch(
+            "routers.mdb_writer.get_mdb_path", return_value=r"I:\test.mdb"
+        ), patch(
+            "routers.mdb_writer.pyodbc.connect",
+            side_effect=RuntimeError("syntax error in query"),
+        ):
+            mock_cfg.get.side_effect = _cfg_get_retry
+            mock_cfg.resolve_mdb_path.side_effect = lambda p: p
+            mock_cfg.get_mdb_connection_string.return_value = "DSN=test"
+
+            with pytest.raises(MdbSyncError) as ei:
+                _execute_mdb_transaction(84, "test_stage", lambda c, cur: None)
+
+        assert ei.value.attempts == 1
+        assert sleeps == []
+
+    def test_minus_1032_is_retriable(self):
+        assert is_retriable_mdb_error(RuntimeError(_LOCK_MSG)) is True
+        assert is_retriable_mdb_error(RuntimeError("syntax error")) is False

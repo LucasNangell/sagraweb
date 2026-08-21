@@ -94,6 +94,8 @@ DOTENV_KEYS = {
     "env": "ENV",
     "mdb_retry_max_attempts": "MDB_RETRY_MAX_ATTEMPTS",
     "mdb_retry_base_wait_seconds": "MDB_RETRY_BASE_WAIT_SECONDS",
+    "mdb_retry_rounds": "MDB_RETRY_ROUNDS",
+    "mdb_retry_second_round_wait_seconds": "MDB_RETRY_SECOND_ROUND_WAIT_SECONDS",
 }
 
 # Flags booleanas (.env): true/false/1/0/yes/no

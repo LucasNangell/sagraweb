@@ -71,7 +71,7 @@ POST/PUT/DELETE (ex.: save OS, incluir andamento)
 | Aspecto | Comportamento |
 |---------|---------------|
 | Ordem das gravações | Fila FIFO + worker único |
-| Retry em lock Access | `_execute_mdb_transaction` (configurável via `MDB_RETRY_*`) |
+| Retry em lock Access | `_execute_mdb_transaction`: 5 tentativas a cada 15s; se falhar, pausa 120s e repete a série (2 rodadas). Configurável via `MDB_RETRY_*`. Admin só após esgotar. |
 | Falha após MySQL OK | `handle_mdb_sync_failure` → log + alerta administrador |
 | MySQL como fonte da verdade | UI e WebSocket refletem MySQL; MDB é réplica |
 

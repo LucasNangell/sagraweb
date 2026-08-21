@@ -225,6 +225,7 @@ _RETRIABLE_MARKERS = (
     "network error",
     "disk or network",
     "retry",
+    "-1032",
     "-1102",
     "hy000",
     "3010",
@@ -340,16 +341,34 @@ def _log_mdb_write_error(operation: str, cod_status: str, nro: int, ano: int, ex
         exc,
         exc_info=True,
     )
-def _retry_settings() -> tuple[int, float]:
+def _retry_settings() -> tuple[int, float, int, float]:
+    """Retorna (max_attempts, base_wait, rounds, second_round_wait)."""
     try:
         max_attempts = int(config_manager.get("mdb_retry_max_attempts") or 5)
     except (TypeError, ValueError):
         max_attempts = 5
     try:
-        base_wait = float(config_manager.get("mdb_retry_base_wait_seconds") or 2)
+        base_wait = float(config_manager.get("mdb_retry_base_wait_seconds") or 15)
     except (TypeError, ValueError):
-        base_wait = 2.0
-    return max(1, max_attempts), max(0.5, base_wait)
+        base_wait = 15.0
+    try:
+        rounds = int(config_manager.get("mdb_retry_rounds") or 2)
+    except (TypeError, ValueError):
+        rounds = 2
+    try:
+        second_round_wait = float(
+            config_manager.get("mdb_retry_second_round_wait_seconds") or 120
+        )
+    except (TypeError, ValueError):
+        second_round_wait = 120.0
+    return (
+        max(1, max_attempts),
+        max(0.5, base_wait),
+        max(1, rounds),
+        max(0.0, second_round_wait),
+    )
+
+
 def is_retriable_mdb_error(exc: BaseException) -> bool:
     """Indica se vale a pena aguardar e tentar de novo (lock / arquivo ocupado)."""
     if isinstance(exc, pyodbc.Error):
@@ -362,6 +381,8 @@ def is_retriable_mdb_error(exc: BaseException) -> bool:
     else:
         text = str(exc).lower()
     return any(marker in text for marker in _RETRIABLE_MARKERS)
+
+
 def _mdb_path_for_connection(nro: int) -> tuple[str, str]:
     """Retorna (caminho configurado, caminho resolvido para ODBC)."""
     configured = get_mdb_path(nro)
@@ -376,55 +397,121 @@ def _execute_mdb_transaction(
 ) -> None:
     """
     Abre conexão, executa callback(conn, cursor), commit.
-    Em erro recuperável: rollback, fecha, espera e tenta com conexão nova.
+    Em erro recuperável: rollback, fecha, espera (intervalo fixo) e tenta de novo.
+    Após esgotar uma rodada de tentativas, aguarda second_round_wait e repete
+    (até mdb_retry_rounds). Só então propaga MdbSyncError (alerta admin).
     """
     configured_path, path = _mdb_path_for_connection(nro)
-    max_attempts, base_wait = _retry_settings()
+    max_attempts, base_wait, rounds, second_round_wait = _retry_settings()
     last_err: Optional[Exception] = None
-    for attempt in range(1, max_attempts + 1):
-        conn: Optional[pyodbc.Connection] = None
-        try:
-            conn_str = config_manager.get_mdb_connection_string(path)
-            conn = pyodbc.connect(conn_str)
-            cursor = conn.cursor()
-            callback(conn, cursor)
-            conn.commit()
-            if attempt > 1:
-                logger.info(
-                    "MDB '%s' OK na tentativa %s/%s (%s)",
-                    stage, attempt, max_attempts, path,
-                )
-            return
-        except Exception as e:
-            last_err = e
-            if conn:
-                try:
-                    conn.rollback()
-                except Exception:
-                    pass
-            retriable = is_retriable_mdb_error(e)
-            if not retriable or attempt >= max_attempts:
-                logger.error(
-                    "MDB '%s' falhou (tentativa %s/%s, retentável=%s): %s",
-                    stage, attempt, max_attempts, retriable, e,
-                )
-                raise MdbSyncError(
-                    stage, nro, configured_path or path, e, attempts=attempt
-                ) from e
-            wait = base_wait * attempt
-            logger.warning(
-                "MDB '%s' bloqueado/ocupado — tentativa %s/%s, nova tentativa em %.1fs: %s",
-                stage, attempt, max_attempts, wait, e,
-            )
-            time.sleep(wait)
-        finally:
-            if conn:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
+    total_attempts = 0
+
+    for round_no in range(1, rounds + 1):
+        for attempt in range(1, max_attempts + 1):
+            total_attempts += 1
+            conn: Optional[pyodbc.Connection] = None
+            try:
+                conn_str = config_manager.get_mdb_connection_string(path)
+                conn = pyodbc.connect(conn_str)
+                cursor = conn.cursor()
+                callback(conn, cursor)
+                conn.commit()
+                if total_attempts > 1:
+                    logger.info(
+                        "MDB '%s' OK na tentativa %s (rodada %s/%s, %s/%s nesta rodada) (%s)",
+                        stage,
+                        total_attempts,
+                        round_no,
+                        rounds,
+                        attempt,
+                        max_attempts,
+                        path,
+                    )
+                return
+            except Exception as e:
+                last_err = e
+                if conn:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                retriable = is_retriable_mdb_error(e)
+                last_in_round = attempt >= max_attempts
+                last_round = round_no >= rounds
+
+                if not retriable:
+                    logger.error(
+                        "MDB '%s' falhou (tentativa %s, rodada %s/%s, retentável=False): %s",
+                        stage,
+                        total_attempts,
+                        round_no,
+                        rounds,
+                        e,
+                    )
+                    raise MdbSyncError(
+                        stage,
+                        nro,
+                        configured_path or path,
+                        e,
+                        attempts=total_attempts,
+                    ) from e
+
+                if last_in_round and last_round:
+                    logger.error(
+                        "MDB '%s' falhou após %s tentativa(s) em %s rodada(s): %s",
+                        stage,
+                        total_attempts,
+                        rounds,
+                        e,
+                    )
+                    raise MdbSyncError(
+                        stage,
+                        nro,
+                        configured_path or path,
+                        e,
+                        attempts=total_attempts,
+                    ) from e
+
+                if last_in_round:
+                    logger.warning(
+                        "MDB '%s' bloqueado/ocupado — rodada %s/%s esgotada; "
+                        "nova rodada em %.1fs: %s",
+                        stage,
+                        round_no,
+                        rounds,
+                        second_round_wait,
+                        e,
+                    )
+                    if second_round_wait > 0:
+                        time.sleep(second_round_wait)
+                else:
+                    logger.warning(
+                        "MDB '%s' bloqueado/ocupado — rodada %s/%s tentativa %s/%s, "
+                        "nova tentativa em %.1fs: %s",
+                        stage,
+                        round_no,
+                        rounds,
+                        attempt,
+                        max_attempts,
+                        base_wait,
+                        e,
+                    )
+                    time.sleep(base_wait)
+            finally:
+                if conn:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+
     if last_err:
-        raise last_err
+        raise MdbSyncError(
+            stage,
+            nro,
+            configured_path or path,
+            last_err,
+            attempts=total_attempts,
+        ) from last_err
 def get_connection(nro: int) -> pyodbc.Connection:
     """Conexão direta (preferir _execute_mdb_transaction para escrita)."""
     _configured, path = _mdb_path_for_connection(nro)

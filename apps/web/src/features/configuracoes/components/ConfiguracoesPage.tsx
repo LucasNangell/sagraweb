@@ -19,10 +19,7 @@ import { CredenciaisDepolModelosSection } from "./CredenciaisDepolModelosSection
 import { CustosSettingsSection } from "./CustosSettingsSection";
 import { EmailTemplatesSection } from "./EmailTemplatesSection";
 import { GerenciaSettingsSection } from "./GerenciaSettingsSection";
-import { PapelariaModelosLivePreviewSection } from "./PapelariaModelosLivePreviewSection";
-import { PapelariaModelosMockupSection } from "./PapelariaModelosMockupSection";
-import { PapelariaModelosNomesSection } from "./PapelariaModelosNomesSection";
-import { PapelariaNovoModeloSection } from "./PapelariaNovoModeloSection";
+import { PapelariaProdutosAdminSection } from "./PapelariaProdutosAdminSection";
 import { PapelariaWorkerQueueSection } from "./PapelariaWorkerQueueSection";
 import { PreAnaliseChecksSection } from "./PreAnaliseChecksSection";
 import { SistemaSettingsSection } from "./SistemaSettingsSection";
@@ -68,7 +65,7 @@ const TAB_META: Record<
   papelaria: {
     label: "Papelaria",
     description:
-      "Cadastro de modelos Corel, mockup 3D, prévia em tempo real e monitoramento da fila do worker.",
+      "Produtos de papelaria: modelos Corel, mockup 3D e prévia em tempo real. Monitoramento da fila do worker.",
     icon: <Printer className="size-3.5" aria-hidden />,
   },
   credenciais_depol: {
@@ -189,10 +186,7 @@ export function ConfiguracoesPage() {
             hidden={activeTab !== "papelaria"}
             className="configuracoes-tab-panel"
           >
-            <PapelariaNovoModeloSection />
-            <PapelariaModelosNomesSection />
-            <PapelariaModelosMockupSection />
-            <PapelariaModelosLivePreviewSection />
+            <PapelariaProdutosAdminSection />
             <PapelariaWorkerQueueSection />
           </div>
           <div

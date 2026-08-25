@@ -1,26 +1,20 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileUp, Loader2, PlusCircle } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { FileUp, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   createPapelariaModeloFromCdr,
-  fetchPapelariaAdminProdutos,
   fetchPapelariaCdrInspect,
   inspectPapelariaCdr,
   type PapelariaCdrInspectResult,
 } from "@/api/adminSystem";
+import type { PapelariaAdminModelRecord } from "@/features/configuracoes/types";
 import {
   buildInitialPreviewConfigFromInspect,
   buildInitialPreviewConfigFromVariaveis,
   normalizeInspectCampos,
 } from "@/features/papelaria/preview";
 import { PAPELARIA_MOCKUP_CONFIGS } from "@/features/papelaria/mockup/papelariaMockupConfigs";
-
-import {
-  ConfigSection,
-  ConfigSectionBody,
-  ConfigSectionHeader,
-} from "./ConfigSectionLayout";
 
 const PRESET_OPTIONS = [
   { id: "folha_a4_simples", label: "Folha simples" },
@@ -39,18 +33,19 @@ function isInspectPending(status: PapelariaCdrInspectResult["status"]): boolean 
   return status === "pending" || status === "processing";
 }
 
-export function PapelariaNovoModeloSection() {
+export function PapelariaNovoModeloForm({
+  lockedProduto,
+  onCreated,
+  onCancel,
+}: {
+  lockedProduto?: string | null;
+  onCreated: (modelo: PapelariaAdminModelRecord) => void;
+  onCancel?: () => void;
+}) {
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const pollTimerRef = useRef<number | null>(null);
 
-  const produtosQuery = useQuery({
-    queryKey: ["admin", "papelaria-produtos"],
-    queryFn: fetchPapelariaAdminProdutos,
-  });
-
-  const [produtoModo, setProdutoModo] = useState<"existente" | "novo">("existente");
-  const [produtoExistente, setProdutoExistente] = useState("");
   const [produtoNovo, setProdutoNovo] = useState("");
   const [frenteVerso, setFrenteVerso] = useState("Frente");
   const [cores, setCores] = useState("Policromia");
@@ -64,11 +59,8 @@ export function PapelariaNovoModeloSection() {
   );
   const [inspectLoading, setInspectLoading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  const produtos = produtosQuery.data?.produtos ?? [];
-  const produtoFinal = produtoModo === "existente" ? produtoExistente : produtoNovo.trim();
-
+  const produtoFinal = (lockedProduto ?? produtoNovo).trim();
   const variaveisDetectadas = inspectResult?.variaveis ?? [];
   const camposDetectados = inspectResult?.campos ?? {};
   const camposNomes = Object.keys(camposDetectados);
@@ -161,18 +153,15 @@ export function PapelariaNovoModeloSection() {
     },
     onSuccess: (data) => {
       setLocalError(null);
-      setSuccessMsg(
-        `Modelo "${data.nome_exibicao}" criado (ID ${data.id}). Configure mockup e prévia abaixo.`,
-      );
       setCdrFile(null);
       setInspectId(null);
       setInspectResult(null);
       if (fileRef.current) fileRef.current.value = "";
       void qc.invalidateQueries({ queryKey: ["admin", "papelaria-modelos"] });
       void qc.invalidateQueries({ queryKey: ["admin", "papelaria-produtos"] });
+      onCreated(data);
     },
     onError: (err: Error) => {
-      setSuccessMsg(null);
       setLocalError(err.message);
     },
   });
@@ -184,7 +173,6 @@ export function PapelariaNovoModeloSection() {
     }
 
     setCdrFile(file);
-    setSuccessMsg(null);
     setInspectId(null);
     setInspectResult(null);
     setLocalError(null);
@@ -223,41 +211,29 @@ export function PapelariaNovoModeloSection() {
   };
 
   return (
-    <ConfigSection variant="papelaria">
-      <ConfigSectionHeader
-        title="Novo modelo — upload .cdr"
-        description="Envie o template Corel, escolha o produto e o sistema registra o modelo com configurações iniciais de mockup e prévia."
-        icon={<PlusCircle className="size-4" aria-hidden />}
-      />
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+      <div>
+        <h3 className="text-sm font-semibold text-slate-800">
+          {lockedProduto ? "Novo modelo" : "Novo produto"}
+        </h3>
+        <p className="mt-0.5 text-xs leading-relaxed text-slate-600">
+          Envie o template Corel. O sistema registra o modelo com configurações iniciais de
+          mockup e prévia — ajuste-as em seguida nas abas do modelo.
+        </p>
+      </div>
 
-      <ConfigSectionBody>
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
         <label className="flex flex-col gap-1 text-xs text-slate-600">
           Produto
-          <select
-            className="rounded border border-slate-300 px-2 py-1.5 text-xs"
-            value={produtoModo}
-            onChange={(e) => setProdutoModo(e.target.value as "existente" | "novo")}
-          >
-            <option value="existente">Produto existente</option>
-            <option value="novo">Novo produto</option>
-          </select>
-          {produtoModo === "existente" ? (
-            <select
-              className="mt-1 rounded border border-slate-300 px-2 py-1.5 text-xs"
-              value={produtoExistente}
-              onChange={(e) => setProdutoExistente(e.target.value)}
-            >
-              <option value="">Selecione...</option>
-              {produtos.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
+          {lockedProduto ? (
+            <input
+              className="rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-800"
+              value={lockedProduto}
+              readOnly
+            />
           ) : (
             <input
-              className="mt-1 rounded border border-slate-300 px-2 py-1.5 text-xs"
+              className="rounded border border-slate-300 px-2 py-1.5 text-xs"
               value={produtoNovo}
               onChange={(e) => setProdutoNovo(e.target.value)}
               placeholder="Nome do produto"
@@ -362,27 +338,34 @@ export function PapelariaNovoModeloSection() {
             </div>
           ) : null}
         </div>
+      </div>
 
-        <div className="flex items-end md:col-span-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 rounded bg-secondary-blue px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+          disabled={!canSubmit || createMutation.isPending}
+          onClick={() => createMutation.mutate()}
+        >
+          {createMutation.isPending ? (
+            <Loader2 className="size-3.5 animate-spin" aria-hidden />
+          ) : (
+            <FileUp className="size-3.5" aria-hidden />
+          )}
+          Criar modelo
+        </button>
+        {onCancel ? (
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 rounded bg-secondary-blue px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            disabled={!canSubmit || createMutation.isPending}
-            onClick={() => createMutation.mutate()}
+            className="rounded border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            onClick={onCancel}
           >
-            {createMutation.isPending ? (
-              <Loader2 className="size-3.5 animate-spin" aria-hidden />
-            ) : (
-              <FileUp className="size-3.5" aria-hidden />
-            )}
-            Criar modelo
+            Cancelar
           </button>
-        </div>
+        ) : null}
       </div>
 
       {localError ? <p className="text-xs text-red-600">{localError}</p> : null}
-      {successMsg ? <p className="text-xs text-emerald-700">{successMsg}</p> : null}
-      </ConfigSectionBody>
-    </ConfigSection>
+    </div>
   );
 }

@@ -116,7 +116,44 @@
   overflow: visible;
 }
 
+.papelaria-produtos-layout {
+  display: grid;
+  min-height: 28rem;
+  flex: 1 1 auto;
+  overflow: hidden;
+  grid-template-columns: 1fr;
+  grid-template-rows: minmax(10rem, auto) minmax(0, 1fr);
+}
+
+.papelaria-produtos-sidebar {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.papelaria-produtos-detail {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.papelaria-modelo-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  border-radius: 0.5rem;
+  border: 1px solid #e2e8f0;
+  background: #f1f5f9;
+  padding: 0.25rem;
+}
+
 .papelaria-admin-four-col,
+.papelaria-admin-three-col,
 .email-admin-three-col {
   display: grid;
   gap: 0.75rem;
@@ -129,6 +166,12 @@
   overflow: hidden;
 }
 
+.papelaria-admin-three-col {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
 .email-admin-three-col {
   min-height: 28rem;
   max-height: none;
@@ -136,8 +179,24 @@
 }
 
 @media (min-width: 1024px) {
+  .papelaria-produtos-layout {
+    grid-template-columns: 15rem minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .papelaria-produtos-sidebar {
+    border-bottom: 0;
+    border-right: 1px solid #e2e8f0;
+  }
+
   .papelaria-admin-four-col {
     grid-template-columns: 11.5rem minmax(0, 1.25fr) minmax(0, 17rem) minmax(0, 1.15fr);
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .papelaria-admin-three-col {
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 17rem) minmax(0, 1.15fr);
     grid-template-rows: minmax(0, 1fr);
     align-items: stretch;
   }
@@ -149,7 +208,8 @@
   }
 
   .papelaria-admin-four-col > .papelaria-admin-col,
-  .papelaria-admin-four-col > .papelaria-admin-col-span {
+  .papelaria-admin-four-col > .papelaria-admin-col-span,
+  .papelaria-admin-three-col > .papelaria-admin-col {
     min-height: 0;
     min-width: 0;
   }

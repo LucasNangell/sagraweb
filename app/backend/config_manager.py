@@ -545,7 +545,12 @@ class ConfigManager:
 
     def get_mdb_connection_string(self, path):
         resolved = self.resolve_mdb_path(path)
-        return f"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={resolved};"
+        return (
+            f"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};"
+            f"DBQ={resolved};"
+            "Exclusive=0;"
+            "Mode=Share Deny None;"
+        )
 
     def uses_nginx_api_path(self) -> bool:
         """True quando clientes devem chamar a API via Nginx (/sagra/api)."""

@@ -250,6 +250,15 @@ _LOCK_MSG = (
     "need permission to view and write its data. (-1032)\")"
 )
 
+_NETWORK_INTERRUPT_MSG = (
+    "('HY000', '[HY000] [Microsoft][ODBC Microsoft Access Driver] "
+    "Your network access was interrupted. To continue, close the database, "
+    "and then open it again. (-1022) (SQLDriverConnect); "
+    "[HY000] [Microsoft][ODBC Microsoft Access Driver] "
+    "Your network access was interrupted. To continue, close the database, "
+    "and then open it again. (-1022)')"
+)
+
 
 def _cfg_get_retry(key, default=None):
     values = {
@@ -330,3 +339,54 @@ class TestExecuteMdbTransactionRetry:
     def test_minus_1032_is_retriable(self):
         assert is_retriable_mdb_error(RuntimeError(_LOCK_MSG)) is True
         assert is_retriable_mdb_error(RuntimeError("syntax error")) is False
+
+    def test_minus_1022_network_interrupt_is_retriable(self):
+        err = RuntimeError(_NETWORK_INTERRUPT_MSG)
+        assert is_retriable_mdb_error(err) is True
+        assert is_retriable_mdb_error(RuntimeError("(-1022)")) is True
+
+    def test_network_interrupt_retries_with_fresh_connect(self):
+        sleeps: list[float] = []
+        net_err = RuntimeError(_NETWORK_INTERRUPT_MSG)
+        conn = MagicMock()
+        cursor = MagicMock()
+        conn.cursor.return_value = cursor
+        connect_results = [net_err, conn]
+
+        with patch("routers.mdb_writer.config_manager") as mock_cfg, patch(
+            "routers.mdb_writer.time.sleep", side_effect=lambda s: sleeps.append(s)
+        ), patch(
+            "routers.mdb_writer.get_mdb_path", return_value=r"I:\test.mdb"
+        ), patch(
+            "routers.mdb_writer.pyodbc.connect", side_effect=connect_results
+        ) as mock_connect:
+            mock_cfg.get.side_effect = _cfg_get_retry
+            mock_cfg.resolve_mdb_path.side_effect = lambda p: p
+            mock_cfg.get_mdb_connection_string.return_value = "DSN=test"
+
+            _execute_mdb_transaction(84, "test_stage", lambda c, cur: None)
+
+        assert sleeps == [15]
+        assert mock_connect.call_count == 2
+        for call in mock_connect.call_args_list:
+            assert call.kwargs.get("timeout") == 30
+        conn.commit.assert_called_once()
+
+
+class TestMdbConnectionHardening:
+    def test_pooling_disabled(self):
+        import routers.mdb_writer as mdb_writer
+
+        assert mdb_writer.pyodbc.pooling is False
+
+    def test_connection_string_shared_mode(self):
+        from config_manager import config_manager
+
+        with patch.object(
+            config_manager, "resolve_mdb_path", return_value=r"\\server\share\os.mdb"
+        ):
+            conn_str = config_manager.get_mdb_connection_string(r"I:\os.mdb")
+
+        assert "Exclusive=0" in conn_str
+        assert "Mode=Share Deny None" in conn_str
+        assert r"DBQ=\\server\share\os.mdb" in conn_str

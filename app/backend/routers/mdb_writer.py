@@ -8,7 +8,7 @@ PKs respeitadas:
   - tabProtocolos: (NroProtocolo, AnoProtocolo)
   - tabDetalhesServico: (NroProtocoloLinkDet, AnoProtocoloLinkDet)
   - tabAndamento: CodStatus (único)
-Retry: bloqueios temporários do Access (arquivo em uso, lock) — aguarda e tenta de novo.
+Retry: bloqueios temporários do Access (arquivo em uso, lock, queda de rede) — aguarda e tenta de novo.
 """
 from __future__ import annotations
 import atexit
@@ -30,6 +30,10 @@ from mdb_helpers import (
     to_mdb_memo,
     to_mdb_null,
 )
+
+# ACE/Jet over UNC/DFS: pooling reuses a dead handle after -1022
+# ("network access was interrupted"). Close must release the engine.
+pyodbc.pooling = False
 logger = logging.getLogger(__name__)
 
 _MDB_SYNC_QUEUE: Queue[Tuple[str, Callable[[], None], dict[str, Any]]] = Queue(maxsize=256)
@@ -223,8 +227,10 @@ _RETRIABLE_MARKERS = (
     "too many client",
     "deadlock",
     "network error",
+    "network access was interrupted",
     "disk or network",
     "retry",
+    "-1022",
     "-1032",
     "-1102",
     "hy000",
@@ -390,6 +396,14 @@ def _mdb_path_for_connection(nro: int) -> tuple[str, str]:
     return configured, resolved
 
 
+_MDB_CONNECT_TIMEOUT = 30
+
+
+def _mdb_connect(conn_str: str) -> pyodbc.Connection:
+    """Abre ODBC Access com timeout; pooling desligado no import deste módulo."""
+    return pyodbc.connect(conn_str, timeout=_MDB_CONNECT_TIMEOUT)
+
+
 def _execute_mdb_transaction(
     nro: int,
     stage: str,
@@ -412,7 +426,7 @@ def _execute_mdb_transaction(
             conn: Optional[pyodbc.Connection] = None
             try:
                 conn_str = config_manager.get_mdb_connection_string(path)
-                conn = pyodbc.connect(conn_str)
+                conn = _mdb_connect(conn_str)
                 cursor = conn.cursor()
                 callback(conn, cursor)
                 conn.commit()
@@ -517,7 +531,7 @@ def get_connection(nro: int) -> pyodbc.Connection:
     _configured, path = _mdb_path_for_connection(nro)
     try:
         conn_str = config_manager.get_mdb_connection_string(path)
-        return pyodbc.connect(conn_str)
+        return _mdb_connect(conn_str)
     except Exception as e:
         logger.error("Erro conectando ao MDB %s: %s", path, e)
         raise

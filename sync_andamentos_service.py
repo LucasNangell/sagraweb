@@ -113,6 +113,8 @@ SYNC_CONNECT_TIMEOUT = _env_int("SYNC_CONNECT_TIMEOUT", 30)
 SYNC_QUERY_TIMEOUT = _env_int("SYNC_QUERY_TIMEOUT", 60)
 SYNC_BACKOFF_MIN = _env_float("SYNC_BACKOFF_MIN", 5.0)
 SYNC_BACKOFF_MAX = _env_float("SYNC_BACKOFF_MAX", 60.0)
+# 0 desliga. Recicla conexoes ODBC/MySQL entre ciclos para evitar handle zumbi.
+SYNC_CONN_RECYCLE_SECONDS = _env_float("SYNC_CONN_RECYCLE_SECONDS", 900.0)
 # Mantido por compatibilidade; o notify sempre usa base interna (uvicorn).
 SYNC_NOTIFY_INTERNAL_BASE = _env_bool("SYNC_NOTIFY_INTERNAL_BASE", True)
 SYNC_NOTIFY_FAIL_LOG_INTERVAL = _env_float("SYNC_NOTIFY_FAIL_LOG_INTERVAL", 60.0)
@@ -277,7 +279,8 @@ class HeartbeatWriter:
             self.consecutive_errors += 1
             self.last_error = (error or "")[:500]
             self.phase = "error"
-            self.last_progress_mono = time.monotonic()
+            # Nao resetar last_progress_mono: erro em loop deve acumular stall
+            # para o watchdog interno encerrar com exit 17 e o NSSM relancar.
 
     def snapshot(self) -> Dict[str, Any]:
         with self.lock:
@@ -421,6 +424,7 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
         self._notify_fail_ts = 0.0
         self._cycle_stats = _empty_cycle_stats()
         self._init_baseline_state()
+        self._last_conn_recycle_mono = time.monotonic()
 
         # Sempre patch: Old usa get_api_base() relativo (/sagra/api) que quebra requests.
         self._install_reliable_notify()
@@ -1288,11 +1292,28 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             except Exception:
                 self.conn_mgr.invalidate_mysql()
 
+    def _maybe_recycle_connections(self) -> None:
+        interval = SYNC_CONN_RECYCLE_SECONDS
+        if interval <= 0:
+            return
+        now = time.monotonic()
+        if now - self._last_conn_recycle_mono < interval:
+            return
+        self._svc_log.info(
+            "[RECYCLE] invalidando conexoes MDB/MySQL (intervalo=%.0fs)", interval
+        )
+        self.conn_mgr.invalidate_all()
+        self._last_conn_recycle_mono = now
+
     # ------------------------------------------------------------------
     # Watchdog
     # ------------------------------------------------------------------
-    # Watchdog
-    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_fatal_stall(phase: str, stall: float) -> bool:
+        if (phase or "") == "mdb_unavailable":
+            return False
+        return stall >= SYNC_STALL_TIMEOUT
 
     def _dump_all_stacks(self) -> None:
         try:
@@ -1325,9 +1346,8 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                 stall = snap["stall_seconds"]
                 phase = snap.get("phase") or ""
                 # Skip intencional de share MDB: nao tratar como stall fatal.
-                if phase == "mdb_unavailable":
-                    continue
-                if stall >= SYNC_STALL_TIMEOUT:
+                # Sempre dormir depois (nao continue) para nao girar a 100% CPU.
+                if self._is_fatal_stall(phase, stall):
                     self._svc_log.critical(
                         "[WATCHDOG] STALL detectado: phase=%s stall=%.1fs - "
                         "encerrando com codigo %s para NSSM reiniciar",
@@ -1403,10 +1423,11 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             SYNC_CONFLICT_WINNER,
         )
         self._svc_log.info(
-            "[INFO] Monitorando ultimos %s dias | intervalo=%ss | stall=%ss",
+            "[INFO] Monitorando ultimos %s dias | intervalo=%ss | stall=%ss | recycle=%ss",
             self.config.dias_monitoramento,
             self.config.intervalo_segundos,
             SYNC_STALL_TIMEOUT,
+            SYNC_CONN_RECYCLE_SECONDS,
         )
         self._svc_log.info("[INFO] Filtro de Ano: APENAS REGISTROS >= 2024")
         self._svc_log.info("[INFO] PID: %s", os.getpid())
@@ -1434,11 +1455,13 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                 try:
                     self.perform_sync()
                     backoff = 0.0
+                    self._maybe_recycle_connections()
                 except Exception as e:
                     self._svc_log.error("[ERRO] Excecao no supervisor: %s", e)
                     self._svc_log.error(traceback.format_exc())
                     self._hb.mark_cycle_error(str(e))
                     self.conn_mgr.invalidate_all()
+                    self._last_conn_recycle_mono = time.monotonic()
                     backoff = (
                         SYNC_BACKOFF_MIN
                         if backoff <= 0

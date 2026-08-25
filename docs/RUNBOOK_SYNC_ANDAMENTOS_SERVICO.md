@@ -5,8 +5,8 @@
 Manter a sincronização de **`tabAndamento` bidirecional** (MDB ↔ MySQL) rodando 24/7
 no Windows Server, com:
 
-1. **Auto-recuperação interna** (reconexão MDB/MySQL, backoff)
-2. **Watchdog interno** (stall → exit 17 → NSSM reinicia; `mdb_unavailable` não reinicia)
+1. **Auto-recuperação interna** (reconexão MDB/MySQL, backoff, recycle de conexões a cada 15 min)
+2. **Watchdog interno** (stall → exit 17 → NSSM reinicia; `mdb_unavailable` não reinicia; erro em loop também vira stall)
 3. **Watchdog externo** (Task Scheduler SYSTEM a cada 2 min; ignora `phase=mdb_unavailable`)
 
 **Contrato de tabelas:**
@@ -89,12 +89,15 @@ O sync **não** faz parte do ciclo activate/rollback/publicar do Sagra Web:
 
 `SYNC_ANDAMENTOS_ENABLED=false` em produção: a API **não** spawna o bot embutido.
 
-**Inicio 100% manual:** a API (`iniciar-api.bat` / `iniciar-api-detached.ps1` /
-`publicar-release`) **nunca** abre o sync. O serviço NSSM usa
-`SERVICE_DEMAND_START` (não sobe com o Windows). O watchdog externo **não** inicia
-serviço parado — só reinicia se já estiver Running e o heartbeat estiver stale.
+A API (`iniciar-api.bat` / `iniciar-api-detached.ps1` / `publicar-release`) **nunca**
+abre o sync. O instalador NSSM usa **`SERVICE_AUTO_START`** por padrão (sobe com o
+Windows). Use `.\instalar-servico-sync.ps1 -ManualStart` só se quiser inicio manual.
 
-Para subir o sync: `_iniciar-sync-andamentos.cmd` **ou** `nssm start SAGRA-SyncAndamentos`.
+O watchdog externo **não** inicia serviço parado — só reinicia se já estiver Running
+e o heartbeat (`last_cycle_at`) estiver stale. Parada intencional (`parar-servico-sync.ps1`)
+continua respeitada até o próximo boot (AUTO) ou `nssm start`.
+
+Para subir agora: `nssm start SAGRA-SyncAndamentos` (ou `.\instalar-servico-sync.ps1 -Start`).
 
 **Recomendado:** instalar o NSSM com `AppDirectory` em pasta **fixa fora de `current`**
 (ex. `C:\Sistemas CGraf\Sagra Web\sync-runtime`), copiando para lá
@@ -119,13 +122,14 @@ cd $SyncRoot
 #    (primeira vez, ou se o status mostrar ModuleNotFoundError)
 .\instalar-servico-sync.ps1 -Start -InstallDeps
 
-# 1) Se as deps ja existem, basta:
+# 1) Se as deps ja existem (default: AUTO_START, sobe com o Windows):
 # .\instalar-servico-sync.ps1 -Start
+# Inicio manual (nao sobe no boot): .\instalar-servico-sync.ps1 -Start -ManualStart
 
-# 2) (recomendado) Watchdog externo a cada 2 minutos
+# 2) Watchdog externo a cada 2 minutos (obrigatorio para hang ODBC)
 .\instalar-watchdog-sync.ps1
 
-# 3) Conferência rápida
+# 3) Conferência rápida (servico + tarefa agendada + heartbeat)
 .\status-servico-sync.ps1
 ```
 
@@ -193,9 +197,60 @@ Cheque `logs\sync\sync_andamentos.log` e a tabela MySQL `log_sync_andamentos`.
 }
 ```
 
-Regra prática: se `written_at` / `last_cycle_at` estiver há mais de ~3 minutos,
-algo está errado (o watchdog externo reinicia o serviço nesse caso — **exceto**
-quando `phase=mdb_unavailable`).
+Regra prática: se `last_cycle_at` estiver há mais de ~3 minutos (e `phase` não for
+`mdb_unavailable`), algo está errado. `written_at` pode continuar fresco se a thread
+do watchdog interno ainda escrever o JSON — o watchdog **externo** usa `last_cycle_at`.
+
+## Diagnóstico e religar o watchdog (no servidor, você executa)
+
+PowerShell **Administrador**. Não rode estes comandos a partir do DEV contra produção.
+
+```powershell
+# 1) Onde o servico realmente roda
+nssm get SAGRA-SyncAndamentos AppDirectory
+nssm get SAGRA-SyncAndamentos Start
+Get-Service SAGRA-SyncAndamentos | Format-List Name, Status, StartType
+
+# 2) Watchdog externo
+Get-ScheduledTask -TaskName "SAGRA-SyncAndamentos-Watchdog" -ErrorAction SilentlyContinue |
+  Format-List TaskName, State, TaskPath
+Get-ScheduledTaskInfo -TaskName "SAGRA-SyncAndamentos-Watchdog" -ErrorAction SilentlyContinue
+
+# 3) Heartbeat: last_cycle_age > ~3 min com servico Running = vivo mas cego
+$SyncRoot = (nssm get SAGRA-SyncAndamentos AppDirectory).ToString().Trim()
+Set-Location $SyncRoot
+.\status-servico-sync.ps1
+Get-Content .\logs\sync\watchdog_external.log -Tail 40 -ErrorAction SilentlyContinue
+```
+
+Interpretação:
+
+- Tarefa **ausente / Disabled**: watchdog parado → reinstalar (abaixo).
+- `last_cycle_age_sec STALE` + serviço Running: processo hung; o watchdog externo deveria
+  ter reiniciado. Alívio imediato: `nssm restart SAGRA-SyncAndamentos`.
+- `phase=mdb_unavailable`: share/`.mdb` fora; restart **não** resolve até o caminho voltar.
+
+Religar o watchdog no **mesmo** `$SyncRoot` do NSSM:
+
+```powershell
+$SyncRoot = (nssm get SAGRA-SyncAndamentos AppDirectory).ToString().Trim()
+Set-Location $SyncRoot
+.\instalar-watchdog-sync.ps1
+Get-ScheduledTask -TaskName "SAGRA-SyncAndamentos-Watchdog"
+```
+
+Se a tarefa existe e só está desabilitada:
+
+```powershell
+Enable-ScheduledTask -TaskName "SAGRA-SyncAndamentos-Watchdog"
+Start-ScheduledTask -TaskName "SAGRA-SyncAndamentos-Watchdog"
+```
+
+Serviço já instalado no modo antigo (Manual) e quiser 24/7 no boot:
+
+```powershell
+nssm set SAGRA-SyncAndamentos Start SERVICE_AUTO_START
+```
 
 ## Operação diária
 
@@ -215,9 +270,9 @@ nssm restart SAGRA-SyncAndamentos
 Publicar/rollback do **web não atualiza nem reinicia** este serviço. Para atualizar o sync:
 
 1. Pare o serviço: `.\parar-servico-sync.ps1` (no `AppDirectory` do NSSM)
-2. Copie `sync_andamentos_service.py` **e** `sync_andamentos_v2_Old.py` para o runtime fixo (não dependa de `current`)
-3. Reaplique a config NSSM se os scripts mudaram: `.\instalar-servico-sync.ps1 -Start`
-4. Confira: `.\status-servico-sync.ps1`
+2. Copie `sync_andamentos_service.py` **e** `sync_andamentos_v2_Old.py` para o runtime fixo (não dependa de `current`). Se os `*.ps1` do sync mudaram, copie-os também.
+3. Reaplique a config NSSM se os scripts mudaram: `.\instalar-servico-sync.ps1 -Start` (vira AUTO_START). Para manter inicio manual: `-Start -ManualStart`
+4. Confira: `.\status-servico-sync.ps1` (deve listar a tarefa watchdog **Ready**)
 
 Não é necessário reinstalar o watchdog externo se o `AppDirectory` for o mesmo.
 
@@ -236,6 +291,7 @@ Não é necessário reinstalar o watchdog externo se o `AppDirectory` for o mesm
 |----------|---------|--------|
 | `SYNC_STALL_TIMEOUT` | `120` | Segundos sem progresso → exit 17 |
 | `SYNC_WATCHDOG_INTERVAL` | `5` | Intervalo do watchdog interno |
+| `SYNC_CONN_RECYCLE_SECONDS` | `900` | Recicla conexões MDB/MySQL entre ciclos (`0` desliga) |
 | `SYNC_CONNECT_TIMEOUT` | `30` | Timeout de connect ODBC/MySQL |
 | `SYNC_QUERY_TIMEOUT` | `60` | `conn.timeout` ODBC (best-effort) |
 | `SYNC_BACKOFF_MIN` / `MAX` | `5` / `60` | Backoff em falhas / startup |
@@ -283,7 +339,8 @@ Se a home/painel não atualizar: procure `[NOTIFY] falha` em `logs\sync\sync_and
 | Sintoma | Causa provável | Ação |
 |---------|----------------|------|
 | Serviço sobe e cai com exit 2 | Janela manual/`_iniciar-sync` ainda aberta | Feche a outra instância |
-| Heartbeat STALE com serviço Running | Travamento ODBC sem exit | Confirme watchdog externo; force `nssm restart` |
+| Heartbeat STALE com serviço Running | Travamento ODBC sem exit **ou** watchdog externo parado | `.\status-servico-sync.ps1`; se tarefa ausente/Disabled, `.\instalar-watchdog-sync.ps1`; alívio: `nssm restart` |
+| Tarefa watchdog Disabled / ausente | Operador parou o watchdog paralelo | `.\instalar-watchdog-sync.ps1` no AppDirectory do NSSM |
 | `[SKIP] MDB indisponivel` contínuo | Share/`I:` fora ou conta sem acesso | Verifique UNC e credenciais da conta do serviço |
 | `mysql-connector` / `dotenv` ImportError | Dep não instalada | `pip install --no-user python-dotenv mysql-connector-python` |
 | Home/painel demora a refletir MDB | Notify falhando ou serviço antigo | Reinicie o serviço; confira `[NOTIFY]` no log |

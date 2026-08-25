@@ -23,6 +23,24 @@ class TestResolveTimbradoDigitalDocx:
         assert resolved["pb_name"].endswith("-TimbradoA4Digital-PB.docx")
         assert len(resolved["files"]) == 2
 
+    def test_prefers_digital_subfolder(self, monkeypatch, tmp_path):
+        from services import proof_files_service as svc
+
+        sefoc = tmp_path / "Sefoc"
+        digital = sefoc / "Digital"
+        sefoc.mkdir()
+        digital.mkdir()
+        (sefoc / "old-TimbradoA4Digital-Cor.docx").write_bytes(b"old")
+        (sefoc / "old-TimbradoA4Digital-PB.docx").write_bytes(b"old")
+        (digital / "new-TimbradoA4Digital-Cor.docx").write_bytes(b"new")
+        (digital / "new-TimbradoA4Digital-PB.docx").write_bytes(b"new")
+
+        monkeypatch.setattr(svc, "_sefoc_dir", lambda ano, os_id: str(sefoc))
+
+        resolved = svc.resolve_timbrado_digital_docx_paths(2026, 5954)
+        assert resolved["cor_name"].startswith("new-")
+        assert "Digital" in resolved["cor_path"]
+
     def test_missing_pb_raises(self, monkeypatch, tmp_path):
         from services import proof_files_service as svc
 

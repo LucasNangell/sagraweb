@@ -7,7 +7,9 @@ param(
     [string]$ServiceName = "SAGRA-SyncAndamentos",
     [string]$DisplayName = "SAGRA Sync Andamentos",
     [switch]$Start,
-    [switch]$InstallDeps
+    [switch]$InstallDeps,
+    [switch]$AutoStart,
+    [switch]$ManualStart
 )
 
 $ErrorActionPreference = "Stop"
@@ -228,9 +230,14 @@ if ($existing) {
 & $nssm set $ServiceName AppParameters $scriptName
 & $nssm set $ServiceName AppDirectory $Root
 & $nssm set $ServiceName DisplayName $DisplayName
-& $nssm set $ServiceName Description "Sincronizacao unidirecional MDB->MySQL (andamentos) com watchdog e restart automatico."
-# Manual: NAO sobe com o Windows nem com a API. Operador inicia quando quiser.
-& $nssm set $ServiceName Start SERVICE_DEMAND_START
+& $nssm set $ServiceName Description "Sincronizacao bidirecional tabAndamento (MDB/MySQL) com watchdog e restart automatico."
+if ($ManualStart -and $AutoStart) {
+    throw "Use apenas -AutoStart ou -ManualStart, nao os dois."
+}
+# Default 24/7: sobe com o Windows. -ManualStart preserva o modo antigo (inicio so pelo operador).
+$nssmStart = if ($ManualStart) { "SERVICE_DEMAND_START" } else { "SERVICE_AUTO_START" }
+& $nssm set $ServiceName Start $nssmStart
+Write-Host "StartType NSSM: $nssmStart"
 & $nssm set $ServiceName AppStdout $stdoutLog
 & $nssm set $ServiceName AppStderr $stderrLog
 & $nssm set $ServiceName AppRotateFiles 1
@@ -287,6 +294,8 @@ Write-Host "AppParameters (NSSM):"
 & $nssm get $ServiceName AppParameters
 Write-Host "AppDirectory (NSSM):"
 & $nssm get $ServiceName AppDirectory
+Write-Host "Start (NSSM):"
+& $nssm get $ServiceName Start
 
 if ($Start) {
     Write-Host "Iniciando servico..."
@@ -324,7 +333,12 @@ if ($Start) {
         }
     }
 } else {
-    Write-Host "Servico instalado (Start=Manual / DEMAND). Para iniciar: nssm start $ServiceName   ou   -Start"
+    $hint = if ($ManualStart) {
+        "Servico instalado (Start=Manual / DEMAND). Para iniciar: nssm start $ServiceName   ou   -Start"
+    } else {
+        "Servico instalado (Start=Automatic / AUTO). Sobe com o Windows. Para iniciar agora: nssm start $ServiceName   ou   -Start"
+    }
+    Write-Host $hint
 }
 
 Write-Host "Pronto."

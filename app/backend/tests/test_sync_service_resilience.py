@@ -57,6 +57,82 @@ def test_heartbeat_marks_errors(tmp_hb):
     assert snap2["last_error"] is None
 
 
+def test_mark_cycle_error_does_not_reset_stall(tmp_hb, monkeypatch):
+    hb = tmp_hb
+    mono = {"t": 1000.0}
+
+    def fake_mono():
+        return mono["t"]
+
+    monkeypatch.setattr(svc.time, "monotonic", fake_mono)
+    hb.last_progress_mono = 1000.0
+    hb.mark_progress("read_mdb_os")
+    mono["t"] = 1030.0
+    hb.mark_cycle_error("mdb_os_read_failed")
+    snap = hb.snapshot()
+    assert snap["phase"] == "error"
+    assert snap["consecutive_errors"] == 1
+    assert snap["stall_seconds"] >= 30.0
+
+
+def test_is_fatal_stall_skips_mdb_unavailable():
+    timeout = svc.SYNC_STALL_TIMEOUT
+    assert svc.ResilientSynchronizer._is_fatal_stall("mdb_unavailable", timeout + 50) is False
+    assert svc.ResilientSynchronizer._is_fatal_stall("read_mdb_os", timeout + 1) is True
+    assert svc.ResilientSynchronizer._is_fatal_stall("error", timeout) is True
+    assert svc.ResilientSynchronizer._is_fatal_stall("read_mdb_os", timeout - 1) is False
+
+
+def test_watchdog_loop_sleeps_on_mdb_unavailable(tmp_hb, monkeypatch):
+    tmp_hb.mark_skip_cycle("mdb_unavailable")
+    sync = SimpleNamespace(
+        running=True,
+        _hb=tmp_hb,
+        _svc_log=logging.getLogger("test_wd"),
+        _is_fatal_stall=svc.ResilientSynchronizer._is_fatal_stall,
+        _dump_all_stacks=lambda: None,
+    )
+    sleeps = {"n": 0}
+
+    def fake_sleep(_s):
+        sleeps["n"] += 1
+        sync.running = False
+
+    monkeypatch.setattr(svc.time, "sleep", fake_sleep)
+    svc.ResilientSynchronizer._watchdog_loop(sync)
+    assert sleeps["n"] >= 1
+
+
+def test_maybe_recycle_connections_interval(monkeypatch):
+    monkeypatch.setattr(svc, "SYNC_CONN_RECYCLE_SECONDS", 900.0)
+    sync = SimpleNamespace(
+        _last_conn_recycle_mono=1000.0,
+        _svc_log=logging.getLogger("test_recycle"),
+        conn_mgr=MagicMock(),
+    )
+    method = svc.ResilientSynchronizer._maybe_recycle_connections
+
+    monkeypatch.setattr(svc.time, "monotonic", lambda: 1000.0 + 100)
+    method(sync)
+    sync.conn_mgr.invalidate_all.assert_not_called()
+
+    monkeypatch.setattr(svc.time, "monotonic", lambda: 1000.0 + 901)
+    method(sync)
+    sync.conn_mgr.invalidate_all.assert_called_once()
+    assert sync._last_conn_recycle_mono == 1000.0 + 901
+
+
+def test_maybe_recycle_connections_disabled(monkeypatch):
+    monkeypatch.setattr(svc, "SYNC_CONN_RECYCLE_SECONDS", 0.0)
+    sync = SimpleNamespace(
+        _last_conn_recycle_mono=0.0,
+        _svc_log=logging.getLogger("test_recycle"),
+        conn_mgr=MagicMock(),
+    )
+    svc.ResilientSynchronizer._maybe_recycle_connections(sync)
+    sync.conn_mgr.invalidate_all.assert_not_called()
+
+
 def test_stall_detection_with_fake_clock(tmp_hb, monkeypatch):
     hb = tmp_hb
     mono = {"t": 1000.0}

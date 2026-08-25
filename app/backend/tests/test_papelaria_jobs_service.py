@@ -1602,13 +1602,15 @@ class TestTimbradoA4DigitalJob:
 
         sefoc = tmp_path / "Sefoc"
         sefoc.mkdir()
+        digital = sefoc / "Digital"
+        digital.mkdir()
         prefix = "05954-Pasta"
         names = [
             f"{prefix}-TimbradoA4Digital-Cor.docx",
             f"{prefix}-TimbradoA4Digital-PB.docx",
         ]
         for name in names:
-            (sefoc / name).write_bytes(b"ok")
+            (digital / name).write_bytes(b"ok")
 
         updates = {}
 
@@ -1716,13 +1718,15 @@ class TestTimbradoA4DigitalJob:
 
         sefoc = tmp_path / "Sefoc"
         sefoc.mkdir()
+        digital = sefoc / "Digital"
+        digital.mkdir()
         prefix = "05954-Pasta"
         docx_names = [
             f"{prefix}-TimbradoA4Digital-Cor.docx",
             f"{prefix}-TimbradoA4Digital-PB.docx",
         ]
         for name in docx_names:
-            (sefoc / name).write_bytes(b"docx")
+            (digital / name).write_bytes(b"docx")
 
         updates = {}
 

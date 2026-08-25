@@ -211,9 +211,7 @@ def validate_attachment_file_size(path: str, *, label: str = "arquivo") -> None:
 
 def resolve_timbrado_digital_docx_paths(ano: int, os_id: int) -> dict[str, Any]:
     """
-    Localiza os DOCX Cor/PB do Timbrado A4 Digital em Sefoc/.
-
-    Prefere o par mais recente (por mtime do Cor, com PB correspondente).
+    Localiza os DOCX Cor/PB em Sefoc/Digital (padrão) ou Sefoc/ (legado).
     """
     sefoc_path = _sefoc_dir(ano, os_id)
     if not sefoc_path:
@@ -222,32 +220,44 @@ def resolve_timbrado_digital_docx_paths(ano: int, os_id: int) -> dict[str, Any]:
             detail="Pasta Sefoc da OS não encontrada.",
         )
 
+    search_dirs: list[str] = []
+    digital_path = os.path.join(sefoc_path, "Digital")
+    if os.path.isdir(digital_path):
+        search_dirs.append(digital_path)
+    search_dirs.append(sefoc_path)
+
     cor_candidates: list[tuple[float, str]] = []
     pb_by_prefix: dict[str, str] = {}
 
-    for path in glob.glob(os.path.join(sefoc_path, "*.docx")):
-        if not os.path.isfile(path):
-            continue
-        name = os.path.basename(path)
-        if not _is_path_under_dir(path, sefoc_path):
-            continue
-        try:
-            mtime = os.path.getmtime(path)
-        except OSError:
-            mtime = 0.0
-        lower = name.lower()
-        if _TIMBRADO_COR_RE.search(lower):
-            cor_candidates.append((mtime, path))
-        elif _TIMBRADO_PB_RE.search(lower):
-            # prefixo até -TimbradoA4Digital
-            idx = lower.rfind("-timbradoa4digital-")
-            prefix = name[:idx] if idx >= 0 else name
-            pb_by_prefix[prefix.lower()] = path
+    for directory in search_dirs:
+        for path in glob.glob(os.path.join(directory, "*.docx")):
+            if not os.path.isfile(path):
+                continue
+            name = os.path.basename(path)
+            if not _is_path_under_dir(path, sefoc_path):
+                continue
+            try:
+                mtime = os.path.getmtime(path)
+            except OSError:
+                mtime = 0.0
+            lower = name.lower()
+            if _TIMBRADO_COR_RE.search(lower):
+                cor_candidates.append((mtime, path))
+            elif _TIMBRADO_PB_RE.search(lower):
+                idx = lower.rfind("-timbradoa4digital-")
+                prefix = name[:idx] if idx >= 0 else name
+                key = prefix.lower()
+                if key not in pb_by_prefix:
+                    pb_by_prefix[key] = path
+
+        # Par encontrado em Digital tem prioridade sobre Sefoc raiz.
+        if directory == digital_path and cor_candidates:
+            break
 
     if not cor_candidates:
         raise HTTPException(
             status_code=404,
-            detail="DOCX Timbrado A4 Digital (Cor) não encontrado na pasta Sefoc.",
+            detail="DOCX Timbrado A4 Digital (Cor) não encontrado na pasta Digital/Sefoc.",
         )
 
     cor_candidates.sort(key=lambda item: item[0], reverse=True)

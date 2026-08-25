@@ -39,6 +39,29 @@ if (-not $svc) {
     }
 }
 
+Write-Host ""
+Write-Host "---- Watchdog externo (tarefa agendada) ----"
+$taskName = "SAGRA-SyncAndamentos-Watchdog"
+$task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+if (-not $task) {
+    Write-Host "Tarefa: NAO INSTALADA ($taskName)"
+    Write-Host "Para religar (mesmo AppDirectory do NSSM): .\instalar-watchdog-sync.ps1"
+} else {
+    Write-Host "TaskName:   $($task.TaskName)"
+    Write-Host "State:      $($task.State)"
+    try {
+        $info = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction Stop
+        Write-Host "LastRun:    $($info.LastRunTime)"
+        Write-Host "LastResult: $($info.LastTaskResult)"
+        Write-Host "NextRun:    $($info.NextRunTime)"
+    } catch {
+        Write-Host "Info da tarefa indisponivel: $_"
+    }
+    if ($task.State -eq "Disabled") {
+        Write-Host "AVISO: tarefa desabilitada. Enable-ScheduledTask -TaskName '$taskName'"
+    }
+}
+
 $stderrLog = Join-Path $logDir "service_stderr.log"
 $stdoutLog = Join-Path $logDir "service_stdout.log"
 
@@ -57,6 +80,14 @@ if (-not (Test-Path -LiteralPath $hbPath)) {
         if ($written) {
             $age = [math]::Round(((Get-Date).ToUniversalTime() - $written).TotalSeconds, 1)
         }
+        $cycle = $null
+        if ($hb.last_cycle_at) {
+            try { $cycle = [datetime]::Parse($hb.last_cycle_at).ToUniversalTime() } catch {}
+        }
+        $cycleAge = $null
+        if ($cycle) {
+            $cycleAge = [math]::Round(((Get-Date).ToUniversalTime() - $cycle).TotalSeconds, 1)
+        }
         Write-Host "PID:                 $($hb.pid)"
         Write-Host "started_at:          $($hb.started_at)"
         Write-Host "last_cycle_at:       $($hb.last_cycle_at)"
@@ -68,7 +99,11 @@ if (-not (Test-Path -LiteralPath $hbPath)) {
         Write-Host "written_at:          $($hb.written_at)"
         if ($null -ne $age) {
             $staleMark = if ($age -gt $StaleSeconds) { " STALE!" } else { " OK" }
-            Write-Host "heartbeat_age_sec:   $age$staleMark  (limite=$StaleSeconds)"
+            Write-Host "heartbeat_age_sec:   $age$staleMark  (limite=$StaleSeconds, written_at)"
+        }
+        if ($null -ne $cycleAge) {
+            $cycleMark = if ($cycleAge -gt $StaleSeconds -and [string]$hb.phase -ne "mdb_unavailable") { " STALE!" } else { " OK" }
+            Write-Host "last_cycle_age_sec:  $cycleAge$cycleMark  (limite=$StaleSeconds; watchdog externo usa este)"
         }
     } catch {
         Write-Host "Falha ao ler heartbeat: $_"

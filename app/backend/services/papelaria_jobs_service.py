@@ -1410,6 +1410,15 @@ def resolve_os_papelaria_dir(ano: int, nro: int, create: bool = True) -> str:
     return sefoc_dir
 
 
+def resolve_os_timbrado_digital_dir(ano: int, nro: int, create: bool = True) -> str:
+    """DOCX Timbrado A4 Digital: {pasta_os}/Sefoc/Digital."""
+    sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=create)
+    digital_dir = os.path.normpath(os.path.join(sefoc_dir, "Digital"))
+    if create:
+        os.makedirs(digital_dir, exist_ok=True)
+    return digital_dir
+
+
 def get_os_folder_basename(ano: int, nro: int) -> str:
     from routers.os_routes import _get_os_folder_path
 
@@ -1596,6 +1605,11 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
         )
 
     if job["tipo_job"] == TIPO_JOB_TIMBRADO_A4_DIGITAL:
+        payload["output_dir"] = resolve_os_timbrado_digital_dir(
+            job["ano_protocolo"],
+            job["nro_protocolo"],
+            create=True,
+        )
         artifacts = build_timbrado_a4_digital_artifact_names(
             job["ano_protocolo"],
             job["nro_protocolo"],
@@ -1813,7 +1827,7 @@ def _complete_timbrado_a4_digital_job(
             + ", ".join(missing_required)
         )
 
-    output_dir = resolve_os_papelaria_dir(
+    output_dir = resolve_os_timbrado_digital_dir(
         job["ano_protocolo"],
         job["nro_protocolo"],
         create=False,

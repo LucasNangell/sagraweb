@@ -171,6 +171,63 @@
             z-index: 10;
         }
 
+        .overlay-carimbo-entrega {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+            max-width: 90%;
+            max-height: 90%;
+            height: auto;
+            object-fit: contain;
+            pointer-events: none;
+            z-index: 10;
+            mix-blend-mode: multiply;
+        }
+
+        .ficha-carimbo-entrega-spacer {
+            visibility: hidden;
+        }
+
+        .ficha-carimbo-entrega-box {
+            position: relative;
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            min-height: 50px;
+            box-sizing: border-box;
+        }
+
+        .ficha-tech-row {
+            align-items: stretch;
+        }
+
+        .ficha-tech-row > .col.flex-1 {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .ficha-acabamento-wrap.section-box {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .ficha-acabamento-wrap .field-group {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            margin-bottom: 0;
+        }
+
+        .ficha-acabamento.value-box.textarea {
+            flex: 1;
+            min-height: 28px;
+        }
+
         .ficha-top-header {
             display: flex;
             align-items: center;
@@ -445,6 +502,10 @@
                 overflow: hidden !important;
             }
 
+            .overlay-carimbo-entrega {
+                mix-blend-mode: multiply !important;
+            }
+
             .ficha-obs-gerais.value-box.textarea {
                 min-height: 62px !important;
                 max-height: var(--ficha-obs-gerais-max) !important;
@@ -463,19 +524,50 @@
                 max-height: var(--ficha-material-max) !important;
             }
 
-            /* ÁREA DE AÇABAMENTO */
-            .ficha-acabamento.value-box.textarea {
-                max-height: var(--ficha-acabamento-max) !important;
-                min-height: 28px !important;
-                font-size: 8px !important;
-                line-height: 1.15 !important;
+            /* ÁREA DE ACABAMENTO — estica até a base da coluna Papel */
+            .ficha-tech-row {
+                align-items: stretch !important;
+            }
+
+            .ficha-tech-row > .col.flex-1 {
+                display: flex !important;
+                flex-direction: column !important;
+            }
+
+            .ficha-acabamento-wrap.section-box {
+                flex: 1 !important;
+                height: auto !important;
+                max-height: none !important;
+                display: flex !important;
+                flex-direction: column !important;
+                min-height: 0 !important;
                 overflow: hidden !important;
             }
 
-            .ficha-acabamento-wrap.section-box,
             .ficha-acabamento-wrap .field-group {
+                flex: 1 !important;
                 height: auto !important;
-                max-height: calc(var(--ficha-acabamento-max) + 24px) !important;
+                max-height: none !important;
+                display: flex !important;
+                flex-direction: column !important;
+                min-height: 0 !important;
+                margin-bottom: 0 !important;
+            }
+
+            .ficha-acabamento.value-box.textarea {
+                flex: 1 !important;
+                min-height: 28px !important;
+                max-height: none !important;
+                height: auto !important;
+                font-size: 8px !important;
+                line-height: 1.15 !important;
+                overflow: hidden !important;
+                align-items: flex-start !important;
+            }
+
+            .ficha-carimbo-entrega-box {
+                min-height: 62px !important;
+                max-height: var(--ficha-obs-gerais-max) !important;
                 overflow: hidden !important;
             }
 
@@ -762,7 +854,7 @@
                 </div>
 
                 <div class="section-header">Informações Técnicas</div>
-                <div class="row">
+                <div class="row ficha-tech-row">
                     <div class="col flex-3">
                         <div class="section-box">
                             <div class="grid-tech">
@@ -847,8 +939,16 @@
                     </div>
 
                     <div class="col flex-1">
-                        <div class="section-box" style="height: 100%; padding: 0;">
-                            <div class="row" style="height: 100%; gap: 0;">
+                        {% if show_carimbo_entrega %}
+                        <div class="section-header ficha-carimbo-entrega-spacer" style="font-size: 14px;" aria-hidden="true">Observações Gerais:</div>
+                        {% endif %}
+                        <div class="section-box" style="height: 100%; position: relative;{% if show_carimbo_entrega %} flex: 1; display: flex; flex-direction: column;{% else %} padding: 0;{% endif %}">
+                            {% if show_carimbo_entrega %}
+                            <div class="value-box ficha-carimbo-entrega-box">
+                                <img src="{{ carimbo_entrega_src }}" class="overlay-carimbo-entrega" alt="Entrega">
+                            </div>
+                            {% endif %}
+                            <div class="row" style="height: 100%; gap: 0;{% if show_carimbo_entrega %} visibility: hidden; position: absolute; inset: 0;{% endif %}">
                                 <div class="col flex-1" style="padding: 5px; border-right: 2px solid #b0b0b0;">
                                     <div class="section-header" style="font-size: 11px;">Insumos Fornecidos</div>
                                     <div class="value-box textarea ficha-insumos" style="flex: 1; min-height: 50px; height: 100%; font-weight: normal;">
@@ -985,6 +1085,9 @@
             }
 
             function autoSizeTextarea(box) {
+                if (box.classList.contains('ficha-acabamento')) {
+                    return;
+                }
                 var minFieldH = getFichaFieldMinHeight(box);
                 var maxFieldH = getFichaFieldMaxHeight(box);
                 var floorH = minFieldH > 0 ? minFieldH : 30;
@@ -1011,11 +1114,14 @@
                 var fieldGroup = acabamentoBox.closest('.field-group');
                 var sectionBox = acabamentoBox.closest('.section-box');
                 if (fieldGroup) {
-                    fieldGroup.style.setProperty('height', 'auto', 'important');
+                    fieldGroup.style.removeProperty('height');
                 }
                 if (sectionBox) {
-                    sectionBox.style.setProperty('height', 'auto', 'important');
+                    sectionBox.style.removeProperty('height');
                 }
+                acabamentoBox.style.removeProperty('height');
+                acabamentoBox.style.removeProperty('max-height');
+                acabamentoBox.style.removeProperty('min-height');
             }
 
             function fitPrintPageScale() {

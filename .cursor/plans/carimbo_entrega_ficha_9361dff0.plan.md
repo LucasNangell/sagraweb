@@ -4,16 +4,16 @@ overview: Quando o título da OS contiver "Camara nas Redes", a ficha A5 sobrep�
 todos:
   - id: move-png
     content: Mover entrega.png para app/backend/templates/
-    status: pending
+    status: completed
   - id: backend-helpers
     content: Helpers de título + data URI e flags no context de requisicao_routes.py
-    status: pending
+    status: completed
   - id: template-overlay
     content: Overlay + visibility:hidden no bloco Insumos/Material sem alterar a estrutura
-    status: pending
+    status: completed
   - id: tests
     content: Testes unitários dos helpers e pytest focado
-    status: pending
+    status: completed
 isProject: false
 ---
 

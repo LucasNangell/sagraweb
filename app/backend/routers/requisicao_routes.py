@@ -6,6 +6,7 @@ import base64
 import os
 import datetime
 import logging
+import unicodedata
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -50,15 +51,21 @@ def _resolve_template_path() -> str:
     )
 
 
-def _resolve_carimbo_data_uri(template_path: str) -> str:
-    """Embute carimbo.png do mesmo diretório do template (evita /carimbo.png na raiz do site)."""
-    carimbo_path = os.path.join(os.path.dirname(template_path), "carimbo.png")
-    if not os.path.isfile(carimbo_path):
-        logger.warning("carimbo.png não encontrado em %s", os.path.dirname(template_path))
+def _resolve_carimbo_data_uri(template_path: str, filename: str = "carimbo.png") -> str:
+    """Embute PNG do mesmo diretório do template (evita URL na raiz do site)."""
+    asset_path = os.path.join(os.path.dirname(template_path), filename)
+    if not os.path.isfile(asset_path):
+        logger.warning("%s não encontrado em %s", filename, os.path.dirname(template_path))
         return ""
-    with open(carimbo_path, "rb") as carimbo_file:
-        encoded = base64.b64encode(carimbo_file.read()).decode("ascii")
+    with open(asset_path, "rb") as asset_file:
+        encoded = base64.b64encode(asset_file.read()).decode("ascii")
     return f"data:image/png;base64,{encoded}"
+
+
+def _titulo_indica_camara_nas_redes(titulo: str | None) -> bool:
+    normalized = unicodedata.normalize("NFKD", str(titulo or ""))
+    ascii_title = "".join(c for c in normalized if not unicodedata.combining(c)).casefold()
+    return "camara nas redes" in ascii_title
 
 
 def _normalize_prova_cor_tipo(value: str | None) -> str | None:
@@ -207,6 +214,12 @@ def generate_requisicao(
                 "Solicitado p/" in prazo_entrega
                 or "Prometido p/" in prazo_entrega
             )
+        )
+
+        context["carimbo_entrega_src"] = _resolve_carimbo_data_uri(template_path, "entrega.png")
+        context["show_carimbo_entrega"] = bool(
+            context["carimbo_entrega_src"]
+            and _titulo_indica_camara_nas_redes(context.get("servico_titulo"))
         )
 
         with open(template_path, "r", encoding="utf-8") as f:

@@ -269,6 +269,19 @@ def get_movimentos(
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
+@router.post("/estoque/importar-licitacoes")
+def post_importar_licitacoes(request: Request):
+    _require_gerente(request)
+    try:
+        from estoque_import_licitacoes import import_licitacoes_materiais
+
+        return import_licitacoes_materiais(ponto=_ponto(request))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get("/estoque/pedidos")
 def get_pedidos(
     request: Request,

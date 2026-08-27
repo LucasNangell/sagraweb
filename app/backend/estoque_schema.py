@@ -99,11 +99,13 @@ CREATE TABLE IF NOT EXISTS tab_estoque_movimento (
     referencia_os_nro INT NULL,
     referencia_os_ano INT NULL,
     ponto VARCHAR(32) NULL,
+    import_key VARCHAR(191) NULL,
     criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY idx_estoque_mov_sku (sku_id),
     KEY idx_estoque_mov_tipo (tipo),
     KEY idx_estoque_mov_criado (criado_em),
-    KEY idx_estoque_mov_pedido (pedido_id)
+    KEY idx_estoque_mov_pedido (pedido_id),
+    UNIQUE KEY uk_estoque_mov_import_key (import_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 """
 
@@ -114,6 +116,40 @@ _SEED_CATEGORIAS = (
     "Chapa",
     "Insumo geral",
 )
+
+
+def _ensure_movimento_import_key(cursor) -> None:
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'tab_estoque_movimento'
+          AND COLUMN_NAME = 'import_key'
+        """
+    )
+    if not cursor.fetchone():
+        cursor.execute(
+            "ALTER TABLE tab_estoque_movimento ADD COLUMN import_key VARCHAR(191) NULL"
+        )
+        logger.info("Estoque: coluna import_key adicionada")
+    cursor.execute(
+        """
+        SELECT INDEX_NAME
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'tab_estoque_movimento'
+          AND INDEX_NAME = 'uk_estoque_mov_import_key'
+        """
+    )
+    if not cursor.fetchone():
+        cursor.execute(
+            """
+            ALTER TABLE tab_estoque_movimento
+            ADD UNIQUE KEY uk_estoque_mov_import_key (import_key)
+            """
+        )
+        logger.info("Estoque: índice único import_key adicionado")
 
 
 def ensure_estoque_schema() -> None:
@@ -127,6 +163,7 @@ def ensure_estoque_schema() -> None:
             cursor.execute(_CREATE_PEDIDO_SQL)
             cursor.execute(_CREATE_PEDIDO_ITEM_SQL)
             cursor.execute(_CREATE_MOVIMENTO_SQL)
+            _ensure_movimento_import_key(cursor)
             for nome in _SEED_CATEGORIAS:
                 cursor.execute(
                     """
@@ -143,6 +180,14 @@ def ensure_estoque_schema() -> None:
                     logger.info("Estoque: %s materiais do relatório inseridos (seed)", n)
             except Exception as seed_exc:
                 logger.error("Estoque: falha no seed de materiais: %s", seed_exc)
+            try:
+                from estoque_import_licitacoes import ensure_licitacao_skus
+
+                n_new = ensure_licitacao_skus(cursor)
+                if n_new:
+                    logger.info("Estoque: %s SKUs das licitações inseridos", n_new)
+            except Exception as lic_exc:
+                logger.error("Estoque: falha ao garantir SKUs das licitações: %s", lic_exc)
         logger.info("Schema Estoque garantido")
     except Exception as exc:
         logger.error("Erro ao migrar schema Estoque: %s", exc)

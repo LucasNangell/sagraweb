@@ -26,6 +26,14 @@ def _f(value: Decimal) -> float:
     return float(value.quantize(D("0.0001")))
 
 
+def _novo_custo_medio(
+    qtd_antes: Decimal, medio_antes: Decimal, qtd_ent: Decimal, unit: Decimal
+) -> Decimal:
+    if qtd_antes <= 0:
+        return unit
+    return ((qtd_antes * medio_antes) + (qtd_ent * unit)) / (qtd_antes + qtd_ent)
+
+
 def _ponto_str(ponto: Any) -> str:
     return str(ponto or "").strip()
 
@@ -78,14 +86,15 @@ def _insert_movimento(
     pedido_id: int | None = None,
     os_nro: int | None = None,
     os_ano: int | None = None,
+    import_key: str | None = None,
 ) -> int:
     custo_total = (quantidade.copy_abs() * custo_unitario).quantize(D("0.0001"))
     cursor.execute(
         """
         INSERT INTO tab_estoque_movimento (
             sku_id, tipo, quantidade, custo_unitario, custo_total, saldo_apos,
-            motivo, pedido_id, referencia_os_nro, referencia_os_ano, ponto
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            motivo, pedido_id, referencia_os_nro, referencia_os_ano, ponto, import_key
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             sku_id,
@@ -99,6 +108,7 @@ def _insert_movimento(
             os_nro,
             os_ano,
             ponto,
+            import_key,
         ),
     )
     return int(cursor.lastrowid)
@@ -205,6 +215,28 @@ def get_sku(sku_id: int, *, include_cost: bool = False) -> Optional[dict]:
         WHERE s.id = %s
         """,
         (sku_id,),
+    )
+    if not rows:
+        return None
+    return _sku_row_to_dict(rows[0], include_cost=include_cost)
+
+
+def get_sku_by_codigo(codigo: str, *, include_cost: bool = False) -> Optional[dict]:
+    code = (codigo or "").strip()
+    if not code:
+        return None
+    rows = db.execute_query(
+        """
+        SELECT s.*, c.nome AS categoria_nome,
+               COALESCE(sal.quantidade, 0) AS quantidade,
+               COALESCE(sal.reservado, 0) AS reservado
+        FROM tab_estoque_sku s
+        LEFT JOIN tab_estoque_categoria c ON c.id = s.categoria_id
+        LEFT JOIN tab_estoque_saldo sal ON sal.sku_id = s.id
+        WHERE s.codigo = %s
+        LIMIT 1
+        """,
+        (code,),
     )
     if not rows:
         return None
@@ -331,11 +363,27 @@ def registrar_entrada(
     ponto: str,
     os_nro: int | None = None,
     os_ano: int | None = None,
+    import_key: str | None = None,
 ) -> dict:
     qtd = _dec(quantidade)
     if qtd <= 0:
         raise ValueError("Quantidade de entrada deve ser positiva")
     custo = _dec(custo_unitario) if custo_unitario is not None else None
+    key = (import_key or "").strip() or None
+    if key:
+        existing = db.execute_query(
+            """
+            SELECT id, sku_id FROM tab_estoque_movimento
+            WHERE import_key = %s LIMIT 1
+            """,
+            (key,),
+        )
+        if existing:
+            return {
+                "movimento_id": int(existing[0]["id"]),
+                "sku": get_sku(int(existing[0]["sku_id"]), include_cost=True),
+                "skipped": True,
+            }
 
     def _tx(cursor):
         cursor.execute("SELECT id, custo_medio FROM tab_estoque_sku WHERE id = %s FOR UPDATE", (sku_id,))
@@ -346,10 +394,7 @@ def registrar_entrada(
         qtd_antes = _dec(saldo["quantidade"])
         unit = custo if custo is not None else _dec(sku["custo_medio"])
         if custo is not None and custo >= 0:
-            if qtd_antes <= 0:
-                novo_medio = unit
-            else:
-                novo_medio = ((qtd_antes * _dec(sku["custo_medio"])) + (qtd * unit)) / (qtd_antes + qtd)
+            novo_medio = _novo_custo_medio(qtd_antes, _dec(sku["custo_medio"]), qtd, unit)
             cursor.execute(
                 "UPDATE tab_estoque_sku SET custo_medio = %s, ultimo_custo = %s WHERE id = %s",
                 (_f(novo_medio), _f(unit), sku_id),
@@ -370,10 +415,25 @@ def registrar_entrada(
             ponto=ponto,
             os_nro=os_nro,
             os_ano=os_ano,
+            import_key=key,
         )
         return mov_id
 
-    mov_id = int(db.execute_transaction([_tx])[0])
+    try:
+        mov_id = int(db.execute_transaction([_tx])[0])
+    except Exception as exc:
+        if key and ("Duplicate" in str(exc) or "uk_estoque_mov_import_key" in str(exc)):
+            existing = db.execute_query(
+                "SELECT id, sku_id FROM tab_estoque_movimento WHERE import_key = %s LIMIT 1",
+                (key,),
+            )
+            if existing:
+                return {
+                    "movimento_id": int(existing[0]["id"]),
+                    "sku": get_sku(int(existing[0]["sku_id"]), include_cost=True),
+                    "skipped": True,
+                }
+        raise
     _maybe_notify_low_stock(sku_id)
     return {"movimento_id": mov_id, "sku": get_sku(sku_id, include_cost=True)}
 

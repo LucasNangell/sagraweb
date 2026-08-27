@@ -46,6 +46,8 @@ def _insumo_row(row: dict) -> dict:
     qtd = _f(row.get("qtd_embalagem"), 1) or 1
     bruto = _f(row.get("preco_bruto"))
     unit = _f(row.get("preco_unitario"))
+    sku_id = row.get("estoque_sku_id")
+    custo_est = row.get("custo_estoque")
     return {
         "id": int(row["id"]),
         "codigo": row["codigo"],
@@ -55,28 +57,105 @@ def _insumo_row(row: dict) -> dict:
         "qtd_embalagem": qtd,
         "preco_bruto": bruto,
         "preco_unitario": unit,
+        "preco_cadastro": unit,
         "rendimento_a4": _f(row.get("rendimento_a4")) if row.get("rendimento_a4") is not None else None,
         "formato_folha": row.get("formato_folha"),
         "aliases": _json_load(row.get("aliases_json"), []),
         "atualizado_em": _iso(row.get("atualizado_em")),
         "ativo": bool(row.get("ativo", 1)),
+        "estoque_sku_id": int(sku_id) if sku_id else None,
+        "estoque_sku_codigo": row.get("estoque_sku_codigo"),
+        "custo_estoque": _f(custo_est) if custo_est is not None else None,
     }
 
 
+_INSUMO_SELECT = """
+SELECT i.*,
+       s.codigo AS estoque_sku_codigo,
+       s.custo_medio AS custo_estoque
+FROM tab_orcamento_insumo i
+LEFT JOIN tab_estoque_sku s ON s.id = i.estoque_sku_id
+"""
+
+
+def tinta_policromia_custo(skus: list[dict]) -> Optional[float]:
+    """Média ponderada pelo saldo das tintas CMY; None se algum custo estiver zerado."""
+    if len(skus) != 3:
+        return None
+    medios: list[float] = []
+    pesos: list[float] = []
+    for sku in skus:
+        custo = _f(sku.get("custo_medio"))
+        if custo <= 0:
+            return None
+        qtd = _f(sku.get("quantidade"))
+        medios.append(custo)
+        pesos.append(qtd if qtd > 0 else 0.0)
+    total = sum(pesos)
+    if total > 0:
+        return sum(m * p for m, p in zip(medios, pesos)) / total
+    return sum(medios) / 3.0
+
+
+def overlay_estoque_precos(
+    insumos: list[dict],
+    t5_skus: Optional[list[dict]] = None,
+) -> list[dict]:
+    """Substitui preco_unitario pelo custo_medio do SKU ligado quando > 0."""
+    t5_custo = tinta_policromia_custo(t5_skus or [])
+    out: list[dict] = []
+    for item in insumos:
+        row = dict(item)
+        cadastro = _f(row.get("preco_cadastro") if row.get("preco_cadastro") is not None else row.get("preco_unitario"))
+        row["preco_cadastro"] = cadastro
+        custo_est = _f(row.get("custo_estoque")) if row.get("custo_estoque") is not None else 0.0
+        if custo_est > 0:
+            row["custo_estoque"] = custo_est
+            row["preco_unitario"] = custo_est
+        else:
+            row["custo_estoque"] = None
+            row["preco_unitario"] = cadastro
+        if row.get("codigo") == "t5" and t5_custo is not None:
+            row["custo_estoque"] = t5_custo
+            row["preco_unitario"] = t5_custo
+            if not row.get("estoque_sku_codigo"):
+                row["estoque_sku_codigo"] = "MAT-144/145/146"
+        out.append(row)
+    return out
+
+
+def _t5_skus() -> list[dict]:
+    try:
+        from estoque_import_licitacoes import T5_INK_CODIGOS
+        from services.estoque_service import get_sku_by_codigo
+    except Exception:
+        return []
+    found: list[dict] = []
+    for codigo in T5_INK_CODIGOS:
+        sku = get_sku_by_codigo(codigo, include_cost=True)
+        if sku:
+            found.append(sku)
+    return found
+
+
 def list_insumos(*, include_inactive: bool = True) -> list[dict]:
-    sql = "SELECT * FROM tab_orcamento_insumo"
+    sql = _INSUMO_SELECT
     if not include_inactive:
-        sql += " WHERE ativo = 1"
-    sql += " ORDER BY categoria ASC, codigo ASC"
-    return [_insumo_row(r) for r in (db.execute_query(sql) or [])]
+        sql += " WHERE i.ativo = 1"
+    sql += " ORDER BY i.categoria ASC, i.codigo ASC"
+    rows = [_insumo_row(r) for r in (db.execute_query(sql) or [])]
+    return overlay_estoque_precos(rows, t5_skus=_t5_skus())
 
 
 def get_insumo(insumo_id: int) -> Optional[dict]:
     rows = db.execute_query(
-        "SELECT * FROM tab_orcamento_insumo WHERE id = %s",
+        _INSUMO_SELECT + " WHERE i.id = %s",
         (insumo_id,),
     )
-    return _insumo_row(rows[0]) if rows else None
+    if not rows:
+        return None
+    overlaid = overlay_estoque_precos([_insumo_row(rows[0])], t5_skus=_t5_skus())
+    return overlaid[0]
 
 
 def _unit_from(bruto: float, qtd: float, categoria: str) -> float:

@@ -84,11 +84,13 @@ export function fetchEstoqueSkus(params?: {
   q?: string;
   categoria_id?: number;
   include_inactive?: boolean;
+  limit?: number;
 }) {
   const qs = new URLSearchParams();
   if (params?.q) qs.set("q", params.q);
   if (params?.categoria_id != null) qs.set("categoria_id", String(params.categoria_id));
   if (params?.include_inactive) qs.set("include_inactive", "true");
+  if (params?.limit != null) qs.set("limit", String(params.limit));
   const suffix = qs.toString() ? `?${qs}` : "";
   return apiFetch<{ items: EstoqueSku[]; total: number }>(`/estoque/skus${suffix}`);
 }
@@ -196,10 +198,15 @@ export function cancelarEstoquePedido(id: number) {
   return apiFetch<EstoquePedido>(`/estoque/pedidos/${id}/cancelar`, { method: "POST" });
 }
 
-export function fetchEstoqueMovimentos(params?: { sku_id?: number; tipo?: string }) {
+export function fetchEstoqueMovimentos(params?: {
+  sku_id?: number;
+  tipo?: string;
+  limit?: number;
+}) {
   const qs = new URLSearchParams();
   if (params?.sku_id != null) qs.set("sku_id", String(params.sku_id));
   if (params?.tipo) qs.set("tipo", params.tipo);
+  if (params?.limit != null) qs.set("limit", String(params.limit));
   const suffix = qs.toString() ? `?${qs}` : "";
   return apiFetch<{ items: EstoqueMovimento[]; total: number }>(
     `/estoque/movimentos${suffix}`,

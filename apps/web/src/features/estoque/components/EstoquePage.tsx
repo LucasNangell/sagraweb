@@ -109,6 +109,7 @@ export function EstoquePage() {
     custo_unitario: "",
     motivo: "",
   });
+  const [movSkuFilter, setMovSkuFilter] = useState("");
 
   const skusQuery = useQuery({
     queryKey: ["estoque", "skus", debouncedSearch, isGerente],
@@ -116,6 +117,7 @@ export function EstoquePage() {
       fetchEstoqueSkus({
         q: debouncedSearch || undefined,
         include_inactive: isGerente,
+        limit: 500,
       }),
   });
 
@@ -144,9 +146,19 @@ export function EstoquePage() {
       ),
   });
 
+  const allSkusQuery = useQuery({
+    queryKey: ["estoque", "skus", "filtro-mov"],
+    queryFn: () => fetchEstoqueSkus({ include_inactive: true, limit: 500 }),
+    enabled: isGerente && tab === "movimentos",
+  });
+
   const movimentosQuery = useQuery({
-    queryKey: ["estoque", "movimentos"],
-    queryFn: () => fetchEstoqueMovimentos(),
+    queryKey: ["estoque", "movimentos", movSkuFilter],
+    queryFn: () =>
+      fetchEstoqueMovimentos({
+        sku_id: movSkuFilter ? Number(movSkuFilter) : undefined,
+        limit: 500,
+      }),
     enabled: isGerente && tab === "movimentos",
   });
 
@@ -270,7 +282,7 @@ export function EstoquePage() {
   };
 
   const skus = skusQuery.data?.items ?? [];
-  const gerenteCols = isGerente ? 6 : 4;
+  const gerenteCols = isGerente ? 7 : 4;
 
   const renderSkuRows = () => {
     if (skusQuery.isLoading) {
@@ -302,6 +314,11 @@ export function EstoquePage() {
             <span className="ml-2 inline-block text-xs text-amber-700">baixo</span>
           ) : null}
         </td>
+        {isGerente ? (
+          <td className="px-3 py-2.5 whitespace-nowrap text-slate-600">
+            {s.papel_link || "—"}
+          </td>
+        ) : null}
         <td className="px-3 py-2.5 whitespace-nowrap">
           {qty(s.disponivel)} {s.unidade}
         </td>
@@ -363,6 +380,7 @@ export function EstoquePage() {
               <div className="break-words text-sm text-slate-600">{s.nome}</div>
               <div className="mt-1 text-xs text-slate-500">
                 Disp.: {qty(s.disponivel)} {s.unidade}
+                {s.papel_link ? ` · ${s.papel_link}` : ""}
                 {isGerente ? ` · Mín.: ${qty(s.estoque_minimo)} · ${money(s.custo_medio)}` : ""}
               </div>
             </div>
@@ -714,6 +732,7 @@ export function EstoquePage() {
                       <tr>
                         <Th>Código</Th>
                         <Th>Nome</Th>
+                        {isGerente ? <Th>Formato</Th> : null}
                         <Th>Disponível</Th>
                         {isGerente ? <Th>Mínimo</Th> : null}
                         {isGerente ? <Th>Custo médio</Th> : null}
@@ -902,23 +921,42 @@ export function EstoquePage() {
 
           {tab === "movimentos" && isGerente ? (
             <Panel className="flex max-h-[min(75vh,48rem)] flex-col overflow-hidden">
+              <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-3 py-2">
+                <label className="text-xs text-slate-600">
+                  SKU
+                  <select
+                    className="ml-2 rounded border border-slate-300 px-2 py-1 text-sm"
+                    value={movSkuFilter}
+                    onChange={(e) => setMovSkuFilter(e.target.value)}
+                  >
+                    <option value="">Todos</option>
+                    {(allSkusQuery.data?.items ?? []).map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.codigo} — {s.nome}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
               <div className="min-h-0 flex-1 overflow-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
-                <table className="w-full text-left text-sm" style={{ minWidth: "40rem" }}>
+                <table className="w-full text-left text-sm" style={{ minWidth: "64rem" }}>
                   <thead>
                     <tr>
                       <Th>Data</Th>
                       <Th>Tipo</Th>
                       <Th>SKU</Th>
                       <Th>Qtd</Th>
-                      <Th>Custo</Th>
+                      <Th>Unitário</Th>
+                      <Th>Custo total</Th>
                       <Th>Saldo após</Th>
+                      <Th>Motivo</Th>
                     </tr>
                   </thead>
                   <tbody>
                     {(movimentosQuery.data?.items ?? []).length === 0 ? (
                       <tr>
                         <td
-                          colSpan={6}
+                          colSpan={8}
                           className="px-3 py-8 text-center text-slate-500"
                         >
                           {movimentosQuery.isLoading ? (
@@ -940,10 +978,16 @@ export function EstoquePage() {
                             {qty(m.quantidade)}
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap">
+                            {money(m.custo_unitario)}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
                             {money(m.custo_total)}
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap">
                             {qty(m.saldo_apos)}
+                          </td>
+                          <td className="max-w-[28rem] px-3 py-2 text-xs text-slate-600 break-words">
+                            {m.motivo || "—"}
                           </td>
                         </tr>
                       ))

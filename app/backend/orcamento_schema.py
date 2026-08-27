@@ -24,12 +24,14 @@ CREATE TABLE IF NOT EXISTS tab_orcamento_insumo (
     rendimento_a4 DECIMAL(8,2) NULL,
     formato_folha VARCHAR(32) NULL,
     aliases_json JSON NULL,
+    estoque_sku_id BIGINT NULL,
     atualizado_em DATE NULL,
     ativo TINYINT(1) NOT NULL DEFAULT 1,
     criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     atualizado_por VARCHAR(32) NULL,
     UNIQUE KEY uk_orcamento_insumo_codigo (codigo),
-    KEY idx_orcamento_insumo_categoria (categoria, ativo)
+    KEY idx_orcamento_insumo_categoria (categoria, ativo),
+    KEY idx_orcamento_insumo_estoque (estoque_sku_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 """
 
@@ -188,6 +190,47 @@ def _preco_unitario(item: dict) -> float:
     return bruto / qtd
 
 
+def _ensure_insumo_estoque_sku(cursor) -> None:
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'tab_orcamento_insumo'
+          AND COLUMN_NAME = 'estoque_sku_id'
+        """
+    )
+    if not cursor.fetchone():
+        cursor.execute(
+            "ALTER TABLE tab_orcamento_insumo ADD COLUMN estoque_sku_id BIGINT NULL"
+        )
+        logger.info("Orçamento: coluna estoque_sku_id adicionada")
+    cursor.execute(
+        """
+        SELECT INDEX_NAME
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'tab_orcamento_insumo'
+          AND INDEX_NAME = 'idx_orcamento_insumo_estoque'
+        """
+    )
+    if not cursor.fetchone():
+        cursor.execute(
+            """
+            ALTER TABLE tab_orcamento_insumo
+            ADD KEY idx_orcamento_insumo_estoque (estoque_sku_id)
+            """
+        )
+    try:
+        from estoque_import_licitacoes import link_orcamento_insumos
+
+        n = link_orcamento_insumos(cursor)
+        if n:
+            logger.info("Orçamento: %s insumos ligados ao estoque", n)
+    except Exception as exc:
+        logger.warning("Orçamento: vínculo com estoque adiados: %s", exc)
+
+
 def ensure_orcamento_schema() -> None:
     """Cria tabelas e faz seed idempotente (não sobrescreve cadastro existente)."""
     db = Database()
@@ -198,6 +241,7 @@ def ensure_orcamento_schema() -> None:
             cursor.execute(_CREATE_FORMATO_SQL)
             cursor.execute(_CREATE_FAIXA_SQL)
             cursor.execute(_CREATE_ORCAMENTO_SQL)
+            _ensure_insumo_estoque_sku(cursor)
 
             cursor.execute("SELECT COUNT(*) AS n FROM tab_orcamento_insumo")
             if int((cursor.fetchone() or {}).get("n") or 0) == 0:

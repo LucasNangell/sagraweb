@@ -306,11 +306,15 @@ export interface OrcamentoInsumoRecord {
   qtd_embalagem: number;
   preco_bruto: number;
   preco_unitario: number;
+  preco_cadastro?: number;
   rendimento_a4?: number | null;
   formato_folha?: string | null;
   aliases: string[];
   atualizado_em?: string | null;
   ativo: boolean;
+  estoque_sku_id?: number | null;
+  estoque_sku_codigo?: string | null;
+  custo_estoque?: number | null;
 }
 
 export interface OrcamentoParametroRecord {

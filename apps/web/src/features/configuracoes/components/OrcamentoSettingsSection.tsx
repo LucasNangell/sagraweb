@@ -78,7 +78,7 @@ export function OrcamentoSettingsSection() {
           items={paramsQ.data?.items ?? []}
           onSaved={() => void qc.invalidateQueries({ queryKey: QK })}
         />
-        <ConfigSubsection title="Insumos" description="Preço bruto da embalagem; o unitário é recalculado.">
+        <ConfigSubsection title="Insumos" description="Preço bruto da embalagem; o unitário vem do custo médio do estoque quando o insumo está ligado a um SKU.">
           <InsumosTable items={insumosQ.data?.items ?? []} onSaved={() => void qc.invalidateQueries({ queryKey: QK })} />
         </ConfigSubsection>
         <ConfigSubsection title="Formatos sugeridos" description="Envelope em mm e fator equivalente em A4.">
@@ -167,13 +167,15 @@ function InsumosTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] border-collapse text-xs">
+      <table className="w-full min-w-[52rem] border-collapse text-xs">
         <thead>
           <tr className="bg-slate-50 text-left text-[0.65rem] uppercase text-slate-500">
             <th className="px-2 py-1.5">Cód</th>
             <th className="px-2 py-1.5">Especificação</th>
             <th className="px-2 py-1.5">Qtd</th>
             <th className="px-2 py-1.5">Preço bruto</th>
+            <th className="px-2 py-1.5">SKU estoque</th>
+            <th className="px-2 py-1.5">Custo estoque</th>
             <th className="px-2 py-1.5">Unitário</th>
             <th className="px-2 py-1.5">A4</th>
           </tr>
@@ -198,7 +200,18 @@ function InsumosTable({
                   }}
                 />
               </td>
-              <td className="px-2 py-1 tabular-nums">{money(item.preco_unitario)}</td>
+              <td className="px-2 py-1 font-mono text-slate-600">
+                {item.estoque_sku_codigo ?? "—"}
+              </td>
+              <td className="px-2 py-1 tabular-nums text-slate-600">
+                {item.custo_estoque != null ? money(item.custo_estoque) : "—"}
+              </td>
+              <td className="px-2 py-1 tabular-nums">
+                {money(item.preco_unitario)}
+                {item.custo_estoque != null ? (
+                  <span className="ml-1 text-[10px] text-slate-400">estoque</span>
+                ) : null}
+              </td>
               <td className="px-2 py-1 tabular-nums">{item.rendimento_a4 ?? "—"}</td>
             </tr>
           ))}

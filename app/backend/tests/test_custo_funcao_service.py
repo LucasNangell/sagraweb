@@ -130,6 +130,8 @@ def test_list_funcoes_maps_rows():
         "custo_mensal": 1760,
         "custo_hora": 10,
         "horas_mes": 176,
+        "quantidade": 1,
+        "alocacao": "etapa",
         "moeda": "BRL",
         "ativo": 1,
         "criado_em": None,

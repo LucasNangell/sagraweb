@@ -51,6 +51,8 @@ type FormState = {
   codigo: string;
   descricao: string;
   custoMensal: string;
+  quantidade: string;
+  alocacao: "etapa" | "overhead";
 };
 
 const EMPTY_FORM: FormState = {
@@ -58,6 +60,8 @@ const EMPTY_FORM: FormState = {
   codigo: "",
   descricao: "",
   custoMensal: "",
+  quantidade: "1",
+  alocacao: "etapa",
 };
 
 export function CustosSettingsSection() {
@@ -123,6 +127,8 @@ export function CustosSettingsSection() {
       codigo: item.codigo ?? "",
       descricao: item.descricao ?? "",
       custoMensal: String(item.custo_mensal).replace(".", ","),
+      quantidade: String(item.quantidade ?? 1),
+      alocacao: item.alocacao === "overhead" ? "overhead" : "etapa",
     });
   };
 
@@ -131,11 +137,15 @@ export function CustosSettingsSection() {
       const mensal = parseMoneyInput(form.custoMensal);
       if (!form.nome.trim()) throw new Error("Informe o nome da função.");
       if (mensal == null) throw new Error("Informe um custo mensal válido (≥ 0).");
+      const qtd = Number(form.quantidade);
+      if (!Number.isFinite(qtd) || qtd < 1) throw new Error("Informe a quantidade no quadro (≥ 1).");
       return createCustoFuncao({
         nome: form.nome.trim(),
         custo_mensal: mensal,
         codigo: form.codigo.trim() || null,
         descricao: form.descricao.trim() || null,
+        quantidade: Math.round(qtd),
+        alocacao: form.alocacao,
       });
     },
     onSuccess: () => {
@@ -151,6 +161,8 @@ export function CustosSettingsSection() {
       const mensal = parseMoneyInput(form.custoMensal);
       if (!form.nome.trim()) throw new Error("Informe o nome da função.");
       if (mensal == null) throw new Error("Informe um custo mensal válido (≥ 0).");
+      const qtd = Number(form.quantidade);
+      if (!Number.isFinite(qtd) || qtd < 1) throw new Error("Informe a quantidade no quadro (≥ 1).");
       const codigoTrim = form.codigo.trim();
       return updateCustoFuncao(editingId, {
         nome: form.nome.trim(),
@@ -158,6 +170,8 @@ export function CustosSettingsSection() {
         codigo: codigoTrim || null,
         clear_codigo: !codigoTrim,
         descricao: form.descricao.trim() || null,
+        quantidade: Math.round(qtd),
+        alocacao: form.alocacao,
       });
     },
     onSuccess: () => {
@@ -193,7 +207,7 @@ export function CustosSettingsSection() {
       <ConfigSectionHeader
         icon={<Users className="size-4" aria-hidden />}
         title="Custos operacionais"
-        description="Cadastre funções da gráfica e o custo mensal de cada tipo de operador. O custo/hora é calculado automaticamente (custo mensal ÷ 176 h) para uso futuro no cálculo de mão de obra."
+        description="Cadastre funções da gráfica, o efetivo e o custo mensal. O custo/hora (mensal ÷ 176 h) entra no orçamento por etapa; gerente e mecânico são overhead da estrutura."
       />
       <ConfigSectionBody>
         <ConfigSubsection tone="highlight" title="Funções (mão de obra)">
@@ -252,6 +266,34 @@ export function CustosSettingsSection() {
                 placeholder="0,00"
                 className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none ring-secondary-blue/30 focus:ring-2"
               />
+            </label>
+            <label className="block text-xs">
+              <span className="mb-1 block font-semibold text-slate-700">Quadro (qtd) *</span>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={form.quantidade}
+                onChange={(e) => setForm((f) => ({ ...f, quantidade: e.target.value }))}
+                required
+                className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none ring-secondary-blue/30 focus:ring-2"
+              />
+            </label>
+            <label className="block text-xs">
+              <span className="mb-1 block font-semibold text-slate-700">Alocação *</span>
+              <select
+                value={form.alocacao}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    alocacao: e.target.value === "overhead" ? "overhead" : "etapa",
+                  }))
+                }
+                className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-xs outline-none ring-secondary-blue/30 focus:ring-2"
+              >
+                <option value="etapa">Etapa (trabalha no serviço)</option>
+                <option value="overhead">Estrutura (gerente / mecânico)</option>
+              </select>
             </label>
             <div className="block text-xs">
               <span className="mb-1 block font-semibold text-slate-700">Custo/hora (calculado)</span>
@@ -344,9 +386,11 @@ export function CustosSettingsSection() {
 
         {!listQuery.isPending && !listQuery.isError ? (
           <div className="mt-4 overflow-hidden rounded-lg border border-slate-200">
-            <div className="hidden grid-cols-[minmax(0,1.4fr)_minmax(0,0.7fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_auto] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500 sm:grid">
+            <div className="hidden grid-cols-[minmax(0,1.6fr)_minmax(0,0.5fr)_minmax(0,0.5fr)_minmax(0,0.7fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_auto] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500 sm:grid">
               <span>Função</span>
               <span>Código</span>
+              <span>Quadro</span>
+              <span>Alocação</span>
               <span>Custo mensal</span>
               <span>Custo/hora</span>
               <span>Ações</span>
@@ -362,7 +406,7 @@ export function CustosSettingsSection() {
                   <li
                     key={item.id}
                     className={cn(
-                      "grid gap-2 px-3 py-2.5 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,0.7fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_auto] sm:items-center",
+                      "grid gap-2 px-3 py-2.5 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,0.5fr)_minmax(0,0.5fr)_minmax(0,0.7fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_auto] sm:items-center",
                       !item.ativo && "bg-slate-50/80",
                       editingId === item.id && "bg-sky-50/60",
                     )}
@@ -395,6 +439,10 @@ export function CustosSettingsSection() {
                       ) : null}
                     </div>
                     <span className="text-xs text-slate-600">{item.codigo || "—"}</span>
+                    <span className="text-xs text-slate-600">{item.quantidade ?? 1}</span>
+                    <span className="text-xs text-slate-600">
+                      {item.alocacao === "overhead" ? "Estrutura" : "Etapa"}
+                    </span>
                     <span className="text-xs font-medium text-slate-800">
                       {money(item.custo_mensal)}
                     </span>

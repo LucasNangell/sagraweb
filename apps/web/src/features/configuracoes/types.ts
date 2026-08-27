@@ -269,6 +269,8 @@ export interface CustoFuncaoRecord {
   custo_mensal: number;
   custo_hora: number;
   horas_mes: number;
+  quantidade: number;
+  alocacao: "etapa" | "overhead" | string;
   moeda: string;
   ativo: boolean;
   criado_em?: string | null;
@@ -287,6 +289,8 @@ export interface CustoFuncaoCreatePayload {
   custo_mensal: number;
   codigo?: string | null;
   descricao?: string | null;
+  quantidade?: number;
+  alocacao?: string;
 }
 
 export interface CustoFuncaoUpdatePayload {
@@ -295,6 +299,8 @@ export interface CustoFuncaoUpdatePayload {
   codigo?: string | null;
   clear_codigo?: boolean;
   descricao?: string | null;
+  quantidade?: number;
+  alocacao?: string;
 }
 
 export interface OrcamentoInsumoRecord {
@@ -343,4 +349,38 @@ export interface OrcamentoFaixaRecord {
   percentual: number;
   ordem: number;
   ativo: boolean;
+}
+
+export interface ProdutoPassoCrew {
+  funcao_id: number;
+  quantidade: number;
+  nome?: string | null;
+  codigo?: string | null;
+}
+
+export interface ProdutoPassoRecord {
+  id?: number;
+  ordem: number;
+  nome: string;
+  setor_link: string;
+  tipo: "produtiva" | "espera_cliente" | "fim" | string;
+  cobra_pessoal: boolean;
+  tecnologia: string;
+  setup_min: number;
+  min_por_un: number;
+  min_por_pag: number;
+  min_por_folha: number;
+  funcoes: ProdutoPassoCrew[];
+  aprendido?: {
+    n: number;
+    mediana_horas?: number | null;
+    ewma_horas?: number | null;
+  };
+}
+
+export interface ProdutoPassosResponse {
+  passos: ProdutoPassoRecord[];
+  funcoes: CustoFuncaoRecord[];
+  setores: string[];
+  produtos: { id: number; label: string }[];
 }

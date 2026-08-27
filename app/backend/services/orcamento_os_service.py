@@ -289,7 +289,16 @@ def montar_oficio_preview(payload: dict, resultado: dict, params: dict) -> dict:
 def orcamento_da_os(ano: int, os_id: int) -> dict:
     catalog = admin_svc.load_catalog()
     payload = map_os_to_payload(ano, os_id, catalog)
-    return calcular_payload(payload, catalog)
+    computed = calcular_payload(payload, catalog)
+    try:
+        from services.orcamento_realizado_service import comparativo_da_os
+
+        comparativo = comparativo_da_os(ano, os_id, computed)
+        if comparativo:
+            computed["comparativo"] = comparativo
+    except Exception:
+        logger.exception("Orçamento: falha ao montar comparativo OS %s/%s", os_id, ano)
+    return computed
 
 
 def _next_numero(ano: int) -> int:
@@ -312,11 +321,15 @@ def persistir_orcamento(payload: dict, ponto: Optional[str] = None) -> dict:
     oficio = dict(computed.get("oficio") or {})
     oficio["numero"] = numero
     oficio["ano"] = ano
+    escolhido = resultado.get("escolhido") or {}
     snapshot = {
         "entrada": payload,
         "resultado": resultado,
         "oficio": oficio,
         "parametros": catalog["parametros"],
+        "roteiro": escolhido.get("pessoal_detalhe") or [],
+        "usa_pessoal_hora": bool(escolhido.get("usa_pessoal_hora")),
+        "custo_pessoal": escolhido.get("custo_pessoal") or 0,
     }
 
     def _tx(cursor):

@@ -95,6 +95,9 @@ def _catalog(extra_insumos=None):
         "parametros": dict(PARAMS),
         "formatos": FORMATOS,
         "faixas": FAIXAS,
+        "funcoes": [],
+        "passos": [],
+        "learned": [],
     }
 
 
@@ -226,3 +229,130 @@ def test_faixa_pessoal_5000_usa_22_por_cento():
         x for x in result["offset"]["indiretos_detalhe"] if x["nome"].startswith("Gastos")
     )
     assert pessoal["aliquota"] == 0.22
+
+
+def _passos_cartao(funcao_id: int = 2):
+    return [
+        {
+            "id": 1,
+            "produto_rotulo": "Ct Visita",
+            "nome": "SIELT impressão",
+            "setor_link": "SIELT",
+            "tipo": "produtiva",
+            "cobra_pessoal": True,
+            "setup_min": 60,
+            "min_por_un": 0,
+            "funcoes": [{"funcao_id": funcao_id, "quantidade": 1}],
+        },
+        {
+            "id": 2,
+            "produto_rotulo": "Ct Visita",
+            "nome": "Prova cliente",
+            "setor_link": "SEFOC",
+            "tipo": "espera_cliente",
+            "setup_min": 0,
+            "funcoes": [],
+        },
+        {
+            "id": 3,
+            "produto_rotulo": "Ct Visita",
+            "nome": "SEPAC refile",
+            "setor_link": "SEPAC",
+            "tipo": "produtiva",
+            "cobra_pessoal": True,
+            "setup_min": 30,
+            "funcoes": [{"funcao_id": funcao_id, "quantidade": 1}],
+        },
+    ]
+
+
+def test_offset_com_etapas_nao_usa_faixa_80():
+    catalog = _catalog()
+    catalog["funcoes"] = [
+        {
+            "id": 2,
+            "nome": "Digital",
+            "ativo": True,
+            "alocacao": "etapa",
+            "quantidade": 1,
+            "custo_mensal": 17600,
+            "custo_hora": 100,
+        },
+        {
+            "id": 9,
+            "nome": "Gerente",
+            "ativo": True,
+            "alocacao": "overhead",
+            "quantidade": 1,
+            "custo_mensal": 17600,
+            "custo_hora": 100,
+        },
+    ]
+    catalog["passos"] = _passos_cartao()
+    result = calcular(
+        {
+            "os": {"produto": "Ct Visita"},
+            "tiragem": 500,
+            "tecnologia": "offset",
+            "componentes": [
+                {
+                    "nome": "Cartão",
+                    "tipo": "UNICO",
+                    "menor_mm": 90,
+                    "maior_mm": 50,
+                    "paginas": 2,
+                    "cor": True,
+                    "frente_verso": True,
+                    "papel_codigo": "p26",
+                }
+            ],
+        },
+        catalog,
+    )
+    nomes = [x["nome"] for x in result["offset"]["indiretos_detalhe"]]
+    assert not any(n.startswith("Gastos com pessoal") for n in nomes)
+    assert result["offset"]["usa_pessoal_hora"] is True
+    assert result["offset"]["custo_pessoal"] > 0
+
+
+def test_digital_com_etapas_nao_usa_lump_87():
+    catalog = _catalog()
+    catalog["funcoes"] = [
+        {
+            "id": 2,
+            "nome": "Digital",
+            "ativo": True,
+            "alocacao": "etapa",
+            "quantidade": 1,
+            "custo_mensal": 17600,
+            "custo_hora": 100,
+        }
+    ]
+    catalog["passos"] = _passos_cartao()
+    result = calcular(
+        {
+            "os": {"produto": "Ct Visita"},
+            "tiragem": 100,
+            "tecnologia": "digital",
+            "componentes": [
+                {
+                    "nome": "Marcador",
+                    "tipo": "UNICO",
+                    "menor_mm": 55,
+                    "maior_mm": 200,
+                    "paginas": 2,
+                    "cor": True,
+                    "frente_verso": True,
+                    "papel_codigo": "p26",
+                    "laminacao": True,
+                }
+            ],
+        },
+        catalog,
+    )
+    digital = result["digital"]
+    nomes = [x["nome"] for x in digital["indiretos_detalhe"]]
+    assert not any("Insumos indiretos" in n for n in nomes)
+    lump = (digital["custo_papel"] + digital["custo_acabamento"]) * 0.87
+    assert digital["total"] != pytest.approx(digital["custo_papel"] + digital["custo_clique"] + digital["custo_acabamento"] + lump, abs=0.05)
+    assert digital["usa_pessoal_hora"] is True

@@ -44,6 +44,19 @@ def _normalize_codigo(codigo: str | None) -> str | None:
     return cleaned or None
 
 
+def _normalize_alocacao(value: str | None) -> str:
+    text = str(value or "etapa").strip().lower()
+    return "overhead" if text == "overhead" else "etapa"
+
+
+def _quantidade(value: Any, default: int = 1) -> int:
+    try:
+        n = int(float(value))
+    except (TypeError, ValueError):
+        n = default
+    return max(n, 1)
+
+
 def _row_to_dict(row: dict) -> dict:
     return {
         "id": int(row["id"]),
@@ -53,6 +66,8 @@ def _row_to_dict(row: dict) -> dict:
         "custo_mensal": _f(_dec(row.get("custo_mensal"))),
         "custo_hora": _f(_dec(row.get("custo_hora"))),
         "horas_mes": _f(_dec(row.get("horas_mes") or HORAS_MES_PADRAO)),
+        "quantidade": _quantidade(row.get("quantidade"), 1),
+        "alocacao": _normalize_alocacao(row.get("alocacao")),
         "moeda": row.get("moeda") or "BRL",
         "ativo": bool(row.get("ativo", 1)),
         "criado_em": row.get("criado_em"),
@@ -65,7 +80,8 @@ def _row_to_dict(row: dict) -> dict:
 def list_funcoes(*, include_inactive: bool = True) -> list[dict]:
     sql = """
         SELECT id, nome, codigo, descricao, custo_mensal, custo_hora, horas_mes,
-               moeda, ativo, criado_em, criado_por, atualizado_em, atualizado_por
+               quantidade, alocacao, moeda, ativo, criado_em, criado_por,
+               atualizado_em, atualizado_por
         FROM tab_custo_funcao
     """
     if not include_inactive:
@@ -79,7 +95,8 @@ def get_funcao(funcao_id: int) -> Optional[dict]:
     rows = db.execute_query(
         """
         SELECT id, nome, codigo, descricao, custo_mensal, custo_hora, horas_mes,
-               moeda, ativo, criado_em, criado_por, atualizado_em, atualizado_por
+               quantidade, alocacao, moeda, ativo, criado_em, criado_por,
+               atualizado_em, atualizado_por
         FROM tab_custo_funcao
         WHERE id = %s
         """,
@@ -114,6 +131,8 @@ def create_funcao(
     ponto: str,
     codigo: str | None = None,
     descricao: str | None = None,
+    quantidade: int = 1,
+    alocacao: str | None = None,
 ) -> dict:
     nome_clean = (nome or "").strip()
     if not nome_clean:
@@ -132,8 +151,8 @@ def create_funcao(
             """
             INSERT INTO tab_custo_funcao (
                 nome, codigo, descricao, custo_mensal, custo_hora, horas_mes,
-                moeda, ativo, criado_por, atualizado_por
-            ) VALUES (%s, %s, %s, %s, %s, %s, 'BRL', 1, %s, %s)
+                quantidade, alocacao, moeda, ativo, criado_por, atualizado_por
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'BRL', 1, %s, %s)
             """,
             (
                 nome_clean,
@@ -142,6 +161,8 @@ def create_funcao(
                 _f(mensal),
                 _f(custo_hora),
                 _f(horas),
+                _quantidade(quantidade, 1),
+                _normalize_alocacao(alocacao),
                 ponto_str,
                 ponto_str,
             ),
@@ -163,6 +184,8 @@ def update_funcao(
     clear_codigo: bool = False,
     descricao: str | None = None,
     custo_mensal: float | None = None,
+    quantidade: int | None = None,
+    alocacao: str | None = None,
 ) -> dict:
     existing = get_funcao(funcao_id)
     if not existing:
@@ -190,6 +213,14 @@ def update_funcao(
     if descricao is not None:
         sets.append("descricao = %s")
         params.append(descricao)
+
+    if quantidade is not None:
+        sets.append("quantidade = %s")
+        params.append(_quantidade(quantidade, 1))
+
+    if alocacao is not None:
+        sets.append("alocacao = %s")
+        params.append(_normalize_alocacao(alocacao))
 
     if custo_mensal is not None:
         mensal = _dec(custo_mensal)

@@ -57,6 +57,21 @@ export interface OrcamentoLinhaIndireto {
   valor: number;
 }
 
+export interface OrcamentoPessoalDetalhe {
+  passo_id?: number | null;
+  nome?: string | null;
+  setor_link?: string | null;
+  tipo?: string | null;
+  cobra_pessoal?: boolean;
+  horas_prior?: number;
+  horas?: number;
+  horas_obs?: number;
+  n_amostras?: number;
+  fonte?: string;
+  valor: number;
+  capped?: boolean;
+}
+
 export interface OrcamentoComponenteResultado {
   nome: string;
   tipo: string;
@@ -85,7 +100,10 @@ export interface OrcamentoConsolidado {
   custo_acabamento: number;
   custo_direto: number;
   custo_indiretos: number;
+  custo_pessoal?: number;
+  pessoal_detalhe?: OrcamentoPessoalDetalhe[];
   indiretos_detalhe: OrcamentoLinhaIndireto[];
+  usa_pessoal_hora?: boolean;
   total: number;
   unitario: number;
   por_cento_paginas: number;
@@ -129,10 +147,37 @@ export interface OrcamentoOficio {
   telefone: string;
 }
 
+export interface OrcamentoComparativo {
+  tem_realizado: boolean;
+  situacao?: string;
+  estimado: {
+    fonte?: string;
+    total?: number;
+    custo_pessoal?: number;
+    custo_material?: number;
+    pessoal_detalhe?: OrcamentoPessoalDetalhe[];
+  };
+  estimado_fonte?: string;
+  realizado?: {
+    total?: number;
+    custo_pessoal?: number;
+    custo_material?: number;
+    desperdicio?: number;
+    tem_estoque?: boolean;
+    nota_material?: string | null;
+    pessoal_detalhe?: OrcamentoPessoalDetalhe[];
+    horas_produtivas?: number;
+  } | null;
+  delta?: number | null;
+  confianca?: { n: number; k: number; rotulo: string };
+  computed_at?: string;
+}
+
 export interface OrcamentoResponse {
   entrada: OrcamentoEntrada;
   opcoes?: { papeis: OrcamentoPapelOpcao[]; espirais?: OrcamentoPapelOpcao[] };
   resultado: OrcamentoResultado;
   oficio: OrcamentoOficio;
   parametros?: Record<string, unknown>;
+  comparativo?: OrcamentoComparativo | null;
 }

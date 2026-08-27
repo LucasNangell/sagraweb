@@ -12,6 +12,8 @@ import re
 import unicodedata
 from typing import Any, Optional
 
+from services.orcamento_pessoal import custear_passos
+
 _GRAMATURA_RE = re.compile(r"(\d+)\s*g(?:r|ra|ramas)?\b", re.IGNORECASE)
 _WS_RE = re.compile(r"\s+")
 
@@ -321,6 +323,25 @@ def _sum_key(rows: list[dict], key: str) -> float:
     return sum(_f(r.get(key)) for r in rows)
 
 
+def _filter_passos(passos: list[dict], produto: str) -> list[dict]:
+    wanted = normalize_text(produto)
+    if not wanted:
+        return []
+    return [p for p in passos if normalize_text(p.get("produto_rotulo")) == wanted]
+
+
+def _facility_aliquotas(params: dict) -> list[tuple[str, float]]:
+    linhas = [
+        ("Energia elétrica", _f(params.get("aliquota_energia"), 0.07)),
+        ("Depreciação", _f(params.get("aliquota_depreciacao"), 0.10)),
+        ("Perdas na produção", _f(params.get("aliquota_perdas"), 0.03)),
+        ("Manutenção", _f(params.get("aliquota_manutencao"), 0.05)),
+    ]
+    if _b(params.get("aplicar_diagramacao")):
+        linhas.append(("Diagramação", _f(params.get("aliquota_diagramacao"), 0.20)))
+    return linhas
+
+
 def _consolidar(tecnologia: str, rows: list[dict], catalog: dict, tiragem: int) -> dict:
     params = catalog["parametros"]
     papel = _sum_key(rows, "custo_papel")
@@ -329,38 +350,98 @@ def _consolidar(tecnologia: str, rows: list[dict], catalog: dict, tiragem: int) 
     tinta = _sum_key(rows, "custo_tinta")
     acabamento = _sum_key(rows, "custo_acabamento")
     linhas_indiretos: list[dict] = []
+    pags = sum(int(r.get("paginas") or 0) for r in rows) or 1
+    folhas = _sum_key(rows, "folhas_matriz")
+    pessoal_info = custear_passos(
+        catalog.get("passos") or [],
+        tecnologia=tecnologia,
+        tiragem=tiragem,
+        paginas=pags,
+        folhas=folhas,
+        funcoes=catalog.get("funcoes") or [],
+        learned=catalog.get("learned") or [],
+        k=_f(params.get("blend_k"), 8),
+        utilizacao=_f(params.get("overhead_utilizacao"), 0.6),
+        horas_mes=176.0,
+    )
+    usa_hora = bool(pessoal_info.get("tem_passos"))
 
     if tecnologia == "digital":
-        base_ind = papel + acabamento
-        aliq = _f(params.get("aliquota_indiretos_digital"), 0.87)
-        indiretos = _money(base_ind * aliq)
-        linhas_indiretos.append(
-            {"nome": "Insumos indiretos (papel + acabamento)", "aliquota": aliq, "valor": indiretos}
-        )
-        direto = papel + clique + acabamento
-        total = direto + indiretos
+        if usa_hora:
+            material = papel + clique + acabamento
+            direto = material
+            indiretos = 0.0
+            for nome, aliq in _facility_aliquotas(params):
+                valor = material * aliq
+                linhas_indiretos.append({"nome": nome, "aliquota": aliq, "valor": valor})
+                indiretos += valor
+            for linha in pessoal_info.get("detalhe") or []:
+                if linha.get("cobra_pessoal"):
+                    linhas_indiretos.append(
+                        {
+                            "nome": f"Pessoal: {linha.get('nome')}",
+                            "aliquota": 0,
+                            "valor": linha.get("valor") or 0,
+                        }
+                    )
+            if pessoal_info.get("overhead_estrutura"):
+                linhas_indiretos.append(
+                    {
+                        "nome": "Estrutura (gerente/mecânico)",
+                        "aliquota": 0,
+                        "valor": pessoal_info["overhead_estrutura"],
+                    }
+                )
+            indiretos = _money(indiretos + (pessoal_info.get("custo_pessoal") or 0))
+            total = direto + indiretos
+        else:
+            base_ind = papel + acabamento
+            aliq = _f(params.get("aliquota_indiretos_digital"), 0.87)
+            indiretos = _money(base_ind * aliq)
+            linhas_indiretos.append(
+                {"nome": "Insumos indiretos (papel + acabamento)", "aliquota": aliq, "valor": indiretos}
+            )
+            direto = papel + clique + acabamento
+            total = direto + indiretos
+            pessoal_info = {**pessoal_info, "custo_pessoal": 0.0, "detalhe": []}
     else:
-        direto = papel + pre + tinta + acabamento
-        pessoal = faixa_pessoal(tiragem, catalog["faixas"])
-        aliquotas = [
-            ("Gastos com pessoal", pessoal),
-            ("Energia elétrica", _f(params.get("aliquota_energia"), 0.07)),
-            ("Depreciação", _f(params.get("aliquota_depreciacao"), 0.10)),
-            ("Perdas na produção", _f(params.get("aliquota_perdas"), 0.03)),
-            ("Manutenção", _f(params.get("aliquota_manutencao"), 0.05)),
-        ]
-        if _b(params.get("aplicar_diagramacao")):
-            aliquotas.append(("Diagramação", _f(params.get("aliquota_diagramacao"), 0.20)))
+        material = papel + pre + tinta + acabamento
+        direto = material
         indiretos = 0.0
+        if usa_hora:
+            aliquotas = _facility_aliquotas(params)
+        else:
+            pessoal = faixa_pessoal(tiragem, catalog.get("faixas") or [])
+            aliquotas = [("Gastos com pessoal", pessoal), *_facility_aliquotas(params)]
         for nome, aliq in aliquotas:
             valor = direto * aliq
             linhas_indiretos.append({"nome": nome, "aliquota": aliq, "valor": valor})
             indiretos += valor
+        if usa_hora:
+            for linha in pessoal_info.get("detalhe") or []:
+                if linha.get("cobra_pessoal"):
+                    linhas_indiretos.append(
+                        {
+                            "nome": f"Pessoal: {linha.get('nome')}",
+                            "aliquota": 0,
+                            "valor": linha.get("valor") or 0,
+                        }
+                    )
+            if pessoal_info.get("overhead_estrutura"):
+                linhas_indiretos.append(
+                    {
+                        "nome": "Estrutura (gerente/mecânico)",
+                        "aliquota": 0,
+                        "valor": pessoal_info["overhead_estrutura"],
+                    }
+                )
+            indiretos += pessoal_info.get("custo_pessoal") or 0
+        else:
+            pessoal_info = {**pessoal_info, "custo_pessoal": 0.0, "detalhe": []}
         indiretos = _money(indiretos)
         total = direto + indiretos
 
     unitario = (total / tiragem) if tiragem else 0.0
-    pags = sum(int(r.get("paginas") or 0) for r in rows) or 1
     por_cento_pag = unitario / (pags / 100.0) if pags else 0.0
     return {
         "tecnologia": tecnologia,
@@ -371,11 +452,14 @@ def _consolidar(tecnologia: str, rows: list[dict], catalog: dict, tiragem: int) 
         "custo_acabamento": acabamento,
         "custo_direto": direto,
         "custo_indiretos": indiretos,
+        "custo_pessoal": pessoal_info.get("custo_pessoal") or 0.0,
+        "pessoal_detalhe": pessoal_info.get("detalhe") or [],
         "indiretos_detalhe": linhas_indiretos,
         "total": _money(total),
         "unitario": unitario,
         "por_cento_paginas": por_cento_pag,
         "componentes": rows,
+        "usa_pessoal_hora": usa_hora,
     }
 
 
@@ -384,21 +468,26 @@ def calcular(payload: dict, catalog: dict) -> dict:
     payload: titulo, tiragem, tecnologia (digital|offset|auto), componentes[].
     catalog: insumos, parametros, formatos, faixas.
     """
+    catalog = catalog or {}
+    produto = str((payload.get("os") or {}).get("produto") or "")
+    catalog_local = dict(catalog)
+    catalog_local["passos"] = _filter_passos(catalog.get("passos") or [], produto)
+
     tiragem = max(int(_f(payload.get("tiragem"), 1)), 1)
     componentes = payload.get("componentes") or []
     if not componentes:
         raise ValueError("Informe ao menos um componente.")
 
     digital_rows = [
-        _calc_componente(c, tiragem=tiragem, tecnologia="digital", catalog=catalog)
+        _calc_componente(c, tiragem=tiragem, tecnologia="digital", catalog=catalog_local)
         for c in componentes
     ]
     offset_rows = [
-        _calc_componente(c, tiragem=tiragem, tecnologia="offset", catalog=catalog)
+        _calc_componente(c, tiragem=tiragem, tecnologia="offset", catalog=catalog_local)
         for c in componentes
     ]
-    digital = _consolidar("digital", digital_rows, catalog, tiragem)
-    offset = _consolidar("offset", offset_rows, catalog, tiragem)
+    digital = _consolidar("digital", digital_rows, catalog_local, tiragem)
+    offset = _consolidar("offset", offset_rows, catalog_local, tiragem)
 
     requested = str(payload.get("tecnologia") or "auto").strip().lower()
     if requested not in {"digital", "offset", "auto"}:

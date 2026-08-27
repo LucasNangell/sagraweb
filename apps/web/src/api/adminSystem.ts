@@ -28,6 +28,8 @@ import type {
   OrcamentoFormatoRecord,
   OrcamentoInsumoRecord,
   OrcamentoParametroRecord,
+  ProdutoPassosResponse,
+  ProdutoPassoRecord,
 } from "@/features/configuracoes/types";
 
 export async function fetchPreAnaliseChecksConfig(): Promise<PreAnaliseCheckConfig[]> {
@@ -878,5 +880,44 @@ export async function updateOrcamentoFaixa(
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+  });
+}
+
+export async function ensureProdutoCatalogItem(
+  label: string,
+): Promise<{ item: SystemCatalogItemRecord }> {
+  return apiFetch("/admin/system/catalog/produto/ensure", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ label }),
+  });
+}
+
+export async function fetchProdutoPassos(
+  catalogId: number,
+): Promise<ProdutoPassosResponse> {
+  return apiFetch(`/admin/system/catalog/produto/${catalogId}/passos`);
+}
+
+export async function saveProdutoPassos(
+  catalogId: number,
+  payload: { rotulo: string; passos: ProdutoPassoRecord[] },
+): Promise<{ passos: ProdutoPassoRecord[] }> {
+  return apiFetch(`/admin/system/catalog/produto/${catalogId}/passos`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function copyProdutoPassos(
+  catalogId: number,
+  origemCatalogId: number,
+  rotulo: string,
+): Promise<{ passos: ProdutoPassoRecord[] }> {
+  return apiFetch(`/admin/system/catalog/produto/${catalogId}/passos/copiar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ origem_catalog_id: origemCatalogId, rotulo }),
   });
 }

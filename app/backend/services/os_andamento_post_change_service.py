@@ -62,7 +62,7 @@ def after_andamento_changed(
 
 
 
-    return refresh_home_os_sources(
+    result = refresh_home_os_sources(
 
         nro,
 
@@ -89,6 +89,49 @@ def after_andamento_changed(
         refresh_filter_options=True,
 
     )
+
+    _maybe_aprender_orcamento(nro, ano, situacao or result.get("situacao"), cursor=cursor)
+
+    return result
+
+
+def _maybe_aprender_orcamento(
+
+    nro: int,
+
+    ano: int,
+
+    situacao: str | None,
+
+    *,
+
+    cursor=None,
+
+) -> None:
+
+    """Na Entregue, grava realizado/aprendizado sem falhar o andamento.
+
+    Se o cursor da transação ainda estiver aberto, adia — o notify pós-commit cobre,
+    e a página de orçamento recalcula se a linha ainda não existir.
+    """
+
+    if cursor is not None:
+
+        return
+
+    if (situacao or "").strip().casefold() != "entregue":
+
+        return
+
+    try:
+
+        from services.orcamento_realizado_service import on_os_entregue
+
+        on_os_entregue(nro, ano)
+
+    except Exception:
+
+        logger.exception("Orçamento: aprendizado na entrega falhou OS %s/%s", nro, ano)
 
 
 

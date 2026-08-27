@@ -9,6 +9,7 @@ import {
   gerarOrcamentoPdf,
 } from "@/api/orcamento";
 import type {
+  OrcamentoComparativo,
   OrcamentoComponente,
   OrcamentoConsolidado,
   OrcamentoEntrada,
@@ -185,6 +186,7 @@ export function OrcamentoPage({ ano, id }: OrcamentoPageProps) {
 
         <div className="space-y-3">
           <Comparativo digital={r.digital} offset={r.offset} escolhida={r.tecnologia_escolhida} />
+          {computed.comparativo ? <EstimadoVsReal comparativo={computed.comparativo} /> : null}
           <Detalhe consolidado={r.escolhido} />
         </div>
       </section>
@@ -368,6 +370,83 @@ function TechCard({
   );
 }
 
+function EstimadoVsReal({ comparativo }: { comparativo: OrcamentoComparativo }) {
+  const est = comparativo.estimado;
+  const real = comparativo.realizado;
+  const fonte =
+    comparativo.estimado_fonte === "snapshot"
+      ? "snapshot do ofício"
+      : "sem snapshot (recálculo atual)";
+  const rows: { label: string; est?: number; real?: number }[] = [
+    { label: "Pessoal", est: est.custo_pessoal, real: real?.custo_pessoal },
+    { label: "Material", est: est.custo_material, real: real?.custo_material },
+    { label: "Total", est: est.total, real: real?.total },
+  ];
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3">
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Estimado × realizado
+        </h2>
+        {comparativo.confianca ? (
+          <span className="text-[10px] text-slate-500">
+            n={comparativo.confianca.n} · {comparativo.confianca.rotulo}
+          </span>
+        ) : null}
+      </div>
+      <p className="mb-2 text-[11px] text-slate-500">Estimado: {fonte}</p>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-left text-slate-500">
+            <th className="py-1 font-medium"> </th>
+            <th className="py-1 text-right font-medium">Estimado</th>
+            <th className="py-1 text-right font-medium">Realizado</th>
+            <th className="py-1 text-right font-medium">Δ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const delta =
+              row.est != null && row.real != null ? row.real - row.est : null;
+            return (
+              <tr key={row.label} className="border-t border-slate-100">
+                <td className="py-1">{row.label}</td>
+                <td className="py-1 text-right tabular-nums">{brl(row.est)}</td>
+                <td className="py-1 text-right tabular-nums">
+                  {real ? brl(row.real) : "—"}
+                </td>
+                <td className="py-1 text-right tabular-nums text-slate-500">
+                  {delta != null ? brl(delta) : "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {real?.desperdicio ? (
+        <p className="mt-2 text-[11px] text-amber-700">
+          Desperdício extra (consumo − teórico): {brl(real.desperdicio)}
+        </p>
+      ) : null}
+      {real?.nota_material ? (
+        <p className="mt-1 text-[11px] text-slate-500">{real.nota_material}</p>
+      ) : null}
+      {(real?.pessoal_detalhe || []).filter((d) => d.cobra_pessoal).length > 0 ? (
+        <ul className="mt-2 space-y-0.5 text-[11px] text-slate-600">
+          {real?.pessoal_detalhe
+            ?.filter((d) => d.cobra_pessoal)
+            .map((d) => (
+              <li key={`${d.passo_id}-${d.nome}`}>
+                {d.nome}: {Number(d.horas || 0).toFixed(2)} h
+                {d.capped ? " (teto)" : ""} · {brl(d.valor)}
+              </li>
+            ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 function Detalhe({ consolidado }: { consolidado: OrcamentoConsolidado }) {
   const rows = useMemo(
     () => [
@@ -417,6 +496,18 @@ function Detalhe({ consolidado }: { consolidado: OrcamentoConsolidado }) {
           </tr>
         </tbody>
       </table>
+      {(consolidado.pessoal_detalhe || []).some((d) => d.cobra_pessoal) ? (
+        <ul className="mt-2 space-y-0.5 text-[11px] text-slate-500">
+          {consolidado.pessoal_detalhe
+            ?.filter((d) => d.cobra_pessoal)
+            .map((d) => (
+              <li key={`h-${d.passo_id}-${d.nome}`}>
+                {d.nome}: {Number(d.horas || 0).toFixed(2)} h
+                {d.n_amostras ? ` (n=${d.n_amostras})` : " (prior)"}
+              </li>
+            ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

@@ -329,6 +329,11 @@ def _get_catalog_row(category: str, item_id: int) -> Dict[str, Any]:
     return rows[0]
 
 
+def get_catalog_item(category: str, item_id: int) -> Dict[str, Any]:
+    """Item do catálogo serializado; KeyError se não existir."""
+    return _serialize_row(_get_catalog_row(category, item_id))
+
+
 def create_catalog_item(
     category: str,
     *,
@@ -371,6 +376,32 @@ def create_catalog_item(
     if not rows:
         raise RuntimeError("Falha ao criar item do catálogo.")
     return _serialize_row(_get_catalog_row(key, int(rows[0]["ID"])))
+
+
+def get_or_create_catalog_item(
+    category: str,
+    label: str,
+    *,
+    updated_by_ponto: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Devolve o item do catálogo, criando-o se só existia 'em uso'."""
+    key = _validate_category(category)
+    normalized = _normalize_label(label)
+    if not normalized:
+        raise ValueError("Informe um nome válido.")
+    existing = db.execute_query(
+        """
+        SELECT ID FROM tabSystemCatalog
+        WHERE Categoria = %s AND Rotulo = %s
+        LIMIT 1
+        """,
+        (key, normalized),
+    )
+    if existing:
+        return _serialize_row(_get_catalog_row(key, int(existing[0]["ID"])))
+    return create_catalog_item(
+        key, label=normalized, updated_by_ponto=updated_by_ponto
+    )
 
 
 def _upsert_usage_override(

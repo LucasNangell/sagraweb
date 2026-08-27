@@ -20,7 +20,7 @@ import {
   Users,
   Workflow,
 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, useEffect, type ReactNode } from "react";
 
 import {
   activateSystemCatalogByLabel,
@@ -36,6 +36,7 @@ import {
   activateAcabamentoVariacao,
   deactivateAcabamentoVariacao,
   deleteAcabamentoVariacao,
+  ensureProdutoCatalogItem,
 } from "@/api/adminSystem";
 import type {
   SystemCatalogAdminItem,
@@ -53,6 +54,7 @@ import {
   ConfigSidebarLayout,
   ConfigSubsection,
 } from "./ConfigSectionLayout";
+import { ProdutoEtapasPanel } from "./ProdutoEtapasPanel";
 
 const CATEGORY_ICONS: Record<SystemCatalogCategoryKey, ReactNode> = {
   setor: <Building2 className="size-3.5" aria-hidden />,
@@ -354,6 +356,7 @@ export function SistemaSettingsSection() {
                           item={item}
                           pending={pending}
                           showVariacoes={activeCategory === "acabamento"}
+                          showEtapas={activeCategory === "produto"}
                           onToggle={() => void toggleMutation.mutate(item)}
                           onDelete={() => handleDelete(item)}
                         />
@@ -381,30 +384,63 @@ function CatalogItemRow({
   item,
   pending,
   showVariacoes,
+  showEtapas,
   onToggle,
   onDelete,
 }: {
   item: SystemCatalogAdminItem;
   pending: boolean;
   showVariacoes?: boolean;
+  showEtapas?: boolean;
   onToggle: () => void;
   onDelete: () => void;
 }) {
+  const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
+  const [catalogId, setCatalogId] = useState<number | null>(item.id);
+  const expandable = Boolean((showVariacoes && item.id != null) || showEtapas);
+
+  useEffect(() => {
+    setCatalogId(item.id);
+  }, [item.id]);
+
+  const ensureMut = useMutation({
+    mutationFn: () => ensureProdutoCatalogItem(item.label),
+    onSuccess: (data) => {
+      setCatalogId(data.item.id);
+      void qc.invalidateQueries({ queryKey: ["admin", "system-catalog", "produto"] });
+    },
+    onError: (err) =>
+      window.alert(err instanceof Error ? err.message : "Falha ao abrir o produto."),
+  });
+
+  const toggleExpand = () => {
+    if (expanded) {
+      setExpanded(false);
+      return;
+    }
+    if (showEtapas && catalogId == null) {
+      void ensureMut.mutateAsync().then(() => setExpanded(true));
+      return;
+    }
+    setExpanded(true);
+  };
 
   return (
     <li className={cn(!item.active && "bg-slate-50/80")}>
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-2.5">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            {showVariacoes && item.id != null ? (
+            {expandable ? (
               <button
                 type="button"
-                onClick={() => setExpanded((v) => !v)}
+                onClick={toggleExpand}
                 className="inline-flex items-center gap-1 text-slate-500 hover:text-secondary-blue"
-                title={expanded ? "Recolher variações" : "Expandir variações"}
+                title={expanded ? "Recolher" : "Expandir"}
               >
-                {expanded ? (
+                {ensureMut.isPending ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : expanded ? (
                   <ChevronDown className="size-3.5" aria-hidden />
                 ) : (
                   <ChevronRight className="size-3.5" aria-hidden />
@@ -463,6 +499,9 @@ function CatalogItemRow({
 
       {showVariacoes && item.id != null && expanded ? (
         <VariacoesPanel catalogId={item.id} />
+      ) : null}
+      {showEtapas && catalogId != null && expanded ? (
+        <ProdutoEtapasPanel catalogId={catalogId} rotulo={item.label} />
       ) : null}
     </li>
   );

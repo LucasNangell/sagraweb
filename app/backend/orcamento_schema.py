@@ -159,6 +159,9 @@ _SEED_PARAMETROS: tuple[tuple[str, str, str, str], ...] = (
     ("pdf_telefone", "3216-2701", "text", "Telefone no rodapé"),
     ("pdf_clausula_validade", "Este orçamento tem validade de {validade_dias} dias.", "text", "Cláusula de validade"),
     ("pdf_clausula_entrega", "Impressão em equipamento {tecnologia}. Entrega em {prazo_entrega_dias} ({prazo_extenso}) dias úteis após a aprovação dos arquivos pela equipe técnica da CGraf.", "text", "Cláusula de prazo/tecnologia"),
+    ("blend_k", "8", "number", "Peso do prior no blend de tempo (n/(n+k))"),
+    ("stint_teto_fator", "3", "number", "Teto do stint realizado vs tempo-padrão"),
+    ("overhead_utilizacao", "0.6", "percent", "Fator de utilização dos FTE produtivos no overhead"),
 )
 
 _SEED_FORMATOS: tuple[tuple[str, float, float, float, int], ...] = (
@@ -188,6 +191,147 @@ def _preco_unitario(item: dict) -> float:
     if qtd <= 0:
         return 0.0
     return bruto / qtd
+
+
+_CREATE_PRODUTO_PASSO_SQL = """
+CREATE TABLE IF NOT EXISTS tab_orcamento_produto_passo (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    catalog_id INT NOT NULL,
+    produto_rotulo VARCHAR(255) NOT NULL,
+    ordem INT NOT NULL DEFAULT 0,
+    nome VARCHAR(120) NOT NULL,
+    setor_link VARCHAR(64) NOT NULL,
+    tipo VARCHAR(24) NOT NULL DEFAULT 'produtiva',
+    cobra_pessoal TINYINT(1) NOT NULL DEFAULT 1,
+    tecnologia VARCHAR(16) NOT NULL DEFAULT 'qualquer',
+    setup_min DECIMAL(10,4) NOT NULL DEFAULT 0,
+    min_por_un DECIMAL(10,4) NOT NULL DEFAULT 0,
+    min_por_pag DECIMAL(10,4) NOT NULL DEFAULT 0,
+    min_por_folha DECIMAL(10,4) NOT NULL DEFAULT 0,
+    ativo TINYINT(1) NOT NULL DEFAULT 1,
+    KEY idx_orc_passo_catalog (catalog_id, ordem),
+    KEY idx_orc_passo_rotulo (produto_rotulo)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+"""
+
+_CREATE_PASSO_FUNCAO_SQL = """
+CREATE TABLE IF NOT EXISTS tab_orcamento_passo_funcao (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    passo_id BIGINT NOT NULL,
+    funcao_id BIGINT NOT NULL,
+    quantidade DECIMAL(8,2) NOT NULL DEFAULT 1,
+    UNIQUE KEY uk_orc_passo_funcao (passo_id, funcao_id),
+    KEY idx_orc_passo_funcao_passo (passo_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+"""
+
+_CREATE_TEMPO_APRENDIDO_SQL = """
+CREATE TABLE IF NOT EXISTS tab_orcamento_tempo_aprendido (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    catalog_id INT NOT NULL,
+    passo_id BIGINT NOT NULL,
+    setor_link VARCHAR(64) NOT NULL,
+    n INT NOT NULL DEFAULT 0,
+    mediana_horas DECIMAL(12,6) NOT NULL DEFAULT 0,
+    ewma_horas DECIMAL(12,6) NOT NULL DEFAULT 0,
+    p25_horas DECIMAL(12,6) NULL,
+    p75_horas DECIMAL(12,6) NULL,
+    amostras_json JSON NULL,
+    atualizado_em DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_orc_tempo_passo (passo_id),
+    KEY idx_orc_tempo_catalog (catalog_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+"""
+
+_CREATE_REALIZADO_SQL = """
+CREATE TABLE IF NOT EXISTS tab_orcamento_realizado (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    nro_protocolo INT NOT NULL,
+    ano_protocolo INT NOT NULL,
+    orcamento_id BIGINT NULL,
+    estimado_json JSON NULL,
+    realizado_json JSON NOT NULL,
+    computed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_orc_realizado_os (ano_protocolo, nro_protocolo)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+"""
+
+
+_CT_VISITA_PASSOS: tuple[tuple[int, str, str, str, int, float, float, str], ...] = (
+    # ordem, nome, setor, tipo, cobra, setup_min, min_por_un, funcao_codigo
+    (10, "SEFOC pré-montagem", "SEFOC", "produtiva", 1, 20, 0.5, "PRE"),
+    (20, "Prova com o cliente", "SEFOC", "espera_cliente", 0, 0, 0, ""),
+    (30, "SEFOC montagem pós-aprovação", "SEFOC", "produtiva", 1, 15, 0.3, "PRE"),
+    (40, "SIELT impressão digital", "SIELT", "produtiva", 1, 10, 0.02, "DIG"),
+    (50, "SEPAC refile", "SEPAC", "produtiva", 1, 10, 0.05, "ACAB"),
+    (60, "SEPAC empacote", "SEPAC", "produtiva", 1, 5, 0.04, "AUX"),
+    (70, "Expedição", "SEDIR", "fim", 0, 0, 0, ""),
+)
+
+
+def _ensure_parametros_faltantes(cursor) -> None:
+    for chave, valor, tipo, desc in _SEED_PARAMETROS:
+        cursor.execute(
+            """
+            INSERT IGNORE INTO tab_orcamento_parametro (chave, valor, tipo, descricao)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (chave, valor, tipo, desc),
+        )
+
+
+def _seed_ct_visita(cursor) -> None:
+    cursor.execute(
+        """
+        INSERT IGNORE INTO tabSystemCatalog (Categoria, Rotulo, Ativo, Ordem, Origem)
+        VALUES ('produto', 'Ct Visita', 1, 50, 'catalog')
+        """
+    )
+    cursor.execute(
+        """
+        SELECT ID FROM tabSystemCatalog
+        WHERE Categoria = 'produto' AND Rotulo = 'Ct Visita'
+        LIMIT 1
+        """
+    )
+    row = cursor.fetchone() or {}
+    catalog_id = row.get("ID")
+    if not catalog_id:
+        return
+    cursor.execute(
+        "SELECT COUNT(*) AS n FROM tab_orcamento_produto_passo WHERE catalog_id = %s",
+        (catalog_id,),
+    )
+    if int((cursor.fetchone() or {}).get("n") or 0) > 0:
+        return
+    codigo_to_id: dict[str, int] = {}
+    cursor.execute(
+        "SELECT id, codigo FROM tab_custo_funcao WHERE codigo IS NOT NULL AND ativo = 1"
+    )
+    for fn in cursor.fetchall() or []:
+        codigo_to_id[str(fn.get("codigo") or "")] = int(fn["id"])
+    for ordem, nome, setor, tipo, cobra, setup, min_un, codigo in _CT_VISITA_PASSOS:
+        cursor.execute(
+            """
+            INSERT INTO tab_orcamento_produto_passo (
+                catalog_id, produto_rotulo, ordem, nome, setor_link, tipo,
+                cobra_pessoal, tecnologia, setup_min, min_por_un, min_por_pag,
+                min_por_folha, ativo
+            ) VALUES (%s, 'Ct Visita', %s, %s, %s, %s, %s, 'qualquer', %s, %s, 0, 0, 1)
+            """,
+            (catalog_id, ordem, nome, setor, tipo, cobra, setup, min_un),
+        )
+        passo_id = int(cursor.lastrowid)
+        funcao_id = codigo_to_id.get(codigo) if codigo else None
+        if funcao_id:
+            cursor.execute(
+                """
+                INSERT INTO tab_orcamento_passo_funcao (passo_id, funcao_id, quantidade)
+                VALUES (%s, %s, 1)
+                """,
+                (passo_id, funcao_id),
+            )
+    logger.info("Orçamento: etapas seed Ct Visita gravadas")
 
 
 def _ensure_insumo_estoque_sku(cursor) -> None:
@@ -241,7 +385,12 @@ def ensure_orcamento_schema() -> None:
             cursor.execute(_CREATE_FORMATO_SQL)
             cursor.execute(_CREATE_FAIXA_SQL)
             cursor.execute(_CREATE_ORCAMENTO_SQL)
+            cursor.execute(_CREATE_PRODUTO_PASSO_SQL)
+            cursor.execute(_CREATE_PASSO_FUNCAO_SQL)
+            cursor.execute(_CREATE_TEMPO_APRENDIDO_SQL)
+            cursor.execute(_CREATE_REALIZADO_SQL)
             _ensure_insumo_estoque_sku(cursor)
+            _ensure_parametros_faltantes(cursor)
 
             cursor.execute("SELECT COUNT(*) AS n FROM tab_orcamento_insumo")
             if int((cursor.fetchone() or {}).get("n") or 0) == 0:
@@ -304,6 +453,10 @@ def ensure_orcamento_schema() -> None:
                         """,
                         (lim_inf, lim_sup, perc, ordem),
                     )
+            try:
+                _seed_ct_visita(cursor)
+            except Exception as seed_exc:
+                logger.warning("Orçamento: seed Ct Visita adiado: %s", seed_exc)
         logger.info("Schema tab_orcamento* garantido")
     except Exception as exc:
         logger.error("Erro ao migrar schema de orçamento: %s", exc)

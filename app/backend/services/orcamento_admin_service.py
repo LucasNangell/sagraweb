@@ -385,9 +385,34 @@ def load_catalog() -> dict:
                 params[chave] = valor
         else:
             params[chave] = valor
+    funcoes: list[dict] = []
+    passos: list[dict] = []
+    learned: list[dict] = []
+    try:
+        from services import custo_funcao_service as custo_svc
+
+        funcoes = custo_svc.list_funcoes(include_inactive=False)
+    except Exception:
+        logger.exception("Orçamento: falha ao carregar funções de custo")
+    try:
+        from services import orcamento_produto_passos_service as passos_svc
+
+        rows = db.execute_query(
+            """
+            SELECT DISTINCT catalog_id FROM tab_orcamento_produto_passo WHERE ativo = 1
+            """
+        ) or []
+        for row in rows:
+            passos.extend(passos_svc.list_passos(int(row["catalog_id"])))
+        learned = passos_svc.list_learned()
+    except Exception:
+        logger.exception("Orçamento: falha ao carregar etapas de produto")
     return {
         "insumos": list_insumos(include_inactive=False),
         "parametros": params,
         "formatos": list_formatos(include_inactive=False),
         "faixas": list_faixas(include_inactive=False),
+        "funcoes": funcoes,
+        "passos": passos,
+        "learned": learned,
     }

@@ -1207,6 +1207,8 @@ class CustoFuncaoCreateRequest(BaseModel):
     custo_mensal: float = Field(..., ge=0)
     codigo: Optional[str] = Field(None, max_length=64)
     descricao: Optional[str] = None
+    quantidade: int = Field(1, ge=1)
+    alocacao: Optional[str] = Field("etapa", max_length=16)
 
 
 class CustoFuncaoUpdateRequest(BaseModel):
@@ -1215,6 +1217,8 @@ class CustoFuncaoUpdateRequest(BaseModel):
     codigo: Optional[str] = Field(None, max_length=64)
     clear_codigo: bool = False
     descricao: Optional[str] = None
+    quantidade: Optional[int] = Field(None, ge=1)
+    alocacao: Optional[str] = Field(None, max_length=16)
 
 
 @router.get(
@@ -1248,6 +1252,8 @@ def create_custo_funcao(
             custo_mensal=body.custo_mensal,
             codigo=body.codigo,
             descricao=body.descricao,
+            quantidade=body.quantidade,
+            alocacao=body.alocacao,
             ponto=str(session.ponto),
         )
     except ValueError as exc:
@@ -1277,6 +1283,8 @@ def update_custo_funcao(
             codigo=body.codigo,
             clear_codigo=body.clear_codigo,
             descricao=body.descricao,
+            quantidade=body.quantidade,
+            alocacao=body.alocacao,
             ponto=str(session.ponto),
         )
     except KeyError:
@@ -1525,4 +1533,127 @@ def admin_update_orcamento_faixa(faixa_id: int, body: OrcamentoFaixaUpdate):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"items": items}
+
+
+class ProdutoPassoCrew(BaseModel):
+    funcao_id: int
+    quantidade: float = 1
+
+
+class ProdutoPassoIn(BaseModel):
+    ordem: Optional[int] = None
+    nome: str = ""
+    setor_link: str
+    tipo: str = "produtiva"
+    cobra_pessoal: bool = True
+    tecnologia: str = "qualquer"
+    setup_min: float = 0
+    min_por_un: float = 0
+    min_por_pag: float = 0
+    min_por_folha: float = 0
+    funcoes: list[ProdutoPassoCrew] = Field(default_factory=list)
+
+
+class ProdutoPassosReplace(BaseModel):
+    rotulo: str = ""
+    passos: list[ProdutoPassoIn] = Field(default_factory=list)
+
+
+class ProdutoPassosCopiar(BaseModel):
+    origem_catalog_id: int
+    rotulo: str = ""
+
+
+class ProdutoEnsure(BaseModel):
+    label: str
+
+
+@router.post(
+    "/api/admin/system/catalog/produto/ensure",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def admin_ensure_produto(
+    body: ProdutoEnsure,
+    session: SessionData = Depends(require_session),
+):
+    from services import orcamento_produto_passos_service as passos_svc
+
+    try:
+        item = passos_svc.ensure_produto_catalog_id(body.label, ponto=str(session.ponto))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"item": item}
+
+
+@router.get(
+    "/api/admin/system/catalog/produto/{catalog_id}/passos",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def admin_list_produto_passos(catalog_id: int):
+    from services import custo_funcao_service as custo_svc
+    from services import orcamento_produto_passos_service as passos_svc
+    from services import system_catalog_service as cat_svc
+
+    passos = passos_svc.list_passos(catalog_id)
+    funcoes = custo_svc.list_funcoes(include_inactive=False)
+    setores = [it["label"] for it in cat_svc.list_admin_items("setor") if it.get("active")]
+    produtos = [
+        {"id": it["id"], "label": it["label"]}
+        for it in cat_svc.list_admin_items("produto")
+        if it.get("id") and it.get("active")
+    ]
+    return {"passos": passos, "funcoes": funcoes, "setores": setores, "produtos": produtos}
+
+
+@router.put(
+    "/api/admin/system/catalog/produto/{catalog_id}/passos",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def admin_replace_produto_passos(catalog_id: int, body: ProdutoPassosReplace):
+    from services import orcamento_produto_passos_service as passos_svc
+    from services import system_catalog_service as cat_svc
+
+    rotulo = (body.rotulo or "").strip()
+    if not rotulo:
+        try:
+            row = cat_svc.get_catalog_item("produto", catalog_id)
+            rotulo = (row or {}).get("label") or ""
+        except KeyError:
+            raise HTTPException(status_code=404, detail="Produto não encontrado.") from None
+    try:
+        passos = passos_svc.replace_passos(
+            catalog_id,
+            [p.model_dump() for p in body.passos],
+            rotulo=rotulo,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Erro ao gravar etapas do produto %s", catalog_id)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"passos": passos}
+
+
+@router.post(
+    "/api/admin/system/catalog/produto/{catalog_id}/passos/copiar",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def admin_copiar_produto_passos(catalog_id: int, body: ProdutoPassosCopiar):
+    from services import orcamento_produto_passos_service as passos_svc
+    from services import system_catalog_service as cat_svc
+
+    rotulo = (body.rotulo or "").strip()
+    if not rotulo:
+        try:
+            row = cat_svc.get_catalog_item("produto", catalog_id)
+            rotulo = (row or {}).get("label") or ""
+        except KeyError:
+            raise HTTPException(status_code=404, detail="Produto não encontrado.") from None
+    try:
+        passos = passos_svc.copiar_passos(
+            catalog_id, body.origem_catalog_id, rotulo=rotulo
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"passos": passos}
 

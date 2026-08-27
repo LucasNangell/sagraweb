@@ -62,6 +62,17 @@ describe("permissions / menu", () => {
     expect(getVisibleNavItems(perms, true)).toEqual([]);
   });
 
+  it("orçamento só com ctx_orcamento, sem item de sidebar", () => {
+    const perms = parsePermissionsFromApi({ ctx_orcamento: true, sb_inicio: true });
+    expect(canAccessRoute(perms, "/orcamento")).toBe(true);
+    expect(getVisibleNavItems(perms, true).some((i) => i.to === "/orcamento")).toBe(
+      false,
+    );
+    expect(canAccessRoute(parsePermissionsFromApi({ sb_inicio: true }), "/orcamento")).toBe(
+      false,
+    );
+  });
+
   it("usuário só com gravação externa vai para /gravacao-externa", () => {
     const perms = parsePermissionsFromApi({ sb_gravacao_externa: true });
     expect(canAccessRoute(perms, "/gravacao-externa")).toBe(true);

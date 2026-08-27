@@ -296,3 +296,47 @@ export interface CustoFuncaoUpdatePayload {
   clear_codigo?: boolean;
   descricao?: string | null;
 }
+
+export interface OrcamentoInsumoRecord {
+  id: number;
+  codigo: string;
+  categoria: string;
+  especificacao: string;
+  unidade?: string | null;
+  qtd_embalagem: number;
+  preco_bruto: number;
+  preco_unitario: number;
+  rendimento_a4?: number | null;
+  formato_folha?: string | null;
+  aliases: string[];
+  atualizado_em?: string | null;
+  ativo: boolean;
+}
+
+export interface OrcamentoParametroRecord {
+  chave: string;
+  valor: string;
+  tipo: string;
+  descricao?: string | null;
+  atualizado_em?: string | null;
+  atualizado_por?: string | null;
+}
+
+export interface OrcamentoFormatoRecord {
+  id: number;
+  codigo: string;
+  menor_mm: number;
+  maior_mm: number;
+  fator_a4: number;
+  ordem: number;
+  ativo: boolean;
+}
+
+export interface OrcamentoFaixaRecord {
+  id: number;
+  limite_inf: number;
+  limite_sup: number | null;
+  percentual: number;
+  ordem: number;
+  ativo: boolean;
+}

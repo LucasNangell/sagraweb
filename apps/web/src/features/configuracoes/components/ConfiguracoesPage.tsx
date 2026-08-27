@@ -1,6 +1,7 @@
 import { cn } from "@sagra/ui";
 import {
   Briefcase,
+  Calculator,
   ClipboardList,
   Coins,
   Database,
@@ -19,6 +20,7 @@ import { CredenciaisDepolModelosSection } from "./CredenciaisDepolModelosSection
 import { CustosSettingsSection } from "./CustosSettingsSection";
 import { EmailTemplatesSection } from "./EmailTemplatesSection";
 import { GerenciaSettingsSection } from "./GerenciaSettingsSection";
+import { OrcamentoSettingsSection } from "./OrcamentoSettingsSection";
 import { PapelariaProdutosAdminSection } from "./PapelariaProdutosAdminSection";
 import { PapelariaWorkerQueueSection } from "./PapelariaWorkerQueueSection";
 import { PreAnaliseChecksSection } from "./PreAnaliseChecksSection";
@@ -34,7 +36,8 @@ type ConfigTab =
   | "credenciais_depol"
   | "caixas"
   | "sistema"
-  | "custos";
+  | "custos"
+  | "orcamento";
 
 const TAB_META: Record<
   ConfigTab,
@@ -91,6 +94,12 @@ const TAB_META: Record<
     description:
       "Cadastro de funções da gráfica e custo de mão de obra (custo mensal → custo/hora automático).",
     icon: <Wallet className="size-3.5" aria-hidden />,
+  },
+  orcamento: {
+    label: "Orçamento",
+    description:
+      "Insumos, alíquotas, formatos e textos do ofício usados no cálculo Digital/Offset.",
+    icon: <Calculator className="size-3.5" aria-hidden />,
   },
 };
 
@@ -224,6 +233,15 @@ export function ConfiguracoesPage() {
             className="configuracoes-tab-panel"
           >
             <CustosSettingsSection />
+          </div>
+          <div
+            role="tabpanel"
+            id="config-panel-orcamento"
+            aria-labelledby="config-tab-orcamento"
+            hidden={activeTab !== "orcamento"}
+            className="configuracoes-tab-panel"
+          >
+            <OrcamentoSettingsSection />
           </div>
         </div>
       </div>

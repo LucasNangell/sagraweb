@@ -69,6 +69,7 @@ class UserPermissionsUpdate(BaseModel):
     ctx_imprimir_ficha: Optional[bool] = None
     ctx_detalhes_os: Optional[bool] = None
     ctx_prova_web: Optional[bool] = None
+    ctx_orcamento: Optional[bool] = None
     sb_inicio: Optional[bool] = None
     sb_gerencia: Optional[bool] = None
     sb_email: Optional[bool] = None
@@ -350,7 +351,7 @@ async def get_user_permissions_admin(ponto: int):
         perms = {k: False for k in (
             "ctx_nova_os", "ctx_duplicar_os", "ctx_editar_os", "ctx_vincular_os",
             "ctx_abrir_pasta", "ctx_mover_pastas", "ctx_imprimir_ficha", "ctx_detalhes_os",
-            "ctx_prova_web",
+            "ctx_prova_web", "ctx_orcamento",
             "sb_inicio", "sb_gerencia", "sb_email", "sb_analise", "sb_papelaria",
             "sb_usuario", "sb_configuracoes", "sb_relatorio", "sb_dashboard_setor",
             "sb_dashboard_global", "sb_dashboard_tablet", "sb_admin_ips", "sb_pcp", "sb_usuarios",

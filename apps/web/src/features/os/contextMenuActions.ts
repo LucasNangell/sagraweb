@@ -69,6 +69,12 @@ export const OS_CONTEXT_MENU_ITEMS: OsContextMenuItem[] = [
     requiresRow: true,
   },
   {
+    id: "orcamento",
+    label: "Orçamento",
+    permission: "ctx_orcamento",
+    requiresRow: true,
+  },
+  {
     id: "notify",
     label: "Notificar",
     permission: "ctx_detalhes_os",

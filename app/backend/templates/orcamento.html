@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Orçamento {{ numero }}/{{ ano }}</title>
+  <style>
+    body { font-family: "Times New Roman", Times, serif; font-size: 12pt; color: #111; margin: 24mm 20mm; }
+    h1 { text-align: center; font-size: 18pt; margin: 0 0 16px; }
+    .meta { margin-bottom: 14px; }
+    .spec { margin: 10px 0; }
+    .totais { margin: 14px 0; }
+    .clausulas { margin-top: 18px; }
+    .assinaturas { display: flex; gap: 24px; margin-top: 36px; }
+    .assinaturas div { flex: 1; }
+    footer { margin-top: 40px; text-align: center; font-size: 9pt; color: #444; }
+  </style>
+</head>
+<body>
+  <h1>ORÇAMENTO {{ numero }}/{{ ano }}</h1>
+  {% if processo %}<div class="meta">Processo nº {{ processo }}</div>{% endif %}
+  <div class="meta">Ordem de serviço nº {{ os_numero }}/{{ os_ano }}</div>
+  <div class="meta">{{ data_extenso }}</div>
+  <p><strong>Solicitante:</strong> {{ solicitante }}</p>
+  <p><strong>Título:</strong> {{ titulo }}</p>
+  <div class="spec"><strong>Especificação Solicitada:</strong><br />{{ especificacao }}</div>
+  <div class="spec"><strong>Especificação Orçada:</strong><br />{{ especificacao }}</div>
+  <div class="totais">
+    Nº.de páginas: {{ '%02d'|format(paginas) }}<br />
+    Tiragem: {{ tiragem }}<br />
+    <strong>Valor total: {{ valor_total }}</strong>
+  </div>
+  <div class="clausulas">
+    - {{ clausula_validade }}<br />
+    - {{ clausula_entrega }}
+  </div>
+  <div class="assinaturas">
+    <div>
+      Encaminho o presente orçamento conforme solicitação recebida e obedecida a norma vigente.
+      <p style="margin-top: 36px;"><strong>{{ signatario }}</strong><br />{{ cargo }}</p>
+    </div>
+    <div>
+      Autorizo a execução do trabalho especificado.
+      <p style="margin-top: 36px;">Responsável<br />Assinatura e Carimbo</p>
+    </div>
+  </div>
+  <footer>
+    Endereço: {{ endereco }}<br />
+    Telefone: {{ telefone }}
+  </footer>
+</body>
+</html>

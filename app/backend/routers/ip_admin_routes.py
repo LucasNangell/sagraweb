@@ -32,6 +32,7 @@ class IPPermission(BaseModel):
     ctx_mover_pastas: bool = True
     ctx_imprimir_ficha: bool = True
     ctx_detalhes_os: bool = True
+    ctx_orcamento: bool = False
     
     # Sidebar
     sb_inicio: bool = True
@@ -89,6 +90,7 @@ class IPPermissionUpdate(BaseModel):
     ctx_mover_pastas: Optional[bool] = None
     ctx_imprimir_ficha: Optional[bool] = None
     ctx_detalhes_os: Optional[bool] = None
+    ctx_orcamento: Optional[bool] = None
     
     # Sidebar
     sb_inicio: Optional[bool] = None
@@ -151,6 +153,7 @@ def _full_access_permissions(client_ip: str) -> dict:
         "ctx_imprimir_ficha": True,
         "ctx_detalhes_os": True,
         "ctx_prova_web": True,
+        "ctx_orcamento": True,
         "sb_inicio": True,
         "sb_gerencia": True,
         "sb_email": True,
@@ -227,6 +230,7 @@ def get_client_permissions(client_ip: str) -> dict:
                     'ctx_mover_pastas': bool(exact_match.get('ctx_mover_pastas', True)),
                     'ctx_imprimir_ficha': bool(exact_match.get('ctx_imprimir_ficha', True)),
                     'ctx_detalhes_os': bool(exact_match.get('ctx_detalhes_os', True)),
+                    'ctx_orcamento': bool(exact_match.get('ctx_orcamento', False)),
                     'sb_inicio': bool(exact_match.get('sb_inicio', True)),
                     'sb_gerencia': bool(exact_match.get('sb_gerencia', True)),
                     'sb_email': bool(exact_match.get('sb_email', True)),
@@ -281,6 +285,7 @@ def get_client_permissions(client_ip: str) -> dict:
                         'ctx_mover_pastas': bool(ip_data.get('ctx_mover_pastas', True)),
                         'ctx_imprimir_ficha': bool(ip_data.get('ctx_imprimir_ficha', True)),
                         'ctx_detalhes_os': bool(ip_data.get('ctx_detalhes_os', True)),
+                        'ctx_orcamento': bool(ip_data.get('ctx_orcamento', False)),
                         'sb_inicio': bool(ip_data.get('sb_inicio', True)),
                         'sb_gerencia': bool(ip_data.get('sb_gerencia', True)),
                         'sb_email': bool(ip_data.get('sb_email', True)),
@@ -339,6 +344,7 @@ def _to_permissions_response(
         ctx_imprimir_ficha=bool(perms.get("ctx_imprimir_ficha", True)),
         ctx_detalhes_os=bool(perms.get("ctx_detalhes_os", True)),
         ctx_prova_web=bool(perms.get("ctx_prova_web", False)),
+        ctx_orcamento=bool(perms.get("ctx_orcamento", False)),
         sb_inicio=bool(perms.get("sb_inicio", True)),
         sb_gerencia=bool(perms.get("sb_gerencia", True)),
         sb_email=bool(perms.get("sb_email", True)),
@@ -476,7 +482,7 @@ async def add_ip(data: IPPermission, ponto: Optional[int] = None, nome_usuario: 
                     UPDATE ip_permissions SET
                         descricao=%s, grupo=%s, ativo=%s,
                         ctx_nova_os=%s, ctx_duplicar_os=%s, ctx_editar_os=%s, ctx_vincular_os=%s,
-                        ctx_abrir_pasta=%s, ctx_mover_pastas=%s, ctx_imprimir_ficha=%s, ctx_detalhes_os=%s,
+                        ctx_abrir_pasta=%s, ctx_mover_pastas=%s, ctx_imprimir_ficha=%s, ctx_detalhes_os=%s, ctx_orcamento=%s,
                         sb_inicio=%s, sb_gerencia=%s, sb_email=%s, sb_analise=%s,
                         sb_papelaria=%s, sb_usuario=%s, sb_configuracoes=%s,
                         sb_relatorio=%s, sb_dashboard_setor=%s, sb_admin_ips=%s,
@@ -485,7 +491,7 @@ async def add_ip(data: IPPermission, ponto: Optional[int] = None, nome_usuario: 
                 """, (
                     data.descricao, data.grupo, data.ativo,
                     data.ctx_nova_os, data.ctx_duplicar_os, data.ctx_editar_os,
-                    data.ctx_vincular_os, data.ctx_abrir_pasta, data.ctx_mover_pastas, data.ctx_imprimir_ficha, data.ctx_detalhes_os,
+                    data.ctx_vincular_os, data.ctx_abrir_pasta, data.ctx_mover_pastas, data.ctx_imprimir_ficha, data.ctx_detalhes_os, data.ctx_orcamento,
                     data.sb_inicio, data.sb_gerencia, data.sb_email, data.sb_analise,
                     data.sb_papelaria, data.sb_usuario, data.sb_configuracoes,
                     data.sb_relatorio, data.sb_dashboard_setor, data.sb_admin_ips,
@@ -498,14 +504,14 @@ async def add_ip(data: IPPermission, ponto: Optional[int] = None, nome_usuario: 
                     INSERT INTO ip_permissions (
                         ip, descricao, grupo, ativo,
                         ctx_nova_os, ctx_duplicar_os, ctx_editar_os, ctx_vincular_os,
-                        ctx_abrir_pasta, ctx_mover_pastas, ctx_imprimir_ficha, ctx_detalhes_os,
+                        ctx_abrir_pasta, ctx_mover_pastas, ctx_imprimir_ficha, ctx_detalhes_os, ctx_orcamento,
                         sb_inicio, sb_gerencia, sb_email, sb_analise,
                         sb_papelaria, sb_usuario, sb_configuracoes,
                         sb_relatorio, sb_dashboard_setor, sb_admin_ips,
                         sb_pcp, sb_usuarios, sb_active_computers, sb_gravacao, sb_cotas_graf, sb_gravacao_externa, sb_gravacao_pendente, sb_gravacao_externa_operador, sb_gravacao_pendente_excluir, sb_gravacao_externa_entrega, sb_gravacao_externa_lancar, sb_estoque, sb_estoque_gerente, sb_lombada, sb_credenciais_depol
                     ) VALUES (
                         %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s, %s, %s,
                         %s, %s, %s,
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
@@ -513,7 +519,7 @@ async def add_ip(data: IPPermission, ponto: Optional[int] = None, nome_usuario: 
                 """, (
                     data.ip, data.descricao, data.grupo, data.ativo,
                     data.ctx_nova_os, data.ctx_duplicar_os, data.ctx_editar_os,
-                    data.ctx_vincular_os, data.ctx_abrir_pasta, data.ctx_mover_pastas, data.ctx_imprimir_ficha, data.ctx_detalhes_os,
+                    data.ctx_vincular_os, data.ctx_abrir_pasta, data.ctx_mover_pastas, data.ctx_imprimir_ficha, data.ctx_detalhes_os, data.ctx_orcamento,
                     data.sb_inicio, data.sb_gerencia, data.sb_email, data.sb_analise,
                     data.sb_papelaria, data.sb_usuario, data.sb_configuracoes,
                     data.sb_relatorio, data.sb_dashboard_setor, data.sb_admin_ips,

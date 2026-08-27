@@ -30,6 +30,7 @@ _EXTRA_COLUMNS: tuple[tuple[str, str], ...] = (
     ("sb_lombada", "TINYINT(1) NOT NULL DEFAULT 0"),
     ("sb_credenciais_depol", "TINYINT(1) NOT NULL DEFAULT 0"),
     ("ctx_prova_web", "TINYINT(1) NOT NULL DEFAULT 0"),
+    ("ctx_orcamento", "TINYINT(1) NOT NULL DEFAULT 0"),
 )
 
 _CREATE_TABLE_SQL = """

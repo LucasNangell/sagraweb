@@ -140,6 +140,7 @@ export function getVisibleNavItems(
 export const ROUTE_PERMISSIONS: Record<string, PermissionKey> = {
   "/": "sb_inicio",
   "/gerencia": "sb_gerencia",
+  "/orcamento": "ctx_orcamento",
   "/email": "sb_email",
   "/analise": "sb_analise",
   "/analise-lab": "sb_analise",

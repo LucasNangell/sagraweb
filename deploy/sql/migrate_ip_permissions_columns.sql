@@ -9,3 +9,4 @@ ALTER TABLE ip_permissions ADD COLUMN sb_pcp TINYINT(1) NOT NULL DEFAULT 0;
 ALTER TABLE ip_permissions ADD COLUMN sb_usuarios TINYINT(1) NOT NULL DEFAULT 0;
 ALTER TABLE ip_permissions ADD COLUMN sb_active_computers TINYINT(1) NOT NULL DEFAULT 0;
 ALTER TABLE ip_permissions ADD COLUMN sb_gravacao TINYINT(1) NOT NULL DEFAULT 0;
+ALTER TABLE ip_permissions ADD COLUMN ctx_orcamento TINYINT(1) NOT NULL DEFAULT 0;

@@ -1332,3 +1332,197 @@ def deactivate_custo_funcao(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"item": item}
 
+
+# --- Orçamento gráfico: cadastro de variáveis ---
+
+
+class OrcamentoInsumoRequest(BaseModel):
+    codigo: str = Field(..., min_length=1, max_length=32)
+    categoria: str = Field(..., min_length=1, max_length=32)
+    especificacao: str = Field(..., min_length=1, max_length=255)
+    unidade: Optional[str] = Field(None, max_length=16)
+    qtd_embalagem: float = Field(1, ge=0)
+    preco_bruto: float = Field(0, ge=0)
+    rendimento_a4: Optional[float] = Field(None, ge=0)
+    formato_folha: Optional[str] = None
+    aliases: Optional[list[str]] = None
+    atualizado_em: Optional[str] = None
+    ativo: bool = True
+
+
+class OrcamentoParametrosRequest(BaseModel):
+    valores: dict[str, str]
+
+
+class OrcamentoFormatoUpdate(BaseModel):
+    codigo: Optional[str] = None
+    menor_mm: Optional[float] = None
+    maior_mm: Optional[float] = None
+    fator_a4: Optional[float] = None
+    ordem: Optional[int] = None
+    ativo: Optional[bool] = None
+
+
+class OrcamentoFaixaUpdate(BaseModel):
+    limite_inf: Optional[int] = None
+    limite_sup: Optional[int] = None
+    percentual: Optional[float] = None
+    ordem: Optional[int] = None
+    ativo: Optional[bool] = None
+
+
+@router.get(
+    "/api/admin/system/orcamento/insumos",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def admin_list_orcamento_insumos(include_inactive: bool = True):
+    from services import orcamento_admin_service as orc_adm
+
+    return {"items": orc_adm.list_insumos(include_inactive=include_inactive)}
+
+
+@router.post(
+    "/api/admin/system/orcamento/insumos",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def admin_create_orcamento_insumo(
+    body: OrcamentoInsumoRequest,
+    session: SessionData = Depends(require_session),
+):
+    from services import orcamento_admin_service as orc_adm
+
+    try:
+        item = orc_adm.upsert_insumo(**body.model_dump(), ponto=str(session.ponto))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"item": item}
+
+
+@router.put(
+    "/api/admin/system/orcamento/insumos/{insumo_id}",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def admin_update_orcamento_insumo(
+    insumo_id: int,
+    body: OrcamentoInsumoRequest,
+    session: SessionData = Depends(require_session),
+):
+    from services import orcamento_admin_service as orc_adm
+
+    try:
+        item = orc_adm.upsert_insumo(
+            insumo_id=insumo_id, **body.model_dump(), ponto=str(session.ponto)
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Insumo não encontrado.") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"item": item}
+
+
+@router.post(
+    "/api/admin/system/orcamento/insumos/{insumo_id}/ativar",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def admin_ativar_orcamento_insumo(
+    insumo_id: int,
+    session: SessionData = Depends(require_session),
+):
+    from services import orcamento_admin_service as orc_adm
+
+    try:
+        item = orc_adm.set_insumo_ativo(insumo_id, True, ponto=str(session.ponto))
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Insumo não encontrado.") from None
+    return {"item": item}
+
+
+@router.post(
+    "/api/admin/system/orcamento/insumos/{insumo_id}/desativar",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def admin_desativar_orcamento_insumo(
+    insumo_id: int,
+    session: SessionData = Depends(require_session),
+):
+    from services import orcamento_admin_service as orc_adm
+
+    try:
+        item = orc_adm.set_insumo_ativo(insumo_id, False, ponto=str(session.ponto))
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Insumo não encontrado.") from None
+    return {"item": item}
+
+
+@router.get(
+    "/api/admin/system/orcamento/parametros",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def admin_list_orcamento_parametros():
+    from services import orcamento_admin_service as orc_adm
+
+    return {"items": orc_adm.list_parametros()}
+
+
+@router.put(
+    "/api/admin/system/orcamento/parametros",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def admin_update_orcamento_parametros(
+    body: OrcamentoParametrosRequest,
+    session: SessionData = Depends(require_session),
+):
+    from services import orcamento_admin_service as orc_adm
+
+    return {"items": orc_adm.update_parametros(body.valores, ponto=str(session.ponto))}
+
+
+@router.get(
+    "/api/admin/system/orcamento/formatos",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def admin_list_orcamento_formatos():
+    from services import orcamento_admin_service as orc_adm
+
+    return {"items": orc_adm.list_formatos(include_inactive=True)}
+
+
+@router.put(
+    "/api/admin/system/orcamento/formatos/{formato_id}",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def admin_update_orcamento_formato(formato_id: int, body: OrcamentoFormatoUpdate):
+    from services import orcamento_admin_service as orc_adm
+
+    try:
+        items = orc_adm.update_formato(formato_id, body.model_dump(exclude_none=True))
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Formato não encontrado.") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"items": items}
+
+
+@router.get(
+    "/api/admin/system/orcamento/faixas",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def admin_list_orcamento_faixas():
+    from services import orcamento_admin_service as orc_adm
+
+    return {"items": orc_adm.list_faixas(include_inactive=True)}
+
+
+@router.put(
+    "/api/admin/system/orcamento/faixas/{faixa_id}",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def admin_update_orcamento_faixa(faixa_id: int, body: OrcamentoFaixaUpdate):
+    from services import orcamento_admin_service as orc_adm
+
+    try:
+        items = orc_adm.update_faixa(faixa_id, body.model_dump(exclude_none=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"items": items}
+

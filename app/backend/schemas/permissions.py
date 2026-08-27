@@ -26,6 +26,7 @@ class ClientPermissionsResponse(BaseModel):
     ctx_imprimir_ficha: bool = True
     ctx_detalhes_os: bool = True
     ctx_prova_web: bool = False
+    ctx_orcamento: bool = False
     sb_inicio: bool = True
     sb_gerencia: bool = True
     sb_email: bool = True

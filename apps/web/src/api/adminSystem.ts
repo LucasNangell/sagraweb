@@ -24,6 +24,10 @@ import type {
   CustoFuncaoListResponse,
   CustoFuncaoRecord,
   CustoFuncaoUpdatePayload,
+  OrcamentoFaixaRecord,
+  OrcamentoFormatoRecord,
+  OrcamentoInsumoRecord,
+  OrcamentoParametroRecord,
 } from "@/features/configuracoes/types";
 
 export async function fetchPreAnaliseChecksConfig(): Promise<PreAnaliseCheckConfig[]> {
@@ -786,5 +790,93 @@ export async function deactivateCustoFuncao(
 ): Promise<{ item: CustoFuncaoRecord }> {
   return apiFetch(`/admin/system/custos/funcoes/${funcaoId}/desativar`, {
     method: "POST",
+  });
+}
+
+export async function fetchOrcamentoInsumos(
+  includeInactive = true,
+): Promise<{ items: OrcamentoInsumoRecord[] }> {
+  const qs = includeInactive ? "" : "?include_inactive=false";
+  return apiFetch(`/admin/system/orcamento/insumos${qs}`);
+}
+
+export async function createOrcamentoInsumo(
+  payload: Omit<OrcamentoInsumoRecord, "id" | "preco_unitario">,
+): Promise<{ item: OrcamentoInsumoRecord }> {
+  return apiFetch("/admin/system/orcamento/insumos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateOrcamentoInsumo(
+  id: number,
+  payload: Omit<OrcamentoInsumoRecord, "id" | "preco_unitario">,
+): Promise<{ item: OrcamentoInsumoRecord }> {
+  return apiFetch(`/admin/system/orcamento/insumos/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function setOrcamentoInsumoAtivo(
+  id: number,
+  ativo: boolean,
+): Promise<{ item: OrcamentoInsumoRecord }> {
+  const action = ativo ? "ativar" : "desativar";
+  return apiFetch(`/admin/system/orcamento/insumos/${id}/${action}`, {
+    method: "POST",
+  });
+}
+
+export async function fetchOrcamentoParametros(): Promise<{
+  items: OrcamentoParametroRecord[];
+}> {
+  return apiFetch("/admin/system/orcamento/parametros");
+}
+
+export async function updateOrcamentoParametros(
+  valores: Record<string, string>,
+): Promise<{ items: OrcamentoParametroRecord[] }> {
+  return apiFetch("/admin/system/orcamento/parametros", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ valores }),
+  });
+}
+
+export async function fetchOrcamentoFormatos(): Promise<{
+  items: OrcamentoFormatoRecord[];
+}> {
+  return apiFetch("/admin/system/orcamento/formatos");
+}
+
+export async function updateOrcamentoFormato(
+  id: number,
+  payload: Partial<OrcamentoFormatoRecord>,
+): Promise<{ items: OrcamentoFormatoRecord[] }> {
+  return apiFetch(`/admin/system/orcamento/formatos/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchOrcamentoFaixas(): Promise<{
+  items: OrcamentoFaixaRecord[];
+}> {
+  return apiFetch("/admin/system/orcamento/faixas");
+}
+
+export async function updateOrcamentoFaixa(
+  id: number,
+  payload: Partial<OrcamentoFaixaRecord>,
+): Promise<{ items: OrcamentoFaixaRecord[] }> {
+  return apiFetch(`/admin/system/orcamento/faixas/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
 }

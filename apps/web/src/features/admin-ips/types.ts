@@ -14,6 +14,7 @@ export interface IpPermissionRecord {
   ctx_mover_pastas: boolean | number;
   ctx_imprimir_ficha: boolean | number;
   ctx_detalhes_os: boolean | number;
+  ctx_orcamento: boolean | number;
   sb_inicio: boolean | number;
   sb_gerencia: boolean | number;
   sb_email: boolean | number;

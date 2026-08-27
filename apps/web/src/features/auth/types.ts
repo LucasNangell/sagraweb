@@ -9,6 +9,7 @@ export type PermissionKey =
   | "ctx_imprimir_ficha"
   | "ctx_detalhes_os"
   | "ctx_prova_web"
+  | "ctx_orcamento"
   | "sb_inicio"
   | "sb_gerencia"
   | "sb_email"
@@ -53,6 +54,7 @@ export const PERMISSION_KEYS: PermissionKey[] = [
   "ctx_imprimir_ficha",
   "ctx_detalhes_os",
   "ctx_prova_web",
+  "ctx_orcamento",
   "sb_inicio",
   "sb_gerencia",
   "sb_email",
@@ -103,6 +105,7 @@ export interface PermissionsResponse {
   ctx_imprimir_ficha?: boolean;
   ctx_detalhes_os?: boolean;
   ctx_prova_web?: boolean;
+  ctx_orcamento?: boolean;
   sb_inicio?: boolean;
   sb_gerencia?: boolean;
   sb_email?: boolean;

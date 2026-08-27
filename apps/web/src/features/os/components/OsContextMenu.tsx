@@ -59,6 +59,7 @@ export function OsRowContextMenu({
         moveFolders: "ctx_mover_pastas",
         provaWeb: "ctx_prova_web",
         print: "ctx_imprimir_ficha",
+        orcamento: "ctx_orcamento",
         notify: "ctx_detalhes_os",
       };
       const perm = required[actionId];
@@ -119,6 +120,15 @@ export function OsRowContextMenu({
           break;
         case "print":
           window.dispatchEvent(new CustomEvent("sagra:os-print-ficha"));
+          break;
+        case "orcamento":
+          void navigate({
+            to: "/orcamento",
+            search: {
+              ano: String(row.ano),
+              id: String(row.nr_os),
+            },
+          });
           break;
         case "notify":
           window.dispatchEvent(new CustomEvent("sagra:os-notificar"));

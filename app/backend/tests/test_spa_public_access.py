@@ -55,6 +55,12 @@ class TestSpaAccessHelpers:
         assert has_screen_access_for_spa_path("/analise", perms)
         assert not has_screen_access_for_spa_path("/email", perms)
 
+    def test_orcamento_exige_ctx_orcamento(self):
+        from security.spa_access import has_screen_access_for_spa_path
+
+        assert has_screen_access_for_spa_path("/orcamento", {"ctx_orcamento": True})
+        assert not has_screen_access_for_spa_path("/orcamento", {"sb_gerencia": True})
+
 
 class TestResolveClientIpCloudflare:
     def test_cf_connecting_ip_preferred_over_xff(self):

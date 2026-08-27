@@ -47,6 +47,7 @@ const PERMISSION_LABELS: Partial<Record<PermissionKey, string>> = {
   ctx_imprimir_ficha: "Imprimir ficha",
   ctx_detalhes_os: "Detalhes da OS",
   ctx_prova_web: "Prova WEB",
+  ctx_orcamento: "Orçamento",
   sb_inicio: "Início",
   sb_gerencia: "Gerência",
   sb_email: "E-mail",

@@ -84,6 +84,9 @@ export const queryKeys = {
     papeis: ["gerencia", "papeis"] as const,
     cores: ["gerencia", "cores"] as const,
     formatos: ["gerencia", "formatos"] as const,
+    formasEntrega: ["gerencia", "formas-entrega"] as const,
+    responsaveisGrafica: ["gerencia", "responsaveis-grafica"] as const,
+    acabamentos: ["gerencia", "acabamentos"] as const,
     details: (ano: number, id: number) => ["gerencia", "details", ano, id] as const,
   },
   analise: {

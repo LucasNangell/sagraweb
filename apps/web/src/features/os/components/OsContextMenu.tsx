@@ -13,7 +13,12 @@ import { useOsPathMutation } from "@/api/hooks/useOsPath";
 import { fetchOsPath } from "@/api/os";
 import { useAccessControl } from "@/features/auth/useAccessControl";
 import { tryOpenFolderLocally } from "@/lib/sagraLocalOpener";
-import { gerenciaSearchFromRow } from "../contextMenuActions";
+import {
+  confirmNovaOsType,
+  duplicateOsGerenciaSearch,
+  gerenciaSearchFromRow,
+  novaOsGerenciaSearch,
+} from "../contextMenuActions";
 import { normalizeOsSelection } from "../osTableRows";
 import { useOsSelectionStore } from "../osSelectionStore";
 import type { OsSearchRow } from "../types";
@@ -72,27 +77,16 @@ export function OsRowContextMenu({
       onSelectRow(normalizeOsSelection(row));
 
       switch (actionId) {
-        case "new": {
-          const papelaria = window.confirm(
-            "Deseja criar uma OS de Papelaria?",
-          );
+        case "new":
           void navigate({
             to: "/gerencia",
-            search: {
-              action: "new",
-              type: papelaria ? "papelaria" : "normal",
-            },
+            search: novaOsGerenciaSearch(confirmNovaOsType()),
           });
           break;
-        }
         case "duplicate":
           void navigate({
             to: "/gerencia",
-            search: {
-              action: "duplicate",
-              ano: String(row.ano),
-              id: String(row.nr_os),
-            },
+            search: duplicateOsGerenciaSearch(row),
           });
           break;
         case "edit":

@@ -58,29 +58,6 @@ export function GerenciaPage({ search }: GerenciaPageProps) {
     return "Nova Ordem de Serviço";
   }, [readOnly, search]);
 
-  /** Altura máxima do painel Detalhes Técnicos (scroll interno; demais seções sem scroll). */
-  useEffect(() => {
-    const marginAboveActions = 24;
-    const fixedActionsEstimate = 88;
-
-    const updateDetalhesMaxHeight = () => {
-      const headerEl = document.querySelector(".gerencia-page-header");
-      const top = headerEl?.getBoundingClientRect().bottom ?? 0;
-      const available = Math.max(
-        320,
-        window.innerHeight - top - fixedActionsEstimate - marginAboveActions,
-      );
-      document.documentElement.style.setProperty(
-        "--gerencia-detalhes-max-h",
-        `${available}px`,
-      );
-    };
-
-    updateDetalhesMaxHeight();
-    window.addEventListener("resize", updateDetalhesMaxHeight);
-    return () => window.removeEventListener("resize", updateDetalhesMaxHeight);
-  }, []);
-
   const handleCancel = () => {
     if (readOnly) {
       void navigate({ to: "/" });
@@ -117,7 +94,7 @@ export function GerenciaPage({ search }: GerenciaPageProps) {
 
   if (loading) {
     return (
-      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-slate-500">
+      <div className="flex h-0 min-h-0 flex-1 flex-col items-center justify-center gap-3 text-slate-500">
         <Loader2 className="size-8 animate-spin" aria-hidden />
         <p className="text-sm">Carregando gerência da OS…</p>
       </div>
@@ -125,33 +102,34 @@ export function GerenciaPage({ search }: GerenciaPageProps) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col px-3 py-3 md:px-4 md:py-4">
+    <div className="flex h-0 min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain px-3 py-3 md:px-4 md:py-4">
       <header className="gerencia-page-header mb-3 shrink-0 border-b border-slate-200/80 pb-3">
         <h1 className="text-lg font-bold text-secondary-blue">{pageTitle}</h1>
         {isGerenciaEditMode(search) ? (
           <p className="text-xs text-slate-500">
-            Edição — os campos seguem a mesma estrutura do sistema legado.
+            Informações detalhadas da OS
           </p>
         ) : null}
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        <GerenciaFormGrid
-          form={form}
-          update={update}
-          readOnly={readOnly}
-          categorias={aux.categorias}
-          produtos={aux.produtos}
-          maquinas={aux.maquinas}
-          papeis={aux.papeis}
-          cores={aux.cores}
-          formatos={aux.formatos}
-          techSpec={techSpec}
-          onTechSpecChange={handleTechSpecChange}
-          deputyPhoto={deputyPhoto}
-          onSolicitanteBlur={() => void fetchDeputadoIfNeeded()}
-        />
-      </div>
+      <GerenciaFormGrid
+        form={form}
+        update={update}
+        readOnly={readOnly}
+        categorias={aux.categorias}
+        produtos={aux.produtos}
+        maquinas={aux.maquinas}
+        papeis={aux.papeis}
+        cores={aux.cores}
+        formatos={aux.formatos}
+        formasEntrega={aux.formasEntrega}
+        responsaveisGrafica={aux.responsaveisGrafica}
+        acabamentos={aux.acabamentos}
+        techSpec={techSpec}
+        onTechSpecChange={handleTechSpecChange}
+        deputyPhoto={deputyPhoto}
+        onSolicitanteBlur={() => void fetchDeputadoIfNeeded()}
+      />
 
       <div className="pointer-events-none fixed bottom-6 right-6 z-50 flex gap-2">
         <button

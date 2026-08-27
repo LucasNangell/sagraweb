@@ -150,6 +150,8 @@ def _componente_from_payload(comp: Any) -> Dict[str, Any]:
         "nome": getattr(comp, "nome", None),
         "tipo": getattr(comp, "tipo", None),
         "lotes": getattr(comp, "lotes", None) or [],
+        "acabamentos": getattr(comp, "acabamentos", None) or [],
+        "verso_em_branco": bool(getattr(comp, "verso_em_branco", False)),
     }
 
 
@@ -188,7 +190,33 @@ def _lote_to_dict(lote: Any) -> Dict[str, Any]:
         "cores_link": raw.get("cores_link") or "",
         "papel_desc": raw.get("papel_desc") or "",
         "cores_desc": raw.get("cores_desc") or "",
+        "frente_verso": bool(raw.get("frente_verso")),
+        "acabamentos": [
+            _acabamento_to_dict(a) for a in (raw.get("acabamentos") or []) if a
+        ],
     }
+
+
+def _acabamento_to_dict(item: Any) -> Dict[str, Any]:
+    if hasattr(item, "model_dump"):
+        raw = item.model_dump(exclude_none=False)
+    elif isinstance(item, dict):
+        raw = dict(item)
+    else:
+        raw = {}
+    label = str(raw.get("label") or "").strip()
+    variacao_label = str(raw.get("variacao_label") or "").strip()
+    out: Dict[str, Any] = {"label": label or variacao_label}
+    if raw.get("catalog_id") is not None:
+        out["catalog_id"] = raw.get("catalog_id")
+    if raw.get("variacao_id") is not None:
+        out["variacao_id"] = raw.get("variacao_id")
+    if variacao_label:
+        out["variacao_label"] = variacao_label
+    obs = str(raw.get("obs") or "").strip()
+    if obs:
+        out["obs"] = obs
+    return out
 
 
 def sync_componentes_from_techspec(
@@ -237,7 +265,26 @@ def sync_componentes_from_techspec(
         if tipo and tipo not in _LEGACY_TIPOS:
             tipo = None
         lotes = [_lote_to_dict(l) for l in (comp.get("lotes") or [])]
-        techspec_json = json.dumps({"lotes": lotes}, ensure_ascii=False)
+        acabamentos = [
+            _acabamento_to_dict(a) for a in (comp.get("acabamentos") or []) if a
+        ]
+        gerais_raw = getattr(techspec, "acabamentosGerais", None)
+        if gerais_raw is None and isinstance(techspec, dict):
+            gerais_raw = techspec.get("acabamentosGerais") or techspec.get(
+                "acabamentos_gerais"
+            )
+        acabamentos_gerais = [
+            _acabamento_to_dict(a) for a in (gerais_raw or []) if a
+        ]
+        techspec_json = json.dumps(
+            {
+                "lotes": lotes,
+                "acabamentos": acabamentos,
+                "acabamentos_gerais": acabamentos_gerais,
+                "verso_em_branco": bool(comp.get("verso_em_branco")),
+            },
+            ensure_ascii=False,
+        )
         comp_id = _resolve_componente_id(comp)
 
         row = None
@@ -354,13 +401,22 @@ def load_componentes_for_os(nro: int, ano: int, *, ativos_only: bool = True) -> 
     result: List[Dict[str, Any]] = []
     for row in rows or []:
         lotes: list = []
+        acabamentos: list = []
+        acabamentos_gerais: list = []
+        verso_em_branco = False
         raw_json = row.get("techspec_json")
         if raw_json:
             try:
                 parsed = json.loads(raw_json) if isinstance(raw_json, str) else raw_json
                 lotes = parsed.get("lotes") or []
+                acabamentos = parsed.get("acabamentos") or []
+                acabamentos_gerais = parsed.get("acabamentos_gerais") or []
+                verso_em_branco = bool(parsed.get("verso_em_branco"))
             except (json.JSONDecodeError, TypeError, AttributeError):
                 lotes = []
+                acabamentos = []
+                acabamentos_gerais = []
+                verso_em_branco = False
         result.append(
             {
                 "id": int(row["id"]),
@@ -370,6 +426,9 @@ def load_componentes_for_os(nro: int, ano: int, *, ativos_only: bool = True) -> 
                 "ordem": int(row.get("ordem") or 0),
                 "ativo": bool(row.get("ativo")),
                 "lotes": lotes,
+                "acabamentos": acabamentos,
+                "acabamentos_gerais": acabamentos_gerais,
+                "verso_em_branco": verso_em_branco,
             }
         )
     return result
@@ -377,16 +436,26 @@ def load_componentes_for_os(nro: int, ano: int, *, ativos_only: bool = True) -> 
 
 def techspec_from_componentes_rows(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     componentes = []
+    acabamentos_gerais: list = []
     for row in rows:
+        if not acabamentos_gerais:
+            acabamentos_gerais = row.get("acabamentos_gerais") or []
         comp: Dict[str, Any] = {
             "componente_id": row["id"],
             "nome": row["nome"],
             "lotes": row.get("lotes") or [],
+            "acabamentos": row.get("acabamentos") or [],
         }
         if row.get("tipo"):
             comp["tipo"] = row["tipo"]
+        if row.get("verso_em_branco"):
+            comp["verso_em_branco"] = True
         componentes.append(comp)
-    return {"version": 1, "componentes": componentes}
+    return {
+        "version": 1,
+        "componentes": componentes,
+        "acabamentosGerais": acabamentos_gerais,
+    }
 
 
 def get_sub_os_current_status(sub_os_id: int) -> Optional[Dict[str, Any]]:

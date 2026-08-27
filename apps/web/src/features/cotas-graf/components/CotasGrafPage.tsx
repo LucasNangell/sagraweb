@@ -443,7 +443,7 @@ export function CotasGrafPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4 md:h-full md:min-h-0">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto md:h-full">
       <header className="flex flex-wrap items-center gap-3 rounded-lg border border-sagra-border bg-white px-4 py-3 shadow-sm">
         <Coins className="size-8 text-primary-green" />
         <div>

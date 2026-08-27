@@ -33,6 +33,25 @@ class ProdutoRow(BaseModel):
     Produto: Optional[str] = None
 
 
+class FormaEntregaRow(BaseModel):
+    FormaEntrega: Optional[str] = None
+
+
+class ResponsavelGrafRow(BaseModel):
+    ResponsavelGraf: Optional[str] = None
+
+
+class AcabamentoVariacaoRow(BaseModel):
+    id: int
+    label: str
+
+
+class AcabamentoCatalogRow(BaseModel):
+    id: int
+    label: str
+    variacoes: List[AcabamentoVariacaoRow] = Field(default_factory=list)
+
+
 class PapelRow(BaseModel):
     Papel: Optional[str] = None
 

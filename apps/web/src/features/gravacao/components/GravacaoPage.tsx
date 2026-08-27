@@ -89,7 +89,7 @@ export function GravacaoPage() {
   }, [lastError, reconnectAttempt, status]);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
       <header className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-sagra-border bg-white px-4 py-3 shadow-sm">
         <div className="flex items-center gap-3">
           <Disc3 className="size-8 text-primary-green" />

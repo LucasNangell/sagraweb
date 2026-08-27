@@ -100,7 +100,7 @@ export function CredenciaisDepolPage() {
   }, [selectedOs?.nr_os, selectedOs?.ano, selectedOs?.produto]);
 
   return (
-    <div className="flex min-h-min flex-1 flex-col gap-3 md:h-full md:min-h-0 md:overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto md:h-full md:overflow-hidden">
       <header className="flex shrink-0 flex-wrap items-end justify-between gap-3 px-1">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">

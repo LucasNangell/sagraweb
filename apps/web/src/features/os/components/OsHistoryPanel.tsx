@@ -138,9 +138,7 @@ export function OsHistoryPanel({
     if (!selected || isSubOs) {
       return [];
     }
-    const options: DestinationOption[] = [
-      { key: "main", label: `OS ${selected.nr_os} (principal)` },
-    ];
+    const options: DestinationOption[] = [];
     const componentIdsWithSubOs = new Set(
       activeSubOsList.map((s) => s.componente_id),
     );
@@ -158,7 +156,7 @@ export function OsHistoryPanel({
     return options;
   }, [selected, isSubOs, activeSubOsList, activeComponents]);
 
-  /** OS principal com Sub OSs e/ou componentes ativos exige escolha de destino. */
+  /** OS principal com Sub OSs e/ou componentes ativos pode lançar em componente específico. */
   const needsDestinationSelector =
     !isSubOs && (activeSubOsList.length > 0 || activeComponents.length > 0);
 
@@ -179,7 +177,7 @@ export function OsHistoryPanel({
     "juntada" | "vinculo" | null
   >(null);
   const [andamentoTarget, setAndamentoTarget] = useState<AndamentoTargetKey>("");
-  const [confirmMainOs, setConfirmMainOs] = useState(false);
+  const [componenteEspecifico, setComponenteEspecifico] = useState(false);
   const [entregaModalOpen, setEntregaModalOpen] = useState(false);
   const [gravacaoPendenteModalOpen, setGravacaoPendenteModalOpen] = useState(false);
   const [gravacaoInterceptOpen, setGravacaoInterceptOpen] = useState(false);
@@ -271,7 +269,7 @@ export function OsHistoryPanel({
     setAndamentoTarget(
       isSubOs && subOsId != null ? (`sub:${subOsId}` as AndamentoTargetKey) : "",
     );
-    setConfirmMainOs(false);
+    setComponenteEspecifico(false);
     lastAutoKeyRef.current = null;
   }, [ano, id, isSubOs, subOsId, resetForm]);
 
@@ -330,31 +328,6 @@ export function OsHistoryPanel({
     rows.length,
   ]);
 
-  const destinoLabel = useMemo(() => {
-    if (!selected) {
-      return "";
-    }
-    if (isSubOs) {
-      return (
-        selected.display_label ??
-        `${selected.nr_os} [${selected.componente_nome ?? "Componente"}]`
-      );
-    }
-    if (andamentoTarget === "main") {
-      return `OS ${selected.nr_os}`;
-    }
-    if (andamentoTarget.startsWith("sub:")) {
-      const sid = Number(andamentoTarget.slice(4));
-      const sub = activeSubOsList.find((s) => s.id === sid);
-      return sub?.display_name ?? andamentoTarget;
-    }
-    if (andamentoTarget.startsWith("comp:")) {
-      const opt = destinationOptions.find((o) => o.key === andamentoTarget);
-      return opt?.label ?? andamentoTarget;
-    }
-    return "Selecione o destino abaixo";
-  }, [selected, isSubOs, andamentoTarget, activeSubOsList, destinationOptions]);
-
   const canSaveNew = useMemo(() => {
     if (!editing || isEditMode) {
       return true;
@@ -362,14 +335,8 @@ export function OsHistoryPanel({
     if (isSubOs) {
       return true;
     }
-    if (!needsDestinationSelector) {
+    if (!needsDestinationSelector || !componenteEspecifico) {
       return true;
-    }
-    if (!andamentoTarget) {
-      return false;
-    }
-    if (andamentoTarget === "main") {
-      return confirmMainOs;
     }
     return (
       andamentoTarget.startsWith("sub:") || andamentoTarget.startsWith("comp:")
@@ -379,8 +346,8 @@ export function OsHistoryPanel({
     isEditMode,
     isSubOs,
     needsDestinationSelector,
+    componenteEspecifico,
     andamentoTarget,
-    confirmMainOs,
   ]);
 
   const startNew = () => {
@@ -395,11 +362,9 @@ export function OsHistoryPanel({
     setAndamentoTarget(
       isSubOs && subOsId != null
         ? (`sub:${subOsId}` as AndamentoTargetKey)
-        : needsDestinationSelector
-          ? ""
-          : "main",
+        : "main",
     );
-    setConfirmMainOs(false);
+    setComponenteEspecifico(false);
     setForm({
       situacao: "",
       setor: "",
@@ -420,6 +385,10 @@ export function OsHistoryPanel({
   const cancelEdit = () => {
     setEditing(false);
     setIsEditMode(false);
+    setComponenteEspecifico(false);
+    setAndamentoTarget(
+      isSubOs && subOsId != null ? (`sub:${subOsId}` as AndamentoTargetKey) : "",
+    );
     if (selectedHistory) {
       selectHistoryRow(selectedHistory);
     } else {
@@ -432,7 +401,7 @@ export function OsHistoryPanel({
     setor: form.setor,
     obs: form.obs,
     usuario: form.usuario,
-    confirm_main_os_target: needsDestinationSelector ? confirmMainOs : true,
+    confirm_main_os_target: true,
   });
 
   const refreshAfterSubOsSave = async (targetSubId: number) => {
@@ -474,9 +443,7 @@ export function OsHistoryPanel({
       return;
     }
     if (!canSaveNew) {
-      window.alert(
-        "Selecione o destino do andamento e confirme se for da OS principal.",
-      );
+      window.alert("Selecione o componente para lançar o andamento.");
       return;
     }
 
@@ -580,7 +547,7 @@ export function OsHistoryPanel({
       setAndamentoTarget(
         isSubOs && subOsId != null ? (`sub:${subOsId}` as AndamentoTargetKey) : "",
       );
-      setConfirmMainOs(false);
+      setComponenteEspecifico(false);
     } catch (e) {
       window.alert(
         `Erro ao salvar: ${e instanceof Error ? e.message : "falha"}`,
@@ -923,127 +890,105 @@ export function OsHistoryPanel({
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-2">
               <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
                 <div className="flex min-h-full flex-col gap-2">
-                  {editing && !isEditMode ? (
-                    <div className="flex min-w-0 shrink-0 flex-col gap-1.5">
-                  <div className="rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-xs text-blue-950">
-                    <p className="font-bold">Destino do andamento:</p>
-                    <p className="mt-0.5 font-semibold">{destinoLabel}</p>
-                  </div>
-                  {!isSubOs && needsDestinationSelector ? (
-                    <>
-                      <label className="min-w-0 text-xs">
-                        <span className="font-semibold text-neutral-700">
-                          Lançar andamento em: *
-                        </span>
-                        <select
-                          value={andamentoTarget}
-                          onChange={(e) => {
-                            const v = e.target.value as AndamentoTargetKey;
-                            setAndamentoTarget(v);
-                            if (v !== "main") {
-                              setConfirmMainOs(false);
-                            }
-                          }}
-                          className="mt-0.5 h-8 w-full rounded border border-sagra-border px-1 text-xs"
-                        >
-                          <option value="">Selecione o destino...</option>
-                          {destinationOptions.map((opt) => (
-                            <option key={opt.key} value={opt.key}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[0.65rem] text-amber-900">
-                        {andamentoTarget === "main"
-                          ? "Este andamento será lançado na OS principal e também atualizará todos os componentes ativos desta OS."
-                          : "Esta OS possui componentes com andamento independente. Confirme o destino do andamento."}
-                      </p>
-                      {andamentoTarget === "main" ? (
-                        <label className="flex items-start gap-2 text-xs text-neutral-800">
-                          <input
-                            type="checkbox"
-                            className="mt-0.5 shrink-0"
-                            checked={confirmMainOs}
-                            onChange={(e) =>
-                              setConfirmMainOs(e.target.checked)
-                            }
-                          />
-                          <span>
-                            Confirmo que este andamento pertence à OS principal (
-                            {selected?.nr_os}) e deve ser aplicado a todos os
-                            componentes ativos.
-                          </span>
-                        </label>
-                      ) : null}
-                    </>
-                  ) : null}
-                  {frozen ? (
-                    <p className="text-xs font-semibold text-amber-800">
+                  {editing && frozen ? (
+                    <p className="shrink-0 text-xs font-semibold text-amber-800">
                       OS congelada — não é permitido novo andamento.
                     </p>
                   ) : null}
-                </div>
-              ) : null}
 
-              {editing && isEditMode && frozen ? (
-                <p className="shrink-0 text-xs font-semibold text-amber-800">
-                  OS congelada — não é permitido novo andamento.
-                </p>
-              ) : null}
+                  <div className="grid shrink-0 grid-cols-1 gap-1.5 sm:grid-cols-3">
+                    <label className="min-w-0 text-xs">
+                      <span className="font-semibold text-neutral-600">Andamento</span>
+                      <select
+                        value={form.situacao}
+                        disabled={!editing}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, situacao: e.target.value }))
+                        }
+                        className="mt-0.5 h-8 w-full rounded border border-sagra-border px-1 text-xs disabled:bg-slate-50"
+                      >
+                        <option value="">Selecione...</option>
+                        {(situacoesQuery.data ?? []).map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="min-w-0 text-xs">
+                      <span className="font-semibold text-neutral-600">Setor</span>
+                      <select
+                        value={form.setor}
+                        disabled={!editing}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, setor: e.target.value }))
+                        }
+                        className="mt-0.5 h-8 w-full rounded border border-sagra-border px-1 text-xs disabled:bg-slate-50"
+                      >
+                        <option value="">Selecione...</option>
+                        {(setoresQuery.data ?? []).map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="min-w-0 text-xs">
+                      <span className="font-semibold text-neutral-600">Ponto</span>
+                      <input
+                        type="text"
+                        value={form.usuario}
+                        disabled={!editing}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, usuario: e.target.value }))
+                        }
+                        className="mt-0.5 h-8 w-full rounded border border-sagra-border px-2 text-xs disabled:bg-slate-50"
+                      />
+                    </label>
+                  </div>
 
-              <div className="grid shrink-0 grid-cols-1 gap-1.5 sm:grid-cols-3">
-                <label className="min-w-0 text-xs">
-                  <span className="font-semibold text-neutral-600">Andamento</span>
-                  <select
-                    value={form.situacao}
-                    disabled={!editing}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, situacao: e.target.value }))
-                    }
-                    className="mt-0.5 h-8 w-full rounded border border-sagra-border px-1 text-xs disabled:bg-slate-50"
-                  >
-                    <option value="">Selecione...</option>
-                    {(situacoesQuery.data ?? []).map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="min-w-0 text-xs">
-                  <span className="font-semibold text-neutral-600">Setor</span>
-                  <select
-                    value={form.setor}
-                    disabled={!editing}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, setor: e.target.value }))
-                    }
-                    className="mt-0.5 h-8 w-full rounded border border-sagra-border px-1 text-xs disabled:bg-slate-50"
-                  >
-                    <option value="">Selecione...</option>
-                    {(setoresQuery.data ?? []).map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="min-w-0 text-xs">
-                  <span className="font-semibold text-neutral-600">Ponto</span>
-                  <input
-                    type="text"
-                    value={form.usuario}
-                    disabled={!editing}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, usuario: e.target.value }))
-                    }
-                    className="mt-0.5 h-8 w-full rounded border border-sagra-border px-2 text-xs disabled:bg-slate-50"
-                  />
-                </label>
-              </div>
+                  {editing && !isEditMode && needsDestinationSelector ? (
+                    <div className="flex min-w-0 shrink-0 flex-col gap-1.5">
+                      <label className="flex items-center gap-2 text-xs text-neutral-800">
+                        <input
+                          type="checkbox"
+                          className="shrink-0"
+                          checked={componenteEspecifico}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setComponenteEspecifico(checked);
+                            setAndamentoTarget(checked ? "" : "main");
+                          }}
+                        />
+                        <span>Componente específico</span>
+                      </label>
+                      {componenteEspecifico ? (
+                        <label className="min-w-0 text-xs">
+                          <span className="font-semibold text-neutral-700">
+                            Lançar andamento em: *
+                          </span>
+                          <select
+                            value={andamentoTarget}
+                            onChange={(e) => {
+                              setAndamentoTarget(
+                                e.target.value as AndamentoTargetKey,
+                              );
+                            }}
+                            className="mt-0.5 h-8 w-full rounded border border-sagra-border px-1 text-xs"
+                          >
+                            <option value="">Selecione o destino...</option>
+                            {destinationOptions.map((opt) => (
+                              <option key={opt.key} value={opt.key}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                    </div>
+                  ) : null}
 
-              <label className="flex min-h-[5rem] min-w-0 flex-1 flex-col text-xs">
+                  <label className="flex min-h-[5rem] min-w-0 flex-1 flex-col text-xs">
                 <span className="shrink-0 font-semibold text-neutral-600">
                   Observação
                 </span>

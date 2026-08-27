@@ -19,6 +19,7 @@ import { formToSavePayload } from "../mappers";
 import {
   applyTechSpecToForm,
   createEmptyTechSpec,
+  ensureGenericoComponentes,
   ensureTechSpecIntegrity,
   loadTechSpecFromStorage,
   saveTechSpecToStorage,
@@ -34,6 +35,7 @@ import {
   patchTiragemMaximaFromCota,
   recalculateGerenciaCalcs,
   setGerenciaCoefA4PorProduto,
+  validateEntregaDataForSave,
 } from "../utils";
 
 const CALC_KEYS = [
@@ -80,6 +82,8 @@ export function useGerenciaOsEditor({
 
   const [form, setForm] = useState<GerenciaFormState>(createEmptyGerenciaForm);
   const [techSpec, setTechSpec] = useState<TechSpec>(createEmptyTechSpec);
+  const techSpecRef = useRef(techSpec);
+  techSpecRef.current = techSpec;
   const [snapshot, setSnapshot] = useState<GerenciaFormState | null>(null);
   const [techSpecSnapshot, setTechSpecSnapshot] = useState<TechSpec | null>(null);
   const [loading, setLoading] = useState(true);
@@ -99,9 +103,10 @@ export function useGerenciaOsEditor({
         const merged = { ...prev, ...nextPatch };
         const touched = CALC_KEYS.some((k) => k in nextPatch);
         if (touched) {
-          const recalced = recalculateGerenciaCalcs(merged);
+          const opts = { techSpec: techSpecRef.current };
+          const recalced = recalculateGerenciaCalcs(merged, opts);
           const withCalcs = { ...merged, ...recalced };
-          return { ...withCalcs, ...patchTiragemMaximaFromCota(withCalcs) };
+          return { ...withCalcs, ...patchTiragemMaximaFromCota(withCalcs, opts) };
         }
         return merged;
       });
@@ -112,11 +117,13 @@ export function useGerenciaOsEditor({
   const handleTechSpecChange = useCallback(
     (nextSpec: TechSpec, meta?: TechSpecChangeMeta) => {
       const safe = ensureTechSpecIntegrity(nextSpec);
+      techSpecRef.current = safe;
       setTechSpec(safe);
       setForm((prev) => {
         const merged = applyTechSpecToForm(prev, safe, meta);
-        const withCalcs = { ...merged, ...recalculateGerenciaCalcs(merged) };
-        return { ...withCalcs, ...patchTiragemMaximaFromCota(withCalcs) };
+        const opts = { techSpec: safe };
+        const withCalcs = { ...merged, ...recalculateGerenciaCalcs(merged, opts) };
+        return { ...withCalcs, ...patchTiragemMaximaFromCota(withCalcs, opts) };
       });
     },
     [],
@@ -234,11 +241,12 @@ export function useGerenciaOsEditor({
           }
         }
 
-        spec = ensureTechSpecIntegrity(spec);
+        spec = ensureGenericoComponentes(ensureTechSpecIntegrity(spec), next);
         const synced = applyTechSpecToForm(next, spec);
-        const recalced = recalculateGerenciaCalcs(synced);
+        const opts = { techSpec: spec };
+        const recalced = recalculateGerenciaCalcs(synced, opts);
         const merged = { ...synced, ...recalced };
-        const withCalcs = { ...merged, ...patchTiragemMaximaFromCota(merged) };
+        const withCalcs = { ...merged, ...patchTiragemMaximaFromCota(merged, opts) };
 
         if (!cancelled) {
           applyLoadedState(withCalcs, spec);
@@ -320,7 +328,9 @@ export function useGerenciaOsEditor({
           const merged = { ...prev, op_cota_atual };
           return {
             op_cota_atual,
-            ...patchTiragemMaximaFromCota(merged),
+            ...patchTiragemMaximaFromCota(merged, {
+              techSpec: techSpecRef.current,
+            }),
           };
         });
       })
@@ -353,6 +363,7 @@ export function useGerenciaOsEditor({
     const alt = String(dims.altura);
     const larg = String(dims.largura);
     if (form.calc_altura === alt && form.calc_largura === larg) return;
+    if (form.calc_altura.trim() || form.calc_largura.trim()) return;
 
     update((prev) => {
       const merged = {
@@ -386,15 +397,23 @@ export function useGerenciaOsEditor({
       window.alert("Informe o Solicitante.");
       return null;
     }
+    const entregaError = validateEntregaDataForSave(form);
+    if (entregaError) {
+      window.alert(entregaError);
+      return null;
+    }
 
     setSaving(true);
     try {
-      const safeSpec = ensureTechSpecIntegrity(techSpec);
+      const safeSpec = ensureGenericoComponentes(
+        ensureTechSpecIntegrity(techSpec),
+        form,
+      );
       const formForSave = applyTechSpecToForm(form, safeSpec);
       const payload = formToSavePayload(
         {
           ...formForSave,
-          ...recalculateGerenciaCalcs(formForSave),
+          ...recalculateGerenciaCalcs(formForSave, { techSpec: safeSpec }),
         },
         search,
         ponto,

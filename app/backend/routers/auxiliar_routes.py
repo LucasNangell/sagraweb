@@ -21,6 +21,9 @@ from schemas.auxiliar import (
     PapelRow,
     ProdutoRow,
     ProtocoloLookupResponse,
+    FormaEntregaRow,
+    ResponsavelGrafRow,
+    AcabamentoCatalogRow,
     SetorRow,
     SituacaoRow,
 )
@@ -221,6 +224,53 @@ def get_cores() -> List[CorRow]:
     dynamic = [str(r.get("Cor") or "").strip() for r in rows if r.get("Cor")]
     merged = merge_catalog_labels("cor", dynamic)
     return [CorRow(Cor=label) for label in merged]
+
+
+@router.get("/formas-entrega", response_model=List[FormaEntregaRow])
+def get_formas_entrega(response: Response) -> List[FormaEntregaRow]:
+    _set_aux_lookup_cache(response)
+    rows = db.execute_query(
+        """
+        SELECT DISTINCT EntregaFormaLink AS FormaEntrega
+        FROM tabProtocolos
+        WHERE EntregaFormaLink IS NOT NULL AND TRIM(EntregaFormaLink) <> ''
+        ORDER BY EntregaFormaLink
+        """
+    )
+    values = [
+        str(r.get("FormaEntrega") or "").strip()
+        for r in rows
+        if r.get("FormaEntrega")
+    ]
+    return [FormaEntregaRow(FormaEntrega=label) for label in values if label]
+
+
+@router.get("/responsaveis-grafica", response_model=List[ResponsavelGrafRow])
+def get_responsaveis_grafica(response: Response) -> List[ResponsavelGrafRow]:
+    _set_aux_lookup_cache(response)
+    rows = db.execute_query(
+        """
+        SELECT DISTINCT ResponsavelGrafLink AS ResponsavelGraf
+        FROM tabProtocolos
+        WHERE ResponsavelGrafLink IS NOT NULL AND TRIM(ResponsavelGrafLink) <> ''
+        ORDER BY ResponsavelGrafLink
+        """
+    )
+    values = [
+        str(r.get("ResponsavelGraf") or "").strip()
+        for r in rows
+        if r.get("ResponsavelGraf")
+    ]
+    return [ResponsavelGrafRow(ResponsavelGraf=label) for label in values if label]
+
+
+@router.get("/acabamentos", response_model=List[AcabamentoCatalogRow])
+def get_acabamentos(response: Response) -> List[AcabamentoCatalogRow]:
+    from services.system_catalog_service import list_acabamentos_operacionais
+
+    _set_aux_lookup_cache(response)
+    items = list_acabamentos_operacionais()
+    return [AcabamentoCatalogRow.model_validate(item) for item in items]
 
 
 @router.get("/protocolo/buscar", response_model=ProtocoloLookupResponse)

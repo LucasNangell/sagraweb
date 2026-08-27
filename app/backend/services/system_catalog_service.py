@@ -749,3 +749,43 @@ def delete_variacao(catalog_id: int, variacao_id: int) -> None:
         "DELETE FROM tabSystemCatalogVariacao WHERE ID = %s AND CatalogID = %s",
         (variacao_id, catalog_id),
     )
+
+
+def list_acabamentos_operacionais() -> List[Dict[str, Any]]:
+    """Itens ativos de acabamento com variações ativas (uso na Gerência)."""
+    ensure_system_catalog_schema()
+    rows = db.execute_query(
+        """
+        SELECT ID, Rotulo, Ordem
+        FROM tabSystemCatalog
+        WHERE Categoria = 'acabamento' AND Ativo = 1
+        ORDER BY Ordem ASC, Rotulo ASC
+        """
+    )
+    items: List[Dict[str, Any]] = []
+    for row in rows or []:
+        catalog_id = int(row["ID"])
+        variacao_rows = db.execute_query(
+            """
+            SELECT ID, Rotulo, Ordem
+            FROM tabSystemCatalogVariacao
+            WHERE CatalogID = %s AND Ativo = 1
+            ORDER BY Ordem ASC, Rotulo ASC
+            """,
+            (catalog_id,),
+        )
+        items.append(
+            {
+                "id": catalog_id,
+                "label": str(row.get("Rotulo") or "").strip(),
+                "variacoes": [
+                    {
+                        "id": int(v["ID"]),
+                        "label": str(v.get("Rotulo") or "").strip(),
+                    }
+                    for v in (variacao_rows or [])
+                    if str(v.get("Rotulo") or "").strip()
+                ],
+            }
+        )
+    return [item for item in items if item["label"]]

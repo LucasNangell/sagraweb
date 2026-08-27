@@ -10,3 +10,5 @@ export const PRIORIDADE_GERENCIA = [
   "Solicitado p/",
   "Prometido p/",
 ] as const;
+
+export const TURNO_GERENCIA = ["Manhã", "Tarde", "Noite"] as const;

@@ -137,6 +137,21 @@ export interface OsComponenteRow {
   ordem: number;
   ativo: boolean;
   lotes: unknown[];
+  acabamentos?: Array<{
+    catalog_id?: number;
+    label?: string;
+    variacao_id?: number;
+    variacao_label?: string;
+    obs?: string;
+  }>;
+  acabamentos_gerais?: Array<{
+    catalog_id?: number;
+    label?: string;
+    variacao_id?: number;
+    variacao_label?: string;
+    obs?: string;
+  }>;
+  verso_em_branco?: boolean;
 }
 
 export interface SubOsRow {

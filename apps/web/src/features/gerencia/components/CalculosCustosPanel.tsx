@@ -1,4 +1,5 @@
 import { cn } from "@sagra/ui";
+import { useId } from "react";
 
 import type { GerenciaFormState, GerenciaFormUpdater } from "../types";
 import {
@@ -7,8 +8,8 @@ import {
   getCalculosDisplayRows,
   type TechSpec,
 } from "../techSpec";
-import { patchTiragemMaximaFromCota, recalculateGerenciaCalcs } from "../utils";
-import { Field, Row, gerenciaInputClass } from "./gerenciaFormUi";
+import { patchTiragemMaximaFromCota, recalculateGerenciaCalcs, applyUsarTodaCota, computeTiragemMaximaFromForm } from "../utils";
+import { Field, gerenciaInputClass } from "./gerenciaFormUi";
 
 const CALC_FIELD_BY_TIPO: Record<
   ComponenteTipo,
@@ -47,17 +48,19 @@ export function CalculosCustosPanel({
   const rows = getCalculosDisplayRows(techSpec, form);
   const totals = sumRows(rows);
   const hasOutras = rows.some((r) => r.outras > 0);
+  const tiragemFinalId = useId();
+  const calcOpts = { techSpec };
 
   const setCalc = (field: keyof GerenciaFormState, value: string) => {
     update((prev) => {
       const merged = { ...prev, [field]: value };
-      const withCalcs = { ...merged, ...recalculateGerenciaCalcs(merged) };
-      return { ...withCalcs, ...patchTiragemMaximaFromCota(withCalcs) };
+      const withCalcs = { ...merged, ...recalculateGerenciaCalcs(merged, calcOpts) };
+      return { ...withCalcs, ...patchTiragemMaximaFromCota(withCalcs, calcOpts) };
     });
   };
 
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-3">
       <div>
         <p className="mb-1.5 text-[0.65rem] font-semibold uppercase tracking-wide text-slate-500">
           Páginas por componente
@@ -83,21 +86,30 @@ export function CalculosCustosPanel({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {rows.map((row) => {
+                  const fields = row.tipo ? CALC_FIELD_BY_TIPO[row.tipo] : undefined;
+                  return (
                   <ComponenteCalcRow
-                    key={row.tipo}
+                    key={row.tipo ?? row.label}
                     row={row}
                     readOnly={readOnly}
                     autoFromSpec={techSpec.componentes.length > 0}
                     showOutras={hasOutras}
-                    colorValue={form[CALC_FIELD_BY_TIPO[row.tipo].color] as string}
-                    pbValue={form[CALC_FIELD_BY_TIPO[row.tipo].pb] as string}
-                    onColorChange={(v) =>
-                      setCalc(CALC_FIELD_BY_TIPO[row.tipo].color, v)
+                    colorValue={
+                      fields ? (form[fields.color] as string) : String(row.color)
                     }
-                    onPbChange={(v) => setCalc(CALC_FIELD_BY_TIPO[row.tipo].pb, v)}
+                    pbValue={
+                      fields ? (form[fields.pb] as string) : String(row.pb)
+                    }
+                    onColorChange={(v) => {
+                      if (fields) setCalc(fields.color, v);
+                    }}
+                    onPbChange={(v) => {
+                      if (fields) setCalc(fields.pb, v);
+                    }}
                   />
-                ))}
+                  );
+                })}
                 <tr className="border-t border-slate-200 bg-slate-50/90 font-semibold text-slate-800">
                   <td className="px-2 py-1.5">Total</td>
                   <td className="px-2 py-1.5 text-right tabular-nums">{totals.color}</td>
@@ -121,64 +133,122 @@ export function CalculosCustosPanel({
         ) : null}
       </div>
 
-      <Row className="grid-cols-2 items-end sm:grid-cols-4">
-        <Field label="Total Páginas">
-          <input
-            readOnly
-            value={form.calc_total_paginas}
-            className={cn(gerenciaInputClass, "bg-slate-100 font-bold")}
-          />
-        </Field>
-        <Field label="Tiragem">
-          <input
-            readOnly
-            value={form.calc_tiragem}
-            className={cn(gerenciaInputClass, "bg-slate-100")}
-          />
-        </Field>
-        <CalcDimField
-          label="Altura (mm)"
-          value={form.calc_altura}
-          readOnly={readOnly}
-          step="0.1"
-          onChange={(v) => setCalc("calc_altura", v)}
-        />
-        <CalcDimField
-          label="Largura (mm)"
-          value={form.calc_largura}
-          readOnly={readOnly}
-          step="0.1"
-          onChange={(v) => setCalc("calc_largura", v)}
-        />
-      </Row>
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:gap-4">
+        <div className="grid min-w-0 flex-1 grid-cols-3 items-end gap-2">
+          <Field label="Cota atual" className="min-w-0">
+            <input
+              readOnly
+              tabIndex={-1}
+              inputMode="decimal"
+              value={form.op_cota_atual}
+              className={cn(
+                gerenciaInputClass,
+                "min-w-0 bg-slate-50 text-slate-700",
+              )}
+              placeholder="—"
+              title="Saldo de cota do semestre (CotasGraf)"
+            />
+          </Field>
+          <Field label="Tiragem máxima" className="min-w-0">
+            <input
+              readOnly
+              tabIndex={-1}
+              value={
+                form.op_cota_atual.trim()
+                  ? computeTiragemMaximaFromForm(form, calcOpts)
+                  : form.op_tiragem_pret
+              }
+              className={cn(
+                gerenciaInputClass,
+                "min-w-0 bg-slate-50 text-slate-700",
+              )}
+              title="Calculada a partir da cota atual, páginas e formato"
+            />
+          </Field>
+          <div className="min-w-0">
+            <div className="flex min-h-[1rem] items-center justify-between gap-1">
+              <label
+                htmlFor={tiragemFinalId}
+                className="text-xs font-semibold text-slate-600"
+              >
+                Tiragem final
+              </label>
+              {!readOnly ? (
+                <button
+                  type="button"
+                  disabled={!computeTiragemMaximaFromForm(form, calcOpts)}
+                  onClick={() =>
+                    update((prev) => applyUsarTodaCota(prev, calcOpts))
+                  }
+                  className="shrink-0 text-[0.6rem] font-semibold leading-none text-secondary-blue underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-40"
+                  title="Define tiragem final e sincroniza cálculos"
+                >
+                  Usar toda cota
+                </button>
+              ) : null}
+            </div>
+            <input
+              id={tiragemFinalId}
+              readOnly={readOnly}
+              value={form.op_tiragem_final}
+              onChange={(e) => {
+                const v = e.target.value;
+                update((prev) => {
+                  const merged = {
+                    ...prev,
+                    op_tiragem_final: v,
+                    val_tiragem: v,
+                    calc_tiragem: v,
+                  };
+                  const withCalcs = {
+                    ...merged,
+                    ...recalculateGerenciaCalcs(merged, calcOpts),
+                  };
+                  return {
+                    ...withCalcs,
+                    ...patchTiragemMaximaFromCota(withCalcs, calcOpts),
+                  };
+                });
+              }}
+              className={cn(gerenciaInputClass, "min-w-0")}
+            />
+          </div>
+        </div>
 
-      <Row className="grid-cols-2 items-end border-t border-slate-100 pt-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-        <Field label="Coeficiente A4 (un/folha)" className="min-w-0">
-          <input
-            readOnly
-            value={form.calc_coef_a4}
-            className={cn(
-              gerenciaInputClass,
-              "bg-slate-100 font-bold text-secondary-blue",
-            )}
-          />
-        </Field>
-        <Field label="Cota Estimada" className="min-w-0">
-          <input
-            readOnly
-            value={form.calc_cota_total}
-            className={cn(
-              gerenciaInputClass,
-              "border-emerald-200 bg-emerald-50 font-bold text-primary-green",
-            )}
-          />
-        </Field>
-        <DebitarCgrafToggle
-          checked={form.chk_debitar_cgraf}
-          readOnly={readOnly}
-          onChange={(v) => update({ chk_debitar_cgraf: v })}
+        <div
+          className="hidden h-10 w-px shrink-0 bg-slate-200 xl:block"
+          aria-hidden
         />
-      </Row>
+
+        <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2">
+          <Field label="Coeficiente A4" className="min-w-0">
+            <input
+              readOnly
+              value={form.calc_coef_a4}
+              title="Unidades por folha A4"
+              className={cn(
+                gerenciaInputClass,
+                "min-w-0 bg-slate-100 font-bold text-secondary-blue",
+              )}
+            />
+          </Field>
+          <Field label="Cota estimada" className="min-w-0">
+            <input
+              readOnly
+              value={form.calc_cota_total}
+              className={cn(
+                gerenciaInputClass,
+                "min-w-0 border-emerald-200 bg-emerald-50 font-bold text-primary-green",
+              )}
+            />
+          </Field>
+          <DebitarCgrafToggle
+            checked={form.chk_debitar_cgraf}
+            readOnly={readOnly}
+            onChange={(v) => update({ chk_debitar_cgraf: v })}
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -265,8 +335,8 @@ function DebitarCgrafToggle({
   onChange: (v: boolean) => void;
 }) {
   return (
-    <div className="flex shrink-0 flex-col items-center gap-1 pb-0.5">
-      <span className="max-w-[5.5rem] text-center text-[0.65rem] font-semibold leading-tight text-slate-600">
+    <div className="flex shrink-0 flex-col items-center">
+      <span className="max-w-[5.5rem] text-center text-xs font-semibold leading-tight text-slate-600">
         Debitar cota CGraf
       </span>
       <button
@@ -277,7 +347,7 @@ function DebitarCgrafToggle({
         disabled={readOnly}
         onClick={() => onChange(!checked)}
         className={cn(
-          "relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary-blue/30",
+          "relative mt-1 inline-flex h-8 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary-blue/30",
           checked ? "bg-primary-green" : "bg-slate-200",
           readOnly ? "cursor-not-allowed opacity-60" : "cursor-pointer",
         )}
@@ -290,33 +360,5 @@ function DebitarCgrafToggle({
         />
       </button>
     </div>
-  );
-}
-
-function CalcDimField({
-  label,
-  value,
-  readOnly,
-  step,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  readOnly: boolean;
-  step?: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <Field label={label}>
-      <input
-        type="number"
-        min={0}
-        step={step}
-        readOnly={readOnly}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={gerenciaInputClass}
-      />
-    </Field>
   );
 }

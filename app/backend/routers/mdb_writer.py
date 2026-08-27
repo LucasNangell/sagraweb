@@ -631,6 +631,12 @@ def _ensure_os_lookups(
         cursor, "tabProdutos", "Produto", det.get("TipoPublicacaoLink"), mdb_path=mdb_path
     )
     _ensure_lookup_value(cursor, "tabCores", "Cor", det.get("Cores"), mdb_path=mdb_path)
+    _ensure_lookup_value(
+        cursor, "tabEntregaForma", "FormaEntrega", proto.get("EntregaFormaLink"), mdb_path=mdb_path
+    )
+    _ensure_lookup_value(
+        cursor, "tabRespGraf", "ResponsGraf", proto.get("ResponsavelGrafLink"), mdb_path=mdb_path
+    )
 def _protocolo_exists(cursor, nro: int, ano: int) -> bool:
     cursor.execute(
         "SELECT COUNT(*) FROM tabProtocolos WHERE NroProtocolo = ? AND AnoProtocolo = ?",
@@ -661,6 +667,7 @@ def _write_protocolo(
         "GabSalaUsuario", "Andar", "Localizacao", "RamalUsuario",
         "DataEntrada", "ProcessoSolicit", "CSnro",
         "EntregPrazoLink", "EntregData", "ContatoTrab",
+        "ResponsavelGrafLink", "EntregaFormaLink", "EntregPeriodo",
     )
     from os_calc_fields import cota_protocolo_column
 
@@ -694,6 +701,9 @@ def _write_protocolo(
             "EntregPrazoLink",
             "EntregData",
             "ContatoTrab",
+            "ResponsavelGrafLink",
+            "EntregaFormaLink",
+            "EntregPeriodo",
         ]
         if cota_col in avail:
             base_cols.append(cota_col)

@@ -488,7 +488,7 @@ export function EstoquePage() {
   };
 
   return (
-    <div className="flex min-h-min flex-1 flex-col gap-3 md:h-full md:min-h-0 md:overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto md:h-full md:overflow-hidden">
       <header className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-3 shadow-sm sm:px-4">
         <div className="flex items-start gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary-green/15 text-primary-green">

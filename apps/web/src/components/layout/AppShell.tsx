@@ -16,15 +16,15 @@ export function AppShell() {
   const showLombadaModal = useLombadaUiStore((s) => s.open);
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-sagra-bg">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-sagra-bg">
       <Header />
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <Sidebar
           collapsed={sidebarCollapsed}
           onToggle={() => setSidebarCollapsed((v) => !v)}
         />
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-y-contain p-2 pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] sm:p-3 md:overflow-hidden md:p-2 md:pb-2 lg:p-[calc(var(--spacing)*2)]">
-          <div className="flex min-h-min flex-1 flex-col md:min-h-0 md:overflow-hidden">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-2 pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] sm:p-3 md:p-2 md:pb-2 lg:p-[calc(var(--spacing)*2)]">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <Outlet />
           </div>
         </main>

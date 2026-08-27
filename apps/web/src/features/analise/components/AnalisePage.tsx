@@ -1257,7 +1257,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
     );
 
   return (
-    <div className="flex min-h-min flex-1 flex-col gap-2 p-2 md:h-full md:min-h-0 md:overflow-hidden md:p-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2 md:h-full md:overflow-hidden md:p-3">
       {/* Toolbar */}
       <section className="shrink-0 rounded-lg border border-t-[3px] border-sagra-border border-t-primary-green bg-white px-3 py-3 shadow-sm sm:px-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">

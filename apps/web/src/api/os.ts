@@ -588,6 +588,9 @@ export interface SaveOsPayload {
   ModelosArq?: string | null;
   EntregPrazoLink?: string | null;
   EntregData?: string | null;
+  EntregPeriodo?: string | null;
+  ResponsavelGrafLink?: string | null;
+  EntregaFormaLink?: string | null;
   PapelLink?: string | null;
   PapelDescricao?: string | null;
   Cores?: string | null;
@@ -607,6 +610,13 @@ export interface SaveOsPayload {
   Calculos?: Record<string, string | number>;
   TechSpec?: {
     version?: number;
+    acabamentosGerais?: Array<{
+      catalog_id?: number;
+      label?: string;
+      variacao_id?: number;
+      variacao_label?: string;
+      obs?: string;
+    }>;
     componentes?: Array<{
       componente_id?: number;
       nome?: string;
@@ -619,6 +629,21 @@ export interface SaveOsPayload {
         cores_link?: string;
         papel_desc?: string;
         cores_desc?: string;
+        frente_verso?: boolean;
+        acabamentos?: Array<{
+          catalog_id?: number;
+          label?: string;
+          variacao_id?: number;
+          variacao_label?: string;
+          obs?: string;
+        }>;
+      }>;
+      acabamentos?: Array<{
+        catalog_id?: number;
+        label?: string;
+        variacao_id?: number;
+        variacao_label?: string;
+        obs?: string;
       }>;
     }>;
   };

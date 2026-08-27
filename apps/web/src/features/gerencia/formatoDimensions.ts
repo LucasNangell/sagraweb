@@ -64,3 +64,52 @@ export function resolveFormatoDimensions(
 
   return null;
 }
+
+function sameDims(a: FormatoDimensoes, b: FormatoDimensoes, eps = 0.051): boolean {
+  return Math.abs(a.altura - b.altura) <= eps && Math.abs(a.largura - b.largura) <= eps;
+}
+
+function formatMm(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+}
+
+export function formatDimensionFormato(altura: number, largura: number): string {
+  return `${formatMm(altura)} x ${formatMm(largura)}`;
+}
+
+/**
+ * Nome de formato que corresponde às medidas (catálogo, ISO ou "H x L").
+ * Preserva o nome atual quando ele já descreve as mesmas dimensões.
+ */
+export function findFormatoForDimensions(
+  altura: number,
+  largura: number,
+  predefinidos?: FormatoLookupItem[],
+  currentFormato?: string,
+): string | null {
+  if (!(altura > 0) || !(largura > 0)) return null;
+  const target = { altura, largura };
+  const current = (currentFormato || "").trim();
+
+  if (current) {
+    const currentDims = resolveFormatoDimensions(current, predefinidos);
+    if (currentDims && sameDims(currentDims, target)) return current;
+  }
+
+  const fromApi = predefinidos?.find(
+    (f) =>
+      f.altura_mm != null &&
+      f.largura_mm != null &&
+      sameDims({ altura: f.altura_mm, largura: f.largura_mm }, target),
+  );
+  if (fromApi?.formato.trim()) return fromApi.formato.trim();
+
+  for (const [nome, dims] of Object.entries(ISO_FORMATOS_MM)) {
+    if (sameDims(dims, target)) {
+      return nome === "A4 PAISAGEM" ? "A4 Paisagem" : nome;
+    }
+  }
+
+  return formatDimensionFormato(altura, largura);
+}

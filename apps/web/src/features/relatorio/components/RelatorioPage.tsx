@@ -161,7 +161,7 @@ export function RelatorioPage() {
       : null;
 
   return (
-    <div className="relative flex min-h-min flex-1 flex-col gap-2 md:h-full md:min-h-0 md:overflow-hidden">
+    <div className="relative flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto md:h-full md:overflow-hidden">
       <RelatorioFiltersPanel
         filters={filters}
         onPatchFilters={patchFilters}

@@ -103,7 +103,11 @@ def _componente_from_lote(
     cores = lote.get("cores_link") or lote.get("cores_desc") or fallback.get("Cores")
     papel = match_papel(papel_nome, insumos)
     menor, maior = _dimensoes(fallback.get("FormatoLink"))
-    fv = bool(fallback.get("FrenteVerso"))
+    fv = (
+        bool(lote.get("frente_verso"))
+        if "frente_verso" in lote
+        else bool(fallback.get("FrenteVerso"))
+    )
     return {
         "nome": nome,
         "tipo": tipo or "UNICO",

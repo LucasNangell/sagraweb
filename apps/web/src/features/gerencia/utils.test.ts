@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveFormatoDimensions } from "./formatoDimensions";
+import { findFormatoForDimensions, resolveFormatoDimensions } from "./formatoDimensions";
+import { createEmptyGerenciaForm } from "./defaults";
 import type { GerenciaFormState } from "./types";
 import {
   calculateCoefA4,
@@ -10,12 +11,47 @@ import {
   isDeputadoOsQuotaRule,
   parseCoefA4Value,
   parseCotaEstimadaValue,
+  patchFormatoDimensions,
+  patchFormatoFromDimensions,
   recalculateGerenciaCalcs,
   resolveGerenciaCoefA4,
   roundCoefA4,
   setGerenciaCoefA4PorProduto,
   toCheck,
+  validateEntregaDataForSave,
 } from "./utils";
+
+describe("validateEntregaDataForSave", () => {
+  it("não exige data quando a prioridade é Normal", () => {
+    expect(
+      validateEntregaDataForSave({ val_prioridade: "Normal", val_data: "" }),
+    ).toBeNull();
+  });
+
+  it("bloqueia salvamento sem data quando a prioridade não é Normal", () => {
+    expect(
+      validateEntregaDataForSave({
+        val_prioridade: "Solicitado p/",
+        val_data: "",
+      }),
+    ).toBe("Informe a Data Entrega.");
+    expect(
+      validateEntregaDataForSave({
+        val_prioridade: "Prometido p/",
+        val_data: "  ",
+      }),
+    ).toBe("Informe a Data Entrega.");
+  });
+
+  it("aceita data preenchida com prioridade diferente de Normal", () => {
+    expect(
+      validateEntregaDataForSave({
+        val_prioridade: "Solicitado p/",
+        val_data: "2026-08-28",
+      }),
+    ).toBeNull();
+  });
+});
 
 describe("toCheck", () => {
   it("interpreta 0/1 e booleanos corretamente (FrenteVerso da OS)", () => {
@@ -135,6 +171,60 @@ describe("getGerenciaCotaPaginas", () => {
         baseForm({ op_os: "5001", calc_miolo_color: "1" }),
       ),
     ).toBe(1);
+  });
+
+  it("capa 4p com verso em branco conta 2 páginas na cota", () => {
+    const spec = {
+      version: 1 as const,
+      componentes: [
+        {
+          nome: "Capa",
+          tipo: "CAPA" as const,
+          verso_em_branco: true,
+          lotes: [
+            {
+              id: "c",
+              paginas: 4,
+              maquina_link: "",
+              papel_link: "",
+              cores_link: "4x4",
+              papel_desc: "",
+              cores_desc: "",
+              frente_verso: false,
+              acabamentos: [],
+            },
+          ],
+        },
+      ],
+    };
+    expect(
+      getGerenciaCotaPaginas(
+        baseForm({ val_pgs: "4", calc_capa_color: "2" }),
+        { techSpec: spec },
+      ),
+    ).toBe(8);
+    expect(
+      getGerenciaCotaPaginas(
+        baseForm({
+          req_categoria: "Orgao",
+          val_pgs: "4",
+          calc_capa_color: "2",
+        }),
+        { techSpec: spec },
+      ),
+    ).toBe(2);
+    expect(
+      recalculateGerenciaCalcs(
+        baseForm({
+          val_pgs: "4",
+          calc_capa_color: "2",
+          calc_tiragem: "100",
+          calc_altura: "210",
+          calc_largura: "297",
+        }),
+        { techSpec: spec },
+      ).calc_cota_total,
+    ).toBe("800");
   });
 });
 
@@ -281,5 +371,47 @@ describe("formato com unidade no nome → coeficiente A4", () => {
       altura: 210,
       largura: 297,
     });
+  });
+});
+
+describe("findFormatoForDimensions", () => {
+  it("casa medidas com o nome ISO ou do catálogo", () => {
+    expect(findFormatoForDimensions(210, 297)).toBe("A4");
+    expect(findFormatoForDimensions(297, 210)).toBe("A4 Paisagem");
+    expect(
+      findFormatoForDimensions(90, 50, [
+        { formato: "Cartão", altura_mm: 90, largura_mm: 50 },
+      ]),
+    ).toBe("Cartão");
+  });
+
+  it("preserva o nome atual quando as medidas já correspondem", () => {
+    expect(
+      findFormatoForDimensions(210, 297, undefined, "210mm x 297mm"),
+    ).toBe("210mm x 297mm");
+  });
+
+  it("gera rótulo H x L quando não há formato cadastrado", () => {
+    expect(findFormatoForDimensions(91, 52)).toBe("91 x 52");
+  });
+});
+
+describe("patchFormatoFromDimensions", () => {
+  it("atualiza Formato ao editar altura/largura", () => {
+    const prev = {
+      ...createEmptyGerenciaForm(),
+      val_formato: "A4",
+      calc_altura: "210",
+      calc_largura: "297",
+    };
+    expect(
+      patchFormatoFromDimensions(prev, { calc_altura: "148", calc_largura: "210" }),
+    ).toEqual({
+      calc_altura: "148",
+      calc_largura: "210",
+      val_formato: "A5",
+    });
+    expect(patchFormatoDimensions(prev, "A5").calc_altura).toBe("148");
+    expect(patchFormatoDimensions(prev, "A5").calc_largura).toBe("210");
   });
 });

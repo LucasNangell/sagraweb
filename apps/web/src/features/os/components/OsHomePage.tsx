@@ -531,7 +531,7 @@ export function OsHomePage() {
   }, [filters, searchFilters, textBelowMinLength]);
 
   return (
-    <div className="flex min-h-min flex-1 flex-col gap-2 md:h-full md:min-h-0 md:overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto md:h-full md:overflow-hidden">
 
       <OsFiltersPanel
         onRefresh={handleRefresh}

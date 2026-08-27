@@ -25,6 +25,9 @@ export function createEmptyGerenciaForm(): GerenciaFormState {
     val_titulo: "",
     val_prioridade: "Normal",
     val_data: "",
+    val_turno: "",
+    val_resp_grafica: "",
+    val_forma_entrega: "",
 
     val_produto: "",
     val_maquina: "",

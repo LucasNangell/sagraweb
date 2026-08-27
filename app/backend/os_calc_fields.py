@@ -129,10 +129,13 @@ def _parse_cores_descricao(cores_descricao: Optional[str]) -> Dict[str, str]:
     out: Dict[str, str] = {t: "" for t in COMPONENT_SLOT_ORDER}
     if not cores_descricao:
         return out
-    for chunk in str(cores_descricao).split("|"):
-        part = chunk.strip()
-        if not part:
-            continue
+    normalized = str(cores_descricao).replace("\r\n", "\n").replace("\r", "\n")
+    chunks: list[str] = []
+    for line in normalized.replace("|", "\n").split("\n"):
+        part = line.strip()
+        if part:
+            chunks.append(part)
+    for part in chunks:
         for tipo in COMPONENT_SLOT_ORDER:
             for label, _key in [_COMPONENT_LABELS[tipo]]:
                 prefix = f"{label}:"
@@ -186,6 +189,44 @@ def _component_pages_from_techspec(techspec: Any) -> Dict[str, Dict[str, int]]:
             elif kind == "COLOR":
                 color += pages
         result[tipo] = {"color": color, "pb": pb}
+
+    has_legacy_pages = any(
+        result[t]["color"] or result[t]["pb"] for t in COMPONENT_SLOT_ORDER
+    )
+    if not has_legacy_pages:
+        for comp in componentes or []:
+            tipo = (
+                getattr(comp, "tipo", None)
+                or (comp.get("tipo") if isinstance(comp, dict) else "")
+                or ""
+            ).upper()
+            if tipo in result:
+                continue
+            lotes = getattr(comp, "lotes", None)
+            if lotes is None and isinstance(comp, dict):
+                lotes = comp.get("lotes") or []
+            color = pb = 0
+            for lote in lotes or []:
+                pages = _to_int(
+                    getattr(lote, "paginas", None)
+                    if not isinstance(lote, dict)
+                    else lote.get("paginas")
+                ) or 0
+                cores_link = (
+                    getattr(lote, "cores_link", None)
+                    if not isinstance(lote, dict)
+                    else lote.get("cores_link")
+                )
+                kind = classify_cores_kind(cores_link)
+                if kind == "PB":
+                    pb += pages
+                elif kind == "COLOR":
+                    color += pages
+                else:
+                    pb += pages
+            if color or pb:
+                result["MIOLO"] = {"color": color, "pb": pb}
+                break
     return result
 
 
@@ -226,6 +267,21 @@ def _cores_text_per_component(
     for tipo in COMPONENT_SLOT_ORDER:
         if not by_tipo[tipo]:
             by_tipo[tipo] = parsed.get(tipo) or (cores_fallback or "")
+
+    if not by_tipo["MIOLO"]:
+        for comp in componentes or []:
+            tipo = (
+                getattr(comp, "tipo", None)
+                or (comp.get("tipo") if isinstance(comp, dict) else "")
+                or ""
+            ).upper()
+            if tipo in by_tipo:
+                continue
+            cores_text = _primary_cores_from_techspec_component(comp)
+            if cores_text:
+                by_tipo["MIOLO"] = cores_text
+                break
+
     return by_tipo
 
 

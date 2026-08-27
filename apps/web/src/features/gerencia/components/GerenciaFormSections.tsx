@@ -8,14 +8,21 @@ import {
 } from "react";
 
 import { textareaRows } from "../fieldSizing";
-import { PRIORIDADE_GERENCIA } from "../constants";
+import { PRIORIDADE_GERENCIA, TURNO_GERENCIA } from "../constants";
 import type { GerenciaFormState, GerenciaFormUpdater } from "../types";
 import type { FormatoLookupItem } from "../formatoDimensions";
-import type { TechSpec, TechSpecChangeMeta } from "../techSpec";
+import {
+  buildDescAcabamentoFromTechSpec,
+  type TechSpec,
+  type TechSpecChangeMeta,
+} from "../techSpec";
+import type { AcabamentoCatalogItem } from "@/api/auxLookups";
 import {
   applyUsarTodaCota,
   computeTiragemMaximaFromForm,
+  isEntregaDataRequired,
   patchFormatoDimensions,
+  patchFormatoFromDimensions,
   patchTiragemMaximaFromCota,
   recalculateGerenciaCalcs,
 } from "../utils";
@@ -29,10 +36,13 @@ import {
 import { CalculosCustosPanel } from "./CalculosCustosPanel";
 import { FormatoCombobox } from "./FormatoCombobox";
 import { TrabalhoComponentes } from "./TrabalhoComponentes";
+import { AcabamentoField } from "./AcabamentoField";
+import { OrcamentoCotaHeaderButton } from "./OrcamentoCotaHeaderButton";
 
 export type GerenciaSectionId =
   | "solicitante"
   | "ordem"
+  | "entrega"
   | "tecnicos"
   | "material"
   | "elementos"
@@ -41,10 +51,11 @@ export type GerenciaSectionId =
 export const GERENCIA_SECTIONS: { id: GerenciaSectionId; label: string }[] = [
   { id: "solicitante", label: "Solicitante" },
   { id: "ordem", label: "Ordem de Produção" },
-  { id: "tecnicos", label: "Detalhes Técnicos" },
   { id: "material", label: "Material Entregue" },
   { id: "elementos", label: "Elementos Gráficos" },
-  { id: "custos", label: "Cálculos e Custos" },
+  { id: "entrega", label: "Entrega" },
+  { id: "tecnicos", label: "Detalhes Técnicos" },
+  { id: "custos", label: "Cálculos de cota" },
 ];
 
 /** page = layout original da gerência; modal = grade 12 densa */
@@ -61,6 +72,9 @@ export interface GerenciaSectionProps {
   papeis: string[];
   cores: string[];
   formatos: FormatoLookupItem[];
+  formasEntrega: string[];
+  responsaveisGrafica: string[];
+  acabamentos: AcabamentoCatalogItem[];
   techSpec: TechSpec;
   onTechSpecChange: (spec: TechSpec, meta?: TechSpecChangeMeta) => void;
   deputyPhoto?: string | null;
@@ -90,21 +104,81 @@ function setFormato(
   });
 }
 
+function setDimensoes(
+  update: GerenciaFormUpdater,
+  patch: { calc_altura?: string; calc_largura?: string },
+  formatosLookup: FormatoLookupItem[],
+) {
+  update((prev) => {
+    const merged = {
+      ...prev,
+      ...patchFormatoFromDimensions(prev, patch, formatosLookup),
+    };
+    const withCalcs = { ...merged, ...recalculateGerenciaCalcs(merged) };
+    return { ...withCalcs, ...patchTiragemMaximaFromCota(withCalcs) };
+  });
+}
+
+function optionsWithCurrent(items: string[], current: string): string[] {
+  const value = current.trim();
+  if (!value || items.includes(value)) return items;
+  return [value, ...items];
+}
+
 function SelectOptions({
   items,
   placeholder = "Selecione...",
+  current = "",
 }: {
   items: string[];
   placeholder?: string;
+  current?: string;
 }) {
+  const list = optionsWithCurrent(items, current);
   return (
     <>
       <option value="">{placeholder}</option>
-      {items.map((item) => (
+      {list.map((item) => (
         <option key={item} value={item}>
           {item}
         </option>
       ))}
+    </>
+  );
+}
+
+function SuggestInput({
+  listId,
+  value,
+  items,
+  readOnly,
+  onChange,
+  ariaLabel,
+}: {
+  listId: string;
+  value: string;
+  items: string[];
+  readOnly: boolean;
+  onChange: (value: string) => void;
+  ariaLabel: string;
+}) {
+  const options = optionsWithCurrent(items, value);
+  return (
+    <>
+      <input
+        readOnly={readOnly}
+        list={listId}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Selecione ou digite..."
+        className={gerenciaInputClass}
+        aria-label={ariaLabel}
+      />
+      <datalist id={listId}>
+        {options.map((item) => (
+          <option key={item} value={item} />
+        ))}
+      </datalist>
     </>
   );
 }
@@ -499,69 +573,10 @@ export function GerenciaOrdemSection({
 }: Pick<GerenciaSectionProps, "form" | "update" | "readOnly" | "layout">) {
   const ro = readOnly;
 
-  const tiragemBlock = (
-    <div className="rounded-md bg-slate-50 p-2.5">
-      <p className="mb-1.5 text-xs font-extrabold uppercase text-secondary-blue">
-        Tiragem
-      </p>
-      <div className="grid grid-cols-3 gap-2">
-        <Field label="Cota atual" className="min-w-0">
-          <input
-            readOnly
-            tabIndex={-1}
-            inputMode="decimal"
-            value={form.op_cota_atual}
-            className={cn(
-              gerenciaInputClass,
-              "min-w-0 bg-slate-50 text-slate-700",
-            )}
-            placeholder="—"
-            title="Saldo de cota do semestre (CotasGraf)"
-          />
-        </Field>
-        <Field label="Tiragem máxima" className="min-w-0">
-          <input
-            readOnly
-            tabIndex={-1}
-            value={
-              form.op_cota_atual.trim()
-                ? computeTiragemMaximaFromForm(form)
-                : form.op_tiragem_pret
-            }
-            className={cn(
-              gerenciaInputClass,
-              "min-w-0 bg-slate-50 text-slate-700",
-            )}
-            title="Calculada a partir da cota atual, páginas e formato"
-          />
-        </Field>
-        <Field label="Tiragem final" className="min-w-0">
-          <input
-            readOnly={ro}
-            value={form.op_tiragem_final}
-            onChange={(e) => set(update, "op_tiragem_final", e.target.value)}
-            className={cn(gerenciaInputClass, "min-w-0")}
-          />
-          {!ro ? (
-            <button
-              type="button"
-              disabled={!computeTiragemMaximaFromForm(form)}
-              onClick={() => update((prev) => applyUsarTodaCota(prev))}
-              className="mt-1 w-full rounded-md border border-secondary-blue/30 bg-white px-1.5 py-1 text-[0.6rem] font-semibold leading-tight text-secondary-blue shadow-sm transition hover:border-secondary-blue/50 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-              title="Define tiragem final e sincroniza detalhes técnicos e cálculos"
-            >
-              Usar toda cota
-            </button>
-          ) : null}
-        </Field>
-      </div>
-    </div>
-  );
-
   if (layout === "modal") {
     return (
       <ModalGrid>
-        <Field label="OS / Ano" className="col-span-4">
+        <Field label="OS / Ano" className="col-span-6">
           <div className="mt-1 flex items-center gap-1">
             <input
               readOnly
@@ -578,7 +593,7 @@ export function GerenciaOrdemSection({
             />
           </div>
         </Field>
-        <Field label="Data Entrada" className="col-span-4">
+        <Field label="Data Entrada" className="col-span-6">
           <input
             type="date"
             readOnly={ro}
@@ -586,20 +601,6 @@ export function GerenciaOrdemSection({
             onChange={(e) => set(update, "op_data_entrada", e.target.value)}
             className={gerenciaInputClass}
           />
-        </Field>
-        <Field label="Prioridade" className="col-span-4">
-          <select
-            disabled={ro}
-            value={form.val_prioridade}
-            onChange={(e) => set(update, "val_prioridade", e.target.value)}
-            className={gerenciaInputClass}
-          >
-            {PRIORIDADE_GERENCIA.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
         </Field>
 
         <Field label="Título da Obra" className="col-span-12">
@@ -611,7 +612,7 @@ export function GerenciaOrdemSection({
           />
         </Field>
 
-        <Field label="Processo" className="col-span-4">
+        <Field label="Processo" className="col-span-6">
           <input
             readOnly={ro}
             value={form.op_processo}
@@ -619,7 +620,7 @@ export function GerenciaOrdemSection({
             className={gerenciaInputClass}
           />
         </Field>
-        <Field label="Com. Serviço" className="col-span-4">
+        <Field label="Com. Serviço" className="col-span-6">
           <input
             readOnly={ro}
             value={form.op_cs}
@@ -627,17 +628,6 @@ export function GerenciaOrdemSection({
             className={gerenciaInputClass}
           />
         </Field>
-        <Field label="Data Entrega" className="col-span-4">
-          <input
-            type="date"
-            readOnly={ro}
-            value={form.val_data}
-            onChange={(e) => set(update, "val_data", e.target.value)}
-            className={gerenciaInputClass}
-          />
-        </Field>
-
-        <div className="col-span-12">{tiragemBlock}</div>
       </ModalGrid>
     );
   }
@@ -699,32 +689,177 @@ export function GerenciaOrdemSection({
             />
           </Field>
         </Row>
+      </div>
+    </GerenciaPanel>
+  );
+}
+
+export function GerenciaEntregaSection({
+  form,
+  update,
+  readOnly,
+  layout = "page",
+  formasEntrega,
+  responsaveisGrafica,
+}: Pick<
+  GerenciaSectionProps,
+  | "form"
+  | "update"
+  | "readOnly"
+  | "layout"
+  | "formasEntrega"
+  | "responsaveisGrafica"
+>) {
+  const ro = readOnly;
+  const turnos = optionsWithCurrent([...TURNO_GERENCIA], form.val_turno);
+  const dataEntregaRequired = isEntregaDataRequired(form.val_prioridade);
+
+  if (layout === "modal") {
+    return (
+      <ModalGrid>
+        <Field label="Prioridade" className="col-span-12">
+          <select
+            disabled={ro}
+            value={form.val_prioridade}
+            onChange={(e) => set(update, "val_prioridade", e.target.value)}
+            className={gerenciaInputClass}
+          >
+            {PRIORIDADE_GERENCIA.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Data Entrega" className="col-span-6" required={dataEntregaRequired}>
+          <input
+            type="date"
+            readOnly={ro}
+            required={dataEntregaRequired}
+            aria-required={dataEntregaRequired}
+            value={form.val_data}
+            onChange={(e) => set(update, "val_data", e.target.value)}
+            className={gerenciaInputClass}
+          />
+        </Field>
+        <Field label="Turno" className="col-span-6">
+          <select
+            disabled={ro}
+            value={form.val_turno}
+            onChange={(e) => set(update, "val_turno", e.target.value)}
+            className={gerenciaInputClass}
+          >
+            <SelectOptions items={turnos} current={form.val_turno} />
+          </select>
+        </Field>
+        <Field label="Responsável na Gráfica" className="col-span-6">
+          <SuggestInput
+            listId={`gerencia-resp-grafica-${layout}`}
+            value={form.val_resp_grafica}
+            items={responsaveisGrafica}
+            readOnly={ro}
+            onChange={(v) => set(update, "val_resp_grafica", v)}
+            ariaLabel="Responsável na Gráfica"
+          />
+        </Field>
+        <Field label="Forma de entrega" className="col-span-6">
+          <select
+            disabled={ro}
+            value={form.val_forma_entrega}
+            onChange={(e) => set(update, "val_forma_entrega", e.target.value)}
+            className={gerenciaInputClass}
+          >
+            <SelectOptions
+              items={formasEntrega}
+              current={form.val_forma_entrega}
+            />
+          </select>
+        </Field>
+        <Field label="Contato" className="col-span-12">
+          <textarea
+            readOnly={ro}
+            rows={textareaRows("txt_contato", 3)}
+            value={form.txt_contato}
+            onChange={(e) => set(update, "txt_contato", e.target.value)}
+            className={cn(gerenciaInputClass, "min-h-[4.5rem] resize-y")}
+          />
+        </Field>
+      </ModalGrid>
+    );
+  }
+
+  return (
+    <GerenciaPanel title="Entrega">
+      <div className="flex h-full flex-col gap-2.5">
+        <Field label="Prioridade">
+          <select
+            disabled={ro}
+            value={form.val_prioridade}
+            onChange={(e) => set(update, "val_prioridade", e.target.value)}
+            className={gerenciaInputClass}
+          >
+            {PRIORIDADE_GERENCIA.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </Field>
         <Row className="grid-cols-1 sm:grid-cols-2">
-          <Field label="Prioridade">
-            <select
-              disabled={ro}
-              value={form.val_prioridade}
-              onChange={(e) => set(update, "val_prioridade", e.target.value)}
-              className={gerenciaInputClass}
-            >
-              {PRIORIDADE_GERENCIA.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Data Entrega">
+          <Field label="Data Entrega" required={dataEntregaRequired}>
             <input
               type="date"
               readOnly={ro}
+              required={dataEntregaRequired}
+              aria-required={dataEntregaRequired}
               value={form.val_data}
               onChange={(e) => set(update, "val_data", e.target.value)}
               className={gerenciaInputClass}
             />
           </Field>
+          <Field label="Turno">
+            <select
+              disabled={ro}
+              value={form.val_turno}
+              onChange={(e) => set(update, "val_turno", e.target.value)}
+              className={gerenciaInputClass}
+            >
+              <SelectOptions items={turnos} current={form.val_turno} />
+            </select>
+          </Field>
         </Row>
-        <div className="mt-auto">{tiragemBlock}</div>
+        <Field label="Responsável na Gráfica">
+          <SuggestInput
+            listId={`gerencia-resp-grafica-${layout}`}
+            value={form.val_resp_grafica}
+            items={responsaveisGrafica}
+            readOnly={ro}
+            onChange={(v) => set(update, "val_resp_grafica", v)}
+            ariaLabel="Responsável na Gráfica"
+          />
+        </Field>
+        <Field label="Forma de entrega">
+          <select
+            disabled={ro}
+            value={form.val_forma_entrega}
+            onChange={(e) => set(update, "val_forma_entrega", e.target.value)}
+            className={gerenciaInputClass}
+          >
+            <SelectOptions
+              items={formasEntrega}
+              current={form.val_forma_entrega}
+            />
+          </select>
+        </Field>
+        <Field label="Contato">
+          <textarea
+            readOnly={ro}
+            rows={4}
+            value={form.txt_contato}
+            onChange={(e) => set(update, "txt_contato", e.target.value)}
+            className={cn(gerenciaInputClass, "min-h-[72px] resize-y")}
+          />
+        </Field>
       </div>
     </GerenciaPanel>
   );
@@ -740,71 +875,97 @@ export function GerenciaTecnicosSection({
   papeis,
   cores,
   formatos,
+  acabamentos,
   techSpec,
   onTechSpecChange,
 }: Omit<GerenciaSectionProps, "categorias" | "deputyPhoto" | "onSolicitanteBlur">) {
   const ro = readOnly;
 
-  const papelCoresAcab = (modal: boolean) => (
-    <div className={cn("grid gap-3", modal ? "grid-cols-3" : "grid-cols-1 md:grid-cols-3")}>
-      <Field label="Papel" className="min-w-0">
-        <select
-          disabled={ro}
-          value={form.val_papel}
-          onChange={(e) => set(update, "val_papel", e.target.value)}
-          className={gerenciaInputClass}
-        >
-          <SelectOptions items={papeis} />
-        </select>
-        <textarea
-          readOnly={ro}
-          rows={modal ? textareaRows("txt_papel_desc", 2) : 2}
-          placeholder="Descrição..."
-          value={form.txt_papel_desc}
-          onChange={(e) => set(update, "txt_papel_desc", e.target.value)}
-          className={cn(gerenciaInputClass, "mt-1.5 min-h-[4.5rem] resize-y")}
-        />
-      </Field>
-      <Field label="Cores" className="min-w-0">
-        <select
-          disabled={ro}
-          value={form.val_cores}
-          onChange={(e) => set(update, "val_cores", e.target.value)}
-          className={gerenciaInputClass}
-        >
-          <SelectOptions items={cores} />
-        </select>
-        <textarea
-          readOnly={ro}
-          rows={modal ? textareaRows("txt_cores_desc", 2) : 2}
-          placeholder="Descrição..."
-          value={form.txt_cores_desc}
-          onChange={(e) => set(update, "txt_cores_desc", e.target.value)}
-          className={cn(gerenciaInputClass, "mt-1.5 min-h-[4.5rem] resize-y")}
-        />
-      </Field>
-      <Field label="Acabamento" className="min-w-0">
-        <textarea
-          readOnly={ro}
-          rows={modal ? Math.max(textareaRows("txt_acabamento", 3), 4) : 5}
-          value={form.txt_acabamento}
-          onChange={(e) => set(update, "txt_acabamento", e.target.value)}
-          className={cn(
-            gerenciaInputClass,
-            modal
-              ? "mt-0 min-h-[7.25rem] resize-y"
-              : "min-h-[88px] resize-y",
-          )}
-        />
-      </Field>
-    </div>
+  const componentes = (
+    <TrabalhoComponentes
+      spec={techSpec}
+      totalPaginas={form.val_pgs}
+      onChange={onTechSpecChange}
+      readOnly={ro}
+      maquinas={maquinas}
+      papeis={papeis}
+      cores={cores}
+      acabamentos={acabamentos}
+    />
+  );
+
+  const acabamentosOs = (
+    <AcabamentoField
+      label="Acabamentos"
+      catalog={acabamentos}
+      selected={techSpec.acabamentosGerais ?? []}
+      displayValue={buildDescAcabamentoFromTechSpec(techSpec)}
+      multiline
+      readOnly={ro}
+      onChange={(next) =>
+        onTechSpecChange({ ...techSpec, acabamentosGerais: next })
+      }
+      techSpec={techSpec}
+    />
+  );
+
+  const obsField = (
+    <Field label="Obs">
+      <textarea
+        readOnly={ro}
+        rows={layout === "modal" ? textareaRows("txt_obs", 3) : 4}
+        value={form.txt_obs}
+        onChange={(e) => set(update, "txt_obs", e.target.value)}
+        className={cn(
+          gerenciaInputClass,
+          layout === "modal" ? "min-h-[4.5rem] resize-y" : "min-h-[72px] resize-y",
+        )}
+      />
+    </Field>
+  );
+
+  const formatoField = (
+    <FormatoCombobox
+      value={form.val_formato}
+      formatos={formatos}
+      readOnly={ro}
+      onChange={(v) => setFormato(update, v, formatos)}
+    />
+  );
+
+  const alturaField = (
+    <input
+      type="number"
+      min={0}
+      step="0.1"
+      readOnly={ro}
+      value={form.calc_altura}
+      onChange={(e) =>
+        setDimensoes(update, { calc_altura: e.target.value }, formatos)
+      }
+      className={gerenciaInputClass}
+    />
+  );
+
+  const larguraField = (
+    <input
+      type="number"
+      min={0}
+      step="0.1"
+      readOnly={ro}
+      value={form.calc_largura}
+      onChange={(e) =>
+        setDimensoes(update, { calc_largura: e.target.value }, formatos)
+      }
+      className={gerenciaInputClass}
+    />
   );
 
   if (layout === "modal") {
     return (
       <div className="space-y-3">
         <ModalGrid>
-          <Field label="Produto" className="col-span-4">
+          <Field label="Produto" className="col-span-3">
             <select
               disabled={ro}
               value={form.val_produto}
@@ -814,61 +975,7 @@ export function GerenciaTecnicosSection({
               <SelectOptions items={produtos} />
             </select>
           </Field>
-          <Field label="Máquina" className="col-span-4">
-            <select
-              disabled={ro}
-              value={form.val_maquina}
-              onChange={(e) => set(update, "val_maquina", e.target.value)}
-              className={gerenciaInputClass}
-            >
-              <SelectOptions items={maquinas} />
-            </select>
-          </Field>
-          <Field label="Formato" className="col-span-4">
-            <FormatoCombobox
-              value={form.val_formato}
-              formatos={formatos}
-              readOnly={ro}
-              onChange={(v) => setFormato(update, v, formatos)}
-            />
-          </Field>
-
-          <Field label="Tiragem" className="col-span-3">
-            <input
-              readOnly={ro}
-              value={form.val_tiragem}
-              onChange={(e) => {
-                const v = e.target.value;
-                update((prev) => {
-                  const merged = { ...prev, val_tiragem: v, calc_tiragem: v };
-                  return { ...merged, ...recalculateGerenciaCalcs(merged) };
-                });
-              }}
-              className={gerenciaInputClass}
-            />
-          </Field>
-          <Field label="Páginas" className="col-span-3">
-            <input
-              readOnly={ro}
-              value={form.val_pgs}
-              onChange={(e) => {
-                const v = e.target.value;
-                update((prev) => {
-                  const merged = { ...prev, val_pgs: v };
-                  const withCalcs = {
-                    ...merged,
-                    ...recalculateGerenciaCalcs(merged),
-                  };
-                  return {
-                    ...withCalcs,
-                    ...patchTiragemMaximaFromCota(withCalcs),
-                  };
-                });
-              }}
-              className={gerenciaInputClass}
-            />
-          </Field>
-          <Field label="Modelos" className="col-span-3">
+          <Field label="Qt. Modelos" className="col-span-2">
             <input
               readOnly={ro}
               value={form.val_modelos}
@@ -876,49 +983,22 @@ export function GerenciaTecnicosSection({
               className={gerenciaInputClass}
             />
           </Field>
-          <label className="col-span-3 flex items-end gap-2 pb-2 text-xs font-semibold text-slate-600">
-            <input
-              type="checkbox"
-              disabled={ro}
-              checked={form.chk_fv}
-              onChange={(e) => set(update, "chk_fv", e.target.checked)}
-              className="size-4 rounded border-slate-300"
-            />
-            F/V
-          </label>
+          <Field label="Formato" className="col-span-3">
+            {formatoField}
+          </Field>
+          <Field label="Altura (mm)" className="col-span-2">
+            {alturaField}
+          </Field>
+          <Field label="Largura (mm)" className="col-span-2">
+            {larguraField}
+          </Field>
         </ModalGrid>
 
-        <TrabalhoComponentes
-          spec={techSpec}
-          totalPaginas={form.val_pgs}
-          onChange={onTechSpecChange}
-          readOnly={ro}
-          maquinas={maquinas}
-          papeis={papeis}
-          cores={cores}
-        />
-
-        {papelCoresAcab(true)}
+        {componentes}
 
         <ModalGrid>
-          <Field label="Obs" className="col-span-6">
-            <textarea
-              readOnly={ro}
-              rows={textareaRows("txt_obs", 3)}
-              value={form.txt_obs}
-              onChange={(e) => set(update, "txt_obs", e.target.value)}
-              className={cn(gerenciaInputClass, "min-h-[4.5rem] resize-y")}
-            />
-          </Field>
-          <Field label="Contato" className="col-span-6">
-            <textarea
-              readOnly={ro}
-              rows={textareaRows("txt_contato", 3)}
-              value={form.txt_contato}
-              onChange={(e) => set(update, "txt_contato", e.target.value)}
-              className={cn(gerenciaInputClass, "min-h-[4.5rem] resize-y")}
-            />
-          </Field>
+          <div className="col-span-6">{acabamentosOs}</div>
+          <div className="col-span-6">{obsField}</div>
         </ModalGrid>
       </div>
     );
@@ -927,15 +1007,10 @@ export function GerenciaTecnicosSection({
   return (
     <GerenciaPanel
       title="Detalhes Técnicos"
-      scrollableBody
-      className={cn(
-        "max-h-[var(--gerencia-detalhes-max-h)] min-h-0",
-        "min-[1900px]:col-start-2 min-[1900px]:row-span-2 min-[1900px]:row-start-1",
-        "min-[1900px]:sticky min-[1900px]:top-0 min-[1900px]:self-start",
-      )}
+      className="min-[1900px]:col-start-2 min-[1900px]:row-span-2 min-[1900px]:row-start-1"
     >
       <div className="space-y-3">
-        <Row className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+        <Row className="grid-cols-5">
           <Field label="Produto">
             <select
               disabled={ro}
@@ -946,64 +1021,7 @@ export function GerenciaTecnicosSection({
               <SelectOptions items={produtos} />
             </select>
           </Field>
-          <Field label="Máquina">
-            <select
-              disabled={ro}
-              value={form.val_maquina}
-              onChange={(e) => set(update, "val_maquina", e.target.value)}
-              className={gerenciaInputClass}
-            >
-              <SelectOptions items={maquinas} />
-            </select>
-          </Field>
-          <Field label="Tiragem">
-            <input
-              readOnly={ro}
-              value={form.val_tiragem}
-              onChange={(e) => {
-                const v = e.target.value;
-                update((prev) => {
-                  const merged = { ...prev, val_tiragem: v, calc_tiragem: v };
-                  return { ...merged, ...recalculateGerenciaCalcs(merged) };
-                });
-              }}
-              className={gerenciaInputClass}
-            />
-          </Field>
-          <Field label="Páginas">
-            <input
-              readOnly={ro}
-              value={form.val_pgs}
-              onChange={(e) => {
-                const v = e.target.value;
-                update((prev) => {
-                  const merged = { ...prev, val_pgs: v };
-                  const withCalcs = {
-                    ...merged,
-                    ...recalculateGerenciaCalcs(merged),
-                  };
-                  return {
-                    ...withCalcs,
-                    ...patchTiragemMaximaFromCota(withCalcs),
-                  };
-                });
-              }}
-              className={gerenciaInputClass}
-            />
-          </Field>
-          <label className="flex items-end gap-2 pb-1.5 text-xs font-semibold text-slate-600">
-            <input
-              type="checkbox"
-              disabled={ro}
-              checked={form.chk_fv}
-              onChange={(e) => set(update, "chk_fv", e.target.checked)}
-              className="size-4 rounded border-slate-300"
-            />
-            F/V
-          </label>
-        </Row>
-        <Row className="grid-cols-1 md:grid-cols-2">
-          <Field label="Modelos">
+          <Field label="Qt. Modelos">
             <input
               readOnly={ro}
               value={form.val_modelos}
@@ -1011,47 +1029,16 @@ export function GerenciaTecnicosSection({
               className={gerenciaInputClass}
             />
           </Field>
-          <Field label="Formato">
-            <FormatoCombobox
-              value={form.val_formato}
-              formatos={formatos}
-              readOnly={ro}
-              onChange={(v) => setFormato(update, v, formatos)}
-            />
-          </Field>
+          <Field label="Formato">{formatoField}</Field>
+          <Field label="Altura (mm)">{alturaField}</Field>
+          <Field label="Largura (mm)">{larguraField}</Field>
         </Row>
 
-        <TrabalhoComponentes
-          spec={techSpec}
-          totalPaginas={form.val_pgs}
-          onChange={onTechSpecChange}
-          readOnly={ro}
-          maquinas={maquinas}
-          papeis={papeis}
-          cores={cores}
-        />
+        {componentes}
 
-        {papelCoresAcab(false)}
-
-        <Row className="grid-cols-1 md:grid-cols-2">
-          <Field label="Obs">
-            <textarea
-              readOnly={ro}
-              rows={4}
-              value={form.txt_obs}
-              onChange={(e) => set(update, "txt_obs", e.target.value)}
-              className={cn(gerenciaInputClass, "min-h-[72px] resize-y")}
-            />
-          </Field>
-          <Field label="Contato">
-            <textarea
-              readOnly={ro}
-              rows={4}
-              value={form.txt_contato}
-              onChange={(e) => set(update, "txt_contato", e.target.value)}
-              className={cn(gerenciaInputClass, "min-h-[72px] resize-y")}
-            />
-          </Field>
+        <Row className="grid-cols-1 sm:grid-cols-2">
+          {acabamentosOs}
+          {obsField}
         </Row>
       </div>
     </GerenciaPanel>
@@ -1118,8 +1105,12 @@ export function GerenciaMaterialSection({
   }
 
   return (
-    <GerenciaPanel title="Material Entregue">
-      <div className="grid grid-cols-2 gap-2">
+    <GerenciaPanel
+      title="Material Entregue"
+      className="h-full min-h-0"
+      bodyClassName="flex min-h-0 flex-1 flex-col gap-1.5 p-2.5"
+    >
+      <div className="grid shrink-0 grid-cols-2 gap-1.5">
         <CheckRow
           id="mat_amostra"
           label="Amostra"
@@ -1149,14 +1140,20 @@ export function GerenciaMaterialSection({
           onChange={(v) => set(update, "mat_original", v)}
         />
       </div>
-      <Field label="Insumos Fornecidos" className="mt-2">
+      <Field
+        label="Insumos Fornecidos"
+        className="flex min-h-0 flex-1 flex-col"
+      >
         <textarea
           readOnly={ro}
           rows={2}
           placeholder="Descreva os insumos..."
           value={form.mat_insumos}
           onChange={(e) => set(update, "mat_insumos", e.target.value)}
-          className={cn(gerenciaInputClass, "resize-y")}
+          className={cn(
+            gerenciaInputClass,
+            "min-h-[3.5rem] flex-1 resize-y",
+          )}
         />
       </Field>
     </GerenciaPanel>
@@ -1170,47 +1167,6 @@ export function GerenciaElementosSection({
   layout = "page",
 }: Pick<GerenciaSectionProps, "form" | "update" | "readOnly" | "layout">) {
   const ro = readOnly;
-  const cards = (
-    <div
-      className={cn(
-        "grid gap-2",
-        layout === "modal" ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2",
-      )}
-    >
-      <ElementCard
-        id="el_brasao"
-        icon="🛡️"
-        label="Brasão"
-        checked={form.el_brasao}
-        readOnly={ro}
-        onChange={(v) => set(update, "el_brasao", v)}
-      />
-      <ElementCard
-        id="el_timbre"
-        icon="📝"
-        label="Timbre"
-        checked={form.el_timbre}
-        readOnly={ro}
-        onChange={(v) => set(update, "el_timbre", v)}
-      />
-      <ElementCard
-        id="el_arte"
-        icon="🎨"
-        label="Arte Gab."
-        checked={form.el_arte}
-        readOnly={ro}
-        onChange={(v) => set(update, "el_arte", v)}
-      />
-      <ElementCard
-        id="el_assinatura"
-        icon="✍️"
-        label="Assinatura"
-        checked={form.el_assinatura}
-        readOnly={ro}
-        onChange={(v) => set(update, "el_assinatura", v)}
-      />
-    </div>
-  );
 
   if (layout === "modal") {
     return (
@@ -1218,17 +1174,76 @@ export function GerenciaElementosSection({
         <p className="text-xs text-slate-500">
           Selecione os elementos institucionais:
         </p>
-        {cards}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <ElementCard
+            id="el_brasao"
+            icon="🛡️"
+            label="Brasão"
+            checked={form.el_brasao}
+            readOnly={ro}
+            onChange={(v) => set(update, "el_brasao", v)}
+          />
+          <ElementCard
+            id="el_timbre"
+            icon="📝"
+            label="Timbre"
+            checked={form.el_timbre}
+            readOnly={ro}
+            onChange={(v) => set(update, "el_timbre", v)}
+          />
+          <ElementCard
+            id="el_arte"
+            icon="🎨"
+            label="Arte Gab."
+            checked={form.el_arte}
+            readOnly={ro}
+            onChange={(v) => set(update, "el_arte", v)}
+          />
+          <ElementCard
+            id="el_assinatura"
+            icon="✍️"
+            label="Assinatura"
+            checked={form.el_assinatura}
+            readOnly={ro}
+            onChange={(v) => set(update, "el_assinatura", v)}
+          />
+        </div>
       </div>
     );
   }
 
   return (
-    <GerenciaPanel title="Elementos Gráficos">
-      <p className="mb-2 text-xs italic text-slate-400">
-        Selecione os elementos institucionais:
-      </p>
-      {cards}
+    <GerenciaPanel title="Elementos Gráficos" bodyClassName="p-2.5">
+      <div className="grid grid-cols-2 gap-1.5">
+        <CheckRow
+          id="el_brasao"
+          label="Brasão"
+          checked={form.el_brasao}
+          readOnly={ro}
+          onChange={(v) => set(update, "el_brasao", v)}
+        />
+        <CheckRow
+          id="el_timbre"
+          label="Timbre"
+          checked={form.el_timbre}
+          readOnly={ro}
+          onChange={(v) => set(update, "el_timbre", v)}
+        />
+        <CheckRow
+          id="el_arte"
+          label="Arte Gab."
+          checked={form.el_arte}
+          readOnly={ro}
+          onChange={(v) => set(update, "el_arte", v)}
+        />
+        <CheckRow
+          id="el_assinatura"
+          label="Assinatura"
+          checked={form.el_assinatura}
+          readOnly={ro}
+          onChange={(v) => set(update, "el_assinatura", v)}
+        />
+      </div>
     </GerenciaPanel>
   );
 }
@@ -1255,8 +1270,11 @@ export function GerenciaCustosSection({
   if (layout === "modal") return body;
   return (
     <GerenciaPanel
-      title="Cálculos & Custos"
+      title="Cálculos de cota"
       icon={<Calculator className="size-4 text-secondary-blue" aria-hidden />}
+      headerRight={
+        <OrcamentoCotaHeaderButton ano={form.op_ano} osId={form.op_os} />
+      }
     >
       {body}
     </GerenciaPanel>
@@ -1272,6 +1290,8 @@ export function renderGerenciaSection(
       return <GerenciaSolicitanteSection {...props} />;
     case "ordem":
       return <GerenciaOrdemSection {...props} />;
+    case "entrega":
+      return <GerenciaEntregaSection {...props} />;
     case "tecnicos":
       return <GerenciaTecnicosSection {...props} />;
     case "material":

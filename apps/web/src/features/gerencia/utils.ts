@@ -1,7 +1,15 @@
 import { formatDateForInput } from "@/lib/format";
-import type { FormatoLookupItem } from "./formatoDimensions";
-import { resolveFormatoDimensions } from "./formatoDimensions";
-import { classifyCoresKind } from "./techSpec";
+import {
+  findFormatoForDimensions,
+  resolveFormatoDimensions,
+  type FormatoLookupItem,
+} from "./formatoDimensions";
+import {
+  calculateCotaPagesFromTechSpec,
+  classifyCoresKind,
+  computeComponentCalcs,
+  type TechSpec,
+} from "./techSpec";
 import type { GerenciaFormState, GerenciaOsDetails } from "./types";
 
 export { formatDateForInput };
@@ -17,6 +25,20 @@ export function toCheck(val: unknown): boolean {
 export function strField(val: unknown): string {
   if (val === null || val === undefined) return "";
   return String(val);
+}
+
+/** Data Entrega é obrigatória quando a prioridade não é Normal. */
+export function isEntregaDataRequired(prioridade: string): boolean {
+  const value = prioridade.trim();
+  return value.length > 0 && value.toLowerCase() !== "normal";
+}
+
+export function validateEntregaDataForSave(
+  form: Pick<GerenciaFormState, "val_prioridade" | "val_data">,
+): string | null {
+  if (!isEntregaDataRequired(form.val_prioridade)) return null;
+  if (form.val_data.trim()) return null;
+  return "Informe a Data Entrega.";
 }
 
 /** Cota estimada: arredonda para cima e exibe sem casas decimais (pt-BR: 1.234). */
@@ -120,6 +142,27 @@ export function patchFormatoDimensions(
     calc_altura: String(dims.altura),
     calc_largura: String(dims.largura),
   };
+}
+
+function parseMmInput(raw: string): number {
+  return parseFloat(String(raw ?? "").trim().replace(",", ".")) || 0;
+}
+
+/** Atualiza Formato quando o usuário edita altura/largura. */
+export function patchFormatoFromDimensions(
+  prev: GerenciaFormState,
+  patch: Pick<Partial<GerenciaFormState>, "calc_altura" | "calc_largura">,
+  predefinidos?: FormatoLookupItem[],
+): Partial<GerenciaFormState> {
+  const alturaRaw = patch.calc_altura ?? prev.calc_altura;
+  const larguraRaw = patch.calc_largura ?? prev.calc_largura;
+  const formato = findFormatoForDimensions(
+    parseMmInput(alturaRaw),
+    parseMmInput(larguraRaw),
+    predefinidos,
+    prev.val_formato,
+  );
+  return formato ? { ...patch, val_formato: formato } : { ...patch };
 }
 
 export function patchCapaMioloDescFields(
@@ -314,9 +357,20 @@ export function isDeputadoOsQuotaRule(
   return Number.isFinite(nro) && nro > 0 && nro < PAPELARIA_OS_MIN;
 }
 
+export type GerenciaCalcOptions = {
+  totalPaginas?: number;
+  /** Quando informado, a cota usa páginas impressas (capa verso em branco). */
+  techSpec?: TechSpec;
+};
+
+function cotaPagesFromTechSpec(spec?: TechSpec): number | undefined {
+  if (!spec?.componentes.length) return undefined;
+  return calculateCotaPagesFromTechSpec(spec);
+}
+
 export function getGerenciaTotalPaginas(
   form: GerenciaPaginasForm,
-  options?: { totalPaginas?: number },
+  options?: GerenciaCalcOptions,
 ): number {
   const { parsedPgs } = parseGerenciaPageBreakdown(form);
   return options?.totalPaginas ?? parsedPgs;
@@ -325,10 +379,23 @@ export function getGerenciaTotalPaginas(
 /** Páginas efetivas para cota/tiragem máxima (policromia ×4 só em OS Deputado <5000). */
 export function getGerenciaCotaPaginas(
   form: GerenciaCotaForm,
-  options?: { totalPaginas?: number },
+  options?: GerenciaCalcOptions,
 ): number {
-  const physical = getGerenciaTotalPaginas(form, options);
+  const printed = cotaPagesFromTechSpec(options?.techSpec);
+  const physical = options?.totalPaginas ?? printed ?? getGerenciaTotalPaginas(form);
   if (!isDeputadoOsQuotaRule(form)) return physical;
+
+  if (printed != null && options?.techSpec) {
+    const rows = computeComponentCalcs(options.techSpec);
+    const color = rows.reduce((sum, row) => sum + row.color, 0);
+    const pb = rows.reduce((sum, row) => sum + row.pb, 0);
+    return applyDeputadoPolychromeQuota(
+      printed,
+      color,
+      pb,
+      inferCoresKindFromForm(form),
+    );
+  }
 
   const { color, pb } = parseGerenciaPageBreakdown(form);
   return applyDeputadoPolychromeQuota(
@@ -377,10 +444,11 @@ export function computeTiragemMaximaFromForm(
     | "val_cores_mio"
     | "val_cores_mio2"
   >,
+  options?: GerenciaCalcOptions,
 ): string {
   const cota = parseCotaAtualValue(form.op_cota_atual);
   if (!cota) return "";
-  const totalPaginas = getGerenciaCotaPaginas(form);
+  const totalPaginas = getGerenciaCotaPaginas(form, options);
   const coef = resolveGerenciaCoefA4ForCalcs(form);
   const max = calculateMaxTiragemFromCota(cota, totalPaginas, coef);
   return max > 0 ? String(max) : "";
@@ -389,8 +457,9 @@ export function computeTiragemMaximaFromForm(
 /** Aplica tiragem máxima em final, detalhes técnicos e cálculos. */
 export function applyUsarTodaCota(
   form: GerenciaFormState,
+  options?: GerenciaCalcOptions,
 ): Partial<GerenciaFormState> {
-  const tiragemMax = computeTiragemMaximaFromForm(form);
+  const tiragemMax = computeTiragemMaximaFromForm(form, options);
   if (!tiragemMax) return {};
   const merged: GerenciaFormState = {
     ...form,
@@ -404,15 +473,16 @@ export function applyUsarTodaCota(
     op_tiragem_final: tiragemMax,
     val_tiragem: tiragemMax,
     calc_tiragem: tiragemMax,
-    ...recalculateGerenciaCalcs(merged),
+    ...recalculateGerenciaCalcs(merged, options),
   };
 }
 
 export function patchTiragemMaximaFromCota(
   form: GerenciaFormState,
+  options?: GerenciaCalcOptions,
 ): Partial<GerenciaFormState> {
   if (!form.op_cota_atual.trim()) return {};
-  return { op_tiragem_pret: computeTiragemMaximaFromForm(form) };
+  return { op_tiragem_pret: computeTiragemMaximaFromForm(form, options) };
 }
 
 export function recalculateGerenciaCalcs(
@@ -438,7 +508,7 @@ export function recalculateGerenciaCalcs(
     | "val_cores_mio"
     | "val_cores_mio2"
   >,
-  options?: { totalPaginas?: number },
+  options?: GerenciaCalcOptions,
 ): Pick<GerenciaFormState, "calc_total_paginas" | "calc_coef_a4" | "calc_cota_total"> {
   const totalPaginas = getGerenciaTotalPaginas(form, options);
   const cotaPaginas = getGerenciaCotaPaginas(form, options);
@@ -486,6 +556,9 @@ export function detailsToForm(data: GerenciaOsDetails): Partial<GerenciaFormStat
     val_modelos: strField(data.ModelosArq),
     val_prioridade: strField(data.EntregPrazoLink) || "Normal",
     val_data: formatDateForInput(data.EntregData ?? undefined),
+    val_turno: strField(data.EntregPeriodo),
+    val_resp_grafica: strField(data.ResponsavelGrafLink),
+    val_forma_entrega: strField(data.EntregaFormaLink),
 
     val_papel: strField(data.PapelLink),
     txt_papel_desc: strField(data.PapelDescricao),

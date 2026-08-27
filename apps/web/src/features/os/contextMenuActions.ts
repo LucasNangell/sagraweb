@@ -1,5 +1,16 @@
 import type { PermissionKey } from "@/features/auth/types";
+import type { GerenciaSearchParams } from "@/features/gerencia/types";
+
 import type { OsSearchRow } from "./types";
+
+export type OsNovaType = "normal" | "papelaria";
+
+export type OsGerenciaModalMode =
+  | { kind: "existing" }
+  | { kind: "new"; type: OsNovaType }
+  | { kind: "duplicate" };
+
+const NOVA_OS_PAPELARIA_CONFIRM = "Deseja criar uma OS de Papelaria?";
 
 export interface OsContextMenuItem {
   id: string;
@@ -109,4 +120,60 @@ export function gerenciaSearchFromRow(
     id: String(row.nr_os),
     ...(extra ?? {}),
   };
+}
+
+export function confirmNovaOsType(): OsNovaType {
+  return window.confirm(NOVA_OS_PAPELARIA_CONFIRM) ? "papelaria" : "normal";
+}
+
+export function novaOsGerenciaSearch(type: OsNovaType): GerenciaSearchParams {
+  return { action: "new", type };
+}
+
+export function duplicateOsGerenciaSearch(row: {
+  ano: number;
+  nr_os: number;
+}): GerenciaSearchParams {
+  return {
+    action: "duplicate",
+    ano: String(row.ano),
+    id: String(row.nr_os),
+  };
+}
+
+export function gerenciaSearchForModal(
+  row: { ano: number; nr_os: number } | null,
+  mode: OsGerenciaModalMode,
+): GerenciaSearchParams {
+  if (mode.kind === "new") {
+    return novaOsGerenciaSearch(mode.type);
+  }
+  if (!row) {
+    return { ano: undefined, id: undefined };
+  }
+  if (mode.kind === "duplicate") {
+    return duplicateOsGerenciaSearch(row);
+  }
+  return { ano: String(row.ano), id: String(row.nr_os) };
+}
+
+export function isGerenciaModalExistingOnly(mode: OsGerenciaModalMode): boolean {
+  return mode.kind === "existing";
+}
+
+export function gerenciaModalTitle(
+  row: { ano: number; nr_os: number } | null,
+  mode: OsGerenciaModalMode,
+): string {
+  if (mode.kind === "new") {
+    const t = mode.type === "papelaria" ? "Papelaria" : "Normal";
+    return `Nova Ordem de Serviço (${t})`;
+  }
+  if (mode.kind === "duplicate" && row) {
+    return `Nova OS (Cópia de ${row.nr_os}/${row.ano})`;
+  }
+  if (row) {
+    return `OS ${row.nr_os}/${row.ano}`;
+  }
+  return "Nova Ordem de Serviço";
 }

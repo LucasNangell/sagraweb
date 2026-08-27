@@ -156,6 +156,53 @@ export async function fetchCores(): Promise<string[]> {
     .sort((a, b) => a.localeCompare(b, "pt-BR"));
 }
 
+interface FormaEntregaRow {
+  FormaEntrega?: string | null;
+}
+
+interface ResponsavelGrafRow {
+  ResponsavelGraf?: string | null;
+}
+
+export async function fetchFormasEntrega(): Promise<string[]> {
+  const rows = await apiFetch<FormaEntregaRow[]>("/aux/formas-entrega");
+  return rows
+    .map((r) => r.FormaEntrega)
+    .filter((v): v is string => Boolean(v?.trim()))
+    .sort((a, b) => a.localeCompare(b, "pt-BR"));
+}
+
+export async function fetchResponsaveisGrafica(): Promise<string[]> {
+  const rows = await apiFetch<ResponsavelGrafRow[]>("/aux/responsaveis-grafica");
+  return rows
+    .map((r) => r.ResponsavelGraf)
+    .filter((v): v is string => Boolean(v?.trim()))
+    .sort((a, b) => a.localeCompare(b, "pt-BR"));
+}
+
+export interface AcabamentoCatalogVariacao {
+  id: number;
+  label: string;
+}
+
+export interface AcabamentoCatalogItem {
+  id: number;
+  label: string;
+  variacoes: AcabamentoCatalogVariacao[];
+}
+
+export async function fetchAcabamentos(): Promise<AcabamentoCatalogItem[]> {
+  const rows = await apiFetch<AcabamentoCatalogItem[]>("/aux/acabamentos");
+  return (rows ?? []).map((row) => ({
+    id: row.id,
+    label: row.label,
+    variacoes: (row.variacoes ?? []).map((v) => ({
+      id: v.id,
+      label: v.label,
+    })),
+  }));
+}
+
 export async function fetchDeputadoLookup(
   nome: string,
   deputadoId?: number,

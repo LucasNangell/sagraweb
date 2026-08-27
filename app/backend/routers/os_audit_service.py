@@ -78,6 +78,9 @@ FIELD_LABELS: dict[str, str] = {
     "CSnro": "CS",
     "EntregPrazoLink": "Prazo entrega",
     "EntregData": "Data entrega",
+    "EntregPeriodo": "Turno",
+    "ResponsavelGrafLink": "Responsável na gráfica",
+    "EntregaFormaLink": "Forma de entrega",
     "ContatoTrab": "Contato",
     "Titulo": "Título",
     "TipoPublicacaoLink": "Produto",
@@ -126,6 +129,9 @@ PROTOCOLO_FIELDS = (
     "CSnro",
     "EntregPrazoLink",
     "EntregData",
+    "EntregPeriodo",
+    "ResponsavelGrafLink",
+    "EntregaFormaLink",
     "ContatoTrab",
 )
 
@@ -173,6 +179,9 @@ SAVE_PROTO_MAP = {
     "CSnro": "CSnro",
     "EntregPrazoLink": "EntregPrazoLink",
     "EntregData": "EntregData",
+    "EntregPeriodo": "EntregPeriodo",
+    "ResponsavelGrafLink": "ResponsavelGrafLink",
+    "EntregaFormaLink": "EntregaFormaLink",
     "ContatoTrab": "ContatoTrab",
     "DebitarCGRAF": "DebitarCGRAF",
 }

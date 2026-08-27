@@ -4,9 +4,12 @@ import {
   fetchCategorias,
   fetchCores,
   fetchFormatos,
+  fetchFormasEntrega,
+  fetchAcabamentos,
   fetchMaquinas,
   fetchPapeis,
   fetchProdutos,
+  fetchResponsaveisGrafica,
 } from "@/api/auxLookups";
 import { queryKeys } from "@/api/query-keys";
 
@@ -43,6 +46,21 @@ export function useGerenciaAuxLookups() {
     queryFn: fetchFormatos,
     staleTime: STALE_MS,
   });
+  const formasEntrega = useQuery({
+    queryKey: queryKeys.gerencia.formasEntrega,
+    queryFn: fetchFormasEntrega,
+    staleTime: STALE_MS,
+  });
+  const responsaveisGrafica = useQuery({
+    queryKey: queryKeys.gerencia.responsaveisGrafica,
+    queryFn: fetchResponsaveisGrafica,
+    staleTime: STALE_MS,
+  });
+  const acabamentos = useQuery({
+    queryKey: queryKeys.gerencia.acabamentos,
+    queryFn: fetchAcabamentos,
+    staleTime: STALE_MS,
+  });
 
   const loading =
     categorias.isLoading ||
@@ -50,7 +68,10 @@ export function useGerenciaAuxLookups() {
     maquinas.isLoading ||
     papeis.isLoading ||
     cores.isLoading ||
-    formatos.isLoading;
+    formatos.isLoading ||
+    formasEntrega.isLoading ||
+    responsaveisGrafica.isLoading ||
+    acabamentos.isLoading;
 
   return {
     loading,
@@ -60,5 +81,8 @@ export function useGerenciaAuxLookups() {
     papeis: papeis.data ?? [],
     cores: cores.data ?? [],
     formatos: formatos.data ?? [],
+    formasEntrega: formasEntrega.data ?? [],
+    responsaveisGrafica: responsaveisGrafica.data ?? [],
+    acabamentos: acabamentos.data ?? [],
   };
 }

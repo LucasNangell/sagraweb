@@ -185,6 +185,14 @@ class CalculosPayload(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
+class TechSpecAcabamentoPayload(BaseModel):
+    catalog_id: Optional[int] = None
+    label: str = ""
+    variacao_id: Optional[int] = None
+    variacao_label: Optional[str] = None
+    obs: Optional[str] = None
+
+
 class TechSpecLotePayload(BaseModel):
     id: Optional[str] = None
     paginas: int = 0
@@ -193,6 +201,8 @@ class TechSpecLotePayload(BaseModel):
     cores_link: Optional[str] = None
     papel_desc: Optional[str] = None
     cores_desc: Optional[str] = None
+    frente_verso: Optional[bool] = False
+    acabamentos: List[TechSpecAcabamentoPayload] = Field(default_factory=list)
 
 
 class TechSpecComponentePayload(BaseModel):
@@ -200,11 +210,14 @@ class TechSpecComponentePayload(BaseModel):
     nome: Optional[str] = None
     tipo: Optional[str] = None
     lotes: List[TechSpecLotePayload] = Field(default_factory=list)
+    acabamentos: List[TechSpecAcabamentoPayload] = Field(default_factory=list)
+    verso_em_branco: Optional[bool] = False
 
 
 class TechSpecPayload(BaseModel):
     version: int = 1
     componentes: List[TechSpecComponentePayload] = Field(default_factory=list)
+    acabamentosGerais: List[TechSpecAcabamentoPayload] = Field(default_factory=list)
 
 
 class ProtocoloEntregaPayload(BaseModel):
@@ -331,6 +344,9 @@ class SaveOSRequest(BaseModel):
     
     EntregPrazoLink: Optional[str] = None
     EntregData: Optional[str] = None
+    EntregPeriodo: Optional[str] = None
+    ResponsavelGrafLink: Optional[str] = None
+    EntregaFormaLink: Optional[str] = None
     
     PapelLink: Optional[str] = None
     PapelDescricao: Optional[str] = None
@@ -629,6 +645,18 @@ def _get_os_folder_path(ano: int, id: int) -> Optional[str]:
     logger.info("DEBUG PATH: Not found in network.")
     return None
 
+
+def require_entreg_data_for_priority(
+    prazo: Optional[str],
+    data_entrega: Optional[str],
+) -> None:
+    prazo_norm = (prazo or "").strip()
+    if not prazo_norm or prazo_norm.casefold() == "normal":
+        return
+    if not str(data_entrega or "").strip():
+        raise HTTPException(status_code=400, detail="Informe a Data Entrega.")
+
+
 @router.post("/os/save", response_model=SaveOsResponse)
 def save_os(data: SaveOSRequest):
     """
@@ -639,8 +667,13 @@ def save_os(data: SaveOSRequest):
     # Sanitize empty strings to None to avoid DB errors or bad data
     if data.EntregData == "": data.EntregData = None
     if data.DataEntrada == "": data.DataEntrada = None
+    if data.EntregPeriodo == "": data.EntregPeriodo = None
+    if data.ResponsavelGrafLink == "": data.ResponsavelGrafLink = None
+    if data.EntregaFormaLink == "": data.EntregaFormaLink = None
     if data.NroProtocolo == 0: data.NroProtocolo = None
     if data.AnoProtocolo == 0: data.AnoProtocolo = None
+
+    require_entreg_data_for_priority(data.EntregPrazoLink, data.EntregData)
 
     save_meta = {"was_insert": False}
 
@@ -718,6 +751,7 @@ def save_os(data: SaveOSRequest):
                     GabSalaUsuario=%s, Andar=%s, Localizacao=%s, RamalUsuario=%s,
                     DataEntrada=%s, ProcessoSolicit=%s, CSnro=%s,
                     EntregPrazoLink=%s, EntregData=%s, ContatoTrab=%s,
+                    ResponsavelGrafLink=%s, EntregaFormaLink=%s, EntregPeriodo=%s,
                     {cota_col}=%s, DebitarCGRAF=%s
                 WHERE NroProtocolo=%s AND AnoProtocolo=%s
             """
@@ -726,6 +760,7 @@ def save_os(data: SaveOSRequest):
                 data.GabSalaUsuario, data.Andar, data.Localizacao, data.RamalUsuario,
                 data.DataEntrada, data.ProcessoSolicit, data.CSnro,
                 data.EntregPrazoLink, data.EntregData, data.ContatoTrab,
+                data.ResponsavelGrafLink, data.EntregaFormaLink, data.EntregPeriodo,
                 cota_estimada,
                 bool(data.DebitarCGRAF),
                 data.NroProtocolo, data.AnoProtocolo
@@ -738,10 +773,11 @@ def save_os(data: SaveOSRequest):
                     GabSalaUsuario, Andar, Localizacao, RamalUsuario,
                     DataEntrada, ProcessoSolicit, CSnro,
                     EntregPrazoLink, EntregData, ContatoTrab,
+                    ResponsavelGrafLink, EntregaFormaLink, EntregPeriodo,
                     {cota_col},
                     DebitarCGRAF,
                     OrgInteressado
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, COALESCE(%s, 'Câmara dos Deputados'))
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, COALESCE(%s, 'Câmara dos Deputados'))
             """
             cursor.execute(query_proto, (
                 final_id, current_year,
@@ -749,6 +785,7 @@ def save_os(data: SaveOSRequest):
                 data.GabSalaUsuario, data.Andar, data.Localizacao, data.RamalUsuario,
                 data.DataEntrada, data.ProcessoSolicit, data.CSnro,
                 data.EntregPrazoLink, data.EntregData, data.ContatoTrab,
+                data.ResponsavelGrafLink, data.EntregaFormaLink, data.EntregPeriodo,
                 cota_estimada,
                 bool(data.DebitarCGRAF),
                 data.OrgInteressado 

@@ -38,10 +38,8 @@ export function ClientePortalShell({
   return (
     <div
       className={cn(
-        "flex flex-col bg-sagra-bg",
-        fullWidth
-          ? "h-dvh max-h-dvh overflow-hidden"
-          : "min-h-dvh",
+        "flex h-full min-h-0 flex-col overflow-hidden bg-sagra-bg",
+        fullWidth && "max-h-dvh",
       )}
     >
       <PortalSystemHeader subtitle="Portal do Cliente — Acompanhamento de OSs" />

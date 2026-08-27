@@ -6,5 +6,9 @@ export const Route = createFileRoute("/cliente/login")({
 });
 
 function ClienteLoginLayout() {
-  return <Outlet />;
+  return (
+    <div className="h-full overflow-y-auto">
+      <Outlet />
+    </div>
+  );
 }

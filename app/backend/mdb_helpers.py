@@ -218,7 +218,7 @@ def prepare_os_protocol_params(row: dict) -> dict:
         "CodigoRequisic", "CategoriaLink", "NomeUsuario", "Titular", "OrgInteressado",
         "SiglaOrgao", "GabSalaUsuario", "Andar", "Localizacao", "RamalUsuario",
         "DataEntrada", "ProcessoSolicit", "CSnro", "EntregPrazoLink", "EntregData",
-        "ContatoTrab", cota_field,
+        "ContatoTrab", "ResponsavelGrafLink", "EntregaFormaLink", "EntregPeriodo", cota_field,
     )
     return {f: to_mdb_field(f, row.get(f)) for f in fields}
 

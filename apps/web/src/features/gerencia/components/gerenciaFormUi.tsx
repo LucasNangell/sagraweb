@@ -21,6 +21,7 @@ export function GerenciaPanel({
   className,
   bodyClassName,
   scrollableBody = false,
+  headerRight,
 }: {
   title: string;
   icon?: ReactNode;
@@ -29,6 +30,7 @@ export function GerenciaPanel({
   /** Corpo com scroll interno (cabeçalho do painel permanece fixo). */
   scrollableBody?: boolean;
   bodyClassName?: string;
+  headerRight?: ReactNode;
 }) {
   return (
     <section
@@ -41,6 +43,7 @@ export function GerenciaPanel({
       <header className="flex shrink-0 items-center gap-2 border-b border-slate-100 bg-slate-50/80 px-3 py-2.5">
         {icon}
         <h3 className="text-sm font-bold text-secondary-blue">{title}</h3>
+        {headerRight ? <div className="ml-auto shrink-0">{headerRight}</div> : null}
       </header>
       <div
         className={cn(
@@ -61,16 +64,24 @@ export function Field({
   children,
   className,
   compact = false,
+  required = false,
 }: {
   label: string;
   children: ReactNode;
   className?: string;
   compact?: boolean;
+  required?: boolean;
 }) {
   return (
     <label className={cn("block min-w-0", className)}>
       <span className={compact ? gerenciaLabelCompactClass : gerenciaLabelClass}>
         {label}
+        {required ? (
+          <span className="text-red-600" aria-hidden="true">
+            {" "}
+            *
+          </span>
+        ) : null}
       </span>
       {children}
     </label>

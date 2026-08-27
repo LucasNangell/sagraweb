@@ -24,6 +24,9 @@ export interface GerenciaFormState {
   val_titulo: string;
   val_prioridade: string;
   val_data: string;
+  val_turno: string;
+  val_resp_grafica: string;
+  val_forma_entrega: string;
 
   val_produto: string;
   val_maquina: string;
@@ -122,6 +125,9 @@ export interface GerenciaOsDetails {
   ModelosArq?: string | null;
   EntregPrazoLink?: string | null;
   EntregData?: string | null;
+  EntregPeriodo?: string | null;
+  EntregaFormaLink?: string | null;
+  ResponsavelGrafLink?: string | null;
   PapelLink?: string | null;
   PapelDescricao?: string | null;
   Cores?: string | null;

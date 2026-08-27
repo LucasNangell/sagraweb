@@ -32,6 +32,8 @@ class TestLoteSerialization:
         assert data["cores_link"] == "4x4"
         assert data["papel_desc"] == "nota papel"
         assert data["cores_desc"] == "nota cores"
+        assert data["frente_verso"] is False
+        assert data["acabamentos"] == []
 
 
 class TestSyncComponentesFromTechspec:
@@ -75,6 +77,33 @@ class TestSyncComponentesFromTechspec:
         assert lote["maquina_link"] == "Digital"
         assert lote["papel_link"] == "Sulfite"
         assert lote["cores_link"] == "P/B"
+
+    def test_saves_capa_verso_em_branco(self):
+        cursor = self._cursor_with_existing()
+        techspec = TechSpecPayload(
+            componentes=[
+                TechSpecComponentePayload(
+                    nome="Capa",
+                    tipo="CAPA",
+                    verso_em_branco=True,
+                    lotes=[
+                        TechSpecLotePayload(
+                            id="l1",
+                            paginas=4,
+                            cores_link="4x4",
+                        )
+                    ],
+                )
+            ]
+        )
+        sync_componentes_from_techspec(cursor, nro=886, ano=2026, techspec=techspec, ponto="123")
+
+        insert_calls = [
+            c for c in cursor.execute.call_args_list if "INSERT INTO tab_os_componentes" in str(c[0][0])
+        ]
+        parsed = json.loads(insert_calls[0][0][1][6])
+        assert parsed["verso_em_branco"] is True
+        assert parsed["lotes"][0]["paginas"] == 4
 
     def test_empty_componentes_list_cleans_up_without_sub_os(self):
         cursor = self._cursor_with_existing(
@@ -183,6 +212,27 @@ class TestLoadComponentesForOs:
         assert len(rows) == 1
         assert rows[0]["lotes"][0]["paginas"] == 4
         assert rows[0]["lotes"][0]["papel_link"] == "Couché"
+
+    def test_parses_verso_em_branco(self):
+        with patch("services.os_componentes_service.db") as mock_db:
+            mock_db.execute_query.return_value = [
+                {
+                    "id": 1,
+                    "nome": "Capa",
+                    "nome_normalizado": "capa",
+                    "tipo": "CAPA",
+                    "ordem": 0,
+                    "ativo": 1,
+                    "techspec_json": json.dumps(
+                        {
+                            "lotes": [{"id": "l1", "paginas": 4, "cores_link": "4x4"}],
+                            "verso_em_branco": True,
+                        }
+                    ),
+                }
+            ]
+            rows = load_componentes_for_os(886, 2026)
+        assert rows[0]["verso_em_branco"] is True
 
     def test_ativos_only_false_includes_inactive(self):
         with patch("services.os_componentes_service.db") as mock_db:

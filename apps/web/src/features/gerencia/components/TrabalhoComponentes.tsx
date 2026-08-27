@@ -1,5 +1,6 @@
 import { Plus, Trash2 } from "lucide-react";
 
+import type { AcabamentoCatalogItem } from "@/api/auxLookups";
 import {
   COMPONENTE_LABELS,
   COMPONENTE_TIPOS,
@@ -7,27 +8,37 @@ import {
   calculateRemainingPages,
   createComponente,
   createDefaultLote,
+  createGenericoComponente,
   createNamedComponente,
   getComponenteKey,
   getComponenteLabel,
+  isGenericoComponente,
+  loteCoresValue,
+  lotePapelValue,
   type TechSpec,
   type TechSpecChangeMeta,
   type TechSpecComponente,
   type TechSpecLote,
 } from "../techSpec";
+import { AcabamentoField } from "./AcabamentoField";
 import { Field, Row, gerenciaInputClass } from "./gerenciaFormUi";
 
 function SelectOptions({
   items,
+  extra,
   placeholder = "Selecione...",
 }: {
   items: string[];
+  extra?: string;
   placeholder?: string;
 }) {
+  const extraValue = (extra || "").trim();
+  const all =
+    extraValue && !items.includes(extraValue) ? [...items, extraValue] : items;
   return (
     <>
       <option value="">{placeholder}</option>
-      {items.map((item) => (
+      {all.map((item) => (
         <option key={item} value={item}>
           {item}
         </option>
@@ -45,6 +56,7 @@ interface TrabalhoComponentesProps {
   maquinas: string[];
   papeis: string[];
   cores: string[];
+  acabamentos: AcabamentoCatalogItem[];
 }
 
 function parseTotalPaginas(raw: string | undefined): number {
@@ -59,6 +71,7 @@ export function TrabalhoComponentes({
   maquinas,
   papeis,
   cores,
+  acabamentos,
 }: TrabalhoComponentesProps) {
   const usedTipos = new Set(
     spec.componentes.map((c) => c.tipo).filter(Boolean) as ComponenteTipo[],
@@ -89,6 +102,12 @@ export function TrabalhoComponentes({
   const addNamedComponente = () => {
     const nome = window.prompt("Nome do componente:");
     if (!nome?.trim()) return;
+    if (isGenericoComponente({ nome, lotes: [] })) {
+      window.alert(
+        "Arquivo é um componente automático e não pode ser adicionado manualmente.",
+      );
+      return;
+    }
     const total = parseTotalPaginas(totalPaginas);
     const restante =
       total > 0 ? calculateRemainingPages(total, spec) : undefined;
@@ -107,9 +126,11 @@ export function TrabalhoComponentes({
     spec.componentes.find((c) => getComponenteKey(c) === key);
 
   const removeComponente = (key: string) => {
+    const remaining = spec.componentes.filter((c) => getComponenteKey(c) !== key);
     updateSpec({
       ...spec,
-      componentes: spec.componentes.filter((c) => getComponenteKey(c) !== key),
+      componentes:
+        remaining.length > 0 ? remaining : [createGenericoComponente()],
     });
   };
 
@@ -194,26 +215,23 @@ export function TrabalhoComponentes({
         ) : null}
       </div>
 
-      {spec.componentes.length === 0 ? (
-        <p className="rounded-md border border-dashed border-slate-200 bg-slate-50/80 px-3 py-4 text-center text-xs text-slate-500">
-          {readOnly
-            ? "Nenhum componente cadastrado."
-            : "Adicione Capa, Miolo ou Encarte conforme o trabalho."}
-        </p>
-      ) : null}
-
       <div className="space-y-3">
         {spec.componentes.map((comp) => {
           const key = getComponenteKey(comp);
           return (
             <ComponenteCard
               key={key}
+              spec={spec}
               comp={comp}
               readOnly={readOnly}
               maquinas={maquinas}
               papeis={papeis}
               cores={cores}
+              acabamentos={acabamentos}
               onRename={(nome) => updateComponente(key, { ...comp, nome })}
+              onVersoEmBranco={(checked) =>
+                updateComponente(key, { ...comp, verso_em_branco: checked })
+              }
               onRemove={() => removeComponente(key)}
               onAddLote={() => addLote(key)}
               onRemoveLote={(loteId) => removeLote(key, loteId)}
@@ -227,23 +245,29 @@ export function TrabalhoComponentes({
 }
 
 function ComponenteCard({
+  spec,
   comp,
   readOnly,
   maquinas,
   papeis,
   cores,
+  acabamentos,
   onRename,
+  onVersoEmBranco,
   onRemove,
   onAddLote,
   onRemoveLote,
   onUpdateLote,
 }: {
+  spec: TechSpec;
   comp: TechSpecComponente;
   readOnly: boolean;
   maquinas: string[];
   papeis: string[];
   cores: string[];
+  acabamentos: AcabamentoCatalogItem[];
   onRename: (nome: string) => void;
+  onVersoEmBranco: (checked: boolean) => void;
   onRemove: () => void;
   onAddLote: () => void;
   onRemoveLote: (loteId: string) => void;
@@ -251,7 +275,9 @@ function ComponenteCard({
 }) {
   const subtitle =
     comp.tipo === "CAPA"
-      ? "Capa fixa em 4 páginas (ajuste se necessário)"
+      ? comp.verso_em_branco
+        ? "Capa em 4 páginas; verso em branco não entra na cota"
+        : "Capa fixa em 4 páginas (ajuste se necessário)"
       : "Variações de páginas, papel, cores e máquina (ex.: policromia + P/B)";
 
   return (
@@ -272,6 +298,23 @@ function ComponenteCard({
             />
           )}
           <p className="text-[0.65rem] text-slate-500">{subtitle}</p>
+          {comp.tipo === "CAPA" ? (
+            <label
+              className="mt-1.5 flex items-center gap-1.5"
+              title="Não contabiliza o verso na cota (capa 4 páginas → 2 páginas impressas)"
+            >
+              <input
+                type="checkbox"
+                disabled={readOnly}
+                checked={Boolean(comp.verso_em_branco)}
+                onChange={(e) => onVersoEmBranco(e.target.checked)}
+                className="size-4 rounded border-slate-300"
+              />
+              <span className="text-[0.65rem] font-semibold text-slate-600">
+                Verso em branco
+              </span>
+            </label>
+          ) : null}
         </div>
         {!readOnly ? (
           <button
@@ -298,6 +341,8 @@ function ComponenteCard({
             canRemove={comp.lotes.length > 1}
             onRemove={() => onRemoveLote(lote.id)}
             onChange={(patch) => onUpdateLote(lote.id, patch)}
+            acabamentosCatalog={acabamentos}
+            techSpec={spec}
           />
         ))}
       </div>
@@ -326,6 +371,8 @@ function LoteCard({
   canRemove,
   onRemove,
   onChange,
+  acabamentosCatalog,
+  techSpec,
 }: {
   index: number;
   lote: TechSpecLote;
@@ -336,7 +383,28 @@ function LoteCard({
   canRemove: boolean;
   onRemove: () => void;
   onChange: (patch: Partial<TechSpecLote>) => void;
+  acabamentosCatalog: AcabamentoCatalogItem[];
+  techSpec: TechSpec;
 }) {
+  const papelValue = lotePapelValue(lote);
+  const coresValue = loteCoresValue(lote);
+
+  const setCatalogOrDesc = (
+    kind: "papel" | "cores",
+    value: string,
+    catalog: string[],
+  ) => {
+    if (kind === "papel") {
+      if (!value) onChange({ papel_link: "", papel_desc: "" });
+      else if (catalog.includes(value)) onChange({ papel_link: value, papel_desc: "" });
+      else onChange({ papel_link: "", papel_desc: value });
+      return;
+    }
+    if (!value) onChange({ cores_link: "", cores_desc: "" });
+    else if (catalog.includes(value)) onChange({ cores_link: value, cores_desc: "" });
+    else onChange({ cores_link: "", cores_desc: value });
+  };
+
   return (
     <div className="rounded border border-slate-200/80 bg-white p-2">
       <div className="mb-1.5 flex items-center justify-between gap-2">
@@ -353,8 +421,8 @@ function LoteCard({
         ) : null}
       </div>
 
-      <Row className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-        <Field label="Páginas">
+      <Row className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-12">
+        <Field label="Páginas" className="lg:col-span-2">
           <input
             type="number"
             min={0}
@@ -366,36 +434,55 @@ function LoteCard({
             className={gerenciaInputClass}
           />
         </Field>
-        <Field label="Papel">
+        <Field label="Papel" className="lg:col-span-2">
           <select
             disabled={readOnly}
-            value={lote.papel_link}
-            onChange={(e) => onChange({ papel_link: e.target.value })}
+            value={papelValue}
+            onChange={(e) => setCatalogOrDesc("papel", e.target.value, papeis)}
             className={gerenciaInputClass}
           >
-            <SelectOptions items={papeis} />
+            <SelectOptions items={papeis} extra={papelValue} />
           </select>
         </Field>
-        <Field label="Cores">
+        <Field label="Cores" className="lg:col-span-2">
           <select
             disabled={readOnly}
-            value={lote.cores_link}
-            onChange={(e) => onChange({ cores_link: e.target.value })}
+            value={coresValue}
+            onChange={(e) => setCatalogOrDesc("cores", e.target.value, cores)}
             className={gerenciaInputClass}
           >
-            <SelectOptions items={cores} />
+            <SelectOptions items={cores} extra={coresValue} />
           </select>
         </Field>
-        <Field label="Máquina">
+        <Field label="Máquina" className="lg:col-span-2">
           <select
             disabled={readOnly}
             value={lote.maquina_link}
             onChange={(e) => onChange({ maquina_link: e.target.value })}
             className={gerenciaInputClass}
           >
-            <SelectOptions items={maquinas} />
+            <SelectOptions items={maquinas} extra={lote.maquina_link} />
           </select>
         </Field>
+        <AcabamentoField
+          className="sm:col-span-2 lg:col-span-3"
+          label="Acabamento específico"
+          catalog={acabamentosCatalog}
+          selected={lote.acabamentos ?? []}
+          readOnly={readOnly}
+          onChange={(next) => onChange({ acabamentos: next })}
+          techSpec={techSpec}
+        />
+        <label className="flex min-w-0 items-end gap-2 pb-1.5 lg:col-span-1">
+          <input
+            type="checkbox"
+            disabled={readOnly}
+            checked={Boolean(lote.frente_verso)}
+            onChange={(e) => onChange({ frente_verso: e.target.checked })}
+            className="size-4 rounded border-slate-300"
+          />
+          <span className="text-xs font-semibold text-slate-600">F/V</span>
+        </label>
       </Row>
     </div>
   );

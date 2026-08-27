@@ -110,7 +110,8 @@ def duplicate_os_sql(
             CodigoRequisic, CategoriaLink, NomeUsuario, Titular, OrgInteressado, SiglaOrgao,
             GabSalaUsuario, Andar, Localizacao, RamalUsuario, CodUsuarioLink,
             DataEntrada, ProcessoSolicit, CSnro, CotaRepro, CotaCartao,
-            EntregPrazoLink, EntregData, ContatoTrab
+            EntregPrazoLink, EntregData, ContatoTrab,
+            ResponsavelGrafLink, EntregaFormaLink, EntregPeriodo
         """
         cur.execute(
             f"""

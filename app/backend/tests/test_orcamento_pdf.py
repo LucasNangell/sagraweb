@@ -62,8 +62,9 @@ def test_montar_especificacao_usa_descricao_nao_codigo():
     payload = _payload_marcador()
     text = montar_especificacao(payload, insumos=[P26])
     assert "55×200 mm" in text
-    assert "Papel Couchê fosco 300gr" in text
+    assert "Couchê fosco 300g" in text
     assert "p26" not in text
+    assert "Papel Couchê fosco 300gr" not in text
     assert "laminação fosca somente na frente" in text
     assert "Tiragem: 100" in text
 
@@ -73,12 +74,23 @@ def test_grupos_produto_material_impressao_acabamento():
     titulos = [g["titulo"] for g in grupos]
     assert titulos == ["Produto", "Material", "Impressão", "Acabamento"]
     material = next(g for g in grupos if g["titulo"] == "Material")
-    papéis = [l["valor"] for l in material["linhas"] if l["label"].startswith("Papel")]
-    assert any("Couchê fosco 300gr" in v for v in papéis)
-    assert not any("p26" in v for v in papéis)
-    os_row = next((l for l in material["linhas"] if "OS" in l["label"]), None)
-    assert os_row is not None
-    assert "Couchê fosco 300g" in os_row["valor"]
+    papéis = [l for l in material["linhas"] if l["label"].startswith("Papel")]
+    assert len(papéis) == 1
+    assert papéis[0]["label"] == "Papel"
+    assert papéis[0]["valor"] == "Couchê fosco 300g"
+    assert "p26" not in papéis[0]["valor"]
+    assert not any("OS" in l["label"] for l in material["linhas"])
+
+
+def test_papel_sem_os_usa_descricao_cadastro():
+    payload = _payload_marcador()
+    payload["os"]["papel_os"] = ""
+    payload["componentes"][0]["papel_nome_os"] = ""
+    grupos = montar_especificacao_grupos(payload, insumos=[P26])
+    material = next(g for g in grupos if g["titulo"] == "Material")
+    papel = next(l for l in material["linhas"] if l["label"] == "Papel")
+    assert "Couchê fosco 300gr" in papel["valor"]
+    assert "p26" not in papel["valor"]
 
 
 def test_oficio_preview_usa_os_nao_numero_de_orcamento():

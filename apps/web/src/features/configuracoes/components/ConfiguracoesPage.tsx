@@ -98,7 +98,7 @@ const TAB_META: Record<
   orcamento: {
     label: "Orçamento",
     description:
-      "Insumos, alíquotas, formatos e textos do ofício usados no cálculo Digital/Offset.",
+      "Alíquotas, cliques, formatos e textos do ofício usados no cálculo Digital/Offset. Preços de material vêm do estoque.",
     icon: <Calculator className="size-3.5" aria-hidden />,
   },
 };

@@ -186,7 +186,12 @@ export function OrcamentoPage({ ano, id }: OrcamentoPageProps) {
         </div>
 
         <div className="space-y-3">
-          <Comparativo digital={r.digital} offset={r.offset} escolhida={r.tecnologia_escolhida} />
+          <Comparativo
+            digital={r.digital}
+            offset={r.offset}
+            escolhida={r.tecnologia_escolhida}
+            onEscolher={(tec) => setEntrada({ ...entrada, tecnologia: tec })}
+          />
           {computed.comparativo ? <EstimadoVsReal comparativo={computed.comparativo} /> : null}
           <Detalhe consolidado={r.escolhido} />
         </div>
@@ -356,19 +361,34 @@ function Comparativo({
   digital,
   offset,
   escolhida,
+  onEscolher,
 }: {
   digital: OrcamentoConsolidado;
   offset: OrcamentoConsolidado;
   escolhida: string;
+  onEscolher: (tec: "digital" | "offset") => void;
 }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3">
       <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
         Comparativo Digital × Offset
       </h2>
+      <p className="mb-2 text-[11px] text-slate-500">Clique no card para orçar nessa máquina.</p>
       <div className="grid grid-cols-2 gap-2 text-xs">
-        <TechCard label="Digital" total={digital.total} unit={digital.unitario} active={escolhida === "digital"} />
-        <TechCard label="Offset" total={offset.total} unit={offset.unitario} active={escolhida === "offset"} />
+        <TechCard
+          label="Digital"
+          total={digital.total}
+          unit={digital.unitario}
+          active={escolhida === "digital"}
+          onClick={() => onEscolher("digital")}
+        />
+        <TechCard
+          label="Offset"
+          total={offset.total}
+          unit={offset.unitario}
+          active={escolhida === "offset"}
+          onClick={() => onEscolher("offset")}
+        />
       </div>
     </div>
   );
@@ -379,24 +399,28 @@ function TechCard({
   total,
   unit,
   active,
+  onClick,
 }: {
   label: string;
   total: number;
   unit: number;
   active: boolean;
+  onClick: () => void;
 }) {
   return (
-    <div
+    <button
+      type="button"
+      onClick={onClick}
       className={
         active
-          ? "rounded border border-primary-green bg-emerald-50 p-2"
-          : "rounded border border-slate-200 p-2"
+          ? "rounded border border-primary-green bg-emerald-50 p-2 text-left"
+          : "rounded border border-slate-200 p-2 text-left hover:border-secondary-blue hover:bg-slate-50"
       }
     >
       <p className="font-semibold">{label}</p>
       <p className="text-base font-bold tabular-nums">{brl(total)}</p>
       <p className="text-[11px] text-slate-500">{brl(unit)} / un.</p>
-    </div>
+    </button>
   );
 }
 

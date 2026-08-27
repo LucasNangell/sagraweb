@@ -246,24 +246,21 @@ def _descricao_papel(
     os_meta: dict,
     insumos: list[dict],
     resultado_row: Optional[dict] = None,
-) -> tuple[str, str]:
-    """Retorna (descrição orçada, nome da OS se diferente). Nunca devolve código pX."""
+) -> str:
+    """Nome do papel para o ofício: texto da OS; senão descrição do cadastro. Nunca código pX."""
+    os_name = str(comp.get("papel_nome_os") or os_meta.get("papel_os") or "").strip()
+    if os_name and _parece_codigo_insumo(os_name):
+        os_name = ""
+    if os_name:
+        return os_name
     catalog_spec = str((resultado_row or {}).get("papel_especificacao") or "").strip()
     if not catalog_spec:
         item = insumo_by_codigo(insumos, comp.get("papel_codigo"))
         if item:
             catalog_spec = str(item.get("especificacao") or "").strip()
-    os_name = str(comp.get("papel_nome_os") or os_meta.get("papel_os") or "").strip()
-    if os_name and _parece_codigo_insumo(os_name):
-        os_name = ""
-    best = catalog_spec or os_name
-    if (
-        os_name
-        and catalog_spec
-        and normalize_text(os_name) != normalize_text(catalog_spec)
-    ):
-        return catalog_spec, os_name
-    return best, ""
+    if catalog_spec and not _parece_codigo_insumo(catalog_spec):
+        return catalog_spec
+    return ""
 
 
 def _descricao_espiral(comp: dict, insumos: list[dict]) -> str:
@@ -336,13 +333,10 @@ def montar_especificacao_grupos(
     material_linhas: list[dict] = []
     for idx, comp in enumerate(comps):
         rotulo = _comp_rotulo(comp, idx, n)
-        papel, papel_os = _descricao_papel(comp, os_meta, insumos, _resultado_comp(resultado, idx))
+        papel = _descricao_papel(comp, os_meta, insumos, _resultado_comp(resultado, idx))
         if papel:
             label = f"Papel ({rotulo})" if rotulo else "Papel"
             material_linhas.append(_linha(label, papel))
-        if papel_os:
-            os_label = f"Papel OS ({rotulo})" if rotulo else "Papel (OS)"
-            material_linhas.append(_linha(os_label, papel_os))
         if comp.get("espiral"):
             esp = _descricao_espiral(comp, insumos)
             if esp and not any(l["valor"] == esp for l in material_linhas):

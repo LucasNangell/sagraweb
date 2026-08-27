@@ -7,7 +7,10 @@
     body { font-family: "Times New Roman", Times, serif; font-size: 12pt; color: #111; margin: 24mm 20mm; }
     h1 { text-align: center; font-size: 18pt; margin: 0 0 16px; }
     .meta { margin-bottom: 14px; }
-    .spec { margin: 10px 0; }
+    .spec table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 11pt; }
+    .spec th { text-align: left; background: #eee; padding: 4px 6px; border: 1px solid #ccc; }
+    .spec td { padding: 4px 6px; border: 1px solid #ccc; vertical-align: top; }
+    .spec td:first-child { width: 32%; font-weight: 600; }
     .totais { margin: 14px 0; }
     .clausulas { margin-top: 18px; }
     .assinaturas { display: flex; gap: 24px; margin-top: 36px; }
@@ -22,11 +25,22 @@
   <div class="meta">{{ data_extenso }}</div>
   <p><strong>Solicitante:</strong> {{ solicitante }}</p>
   <p><strong>Título:</strong> {{ titulo }}</p>
-  <div class="spec"><strong>Especificação Solicitada:</strong><br />{{ especificacao }}</div>
-  <div class="spec"><strong>Especificação Orçada:</strong><br />{{ especificacao }}</div>
+  <div class="spec">
+    <strong>Especificação</strong>
+    {% if especificacao_grupos %}
+    <table>
+      {% for grupo in especificacao_grupos %}
+      <tr><th colspan="2">{{ grupo.titulo }}</th></tr>
+      {% for linha in grupo.linhas %}
+      <tr><td>{{ linha.label }}</td><td>{{ linha.valor }}</td></tr>
+      {% endfor %}
+      {% endfor %}
+    </table>
+    {% else %}
+    <br />{{ especificacao }}
+    {% endif %}
+  </div>
   <div class="totais">
-    Nº.de páginas: {{ '%02d'|format(paginas) }}<br />
-    Tiragem: {{ tiragem }}<br />
     <strong>Valor total: {{ valor_total }}</strong>
   </div>
   <div class="clausulas">

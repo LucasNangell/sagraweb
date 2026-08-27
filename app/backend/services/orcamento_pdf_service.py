@@ -40,6 +40,36 @@ def _data_extenso(value: Any) -> str:
     return f"Brasília, {d.day} de {_MESES[d.month - 1]} de {d.year}."
 
 
+def _draw_especificacao_tabela(pdf: FPDF, grupos: list) -> None:
+    usable = pdf.w - pdf.l_margin - pdf.r_margin
+    label_w = min(48.0, usable * 0.32)
+    value_w = usable - label_w
+    line_h = 5.5
+    for grupo in grupos:
+        titulo = str((grupo or {}).get("titulo") or "").strip()
+        linhas = (grupo or {}).get("linhas") or []
+        if not linhas:
+            continue
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_fill_color(230, 230, 230)
+        pdf.set_text_color(40, 40, 40)
+        pdf.cell(usable, line_h, _txt(titulo), border=1, fill=True, new_x="LMARGIN", new_y="NEXT")
+        for linha in linhas:
+            label = _txt(str((linha or {}).get("label") or ""))
+            valor = _txt(str((linha or {}).get("valor") or ""))
+            x = pdf.get_x()
+            y = pdf.get_y()
+            pdf.set_font("Helvetica", "", 9)
+            pdf.set_text_color(0, 0, 0)
+            pdf.multi_cell(label_w, line_h, label, border=1)
+            h_label = pdf.get_y() - y
+            pdf.set_xy(x + label_w, y)
+            pdf.multi_cell(value_w, line_h, valor, border=1)
+            h_val = pdf.get_y() - y
+            pdf.set_xy(pdf.l_margin, y + max(h_label, h_val))
+    pdf.set_text_color(0, 0, 0)
+
+
 class OrcamentoOficioPDF(FPDF):
     def __init__(self, endereco: str, telefone: str):
         super().__init__(format="A4")
@@ -95,18 +125,14 @@ def build_orcamento_pdf(record: dict) -> bytes:
     pdf.cell(0, 6, _txt(f"Título: {oficio.get('titulo') or ''}"), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
     pdf.set_font("Helvetica", "B", 11)
-    pdf.cell(0, 6, _txt("Especificação Solicitada:"), new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font("Helvetica", "", 11)
-    pdf.multi_cell(0, 5.5, _txt(oficio.get("especificacao") or ""), new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(3)
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.cell(0, 6, _txt("Especificação Orçada:"), new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font("Helvetica", "", 11)
-    pdf.multi_cell(0, 5.5, _txt(oficio.get("especificacao") or ""), new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(3)
-    pags = oficio.get("paginas") or 0
-    pdf.cell(0, 6, _txt(f"Nº.de páginas: {int(pags):02d}"), new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(0, 6, _txt(f"Tiragem: {oficio.get('tiragem') or 0}"), new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 6, _txt("Especificação"), new_x="LMARGIN", new_y="NEXT")
+    grupos = oficio.get("especificacao_grupos") or []
+    if grupos:
+        _draw_especificacao_tabela(pdf, grupos)
+    else:
+        pdf.set_font("Helvetica", "", 11)
+        pdf.multi_cell(0, 5.5, _txt(oficio.get("especificacao") or ""), new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
     pdf.set_font("Helvetica", "B", 11)
     pdf.cell(0, 6, _txt(f"Valor total: {_brl(oficio.get('valor_total'))}"), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(6)

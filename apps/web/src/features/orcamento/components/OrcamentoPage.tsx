@@ -13,6 +13,7 @@ import type {
   OrcamentoComponente,
   OrcamentoConsolidado,
   OrcamentoEntrada,
+  OrcamentoEspecificacaoGrupo,
   OrcamentoResponse,
 } from "@/features/orcamento/types";
 
@@ -204,15 +205,17 @@ export function OrcamentoPage({ ano, id }: OrcamentoPageProps) {
         <p>
           <strong>Título:</strong> {oficio.titulo}
         </p>
-        <p className="mt-2">
-          <strong>Especificação Solicitada:</strong> {oficio.especificacao}
-        </p>
-        <p>
-          <strong>Especificação Orçada:</strong> {oficio.especificacao}
-        </p>
-        <p className="mt-2">Nº.de páginas: {String(oficio.paginas).padStart(2, "0")}</p>
-        <p>Tiragem: {oficio.tiragem}</p>
-        <p className="font-semibold">Valor total: {brl(oficio.valor_total)}</p>
+        <div className="mt-3">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Especificação
+          </p>
+          {oficio.especificacao_grupos && oficio.especificacao_grupos.length > 0 ? (
+            <EspecificacaoTabela grupos={oficio.especificacao_grupos} />
+          ) : (
+            <p>{oficio.especificacao}</p>
+          )}
+        </div>
+        <p className="mt-3 font-semibold">Valor total: {brl(oficio.valor_total)}</p>
         <p className="mt-3 text-xs text-slate-600">- {oficio.clausula_validade}</p>
         <p className="text-xs text-slate-600">- {oficio.clausula_entrega}</p>
         <div className="mt-6 grid grid-cols-2 gap-6 text-xs">
@@ -235,6 +238,33 @@ export function OrcamentoPage({ ano, id }: OrcamentoPageProps) {
         </p>
       </section>
     </div>
+  );
+}
+
+function EspecificacaoTabela({ grupos }: { grupos: OrcamentoEspecificacaoGrupo[] }) {
+  return (
+    <table className="w-full border-collapse text-xs">
+      {grupos.map((grupo) => (
+        <tbody key={grupo.titulo}>
+          <tr>
+            <th
+              colSpan={2}
+              className="border border-slate-200 bg-slate-100 px-2 py-1 text-left text-[10px] font-bold uppercase tracking-wide text-slate-600"
+            >
+              {grupo.titulo}
+            </th>
+          </tr>
+          {(grupo.linhas || []).map((linha) => (
+            <tr key={`${grupo.titulo}-${linha.label}`}>
+              <td className="w-36 border border-slate-200 px-2 py-1 align-top font-medium text-slate-600">
+                {linha.label}
+              </td>
+              <td className="border border-slate-200 px-2 py-1 text-slate-800">{linha.valor}</td>
+            </tr>
+          ))}
+        </tbody>
+      ))}
+    </table>
   );
 }
 

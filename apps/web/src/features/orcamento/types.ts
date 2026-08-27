@@ -123,6 +123,16 @@ export interface OrcamentoResultado {
   alertas: string[];
 }
 
+export interface OrcamentoEspecificacaoLinha {
+  label: string;
+  valor: string;
+}
+
+export interface OrcamentoEspecificacaoGrupo {
+  titulo: string;
+  linhas: OrcamentoEspecificacaoLinha[];
+}
+
 export interface OrcamentoOficio {
   solicitante: string;
   titulo: string;
@@ -133,6 +143,7 @@ export interface OrcamentoOficio {
   os_ano?: number;
   data_entrada?: string;
   especificacao: string;
+  especificacao_grupos?: OrcamentoEspecificacaoGrupo[];
   paginas: number;
   tiragem: number;
   valor_total: number;

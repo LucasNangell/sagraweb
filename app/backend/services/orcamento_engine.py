@@ -542,6 +542,7 @@ def _custear_acabamentos(
                 k=k,
                 utilizacao=util,
                 horas_mes=176.0,
+                forcar_volume=True,
             )
         )
     if not parts:

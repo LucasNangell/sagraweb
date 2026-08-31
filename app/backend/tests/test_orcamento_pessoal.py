@@ -1,6 +1,8 @@
 """Regressão do custeio de pessoal por etapa."""
 from __future__ import annotations
 
+import pytest
+
 from services.orcamento_pessoal import (
     blend_horas,
     cap_stint,
@@ -26,6 +28,69 @@ def test_prior_horas_setup_e_tiragem():
     passo = {"setup_min": 30, "min_por_un": 0.6, "min_por_pag": 0, "min_por_folha": 0}
     # 30 + 100*0.6 = 90 min = 1.5 h
     assert prior_horas(passo, tiragem=100, paginas=2, folhas=10) == 1.5
+
+
+def test_min_por_pag_sielt_escala_com_tiragem():
+    passo = {
+        "setor_link": "SIELT",
+        "setup_min": 60,
+        "min_por_un": 0,
+        "min_por_pag": 0.1,
+        "min_por_folha": 0,
+    }
+    h100 = prior_horas(passo, tiragem=100, paginas=4, folhas=0)
+    h1000 = prior_horas(passo, tiragem=1000, paginas=4, folhas=0)
+    setup_h = 1.0
+    assert h100 - setup_h == pytest.approx(100 * 4 * 0.1 / 60)
+    assert (h1000 - setup_h) / (h100 - setup_h) == pytest.approx(10.0)
+
+
+def test_min_por_pag_seimp_e_encadernacao_usam_volume():
+    base = {"setup_min": 0, "min_por_un": 0, "min_por_pag": 0.2, "min_por_folha": 0}
+    seimp = prior_horas({**base, "setor_link": "SEIMP"}, tiragem=50, paginas=8, folhas=0)
+    enc = prior_horas({**base, "setor_link": "Encadernação"}, tiragem=50, paginas=8, folhas=0)
+    esperado = 50 * 8 * 0.2 / 60
+    assert seimp == pytest.approx(esperado)
+    assert enc == pytest.approx(esperado)
+
+
+def test_min_por_pag_sefoc_nao_escala_com_tiragem():
+    passo = {
+        "setor_link": "SEFOC",
+        "setup_min": 0,
+        "min_por_un": 0,
+        "min_por_pag": 0.5,
+        "min_por_folha": 0,
+    }
+    h100 = prior_horas(passo, tiragem=100, paginas=4, folhas=0)
+    h1000 = prior_horas(passo, tiragem=1000, paginas=4, folhas=0)
+    assert h100 == pytest.approx(4 * 0.5 / 60)
+    assert h100 == h1000
+
+
+def test_min_por_un_sielt_nao_duplica_tiragem():
+    passo = {
+        "setor_link": "SIELT",
+        "setup_min": 0,
+        "min_por_un": 0.6,
+        "min_por_pag": 0,
+        "min_por_folha": 0,
+    }
+    assert prior_horas(passo, tiragem=100, paginas=8, folhas=0) == pytest.approx(1.0)
+
+
+def test_acabamento_forcar_volume_mesmo_sem_setor_de_chao():
+    passo = {
+        "setor_link": "Outro",
+        "setup_min": 0,
+        "min_por_un": 0,
+        "min_por_pag": 0.1,
+        "min_por_folha": 0,
+    }
+    sem = prior_horas(passo, tiragem=200, paginas=2, folhas=0)
+    com = prior_horas(passo, tiragem=200, paginas=2, folhas=0, forcar_volume=True)
+    assert sem == pytest.approx(2 * 0.1 / 60)
+    assert com == pytest.approx(200 * 2 * 0.1 / 60)
 
 
 def test_cap_stint_limita_teto():

@@ -4,7 +4,10 @@ Puro, sem I/O.
 """
 from __future__ import annotations
 
+import unicodedata
 from typing import Any, Optional
+
+_VOLUME_SETORES = frozenset({"sielt", "seimp", "sepac", "encadernacao"})
 
 
 def _f(value: Any, default: float = 0.0) -> float:
@@ -28,19 +31,46 @@ def _money(value: float) -> float:
     return round(float(value) + 1e-12, 2)
 
 
+def _norm_setor(value: Any) -> str:
+    text = str(value or "").strip().casefold()
+    text = unicodedata.normalize("NFKD", text)
+    return "".join(ch for ch in text if not unicodedata.combining(ch))
+
+
+def setor_usa_volume(setor: Any) -> bool:
+    """SIELT, SEIMP, SEPAC e Encadernação medem Min / pág. pelo volume produzido."""
+    return _norm_setor(setor) in _VOLUME_SETORES
+
+
+def paginas_para_prior(
+    passo: dict,
+    paginas: int,
+    tiragem: int,
+    *,
+    forcar_volume: bool = False,
+) -> int:
+    """Páginas de um exemplar, ou páginas × tiragem no chão de fábrica / acabamento."""
+    pags = max(int(paginas or 0), 0)
+    if forcar_volume or setor_usa_volume(passo.get("setor_link")):
+        return pags * max(int(tiragem or 0), 1)
+    return pags
+
+
 def prior_horas(
     passo: dict,
     *,
     tiragem: int,
     paginas: int,
     folhas: float,
+    forcar_volume: bool = False,
 ) -> float:
     """Tempo-padrão em horas: setup + tiragem×un + páginas×pag + folhas×folha (minutos)."""
     setup = _f(passo.get("setup_min"))
     por_un = _f(passo.get("min_por_un"))
     por_pag = _f(passo.get("min_por_pag"))
     por_folha = _f(passo.get("min_por_folha"))
-    minutos = setup + tiragem * por_un + paginas * por_pag + folhas * por_folha
+    pags = paginas_para_prior(passo, paginas, tiragem, forcar_volume=forcar_volume)
+    minutos = setup + tiragem * por_un + pags * por_pag + folhas * por_folha
     return max(minutos, 0.0) / 60.0
 
 
@@ -174,6 +204,7 @@ def custear_passos(
     k: float = 8.0,
     utilizacao: float = 0.6,
     horas_mes: float = 176.0,
+    forcar_volume: bool = False,
 ) -> dict:
     """
     Retorna custo de pessoal das etapas + overhead de estrutura.
@@ -206,7 +237,13 @@ def custear_passos(
             )
             continue
         tem_passo_produtivo = True
-        prior = prior_horas(passo, tiragem=tiragem, paginas=paginas, folhas=folhas)
+        prior = prior_horas(
+            passo,
+            tiragem=tiragem,
+            paginas=paginas,
+            folhas=folhas,
+            forcar_volume=forcar_volume,
+        )
         rec = learned_for_passo(passo, learned)
         n = int(_f(rec.get("n")))
         mediana = _f(rec.get("mediana_horas"))

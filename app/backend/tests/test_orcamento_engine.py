@@ -812,19 +812,28 @@ def _funcao_acab(fid=3):
     }
 
 
-def _passo_acabamento(catalog_id, rotulo, *, min_por_folha=0.0, setup_min=60.0, funcao_id=3):
+def _passo_acabamento(
+    catalog_id,
+    rotulo,
+    *,
+    min_por_folha=0.0,
+    min_por_pag=0.0,
+    setup_min=60.0,
+    setor_link="SEPAC",
+    funcao_id=3,
+):
     return {
         "id": 900 + catalog_id,
         "catalog_id": catalog_id,
         "produto_rotulo": rotulo,
         "nome": rotulo,
-        "setor_link": "SEPAC",
+        "setor_link": setor_link,
         "tipo": "produtiva",
         "cobra_pessoal": True,
         "tecnologia": "qualquer",
         "setup_min": setup_min,
         "min_por_un": 0,
-        "min_por_pag": 0,
+        "min_por_pag": min_por_pag,
         "min_por_folha": min_por_folha,
         "funcoes": [{"funcao_id": funcao_id, "quantidade": 1}],
     }
@@ -908,3 +917,159 @@ def test_laminacao_so_capa_nao_usa_folhas_do_miolo():
     lam = next(d for d in offset["pessoal_detalhe"] if d.get("nome") == "Laminação")
     assert lam["horas"] == pytest.approx(capa["folhas_matriz"], abs=0.02)
     assert lam["horas"] < (capa["folhas_matriz"] + miolo["folhas_matriz"]) * 0.9
+
+
+def _horas_passo(result, tecnologia, nome):
+    detalhe = result[tecnologia]["pessoal_detalhe"] or []
+    return next(d["horas"] for d in detalhe if d.get("nome") == nome)
+
+
+def test_sielt_min_por_pag_escala_com_tiragem_digital():
+    catalog = _catalog()
+    catalog["parametros"]["pessoal_por_hora"] = 1
+    catalog["funcoes"] = [_funcao_acab(2)]
+    catalog["passos"] = [
+        {
+            "id": 1,
+            "produto_rotulo": "Ct Visita",
+            "nome": "SIELT impressão",
+            "setor_link": "SIELT",
+            "tipo": "produtiva",
+            "cobra_pessoal": True,
+            "setup_min": 0,
+            "min_por_un": 0,
+            "min_por_pag": 0.1,
+            "min_por_folha": 0,
+            "funcoes": [{"funcao_id": 2, "quantidade": 1}],
+        }
+    ]
+    payload = {
+        "os": {"produto": "Ct Visita"},
+        "tecnologia": "digital",
+        "componentes": [
+            {
+                "nome": "Cartão",
+                "tipo": "UNICO",
+                "menor_mm": 90,
+                "maior_mm": 50,
+                "paginas": 2,
+                "cor": True,
+                "frente_verso": True,
+                "papel_codigo": "p26",
+            }
+        ],
+    }
+    h100 = _horas_passo(calcular({**payload, "tiragem": 100}, catalog), "digital", "SIELT impressão")
+    h1000 = _horas_passo(calcular({**payload, "tiragem": 1000}, catalog), "digital", "SIELT impressão")
+    assert h1000 / h100 == pytest.approx(10.0)
+
+
+def test_seimp_min_por_pag_escala_com_tiragem_offset():
+    catalog = _catalog()
+    catalog["parametros"]["pessoal_por_hora"] = 1
+    catalog["funcoes"] = [_funcao_acab(2)]
+    catalog["passos"] = [
+        {
+            "id": 1,
+            "produto_rotulo": "Publicação",
+            "nome": "SEIMP impressão",
+            "setor_link": "SEIMP",
+            "tipo": "produtiva",
+            "cobra_pessoal": True,
+            "setup_min": 0,
+            "min_por_un": 0,
+            "min_por_pag": 0.1,
+            "min_por_folha": 0,
+            "funcoes": [{"funcao_id": 2, "quantidade": 1}],
+        }
+    ]
+    payload = {
+        "os": {"produto": "Publicação"},
+        "tecnologia": "offset",
+        "componentes": [
+            {
+                "nome": "Miolo",
+                "tipo": "UNICO",
+                "menor_mm": 210,
+                "maior_mm": 297,
+                "paginas": 8,
+                "cor": False,
+                "frente_verso": True,
+                "papel_codigo": "p1",
+            }
+        ],
+    }
+    h100 = _horas_passo(calcular({**payload, "tiragem": 100}, catalog), "offset", "SEIMP impressão")
+    h1000 = _horas_passo(calcular({**payload, "tiragem": 1000}, catalog), "offset", "SEIMP impressão")
+    assert h1000 / h100 == pytest.approx(10.0)
+
+
+def test_sefoc_min_por_pag_nao_escala_com_tiragem():
+    catalog = _catalog()
+    catalog["parametros"]["pessoal_por_hora"] = 1
+    catalog["funcoes"] = [_funcao_acab(2)]
+    catalog["passos"] = [
+        {
+            "id": 1,
+            "produto_rotulo": "Ct Visita",
+            "nome": "SEFOC pré",
+            "setor_link": "SEFOC",
+            "tipo": "produtiva",
+            "cobra_pessoal": True,
+            "setup_min": 0,
+            "min_por_un": 0,
+            "min_por_pag": 0.5,
+            "min_por_folha": 0,
+            "funcoes": [{"funcao_id": 2, "quantidade": 1}],
+        }
+    ]
+    payload = {
+        "os": {"produto": "Ct Visita"},
+        "tecnologia": "digital",
+        "componentes": [
+            {
+                "nome": "Cartão",
+                "tipo": "UNICO",
+                "menor_mm": 90,
+                "maior_mm": 50,
+                "paginas": 2,
+                "cor": True,
+                "frente_verso": True,
+                "papel_codigo": "p26",
+            }
+        ],
+    }
+    h100 = _horas_passo(calcular({**payload, "tiragem": 100}, catalog), "digital", "SEFOC pré")
+    h1000 = _horas_passo(calcular({**payload, "tiragem": 1000}, catalog), "digital", "SEFOC pré")
+    assert h100 == pytest.approx(2 * 0.5 / 60)
+    assert h100 == pytest.approx(h1000)
+
+
+def test_acabamento_min_por_pag_escala_com_tiragem():
+    catalog = _catalog()
+    catalog["parametros"]["pessoal_por_hora"] = 1
+    catalog["funcoes"] = [_funcao_acab()]
+    catalog["passos_acabamento"] = [
+        _passo_acabamento(
+            90, "Grampo", setup_min=0, min_por_pag=0.1, setor_link="Outro"
+        )
+    ]
+    payload = {
+        "tecnologia": "offset",
+        "componentes": [
+            {
+                "nome": "Único",
+                "tipo": "UNICO",
+                "menor_mm": 210,
+                "maior_mm": 297,
+                "paginas": 8,
+                "cor": False,
+                "frente_verso": True,
+                "papel_codigo": "p1",
+                "grampo": True,
+            }
+        ],
+    }
+    h100 = _horas_passo(calcular({**payload, "tiragem": 100}, catalog), "offset", "Grampo")
+    h1000 = _horas_passo(calcular({**payload, "tiragem": 1000}, catalog), "offset", "Grampo")
+    assert h1000 / h100 == pytest.approx(10.0)

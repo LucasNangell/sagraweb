@@ -229,7 +229,7 @@ describe("getGerenciaCotaPaginas", () => {
         }),
         { techSpec: spec },
       ).calc_cota_total,
-    ).toBe("800");
+    ).toBe("889");
   });
 });
 
@@ -262,7 +262,7 @@ describe("formatCotaEstimada", () => {
 describe("recalculateGerenciaCalcs", () => {
   it("cota estimada = páginas efetivas × tiragem / coef A4", () => {
     const result = recalculateGerenciaCalcs(baseForm());
-    expect(result.calc_cota_total).toBe("400");
+    expect(result.calc_cota_total).toBe("445");
     expect(result.calc_total_paginas).toBe("1");
   });
 
@@ -274,7 +274,7 @@ describe("recalculateGerenciaCalcs", () => {
         calc_largura: "210",
       }),
     );
-    expect(result.calc_cota_total).toBe("200");
+    expect(result.calc_cota_total).toBe("223");
   });
 
   it("cota estimada usa coeficiente A4 arredondado (1 casa decimal)", () => {
@@ -289,8 +289,8 @@ describe("recalculateGerenciaCalcs", () => {
         calc_largura: "210",
       }),
     );
-    expect(result.calc_coef_a4).toBe("2,0");
-    expect(result.calc_cota_total).toBe("297");
+    expect(result.calc_coef_a4).toBe("1,8");
+    expect(result.calc_cota_total).toBe("330");
   });
 
   it("produto de papelaria usa coeficiente da tabela independente do nº da OS", () => {
@@ -332,8 +332,8 @@ describe("recalculateGerenciaCalcs", () => {
         val_modelos: "3",
       }),
     );
-    expect(one.calc_cota_total).toBe("10");
-    expect(three.calc_cota_total).toBe("30");
+    expect(one.calc_cota_total).toBe("12");
+    expect(three.calc_cota_total).toBe("34");
   });
 
   it("trata modelos vazio ou 0 como 1 na cota", () => {
@@ -357,8 +357,8 @@ describe("recalculateGerenciaCalcs", () => {
         val_modelos: "0",
       }),
     );
-    expect(empty.calc_cota_total).toBe("10");
-    expect(zero.calc_cota_total).toBe("10");
+    expect(empty.calc_cota_total).toBe("12");
+    expect(zero.calc_cota_total).toBe("12");
   });
 });
 
@@ -386,10 +386,10 @@ describe("computeTiragemMaximaFromForm", () => {
       op_cota_atual: "120",
     };
     expect(computeTiragemMaximaFromForm({ ...base, val_modelos: "" })).toBe(
-      "120",
+      "108",
     );
     expect(computeTiragemMaximaFromForm({ ...base, val_modelos: "3" })).toBe(
-      "40",
+      "36",
     );
   });
 });
@@ -400,7 +400,7 @@ describe("resolveGerenciaCoefA4", () => {
       resolveGerenciaCoefA4(
         baseForm({ calc_altura: "210", calc_largura: "297" }),
       ),
-    ).toBeCloseTo(1, 5);
+    ).toBeCloseTo((210 * 297) / (220 * 307), 5);
   });
 
   it("usa tabela pelo produto, sem depender do nº da OS", () => {
@@ -424,29 +424,35 @@ describe("formato com unidade no nome → coeficiente A4", () => {
     return roundCoefA4(calculateCoefA4(dims!.altura, dims!.largura));
   }
 
-  it('parseia "50mmx50mm" e calcula coef ≈ 24,9', () => {
+  it("soma 10 mm em cada dimensão (sangria 5 mm por lateral)", () => {
+    const areaA4 = 210 * 297;
+    expect(calculateCoefA4(75, 110)).toBeCloseTo(areaA4 / (85 * 120), 10);
+    expect(roundCoefA4(calculateCoefA4(75, 110))).toBe(6.1);
+  });
+
+  it('parseia "50mmx50mm" e calcula coef ≈ 17,3', () => {
     expect(resolveFormatoDimensions("50mmx50mm")).toEqual({
       altura: 50,
       largura: 50,
     });
-    expect(coefFromFormato("50mmx50mm")).toBe(24.9);
-    expect(formatCoefA4Display(coefFromFormato("50mmx50mm"))).toBe("24,9");
+    expect(coefFromFormato("50mmx50mm")).toBe(17.3);
+    expect(formatCoefA4Display(coefFromFormato("50mmx50mm"))).toBe("17,3");
   });
 
-  it('parseia "50MM×50MM" e calcula coef ≈ 24,9', () => {
+  it('parseia "50MM×50MM" e calcula coef ≈ 17,3', () => {
     expect(resolveFormatoDimensions("50MM×50MM")).toEqual({
       altura: 50,
       largura: 50,
     });
-    expect(coefFromFormato("50MM×50MM")).toBe(24.9);
+    expect(coefFromFormato("50MM×50MM")).toBe(17.3);
   });
 
-  it('parseia "210mm x 297mm" como A4 (coef = 1,0)', () => {
+  it('parseia "210mm x 297mm" como A4 (coef = 0,9 com sangria)', () => {
     expect(resolveFormatoDimensions("210mm x 297mm")).toEqual({
       altura: 210,
       largura: 297,
     });
-    expect(coefFromFormato("210mm x 297mm")).toBe(1);
+    expect(coefFromFormato("210mm x 297mm")).toBe(0.9);
   });
 
   it('mantém parse sem unidade ("50x50") e ISO ("A4")', () => {

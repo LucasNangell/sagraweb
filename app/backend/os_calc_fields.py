@@ -77,12 +77,19 @@ def _to_int(value: Any) -> Optional[int]:
         return None
 
 
+# Sangria de 5 mm em cada lateral: +10 mm em altura e em largura no coef A4.
+COEF_A4_SANGRIA_LATERAL_MM = 5
+COEF_A4_SANGRIA_EIXO_MM = COEF_A4_SANGRIA_LATERAL_MM * 2
+
+
 def calculate_coef_a4(altura_mm: Any, largura_mm: Any) -> float:
-    """Coeficiente A4 = área A4 / área do formato (mm²)."""
+    """Coeficiente A4 = área A4 / área do formato com sangria (mm²)."""
     area_a4 = 210 * 297
     h = _to_float(altura_mm)
     w = _to_float(largura_mm)
-    area_prod = h * w
+    if h <= 0 or w <= 0:
+        return 0.0
+    area_prod = (h + COEF_A4_SANGRIA_EIXO_MM) * (w + COEF_A4_SANGRIA_EIXO_MM)
     if area_prod <= 0:
         return 0.0
     return area_a4 / area_prod

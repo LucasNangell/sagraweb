@@ -961,13 +961,11 @@ export function computeComponentCalcs(spec: TechSpec): ComponenteCalcResumo[] {
         Number(lote.paginas) || 0,
         loteIsVersoZero(lote, comp),
       );
-      const kind =
-        classifyCoresKind(lote.impressao || "") ||
-        classifyCoresKind(lote.cores_link) ||
-        classifyCoresKind(lote.cores_desc);
-      if (kind === "PB") pb += pages;
-      else if (kind === "COLOR") color += pages;
-      else outras += pages;
+      const acc = { color: 0, pb: 0, outras: 0 };
+      allocateLoteCotaPages(lote, pages, acc);
+      color += acc.color;
+      pb += acc.pb;
+      outras += acc.outras;
     }
     return {
       tipo: comp.tipo,
@@ -978,6 +976,61 @@ export function computeComponentCalcs(spec: TechSpec): ComponenteCalcResumo[] {
       total: color + pb + outras,
     };
   });
+}
+
+type CotaCorBucket = "COLOR" | "PB" | "outras";
+
+function impressaoSideKind(cores: number): CotaCorBucket | null {
+  if (cores <= 0) return null;
+  if (cores >= 4) return "COLOR";
+  if (cores === 1) return "PB";
+  return "outras";
+}
+
+function addCotaBucket(
+  acc: { color: number; pb: number; outras: number },
+  kind: CotaCorBucket | null,
+  pages: number,
+) {
+  if (!kind || pages <= 0) return;
+  if (kind === "COLOR") acc.color += pages;
+  else if (kind === "PB") acc.pb += pages;
+  else acc.outras += pages;
+}
+
+function allocateLoteCotaPages(
+  lote: Pick<TechSpecLote, "impressao" | "cores_link" | "cores_desc">,
+  pages: number,
+  acc: { color: number; pb: number; outras: number },
+) {
+  const parsed =
+    parseImpressao(lote.impressao) ||
+    parseImpressao(lote.cores_link) ||
+    parseImpressao(lote.cores_desc);
+
+  if (parsed) {
+    const frenteKind = impressaoSideKind(parsed.frente);
+    if (parsed.verso === 0) {
+      addCotaBucket(acc, frenteKind, pages);
+      return;
+    }
+    const versoKind = impressaoSideKind(parsed.verso);
+    if (frenteKind === versoKind) {
+      addCotaBucket(acc, frenteKind, pages);
+      return;
+    }
+    addCotaBucket(acc, frenteKind, Math.ceil(pages / 2));
+    addCotaBucket(acc, versoKind, Math.floor(pages / 2));
+    return;
+  }
+
+  const kind =
+    classifyCoresKind(lote.impressao || "") ||
+    classifyCoresKind(lote.cores_link) ||
+    classifyCoresKind(lote.cores_desc);
+  if (kind === "PB") acc.pb += pages;
+  else if (kind === "COLOR") acc.color += pages;
+  else acc.outras += pages;
 }
 
 function resumoToCalcFields(rows: ComponenteCalcResumo[]): Pick<

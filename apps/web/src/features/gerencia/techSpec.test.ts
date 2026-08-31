@@ -528,6 +528,73 @@ describe("Impressão N/M", () => {
     expect(calculateTotalPagesFromTechSpec(spec)).toBe(4);
     expect(calculateCotaPagesFromTechSpec(spec)).toBe(2);
     expect(computeComponentCalcs(spec)[0].color).toBe(2);
+    expect(computeComponentCalcs(spec)[0].pb).toBe(0);
+  });
+
+  it("4/1 reparte frente policromia e verso P/B", () => {
+    const two: TechSpec = {
+      version: 1,
+      componentes: [
+        {
+          nome: "Arquivo",
+          lotes: [lote({ id: "a", paginas: 2, impressao: "4/1", frente_verso: true })],
+        },
+      ],
+    };
+    expect(computeComponentCalcs(two)[0]).toMatchObject({
+      color: 1,
+      pb: 1,
+      outras: 0,
+      total: 2,
+    });
+
+    const four: TechSpec = {
+      version: 1,
+      componentes: [
+        {
+          nome: "Arquivo",
+          lotes: [lote({ id: "a", paginas: 4, impressao: "4/1", frente_verso: true })],
+        },
+      ],
+    };
+    expect(computeComponentCalcs(four)[0]).toMatchObject({
+      color: 2,
+      pb: 2,
+      outras: 0,
+      total: 4,
+    });
+  });
+
+  it("4/4 conta as duas faces como policromia; 1/4 inverte os lados", () => {
+    const duplexColor: TechSpec = {
+      version: 1,
+      componentes: [
+        {
+          nome: "Arquivo",
+          lotes: [lote({ id: "a", paginas: 2, impressao: "4/4", frente_verso: true })],
+        },
+      ],
+    };
+    expect(computeComponentCalcs(duplexColor)[0]).toMatchObject({
+      color: 2,
+      pb: 0,
+      total: 2,
+    });
+
+    const backColor: TechSpec = {
+      version: 1,
+      componentes: [
+        {
+          nome: "Arquivo",
+          lotes: [lote({ id: "a", paginas: 2, impressao: "1/4", frente_verso: true })],
+        },
+      ],
+    };
+    expect(computeComponentCalcs(backColor)[0]).toMatchObject({
+      color: 1,
+      pb: 1,
+      total: 2,
+    });
   });
 });
 

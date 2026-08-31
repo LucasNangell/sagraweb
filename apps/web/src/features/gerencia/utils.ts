@@ -180,10 +180,16 @@ export function patchCapaMioloDescFields(
   return { [key]: value };
 }
 
+/** Sangria de 5 mm em cada lateral: +10 mm em altura e em largura no coef A4. */
+export const COEF_A4_SANGRIA_LATERAL_MM = 5;
+const COEF_A4_SANGRIA_EIXO_MM = COEF_A4_SANGRIA_LATERAL_MM * 2;
+
 export function calculateCoefA4(altura: number, largura: number): number {
   const areaA4 = 210 * 297;
-  const areaProd = altura * largura;
-  if (!areaProd) return 0;
+  if (!altura || !largura) return 0;
+  const areaProd =
+    (altura + COEF_A4_SANGRIA_EIXO_MM) * (largura + COEF_A4_SANGRIA_EIXO_MM);
+  if (areaProd <= 0) return 0;
   return areaA4 / areaProd;
 }
 

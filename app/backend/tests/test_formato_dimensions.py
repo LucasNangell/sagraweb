@@ -5,6 +5,13 @@ from formato_dimensions import resolve_formato_dimensions
 from os_calc_fields import calculate_coef_a4
 
 
+class TestCalculateCoefA4Sangria:
+    def test_75x110_equivale_area_85x120(self):
+        area_a4 = 210 * 297
+        assert calculate_coef_a4(75, 110) == area_a4 / (85 * 120)
+        assert round(calculate_coef_a4(75, 110), 1) == 6.1
+
+
 class TestResolveFormatoDimensions:
     def test_50mmx50mm(self):
         assert resolve_formato_dimensions("50mmx50mm") == (50.0, 50.0)
@@ -23,4 +30,4 @@ class TestResolveFormatoDimensions:
         dims = resolve_formato_dimensions("50mmx50mm")
         assert dims is not None
         coef = calculate_coef_a4(dims[0], dims[1])
-        assert round(coef, 1) == 24.9
+        assert round(coef, 1) == 17.3

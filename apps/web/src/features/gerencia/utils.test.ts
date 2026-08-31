@@ -13,6 +13,8 @@ import {
   parseCotaEstimadaValue,
   patchFormatoDimensions,
   patchFormatoFromDimensions,
+  computeTiragemMaximaFromForm,
+  parseGerenciaModelos,
   recalculateGerenciaCalcs,
   resolveGerenciaCoefA4,
   roundCoefA4,
@@ -79,6 +81,7 @@ function baseForm(
   | "req_categoria"
   | "op_os"
   | "val_pgs"
+  | "val_modelos"
   | "calc_capa_color"
   | "calc_capa_pb"
   | "calc_miolo_color"
@@ -100,6 +103,7 @@ function baseForm(
     op_os: "1234",
     val_produto: "",
     val_pgs: "1",
+    val_modelos: "",
     calc_capa_color: "",
     calc_capa_pb: "",
     calc_miolo_color: "",
@@ -305,6 +309,88 @@ describe("recalculateGerenciaCalcs", () => {
     expect(result.calc_coef_a4).toBe("10,0");
     expect(result.calc_cota_total).toBe("100");
     setGerenciaCoefA4PorProduto({});
+  });
+
+  it("multiplica a tiragem pela quantidade de modelos na cota", () => {
+    const one = recalculateGerenciaCalcs(
+      baseForm({
+        req_categoria: "Orgao",
+        val_cores: "P/B",
+        calc_miolo_pb: "1",
+        val_pgs: "1",
+        calc_tiragem: "10",
+        val_modelos: "1",
+      }),
+    );
+    const three = recalculateGerenciaCalcs(
+      baseForm({
+        req_categoria: "Orgao",
+        val_cores: "P/B",
+        calc_miolo_pb: "1",
+        val_pgs: "1",
+        calc_tiragem: "10",
+        val_modelos: "3",
+      }),
+    );
+    expect(one.calc_cota_total).toBe("10");
+    expect(three.calc_cota_total).toBe("30");
+  });
+
+  it("trata modelos vazio ou 0 como 1 na cota", () => {
+    const empty = recalculateGerenciaCalcs(
+      baseForm({
+        req_categoria: "Orgao",
+        val_cores: "P/B",
+        calc_miolo_pb: "1",
+        val_pgs: "1",
+        calc_tiragem: "10",
+        val_modelos: "",
+      }),
+    );
+    const zero = recalculateGerenciaCalcs(
+      baseForm({
+        req_categoria: "Orgao",
+        val_cores: "P/B",
+        calc_miolo_pb: "1",
+        val_pgs: "1",
+        calc_tiragem: "10",
+        val_modelos: "0",
+      }),
+    );
+    expect(empty.calc_cota_total).toBe("10");
+    expect(zero.calc_cota_total).toBe("10");
+  });
+});
+
+describe("parseGerenciaModelos", () => {
+  it("usa 1 quando vazio, inválido ou ≤ 0", () => {
+    expect(parseGerenciaModelos("")).toBe(1);
+    expect(parseGerenciaModelos("0")).toBe(1);
+    expect(parseGerenciaModelos("-2")).toBe(1);
+    expect(parseGerenciaModelos("abc")).toBe(1);
+    expect(parseGerenciaModelos("3")).toBe(3);
+  });
+});
+
+describe("computeTiragemMaximaFromForm", () => {
+  it("reduz a tiragem máxima na proporção dos modelos", () => {
+    const base = {
+      ...baseForm({
+        req_categoria: "Orgao",
+        val_cores: "P/B",
+        calc_miolo_pb: "1",
+        val_pgs: "1",
+        calc_altura: "210",
+        calc_largura: "297",
+      }),
+      op_cota_atual: "120",
+    };
+    expect(computeTiragemMaximaFromForm({ ...base, val_modelos: "" })).toBe(
+      "120",
+    );
+    expect(computeTiragemMaximaFromForm({ ...base, val_modelos: "3" })).toBe(
+      "40",
+    );
   });
 });
 

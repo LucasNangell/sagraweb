@@ -134,7 +134,7 @@ export function CalculosCustosPanel({
       </div>
 
       <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:gap-4">
-        <div className="grid min-w-0 flex-1 grid-cols-3 items-end gap-2">
+        <div className="grid min-w-0 flex-1 grid-cols-2 items-end gap-2 sm:grid-cols-4">
           <Field label="Cota atual" className="min-w-0">
             <input
               readOnly
@@ -213,6 +213,29 @@ export function CalculosCustosPanel({
               className={cn(gerenciaInputClass, "min-w-0")}
             />
           </div>
+          <Field label="Qt. Modelos" className="min-w-0">
+            <input
+              readOnly={readOnly}
+              inputMode="numeric"
+              value={form.val_modelos}
+              onChange={(e) => {
+                const v = e.target.value;
+                update((prev) => {
+                  const merged = { ...prev, val_modelos: v };
+                  const withCalcs = {
+                    ...merged,
+                    ...recalculateGerenciaCalcs(merged, calcOpts),
+                  };
+                  return {
+                    ...withCalcs,
+                    ...patchTiragemMaximaFromCota(withCalcs, calcOpts),
+                  };
+                });
+              }}
+              className={cn(gerenciaInputClass, "min-w-0")}
+              title="Cada modelo consome a tiragem na cota (10 × 3 modelos = 30)"
+            />
+          </Field>
         </div>
 
         <div

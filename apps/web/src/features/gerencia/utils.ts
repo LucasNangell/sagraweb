@@ -406,7 +406,7 @@ export function getGerenciaCotaPaginas(
   );
 }
 
-/** Tiragem máxima possível com a cota informada: cota = (páginas × tiragem) / coef → tiragem = (cota × coef) / páginas */
+/** Tiragem máxima possível com a cota informada: cota = (páginas × tiragem × modelos) / coef → tiragem = (cota × coef) / (páginas × modelos) */
 export function calculateMaxTiragemFromCota(
   cotaAtual: number,
   totalPaginas: number,
@@ -421,6 +421,13 @@ export function parseCotaAtualValue(raw: string): number {
   return n > 0 ? n : 0;
 }
 
+/** Quantidade de modelos para cota: vazio, inválido ou ≤ 0 conta como 1. */
+export function parseGerenciaModelos(raw: string | undefined | null): number {
+  const n = parseInt(String(raw ?? "").trim(), 10);
+  if (!Number.isFinite(n) || n <= 0) return 1;
+  return n;
+}
+
 export function computeTiragemMaximaFromForm(
   form: Pick<
     GerenciaFormState,
@@ -429,6 +436,7 @@ export function computeTiragemMaximaFromForm(
     | "op_os"
     | "val_produto"
     | "val_pgs"
+    | "val_modelos"
     | "calc_capa_color"
     | "calc_capa_pb"
     | "calc_miolo_color"
@@ -449,8 +457,9 @@ export function computeTiragemMaximaFromForm(
   const cota = parseCotaAtualValue(form.op_cota_atual);
   if (!cota) return "";
   const totalPaginas = getGerenciaCotaPaginas(form, options);
+  const modelos = parseGerenciaModelos(form.val_modelos);
   const coef = resolveGerenciaCoefA4ForCalcs(form);
-  const max = calculateMaxTiragemFromCota(cota, totalPaginas, coef);
+  const max = calculateMaxTiragemFromCota(cota, totalPaginas * modelos, coef);
   return max > 0 ? String(max) : "";
 }
 
@@ -492,6 +501,7 @@ export function recalculateGerenciaCalcs(
     | "op_os"
     | "val_produto"
     | "val_pgs"
+    | "val_modelos"
     | "calc_capa_color"
     | "calc_capa_pb"
     | "calc_miolo_color"
@@ -513,9 +523,10 @@ export function recalculateGerenciaCalcs(
   const totalPaginas = getGerenciaTotalPaginas(form, options);
   const cotaPaginas = getGerenciaCotaPaginas(form, options);
   const tiragem = parseFloat(form.calc_tiragem || "0") || 0;
+  const modelos = parseGerenciaModelos(form.val_modelos);
   const rawCoef = resolveGerenciaCoefA4(form);
   const coef = roundCoefA4(rawCoef);
-  const cota = coef ? (cotaPaginas * tiragem) / coef : 0;
+  const cota = coef ? (cotaPaginas * tiragem * modelos) / coef : 0;
 
   return {
     calc_total_paginas: String(totalPaginas),

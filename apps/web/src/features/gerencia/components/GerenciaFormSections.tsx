@@ -99,6 +99,19 @@ function set<K extends keyof GerenciaFormState>(
   update({ [key]: value } as Partial<GerenciaFormState>);
 }
 
+function setModelos(
+  update: GerenciaFormUpdater,
+  value: string,
+  techSpec: TechSpec,
+) {
+  update((prev) => {
+    const merged = { ...prev, val_modelos: value };
+    const opts = { techSpec };
+    const withCalcs = { ...merged, ...recalculateGerenciaCalcs(merged, opts) };
+    return { ...withCalcs, ...patchTiragemMaximaFromCota(withCalcs, opts) };
+  });
+}
+
 function setFormato(
   update: GerenciaFormUpdater,
   formato: string,
@@ -1037,7 +1050,7 @@ export function GerenciaTecnicosSection({
             <input
               readOnly={ro}
               value={form.val_modelos}
-              onChange={(e) => set(update, "val_modelos", e.target.value)}
+              onChange={(e) => setModelos(update, e.target.value, techSpec)}
               className={gerenciaInputClass}
             />
           </Field>
@@ -1083,7 +1096,7 @@ export function GerenciaTecnicosSection({
             <input
               readOnly={ro}
               value={form.val_modelos}
-              onChange={(e) => set(update, "val_modelos", e.target.value)}
+              onChange={(e) => setModelos(update, e.target.value, techSpec)}
               className={gerenciaInputClass}
             />
           </Field>

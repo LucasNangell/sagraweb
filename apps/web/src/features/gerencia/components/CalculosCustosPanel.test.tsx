@@ -26,13 +26,15 @@ describe("CalculosCustosPanel", () => {
     const cotaAtual = screen.getByLabelText("Cota atual");
     const tiragemMax = screen.getByLabelText("Tiragem máxima");
     const tiragemFinal = screen.getByLabelText("Tiragem final");
+    const modelos = screen.getByLabelText("Qt. Modelos");
     const coeficiente = screen.getByLabelText("Coeficiente A4");
     const cotaEstimada = screen.getByLabelText("Cota estimada");
 
     expect(documentOrder(pagesHeading, cotaAtual)).toBe(true);
     expect(documentOrder(cotaAtual, tiragemMax)).toBe(true);
     expect(documentOrder(tiragemMax, tiragemFinal)).toBe(true);
-    expect(documentOrder(tiragemFinal, coeficiente)).toBe(true);
+    expect(documentOrder(tiragemFinal, modelos)).toBe(true);
+    expect(documentOrder(modelos, coeficiente)).toBe(true);
     expect(documentOrder(coeficiente, cotaEstimada)).toBe(true);
     expect(screen.queryByLabelText("Total Páginas")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Altura (mm)")).not.toBeInTheDocument();

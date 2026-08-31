@@ -120,7 +120,7 @@ describe("GerenciaFormGrid", () => {
   it("mantém Formato, Altura e Largura na mesma linha de Produto e Qt. Modelos", () => {
     renderGrid();
     const produto = screen.getByLabelText("Produto");
-    const modelos = screen.getByLabelText("Qt. Modelos");
+    const modelos = screen.getAllByLabelText("Qt. Modelos")[0];
     const formato = screen.getByLabelText("Formato");
     const altura = screen.getByLabelText("Altura (mm)");
     const largura = screen.getByLabelText("Largura (mm)");

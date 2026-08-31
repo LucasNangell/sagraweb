@@ -1,16 +1,30 @@
 """Gera o ofício de orçamento em PDF (fpdf2), no formato do DOC-modelo."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 
 from fpdf import FPDF
+from fpdf.fonts import FontFace
 
 _MESES = (
     "janeiro", "fevereiro", "março", "abril", "maio", "junho",
     "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
 )
+
+CABECALHO_LINHAS = (
+    "CÂMARA DOS DEPUTADOS",
+    "Departamento de Apoio Parlamentar",
+    "Coordenação Gráfica da Câmara",
+)
+
+_TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
+BRASAO_PATH = _TEMPLATES_DIR / "orcamento_brasao.png"
+_HEADER_TOP = 10.0
+_BRASAO_H = 18.0
+_TMARGIN = 34.0
 
 
 def _txt(value: Any) -> str:
@@ -28,12 +42,15 @@ def _brl(value: Any) -> str:
 
 def _data_extenso(value: Any) -> str:
     d: date
-    if isinstance(value, date):
+    if isinstance(value, datetime):
+        d = value.date()
+    elif isinstance(value, date):
         d = value
     else:
-        text = str(value or "")[:10]
+        text = str(value or "").strip()
+        iso = text[:10]
         try:
-            y, m, day = (int(p) for p in text.split("-"))
+            y, m, day = (int(p) for p in iso.split("-"))
             d = date(y, m, day)
         except (ValueError, TypeError):
             d = date.today()
@@ -70,13 +87,81 @@ def _draw_especificacao_tabela(pdf: FPDF, grupos: list) -> None:
     pdf.set_text_color(0, 0, 0)
 
 
+def _draw_assinaturas(pdf: FPDF, oficio: dict) -> None:
+    usable = pdf.w - pdf.l_margin - pdf.r_margin
+    col = usable / 2
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_fill_color(255, 255, 255)
+    pdf.set_draw_color(0, 0, 0)
+    pdf.set_line_width(0.3)
+    with pdf.table(
+        width=usable,
+        col_widths=(col, col),
+        first_row_as_headings=False,
+        num_heading_rows=0,
+        borders_layout="NO_HORIZONTAL_LINES",
+        cell_fill_color=(255, 255, 255),
+        cell_fill_mode="ALL",
+        text_align="LEFT",
+        v_align="TOP",
+        align="LEFT",
+        line_height=5,
+        padding=1,
+    ) as table:
+        pad = (2, 6, 2, 2)
+        row = table.row()
+        row.cell(
+            _txt(
+                "Encaminho o presente orçamento conforme solicitação recebida "
+                "e obedecida a norma vigente."
+            ),
+            padding=pad,
+        )
+        row.cell(
+            _txt("Autorizo a execução do trabalho especificado."),
+            padding=pad,
+        )
+        row = table.row()
+        row.cell(" \n\n", padding=pad)
+        row.cell(" \n\n", padding=pad)
+        row = table.row()
+        row.cell(
+            _txt(oficio.get("signatario") or ""),
+            style=FontFace(emphasis="B"),
+            padding=pad,
+            align="C",
+        )
+        row.cell(_txt("Responsável"), padding=pad, align="C")
+        row = table.row()
+        row.cell(_txt(oficio.get("cargo") or ""), padding=pad, align="C")
+        row.cell(_txt("Assinatura e Carimbo"), padding=pad, align="C")
+
+
 class OrcamentoOficioPDF(FPDF):
     def __init__(self, endereco: str, telefone: str):
         super().__init__(format="A4")
         self._endereco = endereco
         self._telefone = telefone
         self.set_auto_page_break(auto=True, margin=22)
-        self.set_margins(20, 18, 20)
+        self.set_margins(20, _TMARGIN, 20)
+
+    def header(self):
+        x = self.l_margin
+        y = _HEADER_TOP
+        text_x = x
+        if BRASAO_PATH.is_file():
+            self.image(str(BRASAO_PATH), x=x, y=y, h=_BRASAO_H)
+            text_x = x + _BRASAO_H + 4
+        self.set_text_color(0, 0, 0)
+        self.set_xy(text_x, y)
+        for i, linha in enumerate(CABECALHO_LINHAS):
+            self.set_x(text_x)
+            if i == 0:
+                self.set_font("Helvetica", "B", 11)
+                self.cell(0, 5, _txt(linha), new_x="LMARGIN", new_y="NEXT")
+            else:
+                self.set_font("Helvetica", "", 8)
+                self.cell(0, 4, _txt(linha), new_x="LMARGIN", new_y="NEXT")
 
     def footer(self):
         self.set_y(-18)
@@ -101,7 +186,7 @@ def build_orcamento_pdf(record: dict) -> bytes:
         0,
         10,
         _txt(f"ORÇAMENTO {record['numero']}/{record['ano']}"),
-        align="C",
+        align="R",
         new_x="LMARGIN",
         new_y="NEXT",
     )
@@ -118,7 +203,8 @@ def build_orcamento_pdf(record: dict) -> bytes:
         new_y="NEXT",
     )
     pdf.ln(4)
-    pdf.cell(0, 6, _txt(_data_extenso(os_meta.get("data_entrada"))), new_x="LMARGIN", new_y="NEXT")
+    data_fonte = record.get("criado_em") or oficio.get("data_geracao")
+    pdf.cell(0, 6, _txt(_data_extenso(data_fonte)), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(6)
     pdf.set_font("Helvetica", "B", 11)
     pdf.cell(0, 6, _txt(f"Solicitante: {oficio.get('solicitante') or ''}"), new_x="LMARGIN", new_y="NEXT")
@@ -140,27 +226,7 @@ def build_orcamento_pdf(record: dict) -> bytes:
     pdf.multi_cell(0, 5, _txt("- " + (oficio.get("clausula_validade") or "")), new_x="LMARGIN", new_y="NEXT")
     pdf.multi_cell(0, 5, _txt("- " + (oficio.get("clausula_entrega") or "")), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(14)
-
-    col_w = 85
-    y = pdf.get_y()
-    pdf.set_font("Helvetica", "", 10)
-    pdf.multi_cell(
-        col_w,
-        5,
-        _txt("Encaminho o presente orçamento conforme solicitação recebida e obedecida a norma vigente."),
-        new_x="LMARGIN",
-        new_y="NEXT",
-    )
-    y_left = pdf.get_y()
-    pdf.set_xy(20 + col_w + 10, y)
-    pdf.multi_cell(col_w, 5, _txt("Autorizo a execução do trabalho especificado."), new_x="LMARGIN", new_y="NEXT")
-    pdf.set_xy(20, max(y_left, pdf.get_y()) + 16)
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(col_w, 5, _txt(oficio.get("signatario") or ""), new_x="RIGHT", new_y="TOP")
-    pdf.cell(col_w, 5, _txt("Responsável"), new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font("Helvetica", "", 10)
-    pdf.cell(col_w, 5, _txt(oficio.get("cargo") or ""), new_x="RIGHT", new_y="TOP")
-    pdf.cell(col_w, 5, _txt("Assinatura e Carimbo"), new_x="LMARGIN", new_y="NEXT")
+    _draw_assinaturas(pdf, oficio)
 
     buffer = BytesIO()
     pdf.output(buffer)

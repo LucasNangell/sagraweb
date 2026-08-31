@@ -43,6 +43,7 @@ class ComponenteOrcamento(BaseModel):
     cor: bool = True
     frente_verso: bool = True
     verso_cor: bool = False
+    impressao: Optional[str] = None
     papel_codigo: Optional[str] = None
     papel_nome_os: Optional[str] = None
     laminacao: bool = False

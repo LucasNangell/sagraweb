@@ -39,7 +39,7 @@ const spec: TechSpec = {
 };
 
 describe("TrabalhoComponentes", () => {
-  it("repete Papel, Cores, Acabamento específico e F/V em cada variação", () => {
+  it("repete Papel, Cores, Impressão, Acabamento específico e F/V em cada variação", () => {
     render(
       <TrabalhoComponentes
         spec={spec}
@@ -55,6 +55,7 @@ describe("TrabalhoComponentes", () => {
     expect(screen.getAllByLabelText("Páginas")).toHaveLength(2);
     expect(screen.getAllByLabelText("Papel")).toHaveLength(2);
     expect(screen.getAllByLabelText("Cores")).toHaveLength(2);
+    expect(screen.getAllByLabelText("Impressão")).toHaveLength(2);
     expect(screen.getAllByLabelText("Máquina")).toHaveLength(2);
     expect(screen.getAllByLabelText("Acabamento específico")).toHaveLength(2);
     expect(screen.getAllByText("F/V")).toHaveLength(2);
@@ -92,7 +93,25 @@ describe("TrabalhoComponentes", () => {
     ).toBeInTheDocument();
   });
 
-  it("oferece Verso em branco só no componente Capa", () => {
+  it("não mostra o checkbox Verso em branco", () => {
+    render(
+      <TrabalhoComponentes
+        spec={spec}
+        onChange={vi.fn()}
+        readOnly={false}
+        maquinas={["Offset"]}
+        papeis={["CF 250g"]}
+        cores={["4x4"]}
+        acabamentos={[]}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("checkbox", { name: "Verso em branco" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("ao escolher 4/0 desmarca F/V", () => {
     const onChange = vi.fn();
     render(
       <TrabalhoComponentes
@@ -106,50 +125,47 @@ describe("TrabalhoComponentes", () => {
       />,
     );
 
-    const checkbox = screen.getByRole("checkbox", { name: "Verso em branco" });
-    expect(checkbox).not.toBeChecked();
-    fireEvent.click(checkbox);
+    const selects = screen.getAllByLabelText("Impressão");
+    fireEvent.change(selects[0], { target: { value: "4/0" } });
     expect(onChange).toHaveBeenCalled();
     const next = onChange.mock.calls[0][0] as TechSpec;
-    expect(next.componentes[0].verso_em_branco).toBe(true);
+    expect(next.componentes[0].lotes[0].impressao).toBe("4/0");
+    expect(next.componentes[0].lotes[0].frente_verso).toBe(false);
   });
 
-  it("não mostra Verso em branco em Miolo", () => {
+  it("abre o seletor de acabamento específico da variação", () => {
     render(
       <TrabalhoComponentes
-        spec={{
-          version: 1,
-          componentes: [
-            {
-              nome: "Miolo",
-              tipo: "MIOLO",
-              lotes: [
-                {
-                  id: "m1",
-                  paginas: 16,
-                  maquina_link: "",
-                  papel_link: "",
-                  cores_link: "P/B",
-                  papel_desc: "",
-                  cores_desc: "",
-                  frente_verso: false,
-                  acabamentos: [],
-                },
-              ],
-            },
-          ],
-        }}
+        spec={spec}
         onChange={vi.fn()}
         readOnly={false}
         maquinas={["Offset"]}
-        papeis={["Offset 90"]}
-        cores={["P/B"]}
+        papeis={["CF 250g"]}
+        cores={["4x4"]}
+        acabamentos={[{ id: 1, label: "Verniz", variacoes: [] }]}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByLabelText("Acabamento específico")[0]);
+    expect(
+      screen.getByRole("dialog", { name: "Incluir acabamentos" }),
+    ).toBeInTheDocument();
+  });
+
+  it("não abre o seletor de acabamento específico em somente leitura", () => {
+    render(
+      <TrabalhoComponentes
+        spec={spec}
+        onChange={vi.fn()}
+        readOnly
+        maquinas={["Offset"]}
+        papeis={["CF 250g"]}
+        cores={["4x4"]}
         acabamentos={[]}
       />,
     );
 
-    expect(
-      screen.queryByRole("checkbox", { name: "Verso em branco" }),
-    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByLabelText("Acabamento específico")[0]);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

@@ -190,6 +190,7 @@ describe("getGerenciaCotaPaginas", () => {
               cores_link: "4x4",
               papel_desc: "",
               cores_desc: "",
+              impressao: "4/0",
               frente_verso: false,
               acabamentos: [],
             },

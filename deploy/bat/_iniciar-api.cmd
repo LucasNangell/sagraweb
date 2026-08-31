@@ -12,10 +12,15 @@ set "PYTHONPATH=%BACKEND%;%ROOT%\app\services"
 
 call "%~dp0_resolve-dev-tools.cmd"
 
-python -c "import sys" >nul 2>&1
+if defined SAGRA_PYTHON (
+    "%SAGRA_PYTHON%" -c "import sys" >nul 2>&1
+) else (
+    python -c "import sys" >nul 2>&1
+)
 if errorlevel 1 (
     echo [ERRO] Python nao encontrado ^(stub da Store ou ausente^).
     echo        Use o launcher "py" ou adicione o python.exe real ao PATH.
+    if defined SAGRA_PYTHON echo        Tentativa resolvida: %SAGRA_PYTHON%
     pause
     exit /b 1
 )
@@ -55,10 +60,11 @@ echo  Health: http://127.0.0.1:%API_PORT%/health/live
 echo  Ctrl+C para encerrar esta janela.
 echo.
 
-python -c "from config_manager import config_manager; config_manager.write_client_config_js(); print('config_client.js OK')" 2>nul
+if not defined SAGRA_PYTHON set "SAGRA_PYTHON=python"
+"%SAGRA_PYTHON%" -c "from config_manager import config_manager; config_manager.write_client_config_js(); print('config_client.js OK')" 2>nul
 if errorlevel 1 echo [AVISO] Falha ao gerar config_client.js
 
-python -m uvicorn routers.api:app --host 127.0.0.1 --port %API_PORT% --reload --reload-delay 2
+"%SAGRA_PYTHON%" -m uvicorn routers.api:app --host 127.0.0.1 --port %API_PORT% --reload --reload-delay 2
 
 pause
 endlocal

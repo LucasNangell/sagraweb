@@ -24,6 +24,7 @@ class TestLoteSerialization:
             cores_link="4x4",
             papel_desc="nota papel",
             cores_desc="nota cores",
+            impressao="4/0",
         )
         data = _lote_to_dict(lote)
         assert data["paginas"] == 12
@@ -32,6 +33,7 @@ class TestLoteSerialization:
         assert data["cores_link"] == "4x4"
         assert data["papel_desc"] == "nota papel"
         assert data["cores_desc"] == "nota cores"
+        assert data["impressao"] == "4/0"
         assert data["frente_verso"] is False
         assert data["acabamentos"] == []
 
@@ -78,19 +80,19 @@ class TestSyncComponentesFromTechspec:
         assert lote["papel_link"] == "Sulfite"
         assert lote["cores_link"] == "P/B"
 
-    def test_saves_capa_verso_em_branco(self):
+    def test_saves_lote_impressao(self):
         cursor = self._cursor_with_existing()
         techspec = TechSpecPayload(
             componentes=[
                 TechSpecComponentePayload(
                     nome="Capa",
                     tipo="CAPA",
-                    verso_em_branco=True,
                     lotes=[
                         TechSpecLotePayload(
                             id="l1",
                             paginas=4,
                             cores_link="4x4",
+                            impressao="4/0",
                         )
                     ],
                 )
@@ -102,8 +104,9 @@ class TestSyncComponentesFromTechspec:
             c for c in cursor.execute.call_args_list if "INSERT INTO tab_os_componentes" in str(c[0][0])
         ]
         parsed = json.loads(insert_calls[0][0][1][6])
-        assert parsed["verso_em_branco"] is True
-        assert parsed["lotes"][0]["paginas"] == 4
+        assert parsed["lotes"][0]["impressao"] == "4/0"
+        assert "verso_em_branco" not in parsed
+
 
     def test_empty_componentes_list_cleans_up_without_sub_os(self):
         cursor = self._cursor_with_existing(

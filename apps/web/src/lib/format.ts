@@ -24,6 +24,28 @@ function parseCivilDate(value: string): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+const MESES_PT = [
+  "janeiro",
+  "fevereiro",
+  "março",
+  "abril",
+  "maio",
+  "junho",
+  "julho",
+  "agosto",
+  "setembro",
+  "outubro",
+  "novembro",
+  "dezembro",
+];
+
+/** Ofício: "Brasília, 12 de janeiro de 2026." Sem valor, usa a data de hoje. */
+export function formatDataExtensoBrasilia(value?: string | null): string {
+  const parsed = value ? parseCivilDate(value) : new Date();
+  const d = parsed && !Number.isNaN(parsed.getTime()) ? parsed : new Date();
+  return `Brasília, ${d.getDate()} de ${MESES_PT[d.getMonth()]} de ${d.getFullYear()}.`;
+}
+
 export function formatDateBr(value: string | null | undefined): string {
   if (!value) {
     return "";

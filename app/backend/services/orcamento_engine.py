@@ -1,9 +1,10 @@
 """
 Motor de custeio Digital e Offset — puro, sem I/O.
 
-Reproduz a metodologia das planilhas de estimativa (não os bugs de referência
-deslocada). Valores monetários intermediários ficam em float; o total é
-arredondado a 2 casas no consolidado.
+Digital segue a planilha OS 1365 (clique + 87% sobre papel+acabamento).
+Offset segue a planilha 2 componentes (faixa de pessoal + 7/10/3/5%).
+Preços de papel são distintos por tecnologia. Valores intermediários ficam
+em float; o total é arredondado a 2 casas no consolidado.
 """
 from __future__ import annotations
 
@@ -15,6 +16,7 @@ from typing import Any, Optional
 from services.orcamento_pessoal import custear_passos
 
 _GRAMATURA_RE = re.compile(r"(\d+)\s*g(?:r|ra|ramas)?\b", re.IGNORECASE)
+_CORES_XY_RE = re.compile(r"(\d)\s*[xX×/]\s*(\d)")
 _WS_RE = re.compile(r"\s+")
 
 
@@ -132,6 +134,17 @@ def insumo_by_codigo(insumos: list[dict], codigo: Optional[str]) -> Optional[dic
     return None
 
 
+def _preco_insumo(item: Optional[dict], tecnologia: str) -> float:
+    """Digital usa preco_unitario_digital quando > 0; Offset (e fallback) usa preco_unitario."""
+    if not item:
+        return 0.0
+    if tecnologia == "digital":
+        dig = _f(item.get("preco_unitario_digital"))
+        if dig > 0:
+            return dig
+    return _f(item.get("preco_unitario"))
+
+
 def faixa_pessoal(tiragem: int, faixas: list[dict]) -> float:
     ordered = sorted(faixas, key=lambda f: int(f.get("limite_inf") or 0))
     chosen = 0.0
@@ -145,6 +158,23 @@ def faixa_pessoal(tiragem: int, faixas: list[dict]) -> float:
         if sup is None or tiragem <= int(sup):
             chosen = _f(faixa.get("percentual"))
     return chosen
+
+
+def parse_cores_impressao(cores: Optional[str]) -> Optional[dict]:
+    """Lê 4x0 / 4x1 / 4x4: verso 0 = sem impressão no verso (2 páginas da capa não entram em chapas)."""
+    if not cores or not str(cores).strip():
+        return None
+    match = _CORES_XY_RE.search(str(cores).replace(" ", ""))
+    if not match:
+        return None
+    frente, verso = int(match.group(1)), int(match.group(2))
+    return {
+        "cor": frente >= 4,
+        "frente_verso": verso > 0,
+        "verso_cor": verso >= 4,
+        "frente": frente,
+        "verso": verso,
+    }
 
 
 def _chapas_capa(cor: bool, frente_verso: bool, verso_cor: bool) -> int:
@@ -205,22 +235,30 @@ def _calc_componente(
     fmt = _component_format(comp, formatos)
     fator = fmt["fator_a4"]
     paginas = max(int(_f(comp.get("paginas"), 1)), 1)
-    cor = _b(comp.get("cor"))
-    fv = _b(comp.get("frente_verso"))
-    verso_cor = _b(comp.get("verso_cor")) if fv else False
+    parsed_imp = parse_cores_impressao(comp.get("impressao"))
+    if parsed_imp is not None:
+        cor = bool(parsed_imp["cor"])
+        fv = bool(parsed_imp["frente_verso"])
+        verso_cor = bool(parsed_imp["verso_cor"])
+    else:
+        cor = _b(comp.get("cor"))
+        fv = _b(comp.get("frente_verso"))
+        verso_cor = _b(comp.get("verso_cor")) if fv else False
     papel = insumo_by_codigo(insumos, comp.get("papel_codigo"))
-    rendimento = _f((papel or {}).get("rendimento_a4"), 8) or 8
-    preco_folha = _f((papel or {}).get("preco_unitario"))
+    preco_folha = _preco_insumo(papel, tecnologia)
 
     total_paginas = tiragem * paginas
     if tecnologia == "digital":
         a4_eq = total_paginas / fator
         acerto = 0.0
+        rendimento = _f(params.get("rendimento_digital_a4"), 8) or 8
     else:
-        divisor_fv = 2.0 if fv else 1.0
+        # Planilha Offset 2 componentes: G13/G14 fixos em 2 (F/V no papel).
+        divisor_fv = 2.0
         folhas_produto = total_paginas / divisor_fv
         a4_eq = folhas_produto / fator
         acerto = _f(params.get("acerto_offset_folhas"), 50)
+        rendimento = _f(params.get("rendimento_offset_a4"), 8) or 8
 
     folhas_matriz = a4_eq / rendimento + acerto
     custo_papel = folhas_matriz * preco_folha
@@ -238,7 +276,7 @@ def _calc_componente(
     else:
         qtd_chapas_cobradas = qtd_chapas
     chapa = insumo_by_codigo(insumos, params.get("chapa_codigo_padrao") or "c4")
-    custo_chapa = qtd_chapas_cobradas * _f((chapa or {}).get("preco_unitario"))
+    custo_chapa = qtd_chapas_cobradas * _preco_insumo(chapa, tecnologia)
     qtd_provas = int(_f(comp.get("qtd_provas")))
     qtd_fotolitos = int(_f(comp.get("qtd_fotolitos")))
     custo_prova = qtd_provas * _f(params.get("cotacao_prova"), 5)
@@ -250,14 +288,16 @@ def _calc_componente(
         params.get("tinta_cor_codigo" if cor else "tinta_pb_codigo"),
     )
     impressoes = 2.0 * folhas_matriz if tecnologia == "offset" else 0.0
-    custo_tinta = impressoes * (_f((tinta or {}).get("preco_unitario")) / 10000.0)
+    custo_tinta = impressoes * (_preco_insumo(tinta, tecnologia) / 10000.0)
 
     custo_laminacao = 0.0
     if _b(comp.get("laminacao")):
         bopp = insumo_by_codigo(insumos, params.get("bopp_codigo") or "b0")
         metros = _f(params.get("bopp_metros"), 1500) or 1500
         fator_fv = 2.0 if _b(comp.get("laminacao_fv")) else 1.0
-        custo_laminacao = (folhas_matriz / metros) * _f((bopp or {}).get("preco_unitario")) * fator_fv
+        # Planilha Acabamento!G = A4_eq / rendimento (sem acerto).
+        folhas_bopp = a4_eq / rendimento
+        custo_laminacao = (folhas_bopp / metros) * _preco_insumo(bopp, tecnologia) * fator_fv
 
     custo_cola = 0.0
     if _b(comp.get("cola")) and paginas > _f(params.get("cola_min_paginas"), 70):
@@ -267,23 +307,23 @@ def _calc_componente(
         pg_ref = _f(params.get("cola_paginas_ref"), 180)
         denom = ex_ref * pg_ref
         if denom > 0:
-            custo_cola = (kg_ref * total_paginas / denom) * _f((cola or {}).get("preco_unitario"))
+            custo_cola = (kg_ref * total_paginas / denom) * _preco_insumo(cola, tecnologia)
 
     custo_grampo = 0.0
     if _b(comp.get("grampo")) and paginas <= _f(params.get("grampo_max_paginas"), 80):
         grampo = insumo_by_codigo(insumos, params.get("grampo_codigo") or "g1")
         qtd = _f(params.get("grampos_por_exemplar"), 2) * tiragem
-        custo_grampo = qtd * _f((grampo or {}).get("preco_unitario"))
+        custo_grampo = qtd * _preco_insumo(grampo, tecnologia)
 
     custo_espiral = 0.0
     if _b(comp.get("espiral")):
         espiral = insumo_by_codigo(insumos, comp.get("espiral_codigo") or params.get("espiral_codigo") or "e1")
-        custo_espiral = tiragem * _f((espiral or {}).get("preco_unitario"))
+        custo_espiral = tiragem * _preco_insumo(espiral, tecnologia)
 
     custo_pvc = 0.0
     if _b(comp.get("capa_pvc")):
         pvc = insumo_by_codigo(insumos, params.get("capa_pvc_codigo") or "c9")
-        custo_pvc = tiragem * _f((pvc or {}).get("preco_unitario"))
+        custo_pvc = tiragem * _preco_insumo(pvc, tecnologia)
 
     custo_extras = _f(comp.get("verniz")) + _f(comp.get("faca_cliche"))
     custo_acabamento = (
@@ -364,7 +404,7 @@ def _consolidar(tecnologia: str, rows: list[dict], catalog: dict, tiragem: int) 
         utilizacao=_f(params.get("overhead_utilizacao"), 0.6),
         horas_mes=176.0,
     )
-    usa_hora = bool(pessoal_info.get("tem_passos"))
+    usa_hora = _b(params.get("pessoal_por_hora")) and bool(pessoal_info.get("tem_passos"))
 
     if tecnologia == "digital":
         if usa_hora:

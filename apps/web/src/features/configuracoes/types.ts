@@ -313,6 +313,8 @@ export interface OrcamentoInsumoRecord {
   preco_bruto: number;
   preco_unitario: number;
   preco_cadastro?: number;
+  preco_bruto_digital?: number;
+  preco_unitario_digital?: number;
   rendimento_a4?: number | null;
   formato_folha?: string | null;
   aliases: string[];

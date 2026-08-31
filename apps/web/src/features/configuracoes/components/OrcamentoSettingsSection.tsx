@@ -63,6 +63,12 @@ const DIGITAL_FIELDS: FieldSpec[] = [
     kind: "percent",
     suffix: "%",
   },
+  {
+    chave: "rendimento_digital_a4",
+    label: "A4 por folha (Digital)",
+    hint: "Divisor da planilha Digital (K13), em geral 8.",
+    kind: "number",
+  },
 ];
 
 const OFFSET_FIELDS: FieldSpec[] = [
@@ -70,6 +76,12 @@ const OFFSET_FIELDS: FieldSpec[] = [
     chave: "acerto_offset_folhas",
     label: "Folhas de acerto",
     hint: "Somadas à matriz na impressão Offset.",
+    kind: "number",
+  },
+  {
+    chave: "rendimento_offset_a4",
+    label: "A4 por folha (Offset)",
+    hint: "Divisor da planilha Offset 2 componentes (K13), em geral 8.",
     kind: "number",
   },
   {

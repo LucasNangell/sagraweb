@@ -5,6 +5,7 @@ import {
   COMPONENTE_LABELS,
   COMPONENTE_TIPOS,
   type ComponenteTipo,
+  IMPRESSAO_OPTIONS,
   calculateRemainingPages,
   createComponente,
   createDefaultLote,
@@ -12,9 +13,13 @@ import {
   createNamedComponente,
   getComponenteKey,
   getComponenteLabel,
+  impressaoAfterCoresChange,
+  impressaoAfterFvChange,
   isGenericoComponente,
   loteCoresValue,
+  loteIsVersoZero,
   lotePapelValue,
+  parseImpressao,
   type TechSpec,
   type TechSpecChangeMeta,
   type TechSpecComponente,
@@ -229,9 +234,6 @@ export function TrabalhoComponentes({
               cores={cores}
               acabamentos={acabamentos}
               onRename={(nome) => updateComponente(key, { ...comp, nome })}
-              onVersoEmBranco={(checked) =>
-                updateComponente(key, { ...comp, verso_em_branco: checked })
-              }
               onRemove={() => removeComponente(key)}
               onAddLote={() => addLote(key)}
               onRemoveLote={(loteId) => removeLote(key, loteId)}
@@ -253,7 +255,6 @@ function ComponenteCard({
   cores,
   acabamentos,
   onRename,
-  onVersoEmBranco,
   onRemove,
   onAddLote,
   onRemoveLote,
@@ -267,16 +268,16 @@ function ComponenteCard({
   cores: string[];
   acabamentos: AcabamentoCatalogItem[];
   onRename: (nome: string) => void;
-  onVersoEmBranco: (checked: boolean) => void;
   onRemove: () => void;
   onAddLote: () => void;
   onRemoveLote: (loteId: string) => void;
   onUpdateLote: (loteId: string, patch: Partial<TechSpecLote>) => void;
 }) {
+  const capaVersoZero = comp.lotes.some((l) => loteIsVersoZero(l, comp));
   const subtitle =
     comp.tipo === "CAPA"
-      ? comp.verso_em_branco
-        ? "Capa em 4 páginas; verso em branco não entra na cota"
+      ? capaVersoZero
+        ? "Capa em 4 páginas; verso 0 não entra na cota"
         : "Capa fixa em 4 páginas (ajuste se necessário)"
       : "Variações de páginas, papel, cores e máquina (ex.: policromia + P/B)";
 
@@ -298,23 +299,6 @@ function ComponenteCard({
             />
           )}
           <p className="text-[0.65rem] text-slate-500">{subtitle}</p>
-          {comp.tipo === "CAPA" ? (
-            <label
-              className="mt-1.5 flex items-center gap-1.5"
-              title="Não contabiliza o verso na cota (capa 4 páginas → 2 páginas impressas)"
-            >
-              <input
-                type="checkbox"
-                disabled={readOnly}
-                checked={Boolean(comp.verso_em_branco)}
-                onChange={(e) => onVersoEmBranco(e.target.checked)}
-                className="size-4 rounded border-slate-300"
-              />
-              <span className="text-[0.65rem] font-semibold text-slate-600">
-                Verso em branco
-              </span>
-            </label>
-          ) : null}
         </div>
         {!readOnly ? (
           <button
@@ -400,9 +384,33 @@ function LoteCard({
       else onChange({ papel_link: "", papel_desc: value });
       return;
     }
-    if (!value) onChange({ cores_link: "", cores_desc: "" });
-    else if (catalog.includes(value)) onChange({ cores_link: value, cores_desc: "" });
-    else onChange({ cores_link: "", cores_desc: value });
+    const coresPatch = !value
+      ? { cores_link: "", cores_desc: "" }
+      : catalog.includes(value)
+        ? { cores_link: value, cores_desc: "" }
+        : { cores_link: "", cores_desc: value };
+    const impressao = impressaoAfterCoresChange(lote, value);
+    const parsed = parseImpressao(impressao);
+    onChange({
+      ...coresPatch,
+      impressao,
+      frente_verso: parsed ? parsed.verso > 0 : lote.frente_verso,
+    });
+  };
+
+  const setFrenteVerso = (checked: boolean) => {
+    onChange({
+      frente_verso: checked,
+      impressao: impressaoAfterFvChange(lote, checked),
+    });
+  };
+
+  const setImpressao = (value: string) => {
+    const parsed = parseImpressao(value);
+    onChange({
+      impressao: value,
+      frente_verso: parsed ? parsed.verso > 0 : false,
+    });
   };
 
   return (
@@ -454,6 +462,16 @@ function LoteCard({
             <SelectOptions items={cores} extra={coresValue} />
           </select>
         </Field>
+        <Field label="Impressão" className="lg:col-span-1">
+          <select
+            disabled={readOnly}
+            value={lote.impressao || ""}
+            onChange={(e) => setImpressao(e.target.value)}
+            className={gerenciaInputClass}
+          >
+            <SelectOptions items={IMPRESSAO_OPTIONS} extra={lote.impressao} />
+          </select>
+        </Field>
         <Field label="Máquina" className="lg:col-span-2">
           <select
             disabled={readOnly}
@@ -465,7 +483,7 @@ function LoteCard({
           </select>
         </Field>
         <AcabamentoField
-          className="sm:col-span-2 lg:col-span-3"
+          className="sm:col-span-2 lg:col-span-2"
           label="Acabamento específico"
           catalog={acabamentosCatalog}
           selected={lote.acabamentos ?? []}
@@ -478,7 +496,7 @@ function LoteCard({
             type="checkbox"
             disabled={readOnly}
             checked={Boolean(lote.frente_verso)}
-            onChange={(e) => onChange({ frente_verso: e.target.checked })}
+            onChange={(e) => setFrenteVerso(e.target.checked)}
             className="size-4 rounded border-slate-300"
           />
           <span className="text-xs font-semibold text-slate-600">F/V</span>

@@ -5,7 +5,13 @@
   <title>Orçamento {{ numero }}/{{ ano }}</title>
   <style>
     body { font-family: "Times New Roman", Times, serif; font-size: 12pt; color: #111; margin: 24mm 20mm; }
-    h1 { text-align: center; font-size: 18pt; margin: 0 0 16px; }
+    .cabecalho { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+    .cabecalho td { vertical-align: middle; border: none; padding: 0; }
+    .cabecalho .brasao { width: 22mm; }
+    .cabecalho img { width: 18mm; height: 18mm; }
+    .cabecalho .hierarquia { font-size: 10pt; line-height: 1.25; }
+    .cabecalho .hierarquia strong { font-size: 12pt; }
+    h1 { text-align: right; font-size: 18pt; margin: 0 0 16px; }
     .meta { margin-bottom: 14px; }
     .spec table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 11pt; }
     .spec th { text-align: left; background: #eee; padding: 4px 6px; border: 1px solid #ccc; }
@@ -13,12 +19,25 @@
     .spec td:first-child { width: 32%; font-weight: 600; }
     .totais { margin: 14px 0; }
     .clausulas { margin-top: 18px; }
-    .assinaturas { display: flex; gap: 24px; margin-top: 36px; }
-    .assinaturas div { flex: 1; }
+    .assinaturas { width: 100%; border-collapse: collapse; margin-top: 36px; background: #fff; border: 1px solid #111; }
+    .assinaturas td { width: 50%; vertical-align: top; border: none; border-right: 1px solid #111; background: #fff; padding: 8px; font-size: 11pt; }
+    .assinaturas td:last-child { border-right: none; }
+    .assinaturas .espaco td { height: 36px; }
+    .assinaturas .nome td { text-align: center; }
     footer { margin-top: 40px; text-align: center; font-size: 9pt; color: #444; }
   </style>
 </head>
 <body>
+  <table class="cabecalho">
+    <tr>
+      <td class="brasao"><img src="orcamento_brasao.png" alt="" /></td>
+      <td class="hierarquia">
+        <strong>CÂMARA DOS DEPUTADOS</strong><br />
+        Departamento de Apoio Parlamentar<br />
+        Coordenação Gráfica da Câmara
+      </td>
+    </tr>
+  </table>
   <h1>ORÇAMENTO {{ numero }}/{{ ano }}</h1>
   {% if processo %}<div class="meta">Processo nº {{ processo }}</div>{% endif %}
   <div class="meta">Ordem de serviço nº {{ os_numero }}/{{ os_ano }}</div>
@@ -47,16 +66,21 @@
     - {{ clausula_validade }}<br />
     - {{ clausula_entrega }}
   </div>
-  <div class="assinaturas">
-    <div>
-      Encaminho o presente orçamento conforme solicitação recebida e obedecida a norma vigente.
-      <p style="margin-top: 36px;"><strong>{{ signatario }}</strong><br />{{ cargo }}</p>
-    </div>
-    <div>
-      Autorizo a execução do trabalho especificado.
-      <p style="margin-top: 36px;">Responsável<br />Assinatura e Carimbo</p>
-    </div>
-  </div>
+  <table class="assinaturas">
+    <tr>
+      <td>Encaminho o presente orçamento conforme solicitação recebida e obedecida a norma vigente.</td>
+      <td>Autorizo a execução do trabalho especificado.</td>
+    </tr>
+    <tr class="espaco"><td>&nbsp;</td><td>&nbsp;</td></tr>
+    <tr class="nome">
+      <td><strong>{{ signatario }}</strong></td>
+      <td>Responsável</td>
+    </tr>
+    <tr class="nome">
+      <td>{{ cargo }}</td>
+      <td>Assinatura e Carimbo</td>
+    </tr>
+  </table>
   <footer>
     Endereço: {{ endereco }}<br />
     Telefone: {{ telefone }}

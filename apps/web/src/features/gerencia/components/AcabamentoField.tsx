@@ -1,6 +1,6 @@
 import { cn } from "@sagra/ui";
-import { Check, Plus, Scissors, X } from "lucide-react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { Check, Scissors, X } from "lucide-react";
+import { useEffect, useId, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 
 import type { AcabamentoCatalogItem } from "@/api/auxLookups";
@@ -70,13 +70,33 @@ export function AcabamentoField({
   const [open, setOpen] = useState(false);
   const fieldId = useId();
   const text = displayValue ?? displayText(selected);
+  const canOpen = !readOnly;
+
+  const openPicker = () => {
+    if (!canOpen) return;
+    setOpen(true);
+  };
+
+  const onFieldKeyDown = (e: ReactKeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (!canOpen) return;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      setOpen(true);
+    }
+  };
+
+  const fieldClass = cn(
+    gerenciaInputClass,
+    "mt-0 min-w-0 w-full",
+    canOpen && "cursor-pointer",
+  );
 
   return (
     <div className={cn("min-w-0", className)}>
       <label htmlFor={fieldId} className={gerenciaLabelClass}>
         {label}
       </label>
-      <div className="mt-1 flex min-w-0 items-start gap-1.5">
+      <div className="mt-1 min-w-0">
         {multiline ? (
           <textarea
             id={fieldId}
@@ -85,11 +105,12 @@ export function AcabamentoField({
             value={text}
             placeholder="Nenhum"
             title={text || "Nenhum acabamento"}
-            className={cn(
-              gerenciaInputClass,
-              "mt-0 min-h-[72px] min-w-0 flex-1 resize-y whitespace-pre-wrap",
-            )}
+            className={cn(fieldClass, "min-h-[72px] resize-y whitespace-pre-wrap")}
             aria-label={label}
+            aria-haspopup={canOpen ? "dialog" : undefined}
+            aria-expanded={canOpen ? open : undefined}
+            onClick={openPicker}
+            onKeyDown={onFieldKeyDown}
           />
         ) : (
           <input
@@ -98,22 +119,14 @@ export function AcabamentoField({
             value={text}
             placeholder="Nenhum"
             title={text || "Nenhum acabamento"}
-            className={cn(gerenciaInputClass, "mt-0 min-w-0 flex-1 truncate")}
+            className={cn(fieldClass, "truncate")}
             aria-label={label}
+            aria-haspopup={canOpen ? "dialog" : undefined}
+            aria-expanded={canOpen ? open : undefined}
+            onClick={openPicker}
+            onKeyDown={onFieldKeyDown}
           />
         )}
-        {!readOnly ? (
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            aria-haspopup="dialog"
-            aria-expanded={open}
-            className="inline-flex h-[2.125rem] shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-secondary-blue/30 bg-white px-2.5 text-xs font-semibold text-secondary-blue shadow-sm transition hover:border-secondary-blue/50 hover:bg-slate-50"
-          >
-            <Plus className="size-3.5" aria-hidden />
-            {selected.length || displayValue ? "Alterar" : "Incluir"}
-          </button>
-        ) : null}
       </div>
       {open
         ? createPortal(
@@ -185,10 +198,13 @@ function AcabamentoModal({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      onClose();
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [onClose]);
 
   const togglePlain = (item: AcabamentoCatalogItem) => {

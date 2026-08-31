@@ -20,6 +20,8 @@ export interface TechSpecLote {
   cores_link: string;
   papel_desc: string;
   cores_desc: string;
+  /** Frente/verso em cores, ex. 4/0, 1/1, 4/4. */
+  impressao?: string;
   frente_verso: boolean;
   acabamentos: TechSpecAcabamento[];
 }
@@ -34,7 +36,7 @@ export interface TechSpecComponente {
   lotes: TechSpecLote[];
   /** Acabamentos do memo DescAcabamento rotulado (não são o específico do lote). */
   acabamentos?: TechSpecAcabamento[];
-  /** Capa: verso sem impressão — não entra na cota (4p → 2p). */
+  /** Legado (capa): migrado para impressao N/0. Não gravar em saves novos. */
   verso_em_branco?: boolean;
 }
 
@@ -69,6 +71,7 @@ export function createDefaultLote(maquinaLink = ""): TechSpecLote {
     cores_link: "",
     papel_desc: "",
     cores_desc: "",
+    impressao: "",
     frente_verso: false,
     acabamentos: [],
   };
@@ -210,6 +213,7 @@ export function createGenericoComponente(options?: {
   lote.papel_desc = options?.papelDesc ?? "";
   lote.cores_desc = options?.coresDesc ?? "";
   lote.frente_verso = Boolean(options?.frenteVerso);
+  lote.impressao = inferImpressaoFromLote(lote);
   return {
     nome: GENERICO_NOME,
     lotes: [lote],
@@ -252,6 +256,131 @@ export function lotePapelValue(lote: Pick<TechSpecLote, "papel_link" | "papel_de
 
 export function loteCoresValue(lote: Pick<TechSpecLote, "cores_link" | "cores_desc">): string {
   return (lote.cores_link || lote.cores_desc || "").trim();
+}
+
+const IMPRESSAO_XY_RE = /(\d)\s*[xX×/]\s*(\d)/;
+
+export type ImpressaoSpec = { frente: number; verso: number };
+
+export const IMPRESSAO_OPTIONS: string[] = (() => {
+  const out: string[] = [];
+  for (let frente = 1; frente <= 4; frente += 1) {
+    for (let verso = 0; verso <= 4; verso += 1) {
+      out.push(`${frente}/${verso}`);
+    }
+  }
+  return out;
+})();
+
+export function parseImpressao(raw: string | undefined | null): ImpressaoSpec | null {
+  if (!raw) return null;
+  const match = IMPRESSAO_XY_RE.exec(String(raw).replace(/\s/g, ""));
+  if (!match) return null;
+  const frente = Number(match[1]);
+  const verso = Number(match[2]);
+  if (frente < 1 || frente > 4 || verso < 0 || verso > 4) return null;
+  return { frente, verso };
+}
+
+export function formatImpressao(frente: number, verso: number): string {
+  return `${frente}/${verso}`;
+}
+
+export function flagsFromImpressao(value: string): {
+  cor: boolean;
+  frente_verso: boolean;
+  verso_cor: boolean;
+} {
+  const parsed = parseImpressao(value);
+  if (!parsed) return { cor: false, frente_verso: false, verso_cor: false };
+  return {
+    cor: parsed.frente >= 4,
+    frente_verso: parsed.verso > 0,
+    verso_cor: parsed.verso >= 4,
+  };
+}
+
+export function impressaoFromFlags(
+  cor: boolean,
+  frenteVerso: boolean,
+  versoCor: boolean,
+): string {
+  const frente = cor ? 4 : 1;
+  const verso = !frenteVerso ? 0 : versoCor ? 4 : 1;
+  return formatImpressao(frente, verso);
+}
+
+function frenteFromCoresKind(kind: "PB" | "COLOR" | null): number {
+  return kind === "COLOR" ? 4 : 1;
+}
+
+/** Infere N/M a partir do catálogo de cores, F/V e flag legado verso em branco. */
+export function inferImpressaoFromLote(
+  lote: Pick<
+    TechSpecLote,
+    "impressao" | "cores_link" | "cores_desc" | "frente_verso"
+  >,
+  options?: { versoEmBranco?: boolean },
+): string {
+  const explicit = parseImpressao(lote.impressao);
+  if (explicit) return formatImpressao(explicit.frente, explicit.verso);
+
+  const coresText = loteCoresValue(lote);
+  if (options?.versoEmBranco) {
+    return formatImpressao(frenteFromCoresKind(classifyCoresKind(coresText)), 0);
+  }
+
+  const fromCores = parseImpressao(coresText);
+  if (fromCores) return formatImpressao(fromCores.frente, fromCores.verso);
+
+  const kind = classifyCoresKind(coresText);
+  if (!kind) return "";
+  const frente = frenteFromCoresKind(kind);
+  return formatImpressao(frente, lote.frente_verso ? frente : 0);
+}
+
+/** Ao mudar o catálogo de cores: 4x4/1x1 vira N/M; senão só o dígito da frente. */
+export function impressaoAfterCoresChange(
+  lote: Pick<TechSpecLote, "impressao" | "frente_verso">,
+  coresValue: string,
+): string {
+  const fromCatalog = parseImpressao(coresValue);
+  if (fromCatalog) return formatImpressao(fromCatalog.frente, fromCatalog.verso);
+  const kind = classifyCoresKind(coresValue);
+  if (!kind) return lote.impressao?.trim() || "";
+  const current = parseImpressao(lote.impressao);
+  if (kind === "PB") {
+    const verso = current && current.verso > 0 ? 1 : lote.frente_verso ? 1 : 0;
+    return formatImpressao(1, verso);
+  }
+  const frente = 4;
+  const verso = current ? current.verso : lote.frente_verso ? frente : 0;
+  return formatImpressao(frente, verso);
+}
+
+/** Ao marcar/desmarcar F/V: verso 0 ou, se ligar, o verso anterior (ou igual à frente). */
+export function impressaoAfterFvChange(
+  lote: Pick<TechSpecLote, "impressao" | "cores_link" | "cores_desc">,
+  frenteVerso: boolean,
+): string {
+  const current =
+    parseImpressao(lote.impressao) || parseImpressao(loteCoresValue(lote));
+  const kind = classifyCoresKind(loteCoresValue(lote));
+  const frente = current?.frente ?? frenteFromCoresKind(kind);
+  if (!frenteVerso) return formatImpressao(frente, 0);
+  const verso = current && current.verso > 0 ? current.verso : frente;
+  return formatImpressao(frente, verso);
+}
+
+export function loteIsVersoZero(
+  lote: Pick<TechSpecLote, "impressao" | "cores_link" | "cores_desc">,
+  comp?: Pick<TechSpecComponente, "tipo" | "verso_em_branco">,
+): boolean {
+  const explicit = parseImpressao(lote.impressao);
+  if (explicit) return explicit.verso === 0;
+  if (comp?.verso_em_branco) return true;
+  const fromCores = parseImpressao(lote.cores_link) || parseImpressao(lote.cores_desc);
+  return fromCores != null && fromCores.verso === 0;
 }
 
 export interface LabeledMemoSegment {
@@ -403,6 +532,7 @@ function parseComponentesFromPapelCores(
     const cores = coresSegs.find((s) => s.tipo === comp.tipo || s.nome === comp.nome);
     assignParsedField(lote, "papel", papel?.value ?? "", form.val_papel.trim());
     assignParsedField(lote, "cores", cores?.value ?? "", form.val_cores.trim());
+    lote.impressao = inferImpressaoFromLote(lote);
   }
 
   const papelRest = unlabeledMemoRemainder(form.txt_papel_desc);
@@ -497,7 +627,10 @@ function applyOsFrenteVerso(spec: TechSpec, chkFv: boolean | undefined): TechSpe
     ...spec,
     componentes: spec.componentes.map((c) => ({
       ...c,
-      lotes: c.lotes.map((l) => ({ ...l, frente_verso: true })),
+      lotes: c.lotes.map((l) => {
+        const impressao = impressaoAfterFvChange(l, true);
+        return { ...l, frente_verso: true, impressao };
+      }),
     })),
   };
 }
@@ -611,18 +744,29 @@ export function ensureGenericoComponentes(
   return ensureTechSpecIntegrity({ ...safe, componentes: nonempty });
 }
 
-function normalizeLote(l: Partial<TechSpecLote> & Record<string, unknown>): TechSpecLote {
+function normalizeLote(
+  l: Partial<TechSpecLote> & Record<string, unknown>,
+  options?: { versoEmBranco?: boolean },
+): TechSpecLote {
   const rawAcab = Array.isArray(l.acabamentos) ? l.acabamentos : undefined;
-  return {
+  const base: TechSpecLote = {
     id: (l.id as string) ?? newLoteId(),
     paginas: Number(l.paginas) || 0,
-    maquina_link: l.maquina_link ?? "",
-    papel_link: l.papel_link ?? "",
-    cores_link: l.cores_link ?? "",
-    papel_desc: l.papel_desc ?? "",
-    cores_desc: l.cores_desc ?? "",
+    maquina_link: (l.maquina_link as string) ?? "",
+    papel_link: (l.papel_link as string) ?? "",
+    cores_link: (l.cores_link as string) ?? "",
+    papel_desc: (l.papel_desc as string) ?? "",
+    cores_desc: (l.cores_desc as string) ?? "",
+    impressao: typeof l.impressao === "string" ? l.impressao : "",
     frente_verso: Boolean(l.frente_verso),
     acabamentos: (rawAcab ?? []).map(normalizeAcabamento).filter((item): item is TechSpecAcabamento => item != null),
+  };
+  const impressao = inferImpressaoFromLote(base, options);
+  const parsed = parseImpressao(impressao);
+  return {
+    ...base,
+    impressao,
+    frente_verso: parsed ? parsed.verso > 0 : base.frente_verso,
   };
 }
 
@@ -662,13 +806,14 @@ function normalizeComponente(comp: TechSpecComponente): TechSpecComponente {
   const acabamentos = (migrated.acabamentos ?? [])
     .map((item) => normalizeAcabamento(item))
     .filter((item): item is TechSpecAcabamento => item != null);
+  const { verso_em_branco: legacyVerso, ...rest } = migrated;
+  const versoEmBranco = Boolean(legacyVerso);
   return {
-    ...migrated,
+    ...rest,
     nome,
     tipo,
-    lotes: lotesSource.map((l) => normalizeLote(l)),
+    lotes: lotesSource.map((l) => normalizeLote(l, { versoEmBranco })),
     acabamentos,
-    verso_em_branco: tipo === "CAPA" ? Boolean(migrated.verso_em_branco) : undefined,
   };
 }
 
@@ -721,11 +866,19 @@ export function techSpecFromComponentesApi(
 export function classifyCoresKind(cores: string): "PB" | "COLOR" | null {
   const c = (cores || "").trim().toUpperCase();
   if (!c) return null;
+  const parsed = parseImpressao(c);
+  if (parsed) {
+    if (parsed.frente >= 4 || parsed.verso >= 4) return "COLOR";
+    if (parsed.frente === 1 && parsed.verso <= 1) return "PB";
+    return null;
+  }
   if (
     c.includes("P/B") ||
     c.includes("PB") ||
     c.includes("1X1") ||
     c.includes("1X0") ||
+    c.includes("1/1") ||
+    c.includes("1/0") ||
     c === "PRETO" ||
     c.includes("PRETO") ||
     c.includes("RELEV")
@@ -746,32 +899,34 @@ export function calculateTotalPagesFromTechSpec(spec: TechSpec): number {
   );
 }
 
-/** Páginas físicas que entram na cota: capa com verso em branco conta só a frente. */
+/** Páginas físicas que entram na cota: verso 0 (N/0) conta só a frente. */
 export function printedPagesForCota(
   paginas: number,
-  versoEmBranco: boolean,
+  versoZero: boolean,
 ): number {
   const pages = Math.max(0, Number(paginas) || 0);
-  if (!versoEmBranco) return pages;
+  if (!versoZero) return pages;
   return Math.ceil(pages / 2);
 }
 
 export function isCapaVersoEmBranco(comp: TechSpecComponente): boolean {
-  return comp.tipo === "CAPA" && Boolean(comp.verso_em_branco);
+  if (comp.tipo !== "CAPA") return false;
+  if (comp.verso_em_branco) return true;
+  return comp.lotes.some((l) => loteIsVersoZero(l, comp));
 }
 
 /** Soma de páginas impressas (cota), sem alterar o total físico da OS. */
 export function calculateCotaPagesFromTechSpec(spec: TechSpec): number {
-  return spec.componentes.reduce((sum, comp) => {
-    const versoEmBranco = isCapaVersoEmBranco(comp);
-    return (
+  return spec.componentes.reduce(
+    (sum, comp) =>
       sum +
       comp.lotes.reduce(
-        (s, l) => s + printedPagesForCota(Number(l.paginas) || 0, versoEmBranco),
+        (s, l) =>
+          s + printedPagesForCota(Number(l.paginas) || 0, loteIsVersoZero(l, comp)),
         0,
-      )
-    );
-  }, 0);
+      ),
+    0,
+  );
 }
 
 /** Páginas restantes para novo componente (total da OS − já alocadas). */
@@ -801,10 +956,15 @@ export function computeComponentCalcs(spec: TechSpec): ComponenteCalcResumo[] {
     let color = 0;
     let pb = 0;
     let outras = 0;
-    const versoEmBranco = isCapaVersoEmBranco(comp);
     for (const lote of comp.lotes) {
-      const pages = printedPagesForCota(Number(lote.paginas) || 0, versoEmBranco);
-      const kind = classifyCoresKind(lote.cores_link);
+      const pages = printedPagesForCota(
+        Number(lote.paginas) || 0,
+        loteIsVersoZero(lote, comp),
+      );
+      const kind =
+        classifyCoresKind(lote.impressao || "") ||
+        classifyCoresKind(lote.cores_link) ||
+        classifyCoresKind(lote.cores_desc);
       if (kind === "PB") pb += pages;
       else if (kind === "COLOR") color += pages;
       else outras += pages;
@@ -1090,6 +1250,7 @@ function legacyRowToLote(
     cores_link: cores.trim(),
     papel_desc: "",
     cores_desc: "",
+    impressao: "",
     frente_verso: false,
     acabamentos: [],
   };

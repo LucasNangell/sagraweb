@@ -50,7 +50,11 @@ if "%RESTART%"=="1" echo  Modo: RESTART ^(encerra API antiga na porta %API_PORT%
 if "%API_ONLY%"=="1" echo  Modo: API-ONLY ^(reinicia somente API^)
 echo.
 
-python -c "import sys" >nul 2>&1
+if defined SAGRA_PYTHON (
+    "%SAGRA_PYTHON%" -c "import sys" >nul 2>&1
+) else (
+    python -c "import sys" >nul 2>&1
+)
 if errorlevel 1 (
     echo [ERRO] Python nao encontrado ^(ou so ha o atalho da Microsoft Store^).
     echo        Instale Python 3 e/ou use o launcher "py" no PATH.
@@ -241,8 +245,9 @@ if errorlevel 1 (
     exit /b 1
 )
 
-python -c "from config_manager import config_manager; config_manager.write_client_config_js(); print('config_client.js OK')" 2>nul
-python -m uvicorn routers.api:app --host 127.0.0.1 --port %API_PORT% --reload
+if not defined SAGRA_PYTHON set "SAGRA_PYTHON=python"
+"%SAGRA_PYTHON%" -c "from config_manager import config_manager; config_manager.write_client_config_js(); print('config_client.js OK')" 2>nul
+"%SAGRA_PYTHON%" -m uvicorn routers.api:app --host 127.0.0.1 --port %API_PORT% --reload
 
 pause
 exit /b 0

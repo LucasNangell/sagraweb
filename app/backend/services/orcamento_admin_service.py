@@ -46,6 +46,8 @@ def _insumo_row(row: dict) -> dict:
     qtd = _f(row.get("qtd_embalagem"), 1) or 1
     bruto = _f(row.get("preco_bruto"))
     unit = _f(row.get("preco_unitario"))
+    bruto_d = _f(row.get("preco_bruto_digital"))
+    unit_d = _f(row.get("preco_unitario_digital"))
     sku_id = row.get("estoque_sku_id")
     custo_est = row.get("custo_estoque")
     return {
@@ -58,6 +60,8 @@ def _insumo_row(row: dict) -> dict:
         "preco_bruto": bruto,
         "preco_unitario": unit,
         "preco_cadastro": unit,
+        "preco_bruto_digital": bruto_d,
+        "preco_unitario_digital": unit_d if unit_d > 0 else unit,
         "rendimento_a4": _f(row.get("rendimento_a4")) if row.get("rendimento_a4") is not None else None,
         "formato_folha": row.get("formato_folha"),
         "aliases": _json_load(row.get("aliases_json"), []),
@@ -138,13 +142,15 @@ def _t5_skus() -> list[dict]:
     return found
 
 
-def list_insumos(*, include_inactive: bool = True) -> list[dict]:
+def list_insumos(*, include_inactive: bool = True, overlay: bool = True) -> list[dict]:
     sql = _INSUMO_SELECT
     if not include_inactive:
         sql += " WHERE i.ativo = 1"
     sql += " ORDER BY i.categoria ASC, i.codigo ASC"
     rows = [_insumo_row(r) for r in (db.execute_query(sql) or [])]
-    return overlay_estoque_precos(rows, t5_skus=_t5_skus())
+    if overlay:
+        return overlay_estoque_precos(rows, t5_skus=_t5_skus())
+    return rows
 
 
 def get_insumo(insumo_id: int) -> Optional[dict]:
@@ -176,6 +182,7 @@ def upsert_insumo(
     unidade: Optional[str] = None,
     qtd_embalagem: float = 1,
     preco_bruto: float = 0,
+    preco_bruto_digital: Optional[float] = None,
     rendimento_a4: Optional[float] = None,
     formato_folha: Optional[str] = None,
     aliases: Optional[list[str]] = None,
@@ -194,24 +201,47 @@ def upsert_insumo(
         raise ValueError("Especificação é obrigatória.")
     unit = _unit_from(float(preco_bruto), float(qtd_embalagem or 1), categoria)
     aliases_json = json.dumps(aliases or [], ensure_ascii=False)
+    has_digital = preco_bruto_digital is not None
+    bruto_d = float(preco_bruto_digital) if has_digital else float(preco_bruto)
+    unit_d = _unit_from(bruto_d, float(qtd_embalagem or 1), categoria)
     if insumo_id:
-        db.execute_query(
-            """
-            UPDATE tab_orcamento_insumo SET
-                codigo=%s, categoria=%s, especificacao=%s, unidade=%s,
-                qtd_embalagem=%s, preco_bruto=%s, preco_unitario=%s,
-                rendimento_a4=%s, formato_folha=%s, aliases_json=%s,
-                atualizado_em=%s, ativo=%s, atualizado_por=%s
-            WHERE id=%s
-            """,
-            (
-                codigo, categoria, especificacao, unidade,
-                qtd_embalagem, preco_bruto, unit,
-                rendimento_a4, formato_folha, aliases_json,
-                atualizado_em or date.today().isoformat(),
-                1 if ativo else 0, ponto, insumo_id,
-            ),
-        )
+        if has_digital:
+            db.execute_query(
+                """
+                UPDATE tab_orcamento_insumo SET
+                    codigo=%s, categoria=%s, especificacao=%s, unidade=%s,
+                    qtd_embalagem=%s, preco_bruto=%s, preco_unitario=%s,
+                    preco_bruto_digital=%s, preco_unitario_digital=%s,
+                    rendimento_a4=%s, formato_folha=%s, aliases_json=%s,
+                    atualizado_em=%s, ativo=%s, atualizado_por=%s
+                WHERE id=%s
+                """,
+                (
+                    codigo, categoria, especificacao, unidade,
+                    qtd_embalagem, preco_bruto, unit, bruto_d, unit_d,
+                    rendimento_a4, formato_folha, aliases_json,
+                    atualizado_em or date.today().isoformat(),
+                    1 if ativo else 0, ponto, insumo_id,
+                ),
+            )
+        else:
+            db.execute_query(
+                """
+                UPDATE tab_orcamento_insumo SET
+                    codigo=%s, categoria=%s, especificacao=%s, unidade=%s,
+                    qtd_embalagem=%s, preco_bruto=%s, preco_unitario=%s,
+                    rendimento_a4=%s, formato_folha=%s, aliases_json=%s,
+                    atualizado_em=%s, ativo=%s, atualizado_por=%s
+                WHERE id=%s
+                """,
+                (
+                    codigo, categoria, especificacao, unidade,
+                    qtd_embalagem, preco_bruto, unit,
+                    rendimento_a4, formato_folha, aliases_json,
+                    atualizado_em or date.today().isoformat(),
+                    1 if ativo else 0, ponto, insumo_id,
+                ),
+            )
         item = get_insumo(insumo_id)
         if not item:
             raise KeyError("Insumo não encontrado.")
@@ -228,13 +258,14 @@ def upsert_insumo(
             """
             INSERT INTO tab_orcamento_insumo (
                 codigo, categoria, especificacao, unidade, qtd_embalagem,
-                preco_bruto, preco_unitario, rendimento_a4, formato_folha,
+                preco_bruto, preco_unitario, preco_bruto_digital, preco_unitario_digital,
+                rendimento_a4, formato_folha,
                 aliases_json, atualizado_em, ativo, atualizado_por
-            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """,
             (
                 codigo, categoria, especificacao, unidade, qtd_embalagem,
-                preco_bruto, unit, rendimento_a4, formato_folha,
+                preco_bruto, unit, bruto_d, unit_d, rendimento_a4, formato_folha,
                 aliases_json, atualizado_em or date.today().isoformat(),
                 1 if ativo else 0, ponto,
             ),
@@ -408,7 +439,7 @@ def load_catalog() -> dict:
     except Exception:
         logger.exception("Orçamento: falha ao carregar etapas de produto")
     return {
-        "insumos": list_insumos(include_inactive=False),
+        "insumos": list_insumos(include_inactive=False, overlay=False),
         "parametros": params,
         "formatos": list_formatos(include_inactive=False),
         "faixas": list_faixas(include_inactive=False),

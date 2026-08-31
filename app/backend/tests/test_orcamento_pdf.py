@@ -3,13 +3,16 @@ from __future__ import annotations
 
 import re
 import zlib
+from datetime import date
+
+import fitz
 
 from services.orcamento_os_service import (
     montar_especificacao,
     montar_especificacao_grupos,
     montar_oficio_preview,
 )
-from services.orcamento_pdf_service import build_orcamento_pdf
+from services.orcamento_pdf_service import BRASAO_PATH, build_orcamento_pdf
 
 P26 = {
     "codigo": "p26",
@@ -130,6 +133,7 @@ def test_oficio_preview_usa_os_nao_numero_de_orcamento():
     assert "Digital" in oficio["clausula_entrega"]
     assert oficio["especificacao_grupos"]
     assert oficio["especificacao_grupos"][0]["titulo"] == "Produto"
+    assert oficio["data_geracao"] == date.today().isoformat()
 
 
 def test_pdf_oficio_contem_numero_proprio_e_os():
@@ -213,3 +217,106 @@ def test_pdf_snapshot_antigo_sem_grupos_usa_texto():
     )
     text = _pdf_streams(pdf)
     assert "55x200mm" in text
+
+
+def _oficio_record(**overrides):
+    record = {
+        "numero": 132,
+        "ano": 2026,
+        "nro_protocolo": 1365,
+        "ano_protocolo": 2026,
+        "criado_em": "2026-08-27",
+        "snapshot": {
+            "oficio": {
+                "solicitante": "Leonardo",
+                "titulo": "Marcador de página",
+                "processo": "PROC-1",
+                "especificacao": "Publicação no formato 55x200mm.",
+                "valor_total": 124.9,
+                "clausula_validade": "Este orçamento tem validade de 180 dias.",
+                "clausula_entrega": "Impressão em equipamento Digital.",
+                "signatario": "Jorge Luiz",
+                "cargo": "Diretor",
+                "endereco": "Via N3, Projeção L",
+                "telefone": "3216-2701",
+                "data_geracao": "2026-08-27",
+            },
+            "entrada": {"os": {"data_entrada": "2026-01-12"}},
+        },
+    }
+    record.update(overrides)
+    return record
+
+
+def _pdf_words(pdf: bytes) -> list:
+    doc = fitz.open(stream=pdf, filetype="pdf")
+    try:
+        return doc[0].get_text("words")
+    finally:
+        doc.close()
+
+
+def _first_word(words: list, prefix: str, *, exact: bool = False):
+    needle = prefix.casefold()
+    for word in words:
+        token = word[4].casefold()
+        if exact:
+            if token == needle:
+                return word
+        elif token.startswith(needle):
+            return word
+    raise AssertionError(f"palavra {prefix!r} não encontrada")
+
+
+def test_pdf_usa_data_de_geracao_nao_data_entrada_os():
+    pdf = build_orcamento_pdf(_oficio_record())
+    text = _pdf_streams(pdf)
+    assert "27 de agosto de 2026" in text
+    assert "12 de janeiro de 2026" not in text
+    assert "10 de junho de 2026" not in text
+
+
+def test_pdf_cabecalho_institucional_e_brasao():
+    assert BRASAO_PATH.is_file()
+    pdf = build_orcamento_pdf(_oficio_record())
+    text = _pdf_streams(pdf)
+    assert "C" in text and "MARA DOS DEPUTADOS" in text.replace("\n", "")
+    doc = fitz.open(stream=pdf, filetype="pdf")
+    try:
+        images = doc[0].get_images()
+        assert images, "PDF deve embutir o brasão"
+        page_text = doc[0].get_text()
+    finally:
+        doc.close()
+    assert "CÂMARA DOS DEPUTADOS" in page_text
+    assert "Departamento de Apoio Parlamentar" in page_text
+    assert "Coordenação Gráfica da Câmara" in page_text
+    words = _pdf_words(pdf)
+    titulo = next(
+        (
+            w
+            for w in words
+            if "RCAMENTO" in w[4].upper().replace("Ç", "C")
+        ),
+        None,
+    )
+    assert titulo is not None
+    assert titulo[0] > 280, "ORÇAMENTO deve ficar alinhado à direita"
+
+
+def test_pdf_assinaturas_alinhadas_em_duas_colunas():
+    pdf = build_orcamento_pdf(_oficio_record())
+    words = _pdf_words(pdf)
+    encaminho = _first_word(words, "Encaminho")
+    autorizo = _first_word(words, "Autorizo")
+    jorge = _first_word(words, "Jorge")
+    responsavel = _first_word(words, "Respons")
+    diretor = _first_word(words, "Diretor", exact=True)
+    assinatura = _first_word(words, "Assinatura")
+    assert autorizo[0] > encaminho[0] + 40
+    assert jorge[0] > encaminho[0] + 8
+    assert responsavel[0] > autorizo[0] + 8
+    assert abs(jorge[0] - diretor[0]) < 20
+    assert abs(jorge[1] - responsavel[1]) < 5
+    assert abs(diretor[1] - assinatura[1]) < 5
+

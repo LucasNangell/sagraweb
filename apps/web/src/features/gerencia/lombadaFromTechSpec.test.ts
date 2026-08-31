@@ -12,6 +12,7 @@ function lote(partial: Partial<TechSpecLote>): TechSpecLote {
     cores_link: partial.cores_link ?? "",
     papel_desc: partial.papel_desc ?? "",
     cores_desc: partial.cores_desc ?? "",
+    impressao: partial.impressao ?? "",
     frente_verso: partial.frente_verso ?? false,
     acabamentos: partial.acabamentos ?? [],
   };

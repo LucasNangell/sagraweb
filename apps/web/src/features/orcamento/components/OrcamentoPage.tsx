@@ -16,6 +16,12 @@ import type {
   OrcamentoEspecificacaoGrupo,
   OrcamentoResponse,
 } from "@/features/orcamento/types";
+import {
+  flagsFromImpressao,
+  IMPRESSAO_OPTIONS,
+  impressaoFromFlags,
+} from "@/features/gerencia/techSpec";
+import { formatDataExtensoBrasilia } from "@/lib/format";
 
 function brl(n: number | undefined) {
   return (n ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -192,18 +198,33 @@ export function OrcamentoPage({ ano, id }: OrcamentoPageProps) {
             escolhida={r.tecnologia_escolhida}
             onEscolher={(tec) => setEntrada({ ...entrada, tecnologia: tec })}
           />
-          {computed.comparativo ? <EstimadoVsReal comparativo={computed.comparativo} /> : null}
+          {computed.comparativo && r.escolhido.usa_pessoal_hora ? (
+            <EstimadoVsReal comparativo={computed.comparativo} />
+          ) : null}
           <Detalhe consolidado={r.escolhido} />
         </div>
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-4 text-sm leading-relaxed">
-        <h2 className="mb-2 text-center text-base font-bold">
+        <header className="mb-4 flex items-center gap-3">
+          <img
+            src={`${(import.meta.env.BASE_URL || "/").replace(/\/?$/, "/")}orcamento-brasao.png`}
+            alt=""
+            className="h-14 w-14 object-contain"
+          />
+          <div className="text-[11px] leading-tight text-slate-800">
+            <p className="font-bold">CÂMARA DOS DEPUTADOS</p>
+            <p>Departamento de Apoio Parlamentar</p>
+            <p>Coordenação Gráfica da Câmara</p>
+          </div>
+        </header>
+        <h2 className="mb-2 text-right text-base font-bold">
           ORÇAMENTO{" "}
           {oficio.numero && oficio.ano ? `${oficio.numero}/${oficio.ano}` : "(prévia)"}
         </h2>
         {oficio.processo ? <p>Processo nº {oficio.processo}</p> : null}
         <p>Ordem de serviço nº {oficio.os_numero}/{oficio.os_ano}</p>
+        <p className="mt-2">{formatDataExtensoBrasilia(oficio.data_geracao)}</p>
         <p className="mt-2">
           <strong>Solicitante:</strong> {oficio.solicitante}
         </p>
@@ -223,19 +244,31 @@ export function OrcamentoPage({ ano, id }: OrcamentoPageProps) {
         <p className="mt-3 font-semibold">Valor total: {brl(oficio.valor_total)}</p>
         <p className="mt-3 text-xs text-slate-600">- {oficio.clausula_validade}</p>
         <p className="text-xs text-slate-600">- {oficio.clausula_entrega}</p>
-        <div className="mt-6 grid grid-cols-2 gap-6 text-xs">
-          <div>
-            Encaminho o presente orçamento conforme solicitação recebida e obedecida a norma
-            vigente.
-            <p className="mt-8 font-semibold">{oficio.signatario}</p>
-            <p>{oficio.cargo}</p>
-          </div>
-          <div>
-            Autorizo a execução do trabalho especificado.
-            <p className="mt-8">Responsável</p>
-            <p>Assinatura e Carimbo</p>
-          </div>
-        </div>
+        <table className="mt-6 w-full table-fixed border-collapse border border-slate-800 bg-white text-xs">
+          <tbody>
+            <tr className="align-top">
+              <td className="w-1/2 border-r border-slate-800 bg-white px-2 py-2 pb-8">
+                Encaminho o presente orçamento conforme solicitação recebida e
+                obedecida a norma vigente.
+              </td>
+              <td className="w-1/2 bg-white px-2 py-2 pb-8">
+                Autorizo a execução do trabalho especificado.
+              </td>
+            </tr>
+            <tr className="align-top">
+              <td className="w-1/2 border-r border-slate-800 bg-white px-2 py-2 text-center font-semibold">
+                {oficio.signatario}
+              </td>
+              <td className="w-1/2 bg-white px-2 py-2 text-center">Responsável</td>
+            </tr>
+            <tr className="align-top">
+              <td className="w-1/2 border-r border-slate-800 bg-white px-2 py-2 text-center">
+                {oficio.cargo}
+              </td>
+              <td className="w-1/2 bg-white px-2 py-2 text-center">Assinatura e Carimbo</td>
+            </tr>
+          </tbody>
+        </table>
         <p className="mt-6 text-center text-[11px] text-slate-500">
           Endereço: {oficio.endereco}
           <br />
@@ -283,8 +316,6 @@ function ComponenteFields({
   onChange: (next: OrcamentoComponente) => void;
 }) {
   const flags: { key: keyof OrcamentoComponente; label: string }[] = [
-    { key: "cor", label: "Colorido" },
-    { key: "frente_verso", label: "Frente e verso" },
     { key: "laminacao", label: "Laminação" },
     { key: "laminacao_fv", label: "Laminação F/V" },
     { key: "grampo", label: "Grampo" },
@@ -292,6 +323,9 @@ function ComponenteFields({
     { key: "espiral", label: "Espiral" },
     { key: "capa_pvc", label: "Capa PVC" },
   ];
+  const impressaoValue =
+    comp.impressao?.trim() ||
+    impressaoFromFlags(comp.cor, comp.frente_verso, comp.verso_cor);
   return (
     <div className="mt-3 rounded border border-slate-100 bg-slate-50/80 p-2">
       <p className="mb-1 text-[0.65rem] font-semibold uppercase text-slate-500">
@@ -340,6 +374,27 @@ function ComponenteFields({
             ))}
           </select>
         </label>
+        <label>
+          Impressão
+          <select
+            className="mt-0.5 w-full rounded border px-2 py-1"
+            value={impressaoValue}
+            onChange={(e) => {
+              const value = e.target.value;
+              onChange({
+                ...comp,
+                impressao: value,
+                ...flagsFromImpressao(value),
+              });
+            }}
+          >
+            {IMPRESSAO_OPTIONS.map((opt) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
       <div className="mt-2 flex flex-wrap gap-3 text-xs">
         {flags.map(({ key, label }) => (
@@ -347,7 +402,9 @@ function ComponenteFields({
             <input
               type="checkbox"
               checked={Boolean(comp[key])}
-              onChange={(e) => onChange({ ...comp, [key]: e.target.checked })}
+              onChange={(e) => {
+                onChange({ ...comp, [key]: e.target.checked });
+              }}
             />
             {label}
           </label>

@@ -7,11 +7,15 @@ import {
   buildPapelDescFromTechSpec,
   calculateCotaPagesFromTechSpec,
   calculateTotalPagesFromTechSpec,
+  classifyCoresKind,
   computeComponentCalcs,
   createEmptyTechSpec,
   createGenericoComponente,
   ensureGenericoComponentes,
   ensureTechSpecIntegrity,
+  inferImpressaoFromLote,
+  impressaoAfterCoresChange,
+  impressaoAfterFvChange,
   isGenericoComponente,
   parseLabeledMemo,
   specHasFrenteVerso,
@@ -60,6 +64,7 @@ function lote(partial: Partial<TechSpecLote>): TechSpecLote {
     cores_link: partial.cores_link ?? "",
     papel_desc: partial.papel_desc ?? "",
     cores_desc: partial.cores_desc ?? "",
+    impressao: partial.impressao ?? "",
     frente_verso: partial.frente_verso ?? false,
     acabamentos: partial.acabamentos ?? [],
   };
@@ -424,6 +429,105 @@ describe("Capa verso em branco", () => {
     const form = applyTechSpecToForm(createEmptyGerenciaForm(), capa4Color(true));
     expect(form.val_pgs).toBe("4");
     expect(form.calc_capa_color).toBe("2");
+  });
+
+  it("migra verso_em_branco para impressao 4/0 e deixa de gravar o flag", () => {
+    const migrated = ensureTechSpecIntegrity(capa4Color(true));
+    expect(migrated.componentes[0].verso_em_branco).toBeUndefined();
+    expect(migrated.componentes[0].lotes[0].impressao).toBe("4/0");
+    expect(migrated.componentes[0].lotes[0].frente_verso).toBe(false);
+    expect(calculateCotaPagesFromTechSpec(migrated)).toBe(2);
+  });
+});
+
+describe("Impressão N/M", () => {
+  it("infere 4/4, 4/0, 1/1 e 1/0 a partir do catálogo e F/V", () => {
+    expect(
+      inferImpressaoFromLote({
+        cores_link: "4x4",
+        cores_desc: "",
+        frente_verso: true,
+        impressao: "",
+      }),
+    ).toBe("4/4");
+    expect(
+      inferImpressaoFromLote({
+        cores_link: "Policromia",
+        cores_desc: "",
+        frente_verso: false,
+        impressao: "",
+      }),
+    ).toBe("4/0");
+    expect(
+      inferImpressaoFromLote({
+        cores_link: "P/B",
+        cores_desc: "",
+        frente_verso: true,
+        impressao: "",
+      }),
+    ).toBe("1/1");
+    expect(
+      inferImpressaoFromLote({
+        cores_link: "P/B",
+        cores_desc: "",
+        frente_verso: false,
+        impressao: "",
+      }),
+    ).toBe("1/0");
+  });
+
+  it("ao mudar F/V só ajusta o verso", () => {
+    expect(
+      impressaoAfterFvChange(
+        { impressao: "4/4", cores_link: "4x4", cores_desc: "" },
+        false,
+      ),
+    ).toBe("4/0");
+    expect(
+      impressaoAfterFvChange(
+        { impressao: "1/0", cores_link: "P/B", cores_desc: "" },
+        true,
+      ),
+    ).toBe("1/1");
+  });
+
+  it("ao mudar cores 4x4/P/B atualiza N/M", () => {
+    expect(
+      impressaoAfterCoresChange({ impressao: "1/0", frente_verso: false }, "4x4"),
+    ).toBe("4/4");
+    expect(
+      impressaoAfterCoresChange({ impressao: "4/4", frente_verso: true }, "P/B"),
+    ).toBe("1/1");
+  });
+
+  it("classifyCoresKind reconhece 1/1 e 4/0; 2/3 não é policromia", () => {
+    expect(classifyCoresKind("1/1")).toBe("PB");
+    expect(classifyCoresKind("1/0")).toBe("PB");
+    expect(classifyCoresKind("4/0")).toBe("COLOR");
+    expect(classifyCoresKind("2/3")).toBeNull();
+  });
+
+  it("capa 4p em 4/0 conta 2 na cota mesmo sem o flag legado", () => {
+    const spec: TechSpec = {
+      version: 1,
+      componentes: [
+        {
+          nome: "Capa",
+          tipo: "CAPA",
+          lotes: [
+            lote({
+              id: "c",
+              paginas: 4,
+              cores_link: "4x4",
+              impressao: "4/0",
+            }),
+          ],
+        },
+      ],
+    };
+    expect(calculateTotalPagesFromTechSpec(spec)).toBe(4);
+    expect(calculateCotaPagesFromTechSpec(spec)).toBe(2);
+    expect(computeComponentCalcs(spec)[0].color).toBe(2);
   });
 });
 

@@ -23,6 +23,7 @@ export interface OrcamentoComponente {
   cor: boolean;
   frente_verso: boolean;
   verso_cor: boolean;
+  impressao?: string | null;
   papel_codigo?: string | null;
   papel_nome_os?: string | null;
   laminacao: boolean;
@@ -142,6 +143,7 @@ export interface OrcamentoOficio {
   os_numero?: number;
   os_ano?: number;
   data_entrada?: string;
+  data_geracao?: string;
   especificacao: string;
   especificacao_grupos?: OrcamentoEspecificacaoGrupo[];
   paginas: number;

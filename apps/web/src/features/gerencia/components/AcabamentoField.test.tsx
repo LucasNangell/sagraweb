@@ -41,7 +41,41 @@ describe("AcabamentoField", () => {
     expect(screen.getByLabelText("Acabamento específico")).toHaveValue(
       "Grampo, Laminação Fosca",
     );
-    expect(screen.getByRole("button", { name: "Alterar" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Acabamento específico")).toHaveAttribute(
+      "aria-haspopup",
+      "dialog",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Alterar" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("abre o seletor ao clicar no campo e não abre em somente leitura", () => {
+    const { rerender } = render(
+      <AcabamentoField
+        catalog={catalog}
+        selected={[]}
+        readOnly={false}
+        onChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText("Acabamento específico"));
+    expect(
+      screen.getByRole("dialog", { name: "Incluir acabamentos" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    rerender(
+      <AcabamentoField
+        catalog={catalog}
+        selected={[]}
+        readOnly
+        onChange={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText("Acabamento específico"));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("abre o modal, seleciona variação e aplica o texto no campo", () => {
@@ -55,7 +89,7 @@ describe("AcabamentoField", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Incluir" }));
+    fireEvent.click(screen.getByLabelText("Acabamento específico"));
     const dialog = screen.getByRole("dialog", { name: "Incluir acabamentos" });
 
     fireEvent.click(within(dialog).getByRole("button", { name: /Laminação/ }));
@@ -83,10 +117,32 @@ describe("AcabamentoField", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Incluir" }));
+    fireEvent.click(screen.getByLabelText("Acabamento específico"));
     fireEvent.click(screen.getByRole("button", { name: /Grampo/ }));
     fireEvent.click(screen.getByRole("button", { name: "Incluir na OS" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("Escape fecha o seletor sem persistir", () => {
+    const onChange = vi.fn();
+    render(
+      <AcabamentoField
+        catalog={catalog}
+        selected={[]}
+        readOnly={false}
+        onChange={onChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText("Acabamento específico"));
+    expect(
+      screen.getByRole("dialog", { name: "Incluir acabamentos" }),
+    ).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Escape" });
 
     expect(onChange).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -103,7 +159,7 @@ describe("AcabamentoField", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Incluir" }));
+    fireEvent.click(screen.getByLabelText("Acabamento específico"));
     const dialog = screen.getByRole("dialog", { name: "Incluir acabamentos" });
     fireEvent.click(within(dialog).getByRole("button", { name: /Laminação/ }));
     fireEvent.click(within(dialog).getByRole("button", { name: /Fosca/ }));
@@ -205,7 +261,7 @@ describe("AcabamentoField", () => {
       </QueryClientProvider>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Incluir" }));
+    fireEvent.click(screen.getByLabelText("Acabamento específico"));
     const dialog = screen.getByRole("dialog", { name: "Incluir acabamentos" });
     fireEvent.click(within(dialog).getByRole("button", { name: /Lombada/ }));
 

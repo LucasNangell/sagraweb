@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from os_calc_fields import compute_detalhes_calc_fields
+from os_calc_fields import classify_cores_kind, compute_detalhes_calc_fields, printed_pages_for_cota
 from routers.auxiliar_routes import get_acabamentos
 from routers.os_routes import (
     TechSpecAcabamentoPayload,
@@ -145,6 +145,39 @@ class TestCalcFieldsGenerico:
         assert fields["CalcCor2"] == "4x4"
         assert fields["CalcPgs1"] is None
         assert fields["CalcPgs3"] is None
+
+
+class TestImpressaoNm:
+    def test_classify_1_1_is_pb(self):
+        assert classify_cores_kind("1/1") == "PB"
+        assert classify_cores_kind("1/0") == "PB"
+        assert classify_cores_kind("4/0") == "COLOR"
+        assert classify_cores_kind("2/3") is None
+
+    def test_printed_pages_halves_verso_zero(self):
+        assert printed_pages_for_cota(4, impressao="4/0") == 2
+        assert printed_pages_for_cota(4, impressao="4/4") == 4
+        assert printed_pages_for_cota(4, cores_link="4x0") == 2
+        assert printed_pages_for_cota(4, verso_em_branco=True) == 2
+
+    def test_capa_4x0_counts_half_pages_in_techspec(self):
+        fields = compute_detalhes_calc_fields(
+            calculos={"coef_a4": 1, "altura_mm": 210, "largura_mm": 297},
+            techspec={
+                "version": 1,
+                "componentes": [
+                    {
+                        "nome": "Capa",
+                        "tipo": "CAPA",
+                        "lotes": [
+                            {"paginas": 4, "cores_link": "4x4", "impressao": "4/0"},
+                        ],
+                    }
+                ],
+            },
+        )
+        assert fields["CalcQtdCores1"] == 4
+        assert fields["CalcCor1"] == "4x4"
 
     def test_parse_cores_descricao_com_quebra_de_linha(self):
         fields = compute_detalhes_calc_fields(

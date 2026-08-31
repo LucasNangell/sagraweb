@@ -16,6 +16,7 @@ from services.orcamento_engine import (
     insumo_by_codigo,
     match_papel,
     normalize_text,
+    parse_cores_impressao,
     suggest_formato,
 )
 from services.os_componentes_service import load_componentes_for_os
@@ -100,23 +101,34 @@ def _componente_from_lote(
     insumos: list[dict],
 ) -> dict:
     papel_nome = lote.get("papel_link") or lote.get("papel_desc") or fallback.get("PapelLink")
-    cores = lote.get("cores_link") or lote.get("cores_desc") or fallback.get("Cores")
+    cores_nm = lote.get("impressao") or lote.get("cores_link") or lote.get("cores_desc") or fallback.get("Cores")
     papel = match_papel(papel_nome, insumos)
     menor, maior = _dimensoes(fallback.get("FormatoLink"))
-    fv = (
-        bool(lote.get("frente_verso"))
-        if "frente_verso" in lote
-        else bool(fallback.get("FrenteVerso"))
-    )
+    spec = parse_cores_impressao(cores_nm)
+    if spec is not None:
+        cor = bool(spec["cor"])
+        fv = bool(spec["frente_verso"])
+        verso_cor = bool(spec["verso_cor"])
+        impressao = f"{spec['frente']}/{spec['verso']}"
+    else:
+        cor = _is_color(cores_nm)
+        fv = (
+            bool(lote.get("frente_verso"))
+            if "frente_verso" in lote
+            else bool(fallback.get("FrenteVerso"))
+        )
+        verso_cor = False
+        impressao = str(lote.get("impressao") or "").strip()
     return {
         "nome": nome,
         "tipo": tipo or "UNICO",
         "menor_mm": menor,
         "maior_mm": maior,
         "paginas": int(lote.get("paginas") or fallback.get("Pags") or 1),
-        "cor": _is_color(cores),
+        "cor": cor,
         "frente_verso": fv,
-        "verso_cor": fv and _is_color(cores),
+        "verso_cor": verso_cor,
+        "impressao": impressao,
         "papel_codigo": (papel or {}).get("codigo"),
         "papel_nome_os": papel_nome,
         "laminacao": acab["laminacao"] if (tipo or "").upper() in {"CAPA", "UNICO", ""} else False,
@@ -439,6 +451,7 @@ def montar_oficio_preview(
         "os_numero": os_meta.get("nro_protocolo"),
         "os_ano": os_meta.get("ano_protocolo"),
         "data_entrada": os_meta.get("data_entrada") or "",
+        "data_geracao": date.today().isoformat(),
         "especificacao": montar_especificacao(payload, resultado, insumos or []),
         "especificacao_grupos": grupos,
         "paginas": pags,
@@ -491,6 +504,7 @@ def persistir_orcamento(payload: dict, ponto: Optional[str] = None) -> dict:
     oficio = dict(computed.get("oficio") or {})
     oficio["numero"] = numero
     oficio["ano"] = ano
+    oficio["data_geracao"] = date.today().isoformat()
     escolhido = resultado.get("escolhido") or {}
     snapshot = {
         "entrada": payload,

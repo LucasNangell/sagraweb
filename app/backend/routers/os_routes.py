@@ -201,6 +201,7 @@ class TechSpecLotePayload(BaseModel):
     cores_link: Optional[str] = None
     papel_desc: Optional[str] = None
     cores_desc: Optional[str] = None
+    impressao: Optional[str] = None
     frente_verso: Optional[bool] = False
     acabamentos: List[TechSpecAcabamentoPayload] = Field(default_factory=list)
 

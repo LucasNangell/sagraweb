@@ -10,6 +10,7 @@ Regras de negócio:
 from __future__ import annotations
 
 import math
+import re
 from typing import Any, Dict, Optional
 
 COMPONENT_SLOT_ORDER = ("CAPA", "MIOLO", "ENCARTE")
@@ -18,6 +19,7 @@ _COMPONENT_LABELS = {
     "MIOLO": ("Miolo", "miolo"),
     "ENCARTE": ("Encarte", "encarte"),
 }
+_CORES_XY_RE = re.compile(r"(\d)\s*[xX×/]\s*(\d)")
 
 
 def _to_float(value: Any) -> float:
@@ -86,10 +88,49 @@ def calculate_coef_a4(altura_mm: Any, largura_mm: Any) -> float:
     return area_a4 / area_prod
 
 
+def parse_impressao(cores: Optional[str]) -> Optional[tuple[int, int]]:
+    if not cores or not str(cores).strip():
+        return None
+    match = _CORES_XY_RE.search(str(cores).replace(" ", ""))
+    if not match:
+        return None
+    frente, verso = int(match.group(1)), int(match.group(2))
+    if frente < 1 or frente > 4 or verso < 0 or verso > 4:
+        return None
+    return frente, verso
+
+
+def printed_pages_for_cota(
+    pages: int,
+    *,
+    impressao: Optional[str] = None,
+    cores_link: Optional[str] = None,
+    verso_em_branco: bool = False,
+) -> int:
+    pages = max(0, int(pages or 0))
+    parsed = parse_impressao(impressao)
+    if parsed is not None:
+        return math.ceil(pages / 2) if parsed[1] == 0 else pages
+    if verso_em_branco:
+        return math.ceil(pages / 2)
+    parsed_cores = parse_impressao(cores_link)
+    if parsed_cores is not None and parsed_cores[1] == 0:
+        return math.ceil(pages / 2)
+    return pages
+
+
 def classify_cores_kind(cores: Optional[str]) -> Optional[str]:
     """Retorna 'PB', 'COLOR' ou None."""
     c = (cores or "").strip().upper()
     if not c:
+        return None
+    parsed = parse_impressao(c)
+    if parsed is not None:
+        frente, verso = parsed
+        if frente >= 4 or verso >= 4:
+            return "COLOR"
+        if frente == 1 and verso <= 1:
+            return "PB"
         return None
     if (
         "P/B" in c
@@ -97,6 +138,8 @@ def classify_cores_kind(cores: Optional[str]) -> Optional[str]:
         or c.startswith("PB")
         or "1X1" in c
         or "1X0" in c
+        or "1/1" in c
+        or "1/0" in c
         or c == "PRETO"
         or "PRETO" in c
         or "RELEV" in c
@@ -161,6 +204,33 @@ def _component_pages_from_calculos(calculos: Dict[str, Any]) -> Dict[str, Dict[s
     return result
 
 
+def _lote_get(lote: Any, key: str) -> Any:
+    if isinstance(lote, dict):
+        return lote.get(key)
+    return getattr(lote, key, None)
+
+
+def _comp_get(comp: Any, key: str) -> Any:
+    if isinstance(comp, dict):
+        return comp.get(key)
+    return getattr(comp, key, None)
+
+
+def _lote_printed_kind(lote: Any, *, verso_em_branco: bool) -> tuple[int, Optional[str]]:
+    pages = _to_int(_lote_get(lote, "paginas")) or 0
+    impressao = _lote_get(lote, "impressao")
+    cores_link = _lote_get(lote, "cores_link")
+    cores_desc = _lote_get(lote, "cores_desc")
+    printed = printed_pages_for_cota(
+        pages,
+        impressao=impressao,
+        cores_link=cores_link,
+        verso_em_branco=verso_em_branco,
+    )
+    kind = classify_cores_kind(impressao) or classify_cores_kind(cores_link) or classify_cores_kind(cores_desc)
+    return printed, kind
+
+
 def _component_pages_from_techspec(techspec: Any) -> Dict[str, Dict[str, int]]:
     result: Dict[str, Dict[str, int]] = {t: {"color": 0, "pb": 0} for t in COMPONENT_SLOT_ORDER}
     if not techspec:
@@ -169,21 +239,14 @@ def _component_pages_from_techspec(techspec: Any) -> Dict[str, Dict[str, int]]:
     if componentes is None and isinstance(techspec, dict):
         componentes = techspec.get("componentes") or []
     for comp in componentes or []:
-        tipo = (getattr(comp, "tipo", None) or (comp.get("tipo") if isinstance(comp, dict) else "") or "").upper()
+        tipo = str(_comp_get(comp, "tipo") or "").upper()
         if tipo not in result:
             continue
-        lotes = getattr(comp, "lotes", None)
-        if lotes is None and isinstance(comp, dict):
-            lotes = comp.get("lotes") or []
+        lotes = _comp_get(comp, "lotes") or []
+        verso_em_branco = bool(_comp_get(comp, "verso_em_branco"))
         color = pb = 0
         for lote in lotes or []:
-            pages = _to_int(getattr(lote, "paginas", None) if not isinstance(lote, dict) else lote.get("paginas")) or 0
-            cores_link = (
-                getattr(lote, "cores_link", None)
-                if not isinstance(lote, dict)
-                else lote.get("cores_link")
-            )
-            kind = classify_cores_kind(cores_link)
+            pages, kind = _lote_printed_kind(lote, verso_em_branco=verso_em_branco)
             if kind == "PB":
                 pb += pages
             elif kind == "COLOR":
@@ -195,29 +258,14 @@ def _component_pages_from_techspec(techspec: Any) -> Dict[str, Dict[str, int]]:
     )
     if not has_legacy_pages:
         for comp in componentes or []:
-            tipo = (
-                getattr(comp, "tipo", None)
-                or (comp.get("tipo") if isinstance(comp, dict) else "")
-                or ""
-            ).upper()
+            tipo = str(_comp_get(comp, "tipo") or "").upper()
             if tipo in result:
                 continue
-            lotes = getattr(comp, "lotes", None)
-            if lotes is None and isinstance(comp, dict):
-                lotes = comp.get("lotes") or []
+            lotes = _comp_get(comp, "lotes") or []
+            verso_em_branco = bool(_comp_get(comp, "verso_em_branco"))
             color = pb = 0
             for lote in lotes or []:
-                pages = _to_int(
-                    getattr(lote, "paginas", None)
-                    if not isinstance(lote, dict)
-                    else lote.get("paginas")
-                ) or 0
-                cores_link = (
-                    getattr(lote, "cores_link", None)
-                    if not isinstance(lote, dict)
-                    else lote.get("cores_link")
-                )
-                kind = classify_cores_kind(cores_link)
+                pages, kind = _lote_printed_kind(lote, verso_em_branco=verso_em_branco)
                 if kind == "PB":
                     pb += pages
                 elif kind == "COLOR":

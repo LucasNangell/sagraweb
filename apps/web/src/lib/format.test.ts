@@ -1,6 +1,35 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDateBr, formatDateForInput } from "@/lib/format";
+import { formatDataExtensoBrasilia, formatDateBr, formatDateForInput } from "@/lib/format";
+
+describe("formatDataExtensoBrasilia", () => {
+  it("formata data civil no estilo do ofício", () => {
+    expect(formatDataExtensoBrasilia("2026-01-12")).toBe(
+      "Brasília, 12 de janeiro de 2026.",
+    );
+  });
+
+  it("usa hoje quando o valor está vazio", () => {
+    const now = new Date();
+    const meses = [
+      "janeiro",
+      "fevereiro",
+      "março",
+      "abril",
+      "maio",
+      "junho",
+      "julho",
+      "agosto",
+      "setembro",
+      "outubro",
+      "novembro",
+      "dezembro",
+    ];
+    expect(formatDataExtensoBrasilia(undefined)).toBe(
+      `Brasília, ${now.getDate()} de ${meses[now.getMonth()]} de ${now.getFullYear()}.`,
+    );
+  });
+});
 
 describe("formatDateBr", () => {
   it("preserva data civil YYYY-MM-DD sem deslocar fuso", () => {

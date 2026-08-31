@@ -1351,6 +1351,7 @@ class OrcamentoInsumoRequest(BaseModel):
     unidade: Optional[str] = Field(None, max_length=16)
     qtd_embalagem: float = Field(1, ge=0)
     preco_bruto: float = Field(0, ge=0)
+    preco_bruto_digital: Optional[float] = Field(None, ge=0)
     rendimento_a4: Optional[float] = Field(None, ge=0)
     formato_folha: Optional[str] = None
     aliases: Optional[list[str]] = None

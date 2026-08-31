@@ -49,7 +49,7 @@ describe("campos de Entrega", () => {
                 paginas: 16,
                 maquina_link: "Offset",
                 papel_link: "Pólen",
-                cores_link: "1x1",
+                cores_link: "P/B",
                 papel_desc: "",
                 cores_desc: "",
                 frente_verso: false,

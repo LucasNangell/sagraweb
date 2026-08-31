@@ -256,7 +256,7 @@ export function OsGerenciaDetailModal({
         if (e.target === e.currentTarget) requestClose();
       }}
     >
-      <div className="relative flex h-[min(84vh,720px)] w-full max-w-5xl min-w-0 flex-col overflow-hidden rounded-lg border-t-4 border-[#24344D] bg-white shadow-xl">
+      <div className="relative flex h-[min(84vh,720px)] w-full max-w-[76.8rem] min-w-0 flex-col overflow-hidden rounded-lg border-t-4 border-[#24344D] bg-white shadow-xl">
         <header className="flex shrink-0 items-start justify-between gap-3 border-b border-sagra-border px-4 py-2.5 sm:px-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">

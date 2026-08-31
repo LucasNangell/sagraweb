@@ -31,7 +31,7 @@ type FieldKind = "number" | "money" | "percent" | "bool" | "text" | "textarea";
 
 export type { FieldKind };
 
-type FieldSpec = {
+export type FieldSpec = {
   chave: string;
   label: string;
   hint?: string;
@@ -59,7 +59,7 @@ const DIGITAL_FIELDS: FieldSpec[] = [
   {
     chave: "aliquota_indiretos_digital",
     label: "Indiretos Digital",
-    hint: "Percentual sobre papel + acabamento (sem clique).",
+    hint: "Percentual sobre papel + acabamento (sem clique). Vale quando a mão de obra por hora estiver desligada.",
     kind: "percent",
     suffix: "%",
   },
@@ -164,6 +164,15 @@ const ACABAMENTO_FIELDS: FieldSpec[] = [
   },
 ];
 
+export const MAO_OBRA_FIELDS: FieldSpec[] = [
+  {
+    chave: "pessoal_por_hora",
+    label: "Incluir custo de mão de obra por hora (salários)",
+    hint: "Quando marcado, usa o custo/hora das funções (aba Custos) e as etapas do produto; substitui a faixa percentual Offset e os 87% de indiretos Digital. Sem etapas no produto, o cálculo continua no modo atual.",
+    kind: "bool",
+  },
+];
+
 const OFICIO_FIELDS: FieldSpec[] = [
   { chave: "validade_dias", label: "Validade (dias)", kind: "number" },
   { chave: "prazo_entrega_dias", label: "Prazo de entrega (dias úteis)", kind: "number" },
@@ -187,10 +196,11 @@ const OFICIO_FIELDS: FieldSpec[] = [
   },
 ];
 
-const VISIBLE_FIELDS: FieldSpec[] = [
+export const VISIBLE_FIELDS: FieldSpec[] = [
   ...DIGITAL_FIELDS,
   ...OFFSET_FIELDS,
   ...ACABAMENTO_FIELDS,
+  ...MAO_OBRA_FIELDS,
   ...OFICIO_FIELDS,
 ];
 
@@ -224,6 +234,14 @@ export function fromDisplay(display: string, kind: FieldKind): string {
     return n == null ? display.trim() : String(n);
   }
   return display;
+}
+
+export function buildOrcamentoParametrosPayload(draft: Record<string, string>): Record<string, string> {
+  const valores: Record<string, string> = {};
+  for (const spec of VISIBLE_FIELDS) {
+    valores[spec.chave] = fromDisplay(draft[spec.chave] ?? "", spec.kind);
+  }
+  return valores;
 }
 
 function inputClass(wide = false) {
@@ -385,13 +403,7 @@ function ParametrosLayout({
   }, [byChave]);
 
   const mut = useMutation({
-    mutationFn: () => {
-      const valores: Record<string, string> = {};
-      for (const spec of VISIBLE_FIELDS) {
-        valores[spec.chave] = fromDisplay(draft[spec.chave] ?? "", spec.kind);
-      }
-      return updateOrcamentoParametros(valores);
-    },
+    mutationFn: () => updateOrcamentoParametros(buildOrcamentoParametrosPayload(draft)),
     onSuccess: onInvalidate,
   });
 
@@ -429,7 +441,7 @@ function ParametrosLayout({
 
         <ConfigSubsection
           title="Impressão digital"
-          description="Custos por clique e o percentual de indiretos aplicado quando não há custeio por hora."
+          description="Custos por clique e o percentual de indiretos aplicado quando a mão de obra por hora estiver desligada."
         >
           <FieldsGrid fields={DIGITAL_FIELDS} draft={draft} onChange={setField} />
         </ConfigSubsection>
@@ -456,8 +468,15 @@ function ParametrosLayout({
         </ConfigSubsection>
 
         <ConfigSubsection
+          title="Mão de obra"
+          description="Inclui no orçamento o custo das funções (salários) pelas etapas do produto, em vez da faixa percentual e dos 87% de indiretos Digital."
+        >
+          <FieldsGrid fields={MAO_OBRA_FIELDS} draft={draft} onChange={setField} columns="sm:grid-cols-1" />
+        </ConfigSubsection>
+
+        <ConfigSubsection
           title="Pessoal Offset"
-          description="Percentual sobre a base direta Offset conforme a faixa de tiragem, quando o cálculo não usa custo/hora."
+          description="Percentual sobre a base direta Offset conforme a faixa de tiragem, quando a mão de obra por hora estiver desligada."
         >
           <FaixasTable items={faixas} onSaved={onInvalidate} />
         </ConfigSubsection>

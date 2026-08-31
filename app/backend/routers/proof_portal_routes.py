@@ -895,7 +895,7 @@ def _register_proof_andamento(
 
     if aprovado:
 
-        situacao = "Em Execução"
+        situacao = "Saída p/"
 
         obs = f"Prova v{versao} aprovada pelo cliente ({ident_cliente})"
 

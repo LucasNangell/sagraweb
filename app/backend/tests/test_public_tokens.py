@@ -136,7 +136,7 @@ class TestProofAndamentoRegistration:
             client_ip="127.0.0.1",
         )
 
-        assert result["situacao"] == "Em Execução"
+        assert result["situacao"] == "Saída p/"
         assert "Prova v2 aprovada pelo cliente (João Silva - 918.713)" in result["obs"]
 
     def test_reject_registers_em_execucao_sefoc_with_alteracoes(self, monkeypatch):

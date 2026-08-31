@@ -51,6 +51,7 @@ const SYSTEM_SIDEBAR_ORDER = [
   "activation",
   "password_reset",
   "cliente_activation",
+  "os_arquivos_link",
   "gravacao_encaminhada",
   "gravacao_iniciada",
   "gravacao_concluida",

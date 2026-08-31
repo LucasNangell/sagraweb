@@ -52,6 +52,7 @@ CONFIGURABLE_TEMPLATE_IDS = frozenset(
         "gravacao_iniciada",
         "gravacao_encaminhada",
         "gravacao_concluida",
+        "os_arquivos_link",
     }
 )
 
@@ -76,6 +77,10 @@ TEMPLATE_PRESET_OPTIONS: Dict[str, List[Dict[str, str]]] = {
         {"id": "builtin_text", "label": "Texto simples"},
     ],
     "cliente_activation": [
+        {"id": "cgraf_layout_pt", "label": "Layout Câmara (banner e botão)"},
+        {"id": "builtin_text", "label": "Texto simples"},
+    ],
+    "os_arquivos_link": [
         {"id": "cgraf_layout_pt", "label": "Layout Câmara (banner e botão)"},
         {"id": "builtin_text", "label": "Texto simples"},
     ],

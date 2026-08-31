@@ -89,7 +89,7 @@ describe("permissions / menu", () => {
     expect(resolveDefaultAppRoute(perms, "/analise")).toBe("/");
   });
 
-  it("usuário com sb_dashboard_tablet vai para /painel/tablet", () => {
+  it("usuário só com sb_dashboard_tablet vai para /painel/tablet", () => {
     const perms = parsePermissionsFromApi({ sb_dashboard_tablet: true });
     expect(canAccessRoute(perms, "/painel/tablet")).toBe(true);
     expect(canAccessRoute(perms, "/painel/celular")).toBe(true);
@@ -97,6 +97,23 @@ describe("permissions / menu", () => {
     expect(getVisibleNavItems(perms, true).some((i) => i.to === "/painel/tablet")).toBe(
       false,
     );
+  });
+
+  it("usuário com sb_inicio e sb_dashboard_tablet vai para /", () => {
+    const perms = parsePermissionsFromApi({
+      sb_inicio: true,
+      sb_dashboard_tablet: true,
+    });
+    expect(resolveDefaultAppRoute(perms)).toBe("/");
+    expect(resolveDefaultAppRoute(perms, "/painel/tablet")).toBe("/painel/tablet");
+  });
+
+  it("usuário com tablet e outra rota de menu (sem Início) vai para o menu", () => {
+    const perms = parsePermissionsFromApi({
+      sb_dashboard_tablet: true,
+      sb_gravacao_externa: true,
+    });
+    expect(resolveDefaultAppRoute(perms)).toBe("/gravacao-externa");
   });
 
   it("sb_dashboard_tablet false nega /painel/tablet e /painel/celular", () => {

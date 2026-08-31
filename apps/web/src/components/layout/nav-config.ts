@@ -224,6 +224,7 @@ export function canAccessRoute(permissions: Permissions, path: string): boolean 
 /**
  * Rota inicial após login ou quando `/` não é permitido.
  * Respeita redirect explícito se o usuário tiver acesso; senão, primeiro item do menu com rota.
+ * `/painel/tablet` só entra como fallback (não está no menu) quando não há outra rota.
  */
 export function resolveDefaultAppRoute(
   permissions: Permissions,
@@ -233,13 +234,13 @@ export function resolveDefaultAppRoute(
   if (target && canAccessRoute(permissions, target)) {
     return normalizeRoutePath(target);
   }
-  if (hasPainelTabletAccess(permissions)) {
-    return "/painel/tablet";
-  }
   const visible = getVisibleNavItems(permissions, true);
   const firstRoute = visible.find((item) => item.to)?.to;
   if (firstRoute) {
     return firstRoute;
+  }
+  if (hasPainelTabletAccess(permissions)) {
+    return "/painel/tablet";
   }
   return "/";
 }

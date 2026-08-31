@@ -102,6 +102,12 @@ export function formatOsLabel(row: { nr_os: number; ano: number }): string {
   return `${row.nr_os}/${row.ano}`;
 }
 
+/** Rótulo curto `{nr}/{yy}` (ex.: 2282/25). */
+export function formatOsShortLabel(nr: number, ano: number): string {
+  const year = ano < 100 ? 2000 + ano : ano;
+  return `${nr}/${String(year % 100).padStart(2, "0")}`;
+}
+
 /** Entrada de ponto: apenas dígitos (remove letras, espaços e símbolos). */
 export function sanitizePontoDigits(value: string): string {
   return value.replace(/\D/g, "");

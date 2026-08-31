@@ -4,14 +4,19 @@ from __future__ import annotations
 import logging
 import os
 import shutil
-from typing import Callable, List, Optional, Tuple
+from typing import Any, Callable, List, Optional
 
+from database import db
 from services.os_arquivos_service import _fetch_os_meta
 from services.os_folder_structure import ensure_os_folder_on_network, normalize_text_custom
 
 logger = logging.getLogger(__name__)
 
 GetOsFolderPath = Callable[[int, int], Optional[str]]
+
+CONCLUDED_SITUACOES = frozenset({"Entregue", "Cancelada", "Cancelado"})
+REPETICAO_OBSERV_LINE_2 = "      Arquivos movidos pra pasta"
+REPETICAO_OBSERV_LINE_3 = "----------------------------------"
 
 
 def _year_suffix(ano: int) -> str:
@@ -73,6 +78,117 @@ def list_move_candidate_folders(source_dir: str) -> List[str]:
             continue
         names.append(name)
     return sorted(names, key=_folder_sort_key)
+
+
+def format_os_short_label(nr: int, ano: int) -> str:
+    return f"{int(nr)}/{_year_suffix(ano)}"
+
+
+def format_repeticao_observ(origem_id: int, origem_ano: int) -> str:
+    return (
+        f"---- Repetição da OS {format_os_short_label(origem_id, origem_ano)} ----\n"
+        f"{REPETICAO_OBSERV_LINE_2}\n"
+        f"{REPETICAO_OBSERV_LINE_3}"
+    )
+
+
+def merge_observ(existing: Optional[str], block: str) -> str:
+    current = (existing or "").rstrip()
+    if not current:
+        return block
+    return f"{current}\n{block}"
+
+
+def is_origem_concluida(situacao: Optional[str]) -> bool:
+    return (situacao or "").strip() in CONCLUDED_SITUACOES
+
+
+def _serialize_andamento_value(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    text = str(value).strip()
+    return text or None
+
+
+def fetch_origem_andamento(origem_ano: int, origem_id: int) -> dict:
+    rows = db.execute_query(
+        """
+        SELECT CodStatus, SituacaoLink, SetorLink, Data, Ponto, `Observaçao`, UltimoStatus
+        FROM tabAndamento
+        WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s
+        ORDER BY CodStatus
+        """,
+        (origem_id, origem_ano),
+    ) or []
+
+    andamentos: List[dict] = []
+    current_situacao: Optional[str] = None
+    current_time = None
+    for row in rows:
+        situacao = _serialize_andamento_value(row.get("SituacaoLink"))
+        andamentos.append(
+            {
+                "situacao": situacao,
+                "setor": _serialize_andamento_value(row.get("SetorLink")),
+                "data": _serialize_andamento_value(row.get("Data")),
+                "ponto": _serialize_andamento_value(row.get("Ponto")),
+                "observacao": _serialize_andamento_value(row.get("Observaçao")),
+            }
+        )
+        if not row.get("UltimoStatus"):
+            continue
+        data = row.get("Data")
+        if current_situacao is None or (
+            data is not None and (current_time is None or data >= current_time)
+        ):
+            current_situacao = (situacao or "").strip() or None
+            current_time = data
+
+    return {
+        "origem_situacao": current_situacao,
+        "origem_concluida": is_origem_concluida(current_situacao),
+        "origem_andamentos": andamentos,
+    }
+
+
+def write_repeticao_observ(
+    *,
+    dest_ano: int,
+    dest_id: int,
+    origem_id: int,
+    origem_ano: int,
+) -> str:
+    block = format_repeticao_observ(origem_id, origem_ano)
+    rows = db.execute_query(
+        """
+        SELECT Observ
+        FROM tabDetalhesServico
+        WHERE NroProtocoloLinkDet = %s AND AnoProtocoloLinkDet = %s
+        """,
+        (dest_id, dest_ano),
+    ) or []
+    existing = rows[0].get("Observ") if rows else None
+    merged = merge_observ(existing, block)
+    if rows:
+        db.execute_query(
+            """
+            UPDATE tabDetalhesServico
+            SET Observ = %s
+            WHERE NroProtocoloLinkDet = %s AND AnoProtocoloLinkDet = %s
+            """,
+            (merged, dest_id, dest_ano),
+        )
+    else:
+        db.execute_query(
+            """
+            INSERT INTO tabDetalhesServico (NroProtocoloLinkDet, AnoProtocoloLinkDet, Observ)
+            VALUES (%s, %s, %s)
+            """,
+            (dest_id, dest_ano, merged),
+        )
+    return merged
 
 
 def compare_os_meta(
@@ -143,8 +259,11 @@ def preview_folder_move(
             if item["to_name"].lower() in existing:
                 dest_conflicts.append(item["to_name"])
 
+    andamento = fetch_origem_andamento(origem_ano, origem_id)
+
     return {
         **comparison,
+        **andamento,
         "origem_folder_exists": bool(origem_dir and os.path.isdir(origem_dir)),
         "origem_folder_path": origem_dir or "",
         "dest_folder_exists": bool(dest_dir and os.path.isdir(dest_dir)),
@@ -178,6 +297,8 @@ def execute_folder_move(
     origem_ano: int,
     origem_id: int,
     confirm_meta_mismatch: bool = False,
+    append_repeticao_observ: bool = False,
+    confirm_origem_nao_concluida: bool = False,
     get_os_folder_path: GetOsFolderPath,
 ) -> dict:
     preview = preview_folder_move(
@@ -191,6 +312,15 @@ def execute_folder_move(
     if preview["meta_mismatch"] and not confirm_meta_mismatch:
         raise ValueError(
             "Solicitante ou produto diferente entre as OSs. Confirme a operação para continuar."
+        )
+
+    if (
+        append_repeticao_observ
+        and not preview["origem_concluida"]
+        and not confirm_origem_nao_concluida
+    ):
+        raise ValueError(
+            "A OS de origem ainda não foi concluída. Confirme a transferência de arquivos para continuar."
         )
 
     if not preview["origem_folder_exists"]:
@@ -247,6 +377,14 @@ def execute_folder_move(
             dest_ano,
         )
         raise
+
+    if append_repeticao_observ:
+        write_repeticao_observ(
+            dest_ano=dest_ano,
+            dest_id=dest_id,
+            origem_id=origem_id,
+            origem_ano=origem_ano,
+        )
 
     return {
         "status": "ok",

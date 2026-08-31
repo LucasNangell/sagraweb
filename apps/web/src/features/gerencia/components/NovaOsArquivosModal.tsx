@@ -1,6 +1,6 @@
 import { cn } from "@sagra/ui";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Mail, Upload, X } from "lucide-react";
+import { Copy, Loader2, Mail, Upload, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -9,27 +9,33 @@ import {
   sendOsArquivosClientEmail,
 } from "@/api/osArquivos";
 import { UploadProgressBar } from "@/components/UploadProgressBar";
+import { OsFolderMoveForm } from "@/features/os/components/OsFolderMoveForm";
 
 export interface NovaOsArquivosModalProps {
   open: boolean;
   ano: number;
   osId: number;
   ponto: string;
+  origemId?: number;
+  origemAno?: number;
   onDone: () => void;
   onClose: () => void;
 }
 
-type Mode = "choice" | "email" | "self";
+type Mode = "choice" | "self" | "repeticao";
 
 export function NovaOsArquivosModal({
   open,
   ano,
   osId,
   ponto,
+  origemId,
+  origemAno,
   onDone,
   onClose,
 }: NovaOsArquivosModalProps) {
   const [mode, setMode] = useState<Mode>("choice");
+  const [returnMode, setReturnMode] = useState<Mode>("choice");
   const [email, setEmail] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [dragOver, setDragOver] = useState(false);
@@ -52,6 +58,7 @@ export function NovaOsArquivosModal({
   useEffect(() => {
     if (!open) {
       setMode("choice");
+      setReturnMode("choice");
       setEmail("");
       setFiles([]);
       setDragOver(false);
@@ -59,7 +66,9 @@ export function NovaOsArquivosModal({
       return;
     }
     if (settingsQuery.isPending) return;
-    setMode(emailToClientEnabled ? "choice" : "self");
+    const initial: Mode = emailToClientEnabled ? "choice" : "self";
+    setMode(initial);
+    setReturnMode(initial);
   }, [open, emailToClientEnabled, settingsQuery.isPending]);
 
   const resetSelf = useCallback(() => {
@@ -67,6 +76,12 @@ export function NovaOsArquivosModal({
     setDragOver(false);
     setError(null);
   }, []);
+
+  const openRepeticao = () => {
+    setError(null);
+    setReturnMode(emailToClientEnabled ? "choice" : "self");
+    setMode("repeticao");
+  };
 
   if (!open) {
     return null;
@@ -149,6 +164,18 @@ export function NovaOsArquivosModal({
     }
   };
 
+  const repeticaoButton = (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={openRepeticao}
+      className="flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-secondary-blue hover:bg-slate-50"
+    >
+      <Copy className="size-4" aria-hidden />
+      Repetição de OS
+    </button>
+  );
+
   return (
     <div
       className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/55 p-4"
@@ -159,7 +186,7 @@ export function NovaOsArquivosModal({
       <div
         className={cn(
           "flex max-h-[90vh] w-full flex-col overflow-hidden rounded-lg border-t-4 border-primary-green bg-white shadow-xl transition-all",
-          mode === "self" ? "max-w-2xl" : "max-w-lg",
+          mode === "self" || mode === "repeticao" ? "max-w-2xl" : "max-w-lg",
         )}
       >
         <header className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
@@ -168,12 +195,16 @@ export function NovaOsArquivosModal({
               id="nova-os-arquivos-title"
               className="text-lg font-semibold text-secondary-blue"
             >
-              Arquivos da OS {osId}/{ano}
+              {mode === "repeticao"
+                ? `Repetição de OS — ${osId}/${ano}`
+                : `Arquivos da OS ${osId}/${ano}`}
             </h2>
             <p className="mt-1 text-sm text-slate-600">
-              {emailToClientEnabled
-                ? "Envie os arquivos ao cliente por e-mail ou inclua você mesmo na pasta Original."
-                : "Inclua os arquivos na pasta Original da OS."}
+              {mode === "repeticao"
+                ? "Informe de qual OS virão os arquivos. A pasta da nova OS será criada e as subpastas transferidas."
+                : emailToClientEnabled
+                  ? "Envie os arquivos ao cliente por e-mail, inclua você mesmo na pasta Original ou use uma repetição de OS."
+                  : "Inclua os arquivos na pasta Original da OS ou use uma repetição de OS."}
             </p>
           </div>
           <button
@@ -236,6 +267,7 @@ export function NovaOsArquivosModal({
                 <Upload className="size-4" aria-hidden />
                 Eu incluo os arquivos
               </button>
+              {repeticaoButton}
             </div>
           ) : null}
 
@@ -308,7 +340,37 @@ export function NovaOsArquivosModal({
                   ))}
                 </ul>
               ) : null}
+              <div className="relative py-1 text-center text-xs text-slate-400">
+                <span className="bg-white px-2">ou</span>
+                <div className="absolute inset-x-0 top-1/2 -z-10 border-t border-slate-200" />
+              </div>
+              {repeticaoButton}
             </div>
+          ) : null}
+
+          {mode === "repeticao" ? (
+            <OsFolderMoveForm
+              destAno={ano}
+              destId={osId}
+              variant="repeticao"
+              defaultOrigemNumero={origemId && origemId > 0 ? String(origemId) : ""}
+              defaultOrigemAno={origemAno && origemAno > 0 ? String(origemAno) : ""}
+              cancelLabel="← Voltar"
+              onCancel={() => setMode(returnMode)}
+              onSuccess={(result) => {
+                const moved = result.moved_folders
+                  .map((item) => item.to_name)
+                  .join(", ");
+                window.alert(
+                  `Pastas movidas com sucesso para OS ${osId}/${ano}.\n\n` +
+                    `Itens: ${moved}\n` +
+                    (result.dest_folder_created
+                      ? "\nA pasta de destino foi criada na rede."
+                      : ""),
+                );
+                onDone();
+              }}
+            />
           ) : null}
         </div>
 

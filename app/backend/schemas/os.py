@@ -59,6 +59,14 @@ class OsFolderMoveFolderItem(BaseModel):
     dest_path: Optional[str] = None
 
 
+class OsFolderMoveAndamentoItem(BaseModel):
+    situacao: Optional[str] = None
+    setor: Optional[str] = None
+    data: Optional[str] = None
+    ponto: Optional[str] = None
+    observacao: Optional[str] = None
+
+
 class OsFolderMovePreviewResponse(BaseModel):
     dest_solicitante: str
     dest_produto: str
@@ -74,12 +82,17 @@ class OsFolderMovePreviewResponse(BaseModel):
     folders_to_move: List[OsFolderMoveFolderItem]
     dest_conflicts: List[str]
     can_execute: bool
+    origem_situacao: Optional[str] = None
+    origem_concluida: bool = True
+    origem_andamentos: List[OsFolderMoveAndamentoItem] = Field(default_factory=list)
 
 
 class OsFolderMoveExecuteRequest(BaseModel):
     origem_ano: int
     origem_id: int
     confirm_meta_mismatch: bool = False
+    append_repeticao_observ: bool = False
+    confirm_origem_nao_concluida: bool = False
 
 
 class OsFolderMoveExecuteResponse(BaseModel):

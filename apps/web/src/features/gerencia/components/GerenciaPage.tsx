@@ -35,6 +35,8 @@ export function GerenciaPage({ search }: GerenciaPageProps) {
   const [arquivosModal, setArquivosModal] = useState<{
     ano: number;
     osId: number;
+    origemId?: number;
+    origemAno?: number;
   } | null>(null);
 
   useEffect(() => {
@@ -79,7 +81,18 @@ export function GerenciaPage({ search }: GerenciaPageProps) {
       const showArquivosModal =
         wasNewOs && osNum > 0 && osNum < 5000 && persistAno;
       if (showArquivosModal) {
-        setArquivosModal({ ano: persistAno, osId: osNum });
+        setArquivosModal({
+          ano: persistAno,
+          osId: osNum,
+          origemId:
+            search.action === "duplicate" && search.id
+              ? parseInt(search.id, 10)
+              : undefined,
+          origemAno:
+            search.action === "duplicate" && search.ano
+              ? parseInt(search.ano, 10)
+              : undefined,
+        });
         return;
       }
       window.alert(
@@ -171,6 +184,8 @@ export function GerenciaPage({ search }: GerenciaPageProps) {
         ano={arquivosModal?.ano ?? 0}
         osId={arquivosModal?.osId ?? 0}
         ponto={ponto}
+        origemId={arquivosModal?.origemId}
+        origemAno={arquivosModal?.origemAno}
         onDone={() => {
           setArquivosModal(null);
           void navigate({ to: "/" });

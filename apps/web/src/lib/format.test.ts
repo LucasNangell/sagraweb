@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDataExtensoBrasilia, formatDateBr, formatDateForInput } from "@/lib/format";
+import {
+  formatDataExtensoBrasilia,
+  formatDateBr,
+  formatDateForInput,
+  formatOsShortLabel,
+} from "@/lib/format";
 
 describe("formatDataExtensoBrasilia", () => {
   it("formata data civil no estilo do ofício", () => {
@@ -64,5 +69,13 @@ describe("formatDateForInput", () => {
     expect(formatDateForInput(undefined)).toBe("");
     expect(formatDateForInput("")).toBe("");
     expect(formatDateForInput("não-é-data")).toBe("");
+  });
+});
+
+describe("formatOsShortLabel", () => {
+  it("formata número e ano com dois dígitos", () => {
+    expect(formatOsShortLabel(2282, 2025)).toBe("2282/25");
+    expect(formatOsShortLabel(2282, 25)).toBe("2282/25");
+    expect(formatOsShortLabel(5024, 2026)).toBe("5024/26");
   });
 });

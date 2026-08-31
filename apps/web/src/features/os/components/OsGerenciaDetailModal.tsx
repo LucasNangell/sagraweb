@@ -48,6 +48,8 @@ export function OsGerenciaDetailModal({
   const [arquivosModal, setArquivosModal] = useState<{
     ano: number;
     osId: number;
+    origemId?: number;
+    origemAno?: number;
   } | null>(null);
 
   const composing = mode.kind !== "existing";
@@ -189,7 +191,12 @@ export function OsGerenciaDetailModal({
       const showArquivosModal =
         osNum > 0 && osNum < 5000 && persistAno != null;
       if (showArquivosModal) {
-        setArquivosModal({ ano: persistAno, osId: osNum });
+        setArquivosModal({
+          ano: persistAno,
+          osId: osNum,
+          origemId: mode.kind === "duplicate" && row ? row.nr_os : undefined,
+          origemAno: mode.kind === "duplicate" && row ? row.ano : undefined,
+        });
         return;
       }
       window.alert(
@@ -431,6 +438,8 @@ export function OsGerenciaDetailModal({
         ano={arquivosModal?.ano ?? 0}
         osId={arquivosModal?.osId ?? 0}
         ponto={ponto}
+        origemId={arquivosModal?.origemId}
+        origemAno={arquivosModal?.origemAno}
         onDone={finishCompose}
         onClose={finishCompose}
       />

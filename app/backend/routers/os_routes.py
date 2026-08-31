@@ -610,6 +610,8 @@ def move_os_folders(ano: int, id: int, body: OsFolderMoveExecuteRequest):
             origem_ano=body.origem_ano,
             origem_id=body.origem_id,
             confirm_meta_mismatch=body.confirm_meta_mismatch,
+            append_repeticao_observ=body.append_repeticao_observ,
+            confirm_origem_nao_concluida=body.confirm_origem_nao_concluida,
             get_os_folder_path=_get_os_folder_path,
         )
     except ValueError as exc:
@@ -623,6 +625,15 @@ def move_os_folders(ano: int, id: int, body: OsFolderMoveExecuteRequest):
     except Exception as exc:
         logger.error("Erro ao mover pastas %s/%s: %s", id, ano, exc)
         raise HTTPException(status_code=500, detail="Não foi possível mover as pastas.") from exc
+
+    if body.append_repeticao_observ:
+        def _sync_observ_to_mdb() -> None:
+            from .mdb_writer import sync_os_from_mysql_to_mdb
+
+            sync_os_from_mysql_to_mdb(id, ano)
+
+        _dispatch_mdb_sync("os_repeticao_observ", _sync_observ_to_mdb, nro=id, ano=ano)
+
     return OsFolderMoveExecuteResponse(**result)
 
 

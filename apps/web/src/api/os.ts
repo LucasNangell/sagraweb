@@ -238,6 +238,14 @@ export interface OsFolderMoveFolderItem {
   dest_path?: string | null;
 }
 
+export interface OsFolderMoveAndamentoItem {
+  situacao?: string | null;
+  setor?: string | null;
+  data?: string | null;
+  ponto?: string | null;
+  observacao?: string | null;
+}
+
 export interface OsFolderMovePreviewResponse {
   dest_solicitante: string;
   dest_produto: string;
@@ -253,6 +261,9 @@ export interface OsFolderMovePreviewResponse {
   folders_to_move: OsFolderMoveFolderItem[];
   dest_conflicts: string[];
   can_execute: boolean;
+  origem_situacao?: string | null;
+  origem_concluida?: boolean;
+  origem_andamentos?: OsFolderMoveAndamentoItem[];
 }
 
 export interface OsFolderMoveExecuteResponse {
@@ -263,6 +274,14 @@ export interface OsFolderMoveExecuteResponse {
   transfer_suffix: string;
   dest_folder_created: boolean;
   meta_mismatch: boolean;
+}
+
+export interface OsFolderMoveExecutePayload {
+  origem_ano: number;
+  origem_id: number;
+  confirm_meta_mismatch?: boolean;
+  append_repeticao_observ?: boolean;
+  confirm_origem_nao_concluida?: boolean;
 }
 
 export async function previewOsFolderMove(
@@ -287,11 +306,7 @@ export async function previewOsFolderMove(
 export async function executeOsFolderMove(
   destAno: number,
   destId: number,
-  payload: {
-    origem_ano: number;
-    origem_id: number;
-    confirm_meta_mismatch?: boolean;
-  },
+  payload: OsFolderMoveExecutePayload,
 ): Promise<OsFolderMoveExecuteResponse> {
   return apiFetch<OsFolderMoveExecuteResponse>(
     `/os/${destAno}/${destId}/folder-move`,

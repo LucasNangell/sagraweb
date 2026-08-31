@@ -972,6 +972,12 @@ def startup_init():
         logger.error("Erro ao migrar tabUsuarioFace no startup: %s", exc)
 
     try:
+        from solicitante_foto_schema import ensure_solicitante_foto_schema
+        ensure_solicitante_foto_schema()
+    except Exception as exc:
+        logger.error("Erro ao migrar tab_solicitante_foto no startup: %s", exc)
+
+    try:
         from ip_permissions_schema import ensure_ip_permissions_schema
         ensure_ip_permissions_schema()
     except Exception as exc:

@@ -60,6 +60,9 @@ deploy/recovery_temp/
 # Fotos faciais (painel tablet)
 app/backend/data/face_enrollments/
 
+# Fotos cadastradas de solicitantes (modal da OS)
+app/backend/data/solicitante_fotos/
+
 # Cache de renderização da Prova WEB
 app/backend/cache/
 

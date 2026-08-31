@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { fetchDeputadoLookup } from "@/api/auxLookups";
+import {
+  fetchDeputadoLookup,
+  fetchSolicitanteFotoStatus,
+  solicitanteFotoUrl,
+  uploadSolicitanteFoto,
+} from "@/api/auxLookups";
 import { useGerenciaAuxLookups } from "@/api/hooks/useGerenciaAux";
 import {
   fetchGerenciaCoefA4Produtos,
@@ -28,6 +33,10 @@ import {
   type TechSpecChangeMeta,
 } from "../techSpec";
 import type { GerenciaFormState, GerenciaOsDetails, GerenciaSearchParams } from "../types";
+import {
+  loadSolicitantePhoto,
+  solicitantePhotoSearchKey,
+} from "../solicitantePhoto";
 import {
   detailsToForm,
   formatCotaEstimada,
@@ -89,6 +98,7 @@ export function useGerenciaOsEditor({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deputyPhoto, setDeputyPhoto] = useState<string | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const lastDepSearch = useRef("");
 
@@ -278,34 +288,76 @@ export function useGerenciaOsEditor({
     search.modo,
   ]);
 
-  const fetchDeputadoIfNeeded = useCallback(async () => {
-    if (form.req_categoria !== "Deputado") return;
+  const fetchSolicitantePhotoIfNeeded = useCallback(async () => {
     const nome = form.req_solicitante.trim();
-    if (nome.length < 3) return;
-    if (nome.toLowerCase() === lastDepSearch.current.toLowerCase()) return;
-    lastDepSearch.current = nome;
+    if (nome.length < 3) {
+      lastDepSearch.current = "";
+      setDeputyPhoto(null);
+      return;
+    }
+    const key = solicitantePhotoSearchKey(form.req_categoria, nome);
+    if (key === lastDepSearch.current) return;
 
     try {
-      const data = await fetchDeputadoLookup(nome);
-      if (!data.nome) return;
-      update((prev) => ({
-        req_gabinete: prev.req_gabinete || data.gabinete,
-        req_andar: prev.req_andar || data.andar,
-        req_ramal: prev.req_ramal || data.ramal,
-        req_local: prev.req_local || data.local,
-      }));
-      if (data.foto) setDeputyPhoto(data.foto);
+      const result = await loadSolicitantePhoto({
+        nome,
+        categoria: form.req_categoria,
+        fetchStatus: fetchSolicitanteFotoStatus,
+        fotoUrl: solicitanteFotoUrl,
+        fetchDeputado: fetchDeputadoLookup,
+      });
+      lastDepSearch.current = key;
+      setDeputyPhoto(result.photo);
+      if (result.deputado) {
+        const data = result.deputado;
+        update((prev) => ({
+          req_gabinete: prev.req_gabinete || data.gabinete,
+          req_andar: prev.req_andar || data.andar,
+          req_ramal: prev.req_ramal || data.ramal,
+          req_local: prev.req_local || data.local,
+        }));
+      }
     } catch (e) {
       console.error(e);
     }
   }, [form.req_categoria, form.req_solicitante, update]);
 
+  const uploadSolicitantePhoto = useCallback(
+    async (file: File) => {
+      const nome = form.req_solicitante.trim();
+      if (nome.length < 3) {
+        window.alert(
+          "Informe o Solicitante (mínimo 3 caracteres) antes de alterar a foto.",
+        );
+        return;
+      }
+      if (file.size > 8 * 1024 * 1024) {
+        window.alert("Imagem muito grande (máx. 8MB).");
+        return;
+      }
+      setPhotoUploading(true);
+      try {
+        await uploadSolicitanteFoto(nome, file);
+        lastDepSearch.current = solicitantePhotoSearchKey(
+          form.req_categoria,
+          nome,
+        );
+        setDeputyPhoto(solicitanteFotoUrl(nome, Date.now()));
+      } catch (e) {
+        window.alert(
+          e instanceof Error ? e.message : "Falha ao salvar a foto.",
+        );
+      } finally {
+        setPhotoUploading(false);
+      }
+    },
+    [form.req_categoria, form.req_solicitante],
+  );
+
   useEffect(() => {
     if (!enabled) return;
-    if (form.req_categoria === "Deputado" && form.req_solicitante.trim().length >= 3) {
-      void fetchDeputadoIfNeeded();
-    }
-  }, [enabled, form.req_categoria, form.req_solicitante, fetchDeputadoIfNeeded]);
+    void fetchSolicitantePhotoIfNeeded();
+  }, [enabled, fetchSolicitantePhotoIfNeeded]);
 
   useEffect(() => {
     if (!enabled || existingOnly) return;
@@ -456,7 +508,10 @@ export function useGerenciaOsEditor({
     setForm,
     setTechSpec,
     deputyPhoto,
-    fetchDeputadoIfNeeded,
+    photoUploading,
+    fetchSolicitantePhotoIfNeeded,
+    fetchDeputadoIfNeeded: fetchSolicitantePhotoIfNeeded,
+    uploadSolicitantePhoto,
     loadError,
     ponto,
     aux,

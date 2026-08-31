@@ -1,4 +1,4 @@
-import { apiFetch } from "@/api/client";
+import { apiFetch, apiUrl } from "@/api/client";
 
 interface SetorRow {
   Setor?: string | null;
@@ -214,4 +214,38 @@ export async function fetchDeputadoLookup(
     q.set("nome", nome);
   }
   return apiFetch<DeputadoLookup>(`/aux/deputado/buscar?${q}`);
+}
+
+export interface SolicitanteFotoStatus {
+  exists: boolean;
+}
+
+export function solicitanteFotoUrl(nome: string, cacheBust?: number): string {
+  const q = new URLSearchParams();
+  q.set("nome", nome);
+  if (cacheBust != null) {
+    q.set("t", String(cacheBust));
+  }
+  return apiUrl(`/aux/solicitante/foto?${q}`);
+}
+
+export async function fetchSolicitanteFotoStatus(
+  nome: string,
+): Promise<SolicitanteFotoStatus> {
+  const q = new URLSearchParams();
+  q.set("nome", nome);
+  return apiFetch<SolicitanteFotoStatus>(`/aux/solicitante/foto-status?${q}`);
+}
+
+export async function uploadSolicitanteFoto(
+  nome: string,
+  file: File,
+): Promise<SolicitanteFotoStatus> {
+  const fd = new FormData();
+  fd.append("nome", nome);
+  fd.append("file", file);
+  return apiFetch<SolicitanteFotoStatus>("/aux/solicitante/foto", {
+    method: "POST",
+    body: fd,
+  });
 }

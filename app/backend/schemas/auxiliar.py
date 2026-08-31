@@ -104,6 +104,10 @@ class DeputadoEmailsResponse(BaseModel):
     gabinete: str = ""
 
 
+class SolicitanteFotoStatusResponse(BaseModel):
+    exists: bool = False
+
+
 class AuxListResponse(BaseModel):
     """Resposta genérica para listas auxiliares."""
 

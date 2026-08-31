@@ -5,7 +5,7 @@ import unicodedata
 from typing import List
 from unicodedata import normalize
 
-from fastapi import APIRouter, Query, Response
+from fastapi import APIRouter, File, Form, HTTPException, Query, Response, UploadFile
 
 from database import db
 from lookup_sync import sync_lookup_tables_from_mdb_if_empty
@@ -26,6 +26,7 @@ from schemas.auxiliar import (
     AcabamentoCatalogRow,
     SetorRow,
     SituacaoRow,
+    SolicitanteFotoStatusResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -318,6 +319,44 @@ def buscar_deputado(
     except Exception as exc:
         logger.error("Erro ao buscar deputado (nome=%s id=%s): %s", nome, id, exc)
         return DeputadoLookupResponse()
+
+
+@router.get("/solicitante/foto-status", response_model=SolicitanteFotoStatusResponse)
+def solicitante_foto_status(nome: str = Query("")) -> SolicitanteFotoStatusResponse:
+    from services.solicitante_foto_service import foto_exists
+
+    return SolicitanteFotoStatusResponse(exists=foto_exists(nome))
+
+
+@router.get("/solicitante/foto")
+def solicitante_foto(nome: str = Query("", min_length=0)):
+    from fastapi.responses import FileResponse
+
+    from services.solicitante_foto_service import resolve_foto_path
+
+    path = resolve_foto_path(nome)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Foto não cadastrada.")
+    return FileResponse(
+        path,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, max-age=60"},
+    )
+
+
+@router.post("/solicitante/foto", response_model=SolicitanteFotoStatusResponse)
+async def upload_solicitante_foto(
+    nome: str = Form(...),
+    file: UploadFile = File(...),
+) -> SolicitanteFotoStatusResponse:
+    from services.solicitante_foto_service import MAX_BYTES, save_foto
+
+    data = await file.read(MAX_BYTES + 1)
+    try:
+        save_foto(nome, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return SolicitanteFotoStatusResponse(exists=True)
 
 
 def normalize_text(text: str) -> str:

@@ -87,6 +87,8 @@ export interface GerenciaSectionProps {
   onTechSpecChange: (spec: TechSpec, meta?: TechSpecChangeMeta) => void;
   deputyPhoto?: string | null;
   onSolicitanteBlur?: () => void;
+  onChangePhoto?: (file: File) => void;
+  photoUploading?: boolean;
 }
 
 function set<K extends keyof GerenciaFormState>(
@@ -219,17 +221,26 @@ function PhotoBox({
   className,
   /** No modal: só o frame (slot pai já tem aspect 3:4 + altura). */
   fillHeight = false,
+  onChangePhoto,
+  photoUploading = false,
 }: {
   deputyPhoto?: string | null;
   name: string;
   className?: string;
   fillHeight?: boolean;
+  onChangePhoto?: (file: File) => void;
+  photoUploading?: boolean;
 }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const canChange = Boolean(onChangePhoto);
+
   const frame = (
     <div
       className={cn(
         "relative flex items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-100 font-bold text-secondary-blue",
-        fillHeight ? "size-full text-2xl" : "aspect-[3/4] w-full max-w-[7.5rem] text-lg",
+        fillHeight
+          ? cn("min-h-0 w-full flex-1 text-2xl", canChange ? "" : "size-full")
+          : "aspect-[3/4] w-full max-w-[7.5rem] text-lg",
       )}
     >
       {deputyPhoto ? (
@@ -246,7 +257,7 @@ function PhotoBox({
           aria-hidden
         />
       )}
-      {fillHeight ? (
+      {fillHeight && !canChange ? (
         <span className="absolute inset-x-0 bottom-0 bg-black/45 py-0.5 text-center text-[0.6rem] font-semibold uppercase tracking-wide text-white">
           Foto
         </span>
@@ -254,16 +265,49 @@ function PhotoBox({
     </div>
   );
 
+  const changeControl = canChange ? (
+    <>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="sr-only"
+        aria-hidden
+        tabIndex={-1}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file) onChangePhoto?.(file);
+        }}
+      />
+      <button
+        type="button"
+        disabled={photoUploading}
+        onClick={() => fileRef.current?.click()}
+        className="mt-1 w-full shrink-0 rounded border border-slate-200 bg-white px-1 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+      >
+        {photoUploading ? "Salvando…" : "Alterar"}
+      </button>
+    </>
+  ) : null;
+
   if (fillHeight) {
-    return <div className={cn("size-full", className)}>{frame}</div>;
+    return (
+      <div className={cn("flex size-full flex-col", className)}>
+        {frame}
+        {changeControl}
+      </div>
+    );
   }
 
   return (
     <div className={cn("flex flex-col items-center", className)}>
       {frame}
-      <span className="mt-1 text-center text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400">
-        Foto
-      </span>
+      {changeControl ?? (
+        <span className="mt-1 text-center text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400">
+          Foto
+        </span>
+      )}
     </div>
   );
 }
@@ -276,6 +320,8 @@ export function GerenciaSolicitanteSection({
   categorias,
   deputyPhoto,
   onSolicitanteBlur,
+  onChangePhoto,
+  photoUploading,
 }: Pick<
   GerenciaSectionProps,
   | "form"
@@ -285,6 +331,8 @@ export function GerenciaSolicitanteSection({
   | "categorias"
   | "deputyPhoto"
   | "onSolicitanteBlur"
+  | "onChangePhoto"
+  | "photoUploading"
 >) {
   const ro = readOnly;
   const fieldsRef = useRef<HTMLDivElement>(null);
@@ -409,6 +457,8 @@ export function GerenciaSolicitanteSection({
               deputyPhoto={deputyPhoto}
               name={form.req_solicitante}
               fillHeight
+              onChangePhoto={onChangePhoto}
+              photoUploading={photoUploading}
             />
           </div>
         </div>

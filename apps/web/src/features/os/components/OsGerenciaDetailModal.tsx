@@ -77,7 +77,9 @@ export function OsGerenciaDetailModal({
     dirty,
     resetToSnapshot,
     deputyPhoto,
+    photoUploading,
     fetchDeputadoIfNeeded,
+    uploadSolicitantePhoto,
     loadError,
     ponto,
     aux,
@@ -249,6 +251,8 @@ export function OsGerenciaDetailModal({
     onTechSpecChange: handleTechSpecChange,
     deputyPhoto,
     onSolicitanteBlur: () => void fetchDeputadoIfNeeded(),
+    onChangePhoto: (file: File) => void uploadSolicitantePhoto(file),
+    photoUploading,
   };
 
   const activeLabel =

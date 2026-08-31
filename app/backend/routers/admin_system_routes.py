@@ -1658,3 +1658,87 @@ def admin_copiar_produto_passos(catalog_id: int, body: ProdutoPassosCopiar):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"passos": passos}
 
+
+def _acabamento_passos_context(catalog_id: int):
+    from services import custo_funcao_service as custo_svc
+    from services import orcamento_produto_passos_service as passos_svc
+    from services import system_catalog_service as cat_svc
+
+    try:
+        item = passos_svc.require_catalog_category(catalog_id, "acabamento")
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Acabamento não encontrado.") from None
+    passos = passos_svc.list_passos(catalog_id)
+    funcoes = custo_svc.list_funcoes(include_inactive=False)
+    setores = [it["label"] for it in cat_svc.list_admin_items("setor") if it.get("active")]
+    acabamentos = [
+        {"id": it["id"], "label": it["label"]}
+        for it in cat_svc.list_admin_items("acabamento")
+        if it.get("id") and it.get("active")
+    ]
+    return item, passos, funcoes, setores, acabamentos
+
+
+@router.get(
+    "/api/admin/system/catalog/acabamento/{catalog_id}/passos",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def admin_list_acabamento_passos(catalog_id: int):
+    item, passos, funcoes, setores, acabamentos = _acabamento_passos_context(catalog_id)
+    return {
+        "passos": passos,
+        "funcoes": funcoes,
+        "setores": setores,
+        "produtos": [],
+        "acabamentos": acabamentos,
+        "rotulo": item.get("label") or "",
+    }
+
+
+@router.put(
+    "/api/admin/system/catalog/acabamento/{catalog_id}/passos",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def admin_replace_acabamento_passos(catalog_id: int, body: ProdutoPassosReplace):
+    from services import orcamento_produto_passos_service as passos_svc
+
+    try:
+        item = passos_svc.require_catalog_category(catalog_id, "acabamento")
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Acabamento não encontrado.") from None
+    rotulo = (body.rotulo or "").strip() or (item.get("label") or "")
+    try:
+        passos = [
+            {**p.model_dump(), "tipo": "produtiva", "cobra_pessoal": True}
+            for p in body.passos
+        ]
+        saved = passos_svc.replace_passos(catalog_id, passos, rotulo=rotulo)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Erro ao gravar etapas do acabamento %s", catalog_id)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"passos": saved}
+
+
+@router.post(
+    "/api/admin/system/catalog/acabamento/{catalog_id}/passos/copiar",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def admin_copiar_acabamento_passos(catalog_id: int, body: ProdutoPassosCopiar):
+    from services import orcamento_produto_passos_service as passos_svc
+
+    try:
+        item = passos_svc.require_catalog_category(catalog_id, "acabamento")
+        passos_svc.require_catalog_category(body.origem_catalog_id, "acabamento")
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Acabamento não encontrado.") from None
+    rotulo = (body.rotulo or "").strip() or (item.get("label") or "")
+    try:
+        passos = passos_svc.copiar_passos(
+            catalog_id, body.origem_catalog_id, rotulo=rotulo
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"passos": passos}
+

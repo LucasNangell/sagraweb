@@ -36,6 +36,16 @@ def ensure_produto_catalog_id(label: str, *, ponto: str | None = None) -> dict:
     return get_or_create_catalog_item("produto", label, updated_by_ponto=ponto)
 
 
+def require_catalog_category(catalog_id: int, category: str) -> dict:
+    """Garante que o item existe na categoria; ValueError se não."""
+    from services.system_catalog_service import get_catalog_item
+
+    try:
+        return get_catalog_item(category, catalog_id)
+    except KeyError as exc:
+        raise ValueError(f"Item {catalog_id} não encontrado em {category}.") from exc
+
+
 def _passo_row(row: dict, funcoes: list[dict] | None = None) -> dict:
     learned = {
         "n": _i(row.get("n_aprendido")),

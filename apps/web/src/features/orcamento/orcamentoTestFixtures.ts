@@ -15,7 +15,7 @@ function stubConsolidado(tecnologia: string, total: number): OrcamentoConsolidad
     custo_material: 35,
     custo_direto: 35,
     custo_indiretos: 15,
-    material_detalhe: [{ nome: "Papel — Couche fosco 300g", valor: 10 }],
+    material_detalhe: [{ nome: "Papel", valor: 10 }],
     indiretos_detalhe: [],
     total,
     unitario: total,

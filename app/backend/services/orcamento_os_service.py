@@ -67,6 +67,52 @@ def _parse_acabamento(texto: Optional[str]) -> dict:
     }
 
 
+_FLAG_LABELS = (
+    ("laminacao", "Laminação", {"CAPA", "UNICO", ""}),
+    ("grampo", "Grampo", None),
+    ("cola", "Cola", None),
+    ("espiral", "Espiral", None),
+    ("capa_pvc", "Capa PVC", None),
+)
+
+
+def _merge_acabamento_items(*groups: list | None) -> list[dict]:
+    items: list[dict] = []
+    seen: set[tuple] = set()
+    for group in groups:
+        for raw in group or []:
+            if not isinstance(raw, dict):
+                continue
+            try:
+                cid = int(raw["catalog_id"]) if raw.get("catalog_id") is not None else None
+            except (TypeError, ValueError):
+                cid = None
+            label = str(raw.get("label") or "").strip()
+            if cid is None and not label:
+                continue
+            key = ("id", cid) if cid is not None else ("lab", normalize_text(label))
+            if key in seen:
+                continue
+            seen.add(key)
+            out: dict = {"label": label}
+            if cid is not None:
+                out["catalog_id"] = cid
+            items.append(out)
+    return items
+
+
+def _acabamentos_from_flags(acab: dict, tipo: str) -> list[dict]:
+    tipo_u = (tipo or "").upper()
+    out: list[dict] = []
+    for flag, label, tipos in _FLAG_LABELS:
+        if not acab.get(flag):
+            continue
+        if tipos is not None and tipo_u not in tipos:
+            continue
+        out.append({"label": label})
+    return out
+
+
 def _is_color(cores: Optional[str]) -> bool:
     kind = classify_cores_kind(cores)
     if kind == "PB":
@@ -99,6 +145,7 @@ def _componente_from_lote(
     fallback: dict,
     acab: dict,
     insumos: list[dict],
+    acabamentos_os: list | None = None,
 ) -> dict:
     papel_nome = lote.get("papel_link") or lote.get("papel_desc") or fallback.get("PapelLink")
     cores_nm = lote.get("impressao") or lote.get("cores_link") or lote.get("cores_desc") or fallback.get("Cores")
@@ -140,6 +187,10 @@ def _componente_from_lote(
         "capa_pvc": acab["capa_pvc"],
         "verniz": 0,
         "faca_cliche": 0,
+        "acabamentos": _merge_acabamento_items(
+            acabamentos_os,
+            _acabamentos_from_flags(acab, tipo),
+        ),
     }
 
 
@@ -149,19 +200,31 @@ def map_os_to_payload(ano: int, os_id: int, catalog: Optional[dict] = None) -> d
     acab = _parse_acabamento(row.get("DescAcabamento"))
     insumos = catalog["insumos"]
     componentes_os = load_componentes_for_os(os_id, ano, ativos_only=True)
+    gerais: list = []
+    for c in componentes_os:
+        if c.get("acabamentos_gerais"):
+            gerais = list(c.get("acabamentos_gerais") or [])
+            break
     componentes: list[dict] = []
     for comp in componentes_os:
         lotes = comp.get("lotes") or [{}]
         tipo = (comp.get("tipo") or "UNICO").upper()
         for lote in lotes:
+            lote_dict = lote if isinstance(lote, dict) else {}
+            extra = _merge_acabamento_items(
+                gerais,
+                comp.get("acabamentos"),
+                lote_dict.get("acabamentos"),
+            )
             componentes.append(
                 _componente_from_lote(
                     nome=comp.get("nome") or tipo.title(),
                     tipo=tipo,
-                    lote=lote if isinstance(lote, dict) else {},
+                    lote=lote_dict,
                     fallback=row,
                     acab=acab,
                     insumos=insumos,
+                    acabamentos_os=extra,
                 )
             )
     if not componentes:

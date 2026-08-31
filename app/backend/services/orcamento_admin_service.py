@@ -418,6 +418,7 @@ def load_catalog() -> dict:
             params[chave] = valor
     funcoes: list[dict] = []
     passos: list[dict] = []
+    passos_acabamento: list[dict] = []
     learned: list[dict] = []
     try:
         from services import custo_funcao_service as custo_svc
@@ -430,14 +431,23 @@ def load_catalog() -> dict:
 
         rows = db.execute_query(
             """
-            SELECT DISTINCT catalog_id FROM tab_orcamento_produto_passo WHERE ativo = 1
+            SELECT DISTINCT p.catalog_id, LOWER(COALESCE(c.Categoria, '')) AS categoria
+            FROM tab_orcamento_produto_passo p
+            LEFT JOIN tabSystemCatalog c ON c.ID = p.catalog_id
+            WHERE p.ativo = 1
             """
         ) or []
+        passos_acabamento = []
         for row in rows:
-            passos.extend(passos_svc.list_passos(int(row["catalog_id"])))
+            listed = passos_svc.list_passos(int(row["catalog_id"]))
+            if str(row.get("categoria") or "").strip() == "acabamento":
+                passos_acabamento.extend(listed)
+            else:
+                passos.extend(listed)
         learned = passos_svc.list_learned()
     except Exception:
         logger.exception("Orçamento: falha ao carregar etapas de produto")
+        passos_acabamento = []
     return {
         "insumos": list_insumos(include_inactive=False, overlay=False),
         "parametros": params,
@@ -445,5 +455,6 @@ def load_catalog() -> dict:
         "faixas": list_faixas(include_inactive=False),
         "funcoes": funcoes,
         "passos": passos,
+        "passos_acabamento": passos_acabamento,
         "learned": learned,
     }

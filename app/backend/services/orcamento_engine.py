@@ -332,11 +332,8 @@ def _calc_componente(
         custo_laminacao + custo_cola + custo_grampo + custo_espiral + custo_pvc + custo_extras
     )
 
-    papel_rotulo = str(
-        (papel or {}).get("especificacao") or (papel or {}).get("codigo") or "papel"
-    ).strip()
     material_linhas: list[dict] = []
-    _add_material(material_linhas, f"Papel — {papel_rotulo}", custo_papel)
+    _add_material(material_linhas, "Papel", custo_papel)
     _add_material(material_linhas, "Cliques digitais", custo_clique)
     _add_material(material_linhas, "Chapas", custo_chapa)
     _add_material(material_linhas, "Provas", custo_prova)
@@ -376,6 +373,12 @@ def _calc_componente(
         "custo_extras": custo_extras,
         "custo_acabamento": custo_acabamento,
         "material_linhas": material_linhas,
+        "laminacao": _b(comp.get("laminacao")),
+        "grampo": _b(comp.get("grampo")),
+        "cola": _b(comp.get("cola")),
+        "espiral": _b(comp.get("espiral")),
+        "capa_pvc": _b(comp.get("capa_pvc")),
+        "acabamentos": list(comp.get("acabamentos") or []),
         "alertas": [] if papel else ["Papel não selecionado"],
     }
 
@@ -391,28 +394,30 @@ def _sum_key(rows: list[dict], key: str) -> float:
     return sum(_f(r.get(key)) for r in rows)
 
 
-def _comp_prefix(row: dict) -> str:
-    nome = str(row.get("nome") or "").strip()
-    tipo = str(row.get("tipo") or "").strip()
-    if tipo.upper() in {"UNICO", "ÚNICO"}:
-        tipo = ""
-    return nome or tipo.title()
+def _material_grupo(nome: str) -> str:
+    """Agrupa por tipo de insumo, ignorando especificação após ' — '."""
+    text = str(nome or "").strip()
+    if " — " in text:
+        return text.split(" — ", 1)[0].strip() or text
+    return text
 
 
 def _material_detalhe(rows: list[dict]) -> list[dict]:
-    multi = len(rows) > 1
-    linhas: list[dict] = []
+    by_nome: dict[str, float] = {}
+    ordem: list[str] = []
     for row in rows:
-        prefix = _comp_prefix(row) if multi else ""
         for item in row.get("material_linhas") or []:
             valor = _f(item.get("valor"))
             if valor <= 0:
                 continue
-            nome = str(item.get("nome") or "").strip()
-            if prefix:
-                nome = f"{prefix} · {nome}"
-            linhas.append({"nome": nome, "valor": _money(valor)})
-    return linhas
+            nome = _material_grupo(item.get("nome") or "")
+            if not nome:
+                continue
+            if nome not in by_nome:
+                ordem.append(nome)
+                by_nome[nome] = 0.0
+            by_nome[nome] += valor
+    return [{"nome": nome, "valor": _money(by_nome[nome])} for nome in ordem]
 
 
 def _filter_passos(passos: list[dict], produto: str) -> list[dict]:
@@ -420,6 +425,137 @@ def _filter_passos(passos: list[dict], produto: str) -> list[dict]:
     if not wanted:
         return []
     return [p for p in passos if normalize_text(p.get("produto_rotulo")) == wanted]
+
+
+_FLAG_NORMS = (
+    ("laminacao", "laminacao"),
+    ("grampo", "grampo"),
+    ("cola", "cola"),
+    ("espiral", "espiral"),
+    ("capa_pvc", "capa pvc"),
+)
+
+
+def _index_passos_acabamento(passos: list[dict]) -> tuple[dict[int, list[dict]], dict[str, int]]:
+    by_id: dict[int, list[dict]] = {}
+    by_norm: dict[str, int] = {}
+    for passo in passos or []:
+        try:
+            cid = int(passo.get("catalog_id") or 0)
+        except (TypeError, ValueError):
+            cid = 0
+        if cid <= 0:
+            continue
+        by_id.setdefault(cid, []).append(passo)
+        rotulo = normalize_text(passo.get("produto_rotulo") or "")
+        if rotulo and rotulo not in by_norm:
+            by_norm[rotulo] = cid
+    return by_id, by_norm
+
+
+def _ids_acabamento_do_row(row: dict, by_norm: dict[str, int]) -> set[int]:
+    ids: set[int] = set()
+    for item in row.get("acabamentos") or []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            cid = int(item.get("catalog_id") or 0)
+        except (TypeError, ValueError):
+            cid = 0
+        if cid > 0:
+            ids.add(cid)
+            continue
+        mapped = by_norm.get(normalize_text(item.get("label")))
+        if mapped:
+            ids.add(mapped)
+    for flag, norm in _FLAG_NORMS:
+        if _b(row.get(flag)):
+            mapped = by_norm.get(norm)
+            if mapped:
+                ids.add(mapped)
+    return ids
+
+
+def _merge_pessoal(*infos: dict) -> dict:
+    detalhe: list[dict] = []
+    horas = 0.0
+    custo_etapas = 0.0
+    overhead = 0.0
+    tem_passos = False
+    tem_pessoal_hora = False
+    taxa = 0.0
+    for info in infos:
+        if not info:
+            continue
+        detalhe.extend(info.get("detalhe") or [])
+        horas += _f(info.get("horas_produtivas"))
+        custo_etapas += _f(info.get("custo_etapas"))
+        overhead += _f(info.get("overhead_estrutura"))
+        tem_passos = tem_passos or bool(info.get("tem_passos"))
+        tem_pessoal_hora = tem_pessoal_hora or bool(info.get("tem_pessoal_hora"))
+        if info.get("overhead_hora"):
+            taxa = _f(info.get("overhead_hora"))
+    return {
+        "tem_passos": tem_passos,
+        "tem_pessoal_hora": tem_pessoal_hora,
+        "horas_produtivas": horas,
+        "custo_etapas": _money(custo_etapas),
+        "overhead_estrutura": _money(overhead),
+        "overhead_hora": taxa,
+        "custo_pessoal": _money(custo_etapas + overhead),
+        "detalhe": detalhe,
+    }
+
+
+def _custear_acabamentos(
+    rows: list[dict],
+    catalog: dict,
+    *,
+    tecnologia: str,
+    tiragem: int,
+    params: dict,
+) -> dict:
+    by_id, by_norm = _index_passos_acabamento(catalog.get("passos_acabamento") or [])
+    grouped: dict[int, list[dict]] = {}
+    for row in rows:
+        for cid in _ids_acabamento_do_row(row, by_norm):
+            grouped.setdefault(cid, []).append(row)
+    parts: list[dict] = []
+    funcoes = catalog.get("funcoes") or []
+    k = _f(params.get("blend_k"), 8)
+    util = _f(params.get("overhead_utilizacao"), 0.6)
+    for cid, matching in grouped.items():
+        passos = by_id.get(cid) or []
+        if not passos:
+            continue
+        pags = sum(int(r.get("paginas") or 0) for r in matching) or 1
+        folhas = _sum_key(matching, "folhas_matriz")
+        parts.append(
+            custear_passos(
+                passos,
+                tecnologia=tecnologia,
+                tiragem=tiragem,
+                paginas=pags,
+                folhas=folhas,
+                funcoes=funcoes,
+                learned=[],
+                k=k,
+                utilizacao=util,
+                horas_mes=176.0,
+            )
+        )
+    if not parts:
+        return {
+            "tem_passos": False,
+            "tem_pessoal_hora": False,
+            "horas_produtivas": 0.0,
+            "custo_etapas": 0.0,
+            "overhead_estrutura": 0.0,
+            "overhead_hora": 0.0,
+            "custo_pessoal": 0.0,
+            "detalhe": [],
+        }
+    return _merge_pessoal(*parts)
 
 
 def _facility_aliquotas(params: dict) -> list[tuple[str, float]]:
@@ -456,6 +592,10 @@ def _consolidar(tecnologia: str, rows: list[dict], catalog: dict, tiragem: int) 
         utilizacao=_f(params.get("overhead_utilizacao"), 0.6),
         horas_mes=176.0,
     )
+    acab_info = _custear_acabamentos(
+        rows, catalog, tecnologia=tecnologia, tiragem=tiragem, params=params
+    )
+    pessoal_info = _merge_pessoal(pessoal_info, acab_info)
     usa_hora = _b(params.get("pessoal_por_hora")) and bool(pessoal_info.get("tem_passos"))
 
     if tecnologia == "digital":

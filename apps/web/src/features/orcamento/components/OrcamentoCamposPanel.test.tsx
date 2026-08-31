@@ -39,8 +39,8 @@ describe("OrcamentoCamposPanel compact", () => {
     const detalhe = screen.getByText(/Detalhamento/).closest("div");
     expect(detalhe).toBeTruthy();
     expect(within(detalhe as HTMLElement).getByText("Material")).toBeInTheDocument();
-    expect(within(detalhe as HTMLElement).getByText("Papel — Couche fosco 300g")).toBeInTheDocument();
-    expect(within(detalhe as HTMLElement).queryByText("Papel")).not.toBeInTheDocument();
+    expect(within(detalhe as HTMLElement).getByText("Papel")).toBeInTheDocument();
+    expect(within(detalhe as HTMLElement).queryByText(/Papel —/)).not.toBeInTheDocument();
     expect(within(detalhe as HTMLElement).queryByText("Cliques (Digital)")).not.toBeInTheDocument();
   });
 });

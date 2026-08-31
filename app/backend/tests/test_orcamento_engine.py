@@ -120,6 +120,7 @@ def _catalog(extra_insumos=None):
         "faixas": FAIXAS,
         "funcoes": [],
         "passos": [],
+        "passos_acabamento": [],
         "learned": [],
     }
 
@@ -398,9 +399,14 @@ def test_material_detalhe_capa_miolo_e_bopp():
     )
     offset = result["offset"]
     nomes = [x["nome"] for x in offset["material_detalhe"]]
-    assert any(n.startswith("Capa · Papel — Offset 240g") for n in nomes)
-    assert any(n.startswith("Miolo · Papel — Offset 90g") for n in nomes)
-    assert any("Laminação (BOPP)" in n for n in nomes)
+    assert nomes.count("Papel") == 1
+    papel = next(x for x in offset["material_detalhe"] if x["nome"] == "Papel")
+    assert papel["valor"] == pytest.approx(offset["custo_papel"], abs=0.02)
+    assert not any(n.startswith("Papel —") for n in nomes)
+    assert "Laminação (BOPP)" in nomes
+    assert not any("Capa ·" in n or "Miolo ·" in n for n in nomes)
+    assert nomes.count("Chapas") == 1
+    assert nomes.count("Tinta") == 1
     soma = sum(x["valor"] for x in offset["material_detalhe"])
     assert soma == pytest.approx(offset["custo_material"], abs=0.02)
     assert offset["custo_material"] == pytest.approx(
@@ -411,6 +417,66 @@ def test_material_detalhe_capa_miolo_e_bopp():
         + offset["custo_acabamento"],
         abs=0.02,
     )
+
+
+def test_material_detalhe_agrupa_variacoes_do_mesmo_componente():
+    """Duas variações (lotes) do mesmo componente somam um único Papel."""
+    result = calcular(
+        {
+            "tiragem": 300,
+            "tecnologia": "offset",
+            "componentes": [
+                {
+                    "nome": "Capa",
+                    "tipo": "CAPA",
+                    "menor_mm": 210,
+                    "maior_mm": 297,
+                    "paginas": 4,
+                    "cor": True,
+                    "frente_verso": True,
+                    "verso_cor": True,
+                    "papel_codigo": "p8",
+                },
+                {
+                    "nome": "Capa",
+                    "tipo": "CAPA",
+                    "menor_mm": 210,
+                    "maior_mm": 297,
+                    "paginas": 4,
+                    "cor": True,
+                    "frente_verso": True,
+                    "verso_cor": True,
+                    "papel_codigo": "p2",
+                },
+            ],
+        },
+        _catalog(
+            [
+                {
+                    "codigo": "p8",
+                    "categoria": "papel",
+                    "especificacao": "Offset 240g",
+                    "preco_unitario": 1.37,
+                    "rendimento_a4": 8,
+                    "ativo": True,
+                },
+                {
+                    "codigo": "p2",
+                    "categoria": "papel",
+                    "especificacao": "Offset 90g",
+                    "preco_unitario": 0.43,
+                    "rendimento_a4": 8,
+                    "ativo": True,
+                },
+            ]
+        ),
+    )
+    offset = result["offset"]
+    papeis = [x for x in offset["material_detalhe"] if x["nome"] == "Papel"]
+    assert len(papeis) == 1
+    assert papeis[0]["valor"] == pytest.approx(offset["custo_papel"], abs=0.02)
+    assert offset["custo_papel"] > 0
+    assert not any(" — " in x["nome"] for x in offset["material_detalhe"])
 
 
 def test_faixa_pessoal_5000_usa_22_por_cento():
@@ -732,3 +798,113 @@ def test_offset_capa_4x0_planilha_teste():
     assert offset["custo_tinta"] == pytest.approx(29.65, abs=0.02)
     assert capa["custo_laminacao"] == pytest.approx(70.71, abs=0.02)
     assert miolo["custo_cola"] == pytest.approx(41.07, abs=0.02)
+
+
+def _funcao_acab(fid=3):
+    return {
+        "id": fid,
+        "nome": "Acabamento",
+        "ativo": True,
+        "alocacao": "etapa",
+        "quantidade": 1,
+        "custo_mensal": 17600,
+        "custo_hora": 100,
+    }
+
+
+def _passo_acabamento(catalog_id, rotulo, *, min_por_folha=0.0, setup_min=60.0, funcao_id=3):
+    return {
+        "id": 900 + catalog_id,
+        "catalog_id": catalog_id,
+        "produto_rotulo": rotulo,
+        "nome": rotulo,
+        "setor_link": "SEPAC",
+        "tipo": "produtiva",
+        "cobra_pessoal": True,
+        "tecnologia": "qualquer",
+        "setup_min": setup_min,
+        "min_por_un": 0,
+        "min_por_pag": 0,
+        "min_por_folha": min_por_folha,
+        "funcoes": [{"funcao_id": funcao_id, "quantidade": 1}],
+    }
+
+
+def test_pessoal_por_hora_inclui_grampo_do_catalogo():
+    catalog = _catalog()
+    catalog["parametros"]["pessoal_por_hora"] = 1
+    catalog["funcoes"] = [_funcao_acab()]
+    catalog["passos_acabamento"] = [_passo_acabamento(90, "Grampo", setup_min=60)]
+    payload = {
+        "tiragem": 100,
+        "tecnologia": "offset",
+        "componentes": [
+            {
+                "nome": "Único",
+                "tipo": "UNICO",
+                "menor_mm": 210,
+                "maior_mm": 297,
+                "paginas": 8,
+                "cor": False,
+                "frente_verso": True,
+                "papel_codigo": "p1",
+                "grampo": True,
+            }
+        ],
+    }
+    com_grampo = calcular(payload, catalog)
+    nomes = [x["nome"] for x in com_grampo["offset"]["indiretos_detalhe"]]
+    assert any(n == "Pessoal: Grampo" for n in nomes)
+    assert com_grampo["offset"]["custo_pessoal"] > 0
+
+    sem = dict(payload)
+    sem["componentes"] = [{**payload["componentes"][0], "grampo": False}]
+    sem_grampo = calcular(sem, catalog)
+    nomes_sem = [x["nome"] for x in sem_grampo["offset"]["indiretos_detalhe"]]
+    assert not any(n == "Pessoal: Grampo" for n in nomes_sem)
+    assert sem_grampo["offset"]["custo_pessoal"] < com_grampo["offset"]["custo_pessoal"]
+
+
+def test_laminacao_so_capa_nao_usa_folhas_do_miolo():
+    catalog = _catalog()
+    catalog["parametros"]["pessoal_por_hora"] = 1
+    catalog["funcoes"] = [_funcao_acab()]
+    catalog["passos_acabamento"] = [
+        _passo_acabamento(30, "Laminação", min_por_folha=60, setup_min=0)
+    ]
+    result = calcular(
+        {
+            "tiragem": 500,
+            "tecnologia": "offset",
+            "componentes": [
+                {
+                    "nome": "Capa",
+                    "tipo": "CAPA",
+                    "menor_mm": 210,
+                    "maior_mm": 297,
+                    "paginas": 4,
+                    "cor": True,
+                    "frente_verso": True,
+                    "papel_codigo": "p1",
+                    "laminacao": True,
+                },
+                {
+                    "nome": "Miolo",
+                    "tipo": "MIOLO",
+                    "menor_mm": 210,
+                    "maior_mm": 297,
+                    "paginas": 32,
+                    "cor": False,
+                    "frente_verso": True,
+                    "papel_codigo": "p1",
+                },
+            ],
+        },
+        catalog,
+    )
+    offset = result["offset"]
+    capa = next(c for c in offset["componentes"] if c["tipo"] == "CAPA")
+    miolo = next(c for c in offset["componentes"] if c["tipo"] == "MIOLO")
+    lam = next(d for d in offset["pessoal_detalhe"] if d.get("nome") == "Laminação")
+    assert lam["horas"] == pytest.approx(capa["folhas_matriz"], abs=0.02)
+    assert lam["horas"] < (capa["folhas_matriz"] + miolo["folhas_matriz"]) * 0.9

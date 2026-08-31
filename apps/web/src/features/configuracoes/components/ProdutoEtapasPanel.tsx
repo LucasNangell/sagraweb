@@ -3,15 +3,18 @@ import { ChevronDown, ChevronUp, Loader2, Plus, Save, Trash2 } from "lucide-reac
 import { useEffect, useState } from "react";
 
 import {
+  copyAcabamentoPassos,
   copyProdutoPassos,
+  fetchAcabamentoPassos,
   fetchProdutoPassos,
+  saveAcabamentoPassos,
   saveProdutoPassos,
 } from "@/api/adminSystem";
 import type { ProdutoPassoRecord } from "@/features/configuracoes/types";
 
-const EMPTY_PASSO = (): ProdutoPassoRecord => ({
+const EMPTY_PASSO = (nome = ""): ProdutoPassoRecord => ({
   ordem: 10,
-  nome: "",
+  nome,
   setor_link: "",
   tipo: "produtiva",
   cobra_pessoal: true,
@@ -23,18 +26,42 @@ const EMPTY_PASSO = (): ProdutoPassoRecord => ({
   funcoes: [],
 });
 
+export const ETAPAS_PANEL_COPY = {
+  produto: {
+    title: "Etapas de produção",
+    empty:
+      "Nenhuma etapa. O orçamento usará o percentual da planilha até você cadastrar o fluxo.",
+    loading: "Carregando etapas…",
+    add: "Etapa",
+  },
+  acabamento: {
+    title: "Tempo e mão de obra",
+    empty:
+      "Nenhum tempo cadastrado. O orçamento só cobra o material deste acabamento até você informar setup e funções.",
+    loading: "Carregando tempo e mão de obra…",
+    add: "Etapa",
+  },
+} as const;
+
+export type EtapasPanelVariant = keyof typeof ETAPAS_PANEL_COPY;
+
 export function ProdutoEtapasPanel({
   catalogId,
   rotulo,
+  variant = "produto",
 }: {
   catalogId: number;
   rotulo: string;
+  variant?: EtapasPanelVariant;
 }) {
   const qc = useQueryClient();
-  const queryKey = ["admin", "produto-passos", catalogId] as const;
+  const copy = ETAPAS_PANEL_COPY[variant];
+  const isAcabamento = variant === "acabamento";
+  const queryKey = ["admin", isAcabamento ? "acabamento-passos" : "produto-passos", catalogId] as const;
   const query = useQuery({
     queryKey,
-    queryFn: () => fetchProdutoPassos(catalogId),
+    queryFn: () =>
+      isAcabamento ? fetchAcabamentoPassos(catalogId) : fetchProdutoPassos(catalogId),
   });
   const [draft, setDraft] = useState<ProdutoPassoRecord[]>([]);
   const [copyFrom, setCopyFrom] = useState("");
@@ -44,11 +71,17 @@ export function ProdutoEtapasPanel({
   }, [query.data]);
 
   const saveMut = useMutation({
-    mutationFn: () =>
-      saveProdutoPassos(catalogId, {
-        rotulo,
-        passos: draft.map((p, i) => ({ ...p, ordem: (i + 1) * 10 })),
-      }),
+    mutationFn: () => {
+      const passos = draft.map((p, i) => ({
+        ...p,
+        ordem: (i + 1) * 10,
+        ...(isAcabamento ? { tipo: "produtiva" as const, cobra_pessoal: true } : {}),
+      }));
+      const payload = { rotulo, passos };
+      return isAcabamento
+        ? saveAcabamentoPassos(catalogId, payload)
+        : saveProdutoPassos(catalogId, payload);
+    },
     onSuccess: (data) => {
       setDraft(data.passos);
       void qc.invalidateQueries({ queryKey });
@@ -58,7 +91,10 @@ export function ProdutoEtapasPanel({
   });
 
   const copyMut = useMutation({
-    mutationFn: () => copyProdutoPassos(catalogId, Number(copyFrom), rotulo),
+    mutationFn: () =>
+      isAcabamento
+        ? copyAcabamentoPassos(catalogId, Number(copyFrom), rotulo)
+        : copyProdutoPassos(catalogId, Number(copyFrom), rotulo),
     onSuccess: (data) => {
       setDraft(data.passos);
       void qc.invalidateQueries({ queryKey });
@@ -69,13 +105,15 @@ export function ProdutoEtapasPanel({
 
   const setores = query.data?.setores ?? [];
   const funcoes = (query.data?.funcoes ?? []).filter((f) => f.alocacao !== "overhead");
-  const produtos = (query.data?.produtos ?? []).filter((p) => p.id !== catalogId);
+  const peers = (
+    isAcabamento ? (query.data?.acabamentos ?? []) : (query.data?.produtos ?? [])
+  ).filter((p) => p.id !== catalogId);
 
   if (query.isPending) {
     return (
       <div className="mx-3 mb-3 flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50/60 px-3 py-2 text-xs text-slate-500">
         <Loader2 className="size-3 animate-spin" />
-        Carregando etapas…
+        {copy.loading}
       </div>
     );
   }
@@ -91,10 +129,10 @@ export function ProdutoEtapasPanel({
     <div className="mx-3 mb-3 rounded-md border border-slate-200 bg-slate-50/60">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
         <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-          Etapas de produção
+          {copy.title}
         </span>
         <div className="flex flex-wrap items-center gap-1">
-          {produtos.length > 0 ? (
+          {peers.length > 0 ? (
             <>
               <select
                 className="h-7 rounded border border-slate-200 bg-white px-1 text-[11px]"
@@ -102,7 +140,7 @@ export function ProdutoEtapasPanel({
                 onChange={(e) => setCopyFrom(e.target.value)}
               >
                 <option value="">Copiar de…</option>
-                {produtos.map((p) => (
+                {peers.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}
                   </option>
@@ -120,11 +158,11 @@ export function ProdutoEtapasPanel({
           ) : null}
           <button
             type="button"
-            onClick={() => setDraft((d) => [...d, EMPTY_PASSO()])}
+            onClick={() => setDraft((d) => [...d, EMPTY_PASSO(isAcabamento ? rotulo : "")])}
             className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-white px-2 text-[11px] font-semibold"
           >
             <Plus className="size-3" />
-            Etapa
+            {copy.add}
           </button>
           <button
             type="button"
@@ -140,13 +178,13 @@ export function ProdutoEtapasPanel({
 
       {draft.length === 0 ? (
         <p className="px-3 py-2 text-xs italic text-slate-400">
-          Nenhuma etapa. O orçamento usará o percentual da planilha até você cadastrar o fluxo.
+          {copy.empty}
         </p>
       ) : (
         <ul className="divide-y divide-slate-100">
           {draft.map((passo, idx) => (
             <li key={passo.id ?? `new-${idx}`} className="space-y-2 px-3 py-2">
-              <div className="grid gap-2 sm:grid-cols-4">
+              <div className={`grid gap-2 ${isAcabamento ? "sm:grid-cols-3" : "sm:grid-cols-4"}`}>
                 <input
                   className="h-7 rounded border px-2 text-xs"
                   placeholder="Nome da etapa"
@@ -171,6 +209,7 @@ export function ProdutoEtapasPanel({
                     </option>
                   ))}
                 </select>
+                {!isAcabamento ? (
                 <select
                   className="h-7 rounded border px-1 text-xs"
                   value={passo.tipo}
@@ -188,6 +227,7 @@ export function ProdutoEtapasPanel({
                   <option value="espera_cliente">Espera do cliente (R$ 0)</option>
                   <option value="fim">Fim / expedição (R$ 0)</option>
                 </select>
+                ) : null}
                 <select
                   className="h-7 rounded border px-1 text-xs"
                   value={passo.tecnologia}
@@ -202,7 +242,7 @@ export function ProdutoEtapasPanel({
                   <option value="offset">Só Offset</option>
                 </select>
               </div>
-              {passo.tipo === "produtiva" ? (
+              {isAcabamento || passo.tipo === "produtiva" ? (
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {(
                     [
@@ -232,7 +272,7 @@ export function ProdutoEtapasPanel({
                   ))}
                 </div>
               ) : null}
-              {passo.tipo === "produtiva" ? (
+              {isAcabamento || passo.tipo === "produtiva" ? (
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[10px] font-semibold uppercase text-slate-500">Funções</span>
                   {(passo.funcoes || []).map((crew, ci) => (

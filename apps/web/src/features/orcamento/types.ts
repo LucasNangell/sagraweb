@@ -35,6 +35,7 @@ export interface OrcamentoComponente {
   espiral_codigo?: string | null;
   verniz: number;
   faca_cliche: number;
+  acabamentos?: { catalog_id?: number; label: string }[];
 }
 
 export interface OrcamentoEntrada {

@@ -921,3 +921,32 @@ export async function copyProdutoPassos(
     body: JSON.stringify({ origem_catalog_id: origemCatalogId, rotulo }),
   });
 }
+
+export async function fetchAcabamentoPassos(
+  catalogId: number,
+): Promise<ProdutoPassosResponse> {
+  return apiFetch(`/admin/system/catalog/acabamento/${catalogId}/passos`);
+}
+
+export async function saveAcabamentoPassos(
+  catalogId: number,
+  payload: { rotulo: string; passos: ProdutoPassoRecord[] },
+): Promise<{ passos: ProdutoPassoRecord[] }> {
+  return apiFetch(`/admin/system/catalog/acabamento/${catalogId}/passos`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function copyAcabamentoPassos(
+  catalogId: number,
+  origemCatalogId: number,
+  rotulo: string,
+): Promise<{ passos: ProdutoPassoRecord[] }> {
+  return apiFetch(`/admin/system/catalog/acabamento/${catalogId}/passos/copiar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ origem_catalog_id: origemCatalogId, rotulo }),
+  });
+}

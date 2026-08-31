@@ -498,7 +498,14 @@ function CatalogItemRow({
       </div>
 
       {showVariacoes && item.id != null && expanded ? (
-        <VariacoesPanel catalogId={item.id} />
+        <>
+          <VariacoesPanel catalogId={item.id} />
+          <ProdutoEtapasPanel
+            catalogId={item.id}
+            rotulo={item.label}
+            variant="acabamento"
+          />
+        </>
       ) : null}
       {showEtapas && catalogId != null && expanded ? (
         <ProdutoEtapasPanel catalogId={catalogId} rotulo={item.label} />

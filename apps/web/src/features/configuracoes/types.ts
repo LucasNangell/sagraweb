@@ -385,4 +385,5 @@ export interface ProdutoPassosResponse {
   funcoes: CustoFuncaoRecord[];
   setores: string[];
   produtos: { id: number; label: string }[];
+  acabamentos?: { id: number; label: string }[];
 }

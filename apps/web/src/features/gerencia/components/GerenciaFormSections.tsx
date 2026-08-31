@@ -122,7 +122,7 @@ function setFormato(
       ...prev,
       ...patchFormatoDimensions(prev, formato, formatosLookup),
     };
-    const withCalcs = { ...merged, ...recalculateGerenciaCalcs(merged) };
+    const withCalcs = { ...merged, ...recalculateGerenciaCalcs(merged, { refreshCoef: true }) };
     return { ...withCalcs, ...patchTiragemMaximaFromCota(withCalcs) };
   });
 }
@@ -137,7 +137,7 @@ function setDimensoes(
       ...prev,
       ...patchFormatoFromDimensions(prev, patch, formatosLookup),
     };
-    const withCalcs = { ...merged, ...recalculateGerenciaCalcs(merged) };
+    const withCalcs = { ...merged, ...recalculateGerenciaCalcs(merged, { refreshCoef: true }) };
     return { ...withCalcs, ...patchTiragemMaximaFromCota(withCalcs) };
   });
 }

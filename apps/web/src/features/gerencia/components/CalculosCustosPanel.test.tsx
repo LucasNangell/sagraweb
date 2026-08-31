@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { createEmptyGerenciaForm } from "../defaults";
@@ -40,5 +40,39 @@ describe("CalculosCustosPanel", () => {
     expect(screen.queryByLabelText("Altura (mm)")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Largura (mm)")).not.toBeInTheDocument();
     expect(screen.queryByText("Tiragem")).not.toBeInTheDocument();
+  });
+
+  it("permite editar o coeficiente A4 quando a OS não está só leitura", () => {
+    render(
+      <CalculosCustosPanel
+        form={createEmptyGerenciaForm()}
+        update={vi.fn()}
+        techSpec={createEmptyTechSpec()}
+        readOnly={false}
+      />,
+    );
+    expect(screen.getByLabelText("Coeficiente A4")).not.toHaveAttribute(
+      "readonly",
+    );
+  });
+
+  it("ao editar o coeficiente A4 dispara update com o novo valor", () => {
+    const update = vi.fn();
+    render(
+      <CalculosCustosPanel
+        form={{
+          ...createEmptyGerenciaForm(),
+          calc_coef_a4: "6,1",
+          calc_cota_total: "4",
+        }}
+        update={update}
+        techSpec={createEmptyTechSpec()}
+        readOnly={false}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Coeficiente A4"), {
+      target: { value: "7,0" },
+    });
+    expect(update).toHaveBeenCalledWith({ calc_coef_a4: "7,0" });
   });
 });

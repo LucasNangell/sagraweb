@@ -277,20 +277,35 @@ export function gerenciaJobIsFrenteVerso(
   return Boolean(techSpec && specHasFrenteVerso(techSpec));
 }
 
+export type GerenciaCotaEstimadaInput = {
+  cotaPaginas: number;
+  tiragem: number;
+  modelos: number;
+  coef: number;
+  frenteVerso: boolean;
+};
+
 /**
- * Divisor da cota: F/V com coef dimensional > 1 não aplica imposição (n-up).
- * Tabela de papelaria e o coef exibido não mudam.
+ * Cota numérica (antes do ceil de exibição).
+ * F/V com coef > 1: imposição por folha (tiragem 1 junta modelos; tiragem > 1 n-up por modelo) × 2 faces.
  */
-export function resolveGerenciaCoefA4ForCota(
-  form: GerenciaCoefA4Form & GerenciaFrenteVersoForm,
-  options?: GerenciaCalcOptions,
-  coefA4PorProduto?: Record<string, number>,
-): number {
-  const fromTable = gerenciaCoefA4FromTable(form, coefA4PorProduto) != null;
-  const coef = resolveGerenciaCoefA4ForCalcs(form, coefA4PorProduto);
-  if (fromTable) return coef;
-  if (gerenciaJobIsFrenteVerso(form, options?.techSpec) && coef > 1) return 1;
-  return coef;
+export function calculateGerenciaCotaEstimada({
+  cotaPaginas,
+  tiragem,
+  modelos,
+  coef,
+  frenteVerso,
+}: GerenciaCotaEstimadaInput): number {
+  if (!coef) return 0;
+  if (frenteVerso && coef > 1) {
+    if (tiragem <= 0) return 0;
+    const folhas =
+      tiragem <= 1
+        ? Math.ceil(modelos / coef)
+        : modelos * Math.ceil(tiragem / coef);
+    return folhas * 2;
+  }
+  return (cotaPaginas * tiragem * modelos) / coef;
 }
 
 const DEPUTADO_POLYCHROME_QUOTA_FACTOR = 4;
@@ -401,6 +416,8 @@ export type GerenciaCalcOptions = {
   totalPaginas?: number;
   /** Quando informado, a cota usa páginas impressas (capa verso em branco). */
   techSpec?: TechSpec;
+  /** Recalcula o coef A4 por dimensões/tabela (formato, medidas ou produto). */
+  refreshCoef?: boolean;
 };
 
 function cotaPagesFromTechSpec(spec?: TechSpec): number | undefined {
@@ -446,7 +463,57 @@ export function getGerenciaCotaPaginas(
   );
 }
 
-/** Tiragem máxima possível com a cota informada: cota = (páginas × tiragem × modelos) / coef → tiragem = (cota × coef) / (páginas × modelos) */
+type GerenciaCoefStoredForm = GerenciaCoefA4Form & { calc_coef_a4?: string };
+
+function resolveEffectiveCoefA4(
+  form: GerenciaCoefStoredForm,
+  options?: GerenciaCalcOptions,
+): { forCota: number; coefField: string } {
+  const autoRaw = resolveGerenciaCoefA4(form);
+  const autoRounded = roundCoefA4(autoRaw);
+  if (!options?.refreshCoef) {
+    const raw = form.calc_coef_a4;
+    if (raw != null && String(raw).trim() !== "") {
+      const stored = parseCoefA4Value(String(raw));
+      if (stored > 0) {
+        return { forCota: roundCoefA4(stored), coefField: String(raw) };
+      }
+      return { forCota: autoRounded, coefField: String(raw) };
+    }
+  }
+  return { forCota: autoRounded, coefField: formatCoefA4Display(autoRaw) };
+}
+
+function maxTiragemNupFrenteVerso(
+  cotaAtual: number,
+  modelos: number,
+  coef: number,
+): number {
+  const cotaOf = (tiragem: number) =>
+    calculateGerenciaCotaEstimada({
+      cotaPaginas: 1,
+      tiragem,
+      modelos,
+      coef,
+      frenteVerso: true,
+    });
+  if (cotaOf(1) > cotaAtual) return 0;
+  let hi = 2;
+  while (cotaOf(hi) <= cotaAtual) {
+    hi *= 2;
+    if (hi > 1_000_000_000) break;
+  }
+  let left = 1;
+  let right = hi;
+  while (left < right) {
+    const mid = Math.floor((left + right + 1) / 2);
+    if (cotaOf(mid) <= cotaAtual) left = mid;
+    else right = mid - 1;
+  }
+  return left;
+}
+
+/** Tiragem máxima no caminho linear: cota = (páginas × tiragem × modelos) / coef. */
 export function calculateMaxTiragemFromCota(
   cotaAtual: number,
   totalPaginas: number,
@@ -492,14 +559,19 @@ export function computeTiragemMaximaFromForm(
     | "val_cores_capa2"
     | "val_cores_mio"
     | "val_cores_mio2"
-  >,
+  > & { calc_coef_a4?: string },
   options?: GerenciaCalcOptions,
 ): string {
   const cota = parseCotaAtualValue(form.op_cota_atual);
   if (!cota) return "";
   const totalPaginas = getGerenciaCotaPaginas(form, options);
   const modelos = parseGerenciaModelos(form.val_modelos);
-  const coef = resolveGerenciaCoefA4ForCota(form, options);
+  const { forCota: coef } = resolveEffectiveCoefA4(form, options);
+  const frenteVerso = gerenciaJobIsFrenteVerso(form, options?.techSpec);
+  if (frenteVerso && coef > 1) {
+    const max = maxTiragemNupFrenteVerso(cota, modelos, coef);
+    return max > 0 ? String(max) : "";
+  }
   const max = calculateMaxTiragemFromCota(cota, totalPaginas * modelos, coef);
   return max > 0 ? String(max) : "";
 }
@@ -559,20 +631,26 @@ export function recalculateGerenciaCalcs(
     | "val_cores_capa2"
     | "val_cores_mio"
     | "val_cores_mio2"
-  >,
+  > & { calc_coef_a4?: string },
   options?: GerenciaCalcOptions,
 ): Pick<GerenciaFormState, "calc_total_paginas" | "calc_coef_a4" | "calc_cota_total"> {
   const totalPaginas = getGerenciaTotalPaginas(form, options);
   const cotaPaginas = getGerenciaCotaPaginas(form, options);
   const tiragem = parseFloat(form.calc_tiragem || "0") || 0;
   const modelos = parseGerenciaModelos(form.val_modelos);
-  const rawCoef = resolveGerenciaCoefA4(form);
-  const coefCota = resolveGerenciaCoefA4ForCota(form, options);
-  const cota = coefCota ? (cotaPaginas * tiragem * modelos) / coefCota : 0;
+  const { forCota: coef, coefField } = resolveEffectiveCoefA4(form, options);
+  const frenteVerso = gerenciaJobIsFrenteVerso(form, options?.techSpec);
+  const cota = calculateGerenciaCotaEstimada({
+    cotaPaginas,
+    tiragem,
+    modelos,
+    coef,
+    frenteVerso,
+  });
 
   return {
     calc_total_paginas: String(totalPaginas),
-    calc_coef_a4: formatCoefA4Display(rawCoef),
+    calc_coef_a4: coefField,
     calc_cota_total: Number.isFinite(cota) ? formatCotaEstimada(cota) : "0",
   };
 }
@@ -641,6 +719,14 @@ export function detailsToForm(data: GerenciaOsDetails): Partial<GerenciaFormStat
     calc_altura: calc ? strField(calc.altura_mm) : "",
     calc_largura: calc ? strField(calc.largura_mm) : "",
     calc_tiragem: calc ? strField(calc.tiragem) : strField(data.Tiragem),
+    calc_coef_a4: (() => {
+      if (calc?.coef_a4 == null || String(calc.coef_a4).trim() === "") return "";
+      const n =
+        typeof calc.coef_a4 === "number"
+          ? calc.coef_a4
+          : parseCoefA4Value(String(calc.coef_a4));
+      return n > 0 ? formatCoefA4Display(n) : "";
+    })(),
     calc_cota_total:
       calc?.cota_total != null && String(calc.cota_total).trim() !== ""
         ? formatCotaEstimadaFromUnknown(calc.cota_total)

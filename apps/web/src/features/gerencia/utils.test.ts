@@ -5,6 +5,7 @@ import { createEmptyGerenciaForm } from "./defaults";
 import type { GerenciaFormState } from "./types";
 import {
   calculateCoefA4,
+  detailsToForm,
   formatCoefA4Display,
   formatCotaEstimada,
   getGerenciaCotaPaginas,
@@ -437,7 +438,96 @@ describe("recalculateGerenciaCalcs", () => {
     expect(result.calc_cota_total).toBe("2");
   });
 
-  it("produto de tabela F/V continua dividindo pelo coef da tabela", () => {
+  it("7 modelos F/V coef 6,1 e tiragem 1 junta na folha (cota 4, não 14)", () => {
+    const result = recalculateGerenciaCalcs(
+      baseForm({
+        req_categoria: "Orgao",
+        val_cores: "P/B",
+        calc_miolo_pb: "1",
+        val_pgs: "2",
+        val_modelos: "7",
+        calc_tiragem: "1",
+        calc_altura: "75",
+        calc_largura: "110",
+        chk_fv: true,
+      }),
+    );
+    expect(result.calc_coef_a4).toBe("6,1");
+    expect(result.calc_cota_total).toBe("4");
+  });
+
+  it("recalcula a cota quando o coeficiente A4 da OS muda", () => {
+    const form = baseForm({
+      req_categoria: "Orgao",
+      val_cores: "P/B",
+      calc_miolo_pb: "1",
+      val_pgs: "2",
+      val_modelos: "7",
+      calc_tiragem: "1",
+      calc_altura: "75",
+      calc_largura: "110",
+      chk_fv: true,
+    });
+    expect(recalculateGerenciaCalcs(form).calc_cota_total).toBe("4");
+    expect(
+      recalculateGerenciaCalcs({ ...form, calc_coef_a4: "7,0" }).calc_cota_total,
+    ).toBe("2");
+  });
+
+  it("7 modelos F/V coef 6,1 e tiragem 10 n-up por modelo", () => {
+    const result = recalculateGerenciaCalcs(
+      baseForm({
+        req_categoria: "Orgao",
+        val_cores: "P/B",
+        calc_miolo_pb: "1",
+        val_pgs: "2",
+        val_modelos: "7",
+        calc_tiragem: "10",
+        calc_altura: "75",
+        calc_largura: "110",
+        chk_fv: true,
+      }),
+    );
+    expect(result.calc_cota_total).toBe("28");
+  });
+
+  it("coef A4 digitado prevalece sobre o geométrico na cota", () => {
+    const stored = recalculateGerenciaCalcs(
+      baseForm({
+        req_categoria: "Orgao",
+        val_cores: "P/B",
+        calc_miolo_pb: "1",
+        val_pgs: "2",
+        val_modelos: "9",
+        calc_tiragem: "1",
+        calc_altura: "75",
+        calc_largura: "110",
+        calc_coef_a4: "4,0",
+        chk_fv: true,
+      }),
+    );
+    expect(stored.calc_coef_a4).toBe("4,0");
+    expect(stored.calc_cota_total).toBe("6");
+    const refreshed = recalculateGerenciaCalcs(
+      baseForm({
+        req_categoria: "Orgao",
+        val_cores: "P/B",
+        calc_miolo_pb: "1",
+        val_pgs: "2",
+        val_modelos: "9",
+        calc_tiragem: "1",
+        calc_altura: "75",
+        calc_largura: "110",
+        calc_coef_a4: "4,0",
+        chk_fv: true,
+      }),
+      { refreshCoef: true },
+    );
+    expect(refreshed.calc_coef_a4).toBe("6,1");
+    expect(refreshed.calc_cota_total).toBe("4");
+  });
+
+  it("produto de tabela F/V continua usando o coef da tabela na imposição", () => {
     setGerenciaCoefA4PorProduto({ "Ct Visita": 10 });
     const result = recalculateGerenciaCalcs(
       baseForm({
@@ -489,7 +579,7 @@ describe("computeTiragemMaximaFromForm", () => {
     );
   });
 
-  it("F/V meia folha não usa o coef 2 no inverso da cota", () => {
+  it("F/V meia folha busca a maior tiragem cuja cota cabe no saldo", () => {
     const base = {
       ...baseForm({
         req_categoria: "Orgao",
@@ -506,7 +596,7 @@ describe("computeTiragemMaximaFromForm", () => {
     ).toBe("120");
     expect(
       computeTiragemMaximaFromForm({ ...base, chk_fv: true }),
-    ).toBe("60");
+    ).toBe("120");
   });
 });
 
@@ -530,6 +620,17 @@ describe("resolveGerenciaCoefA4", () => {
       { "Timbrado A4": 1 },
     );
     expect(coef).toBe(1);
+  });
+});
+
+describe("detailsToForm coef A4", () => {
+  it("restaura Calculos.coef_a4 salvo na OS", () => {
+    const form = detailsToForm({
+      Calculos: { coef_a4: 4, altura_mm: 75, largura_mm: 110 },
+    });
+    expect(form.calc_coef_a4).toBe("4,0");
+    expect(form.calc_altura).toBe("75");
+    expect(form.calc_largura).toBe("110");
   });
 });
 

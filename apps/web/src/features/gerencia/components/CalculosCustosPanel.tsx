@@ -8,7 +8,7 @@ import {
   getCalculosDisplayRows,
   type TechSpec,
 } from "../techSpec";
-import { patchTiragemMaximaFromCota, recalculateGerenciaCalcs, applyUsarTodaCota, computeTiragemMaximaFromForm } from "../utils";
+import { patchTiragemMaximaFromCota, recalculateGerenciaCalcs, applyUsarTodaCota, computeTiragemMaximaFromForm, formatCoefA4Display, parseCoefA4Value } from "../utils";
 import { Field, gerenciaInputClass } from "./gerenciaFormUi";
 
 const CALC_FIELD_BY_TIPO: Record<
@@ -246,12 +246,22 @@ export function CalculosCustosPanel({
         <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2">
           <Field label="Coeficiente A4" className="min-w-0">
             <input
-              readOnly
+              readOnly={readOnly}
+              inputMode="decimal"
               value={form.calc_coef_a4}
-              title="Unidades por folha A4"
+              onChange={(e) => update({ calc_coef_a4: e.target.value })}
+              onBlur={() => {
+                const n = parseCoefA4Value(form.calc_coef_a4);
+                if (n <= 0) return;
+                const formatted = formatCoefA4Display(n);
+                if (formatted === form.calc_coef_a4) return;
+                update({ calc_coef_a4: formatted });
+              }}
+              title="Unidades por folha A4 (editável conforme a montagem)"
               className={cn(
                 gerenciaInputClass,
-                "min-w-0 bg-slate-100 font-bold text-secondary-blue",
+                "min-w-0 font-bold text-secondary-blue",
+                readOnly && "bg-slate-100",
               )}
             />
           </Field>

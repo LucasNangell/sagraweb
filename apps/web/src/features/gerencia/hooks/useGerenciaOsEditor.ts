@@ -67,6 +67,7 @@ const CALC_KEYS = [
   "calc_tiragem",
   "calc_altura",
   "calc_largura",
+  "calc_coef_a4",
 ] as const;
 
 export interface UseGerenciaOsEditorOptions {
@@ -113,7 +114,20 @@ export function useGerenciaOsEditor({
         const merged = { ...prev, ...nextPatch };
         const touched = CALC_KEYS.some((k) => k in nextPatch);
         if (touched) {
-          const opts = { techSpec: techSpecRef.current };
+          const coefJustEdited =
+            "calc_coef_a4" in nextPatch &&
+            nextPatch.calc_coef_a4 !== prev.calc_coef_a4;
+          const opts = {
+            techSpec: techSpecRef.current,
+            refreshCoef:
+              !coefJustEdited &&
+              ((nextPatch.val_produto !== undefined &&
+                nextPatch.val_produto !== prev.val_produto) ||
+                (nextPatch.calc_altura !== undefined &&
+                  nextPatch.calc_altura !== prev.calc_altura) ||
+                (nextPatch.calc_largura !== undefined &&
+                  nextPatch.calc_largura !== prev.calc_largura)),
+          };
           const recalced = recalculateGerenciaCalcs(merged, opts);
           const withCalcs = { ...merged, ...recalced };
           return { ...withCalcs, ...patchTiragemMaximaFromCota(withCalcs, opts) };
@@ -422,7 +436,7 @@ export function useGerenciaOsEditor({
         ...prev,
         ...patchFormatoDimensions(prev, formato, aux.formatos),
       };
-      const withCalcs = { ...merged, ...recalculateGerenciaCalcs(merged) };
+      const withCalcs = { ...merged, ...recalculateGerenciaCalcs(merged, { refreshCoef: true }) };
       return { ...withCalcs, ...patchTiragemMaximaFromCota(withCalcs) };
     });
   }, [

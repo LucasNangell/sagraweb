@@ -7,6 +7,7 @@ import type {
   OrcamentoComponente,
   OrcamentoConsolidado,
   OrcamentoEntrada,
+  OrcamentoLinhaCusto,
   OrcamentoResponse,
 } from "@/features/orcamento/types";
 import {
@@ -484,18 +485,31 @@ function EstimadoVsReal({ comparativo }: { comparativo: OrcamentoComparativo }) 
   );
 }
 
+const MATERIAL_FALLBACK: { nome: string; key: keyof OrcamentoConsolidado }[] = [
+  { nome: "Papel", key: "custo_papel" },
+  { nome: "Cliques (Digital)", key: "custo_clique" },
+  { nome: "Pré-impressão", key: "custo_pre" },
+  { nome: "Tinta / impressão", key: "custo_tinta" },
+  { nome: "Acabamento", key: "custo_acabamento" },
+];
+
+function materialLinhas(consolidado: OrcamentoConsolidado): OrcamentoLinhaCusto[] {
+  const detalhe = (consolidado.material_detalhe || []).filter((l) => Number(l.valor) > 0);
+  if (detalhe.length > 0) return detalhe;
+  return MATERIAL_FALLBACK.flatMap(({ nome, key }) => {
+    const valor = Number(consolidado[key] ?? 0);
+    return valor > 0 ? [{ nome, valor }] : [];
+  });
+}
+
+function custoMaterialTotal(consolidado: OrcamentoConsolidado, linhas: OrcamentoLinhaCusto[]) {
+  if (consolidado.custo_material != null) return consolidado.custo_material;
+  return linhas.reduce((acc, l) => acc + Number(l.valor || 0), 0);
+}
+
 function Detalhe({ consolidado }: { consolidado: OrcamentoConsolidado }) {
-  const rows = useMemo(
-    () => [
-      ["Papel", consolidado.custo_papel],
-      ["Cliques (Digital)", consolidado.custo_clique],
-      ["Pré-impressão", consolidado.custo_pre],
-      ["Tinta / impressão", consolidado.custo_tinta],
-      ["Acabamento", consolidado.custo_acabamento],
-      ["Indiretos", consolidado.custo_indiretos],
-    ],
-    [consolidado],
-  );
+  const materiais = useMemo(() => materialLinhas(consolidado), [consolidado]);
+  const custoMaterial = custoMaterialTotal(consolidado, materiais);
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3">
       <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -503,14 +517,26 @@ function Detalhe({ consolidado }: { consolidado: OrcamentoConsolidado }) {
       </h2>
       <table className="w-full text-xs">
         <tbody>
-          {rows.map(([label, value]) => (
-            <tr key={label} className="border-t border-slate-100">
-              <td className="py-1">{label}</td>
-              <td className="py-1 text-right tabular-nums">
-                {formatOrcamentoBrl(Number(value))}
+          <tr className="border-t border-slate-100">
+            <td className="py-1">Material</td>
+            <td className="py-1 text-right tabular-nums">
+              {formatOrcamentoBrl(custoMaterial)}
+            </td>
+          </tr>
+          {materiais.map((linha) => (
+            <tr key={linha.nome} className="border-t border-slate-50 text-slate-500">
+              <td className="py-0.5 pl-3">{linha.nome}</td>
+              <td className="py-0.5 text-right tabular-nums">
+                {formatOrcamentoBrl(linha.valor)}
               </td>
             </tr>
           ))}
+          <tr className="border-t border-slate-100">
+            <td className="py-1">Indiretos</td>
+            <td className="py-1 text-right tabular-nums">
+              {formatOrcamentoBrl(consolidado.custo_indiretos)}
+            </td>
+          </tr>
           {consolidado.indiretos_detalhe?.map((linha) => (
             <tr key={linha.nome} className="border-t border-slate-50 text-slate-500">
               <td className="py-0.5 pl-3">{linha.nome}</td>

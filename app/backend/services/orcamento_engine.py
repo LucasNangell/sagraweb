@@ -325,10 +325,30 @@ def _calc_componente(
         pvc = insumo_by_codigo(insumos, params.get("capa_pvc_codigo") or "c9")
         custo_pvc = tiragem * _preco_insumo(pvc, tecnologia)
 
-    custo_extras = _f(comp.get("verniz")) + _f(comp.get("faca_cliche"))
+    custo_verniz = _f(comp.get("verniz"))
+    custo_faca = _f(comp.get("faca_cliche"))
+    custo_extras = custo_verniz + custo_faca
     custo_acabamento = (
         custo_laminacao + custo_cola + custo_grampo + custo_espiral + custo_pvc + custo_extras
     )
+
+    papel_rotulo = str(
+        (papel or {}).get("especificacao") or (papel or {}).get("codigo") or "papel"
+    ).strip()
+    material_linhas: list[dict] = []
+    _add_material(material_linhas, f"Papel — {papel_rotulo}", custo_papel)
+    _add_material(material_linhas, "Cliques digitais", custo_clique)
+    _add_material(material_linhas, "Chapas", custo_chapa)
+    _add_material(material_linhas, "Provas", custo_prova)
+    _add_material(material_linhas, "Fotolitos", custo_fotolito)
+    _add_material(material_linhas, "Tinta", custo_tinta)
+    _add_material(material_linhas, "Laminação (BOPP)", custo_laminacao)
+    _add_material(material_linhas, "Cola", custo_cola)
+    _add_material(material_linhas, "Grampo", custo_grampo)
+    _add_material(material_linhas, "Espiral", custo_espiral)
+    _add_material(material_linhas, "Capa PVC", custo_pvc)
+    _add_material(material_linhas, "Verniz", custo_verniz)
+    _add_material(material_linhas, "Faca / clichê", custo_faca)
 
     return {
         "nome": comp.get("nome") or tipo.title(),
@@ -355,12 +375,44 @@ def _calc_componente(
         "custo_pvc": custo_pvc,
         "custo_extras": custo_extras,
         "custo_acabamento": custo_acabamento,
+        "material_linhas": material_linhas,
         "alertas": [] if papel else ["Papel não selecionado"],
     }
 
 
+def _add_material(linhas: list[dict], nome: str, valor: float) -> None:
+    amount = _f(valor)
+    if amount <= 0:
+        return
+    linhas.append({"nome": nome, "valor": amount})
+
+
 def _sum_key(rows: list[dict], key: str) -> float:
     return sum(_f(r.get(key)) for r in rows)
+
+
+def _comp_prefix(row: dict) -> str:
+    nome = str(row.get("nome") or "").strip()
+    tipo = str(row.get("tipo") or "").strip()
+    if tipo.upper() in {"UNICO", "ÚNICO"}:
+        tipo = ""
+    return nome or tipo.title()
+
+
+def _material_detalhe(rows: list[dict]) -> list[dict]:
+    multi = len(rows) > 1
+    linhas: list[dict] = []
+    for row in rows:
+        prefix = _comp_prefix(row) if multi else ""
+        for item in row.get("material_linhas") or []:
+            valor = _f(item.get("valor"))
+            if valor <= 0:
+                continue
+            nome = str(item.get("nome") or "").strip()
+            if prefix:
+                nome = f"{prefix} · {nome}"
+            linhas.append({"nome": nome, "valor": _money(valor)})
+    return linhas
 
 
 def _filter_passos(passos: list[dict], produto: str) -> list[dict]:
@@ -483,6 +535,7 @@ def _consolidar(tecnologia: str, rows: list[dict], catalog: dict, tiragem: int) 
 
     unitario = (total / tiragem) if tiragem else 0.0
     por_cento_pag = unitario / (pags / 100.0) if pags else 0.0
+    custo_material = papel + clique + pre + tinta + acabamento
     return {
         "tecnologia": tecnologia,
         "custo_papel": papel,
@@ -490,10 +543,12 @@ def _consolidar(tecnologia: str, rows: list[dict], catalog: dict, tiragem: int) 
         "custo_pre": pre,
         "custo_tinta": tinta,
         "custo_acabamento": acabamento,
+        "custo_material": custo_material,
         "custo_direto": direto,
         "custo_indiretos": indiretos,
         "custo_pessoal": pessoal_info.get("custo_pessoal") or 0.0,
         "pessoal_detalhe": pessoal_info.get("detalhe") or [],
+        "material_detalhe": _material_detalhe(rows),
         "indiretos_detalhe": linhas_indiretos,
         "total": _money(total),
         "unitario": unitario,

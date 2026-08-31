@@ -52,11 +52,13 @@ export interface OrcamentoPapelOpcao {
   rendimento_a4?: number | null;
 }
 
-export interface OrcamentoLinhaIndireto {
+export interface OrcamentoLinhaCusto {
   nome: string;
-  aliquota: number;
+  aliquota?: number;
   valor: number;
 }
+
+export type OrcamentoLinhaIndireto = OrcamentoLinhaCusto;
 
 export interface OrcamentoPessoalDetalhe {
   passo_id?: number | null;
@@ -101,8 +103,10 @@ export interface OrcamentoConsolidado {
   custo_acabamento: number;
   custo_direto: number;
   custo_indiretos: number;
+  custo_material?: number;
   custo_pessoal?: number;
   pessoal_detalhe?: OrcamentoPessoalDetalhe[];
+  material_detalhe?: OrcamentoLinhaCusto[];
   indiretos_detalhe: OrcamentoLinhaIndireto[];
   usa_pessoal_hora?: boolean;
   total: number;

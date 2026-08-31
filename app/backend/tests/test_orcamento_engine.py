@@ -347,6 +347,72 @@ def test_offset_dois_componentes_chapas_e_indiretos():
     assert offset["custo_indiretos"] == pytest.approx(offset["custo_direto"] * 1.05, abs=0.05)
 
 
+def test_material_detalhe_capa_miolo_e_bopp():
+    capa_papel = {
+        "codigo": "p8",
+        "categoria": "papel",
+        "especificacao": "Offset 240g",
+        "preco_unitario": 1.37,
+        "rendimento_a4": 8,
+        "ativo": True,
+    }
+    miolo_papel = {
+        "codigo": "p2",
+        "categoria": "papel",
+        "especificacao": "Offset 90g",
+        "preco_unitario": 0.43,
+        "rendimento_a4": 8,
+        "ativo": True,
+    }
+    result = calcular(
+        {
+            "tiragem": 500,
+            "tecnologia": "offset",
+            "componentes": [
+                {
+                    "nome": "Capa",
+                    "tipo": "CAPA",
+                    "menor_mm": 210,
+                    "maior_mm": 297,
+                    "paginas": 4,
+                    "cor": True,
+                    "frente_verso": True,
+                    "verso_cor": True,
+                    "papel_codigo": "p8",
+                    "laminacao": True,
+                },
+                {
+                    "nome": "Miolo",
+                    "tipo": "MIOLO",
+                    "menor_mm": 210,
+                    "maior_mm": 297,
+                    "paginas": 32,
+                    "cor": False,
+                    "frente_verso": True,
+                    "papel_codigo": "p2",
+                    "grampo": True,
+                },
+            ],
+        },
+        _catalog([capa_papel, miolo_papel]),
+    )
+    offset = result["offset"]
+    nomes = [x["nome"] for x in offset["material_detalhe"]]
+    assert any(n.startswith("Capa · Papel — Offset 240g") for n in nomes)
+    assert any(n.startswith("Miolo · Papel — Offset 90g") for n in nomes)
+    assert any("Laminação (BOPP)" in n for n in nomes)
+    soma = sum(x["valor"] for x in offset["material_detalhe"])
+    assert soma == pytest.approx(offset["custo_material"], abs=0.02)
+    assert offset["custo_material"] == pytest.approx(
+        offset["custo_papel"]
+        + offset["custo_clique"]
+        + offset["custo_pre"]
+        + offset["custo_tinta"]
+        + offset["custo_acabamento"],
+        abs=0.02,
+    )
+
+
 def test_faixa_pessoal_5000_usa_22_por_cento():
     result = calcular(
         {

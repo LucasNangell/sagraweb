@@ -355,6 +355,84 @@ export async function fetchGerenciaCoefA4Produtos(): Promise<{
   );
 }
 
+export type OsEditLockOrigem = "os_edit" | "andamento";
+
+export interface OsEditLockBody {
+  token: string;
+  origem?: OsEditLockOrigem;
+}
+
+export interface OsEditLockStatus {
+  locked: boolean;
+  expired: boolean;
+  holder_ponto: number | null;
+  holder_nome: string | null;
+  origem: string | null;
+  is_self: boolean;
+}
+
+export async function acquireOsEditLock(
+  ano: number,
+  id: number,
+  body: OsEditLockBody,
+): Promise<{ held: boolean; token: string }> {
+  return apiFetch(`/os/${ano}/${id}/edit-lock`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function heartbeatOsEditLock(
+  ano: number,
+  id: number,
+  body: OsEditLockBody,
+): Promise<{ held: boolean }> {
+  return apiFetch(`/os/${ano}/${id}/edit-lock/heartbeat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function releaseOsEditLock(
+  ano: number,
+  id: number,
+  body: OsEditLockBody,
+): Promise<{ released: boolean }> {
+  return apiFetch(`/os/${ano}/${id}/edit-lock/release`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function releaseOsEditLockKeepalive(
+  ano: number,
+  id: number,
+  body: OsEditLockBody,
+): void {
+  const url = apiUrl(`/os/${ano}/${id}/edit-lock/release`);
+  void fetch(url, {
+    method: "POST",
+    credentials: "include",
+    keepalive: true,
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "X-Requested-With": "XMLHttpRequest",
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function fetchOsEditLockStatus(
+  ano: number,
+  id: number,
+): Promise<OsEditLockStatus> {
+  return apiFetch<OsEditLockStatus>(`/os/${ano}/${id}/edit-lock`);
+}
+
 export async function fetchOsHistory(
   ano: number,
   id: number,

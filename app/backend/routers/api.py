@@ -1073,6 +1073,12 @@ def startup_init():
         logger.error("Erro ao garantir schema de notificação OS no startup: %s", exc)
 
     try:
+        from os_edit_lock_schema import ensure_os_edit_lock_schema
+        ensure_os_edit_lock_schema()
+    except Exception as exc:
+        logger.error("Erro ao garantir schema tab_os_edit_lock no startup: %s", exc)
+
+    try:
         from services.gravacao_externa_schema import ensure_gravacao_externa_schema
         ensure_gravacao_externa_schema()
         from services.gravacao_externa_zip_job_service import recover_zip_jobs

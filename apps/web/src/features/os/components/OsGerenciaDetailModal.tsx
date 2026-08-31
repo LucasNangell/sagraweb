@@ -13,6 +13,7 @@ import {
 import { NovaOsArquivosModal } from "@/features/gerencia/components/NovaOsArquivosModal";
 import { OrcamentoCotaHeaderButton } from "@/features/gerencia/components/OrcamentoCotaHeaderButton";
 import { useGerenciaOsEditor } from "@/features/gerencia/hooks/useGerenciaOsEditor";
+import { useOsEditLock } from "@/features/os/hooks/useOsEditLock";
 
 import {
   confirmNovaOsType,
@@ -54,6 +55,11 @@ export function OsGerenciaDetailModal({
 
   const composing = mode.kind !== "existing";
   const formEditable = composing || editing;
+  const lock = useOsEditLock({
+    ano: row?.ano ?? null,
+    id: row?.nr_os ?? null,
+    origem: "os_edit",
+  });
 
   const search = useMemo(
     () => gerenciaSearchForModal(row, mode),
@@ -84,18 +90,20 @@ export function OsGerenciaDetailModal({
 
   useEffect(() => {
     if (!open) {
+      void lock.release();
       setEditing(false);
       setMode(EXISTING_MODE);
       setSection("solicitante");
       setArquivosModal(null);
     }
-  }, [open]);
+  }, [open, lock.release]);
 
   useEffect(() => {
+    void lock.release();
     setEditing(false);
     setMode(EXISTING_MODE);
     setSection("solicitante");
-  }, [row?.ano, row?.nr_os]);
+  }, [row?.ano, row?.nr_os, lock.release]);
 
   const requestClose = useCallback(() => {
     if (arquivosModal) return;
@@ -111,8 +119,9 @@ export function OsGerenciaDetailModal({
     }
     setEditing(false);
     setMode(EXISTING_MODE);
+    void lock.release();
     onClose();
-  }, [arquivosModal, dirty, formEditable, onClose, resetToSnapshot]);
+  }, [arquivosModal, dirty, formEditable, onClose, resetToSnapshot, lock.release]);
 
   const finishCompose = useCallback(() => {
     setEditing(false);
@@ -133,8 +142,10 @@ export function OsGerenciaDetailModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, requestClose]);
 
-  const handleStartEdit = () => {
+  const handleStartEdit = async () => {
     if (!canEdit) return;
+    const ok = await lock.acquire();
+    if (!ok) return;
     setEditing(true);
   };
 
@@ -142,6 +153,7 @@ export function OsGerenciaDetailModal({
     if (dirty) {
       if (!window.confirm("Descartar alterações?")) return;
     }
+    void lock.release();
     if (composing) {
       setMode(EXISTING_MODE);
       setSection("solicitante");
@@ -212,6 +224,7 @@ export function OsGerenciaDetailModal({
       result.message ||
         `OS salva com sucesso! (OS: ${result.id}/${result.ano})`,
     );
+    void lock.release();
   };
 
   if (!open || !row) {
@@ -395,8 +408,8 @@ export function OsGerenciaDetailModal({
                 {canEdit ? (
                   <button
                     type="button"
-                    onClick={handleStartEdit}
-                    disabled={loading || !!loadError}
+                    onClick={() => void handleStartEdit()}
+                    disabled={loading || !!loadError || lock.acquiring}
                     className="inline-flex items-center gap-2 rounded-lg bg-secondary-blue px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-secondary-blue/90 disabled:opacity-50"
                   >
                     <Pencil className="size-4" aria-hidden />

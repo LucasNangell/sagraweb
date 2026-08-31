@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from schemas.common import StatusResponse
@@ -190,7 +190,14 @@ def get_sub_os_history(ano: int, id: int, sub_os_id: int):
 
 
 @router.post("/os/{ano}/{id}/sub-os/{sub_os_id}/history", response_model=SubOsHistoryAddResponse)
-def add_sub_os_history_endpoint(ano: int, id: int, sub_os_id: int, item: SubOsHistoryItem):
+def add_sub_os_history_endpoint(
+    ano: int, id: int, sub_os_id: int, item: SubOsHistoryItem, request: Request
+):
+    from services.os_edit_lock_service import (
+        enforce_interactive_lock,
+        release_lock_for_request,
+    )
+
     sub = get_sub_os(id, ano, sub_os_id)
     if not sub:
         raise HTTPException(status_code=404, detail="Sub OS não encontrada para esta OS")
@@ -202,6 +209,8 @@ def add_sub_os_history_endpoint(ano: int, id: int, sub_os_id: int, item: SubOsHi
             detail=f"OS {id}/{ano} congelada ({situacao}) — andamento de Sub OS bloqueado",
         )
 
+    enforce_interactive_lock(request, id, ano, "andamento")
+
     try:
         result = add_sub_os_history(
             nro=id,
@@ -212,7 +221,10 @@ def add_sub_os_history_endpoint(ano: int, id: int, sub_os_id: int, item: SubOsHi
             obs=item.obs,
             usuario=item.usuario,
         )
+        release_lock_for_request(request, id, ano)
         return SubOsHistoryAddResponse.model_validate(result)
+    except HTTPException:
+        raise
     except ValueError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
     except Exception as exc:

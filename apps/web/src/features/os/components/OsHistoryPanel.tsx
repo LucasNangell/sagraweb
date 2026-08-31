@@ -34,6 +34,7 @@ import { formatDateBr, formatPonto } from "@/lib/format";
 import { dedupeOsHistoryRows } from "../osHistoryUtils";
 import { silentRefreshOsSearch } from "../osRealtimeSync";
 import { useOsFiltersStore } from "../osFiltersStore";
+import { useOsEditLock } from "../hooks/useOsEditLock";
 import type {
   HistoryPayload,
   OsHistoryRow,
@@ -116,6 +117,11 @@ export function OsHistoryPanel({
   const subOsId = isSubOs ? (selected?.sub_os_id ?? null) : null;
   const osAno = ano != null ? Number(ano) : null;
   const osId = id != null ? Number(id) : null;
+  const lock = useOsEditLock({
+    ano: osAno,
+    id: osId,
+    origem: "andamento",
+  });
 
   const historyQuery = useOsHistory(osAno, osId);
   const subHistoryQuery = useSubOsHistory(ano, id, subOsId);
@@ -244,10 +250,11 @@ export function OsHistoryPanel({
   const historyListRef = useRef<HTMLDivElement>(null);
 
   const resetForm = useCallback(() => {
+    void lock.release();
     setEditing(false);
     setIsEditMode(false);
     setForm(emptyForm());
-  }, []);
+  }, [lock.release]);
 
   const selectHistoryRow = useCallback((row: OsHistoryRow) => {
     setSelectedHistory(row);
@@ -350,11 +357,13 @@ export function OsHistoryPanel({
     andamentoTarget,
   ]);
 
-  const startNew = () => {
+  const startNew = async () => {
     if (frozen) {
       window.alert("OS congelada (Entregue/Cancelada) — andamento bloqueado.");
       return;
     }
+    const ok = await lock.acquire();
+    if (!ok) return;
     setIsEditMode(false);
     setEditing(true);
     setSelectedHistory(null);
@@ -373,16 +382,19 @@ export function OsHistoryPanel({
     });
   };
 
-  const startEdit = () => {
+  const startEdit = async () => {
     if (!selectedHistory) {
       window.alert("Selecione um andamento na lista para editar.");
       return;
     }
+    const ok = await lock.acquire();
+    if (!ok) return;
     setIsEditMode(true);
     setEditing(true);
   };
 
   const cancelEdit = () => {
+    void lock.release();
     setEditing(false);
     setIsEditMode(false);
     setComponenteEspecifico(false);
@@ -1048,8 +1060,8 @@ export function OsHistoryPanel({
                     <>
                       <button
                         type="button"
-                        disabled={frozen}
-                        onClick={startNew}
+                        disabled={frozen || lock.acquiring}
+                        onClick={() => void startNew()}
                         className="rounded bg-primary-green px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
                       >
                         Novo
@@ -1057,7 +1069,8 @@ export function OsHistoryPanel({
                       {!isSubOs ? (
                         <button
                           type="button"
-                          onClick={startEdit}
+                          onClick={() => void startEdit()}
+                          disabled={lock.acquiring}
                           className="rounded bg-amber-500 px-4 py-1.5 text-xs font-semibold text-white"
                         >
                           Editar

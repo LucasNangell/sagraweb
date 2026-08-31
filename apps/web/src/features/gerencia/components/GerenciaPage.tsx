@@ -2,6 +2,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { Loader2, Save, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { useOsEditLock } from "@/features/os/hooks/useOsEditLock";
+
 import { useGerenciaOsEditor } from "../hooks/useGerenciaOsEditor";
 import { isGerenciaEditMode } from "../mappers";
 import type { GerenciaSearchParams } from "../types";
@@ -15,6 +17,16 @@ interface GerenciaPageProps {
 export function GerenciaPage({ search }: GerenciaPageProps) {
   const navigate = useNavigate();
   const readOnly = search.modo === "detalhes";
+  const wantsEditLock = isGerenciaEditMode(search) && !readOnly;
+  const lockAno = search.ano ? parseInt(search.ano, 10) : null;
+  const lockId = search.id ? parseInt(search.id, 10) : null;
+  const lock = useOsEditLock({
+    ano: lockAno,
+    id: lockId,
+    origem: "os_edit",
+    enabled: wantsEditLock,
+  });
+  const viewOnly = readOnly || lock.blocked;
 
   const {
     form,
@@ -30,7 +42,7 @@ export function GerenciaPage({ search }: GerenciaPageProps) {
     loadError,
     ponto,
     aux,
-  } = useGerenciaOsEditor({ search, readOnly });
+  } = useGerenciaOsEditor({ search, readOnly: viewOnly });
 
   const [arquivosModal, setArquivosModal] = useState<{
     ano: number;
@@ -61,12 +73,13 @@ export function GerenciaPage({ search }: GerenciaPageProps) {
   }, [readOnly, search]);
 
   const handleCancel = () => {
-    if (readOnly) {
+    if (viewOnly) {
       void navigate({ to: "/" });
       return;
     }
     if (!window.confirm("Tem certeza? Isso desfará todas as alterações.")) return;
     resetToSnapshot();
+    void lock.release();
     void navigate({ to: "/" });
   };
 
@@ -99,13 +112,14 @@ export function GerenciaPage({ search }: GerenciaPageProps) {
         result.message ||
           `OS salva com sucesso! (OS: ${result.id}/${result.ano})`,
       );
+      void lock.release();
       void navigate({ to: "/" });
     } else {
       window.alert(result.message || "Erro ao salvar OS.");
     }
   };
 
-  if (loading) {
+  if (loading || (wantsEditLock && lock.acquiring)) {
     return (
       <div className="flex h-0 min-h-0 flex-1 flex-col items-center justify-center gap-3 text-slate-500">
         <Loader2 className="size-8 animate-spin" aria-hidden />
@@ -128,7 +142,7 @@ export function GerenciaPage({ search }: GerenciaPageProps) {
       <GerenciaFormGrid
         form={form}
         update={update}
-        readOnly={readOnly}
+        readOnly={viewOnly}
         categorias={aux.categorias}
         produtos={aux.produtos}
         maquinas={aux.maquinas}
@@ -150,7 +164,7 @@ export function GerenciaPage({ search }: GerenciaPageProps) {
           onClick={handleCancel}
           className="pointer-events-auto flex items-center gap-2 rounded-lg border border-red-200 bg-white px-5 py-2.5 text-sm font-semibold text-red-700 shadow-lg transition hover:bg-red-50"
         >
-          {readOnly ? (
+          {viewOnly ? (
             <>
               <X className="size-4" aria-hidden />
               Voltar
@@ -162,7 +176,7 @@ export function GerenciaPage({ search }: GerenciaPageProps) {
             </>
           )}
         </button>
-        {!readOnly ? (
+        {!viewOnly ? (
           <button
             type="button"
             disabled={saving}

@@ -263,6 +263,11 @@ class HistoryItem(BaseModel):
     replicar_alvo: Optional[str] = None  # "juntada" | "vinculo" (default)
 
 
+class OsEditLockBody(BaseModel):
+    token: str = Field(..., min_length=8, max_length=64)
+    origem: Optional[str] = "os_edit"
+
+
 def _apply_protocolo_tab_on_andamento(cursor, nro: int, ano: int, item: HistoryItem, *, ponto: str) -> None:
     from services.os_protocolo_andamento_service import (
         ProtocoloEntregaInput,
@@ -670,7 +675,7 @@ def require_entreg_data_for_priority(
 
 
 @router.post("/os/save", response_model=SaveOsResponse)
-def save_os(data: SaveOSRequest):
+def save_os(data: SaveOSRequest, request: Request):
     """
     Salva uma OS (Insert ou Update).
     Se NroProtocolo e AnoProtocolo forem fornecidos e existirem -> UPDATE.
@@ -684,6 +689,20 @@ def save_os(data: SaveOSRequest):
     if data.EntregaFormaLink == "": data.EntregaFormaLink = None
     if data.NroProtocolo == 0: data.NroProtocolo = None
     if data.AnoProtocolo == 0: data.AnoProtocolo = None
+
+    updating_existing = False
+    if data.NroProtocolo and data.AnoProtocolo:
+        existing = db.execute_query(
+            "SELECT 1 FROM tabProtocolos WHERE NroProtocolo = %s AND AnoProtocolo = %s",
+            (data.NroProtocolo, data.AnoProtocolo),
+        )
+        updating_existing = bool(existing)
+    if updating_existing:
+        from services.os_edit_lock_service import enforce_interactive_lock
+
+        enforce_interactive_lock(
+            request, int(data.NroProtocolo), int(data.AnoProtocolo), "os_edit"
+        )
 
     require_entreg_data_for_priority(data.EntregPrazoLink, data.EntregData)
 
@@ -980,6 +999,13 @@ def save_os(data: SaveOSRequest):
                 )
 
             _dispatch_mdb_sync("os_save", _sync_os_to_mdb, nro=res_id, ano=res_ano)
+
+        if updating_existing:
+            from services.os_edit_lock_service import release_lock_for_request
+
+            release_lock_for_request(
+                request, int(data.NroProtocolo), int(data.AnoProtocolo)
+            )
 
         return result
     except HTTPException:
@@ -1304,6 +1330,83 @@ def _dedupe_history_rows(rows: list) -> list:
     return unique
 
 
+@router.post("/os/{ano}/{id}/edit-lock")
+def acquire_os_edit_lock(ano: int, id: int, body: OsEditLockBody, request: Request):
+    from services.os_edit_lock_service import (
+        OsEditLockedError,
+        acquire_lock,
+        raise_locked_http,
+        session_from_request,
+    )
+
+    session = session_from_request(request)
+    if session is None:
+        raise HTTPException(status_code=403, detail="Sessão ausente ou inválida.")
+    try:
+        return acquire_lock(
+            nro=id,
+            ano=ano,
+            ponto=int(session.ponto),
+            nome=str(session.nome or ""),
+            origem=body.origem or "os_edit",
+            token=body.token,
+        )
+    except OsEditLockedError as exc:
+        raise_locked_http(exc)
+
+
+@router.post("/os/{ano}/{id}/edit-lock/heartbeat")
+def heartbeat_os_edit_lock(ano: int, id: int, body: OsEditLockBody, request: Request):
+    from services.os_edit_lock_service import (
+        OsEditLockGoneError,
+        heartbeat_lock,
+        session_from_request,
+    )
+
+    session = session_from_request(request)
+    if session is None:
+        raise HTTPException(status_code=403, detail="Sessão ausente ou inválida.")
+    try:
+        return heartbeat_lock(
+            nro=id,
+            ano=ano,
+            ponto=int(session.ponto),
+            token=body.token,
+        )
+    except (OsEditLockGoneError, ValueError):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "os_edit_lock_gone",
+                "message": "O bloqueio de edição expirou.",
+            },
+        )
+
+
+@router.post("/os/{ano}/{id}/edit-lock/release")
+def release_os_edit_lock(ano: int, id: int, body: OsEditLockBody, request: Request):
+    from services.os_edit_lock_service import release_lock, session_from_request
+
+    session = session_from_request(request)
+    if session is None:
+        raise HTTPException(status_code=403, detail="Sessão ausente ou inválida.")
+    return release_lock(
+        nro=id,
+        ano=ano,
+        ponto=int(session.ponto),
+        token=body.token,
+    )
+
+
+@router.get("/os/{ano}/{id}/edit-lock")
+def get_os_edit_lock(ano: int, id: int, request: Request):
+    from services.os_edit_lock_service import get_lock_status, session_from_request
+
+    session = session_from_request(request)
+    ponto = int(session.ponto) if session is not None else None
+    return get_lock_status(id, ano, ponto)
+
+
 @router.get("/os/{ano}/{id}/history", response_model=List[HistoryRow])
 def get_os_history(ano: int, id: int):
     query = (
@@ -1337,6 +1440,13 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
                 "Confirme que o andamento é da OS principal (confirm_main_os_target=true)."
             ),
         )
+
+    from services.os_edit_lock_service import (
+        enforce_interactive_lock,
+        release_lock_for_request,
+    )
+
+    enforce_interactive_lock(request, id, ano, "andamento")
 
     if item.from_tablet or item.face_token:
         from security.session_auth import get_session_from_request
@@ -1640,7 +1750,10 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
                 exc,
             )
 
+        release_lock_for_request(request, id, ano)
         return response
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Add history error: {e}")
         if "Duplicate entry" in str(e):
@@ -1848,8 +1961,14 @@ def delete_vinculo(ano: int, id: int, v_num: int, v_ano: int):
 
 
 @router.post("/os/{ano}/{id}/history/replicate", response_model=HistoryReplicateResponse)
-def replicate_history(ano: int, id: int, item: HistoryItem):
+def replicate_history(ano: int, id: int, item: HistoryItem, request: Request):
     """Replicar andamento para OSs do vínculo ou da juntada (incluindo a atual)."""
+    from services.os_edit_lock_service import (
+        enforce_interactive_lock,
+        release_lock_for_request,
+    )
+
+    enforce_interactive_lock(request, id, ano, "andamento")
     alvo = (item.replicar_alvo or "vinculo").strip().lower()
     pre_targets: set[tuple[int, int]] | None = None
     if alvo == "juntada":
@@ -2012,7 +2131,10 @@ def replicate_history(ano: int, id: int, item: HistoryItem):
             ano=inserted[0]["ano"] if inserted else ano,
         )
 
+        release_lock_for_request(request, id, ano)
         return response
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error replicating history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -2050,8 +2172,14 @@ class HistoryUpdateItem(HistoryItem):
     cod_status: str
 
 @router.put("/os/{ano}/{id}/history", response_model=StatusResponse)
-def update_os_history(ano: int, id: int, item: HistoryUpdateItem):
+def update_os_history(ano: int, id: int, item: HistoryUpdateItem, request: Request):
     logger.info(f"DEBUG: PUT History Payload: {item}")
+    from services.os_edit_lock_service import (
+        enforce_interactive_lock,
+        release_lock_for_request,
+    )
+
+    enforce_interactive_lock(request, id, ano, "andamento")
     ponto_formatado = format_ponto(''.join(filter(str.isdigit, item.usuario or '')))
 
     def transaction_logic(cursor):
@@ -2127,7 +2255,10 @@ def update_os_history(ano: int, id: int, item: HistoryUpdateItem):
             ano=ano,
         )
 
+        release_lock_for_request(request, id, ano)
         return StatusResponse(status="ok")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Update history error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

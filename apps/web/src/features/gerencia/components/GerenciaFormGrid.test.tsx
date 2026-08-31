@@ -5,7 +5,7 @@ import { createEmptyGerenciaForm } from "../defaults";
 import { createEmptyTechSpec } from "../techSpec";
 import type { GerenciaFormState } from "../types";
 import { GerenciaFormGrid } from "./GerenciaFormGrid";
-import { GERENCIA_SECTIONS } from "./GerenciaFormSections";
+import { GERENCIA_MODAL_SECTIONS, GERENCIA_SECTIONS } from "./GerenciaFormSections";
 
 function renderGrid(formPatch: Partial<GerenciaFormState> = {}) {
   render(
@@ -29,7 +29,7 @@ function renderGrid(formPatch: Partial<GerenciaFormState> = {}) {
 }
 
 describe("GerenciaFormGrid", () => {
-  it("alinha a nav do modal à ordem da página", () => {
+  it("alinha a ordem da página incluindo Elementos", () => {
     expect(GERENCIA_SECTIONS.map((s) => s.id)).toEqual([
       "solicitante",
       "ordem",
@@ -39,6 +39,20 @@ describe("GerenciaFormGrid", () => {
       "tecnicos",
       "custos",
     ]);
+  });
+
+  it("omite Elementos da nav do modal e rotula a aba como Material", () => {
+    expect(GERENCIA_MODAL_SECTIONS.map((s) => s.id)).toEqual([
+      "solicitante",
+      "ordem",
+      "material",
+      "entrega",
+      "tecnicos",
+      "custos",
+    ]);
+    expect(
+      GERENCIA_MODAL_SECTIONS.find((s) => s.id === "material")?.label,
+    ).toBe("Material");
   });
 
   it("coloca Material e Elementos entre Ordem e Entrega", () => {

@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { queryKeys } from "@/api/query-keys";
 import { useAccessControl } from "@/features/auth/useAccessControl";
 import {
-  GERENCIA_SECTIONS,
+  GERENCIA_MODAL_SECTIONS,
   renderGerenciaSection,
   type GerenciaSectionId,
 } from "@/features/gerencia/components/GerenciaFormSections";
@@ -252,7 +252,7 @@ export function OsGerenciaDetailModal({
   };
 
   const activeLabel =
-    GERENCIA_SECTIONS.find((s) => s.id === section)?.label ?? "";
+    GERENCIA_MODAL_SECTIONS.find((s) => s.id === section)?.label ?? "";
   const title = gerenciaModalTitle(row, mode);
   const showComposeActions = !composing && !editing;
   const badgeLabel = composing
@@ -316,7 +316,7 @@ export function OsGerenciaDetailModal({
             className="flex w-40 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-sagra-border bg-slate-50/90 p-1.5 sm:w-44"
             aria-label="Seções da OS"
           >
-            {GERENCIA_SECTIONS.map((item) => {
+            {GERENCIA_MODAL_SECTIONS.map((item) => {
               const active = item.id === section;
               return (
                 <button
@@ -349,7 +349,14 @@ export function OsGerenciaDetailModal({
                 />
               ) : null}
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3.5 sm:p-4">
+            <div
+              className={cn(
+                "min-h-0 flex-1 overscroll-contain p-3.5 sm:p-4",
+                section === "material"
+                  ? "flex flex-col overflow-hidden"
+                  : "overflow-y-auto",
+              )}
+            >
               {loading ? (
                 <div className="flex items-center justify-center gap-2 py-16 text-neutral-500">
                   <Loader2 className="size-5 animate-spin" aria-hidden />

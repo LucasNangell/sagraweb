@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query, Request, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from typing import Callable, List, Optional, Tuple
 import concurrent.futures
 import logging
@@ -523,6 +523,42 @@ def browse_os_folder(
 
     entries.sort(key=lambda item: (0 if item.type == "folder" else 1, item.name.lower()))
     return OsFolderBrowseResponse(root_path=os_root, relative=rel, entries=entries)
+
+
+def is_original_os_relative(relative: str) -> bool:
+    """True se o relativo está sob uma pasta Original (ou o typo Orignal)."""
+    first = (relative or "").replace("\\", "/").split("/")[0].strip()
+    lowered = first.lower()
+    return lowered.startswith(("original", "orignal"))
+
+
+@router.get("/os/{ano}/{id}/folder-file")
+def serve_os_folder_file(
+    ano: int,
+    id: int,
+    relative: str = Query(..., description="Caminho relativo à raiz da OS, sob Original"),
+):
+    from security.file_access import resolve_allowed_file_path
+
+    rel = _normalize_os_relative_path(relative)
+    if not rel:
+        raise HTTPException(status_code=400, detail="Caminho inválido.")
+    if not is_original_os_relative(rel):
+        raise HTTPException(
+            status_code=403,
+            detail="Somente arquivos das pastas Original podem ser abertos nesta aba.",
+        )
+
+    os_root = _resolve_os_root_path(ano, id)
+    if not os_root:
+        raise HTTPException(status_code=404, detail="Pasta da OS não encontrada na rede.")
+
+    target = _resolve_os_relative_path(os_root, rel)
+    if not os.path.isfile(target):
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
+
+    safe_path = resolve_allowed_file_path(target)
+    return FileResponse(str(safe_path), content_disposition_type="inline")
 
 
 def _fetch_os_folder_meta(ano: int, os_id: int) -> dict:

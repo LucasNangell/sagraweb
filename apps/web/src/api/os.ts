@@ -198,6 +198,15 @@ export async function fetchOsFolderBrowse(
   );
 }
 
+export function osFolderFileUrl(
+  ano: number,
+  id: number,
+  relative: string,
+): string {
+  const params = new URLSearchParams({ relative });
+  return apiUrl(`/os/${ano}/${id}/folder-file?${params}`);
+}
+
 export interface OsFolderPlanResponse {
   exists: boolean;
   folder_name: string;

@@ -38,6 +38,7 @@ import { FormatoCombobox } from "./FormatoCombobox";
 import { TrabalhoComponentes } from "./TrabalhoComponentes";
 import { AcabamentoField } from "./AcabamentoField";
 import { OrcamentoCotaHeaderButton } from "./OrcamentoCotaHeaderButton";
+import { OsOriginalFilesPanel } from "@/features/os/components/OsOriginalFilesPanel";
 
 export type GerenciaSectionId =
   | "solicitante"
@@ -51,12 +52,17 @@ export type GerenciaSectionId =
 export const GERENCIA_SECTIONS: { id: GerenciaSectionId; label: string }[] = [
   { id: "solicitante", label: "Solicitante" },
   { id: "ordem", label: "Ordem de Produção" },
-  { id: "material", label: "Material Entregue" },
+  { id: "material", label: "Material" },
   { id: "elementos", label: "Elementos Gráficos" },
   { id: "entrega", label: "Entrega" },
   { id: "tecnicos", label: "Detalhes Técnicos" },
   { id: "custos", label: "Cálculos de cota" },
 ];
+
+/** Nav do modal: Elementos Gráficos entra na aba Material. */
+export const GERENCIA_MODAL_SECTIONS = GERENCIA_SECTIONS.filter(
+  (item) => item.id !== "elementos",
+);
 
 /** page = layout original da gerência; modal = grade 12 densa */
 export type GerenciaSectionLayout = "page" | "modal";
@@ -1054,53 +1060,105 @@ export function GerenciaMaterialSection({
   const ro = readOnly;
 
   if (layout === "modal") {
+    const ano = Number.parseInt(form.op_ano, 10);
+    const osId = Number.parseInt(form.op_os, 10);
     return (
-      <ModalGrid>
-        <div className="col-span-12 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <CheckRow
-            id="mat_amostra"
-            label="Amostra"
-            checked={form.mat_amostra}
-            readOnly={ro}
-            onChange={(v) => set(update, "mat_amostra", v)}
-            boxed
-          />
-          <CheckRow
-            id="mat_fotolito"
-            label="Fotolito"
-            checked={form.mat_fotolito}
-            readOnly={ro}
-            onChange={(v) => set(update, "mat_fotolito", v)}
-            boxed
-          />
-          <CheckRow
-            id="mat_dobra"
-            label="Mod. Dobra"
-            checked={form.mat_dobra}
-            readOnly={ro}
-            onChange={(v) => set(update, "mat_dobra", v)}
-            boxed
-          />
-          <CheckRow
-            id="mat_original"
-            label="Prova Imp."
-            checked={form.mat_original}
-            readOnly={ro}
-            onChange={(v) => set(update, "mat_original", v)}
-            boxed
-          />
+      <div className="flex min-h-0 flex-1 flex-col gap-3">
+        <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-3">
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-slate-600">
+              Elementos gráficos
+            </p>
+            <div className="grid grid-cols-2 gap-1.5">
+              <CheckRow
+                id="el_brasao"
+                label="Brasão"
+                checked={form.el_brasao}
+                readOnly={ro}
+                onChange={(v) => set(update, "el_brasao", v)}
+                boxed
+              />
+              <CheckRow
+                id="el_timbre"
+                label="Timbre"
+                checked={form.el_timbre}
+                readOnly={ro}
+                onChange={(v) => set(update, "el_timbre", v)}
+                boxed
+              />
+              <CheckRow
+                id="el_arte"
+                label="Arte Gab."
+                checked={form.el_arte}
+                readOnly={ro}
+                onChange={(v) => set(update, "el_arte", v)}
+                boxed
+              />
+              <CheckRow
+                id="el_assinatura"
+                label="Assinatura"
+                checked={form.el_assinatura}
+                readOnly={ro}
+                onChange={(v) => set(update, "el_assinatura", v)}
+                boxed
+              />
+            </div>
+          </div>
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-slate-600">
+              Material entregue
+            </p>
+            <div className="grid grid-cols-2 gap-1.5">
+              <CheckRow
+                id="mat_amostra"
+                label="Amostra"
+                checked={form.mat_amostra}
+                readOnly={ro}
+                onChange={(v) => set(update, "mat_amostra", v)}
+                boxed
+              />
+              <CheckRow
+                id="mat_fotolito"
+                label="Fotolito"
+                checked={form.mat_fotolito}
+                readOnly={ro}
+                onChange={(v) => set(update, "mat_fotolito", v)}
+                boxed
+              />
+              <CheckRow
+                id="mat_dobra"
+                label="Mod. Dobra"
+                checked={form.mat_dobra}
+                readOnly={ro}
+                onChange={(v) => set(update, "mat_dobra", v)}
+                boxed
+              />
+              <CheckRow
+                id="mat_original"
+                label="Prova Imp."
+                checked={form.mat_original}
+                readOnly={ro}
+                onChange={(v) => set(update, "mat_original", v)}
+                boxed
+              />
+            </div>
+          </div>
+          <Field label="Insumos Fornecidos">
+            <textarea
+              readOnly={ro}
+              rows={textareaRows("mat_insumos", 4)}
+              placeholder="Descreva os insumos..."
+              value={form.mat_insumos}
+              onChange={(e) => set(update, "mat_insumos", e.target.value)}
+              className={cn(gerenciaInputClass, "min-h-[5.5rem] resize-y")}
+            />
+          </Field>
         </div>
-        <Field label="Insumos Fornecidos" className="col-span-12">
-          <textarea
-            readOnly={ro}
-            rows={textareaRows("mat_insumos", 3)}
-            placeholder="Descreva os insumos..."
-            value={form.mat_insumos}
-            onChange={(e) => set(update, "mat_insumos", e.target.value)}
-            className={cn(gerenciaInputClass, "min-h-[5rem] resize-y")}
-          />
-        </Field>
-      </ModalGrid>
+        <OsOriginalFilesPanel
+          ano={Number.isFinite(ano) ? ano : null}
+          osId={Number.isFinite(osId) ? osId : null}
+        />
+      </div>
     );
   }
 

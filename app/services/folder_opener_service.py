@@ -7,17 +7,19 @@ no Windows Explorer quando o usuário clica em "Abrir Pasta" na OS.
 
 SEGURANÇA:
 - Aceita apenas conexões de localhost (127.0.0.1)
-- Abre apenas pastas (não executa arquivos)
+- Abre pastas no Explorer e arquivos no aplicativo padrão do Windows
+- Recusa executáveis/scripts (.exe, .bat, .ps1, etc.)
 - Valida existência do caminho antes de abrir
 
 PORTA: 5566 (127.0.0.1:5566)
 
-Para gerar executável:
+Para gerar executável (a partir de app/services):
     pyinstaller --onefile --noconsole --name "SAGRA-FolderOpener" folder_opener_service.py
+    Copiar dist\\SAGRA-FolderOpener.exe para local_services\\dist e C:\\_SAGRA
 
 Autor: Sistema SAGRA
 Data: 22/01/2026
-Versão: 1.0.1
+Versão: 1.1.0
 """
  
 import os
@@ -33,7 +35,12 @@ from flask_cors import CORS
 # Configuração
 PORT = 5566
 HOST = '127.0.0.1'
+VERSION = "1.1.0"
 LOG_FILE = Path.home() / "sagra_folder_opener.log"
+_BLOCKED_FILE_EXTENSIONS = frozenset({
+    ".exe", ".bat", ".cmd", ".com", ".msi", ".ps1", ".vbs", ".js",
+    ".jse", ".wsf", ".wsh", ".scr", ".dll", ".msc",
+})
 
 # Criar aplicação Flask
 app = Flask(__name__)
@@ -161,7 +168,7 @@ def is_valid_folder_path(path):
 
 def is_valid_file_path(path):
     """
-    Valida se o caminho é um arquivo permitido (PDF/imagem) para abrir com app padrão.
+    Valida se o caminho é um arquivo existente e seguro para abrir com o app padrão.
     """
     if not path:
         return False, "Caminho vazio"
@@ -173,8 +180,7 @@ def is_valid_file_path(path):
         return False, "Arquivo não encontrado"
     if not file_path.is_file():
         return False, "Caminho não é um arquivo"
-    allowed = {".pdf", ".jpg", ".jpeg", ".png", ".webp"}
-    if file_path.suffix.lower() not in allowed:
+    if file_path.suffix.lower() in _BLOCKED_FILE_EXTENSIONS:
         return False, "Tipo de arquivo não permitido"
     return True, "OK"
 
@@ -385,7 +391,7 @@ def health():
     return jsonify({
         "status": "running",
         "service": "SAGRA Folder Opener",
-        "version": "1.0.1",
+        "version": VERSION,
         "port": PORT
     }), 200
 

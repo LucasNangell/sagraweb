@@ -37,6 +37,8 @@ import { CalculosCustosPanel } from "./CalculosCustosPanel";
 import { FormatoCombobox } from "./FormatoCombobox";
 import { TrabalhoComponentes } from "./TrabalhoComponentes";
 import { AcabamentoField } from "./AcabamentoField";
+import { PermissionGate } from "@/components/auth/PermissionGate";
+import { OrcamentoCamposEmbed } from "@/features/orcamento/components/OrcamentoCamposPanel";
 import { OrcamentoCotaHeaderButton } from "./OrcamentoCotaHeaderButton";
 import { OsOriginalFilesPanel } from "@/features/os/components/OsOriginalFilesPanel";
 
@@ -56,7 +58,7 @@ export const GERENCIA_SECTIONS: { id: GerenciaSectionId; label: string }[] = [
   { id: "elementos", label: "Elementos Gráficos" },
   { id: "entrega", label: "Entrega" },
   { id: "tecnicos", label: "Detalhes Técnicos" },
-  { id: "custos", label: "Cálculos de cota" },
+  { id: "custos", label: "Cota e Orçamento" },
 ];
 
 /** Nav do modal: Elementos Gráficos entra na aba Material. */
@@ -1325,10 +1327,22 @@ export function GerenciaCustosSection({
     />
   );
 
-  if (layout === "modal") return body;
+  if (layout === "modal") {
+    return (
+      <div className="space-y-4">
+        {body}
+        <OrcamentoCamposEmbed variant="compact" />
+        <PermissionGate permission="ctx_orcamento">
+          <div className="flex justify-end">
+            <OrcamentoCotaHeaderButton ano={form.op_ano} osId={form.op_os} />
+          </div>
+        </PermissionGate>
+      </div>
+    );
+  }
   return (
     <GerenciaPanel
-      title="Cálculos de cota"
+      title="Cota e Orçamento"
       icon={<Calculator className="size-4 text-secondary-blue" aria-hidden />}
       headerRight={
         <OrcamentoCotaHeaderButton ano={form.op_ano} osId={form.op_os} />

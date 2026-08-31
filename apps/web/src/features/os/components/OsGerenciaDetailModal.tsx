@@ -11,8 +11,8 @@ import {
   type GerenciaSectionId,
 } from "@/features/gerencia/components/GerenciaFormSections";
 import { NovaOsArquivosModal } from "@/features/gerencia/components/NovaOsArquivosModal";
-import { OrcamentoCotaHeaderButton } from "@/features/gerencia/components/OrcamentoCotaHeaderButton";
 import { useGerenciaOsEditor } from "@/features/gerencia/hooks/useGerenciaOsEditor";
+import { OrcamentoEditorProvider } from "@/features/orcamento/hooks/useOrcamentoEditor";
 import { useOsEditLock } from "@/features/os/hooks/useOsEditLock";
 
 import {
@@ -338,38 +338,43 @@ export function OsGerenciaDetailModal({
           </nav>
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 bg-white px-4 py-2">
-              <h4 className="text-sm font-bold text-secondary-blue">
-                {activeLabel}
-              </h4>
-              {section === "custos" ? (
-                <OrcamentoCotaHeaderButton
-                  ano={form.op_ano || row.ano}
-                  osId={form.op_os || row.nr_os}
-                />
-              ) : null}
-            </div>
-            <div
-              className={cn(
-                "min-h-0 flex-1 overscroll-contain p-3.5 sm:p-4",
-                section === "material"
-                  ? "flex flex-col overflow-hidden"
-                  : "overflow-y-auto",
-              )}
+            <OrcamentoEditorProvider
+              ano={form.op_ano || row.ano}
+              id={form.op_os || row.nr_os}
+              enabled={
+                section === "custos" &&
+                can("ctx_orcamento") &&
+                !loading &&
+                mode.kind === "existing"
+              }
             >
-              {loading ? (
-                <div className="flex items-center justify-center gap-2 py-16 text-neutral-500">
-                  <Loader2 className="size-5 animate-spin" aria-hidden />
-                  Carregando dados da OS…
-                </div>
-              ) : loadError ? (
-                <p className="py-8 text-center text-sm text-red-600">
-                  {loadError}
-                </p>
-              ) : (
-                renderGerenciaSection(section, sectionProps)
-              )}
-            </div>
+              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 bg-white px-4 py-2">
+                <h4 className="text-sm font-bold text-secondary-blue">
+                  {activeLabel}
+                </h4>
+              </div>
+              <div
+                className={cn(
+                  "min-h-0 flex-1 overscroll-contain p-3.5 sm:p-4",
+                  section === "material"
+                    ? "flex flex-col overflow-hidden"
+                    : "overflow-y-auto",
+                )}
+              >
+                {loading ? (
+                  <div className="flex items-center justify-center gap-2 py-16 text-neutral-500">
+                    <Loader2 className="size-5 animate-spin" aria-hidden />
+                    Carregando dados da OS…
+                  </div>
+                ) : loadError ? (
+                  <p className="py-8 text-center text-sm text-red-600">
+                    {loadError}
+                  </p>
+                ) : (
+                  renderGerenciaSection(section, sectionProps)
+                )}
+              </div>
+            </OrcamentoEditorProvider>
           </div>
         </div>
 

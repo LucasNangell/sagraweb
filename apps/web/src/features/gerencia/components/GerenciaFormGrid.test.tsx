@@ -53,6 +53,9 @@ describe("GerenciaFormGrid", () => {
     expect(
       GERENCIA_MODAL_SECTIONS.find((s) => s.id === "material")?.label,
     ).toBe("Material");
+    expect(
+      GERENCIA_MODAL_SECTIONS.find((s) => s.id === "custos")?.label,
+    ).toBe("Cota e Orçamento");
   });
 
   it("coloca Material e Elementos entre Ordem e Entrega", () => {
@@ -69,7 +72,7 @@ describe("GerenciaFormGrid", () => {
       "Elementos Gráficos",
       "Entrega",
       "Detalhes Técnicos",
-      "Cálculos de cota",
+      "Cota e Orçamento",
     ]);
   });
 

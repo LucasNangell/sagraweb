@@ -8,6 +8,7 @@ import {
   calculateCotaPagesFromTechSpec,
   classifyCoresKind,
   computeComponentCalcs,
+  specHasFrenteVerso,
   type TechSpec,
 } from "./techSpec";
 import type { GerenciaFormState, GerenciaOsDetails } from "./types";
@@ -233,19 +234,25 @@ type GerenciaCoefA4Form = Pick<
   "val_produto" | "calc_altura" | "calc_largura"
 >;
 
+function gerenciaCoefA4FromTable(
+  form: GerenciaCoefA4Form,
+  coefA4PorProduto?: Record<string, number>,
+): number | null {
+  const produto = String(form.val_produto ?? "").trim();
+  if (!produto) return null;
+  const map = coefA4PorProduto ?? gerenciaCoefA4PorProdutoCache;
+  const tableCoef = map[produto];
+  if (tableCoef != null && tableCoef > 0) return tableCoef;
+  return null;
+}
+
 /** Produto de papelaria cadastrado em tabCoefA4Produto usa tabela; demais: altura × largura. */
 export function resolveGerenciaCoefA4(
   form: GerenciaCoefA4Form,
   coefA4PorProduto?: Record<string, number>,
 ): number {
-  const produto = String(form.val_produto ?? "").trim();
-  const map = coefA4PorProduto ?? gerenciaCoefA4PorProdutoCache;
-  if (produto) {
-    const tableCoef = map[produto];
-    if (tableCoef != null && tableCoef > 0) {
-      return tableCoef;
-    }
-  }
+  const tableCoef = gerenciaCoefA4FromTable(form, coefA4PorProduto);
+  if (tableCoef != null) return tableCoef;
   const altura = parseFloat(form.calc_altura || "0") || 0;
   const largura = parseFloat(form.calc_largura || "0") || 0;
   return calculateCoefA4(altura, largura);
@@ -257,6 +264,33 @@ export function resolveGerenciaCoefA4ForCalcs(
   coefA4PorProduto?: Record<string, number>,
 ): number {
   return roundCoefA4(resolveGerenciaCoefA4(form, coefA4PorProduto));
+}
+
+type GerenciaFrenteVersoForm = Partial<Pick<GerenciaFormState, "chk_fv">>;
+
+/** Frente e verso da OS (checkbox) ou de qualquer lote da spec técnica. */
+export function gerenciaJobIsFrenteVerso(
+  form: GerenciaFrenteVersoForm,
+  techSpec?: TechSpec,
+): boolean {
+  if (form.chk_fv) return true;
+  return Boolean(techSpec && specHasFrenteVerso(techSpec));
+}
+
+/**
+ * Divisor da cota: F/V com coef dimensional > 1 não aplica imposição (n-up).
+ * Tabela de papelaria e o coef exibido não mudam.
+ */
+export function resolveGerenciaCoefA4ForCota(
+  form: GerenciaCoefA4Form & GerenciaFrenteVersoForm,
+  options?: GerenciaCalcOptions,
+  coefA4PorProduto?: Record<string, number>,
+): number {
+  const fromTable = gerenciaCoefA4FromTable(form, coefA4PorProduto) != null;
+  const coef = resolveGerenciaCoefA4ForCalcs(form, coefA4PorProduto);
+  if (fromTable) return coef;
+  if (gerenciaJobIsFrenteVerso(form, options?.techSpec) && coef > 1) return 1;
+  return coef;
 }
 
 const DEPUTADO_POLYCHROME_QUOTA_FACTOR = 4;
@@ -443,6 +477,7 @@ export function computeTiragemMaximaFromForm(
     | "val_produto"
     | "val_pgs"
     | "val_modelos"
+    | "chk_fv"
     | "calc_capa_color"
     | "calc_capa_pb"
     | "calc_miolo_color"
@@ -464,7 +499,7 @@ export function computeTiragemMaximaFromForm(
   if (!cota) return "";
   const totalPaginas = getGerenciaCotaPaginas(form, options);
   const modelos = parseGerenciaModelos(form.val_modelos);
-  const coef = resolveGerenciaCoefA4ForCalcs(form);
+  const coef = resolveGerenciaCoefA4ForCota(form, options);
   const max = calculateMaxTiragemFromCota(cota, totalPaginas * modelos, coef);
   return max > 0 ? String(max) : "";
 }
@@ -508,6 +543,7 @@ export function recalculateGerenciaCalcs(
     | "val_produto"
     | "val_pgs"
     | "val_modelos"
+    | "chk_fv"
     | "calc_capa_color"
     | "calc_capa_pb"
     | "calc_miolo_color"
@@ -531,8 +567,8 @@ export function recalculateGerenciaCalcs(
   const tiragem = parseFloat(form.calc_tiragem || "0") || 0;
   const modelos = parseGerenciaModelos(form.val_modelos);
   const rawCoef = resolveGerenciaCoefA4(form);
-  const coef = roundCoefA4(rawCoef);
-  const cota = coef ? (cotaPaginas * tiragem * modelos) / coef : 0;
+  const coefCota = resolveGerenciaCoefA4ForCota(form, options);
+  const cota = coefCota ? (cotaPaginas * tiragem * modelos) / coefCota : 0;
 
   return {
     calc_total_paginas: String(totalPaginas),

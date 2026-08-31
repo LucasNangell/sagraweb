@@ -82,6 +82,7 @@ function baseForm(
   | "op_os"
   | "val_pgs"
   | "val_modelos"
+  | "chk_fv"
   | "calc_capa_color"
   | "calc_capa_pb"
   | "calc_miolo_color"
@@ -104,6 +105,7 @@ function baseForm(
     val_produto: "",
     val_pgs: "1",
     val_modelos: "",
+    chk_fv: false,
     calc_capa_color: "",
     calc_capa_pb: "",
     calc_miolo_color: "",
@@ -360,6 +362,100 @@ describe("recalculateGerenciaCalcs", () => {
     expect(empty.calc_cota_total).toBe("12");
     expect(zero.calc_cota_total).toBe("12");
   });
+
+  it("meia folha só frente divide pelo coef (2 páginas → cota 1)", () => {
+    const result = recalculateGerenciaCalcs(
+      baseForm({
+        req_categoria: "Orgao",
+        val_cores: "P/B",
+        calc_miolo_pb: "1",
+        val_pgs: "2",
+        calc_tiragem: "1",
+        calc_altura: "130",
+        calc_largura: "210",
+        chk_fv: false,
+      }),
+    );
+    expect(result.calc_coef_a4).toBe("2,0");
+    expect(result.calc_cota_total).toBe("1");
+  });
+
+  it("meia folha F/V conta cada face (2 páginas → cota 2) e mantém o coef exibido", () => {
+    const result = recalculateGerenciaCalcs(
+      baseForm({
+        req_categoria: "Orgao",
+        val_cores: "P/B",
+        calc_miolo_pb: "1",
+        val_pgs: "2",
+        calc_tiragem: "1",
+        calc_altura: "130",
+        calc_largura: "210",
+        chk_fv: true,
+      }),
+    );
+    expect(result.calc_coef_a4).toBe("2,0");
+    expect(result.calc_cota_total).toBe("2");
+  });
+
+  it("detecta F/V pelo lote da spec mesmo com chk_fv desmarcado", () => {
+    const spec = {
+      version: 1 as const,
+      componentes: [
+        {
+          nome: "Miolo",
+          tipo: "MIOLO" as const,
+          lotes: [
+            {
+              id: "m",
+              paginas: 2,
+              maquina_link: "",
+              papel_link: "",
+              cores_link: "P/B",
+              papel_desc: "",
+              cores_desc: "",
+              impressao: "1/1",
+              frente_verso: true,
+              acabamentos: [],
+            },
+          ],
+        },
+      ],
+    };
+    const result = recalculateGerenciaCalcs(
+      baseForm({
+        req_categoria: "Orgao",
+        val_cores: "P/B",
+        calc_miolo_pb: "2",
+        val_pgs: "2",
+        calc_tiragem: "1",
+        calc_altura: "130",
+        calc_largura: "210",
+        chk_fv: false,
+      }),
+      { techSpec: spec },
+    );
+    expect(result.calc_cota_total).toBe("2");
+  });
+
+  it("produto de tabela F/V continua dividindo pelo coef da tabela", () => {
+    setGerenciaCoefA4PorProduto({ "Ct Visita": 10 });
+    const result = recalculateGerenciaCalcs(
+      baseForm({
+        req_categoria: "Orgao",
+        val_produto: "Ct Visita",
+        val_cores: "P/B",
+        calc_miolo_pb: "1",
+        val_pgs: "2",
+        calc_tiragem: "1000",
+        calc_altura: "90",
+        calc_largura: "50",
+        chk_fv: true,
+      }),
+    );
+    expect(result.calc_coef_a4).toBe("10,0");
+    expect(result.calc_cota_total).toBe("200");
+    setGerenciaCoefA4PorProduto({});
+  });
 });
 
 describe("parseGerenciaModelos", () => {
@@ -391,6 +487,26 @@ describe("computeTiragemMaximaFromForm", () => {
     expect(computeTiragemMaximaFromForm({ ...base, val_modelos: "3" })).toBe(
       "36",
     );
+  });
+
+  it("F/V meia folha não usa o coef 2 no inverso da cota", () => {
+    const base = {
+      ...baseForm({
+        req_categoria: "Orgao",
+        val_cores: "P/B",
+        calc_miolo_pb: "1",
+        val_pgs: "2",
+        calc_altura: "130",
+        calc_largura: "210",
+      }),
+      op_cota_atual: "120",
+    };
+    expect(
+      computeTiragemMaximaFromForm({ ...base, chk_fv: false }),
+    ).toBe("120");
+    expect(
+      computeTiragemMaximaFromForm({ ...base, chk_fv: true }),
+    ).toBe("60");
   });
 });
 

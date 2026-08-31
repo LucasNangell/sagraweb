@@ -25,7 +25,9 @@ import {
   type TechSpecComponente,
   type TechSpecLote,
 } from "../techSpec";
+import type { FormatoLookupItem } from "../formatoDimensions";
 import { AcabamentoField } from "./AcabamentoField";
+import { FormatoCombobox } from "./FormatoCombobox";
 import { Field, Row, gerenciaInputClass } from "./gerenciaFormUi";
 
 function SelectOptions({
@@ -62,6 +64,7 @@ interface TrabalhoComponentesProps {
   papeis: string[];
   cores: string[];
   acabamentos: AcabamentoCatalogItem[];
+  formatos?: FormatoLookupItem[];
 }
 
 function parseTotalPaginas(raw: string | undefined): number {
@@ -77,6 +80,7 @@ export function TrabalhoComponentes({
   papeis,
   cores,
   acabamentos,
+  formatos = [],
 }: TrabalhoComponentesProps) {
   const usedTipos = new Set(
     spec.componentes.map((c) => c.tipo).filter(Boolean) as ComponenteTipo[],
@@ -233,6 +237,7 @@ export function TrabalhoComponentes({
               papeis={papeis}
               cores={cores}
               acabamentos={acabamentos}
+              formatos={formatos}
               onRename={(nome) => updateComponente(key, { ...comp, nome })}
               onRemove={() => removeComponente(key)}
               onAddLote={() => addLote(key)}
@@ -254,6 +259,7 @@ function ComponenteCard({
   papeis,
   cores,
   acabamentos,
+  formatos,
   onRename,
   onRemove,
   onAddLote,
@@ -267,6 +273,7 @@ function ComponenteCard({
   papeis: string[];
   cores: string[];
   acabamentos: AcabamentoCatalogItem[];
+  formatos: FormatoLookupItem[];
   onRename: (nome: string) => void;
   onRemove: () => void;
   onAddLote: () => void;
@@ -326,6 +333,7 @@ function ComponenteCard({
             onRemove={() => onRemoveLote(lote.id)}
             onChange={(patch) => onUpdateLote(lote.id, patch)}
             acabamentosCatalog={acabamentos}
+            formatos={formatos}
             techSpec={spec}
           />
         ))}
@@ -356,6 +364,7 @@ function LoteCard({
   onRemove,
   onChange,
   acabamentosCatalog,
+  formatos,
   techSpec,
 }: {
   index: number;
@@ -368,6 +377,7 @@ function LoteCard({
   onRemove: () => void;
   onChange: (patch: Partial<TechSpecLote>) => void;
   acabamentosCatalog: AcabamentoCatalogItem[];
+  formatos: FormatoLookupItem[];
   techSpec: TechSpec;
 }) {
   const papelValue = lotePapelValue(lote);
@@ -440,6 +450,19 @@ function LoteCard({
               onChange({ paginas: Math.max(0, parseInt(e.target.value, 10) || 0) })
             }
             className={gerenciaInputClass}
+          />
+        </Field>
+        <Field label="Formato" className="lg:col-span-2">
+          <FormatoCombobox
+            value={lote.formato ?? ""}
+            formatos={formatos}
+            readOnly={readOnly}
+            listId={`gerencia-lote-formato-${lote.id}`}
+            placeholder="Igual ao trabalho"
+            aria-label="Formato"
+            onChange={(v) =>
+              onChange({ formato: v.trim() ? v.trim() : undefined })
+            }
           />
         </Field>
         <Field label="Papel" className="lg:col-span-2">

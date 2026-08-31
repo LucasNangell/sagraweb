@@ -10,6 +10,7 @@ import pytest
 from jinja2 import Template
 
 from routers.requisicao_routes import (
+    _ficha_tem_prioridade,
     _resolve_carimbo_data_uri,
     _resolve_template_path,
     _titulo_indica_camara_nas_redes,
@@ -133,6 +134,7 @@ def _os_row(**overrides):
         "EntregPrazoLink": "",
         "EntregaFormaLink": "",
         "EntregData": None,
+        "EntregPeriodo": "",
     }
     row.update(overrides)
     return row
@@ -166,4 +168,105 @@ def test_rota_nao_liga_carimbo_quando_titulo_comum():
     assert 'class="overlay-carimbo-entrega"' not in html
     assert 'class="value-box ficha-carimbo-entrega-box"' not in html
     assert 'class="section-header ficha-carimbo-entrega-spacer"' not in html
+
+
+@pytest.mark.parametrize(
+    "prazo,esperado",
+    [
+        ("Solicitado p/", True),
+        ("Prometido p/", True),
+        ("Normal", False),
+        ("", False),
+        (None, False),
+    ],
+)
+def test_ficha_tem_prioridade(prazo, esperado):
+    assert _ficha_tem_prioridade(prazo) is esperado
+
+
+def test_template_mostra_turno_quando_show_turno():
+    template_path = _resolve_template_path()
+    with open(template_path, encoding="utf-8") as handle:
+        html = Template(handle.read()).render(
+            show_turno=True,
+            turno="Noite",
+            data_entrega="28/08/2026",
+            forma_entrega="Avisar Contato",
+        )
+
+    assert "ficha-turno" in html
+    assert ">Turno<" in html
+    assert "Noite" in html
+
+
+def test_template_omite_turno_quando_show_turno_falso():
+    template_path = _resolve_template_path()
+    with open(template_path, encoding="utf-8") as handle:
+        html = Template(handle.read()).render(
+            show_turno=False,
+            turno="Noite",
+            data_entrega="28/08/2026",
+            forma_entrega="Avisar Contato",
+        )
+
+    assert "ficha-turno" not in html
+    assert ">Turno<" not in html
+
+
+def test_rota_mostra_turno_quando_prioridade_e_data():
+    with patch(
+        "routers.requisicao_routes.db.execute_query",
+        return_value=[
+            _os_row(
+                EntregPrazoLink="Solicitado p/",
+                EntregData="28/08/2026",
+                EntregPeriodo="Noite",
+            )
+        ],
+    ):
+        response = generate_requisicao(2026, 123)
+
+    html = response.body.decode("utf-8")
+    assert response.status_code == 200
+    assert "ficha-turno" in html
+    assert ">Turno<" in html
+    assert "Noite" in html
+
+
+def test_rota_omite_turno_quando_prioridade_normal():
+    with patch(
+        "routers.requisicao_routes.db.execute_query",
+        return_value=[
+            _os_row(
+                EntregPrazoLink="Normal",
+                EntregData="28/08/2026",
+                EntregPeriodo="Noite",
+            )
+        ],
+    ):
+        response = generate_requisicao(2026, 123)
+
+    html = response.body.decode("utf-8")
+    assert response.status_code == 200
+    assert "ficha-turno" not in html
+    assert ">Turno<" not in html
+
+
+def test_rota_omite_turno_quando_prioridade_sem_data():
+    with patch(
+        "routers.requisicao_routes.db.execute_query",
+        return_value=[
+            _os_row(
+                EntregPrazoLink="Prometido p/",
+                EntregData=None,
+                EntregPeriodo="Tarde",
+            )
+        ],
+    ):
+        response = generate_requisicao(2026, 123)
+
+    html = response.body.decode("utf-8")
+    assert response.status_code == 200
+    assert "ficha-turno" not in html
+    assert ">Turno<" not in html
 

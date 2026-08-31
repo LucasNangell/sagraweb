@@ -984,9 +984,17 @@
                                     <span class="label">Forma de Entrega</span>
                                     <div class="value-box">{{ forma_entrega }}</div>
                                 </div>
-                                <div class="field-group flex-1">
-                                    <span class="label">Data</span>
-                                    <div class="value-box">{{ data_entrega }}</div>
+                                <div class="col flex-1">
+                                    <div class="field-group">
+                                        <span class="label">Data</span>
+                                        <div class="value-box">{{ data_entrega }}</div>
+                                    </div>
+                                    {% if show_turno %}
+                                    <div class="field-group ficha-turno" style="margin-top: 3px;">
+                                        <span class="label">Turno</span>
+                                        <div class="value-box">{{ turno }}</div>
+                                    </div>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>

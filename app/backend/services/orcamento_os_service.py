@@ -103,7 +103,8 @@ def _componente_from_lote(
     papel_nome = lote.get("papel_link") or lote.get("papel_desc") or fallback.get("PapelLink")
     cores_nm = lote.get("impressao") or lote.get("cores_link") or lote.get("cores_desc") or fallback.get("Cores")
     papel = match_papel(papel_nome, insumos)
-    menor, maior = _dimensoes(fallback.get("FormatoLink"))
+    formato = str(lote.get("formato") or "").strip() or fallback.get("FormatoLink")
+    menor, maior = _dimensoes(formato)
     spec = parse_cores_impressao(cores_nm)
     if spec is not None:
         cor = bool(spec["cor"])

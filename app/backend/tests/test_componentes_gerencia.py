@@ -35,7 +35,17 @@ class TestLoteSerialization:
         assert data["cores_desc"] == "nota cores"
         assert data["impressao"] == "4/0"
         assert data["frente_verso"] is False
+        assert data["formato"] == ""
         assert data["acabamentos"] == []
+
+    def test_lote_to_dict_preserves_formato(self):
+        lote = TechSpecLotePayload(
+            id="lote_1",
+            paginas=8,
+            formato="A5",
+        )
+        data = _lote_to_dict(lote)
+        assert data["formato"] == "A5"
 
 
 class TestSyncComponentesFromTechspec:

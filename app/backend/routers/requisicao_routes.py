@@ -68,6 +68,11 @@ def _titulo_indica_camara_nas_redes(titulo: str | None) -> bool:
     return "camara nas redes" in ascii_title
 
 
+def _ficha_tem_prioridade(prazo: str | None) -> bool:
+    prazo_entrega = str(prazo or "")
+    return "Solicitado p/" in prazo_entrega or "Prometido p/" in prazo_entrega
+
+
 def _normalize_prova_cor_tipo(value: str | None) -> str | None:
     if not value:
         return None
@@ -100,7 +105,7 @@ def generate_requisicao(
            p.CategoriaLink, p.CodUsuarioLink, p.NomeUsuario, p.SiglaOrgao, p.RamalUsuario, p.OrgInteressado, p.ContatoTrab,
            d.TipoPublicacaoLink, d.MaquinaLink, d.Pags, d.FrenteVerso, d.Titulo, d.FormatoLink, d.Cores, d.CoresDescricao,
            d.PapelLink, d.PapelDescricao, d.DescAcabamento, d.Observ, d.InsumosFornecidos, d.MaterialFornecido,
-           p.ResponsavelGrafLink, p.EntregPrazoLink, p.EntregaFormaLink, p.EntregData
+           p.ResponsavelGrafLink, p.EntregPrazoLink, p.EntregaFormaLink, p.EntregData, p.EntregPeriodo
         FROM tabProtocolos p
         LEFT JOIN tabDetalhesServico d ON p.NroProtocolo = d.NroProtocoloLinkDet AND p.AnoProtocolo = d.AnoProtocoloLinkDet
         WHERE p.NroProtocolo = %(id)s AND p.AnoProtocolo = %(ano)s
@@ -170,6 +175,7 @@ def generate_requisicao(
             "prazo_entrega": get('EntregPrazoLink'),
             "forma_entrega": get('EntregaFormaLink'),
             "data_entrega": format_date(get('EntregData')),
+            "turno": get('EntregPeriodo'),
             "aviso_1": "",
             "aviso_2": "",
             "aviso_3": "",
@@ -209,11 +215,11 @@ def generate_requisicao(
         context["carimbo_src"] = _resolve_carimbo_data_uri(template_path)
         prazo_entrega = str(context.get("prazo_entrega") or "")
         context["show_carimbo_prioridade"] = bool(
-            context["carimbo_src"]
-            and (
-                "Solicitado p/" in prazo_entrega
-                or "Prometido p/" in prazo_entrega
-            )
+            context["carimbo_src"] and _ficha_tem_prioridade(prazo_entrega)
+        )
+        context["show_turno"] = bool(
+            _ficha_tem_prioridade(prazo_entrega)
+            and str(context.get("data_entrega") or "").strip()
         )
 
         context["carimbo_entrega_src"] = _resolve_carimbo_data_uri(template_path, "entrega.png")

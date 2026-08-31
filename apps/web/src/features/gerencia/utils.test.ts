@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { findFormatoForDimensions, resolveFormatoDimensions } from "./formatoDimensions";
 import { createEmptyGerenciaForm } from "./defaults";
 import type { GerenciaFormState } from "./types";
+import type { TechSpec } from "./techSpec";
 import {
   calculateCoefA4,
   detailsToForm,
@@ -545,6 +546,129 @@ describe("recalculateGerenciaCalcs", () => {
     expect(result.calc_coef_a4).toBe("10,0");
     expect(result.calc_cota_total).toBe("200");
     setGerenciaCoefA4PorProduto({});
+  });
+
+  it("miolo A4 + variação A5 soma coeficientes distintos", () => {
+    const mixed: TechSpec = {
+      version: 1,
+      componentes: [
+        {
+          nome: "Miolo",
+          tipo: "MIOLO",
+          lotes: [
+            {
+              id: "a4",
+              paginas: 10,
+              maquina_link: "",
+              papel_link: "",
+              cores_link: "P/B",
+              papel_desc: "",
+              cores_desc: "",
+              impressao: "",
+              frente_verso: false,
+              acabamentos: [],
+            },
+            {
+              id: "a5",
+              paginas: 10,
+              maquina_link: "",
+              papel_link: "",
+              cores_link: "P/B",
+              papel_desc: "",
+              cores_desc: "",
+              impressao: "",
+              frente_verso: false,
+              formato: "A5",
+              acabamentos: [],
+            },
+          ],
+        },
+      ],
+    };
+    const allA4 = {
+      ...mixed,
+      componentes: [
+        {
+          ...mixed.componentes[0],
+          lotes: mixed.componentes[0].lotes.map((l) => ({
+            ...l,
+            formato: undefined,
+          })),
+        },
+      ],
+    };
+    const form = baseForm({
+      req_categoria: "Orgao",
+      val_cores: "P/B",
+      calc_miolo_pb: "20",
+      val_pgs: "20",
+      calc_tiragem: "100",
+      calc_altura: "210",
+      calc_largura: "297",
+      chk_fv: false,
+    });
+    const single = recalculateGerenciaCalcs(form, { techSpec: allA4 });
+    const mixedResult = recalculateGerenciaCalcs(form, { techSpec: mixed });
+    expect(single.calc_coef_a4).toBe("0,9");
+    expect(mixedResult.calc_coef_a4).toBe("0,9");
+    expect(mixedResult.calc_cota_total).not.toBe(single.calc_cota_total);
+    expect(mixedResult.calc_cota_total).toBe("1.667");
+    expect(single.calc_cota_total).toBe("2.223");
+  });
+
+  it("lote sem formato usa o coef editável da OS", () => {
+    const spec: TechSpec = {
+      version: 1,
+      componentes: [
+        {
+          nome: "Miolo",
+          tipo: "MIOLO",
+          lotes: [
+            {
+              id: "inherit",
+              paginas: 10,
+              maquina_link: "",
+              papel_link: "",
+              cores_link: "P/B",
+              papel_desc: "",
+              cores_desc: "",
+              impressao: "",
+              frente_verso: false,
+              acabamentos: [],
+            },
+            {
+              id: "a5",
+              paginas: 10,
+              maquina_link: "",
+              papel_link: "",
+              cores_link: "P/B",
+              papel_desc: "",
+              cores_desc: "",
+              impressao: "",
+              frente_verso: false,
+              formato: "A5",
+              acabamentos: [],
+            },
+          ],
+        },
+      ],
+    };
+    const result = recalculateGerenciaCalcs(
+      baseForm({
+        req_categoria: "Orgao",
+        val_cores: "P/B",
+        calc_miolo_pb: "20",
+        val_pgs: "20",
+        calc_tiragem: "100",
+        calc_altura: "210",
+        calc_largura: "297",
+        calc_coef_a4: "2,0",
+        chk_fv: false,
+      }),
+      { techSpec: spec },
+    );
+    expect(result.calc_coef_a4).toBe("2,0");
+    expect(result.calc_cota_total).toBe("1.056");
   });
 });
 

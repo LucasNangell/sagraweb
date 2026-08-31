@@ -23,6 +23,8 @@ export interface TechSpecLote {
   /** Frente/verso em cores, ex. 4/0, 1/1, 4/4. */
   impressao?: string;
   frente_verso: boolean;
+  /** Vazio = herda o formato da OS. */
+  formato?: string;
   acabamentos: TechSpecAcabamento[];
 }
 
@@ -75,6 +77,21 @@ export function createDefaultLote(maquinaLink = ""): TechSpecLote {
     frente_verso: false,
     acabamentos: [],
   };
+}
+
+/** Formato efetivo da variação: próprio ou o da OS. */
+export function resolveLoteFormato(
+  lote: Pick<TechSpecLote, "formato">,
+  formatoOs: string,
+): string {
+  const own = String(lote.formato ?? "").trim();
+  return own || String(formatoOs ?? "").trim();
+}
+
+export function specHasLoteFormatoOverride(spec: TechSpec): boolean {
+  return spec.componentes.some((c) =>
+    c.lotes.some((l) => String(l.formato ?? "").trim() !== ""),
+  );
 }
 
 export function createEmptyTechSpec(): TechSpec {
@@ -759,6 +776,9 @@ function normalizeLote(
     cores_desc: (l.cores_desc as string) ?? "",
     impressao: typeof l.impressao === "string" ? l.impressao : "",
     frente_verso: Boolean(l.frente_verso),
+    ...(typeof l.formato === "string" && l.formato.trim()
+      ? { formato: l.formato.trim() }
+      : {}),
     acabamentos: (rawAcab ?? []).map(normalizeAcabamento).filter((item): item is TechSpecAcabamento => item != null),
   };
   const impressao = inferImpressaoFromLote(base, options);
@@ -1031,6 +1051,15 @@ function allocateLoteCotaPages(
   if (kind === "PB") acc.pb += pages;
   else if (kind === "COLOR") acc.color += pages;
   else acc.outras += pages;
+}
+
+export function loteCotaColorBreakdown(
+  lote: Pick<TechSpecLote, "impressao" | "cores_link" | "cores_desc">,
+  pages: number,
+): { color: number; pb: number; outras: number } {
+  const acc = { color: 0, pb: 0, outras: 0 };
+  allocateLoteCotaPages(lote, pages, acc);
+  return acc;
 }
 
 function resumoToCalcFields(rows: ComponenteCalcResumo[]): Pick<

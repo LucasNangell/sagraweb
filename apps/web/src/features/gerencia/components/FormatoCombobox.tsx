@@ -8,6 +8,10 @@ interface FormatoComboboxProps {
   formatos: FormatoLookupItem[];
   readOnly: boolean;
   onChange: (formato: string) => void;
+  /** id do datalist; único por campo para não colidir com o Formato da OS. */
+  listId?: string;
+  placeholder?: string;
+  "aria-label"?: string;
 }
 
 /** Lista distinta de formatos (FormatoLink) para sugestões do combobox. */
@@ -28,6 +32,9 @@ export function FormatoCombobox({
   formatos,
   readOnly,
   onChange,
+  listId = "gerencia-formatos-list",
+  placeholder = "Selecione ou digite...",
+  "aria-label": ariaLabel = "Formato",
 }: FormatoComboboxProps) {
   const options = useMemo(() => distinctFormatoOptions(formatos), [formatos]);
 
@@ -35,15 +42,15 @@ export function FormatoCombobox({
     <>
       <input
         readOnly={readOnly}
-        list="gerencia-formatos-list"
+        list={listId}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onBlur={(e) => onChange(e.target.value)}
-        placeholder="Selecione ou digite..."
+        placeholder={placeholder}
         className={gerenciaInputClass}
-        aria-label="Formato"
+        aria-label={ariaLabel}
       />
-      <datalist id="gerencia-formatos-list">
+      <datalist id={listId}>
         {options.map((nome) => (
           <option key={nome} value={nome} />
         ))}

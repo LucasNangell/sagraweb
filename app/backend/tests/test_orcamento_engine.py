@@ -168,6 +168,37 @@ def test_componente_from_lote_prefers_impressao():
     assert comp["verso_cor"] is False
 
 
+def test_componente_from_lote_usa_formato_do_lote():
+    acab = {
+        "laminacao": False,
+        "laminacao_fv": False,
+        "espiral": False,
+        "grampo": False,
+        "cola": False,
+        "capa_pvc": False,
+    }
+    proprio = _componente_from_lote(
+        nome="Miolo",
+        tipo="MIOLO",
+        lote={"paginas": 8, "formato": "A5"},
+        fallback={"FormatoLink": "A4"},
+        acab=acab,
+        insumos=[],
+    )
+    herdado = _componente_from_lote(
+        nome="Miolo",
+        tipo="MIOLO",
+        lote={"paginas": 8},
+        fallback={"FormatoLink": "A4"},
+        acab=acab,
+        insumos=[],
+    )
+    assert proprio["menor_mm"] == 148
+    assert proprio["maior_mm"] == 210
+    assert herdado["menor_mm"] == 210
+    assert herdado["maior_mm"] == 297
+
+
 def test_impressao_4x0_sobrescreve_flags_de_verso_cor():
     result = calcular(
         {

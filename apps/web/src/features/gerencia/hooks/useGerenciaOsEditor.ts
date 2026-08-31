@@ -94,6 +94,8 @@ export function useGerenciaOsEditor({
   const [techSpec, setTechSpec] = useState<TechSpec>(createEmptyTechSpec);
   const techSpecRef = useRef(techSpec);
   techSpecRef.current = techSpec;
+  const formatosRef = useRef(aux.formatos);
+  formatosRef.current = aux.formatos;
   const [snapshot, setSnapshot] = useState<GerenciaFormState | null>(null);
   const [techSpecSnapshot, setTechSpecSnapshot] = useState<TechSpec | null>(null);
   const [loading, setLoading] = useState(true);
@@ -119,6 +121,7 @@ export function useGerenciaOsEditor({
             nextPatch.calc_coef_a4 !== prev.calc_coef_a4;
           const opts = {
             techSpec: techSpecRef.current,
+            formatos: formatosRef.current,
             refreshCoef:
               !coefJustEdited &&
               ((nextPatch.val_produto !== undefined &&
@@ -145,7 +148,7 @@ export function useGerenciaOsEditor({
       setTechSpec(safe);
       setForm((prev) => {
         const merged = applyTechSpecToForm(prev, safe, meta);
-        const opts = { techSpec: safe };
+        const opts = { techSpec: safe, formatos: formatosRef.current };
         const withCalcs = { ...merged, ...recalculateGerenciaCalcs(merged, opts) };
         return { ...withCalcs, ...patchTiragemMaximaFromCota(withCalcs, opts) };
       });
@@ -267,7 +270,7 @@ export function useGerenciaOsEditor({
 
         spec = ensureGenericoComponentes(ensureTechSpecIntegrity(spec), next);
         const synced = applyTechSpecToForm(next, spec);
-        const opts = { techSpec: spec };
+        const opts = { techSpec: spec, formatos: aux.formatos };
         const recalced = recalculateGerenciaCalcs(synced, opts);
         const merged = { ...synced, ...recalced };
         const withCalcs = { ...merged, ...patchTiragemMaximaFromCota(merged, opts) };
@@ -479,7 +482,10 @@ export function useGerenciaOsEditor({
       const payload = formToSavePayload(
         {
           ...formForSave,
-          ...recalculateGerenciaCalcs(formForSave, { techSpec: safeSpec }),
+          ...recalculateGerenciaCalcs(formForSave, {
+            techSpec: safeSpec,
+            formatos: aux.formatos,
+          }),
         },
         search,
         ponto,

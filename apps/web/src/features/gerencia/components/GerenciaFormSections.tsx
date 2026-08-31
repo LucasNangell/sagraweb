@@ -962,6 +962,7 @@ export function GerenciaTecnicosSection({
       papeis={papeis}
       cores={cores}
       acabamentos={acabamentos}
+      formatos={formatos}
     />
   );
 

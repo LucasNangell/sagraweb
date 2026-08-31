@@ -192,6 +192,7 @@ def _lote_to_dict(lote: Any) -> Dict[str, Any]:
         "cores_desc": raw.get("cores_desc") or "",
         "impressao": str(raw.get("impressao") or "").strip(),
         "frente_verso": bool(raw.get("frente_verso")),
+        "formato": str(raw.get("formato") or "").strip(),
         "acabamentos": [
             _acabamento_to_dict(a) for a in (raw.get("acabamentos") or []) if a
         ],

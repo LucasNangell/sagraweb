@@ -53,6 +53,8 @@ describe("TrabalhoComponentes", () => {
     );
 
     expect(screen.getAllByLabelText("Páginas")).toHaveLength(2);
+    expect(screen.getAllByLabelText("Formato")).toHaveLength(2);
+    expect(screen.getAllByPlaceholderText("Igual ao trabalho")).toHaveLength(2);
     expect(screen.getAllByLabelText("Papel")).toHaveLength(2);
     expect(screen.getAllByLabelText("Cores")).toHaveLength(2);
     expect(screen.getAllByLabelText("Impressão")).toHaveLength(2);
@@ -167,5 +169,53 @@ describe("TrabalhoComponentes", () => {
 
     fireEvent.click(screen.getAllByLabelText("Acabamento específico")[0]);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("grava formato da variação e vazio não persiste override", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <TrabalhoComponentes
+        spec={spec}
+        onChange={onChange}
+        readOnly={false}
+        maquinas={["Offset"]}
+        papeis={["CF 250g"]}
+        cores={["4x4"]}
+        acabamentos={[]}
+        formatos={[
+          { formato: "A4", altura_mm: 210, largura_mm: 297 },
+          { formato: "A5", altura_mm: 148, largura_mm: 210 },
+        ]}
+      />,
+    );
+
+    const campos = screen.getAllByLabelText("Formato");
+    fireEvent.change(campos[0], { target: { value: "A5" } });
+    expect(onChange).toHaveBeenCalled();
+    const withFmt = onChange.mock.calls[0][0] as TechSpec;
+    expect(withFmt.componentes[0].lotes[0].formato).toBe("A5");
+    expect(withFmt.componentes[0].lotes[1].formato).toBeUndefined();
+
+    onChange.mockClear();
+    rerender(
+      <TrabalhoComponentes
+        spec={withFmt}
+        onChange={onChange}
+        readOnly={false}
+        maquinas={["Offset"]}
+        papeis={["CF 250g"]}
+        cores={["4x4"]}
+        acabamentos={[]}
+        formatos={[
+          { formato: "A4", altura_mm: 210, largura_mm: 297 },
+          { formato: "A5", altura_mm: 148, largura_mm: 210 },
+        ]}
+      />,
+    );
+    fireEvent.change(screen.getAllByLabelText("Formato")[0], {
+      target: { value: "" },
+    });
+    const cleared = onChange.mock.calls[0][0] as TechSpec;
+    expect(cleared.componentes[0].lotes[0].formato).toBeUndefined();
   });
 });

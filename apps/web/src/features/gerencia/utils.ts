@@ -8,8 +8,14 @@ import {
   calculateCotaPagesFromTechSpec,
   classifyCoresKind,
   computeComponentCalcs,
+  loteCotaColorBreakdown,
+  loteIsVersoZero,
+  printedPagesForCota,
   specHasFrenteVerso,
+  specHasLoteFormatoOverride,
   type TechSpec,
+  type TechSpecComponente,
+  type TechSpecLote,
 } from "./techSpec";
 import type { GerenciaFormState, GerenciaOsDetails } from "./types";
 
@@ -418,6 +424,8 @@ export type GerenciaCalcOptions = {
   techSpec?: TechSpec;
   /** Recalcula o coef A4 por dimensões/tabela (formato, medidas ou produto). */
   refreshCoef?: boolean;
+  /** Catálogo de formatos (dimensões de override por lote). */
+  formatos?: FormatoLookupItem[];
 };
 
 function cotaPagesFromTechSpec(spec?: TechSpec): number | undefined {
@@ -484,19 +492,10 @@ function resolveEffectiveCoefA4(
   return { forCota: autoRounded, coefField: formatCoefA4Display(autoRaw) };
 }
 
-function maxTiragemNupFrenteVerso(
+function maxTiragemByCotaSearch(
   cotaAtual: number,
-  modelos: number,
-  coef: number,
+  cotaOf: (tiragem: number) => number,
 ): number {
-  const cotaOf = (tiragem: number) =>
-    calculateGerenciaCotaEstimada({
-      cotaPaginas: 1,
-      tiragem,
-      modelos,
-      coef,
-      frenteVerso: true,
-    });
   if (cotaOf(1) > cotaAtual) return 0;
   let hi = 2;
   while (cotaOf(hi) <= cotaAtual) {
@@ -511,6 +510,22 @@ function maxTiragemNupFrenteVerso(
     else right = mid - 1;
   }
   return left;
+}
+
+function maxTiragemNupFrenteVerso(
+  cotaAtual: number,
+  modelos: number,
+  coef: number,
+): number {
+  return maxTiragemByCotaSearch(cotaAtual, (tiragem) =>
+    calculateGerenciaCotaEstimada({
+      cotaPaginas: 1,
+      tiragem,
+      modelos,
+      coef,
+      frenteVerso: true,
+    }),
+  );
 }
 
 /** Tiragem máxima no caminho linear: cota = (páginas × tiragem × modelos) / coef. */
@@ -533,6 +548,118 @@ export function parseGerenciaModelos(raw: string | undefined | null): number {
   const n = parseInt(String(raw ?? "").trim(), 10);
   if (!Number.isFinite(n) || n <= 0) return 1;
   return n;
+}
+
+type GerenciaCotaRecalcForm = Pick<
+  GerenciaFormState,
+  | "req_categoria"
+  | "op_os"
+  | "val_produto"
+  | "val_pgs"
+  | "val_modelos"
+  | "chk_fv"
+  | "calc_capa_color"
+  | "calc_capa_pb"
+  | "calc_miolo_color"
+  | "calc_miolo_pb"
+  | "calc_encarte_color"
+  | "calc_encarte_pb"
+  | "calc_tiragem"
+  | "calc_altura"
+  | "calc_largura"
+  | "val_cores"
+  | "txt_cores_desc"
+  | "val_cores_capa1"
+  | "val_cores_capa2"
+  | "val_cores_mio"
+  | "val_cores_mio2"
+> & { calc_coef_a4?: string };
+
+function inferLoteCoresKind(
+  lote: Pick<TechSpecLote, "impressao" | "cores_link" | "cores_desc">,
+): "PB" | "COLOR" | null {
+  return (
+    classifyCoresKind(lote.impressao || "") ||
+    classifyCoresKind(lote.cores_link) ||
+    classifyCoresKind(lote.cores_desc)
+  );
+}
+
+function loteCotaPagesForQuota(
+  lote: TechSpecLote,
+  comp: TechSpecComponente,
+  form: GerenciaCotaForm,
+): number {
+  const printed = printedPagesForCota(
+    Number(lote.paginas) || 0,
+    loteIsVersoZero(lote, comp),
+  );
+  if (!isDeputadoOsQuotaRule(form)) return printed;
+  const { color, pb } = loteCotaColorBreakdown(lote, printed);
+  return applyDeputadoPolychromeQuota(
+    printed,
+    color,
+    pb,
+    inferLoteCoresKind(lote) ?? inferCoresKindFromForm(form),
+  );
+}
+
+function resolveLoteCoefA4(
+  lote: Pick<TechSpecLote, "formato">,
+  osCoef: number,
+  options?: GerenciaCalcOptions,
+): number {
+  const own = String(lote.formato ?? "").trim();
+  if (!own) return osCoef;
+  const dims = resolveFormatoDimensions(own, options?.formatos);
+  if (!dims) return osCoef;
+  const coef = roundCoefA4(calculateCoefA4(dims.altura, dims.largura));
+  return coef > 0 ? coef : osCoef;
+}
+
+function sumCotaByLotes(
+  form: GerenciaCotaRecalcForm,
+  spec: TechSpec,
+  options?: GerenciaCalcOptions,
+): number {
+  const tiragem = parseFloat(form.calc_tiragem || "0") || 0;
+  const modelos = parseGerenciaModelos(form.val_modelos);
+  const { forCota: osCoef } = resolveEffectiveCoefA4(form, options);
+  let total = 0;
+  for (const comp of spec.componentes) {
+    for (const lote of comp.lotes) {
+      total += calculateGerenciaCotaEstimada({
+        cotaPaginas: loteCotaPagesForQuota(lote, comp, form),
+        tiragem,
+        modelos,
+        coef: resolveLoteCoefA4(lote, osCoef, options),
+        frenteVerso: Boolean(lote.frente_verso),
+      });
+    }
+  }
+  return total;
+}
+
+function computeGerenciaCotaRaw(
+  form: GerenciaCotaRecalcForm,
+  options?: GerenciaCalcOptions,
+): number {
+  const spec = options?.techSpec;
+  if (spec && specHasLoteFormatoOverride(spec)) {
+    return sumCotaByLotes(form, spec, options);
+  }
+  const cotaPaginas = getGerenciaCotaPaginas(form, options);
+  const tiragem = parseFloat(form.calc_tiragem || "0") || 0;
+  const modelos = parseGerenciaModelos(form.val_modelos);
+  const { forCota: coef } = resolveEffectiveCoefA4(form, options);
+  const frenteVerso = gerenciaJobIsFrenteVerso(form, options?.techSpec);
+  return calculateGerenciaCotaEstimada({
+    cotaPaginas,
+    tiragem,
+    modelos,
+    coef,
+    frenteVerso,
+  });
 }
 
 export function computeTiragemMaximaFromForm(
@@ -559,11 +686,18 @@ export function computeTiragemMaximaFromForm(
     | "val_cores_capa2"
     | "val_cores_mio"
     | "val_cores_mio2"
-  > & { calc_coef_a4?: string },
+  > & { calc_coef_a4?: string; calc_tiragem?: string },
   options?: GerenciaCalcOptions,
 ): string {
   const cota = parseCotaAtualValue(form.op_cota_atual);
   if (!cota) return "";
+  if (options?.techSpec && specHasLoteFormatoOverride(options.techSpec)) {
+    const recalcForm = { ...form, calc_tiragem: form.calc_tiragem || "0" };
+    const max = maxTiragemByCotaSearch(cota, (tiragem) =>
+      computeGerenciaCotaRaw({ ...recalcForm, calc_tiragem: String(tiragem) }, options),
+    );
+    return max > 0 ? String(max) : "";
+  }
   const totalPaginas = getGerenciaCotaPaginas(form, options);
   const modelos = parseGerenciaModelos(form.val_modelos);
   const { forCota: coef } = resolveEffectiveCoefA4(form, options);
@@ -608,45 +742,12 @@ export function patchTiragemMaximaFromCota(
 }
 
 export function recalculateGerenciaCalcs(
-  form: Pick<
-    GerenciaFormState,
-    | "req_categoria"
-    | "op_os"
-    | "val_produto"
-    | "val_pgs"
-    | "val_modelos"
-    | "chk_fv"
-    | "calc_capa_color"
-    | "calc_capa_pb"
-    | "calc_miolo_color"
-    | "calc_miolo_pb"
-    | "calc_encarte_color"
-    | "calc_encarte_pb"
-    | "calc_tiragem"
-    | "calc_altura"
-    | "calc_largura"
-    | "val_cores"
-    | "txt_cores_desc"
-    | "val_cores_capa1"
-    | "val_cores_capa2"
-    | "val_cores_mio"
-    | "val_cores_mio2"
-  > & { calc_coef_a4?: string },
+  form: GerenciaCotaRecalcForm,
   options?: GerenciaCalcOptions,
 ): Pick<GerenciaFormState, "calc_total_paginas" | "calc_coef_a4" | "calc_cota_total"> {
   const totalPaginas = getGerenciaTotalPaginas(form, options);
-  const cotaPaginas = getGerenciaCotaPaginas(form, options);
-  const tiragem = parseFloat(form.calc_tiragem || "0") || 0;
-  const modelos = parseGerenciaModelos(form.val_modelos);
-  const { forCota: coef, coefField } = resolveEffectiveCoefA4(form, options);
-  const frenteVerso = gerenciaJobIsFrenteVerso(form, options?.techSpec);
-  const cota = calculateGerenciaCotaEstimada({
-    cotaPaginas,
-    tiragem,
-    modelos,
-    coef,
-    frenteVerso,
-  });
+  const { coefField } = resolveEffectiveCoefA4(form, options);
+  const cota = computeGerenciaCotaRaw(form, options);
 
   return {
     calc_total_paginas: String(totalPaginas),

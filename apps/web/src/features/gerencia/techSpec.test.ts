@@ -19,6 +19,8 @@ import {
   isGenericoComponente,
   parseLabeledMemo,
   specHasFrenteVerso,
+  specHasLoteFormatoOverride,
+  resolveLoteFormato,
   splitCapaMioloMaquina,
   type TechSpec,
   type TechSpecLote,
@@ -66,6 +68,9 @@ function lote(partial: Partial<TechSpecLote>): TechSpecLote {
     cores_desc: partial.cores_desc ?? "",
     impressao: partial.impressao ?? "",
     frente_verso: partial.frente_verso ?? false,
+    ...(partial.formato != null && String(partial.formato).trim()
+      ? { formato: String(partial.formato).trim() }
+      : {}),
     acabamentos: partial.acabamentos ?? [],
   };
 }
@@ -678,5 +683,40 @@ describe("máquina Capa/Miolo com barra", () => {
     );
     expect(spec.componentes[0].lotes[0].maquina_link).toBe("Offset");
     expect(spec.componentes[1].lotes[0].maquina_link).toBe("Digital");
+  });
+});
+
+describe("formato por lote", () => {
+  it("resolveLoteFormato herda o da OS quando vazio", () => {
+    expect(resolveLoteFormato({ formato: "" }, "A4")).toBe("A4");
+    expect(resolveLoteFormato({}, "A5")).toBe("A5");
+    expect(resolveLoteFormato({ formato: "  A6  " }, "A4")).toBe("A6");
+  });
+
+  it("ensureTechSpecIntegrity preserva formato e omite vazio", () => {
+    const spec = ensureTechSpecIntegrity({
+      version: 1,
+      componentes: [
+        {
+          nome: "Miolo",
+          tipo: "MIOLO",
+          lotes: [
+            lote({ id: "a", paginas: 8, formato: "A5" }),
+            lote({ id: "b", paginas: 8, formato: "  " }),
+          ],
+        },
+      ],
+    });
+    expect(spec.componentes[0].lotes[0].formato).toBe("A5");
+    expect(spec.componentes[0].lotes[1].formato).toBeUndefined();
+    expect(specHasLoteFormatoOverride(spec)).toBe(true);
+  });
+
+  it("spec sem override de formato não marca mistura", () => {
+    const spec: TechSpec = {
+      version: 1,
+      componentes: [{ nome: "Miolo", tipo: "MIOLO", lotes: [lote({ paginas: 10 })] }],
+    };
+    expect(specHasLoteFormatoOverride(spec)).toBe(false);
   });
 });

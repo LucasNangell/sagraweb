@@ -51,6 +51,7 @@ def get_filter_products(
 def get_filter_requesters(
     q: Optional[str] = Query(None),
     limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+    categorias: Optional[List[str]] = Query(None),
 ):
-    rows = search_requesters(q=q, limit=limit)
+    rows = search_requesters(q=q, limit=limit, categorias=categorias)
     return FilterOptionsResponse(data=[FilterOptionItem.model_validate(r) for r in rows])

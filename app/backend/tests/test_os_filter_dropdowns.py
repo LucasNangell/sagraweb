@@ -5,7 +5,11 @@ from unittest.mock import patch
 
 import pytest
 
-from services.os_filter_options_service import normalize_label, search_products
+from services.os_filter_options_service import (
+    normalize_label,
+    search_products,
+    search_requesters,
+)
 from services.os_search_service import (
     OS_SEARCH_MAX_MULTI_FILTER_ITEMS,
     _clean_multi_filter_values,
@@ -180,3 +184,61 @@ class TestFilterOptionsProducts:
         assert rows[0]["value"] == "Cartão"
         sql = mock_db.execute_query.call_args.args[0]
         assert "produto_normalizado LIKE" in sql
+
+
+class TestFilterOptionsRequesters:
+    @patch(
+        "services.system_catalog_service.apply_catalog_to_filter_rows",
+        side_effect=lambda _cat, rows, **_kw: rows,
+    )
+    @patch("services.os_filter_options_service._table_has_rows", return_value=True)
+    @patch("services.os_filter_options_service.db")
+    def test_without_categorias_uses_aux_table(self, mock_db, _has_rows, _catalog):
+        mock_db.execute_query.return_value = [
+            {"value": "João", "label": "João", "count": 10},
+        ]
+        rows = search_requesters(q="jo", limit=30)
+        assert rows[0]["value"] == "João"
+        sql = mock_db.execute_query.call_args.args[0]
+        assert "solicitante_normalizado LIKE" in sql
+        assert "CategoriaLink IN" not in sql
+
+    @patch(
+        "services.system_catalog_service.apply_catalog_to_filter_rows",
+        side_effect=lambda _cat, rows, **_kw: rows,
+    )
+    @patch("services.os_filter_options_service.db")
+    def test_with_categorias_filters_protocolos(self, mock_db, _catalog):
+        mock_db.execute_query.return_value = [
+            {"value": "Maria", "label": "Maria", "count": 2},
+        ]
+        rows = search_requesters(
+            q="",
+            limit=30,
+            categorias=["Deputado", " Senado ", "Deputado"],
+        )
+        assert rows[0]["value"] == "Maria"
+        sql = mock_db.execute_query.call_args.args[0]
+        params = mock_db.execute_query.call_args.args[1]
+        assert "tabProtocolos" in sql
+        assert "CategoriaLink IN" in sql
+        assert "solicitante_normalizado" not in sql
+        assert params["cat_sel_0"] == "Deputado"
+        assert params["cat_sel_1"] == "Senado"
+        assert "cat_sel_2" not in params
+        assert _catalog.call_args.kwargs.get("inject_missing") is False
+
+    @patch(
+        "services.system_catalog_service.apply_catalog_to_filter_rows",
+        side_effect=lambda _cat, rows, **_kw: rows,
+    )
+    @patch("services.os_filter_options_service.db")
+    def test_with_categorias_and_prefix(self, mock_db, _catalog):
+        mock_db.execute_query.return_value = []
+        search_requesters(q="mar", limit=30, categorias=["Deputado"])
+        sql = mock_db.execute_query.call_args.args[0]
+        params = mock_db.execute_query.call_args.args[1]
+        assert "CategoriaLink IN" in sql
+        assert "NomeUsuario LIKE %(prefix)s" in sql
+        assert params["prefix"].startswith("mar")
+        assert params["cat_sel_0"] == "Deputado"

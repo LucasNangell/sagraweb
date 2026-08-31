@@ -15,6 +15,7 @@ TABLE_REQUESTERS = "tab_os_filter_solicitantes"
 
 DEFAULT_LIMIT = 30
 MAX_LIMIT = 50
+MAX_CATEGORIAS = 20
 
 _years_cache: tuple[float, List[int]] | None = None
 _YEARS_CACHE_TTL_SEC = 15 * 60
@@ -26,6 +27,18 @@ def normalize_label(value: str) -> str:
         return ""
     decomposed = unicodedata.normalize("NFD", collapsed.casefold())
     return "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
+
+
+def _clean_filter_values(values: Optional[List[str]]) -> List[str]:
+    seen: set[str] = set()
+    result: List[str] = []
+    for raw in values or []:
+        item = (raw or "").strip()
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        result.append(item)
+    return result
 
 
 def fetch_distinct_years() -> List[int]:
@@ -121,11 +134,49 @@ def search_products(*, q: Optional[str] = None, limit: int = DEFAULT_LIMIT) -> L
     return apply_catalog_to_filter_rows("produto", list(rows or []), q=q, limit=limit)
 
 
-def search_requesters(*, q: Optional[str] = None, limit: int = DEFAULT_LIMIT) -> List[Dict[str, Any]]:
+def search_requesters(
+    *,
+    q: Optional[str] = None,
+    limit: int = DEFAULT_LIMIT,
+    categorias: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
     from services.system_catalog_service import apply_catalog_to_filter_rows
 
     limit = min(max(1, limit), MAX_LIMIT)
     q_norm = normalize_label(q or "")
+    clean_categorias = _clean_filter_values(categorias)[:MAX_CATEGORIAS]
+
+    if clean_categorias:
+        cat_placeholders = ", ".join(
+            f"%(cat_sel_{i})s" for i in range(len(clean_categorias))
+        )
+        params: Dict[str, Any] = {"limit": limit}
+        for i, val in enumerate(clean_categorias):
+            params[f"cat_sel_{i}"] = val
+        prefix_sql = ""
+        if q_norm:
+            prefix_sql = " AND NomeUsuario LIKE %(prefix)s"
+            params["prefix"] = f"{q}%"
+        rows = db.execute_query(
+            f"""
+            SELECT NomeUsuario AS value, NomeUsuario AS label, COUNT(*) AS count
+            FROM tabProtocolos
+            WHERE NomeUsuario IS NOT NULL AND TRIM(NomeUsuario) != ''
+              AND CategoriaLink IN ({cat_placeholders})
+              {prefix_sql}
+            GROUP BY NomeUsuario
+            ORDER BY NomeUsuario ASC
+            LIMIT %(limit)s
+            """,
+            params,
+        )
+        return apply_catalog_to_filter_rows(
+            "cliente",
+            list(rows or []),
+            q=q,
+            limit=limit,
+            inject_missing=False,
+        )
 
     if _table_has_rows(TABLE_REQUESTERS):
         if q_norm:
@@ -177,6 +228,9 @@ def search_requesters(*, q: Optional[str] = None, limit: int = DEFAULT_LIMIT) ->
             {"prefix": f"{q}%", "limit": limit},
         )
     return apply_catalog_to_filter_rows("cliente", list(rows or []), q=q, limit=limit)
+
+
+def backfill_filter_products() -> Dict[str, Any]:
     from os_filter_options_schema import ensure_os_filter_options_schema
 
     ensure_os_filter_options_schema()

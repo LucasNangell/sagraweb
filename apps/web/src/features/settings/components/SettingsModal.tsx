@@ -86,6 +86,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const requestersQuery = useOsFilterRequesters(
     debouncedRequesterSearch,
     open && requestersOpen,
+    criterios.categorias,
   );
   const savedFiltersQuery = useSavedFilters(ponto);
 
@@ -392,7 +393,9 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                 className="min-w-0 w-full flex-none"
                 options={categoriasQuery.data ?? []}
                 value={criterios.categorias}
-                onChange={(categorias) => patchCriterios({ categorias })}
+                onChange={(categorias) =>
+                  patchCriterios({ categorias, solicitantes: [] })
+                }
                 disabled={disabled || categoriasQuery.isLoading}
               />
               <SearchableMultiSelect

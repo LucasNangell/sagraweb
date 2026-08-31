@@ -223,6 +223,7 @@ def apply_catalog_to_filter_rows(
     value_key: str = "value",
     q: Optional[str] = None,
     limit: int = 50,
+    inject_missing: bool = True,
 ) -> List[Dict[str, Any]]:
     """Aplica regras do catálogo às opções de filtro (produtos / solicitantes)."""
     dynamic = [str(r.get(value_key) or "").strip() for r in rows if r.get(value_key)]
@@ -231,14 +232,15 @@ def apply_catalog_to_filter_rows(
 
     prefix = (q or "").strip().casefold()
     seen = {str(r.get(value_key) or "").strip().casefold() for r in result}
-    for label in allowed:
-        folded = label.casefold()
-        if folded in seen:
-            continue
-        if prefix and not folded.startswith(prefix):
-            continue
-        result.append({value_key: label, "label": label, "count": None})
-        seen.add(folded)
+    if inject_missing:
+        for label in allowed:
+            folded = label.casefold()
+            if folded in seen:
+                continue
+            if prefix and not folded.startswith(prefix):
+                continue
+            result.append({value_key: label, "label": label, "count": None})
+            seen.add(folded)
 
     result.sort(key=lambda r: str(r.get(value_key) or "").casefold())
     return result[:limit]

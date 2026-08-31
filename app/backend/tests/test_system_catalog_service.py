@@ -43,6 +43,16 @@ class TestSystemCatalogMerge(unittest.TestCase):
         values = {row["value"] for row in result}
         self.assertEqual(values, {"Folder", "Cartaz"})
 
+    @patch("services.system_catalog_service.merge_catalog_labels")
+    def test_apply_catalog_to_filter_rows_skips_inject_when_disabled(self, mock_merge):
+        mock_merge.return_value = ["Folder", "Cartaz"]
+        rows = [{"value": "Folder", "label": "Folder", "count": 3}]
+        result = svc.apply_catalog_to_filter_rows(
+            "produto", rows, limit=10, inject_missing=False
+        )
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["value"], "Folder")
+
 
 class TestSystemCatalogAcabamento(unittest.TestCase):
     def test_acabamento_is_valid_category(self):

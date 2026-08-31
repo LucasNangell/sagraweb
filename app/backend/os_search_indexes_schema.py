@@ -46,6 +46,11 @@ _SEARCH_INDEXES = (
         "(NomeUsuario(64))",
     ),
     (
+        "idx_protocolos_categoria_solicitante",
+        "tabProtocolos",
+        "(CategoriaLink(64), NomeUsuario(64))",
+    ),
+    (
         "idx_sub_os_andamento_filtro",
         "tab_os_sub_os_andamento",
         "(ultimo_status, setor, situacao, sub_os_id)",

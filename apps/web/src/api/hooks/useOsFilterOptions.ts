@@ -30,11 +30,17 @@ export function useOsFilterProducts(q: string, enabled: boolean) {
   });
 }
 
-export function useOsFilterRequesters(q: string, enabled: boolean) {
+export function useOsFilterRequesters(
+  q: string,
+  enabled: boolean,
+  categorias: string[] = [],
+) {
   const term = q.trim();
+  const cats = (categorias ?? []).map((c) => c.trim()).filter(Boolean);
   return useQuery({
-    queryKey: ["os-filter-requesters", term],
-    queryFn: ({ signal }) => fetchOsFilterRequesters(term, 30, { signal }),
+    queryKey: ["os-filter-requesters", term, cats],
+    queryFn: ({ signal }) =>
+      fetchOsFilterRequesters(term, 30, { signal }, cats),
     enabled,
     staleTime: OPTIONS_STALE_MS,
     gcTime: OPTIONS_GC_MS,

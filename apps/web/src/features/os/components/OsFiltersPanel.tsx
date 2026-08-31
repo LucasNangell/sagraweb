@@ -65,6 +65,7 @@ export function OsFiltersPanel({
   const requestersQuery = useOsFilterRequesters(
     debouncedRequesterSearch,
     requestersOpen,
+    filters.categorias,
   );
 
   const parseOptionalInt = (raw: string): number | undefined => {
@@ -248,7 +249,12 @@ export function OsFiltersPanel({
                 options={categoriasQuery.data ?? []}
                 value={filters.categorias}
                 onChange={(categorias) =>
-                  onPatchFilters({ categorias, page: 1 })
+                  onPatchFilters({
+                    categorias,
+                    solicitantes: [],
+                    solicitante: "",
+                    page: 1,
+                  })
                 }
                 disabled={categoriasQuery.isLoading}
               />

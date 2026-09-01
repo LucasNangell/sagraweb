@@ -8,18 +8,22 @@ import {
   FileImage,
   FileText,
   Folder,
+  FolderInput,
   FolderOpen,
   Loader2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useOsPathMutation } from "@/api/hooks/useOsPath";
 import {
   fetchOsFolderBrowse,
   osFolderFileUrl,
   type OsFolderBrowseEntry,
 } from "@/api/os";
 import { queryKeys } from "@/api/query-keys";
+import { useAccessControl } from "@/features/auth/useAccessControl";
 import { tryOpenFileLocally } from "@/lib/sagraLocalOpener";
+import { openNetworkFolder } from "../osFolderActions";
 import {
   isOriginalFolderName,
   isPreviewableFileName,
@@ -101,12 +105,17 @@ export function OsOriginalFilesPanel({
   osId,
   className,
 }: OsOriginalFilesPanelProps) {
+  const { can } = useAccessControl();
+  const canOpenOsFolder = can("ctx_abrir_pasta");
+  const canMoveFolders = can("ctx_mover_pastas");
+  const pathMutation = useOsPathMutation();
   const enabled = ano != null && osId != null && ano > 0 && osId > 0;
 
   const [tree, setTree] = useState<FolderTreeNode[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [selected, setSelected] = useState<OsFolderBrowseEntry | null>(null);
   const [opening, setOpening] = useState(false);
+  const [openingFolder, setOpeningFolder] = useState(false);
 
   const rootQuery = useQuery({
     queryKey:
@@ -241,6 +250,27 @@ export function OsOriginalFilesPanel({
     }
   };
 
+  const handleOpenOsFolder = async () => {
+    if (!enabled || ano == null || osId == null || !canOpenOsFolder) {
+      return;
+    }
+    setOpeningFolder(true);
+    try {
+      await openNetworkFolder({ ano, nr_os: osId }, (input) =>
+        pathMutation.mutateAsync(input),
+      );
+    } finally {
+      setOpeningFolder(false);
+    }
+  };
+
+  const handleMoveFolders = () => {
+    if (!enabled || !canMoveFolders) {
+      return;
+    }
+    window.dispatchEvent(new CustomEvent("sagra:os-mover-pastas"));
+  };
+
   const folderMissing = Boolean(rootQuery.data?.error || !rootQuery.data?.root_path);
   const isPdf = selected ? selected.name.toLowerCase().endsWith(".pdf") : false;
   const isImage = selected
@@ -258,8 +288,38 @@ export function OsOriginalFilesPanel({
         className="flex min-w-0 flex-1 flex-col border-r border-slate-200"
         aria-label="Pastas Original"
       >
-        <div className="shrink-0 border-b border-slate-100 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          Pastas Original
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 px-2.5 py-1.5">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            Pastas Original
+          </span>
+          <div className="flex shrink-0 items-center gap-1">
+            {canMoveFolders ? (
+              <button
+                type="button"
+                onClick={handleMoveFolders}
+                disabled={!enabled}
+                className="inline-flex shrink-0 items-center gap-1 rounded border border-secondary-blue/40 bg-white px-2 py-0.5 text-[11px] font-semibold text-secondary-blue hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <FolderInput className="size-3" aria-hidden />
+                Mover pastas
+              </button>
+            ) : null}
+            {canOpenOsFolder ? (
+              <button
+                type="button"
+                onClick={() => void handleOpenOsFolder()}
+                disabled={!enabled || openingFolder}
+                className="inline-flex shrink-0 items-center gap-1 rounded border border-secondary-blue/40 bg-white px-2 py-0.5 text-[11px] font-semibold text-secondary-blue hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {openingFolder ? (
+                  <Loader2 className="size-3 animate-spin" aria-hidden />
+                ) : (
+                  <FolderOpen className="size-3" aria-hidden />
+                )}
+                Abrir pasta
+              </button>
+            ) : null}
+          </div>
         </div>
         <div className="min-h-0 flex-1 overflow-auto p-1">
           {!enabled ? (

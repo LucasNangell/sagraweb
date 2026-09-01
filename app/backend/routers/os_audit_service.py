@@ -322,6 +322,8 @@ def diff_entity_fields(
     new_values: Mapping[str, Any],
     ponto: Optional[str],
     origem: str = "API",
+    evento_em: Optional[datetime] = None,
+    ref_cod: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     if old_row is None:
@@ -340,6 +342,8 @@ def diff_entity_fields(
                     valor_novo=new_norm,
                     origem=origem,
                     descricao=f"{field_label(field)} definido",
+                    evento_em=evento_em,
+                    ref_cod=ref_cod,
                 )
             )
         return entries
@@ -361,6 +365,8 @@ def diff_entity_fields(
                 valor_novo=new_norm or None,
                 origem=origem,
                 descricao=f"{field_label(field)} alterado",
+                evento_em=evento_em,
+                ref_cod=ref_cod,
             )
         )
     return entries
@@ -413,6 +419,8 @@ def log_os_save(
     ensure_audit_table(cursor)
     proto_values, det_values = build_save_payload_maps(data)
     entries: list[dict[str, Any]] = []
+    evento_em = datetime.now()
+    ref_cod = f"save:{int(evento_em.timestamp() * 1000)}"
 
     if is_update:
         old_proto = old_proto or fetch_protocolo_row(cursor, nro, ano) or {}
@@ -428,6 +436,8 @@ def log_os_save(
                 new_values=proto_values,
                 ponto=ponto,
                 origem=origem,
+                evento_em=evento_em,
+                ref_cod=ref_cod,
             )
         )
         entries.extend(
@@ -441,6 +451,8 @@ def log_os_save(
                 new_values=det_values,
                 ponto=ponto,
                 origem=origem,
+                evento_em=evento_em,
+                ref_cod=ref_cod,
             )
         )
     else:
@@ -453,6 +465,8 @@ def log_os_save(
                 ponto=ponto,
                 origem=origem,
                 descricao=f"OS {nro}/{ano} criada",
+                evento_em=evento_em,
+                ref_cod=ref_cod,
             )
         )
         entries.extend(
@@ -466,6 +480,8 @@ def log_os_save(
                 new_values=proto_values,
                 ponto=ponto,
                 origem=origem,
+                evento_em=evento_em,
+                ref_cod=ref_cod,
             )
         )
         entries.extend(
@@ -479,6 +495,8 @@ def log_os_save(
                 new_values=det_values,
                 ponto=ponto,
                 origem=origem,
+                evento_em=evento_em,
+                ref_cod=ref_cod,
             )
         )
 
@@ -543,6 +561,7 @@ def log_andamento_updated(
 ) -> None:
     ensure_audit_table(cursor)
     entries: list[dict[str, Any]] = []
+    evento_em = datetime.now()
     changes = {
         "SituacaoLink": situacao,
         "SetorLink": setor,
@@ -567,6 +586,7 @@ def log_andamento_updated(
                 valor_novo=new_norm or None,
                 origem=origem,
                 descricao=f"Andamento {cod_status}: {field_label(field)} alterado",
+                evento_em=evento_em,
             )
         )
     insert_entries(cursor, entries)
@@ -830,6 +850,43 @@ def backfill_legacy_audit(cursor, nro: int, ano: int) -> None:
     insert_entries(cursor, entries)
 
 
+def _clean_ponto_digits(value: Any) -> str:
+    return "".join(c for c in str(value or "") if c.isdigit())
+
+
+def _attach_usuario_nomes(cursor, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    pontos = sorted(
+        {
+            _clean_ponto_digits(row.get("ponto"))
+            for row in rows
+            if _clean_ponto_digits(row.get("ponto"))
+        }
+    )
+    names: dict[str, str] = {}
+    if pontos:
+        try:
+            placeholders = ",".join(["%s"] * len(pontos))
+            cursor.execute(
+                f"""
+                SELECT Ponto, Nome FROM tabUsuarios
+                WHERE REPLACE(REPLACE(CAST(Ponto AS CHAR), '.', ''), '-', '')
+                      IN ({placeholders})
+                """,
+                pontos,
+            )
+            for user_row in cursor.fetchall() or []:
+                clean = _clean_ponto_digits(user_row.get("Ponto"))
+                nome = (user_row.get("Nome") or "").strip()
+                if clean and nome:
+                    names[clean] = nome
+        except Exception as exc:
+            logger.warning("Falha ao resolver nomes de usuário do audit log: %s", exc)
+    for row in rows:
+        clean = _clean_ponto_digits(row.get("ponto"))
+        row["usuario_nome"] = names.get(clean)
+    return rows
+
+
 def fetch_audit_log(cursor, nro: int, ano: int) -> list[dict[str, Any]]:
     ensure_audit_table(cursor)
     backfill_legacy_audit(cursor, nro, ano)
@@ -843,4 +900,4 @@ def fetch_audit_log(cursor, nro: int, ano: int) -> list[dict[str, Any]]:
         """,
         (nro, ano),
     )
-    return cursor.fetchall() or []
+    return _attach_usuario_nomes(cursor, cursor.fetchall() or [])

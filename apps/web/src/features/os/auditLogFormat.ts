@@ -92,6 +92,114 @@ export function formatAuditClientIp(ip?: string | null): string {
   return value || "-";
 }
 
+export function formatAuditEventDateParts(value?: string | null): {
+  date: string;
+  time: string;
+} {
+  if (!value) {
+    return { date: "-", time: "-" };
+  }
+  const normalized = value.includes("T") ? value : value.replace(" ", "T");
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) {
+    return { date: formatDateBr(value), time: "-" };
+  }
+  return {
+    date: parsed.toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }),
+    time: parsed.toLocaleTimeString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }),
+  };
+}
+
+export function auditEventSecondKey(value?: string | null): string {
+  if (!value) {
+    return "";
+  }
+  const normalized = value.includes("T") ? value : value.replace(" ", "T");
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return String(Math.floor(parsed.getTime() / 1000));
+}
+
+export interface AuditLogLaunch {
+  id: string;
+  evento_em: string | null;
+  acao: string;
+  ponto: string | null;
+  usuario_nome: string | null;
+  rows: OsAuditLogRow[];
+}
+
+export function groupAuditLogLaunches(rows: OsAuditLogRow[]): AuditLogLaunch[] {
+  const sorted = [...rows].sort((a, b) => {
+    const timeA = Number(auditEventSecondKey(a.evento_em) || 0);
+    const timeB = Number(auditEventSecondKey(b.evento_em) || 0);
+    if (timeA !== timeB) {
+      return timeA - timeB;
+    }
+    return a.id - b.id;
+  });
+  const groups: AuditLogLaunch[] = [];
+  for (const row of sorted) {
+    const last = groups.at(-1);
+    const key = `${row.acao}|${row.ponto ?? ""}|${auditEventSecondKey(row.evento_em)}`;
+    const lastKey = last
+      ? `${last.acao}|${last.ponto ?? ""}|${auditEventSecondKey(last.evento_em)}`
+      : null;
+    if (last && lastKey === key) {
+      last.rows.push(row);
+      continue;
+    }
+    groups.push({
+      id: String(row.id),
+      evento_em: row.evento_em ?? null,
+      acao: row.acao,
+      ponto: row.ponto ?? null,
+      usuario_nome: row.usuario_nome ?? null,
+      rows: [row],
+    });
+  }
+  return groups.reverse();
+}
+
+export function auditEmptyValue(value?: string | null): string {
+  const trimmed = value?.trim() ?? "";
+  return trimmed || "(vazio)";
+}
+
+export interface AuditLaunchDescriptionRow {
+  campo: string;
+  valorAntigo: string;
+  valorAtual: string;
+}
+
+export function auditLaunchDescriptionRows(
+  launch: AuditLogLaunch,
+): AuditLaunchDescriptionRow[] {
+  const fieldRows = launch.rows.filter((row) => row.campo?.trim());
+  if (fieldRows.length > 0) {
+    return fieldRows.map((row) => ({
+      campo: row.campo!.trim(),
+      valorAntigo: auditEmptyValue(row.valor_anterior),
+      valorAtual: auditEmptyValue(row.valor_novo),
+    }));
+  }
+  return launch.rows.map((row) => ({
+    campo: formatAuditActionLabel(row.acao),
+    valorAntigo: auditEmptyValue(row.valor_anterior),
+    valorAtual: auditEmptyValue(row.valor_novo || row.descricao),
+  }));
+}
+
 export function isOsMovementAuditRow(row: OsAuditLogRow): boolean {
   if (row.entidade === "andamento") {
     return true;

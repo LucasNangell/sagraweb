@@ -231,3 +231,4 @@ class OsAuditLogRow(BaseModel):
     client_ip: Optional[str] = None
     origem: Optional[str] = None
     descricao: Optional[str] = None
+    usuario_nome: Optional[str] = None

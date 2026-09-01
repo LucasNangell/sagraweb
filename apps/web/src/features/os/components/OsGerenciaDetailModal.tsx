@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@sagra/ui";
-import { Copy, FilePlus, Loader2, Pencil, Save, X } from "lucide-react";
+import { Copy, FilePlus, Loader2, Pencil, Printer, Save, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { queryKeys } from "@/api/query-keys";
@@ -22,7 +22,10 @@ import {
   isGerenciaModalExistingOnly,
   type OsGerenciaModalMode,
 } from "../contextMenuActions";
+import { OsGerenciaAuditHistoryPanel } from "./OsGerenciaAuditHistoryPanel";
 import type { OsSearchRow } from "../types";
+
+type ModalSectionId = GerenciaSectionId | "historico";
 
 interface OsGerenciaDetailModalProps {
   row: OsSearchRow | null;
@@ -41,11 +44,13 @@ export function OsGerenciaDetailModal({
   const canEdit = can("ctx_editar_os");
   const canNovaOs = can("ctx_nova_os");
   const canDuplicarOs = can("ctx_duplicar_os");
+  const canPrint = can("ctx_imprimir_ficha");
+  const canHistorico = can("ctx_detalhes_os");
   const qc = useQueryClient();
 
   const [editing, setEditing] = useState(false);
   const [mode, setMode] = useState<OsGerenciaModalMode>(EXISTING_MODE);
-  const [section, setSection] = useState<GerenciaSectionId>("solicitante");
+  const [section, setSection] = useState<ModalSectionId>("solicitante");
   const [arquivosModal, setArquivosModal] = useState<{
     ano: number;
     osId: number;
@@ -55,6 +60,7 @@ export function OsGerenciaDetailModal({
 
   const composing = mode.kind !== "existing";
   const formEditable = composing || editing;
+  const showHistoricoTab = canHistorico && !composing;
   const lock = useOsEditLock({
     ano: row?.ano ?? null,
     id: row?.nr_os ?? null,
@@ -106,6 +112,12 @@ export function OsGerenciaDetailModal({
     setMode(EXISTING_MODE);
     setSection("solicitante");
   }, [row?.ano, row?.nr_os, lock.release]);
+
+  useEffect(() => {
+    if (section === "historico" && !showHistoricoTab) {
+      setSection("solicitante");
+    }
+  }, [section, showHistoricoTab]);
 
   const requestClose = useCallback(() => {
     if (arquivosModal) return;
@@ -181,6 +193,11 @@ export function OsGerenciaDetailModal({
     setMode({ kind: "duplicate" });
   };
 
+  const handlePrintFicha = () => {
+    if (!canPrint) return;
+    window.dispatchEvent(new CustomEvent("sagra:os-print-ficha"));
+  };
+
   const handleSave = async () => {
     const result = await save();
     if (!result) return;
@@ -193,6 +210,9 @@ export function OsGerenciaDetailModal({
     if (row) {
       void qc.invalidateQueries({
         queryKey: queryKeys.os.details(row.ano, row.nr_os),
+      });
+      void qc.invalidateQueries({
+        queryKey: queryKeys.os.auditLog(row.ano, row.nr_os),
       });
     }
 
@@ -255,8 +275,12 @@ export function OsGerenciaDetailModal({
     photoUploading,
   };
 
+  const navSections = [
+    ...GERENCIA_MODAL_SECTIONS,
+    ...(showHistoricoTab ? [{ id: "historico" as const, label: "Histórico" }] : []),
+  ];
   const activeLabel =
-    GERENCIA_MODAL_SECTIONS.find((s) => s.id === section)?.label ?? "";
+    navSections.find((s) => s.id === section)?.label ?? "";
   const title = gerenciaModalTitle(row, mode);
   const showComposeActions = !composing && !editing;
   const badgeLabel = composing
@@ -320,7 +344,7 @@ export function OsGerenciaDetailModal({
             className="flex w-40 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-sagra-border bg-slate-50/90 p-1.5 sm:w-44"
             aria-label="Seções da OS"
           >
-            {GERENCIA_MODAL_SECTIONS.map((item) => {
+            {navSections.map((item) => {
               const active = item.id === section;
               return (
                 <button
@@ -360,12 +384,19 @@ export function OsGerenciaDetailModal({
               <div
                 className={cn(
                   "min-h-0 flex-1 overscroll-contain p-3.5 sm:p-4",
-                  section === "material"
+                  section === "material" || section === "historico"
                     ? "flex flex-col overflow-hidden"
                     : "overflow-y-auto",
                 )}
               >
-                {loading ? (
+                {section === "historico" ? (
+                  showHistoricoTab ? (
+                    <OsGerenciaAuditHistoryPanel
+                      ano={row.ano}
+                      osId={row.nr_os}
+                    />
+                  ) : null
+                ) : loading ? (
                   <div className="flex items-center justify-center gap-2 py-16 text-neutral-500">
                     <Loader2 className="size-5 animate-spin" aria-hidden />
                     Carregando dados da OS…
@@ -408,19 +439,23 @@ export function OsGerenciaDetailModal({
                     Duplicar OS
                   </button>
                 ) : null}
+                {canPrint ? (
+                  <button
+                    type="button"
+                    onClick={handlePrintFicha}
+                    disabled={loading || !!loadError}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    <Printer className="size-4" aria-hidden />
+                    Imprimir Ficha
+                  </button>
+                ) : null}
               </>
             ) : null}
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             {!formEditable ? (
               <>
-                <button
-                  type="button"
-                  onClick={requestClose}
-                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-                >
-                  Fechar
-                </button>
                 {canEdit ? (
                   <button
                     type="button"

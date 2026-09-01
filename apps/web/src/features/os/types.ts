@@ -260,6 +260,7 @@ export interface OsAuditLogRow {
   client_ip?: string | null;
   origem?: string | null;
   descricao?: string | null;
+  usuario_nome?: string | null;
 }
 
 export interface OsVinculo {

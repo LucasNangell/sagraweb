@@ -20,7 +20,7 @@ export function OsMoverPastasModal({
 
   return (
     <div
-      className="fixed inset-0 z-[10002] flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-[10005] flex items-center justify-center bg-black/60 p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="mover-pastas-title"

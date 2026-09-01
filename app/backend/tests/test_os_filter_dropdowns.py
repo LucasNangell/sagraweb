@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from services.os_filter_options_service import (
+    _like_contains,
     normalize_label,
     search_products,
     search_requesters,
@@ -172,11 +173,19 @@ class TestFilterOptionsNormalize:
     def test_normalize_label(self):
         assert normalize_label("  João  ") == "joao"
 
+    def test_like_contains_wraps_and_escapes(self):
+        assert _like_contains("silva") == "%silva%"
+        assert _like_contains("a%b_c") == r"%a\%b\_c%"
+
 
 class TestFilterOptionsProducts:
+    @patch(
+        "services.system_catalog_service.apply_catalog_to_filter_rows",
+        side_effect=lambda _cat, rows, **_kw: rows,
+    )
     @patch("services.os_filter_options_service._table_has_rows", return_value=True)
     @patch("services.os_filter_options_service.db")
-    def test_contains_search_on_aux_table(self, mock_db, _has_rows):
+    def test_contains_search_on_aux_table(self, mock_db, _has_rows, _catalog):
         mock_db.execute_query.return_value = [
             {"value": "Cartão", "label": "Cartão", "count": 10},
         ]

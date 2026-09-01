@@ -1,8 +1,18 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@sagra/ui";
-import { Copy, FilePlus, Loader2, Pencil, Printer, Save, X } from "lucide-react";
+import {
+  Copy,
+  FilePlus,
+  Link2,
+  Loader2,
+  Pencil,
+  Printer,
+  Save,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { fetchOsVinculos } from "@/api/os";
 import { queryKeys } from "@/api/query-keys";
 import { useAccessControl } from "@/features/auth/useAccessControl";
 import {
@@ -24,9 +34,27 @@ import {
   type OsGerenciaModalMode,
 } from "../contextMenuActions";
 import { OsGerenciaAuditHistoryPanel } from "./OsGerenciaAuditHistoryPanel";
+import { OsVinculosEditor } from "./OsVinculosEditor";
 import type { OsSearchRow } from "../types";
 
-type ModalSectionId = GerenciaSectionId | "historico";
+export type GerenciaModalNavId = GerenciaSectionId | "historico" | "vinculos";
+
+export function buildGerenciaModalNavSections(options: {
+  showHistorico: boolean;
+  showVinculos: boolean;
+}): { id: GerenciaModalNavId; label: string }[] {
+  return [
+    ...GERENCIA_MODAL_SECTIONS,
+    ...(options.showVinculos
+      ? [{ id: "vinculos" as const, label: "Vínculos da OS" }]
+      : []),
+    ...(options.showHistorico
+      ? [{ id: "historico" as const, label: "Histórico" }]
+      : []),
+  ];
+}
+
+type ModalSectionId = GerenciaModalNavId;
 
 interface OsGerenciaDetailModalProps {
   row: OsSearchRow | null;
@@ -45,6 +73,7 @@ export function OsGerenciaDetailModal({
   const canEdit = can("ctx_editar_os");
   const canNovaOs = can("ctx_nova_os");
   const canDuplicarOs = can("ctx_duplicar_os");
+  const canVincularOs = can("ctx_vincular_os");
   const canPrint = can("ctx_imprimir_ficha");
   const canHistorico = can("ctx_detalhes_os");
   const qc = useQueryClient();
@@ -62,6 +91,16 @@ export function OsGerenciaDetailModal({
   const composing = mode.kind !== "existing";
   const formEditable = composing || editing;
   const showHistoricoTab = canHistorico && !composing;
+  const vinculosQuery = useQuery({
+    queryKey:
+      open && row != null && !composing
+        ? queryKeys.os.vinculos(row.ano, row.nr_os)
+        : ["os", "vinculos", "gerencia-idle"],
+    queryFn: () => fetchOsVinculos(row!.ano, row!.nr_os),
+    enabled: open && row != null && !composing,
+  });
+  const showVinculosTab =
+    !composing && (vinculosQuery.data?.length ?? 0) > 0;
   const lock = useOsEditLock({
     ano: row?.ano ?? null,
     id: row?.nr_os ?? null,
@@ -118,7 +157,10 @@ export function OsGerenciaDetailModal({
     if (section === "historico" && !showHistoricoTab) {
       setSection("solicitante");
     }
-  }, [section, showHistoricoTab]);
+    if (section === "vinculos" && !showVinculosTab) {
+      setSection("solicitante");
+    }
+  }, [section, showHistoricoTab, showVinculosTab]);
 
   const requestClose = useCallback(() => {
     if (arquivosModal) return;
@@ -276,10 +318,10 @@ export function OsGerenciaDetailModal({
     photoUploading,
   };
 
-  const navSections = [
-    ...GERENCIA_MODAL_SECTIONS,
-    ...(showHistoricoTab ? [{ id: "historico" as const, label: "Histórico" }] : []),
-  ];
+  const navSections = buildGerenciaModalNavSections({
+    showHistorico: showHistoricoTab,
+    showVinculos: showVinculosTab,
+  });
   const activeLabel =
     navSections.find((s) => s.id === section)?.label ?? "";
   const title = gerenciaModalTitle(row, mode);
@@ -400,6 +442,14 @@ export function OsGerenciaDetailModal({
                       osId={row.nr_os}
                     />
                   ) : null
+                ) : section === "vinculos" ? (
+                  showVinculosTab ? (
+                    <OsVinculosEditor
+                      key={`${row.ano}-${row.nr_os}`}
+                      row={row}
+                      readOnly={!canVincularOs}
+                    />
+                  ) : null
                 ) : loading ? (
                   <div className="flex items-center justify-center gap-2 py-16 text-neutral-500">
                     <Loader2 className="size-5 animate-spin" aria-hidden />
@@ -410,7 +460,7 @@ export function OsGerenciaDetailModal({
                     {loadError}
                   </p>
                 ) : (
-                  renderGerenciaSection(section, sectionProps)
+                  renderGerenciaSection(section as GerenciaSectionId, sectionProps)
                 )}
               </div>
             </OrcamentoEditorProvider>
@@ -443,6 +493,20 @@ export function OsGerenciaDetailModal({
                   >
                     <Copy className="size-4" aria-hidden />
                     Duplicar OS
+                  </button>
+                ) : null}
+                {canVincularOs ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      window.dispatchEvent(new CustomEvent("sagra:os-vincular"))
+                    }
+                    disabled={loading || !!loadError}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                    data-testid={homeTestIds.osGerenciaVincular}
+                  >
+                    <Link2 className="size-4" aria-hidden />
+                    Vincular OS
                   </button>
                 ) : null}
                 {canPrint ? (

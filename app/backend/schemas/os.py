@@ -178,12 +178,22 @@ class VinculoGrupoMembro(BaseModel):
     ano: int
 
 
+class VinculoGrupoAndamento(BaseModel):
+    situacao: str
+    setor: str
+
+
 class VinculoGrupoConfigResponse(BaseModel):
     grupo_id: Optional[int] = None
     situacao: Optional[str] = None
     setor: Optional[str] = None
     criado_por_ponto: Optional[str] = None
     membros: List[VinculoGrupoMembro] = Field(default_factory=list)
+    andamentos: List[VinculoGrupoAndamento] = Field(default_factory=list)
+
+
+class VinculoGrupoAndamentosRequest(BaseModel):
+    andamentos: List[VinculoGrupoAndamento] = Field(default_factory=list)
 
 
 class VinculoReplicacaoCheckResponse(BaseModel):
@@ -196,6 +206,7 @@ class VinculoReplicacaoCheckResponse(BaseModel):
     setor_grupo: Optional[str] = None
     criado_por_ponto: Optional[str] = None
     membros: List[VinculoGrupoMembro] = Field(default_factory=list)
+    andamentos: List[VinculoGrupoAndamento] = Field(default_factory=list)
 
 
 class OsVersionItem(BaseModel):

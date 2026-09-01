@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS tabProvaWeb (
     Versao INT NOT NULL DEFAULT 1,
     PastaRender VARCHAR(64) NOT NULL DEFAULT 'Prova1',
     Modo VARCHAR(16) NOT NULL DEFAULT 'unico',
+    FolhearModo VARCHAR(16) NOT NULL DEFAULT 'flipbook',
     ArquivoUnico VARCHAR(512) NULL,
     ArquivoCapa VARCHAR(512) NULL,
     ArquivoMiolo VARCHAR(512) NULL,
@@ -118,6 +119,19 @@ def _ensure_prova_web_version_columns(cursor) -> None:
         logger.info("Coluna tabProvaWeb.Status adicionada (existentes=publicado).")
 
     _ensure_prova_web_render_columns(cursor)
+    _ensure_prova_web_folhear_modo_column(cursor)
+
+
+def _ensure_prova_web_folhear_modo_column(cursor) -> None:
+    if not _column_exists(cursor, "tabProvaWeb", "FolhearModo"):
+        cursor.execute(
+            """
+            ALTER TABLE tabProvaWeb
+            ADD COLUMN FolhearModo VARCHAR(16) NOT NULL DEFAULT 'flipbook'
+            AFTER Modo
+            """
+        )
+        logger.info("Coluna tabProvaWeb.FolhearModo adicionada.")
 
 
 def _ensure_prova_web_render_columns(cursor) -> None:

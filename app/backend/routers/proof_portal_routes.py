@@ -720,9 +720,13 @@ def get_proof_flipbook_manifest(ano: int, os_id: int, token: str = Query(...)):
     payload = {**manifest, "pages": pages}
     if book_mockup:
         payload["bookMockup"] = book_mockup
-    from services.prova_web_record_service import prova_web_pdf_sources_meta
+    from services.prova_web_record_service import (
+        normalize_prova_web_folhear_modo,
+        prova_web_pdf_sources_meta,
+    )
 
     payload["pdfSources"] = prova_web_pdf_sources_meta(record)
+    payload["folhearModo"] = normalize_prova_web_folhear_modo(record.get("folhearModo"))
     return payload
 
 

@@ -13,6 +13,11 @@ export const DEPOL_DRAFT_STORAGE_STAFF =
 export const DEPOL_DRAFT_STORAGE_CLIENTE =
   "sagra.credenciais-depol.pedido-draft.cliente";
 
+export function clienteDepolDraftStorageKey(clienteId: number): string {
+  const id = Number.isFinite(clienteId) && clienteId > 0 ? Math.trunc(clienteId) : 0;
+  return `${DEPOL_DRAFT_STORAGE_CLIENTE}.${id}`;
+}
+
 function isDraftItem(v: unknown): v is CredenciaisDepolDraftItem {
   if (!v || typeof v !== "object") return false;
   const o = v as Record<string, unknown>;
@@ -25,19 +30,23 @@ function isDraftItem(v: unknown): v is CredenciaisDepolDraftItem {
   );
 }
 
+/** Valida e normaliza um valor já parseado (API ou JSON). */
+export function normalizeDepolPedidoDraft(data: unknown): CredenciaisDepolDraftItem[] {
+  if (!Array.isArray(data)) return [];
+  return data.filter(isDraftItem).map((item) => ({
+    key: item.key,
+    modelo_arquivo: item.modelo_arquivo,
+    linha1: item.linha1,
+    linha2: item.linha2,
+    linha3: item.linha3,
+  }));
+}
+
 /** Valida e normaliza o JSON do localStorage. */
 export function parseDepolPedidoDraft(raw: string | null): CredenciaisDepolDraftItem[] {
   if (!raw) return [];
   try {
-    const data = JSON.parse(raw) as unknown;
-    if (!Array.isArray(data)) return [];
-    return data.filter(isDraftItem).map((item) => ({
-      key: item.key,
-      modelo_arquivo: item.modelo_arquivo,
-      linha1: item.linha1,
-      linha2: item.linha2,
-      linha3: item.linha3,
-    }));
+    return normalizeDepolPedidoDraft(JSON.parse(raw) as unknown);
   } catch {
     return [];
   }
@@ -50,6 +59,18 @@ export function loadDepolPedidoDraft(storageKey: string): CredenciaisDepolDraftI
   } catch {
     return [];
   }
+}
+
+/** Carrega o rascunho do cliente; migra a chave antiga compartilhada se existir. */
+export function loadClienteDepolPedidoDraft(clienteId: number): CredenciaisDepolDraftItem[] {
+  const key = clienteDepolDraftStorageKey(clienteId);
+  const scoped = loadDepolPedidoDraft(key);
+  if (scoped.length) return scoped;
+  const legacy = loadDepolPedidoDraft(DEPOL_DRAFT_STORAGE_CLIENTE);
+  if (!legacy.length) return [];
+  saveDepolPedidoDraft(key, legacy);
+  clearDepolPedidoDraft(DEPOL_DRAFT_STORAGE_CLIENTE);
+  return legacy;
 }
 
 export function saveDepolPedidoDraft(
@@ -75,4 +96,18 @@ export function clearDepolPedidoDraft(storageKey: string): void {
   } catch {
     // ignore
   }
+}
+
+/** Conta remota prevalece; se estiver vazia, o localStorage é enviado ao servidor. */
+export function resolveHydratedDepolDraft(
+  local: CredenciaisDepolDraftItem[],
+  remote: CredenciaisDepolDraftItem[],
+): { items: CredenciaisDepolDraftItem[]; shouldPushLocalToRemote: boolean } {
+  if (remote.length > 0) {
+    return { items: remote, shouldPushLocalToRemote: false };
+  }
+  if (local.length > 0) {
+    return { items: local, shouldPushLocalToRemote: true };
+  }
+  return { items: [], shouldPushLocalToRemote: false };
 }

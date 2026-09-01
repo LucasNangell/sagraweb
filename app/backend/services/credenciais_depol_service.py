@@ -63,7 +63,7 @@ def _paths_config() -> dict[str, str]:
 
 
 DEFAULT_AUTO_OS_SETTINGS: dict[str, Any] = {
-    "auto_criar_os": False,
+    "auto_criar_os": True,
     "os_template_nro": 20,
     "os_template_ano": 2026,
 }
@@ -84,7 +84,9 @@ def get_auto_os_settings() -> dict[str, Any]:
     except (TypeError, ValueError):
         ano_i = int(DEFAULT_AUTO_OS_SETTINGS["os_template_ano"])
     return {
-        "auto_criar_os": bool(cfg.get("auto_criar_os", False)),
+        "auto_criar_os": bool(
+            cfg.get("auto_criar_os", DEFAULT_AUTO_OS_SETTINGS["auto_criar_os"])
+        ),
         "os_template_nro": nro_i,
         "os_template_ano": ano_i,
         "jpg_dir": _paths_config()["jpg_dir"],
@@ -118,6 +120,90 @@ def update_auto_os_settings(
     config_manager.set("credenciais_depol", cfg)
     config_manager.save_config()
     return get_auto_os_settings()
+
+
+MAX_PEDIDO_DRAFT_ITENS = 100
+
+
+def normalize_pedido_draft_itens(raw: Any) -> list[dict[str, str]]:
+    """Normaliza o rascunho de pedido DEPOL (portal cliente) sem exigir modelo no disco."""
+    data: Any = raw
+    if data is None or data == "":
+        return []
+    if isinstance(data, (bytes, bytearray)):
+        data = data.decode("utf-8", errors="replace")
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except json.JSONDecodeError:
+            return []
+    if not isinstance(data, list):
+        return []
+    out: list[dict[str, str]] = []
+    for item in data[:MAX_PEDIDO_DRAFT_ITENS]:
+        if not isinstance(item, dict):
+            continue
+        key = str(item.get("key") or "").strip()[:80]
+        modelo_raw = str(item.get("modelo_arquivo") or "").strip()
+        try:
+            modelo = _safe_basename(modelo_raw)
+        except ValueError:
+            continue
+        linha1 = str(item.get("linha1") or "").strip()[:255]
+        if not key or not modelo or not linha1:
+            continue
+        out.append(
+            {
+                "key": key,
+                "modelo_arquivo": modelo,
+                "linha1": linha1,
+                "linha2": str(item.get("linha2") or "").strip()[:255],
+                "linha3": str(item.get("linha3") or "").strip()[:255],
+            }
+        )
+    return out
+
+
+def get_cliente_pedido_draft(cliente_id: int) -> list[dict[str, str]]:
+    from cliente_gabinete_schema import ensure_cliente_gabinete_schema
+
+    ensure_cliente_gabinete_schema()
+    cid = int(cliente_id)
+    rows = db.execute_query(
+        """
+        SELECT DepolPedidoDraftJson
+        FROM tabClienteGabinete
+        WHERE ID = %(id)s
+        """,
+        {"id": cid},
+    )
+    if not rows:
+        raise LookupError("Conta não encontrada.")
+    return normalize_pedido_draft_itens(rows[0].get("DepolPedidoDraftJson"))
+
+
+def save_cliente_pedido_draft(cliente_id: int, itens: Any) -> list[dict[str, str]]:
+    from cliente_gabinete_schema import ensure_cliente_gabinete_schema
+
+    ensure_cliente_gabinete_schema()
+    cid = int(cliente_id)
+    exists = db.execute_query(
+        "SELECT ID FROM tabClienteGabinete WHERE ID = %(id)s",
+        {"id": cid},
+    )
+    if not exists:
+        raise LookupError("Conta não encontrada.")
+    clean = normalize_pedido_draft_itens(itens)
+    payload = json.dumps(clean, ensure_ascii=False) if clean else None
+    db.execute_query(
+        """
+        UPDATE tabClienteGabinete
+        SET DepolPedidoDraftJson = %(json)s
+        WHERE ID = %(id)s
+        """,
+        {"json": payload, "id": cid},
+    )
+    return clean
 
 
 def _safe_basename(name: str) -> str:

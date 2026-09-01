@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from services.os_search_service import (
     OS_SEARCH_DEFAULT_ORDER,
+    _build_os_search_order_clause,
     _details_filter_exists_sql,
     _legacy_andamento_join_sql,
     _materialized_andamento_join_sql,
@@ -38,6 +39,30 @@ class TestOsSearchDefaultOrder:
         assert "COALESCE(p.EntregData, p.DataEntrada) ASC" in sql
         assert "p.AnoProtocolo DESC" in sql
         assert "p.NroProtocolo DESC" in sql
+
+    def test_ano_asc_tiebreaks_by_number_asc(self):
+        sql = _build_os_search_order_clause(
+            "ano",
+            "asc",
+            "",
+            situacao_col="a_op.situacao",
+            setor_col="a_op.setor",
+        )
+        assert "p.AnoProtocolo ASC" in sql
+        assert "p.NroProtocolo ASC" in sql
+        assert "p.AnoProtocolo DESC" not in sql
+        assert "p.NroProtocolo DESC" not in sql
+
+    def test_nr_os_desc_tiebreaks_by_year_desc(self):
+        sql = _build_os_search_order_clause(
+            "nr_os",
+            "desc",
+            "",
+            situacao_col="a_op.situacao",
+            setor_col="a_op.setor",
+        )
+        assert "p.NroProtocolo DESC" in sql
+        assert "p.AnoProtocolo DESC" in sql
 
 
 class TestOperacionalSelectSql:

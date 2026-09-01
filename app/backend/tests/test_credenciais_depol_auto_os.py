@@ -8,9 +8,21 @@ import pytest
 
 from services import credenciais_depol_service as depol
 from services.os_duplicate_service import (
+    COLS_DETALHES,
+    COLS_PROTOCOLO,
     DuplicateOsResult,
     format_ponto_for_andamento,
+    sql_ident_list,
 )
+
+
+def test_duplicate_sql_columns_are_unique():
+    for block in (COLS_PROTOCOLO, COLS_DETALHES):
+        cols = sql_ident_list(block)
+        assert cols
+        dups = [c for c in cols if cols.count(c) > 1]
+        assert dups == [], f"coluna repetida no INSERT de duplicar OS: {dups}"
+    assert "FormatoLink" in sql_ident_list(COLS_DETALHES)
 
 
 def test_format_ponto_for_andamento_digits():
@@ -27,7 +39,7 @@ def test_format_ponto_for_andamento_cliente_prefix():
 def test_get_auto_os_settings_defaults(monkeypatch):
     monkeypatch.setattr(depol.config_manager, "get", lambda _k, default=None: {})
     s = depol.get_auto_os_settings()
-    assert s["auto_criar_os"] is False
+    assert s["auto_criar_os"] is True
     assert s["os_template_nro"] == 20
     assert s["os_template_ano"] == 2026
 

@@ -964,6 +964,18 @@ class ClienteDepolCreatePedidoPayload(BaseModel):
     itens: List[ClienteDepolItemPayload] = Field(min_length=1)
 
 
+class ClienteDepolDraftItemPayload(BaseModel):
+    key: str
+    modelo_arquivo: str
+    linha1: str
+    linha2: Optional[str] = None
+    linha3: Optional[str] = None
+
+
+class ClienteDepolDraftPayload(BaseModel):
+    itens: List[ClienteDepolDraftItemPayload] = Field(default_factory=list)
+
+
 def _require_cliente_depol_nav(session: SessionData) -> dict:
     row = _fetch_cliente_by_id(session.cliente_id or 0)
     if not row:
@@ -1043,6 +1055,38 @@ async def cliente_depol_svg(
     return FileResponse(path, media_type="image/svg+xml")
 
 
+@router.get("/api/cliente/credenciais-depol/rascunho")
+async def cliente_get_depol_pedido_draft(
+    session: SessionData = Depends(require_cliente_session),
+):
+    from services import credenciais_depol_service as svc
+
+    row = _require_cliente_depol_nav(session)
+    try:
+        itens = svc.get_cliente_pedido_draft(int(row["ID"]))
+    except (ValueError, LookupError) as exc:
+        raise _cliente_depol_http_err(exc) from exc
+    return {"itens": itens}
+
+
+@router.put("/api/cliente/credenciais-depol/rascunho")
+async def cliente_save_depol_pedido_draft(
+    body: ClienteDepolDraftPayload,
+    session: SessionData = Depends(require_cliente_session),
+):
+    from services import credenciais_depol_service as svc
+
+    row = _require_cliente_depol_nav(session)
+    try:
+        itens = svc.save_cliente_pedido_draft(
+            int(row["ID"]),
+            [i.model_dump() for i in body.itens],
+        )
+    except (ValueError, LookupError) as exc:
+        raise _cliente_depol_http_err(exc) from exc
+    return {"itens": itens}
+
+
 @router.post("/api/cliente/credenciais-depol/pedidos")
 async def cliente_create_depol_pedido(
     body: ClienteDepolCreatePedidoPayload,
@@ -1053,11 +1097,19 @@ async def cliente_create_depol_pedido(
     row = _require_cliente_depol_nav(session)
     criado_por = f"C{int(row['ID'])}"
     try:
-        return svc.create_pedido(
+        pedido = svc.create_pedido(
             criado_por=criado_por,
             titulo=body.titulo,
             observacao=body.observacao,
             itens=[i.model_dump() for i in body.itens],
         )
+        try:
+            svc.save_cliente_pedido_draft(int(row["ID"]), [])
+        except Exception:
+            logger.exception(
+                "Falha ao limpar rascunho DEPOL do cliente %s após envio",
+                row["ID"],
+            )
+        return pedido
     except (ValueError, FileNotFoundError, LookupError) as exc:
         raise _cliente_depol_http_err(exc) from exc

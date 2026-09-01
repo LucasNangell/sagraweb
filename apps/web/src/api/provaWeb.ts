@@ -7,6 +7,8 @@ export type ProvaWebModo =
   | "espiral"
   | "caixa";
 
+export type ProvaWebFolhearModo = "flipbook" | "folhas";
+
 export type CropSource = "trimbox" | "bleedbox" | "manual" | "marcas" | "formato";
 
 export interface CropSidesMm {
@@ -272,6 +274,7 @@ export type ProvaWebRenderStatus =
 
 export interface ProvaWebRecord {
   modo: ProvaWebModo;
+  folhearModo?: ProvaWebFolhearModo;
   arquivoUnico: string | null;
   arquivoCapa: string | null;
   arquivoMiolo: string | null;
@@ -463,6 +466,8 @@ export interface ProvaWebManifestBase {
   truncated: boolean;
   /** Escala de rasterização (~dpi/72); opcional, já enviada pelo backend. */
   renderScale?: number;
+  /** flipbook (livro) ou folhas (páginas soltas). Default flipbook. */
+  folhearModo?: ProvaWebFolhearModo;
   /** Presente quando capa+miolo com lombadaMm > 0. */
   bookMockup?: ProvaWebBookMockupMeta;
   /** Presente no modo folha_dobrada. */
@@ -492,6 +497,7 @@ export interface SaveProvaWebPayload {
   /** Cria Versao N+1 quando já existe prova. */
   nova?: boolean;
   crop_json?: ProvaWebCropJson | null;
+  folhear_modo?: ProvaWebFolhearModo;
 }
 
 export interface ProvaWebCropPageMeta {

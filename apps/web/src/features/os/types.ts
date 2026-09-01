@@ -91,6 +91,8 @@ export interface OsSearchFilters {
   sortDir?: OsSortDir;
   /** Busca por Nr OS: fast path SQL; situação/setor/prioridade/OS/SP aplicados após enrich. */
   exactOsLookup?: boolean;
+  /** Home: GET /os/search com teto alto (sem paginação de UI). */
+  fetchAll?: boolean;
 }
 
 export interface AuxOption {
@@ -104,11 +106,8 @@ export const PRIORIDADE_OPTIONS: AuxOption[] = [
   { value: "Prometido p/", label: "Prometido p/" },
 ];
 
-/** Tamanho padrão de página da listagem de OS. */
+/** Tamanho padrão de página da listagem de OS (preview/relatório e callers paginados). */
 export const DEFAULT_PAGE_SIZE = 20;
-
-/** Opções do seletor de registros por página na listagem de OS. */
-export const OS_PAGE_SIZE_OPTIONS = [20, 50, 100, 500] as const;
 
 /** GET /api/os/{ano}/{id}/details */
 export interface OsDetails {
@@ -276,12 +275,18 @@ export interface OsVinculoGrupoMembro {
   ano: number;
 }
 
+export interface OsVinculoGrupoAndamento {
+  situacao: string;
+  setor: string;
+}
+
 export interface OsVinculoGrupoConfig {
   grupo_id?: number | null;
   situacao?: string | null;
   setor?: string | null;
   criado_por_ponto?: string | null;
   membros: OsVinculoGrupoMembro[];
+  andamentos?: OsVinculoGrupoAndamento[];
 }
 
 export interface OsVinculoReplicacaoCheck {
@@ -294,6 +299,7 @@ export interface OsVinculoReplicacaoCheck {
   setor_grupo?: string | null;
   criado_por_ponto?: string | null;
   membros: OsVinculoGrupoMembro[];
+  andamentos?: OsVinculoGrupoAndamento[];
 }
 
 export interface SavedFilterCriterios {

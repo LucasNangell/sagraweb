@@ -106,6 +106,12 @@ def _ensure_cliente_nav_columns(cursor) -> None:
         "NavCredencialDepol",
         "TINYINT(1) NOT NULL DEFAULT 0 AFTER AuthAtivo",
     )
+    _ensure_column(
+        cursor,
+        "tabClienteGabinete",
+        "DepolPedidoDraftJson",
+        "JSON NULL AFTER NavCredencialDepol",
+    )
 
 
 def _ensure_proof_tokens_columns(cursor) -> None:

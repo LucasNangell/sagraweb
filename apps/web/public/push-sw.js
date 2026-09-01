@@ -4,10 +4,6 @@ self.addEventListener("message", (event) => {
   }
 });
 
-self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
-});
-
 /* Push → toast nativo do Windows (Action Center / canto inferior direito). */
 
 function assetUrl(relativePath) {

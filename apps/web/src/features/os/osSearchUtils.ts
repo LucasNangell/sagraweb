@@ -88,6 +88,7 @@ export function normalizeOsSearchFilters(
     sortBy: filters.sortBy,
     sortDir: filters.sortDir,
     exactOsLookup: filters.exactOsLookup === true,
+    fetchAll: filters.fetchAll === true,
   };
 }
 

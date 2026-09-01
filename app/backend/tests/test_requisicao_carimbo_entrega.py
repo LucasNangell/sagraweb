@@ -11,6 +11,7 @@ from jinja2 import Template
 
 from routers.requisicao_routes import (
     _ficha_tem_prioridade,
+    _ficha_tipo,
     _resolve_carimbo_data_uri,
     _resolve_template_path,
     _titulo_indica_camara_nas_redes,
@@ -184,6 +185,21 @@ def test_ficha_tem_prioridade(prazo, esperado):
     assert _ficha_tem_prioridade(prazo) is esperado
 
 
+@pytest.mark.parametrize(
+    "mode,nro,esperado",
+    [
+        (None, 123, "Ficha da Ordem de Serviço"),
+        ("normal", 4999, "Ficha da Ordem de Serviço"),
+        (None, 5000, "Ficha do Serviço de Papelaria"),
+        (None, 5123, "Ficha do Serviço de Papelaria"),
+        ("prova", 5123, "Ficha p/ Tramitação de Prévia"),
+        ("prova_ficha", 5123, "Ficha p/ Tramitação de Prova"),
+    ],
+)
+def test_ficha_tipo(mode, nro, esperado):
+    assert _ficha_tipo(mode, nro) == esperado
+
+
 def test_template_mostra_turno_quando_show_turno():
     template_path = _resolve_template_path()
     with open(template_path, encoding="utf-8") as handle:
@@ -250,6 +266,32 @@ def test_rota_omite_turno_quando_prioridade_normal():
     assert response.status_code == 200
     assert "ficha-turno" not in html
     assert ">Turno<" not in html
+
+
+def test_rota_titulo_os_normal():
+    with patch(
+        "routers.requisicao_routes.db.execute_query",
+        return_value=[_os_row(NroProtocolo=123)],
+    ):
+        response = generate_requisicao(2026, 123)
+
+    html = response.body.decode("utf-8")
+    assert response.status_code == 200
+    assert "Ficha da Ordem de Serviço" in html
+    assert "Ficha do Serviço de Papelaria" not in html
+
+
+def test_rota_titulo_servico_papelaria():
+    with patch(
+        "routers.requisicao_routes.db.execute_query",
+        return_value=[_os_row(NroProtocolo=5123)],
+    ):
+        response = generate_requisicao(2026, 5123)
+
+    html = response.body.decode("utf-8")
+    assert response.status_code == 200
+    assert "Ficha do Serviço de Papelaria" in html
+    assert "Ficha da Ordem de Serviço" not in html
 
 
 def test_rota_omite_turno_quando_prioridade_sem_data():

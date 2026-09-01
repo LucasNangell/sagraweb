@@ -14,8 +14,10 @@ import { ProvaWebBoxMockup3D } from "./ProvaWebBoxMockup3D";
 import { ProvaWebFlipbook } from "./ProvaWebFlipbook";
 import { ProvaWebFoldMockup3D } from "./ProvaWebFoldMockup3D";
 import { ProvaWebPdfPanel } from "./ProvaWebPdfPanel";
+import { ProvaWebSheetsViewer } from "./ProvaWebSheetsViewer";
 import { ProvaWebSpiralMockup3D } from "./ProvaWebSpiralMockup3D";
 import type { ProvaWebPdfSource } from "./provaWebPdfSources";
+import { shouldUseSheetsViewer } from "./provaWebFolhearModo";
 
 type ViewerTab = "folhear" | "mockup" | "pdf";
 
@@ -120,21 +122,23 @@ export function ProvaWebViewerShell({
           cacheKey: manifest.cacheKey,
         });
 
+  const folhearPane = (
+    <FolhearPane
+      ano={ano}
+      osId={osId}
+      manifest={manifest}
+      buildPageUrl={buildPageUrl}
+      renderPageOverlay={renderPageOverlay}
+      renderStageOverlay={renderStageOverlay}
+      stageGutterRight={stageGutterRight}
+      pageBleedFraction={pageBleedFraction}
+      pageTarget={pageTarget}
+      onPageChange={onPageChange}
+    />
+  );
+
   if (!showTabBar) {
-    return (
-      <ProvaWebFlipbook
-        ano={ano}
-        osId={osId}
-        manifest={manifest}
-        buildPageUrl={buildPageUrl}
-        renderPageOverlay={renderPageOverlay}
-        renderStageOverlay={renderStageOverlay}
-        stageGutterRight={stageGutterRight}
-        pageBleedFraction={pageBleedFraction}
-        pageTarget={pageTarget}
-        onPageChange={onPageChange}
-      />
-    );
+    return folhearPane;
   }
 
   return (
@@ -191,18 +195,7 @@ export function ProvaWebViewerShell({
           buildPdfUrl={buildPdfUrl}
         />
       ) : tab === "folhear" || !showMockupTab ? (
-        <ProvaWebFlipbook
-          ano={ano}
-          osId={osId}
-          manifest={manifest}
-          buildPageUrl={buildPageUrl}
-          renderPageOverlay={renderPageOverlay}
-          renderStageOverlay={renderStageOverlay}
-          stageGutterRight={stageGutterRight}
-          pageBleedFraction={pageBleedFraction}
-          pageTarget={pageTarget}
-          onPageChange={onPageChange}
-        />
+        folhearPane
       ) : isFold && foldMockup ? (
         <ProvaWebFoldMockup3D
           pages={manifest.pages}
@@ -232,6 +225,58 @@ export function ProvaWebViewerShell({
         )
       )}
     </div>
+  );
+}
+
+function FolhearPane({
+  ano,
+  osId,
+  manifest,
+  buildPageUrl,
+  renderPageOverlay,
+  renderStageOverlay,
+  stageGutterRight,
+  pageBleedFraction,
+  pageTarget,
+  onPageChange,
+}: Pick<
+  ProvaWebViewerShellProps,
+  | "ano"
+  | "osId"
+  | "manifest"
+  | "buildPageUrl"
+  | "renderPageOverlay"
+  | "renderStageOverlay"
+  | "stageGutterRight"
+  | "pageBleedFraction"
+  | "pageTarget"
+  | "onPageChange"
+>) {
+  if (shouldUseSheetsViewer(manifest.folhearModo)) {
+    return (
+      <ProvaWebSheetsViewer
+        ano={ano}
+        osId={osId}
+        manifest={manifest}
+        buildPageUrl={buildPageUrl}
+        pageTarget={pageTarget}
+        onPageChange={onPageChange}
+      />
+    );
+  }
+  return (
+    <ProvaWebFlipbook
+      ano={ano}
+      osId={osId}
+      manifest={manifest}
+      buildPageUrl={buildPageUrl}
+      renderPageOverlay={renderPageOverlay}
+      renderStageOverlay={renderStageOverlay}
+      stageGutterRight={stageGutterRight}
+      pageBleedFraction={pageBleedFraction}
+      pageTarget={pageTarget}
+      onPageChange={onPageChange}
+    />
   );
 }
 

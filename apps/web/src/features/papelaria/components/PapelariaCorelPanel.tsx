@@ -37,6 +37,10 @@ import {
   applyPreviewTemplate,
   type ActiveDynamicFieldPlacement,
 } from "../preview";
+import {
+  clienteAlteracaoIdentity,
+  mergePapelariaFieldValues,
+} from "../applyPapelariaPrefill";
 import { isTimbradoA4DigitalProduct } from "../papelariaSession";
 import type {
   PapelariaCorelModelSummary,
@@ -172,6 +176,8 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
   const [cdrPickerOpen, setCdrPickerOpen] = useState(false);
   const [cdrPickerChoice, setCdrPickerChoice] = useState("");
   const autoSelectDone = useRef(false);
+  const prefillApplied = useRef(false);
+  const appliedAlteracaoRef = useRef<string | null>(null);
   const [mobilePanel, setMobilePanel] = useState<"form" | "preview">("form");
 
   const contextQuery = useQuery({
@@ -179,6 +185,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
     queryFn: () => fetchPapelariaOsContext(anoNum, nroNum),
     enabled: hasOs,
     staleTime: 30_000,
+    refetchOnMount: "always",
     retry: 2,
   });
 
@@ -267,10 +274,20 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
     job_id?: number;
     ano?: number;
     nro?: number;
+    id?: number;
+    action?: string;
   }>({
     path: "/ws",
     enabled: hasOs,
     onMessage: (data) => {
+      if (data.type === "system_update" && data.action === "proof_responded") {
+        const osNro = data.id ?? data.nro;
+        if (data.ano !== anoNum || osNro !== nroNum) return;
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.papelaria.contexto(anoNum, nroNum),
+        });
+        return;
+      }
       if (data.type !== "papelaria_job_update") return;
       if (data.ano !== anoNum || data.nro !== nroNum) return;
       refreshPapelariaJobs();
@@ -489,14 +506,35 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
 
   useEffect(() => {
     if (!contextQuery.data || autoSelectDone.current) return;
-    const ctx = contextQuery.data;
-    if (ctx.autoSelectedModelId) {
-      setSelectedModelId(ctx.autoSelectedModelId);
-    }
-    if (ctx.prefill && Object.keys(ctx.prefill).length > 0) {
-      setFieldValues((prev) => ({ ...ctx.prefill, ...prev }));
+    if (contextQuery.data.autoSelectedModelId) {
+      setSelectedModelId(contextQuery.data.autoSelectedModelId);
     }
     autoSelectDone.current = true;
+  }, [contextQuery.data]);
+
+  useEffect(() => {
+    const ctx = contextQuery.data;
+    if (!ctx) return;
+    const camposCliente = ctx.cliente_alteracao?.campos ?? null;
+    const alteracaoKey = clienteAlteracaoIdentity(ctx.cliente_alteracao);
+
+    if (alteracaoKey && alteracaoKey !== appliedAlteracaoRef.current) {
+      setFieldValues((prev) =>
+        mergePapelariaFieldValues(prev, ctx.prefill, camposCliente),
+      );
+      appliedAlteracaoRef.current = alteracaoKey;
+      prefillApplied.current = true;
+      return;
+    }
+
+    if (
+      !prefillApplied.current &&
+      ctx.prefill &&
+      Object.keys(ctx.prefill).length > 0
+    ) {
+      setFieldValues((prev) => mergePapelariaFieldValues(prev, ctx.prefill));
+      prefillApplied.current = true;
+    }
   }, [contextQuery.data]);
 
   useEffect(() => {
@@ -526,11 +564,13 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
     setSelectedModelId(model.id);
     setActiveDynamicFields([]);
     setExcludedFields([]);
-    if (contextQuery.data?.prefill) {
-      setFieldValues({ ...contextQuery.data.prefill });
-    } else {
-      setFieldValues({});
-    }
+    setFieldValues(
+      mergePapelariaFieldValues(
+        {},
+        contextQuery.data?.prefill,
+        contextQuery.data?.cliente_alteracao?.campos,
+      ),
+    );
   };
 
   const camposAlteradosByKey = useMemo(() => {

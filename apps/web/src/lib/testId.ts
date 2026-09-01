@@ -95,9 +95,6 @@ export const homeTestIds = {
     testId("os-table-row", ano, nrOs),
   osTableExpand: (ano: number | string, nrOs: number | string) =>
     testId("os-table-expand", ano, nrOs),
-  osTablePageSize: "os-table-page-size",
-  osTablePrev: "os-table-prev",
-  osTableNext: "os-table-next",
   osTableReport: "os-table-report",
 
   osDetails: (field: string) => testId("os-details", field),
@@ -135,6 +132,7 @@ export const homeTestIds = {
   osGerenciaPrint: "os-gerencia-print",
   osGerenciaNew: "os-gerencia-new",
   osGerenciaDuplicate: "os-gerencia-duplicate",
+  osGerenciaVincular: "os-gerencia-vincular",
 
   gerenciaField: (field: string) => testId("gerencia", field),
 
@@ -150,6 +148,10 @@ export const homeTestIds = {
   osVincularClose: "os-vincular-close",
   osVincularConfirm: "os-vincular-confirm",
   osVincularCancel: "os-vincular-cancel",
+  osVincularAddAndamento: "os-vincular-add-andamento",
+  osVincularSaveAndamentos: "os-vincular-save-andamentos",
+  osVincularAndamentoRow: (index: number) =>
+    testId("os-vincular-andamento", index),
 
   osNotificarRoot: "os-notificar-root",
   osNotificarClose: "os-notificar-close",

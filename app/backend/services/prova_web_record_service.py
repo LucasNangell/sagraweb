@@ -46,11 +46,23 @@ RENDER_STATUSES = frozenset(
 )
 RENDER_IN_FLIGHT = frozenset({RENDER_PENDING, RENDER_RUNNING})
 
+FOLHEAR_FLIPBOOK = "flipbook"
+FOLHEAR_FOLHAS = "folhas"
+FOLHEAR_MODOS = frozenset({FOLHEAR_FLIPBOOK, FOLHEAR_FOLHAS})
+
 _SELECT_PROVA_WEB_COLS = """
-    Modo, ArquivoUnico, ArquivoCapa, ArquivoMiolo, CropJson,
+    Modo, FolhearModo, ArquivoUnico, ArquivoCapa, ArquivoMiolo, CropJson,
     Versao, PastaRender, Status, RenderStatus, RenderError, RenderProgress,
     RenderStartedAt, RenderFinishedAt, PontoRegistro, DataRegistro, DataAtualizacao
 """
+
+
+def normalize_prova_web_folhear_modo(raw: Any) -> str:
+    """Prova WEB: default flipbook (legado / valor inválido)."""
+    value = (str(raw).strip().lower() if raw is not None else "")
+    if value in FOLHEAR_MODOS:
+        return value
+    return FOLHEAR_FLIPBOOK
 
 
 def os_folder_path(ano: int, os_id: int) -> Optional[str]:
@@ -121,6 +133,7 @@ def _row_to_record(row: dict[str, Any]) -> dict[str, Any]:
     render_error = (row.get("RenderError") or "").strip() or None
     return {
         "modo": (row.get("Modo") or MODE_UNICO).strip(),
+        "folhearModo": normalize_prova_web_folhear_modo(row.get("FolhearModo")),
         "arquivoUnico": (row.get("ArquivoUnico") or "").strip() or None,
         "arquivoCapa": (row.get("ArquivoCapa") or "").strip() or None,
         "arquivoMiolo": (row.get("ArquivoMiolo") or "").strip() or None,

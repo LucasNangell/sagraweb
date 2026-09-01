@@ -2,10 +2,8 @@ import * as THREE from "three";
 
 import type { ProvaWebSpiralMockupMeta } from "@/api/provaWeb";
 
-import {
-  addStudioLights,
-  configureRenderer,
-} from "./fold-engine/foldMaterials";
+import { configureRenderer } from "./fold-engine/foldMaterials";
+import { boxCorners, spiralFitDistanceFromCorners } from "./spiralFit";
 
 export type SpiralPageTurnArgs = {
   dir: 1 | -1;
@@ -28,6 +26,8 @@ export type SpiralPageTurnArgs = {
 
 export type SpiralSceneHandle = {
   setOrbit: (rotXDeg: number, rotYDeg: number) => void;
+  /** 1 = maior enquadramento sem cortar; maior = mais perto (clamp 0.4–3). */
+  setZoom: (zoom: number) => void;
   /** Atualiza frente (+Z) e verso (−Z) do bloco sem animação. */
   setPageTextures: (
     frontUrl: string | null,
@@ -141,19 +141,17 @@ function buildWireCurve(
   return new THREE.CatmullRomCurve3(pts, false, "catmullrom", 0.15);
 }
 
-function paperEdgeMaterial(): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({
+function paperEdgeMaterial(): THREE.MeshBasicMaterial {
+  return new THREE.MeshBasicMaterial({
     color: 0xe8e4dc,
-    roughness: 0.85,
-    metalness: 0.02,
+    toneMapped: false,
   });
 }
 
-function blockStripeMaterial(): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({
+function blockStripeMaterial(): THREE.MeshBasicMaterial {
+  return new THREE.MeshBasicMaterial({
     color: 0xf0ebe3,
-    roughness: 0.9,
-    metalness: 0,
+    toneMapped: false,
   });
 }
 
@@ -191,17 +189,15 @@ export async function createSpiralScene(
   orbitGroup.add(contentGroup);
   scene.add(orbitGroup);
 
-  const frontMat = new THREE.MeshStandardMaterial({
+  const frontMat = new THREE.MeshBasicMaterial({
     map: frontTex ?? undefined,
     color: frontTex ? 0xffffff : 0xf8f6f2,
-    roughness: 0.72,
-    metalness: 0.02,
+    toneMapped: false,
   });
-  const backMat = new THREE.MeshStandardMaterial({
+  const backMat = new THREE.MeshBasicMaterial({
     map: backTex ?? undefined,
     color: backTex ? 0xffffff : 0xf4f1ea,
-    roughness: 0.72,
-    metalness: 0.02,
+    toneMapped: false,
   });
   disposables.push(frontMat, backMat);
 
@@ -224,10 +220,9 @@ export async function createSpiralScene(
   contentGroup.add(book);
 
   // Furos: cilindros escuros atravessando a espessura
-  const holeMat = new THREE.MeshStandardMaterial({
+  const holeMat = new THREE.MeshBasicMaterial({
     color: 0x1e293b,
-    roughness: 0.55,
-    metalness: 0.35,
+    toneMapped: false,
   });
   disposables.push(holeMat);
   const holes = holePositionsMm(spiralMockup);
@@ -243,11 +238,10 @@ export async function createSpiralScene(
 
     // Anéis nas faces (ênfase do furo)
     const ringGeo = new THREE.RingGeometry(holeR * 0.92, holeR * 1.25, 24);
-    const ringMat = new THREE.MeshStandardMaterial({
+    const ringMat = new THREE.MeshBasicMaterial({
       color: 0x334155,
-      roughness: 0.6,
-      metalness: 0.2,
       side: THREE.DoubleSide,
+      toneMapped: false,
     });
     disposables.push(ringGeo, ringMat);
     for (const z of [d / 2 + 0.05, -d / 2 - 0.05]) {
@@ -280,21 +274,27 @@ export async function createSpiralScene(
   contentGroup.add(wire);
 
   const maxDim = Math.max(w, h, d * 4);
-  addStudioLights(scene, maxDim);
+  scene.add(new THREE.AmbientLight(0xffffff, 1));
+  const wireKey = new THREE.DirectionalLight(0xffffff, 0.55);
+  wireKey.position.set(maxDim * 0.55, maxDim * 0.9, maxDim * 0.7);
+  scene.add(wireKey);
 
   const renderer = new THREE.WebGLRenderer({
     canvas,
     antialias: true,
     alpha: false,
   });
-  configureRenderer(renderer, "studio");
+  configureRenderer(renderer, "faithful");
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
   let disposed = false;
   let needsRender = true;
   let rafScheduled = false;
-  let rotX = 12;
+  let rotX = -14;
   let rotY = -32;
+  let zoom = 1;
+  let viewW = 1;
+  let viewH = 1;
 
   const applyOrbit = () => {
     orbitGroup.rotation.order = "YXZ";
@@ -304,22 +304,31 @@ export async function createSpiralScene(
   applyOrbit();
 
   const fitCamera = (width: number, height: number) => {
-    const aspect = Math.max(0.2, width / Math.max(1, height));
+    viewW = Math.max(1, width);
+    viewH = Math.max(1, height);
+    const aspect = Math.max(0.2, viewW / viewH);
     camera.aspect = aspect;
     camera.updateProjectionMatrix();
-    const sphere = new THREE.Sphere();
-    new THREE.Box3().setFromObject(contentGroup).getBoundingSphere(sphere);
+    orbitGroup.updateWorldMatrix(true, true);
+    const box = new THREE.Box3().setFromObject(orbitGroup);
+    const center = new THREE.Vector3();
+    if (box.isEmpty()) {
+      center.set(0, 0, 0);
+      box.setFromCenterAndSize(center, new THREE.Vector3(100, 100, 20));
+    } else {
+      box.getCenter(center);
+    }
     const dist =
-      (sphere.radius * 1.65) /
-      Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5));
-    camera.position.set(
-      edge === "left" ? -sphere.radius * 0.15 : 0,
-      edge === "top" ? sphere.radius * 0.12 : sphere.radius * 0.05,
-      dist,
-    );
+      spiralFitDistanceFromCorners(
+        boxCorners(box.min, box.max),
+        center,
+        camera.fov,
+        aspect,
+      ) / Math.max(0.4, zoom);
+    camera.position.set(center.x, center.y, center.z + dist);
     camera.near = Math.max(0.2, dist / 100);
     camera.far = dist * 20;
-    camera.lookAt(0, 0, 0);
+    camera.lookAt(center);
     camera.updateProjectionMatrix();
   };
 
@@ -344,6 +353,13 @@ export async function createSpiralScene(
     rotX = rotXDeg;
     rotY = rotYDeg;
     applyOrbit();
+    fitCamera(viewW, viewH);
+    requestRender();
+  };
+
+  const setZoom = (factor: number) => {
+    zoom = Math.min(3, Math.max(0.4, factor));
+    fitCamera(viewW, viewH);
     requestRender();
   };
 
@@ -443,15 +459,14 @@ export async function createSpiralScene(
 
     const leafGroup = new THREE.Group();
     const leafGeo = new THREE.PlaneGeometry(w, h);
-    const matFront = new THREE.MeshStandardMaterial({
+    const matFront = new THREE.MeshBasicMaterial({
       map: leafFrontTex ?? undefined,
       color: leafFrontTex ? 0xffffff : 0xf8f6f2,
-      roughness: 0.7,
-      metalness: 0.02,
       side: THREE.FrontSide,
       depthWrite: true,
       transparent: true,
       opacity: 1,
+      toneMapped: false,
     });
     let versoMap: THREE.Texture | null = null;
     if (leafBackTex) {
@@ -461,15 +476,14 @@ export async function createSpiralScene(
       versoMap.offset.x = 1;
       versoMap.needsUpdate = true;
     }
-    const matBackLeaf = new THREE.MeshStandardMaterial({
+    const matBackLeaf = new THREE.MeshBasicMaterial({
       map: versoMap ?? undefined,
       color: leafBackTex ? 0xffffff : 0xf0ebe3,
-      roughness: 0.7,
-      metalness: 0.02,
       side: THREE.FrontSide,
       depthWrite: true,
       transparent: true,
       opacity: 1,
+      toneMapped: false,
     });
     const meshF = new THREE.Mesh(leafGeo, matFront);
     const meshB = new THREE.Mesh(leafGeo, matBackLeaf);
@@ -612,6 +626,7 @@ export async function createSpiralScene(
 
   return {
     setOrbit,
+    setZoom,
     setPageTextures,
     playPageTurn,
     requestRender,

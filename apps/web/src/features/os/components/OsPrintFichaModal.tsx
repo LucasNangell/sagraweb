@@ -2,6 +2,7 @@ import { useAuthStore } from "@/features/auth/authStore";
 import type { OsSearchRow } from "../types";
 import {
   buildRequisicaoReportUrl,
+  fichaOsTitle,
   type ProvaFichaCorOptions,
   type RequisicaoPrintMode,
 } from "../utils/requisicaoReportUrl";
@@ -39,7 +40,7 @@ export function OsPrintFichaModal({
   return (
     <RequisicaoFichaViewer
       src={src}
-      title="Ficha da Ordem de Serviço"
+      title={fichaOsTitle(row.nr_os, mode)}
       variant="modal"
       onClose={onClose}
     />

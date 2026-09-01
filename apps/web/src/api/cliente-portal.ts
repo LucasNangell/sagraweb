@@ -240,3 +240,22 @@ export async function createClienteCredenciaisDepolPedido(body: {
     body: JSON.stringify(body),
   });
 }
+
+export async function fetchClienteDepolPedidoDraft() {
+  return clienteFetch<{ itens: unknown }>("/cliente/credenciais-depol/rascunho");
+}
+
+export async function saveClienteDepolPedidoDraft(
+  itens: Array<{
+    key: string;
+    modelo_arquivo: string;
+    linha1: string;
+    linha2: string;
+    linha3: string;
+  }>,
+) {
+  return clienteFetch<{ itens: unknown }>("/cliente/credenciais-depol/rascunho", {
+    method: "PUT",
+    body: JSON.stringify({ itens }),
+  });
+}

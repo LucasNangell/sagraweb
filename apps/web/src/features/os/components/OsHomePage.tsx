@@ -31,6 +31,10 @@ import { useOsActiveSearchStore } from "../osActiveSearchStore";
 import { useOsRealtimeSync } from "../hooks/useOsRealtimeSync";
 import { isParentOsInSearchResults } from "../osTableRows";
 import {
+  lastOsSearchRow,
+  shouldAutoSelectLastOsRow,
+} from "../osHomeListSelection";
+import {
   getDefaultYearValue,
   resolveDefaultYear,
 } from "../osFilterDefaults";
@@ -69,7 +73,6 @@ export function OsHomePage() {
 
   const filters = useOsFiltersStore((s) => s.filters);
   const patchFilters = useOsFiltersStore((s) => s.patchFilters);
-  const setPage = useOsFiltersStore((s) => s.setPage);
 
   const selected = useOsSelectionStore((s) => s.selected);
   const setSelected = useOsSelectionStore((s) => s.setSelected);
@@ -102,6 +105,7 @@ export function OsHomePage() {
   const requestedMobileView = useGuidedTourStore((s) => s.requestedMobileView);
   const [prefsBootstrapped, setPrefsBootstrapped] = useState(homeDefaultPrefsApplied);
   const [isExportingReport, setIsExportingReport] = useState(false);
+  const lastAutoKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     homeSavedFilterId = savedFilterId;
@@ -141,8 +145,8 @@ export function OsHomePage() {
   );
 
   const searchFilters = useMemo(
-    () =>
-      buildOsHomeSearchFilters(
+    () => ({
+      ...buildOsHomeSearchFilters(
         {
           ...filters,
           situacao: debouncedChoiceFilters.situacao,
@@ -154,6 +158,8 @@ export function OsHomePage() {
         },
         debouncedTextFilters,
       ),
+      fetchAll: true,
+    }),
     [debouncedChoiceFilters, debouncedTextFilters, filters],
   );
 
@@ -448,26 +454,7 @@ export function OsHomePage() {
     useOsFiltersStore.getState().resetFilters();
   }, [markUserListFetch, setSelected]);
 
-  const handlePageChange = useCallback(
-    (page: number) => {
-      markUserListFetch();
-      setPage(page);
-    },
-    [markUserListFetch, setPage],
-  );
-
-  const handlePageSizeChange = useCallback(
-    (limit: number) => {
-      if (limit === filters.limit) {
-        return;
-      }
-      markUserListFetch();
-      patchFilters({ limit, page: 1 });
-    },
-    [filters.limit, markUserListFetch, patchFilters],
-  );
-
-  /** Limpa seleção só se a OS principal saiu da página (Sub OS permanece enquanto o pai existir). */
+  /** Limpa seleção só se a OS principal saiu da lista (Sub OS permanece enquanto o pai existir). */
   useEffect(() => {
     if (!selected) {
       return;
@@ -476,6 +463,23 @@ export function OsHomePage() {
       setSelected(null);
     }
   }, [rows, selected, setSelected]);
+
+  useEffect(() => {
+    const last = lastOsSearchRow(rows);
+    const effectiveSelected =
+      selected && isParentOsInSearchResults(selected, rows) ? selected : null;
+    const decision = shouldAutoSelectLastOsRow({
+      lastRow: last,
+      selected: effectiveSelected,
+      lastAutoKey: lastAutoKeyRef.current,
+      editing: historyEditing,
+    });
+    if (!decision) {
+      return;
+    }
+    lastAutoKeyRef.current = decision.nextAutoKey;
+    setSelected(decision.select);
+  }, [historyEditing, rows, selected, setSelected]);
 
   useEffect(() => {
     if (!selected) {
@@ -624,7 +628,6 @@ export function OsHomePage() {
           <OsOrdersTable
             rows={rows}
             meta={meta}
-            currentPage={filters.page}
             isLoading={!prefsBootstrapped || searchQuery.isLoading}
             isFetching={isListFetching}
             isError={searchQuery.isError}
@@ -636,9 +639,6 @@ export function OsHomePage() {
             selectedRow={selected}
             onSelectRow={setSelected}
             selectionLocked={historyEditing}
-            onPageChange={handlePageChange}
-            pageSize={filters.limit}
-            onPageSizeChange={handlePageSizeChange}
             sortBy={filters.sortBy}
             sortDir={filters.sortDir}
             onSortChange={handleSortChange}

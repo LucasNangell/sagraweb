@@ -11,8 +11,6 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
-  ChevronLeft,
-  ChevronRight,
   ChevronDown,
   ChevronRight as ChevronRightIcon,
   FileSpreadsheet,
@@ -31,7 +29,6 @@ import {
   osRowKey,
 } from "../osTableRows";
 import type { OsSearchMeta, OsSearchRow, OsSortColumn, OsSortDir, SubOsRow } from "../types";
-import { OS_PAGE_SIZE_OPTIONS } from "../types";
 import { OsRowContextMenu } from "./OsContextMenu";
 
 const ROW_HEIGHT = 36;
@@ -183,10 +180,8 @@ function buildColumns(
 interface OsOrdersTableProps {
   rows: OsSearchRow[];
   meta: OsSearchMeta | undefined;
-  /** Página solicitada no store (fonte imediata para cliques e rótulo). */
-  currentPage: number;
   isLoading: boolean;
-  /** Refetch em andamento (filtro, paginação, atualizar). */
+  /** Refetch em andamento (filtro, atualizar). */
   isFetching?: boolean;
   isError: boolean;
   errorMessage?: string;
@@ -194,9 +189,6 @@ interface OsOrdersTableProps {
   onSelectRow: (row: OsSearchRow | null) => void;
   /** Bloqueia seleção/expansão durante criação/edição de andamento. */
   selectionLocked?: boolean;
-  onPageChange: (page: number) => void;
-  pageSize: number;
-  onPageSizeChange: (limit: number) => void;
   sortBy?: OsSortColumn;
   sortDir?: OsSortDir;
   onSortChange: (sortBy?: OsSortColumn, sortDir?: OsSortDir) => void;
@@ -210,7 +202,6 @@ interface OsOrdersTableProps {
 export function OsOrdersTable({
   rows,
   meta,
-  currentPage,
   isLoading,
   isFetching = false,
   isError,
@@ -218,9 +209,6 @@ export function OsOrdersTable({
   selectedRow,
   onSelectRow,
   selectionLocked = false,
-  onPageChange,
-  pageSize,
-  onPageSizeChange,
   sortBy,
   sortDir,
   onSortChange,
@@ -481,41 +469,37 @@ export function OsOrdersTable({
     overscan: 6,
   });
 
-  const page = currentPage;
-  const limit = meta?.limit ?? rows.length;
   const totalRecords = meta?.total_records;
-  const totalPages = meta?.total_pages;
   const isUpdating = isLoading || isFetching;
   const showLoadingOverlay = isFetching && rows.length > 0;
-  const start = rows.length > 0 ? (page - 1) * limit + 1 : 0;
-  const end = rows.length > 0 ? start + rows.length - 1 : 0;
+  const lastSearchKey = rows.length > 0 ? osRowKey(rows[rows.length - 1]!) : "";
 
   const headerGroups = table.getHeaderGroups();
 
-  const canPrev = page > 1;
-  const canNext =
-    totalPages != null && totalPages > 0
-      ? page < totalPages
-      : (meta?.has_next ?? false);
-
-  const paginationLabel = useMemo(() => {
+  const countLabel = useMemo(() => {
     if (isUpdating) {
       return rows.length === 0 ? "Carregando..." : "Atualizando...";
     }
     if (rows.length === 0) {
       return "Nenhuma OP encontrada";
     }
-    const total =
-      totalRecords != null && totalRecords >= end
-        ? totalRecords
-        : !canNext
-          ? end
-          : null;
-    if (total != null) {
-      return `${start} a ${end} OPs de ${total} OPs`;
+    const total = totalRecords ?? rows.length;
+    return `${total} OPs`;
+  }, [isUpdating, rows.length, totalRecords]);
+
+  useEffect(() => {
+    if (isLoading || isFetching || rows.length === 0) {
+      return;
     }
-    return `${start} a ${end} OPs de ${total} OPs`;
-  }, [canNext, end, isUpdating, page, rows.length, start, totalRecords]);
+    const list = parentRef.current;
+    if (!list) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      list.scrollTop = list.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isFetching, isLoading, lastSearchKey, rows.length]);
 
   return (
     <section
@@ -788,76 +772,33 @@ export function OsOrdersTable({
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 border-t border-sagra-border px-3 py-2 text-sm text-neutral-600 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:items-center sm:gap-2">
-        <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-          <span className="truncate text-center sm:text-left">
-            {isUpdating ? (
-              <span className="inline-flex items-center justify-center gap-1.5 sm:justify-start">
-                <Loader2 className="size-3.5 shrink-0 animate-spin text-secondary-blue" aria-hidden />
-                {paginationLabel}
-              </span>
+      <div className="flex items-center justify-between gap-2 border-t border-sagra-border px-3 py-2 text-sm text-neutral-600">
+        <span className="truncate">
+          {isUpdating ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Loader2 className="size-3.5 shrink-0 animate-spin text-secondary-blue" aria-hidden />
+              {countLabel}
+            </span>
+          ) : (
+            countLabel
+          )}
+        </span>
+        {onExportReport ? (
+          <button
+            type="button"
+            disabled={exportDisabled || isExporting}
+            onClick={onExportReport}
+            className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg bg-[#217346] px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#1e6b41] disabled:cursor-not-allowed disabled:opacity-60"
+            data-testid={homeTestIds.osTableReport}
+          >
+            {isExporting ? (
+              <Loader2 className="size-3.5 animate-spin" aria-hidden />
             ) : (
-              paginationLabel
+              <FileSpreadsheet className="size-3.5" aria-hidden />
             )}
-          </span>
-          <select
-            value={pageSize}
-            onChange={(e) => onPageSizeChange(Number(e.target.value))}
-            disabled={isUpdating}
-            className="h-7 shrink-0 rounded border border-sagra-border bg-white px-1.5 text-xs tabular-nums disabled:cursor-not-allowed disabled:opacity-60"
-            aria-label="Registros por página"
-            data-testid={homeTestIds.osTablePageSize}
-          >
-            {OS_PAGE_SIZE_OPTIONS.map((size) => (
-              <option key={size} value={size}>
-                {size}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-center justify-center gap-1">
-          <button
-            type="button"
-            disabled={!canPrev}
-            onClick={() => onPageChange(page - 1)}
-            className="flex size-7 cursor-pointer items-center justify-center rounded border border-sagra-border hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label="Página anterior"
-            data-testid={homeTestIds.osTablePrev}
-          >
-            <ChevronLeft className="size-4" />
+            Gerar Relatório
           </button>
-          <span className="min-w-[2rem] text-center font-medium tabular-nums">
-            {page}
-          </span>
-          <button
-            type="button"
-            disabled={!canNext}
-            onClick={() => onPageChange(page + 1)}
-            className="flex size-7 cursor-pointer items-center justify-center rounded border border-sagra-border hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label="Próxima página"
-            data-testid={homeTestIds.osTableNext}
-          >
-            <ChevronRight className="size-4" />
-          </button>
-        </div>
-        <div className="flex justify-end">
-          {onExportReport ? (
-            <button
-              type="button"
-              disabled={exportDisabled || isExporting}
-              onClick={onExportReport}
-              className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#217346] px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#1e6b41] disabled:cursor-not-allowed disabled:opacity-60"
-              data-testid={homeTestIds.osTableReport}
-            >
-              {isExporting ? (
-                <Loader2 className="size-3.5 animate-spin" aria-hidden />
-              ) : (
-                <FileSpreadsheet className="size-3.5" aria-hidden />
-              )}
-              Gerar Relatório
-            </button>
-          ) : null}
-        </div>
+        ) : null}
       </div>
     </section>
   );

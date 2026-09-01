@@ -66,7 +66,7 @@ DEFAULT_CONFIG = {
     "credenciais_depol": {
         "jpg_dir": r"\\redecamara\DfsData\CGraf\Sefoc\Deputados\_Temp\2025\Credenciais Depol\JPG",
         "svg_dir": r"\\redecamara\DfsData\CGraf\Sefoc\Deputados\_Temp\2025\Credenciais Depol",
-        "auto_criar_os": False,
+        "auto_criar_os": True,
         "os_template_nro": 20,
         "os_template_ano": 2026,
     },

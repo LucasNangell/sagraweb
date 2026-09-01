@@ -1,8 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   BookCopy,
+  BookOpen,
   CircleDot,
   FileText,
+  Files,
   Folder,
   Loader2,
   Package,
@@ -17,6 +19,7 @@ import {
   saveProvaWebRecord,
   type ProvaWebCropJson,
   type ProvaWebFileEntry,
+  type ProvaWebFolhearModo,
   type ProvaWebInfo,
   type ProvaWebModo,
   type ProvaWebRecord,
@@ -26,6 +29,7 @@ import { ProvaWebCropAssistant } from "./ProvaWebCropAssistant";
 import { ProvaWebExistingModal } from "./ProvaWebExistingModal";
 import { defaultCaixaCrop } from "./ProvaWebBoxWizard";
 import { defaultEspiralCrop } from "./ProvaWebSpiralWizard";
+import { normalizeProvaWebFolhearModo } from "./provaWebFolhearModo";
 
 interface ProvaWebFilePickerProps {
   ano: number;
@@ -56,6 +60,9 @@ export function ProvaWebFilePicker({
 }: ProvaWebFilePickerProps) {
   const record = info.record;
   const [modo, setModo] = useState<ProvaWebModo>(record?.modo ?? "unico");
+  const [folhearModo, setFolhearModo] = useState<ProvaWebFolhearModo>(() =>
+    normalizeProvaWebFolhearModo(record?.folhearModo),
+  );
   const [espiralSourceKind, setEspiralSourceKind] = useState<
     "unico" | "capa_miolo"
   >(
@@ -164,6 +171,7 @@ export function ProvaWebFilePicker({
         arquivo_capa: usesCapaMioloSlots ? selCapa : null,
         arquivo_miolo: usesCapaMioloSlots ? selMiolo : null,
         nova,
+        folhear_modo: folhearModo,
         crop_json:
           modo === "espiral"
             ? {
@@ -360,6 +368,26 @@ export function ProvaWebFilePicker({
             icon={<Package className="size-3.5" aria-hidden />}
             label="Caixa (flip-top)"
           />
+        </div>
+
+        <div className="mt-3">
+          <p className="mb-1.5 text-[11px] text-neutral-500">
+            Visualização no Folhear
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <ModeButton
+              active={folhearModo === "flipbook"}
+              onClick={() => setFolhearModo("flipbook")}
+              icon={<BookOpen className="size-3.5" aria-hidden />}
+              label="Livro"
+            />
+            <ModeButton
+              active={folhearModo === "folhas"}
+              onClick={() => setFolhearModo("folhas")}
+              icon={<Files className="size-3.5" aria-hidden />}
+              label="Folhas separadas"
+            />
+          </div>
         </div>
 
         {modo === "espiral" && (

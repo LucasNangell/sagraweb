@@ -46,6 +46,90 @@ def test_svg_filename_for_linhas():
         svc.svg_filename_for_linhas(0)
 
 
+def test_normalize_pedido_draft_itens():
+    raw = [
+        {
+            "key": "1",
+            "modelo_arquivo": "a.jpg",
+            "linha1": "A",
+            "linha2": None,
+            "linha3": "",
+        },
+        {"key": "x", "modelo_arquivo": "../evil.jpg", "linha1": "Z"},
+        {"modelo_arquivo": "b.jpg", "linha1": "sem key"},
+        "lixo",
+        {
+            "key": "2",
+            "modelo_arquivo": "b.jpg",
+            "linha1": "B",
+            "linha2": "C",
+            "linha3": "D",
+        },
+    ]
+    assert svc.normalize_pedido_draft_itens(raw) == [
+        {
+            "key": "1",
+            "modelo_arquivo": "a.jpg",
+            "linha1": "A",
+            "linha2": "",
+            "linha3": "",
+        },
+        {
+            "key": "2",
+            "modelo_arquivo": "b.jpg",
+            "linha1": "B",
+            "linha2": "C",
+            "linha3": "D",
+        },
+    ]
+    assert svc.normalize_pedido_draft_itens(None) == []
+    assert svc.normalize_pedido_draft_itens("nao-json") == []
+
+
+def test_get_cliente_pedido_draft(monkeypatch):
+    monkeypatch.setattr(
+        "cliente_gabinete_schema.ensure_cliente_gabinete_schema", lambda: None
+    )
+    monkeypatch.setattr(
+        svc.db,
+        "execute_query",
+        lambda *_a, **_k: [
+            {
+                "DepolPedidoDraftJson": [
+                    {
+                        "key": "1",
+                        "modelo_arquivo": "a.jpg",
+                        "linha1": "A",
+                        "linha2": "",
+                        "linha3": "",
+                    }
+                ]
+            }
+        ],
+    )
+    itens = svc.get_cliente_pedido_draft(9)
+    assert itens[0]["linha1"] == "A"
+
+
+def test_save_cliente_pedido_draft_empty(monkeypatch):
+    monkeypatch.setattr(
+        "cliente_gabinete_schema.ensure_cliente_gabinete_schema", lambda: None
+    )
+    calls = []
+
+    def fake_exec(query, params=None):
+        calls.append((query, params))
+        if "SELECT ID" in query:
+            return [{"ID": 9}]
+        return []
+
+    monkeypatch.setattr(svc.db, "execute_query", fake_exec)
+    assert svc.save_cliente_pedido_draft(9, []) == []
+    update = [c for c in calls if "UPDATE" in c[0]]
+    assert update
+    assert update[0][1]["json"] is None
+
+
 def test_safe_basename_rejects_path():
     with pytest.raises(ValueError):
         svc._safe_basename(r"..\evil.jpg")

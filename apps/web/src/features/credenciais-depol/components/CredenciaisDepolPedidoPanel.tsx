@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, Plus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type {
   CredenciaisDepolModelo,
@@ -13,6 +13,8 @@ import {
 import {
   clearDepolPedidoDraft,
   loadDepolPedidoDraft,
+  normalizeDepolPedidoDraft,
+  resolveHydratedDepolDraft,
   saveDepolPedidoDraft,
   type CredenciaisDepolDraftItem,
 } from "@/features/credenciais-depol/depolPedidoDraftStorage";
@@ -34,6 +36,12 @@ export type CredenciaisDepolPedidoAdapters = {
   svgUrl?: (nome: string) => string;
   /** Chave localStorage do rascunho (staff vs cliente). */
   draftStorageKey: string;
+  /** Substitui o load inicial (ex.: migrar chave antiga do cliente). */
+  loadDraft?: () => CredenciaisDepolDraftItem[];
+  /** Rascunho na conta (portal cliente) — sobrevive a outro navegador. */
+  fetchRemoteDraft?: () => Promise<{ itens: unknown }>;
+  saveRemoteDraft?: (items: CredenciaisDepolDraftItem[]) => Promise<unknown>;
+  persistHint?: string;
   emptyModelosHint?: string;
   invalidateKeys?: readonly (readonly unknown[])[];
 };
@@ -63,17 +71,67 @@ export function CredenciaisDepolPedidoPanel({
 }) {
   const qc = useQueryClient();
   const draftKey = adapters.draftStorageKey;
+  const fetchRemoteDraft = adapters.fetchRemoteDraft;
+  const saveRemoteDraft = adapters.saveRemoteDraft;
   const [selectedModelo, setSelectedModelo] = useState<string | null>(null);
   const [textoLinhas, setTextoLinhas] = useState("");
   const [draft, setDraft] = useState<CredenciaisDepolDraftItem[]>(() =>
-    loadDepolPedidoDraft(draftKey),
+    adapters.loadDraft ? adapters.loadDraft() : loadDepolPedidoDraft(draftKey),
   );
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const hydratedRef = useRef(!fetchRemoteDraft);
+  const dirtyRef = useRef(false);
 
   useEffect(() => {
     saveDepolPedidoDraft(draftKey, draft);
-  }, [draft, draftKey]);
+    if (!hydratedRef.current || !saveRemoteDraft) return;
+    void saveRemoteDraft(draft);
+  }, [draft, draftKey, saveRemoteDraft]);
+
+  useEffect(() => {
+    if (!fetchRemoteDraft) {
+      hydratedRef.current = true;
+      return;
+    }
+    let cancelled = false;
+    hydratedRef.current = false;
+    void fetchRemoteDraft()
+      .then((res) => {
+        if (cancelled) return;
+        const remote = normalizeDepolPedidoDraft(res.itens);
+        if (dirtyRef.current) {
+          hydratedRef.current = true;
+          void saveRemoteDraft?.(draftRef.current);
+          return;
+        }
+        const resolved = resolveHydratedDepolDraft(
+          loadDepolPedidoDraft(draftKey),
+          remote,
+        );
+        const same =
+          JSON.stringify(draftRef.current) === JSON.stringify(resolved.items);
+        if (!same) {
+          setDraft(resolved.items);
+        }
+        saveDepolPedidoDraft(draftKey, resolved.items);
+        if (resolved.shouldPushLocalToRemote) {
+          void saveRemoteDraft?.(resolved.items);
+        }
+        hydratedRef.current = true;
+      })
+      .catch(() => {
+        if (!cancelled) hydratedRef.current = true;
+      });
+    return () => {
+      cancelled = true;
+      if (hydratedRef.current && saveRemoteDraft) {
+        void saveRemoteDraft(draftRef.current);
+      }
+    };
+  }, [draftKey, fetchRemoteDraft, saveRemoteDraft]);
 
   const modelosQ = useQuery({
     queryKey: adapters.queryKey,
@@ -86,15 +144,18 @@ export function CredenciaisDepolPedidoPanel({
   const createMut = useMutation({
     mutationFn: adapters.createPedido,
     onSuccess: (pedido) => {
+      dirtyRef.current = false;
       setDraft([]);
       clearDepolPedidoDraft(draftKey);
+      void saveRemoteDraft?.([]);
       setSelectedModelo(null);
       setTextoLinhas("");
       setError(null);
+      const nItens = Array.isArray(pedido.itens) ? pedido.itens.length : 0;
       setOkMsg(
         pedido.nro_protocolo && pedido.ano_protocolo
           ? `Pedido #${pedido.id} criado e vinculado à OS ${pedido.nro_protocolo}/${pedido.ano_protocolo}.`
-          : `Pedido #${pedido.id} criado com ${pedido.itens.length} credencial(is).`,
+          : `Pedido #${pedido.id} criado com ${nItens} credencial(is).`,
       );
       for (const key of adapters.invalidateKeys ?? [adapters.queryKey]) {
         void qc.invalidateQueries({ queryKey: [...key] });
@@ -127,6 +188,7 @@ export function CredenciaisDepolPedidoPanel({
       setError("Use no máximo 3 linhas (Enter separa as linhas).");
       return;
     }
+    dirtyRef.current = true;
     setDraft((prev) => [
       ...prev,
       {
@@ -265,6 +327,9 @@ export function CredenciaisDepolPedidoPanel({
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
           Lista do pedido ({draft.length})
         </h2>
+        {adapters.persistHint ? (
+          <p className="mt-1 text-xs leading-snug text-slate-500">{adapters.persistHint}</p>
+        ) : null}
         {draft.length === 0 ? (
           <p className="mt-3 text-sm text-slate-500">Nenhuma credencial incluída.</p>
         ) : (
@@ -288,9 +353,10 @@ export function CredenciaisDepolPedidoPanel({
                   <button
                     type="button"
                     aria-label="Remover"
-                    onClick={() =>
-                      setDraft((prev) => prev.filter((x) => x.key !== d.key))
-                    }
+                    onClick={() => {
+                      dirtyRef.current = true;
+                      setDraft((prev) => prev.filter((x) => x.key !== d.key));
+                    }}
                     className="shrink-0 rounded p-1 text-slate-500 hover:bg-white hover:text-red-600"
                   >
                     <Trash2 className="size-4" />

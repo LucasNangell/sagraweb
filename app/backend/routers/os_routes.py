@@ -43,6 +43,8 @@ from schemas.os import (
     PanelRow,
     SaveOsResponse,
     VinculoExcecaoRequest,
+    VinculoGrupoAndamento,
+    VinculoGrupoAndamentosRequest,
     VinculoGrupoConfigResponse,
     VinculoItem,
     VinculoReplicacaoCheckResponse,
@@ -70,6 +72,7 @@ from services.os_search_export_service import (
 )
 from services.os_search_service import (
     OS_SEARCH_DEFAULT_LIMIT,
+    OS_SEARCH_FETCH_ALL_MAX_LIMIT,
     OS_SEARCH_MAX_LIMIT,
     OS_SEARCH_MIN_LIKE_CHARS,
     _clamp_os_search_pagination,
@@ -1130,6 +1133,10 @@ def search_os(
     sort_dir: Optional[str] = None,
     exact_os_lookup: bool = False,
     painel: bool = Query(False, description="Painel TV: omite enrich live/sub-OS extra"),
+    fetch_all: bool = Query(
+        False,
+        description=f"Home: retorna todos os registros filtrados (teto {OS_SEARCH_FETCH_ALL_MAX_LIMIT})",
+    ),
 ):
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
@@ -1168,6 +1175,7 @@ def search_os(
             include_total=include_total or not simple_pagination,
             exact_os_lookup=exact_os_lookup,
             painel=painel,
+            fetch_all=fetch_all,
         )
         return OsSearchResponse.model_validate(result)
     except HTTPException:
@@ -1841,6 +1849,7 @@ class VinculoRequest(BaseModel):
     situacao: Optional[str] = None
     setor: Optional[str] = None
     criado_por: Optional[str] = None
+    andamentos: Optional[List[VinculoGrupoAndamento]] = None
 
 
 @router.get("/os/{ano}/{id}/vinculo/grupo-config", response_model=VinculoGrupoConfigResponse)
@@ -1861,6 +1870,7 @@ def get_vinculo_grupo_config(ano: int, id: int):
             setor=config.get("setor"),
             criado_por_ponto=config.get("criado_por_ponto"),
             membros=config.get("membros") or [],
+            andamentos=config.get("andamentos") or [],
         )
     except Exception as e:
         logger.error("Error fetching vinculo grupo config: %s", e)
@@ -1912,6 +1922,7 @@ def create_vinculo(ano: int, id: int, req: VinculoRequest):
         from services.os_vinculo_grupo_service import (
             assign_grupo_to_component,
             get_grupo_id_for_os,
+            normalize_andamentos_input,
             resolve_grupo_for_new_vinculo,
         )
 
@@ -1939,13 +1950,17 @@ def create_vinculo(ano: int, id: int, req: VinculoRequest):
         if dup:
             raise HTTPException(status_code=409, detail="Vínculo já existe.")
 
+        andamentos_payload = [item.model_dump() for item in (req.andamentos or [])]
+        pares = normalize_andamentos_input(
+            andamentos_payload, req.situacao, req.setor
+        )
         grupo_a = get_grupo_id_for_os(id, ano)
         grupo_b = get_grupo_id_for_os(req.numero, req.ano)
         if grupo_a is None and grupo_b is None:
-            if not (req.situacao or "").strip() or not (req.setor or "").strip():
+            if not pares:
                 raise HTTPException(
                     status_code=400,
-                    detail="Informe andamento e setor para definir o comportamento do grupo.",
+                    detail="Informe ao menos um andamento e setor para definir o comportamento do grupo.",
                 )
 
         # Insert canonical direction as provided
@@ -1958,6 +1973,7 @@ def create_vinculo(ano: int, id: int, req: VinculoRequest):
                 req.situacao,
                 req.setor,
                 req.criado_por,
+                andamentos=pares,
                 cursor=cursor,
             )
             cursor.execute(
@@ -2015,6 +2031,56 @@ def delete_vinculo(ano: int, id: int, v_num: int, v_ano: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.put(
+    "/os/{ano}/{id}/vinculo/grupo-andamentos",
+    response_model=VinculoGrupoConfigResponse,
+)
+def update_vinculo_grupo_andamentos(
+    ano: int, id: int, body: VinculoGrupoAndamentosRequest
+):
+    """Substitui os pares andamento+setor que disparam replicação no grupo."""
+    try:
+        from services.os_vinculo_grupo_service import (
+            get_connected_os_members,
+            get_grupo_config_for_os,
+            get_grupo_id_for_os,
+            replace_grupo_andamentos,
+        )
+
+        grupo_id = get_grupo_id_for_os(id, ano)
+        if grupo_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail="OS não possui grupo de vínculo.",
+            )
+        replace_grupo_andamentos(
+            grupo_id,
+            [item.model_dump() for item in body.andamentos],
+        )
+        config = get_grupo_config_for_os(id, ano)
+        if not config:
+            return VinculoGrupoConfigResponse(
+                grupo_id=grupo_id,
+                membros=get_connected_os_members(id, ano),
+                andamentos=body.andamentos,
+            )
+        return VinculoGrupoConfigResponse(
+            grupo_id=config.get("id"),
+            situacao=config.get("situacao"),
+            setor=config.get("setor"),
+            criado_por_ponto=config.get("criado_por_ponto"),
+            membros=config.get("membros") or [],
+            andamentos=config.get("andamentos") or [],
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        logger.error("Error updating vinculo grupo andamentos: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 @router.post("/os/{ano}/{id}/history/replicate", response_model=HistoryReplicateResponse)
 def replicate_history(ano: int, id: int, item: HistoryItem, request: Request):
     """Replicar andamento para OSs do vínculo ou da juntada (incluindo a atual)."""
@@ -2038,6 +2104,14 @@ def replicate_history(ano: int, id: int, item: HistoryItem, request: Request):
         pre_targets = {(id, ano)}
         for m in juntada["membros"]:
             pre_targets.add((int(m["nr_os"]), int(m["ano"])))
+    else:
+        from services.os_vinculo_grupo_service import get_connected_os_members
+
+        pre_targets = {
+            (int(m["numero"]), int(m["ano"]))
+            for m in get_connected_os_members(id, ano)
+        }
+        pre_targets.add((id, ano))
 
     def transaction_logic(cursor):
         targets: set[tuple[int, int]]
@@ -2045,19 +2119,6 @@ def replicate_history(ano: int, id: int, item: HistoryItem, request: Request):
             targets = set(pre_targets)
         else:
             targets = {(id, ano)}
-            cursor.execute(
-                "SELECT os_principal_numero as principal_num, os_principal_ano as principal_ano, "
-                "os_vinculada_numero as vinc_num, os_vinculada_ano as vinc_ano "
-                "FROM tabOSVinculadas WHERE (os_principal_numero = %s AND os_principal_ano = %s) "
-                "OR (os_vinculada_numero = %s AND os_vinculada_ano = %s)",
-                (id, ano, id, ano),
-            )
-            rows = cursor.fetchall()
-            for r in rows:
-                if r["principal_num"] == id and r["principal_ano"] == ano:
-                    targets.add((r["vinc_num"], r["vinc_ano"]))
-                else:
-                    targets.add((r["principal_num"], r["principal_ano"]))
 
         clean_user = "".join(filter(str.isdigit, item.usuario)) if item.usuario else ""
         obs_formatada = format_andamento_obs(item.obs)

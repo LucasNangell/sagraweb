@@ -20,13 +20,39 @@ CREATE TABLE IF NOT EXISTS tabOSVinculoGrupos (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 """
 
+_CREATE_ANDAMENTOS_SQL = """
+CREATE TABLE IF NOT EXISTS tabOSVinculoGrupoAndamentos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    grupo_id INT NOT NULL,
+    situacao VARCHAR(120) NOT NULL,
+    setor VARCHAR(80) NOT NULL,
+    criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_grupo_andamento (grupo_id, situacao, setor),
+    INDEX idx_vinculo_grupo_andamentos_grupo (grupo_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+"""
+
+_BACKFILL_ANDAMENTOS_SQL = """
+INSERT INTO tabOSVinculoGrupoAndamentos (grupo_id, situacao, setor)
+SELECT g.id, g.situacao, g.setor
+FROM tabOSVinculoGrupos g
+WHERE g.situacao IS NOT NULL AND TRIM(g.situacao) <> ''
+  AND g.setor IS NOT NULL AND TRIM(g.setor) <> ''
+  AND NOT EXISTS (
+      SELECT 1
+      FROM tabOSVinculoGrupoAndamentos a
+      WHERE a.grupo_id = g.id
+  )
+"""
+
 
 def ensure_os_vinculo_grupo_schema() -> None:
-    """Cria tabela de grupos e coluna grupo_id em tabOSVinculadas (idempotente)."""
+    """Cria tabelas de grupos/andamentos e coluna grupo_id (idempotente)."""
     db = Database()
     try:
         with db.cursor() as cursor:
             cursor.execute(_CREATE_GRUPOS_SQL)
+            cursor.execute(_CREATE_ANDAMENTOS_SQL)
             try:
                 cursor.execute(
                     """
@@ -39,6 +65,10 @@ def ensure_os_vinculo_grupo_schema() -> None:
             except Exception as exc:
                 if "Duplicate column" not in str(exc):
                     logger.debug("Migração grupo_id em tabOSVinculadas: %s", exc)
+            try:
+                cursor.execute(_BACKFILL_ANDAMENTOS_SQL)
+            except Exception as exc:
+                logger.debug("Backfill tabOSVinculoGrupoAndamentos: %s", exc)
         logger.info("Schema grupo de vínculo OS verificado/criado com sucesso")
     except Exception as exc:
         logger.error("Erro ao garantir schema grupo de vínculo OS: %s", exc)

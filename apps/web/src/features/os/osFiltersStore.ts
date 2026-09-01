@@ -3,20 +3,9 @@ import { persist } from "zustand/middleware";
 
 import { getDefaultAnos } from "./osFilterDefaults";
 import type { OsSearchFilters } from "./types";
-import { DEFAULT_PAGE_SIZE, OS_PAGE_SIZE_OPTIONS } from "./types";
+import { DEFAULT_PAGE_SIZE } from "./types";
 
 const TOGGLES_KEY = "sagra-os-filter-toggles";
-
-function sanitizePageSize(value: unknown): number {
-  const n = typeof value === "number" ? value : Number(value);
-  if (
-    Number.isFinite(n) &&
-    (OS_PAGE_SIZE_OPTIONS as readonly number[]).includes(n)
-  ) {
-    return n;
-  }
-  return DEFAULT_PAGE_SIZE;
-}
 
 /** Estado inicial: ano corrente (performance + escopo na abertura). */
 export const defaultOsFilters = (): OsSearchFilters => ({
@@ -38,8 +27,9 @@ export const defaultOsFilters = (): OsSearchFilters => ({
   includeSp: true,
   page: 1,
   limit: DEFAULT_PAGE_SIZE,
-  sortBy: "nr_os",
-  sortDir: "desc",
+  sortBy: "ano",
+  sortDir: "asc",
+  fetchAll: true,
 });
 
 interface OsFiltersState {
@@ -75,11 +65,7 @@ export const useOsFiltersStore = create<OsFiltersState>()(
 
       resetFilters: () =>
         set({
-          // Limpar campos; preservar page size escolhido pelo usuário.
-          filters: {
-            ...defaultOsFilters(),
-            limit: get().filters.limit,
-          },
+          filters: defaultOsFilters(),
           globalSearch: "",
         }),
 
@@ -94,7 +80,6 @@ export const useOsFiltersStore = create<OsFiltersState>()(
         filters: {
           includeOs: state.filters.includeOs,
           includeSp: state.filters.includeSp,
-          limit: state.filters.limit,
         },
       }),
       merge: (persisted, current) => {
@@ -109,9 +94,6 @@ export const useOsFiltersStore = create<OsFiltersState>()(
             includeFinished: true,
             includeOs: p.filters.includeOs ?? current.filters.includeOs,
             includeSp: p.filters.includeSp ?? current.filters.includeSp,
-            limit: sanitizePageSize(
-              p.filters.limit ?? current.filters.limit,
-            ),
           },
         };
       },

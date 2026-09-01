@@ -21,6 +21,31 @@ class DuplicateOsResult:
     cod_status: str
 
 
+COLS_PROTOCOLO = """
+            CodigoRequisic, CategoriaLink, NomeUsuario, Titular, OrgInteressado, SiglaOrgao,
+            GabSalaUsuario, Andar, Localizacao, RamalUsuario, CodUsuarioLink,
+            DataEntrada, ProcessoSolicit, CSnro, CotaRepro, CotaCartao,
+            EntregPrazoLink, EntregData, ContatoTrab,
+            ResponsavelGrafLink, EntregaFormaLink, EntregPeriodo
+        """
+
+# FormatoLink uma vez — duplicar no INSERT gera MySQL 1110.
+COLS_DETALHES = """
+            TiragemSolicitada, Tiragem, CotaTotal, Titulo, TipoPublicacaoLink, FormatoLink,
+            MaquinaLink, Pags, FrenteVerso, ModelosArq, PapelLink, PapelDescricao,
+            Cores, CoresDescricao, DescAcabamento, Observ, MaterialFornecido,
+            Fotolito, ModeloDobra, ProvaImpressa, InsumosFornecidos,
+            ElemGrafBrasao, ElemGrafTimbre, ElemGrafArteGab, ElemGrafAssinatura,
+            CalcPgs1, CalcQtdCores1, CalcCor1,
+            CalcPgs2, CalcQtdCores2, CalcCor2,
+            CalcPgs3, CalcQtdCores3, CalcCor3
+        """
+
+
+def sql_ident_list(block: str) -> list[str]:
+    return [part.strip() for part in block.replace("\n", " ").split(",") if part.strip()]
+
+
 def format_ponto_for_andamento(usuario: str) -> str:
     """format_ponto remove não-dígitos; se sobrar vazio (ex. só 'C'), usa o bruto."""
     raw = (usuario or "").strip()
@@ -106,17 +131,10 @@ def duplicate_os_sql(
         else:
             new_id = 5000 if is_papelaria else 1
 
-        cols_protocolo = """
-            CodigoRequisic, CategoriaLink, NomeUsuario, Titular, OrgInteressado, SiglaOrgao,
-            GabSalaUsuario, Andar, Localizacao, RamalUsuario, CodUsuarioLink,
-            DataEntrada, ProcessoSolicit, CSnro, CotaRepro, CotaCartao,
-            EntregPrazoLink, EntregData, ContatoTrab,
-            ResponsavelGrafLink, EntregaFormaLink, EntregPeriodo
-        """
         cur.execute(
             f"""
-            INSERT INTO tabProtocolos (NroProtocolo, AnoProtocolo, {cols_protocolo})
-            SELECT %s, %s, {cols_protocolo}
+            INSERT INTO tabProtocolos (NroProtocolo, AnoProtocolo, {COLS_PROTOCOLO})
+            SELECT %s, %s, {COLS_PROTOCOLO}
             FROM tabProtocolos
             WHERE NroProtocolo = %s AND AnoProtocolo = %s
             """,
@@ -125,20 +143,10 @@ def duplicate_os_sql(
         if cur.rowcount == 0:
             raise LookupError(f"OS {source_nro}/{source_ano} não encontrada.")
 
-        cols_detalhes = """
-            TiragemSolicitada, Tiragem, CotaTotal, Titulo, TipoPublicacaoLink, FormatoLink,
-            MaquinaLink, Pags, FrenteVerso, ModelosArq, FormatoLink, PapelLink, PapelDescricao,
-            Cores, CoresDescricao, DescAcabamento, Observ, MaterialFornecido,
-            Fotolito, ModeloDobra, ProvaImpressa, InsumosFornecidos,
-            ElemGrafBrasao, ElemGrafTimbre, ElemGrafArteGab, ElemGrafAssinatura,
-            CalcPgs1, CalcQtdCores1, CalcCor1,
-            CalcPgs2, CalcQtdCores2, CalcCor2,
-            CalcPgs3, CalcQtdCores3, CalcCor3
-        """
         cur.execute(
             f"""
-            INSERT INTO tabDetalhesServico (NroProtocoloLinkDet, AnoProtocoloLinkDet, {cols_detalhes})
-            SELECT %s, %s, {cols_detalhes}
+            INSERT INTO tabDetalhesServico (NroProtocoloLinkDet, AnoProtocoloLinkDet, {COLS_DETALHES})
+            SELECT %s, %s, {COLS_DETALHES}
             FROM tabDetalhesServico
             WHERE NroProtocoloLinkDet = %s AND AnoProtocoloLinkDet = %s
             """,

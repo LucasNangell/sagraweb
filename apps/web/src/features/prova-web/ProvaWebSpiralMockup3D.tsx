@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
+import { ChevronLeft, ChevronRight, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
@@ -14,8 +14,11 @@ import { useIdleSpiralPageFlip } from "./useIdleSpiralPageFlip";
 import "./prova-web-spiral-mockup.css";
 
 const DEFAULT_ROT_Y = -32;
-const DEFAULT_ROT_X = 14;
+const DEFAULT_ROT_X = -14;
 const MAX_ROT_X = 28;
+const ZOOM_MIN = 0.4;
+const ZOOM_MAX = 3;
+const ZOOM_STEP = 1.18;
 
 type SpiralTurnTiming = {
   durationMs?: number;
@@ -85,12 +88,15 @@ export function ProvaWebSpiralMockup3D({
   sheetIndexRef.current = sheetIndex;
   const [rotY, setRotY] = useState(DEFAULT_ROT_Y);
   const [rotX, setRotX] = useState(DEFAULT_ROT_X);
+  const [zoom, setZoom] = useState(1);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const rotYRef = useRef(DEFAULT_ROT_Y);
   const rotXRef = useRef(DEFAULT_ROT_X);
+  const zoomRef = useRef(1);
   rotYRef.current = rotY;
   rotXRef.current = rotX;
+  zoomRef.current = zoom;
 
   const edge = spiralMockup.edge === "top" ? "top" : "left";
   const totalSheets = sheets.length;
@@ -99,6 +105,28 @@ export function ProvaWebSpiralMockup3D({
   const kickRender = useCallback(() => {
     sceneRef.current?.requestRender();
   }, []);
+
+  const applyZoom = useCallback(
+    (value: number) => {
+      const v = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
+      zoomRef.current = v;
+      setZoom(v);
+      sceneRef.current?.setZoom(v);
+      kickRender();
+    },
+    [kickRender],
+  );
+
+  const nudgeZoom = useCallback(
+    (dir: -1 | 1) => {
+      const next =
+        dir > 0
+          ? zoomRef.current * ZOOM_STEP
+          : zoomRef.current / ZOOM_STEP;
+      applyZoom(next);
+    },
+    [applyZoom],
+  );
 
   const turnTo = useCallback(
     async (
@@ -207,6 +235,7 @@ export function ProvaWebSpiralMockup3D({
         const rect = stage.getBoundingClientRect();
         handle.resize(rect.width, Math.max(1, rect.height));
         handle.setOrbit(rotXRef.current, rotYRef.current);
+        handle.setZoom(zoomRef.current);
         handle.render();
         setReady(true);
       } catch (err) {
@@ -302,11 +331,16 @@ export function ProvaWebSpiralMockup3D({
     (event: React.WheelEvent) => {
       event.preventDefault();
       engage();
+      if (event.ctrlKey || event.metaKey) {
+        if (Math.abs(event.deltaY) < 0.2) return;
+        applyZoom(zoomRef.current * Math.exp(-event.deltaY * 0.002));
+        return;
+      }
       if (Math.abs(event.deltaY) < 2) return;
       if (event.deltaY > 0) void turnTo(sheetIndexRef.current + 1);
       else void turnTo(sheetIndexRef.current - 1);
     },
-    [engage, turnTo],
+    [applyZoom, engage, turnTo],
   );
 
   const reset = () => {
@@ -314,6 +348,7 @@ export function ProvaWebSpiralMockup3D({
     setRotY(DEFAULT_ROT_Y);
     setRotX(DEFAULT_ROT_X);
     sceneRef.current?.setOrbit(DEFAULT_ROT_X, DEFAULT_ROT_Y);
+    applyZoom(1);
   };
 
   return (
@@ -323,8 +358,9 @@ export function ProvaWebSpiralMockup3D({
       aria-label="Mockup 3D com espiral"
     >
       <p className="prova-web-spiral-mockup__hint">
-        Folheia automaticamente no início · arraste para girar · scroll ou
-        botões · espiral na {edge === "left" ? "esquerda" : "borda superior"}
+        Folheia automaticamente no início · arraste para girar · scroll para
+        folhear · Ctrl+scroll ou botões para zoom · espiral na{" "}
+        {edge === "left" ? "esquerda" : "borda superior"}
       </p>
       <div
         ref={stageRef}
@@ -370,6 +406,33 @@ export function ProvaWebSpiralMockup3D({
           aria-label="Próxima folha"
         >
           <ChevronRight className="size-3.5" aria-hidden />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            engage();
+            nudgeZoom(-1);
+          }}
+          title="Diminuir zoom"
+          aria-label="Diminuir zoom"
+          disabled={!ready || zoom <= ZOOM_MIN + 0.001}
+        >
+          <ZoomOut className="size-3.5" aria-hidden />
+        </button>
+        <span className="prova-web-spiral-mockup__zoom-label tabular-nums">
+          {Math.round(zoom * 100)}%
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            engage();
+            nudgeZoom(1);
+          }}
+          title="Aumentar zoom"
+          aria-label="Aumentar zoom"
+          disabled={!ready || zoom >= ZOOM_MAX - 0.001}
+        >
+          <ZoomIn className="size-3.5" aria-hidden />
         </button>
         <button type="button" onClick={reset} title="Resetar vista">
           <span className="inline-flex items-center gap-1.5">

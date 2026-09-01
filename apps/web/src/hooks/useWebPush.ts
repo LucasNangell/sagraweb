@@ -76,8 +76,7 @@ async function ensurePushServiceWorker(): Promise<ServiceWorkerRegistration> {
     });
   }
 
-  // Não ativar SW em waiting aqui — isso engolia o banner "Nova versão".
-  // A ativação fica explícita em PwaUpdatePrompt ("Atualizar").
+  // Não ativar SW em waiting aqui — a ativação fica no boot do PWA (F5 / reabrir).
   if (registration.installing) {
     await new Promise<void>((resolve) => {
       const sw = registration!.installing!;

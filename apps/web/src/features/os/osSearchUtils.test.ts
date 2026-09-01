@@ -68,6 +68,7 @@ describe("buildOsHomeSearchFilters", () => {
     });
     expect(result.exactOsLookup).toBe(false);
     expect(result.page).toBe(2);
+    expect(result.fetchAll).not.toBe(true);
   });
 
   it("ignora título com menos de 3 caracteres sem âncora", () => {
@@ -124,6 +125,14 @@ describe("normalizeOsSearchFilters", () => {
     });
     expect(normalized.exactOsLookup).toBe(true);
     expect(normalized.anos).toEqual([2024, 2026]);
+  });
+
+  it("preserva fetchAll quando já vem nos filtros", () => {
+    const normalized = normalizeOsSearchFilters({
+      ...baseFilters,
+      fetchAll: true,
+    });
+    expect(normalized.fetchAll).toBe(true);
   });
 
   it("normaliza processo para dígitos", () => {

@@ -36,6 +36,7 @@ from services.prova_web_record_service import (
     is_render_ready,
     mark_prova_web_render_pending,
     next_prova_web_versao,
+    normalize_prova_web_folhear_modo,
     resolve_record_sources,
     set_prova_web_status,
 )
@@ -217,6 +218,7 @@ class ProvaWebUpdate(BaseModel):
     # Se true e já existir versão, cria Versao N+1 (ProvaN).
     nova: bool = False
     crop_json: Optional[dict[str, Any]] = None
+    folhear_modo: Optional[Literal["flipbook", "folhas"]] = None
 
 
 def _normalize_crop_json(
@@ -585,6 +587,7 @@ def save_prova_web(ano: int, os_id: int, body: ProvaWebUpdate, request: Request)
     ponto = _session_ponto(request)
     crop_json = _normalize_crop_json(body.crop_json)
     crop_payload = json.dumps(crop_json, ensure_ascii=False) if crop_json is not None else None
+    folhear_modo = normalize_prova_web_folhear_modo(body.folhear_modo)
 
     if replace_draft and existing:
         versao = int(existing["versao"])
@@ -603,7 +606,7 @@ def save_prova_web(ano: int, os_id: int, body: ProvaWebUpdate, request: Request)
         db.execute_query(
             """
             UPDATE tabProvaWeb
-            SET PastaRender = %s, Modo = %s,
+            SET PastaRender = %s, Modo = %s, FolhearModo = %s,
                 ArquivoUnico = %s, ArquivoCapa = %s, ArquivoMiolo = %s,
                 CropJson = %s, Status = %s, PontoRegistro = %s,
                 RenderStatus = %s, RenderError = NULL, RenderProgress = NULL,
@@ -613,6 +616,7 @@ def save_prova_web(ano: int, os_id: int, body: ProvaWebUpdate, request: Request)
             (
                 pasta,
                 body.modo,
+                folhear_modo,
                 arquivo_unico,
                 arquivo_capa,
                 arquivo_miolo,
@@ -634,10 +638,10 @@ def save_prova_web(ano: int, os_id: int, body: ProvaWebUpdate, request: Request)
         db.execute_query(
             """
             INSERT INTO tabProvaWeb
-                (NroProtocolo, AnoProtocolo, Versao, PastaRender, Modo,
+                (NroProtocolo, AnoProtocolo, Versao, PastaRender, Modo, FolhearModo,
                  ArquivoUnico, ArquivoCapa, ArquivoMiolo, CropJson, Status,
                  RenderStatus, PontoRegistro)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 os_id,
@@ -645,6 +649,7 @@ def save_prova_web(ano: int, os_id: int, body: ProvaWebUpdate, request: Request)
                 versao,
                 pasta,
                 body.modo,
+                folhear_modo,
                 arquivo_unico,
                 arquivo_capa,
                 arquivo_miolo,
@@ -841,6 +846,7 @@ def get_prova_web_manifest(ano: int, os_id: int, request: Request):
         **manifest,
         "pages": pages,
         "record": record,
+        "folhearModo": normalize_prova_web_folhear_modo(record.get("folhearModo")),
         "isPapelaria": _is_papelaria_os(ano, os_id),
     }
     if book_mockup:

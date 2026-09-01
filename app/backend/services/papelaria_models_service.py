@@ -1368,54 +1368,58 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
         from services.proof_papelaria_service import load_cliente_alteracao_prova
 
         alt = load_cliente_alteracao_prova(ano, nro)
-        if alt:
-            campos_alt = alt.get("campos") or {}
-            job_dados_base: dict[str, str] = {}
-            job_id_raw = alt.get("job_id")
-            if job_id_raw:
-                try:
-                    from services.papelaria_jobs_service import get_job
-
-                    job = get_job(int(job_id_raw))
-                    if job and isinstance(job.get("dados"), dict):
-                        job_dados_base = {
-                            str(k): str(v) for k, v in job["dados"].items()
-                        }
-                except (TypeError, ValueError):
-                    pass
-            if campos_alt:
-                if job_dados_base:
-                    prefill = {**job_dados_base, **campos_alt}
-                else:
-                    prefill = {**prefill, **campos_alt}
-            elif job_dados_base:
-                prefill = {**prefill, **job_dados_base}
-
-            obs_cli = (alt.get("observacao_cliente") or "").strip()
-            campos_alterados: list[dict[str, str]] = []
-            if campos_alt:
-                for key, depois in campos_alt.items():
-                    antes = job_dados_base.get(str(key), "").strip()
-                    depois_s = str(depois).strip()
-                    if antes != depois_s:
-                        campos_alterados.append(
-                            {
-                                "key": str(key),
-                                "antes": antes,
-                                "depois": depois_s,
-                            }
-                        )
-            if obs_cli or campos_alt:
-                cliente_alteracao = {
-                    "observacao": obs_cli,
-                    "versao": alt.get("versao") or "",
-                    "modelo_id": alt.get("modelo_id"),
-                    "job_id": alt.get("job_id"),
-                    "campos": campos_alt if campos_alt else None,
-                    "campos_alterados": campos_alterados or None,
-                }
     except Exception as exc:
         logger.warning("Falha ao carregar alteração de prova do cliente: %s", exc)
+        alt = None
+
+    if alt:
+        campos_alt = alt.get("campos") or {}
+        job_dados_base: dict[str, str] = {}
+        job_id_raw = alt.get("job_id")
+        if job_id_raw:
+            try:
+                from services.papelaria_jobs_service import get_job
+
+                job = get_job(int(job_id_raw))
+                if job and isinstance(job.get("dados"), dict):
+                    job_dados_base = {
+                        str(k): str(v) for k, v in job["dados"].items()
+                    }
+            except Exception as exc:
+                logger.warning(
+                    "Falha ao carregar job da alteração do cliente: %s", exc
+                )
+        if campos_alt:
+            if job_dados_base:
+                prefill = {**job_dados_base, **campos_alt}
+            else:
+                prefill = {**prefill, **campos_alt}
+        elif job_dados_base:
+            prefill = {**prefill, **job_dados_base}
+
+        obs_cli = (alt.get("observacao_cliente") or "").strip()
+        campos_alterados: list[dict[str, str]] = []
+        if campos_alt:
+            for key, depois in campos_alt.items():
+                antes = job_dados_base.get(str(key), "").strip()
+                depois_s = str(depois).strip()
+                if antes != depois_s:
+                    campos_alterados.append(
+                        {
+                            "key": str(key),
+                            "antes": antes,
+                            "depois": depois_s,
+                        }
+                    )
+        if obs_cli or campos_alt:
+            cliente_alteracao = {
+                "observacao": obs_cli,
+                "versao": alt.get("versao") or "",
+                "modelo_id": alt.get("modelo_id"),
+                "job_id": alt.get("job_id"),
+                "campos": campos_alt if campos_alt else None,
+                "campos_alterados": campos_alterados or None,
+            }
 
     todos_modelos = list_modelos()
     modelos, warnings, auto_id = match_modelos_para_os(

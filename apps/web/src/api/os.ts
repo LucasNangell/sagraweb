@@ -80,6 +80,9 @@ export function buildOsSearchQueryString(filters: OsSearchFilters): string {
   if (!filters.exactOsLookup) {
     params.append("include_total", "true");
   }
+  if (filters.fetchAll) {
+    params.append("fetch_all", "true");
+  }
   params.append("page", String(filters.page));
   params.append("limit", String(filters.limit));
 
@@ -111,6 +114,7 @@ export function buildOsExportQueryString(filters: OsSearchFilters): string {
   params.delete("limit");
   params.delete("simple_pagination");
   params.delete("include_total");
+  params.delete("fetch_all");
   return params.toString();
 }
 
@@ -634,6 +638,7 @@ export async function createOsVinculo(
   options?: {
     situacao?: string;
     setor?: string;
+    andamentos?: { situacao: string; setor: string }[];
     criado_por?: string;
   },
 ): Promise<{ status: string }> {
@@ -645,9 +650,25 @@ export async function createOsVinculo(
       ano: vano,
       situacao: options?.situacao,
       setor: options?.setor,
+      andamentos: options?.andamentos,
       criado_por: options?.criado_por,
     }),
   });
+}
+
+export async function updateOsVinculoGrupoAndamentos(
+  ano: number,
+  id: number,
+  andamentos: { situacao: string; setor: string }[],
+): Promise<OsVinculoGrupoConfig> {
+  return apiFetch<OsVinculoGrupoConfig>(
+    `/os/${ano}/${id}/vinculo/grupo-andamentos`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ andamentos }),
+    },
+  );
 }
 
 export async function deleteOsVinculo(

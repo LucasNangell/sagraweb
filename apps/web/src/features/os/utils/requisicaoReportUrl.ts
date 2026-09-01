@@ -22,6 +22,19 @@ export interface RequisicaoReportParams {
   provaCor?: ProvaFichaCorOptions;
 }
 
+/** Título da ficha (chrome do modal e cabeçalho do relatório A5). */
+export function fichaOsTitle(
+  nro: number,
+  mode: RequisicaoPrintMode = "normal",
+): string {
+  if (mode === "prova_ficha") return "Ficha p/ Tramitação de Prova";
+  if (mode === "prova") return "Ficha p/ Tramitação de Prévia";
+  if (Number.isFinite(nro) && nro >= 5000) {
+    return "Ficha do Serviço de Papelaria";
+  }
+  return "Ficha da Ordem de Serviço";
+}
+
 /** Monta a URL do relatório A5 (GET /api/reports/requisicao/{ano}/{id}). */
 export function buildRequisicaoReportUrl({
   ano,

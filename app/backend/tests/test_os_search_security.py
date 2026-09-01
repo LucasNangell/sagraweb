@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from routers.os_routes import (
+    OS_SEARCH_FETCH_ALL_MAX_LIMIT,
     OS_SEARCH_MAX_LIMIT,
     OS_SEARCH_MIN_LIKE_CHARS,
     _clamp_os_search_pagination,
@@ -11,6 +12,7 @@ from routers.os_routes import (
 from services.os_search_service import (
     _legacy_andamento_join_sql,
     _materialized_andamento_join_sql,
+    _resolve_os_search_pagination,
 )
 
 
@@ -24,6 +26,18 @@ class TestOsSearchGuards:
         page, limit = _clamp_os_search_pagination(2, 0)
         assert page == 2
         assert limit == 1
+
+    def test_fetch_all_uses_home_cap_not_page_limit(self):
+        page, limit, max_limit = _resolve_os_search_pagination(
+            3, 20, fetch_all=True
+        )
+        assert page == 1
+        assert limit == OS_SEARCH_FETCH_ALL_MAX_LIMIT
+        assert max_limit == OS_SEARCH_FETCH_ALL_MAX_LIMIT
+        assert limit > OS_SEARCH_MAX_LIMIT
+
+    def test_fetch_all_cap_is_100000(self):
+        assert OS_SEARCH_FETCH_ALL_MAX_LIMIT == 100_000
 
     def test_like_term_short_without_os_filter(self):
         assert _os_search_like_term("ab", has_nr_os=False, has_ano=False) is None

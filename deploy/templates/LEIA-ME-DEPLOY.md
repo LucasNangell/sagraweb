@@ -89,7 +89,7 @@ Interface: `http://10.1.1.73/` ou `http://cgrafsysvm/` (API: `/sagra/api/`)
 
 **URL pública:** `public_web_base` = `https://cgraf.online` (SPA na raiz). A API do browser continua em `/sagra/api/`. Links antigos `/sagra/...` (exceto `/sagra/api/`) redirecionam para `/...` no Worker e no `index.html`.
 
-**PWA (instalar app / cache de shell):** o build inclui `manifest.webmanifest`, `sw.js` e `icons/` em `app/frontend/` (`scope` `/`). Em HTTP intranet a instalação pode ser limitada; em **https://cgraf.online** funciona plenamente. Após cada deploy, usuários com PWA ativo podem ver o aviso “Nova versão” na interface.
+**PWA (instalar app / cache de shell):** o build inclui `manifest.webmanifest`, `sw.js` e `icons/` em `app/frontend/` (`scope` `/`). Em HTTP intranet a instalação pode ser limitada; em **https://cgraf.online** funciona plenamente. Após cada deploy, a aba aberta permanece na versão anterior até o usuário atualizar a página (F5) ou fechar e reabrir o sistema — sem aviso na interface.
 
 **PWA Painel OS (segundo app no mesmo host):** o build também inclui `manifest-painel-os.webmanifest` e `icons/painel-os-*.png`. Instale a partir de `/painel/tablet` (ou login com `?redirect=/painel/tablet`); o atalho “Painel OS” abre direto no board do tablet, não na home do SAGRA. O service worker continua único (`sw.js`). As duas instalações (SAGRA Web e Painel OS) podem coexistir no dispositivo.
 

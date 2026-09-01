@@ -30,6 +30,7 @@ from services.os_ultimo_andamento_service import TABLE as MATERIALIZED_TABLE, ma
 logger = logging.getLogger(__name__)
 
 OS_SEARCH_MAX_LIMIT = 500
+OS_SEARCH_FETCH_ALL_MAX_LIMIT = 100_000
 OS_SEARCH_MIN_LIKE_CHARS = OS_TEXT_SEARCH_MIN_CHARS
 OS_SEARCH_DEFAULT_LIMIT = 20
 OS_SEARCH_MAX_MULTI_FILTER_ITEMS = 20
@@ -471,8 +472,25 @@ def _sub_os_count_scalar_sql() -> str:
     return sub_os_listable_count_scalar_sql()
 
 
-def _clamp_os_search_pagination(page: int, limit: int) -> tuple[int, int]:
-    return max(1, page), min(max(1, limit), OS_SEARCH_MAX_LIMIT)
+def _clamp_os_search_pagination(
+    page: int, limit: int, *, max_limit: int = OS_SEARCH_MAX_LIMIT
+) -> tuple[int, int]:
+    return max(1, page), min(max(1, limit), max_limit)
+
+
+def _resolve_os_search_pagination(
+    page: int, limit: int, *, fetch_all: bool
+) -> tuple[int, int, int]:
+    """page, limit, max_limit. fetch_all ignora page/limit do cliente."""
+    if fetch_all:
+        max_limit = OS_SEARCH_FETCH_ALL_MAX_LIMIT
+        page, limit = _clamp_os_search_pagination(
+            1, OS_SEARCH_FETCH_ALL_MAX_LIMIT, max_limit=max_limit
+        )
+        return page, limit, max_limit
+    max_limit = OS_SEARCH_MAX_LIMIT
+    page, limit = _clamp_os_search_pagination(page, limit, max_limit=max_limit)
+    return page, limit, max_limit
 
 
 def _os_search_like_term(
@@ -690,6 +708,17 @@ def _build_os_search_order_clause(
     if key == "prioridade":
         body = OS_SEARCH_PRIO_ORDER_DESC if direction == "DESC" else OS_SEARCH_PRIO_ORDER_ASC
         return f"ORDER BY {order_prefix}{body}"
+
+    if key == "ano":
+        return (
+            f"ORDER BY {order_prefix}p.AnoProtocolo {direction}, "
+            f"p.NroProtocolo {direction}"
+        )
+    if key == "nr_os":
+        return (
+            f"ORDER BY {order_prefix}p.NroProtocolo {direction}, "
+            f"p.AnoProtocolo {direction}"
+        )
 
     return (
         f"ORDER BY {order_prefix}{col} {direction}, "
@@ -962,8 +991,11 @@ def execute_os_search(
     include_total: bool = False,
     exact_os_lookup: bool = False,
     painel: bool = False,
+    fetch_all: bool = False,
 ) -> Dict[str, Any]:
-    page, limit = _clamp_os_search_pagination(page, limit)
+    page, limit, pagination_max = _resolve_os_search_pagination(
+        page, limit, fetch_all=fetch_all
+    )
     has_nr_os = nr_os is not None
     clean_anos = _clean_anos_filter_values(anos)
     has_ano = bool(clean_anos) or ano is not None
@@ -1285,7 +1317,7 @@ def execute_os_search(
         # Lookup por Nr OS: poucos anos possíveis — busca completa antes do filtro finished.
         skip_sql_limit = True
     elif use_python_finished_filter:
-        fetch_limit = min(max(limit_clause * 3, limit_clause), OS_SEARCH_MAX_LIMIT)
+        fetch_limit = min(max(limit_clause * 3, limit_clause), pagination_max)
     if not skip_sql_limit:
         params["limit"] = fetch_limit
         params["offset"] = offset

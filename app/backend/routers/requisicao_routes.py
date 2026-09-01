@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from database import db
 from jinja2 import Template
+from os_calc_fields import is_papelaria_os
 import base64
 import os
 import datetime
@@ -71,6 +72,16 @@ def _titulo_indica_camara_nas_redes(titulo: str | None) -> bool:
 def _ficha_tem_prioridade(prazo: str | None) -> bool:
     prazo_entrega = str(prazo or "")
     return "Solicitado p/" in prazo_entrega or "Prometido p/" in prazo_entrega
+
+
+def _ficha_tipo(mode: str | None, nro: int) -> str:
+    if mode == "prova_ficha":
+        return "Ficha p/ Tramitação de Prova"
+    if mode == "prova":
+        return "Ficha p/ Tramitação de Prévia"
+    if is_papelaria_os(nro):
+        return "Ficha do Serviço de Papelaria"
+    return "Ficha da Ordem de Serviço"
 
 
 def _normalize_prova_cor_tipo(value: str | None) -> str | None:
@@ -182,11 +193,7 @@ def generate_requisicao(
             "timestamp_impressao": timestamp_str
         }
 
-        ficha_tipo_by_mode = {
-            "prova_ficha": "Ficha p/ Tramitação de Prova",
-            "prova": "Ficha p/ Tramitação de Prévia",
-        }
-        context["ficha_tipo"] = ficha_tipo_by_mode.get(mode, "Ficha da Ordem de Serviço")
+        context["ficha_tipo"] = _ficha_tipo(mode, get("NroProtocolo"))
 
         if mode in ("prova", "prova_ficha"):
             context["tiragem_qtd"] = "1"

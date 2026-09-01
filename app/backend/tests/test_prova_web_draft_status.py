@@ -64,6 +64,28 @@ def test_row_to_record_missing_status_defaults_publicado() -> None:
     assert rec["isDraft"] is False
 
 
+def test_row_to_record_folhear_modo_default_flipbook() -> None:
+    rec = svc._row_to_record(_row())
+    assert rec["folhearModo"] == svc.FOLHEAR_FLIPBOOK
+
+
+def test_row_to_record_folhear_modo_folhas() -> None:
+    rec = svc._row_to_record(_row(FolhearModo="folhas"))
+    assert rec["folhearModo"] == svc.FOLHEAR_FOLHAS
+
+
+def test_row_to_record_folhear_modo_invalido_vira_flipbook() -> None:
+    rec = svc._row_to_record(_row(FolhearModo="livro"))
+    assert rec["folhearModo"] == svc.FOLHEAR_FLIPBOOK
+
+
+def test_normalize_prova_web_folhear_modo() -> None:
+    assert svc.normalize_prova_web_folhear_modo("folhas") == "folhas"
+    assert svc.normalize_prova_web_folhear_modo("FLIPBOOK") == "flipbook"
+    assert svc.normalize_prova_web_folhear_modo(None) == "flipbook"
+    assert svc.normalize_prova_web_folhear_modo("") == "flipbook"
+
+
 def test_set_status_rejects_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple] = []
 

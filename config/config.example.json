@@ -28,7 +28,7 @@
     "credenciais_depol": {
         "jpg_dir": "\\\\redecamara\\DfsData\\CGraf\\Sefoc\\Deputados\\_Temp\\2025\\Credenciais Depol\\JPG",
         "svg_dir": "\\\\redecamara\\DfsData\\CGraf\\Sefoc\\Deputados\\_Temp\\2025\\Credenciais Depol",
-        "auto_criar_os": false,
+        "auto_criar_os": true,
         "os_template_nro": 20,
         "os_template_ano": 2026
     },

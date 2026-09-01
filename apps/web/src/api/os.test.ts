@@ -88,15 +88,38 @@ describe("buildOsSearchQueryString", () => {
     expect(qs).toContain("exact_os_lookup=true");
     expect(qs).not.toContain("include_total=true");
   });
+
+  it("envia fetch_all na busca da home e mantém include_total", () => {
+    const qs = buildOsSearchQueryString({
+      ...base,
+      fetchAll: true,
+      sortBy: "ano",
+      sortDir: "asc",
+    });
+    expect(qs).toContain("fetch_all=true");
+    expect(qs).toContain("include_total=true");
+    expect(qs).toContain("sort_by=ano");
+    expect(qs).toContain("sort_dir=asc");
+  });
+
+  it("não envia fetch_all no preview de relatório", () => {
+    const qs = buildOsSearchQueryString({
+      ...base,
+      limit: 1,
+    });
+    expect(qs).not.toContain("fetch_all=");
+    expect(qs).toContain("limit=1");
+  });
 });
 
 describe("buildOsExportQueryString", () => {
   it("remove parâmetros de paginação", () => {
-    const qs = buildOsExportQueryString(base);
+    const qs = buildOsExportQueryString({ ...base, fetchAll: true });
     expect(qs).not.toContain("page=");
     expect(qs).not.toContain("limit=");
     expect(qs).not.toContain("simple_pagination=");
     expect(qs).not.toContain("include_total=");
+    expect(qs).not.toContain("fetch_all=");
     expect(qs).toContain("anos=2025");
   });
 });

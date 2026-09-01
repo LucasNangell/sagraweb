@@ -38,6 +38,12 @@ import {
   getDefaultYearValue,
   resolveDefaultYear,
 } from "../osFilterDefaults";
+import {
+  applyOsHomeLocalView,
+  canUseOsHomeLocalView,
+  osHomePatchTriggersFetch,
+  toOsHomeDatasetFilters,
+} from "../osHomeViewFilters";
 import { buildOsHomeSearchFilters } from "../osSearchUtils";
 import {
   savedFilterToOsPatch,
@@ -123,7 +129,7 @@ export function OsHomePage() {
   const debouncedTitulo = useDebouncedValue(filters.titulo, 450);
   const debouncedProcesso = useDebouncedValue(filters.processo, 450);
 
-  const debouncedChoiceFilters = useDebouncedValue(
+  const debouncedDatasetChoices = useDebouncedValue(
     {
       situacao: filters.situacao,
       setor: filters.setor,
@@ -135,13 +141,32 @@ export function OsHomePage() {
     200,
   );
 
+  const localViewPending = canUseOsHomeLocalView({
+    ...filters,
+    anos: debouncedDatasetChoices.anos,
+  });
+
   const debouncedTextFilters = useMemo(
-    () => ({
-      nrOs: debouncedNrOs,
-      titulo: debouncedTitulo,
-      processo: debouncedProcesso,
-    }),
-    [debouncedNrOs, debouncedTitulo, debouncedProcesso],
+    () =>
+      localViewPending
+        ? {
+            nrOs: filters.nrOs,
+            titulo: filters.titulo,
+            processo: debouncedProcesso,
+          }
+        : {
+            nrOs: debouncedNrOs,
+            titulo: debouncedTitulo,
+            processo: debouncedProcesso,
+          },
+    [
+      debouncedNrOs,
+      debouncedProcesso,
+      debouncedTitulo,
+      filters.nrOs,
+      filters.titulo,
+      localViewPending,
+    ],
   );
 
   const searchFilters = useMemo(
@@ -149,18 +174,29 @@ export function OsHomePage() {
       ...buildOsHomeSearchFilters(
         {
           ...filters,
-          situacao: debouncedChoiceFilters.situacao,
-          setor: debouncedChoiceFilters.setor,
-          prioridade: debouncedChoiceFilters.prioridade,
-          categorias: debouncedChoiceFilters.categorias,
-          maquinas: debouncedChoiceFilters.maquinas,
-          anos: debouncedChoiceFilters.anos,
+          situacao: localViewPending
+            ? filters.situacao
+            : debouncedDatasetChoices.situacao,
+          setor: localViewPending
+            ? filters.setor
+            : debouncedDatasetChoices.setor,
+          prioridade: localViewPending
+            ? filters.prioridade
+            : debouncedDatasetChoices.prioridade,
+          categorias: debouncedDatasetChoices.categorias,
+          maquinas: debouncedDatasetChoices.maquinas,
+          anos: debouncedDatasetChoices.anos,
         },
         debouncedTextFilters,
       ),
-      fetchAll: true,
+      fetchAll: true as const,
     }),
-    [debouncedChoiceFilters, debouncedTextFilters, filters],
+    [debouncedDatasetChoices, debouncedTextFilters, filters, localViewPending],
+  );
+
+  const datasetFilters = useMemo(
+    () => ({ ...toOsHomeDatasetFilters(searchFilters), fetchAll: true as const }),
+    [searchFilters],
   );
 
   const textBelowMinLength = useMemo(
@@ -168,33 +204,39 @@ export function OsHomePage() {
     [filters],
   );
 
-  const isTextFilterPending = useMemo(
-    () =>
+  const isTextFilterPending = useMemo(() => {
+    const processoPending = filters.processo !== debouncedProcesso;
+    if (localViewPending) {
+      return processoPending;
+    }
+    return (
       !textBelowMinLength &&
       (filters.nrOs !== debouncedNrOs ||
         filters.titulo !== debouncedTitulo ||
-        filters.processo !== debouncedProcesso),
-    [
-      debouncedNrOs,
-      debouncedTitulo,
-      debouncedProcesso,
-      filters,
-      textBelowMinLength,
-    ],
-  );
+        processoPending)
+    );
+  }, [
+    debouncedNrOs,
+    debouncedProcesso,
+    debouncedTitulo,
+    filters,
+    localViewPending,
+    textBelowMinLength,
+  ]);
 
   const isChoiceFilterPending = useMemo(
     () =>
-      filters.situacao !== debouncedChoiceFilters.situacao ||
-      filters.setor !== debouncedChoiceFilters.setor ||
-      filters.prioridade !== debouncedChoiceFilters.prioridade ||
-      filters.categorias !== debouncedChoiceFilters.categorias ||
-      filters.maquinas !== debouncedChoiceFilters.maquinas ||
-      filters.anos !== debouncedChoiceFilters.anos,
-    [debouncedChoiceFilters, filters],
+      filters.categorias !== debouncedDatasetChoices.categorias ||
+      filters.maquinas !== debouncedDatasetChoices.maquinas ||
+      filters.anos !== debouncedDatasetChoices.anos ||
+      (!localViewPending &&
+        (filters.situacao !== debouncedDatasetChoices.situacao ||
+          filters.setor !== debouncedDatasetChoices.setor ||
+          filters.prioridade !== debouncedDatasetChoices.prioridade)),
+    [debouncedDatasetChoices, filters, localViewPending],
   );
 
-  const searchQuery = useOsSearch(searchFilters, prefsBootstrapped);
+  const searchQuery = useOsSearch(datasetFilters, prefsBootstrapped);
   const registerActiveSearch = useOsActiveSearchStore((s) => s.register);
   const clearActiveSearch = useOsActiveSearchStore((s) => s.clear);
 
@@ -203,13 +245,13 @@ export function OsHomePage() {
       clearActiveSearch();
       return;
     }
-    registerActiveSearch(searchFilters, () => searchQuery.refetch());
+    registerActiveSearch(datasetFilters, () => searchQuery.refetch());
     return () => clearActiveSearch();
   }, [
     clearActiveSearch,
+    datasetFilters,
     prefsBootstrapped,
     registerActiveSearch,
-    searchFilters,
     searchQuery.refetch,
   ]);
 
@@ -243,8 +285,33 @@ export function OsHomePage() {
     defaultYearAdjusted.current = true;
   }, [filters.anos, patchFilters, prefsBootstrapped, yearsQuery.data]);
 
-  const rows = searchQuery.data?.data ?? [];
-  const meta = searchQuery.data?.meta;
+  const localView = useMemo(() => {
+    const raw = searchQuery.data?.data ?? [];
+    if (!canUseOsHomeLocalView(searchFilters)) {
+      return {
+        rows: raw,
+        totalRecords: searchQuery.data?.meta?.total_records,
+      };
+    }
+    return applyOsHomeLocalView(raw, searchFilters);
+  }, [searchFilters, searchQuery.data]);
+
+  const rows = localView.rows;
+  const meta = useMemo(() => {
+    const base = searchQuery.data?.meta;
+    if (!base) {
+      return undefined;
+    }
+    if (localView.totalRecords == null) {
+      return base;
+    }
+    return {
+      ...base,
+      total_records: localView.totalRecords,
+      total_pages: localView.totalRecords ? 1 : 0,
+    };
+  }, [localView.totalRecords, searchQuery.data?.meta]);
+
   const markUserListFetch = useCallback(() => {
     setUserListFetchPending(true);
   }, []);
@@ -297,12 +364,15 @@ export function OsHomePage() {
 
   const applySavedFilter = useCallback(
     (filter: SavedFilter) => {
-      markUserListFetch();
-      patchFilters(savedFilterToOsPatch(filter));
+      const patch = savedFilterToOsPatch(filter);
+      if (osHomePatchTriggersFetch(patch, filters)) {
+        markUserListFetch();
+      }
+      patchFilters(patch);
       setSavedFilterId(String(filter.id));
       setSavedFilterName(filter.nome);
     },
-    [markUserListFetch, patchFilters],
+    [filters, markUserListFetch, patchFilters],
   );
 
   useEffect(() => {
@@ -419,7 +489,7 @@ export function OsHomePage() {
   }, [filters, savedFilterName]);
 
   useOsRealtimeSync({
-    filters: searchFilters,
+    filters: datasetFilters,
   });
 
   const patchFiltersAndClearSaved = (patch: Parameters<typeof patchFilters>[0]) => {
@@ -443,7 +513,9 @@ export function OsHomePage() {
       setSavedFilterName(null);
       setSavedFilterId("");
     }
-    markUserListFetch();
+    if (osHomePatchTriggersFetch(patch, filters)) {
+      markUserListFetch();
+    }
     patchFilters(patch);
   };
 
@@ -491,10 +563,12 @@ export function OsHomePage() {
 
   const handleSortChange = useCallback(
     (sortBy?: OsSortColumn, sortDir?: OsSortDir) => {
-      markUserListFetch();
+      if (osHomePatchTriggersFetch({ sortBy, sortDir, page: 1 }, filters)) {
+        markUserListFetch();
+      }
       patchFilters({ sortBy, sortDir, page: 1 });
     },
-    [markUserListFetch, patchFilters],
+    [filters, markUserListFetch, patchFilters],
   );
 
   const handleOpenGerenciaDetail = useCallback(

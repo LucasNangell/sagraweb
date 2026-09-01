@@ -11,6 +11,20 @@ import {
 
 import type { MultiSelectOption } from "./multi-select";
 
+function nextTabbableAfter(from: HTMLElement): HTMLElement | null {
+  const nodes = document.querySelectorAll<HTMLElement>(
+    "a[href], button:not([disabled]), input:not([disabled]):not([tabindex='-1']), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+  );
+  const focusable = [...nodes].filter(
+    (el) => el.tabIndex >= 0 && !el.hasAttribute("disabled") && el.offsetParent !== null,
+  );
+  const index = focusable.indexOf(from);
+  if (index < 0 || index >= focusable.length - 1) {
+    return null;
+  }
+  return focusable[index + 1] ?? null;
+}
+
 interface SearchableMultiSelectProps {
   id?: string;
   label: string;
@@ -178,11 +192,20 @@ export function SearchableMultiSelect({
       closeDropdown();
       return;
     }
-    if (e.key === "Tab") {
+    if (e.key === "Tab" || e.key === "ArrowRight") {
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+      }
+      const current = e.currentTarget;
+      const nextField =
+        e.key === "ArrowRight" ? nextTabbableAfter(current) : null;
       if (activeIndex >= 0) {
         selectHighlighted();
       } else {
         closeDropdown();
+      }
+      if (nextField) {
+        queueMicrotask(() => nextField.focus());
       }
     }
   };

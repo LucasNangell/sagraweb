@@ -4,8 +4,6 @@ import type { OsSearchFilters, OsSearchRow, OsSortColumn } from "./types";
 
 const OS_NR_SP_THRESHOLD = 5000;
 
-type RowWithEntryDate = OsSearchRow & { data_entrada?: string | null };
-
 /** Há recorte de ano — dá para fatiar a lista já carregada no cliente. */
 export function canUseOsHomeLocalView(filters: OsSearchFilters): boolean {
   return (filters.anos?.length ?? 0) > 0 || filters.ano != null;
@@ -167,8 +165,7 @@ function prioRank(prioridade: string | null | undefined): number {
 }
 
 function rowSortDate(row: OsSearchRow): string {
-  const extra = row as RowWithEntryDate;
-  return String(extra.data_entrega || extra.data_entrada || "");
+  return String(row.data_entrega || row.data_entrada || "");
 }
 
 function cmpText(a: string, b: string): number {
@@ -194,6 +191,8 @@ function fieldValue(row: OsSearchRow, key: OsSortColumn): string {
       return String(row.situacao ?? "");
     case "setor":
       return String(row.setor ?? "");
+    case "data_entrada":
+      return String(row.data_entrada ?? "");
     case "data_entrega":
       return rowSortDate(row);
     default:
@@ -238,6 +237,7 @@ export function sortOsHomeViewRows(
       key === "solicitante" ||
       key === "situacao" ||
       key === "setor" ||
+      key === "data_entrada" ||
       key === "data_entrega"
     ) {
       const byField = cmpText(fieldValue(a, key), fieldValue(b, key)) * dir;

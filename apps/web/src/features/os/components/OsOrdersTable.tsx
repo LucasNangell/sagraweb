@@ -32,7 +32,7 @@ import type { OsSearchMeta, OsSearchRow, OsSortColumn, OsSortDir, SubOsRow } fro
 import { OsRowContextMenu } from "./OsContextMenu";
 
 const ROW_HEIGHT = 36;
-const MOBILE_CARD_HEIGHT = 108;
+const MOBILE_CARD_HEIGHT = 120;
 
 function prioClass(prioridade: string | null | undefined): string {
   if (!prioridade) {
@@ -103,6 +103,16 @@ function buildColumns(
     size: 48,
     cell: ({ getValue }) => (
       <span className="tabular-nums">{getValue<number>()}</span>
+    ),
+  },
+  {
+    accessorKey: "data_entrada",
+    header: "Entrada",
+    size: 76,
+    cell: ({ getValue }) => (
+      <span className="tabular-nums">
+        {formatDateBr(getValue<string | null>() ?? undefined)}
+      </span>
     ),
   },
   {
@@ -537,7 +547,7 @@ export function OsOrdersTable({
           </div>
         ) : null}
         {/* Tabela — tablet/desktop */}
-        <table className="hidden w-full min-w-[900px] table-fixed border-collapse text-sm md:table">
+        <table className="hidden w-full min-w-[980px] table-fixed border-collapse text-sm md:table">
           <thead className="sticky top-0 z-10 bg-secondary-blue text-white">
             {headerGroups.map((hg) => (
               <tr key={hg.id}>
@@ -735,8 +745,16 @@ export function OsOrdersTable({
                         {data.titulo || "—"}
                       </p>
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-neutral-600">
+                        {data.data_entrada ? (
+                          <span className="tabular-nums">
+                            Entrada {formatDateBr(data.data_entrada)}
+                          </span>
+                        ) : null}
                         {data.produto ? (
-                          <span className="truncate">{data.produto}</span>
+                          <span className="truncate">
+                            {data.data_entrada ? "· " : ""}
+                            {data.produto}
+                          </span>
                         ) : null}
                         {data.situacao ? (
                           <span className="truncate">· {data.situacao}</span>

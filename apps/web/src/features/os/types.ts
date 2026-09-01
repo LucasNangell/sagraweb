@@ -9,6 +9,7 @@ export interface OsSearchRow {
   produto?: string | null;
   formato?: string | null;
   setor?: string | null;
+  data_entrada?: string | null;
   data_entrega?: string | null;
   entreg_periodo?: string | null;
   last_update?: string | null;
@@ -56,6 +57,7 @@ export type OsSortColumn =
   | "situacao"
   | "setor"
   | "prioridade"
+  | "data_entrada"
   | "data_entrega";
 
 export type YearFilterMode = "from" | "specific";

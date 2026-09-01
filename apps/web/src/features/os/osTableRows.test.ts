@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildDisplayRows,
   isParentOsInSearchResults,
   isSameOsSelection,
   isSubOsRow,
@@ -92,5 +93,41 @@ describe("isParentOsInSearchResults", () => {
         { nr_os: 100, ano: 2026, kind: "main_os" },
       ]),
     ).toBe(false);
+  });
+});
+
+describe("buildDisplayRows", () => {
+  it("Sub OS herda data_entrada do protocolo e troca só data_entrega", () => {
+    const parent: OsSearchRow = {
+      nr_os: 10,
+      ano: 2026,
+      data_entrada: "2026-02-01",
+      data_entrega: "2026-03-01",
+    };
+    const display = buildDisplayRows(
+      [parent],
+      new Set(["2026-10"]),
+      new Map([
+        [
+          "2026-10",
+          [
+            {
+              id: 1,
+              display_name: "10 [Capa]",
+              componente_id: 1,
+              componente_nome: "Capa",
+              situacao_atual: "Em Execução",
+              setor_atual: "SEFOC",
+              data_atual: "2026-04-01",
+              congelada: false,
+              ativo: true,
+            },
+          ],
+        ],
+      ]),
+    );
+    expect(display).toHaveLength(2);
+    expect(display[1]?.data_entrada).toBe("2026-02-01");
+    expect(display[1]?.data_entrega).toBe("2026-04-01");
   });
 });

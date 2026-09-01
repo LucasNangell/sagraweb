@@ -15,6 +15,7 @@ OS_SEARCH_EXPORT_MAX_ROWS = 10_000
 OS_LIST_EXPORT_COLUMNS: Tuple[Tuple[str, str], ...] = (
     ("Nr OS", "nr_os"),
     ("Ano", "ano"),
+    ("Entrada", "data_entrada"),
     ("Produto", "produto"),
     ("Solicitante", "solicitante"),
     ("Título", "titulo"),

@@ -59,6 +59,7 @@ OS_SEARCH_SORT_COLUMNS_BASE = {
     "titulo": "d.Titulo",
     "solicitante": "p.NomeUsuario",
     "prioridade": "p.EntregPrazoLink",
+    "data_entrada": "p.DataEntrada",
     "data_entrega": "p.EntregData",
 }
 

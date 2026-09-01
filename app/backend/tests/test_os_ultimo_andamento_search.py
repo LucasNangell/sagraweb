@@ -64,6 +64,18 @@ class TestOsSearchDefaultOrder:
         assert "p.NroProtocolo DESC" in sql
         assert "p.AnoProtocolo DESC" in sql
 
+    def test_data_entrada_orders_by_tabprotocolos(self):
+        sql = _build_os_search_order_clause(
+            "data_entrada",
+            "desc",
+            "",
+            situacao_col="a_op.situacao",
+            setor_col="a_op.setor",
+        )
+        assert "p.DataEntrada DESC" in sql
+        assert "p.AnoProtocolo DESC" in sql
+        assert "p.NroProtocolo DESC" in sql
+
 
 class TestOperacionalSelectSql:
     def test_ranking_usa_ultimostatus1_tabandamento(self):

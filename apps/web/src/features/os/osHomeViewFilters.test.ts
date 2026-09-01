@@ -322,6 +322,18 @@ describe("sortOsHomeViewRows", () => {
     );
     expect(sorted.map((r) => r.nr_os)).toEqual([3, 1, 2]);
   });
+
+  it("ordena data_entrada com desempate ano/número", () => {
+    const sorted = sortOsHomeViewRows(
+      [
+        row({ nr_os: 2, ano: 2026, data_entrada: "2026-03-10" }),
+        row({ nr_os: 1, ano: 2026, data_entrada: "2026-01-05" }),
+        row({ nr_os: 3, ano: 2026, data_entrada: "2026-01-05" }),
+      ],
+      { sortBy: "data_entrada", sortDir: "asc" },
+    );
+    expect(sorted.map((r) => r.nr_os)).toEqual([3, 1, 2]);
+  });
 });
 
 describe("applyOsHomeLocalView", () => {

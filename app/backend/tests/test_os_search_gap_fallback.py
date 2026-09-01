@@ -37,7 +37,7 @@ def test_search_setor_filter_uses_tabandamento_live_by_default(
     assert "subfx_setor" in sql
     assert "subfx_sit" in sql
     assert "a_gap.SetorLink" not in sql
-    assert "INNER JOIN tab_os_sub_os_andamento sa" not in sql
+    assert "tab_os_sub_os" in sql
     mock_live_enrich.assert_called_once()
 
 
@@ -82,7 +82,7 @@ def test_search_setor_filter_uses_live_scalar_when_materialized_opt_in(
     assert "a_live.SetorLink" in sql
     assert "a_op.nro_protocolo IS NULL" not in sql
     assert "ROW_NUMBER()" not in sql
-    assert "INNER JOIN tab_os_sub_os_andamento sa" not in sql
+    assert "tab_os_sub_os" in sql
     mock_live_enrich.assert_called_once()
 
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 from typing import Any, List
 
 from database import db
-from services.os_componentes_service import MANUAL_ANDAMENTO_SQL
 
 PENDENCIA_SITUACAO = "Encam. de Docum."
 # Colunas textuais do UNION vêm de tabAndamento (legado) e tab_os_sub_os_andamento.
@@ -24,7 +23,6 @@ def fetch_email_pendencias(setor: str = "SEFOC") -> List[dict[str, Any]]:
     - Sub OS com ultimo_status=1 em tab_os_sub_os_andamento (SPs com componentes).
     """
     setor_filter = (setor or "SEFOC").strip() or "SEFOC"
-    manual_exists = MANUAL_ANDAMENTO_SQL.replace("sa.", "sa_m.")
 
     query = f"""
         SELECT os, ano, produto, observacao, situacao, setor, data
@@ -71,10 +69,6 @@ def fetch_email_pendencias(setor: str = "SEFOC") -> List[dict[str, Any]]:
               AND s.congelada = 0
               AND sa.situacao = %s
               AND sa.setor = %s
-              AND EXISTS (
-                  SELECT 1 FROM tab_os_sub_os_andamento sa_m
-                  WHERE sa_m.sub_os_id = s.id AND {manual_exists}
-              )
         ) AS pendencias
         ORDER BY `data` DESC
     """
@@ -89,7 +83,6 @@ def fetch_email_pendencias(setor: str = "SEFOC") -> List[dict[str, Any]]:
 
 def count_email_pendencias(setor: str = "SEFOC") -> int:
     setor_filter = (setor or "SEFOC").strip() or "SEFOC"
-    manual_exists = MANUAL_ANDAMENTO_SQL.replace("sa.", "sa_m.")
     query = f"""
         SELECT COUNT(*) AS count FROM (
             SELECT p.NroProtocolo, p.AnoProtocolo
@@ -114,10 +107,6 @@ def count_email_pendencias(setor: str = "SEFOC") -> int:
               AND s.congelada = 0
               AND sa.situacao = %s
               AND sa.setor = %s
-              AND EXISTS (
-                  SELECT 1 FROM tab_os_sub_os_andamento sa_m
-                  WHERE sa_m.sub_os_id = s.id AND {manual_exists}
-              )
         ) AS pendencias
     """
     params = (

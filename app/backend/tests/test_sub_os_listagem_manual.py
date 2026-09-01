@@ -3,8 +3,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from services.os_componentes_service import (
     MANUAL_ANDAMENTO_SQL,
     SOURCE_INHERITED_MAIN_OS,
@@ -31,57 +29,61 @@ class TestSubOsHasManualHistory:
 
 
 class TestListSubOsListableOnly:
-    def test_filtra_por_andamento_manual(self):
+    def test_filtra_ativas(self):
         with patch("services.os_componentes_service.db") as mock_db:
             mock_db.execute_query.return_value = []
             with patch("services.os_componentes_service.is_os_frozen", return_value=(False, None)):
                 list_sub_os(2532, 2026, listable_only=True)
             sql = mock_db.execute_query.call_args[0][0]
-            assert "EXISTS" in sql
-            assert "manual_sub_os" in sql
+            assert "s.ativo = 1" in sql
+            assert "manual_sub_os" not in sql
 
-    def test_include_all_sem_filtro_manual(self):
+    def test_include_all_sem_filtro_ativo(self):
         with patch("services.os_componentes_service.db") as mock_db:
             mock_db.execute_query.return_value = []
             with patch("services.os_componentes_service.is_os_frozen", return_value=(False, None)):
                 list_sub_os(2532, 2026, listable_only=False)
             sql = mock_db.execute_query.call_args[0][0]
+            assert "s.ativo = 1" not in sql
             assert "manual_sub_os" not in sql
 
 
 class TestCountSubOsListable:
-    def test_conta_apenas_com_manual(self):
+    def test_conta_ativas(self):
         with patch("services.os_componentes_service.db") as mock_db:
             mock_db.execute_query.return_value = [{"cnt": 0}]
             assert count_sub_os(2532, 2026) == 0
             sql = mock_db.execute_query.call_args[0][0]
-            assert MANUAL_ANDAMENTO_SQL.strip()[:20] in sql or "manual_sub_os" in sql
+            assert "s.ativo = 1" in sql
+            assert "manual_sub_os" not in sql
 
 
 class TestSyncSubOsListableState:
-    def test_inativa_sem_manual(self):
+    def test_inativa_todas_sem_manual_na_os(self):
         cursor = MagicMock()
+        cursor.fetchone.side_effect = [
+            {"nro_protocolo": 1396, "ano_protocolo": 2026, "ativo": 1},
+        ]
         with patch(
-            "services.os_componentes_service.sub_os_has_manual_history",
+            "services.os_componentes_service.os_has_any_manual_sub_os_andamento",
             return_value=False,
         ):
-            assert sync_sub_os_listable_state(cursor, 9) is False
-        cursor.execute.assert_called_with(
-            "UPDATE tab_os_sub_os SET ativo = %s WHERE id = %s",
-            (0, 9),
-        )
+            with patch(
+                "services.os_componentes_service.deactivate_all_sub_os"
+            ) as mock_deact:
+                assert sync_sub_os_listable_state(cursor, 9) is False
+                mock_deact.assert_called_once_with(cursor, 1396, 2026)
 
-    def test_reativa_com_manual(self):
+    def test_mantem_ativo_quando_os_ainda_tem_manual(self):
         cursor = MagicMock()
+        cursor.fetchone.side_effect = [
+            {"nro_protocolo": 1396, "ano_protocolo": 2026, "ativo": 1},
+        ]
         with patch(
-            "services.os_componentes_service.sub_os_has_manual_history",
+            "services.os_componentes_service.os_has_any_manual_sub_os_andamento",
             return_value=True,
         ):
             assert sync_sub_os_listable_state(cursor, 9) is True
-        cursor.execute.assert_called_with(
-            "UPDATE tab_os_sub_os SET ativo = %s WHERE id = %s",
-            (1, 9),
-        )
 
 
 class TestManualAndamentoSql:
@@ -104,15 +106,15 @@ class TestSubOsQueriesManualFilter:
         assert "sa_m" in sql
         assert "manual_sub_os" in sql
 
-    def test_fila_pcp_exige_manual(self):
+    def test_fila_pcp_lista_ativas_sem_exigir_manual_por_linha(self):
         with patch("services.os_sub_os_queries.db") as mock_db:
             mock_db.execute_query.return_value = []
             from services.os_sub_os_queries import fetch_sub_os_queue_rows
 
             fetch_sub_os_queue_rows(base_setor="SIELT", display_setor="SIELT")
             sql = mock_db.execute_query.call_args[0][0]
-            assert "sa_m" in sql
-            assert "manual_sub_os" in sql
+            assert "s.ativo = 1" in sql
+            assert "sa_m" not in sql
 
 
 class TestDeleteSubOsHistoryListable:

@@ -15,6 +15,7 @@ from services.andamento_operacional import MIRROR_EXCLUDE_CLAUSE
 from services.os_sub_os_queries import (
     annotate_search_sub_os_matches,
     build_main_or_sub_os_filter_sql,
+    fetch_home_sub_os_rows_for_pairs,
 )
 from services.os_componentes_service import sub_os_listable_count_scalar_sql
 from services.os_text_search_utils import (
@@ -489,12 +490,91 @@ def _dedupe_os_search_rows(rows: list) -> list:
     for row in rows or []:
         if not isinstance(row, dict):
             continue
-        key = (row.get("nr_os"), row.get("ano"))
+        kind = row.get("kind") or row.get("row_kind") or "main_os"
+        sub_id = row.get("sub_os_id")
+        key = (row.get("nr_os"), row.get("ano"), kind, sub_id)
         if key in seen:
             continue
         seen.add(key)
         unique.append(row)
     return unique
+
+
+def _expand_split_os_search_rows(
+    rows: List[Dict[str, Any]],
+    *,
+    setores: Optional[List[str]] = None,
+    situacoes: Optional[List[str]] = None,
+    include_finished: bool = True,
+) -> List[Dict[str, Any]]:
+    """Substitui OS dividida pelas linhas de Sub OS que casam com o filtro."""
+    split_pairs: List[Tuple[int, int]] = []
+    seen_pairs: set[Tuple[int, int]] = set()
+    for row in rows or []:
+        if row.get("is_sub_os") or row.get("kind") == "sub_os":
+            continue
+        if not row.get("has_sub_os") and not (row.get("sub_os_count") or 0):
+            continue
+        nro = row.get("nr_os")
+        ano = row.get("ano")
+        if nro is None or ano is None:
+            continue
+        pair = (int(nro), int(ano))
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+        split_pairs.append(pair)
+    if not split_pairs:
+        return rows
+
+    sub_rows = fetch_home_sub_os_rows_for_pairs(
+        split_pairs,
+        setores=setores,
+        situacoes=situacoes,
+        include_finished=include_finished,
+    )
+    by_parent: Dict[Tuple[int, int], List[Dict[str, Any]]] = {}
+    for sub in sub_rows:
+        key = (
+            int(sub.get("parent_nr_os") or sub.get("nr_os")),
+            int(sub.get("parent_ano") or sub.get("ano")),
+        )
+        by_parent.setdefault(key, []).append(sub)
+
+    expanded: List[Dict[str, Any]] = []
+    for row in rows or []:
+        if row.get("is_sub_os") or row.get("kind") == "sub_os":
+            expanded.append(row)
+            continue
+        nro = row.get("nr_os")
+        ano = row.get("ano")
+        if nro is None or ano is None:
+            expanded.append(row)
+            continue
+        key = (int(nro), int(ano))
+        if key not in seen_pairs:
+            expanded.append({**row, "kind": row.get("kind") or "main_os"})
+            continue
+        for child in by_parent.get(key, []):
+            merged = {
+                **row,
+                **child,
+                "nr_os": row.get("nr_os"),
+                "ano": row.get("ano"),
+                "titulo": row.get("titulo"),
+                "solicitante": row.get("solicitante"),
+                "prioridade": row.get("prioridade"),
+                "produto": row.get("produto"),
+                "formato": row.get("formato"),
+                "entreg_periodo": row.get("entreg_periodo"),
+                "data_entrada": row.get("data_entrada"),
+                "kind": "sub_os",
+                "is_sub_os": True,
+                "has_sub_os": False,
+                "matched_via_sub_os": False,
+            }
+            expanded.append(merged)
+    return expanded
 
 
 def _build_os_search_order_clause(
@@ -1068,7 +1148,10 @@ def execute_os_search(
                 mirror_exclude_clause=MIRROR_EXCLUDE_CLAUSE.replace(
                     "a.CodStatus", "a_gap.CodStatus"
                 ),
-                include_sub_os=False,
+                include_sub_os=not painel,
+                split_aware=not painel,
+                require_manual=False,
+                include_finished=include_finished,
             )
 
         if prioridade:
@@ -1214,6 +1297,14 @@ def execute_os_search(
         data_results = _enrich_rows_with_details(data_results)
 
     data_results = _enrich_operacional_from_live(data_results)
+
+    if not painel:
+        data_results = _expand_split_os_search_rows(
+            data_results,
+            setores=clean_setor or None,
+            situacoes=clean_situacao or None,
+            include_finished=include_finished,
+        )
 
     # Exact lookup: filtros de escolha após enrich (conjunto pequeno; SQL permanece indexável).
     if use_exact_fast_path:

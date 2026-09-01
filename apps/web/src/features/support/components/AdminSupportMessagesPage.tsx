@@ -138,7 +138,6 @@ export function AdminSupportMessagesPage({
           queryKey: queryKeys.support.adminTicket(selectedId),
         });
       }
-      setStatusFilter("resolvido");
     },
     onError: (err: Error) => {
       setFeedback(err.message || "Não foi possível encerrar a conversa.");

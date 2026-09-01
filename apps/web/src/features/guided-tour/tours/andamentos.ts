@@ -8,7 +8,7 @@ import {
 import type { GuidedTour, TourStepContext } from "../types";
 
 export const ANDAMENTOS_TOUR_ID = "andamentos";
-export const ANDAMENTOS_TOUR_TITLE = "Como fazer andamentos?";
+export const ANDAMENTOS_TOUR_TITLE = "Como lançar andamentos?";
 
 const FROZEN_SITUACOES = new Set(["Entregue", "Cancelada", "Cancelado"]);
 
@@ -55,7 +55,7 @@ export const andamentosTour: GuidedTour = {
   steps: [
     {
       id: "intro",
-      title: "Como fazer andamentos?",
+      title: "Como lançar andamentos?",
       body: "Este tutorial usa uma OS real. No último passo, ao clicar em Salvar, o andamento será registrado de verdade. Escolha uma OS que não esteja Entregue ou Cancelada.",
       placement: "center",
       advance: "next",

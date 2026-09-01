@@ -62,9 +62,9 @@ function buildColumns(
     size: 64,
     cell: ({ row, getValue }) => {
       const data = row.original;
-      if (data.is_sub_os) {
+      if (data.is_sub_os || data.kind === "sub_os") {
         return (
-          <span className="pl-5 font-medium text-secondary-blue">
+          <span className="font-medium text-secondary-blue">
             {data.display_label ?? `${data.nr_os} [${data.componente_nome}]`}
           </span>
         );
@@ -144,7 +144,7 @@ function buildColumns(
     size: 102,
     cell: ({ row, getValue }) => {
       const v = getValue<string | null>();
-      if (row.original.is_sub_os && !v) {
+      if ((row.original.is_sub_os || row.original.kind === "sub_os") && !v) {
         return <span className="text-neutral-400">—</span>;
       }
       return v ?? "";
@@ -156,7 +156,7 @@ function buildColumns(
     size: 58,
     cell: ({ row, getValue }) => {
       const v = getValue<string | null>();
-      if (row.original.is_sub_os && !v) {
+      if ((row.original.is_sub_os || row.original.kind === "sub_os") && !v) {
         return <span className="text-neutral-400">—</span>;
       }
       return v ?? "";
@@ -242,7 +242,7 @@ export function OsOrdersTable({
   useEffect(() => {
     const next = new Map<string, boolean>();
     for (const row of rows) {
-      if (row.is_sub_os) continue;
+      if (row.is_sub_os || row.kind === "sub_os") continue;
       const key = osRowKey(row);
       next.set(
         key,
@@ -647,7 +647,7 @@ export function OsOrdersTable({
                           selectionLocked
                             ? "cursor-not-allowed"
                             : "cursor-pointer hover:bg-slate-50",
-                          data.is_sub_os && "bg-slate-50/70",
+                          (data.is_sub_os || data.kind === "sub_os") && "bg-slate-50/70",
                           isSelected && "bg-[var(--highlight-yellow)]",
                         )}
                         onClick={() => handleSelectRow(data)}
@@ -739,7 +739,7 @@ export function OsOrdersTable({
                     >
                       <div className="flex items-start justify-between gap-2">
                         <span className="text-sm font-bold tabular-nums text-secondary-blue">
-                          {data.is_sub_os
+                          {data.is_sub_os || data.kind === "sub_os"
                             ? (data.display_label ?? `${data.nr_os} [${data.componente_nome}]`)
                             : `OS ${data.nr_os}/${data.ano}`}
                         </span>

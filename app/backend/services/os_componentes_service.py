@@ -45,17 +45,13 @@ def sub_os_listable_count_scalar_sql(
     nro_col: str = "p.NroProtocolo",
     ano_col: str = "p.AnoProtocolo",
 ) -> str:
-    """Subquery correlacionada — mesma regra de count_sub_os/list_sub_os (listable_only)."""
+    """Subquery correlacionada — Sub OSs ativas (OS dividida), inclusive só herdadas."""
     return f"""
         (SELECT COUNT(*)
          FROM tab_os_sub_os AS s_cnt
          WHERE s_cnt.nro_protocolo = {nro_col}
            AND s_cnt.ano_protocolo = {ano_col}
-           AND s_cnt.ativo = 1
-           AND EXISTS (
-               SELECT 1 FROM tab_os_sub_os_andamento sa
-               WHERE sa.sub_os_id = s_cnt.id AND {MANUAL_ANDAMENTO_SQL}
-           ))"""
+           AND s_cnt.ativo = 1)"""
 
 
 def _format_db_datetime(value: Any) -> Optional[str]:
@@ -525,22 +521,15 @@ def _map_sub_os_list_row(row: Dict[str, Any], *, frozen: bool) -> Dict[str, Any]
 
 
 def list_sub_os(nro: int, ano: int, *, listable_only: bool = True) -> List[Dict[str, Any]]:
-    listable_filter = ""
-    if listable_only:
-        listable_filter = f"""
-        AND EXISTS (
-            SELECT 1 FROM tab_os_sub_os_andamento sa
-            WHERE sa.sub_os_id = s.id AND {MANUAL_ANDAMENTO_SQL}
-        )
-        """
+    ativo_sql = "AND s.ativo = 1" if listable_only else ""
     rows = db.execute_query(
         f"""
         SELECT s.id, s.display_name, s.ativo, s.congelada, s.componente_id,
                c.nome AS componente_nome, c.tipo AS componente_tipo
         FROM tab_os_sub_os s
         JOIN tab_os_componentes c ON c.id = s.componente_id
-        WHERE s.nro_protocolo = %s AND s.ano_protocolo = %s AND s.ativo = 1
-        {listable_filter}
+        WHERE s.nro_protocolo = %s AND s.ano_protocolo = %s
+        {ativo_sql}
         ORDER BY c.ordem ASC, s.id ASC
         """,
         (nro, ano),
@@ -550,20 +539,13 @@ def list_sub_os(nro: int, ano: int, *, listable_only: bool = True) -> List[Dict[
 
 
 def count_sub_os(nro: int, ano: int, *, listable_only: bool = True) -> int:
-    listable_filter = ""
-    if listable_only:
-        listable_filter = f"""
-        AND EXISTS (
-            SELECT 1 FROM tab_os_sub_os_andamento sa
-            WHERE sa.sub_os_id = s.id AND {MANUAL_ANDAMENTO_SQL}
-        )
-        """
+    ativo_sql = "AND s.ativo = 1" if listable_only else ""
     rows = db.execute_query(
         f"""
         SELECT COUNT(*) AS cnt
         FROM tab_os_sub_os s
-        WHERE s.nro_protocolo = %s AND s.ano_protocolo = %s AND s.ativo = 1
-        {listable_filter}
+        WHERE s.nro_protocolo = %s AND s.ano_protocolo = %s
+        {ativo_sql}
         """,
         (nro, ano),
     )
@@ -585,17 +567,57 @@ def sub_os_has_manual_history(sub_os_id: int, *, cursor=None) -> bool:
     return bool(rows)
 
 
+def os_has_any_manual_sub_os_andamento(cursor, nro: int, ano: int) -> bool:
+    """True se alguma Sub OS da OS ainda tem andamento manual/exclusivo."""
+    cursor.execute(
+        f"""
+        SELECT 1 AS ok
+        FROM tab_os_sub_os s
+        INNER JOIN tab_os_sub_os_andamento sa ON sa.sub_os_id = s.id
+        WHERE s.nro_protocolo = %s AND s.ano_protocolo = %s
+          AND {MANUAL_ANDAMENTO_SQL}
+        LIMIT 1
+        """,
+        (nro, ano),
+    )
+    return cursor.fetchone() is not None
+
+
+def deactivate_all_sub_os(cursor, nro: int, ano: int) -> None:
+    """Reúne a OS: Sub OSs saem da lista (ativo=0) sem apagar histórico."""
+    cursor.execute(
+        """
+        UPDATE tab_os_sub_os
+        SET ativo = 0
+        WHERE nro_protocolo = %s AND ano_protocolo = %s
+        """,
+        (nro, ano),
+    )
+
+
 def sync_sub_os_listable_state(cursor, sub_os_id: int) -> bool:
     """
-    Sincroniza tab_os_sub_os.ativo conforme existência de andamento manual.
-    Retorna True se a Sub OS permanece listável.
+    Se não restar andamento manual em nenhuma Sub OS da OS, desativa todas
+    (volta ao modo unido). Não reativa irmãos só herdados nem OS já unida.
+    Retorna True se ESTA Sub OS permanece listável (ativo=1).
     """
-    has_manual = sub_os_has_manual_history(sub_os_id, cursor=cursor)
     cursor.execute(
-        "UPDATE tab_os_sub_os SET ativo = %s WHERE id = %s",
-        (1 if has_manual else 0, sub_os_id),
+        """
+        SELECT nro_protocolo, ano_protocolo, ativo
+        FROM tab_os_sub_os
+        WHERE id = %s
+        """,
+        (sub_os_id,),
     )
-    return has_manual
+    row = cursor.fetchone()
+    if not row:
+        return False
+    nro = int(row["nro_protocolo"])
+    ano = int(row["ano_protocolo"])
+    if not os_has_any_manual_sub_os_andamento(cursor, nro, ano):
+        deactivate_all_sub_os(cursor, nro, ano)
+        return False
+    return bool(row.get("ativo"))
 
 
 def count_active_componentes(nro: int, ano: int) -> int:
@@ -657,7 +679,7 @@ def get_or_create_sub_os(
 
     cursor.execute(
         """
-        SELECT id, display_name, congelada
+        SELECT id, display_name, congelada, ativo
         FROM tab_os_sub_os
         WHERE nro_protocolo = %s AND ano_protocolo = %s AND componente_id = %s
         """,
@@ -666,8 +688,14 @@ def get_or_create_sub_os(
     existing = cursor.fetchone()
     display = build_sub_os_display_name(nro, comp["nome"])
     if existing:
+        sub_id = int(existing["id"])
+        if not existing.get("ativo"):
+            cursor.execute(
+                "UPDATE tab_os_sub_os SET ativo = 1 WHERE id = %s",
+                (sub_id,),
+            )
         return {
-            "id": int(existing["id"]),
+            "id": sub_id,
             "display_name": existing["display_name"],
             "created": False,
             "congelada": bool(existing.get("congelada")) or frozen,
@@ -739,18 +767,25 @@ def _ensure_sub_os_for_componente_cursor(
     ano: int,
     componente_id: int,
     ponto: Optional[str] = None,
+    reactivate: bool = False,
 ) -> int:
     """Cria/reutiliza Sub OS para componente ativo (sem bloqueio de congelamento — propagação)."""
     cursor.execute(
         """
-        SELECT id FROM tab_os_sub_os
-        WHERE nro_protocolo = %s AND ano_protocolo = %s AND componente_id = %s AND ativo = 1
+        SELECT id, ativo FROM tab_os_sub_os
+        WHERE nro_protocolo = %s AND ano_protocolo = %s AND componente_id = %s
         """,
         (nro, ano, componente_id),
     )
     row = cursor.fetchone()
     if row:
-        return int(row["id"])
+        sub_id = int(row["id"])
+        if reactivate and not row.get("ativo"):
+            cursor.execute(
+                "UPDATE tab_os_sub_os SET ativo = 1 WHERE id = %s",
+                (sub_id,),
+            )
+        return sub_id
 
     comp = get_componente(nro, ano, componente_id)
     if not comp or not comp.get("ativo", True):
@@ -761,11 +796,137 @@ def _ensure_sub_os_for_componente_cursor(
         """
         INSERT INTO tab_os_sub_os
         (nro_protocolo, ano_protocolo, componente_id, display_name, ativo, congelada, criado_por)
-        VALUES (%s, %s, %s, %s, 1, 0, %s)
+        VALUES (%s, %s, %s, %s, %s, 0, %s)
         """,
-        (nro, ano, componente_id, display, ponto),
+        (nro, ano, componente_id, display, 1 if reactivate else 0, ponto),
     )
     return int(cursor.lastrowid)
+
+
+def _fetch_main_operacional_andamento(cursor, nro: int, ano: int) -> Optional[Dict[str, Any]]:
+    from services.andamento_operacional import MIRROR_EXCLUDE_CLAUSE
+
+    cursor.execute(
+        f"""
+        SELECT a.CodStatus, a.SituacaoLink, a.SetorLink, a.`Observaçao`, a.Ponto
+        FROM tabAndamento a
+        WHERE a.NroProtocoloLink = %s AND a.AnoProtocoloLink = %s
+          AND a.UltimoStatus = 1
+          AND {MIRROR_EXCLUDE_CLAUSE}
+        ORDER BY a.`Data` DESC, a.CodStatus DESC
+        LIMIT 1
+        """,
+        (nro, ano),
+    )
+    return cursor.fetchone()
+
+
+def _seed_inherited_from_main(
+    cursor,
+    *,
+    sub_os_id: int,
+    main_row: Dict[str, Any],
+    ponto_usuario: Optional[str] = None,
+) -> None:
+    cursor.execute(
+        """
+        SELECT 1 AS ok FROM tab_os_sub_os_andamento
+        WHERE sub_os_id = %s AND ultimo_status = 1
+        LIMIT 1
+        """,
+        (sub_os_id,),
+    )
+    if cursor.fetchone():
+        return
+
+    source_cod = str(main_row.get("CodStatus") or "")
+    if source_cod:
+        cursor.execute(
+            """
+            SELECT id FROM tab_os_sub_os_andamento
+            WHERE sub_os_id = %s AND source_cod_status = %s
+            LIMIT 1
+            """,
+            (sub_os_id, source_cod),
+        )
+        existing = cursor.fetchone()
+        if existing:
+            recalc_sub_os_ultimo_status(cursor, sub_os_id)
+            return
+
+    situacao = str(main_row.get("SituacaoLink") or "").strip()
+    setor = str(main_row.get("SetorLink") or "").strip()
+    if not situacao or not setor:
+        return
+
+    obs_text = str(main_row.get("Observaçao") or "").strip()
+    ponto = str(main_row.get("Ponto") or "").strip()
+    cursor.execute(
+        """
+        INSERT INTO tab_os_sub_os_andamento
+        (sub_os_id, situacao, setor, observacao, data, ultimo_status, ponto, criado_por,
+         source_type, source_cod_status, herdado_da_os_principal, cod_status_espelho)
+        VALUES (%s, %s, %s, %s, NOW(), 1, %s, %s, %s, %s, 1, NULL)
+        """,
+        (
+            sub_os_id,
+            situacao,
+            setor,
+            obs_text or None,
+            ponto or None,
+            ponto_usuario,
+            SOURCE_INHERITED_MAIN_OS,
+            source_cod or None,
+        ),
+    )
+
+
+def ensure_split_for_all_componentes(
+    cursor,
+    *,
+    nro: int,
+    ano: int,
+    skip_seed_sub_os_id: Optional[int] = None,
+    ponto: Optional[str] = None,
+) -> List[int]:
+    """
+    Cria/reativa Sub OS de todos os componentes ativos e semeia irmãos sem
+    status atual com o andamento operacional da OS principal.
+    """
+    cursor.execute(
+        """
+        SELECT id FROM tab_os_componentes
+        WHERE nro_protocolo = %s AND ano_protocolo = %s AND ativo = 1
+        ORDER BY ordem ASC, id ASC
+        """,
+        (nro, ano),
+    )
+    componentes = cursor.fetchall() or []
+    if not componentes:
+        return []
+
+    main_row = _fetch_main_operacional_andamento(cursor, nro, ano)
+    affected: List[int] = []
+    for comp_row in componentes:
+        sub_id = _ensure_sub_os_for_componente_cursor(
+            cursor,
+            nro=nro,
+            ano=ano,
+            componente_id=int(comp_row["id"]),
+            ponto=ponto,
+            reactivate=True,
+        )
+        affected.append(sub_id)
+        if skip_seed_sub_os_id is not None and sub_id == skip_seed_sub_os_id:
+            continue
+        if main_row:
+            _seed_inherited_from_main(
+                cursor,
+                sub_os_id=sub_id,
+                main_row=main_row,
+                ponto_usuario=ponto,
+            )
+    return affected
 
 
 def recalc_sub_os_ultimo_status(cursor, sub_os_id: int) -> Optional[int]:
@@ -1153,6 +1314,14 @@ def add_sub_os_history(
         cursor.execute(
             "UPDATE tab_os_sub_os SET ativo = 1 WHERE id = %s",
             (sub_os_id,),
+        )
+
+        ensure_split_for_all_componentes(
+            cursor,
+            nro=nro,
+            ano=ano,
+            skip_seed_sub_os_id=sub_os_id,
+            ponto=ponto_usuario,
         )
 
         componente_nome = sub.get("componente_nome") or ""

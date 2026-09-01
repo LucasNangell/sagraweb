@@ -177,6 +177,10 @@ export const homeTestIds = {
   osSaidaConfirm: "os-saida-confirm",
   osSaidaCancel: "os-saida-cancel",
 
+  osUnirSubOsRoot: "os-unir-sub-os-root",
+  osUnirSubOsConfirm: "os-unir-sub-os-confirm",
+  osUnirSubOsCancel: "os-unir-sub-os-cancel",
+
   osEntregaRoot: "os-entrega-root",
   osEntregaClose: "os-entrega-close",
   osEntregaConfirm: "os-entrega-confirm",

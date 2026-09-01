@@ -45,12 +45,15 @@ def build_main_or_sub_os_filter_sql(
     materialized_supplement_fallback: bool = False,
     mirror_exclude_clause: Optional[str] = None,
     include_sub_os: bool = True,
+    split_aware: bool = False,
+    require_manual: bool = True,
+    include_finished: bool = False,
 ) -> str:
     """
     Fragmento SQL: AND (filtros no andamento principal [OR EXISTS Sub OS]).
 
-    /os/search usa include_sub_os=False — a lista exibe o andamento da OS
-    principal; Sub OS entra nos painéis via /pcp/queue.
+    Home (split_aware): OS unida filtra na principal; OS dividida só entra via Sub OS.
+    Painel: include_sub_os=False — só OS principal; Sub OS entra via /pcp/queue.
 
     materialized_gap_fallback: OS sem linha materializada, com UltimoStatus=1 em tabAndamento.
     tabandamento_gap_fallback: join live sem linha, confirma via EXISTS em tabAndamento.
@@ -69,8 +72,9 @@ def build_main_or_sub_os_filter_sql(
         "s.ativo = 1",
         "s.congelada = 0",
         "sa.ultimo_status = 1",
-        f"sa.situacao NOT IN {FINISHED_SITUACOES}",
     ]
+    if not include_finished:
+        sub_parts.append(f"sa.situacao NOT IN {FINISHED_SITUACOES}")
 
     if clean_setores:
         ph = ", ".join(f"%({prefix}_setor_{i})s" for i in range(len(clean_setores)))
@@ -92,17 +96,21 @@ def build_main_or_sub_os_filter_sql(
     exists_sql = ""
     if include_sub_os:
         sub_where = " AND ".join(sub_parts)
-        manual_sql = MANUAL_ANDAMENTO_SQL.replace("sa.", "sa_m.")
+        manual_clause = ""
+        if require_manual:
+            manual_sql = MANUAL_ANDAMENTO_SQL.replace("sa.", "sa_m.")
+            manual_clause = f"""
+              AND EXISTS (
+                  SELECT 1 FROM tab_os_sub_os_andamento sa_m
+                  WHERE sa_m.sub_os_id = s.id AND {manual_sql}
+              )"""
         exists_sql = f"""
         EXISTS (
             SELECT 1
             FROM tab_os_sub_os s
             INNER JOIN tab_os_sub_os_andamento sa ON sa.sub_os_id = s.id
             WHERE {sub_where}
-              AND EXISTS (
-                  SELECT 1 FROM tab_os_sub_os_andamento sa_m
-                  WHERE sa_m.sub_os_id = s.id AND {manual_sql}
-              )
+              {manual_clause}
         )
     """
 
@@ -175,6 +183,19 @@ def build_main_or_sub_os_filter_sql(
                     f"(a_op.SituacaoLink IS NULL AND ({mat_exists}) AND ({gap_exists})))"
                 )
 
+    if include_sub_os and exists_sql and split_aware:
+        split_sql = """
+        EXISTS (
+            SELECT 1 FROM tab_os_sub_os sx
+            WHERE sx.nro_protocolo = p.NroProtocolo
+              AND sx.ano_protocolo = p.AnoProtocolo
+              AND sx.ativo = 1
+        )
+        """
+        return (
+            f" AND ((NOT ({split_sql}) AND ({effective_main}))"
+            f" OR (({split_sql}) AND {exists_sql}))"
+        )
     if include_sub_os and exists_sql:
         return f" AND (({effective_main}) OR {exists_sql})"
     return f" AND ({effective_main})"
@@ -243,7 +264,6 @@ def pairs_matching_sub_os_filters(
         extra.append(f"sa.situacao IN ({ph})")
         params.extend(clean_situacoes)
     extra_sql = (" AND " + " AND ".join(extra)) if extra else ""
-    manual_sql = MANUAL_ANDAMENTO_SQL.replace("sa.", "sa_m.")
 
     query = f"""
     SELECT DISTINCT s.nro_protocolo AS nro, s.ano_protocolo AS ano
@@ -255,10 +275,6 @@ def pairs_matching_sub_os_filters(
       AND sa.ultimo_status = 1
       AND sa.situacao NOT IN ({finished_ph})
       {extra_sql}
-      AND EXISTS (
-          SELECT 1 FROM tab_os_sub_os_andamento sa_m
-          WHERE sa_m.sub_os_id = s.id AND {manual_sql}
-      )
     """
     rows = db.execute_query(query, params) or []
     return {(int(r["nro"]), int(r["ano"])) for r in rows if r.get("nro") is not None}
@@ -315,10 +331,6 @@ def fetch_sub_os_queue_rows(
        AND p.AnoProtocolo = d.AnoProtocoloLinkDet
     WHERE s.ativo = 1
       AND s.congelada = 0
-      AND EXISTS (
-          SELECT 1 FROM tab_os_sub_os_andamento sa_m
-          WHERE sa_m.sub_os_id = s.id AND {MANUAL_ANDAMENTO_SQL.replace("sa.", "sa_m.")}
-      )
       AND sa.setor = %s
       AND sa.situacao NOT IN {FINISHED_SITUACOES}
       {situacao_filter}
@@ -329,6 +341,91 @@ def fetch_sub_os_queue_rows(
     """
     rows = db.execute_query(query, tuple(params))
     return list(rows or [])
+
+
+def fetch_home_sub_os_rows_for_pairs(
+    pairs: Sequence[Tuple[int, int]],
+    *,
+    setores: Optional[Sequence[str]] = None,
+    situacoes: Optional[Sequence[str]] = None,
+    include_finished: bool = True,
+) -> List[Dict[str, Any]]:
+    """Linhas Sub OS ativas para substituir a OS principal na home."""
+    unique_pairs = list(dict.fromkeys((int(n), int(a)) for n, a in pairs))
+    if not unique_pairs:
+        return []
+
+    pair_ph = ", ".join(["(%s, %s)"] * len(unique_pairs))
+    params: List[Any] = []
+    for nro, ano in unique_pairs:
+        params.extend([nro, ano])
+
+    extra: List[str] = []
+    extra_params: List[Any] = []
+    clean_setores = _clean_filter_values(setores)
+    clean_situacoes = _clean_filter_values(situacoes)
+    finished_sql = ""
+    if not include_finished:
+        finished_ph = ", ".join(["%s"] * len(FINISHED_SITUACOES))
+        finished_sql = f" AND sa.situacao NOT IN ({finished_ph})"
+        extra_params.extend(FINISHED_SITUACOES)
+    if clean_setores:
+        ph = ", ".join(["%s"] * len(clean_setores))
+        extra.append(f"sa.setor IN ({ph})")
+        extra_params.extend(clean_setores)
+    if clean_situacoes:
+        ph = ", ".join(["%s"] * len(clean_situacoes))
+        extra.append(f"sa.situacao IN ({ph})")
+        extra_params.extend(clean_situacoes)
+    extra_sql = (" AND " + " AND ".join(extra)) if extra else ""
+    params.extend(extra_params)
+
+    query = f"""
+    SELECT
+        p.NroProtocolo AS nr_os,
+        p.AnoProtocolo AS ano,
+        sa.situacao AS situacao,
+        sa.setor AS setor,
+        sa.data AS last_update,
+        sa.data AS data_entrega,
+        sa.observacao AS observacao,
+        s.id AS sub_os_id,
+        s.display_name AS display_label,
+        s.componente_id AS componente_id,
+        c.nome AS componente_nome,
+        p.NroProtocolo AS parent_nr_os,
+        p.AnoProtocolo AS parent_ano,
+        'sub_os' AS kind,
+        1 AS is_sub_os,
+        0 AS has_sub_os,
+        0 AS sub_os_count,
+        0 AS matched_via_sub_os
+    FROM tab_os_sub_os s
+    INNER JOIN tab_os_sub_os_andamento sa
+        ON sa.sub_os_id = s.id AND sa.ultimo_status = 1
+    INNER JOIN tab_os_componentes c ON c.id = s.componente_id
+    INNER JOIN tabProtocolos p
+        ON p.NroProtocolo = s.nro_protocolo AND p.AnoProtocolo = s.ano_protocolo
+    WHERE (s.nro_protocolo, s.ano_protocolo) IN ({pair_ph})
+      AND s.ativo = 1
+      {finished_sql}
+      {extra_sql}
+    ORDER BY
+        p.AnoProtocolo DESC,
+        p.NroProtocolo DESC,
+        c.ordem ASC,
+        s.id ASC
+    """
+    rows = db.execute_query(query, tuple(params))
+    result: List[Dict[str, Any]] = []
+    for row in rows or []:
+        mapped = dict(row)
+        mapped["kind"] = "sub_os"
+        mapped["is_sub_os"] = True
+        mapped["has_sub_os"] = False
+        mapped["matched_via_sub_os"] = False
+        result.append(mapped)
+    return result
 
 
 def dedupe_queue_rows_with_sub_os(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

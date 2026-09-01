@@ -255,6 +255,7 @@ class HistoryItem(BaseModel):
     obs: str
     usuario: str
     confirm_main_os_target: Optional[bool] = False
+    unir_sub_os: Optional[bool] = False
     protocolo_entrega: Optional[ProtocoloEntregaPayload] = None
     gravacao_pendente_arquivos: Optional[List[GravacaoPendenteArquivoInput]] = None
     gravacao_pendente_chapas: Optional[List[GravacaoPendenteChapaInput]] = None
@@ -1464,6 +1465,7 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
     logger.info(f"DEBUG: POST History Payload: {item}")
     from services.os_componentes_service import (
         count_sub_os,
+        deactivate_all_sub_os,
         os_has_active_componentes,
         propagate_main_os_andamento_to_sub_os,
     )
@@ -1475,7 +1477,7 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     needs_main_confirm = os_has_active_componentes(id, ano) or count_sub_os(id, ano) > 0
-    if needs_main_confirm and not item.confirm_main_os_target:
+    if needs_main_confirm and not item.confirm_main_os_target and not item.unir_sub_os:
         raise HTTPException(
             status_code=403,
             detail=(
@@ -1680,6 +1682,8 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
                 ponto=ponto_formatado,
                 ponto_usuario=clean_user or item.usuario,
             )
+        if item.unir_sub_os:
+            deactivate_all_sub_os(cursor, id, ano)
 
         _apply_protocolo_tab_on_andamento(
             cursor,

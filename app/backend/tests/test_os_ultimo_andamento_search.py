@@ -443,6 +443,7 @@ class TestOsSearchDisplayedAndamentoFilter:
         assert len(result["data"]) == 1
         assert result["data"][0]["nr_os"] == 100
 
+    @patch("services.os_search_service.fetch_home_sub_os_rows_for_pairs", return_value=[])
     @patch("services.os_search_service._prefer_materialized_andamento", return_value=False)
     @patch(_MAT_POPULATED, return_value=True)
     @patch("services.os_search_service.db")
@@ -459,7 +460,7 @@ class TestOsSearchDisplayedAndamentoFilter:
     )
     @patch("services.os_search_service._enrich_rows_with_details", side_effect=lambda r: r)
     def test_exact_os_lookup_does_not_keep_row_via_sub_os(
-        self, _enrich, _live, mock_db, _pop, _prefer
+        self, _enrich, _live, mock_db, _pop, _prefer, _fetch_subs
     ):
         mock_db.execute_query.return_value = [
             {

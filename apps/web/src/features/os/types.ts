@@ -236,6 +236,8 @@ export interface HistoryPayload {
   cod_status?: string;
   /** Obrigatório quando a OS possui Sub OSs ativas e o destino é a OS principal. */
   confirm_main_os_target?: boolean;
+  /** Reúne Sub OSs na OS principal e aplica o andamento a todos os componentes. */
+  unir_sub_os?: boolean;
   protocolo_entrega?: ProtocoloEntregaPayload;
   gravacao_pendente_arquivos?: GravacaoPendenteArquivoInput[];
   gravacao_pendente_chapas?: GravacaoPendenteChapaInput[];

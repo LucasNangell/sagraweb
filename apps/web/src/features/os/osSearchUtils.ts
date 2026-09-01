@@ -91,12 +91,16 @@ export function normalizeOsSearchFilters(
   };
 }
 
-/** Uma linha por OS (nr_os + ano) — evita duplicatas na tabela e seleção dupla. */
+/** Uma linha por OS principal ou por Sub OS (nr_os + ano + sub_os_id). */
 export function dedupeOsSearchRows(rows: OsSearchRow[]): OsSearchRow[] {
   const seen = new Set<string>();
   const result: OsSearchRow[] = [];
   for (const row of rows) {
-    const key = `${row.nr_os}-${row.ano}`;
+    const kind = row.kind === "sub_os" || row.is_sub_os ? "sub_os" : "main_os";
+    const key =
+      kind === "sub_os"
+        ? `${row.nr_os}-${row.ano}-sub-${row.sub_os_id ?? "?"}`
+        : `${row.nr_os}-${row.ano}-main`;
     if (seen.has(key)) {
       continue;
     }

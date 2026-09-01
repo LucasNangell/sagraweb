@@ -15,6 +15,7 @@ import {
   useSubOsList,
 } from "@/api/hooks/useSubOs";
 import {
+  addOsHistory,
   addSubOsHistory,
   checkOsVinculoReplicacao,
   createOrGetSubOs,
@@ -36,6 +37,9 @@ import { dedupeOsHistoryRows } from "../osHistoryUtils";
 import { silentRefreshOsSearch } from "../osRealtimeSync";
 import { useOsFiltersStore } from "../osFiltersStore";
 import { useOsEditLock } from "../hooks/useOsEditLock";
+import { sharedSetorIfAllTogether } from "../subOsUnir";
+import { toMainOsSelection } from "../osTableRows";
+import { useOsSelectionStore } from "../osSelectionStore";
 import type {
   HistoryPayload,
   OsHistoryRow,
@@ -45,6 +49,7 @@ import type {
   SubOsHistoryRow,
 } from "../types";
 import { OsDecisaoSaidaModal } from "./OsDecisaoSaidaModal";
+import { OsUnirSubOsModal } from "./OsUnirSubOsModal";
 import { OsGravacaoAlterarArquivosButton } from "./OsGravacaoAlterarArquivosButton";
 import { OsEntregaModal } from "./OsEntregaModal";
 import {
@@ -126,7 +131,7 @@ export function OsHistoryPanel({
 
   const historyQuery = useOsHistory(osAno, osId);
   const subHistoryQuery = useSubOsHistory(ano, id, subOsId);
-  const subOsListQuery = useSubOsList(ano, id, Boolean(selected) && !isSubOs);
+  const subOsListQuery = useSubOsList(ano, id, Boolean(selected));
   const componentesQuery = useOsComponentes(ano, id, {
     enabled: Boolean(selected) && !isSubOs,
   });
@@ -194,6 +199,10 @@ export function OsHistoryPanel({
     { maquina: string; quantidade: number }[]
   >([]);
   const [pendingAfterConcluir, setPendingAfterConcluir] = useState<HistoryPayload | null>(
+    null,
+  );
+  const [unirModalOpen, setUnirModalOpen] = useState(false);
+  const [pendingUnirPayload, setPendingUnirPayload] = useState<HistoryPayload | null>(
     null,
   );
   const [selectedSubHistory, setSelectedSubHistory] =
@@ -444,6 +453,28 @@ export function OsHistoryPanel({
     });
   };
 
+  const refreshAfterUnir = async () => {
+    if (!selected || ano == null || id == null) {
+      return;
+    }
+    const mainHistory = await fetchOsHistory(ano, id);
+    queryClient.setQueryData(
+      queryKeys.os.history(ano, id),
+      dedupeOsHistoryRows(mainHistory),
+    );
+    queryClient.invalidateQueries({ queryKey: queryKeys.os.subOs(ano, id) });
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.os.subOsSummary(ano, id),
+    });
+    await silentRefreshOsSearch(queryClient, undefined, {
+      skipCrossTabLock: true,
+    });
+    const current = useOsSelectionStore.getState().selected;
+    if (current?.is_sub_os || current?.kind === "sub_os") {
+      useOsSelectionStore.getState().setSelected(toMainOsSelection(current));
+    }
+  };
+
   const saveHistory = async (payloadOverride?: HistoryPayload) => {
     if (!selected) {
       window.alert("Selecione uma OS primeiro.");
@@ -505,6 +536,13 @@ export function OsHistoryPanel({
       return;
     }
 
+    const unirSetor = sharedSetorIfAllTogether(activeSubOsList);
+    if (!payloadOverride && !isEditMode && unirSetor) {
+      setPendingUnirPayload(payload);
+      setUnirModalOpen(true);
+      return;
+    }
+
     let targetSubId: number | null =
       isSubOs && subOsId != null
         ? subOsId
@@ -513,55 +551,66 @@ export function OsHistoryPanel({
           : null;
 
     try {
-      if (andamentoTarget.startsWith("comp:")) {
-        const compId = Number(andamentoTarget.slice(5));
-        const sub = await createOrGetSubOs(selected.ano, selected.nr_os, compId);
-        targetSubId = sub.id;
-      }
-
-      if (targetSubId != null) {
-        if (isEditMode) {
-          window.alert("Edição de andamento de Sub OS não disponível nesta versão.");
-          return;
-        }
-        if (isSubOs) {
-          await addSubOsMutation.mutateAsync(payload);
-        } else {
-          await addSubOsHistory(ano!, id!, targetSubId, payload);
-          await refreshAfterSubOsSave(targetSubId);
-        }
-      } else if (isEditMode && selectedHistory) {
-        await updateMutation.mutateAsync({
+      if (payload.unir_sub_os) {
+        await addOsHistory(ano!, id!, {
           ...payload,
-          cod_status: selectedHistory.CodStatus,
+          confirm_main_os_target: true,
+          unir_sub_os: true,
         });
+        await refreshAfterUnir();
       } else {
-        const isGravacaoPendenteLaunch =
-          Array.isArray(payload.gravacao_pendente_arquivos) ||
-          Array.isArray(payload.gravacao_pendente_chapas) ||
-          Array.isArray(payload.gravacao_pendente_juntadas);
-        if (!isGravacaoPendenteLaunch) {
-          const replicacao = await checkOsVinculoReplicacao(
-            selected.ano,
-            selected.nr_os,
-            form.situacao,
-            form.setor,
-          );
-          if (replicacao.requires_confirmation) {
-            setPendingGrupoMembros(replicacao.membros ?? []);
-            setPendingReplicacaoOrigem(
-              replicacao.origem === "juntada" ? "juntada" : "vinculo",
-            );
-            setPendingSaida(payload);
+        if (andamentoTarget.startsWith("comp:")) {
+          const compId = Number(andamentoTarget.slice(5));
+          const sub = await createOrGetSubOs(ano!, id!, compId);
+          targetSubId = sub.id;
+        }
+
+        if (targetSubId != null) {
+          if (isEditMode) {
+            window.alert("Edição de andamento de Sub OS não disponível nesta versão.");
             return;
           }
+          if (isSubOs) {
+            await addSubOsMutation.mutateAsync(payload);
+          } else {
+            await addSubOsHistory(ano!, id!, targetSubId, payload);
+            await refreshAfterSubOsSave(targetSubId);
+          }
+        } else if (isEditMode && selectedHistory) {
+          await updateMutation.mutateAsync({
+            ...payload,
+            cod_status: selectedHistory.CodStatus,
+          });
+        } else {
+          const isGravacaoPendenteLaunch =
+            Array.isArray(payload.gravacao_pendente_arquivos) ||
+            Array.isArray(payload.gravacao_pendente_chapas) ||
+            Array.isArray(payload.gravacao_pendente_juntadas);
+          if (!isGravacaoPendenteLaunch) {
+            const replicacao = await checkOsVinculoReplicacao(
+              ano!,
+              id!,
+              form.situacao,
+              form.setor,
+            );
+            if (replicacao.requires_confirmation) {
+              setPendingGrupoMembros(replicacao.membros ?? []);
+              setPendingReplicacaoOrigem(
+                replicacao.origem === "juntada" ? "juntada" : "vinculo",
+              );
+              setPendingSaida(payload);
+              return;
+            }
+          }
+          await addMutation.mutateAsync(payload);
         }
-        await addMutation.mutateAsync(payload);
       }
       setTourSaved(true);
       resetForm();
       setAndamentoTarget(
-        isSubOs && subOsId != null ? (`sub:${subOsId}` as AndamentoTargetKey) : "",
+        isSubOs && subOsId != null && !payload.unir_sub_os
+          ? (`sub:${subOsId}` as AndamentoTargetKey)
+          : "",
       );
       setComponenteEspecifico(false);
     } catch (e) {
@@ -574,6 +623,34 @@ export function OsHistoryPanel({
   const handleEntregaConfirm = (entrega: ProtocoloEntregaPayload) => {
     setEntregaModalOpen(false);
     void saveHistory({ ...buildPayload(), protocolo_entrega: entrega });
+  };
+
+  const handleUnirConfirm = (unir: boolean) => {
+    setUnirModalOpen(false);
+    const pending = pendingUnirPayload;
+    setPendingUnirPayload(null);
+    if (!pending) {
+      return;
+    }
+    if (unir) {
+      void saveHistory({
+        ...pending,
+        confirm_main_os_target: true,
+        unir_sub_os: true,
+      });
+      return;
+    }
+    const hasComponentTarget =
+      isSubOs ||
+      andamentoTarget.startsWith("sub:") ||
+      andamentoTarget.startsWith("comp:");
+    if (!hasComponentTarget) {
+      window.alert("Selecione o componente para lançar o andamento.");
+      setComponenteEspecifico(true);
+      setAndamentoTarget("");
+      return;
+    }
+    void saveHistory(pending);
   };
 
   const handleGravacaoPendenteConfirm = (result: GravacaoPendenteLaunchResult) => {
@@ -1123,6 +1200,21 @@ export function OsHistoryPanel({
           </div>
         )}
       </section>
+
+      <OsUnirSubOsModal
+        open={unirModalOpen}
+        setor={sharedSetorIfAllTogether(activeSubOsList) ?? pendingUnirPayload?.setor ?? ""}
+        osLabel={
+          selected
+            ? `${selected.parent_nr_os ?? selected.nr_os}/${selected.parent_ano ?? selected.ano}`
+            : undefined
+        }
+        onClose={() => {
+          setUnirModalOpen(false);
+          setPendingUnirPayload(null);
+        }}
+        onConfirm={handleUnirConfirm}
+      />
 
       <OsDecisaoSaidaModal
         open={pendingSaida != null}

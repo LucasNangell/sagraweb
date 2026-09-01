@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildOsHomeSearchFilters,
+  dedupeOsSearchRows,
   isExactOsLookup,
   normalizeOsSearchFilters,
 } from "./osSearchUtils";
-import type { OsSearchFilters } from "./types";
+import type { OsSearchFilters, OsSearchRow } from "./types";
 
 const baseFilters: OsSearchFilters = {
   nrOs: undefined,
@@ -131,5 +132,37 @@ describe("normalizeOsSearchFilters", () => {
       processo: "12.345.678/9012",
     });
     expect(normalized.processo).toBe("123456789012");
+  });
+});
+
+describe("dedupeOsSearchRows", () => {
+  it("mantém duas Sub OS da mesma OS", () => {
+    const rows: OsSearchRow[] = [
+      {
+        nr_os: 1396,
+        ano: 2026,
+        kind: "sub_os",
+        is_sub_os: true,
+        sub_os_id: 1,
+        display_label: "1396 [Capa]",
+      },
+      {
+        nr_os: 1396,
+        ano: 2026,
+        kind: "sub_os",
+        is_sub_os: true,
+        sub_os_id: 2,
+        display_label: "1396 [Miolo]",
+      },
+    ];
+    expect(dedupeOsSearchRows(rows)).toHaveLength(2);
+  });
+
+  it("colapsa duplicata da OS principal", () => {
+    const rows: OsSearchRow[] = [
+      { nr_os: 1396, ano: 2026, kind: "main_os" },
+      { nr_os: 1396, ano: 2026, kind: "main_os" },
+    ];
+    expect(dedupeOsSearchRows(rows)).toHaveLength(1);
   });
 });

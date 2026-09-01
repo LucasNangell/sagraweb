@@ -24,6 +24,8 @@ import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 
 import { cn } from "@sagra/ui";
 
+import { homeTestIds } from "@/lib/testId";
+
 
 
 interface NotificationWsMessage {
@@ -558,6 +560,7 @@ export function NotificationCenter() {
           className="relative hidden rounded-full p-2 hover:bg-white/10 sm:inline-flex"
 
           aria-label="Notificações"
+          data-testid={homeTestIds.headerNotifications}
 
           aria-expanded={panelOpen}
 
@@ -610,6 +613,7 @@ export function NotificationCenter() {
                 className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
 
                 aria-label="Dispensar aviso"
+                data-testid={homeTestIds.headerNotificationsDismiss}
 
               >
 
@@ -630,6 +634,7 @@ export function NotificationCenter() {
               <button
 
                 type="button"
+                data-testid={homeTestIds.headerNotificationsOpen}
 
                 onClick={() => openNotification(persistentAlert)}
 
@@ -652,6 +657,7 @@ export function NotificationCenter() {
                 <button
 
                   type="button"
+                  data-testid={homeTestIds.headerNotificationsConversation}
 
                   onClick={() => {
 
@@ -718,6 +724,7 @@ export function NotificationCenter() {
                     <button
 
                       type="button"
+                      data-testid={homeTestIds.headerNotificationItem(item.Id)}
 
                       onClick={() => openNotification(item)}
 
@@ -770,6 +777,7 @@ export function NotificationCenter() {
           aria-modal="true"
 
           aria-labelledby="notification-detail-title"
+          data-testid={homeTestIds.headerNotificationDetail}
 
         >
 
@@ -810,6 +818,7 @@ export function NotificationCenter() {
                 className="rounded p-1 text-slate-500 hover:bg-slate-100"
 
                 aria-label="Fechar"
+                data-testid={homeTestIds.headerNotificationDetailClose}
 
               >
 
@@ -900,6 +909,7 @@ export function NotificationCenter() {
                 <button
 
                   type="button"
+                  data-testid={homeTestIds.headerNotificationDetailConversation}
 
                   onClick={() => {
 
@@ -922,6 +932,7 @@ export function NotificationCenter() {
               <button
 
                 type="button"
+                data-testid={homeTestIds.headerNotificationDetailOk}
 
                 onClick={() => void dismissSelected()}
 

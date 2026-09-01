@@ -41,6 +41,7 @@ import { PermissionGate } from "@/components/auth/PermissionGate";
 import { OrcamentoCamposEmbed } from "@/features/orcamento/components/OrcamentoCamposPanel";
 import { OrcamentoCotaHeaderButton } from "./OrcamentoCotaHeaderButton";
 import { OsOriginalFilesPanel } from "@/features/os/components/OsOriginalFilesPanel";
+import { homeTestIds } from "@/lib/testId";
 
 export type GerenciaSectionId =
   | "solicitante"
@@ -196,6 +197,7 @@ function SuggestInput({
         placeholder="Selecione ou digite..."
         className={gerenciaInputClass}
         aria-label={ariaLabel}
+        data-testid={homeTestIds.gerenciaField(ariaLabel)}
       />
       <datalist id={listId}>
         {options.map((item) => (
@@ -1474,6 +1476,7 @@ function CheckRow({
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
         className="size-4 shrink-0 rounded border-slate-300"
+        data-testid={homeTestIds.gerenciaField(id)}
       />
       {label}
     </label>
@@ -1513,6 +1516,7 @@ function ElementCard({
         disabled={readOnly}
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
+        data-testid={homeTestIds.gerenciaField(id)}
       />
       <span className="text-lg">{icon}</span>
       <span className="text-xs font-medium">{label}</span>

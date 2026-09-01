@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { fetchPapeisLombada, type PapelLombadaItem } from "@/api/auxLookups";
 import { queryKeys } from "@/api/query-keys";
+import { homeTestIds } from "@/lib/testId";
 import { cn } from "@sagra/ui";
 
 import {
@@ -251,6 +252,7 @@ export function LombadaCalculatorForm({
           className={fieldClass}
           placeholder="Ex.: 200"
           aria-label="Páginas do miolo"
+          data-testid={homeTestIds.lombadaPages}
         />
       </label>
 
@@ -266,6 +268,7 @@ export function LombadaCalculatorForm({
         compact={compact}
         fieldClass={fieldClass}
         labelClass={labelClass}
+        testId={homeTestIds.lombadaCoverPaper}
       />
 
       <PapelSelect
@@ -280,6 +283,7 @@ export function LombadaCalculatorForm({
         compact={compact}
         fieldClass={fieldClass}
         labelClass={labelClass}
+        testId={homeTestIds.lombadaBodyPaper}
       />
 
       <label className="block">
@@ -292,6 +296,7 @@ export function LombadaCalculatorForm({
             onChange={(e) => setDifRaw(e.target.value)}
             className={cn(fieldClass, compact ? "w-24" : "w-28")}
             aria-label="Diferença lombada"
+            data-testid={homeTestIds.lombadaDiff}
           />
           <span className="text-slate-500">mm</span>
         </div>
@@ -353,6 +358,7 @@ export function LombadaCalculatorForm({
           type="button"
           onClick={() => onUseInObs(obsText)}
           className="w-full rounded-md border border-secondary-blue/30 bg-white px-3 py-1.5 text-xs font-semibold text-secondary-blue hover:bg-slate-50"
+          data-testid={homeTestIds.lombadaUseInObs}
         >
           Usar {obsText} na observação
         </button>
@@ -398,6 +404,7 @@ function PapelSelect({
   compact: _compact,
   fieldClass,
   labelClass,
+  testId,
 }: {
   label: string;
   value: string;
@@ -408,6 +415,7 @@ function PapelSelect({
   compact: boolean;
   fieldClass: string;
   labelClass: string;
+  testId?: string;
 }) {
   return (
     <label className="block">
@@ -417,6 +425,7 @@ function PapelSelect({
         onChange={(e) => onChange(e.target.value)}
         className={fieldClass}
         aria-label={label}
+        data-testid={testId}
       >
         <option value="">Selecione…</option>
         {papeis.map((p) => (

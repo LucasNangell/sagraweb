@@ -23,6 +23,7 @@ import {
 } from "@/api/os";
 import { queryKeys } from "@/api/query-keys";
 import { formatOsLabel } from "@/lib/format";
+import { homeTestIds } from "@/lib/testId";
 import { isGravacaoExternaFile } from "@/features/gravacao-externa/constants";
 import {
   confirmCreateOsFolderDialog,
@@ -435,6 +436,7 @@ export function OsFolderBrowserModal({
             ? `Arquivos para Gravação Externa — OS ${formatOsLabel(row)}`
             : `Explorar pasta da OS ${formatOsLabel(row)}`
       }
+      data-testid={homeTestIds.osFolderRoot}
     >
       <div className="flex h-[min(88vh,720px)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-slate-200 bg-[#f3f3f3] shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-300 bg-white px-4 py-3">
@@ -459,6 +461,7 @@ export function OsFolderBrowserModal({
             onClick={onClose}
             className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
             aria-label="Fechar"
+            data-testid={homeTestIds.osFolderClose}
           >
             <X className="size-5" />
           </button>
@@ -794,6 +797,7 @@ export function OsFolderBrowserModal({
                 type="button"
                 onClick={confirmGravacaoPicks}
                 className="rounded bg-primary-green px-4 py-1.5 text-sm font-semibold text-white hover:opacity-90"
+                data-testid={homeTestIds.osFolderOpen}
               >
                 Confirmar seleção
               </button>

@@ -6,6 +6,7 @@ import { useOsDetails } from "@/api/hooks/useOsDetails";
 import { useOsComponentes } from "@/api/hooks/useSubOs";
 import { toCheck } from "@/features/gerencia/utils";
 import { formatDateForInput } from "@/lib/format";
+import { homeTestIds } from "@/lib/testId";
 import {
   EMPTY_TECH_FIELD,
   extractComponentTechDetails,
@@ -136,16 +137,16 @@ export function OsDetailsPanel({
           <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2 lg:col-span-3">
             <div className="grid grid-cols-2 items-end gap-1.5 sm:grid-cols-[minmax(0,2.2fr)_minmax(3.25rem,0.55fr)_minmax(3.25rem,0.55fr)_minmax(3.25rem,0.55fr)_auto]">
               <Field label="Máquina" className="col-span-2 sm:col-span-1">
-                <ReadonlyInput value={maquina} />
+                <ReadonlyInput value={maquina} testId={homeTestIds.osDetails("maquina")} />
               </Field>
               <Field label="Tiragem">
-                <ReadonlyInput value={data.Tiragem} />
+                <ReadonlyInput value={data.Tiragem} testId={homeTestIds.osDetails("tiragem")} />
               </Field>
               <Field label="Páginas">
-                <ReadonlyInput value={paginas} />
+                <ReadonlyInput value={paginas} testId={homeTestIds.osDetails("paginas")} />
               </Field>
               <Field label="Modelos">
-                <ReadonlyInput value={data.ModelosArq} />
+                <ReadonlyInput value={data.ModelosArq} testId={homeTestIds.osDetails("modelos")} />
               </Field>
               <div className="flex items-end gap-1.5 pb-1">
                 <input
@@ -155,6 +156,7 @@ export function OsDetailsPanel({
                   tabIndex={-1}
                   aria-readonly="true"
                   aria-label="Frente/Verso"
+                  data-testid={homeTestIds.osDetails("frente-verso")}
                   onChange={() => {}}
                   className="pointer-events-none size-3.5 shrink-0 accent-primary-green"
                 />
@@ -166,13 +168,13 @@ export function OsDetailsPanel({
 
             <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
               <Field label="Formato">
-                <ReadonlyInput value={data.FormatoLink} />
+                <ReadonlyInput value={data.FormatoLink} testId={homeTestIds.osDetails("formato")} />
               </Field>
               <Field label="Prioridade">
-                <ReadonlyInput value={data.EntregPrazoLink} />
+                <ReadonlyInput value={data.EntregPrazoLink} testId={homeTestIds.osDetails("prioridade")} />
               </Field>
               <Field label="Data" className="col-span-2 sm:col-span-1">
-                <ReadonlyInput value={formatDateForInput(data.EntregData)} />
+                <ReadonlyInput value={formatDateForInput(data.EntregData)} testId={homeTestIds.osDetails("data")} />
               </Field>
             </div>
           </div>
@@ -182,24 +184,24 @@ export function OsDetailsPanel({
             fill
             className="min-h-[5.5rem] h-full sm:col-span-2 lg:col-span-1"
           >
-            <ReadonlyTextarea value={data.ContatoTrab} fill />
+            <ReadonlyTextarea value={data.ContatoTrab} fill testId={homeTestIds.osDetails("contato")} />
           </Field>
 
           <Field label="Papel" fill className="min-h-[4.5rem] h-full lg:min-h-0">
-            <ReadonlyTextarea value={papel} fill />
+            <ReadonlyTextarea value={papel} fill testId={homeTestIds.osDetails("papel")} />
           </Field>
           <Field label="Cores" fill className="min-h-[4.5rem] h-full lg:min-h-0">
-            <ReadonlyTextarea value={cores} fill />
+            <ReadonlyTextarea value={cores} fill testId={homeTestIds.osDetails("cores")} />
           </Field>
           <Field
             label="Acabamento"
             fill
             className="min-h-[4.5rem] h-full lg:min-h-0"
           >
-            <ReadonlyTextarea value={data.DescAcabamento} fill />
+            <ReadonlyTextarea value={data.DescAcabamento} fill testId={homeTestIds.osDetails("acabamento")} />
           </Field>
           <Field label="Obs" fill className="min-h-[4.5rem] h-full lg:min-h-0">
-            <ReadonlyTextarea value={data.Observ} fill />
+            <ReadonlyTextarea value={data.Observ} fill testId={homeTestIds.osDetails("obs")} />
           </Field>
         </div>
       )}
@@ -234,7 +236,13 @@ function Field({
   );
 }
 
-function ReadonlyInput({ value }: { value: unknown }) {
+function ReadonlyInput({
+  value,
+  testId,
+}: {
+  value: unknown;
+  testId?: string;
+}) {
   return (
     <input
       type="text"
@@ -242,6 +250,7 @@ function ReadonlyInput({ value }: { value: unknown }) {
       disabled
       value={value != null ? String(value) : ""}
       className="h-8 w-full rounded border border-sagra-border bg-slate-50 px-2 text-xs"
+      data-testid={testId}
     />
   );
 }
@@ -250,10 +259,12 @@ function ReadonlyTextarea({
   value,
   rows,
   fill,
+  testId,
 }: {
   value: unknown;
   rows?: number;
   fill?: boolean;
+  testId?: string;
 }) {
   return (
     <textarea
@@ -265,6 +276,7 @@ function ReadonlyTextarea({
         "w-full resize-none rounded border border-sagra-border bg-slate-50 px-2 py-1 text-xs",
         fill && "h-full min-h-0",
       )}
+      data-testid={testId}
     />
   );
 }

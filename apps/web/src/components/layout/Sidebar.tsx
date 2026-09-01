@@ -14,6 +14,7 @@ import {
 } from "@/lib/painel-standalone";
 import { SupportHelpMenu } from "@/features/support/components/SupportHelpMenu";
 import { cn } from "@sagra/ui";
+import { sidebarNavTestId, homeTestIds } from "@/lib/testId";
 
 import { navItemKey, type NavItem } from "./nav-config";
 
@@ -108,6 +109,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   return (
     <aside
+      data-testid={homeTestIds.sidebar}
       className={cn(
         "sagra-sidebar-nav z-40 flex shrink-0 flex-col border-sagra-border bg-white",
         "fixed inset-x-0 bottom-0 border-t pb-[env(safe-area-inset-bottom,0px)] md:relative md:inset-auto md:border-r md:border-t-0 md:pb-0",
@@ -120,6 +122,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           onClick={onToggle}
           className="rounded p-1.5 text-secondary-blue hover:bg-sagra-bg"
           aria-label={collapsed ? "Expandir menu" : "Recolher menu"}
+          data-testid={homeTestIds.sidebarCollapse}
         >
           {collapsed ? (
             <ChevronRight className="size-5" />
@@ -151,6 +154,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                     type="button"
                     className={cn(navItemClassName(collapsed), "w-full cursor-pointer border-0 bg-transparent")}
                     title={linkTitle ?? item.label}
+                    data-testid={sidebarNavTestId(item.to, item.action)}
                     onClick={() => openLombadaModal()}
                   >
                     <NavItemContent
@@ -182,6 +186,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                   className={navItemClassName(collapsed)}
                   activeOptions={{ exact: to === "/" }}
                   title={linkTitle ?? item.label}
+                  data-testid={sidebarNavTestId(to, item.action)}
                   onClick={
                     item.opensInNewWindow && isPainelStandalonePath(to)
                       ? (e) => {

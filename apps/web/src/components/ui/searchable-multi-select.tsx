@@ -21,6 +21,8 @@ interface SearchableMultiSelectProps {
   labelSide?: "top" | "left";
   hideLabel?: boolean;
   "aria-label"?: string;
+  /** Playwright/Testing Library `data-testid` on the trigger only. */
+  testId?: string;
 }
 
 export function SearchableMultiSelect({
@@ -39,6 +41,7 @@ export function SearchableMultiSelect({
   labelSide = "top",
   hideLabel = false,
   "aria-label": ariaLabel,
+  testId,
 }: SearchableMultiSelectProps) {
   const autoId = useId();
   const fieldId = id ?? autoId;
@@ -109,6 +112,7 @@ export function SearchableMultiSelect({
         id={fieldId}
         type="button"
         disabled={disabled}
+        data-testid={testId}
         onClick={handleOpen}
         onKeyDown={(e) => {
           if (disabled || e.ctrlKey || e.metaKey || e.altKey) {

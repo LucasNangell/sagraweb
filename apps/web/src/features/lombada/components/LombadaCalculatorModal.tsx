@@ -1,6 +1,8 @@
 import { X } from "lucide-react";
 import { useEffect } from "react";
 
+import { homeTestIds } from "@/lib/testId";
+
 import { LombadaCalculatorPanel } from "./LombadaCalculatorForm";
 import { useLombadaUiStore } from "../lombadaUiStore";
 
@@ -29,6 +31,7 @@ export function LombadaCalculatorModal() {
       role="dialog"
       aria-modal="true"
       aria-labelledby="lombada-modal-title"
+      data-testid={homeTestIds.lombadaRoot}
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           closeModal();
@@ -48,6 +51,7 @@ export function LombadaCalculatorModal() {
             onClick={closeModal}
             className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
             aria-label="Fechar"
+            data-testid={homeTestIds.lombadaClose}
           >
             <X className="size-5" />
           </button>

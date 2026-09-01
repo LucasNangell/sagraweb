@@ -10,6 +10,7 @@ import {
 } from "@/api/osNotificacao";
 import { queryKeys } from "@/api/query-keys";
 import { useWebPush } from "@/hooks/useWebPush";
+import { homeTestIds } from "@/lib/testId";
 import type { OsSearchRow } from "../types";
 
 interface OsNotificarModalProps {
@@ -150,6 +151,7 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
       className="fixed inset-0 z-[10002] flex items-center justify-center bg-black/60 p-4"
       role="dialog"
       aria-modal="true"
+      data-testid={homeTestIds.osNotificarRoot}
     >
       <div className="relative w-full max-w-lg rounded-lg border-t-4 border-[#24344D] bg-white p-6 shadow-xl">
         <button
@@ -157,6 +159,7 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
           onClick={onClose}
           className="absolute right-3 top-3 text-neutral-500 hover:text-neutral-800"
           aria-label="Fechar"
+          data-testid={homeTestIds.osNotificarClose}
         >
           <X className="size-5" />
         </button>
@@ -292,6 +295,7 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
             type="button"
             onClick={onClose}
             className="rounded border border-sagra-border px-4 py-2 text-sm"
+            data-testid={homeTestIds.osNotificarCancel}
           >
             Cancelar
           </button>
@@ -300,6 +304,7 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
             disabled={saveMutation.isPending}
             onClick={() => void handleSave()}
             className="rounded bg-secondary-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            data-testid={homeTestIds.osNotificarSend}
           >
             {saveMutation.isPending ? "Salvando…" : "Ativar notificações"}
           </button>

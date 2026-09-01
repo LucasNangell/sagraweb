@@ -1,4 +1,5 @@
 import { Loader2, X } from "lucide-react";
+import { homeTestIds } from "@/lib/testId";
 
 interface ChapaItem {
   maquina: string;
@@ -34,6 +35,7 @@ export function GravacaoConcluirInterceptModal({
       role="dialog"
       aria-modal="true"
       aria-label="Concluir Gravação Externa antes do andamento"
+      data-testid={homeTestIds.osGravacaoConcluirRoot}
     >
       <div className="flex w-full max-w-md flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
@@ -49,6 +51,7 @@ export function GravacaoConcluirInterceptModal({
             disabled={saving}
             className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50"
             aria-label="Fechar"
+            data-testid={homeTestIds.osGravacaoConcluirClose}
           >
             <X className="size-5" />
           </button>
@@ -92,6 +95,7 @@ export function GravacaoConcluirInterceptModal({
             onClick={onClose}
             disabled={saving}
             className="rounded border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
+            data-testid={homeTestIds.osGravacaoConcluirCancel}
           >
             Cancelar
           </button>
@@ -100,6 +104,7 @@ export function GravacaoConcluirInterceptModal({
             onClick={onConfirm}
             disabled={saving}
             className="inline-flex items-center gap-1.5 rounded bg-secondary-blue px-3 py-1.5 text-sm text-white disabled:opacity-50"
+            data-testid={homeTestIds.osGravacaoConcluirConfirm}
           >
             {saving ? <Loader2 className="size-4 animate-spin" /> : null}
             Confirmar e continuar

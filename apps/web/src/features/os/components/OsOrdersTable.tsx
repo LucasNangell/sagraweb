@@ -22,6 +22,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 
 import { fetchSubOsList } from "@/api/os";
 import { formatDateBr } from "@/lib/format";
+import { homeTestIds } from "@/lib/testId";
 import {
   buildDisplayRows,
   displayRowId,
@@ -78,6 +79,7 @@ function buildColumns(
               type="button"
               title={isExpanded ? "Recolher Sub OS" : "Expandir Sub OS"}
               className="rounded p-0.5 text-secondary-blue hover:bg-slate-100"
+              data-testid={homeTestIds.osTableExpand(data.ano, data.nr_os)}
               onClick={(e) => {
                 e.stopPropagation();
                 onToggleExpand(data);
@@ -518,6 +520,7 @@ export function OsOrdersTable({
   return (
     <section
       data-tour="os-table"
+      data-testid={homeTestIds.osTable}
       className="flex h-full min-h-0 flex-col rounded-lg border border-sagra-border bg-white shadow-sm"
       aria-busy={isUpdating}
     >
@@ -562,6 +565,7 @@ export function OsOrdersTable({
                       className="cursor-pointer select-none whitespace-nowrap px-2 py-2 text-left text-xs font-semibold"
                       style={{ width: header.column.getSize() }}
                       onClick={header.column.getToggleSortingHandler()}
+                      data-testid={homeTestIds.osTableSort(header.id)}
                     >
                       <span className="inline-flex items-center gap-1">
                         {flexRender(
@@ -636,6 +640,7 @@ export function OsOrdersTable({
                     >
                       <tr
                         data-index={virtualRow.index}
+                        data-testid={homeTestIds.osTableRow(data.ano, data.nr_os)}
                         style={{ height: ROW_HEIGHT }}
                         className={cn(
                           "border-b border-sagra-border/60",
@@ -719,6 +724,7 @@ export function OsOrdersTable({
                     <button
                       type="button"
                       data-index={virtualRow.index}
+                      data-testid={homeTestIds.osTableRow(data.ano, data.nr_os)}
                       style={{ height: MOBILE_CARD_HEIGHT }}
                       className={cn(
                         "flex w-full flex-col gap-1 border-b border-sagra-border/60 px-3 py-2.5 text-left",
@@ -800,6 +806,7 @@ export function OsOrdersTable({
             disabled={isUpdating}
             className="h-7 shrink-0 rounded border border-sagra-border bg-white px-1.5 text-xs tabular-nums disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Registros por página"
+            data-testid={homeTestIds.osTablePageSize}
           >
             {OS_PAGE_SIZE_OPTIONS.map((size) => (
               <option key={size} value={size}>
@@ -815,6 +822,7 @@ export function OsOrdersTable({
             onClick={() => onPageChange(page - 1)}
             className="flex size-7 cursor-pointer items-center justify-center rounded border border-sagra-border hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="Página anterior"
+            data-testid={homeTestIds.osTablePrev}
           >
             <ChevronLeft className="size-4" />
           </button>
@@ -827,6 +835,7 @@ export function OsOrdersTable({
             onClick={() => onPageChange(page + 1)}
             className="flex size-7 cursor-pointer items-center justify-center rounded border border-sagra-border hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="Próxima página"
+            data-testid={homeTestIds.osTableNext}
           >
             <ChevronRight className="size-4" />
           </button>
@@ -838,6 +847,7 @@ export function OsOrdersTable({
               disabled={exportDisabled || isExporting}
               onClick={onExportReport}
               className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#217346] px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#1e6b41] disabled:cursor-not-allowed disabled:opacity-60"
+              data-testid={homeTestIds.osTableReport}
             >
               {isExporting ? (
                 <Loader2 className="size-3.5 animate-spin" aria-hidden />

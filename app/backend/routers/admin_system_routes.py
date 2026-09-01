@@ -1742,3 +1742,32 @@ def admin_copiar_acabamento_passos(catalog_id: int, body: ProdutoPassosCopiar):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"passos": passos}
 
+
+class PassosPriorsSeedIn(BaseModel):
+    force: bool = True
+
+
+@router.post(
+    "/api/admin/system/orcamento/passos/priors",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def admin_seed_orcamento_passos_priors(
+    body: PassosPriorsSeedIn | None = None,
+    session: SessionData = Depends(require_session),
+):
+    from services.orcamento_passo_priors_seed import seed_orcamento_passos_priors
+
+    payload = body or PassosPriorsSeedIn()
+    try:
+        result = seed_orcamento_passos_priors(
+            force=payload.force,
+            ponto=str(session.ponto),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Erro ao aplicar priors de etapas de orçamento")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return result
+
+

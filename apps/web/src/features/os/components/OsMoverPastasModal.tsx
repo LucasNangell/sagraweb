@@ -2,6 +2,7 @@ import { FolderInput, X } from "lucide-react";
 
 import { OsFolderMoveForm } from "./OsFolderMoveForm";
 import type { OsSearchRow } from "../types";
+import { homeTestIds } from "@/lib/testId";
 
 interface OsMoverPastasModalProps {
   row: OsSearchRow | null;
@@ -24,6 +25,7 @@ export function OsMoverPastasModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="mover-pastas-title"
+      data-testid={homeTestIds.osMoverRoot}
     >
       <div className="relative w-full max-w-xl rounded-lg border-t-4 border-[#24344D] bg-white p-6 shadow-xl">
         <button
@@ -31,6 +33,7 @@ export function OsMoverPastasModal({
           onClick={onClose}
           className="absolute right-3 top-3 text-neutral-500 hover:text-neutral-800"
           aria-label="Fechar"
+          data-testid={homeTestIds.osMoverClose}
         >
           <X className="size-5" />
         </button>

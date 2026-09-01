@@ -23,6 +23,8 @@ interface MultiSelectProps {
   /** Classes extras no painel da lista (ex.: min-w maior que o trigger). */
   dropdownClassName?: string;
   "aria-label"?: string;
+  /** Playwright/Testing Library `data-testid` on the trigger only. */
+  testId?: string;
 }
 
 function normalizeOptions(
@@ -57,6 +59,7 @@ export function MultiSelect({
   hideLabel = false,
   dropdownClassName,
   "aria-label": ariaLabel,
+  testId,
 }: MultiSelectProps) {
   const autoId = useId();
   const fieldId = id ?? autoId;
@@ -135,6 +138,7 @@ export function MultiSelect({
         id={fieldId}
         type="button"
         disabled={disabled}
+        data-testid={testId}
         onClick={handleOpen}
         onKeyDown={(e) => {
           if (disabled || e.ctrlKey || e.metaKey || e.altKey) {

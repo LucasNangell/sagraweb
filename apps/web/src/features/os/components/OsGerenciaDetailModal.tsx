@@ -14,6 +14,7 @@ import { NovaOsArquivosModal } from "@/features/gerencia/components/NovaOsArquiv
 import { useGerenciaOsEditor } from "@/features/gerencia/hooks/useGerenciaOsEditor";
 import { OrcamentoEditorProvider } from "@/features/orcamento/hooks/useOrcamentoEditor";
 import { useOsEditLock } from "@/features/os/hooks/useOsEditLock";
+import { homeTestIds } from "@/lib/testId";
 
 import {
   confirmNovaOsType,
@@ -300,6 +301,7 @@ export function OsGerenciaDetailModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="os-gerencia-detail-title"
+      data-testid={homeTestIds.osGerenciaRoot}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) requestClose();
       }}
@@ -334,6 +336,7 @@ export function OsGerenciaDetailModal({
             onClick={requestClose}
             className="shrink-0 text-neutral-500 hover:text-neutral-800"
             aria-label="Fechar"
+            data-testid={homeTestIds.osGerenciaClose}
           >
             <X className="size-5" />
           </button>
@@ -351,6 +354,7 @@ export function OsGerenciaDetailModal({
                   key={item.id}
                   type="button"
                   onClick={() => setSection(item.id)}
+                  data-testid={homeTestIds.osGerenciaSection(item.id)}
                   className={cn(
                     "rounded-md px-2.5 py-2 text-left text-xs font-semibold transition sm:text-sm",
                     active
@@ -423,6 +427,7 @@ export function OsGerenciaDetailModal({
                     onClick={handleStartNovaOs}
                     disabled={loading || !!loadError}
                     className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                    data-testid={homeTestIds.osGerenciaNew}
                   >
                     <FilePlus className="size-4" aria-hidden />
                     Nova OS
@@ -434,6 +439,7 @@ export function OsGerenciaDetailModal({
                     onClick={handleStartDuplicarOs}
                     disabled={loading || !!loadError}
                     className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                    data-testid={homeTestIds.osGerenciaDuplicate}
                   >
                     <Copy className="size-4" aria-hidden />
                     Duplicar OS
@@ -445,6 +451,7 @@ export function OsGerenciaDetailModal({
                     onClick={handlePrintFicha}
                     disabled={loading || !!loadError}
                     className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                    data-testid={homeTestIds.osGerenciaPrint}
                   >
                     <Printer className="size-4" aria-hidden />
                     Imprimir Ficha
@@ -462,6 +469,7 @@ export function OsGerenciaDetailModal({
                     onClick={() => void handleStartEdit()}
                     disabled={loading || !!loadError || lock.acquiring}
                     className="inline-flex items-center gap-2 rounded-lg bg-secondary-blue px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-secondary-blue/90 disabled:opacity-50"
+                    data-testid={homeTestIds.osGerenciaEdit}
                   >
                     <Pencil className="size-4" aria-hidden />
                     Editar
@@ -475,6 +483,7 @@ export function OsGerenciaDetailModal({
                   onClick={handleCancelEdit}
                   disabled={saving}
                   className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 shadow-sm transition hover:bg-red-50 disabled:opacity-50"
+                  data-testid={homeTestIds.osGerenciaCancel}
                 >
                   Cancelar
                 </button>
@@ -483,6 +492,7 @@ export function OsGerenciaDetailModal({
                   onClick={() => void handleSave()}
                   disabled={saving}
                   className="inline-flex items-center gap-2 rounded-lg bg-primary-green px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-green/90 disabled:opacity-60"
+                  data-testid={homeTestIds.osGerenciaSave}
                 >
                   {saving ? (
                     <Loader2 className="size-4 animate-spin" aria-hidden />

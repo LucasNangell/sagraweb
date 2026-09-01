@@ -10,6 +10,7 @@ import {
 } from "@/api/osArquivos";
 import { UploadProgressBar } from "@/components/UploadProgressBar";
 import { OsFolderMoveForm } from "@/features/os/components/OsFolderMoveForm";
+import { homeTestIds } from "@/lib/testId";
 
 export interface NovaOsArquivosModalProps {
   open: boolean;
@@ -94,6 +95,7 @@ export function NovaOsArquivosModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="nova-os-arquivos-title"
+        data-testid={homeTestIds.osArquivosRoot}
       >
         <div className="flex items-center gap-2 rounded-lg bg-white px-6 py-4 text-sm text-slate-600 shadow-xl">
           <Loader2 className="size-5 animate-spin" aria-hidden />
@@ -182,6 +184,7 @@ export function NovaOsArquivosModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="nova-os-arquivos-title"
+      data-testid={homeTestIds.osArquivosRoot}
     >
       <div
         className={cn(
@@ -213,6 +216,7 @@ export function NovaOsArquivosModal({
             disabled={busy}
             className="rounded p-1 text-slate-500 hover:bg-slate-100"
             aria-label="Fechar"
+            data-testid={homeTestIds.osArquivosClose}
           >
             <X className="size-5" />
           </button>
@@ -380,6 +384,7 @@ export function NovaOsArquivosModal({
             onClick={onClose}
             disabled={busy}
             className="rounded border border-slate-300 px-4 py-2 text-sm"
+            data-testid={homeTestIds.osArquivosSkip}
           >
             Pular por agora
           </button>
@@ -389,6 +394,7 @@ export function NovaOsArquivosModal({
               disabled={busy || !files.length}
               onClick={() => void handleConfirmSelf()}
               className="flex items-center gap-2 rounded bg-primary-green px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              data-testid={homeTestIds.osArquivosConfirm}
             >
               {busy ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden />

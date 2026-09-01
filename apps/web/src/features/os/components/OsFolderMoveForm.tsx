@@ -9,6 +9,7 @@ import {
   type OsFolderMovePreviewResponse,
 } from "@/api/os";
 import { formatDateBr } from "@/lib/format";
+import { homeTestIds } from "@/lib/testId";
 
 import { normalizeOsYear } from "../normalizeOsYear";
 
@@ -298,6 +299,11 @@ export function OsFolderMoveForm({
           onClick={onCancel}
           className="rounded border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
           disabled={busy}
+          data-testid={
+            variant === "repeticao"
+              ? homeTestIds.osArquivosSkip
+              : homeTestIds.osMoverCancel
+          }
         >
           {cancelLabel}
         </button>
@@ -306,6 +312,11 @@ export function OsFolderMoveForm({
           onClick={() => moveMutation.mutate()}
           disabled={!canMove}
           className="rounded bg-primary-green px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+          data-testid={
+            variant === "repeticao"
+              ? homeTestIds.osArquivosConfirm
+              : homeTestIds.osMoverConfirm
+          }
         >
           {moveMutation.isPending ? "Movendo…" : "Mover pastas"}
         </button>

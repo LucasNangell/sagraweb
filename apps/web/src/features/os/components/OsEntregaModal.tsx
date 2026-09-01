@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import type { ProtocoloEntregaPayload } from "../types";
+import { homeTestIds } from "@/lib/testId";
 
 function todayIsoDate(): string {
   const now = new Date();
@@ -58,6 +59,7 @@ export function OsEntregaModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="entrega-modal-title"
+      data-testid={homeTestIds.osEntregaRoot}
     >
       <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border-t-4 border-primary-green bg-white p-6 shadow-xl">
         <h3
@@ -172,6 +174,7 @@ export function OsEntregaModal({
               disabled={saving}
               onClick={onClose}
               className="rounded border border-sagra-border px-4 py-2 text-sm disabled:opacity-60"
+              data-testid={homeTestIds.osEntregaCancel}
             >
               Cancelar
             </button>
@@ -179,6 +182,7 @@ export function OsEntregaModal({
               type="submit"
               disabled={saving}
               className="rounded bg-primary-green px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              data-testid={homeTestIds.osEntregaConfirm}
             >
               Confirmar entrega
             </button>

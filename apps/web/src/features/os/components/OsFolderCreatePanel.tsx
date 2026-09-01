@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 
 import type { OsFolderPlanResponse } from "@/api/os";
+import { homeTestIds } from "@/lib/testId";
 
 export interface OsFolderCreatePanelProps {
   plan: OsFolderPlanResponse | undefined;
@@ -153,6 +154,7 @@ export function OsFolderCreatePanel({
             onClick={onCreate}
             disabled={creating}
             className="inline-flex items-center gap-2 rounded bg-secondary-blue px-5 py-2.5 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-60"
+            data-testid={homeTestIds.osFolderCreate}
           >
             {creating ? (
               <Loader2 className="size-4 animate-spin" aria-hidden />

@@ -62,6 +62,8 @@ import {
 
 import { cn } from "@sagra/ui";
 
+import { homeTestIds } from "@/lib/testId";
+
 
 
 type ModalView = "menu" | "new" | "list" | "thread";
@@ -439,6 +441,7 @@ export function SupportMessageModal() {
       className="fixed inset-0 z-[10003] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4"
 
       role="dialog"
+      data-testid={isAssigned ? homeTestIds.supportAssignedRoot : undefined}
 
       aria-modal="true"
 
@@ -575,6 +578,7 @@ export function SupportMessageModal() {
             className="ml-2 shrink-0 rounded p-1 text-slate-500 hover:bg-slate-100"
 
             aria-label="Fechar"
+            data-testid={isAssigned ? homeTestIds.supportAssignedClose : undefined}
 
           >
 
@@ -897,6 +901,7 @@ export function SupportMessageModal() {
                     placeholder="Escreva sua resposta ou complemento…"
 
                     submitLabel="Enviar mensagem"
+                    submitTestId={isAssigned ? homeTestIds.supportAssignedSend : undefined}
 
                   />
 

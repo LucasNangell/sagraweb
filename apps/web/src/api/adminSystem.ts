@@ -950,3 +950,21 @@ export async function copyAcabamentoPassos(
     body: JSON.stringify({ origem_catalog_id: origemCatalogId, rotulo }),
   });
 }
+
+export type OrcamentoPassosPriorsResult = {
+  applied: boolean;
+  versao: number;
+  versao_codigo: number;
+  produtos: number;
+  acabamentos: number;
+};
+
+export async function seedOrcamentoPassosPriors(
+  force = true,
+): Promise<OrcamentoPassosPriorsResult> {
+  return apiFetch("/admin/system/orcamento/passos/priors", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ force }),
+  });
+}

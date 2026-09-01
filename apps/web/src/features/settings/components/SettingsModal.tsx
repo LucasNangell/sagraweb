@@ -42,6 +42,7 @@ import {
   useSituacoesLookup,
 } from "@/api/hooks/useAuxLookups";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { homeTestIds } from "@/lib/testId";
 import { cn } from "@sagra/ui";
 
 interface SettingsModalProps {
@@ -296,6 +297,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="settings-modal-title"
+      data-testid={homeTestIds.osSettingsRoot}
     >
       <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-xl">
         <header className="flex shrink-0 items-start justify-between border-b border-slate-200/80 px-5 py-4">
@@ -320,6 +322,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
             onClick={onClose}
             className="text-neutral-500 hover:text-neutral-800"
             aria-label="Fechar"
+            data-testid={homeTestIds.osSettingsClose}
           >
             <X className="size-5" />
           </button>
@@ -494,6 +497,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                 placeholder="Nome do filtro"
                 className="h-10 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none ring-primary-green/30 transition focus:ring-2"
                 disabled={disabled}
+                data-testid={homeTestIds.osSettingsName}
               />
               <button
                 type="button"
@@ -502,6 +506,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                 }
                 disabled={disabled}
                 className="inline-flex h-10 items-center justify-center rounded-lg bg-primary-green px-4 text-sm font-semibold text-white transition hover:bg-primary-green/90 disabled:opacity-60"
+                data-testid={homeTestIds.osSettingsSave}
               >
                 {isEditing
                   ? updateFilterMutation.isPending
@@ -563,6 +568,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                           disabled={isBusy}
                           title="Definir como padrão"
                           className="accent-primary-green"
+                          data-testid={homeTestIds.osSettingsDefault}
                         />
                         <button
                           type="button"
@@ -585,6 +591,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                         disabled={isBusy}
                         className="inline-flex size-8 items-center justify-center rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-60"
                         title="Excluir filtro"
+                        data-testid={homeTestIds.osSettingsDelete}
                       >
                         <Trash2 className="size-4" aria-hidden />
                       </button>

@@ -31,6 +31,7 @@ import {
 import { useAccessControl } from "@/features/auth/useAccessControl";
 import { useAuthStore } from "@/features/auth/authStore";
 import { formatDateBr, formatPonto } from "@/lib/format";
+import { homeTestIds } from "@/lib/testId";
 import { dedupeOsHistoryRows } from "../osHistoryUtils";
 import { silentRefreshOsSearch } from "../osRealtimeSync";
 import { useOsFiltersStore } from "../osFiltersStore";
@@ -767,6 +768,7 @@ export function OsHistoryPanel({
     <>
       <section
         data-tour="os-history-panel"
+        data-testid={homeTestIds.osHistoryPanel}
         data-tour-editing={editing ? "true" : "false"}
         data-tour-frozen={frozen ? "true" : "false"}
         data-tour-saved={tourSaved ? "true" : "false"}
@@ -854,6 +856,7 @@ export function OsHistoryPanel({
                         return (
                           <tr
                             key={`${historyOsKey}-${subRow.id}`}
+                            data-testid={homeTestIds.osHistoryRow(subRow.id)}
                             onClick={() => {
                               if (!editing) {
                                 setSelectedSubHistory(subRow);
@@ -884,6 +887,7 @@ export function OsHistoryPanel({
                       return (
                         <tr
                           key={`${historyOsKey}-${mainRow.CodStatus}`}
+                          data-testid={homeTestIds.osHistoryRow(mainRow.CodStatus)}
                           onClick={() => {
                             if (!editing) {
                               selectHistoryRow(mainRow);
@@ -917,7 +921,7 @@ export function OsHistoryPanel({
                   ) : null}
 
                   <div className="grid shrink-0 grid-cols-1 gap-1.5 sm:grid-cols-3">
-                    <label className="min-w-0 text-xs" data-tour="os-history-situacao">
+                    <label className="min-w-0 text-xs" data-tour="os-history-situacao" data-testid={homeTestIds.osHistorySituacao}>
                       <span className="font-semibold text-neutral-600">Andamento</span>
                       <select
                         value={form.situacao}
@@ -935,7 +939,7 @@ export function OsHistoryPanel({
                         ))}
                       </select>
                     </label>
-                    <label className="min-w-0 text-xs" data-tour="os-history-setor">
+                    <label className="min-w-0 text-xs" data-tour="os-history-setor" data-testid={homeTestIds.osHistorySetor}>
                       <span className="font-semibold text-neutral-600">Setor</span>
                       <select
                         value={form.setor}
@@ -953,7 +957,7 @@ export function OsHistoryPanel({
                         ))}
                       </select>
                     </label>
-                    <label className="min-w-0 text-xs" data-tour="os-history-ponto">
+                    <label className="min-w-0 text-xs" data-tour="os-history-ponto" data-testid={homeTestIds.osHistoryPonto}>
                       <span className="font-semibold text-neutral-600">Ponto</span>
                       <input
                         type="text"
@@ -968,7 +972,7 @@ export function OsHistoryPanel({
                   </div>
 
                   {editing && !isEditMode && needsDestinationSelector ? (
-                    <div className="flex min-w-0 shrink-0 flex-col gap-1.5" data-tour="os-history-componente">
+                    <div className="flex min-w-0 shrink-0 flex-col gap-1.5" data-tour="os-history-componente" data-testid={homeTestIds.osHistoryComponente}>
                       <label className="flex items-center gap-2 text-xs text-neutral-800">
                         <input
                           type="checkbox"
@@ -1008,7 +1012,7 @@ export function OsHistoryPanel({
                     </div>
                   ) : null}
 
-                  <label className="flex min-h-[5rem] min-w-0 flex-1 flex-col text-xs" data-tour="os-history-obs">
+                  <label className="flex min-h-[5rem] min-w-0 flex-1 flex-col text-xs" data-tour="os-history-obs" data-testid={homeTestIds.osHistoryObs}>
                 <span className="shrink-0 font-semibold text-neutral-600">
                   Observação
                 </span>
@@ -1036,6 +1040,7 @@ export function OsHistoryPanel({
                     }
                     onClick={() => void handleDelete()}
                     className="flex size-8 items-center justify-center rounded bg-sagra-danger text-white disabled:opacity-40"
+                    data-testid={homeTestIds.osHistoryExcluir}
                   >
                     <Trash2 className="size-4" />
                   </button>
@@ -1052,6 +1057,7 @@ export function OsHistoryPanel({
                         id: String(osId),
                       }}
                       className="inline-flex items-center gap-1.5 rounded bg-secondary-blue px-3 py-1.5 text-xs font-semibold text-white no-underline hover:bg-secondary-blue/90 hover:text-white hover:no-underline"
+                      data-testid={homeTestIds.osHistoryAnalise}
                     >
                       <Search className="size-3.5" aria-hidden />
                       {analiseCaption}
@@ -1071,6 +1077,7 @@ export function OsHistoryPanel({
                         disabled={frozen || lock.acquiring}
                         onClick={() => void startNew()}
                         data-tour="os-history-novo"
+                        data-testid={homeTestIds.osHistoryNovo}
                         className="rounded bg-primary-green px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
                       >
                         Novo
@@ -1081,6 +1088,7 @@ export function OsHistoryPanel({
                           onClick={() => void startEdit()}
                           disabled={lock.acquiring}
                           className="rounded bg-amber-500 px-4 py-1.5 text-xs font-semibold text-white"
+                          data-testid={homeTestIds.osHistoryEditar}
                         >
                           Editar
                         </button>
@@ -1093,6 +1101,7 @@ export function OsHistoryPanel({
                         disabled={saving || !canSaveNew}
                         onClick={() => void saveHistory()}
                         data-tour="os-history-salvar"
+                        data-testid={homeTestIds.osHistorySalvar}
                         className="rounded bg-primary-green px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
                       >
                         Salvar
@@ -1102,6 +1111,7 @@ export function OsHistoryPanel({
                         disabled={saving}
                         onClick={cancelEdit}
                         className="rounded bg-sagra-danger px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                        data-testid={homeTestIds.osHistoryCancelar}
                       >
                         Cancelar
                       </button>

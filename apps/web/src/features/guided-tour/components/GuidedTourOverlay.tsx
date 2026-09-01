@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 
 import { useOsSelectionStore } from "@/features/os/osSelectionStore";
+import { homeTestIds } from "@/lib/testId";
 
 import { getTour } from "../catalog";
 import { queryTourTarget } from "../tourDom";
@@ -285,6 +286,7 @@ export function GuidedTourOverlay() {
             type="button"
             onClick={stop}
             className="rounded px-3 py-1.5 text-xs font-semibold text-neutral-600 hover:bg-slate-50"
+            data-testid={homeTestIds.guidedTourExit}
           >
             Sair
           </button>
@@ -293,6 +295,7 @@ export function GuidedTourOverlay() {
               type="button"
               onClick={next}
               className="rounded bg-primary-green px-3 py-1.5 text-xs font-semibold text-white"
+              data-testid={homeTestIds.guidedTourNext}
             >
               {isLast ? "Concluir" : "Próximo"}
             </button>

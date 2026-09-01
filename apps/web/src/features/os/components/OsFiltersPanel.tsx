@@ -17,6 +17,7 @@ import {
 import { MultiSelect } from "@/components/ui/multi-select";
 import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { homeTestIds } from "@/lib/testId";
 import { useOsFiltersStore } from "../osFiltersStore";
 import { formatProcessoMask } from "../processoMask";
 import { PRIORIDADE_OPTIONS } from "../types";
@@ -95,6 +96,7 @@ export function OsFiltersPanel({
           onClick={() => setMobileExpanded((v) => !v)}
           className="inline-flex shrink-0 items-center gap-1 rounded border border-sagra-border px-2 py-1 text-xs font-medium text-neutral-600"
           aria-expanded={mobileExpanded}
+          data-testid={homeTestIds.osFiltersExpand}
         >
           {mobileExpanded ? (
             <>
@@ -123,6 +125,7 @@ export function OsFiltersPanel({
                   onPatchFilters({ includeOs: e.target.checked, page: 1 })
                 }
                 className="accent-primary-green"
+                data-testid={homeTestIds.osFiltersOs}
               />
               Exibir OSs
             </label>
@@ -134,6 +137,7 @@ export function OsFiltersPanel({
                   onPatchFilters({ includeSp: e.target.checked, page: 1 })
                 }
                 className="accent-primary-green"
+                data-testid={homeTestIds.osFiltersSp}
               />
               Exibir SPs
             </label>
@@ -149,6 +153,7 @@ export function OsFiltersPanel({
                 onClick={onOpenSettings}
                 className="flex h-8 w-full items-center justify-center gap-1.5 rounded border border-sagra-border text-neutral-600 hover:bg-slate-50"
                 aria-label="Abrir preferências de filtros"
+                data-testid={homeTestIds.osFiltersCreate}
               >
                 <Filter className="size-3.5" />
                 <span className="text-xs font-medium">Criar filtros</span>
@@ -159,6 +164,7 @@ export function OsFiltersPanel({
               onChange={(e) => onSavedFilterChange(e.target.value)}
               className="h-8 w-full rounded border border-sagra-border bg-white px-2 text-sm"
               aria-label="Filtros salvos"
+              data-testid={homeTestIds.osFiltersSaved}
             >
               <option value="">Meus Filtros...</option>
               {savedFilters.map((f) => (
@@ -190,6 +196,7 @@ export function OsFiltersPanel({
                     }
                     className={cn(inputClass, "min-w-0 flex-[2]")}
                     aria-label="Nr OS"
+                    data-testid={homeTestIds.osFiltersNrOs}
                   />
                   <span
                     className="shrink-0 text-sm font-semibold text-neutral-400"
@@ -201,6 +208,7 @@ export function OsFiltersPanel({
                     label="Ano"
                     hideLabel
                     aria-label="Ano"
+                    testId={homeTestIds.osFiltersAno}
                     className="min-w-0 flex-[3] flex-none"
                     dropdownClassName="min-w-[8rem]"
                     options={yearOptions}
@@ -234,6 +242,7 @@ export function OsFiltersPanel({
                   }
                   className={cn(inputClass, "w-[11.25rem] shrink-0")}
                   aria-label="Processo"
+                  data-testid={homeTestIds.osFiltersProcesso}
                 />
               </FilterField>
             </FilterGroup>
@@ -246,6 +255,7 @@ export function OsFiltersPanel({
                 label="Categoria"
                 labelSide="left"
                 className="min-w-0 w-full flex-none"
+                testId={homeTestIds.osFiltersCategoria}
                 options={categoriasQuery.data ?? []}
                 value={filters.categorias}
                 onChange={(categorias) =>
@@ -262,6 +272,7 @@ export function OsFiltersPanel({
                 label="Nome"
                 labelSide="left"
                 className="min-w-0 w-full flex-none"
+                testId={homeTestIds.osFiltersNome}
                 value={filters.solicitantes}
                 onChange={(solicitantes) =>
                   onPatchFilters({ solicitantes, solicitante: "", page: 1 })
@@ -287,12 +298,14 @@ export function OsFiltersPanel({
                     onPatchFilters({ titulo: e.target.value, page: 1 })
                   }
                   className={cn(inputClass, "min-w-0 flex-1")}
+                  data-testid={homeTestIds.osFiltersTitulo}
                 />
               </FilterField>
               <MultiSelect
                 label="Máquina"
                 labelSide="left"
                 className="min-w-0 w-full flex-none"
+                testId={homeTestIds.osFiltersMaquina}
                 options={maquinasQuery.data ?? []}
                 value={filters.maquinas}
                 onChange={(maquinas) => onPatchFilters({ maquinas, page: 1 })}
@@ -302,6 +315,7 @@ export function OsFiltersPanel({
                 label="Produto"
                 labelSide="left"
                 className="min-w-0 w-full flex-none"
+                testId={homeTestIds.osFiltersProduto}
                 value={filters.produtos}
                 onChange={(produtos) =>
                   onPatchFilters({ produtos, produto: "", page: 1 })
@@ -316,6 +330,7 @@ export function OsFiltersPanel({
                 label="Prioridade"
                 labelSide="left"
                 className="min-w-0 w-full flex-none"
+                testId={homeTestIds.osFiltersPrioridade}
                 options={PRIORIDADE_OPTIONS}
                 value={filters.prioridade}
                 onChange={(prioridade) =>
@@ -332,6 +347,7 @@ export function OsFiltersPanel({
                 label="Setor"
                 labelSide="left"
                 className="min-w-0 w-full flex-none"
+                testId={homeTestIds.osFiltersSetor}
                 options={setoresQuery.data ?? []}
                 value={filters.setor}
                 onChange={(setor) => onPatchFilters({ setor, page: 1 })}
@@ -341,6 +357,7 @@ export function OsFiltersPanel({
                 label="Situação"
                 labelSide="left"
                 className="min-w-0 w-full flex-none"
+                testId={homeTestIds.osFiltersSituacao}
                 options={situacoesQuery.data ?? []}
                 value={filters.situacao}
                 onChange={(situacao) => onPatchFilters({ situacao, page: 1 })}
@@ -355,6 +372,7 @@ export function OsFiltersPanel({
               title="Limpar filtros"
               onClick={onResetFilters}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+              data-testid={homeTestIds.osFiltersClear}
             >
               <Eraser className="size-3.5" />
             </button>
@@ -365,6 +383,7 @@ export function OsFiltersPanel({
               onClick={onRefresh}
               disabled={isFetching}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-primary-green text-white hover:opacity-90 disabled:opacity-60"
+              data-testid={homeTestIds.osFiltersRefresh}
             >
               <RefreshCw
                 className={cn("size-3.5", isFetching && "animate-spin")}

@@ -3,6 +3,7 @@ import { LogOut, User } from "lucide-react";
 
 import { useAuthStore } from "@/features/auth/authStore";
 import { NotificationCenter } from "@/features/support/components/NotificationCenter";
+import { homeTestIds } from "@/lib/testId";
 import logoUrl from "@/logo.png";
 
 export function Header() {
@@ -54,6 +55,7 @@ export function Header() {
           onClick={() => void handleLogout()}
           className="flex items-center gap-1.5 rounded-md border border-white/30 px-2 py-1.5 text-sm font-medium hover:bg-white/10 sm:gap-2 sm:px-3"
           aria-label="Sair"
+          data-testid={homeTestIds.headerLogout}
         >
           <LogOut className="size-4 shrink-0" />
           <span className="hidden sm:inline">Sair</span>

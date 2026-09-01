@@ -170,6 +170,7 @@ _SEED_PARAMETROS: tuple[tuple[str, str, str, str], ...] = (
     ("rendimento_digital_a4", "8", "number", "A4 por folha matriz na Digital (planilha K13)"),
     ("rendimento_offset_a4", "8", "number", "A4 por folha matriz no Offset (planilha K13/K14)"),
     ("pessoal_por_hora", "0", "bool", "Usar custo/hora das etapas em vez da faixa/87%"),
+    ("passos_priors_versao", "0", "number", "Versão dos priors de etapas de orçamento já aplicados"),
     ("bopp_metros", "1500", "number", "Comprimento da bobina BOPP (m)"),
     ("cola_kg", "25", "number", "Kg de cola de referência"),
     ("cola_exemplares", "10000", "number", "Exemplares de referência da cola"),
@@ -294,18 +295,6 @@ CREATE TABLE IF NOT EXISTS tab_orcamento_realizado (
 """
 
 
-_CT_VISITA_PASSOS: tuple[tuple[int, str, str, str, int, float, float, str], ...] = (
-    # ordem, nome, setor, tipo, cobra, setup_min, min_por_un, funcao_codigo
-    (10, "SEFOC pré-montagem", "SEFOC", "produtiva", 1, 20, 0.5, "PRE"),
-    (20, "Prova com o cliente", "SEFOC", "espera_cliente", 0, 0, 0, ""),
-    (30, "SEFOC montagem pós-aprovação", "SEFOC", "produtiva", 1, 15, 0.3, "PRE"),
-    (40, "SIELT impressão digital", "SIELT", "produtiva", 1, 10, 0.02, "DIG"),
-    (50, "SEPAC refile", "SEPAC", "produtiva", 1, 10, 0.05, "ACAB"),
-    (60, "SEPAC empacote", "SEPAC", "produtiva", 1, 5, 0.04, "AUX"),
-    (70, "Expedição", "SEDIR", "fim", 0, 0, 0, ""),
-)
-
-
 def _ensure_parametros_faltantes(cursor) -> None:
     for chave, valor, tipo, desc in _SEED_PARAMETROS:
         cursor.execute(
@@ -315,60 +304,6 @@ def _ensure_parametros_faltantes(cursor) -> None:
             """,
             (chave, valor, tipo, desc),
         )
-
-
-def _seed_ct_visita(cursor) -> None:
-    cursor.execute(
-        """
-        INSERT IGNORE INTO tabSystemCatalog (Categoria, Rotulo, Ativo, Ordem, Origem)
-        VALUES ('produto', 'Ct Visita', 1, 50, 'catalog')
-        """
-    )
-    cursor.execute(
-        """
-        SELECT ID FROM tabSystemCatalog
-        WHERE Categoria = 'produto' AND Rotulo = 'Ct Visita'
-        LIMIT 1
-        """
-    )
-    row = cursor.fetchone() or {}
-    catalog_id = row.get("ID")
-    if not catalog_id:
-        return
-    cursor.execute(
-        "SELECT COUNT(*) AS n FROM tab_orcamento_produto_passo WHERE catalog_id = %s",
-        (catalog_id,),
-    )
-    if int((cursor.fetchone() or {}).get("n") or 0) > 0:
-        return
-    codigo_to_id: dict[str, int] = {}
-    cursor.execute(
-        "SELECT id, codigo FROM tab_custo_funcao WHERE codigo IS NOT NULL AND ativo = 1"
-    )
-    for fn in cursor.fetchall() or []:
-        codigo_to_id[str(fn.get("codigo") or "")] = int(fn["id"])
-    for ordem, nome, setor, tipo, cobra, setup, min_un, codigo in _CT_VISITA_PASSOS:
-        cursor.execute(
-            """
-            INSERT INTO tab_orcamento_produto_passo (
-                catalog_id, produto_rotulo, ordem, nome, setor_link, tipo,
-                cobra_pessoal, tecnologia, setup_min, min_por_un, min_por_pag,
-                min_por_folha, ativo
-            ) VALUES (%s, 'Ct Visita', %s, %s, %s, %s, %s, 'qualquer', %s, %s, 0, 0, 1)
-            """,
-            (catalog_id, ordem, nome, setor, tipo, cobra, setup, min_un),
-        )
-        passo_id = int(cursor.lastrowid)
-        funcao_id = codigo_to_id.get(codigo) if codigo else None
-        if funcao_id:
-            cursor.execute(
-                """
-                INSERT INTO tab_orcamento_passo_funcao (passo_id, funcao_id, quantidade)
-                VALUES (%s, %s, 1)
-                """,
-                (passo_id, funcao_id),
-            )
-    logger.info("Orçamento: etapas seed Ct Visita gravadas")
 
 
 def _ensure_insumo_estoque_sku(cursor) -> None:
@@ -542,10 +477,12 @@ def ensure_orcamento_schema() -> None:
                         """,
                         (lim_inf, lim_sup, perc, ordem),
                     )
-            try:
-                _seed_ct_visita(cursor)
-            except Exception as seed_exc:
-                logger.warning("Orçamento: seed Ct Visita adiado: %s", seed_exc)
+        try:
+            from services.orcamento_passo_priors_seed import seed_orcamento_passos_priors_if_stale
+
+            seed_orcamento_passos_priors_if_stale()
+        except Exception as seed_exc:
+            logger.warning("Orçamento: seed de priors de etapas adiado: %s", seed_exc)
         logger.info("Schema tab_orcamento* garantido")
     except Exception as exc:
         logger.error("Erro ao migrar schema de orçamento: %s", exc)

@@ -474,6 +474,8 @@ interface SupportReplyFormProps {
 
   submitLabel?: string;
 
+  submitTestId?: string;
+
   onRetry?: () => void;
 
   disabled?: boolean;
@@ -503,6 +505,8 @@ export function SupportReplyForm({
   placeholder = "Digite sua mensagem…",
 
   submitLabel = "Enviar",
+
+  submitTestId,
 
   onRetry,
 
@@ -641,6 +645,7 @@ export function SupportReplyForm({
       <button
 
         type="submit"
+        data-testid={submitTestId}
 
         disabled={!canSubmit}
 

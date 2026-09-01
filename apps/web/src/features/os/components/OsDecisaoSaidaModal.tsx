@@ -1,4 +1,5 @@
 import type { OsVinculoGrupoMembro } from "../types";
+import { homeTestIds } from "@/lib/testId";
 
 interface OsDecisaoSaidaModalProps {
   open: boolean;
@@ -37,6 +38,7 @@ export function OsDecisaoSaidaModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="decisao-saida-title"
+      data-testid={homeTestIds.osSaidaRoot}
     >
       <div className="w-full max-w-md rounded-lg border-t-4 border-primary-green bg-white p-6 shadow-xl">
         <h3
@@ -99,12 +101,14 @@ export function OsDecisaoSaidaModal({
               type="button"
               onClick={onClose}
               className="rounded border border-sagra-border px-4 py-2 text-sm"
+              data-testid={homeTestIds.osSaidaCancel}
             >
               Cancelar
             </button>
             <button
               type="submit"
               className="rounded bg-secondary-blue px-4 py-2 text-sm font-semibold text-white"
+              data-testid={homeTestIds.osSaidaConfirm}
             >
               Confirmar
             </button>

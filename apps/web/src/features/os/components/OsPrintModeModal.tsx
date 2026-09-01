@@ -7,6 +7,7 @@ import {
   type ProvaFichaCorTipo,
   type RequisicaoPrintMode,
 } from "../utils/requisicaoReportUrl";
+import { homeTestIds } from "@/lib/testId";
 
 interface OsPrintModeModalProps {
   open: boolean;
@@ -81,6 +82,7 @@ export function OsPrintModeModal({
       role="dialog"
       aria-modal="true"
       aria-label="Selecionar tipo de impressão"
+      data-testid={homeTestIds.osPrintRoot}
     >
       <div className="relative w-full max-w-md rounded-lg border-t-4 border-primary-green bg-white p-6 text-center shadow-xl">
         <button
@@ -88,6 +90,7 @@ export function OsPrintModeModal({
           onClick={onClose}
           className="absolute right-3 top-3 text-neutral-500 hover:text-neutral-800"
           aria-label="Fechar"
+          data-testid={homeTestIds.osPrintClose}
         >
           <X className="size-5" />
         </button>
@@ -105,6 +108,7 @@ export function OsPrintModeModal({
             type="button"
             onClick={() => onSelect("normal")}
             className="inline-flex items-center justify-center gap-2 rounded bg-secondary-blue px-4 py-3 text-base font-semibold text-white hover:opacity-95"
+            data-testid={homeTestIds.osPrintConfirm}
           >
             <FileText className="size-5" />
             Ficha OS (Normal)

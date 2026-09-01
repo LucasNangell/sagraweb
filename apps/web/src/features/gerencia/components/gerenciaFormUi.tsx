@@ -1,6 +1,8 @@
 import { cn } from "@sagra/ui";
 import type { ReactNode } from "react";
 
+import { homeTestIds } from "@/lib/testId";
+
 export const gerenciaInputClass =
   "mt-1 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 shadow-sm outline-none focus:border-secondary-blue focus:ring-2 focus:ring-secondary-blue/15 disabled:cursor-not-allowed disabled:bg-slate-100";
 
@@ -65,15 +67,20 @@ export function Field({
   className,
   compact = false,
   required = false,
+  testId,
 }: {
   label: string;
   children: ReactNode;
   className?: string;
   compact?: boolean;
   required?: boolean;
+  testId?: string;
 }) {
   return (
-    <label className={cn("block min-w-0", className)}>
+    <label
+      className={cn("block min-w-0", className)}
+      data-testid={testId ?? homeTestIds.gerenciaField(label)}
+    >
       <span className={compact ? gerenciaLabelCompactClass : gerenciaLabelClass}>
         {label}
         {required ? (

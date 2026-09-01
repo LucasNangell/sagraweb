@@ -7,6 +7,7 @@ import { queryKeys } from "@/api/query-keys";
 import { fetchSupportSettings, userManualUrl } from "@/api/support";
 import { getTourCatalog } from "@/features/guided-tour/catalog";
 import { useGuidedTourStore } from "@/features/guided-tour/tourStore";
+import { homeTestIds } from "@/lib/testId";
 import { cn } from "@sagra/ui";
 
 interface SupportHelpMenuProps {
@@ -89,6 +90,7 @@ export function SupportHelpMenu({
           aria-expanded={menuOpen}
           aria-haspopup="menu"
           title="Ajuda"
+          data-testid={homeTestIds.sidebarHelp}
         >
           <CircleHelp className={cn("shrink-0 text-secondary-blue", isMobileNav ? "size-6" : "size-5")} />
           {isMobileNav || !collapsed ? (
@@ -119,6 +121,7 @@ export function SupportHelpMenu({
               role="menuitem"
               onClick={openManual}
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+              data-testid={homeTestIds.sidebarHelpManual}
             >
               <BookOpen className="size-4 text-secondary-blue" aria-hidden />
               Manual do Usuário
@@ -131,6 +134,7 @@ export function SupportHelpMenu({
                 aria-haspopup="menu"
                 onClick={() => setTutorialsOpen((v) => !v)}
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                data-testid={homeTestIds.sidebarHelpTutorial}
               >
                 <GraduationCap className="size-4 text-secondary-blue" aria-hidden />
                 <span className="flex-1">Tutorial guiado</span>
@@ -160,6 +164,7 @@ export function SupportHelpMenu({
                       role="menuitem"
                       onClick={() => startTutorial(item.id)}
                       className="flex w-full items-center px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                      data-testid={homeTestIds.sidebarHelpTutorialItem(item.id)}
                     >
                       {item.title}
                     </button>
@@ -173,6 +178,7 @@ export function SupportHelpMenu({
                 role="menuitem"
                 onClick={openSupportPage}
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                data-testid={homeTestIds.sidebarHelpSupport}
               >
                 <MessageSquare className="size-4 text-secondary-blue" aria-hidden />
                 Mensagem ao suporte

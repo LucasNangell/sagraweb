@@ -1,5 +1,6 @@
 import { Loader2, Printer, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { homeTestIds } from "@/lib/testId";
 
 interface RequisicaoFichaViewerProps {
   src: string;
@@ -210,6 +211,9 @@ export function RequisicaoFichaViewer({
             type="button"
             onClick={onClose}
             className="inline-flex items-center gap-1.5 rounded bg-neutral-500 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-600"
+            data-testid={
+              variant === "modal" ? homeTestIds.osPrintFichaClose : undefined
+            }
           >
             {variant === "modal" ? (
               "Fechar"
@@ -290,6 +294,7 @@ export function RequisicaoFichaViewer({
       role="dialog"
       aria-modal="true"
       aria-label={title}
+      data-testid={variant === "modal" ? homeTestIds.osPrintFichaRoot : undefined}
     >
       <div
         className="flex flex-col overflow-hidden rounded-lg bg-white shadow-2xl"

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { fetchOsAuditLog } from "@/api/os";
 import { queryKeys } from "@/api/query-keys";
 import { formatPonto } from "@/lib/format";
+import { homeTestIds } from "@/lib/testId";
 
 import type { OsSearchRow } from "../types";
 import {
@@ -46,6 +47,7 @@ export function OsAuditLogModal({ row, open, onClose }: OsAuditLogModalProps) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="audit-log-title"
+      data-testid={homeTestIds.osAuditRoot}
     >
       <div className="relative flex max-h-[85vh] w-full max-w-6xl min-w-0 flex-col overflow-hidden rounded-lg border-t-4 border-[#24344D] bg-white shadow-xl">
         <div className="flex shrink-0 items-start justify-between border-b border-sagra-border px-5 py-4">
@@ -66,6 +68,7 @@ export function OsAuditLogModal({ row, open, onClose }: OsAuditLogModalProps) {
             onClick={onClose}
             className="text-neutral-500 hover:text-neutral-800"
             aria-label="Fechar"
+            data-testid={homeTestIds.osAuditClose}
           >
             <X className="size-5" />
           </button>

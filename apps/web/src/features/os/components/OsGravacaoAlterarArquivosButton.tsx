@@ -21,6 +21,7 @@ import {
   isEmGravacaoExternaOperacional,
   isGravacaoPendenteSituacao,
 } from "@/features/gravacao-externa/constants";
+import { homeTestIds } from "@/lib/testId";
 import type { OsSearchRow } from "../types";
 
 interface OsGravacaoAlterarArquivosButtonProps {
@@ -157,6 +158,7 @@ export function OsGravacaoAlterarArquivosButton({
         disabled={disabled || saving || detailLoading}
         onClick={handleOpen}
         className="inline-flex items-center gap-1.5 rounded border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+        data-testid={homeTestIds.osHistoryAlterarArquivos}
       >
         <FolderOpen className="size-3.5" />
         Alterar arquivos

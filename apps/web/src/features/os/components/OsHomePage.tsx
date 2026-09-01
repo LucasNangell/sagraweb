@@ -20,6 +20,7 @@ import { useAuthStore } from "@/features/auth/authStore";
 import { useAccessControl } from "@/features/auth/useAccessControl";
 import { useGuidedTourStore } from "@/features/guided-tour/tourStore";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { homeTestIds } from "@/lib/testId";
 import {
   getActiveFilterValueSummary,
   getImplicitFilterHints,
@@ -570,6 +571,7 @@ export function OsHomePage() {
               role="tab"
               aria-selected={mobileView === "list"}
               onClick={() => setMobileView("list")}
+              data-testid={homeTestIds.osTabLista}
               className={cn(
                 "flex-1 rounded-md px-2 py-1.5 text-[0.65rem] font-semibold transition-colors sm:px-3 sm:text-xs",
                 mobileView === "list"
@@ -584,6 +586,7 @@ export function OsHomePage() {
               role="tab"
               aria-selected={mobileView === "details"}
               onClick={() => setMobileView("details")}
+              data-testid={homeTestIds.osTabDetalhes}
               className={cn(
                 "flex-1 rounded-md px-2 py-1.5 text-[0.65rem] font-semibold transition-colors sm:px-3 sm:text-xs",
                 mobileView === "details"
@@ -597,6 +600,7 @@ export function OsHomePage() {
               type="button"
               role="tab"
               data-tour="os-mobile-history-tab"
+              data-testid={homeTestIds.osTabAndamentos}
               aria-selected={mobileView === "history"}
               onClick={() => setMobileView("history")}
               className={cn(

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/context-menu";
 import { useOsPathMutation } from "@/api/hooks/useOsPath";
 import { useAccessControl } from "@/features/auth/useAccessControl";
+import { homeTestIds } from "@/lib/testId";
 import {
   confirmNovaOsType,
   duplicateOsGerenciaSearch,
@@ -146,7 +147,10 @@ export function OsRowContextMenu({
         {items.map((item) => (
           <span key={item.id}>
             {item.separatorBefore && <ContextMenuSeparator />}
-            <ContextMenuItem onSelect={() => void handleAction(item.id)}>
+            <ContextMenuItem
+              data-testid={homeTestIds.osContext(item.id)}
+              onSelect={() => void handleAction(item.id)}
+            >
               {item.label}
             </ContextMenuItem>
           </span>

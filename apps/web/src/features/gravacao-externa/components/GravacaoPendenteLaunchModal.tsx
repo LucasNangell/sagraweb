@@ -9,6 +9,7 @@ import { fetchOsDetails } from "@/api/os";
 import type { NetworkFilePick } from "@/api/networkFiles";
 import { queryKeys } from "@/api/query-keys";
 import { formatOsLabel } from "@/lib/format";
+import { homeTestIds } from "@/lib/testId";
 import type { OsSearchRow } from "@/features/os/types";
 import { OS_ANO_MAX, OS_ANO_MIN, normalizeAno } from "@/features/os/osAnoUtils";
 import { formatOsListLabel } from "../utils/formatOsJuntadaLabel";
@@ -561,6 +562,7 @@ export function GravacaoPendenteLaunchModal({
         role="dialog"
         aria-modal="true"
         aria-label={`Gravação Pendente — OS ${formatOsLabel(row)}`}
+        data-testid={homeTestIds.osGravacaoRoot}
       >
         <div className="flex max-h-[min(90vh,760px)] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
@@ -573,6 +575,7 @@ export function GravacaoPendenteLaunchModal({
               disabled={saving}
               className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50"
               aria-label="Fechar"
+              data-testid={homeTestIds.osGravacaoClose}
             >
               <X className="size-5" />
             </button>
@@ -961,6 +964,7 @@ export function GravacaoPendenteLaunchModal({
               onClick={handleRequestClose}
               disabled={saving}
               className="inline-flex items-center justify-center rounded-md bg-neutral-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50"
+              data-testid={homeTestIds.osGravacaoCancel}
             >
               Cancelar
             </button>
@@ -969,6 +973,7 @@ export function GravacaoPendenteLaunchModal({
               onClick={handleConfirm}
               disabled={saving}
               className="inline-flex items-center justify-center gap-2 rounded-md bg-primary-green px-4 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              data-testid={homeTestIds.osGravacaoConfirm}
             >
               {saving ? <Loader2 className="size-4 animate-spin" /> : null}
               {isEdit ? "Salvar alterações" : "Confirmar lançamento"}

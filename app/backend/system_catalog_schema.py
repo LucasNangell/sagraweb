@@ -52,6 +52,8 @@ _ACABAMENTO_SEED: tuple[tuple[str, int], ...] = (
     ("Verniz", 70),
     ("Faca", 80),
     ("Grampo", 90),
+    ("Cola", 100),
+    ("Capa PVC", 110),
 )
 
 # Variações seed para Laminação (exemplo canônico do pedido).

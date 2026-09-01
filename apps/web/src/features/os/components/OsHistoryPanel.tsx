@@ -184,6 +184,7 @@ export function OsHistoryPanel({
   >(null);
   const [andamentoTarget, setAndamentoTarget] = useState<AndamentoTargetKey>("");
   const [componenteEspecifico, setComponenteEspecifico] = useState(false);
+  const [tourSaved, setTourSaved] = useState(false);
   const [entregaModalOpen, setEntregaModalOpen] = useState(false);
   const [gravacaoPendenteModalOpen, setGravacaoPendenteModalOpen] = useState(false);
   const [gravacaoInterceptOpen, setGravacaoInterceptOpen] = useState(false);
@@ -366,6 +367,7 @@ export function OsHistoryPanel({
     if (!ok) return;
     setIsEditMode(false);
     setEditing(true);
+    setTourSaved(false);
     setSelectedHistory(null);
     setSelectedSubHistory(null);
     setAndamentoTarget(
@@ -555,6 +557,7 @@ export function OsHistoryPanel({
         }
         await addMutation.mutateAsync(payload);
       }
+      setTourSaved(true);
       resetForm();
       setAndamentoTarget(
         isSubOs && subOsId != null ? (`sub:${subOsId}` as AndamentoTargetKey) : "",
@@ -704,6 +707,7 @@ export function OsHistoryPanel({
           window.alert("Andamento salvo apenas nesta OS.");
         }
       }
+      setTourSaved(true);
       resetForm();
     } catch (e) {
       window.alert(
@@ -762,6 +766,10 @@ export function OsHistoryPanel({
   return (
     <>
       <section
+        data-tour="os-history-panel"
+        data-tour-editing={editing ? "true" : "false"}
+        data-tour-frozen={frozen ? "true" : "false"}
+        data-tour-saved={tourSaved ? "true" : "false"}
         className={cn(
           "flex min-h-0 flex-1 flex-col transition-shadow",
           embedded
@@ -909,7 +917,7 @@ export function OsHistoryPanel({
                   ) : null}
 
                   <div className="grid shrink-0 grid-cols-1 gap-1.5 sm:grid-cols-3">
-                    <label className="min-w-0 text-xs">
+                    <label className="min-w-0 text-xs" data-tour="os-history-situacao">
                       <span className="font-semibold text-neutral-600">Andamento</span>
                       <select
                         value={form.situacao}
@@ -927,7 +935,7 @@ export function OsHistoryPanel({
                         ))}
                       </select>
                     </label>
-                    <label className="min-w-0 text-xs">
+                    <label className="min-w-0 text-xs" data-tour="os-history-setor">
                       <span className="font-semibold text-neutral-600">Setor</span>
                       <select
                         value={form.setor}
@@ -945,7 +953,7 @@ export function OsHistoryPanel({
                         ))}
                       </select>
                     </label>
-                    <label className="min-w-0 text-xs">
+                    <label className="min-w-0 text-xs" data-tour="os-history-ponto">
                       <span className="font-semibold text-neutral-600">Ponto</span>
                       <input
                         type="text"
@@ -960,7 +968,7 @@ export function OsHistoryPanel({
                   </div>
 
                   {editing && !isEditMode && needsDestinationSelector ? (
-                    <div className="flex min-w-0 shrink-0 flex-col gap-1.5">
+                    <div className="flex min-w-0 shrink-0 flex-col gap-1.5" data-tour="os-history-componente">
                       <label className="flex items-center gap-2 text-xs text-neutral-800">
                         <input
                           type="checkbox"
@@ -1000,7 +1008,7 @@ export function OsHistoryPanel({
                     </div>
                   ) : null}
 
-                  <label className="flex min-h-[5rem] min-w-0 flex-1 flex-col text-xs">
+                  <label className="flex min-h-[5rem] min-w-0 flex-1 flex-col text-xs" data-tour="os-history-obs">
                 <span className="shrink-0 font-semibold text-neutral-600">
                   Observação
                 </span>
@@ -1062,6 +1070,7 @@ export function OsHistoryPanel({
                         type="button"
                         disabled={frozen || lock.acquiring}
                         onClick={() => void startNew()}
+                        data-tour="os-history-novo"
                         className="rounded bg-primary-green px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
                       >
                         Novo
@@ -1083,6 +1092,7 @@ export function OsHistoryPanel({
                         type="button"
                         disabled={saving || !canSaveNew}
                         onClick={() => void saveHistory()}
+                        data-tour="os-history-salvar"
                         className="rounded bg-primary-green px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
                       >
                         Salvar

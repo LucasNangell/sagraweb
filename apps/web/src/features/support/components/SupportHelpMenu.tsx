@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { BookOpen, CircleHelp, MessageSquare } from "lucide-react";
+import { BookOpen, ChevronRight, CircleHelp, GraduationCap, MessageSquare } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 
 import { queryKeys } from "@/api/query-keys";
 import { fetchSupportSettings, userManualUrl } from "@/api/support";
+import { getTourCatalog } from "@/features/guided-tour/catalog";
+import { useGuidedTourStore } from "@/features/guided-tour/tourStore";
 import { cn } from "@sagra/ui";
 
 interface SupportHelpMenuProps {
@@ -17,7 +19,10 @@ export function SupportHelpMenu({
   variant = "sidebar-bottom",
 }: SupportHelpMenuProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [tutorialsOpen, setTutorialsOpen] = useState(false);
   const navigate = useNavigate();
+  const startTour = useGuidedTourStore((s) => s.start);
+  const catalog = getTourCatalog();
   const rootRef = useRef<HTMLDivElement>(null);
   const settingsQuery = useQuery({
     queryKey: queryKeys.support.settings,
@@ -28,6 +33,7 @@ export function SupportHelpMenu({
 
   useEffect(() => {
     if (!menuOpen) {
+      setTutorialsOpen(false);
       return;
     }
     const onDocClick = (e: MouseEvent) => {
@@ -46,7 +52,15 @@ export function SupportHelpMenu({
 
   const openSupportPage = () => {
     setMenuOpen(false);
+    setTutorialsOpen(false);
     void navigate({ to: "/mensagens" });
+  };
+
+  const startTutorial = (id: string) => {
+    setMenuOpen(false);
+    setTutorialsOpen(false);
+    void navigate({ to: "/" });
+    startTour(id);
   };
 
   const isMobileNav = variant === "mobile-nav";
@@ -109,6 +123,50 @@ export function SupportHelpMenu({
               <BookOpen className="size-4 text-secondary-blue" aria-hidden />
               Manual do Usuário
             </button>
+            <div className="relative">
+              <button
+                type="button"
+                role="menuitem"
+                aria-expanded={tutorialsOpen}
+                aria-haspopup="menu"
+                onClick={() => setTutorialsOpen((v) => !v)}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+              >
+                <GraduationCap className="size-4 text-secondary-blue" aria-hidden />
+                <span className="flex-1">Tutorial guiado</span>
+                <ChevronRight
+                  className={cn(
+                    "size-4 text-slate-400 transition-transform",
+                    tutorialsOpen && "rotate-90",
+                  )}
+                  aria-hidden
+                />
+              </button>
+              {tutorialsOpen ? (
+                <div
+                  role="menu"
+                  aria-label="Tutoriais guiados"
+                  className={cn(
+                    "rounded-md border border-slate-200 bg-white py-1 shadow-lg",
+                    isMobileNav
+                      ? "mx-2 mb-1"
+                      : "absolute bottom-0 left-full ml-1 w-56",
+                  )}
+                >
+                  {catalog.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => startTutorial(item.id)}
+                      className="flex w-full items-center px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                    >
+                      {item.title}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             {usuarioChatEnabled ? (
               <button
                 type="button"

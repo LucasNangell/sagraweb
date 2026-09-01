@@ -517,6 +517,7 @@ export function OsOrdersTable({
 
   return (
     <section
+      data-tour="os-table"
       className="flex h-full min-h-0 flex-col rounded-lg border border-sagra-border bg-white shadow-sm"
       aria-busy={isUpdating}
     >

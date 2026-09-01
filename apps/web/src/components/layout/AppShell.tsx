@@ -1,6 +1,7 @@
 import { Outlet } from "@tanstack/react-router";
 import { useState } from "react";
 
+import { GuidedTourOverlay } from "@/features/guided-tour/components/GuidedTourOverlay";
 import { LombadaCalculatorModal } from "@/features/lombada/components/LombadaCalculatorModal";
 import { useLombadaUiStore } from "@/features/lombada/lombadaUiStore";
 import { SupportMessageModal } from "@/features/support/components/SupportMessageModal";
@@ -31,6 +32,7 @@ export function AppShell() {
       </div>
       {showAssignedSupportModal ? <SupportMessageModal /> : null}
       {showLombadaModal ? <LombadaCalculatorModal /> : null}
+      <GuidedTourOverlay />
     </div>
   );
 }

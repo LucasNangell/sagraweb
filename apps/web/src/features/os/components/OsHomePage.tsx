@@ -18,6 +18,7 @@ import {
 } from "@/api/hooks/useSavedFilters";
 import { useAuthStore } from "@/features/auth/authStore";
 import { useAccessControl } from "@/features/auth/useAccessControl";
+import { useGuidedTourStore } from "@/features/guided-tour/tourStore";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   getActiveFilterValueSummary,
@@ -97,6 +98,7 @@ export function OsHomePage() {
   const [mobileView, setMobileView] = useState<
     "list" | "details" | "history"
   >("list");
+  const requestedMobileView = useGuidedTourStore((s) => s.requestedMobileView);
   const [prefsBootstrapped, setPrefsBootstrapped] = useState(homeDefaultPrefsApplied);
   const [isExportingReport, setIsExportingReport] = useState(false);
 
@@ -104,6 +106,13 @@ export function OsHomePage() {
     homeSavedFilterId = savedFilterId;
     homeSavedFilterName = savedFilterName;
   }, [savedFilterId, savedFilterName]);
+
+  useEffect(() => {
+    if (!requestedMobileView) {
+      return;
+    }
+    setMobileView(requestedMobileView);
+  }, [requestedMobileView]);
 
   const debouncedNrOs = useDebouncedValue(filters.nrOs, 200);
   const debouncedTitulo = useDebouncedValue(filters.titulo, 450);
@@ -587,6 +596,7 @@ export function OsHomePage() {
             <button
               type="button"
               role="tab"
+              data-tour="os-mobile-history-tab"
               aria-selected={mobileView === "history"}
               onClick={() => setMobileView("history")}
               className={cn(

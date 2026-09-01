@@ -41,6 +41,18 @@ def _clean_filter_values(values: Optional[List[str]]) -> List[str]:
     return result
 
 
+def _escape_sql_like(term: str) -> str:
+    return (
+        term.replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    )
+
+
+def _like_contains(term: str) -> str:
+    return f"%{_escape_sql_like(term)}%"
+
+
 def fetch_distinct_years() -> List[int]:
     global _years_cache
     now = time.time()
@@ -85,11 +97,11 @@ def search_products(*, q: Optional[str] = None, limit: int = DEFAULT_LIMIT) -> L
                 f"""
                 SELECT produto AS value, produto AS label, total_os AS count
                 FROM {TABLE_PRODUCTS}
-                WHERE produto_normalizado LIKE %(prefix)s
+                WHERE produto_normalizado LIKE %(needle)s ESCAPE '\\\\'
                 ORDER BY produto ASC
                 LIMIT %(limit)s
                 """,
-                {"prefix": f"{q_norm}%", "limit": limit},
+                {"needle": _like_contains(q_norm), "limit": limit},
             )
         else:
             rows = db.execute_query(
@@ -124,12 +136,12 @@ def search_products(*, q: Optional[str] = None, limit: int = DEFAULT_LIMIT) -> L
                    COUNT(*) AS count
             FROM tabDetalhesServico
             WHERE TipoPublicacaoLink IS NOT NULL
-              AND TipoPublicacaoLink LIKE %(prefix)s
+              AND TipoPublicacaoLink LIKE %(needle)s ESCAPE '\\\\'
             GROUP BY TipoPublicacaoLink
             ORDER BY TipoPublicacaoLink ASC
             LIMIT %(limit)s
             """,
-            {"prefix": f"{q}%", "limit": limit},
+            {"needle": _like_contains((q or "").strip()), "limit": limit},
         )
     return apply_catalog_to_filter_rows("produto", list(rows or []), q=q, limit=limit)
 
@@ -153,17 +165,17 @@ def search_requesters(
         params: Dict[str, Any] = {"limit": limit}
         for i, val in enumerate(clean_categorias):
             params[f"cat_sel_{i}"] = val
-        prefix_sql = ""
+        needle_sql = ""
         if q_norm:
-            prefix_sql = " AND NomeUsuario LIKE %(prefix)s"
-            params["prefix"] = f"{q}%"
+            needle_sql = " AND NomeUsuario LIKE %(needle)s ESCAPE '\\\\'"
+            params["needle"] = _like_contains((q or "").strip())
         rows = db.execute_query(
             f"""
             SELECT NomeUsuario AS value, NomeUsuario AS label, COUNT(*) AS count
             FROM tabProtocolos
             WHERE NomeUsuario IS NOT NULL AND TRIM(NomeUsuario) != ''
               AND CategoriaLink IN ({cat_placeholders})
-              {prefix_sql}
+              {needle_sql}
             GROUP BY NomeUsuario
             ORDER BY NomeUsuario ASC
             LIMIT %(limit)s
@@ -184,11 +196,11 @@ def search_requesters(
                 f"""
                 SELECT solicitante AS value, solicitante AS label, total_os AS count
                 FROM {TABLE_REQUESTERS}
-                WHERE solicitante_normalizado LIKE %(prefix)s
+                WHERE solicitante_normalizado LIKE %(needle)s ESCAPE '\\\\'
                 ORDER BY solicitante ASC
                 LIMIT %(limit)s
                 """,
-                {"prefix": f"{q_norm}%", "limit": limit},
+                {"needle": _like_contains(q_norm), "limit": limit},
             )
         else:
             rows = db.execute_query(
@@ -220,12 +232,12 @@ def search_requesters(
             SELECT NomeUsuario AS value, NomeUsuario AS label, COUNT(*) AS count
             FROM tabProtocolos
             WHERE NomeUsuario IS NOT NULL
-              AND NomeUsuario LIKE %(prefix)s
+              AND NomeUsuario LIKE %(needle)s ESCAPE '\\\\'
             GROUP BY NomeUsuario
             ORDER BY NomeUsuario ASC
             LIMIT %(limit)s
             """,
-            {"prefix": f"{q}%", "limit": limit},
+            {"needle": _like_contains((q or "").strip()), "limit": limit},
         )
     return apply_catalog_to_filter_rows("cliente", list(rows or []), q=q, limit=limit)
 

@@ -230,14 +230,14 @@ def apply_catalog_to_filter_rows(
     allowed = set(merge_catalog_labels(category, dynamic))
     result = [r for r in rows if str(r.get(value_key) or "").strip() in allowed]
 
-    prefix = (q or "").strip().casefold()
+    needle = (q or "").strip().casefold()
     seen = {str(r.get(value_key) or "").strip().casefold() for r in result}
     if inject_missing:
         for label in allowed:
             folded = label.casefold()
             if folded in seen:
                 continue
-            if prefix and not folded.startswith(prefix):
+            if needle and needle not in folded:
                 continue
             result.append({value_key: label, "label": label, "count": None})
             seen.add(folded)

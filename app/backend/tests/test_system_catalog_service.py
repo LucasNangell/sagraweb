@@ -53,6 +53,28 @@ class TestSystemCatalogMerge(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["value"], "Folder")
 
+    @patch("services.system_catalog_service.merge_catalog_labels")
+    def test_apply_catalog_injects_when_query_matches_middle(self, mock_merge):
+        mock_merge.return_value = ["João da Silva", "Maria"]
+        rows = [{"value": "Maria", "label": "Maria", "count": 1}]
+        result = svc.apply_catalog_to_filter_rows(
+            "cliente", rows, q="silva", limit=10
+        )
+        values = {row["value"] for row in result}
+        self.assertIn("João da Silva", values)
+        self.assertIn("Maria", values)
+
+    @patch("services.system_catalog_service.merge_catalog_labels")
+    def test_apply_catalog_skips_inject_when_query_not_in_label(self, mock_merge):
+        mock_merge.return_value = ["João da Silva", "Maria"]
+        rows = [{"value": "Maria", "label": "Maria", "count": 1}]
+        result = svc.apply_catalog_to_filter_rows(
+            "cliente", rows, q="xyz", limit=10
+        )
+        values = {row["value"] for row in result}
+        self.assertNotIn("João da Silva", values)
+        self.assertEqual(values, {"Maria"})
+
 
 class TestSystemCatalogAcabamento(unittest.TestCase):
     def test_acabamento_is_valid_category(self):

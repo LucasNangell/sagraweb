@@ -78,6 +78,19 @@ def main() -> int:
             "titulo_like",
             {"include_finished": False, "titulo": "relat", "limit": 20},
         ),
+        (
+            "home_fetch_all_ano_corrente",
+            {
+                "fetch_all": True,
+                "include_finished": True,
+                "include_os": True,
+                "include_sp": True,
+                "anos": [args.ano] if args.ano else None,
+                "sort_by": "ano",
+                "sort_dir": "asc",
+                "include_total": True,
+            },
+        ),
     ]
 
     results = []
@@ -85,6 +98,11 @@ def main() -> int:
         if kwargs.get("nr_os") is None and label == "nr_os_exact":
             continue
         if kwargs.get("ano") is None and "ano" in kwargs and label == "abertura_com_ano":
+            continue
+        if (
+            label == "home_fetch_all_ano_corrente"
+            and not kwargs.get("anos")
+        ):
             continue
         results.append(
             _timed(

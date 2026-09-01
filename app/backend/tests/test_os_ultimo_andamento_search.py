@@ -541,3 +541,129 @@ class TestLegacyAndamentoJoinExport:
         assert "UltimoStatus = 1" in sql
         assert "FROM tabAndamento AS a2" in sql
         assert "cod_status_espelho" in sql.lower()
+
+
+class TestHomeFetchAllFastPathSql:
+    @patch("services.os_search_service.fulltext_text_search_indexes_ready", return_value=False)
+    @patch("services.os_search_service._prefer_materialized_andamento", return_value=False)
+    @patch(_MAT_POPULATED, return_value=True)
+    @patch("services.os_search_service.db")
+    def test_skips_row_number_and_count_distinct(
+        self, mock_db, _pop, _prefer, _ft
+    ):
+        mock_db.execute_query.return_value = []
+        result = execute_os_search(
+            fetch_all=True,
+            anos=[2026],
+            include_finished=True,
+            include_os=True,
+            include_sp=True,
+            sort_by="ano",
+            sort_dir="asc",
+            include_total=True,
+            simple_pagination=True,
+        )
+        assert mock_db.execute_query.call_count == 1
+        sql = str(mock_db.execute_query.call_args.args[0])
+        assert "ROW_NUMBER()" not in sql
+        assert "COUNT(DISTINCT" not in sql
+        assert "s_cnt" not in sql
+        assert "FROM tabProtocolos AS p" in sql
+        assert "LIMIT %(limit)s" in sql
+        assert result["meta"]["total_records"] == 0
+        assert result["meta"].get("fetch_all_fast_path") is True
+        assert mock_db.execute_query.call_args.args[1]["limit"] == 100_000
+
+    @patch("services.os_ultimo_andamento_service.fetch_operacional_rows_batch", return_value={})
+    @patch("services.os_search_service.fulltext_text_search_indexes_ready", return_value=False)
+    @patch("services.os_search_service._prefer_materialized_andamento", return_value=False)
+    @patch(_MAT_POPULATED, return_value=True)
+    @patch("services.os_search_service.db")
+    def test_total_records_matches_protocol_count(
+        self, mock_db, _pop, _prefer, _ft, _live
+    ):
+        mock_db.execute_query.side_effect = [
+            [
+                {
+                    "nr_os": 10,
+                    "ano": 2026,
+                    "solicitante": "Gab",
+                    "prioridade": "Normal",
+                    "titulo": None,
+                    "produto": None,
+                    "situacao": None,
+                    "setor": None,
+                    "last_update": None,
+                    "observacao": None,
+                    "formato": None,
+                    "data_entrega": None,
+                    "entreg_periodo": None,
+                    "sub_os_count": 0,
+                    "has_sub_os": 0,
+                }
+            ],
+            [],
+            [],
+        ]
+        result = execute_os_search(
+            fetch_all=True,
+            anos=[2026],
+            include_finished=True,
+            sort_by="ano",
+            sort_dir="asc",
+            include_total=True,
+            simple_pagination=True,
+        )
+        assert result["meta"]["total_records"] == 1
+        assert len(result["data"]) == 1
+        assert "formato" not in result["data"][0]
+        assert "observacao" not in result["data"][0]
+        assert "entreg_periodo" not in result["data"][0]
+        sqls = [str(c.args[0]) for c in mock_db.execute_query.call_args_list]
+        assert all("ROW_NUMBER()" not in s for s in sqls)
+        assert all("COUNT(DISTINCT" not in s for s in sqls)
+        assert any("GROUP BY s_cnt.nro_protocolo" in s for s in sqls)
+        details_sql = next(s for s in sqls if "tabDetalhesServico AS d" in s)
+        assert "FormatoLink" not in details_sql
+
+    @patch("services.os_search_service.fulltext_text_search_indexes_ready", return_value=False)
+    @patch("services.os_search_service._prefer_materialized_andamento", return_value=False)
+    @patch(_MAT_POPULATED, return_value=True)
+    @patch("services.os_search_service.db")
+    def test_setor_without_year_keeps_classic_join(
+        self, mock_db, _pop, _prefer, _ft
+    ):
+        mock_db.execute_query.return_value = []
+        execute_os_search(
+            fetch_all=True,
+            include_finished=True,
+            setor=["SEFOC"],
+            sort_by="ano",
+            simple_pagination=True,
+        )
+        sql = str(mock_db.execute_query.call_args.args[0])
+        assert "ROW_NUMBER()" in sql
+
+    @patch("services.os_search_service.fulltext_text_search_indexes_ready", return_value=True)
+    @patch("services.os_search_service._prefer_materialized_andamento", return_value=False)
+    @patch(_MAT_POPULATED, return_value=True)
+    @patch("services.os_search_service.db")
+    def test_fetch_all_keeps_titulo_filter_on_protocolos(
+        self, mock_db, _pop, _prefer, _ft
+    ):
+        mock_db.execute_query.return_value = []
+        execute_os_search(
+            fetch_all=True,
+            anos=[2026],
+            include_finished=True,
+            titulo="relatorio",
+            sort_by="ano",
+            sort_dir="asc",
+            simple_pagination=True,
+        )
+        sql = str(mock_db.execute_query.call_args.args[0])
+        assert "FROM tabProtocolos AS p" in sql
+        assert "INNER JOIN tabProtocolos AS p" not in sql
+        assert "MATCH" in sql
+        assert "ROW_NUMBER()" not in sql
+        assert "COUNT(DISTINCT" not in sql

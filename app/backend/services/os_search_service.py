@@ -31,9 +31,23 @@ logger = logging.getLogger(__name__)
 
 OS_SEARCH_MAX_LIMIT = 500
 OS_SEARCH_FETCH_ALL_MAX_LIMIT = 100_000
+OS_SEARCH_IN_CHUNK = 500
 OS_SEARCH_MIN_LIKE_CHARS = OS_TEXT_SEARCH_MIN_CHARS
 OS_SEARCH_DEFAULT_LIMIT = 20
 OS_SEARCH_MAX_MULTI_FILTER_ITEMS = 20
+
+_HOME_FETCH_ALL_FAST_SORTS = frozenset(
+    {
+        "",
+        "ano",
+        "nr_os",
+        "solicitante",
+        "prioridade",
+        "data_entrega",
+        "produto",
+        "titulo",
+    }
+)
 
 FINISHED_SITUACOES = ("Entregue", "Cancelada", "Cancelado")
 _FINISHED_SQL_LIST = ", ".join(f"'{s}'" for s in FINISHED_SITUACOES)
@@ -726,38 +740,87 @@ def _build_os_search_order_clause(
     )
 
 
-def _enrich_rows_with_details(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _chunks(items: List[Any], size: int) -> List[List[Any]]:
+    if not items:
+        return []
+    chunk_size = max(1, size)
+    return [items[i : i + chunk_size] for i in range(0, len(items), chunk_size)]
+
+
+def _protocol_pairs(rows: List[Dict[str, Any]]) -> List[Tuple[int, int]]:
+    seen: set[Tuple[int, int]] = set()
+    pairs: List[Tuple[int, int]] = []
+    for row in rows:
+        nro, ano = row.get("nr_os"), row.get("ano")
+        if nro is None or ano is None:
+            continue
+        key = (int(nro), int(ano))
+        if key in seen:
+            continue
+        seen.add(key)
+        pairs.append(key)
+    return pairs
+
+
+def _can_use_home_fetch_all_fast_path(
+    *,
+    fetch_all: bool,
+    pcp_order: bool,
+    exact_os_lookup: bool,
+    sort_key: str,
+    clean_situacao: List[str],
+    clean_setor: List[str],
+    has_ano: bool,
+    include_finished: bool,
+) -> bool:
+    """Home fetch_all: protocolos + enrich em lote, sem ROW_NUMBER em tabAndamento."""
+    if not fetch_all or pcp_order or exact_os_lookup:
+        return False
+    if (sort_key or "").strip() not in _HOME_FETCH_ALL_FAST_SORTS:
+        return False
+    needs_andamento_filter = bool(clean_situacao or clean_setor) or not include_finished
+    if needs_andamento_filter and not has_ano:
+        return False
+    return True
+
+
+def _enrich_rows_with_details(
+    rows: List[Dict[str, Any]], *, slim: bool = False
+) -> List[Dict[str, Any]]:
     if not rows:
         return rows
-    pairs = [(int(r["nr_os"]), int(r["ano"])) for r in rows if r.get("nr_os") is not None]
+    pairs = _protocol_pairs(rows)
     if not pairs:
         return rows
-    placeholders = ", ".join(["(%s, %s)"] * len(pairs))
-    flat: List[Any] = [x for pair in pairs for x in pair]
-    detail_rows = db.execute_query(
-        f"""
+    by_key: Dict[tuple, Dict[str, Any]] = {}
+    fields = ("titulo", "produto") if slim else ("titulo", "produto", "formato")
+    select_formato = "" if slim else ",\n            d.FormatoLink AS formato"
+    for chunk in _chunks(pairs, OS_SEARCH_IN_CHUNK):
+        placeholders = ", ".join(["(%s, %s)"] * len(chunk))
+        flat: List[Any] = [x for pair in chunk for x in pair]
+        detail_rows = db.execute_query(
+            f"""
         SELECT
             d.NroProtocoloLinkDet AS nr_os,
             d.AnoProtocoloLinkDet AS ano,
             d.Titulo AS titulo,
-            d.TipoPublicacaoLink AS produto,
-            d.FormatoLink AS formato
+            d.TipoPublicacaoLink AS produto
+            {select_formato}
         FROM tabDetalhesServico AS d
         WHERE (d.NroProtocoloLinkDet, d.AnoProtocoloLinkDet) IN ({placeholders})
         """,
-        tuple(flat),
-    )
-    by_key: Dict[tuple, Dict[str, Any]] = {}
-    for dr in detail_rows or []:
-        key = (dr.get("nr_os"), dr.get("ano"))
-        if key not in by_key:
-            by_key[key] = dr
+            tuple(flat),
+        )
+        for dr in detail_rows or []:
+            key = (dr.get("nr_os"), dr.get("ano"))
+            if key not in by_key:
+                by_key[key] = dr
     for row in rows:
         key = (row.get("nr_os"), row.get("ano"))
         det = by_key.get(key)
         if not det:
             continue
-        for field in ("titulo", "produto", "formato"):
+        for field in fields:
             if not row.get(field) and det.get(field):
                 row[field] = det.get(field)
     return rows
@@ -930,19 +993,18 @@ def _fulltext_details_driver_from_sql(
     """
 
 
-def _enrich_operacional_from_live(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _enrich_operacional_from_live(
+    rows: List[Dict[str, Any]], *, slim: bool = False
+) -> List[Dict[str, Any]]:
     """Sobrescreve situação/setor com tabAndamento live — mesma fonte do painel setor."""
     if not rows:
         return rows
     from services.os_ultimo_andamento_service import fetch_operacional_rows_batch
 
-    pairs: List[Tuple[int, int]] = []
-    for row in rows:
-        nro, ano = row.get("nr_os"), row.get("ano")
-        if nro is not None and ano is not None:
-            pairs.append((int(nro), int(ano)))
-
-    live_map = fetch_operacional_rows_batch(pairs)
+    pairs = _protocol_pairs(rows)
+    live_map: Dict[Tuple[int, int], Dict[str, Any]] = {}
+    for chunk in _chunks(pairs, OS_SEARCH_IN_CHUNK):
+        live_map.update(fetch_operacional_rows_batch(chunk))
     for row in rows:
         nro, ano = row.get("nr_os"), row.get("ano")
         if nro is None or ano is None:
@@ -953,8 +1015,159 @@ def _enrich_operacional_from_live(rows: List[Dict[str, Any]]) -> List[Dict[str, 
         row["situacao"] = live.get("situacao")
         row["setor"] = live.get("setor")
         row["last_update"] = live.get("data")
-        row["observacao"] = live.get("observacao")
+        if not slim:
+            row["observacao"] = live.get("observacao")
     return rows
+
+
+def _enrich_sub_os_counts(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Contagem de Sub OS ativas em lote (GROUP BY), sem subquery correlacionada."""
+    if not rows:
+        return rows
+    pairs = _protocol_pairs(rows)
+    counts: Dict[Tuple[int, int], int] = {}
+    for chunk in _chunks(pairs, OS_SEARCH_IN_CHUNK):
+        placeholders = ", ".join(["(%s, %s)"] * len(chunk))
+        flat: List[Any] = [x for pair in chunk for x in pair]
+        found = db.execute_query(
+            f"""
+            SELECT
+                s_cnt.nro_protocolo AS nr_os,
+                s_cnt.ano_protocolo AS ano,
+                COUNT(*) AS cnt
+            FROM tab_os_sub_os AS s_cnt
+            WHERE (s_cnt.nro_protocolo, s_cnt.ano_protocolo) IN ({placeholders})
+              AND s_cnt.ativo = 1
+            GROUP BY s_cnt.nro_protocolo, s_cnt.ano_protocolo
+            """,
+            tuple(flat),
+        )
+        for rec in found or []:
+            nro, ano = rec.get("nr_os"), rec.get("ano")
+            if nro is None or ano is None:
+                continue
+            counts[(int(nro), int(ano))] = int(rec.get("cnt") or 0)
+    for row in rows:
+        nro, ano = row.get("nr_os"), row.get("ano")
+        if nro is None or ano is None:
+            row["sub_os_count"] = 0
+            row["has_sub_os"] = False
+            continue
+        cnt = counts.get((int(nro), int(ano)), 0)
+        row["sub_os_count"] = cnt
+        row["has_sub_os"] = cnt > 0
+    return rows
+
+
+def _execute_home_fetch_all(
+    *,
+    filters: str,
+    params: dict,
+    sort_by: Optional[str],
+    sort_dir: Optional[str],
+    limit: int,
+    include_finished: bool,
+    include_total: bool,
+    painel: bool,
+    clean_situacao: List[str],
+    clean_setor: List[str],
+    text_search_modes: List[str],
+) -> Dict[str, Any]:
+    """Lista completa da home: tabProtocolos + enrich em lote, sem ROW_NUMBER/COUNT."""
+    sort_key = (sort_by or "").strip()
+    need_details_join = sort_key in ("produto", "titulo")
+    details_join = _details_display_join_sql(need_join=need_details_join)
+    titulo_select = "d.Titulo AS titulo" if need_details_join else "NULL AS titulo"
+    produto_select = (
+        "d.TipoPublicacaoLink AS produto" if need_details_join else "NULL AS produto"
+    )
+    order_clause = _build_os_search_order_clause(
+        sort_by,
+        sort_dir,
+        "",
+        situacao_col="NULL",
+        setor_col="NULL",
+    )
+    query_params = dict(params)
+    query_params["limit"] = limit
+    data_query = f"""
+    SELECT
+        p.NroProtocolo AS nr_os,
+        p.AnoProtocolo AS ano,
+        {titulo_select},
+        p.NomeUsuario AS solicitante,
+        NULL AS situacao,
+        NULL AS setor,
+        NULL AS last_update,
+        NULL AS observacao,
+        p.EntregPrazoLink AS prioridade,
+        {produto_select},
+        NULL AS formato,
+        p.DataEntrada AS data_entrada,
+        p.EntregData AS data_entrega,
+        NULL AS entreg_periodo,
+        0 AS sub_os_count,
+        0 AS has_sub_os
+    FROM tabProtocolos AS p
+    {details_join}
+    {filters}
+    {order_clause}
+    LIMIT %(limit)s
+    """
+    raw_results = db.execute_query(data_query, query_params)
+    data_results = _dedupe_os_search_rows(raw_results)
+    truncated = len(raw_results or []) >= limit
+
+    if not need_details_join:
+        data_results = _enrich_rows_with_details(data_results, slim=True)
+    data_results = _enrich_operacional_from_live(data_results, slim=True)
+    data_results = _enrich_sub_os_counts(data_results)
+
+    if not include_finished:
+        data_results = _filter_out_finished_rows(data_results)
+
+    if not painel:
+        data_results = _expand_split_os_search_rows(
+            data_results,
+            setores=clean_setor or None,
+            situacoes=clean_situacao or None,
+            include_finished=include_finished,
+        )
+    data_results = _filter_rows_by_displayed_andamento(
+        data_results,
+        situacoes=clean_situacao or None,
+        setores=clean_setor or None,
+    )
+    if not painel:
+        data_results = annotate_search_sub_os_matches(
+            data_results,
+            setores=clean_setor or None,
+            situacoes=clean_situacao or None,
+        )
+
+    for row in data_results:
+        row.pop("observacao", None)
+        row.pop("formato", None)
+        row.pop("entreg_periodo", None)
+
+    protocol_total = len(
+        {(row.get("nr_os"), row.get("ano")) for row in data_results}
+    )
+    total_records = protocol_total
+    total_pages = 1 if protocol_total else 0
+    meta: Dict[str, Any] = {
+        "page": 1,
+        "limit": limit,
+        "has_next": truncated,
+        "simple_pagination": True,
+        "fetch_all_fast_path": True,
+    }
+    if text_search_modes:
+        meta["text_search_modes"] = text_search_modes
+    if include_total:
+        meta["total_records"] = total_records
+        meta["total_pages"] = total_pages
+    return {"data": data_results, "meta": meta}
 
 
 def _enrich_operacional_gaps(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -1051,6 +1264,17 @@ def execute_os_search(
     use_fulltext = fulltext_text_search_indexes_ready()
     mat_populated = materialized_table_populated()
 
+    use_home_fast_path = _can_use_home_fetch_all_fast_path(
+        fetch_all=fetch_all,
+        pcp_order=pcp_order,
+        exact_os_lookup=skip_choice_filters,
+        sort_key=sort_key,
+        clean_situacao=clean_situacao,
+        clean_setor=clean_setor,
+        has_ano=has_ano,
+        include_finished=include_finished,
+    )
+
     # Preview do modo textual (params preenchidos depois no fluxo real).
     preview_params: dict = {}
     _, details_mode_preview = _details_text_filter_sql(
@@ -1064,8 +1288,10 @@ def execute_os_search(
     use_exact_fast_path = skip_choice_filters
 
     # Driver FULLTEXT invertido: só quando não precisa de andamento no SQL de filtro/sort.
+    # Home fetch_all usa FROM tabProtocolos — MATCH entra no WHERE, não neste driver.
     can_use_fulltext_driver = (
-        not use_exact_fast_path
+        not use_home_fast_path
+        and not use_exact_fast_path
         and details_mode_preview == "fulltext"
         and bool(titulo_term or produto_term)
         and not pcp_order
@@ -1089,7 +1315,16 @@ def execute_os_search(
         include_finished or use_mat_for_finished or use_python_finished_filter
     )
 
-    if use_exact_fast_path:
+    if use_home_fast_path:
+        andamento_join = ""
+        situacao_col = "NULL"
+        setor_col = "NULL"
+        uses_materialized = False
+        filter_situacao_col = "NULL"
+        filter_setor_col = "NULL"
+        use_mat_gap_fallback = False
+        use_tabandamento_gap_fallback = False
+    elif use_exact_fast_path:
         andamento_join = ""
         situacao_col = "NULL"
         setor_col = "NULL"
@@ -1148,8 +1383,11 @@ def execute_os_search(
     filters = " WHERE 1=1"
     params: dict = {}
 
-    apply_finished_in_sql = not include_finished and not use_exact_fast_path and (
-        not use_fulltext_driver or use_mat_for_finished
+    apply_finished_in_sql = (
+        not use_home_fast_path
+        and not include_finished
+        and not use_exact_fast_path
+        and (not use_fulltext_driver or use_mat_for_finished)
     )
     if apply_finished_in_sql:
         filters += f" AND {_active_situacao_predicate(filter_situacao_col)}"
@@ -1258,7 +1496,7 @@ def execute_os_search(
             for i, val in enumerate(clean_maquinas):
                 params[f"maq_sel_{i}"] = val
 
-        if clean_situacao or clean_setor:
+        if (clean_situacao or clean_setor) and not use_home_fast_path:
             filters += build_main_or_sub_os_filter_sql(
                 setores=clean_setor or None,
                 situacoes=clean_situacao or None,
@@ -1288,6 +1526,21 @@ def execute_os_search(
                 filters += f" AND p.EntregPrazoLink IN ({placeholders})"
                 for i, s in enumerate(clean_prio):
                     params[f"prio_{i}"] = s
+
+    if use_home_fast_path:
+        return _execute_home_fetch_all(
+            filters=filters,
+            params=params,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+            limit=limit,
+            include_finished=include_finished,
+            include_total=include_total,
+            painel=painel,
+            clean_situacao=clean_situacao,
+            clean_setor=clean_setor,
+            text_search_modes=text_search_modes,
+        )
 
     need_details_join = sort_key in ("produto", "titulo")
 

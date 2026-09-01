@@ -176,14 +176,17 @@ class TestFilterOptionsNormalize:
 class TestFilterOptionsProducts:
     @patch("services.os_filter_options_service._table_has_rows", return_value=True)
     @patch("services.os_filter_options_service.db")
-    def test_prefix_search_on_aux_table(self, mock_db, _has_rows):
+    def test_contains_search_on_aux_table(self, mock_db, _has_rows):
         mock_db.execute_query.return_value = [
             {"value": "Cartão", "label": "Cartão", "count": 10},
         ]
         rows = search_products(q="cart", limit=30)
         assert rows[0]["value"] == "Cartão"
         sql = mock_db.execute_query.call_args.args[0]
-        assert "produto_normalizado LIKE" in sql
+        params = mock_db.execute_query.call_args.args[1]
+        assert "produto_normalizado LIKE %(needle)s" in sql
+        assert "ESCAPE" in sql
+        assert params["needle"] == "%cart%"
 
 
 class TestFilterOptionsRequesters:
@@ -200,8 +203,11 @@ class TestFilterOptionsRequesters:
         rows = search_requesters(q="jo", limit=30)
         assert rows[0]["value"] == "João"
         sql = mock_db.execute_query.call_args.args[0]
-        assert "solicitante_normalizado LIKE" in sql
+        params = mock_db.execute_query.call_args.args[1]
+        assert "solicitante_normalizado LIKE %(needle)s" in sql
+        assert "ESCAPE" in sql
         assert "CategoriaLink IN" not in sql
+        assert params["needle"] == "%jo%"
 
     @patch(
         "services.system_catalog_service.apply_catalog_to_filter_rows",
@@ -233,12 +239,13 @@ class TestFilterOptionsRequesters:
         side_effect=lambda _cat, rows, **_kw: rows,
     )
     @patch("services.os_filter_options_service.db")
-    def test_with_categorias_and_prefix(self, mock_db, _catalog):
+    def test_with_categorias_and_contains(self, mock_db, _catalog):
         mock_db.execute_query.return_value = []
         search_requesters(q="mar", limit=30, categorias=["Deputado"])
         sql = mock_db.execute_query.call_args.args[0]
         params = mock_db.execute_query.call_args.args[1]
         assert "CategoriaLink IN" in sql
-        assert "NomeUsuario LIKE %(prefix)s" in sql
-        assert params["prefix"].startswith("mar")
+        assert "NomeUsuario LIKE %(needle)s" in sql
+        assert "ESCAPE" in sql
+        assert params["needle"] == "%mar%"
         assert params["cat_sel_0"] == "Deputado"

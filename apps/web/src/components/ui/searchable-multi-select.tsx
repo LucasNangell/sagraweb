@@ -1,6 +1,13 @@
 import { cn } from "@sagra/ui";
 import { ChevronDown, Loader2, X } from "lucide-react";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 
 import type { MultiSelectOption } from "./multi-select";
 
@@ -46,9 +53,12 @@ export function SearchableMultiSelect({
   const autoId = useId();
   const fieldId = id ?? autoId;
   const searchId = `${fieldId}-search`;
+  const listId = `${fieldId}-list`;
   const [open, setOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const rootRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const optionRefs = useRef<Array<HTMLLabelElement | null>>([]);
   const isLeft = labelSide === "left";
   const showLabel = !hideLabel && Boolean(label);
 
@@ -70,6 +80,16 @@ export function SearchableMultiSelect({
     focusSearch();
     const t = window.setTimeout(focusSearch, 0);
     return () => window.clearTimeout(t);
+  }, [open]);
+
+  useEffect(() => {
+    setHighlightedIndex(-1);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (!open) {
+      setHighlightedIndex(-1);
+    }
   }, [open]);
 
   const summary =
@@ -94,6 +114,78 @@ export function SearchableMultiSelect({
     }
   }
   mergedOptions.sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+
+  const activeIndex =
+    highlightedIndex >= 0 && highlightedIndex < mergedOptions.length
+      ? highlightedIndex
+      : -1;
+
+  useLayoutEffect(() => {
+    if (activeIndex < 0) {
+      return;
+    }
+    optionRefs.current[activeIndex]?.scrollIntoView?.({ block: "nearest" });
+  }, [activeIndex]);
+
+  const closeDropdown = () => {
+    setOpen(false);
+    setHighlightedIndex(-1);
+  };
+
+  const selectHighlighted = () => {
+    if (activeIndex < 0) {
+      return false;
+    }
+    const opt = mergedOptions[activeIndex];
+    if (opt && !value.includes(opt.value)) {
+      onChange([...value, opt.value]);
+    }
+    closeDropdown();
+    return true;
+  };
+
+  const handleSearchKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    if (e.ctrlKey || e.metaKey || e.altKey) {
+      return;
+    }
+    const count = mergedOptions.length;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (count === 0) {
+        return;
+      }
+      setHighlightedIndex((prev) => {
+        if (prev < 0) {
+          return 0;
+        }
+        return Math.min(prev + 1, count - 1);
+      });
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightedIndex((prev) => {
+        if (prev <= 0) {
+          return -1;
+        }
+        return prev - 1;
+      });
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeDropdown();
+      return;
+    }
+    if (e.key === "Tab") {
+      if (activeIndex >= 0) {
+        selectHighlighted();
+      } else {
+        closeDropdown();
+      }
+    }
+  };
 
   const handleOpen = () => {
     if (disabled) {
@@ -168,6 +260,12 @@ export function SearchableMultiSelect({
               ref={searchRef}
               id={searchId}
               type="search"
+              role="combobox"
+              aria-expanded={open}
+              aria-controls={listId}
+              aria-activedescendant={
+                activeIndex >= 0 ? `${fieldId}-opt-${activeIndex}` : undefined
+              }
               value={searchQuery}
               onChange={(e) => onSearchChange?.(e.target.value)}
               placeholder="Digite para filtrar..."
@@ -175,10 +273,15 @@ export function SearchableMultiSelect({
               autoComplete="off"
               autoFocus
               onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => e.stopPropagation()}
+              onKeyDown={handleSearchKeyDown}
             />
           </div>
-          <div className="max-h-52 overflow-y-auto py-1">
+          <div
+            id={listId}
+            role="listbox"
+            aria-multiselectable="true"
+            className="max-h-52 overflow-y-auto py-1"
+          >
             {isLoading ? (
               <p className="flex items-center gap-2 px-3 py-2 text-sm text-neutral-500">
                 <Loader2 className="size-3.5 animate-spin" />
@@ -187,13 +290,23 @@ export function SearchableMultiSelect({
             ) : mergedOptions.length === 0 ? (
               <p className="px-3 py-2 text-sm text-neutral-500">Nenhuma opção</p>
             ) : (
-              mergedOptions.map((opt) => (
+              mergedOptions.map((opt, index) => (
                 <label
                   key={opt.value}
-                  className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-slate-50"
+                  ref={(el) => {
+                    optionRefs.current[index] = el;
+                  }}
+                  id={`${fieldId}-opt-${index}`}
+                  role="option"
+                  aria-selected={value.includes(opt.value)}
+                  className={cn(
+                    "flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-slate-50",
+                    index === activeIndex && "bg-slate-100",
+                  )}
                 >
                   <input
                     type="checkbox"
+                    tabIndex={-1}
                     checked={value.includes(opt.value)}
                     onChange={() => toggle(opt.value)}
                     className="accent-primary-green"

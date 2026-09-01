@@ -10,6 +10,9 @@ from routers.os_routes import (
     _os_search_like_term,
 )
 from services.os_search_service import (
+    OS_SEARCH_IN_CHUNK,
+    _can_use_home_fetch_all_fast_path,
+    _chunks,
     _legacy_andamento_join_sql,
     _materialized_andamento_join_sql,
     _resolve_os_search_pagination,
@@ -80,3 +83,96 @@ class TestOsSearchPaginationDedupe:
         assert len(deduped) == 21
         page_rows = deduped[:limit]
         assert len(page_rows) == 20
+
+
+class TestHomeFetchAllFastPathEligibility:
+    def test_home_default_is_eligible(self):
+        assert _can_use_home_fetch_all_fast_path(
+            fetch_all=True,
+            pcp_order=False,
+            exact_os_lookup=False,
+            sort_key="ano",
+            clean_situacao=[],
+            clean_setor=[],
+            has_ano=True,
+            include_finished=True,
+        )
+
+    def test_setor_with_year_is_eligible(self):
+        assert _can_use_home_fetch_all_fast_path(
+            fetch_all=True,
+            pcp_order=False,
+            exact_os_lookup=False,
+            sort_key="ano",
+            clean_situacao=[],
+            clean_setor=["SEFOC"],
+            has_ano=True,
+            include_finished=True,
+        )
+
+    def test_setor_without_year_is_not_eligible(self):
+        assert not _can_use_home_fetch_all_fast_path(
+            fetch_all=True,
+            pcp_order=False,
+            exact_os_lookup=False,
+            sort_key="ano",
+            clean_situacao=[],
+            clean_setor=["SEFOC"],
+            has_ano=False,
+            include_finished=True,
+        )
+
+    def test_sort_situacao_is_not_eligible(self):
+        assert not _can_use_home_fetch_all_fast_path(
+            fetch_all=True,
+            pcp_order=False,
+            exact_os_lookup=False,
+            sort_key="situacao",
+            clean_situacao=[],
+            clean_setor=[],
+            has_ano=True,
+            include_finished=True,
+        )
+
+    def test_paginated_search_is_not_eligible(self):
+        assert not _can_use_home_fetch_all_fast_path(
+            fetch_all=False,
+            pcp_order=False,
+            exact_os_lookup=False,
+            sort_key="ano",
+            clean_situacao=[],
+            clean_setor=[],
+            has_ano=True,
+            include_finished=True,
+        )
+
+    def test_exclude_finished_with_year_is_eligible(self):
+        assert _can_use_home_fetch_all_fast_path(
+            fetch_all=True,
+            pcp_order=False,
+            exact_os_lookup=False,
+            sort_key="ano",
+            clean_situacao=[],
+            clean_setor=[],
+            has_ano=True,
+            include_finished=False,
+        )
+
+    def test_exclude_finished_without_year_is_not_eligible(self):
+        assert not _can_use_home_fetch_all_fast_path(
+            fetch_all=True,
+            pcp_order=False,
+            exact_os_lookup=False,
+            sort_key="ano",
+            clean_situacao=[],
+            clean_setor=[],
+            has_ano=False,
+            include_finished=False,
+        )
+
+    def test_enrich_in_clause_chunks_at_500(self):
+        assert OS_SEARCH_IN_CHUNK == 500
+        chunks = _chunks(list(range(501)), OS_SEARCH_IN_CHUNK)
+        assert len(chunks) == 2
+        assert len(chunks[0]) == 500
+        assert chunks[1] == [500]

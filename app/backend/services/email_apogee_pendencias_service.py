@@ -64,20 +64,27 @@ def parse_os_ano_from_subject(subject: str | None) -> Optional[Tuple[int, int]]:
     if not subject:
         return None
 
+    from services.os_protocolo_guard import OsProtocoloGuardError, normalize_ano
+
     match = _OS_ANO_SUBJECT_RE.search(subject)
     if match:
         os_num = int(match.group(1))
-        year_raw = int(match.group(2))
-        if year_raw < 100:
-            year_raw += 2000
-        return os_num, year_raw
+        try:
+            year = normalize_ano(int(match.group(2)))
+        except OsProtocoloGuardError:
+            return None
+        return os_num, year
 
     match_simple = _OS_SIMPLE_RE.search(subject)
     if match_simple:
         os_num = int(match_simple.group(1))
         year_match = re.search(r"\b(20\d{2})\b", subject)
         year_raw = int(year_match.group(1)) if year_match else datetime.now().year
-        return os_num, year_raw
+        try:
+            year = normalize_ano(year_raw)
+        except OsProtocoloGuardError:
+            return None
+        return os_num, year
 
     return None
 

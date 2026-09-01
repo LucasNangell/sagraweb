@@ -1,3 +1,5 @@
+import { normalizeAno } from "@/features/os/osAnoUtils";
+
 export function normalizeText(str: string | null | undefined): string {
   if (!str) return "";
   return str
@@ -38,9 +40,8 @@ export function parseOsAno(subject: string | null | undefined): {
   const matchPadrao = subject.match(/(\d{1,5})\s*\/\s*(\d{2,4})/);
   if (matchPadrao) {
     const os = parseInt(matchPadrao[1], 10);
-    let anoraw = parseInt(matchPadrao[2], 10);
-    if (anoraw < 100) anoraw += 2000;
-    return { os, ano: anoraw };
+    const ano = normalizeAno(parseInt(matchPadrao[2], 10));
+    return { os, ano: ano ?? "" };
   }
 
   const matchSimples = subject.match(/OS\s*:?\s*(\d{1,5})/i);
@@ -48,8 +49,10 @@ export function parseOsAno(subject: string | null | undefined): {
     const os = parseInt(matchSimples[1], 10);
     const currentYear = new Date().getFullYear();
     const matchAno = subject.match(/\b(20\d{2})\b/);
-    const ano = matchAno ? parseInt(matchAno[1], 10) : currentYear;
-    return { os, ano };
+    const ano = normalizeAno(
+      matchAno ? parseInt(matchAno[1], 10) : currentYear,
+    );
+    return { os, ano: ano ?? "" };
   }
 
   return { os: "", ano: "" };

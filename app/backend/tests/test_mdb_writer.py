@@ -12,8 +12,10 @@ from routers.mdb_writer import (
     _map_protocolo_cols_for_mdb,
     _resolve_mdb_column,
     _write_protocolo_extra_cols,
+    classify_mdb_error,
     is_retriable_mdb_error,
     mdb_dest_label,
+    reset_mdb_circuit_for_tests,
     sync_andamento_delete_to_mdb,
     sync_andamento_from_mysql_to_mdb,
 )
@@ -141,8 +143,8 @@ class TestWriteProtocoloExtraCols:
 
 
 class TestUpsertAndamento:
-    def test_duplicado_faz_update(self):
-        row = {
+    def _row(self, **overrides):
+        base = {
             "CodStatus": "000842026-99",
             "SituacaoLink": "Teste",
             "SetorLink": "SEFOC",
@@ -151,45 +153,68 @@ class TestUpsertAndamento:
             "Observaçao": "obs",
             "Ponto": "918713",
         }
+        base.update(overrides)
+        return base
+
+    def test_trio_igual_nao_grava(self):
+        from types import SimpleNamespace
+
+        from routers.mdb_writer import _upsert_andamento_row
+
+        row = self._row()
         executed: list[str] = []
-
-        def fake_execute(sql, params=None):
-            executed.append(str(sql).strip().upper())
-
         cursor = MagicMock()
-        cursor.execute.side_effect = fake_execute
-        cursor.fetchone.return_value = MagicMock(__getitem__=lambda s, i: 1)
+        cursor.execute.side_effect = lambda sql, params=None: executed.append(str(sql))
+        cursor.fetchone.return_value = SimpleNamespace(
+            CodStatus="000842026-99",
+            SituacaoLink="Teste",
+            SetorLink="SEFOC",
+        )
 
-        with patch("routers.mdb_writer._andamento_exists", return_value=True):
-            from routers.mdb_writer import _upsert_andamento_row
+        result = _upsert_andamento_row(cursor, row, 84, 2026)
 
-            _upsert_andamento_row(cursor, row, 84, 2026)
+        assert result == "skipped"
+        assert executed
+        assert all("INSERT" not in s.upper() for s in executed)
+        assert all("UPDATE" not in s.upper() for s in executed)
 
+    def test_duplicado_situacao_diferente_faz_update(self):
+        from types import SimpleNamespace
+
+        from routers.mdb_writer import _upsert_andamento_row
+
+        row = self._row()
+        executed: list[str] = []
+        cursor = MagicMock()
+        cursor.execute.side_effect = lambda sql, params=None: executed.append(
+            str(sql).strip().upper()
+        )
+        cursor.fetchone.return_value = SimpleNamespace(
+            CodStatus="000842026-99",
+            SituacaoLink="Outra",
+            SetorLink="SEFOC",
+        )
+
+        result = _upsert_andamento_row(cursor, row, 84, 2026)
+
+        assert result == "updated"
         assert any("UPDATE TABANDAMENTO" in s for s in executed)
         assert not any(s.startswith("INSERT") for s in executed if "TABANDAMENTO" in s)
 
-    def test_ultimo_status_desmarca_anteriores(self):
-        row = {
-            "CodStatus": "000842026-99",
-            "SituacaoLink": "X",
-            "SetorLink": "Y",
-            "Data": "2026-06-11",
-            "UltimoStatus": 1,
-            "Observaçao": "",
-            "Ponto": "",
-        }
-        executed: list[str] = []
+    def test_ultimo_status_desmarca_anteriores_no_insert(self):
+        from routers.mdb_writer import _upsert_andamento_row
 
+        row = self._row(SituacaoLink="X", SetorLink="Y", Observaçao="", Ponto="")
+        executed: list[str] = []
         cursor = MagicMock()
         cursor.execute.side_effect = lambda sql, params=None: executed.append(str(sql))
-        cursor.fetchone.return_value = MagicMock(__getitem__=lambda s, i: 0)
+        cursor.fetchone.return_value = None
 
-        with patch("routers.mdb_writer._andamento_exists", return_value=False):
-            from routers.mdb_writer import _upsert_andamento_row
+        result = _upsert_andamento_row(cursor, row, 84, 2026)
 
-            _upsert_andamento_row(cursor, row, 84, 2026)
-
+        assert result == "inserted"
         assert any("UltimoStatus" in s and "UPDATE" in s for s in executed)
+        assert any("INSERT" in s.upper() for s in executed)
 
 
 class TestOsRoutesMdbSyncBestEffort:
@@ -271,6 +296,11 @@ def _cfg_get_retry(key, default=None):
 
 
 class TestExecuteMdbTransactionRetry:
+    def setup_method(self):
+        reset_mdb_circuit_for_tests()
+
+    def teardown_method(self):
+        reset_mdb_circuit_for_tests()
     def test_retriable_exhausts_two_rounds_with_fixed_waits(self):
         sleeps: list[float] = []
         lock_err = RuntimeError(_LOCK_MSG)
@@ -372,6 +402,161 @@ class TestExecuteMdbTransactionRetry:
             assert call.kwargs.get("timeout") == 30
         conn.commit.assert_called_once()
 
+    def test_invalid_mode_attribute_fails_immediately(self):
+        sleeps: list[float] = []
+        mode_err = RuntimeError(
+            "('08004', \"[08004] [Microsoft][ODBC Microsoft Access Driver]"
+            "Invalid connection string attribute Mode (8)\")"
+        )
+
+        with patch("routers.mdb_writer.config_manager") as mock_cfg, patch(
+            "routers.mdb_writer.time.sleep", side_effect=lambda s: sleeps.append(s)
+        ), patch(
+            "routers.mdb_writer.get_mdb_path", return_value=r"I:\test.mdb"
+        ), patch("routers.mdb_writer.pyodbc.connect", side_effect=mode_err):
+            mock_cfg.get.side_effect = _cfg_get_retry
+            mock_cfg.resolve_mdb_path.side_effect = lambda p: p
+            mock_cfg.get_mdb_connection_string.return_value = "DSN=test"
+
+            with pytest.raises(MdbSyncError) as ei:
+                _execute_mdb_transaction(84, "test_stage", lambda c, cur: None)
+
+        assert ei.value.attempts == 1
+        assert sleeps == []
+        assert classify_mdb_error(mode_err) == "invalid_conn_str"
+
+    def test_too_many_clients_uses_short_backoff(self):
+        sleeps: list[float] = []
+        sat_err = RuntimeError(
+            "('08004', \"[08004] [Microsoft][ODBC Microsoft Access Driver] "
+            "Too many client tasks. (-1036) (SQLDriverConnect)\")"
+        )
+
+        with patch("routers.mdb_writer.config_manager") as mock_cfg, patch(
+            "routers.mdb_writer.time.sleep", side_effect=lambda s: sleeps.append(s)
+        ), patch(
+            "routers.mdb_writer.get_mdb_path", return_value=r"I:\test.mdb"
+        ), patch("routers.mdb_writer.pyodbc.connect", side_effect=sat_err):
+            mock_cfg.get.side_effect = _cfg_get_retry
+            mock_cfg.resolve_mdb_path.side_effect = lambda p: p
+            mock_cfg.get_mdb_connection_string.return_value = "DSN=test"
+
+            with pytest.raises(MdbSyncError) as ei:
+                _execute_mdb_transaction(84, "test_stage", lambda c, cur: None)
+
+        assert ei.value.attempts == 2
+        assert sleeps == [60]
+        assert classify_mdb_error(sat_err) == "saturation"
+
+    def test_empty_hy000_is_saturation_not_ten_retries(self):
+        sleeps: list[float] = []
+        hy_err = RuntimeError("('HY000', 'The driver did not supply an error!')")
+
+        with patch("routers.mdb_writer.config_manager") as mock_cfg, patch(
+            "routers.mdb_writer.time.sleep", side_effect=lambda s: sleeps.append(s)
+        ), patch(
+            "routers.mdb_writer.get_mdb_path", return_value=r"I:\test.mdb"
+        ), patch("routers.mdb_writer.pyodbc.connect", side_effect=hy_err):
+            mock_cfg.get.side_effect = _cfg_get_retry
+            mock_cfg.resolve_mdb_path.side_effect = lambda p: p
+            mock_cfg.get_mdb_connection_string.return_value = "DSN=test"
+
+            with pytest.raises(MdbSyncError) as ei:
+                _execute_mdb_transaction(84, "test_stage", lambda c, cur: None)
+
+        assert ei.value.attempts == 2
+        assert sleeps == [60]
+
+    def test_circuit_pauses_next_transaction(self):
+        sleeps: list[float] = []
+        sat_err = RuntimeError("Too many client tasks. (-1036)")
+
+        with patch("routers.mdb_writer.config_manager") as mock_cfg, patch(
+            "routers.mdb_writer.time.sleep", side_effect=lambda s: sleeps.append(s)
+        ), patch(
+            "routers.mdb_writer.get_mdb_path", return_value=r"I:\test.mdb"
+        ), patch("routers.mdb_writer.pyodbc.connect", side_effect=sat_err):
+            mock_cfg.get.side_effect = _cfg_get_retry
+            mock_cfg.resolve_mdb_path.side_effect = lambda p: p
+            mock_cfg.get_mdb_connection_string.return_value = "DSN=test"
+
+            with pytest.raises(MdbSyncError):
+                _execute_mdb_transaction(84, "test_stage", lambda c, cur: None)
+            with pytest.raises(MdbSyncError):
+                _execute_mdb_transaction(84, "test_stage", lambda c, cur: None)
+
+        assert sleeps[0] == 60
+        assert any(s >= 60 for s in sleeps[1:])
+
+    def test_recover_if_skips_error_when_already_synced(self):
+        hy_err = RuntimeError("('HY000', 'The driver did not supply an error!')")
+        conn = MagicMock()
+        cursor = MagicMock()
+        conn.cursor.return_value = cursor
+
+        def boom(_c, _cur):
+            raise hy_err
+
+        with patch("routers.mdb_writer.config_manager") as mock_cfg, patch(
+            "routers.mdb_writer.time.sleep"
+        ), patch(
+            "routers.mdb_writer.get_mdb_path", return_value=r"I:\test.mdb"
+        ), patch("routers.mdb_writer.pyodbc.connect", return_value=conn):
+            mock_cfg.get.side_effect = _cfg_get_retry
+            mock_cfg.resolve_mdb_path.side_effect = lambda p: p
+            mock_cfg.get_mdb_connection_string.return_value = "DSN=test"
+
+            _execute_mdb_transaction(
+                84, "test_stage", boom, recover_if=lambda _cur: True
+            )
+
+        conn.rollback.assert_called()
+
+    def test_sync_andamento_recover_if_detects_trio(self):
+        from types import SimpleNamespace
+
+        mysql_row = {
+            "CodStatus": "000842026-01",
+            "SituacaoLink": "Em Execução",
+            "SetorLink": "SEFOC",
+            "Data": "2026-09-01",
+            "UltimoStatus": 1,
+            "Observaçao": "x",
+            "Ponto": "1",
+        }
+        captured: dict = {}
+
+        def fake_execute(nro, stage, cb, recover_if=None):
+            captured["recover_if"] = recover_if
+            cursor = MagicMock()
+            cursor.fetchone.return_value = SimpleNamespace(
+                CodStatus="000842026-01",
+                SituacaoLink="Em Execução",
+                SetorLink="SEFOC",
+            )
+            assert recover_if is not None
+            assert recover_if(cursor) is True
+
+        with patch("routers.mdb_writer.config_manager") as mock_cfg, patch(
+            "routers.mdb_writer.db"
+        ) as mock_db, patch(
+            "routers.mdb_writer.get_mdb_path", return_value=r"I:\test.mdb"
+        ), patch(
+            "routers.mdb_writer._execute_mdb_transaction", side_effect=fake_execute
+        ):
+            mock_cfg.is_mdb_write_enabled.return_value = True
+            mock_db.execute_query.return_value = [mysql_row]
+            sync_andamento_from_mysql_to_mdb("000842026-01", 84, 2026)
+
+        assert captured["recover_if"] is not None
+
+    def test_combined_1036_and_mode_is_saturation(self):
+        err = RuntimeError(
+            "('08004', \"[08004] Too many client tasks. (-1036) (SQLDriverConnect); "
+            "[08004] Invalid connection string attribute Mode (8)\")"
+        )
+        assert classify_mdb_error(err) == "saturation"
+
 
 class TestMdbConnectionHardening:
     def test_pooling_disabled(self):
@@ -379,7 +564,7 @@ class TestMdbConnectionHardening:
 
         assert mdb_writer.pyodbc.pooling is False
 
-    def test_connection_string_shared_mode(self):
+    def test_connection_string_omits_mode(self):
         from config_manager import config_manager
 
         with patch.object(
@@ -388,5 +573,5 @@ class TestMdbConnectionHardening:
             conn_str = config_manager.get_mdb_connection_string(r"I:\os.mdb")
 
         assert "Exclusive=0" in conn_str
-        assert "Mode=Share Deny None" in conn_str
+        assert "Mode=" not in conn_str
         assert r"DBQ=\\server\share\os.mdb" in conn_str

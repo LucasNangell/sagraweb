@@ -19,6 +19,13 @@ import {
 import { useEffect, useState } from "react";
 
 import { emailDownloadUrl } from "@/api/email";
+import { usePendenciaProtocolo } from "@/api/hooks/useEmailQueries";
+import {
+  OS_ANO_MAX,
+  OS_ANO_MIN,
+  normalizeAno,
+  parseOsAnoPair,
+} from "@/features/os/osAnoUtils";
 import type { AndamentoResult, InboxEmail } from "../types";
 import {
   attachmentIconClass,
@@ -114,6 +121,23 @@ export function EmailInboxDetail({
     setShowQuoted(false);
   }, [email?.id]);
 
+  const osAnoPair = parseOsAnoPair(os, ano);
+  const protocoloQuery = usePendenciaProtocolo(
+    osAnoPair?.ano ?? null,
+    osAnoPair?.os ?? null,
+  );
+  const protocoloFound = protocoloQuery.data?.NroProtocolo != null;
+  const anoInvalido = ano !== "" && normalizeAno(ano) == null;
+  const osReady = osAnoPair != null && protocoloFound && !protocoloQuery.isFetching;
+  const protocoloLabel = protocoloFound
+    ? [
+        protocoloQuery.data?.NomeUsuario,
+        protocoloQuery.data?.CategoriaLink,
+      ]
+        .filter((part) => part && String(part).trim())
+        .join(" — ")
+    : "";
+
   if (!email) {
     return <EmailEmptyState />;
   }
@@ -130,16 +154,14 @@ export function EmailInboxDetail({
   const isSepim = !email.account?.includes("papelaria");
 
   const handleSend = async () => {
-    const osNum = typeof os === "number" ? os : parseInt(String(os), 10);
-    const anoNum = typeof ano === "number" ? ano : parseInt(String(ano), 10);
-    if (!osNum || !anoNum) {
-      window.alert("Preencha os campos NrOS e Ano");
+    if (!osAnoPair || !osReady) {
+      window.alert("Informe uma OS existente (número e ano válidos).");
       return;
     }
     try {
       const result = await onSendAndamento({
-        os: osNum,
-        ano: anoNum,
+        os: osAnoPair.os,
+        ano: osAnoPair.ano,
         situacao,
         setor,
         observacao,
@@ -178,16 +200,14 @@ export function EmailInboxDetail({
   };
 
   const handleReply = async () => {
-    const osNum = typeof os === "number" ? os : parseInt(String(os), 10);
-    const anoNum = typeof ano === "number" ? ano : parseInt(String(ano), 10);
-    if (!osNum || !anoNum) {
-      window.alert("Preencha os campos NrOS e Ano");
+    if (!osAnoPair || !osReady) {
+      window.alert("Informe uma OS existente (número e ano válidos).");
       return;
     }
     try {
       await onReply({
-        os: osNum,
-        ano: anoNum,
+        os: osAnoPair.os,
+        ano: osAnoPair.ano,
         email_entry_id: email.real_id ?? null,
       });
       onToast("Resposta enviada ao remetente!");
@@ -200,10 +220,8 @@ export function EmailInboxDetail({
   };
 
   const handleSaveMht = async () => {
-    const osNum = typeof os === "number" ? os : parseInt(String(os), 10);
-    const anoNum = typeof ano === "number" ? ano : parseInt(String(ano), 10);
-    if (!osNum || !anoNum) {
-      window.alert("Preencha os campos NrOS e Ano");
+    if (!osAnoPair || !osReady) {
+      window.alert("Informe uma OS existente (número e ano válidos).");
       return;
     }
     if (!email.real_id) {
@@ -212,8 +230,8 @@ export function EmailInboxDetail({
     }
     try {
       await onSaveEmail({
-        os: osNum,
-        ano: anoNum,
+        os: osAnoPair.os,
+        ano: osAnoPair.ano,
         email_entry_id: email.real_id,
       });
       onToast("E-mail salvo em .mht na pasta Sefoc da OS.");
@@ -366,6 +384,7 @@ export function EmailInboxDetail({
               Nr OS
               <input
                 type="number"
+                min={1}
                 value={os}
                 onChange={(e) =>
                   setOs(e.target.value ? Number(e.target.value) : "")
@@ -377,14 +396,39 @@ export function EmailInboxDetail({
               Ano
               <input
                 type="number"
+                min={OS_ANO_MIN}
+                max={OS_ANO_MAX}
                 value={ano}
                 onChange={(e) =>
                   setAno(e.target.value ? Number(e.target.value) : "")
                 }
+                onBlur={() => {
+                  const expanded = normalizeAno(ano);
+                  if (expanded != null && expanded !== ano) {
+                    setAno(expanded);
+                  }
+                }}
                 className={emailInputClass}
               />
             </label>
           </div>
+          {anoInvalido ? (
+            <p className="mt-2 text-xs text-red-600">
+              Ano inválido. Use 2 dígitos (26) ou 4 dígitos entre {OS_ANO_MIN} e{" "}
+              {OS_ANO_MAX}.
+            </p>
+          ) : osAnoPair && protocoloQuery.isFetching ? (
+            <p className="mt-2 text-xs text-slate-500">Verificando OS…</p>
+          ) : osAnoPair && !protocoloFound ? (
+            <p className="mt-2 text-xs text-red-600">
+              OS {osAnoPair.os}/{osAnoPair.ano} não encontrada.
+            </p>
+          ) : osAnoPair && osReady && protocoloLabel ? (
+            <p className="mt-2 text-xs text-slate-600">
+              OS {osAnoPair.os}/{osAnoPair.ano}
+              {protocoloLabel ? ` — ${protocoloLabel}` : ""}
+            </p>
+          ) : null}
 
           <label className={cn(emailLabelClass, "mt-3 block")}>
             Situação
@@ -427,7 +471,7 @@ export function EmailInboxDetail({
         <div className="shrink-0 space-y-2 border-t border-slate-200/80 bg-white/60 px-4 py-4">
           <button
             type="button"
-            disabled={sendingAndamento}
+            disabled={sendingAndamento || !osReady}
             onClick={() => void handleSend()}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-secondary-blue py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-secondary-blue/90 disabled:opacity-60"
           >
@@ -454,7 +498,7 @@ export function EmailInboxDetail({
             </button>
             <button
               type="button"
-              disabled={replying}
+              disabled={replying || !osReady}
               onClick={() => void handleReply()}
               className="flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 py-2 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-60"
             >
@@ -468,7 +512,7 @@ export function EmailInboxDetail({
           </div>
           <button
             type="button"
-            disabled={savingMht}
+            disabled={savingMht || !osReady}
             onClick={() => void handleSaveMht()}
             className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 py-2 text-xs font-semibold text-sky-800 transition hover:bg-sky-100 disabled:opacity-60"
           >

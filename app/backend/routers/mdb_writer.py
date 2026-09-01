@@ -41,6 +41,14 @@ _MDB_SYNC_WORKER_LOCK = threading.Lock()
 _MDB_SYNC_WORKER_STARTED = False
 _MDB_SYNC_STOP_EVENT = threading.Event()
 
+# Saturação ACE (-1036 / HY000 vazio em SQLDriverConnect): poucas tentativas e
+# pausa da fila inteira para não martelar o Jet.
+_MDB_SATURATION_MAX_ATTEMPTS = 2
+_MDB_SATURATION_WAIT_SECONDS = 60.0
+_MDB_CIRCUIT_COOLDOWN_SECONDS = 90.0
+_MDB_CIRCUIT_LOCK = threading.Lock()
+_MDB_CIRCUIT_OPEN_UNTIL = 0.0
+
 
 def _parse_dispatch_bool(value, default: bool = False) -> bool:
     if value is None:
@@ -224,7 +232,6 @@ _RETRIABLE_MARKERS = (
     "in use",
     "busy",
     "temporarily",
-    "too many client",
     "deadlock",
     "network error",
     "network access was interrupted",
@@ -233,13 +240,15 @@ _RETRIABLE_MARKERS = (
     "-1022",
     "-1032",
     "-1102",
-    "hy000",
     "3010",
     "3045",
     "3354",
     "3197",
     "operationalerror",
 )
+
+# HY000 genérico não entra em _RETRIABLE_MARKERS: sozinho indica saturação/connect
+# morto, não lock de arquivo. Lock/rede continuam cobertos pelos markers acima.
 class MdbWriteDisabledError(Exception):
     """Dual-write MDB desligado (MYSQL_ONLY=true)."""
 
@@ -375,18 +384,83 @@ def _retry_settings() -> tuple[int, float, int, float]:
     )
 
 
-def is_retriable_mdb_error(exc: BaseException) -> bool:
-    """Indica se vale a pena aguardar e tentar de novo (lock / arquivo ocupado)."""
+def _mdb_error_text(exc: BaseException) -> str:
     if isinstance(exc, pyodbc.Error):
         codes = []
         if hasattr(exc, "args") and exc.args:
             codes.append(str(exc.args[0]).lower())
         for part in exc.args[1:] if len(exc.args) > 1 else []:
             codes.append(str(part).lower())
-        text = " ".join(codes)
-    else:
-        text = str(exc).lower()
-    return any(marker in text for marker in _RETRIABLE_MARKERS)
+        return " ".join(codes)
+    return str(exc).lower()
+
+
+def classify_mdb_error(exc: BaseException) -> str:
+    """
+    Classifica falha ODBC/ACE:
+    - invalid_conn_str: atributo inválido (ex. Mode=) sem saturação — não retentar
+    - saturation: -1036 / too many clients / HY000 vazio em connect
+    - retriable: lock, -1022, arquivo em uso
+    - fatal: demais
+    """
+    text = _mdb_error_text(exc)
+    has_saturation = "too many client" in text or "-1036" in text
+    has_invalid_conn = "invalid connection string attribute" in text
+    if has_invalid_conn and not has_saturation:
+        return "invalid_conn_str"
+    if has_saturation:
+        return "saturation"
+    if "the driver did not supply an error" in text:
+        return "saturation"
+    if "hy000" in text and "sqldriverconnect" in text:
+        lock_or_net = any(
+            marker in text
+            for marker in (
+                "locked",
+                "exclusively",
+                "already opened",
+                "-1032",
+                "-1022",
+                "network access was interrupted",
+            )
+        )
+        if not lock_or_net:
+            return "saturation"
+    if any(marker in text for marker in _RETRIABLE_MARKERS):
+        return "retriable"
+    return "fatal"
+
+
+def is_retriable_mdb_error(exc: BaseException) -> bool:
+    """Indica se vale a pena aguardar e tentar de novo (lock / arquivo ocupado)."""
+    return classify_mdb_error(exc) in ("retriable", "saturation")
+
+
+def _trip_mdb_circuit() -> None:
+    global _MDB_CIRCUIT_OPEN_UNTIL
+    with _MDB_CIRCUIT_LOCK:
+        _MDB_CIRCUIT_OPEN_UNTIL = time.monotonic() + _MDB_CIRCUIT_COOLDOWN_SECONDS
+    logger.warning(
+        "MDB circuit aberto por %.0fs (saturação ACE/Jet)",
+        _MDB_CIRCUIT_COOLDOWN_SECONDS,
+    )
+
+
+def _wait_if_mdb_circuit_open() -> None:
+    with _MDB_CIRCUIT_LOCK:
+        until = _MDB_CIRCUIT_OPEN_UNTIL
+    remaining = until - time.monotonic()
+    if remaining <= 0:
+        return
+    logger.warning("MDB circuit aberto — fila pausada %.1fs", remaining)
+    time.sleep(remaining)
+
+
+def reset_mdb_circuit_for_tests() -> None:
+    """Libera o circuit breaker (somente testes)."""
+    global _MDB_CIRCUIT_OPEN_UNTIL
+    with _MDB_CIRCUIT_LOCK:
+        _MDB_CIRCUIT_OPEN_UNTIL = 0.0
 
 
 def _mdb_path_for_connection(nro: int) -> tuple[str, str]:
@@ -408,60 +482,98 @@ def _execute_mdb_transaction(
     nro: int,
     stage: str,
     callback: Callable[[pyodbc.Connection, pyodbc.Cursor], None],
+    *,
+    recover_if: Callable[[pyodbc.Cursor], bool] | None = None,
 ) -> None:
     """
     Abre conexão, executa callback(conn, cursor), commit.
     Em erro recuperável: rollback, fecha, espera (intervalo fixo) e tenta de novo.
-    Após esgotar uma rodada de tentativas, aguarda second_round_wait e repete
-    (até mdb_retry_rounds). Só então propaga MdbSyncError (alerta admin).
+    Saturação ACE (-1036 / HY000 vazio): no máximo 2 tentativas com espera longa
+    e circuit breaker na fila. Atributo de conexão inválido não retenta.
+    recover_if: após falha de escrita, se o cursor ainda ler o andamento já
+    replicado pelo sincronizador, trata como sucesso.
     """
+    _wait_if_mdb_circuit_open()
     configured_path, path = _mdb_path_for_connection(nro)
     max_attempts, base_wait, rounds, second_round_wait = _retry_settings()
-    last_err: Optional[Exception] = None
     total_attempts = 0
+    saturation_attempts = 0
+    round_no = 1
+    attempt = 1
 
-    for round_no in range(1, rounds + 1):
-        for attempt in range(1, max_attempts + 1):
-            total_attempts += 1
-            conn: Optional[pyodbc.Connection] = None
-            try:
-                conn_str = config_manager.get_mdb_connection_string(path)
-                conn = _mdb_connect(conn_str)
-                cursor = conn.cursor()
-                callback(conn, cursor)
-                conn.commit()
-                if total_attempts > 1:
-                    logger.info(
-                        "MDB '%s' OK na tentativa %s (rodada %s/%s, %s/%s nesta rodada) (%s)",
+    while True:
+        _wait_if_mdb_circuit_open()
+        total_attempts += 1
+        conn: Optional[pyodbc.Connection] = None
+        try:
+            conn_str = config_manager.get_mdb_connection_string(path)
+            conn = _mdb_connect(conn_str)
+            cursor = conn.cursor()
+            callback(conn, cursor)
+            conn.commit()
+            if total_attempts > 1:
+                logger.info(
+                    "MDB '%s' OK na tentativa %s (rodada %s/%s, %s/%s nesta rodada) (%s)",
+                    stage,
+                    total_attempts,
+                    round_no,
+                    rounds,
+                    attempt,
+                    max_attempts,
+                    path,
+                )
+            return
+        except Exception as e:
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            if recover_if is not None and conn is not None:
+                try:
+                    if recover_if(conn.cursor()):
+                        logger.info(
+                            "MDB '%s' já replicado após erro (skip idempotente): %s",
+                            stage,
+                            e,
+                        )
+                        return
+                except Exception as recover_exc:
+                    logger.debug(
+                        "MDB '%s' recover_if falhou: %s",
                         stage,
-                        total_attempts,
-                        round_no,
-                        rounds,
-                        attempt,
-                        max_attempts,
-                        path,
+                        recover_exc,
                     )
-                return
-            except Exception as e:
-                last_err = e
-                if conn:
-                    try:
-                        conn.rollback()
-                    except Exception:
-                        pass
-                retriable = is_retriable_mdb_error(e)
-                last_in_round = attempt >= max_attempts
-                last_round = round_no >= rounds
 
-                if not retriable:
-                    logger.error(
-                        "MDB '%s' falhou (tentativa %s, rodada %s/%s, retentável=False): %s",
-                        stage,
-                        total_attempts,
-                        round_no,
-                        rounds,
-                        e,
-                    )
+            kind = classify_mdb_error(e)
+
+            if kind == "invalid_conn_str":
+                logger.error(
+                    "MDB '%s' falhou (tentativa %s, connection string inválida): %s",
+                    stage,
+                    total_attempts,
+                    e,
+                )
+                raise MdbSyncError(
+                    stage,
+                    nro,
+                    configured_path or path,
+                    e,
+                    attempts=total_attempts,
+                ) from e
+
+            if kind == "saturation":
+                saturation_attempts += 1
+                logger.warning(
+                    "MDB '%s' saturação ACE (%s/%s) na tentativa %s: %s",
+                    stage,
+                    saturation_attempts,
+                    _MDB_SATURATION_MAX_ATTEMPTS,
+                    total_attempts,
+                    e,
+                )
+                if saturation_attempts >= _MDB_SATURATION_MAX_ATTEMPTS:
+                    _trip_mdb_circuit()
                     raise MdbSyncError(
                         stage,
                         nro,
@@ -469,63 +581,79 @@ def _execute_mdb_transaction(
                         e,
                         attempts=total_attempts,
                     ) from e
+                time.sleep(_MDB_SATURATION_WAIT_SECONDS)
+                continue
 
-                if last_in_round and last_round:
-                    logger.error(
-                        "MDB '%s' falhou após %s tentativa(s) em %s rodada(s): %s",
-                        stage,
-                        total_attempts,
-                        rounds,
-                        e,
-                    )
-                    raise MdbSyncError(
-                        stage,
-                        nro,
-                        configured_path or path,
-                        e,
-                        attempts=total_attempts,
-                    ) from e
+            if kind != "retriable":
+                logger.error(
+                    "MDB '%s' falhou (tentativa %s, rodada %s/%s, retentável=False): %s",
+                    stage,
+                    total_attempts,
+                    round_no,
+                    rounds,
+                    e,
+                )
+                raise MdbSyncError(
+                    stage,
+                    nro,
+                    configured_path or path,
+                    e,
+                    attempts=total_attempts,
+                ) from e
 
-                if last_in_round:
-                    logger.warning(
-                        "MDB '%s' bloqueado/ocupado — rodada %s/%s esgotada; "
-                        "nova rodada em %.1fs: %s",
-                        stage,
-                        round_no,
-                        rounds,
-                        second_round_wait,
-                        e,
-                    )
-                    if second_round_wait > 0:
-                        time.sleep(second_round_wait)
-                else:
-                    logger.warning(
-                        "MDB '%s' bloqueado/ocupado — rodada %s/%s tentativa %s/%s, "
-                        "nova tentativa em %.1fs: %s",
-                        stage,
-                        round_no,
-                        rounds,
-                        attempt,
-                        max_attempts,
-                        base_wait,
-                        e,
-                    )
-                    time.sleep(base_wait)
-            finally:
-                if conn:
-                    try:
-                        conn.close()
-                    except Exception:
-                        pass
+            last_in_round = attempt >= max_attempts
+            last_round = round_no >= rounds
 
-    if last_err:
-        raise MdbSyncError(
-            stage,
-            nro,
-            configured_path or path,
-            last_err,
-            attempts=total_attempts,
-        ) from last_err
+            if last_in_round and last_round:
+                logger.error(
+                    "MDB '%s' falhou após %s tentativa(s) em %s rodada(s): %s",
+                    stage,
+                    total_attempts,
+                    rounds,
+                    e,
+                )
+                raise MdbSyncError(
+                    stage,
+                    nro,
+                    configured_path or path,
+                    e,
+                    attempts=total_attempts,
+                ) from e
+
+            if last_in_round:
+                logger.warning(
+                    "MDB '%s' bloqueado/ocupado — rodada %s/%s esgotada; "
+                    "nova rodada em %.1fs: %s",
+                    stage,
+                    round_no,
+                    rounds,
+                    second_round_wait,
+                    e,
+                )
+                if second_round_wait > 0:
+                    time.sleep(second_round_wait)
+                round_no += 1
+                attempt = 1
+            else:
+                logger.warning(
+                    "MDB '%s' bloqueado/ocupado — rodada %s/%s tentativa %s/%s, "
+                    "nova tentativa em %.1fs: %s",
+                    stage,
+                    round_no,
+                    rounds,
+                    attempt,
+                    max_attempts,
+                    base_wait,
+                    e,
+                )
+                time.sleep(base_wait)
+                attempt += 1
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 def get_connection(nro: int) -> pyodbc.Connection:
     """Conexão direta (preferir _execute_mdb_transaction para escrita)."""
     _configured, path = _mdb_path_for_connection(nro)
@@ -649,9 +777,52 @@ def _detalhes_exists(cursor, nro: int, ano: int) -> bool:
         (nro, ano),
     )
     return cursor.fetchone()[0] > 0
-def _andamento_exists(cursor, cod_status: str) -> bool:
-    cursor.execute("SELECT COUNT(*) FROM tabAndamento WHERE CodStatus = ?", (cod_status,))
-    return cursor.fetchone()[0] > 0
+def _mdb_row_get(row: Any, name: str, index: int) -> Any:
+    if row is None:
+        return None
+    try:
+        return getattr(row, name)
+    except Exception:
+        pass
+    try:
+        return row[index]
+    except Exception:
+        return None
+
+
+def _norm_andamento_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip().casefold()
+
+
+def _andamento_trio_matches(mdb_row: Any, mysql_row: Dict[str, Any]) -> bool:
+    if mdb_row is None or not mysql_row:
+        return False
+    return (
+        _norm_andamento_text(_mdb_row_get(mdb_row, "CodStatus", 0))
+        == _norm_andamento_text(mysql_row.get("CodStatus"))
+        and _norm_andamento_text(_mdb_row_get(mdb_row, "SituacaoLink", 1))
+        == _norm_andamento_text(mysql_row.get("SituacaoLink"))
+        and _norm_andamento_text(_mdb_row_get(mdb_row, "SetorLink", 2))
+        == _norm_andamento_text(mysql_row.get("SetorLink"))
+    )
+
+
+def _fetch_andamento_trio(cursor, cod_status: str) -> Any:
+    cursor.execute(
+        "SELECT CodStatus, SituacaoLink, SetorLink FROM tabAndamento WHERE CodStatus = ?",
+        (cod_status,),
+    )
+    return cursor.fetchone()
+
+
+def _andamento_already_synced(cursor, mysql_row: Dict[str, Any]) -> bool:
+    cod_status = mysql_row.get("CodStatus")
+    if not cod_status:
+        return False
+    existing = _fetch_andamento_trio(cursor, str(cod_status))
+    return _andamento_trio_matches(existing, mysql_row)
 def _write_protocolo(
     cursor,
     nro: int,
@@ -785,8 +956,17 @@ def _write_detalhes(
             f"INSERT INTO tabDetalhesServico ({col_sql}) VALUES ({placeholders})",
             (nro, ano) + tuple(values),
         )
-def _upsert_andamento_row(cursor, row: Dict[str, Any], nro_fk: int, ano_fk: int) -> None:
+def _upsert_andamento_row(cursor, row: Dict[str, Any], nro_fk: int, ano_fk: int) -> str:
+    """Insere ou atualiza andamento. Retorna skipped|updated|inserted."""
     cod_status = row["CodStatus"]
+    existing = _fetch_andamento_trio(cursor, cod_status)
+    if existing is not None and _andamento_trio_matches(existing, row):
+        logger.info(
+            "MDB andamento %s já presente (CodStatus/SituacaoLink/SetorLink) — skip dual-write",
+            cod_status,
+        )
+        return "skipped"
+
     ultimo = to_mdb_bool(row.get("UltimoStatus"))
     if ultimo:
         cursor.execute(
@@ -807,7 +987,7 @@ def _upsert_andamento_row(cursor, row: Dict[str, Any], nro_fk: int, ano_fk: int)
         nro_fk,
         ano_fk,
     )
-    if _andamento_exists(cursor, cod_status):
+    if existing is not None:
         cursor.execute(
             """
             UPDATE tabAndamento
@@ -817,19 +997,20 @@ def _upsert_andamento_row(cursor, row: Dict[str, Any], nro_fk: int, ano_fk: int)
             """,
             params,
         )
-    else:
-        cursor.execute(
-            """
-            INSERT INTO tabAndamento
-            (CodStatus, NroProtocoloLink, AnoProtocoloLink, SituacaoLink, SetorLink,
-             Data, UltimoStatus, Observaçao, Ponto)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                cod_status, nro_fk, ano_fk,
-                params[0], params[1], params[2], params[3], params[4], params[5],
-            ),
-        )
+        return "updated"
+    cursor.execute(
+        """
+        INSERT INTO tabAndamento
+        (CodStatus, NroProtocoloLink, AnoProtocoloLink, SituacaoLink, SetorLink,
+         Data, UltimoStatus, Observaçao, Ponto)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            cod_status, nro_fk, ano_fk,
+            params[0], params[1], params[2], params[3], params[4], params[5],
+        ),
+    )
+    return "inserted"
 def _ensure_protocolo_in_mdb(cursor, nro: int, ano: int) -> tuple[int, int]:
     cursor.execute(
         "SELECT NroProtocolo, AnoProtocolo FROM tabProtocolos WHERE NroProtocolo = ? AND AnoProtocolo = ?",
@@ -1088,9 +1269,10 @@ def sync_andamento_from_mysql_to_mdb(
 
     def _work(_conn, cursor):
         nro_fk, ano_fk = _ensure_protocolo_in_mdb(cursor, nro, ano)
-        _upsert_andamento_row(cursor, rows[0], nro_fk, ano_fk)
-        # Sempre realinha a OS inteira — upsert de uma linha não basta.
-        _fix_ultimo_status_mdb(cursor, nro_fk, ano_fk)
+        upserted = _upsert_andamento_row(cursor, rows[0], nro_fk, ano_fk)
+        if upserted != "skipped":
+            # Sempre realinha a OS inteira — upsert de uma linha não basta.
+            _fix_ultimo_status_mdb(cursor, nro_fk, ano_fk)
         if proto_extra is not None:
             mdb_path = get_mdb_path(nro)
             written = _write_protocolo_andamento_extra(
@@ -1106,8 +1288,11 @@ def sync_andamento_from_mysql_to_mdb(
                     f"do MDB para OS {nro}/{ano} (nenhuma coluna resolvida)"
                 )
 
+    def _recover(cursor) -> bool:
+        return _andamento_already_synced(cursor, rows[0])
+
     try:
-        _execute_mdb_transaction(nro, stage, _work)
+        _execute_mdb_transaction(nro, stage, _work, recover_if=_recover)
     except MdbSyncError as exc:
         raise MdbSyncError(
             exc.stage,
@@ -1177,8 +1362,15 @@ def sync_andamento_delete_to_mdb(cod_status: str, nro: int, ano: int) -> bool:
         # Sempre realinha flags — mesmo se a linha já não existia no Access.
         _fix_ultimo_status_mdb(cursor, nro, ano)
 
+    def _recover(cursor) -> bool:
+        cursor.execute(
+            "SELECT COUNT(*) FROM tabAndamento WHERE CodStatus = ?",
+            (cod_status,),
+        )
+        return cursor.fetchone()[0] == 0
+
     try:
-        _execute_mdb_transaction(nro, stage, _work)
+        _execute_mdb_transaction(nro, stage, _work, recover_if=_recover)
     except Exception as exc:
         _log_mdb_write_error(operation, cod_status, nro, ano, exc)
         raise
@@ -1307,6 +1499,11 @@ def format_mdb_failure_detail(
         if resolved and resolved != exc.mdb_path:
             lines.append(f"Arquivo MDB (resolvido): {resolved}")
         lines.append(f"Tentativas: {exc.attempts}")
+        kind = classify_mdb_error(root)
+        if kind == "saturation":
+            lines.append("Classe: MDB saturado / driver sem detalhe")
+        elif kind == "invalid_conn_str":
+            lines.append("Classe: connection string ODBC inválida")
         lines.append(f"Detalhe: {root}")
     elif isinstance(exc, MdbWriteDisabledError):
         lines.append(f"OS: {exc.nro}/{exc.ano}")

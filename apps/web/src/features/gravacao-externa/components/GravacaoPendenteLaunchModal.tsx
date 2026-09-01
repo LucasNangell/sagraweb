@@ -10,6 +10,7 @@ import type { NetworkFilePick } from "@/api/networkFiles";
 import { queryKeys } from "@/api/query-keys";
 import { formatOsLabel } from "@/lib/format";
 import type { OsSearchRow } from "@/features/os/types";
+import { OS_ANO_MAX, OS_ANO_MIN, normalizeAno } from "@/features/os/osAnoUtils";
 import { formatOsListLabel } from "../utils/formatOsJuntadaLabel";
 import { hydrateGravacaoPendenteLaunch } from "../utils/hydrateGravacaoPendenteLaunch";
 import { parsePlateFilename } from "../utils/plateFilenameUtils";
@@ -380,9 +381,12 @@ export function GravacaoPendenteLaunchModal({
   const addJuntada = async () => {
     if (!row || isEdit) return;
     const nr = Number(juntadaNumero.trim());
-    const ano = Number(juntadaAno.trim() || row.ano);
-    if (!Number.isFinite(nr) || nr <= 0 || !Number.isFinite(ano) || ano <= 0) {
-      window.alert("Informe número e ano válidos da OS a juntar.");
+    const anoRaw = Number(juntadaAno.trim() || row.ano);
+    const ano = normalizeAno(anoRaw);
+    if (!Number.isFinite(nr) || nr <= 0 || ano == null) {
+      window.alert(
+        `Informe número e ano válidos da OS a juntar (ano entre ${OS_ANO_MIN} e ${OS_ANO_MAX}).`,
+      );
       return;
     }
     if (nr === row.nr_os && ano === row.ano) {
@@ -596,9 +600,19 @@ export function GravacaoPendenteLaunchModal({
                   />
                   <input
                     type="number"
-                    min={2000}
+                    min={OS_ANO_MIN}
+                    max={OS_ANO_MAX}
                     value={juntadaAno}
                     onChange={(e) => setJuntadaAno(e.target.value)}
+                    onBlur={() => {
+                      const expanded = normalizeAno(juntadaAno);
+                      if (
+                        expanded != null &&
+                        String(expanded) !== juntadaAno.trim()
+                      ) {
+                        setJuntadaAno(String(expanded));
+                      }
+                    }}
                     placeholder="Ano"
                     className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
                   />

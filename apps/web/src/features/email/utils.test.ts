@@ -4,6 +4,7 @@ import {
   extractEmailsSimple,
   extractPontosSimple,
   normalizeContentId,
+  parseOsAno,
   prepareInboxEmailBody,
   prepareInboxEmailBodyParts,
   removeAllEmailImages,
@@ -143,5 +144,19 @@ describe("prepareInboxEmailBodyParts", () => {
     expect(parts.quoted).toContain("Texto antigo");
     expect(parts.main).not.toContain("<img");
     expect(parts.quoted).not.toContain("<img");
+  });
+});
+
+describe("parseOsAno", () => {
+  it("expande ano de 2 dígitos", () => {
+    expect(parseOsAno("OS 1396/26")).toEqual({ os: 1396, ano: 2026 });
+  });
+
+  it("rejeita ano de 3 dígitos", () => {
+    expect(parseOsAno("1396/216")).toEqual({ os: 1396, ano: "" });
+  });
+
+  it("aceita ano de 4 dígitos", () => {
+    expect(parseOsAno("Prova 447/2026")).toEqual({ os: 447, ano: 2026 });
   });
 });

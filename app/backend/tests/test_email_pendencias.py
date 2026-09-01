@@ -120,6 +120,7 @@ class TestApogeeSubjectParse:
             ("Prova 1234/26 aprovada", (1234, 2026)),
             ("OS 5678/2025 finalizada", (5678, 2025)),
             ("Re: 99 / 24", (99, 2024)),
+            ("OS 1396/216 andamento", None),
             ("Sem referência de OS", None),
             ("", None),
         ],

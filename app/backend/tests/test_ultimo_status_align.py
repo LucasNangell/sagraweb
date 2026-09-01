@@ -217,7 +217,7 @@ class TestSyncAndamentoUpsertFixesOs:
         ):
             mock_db.execute_query.return_value = [row]
 
-            def run_work(_nro, _stage, work):
+            def run_work(_nro, _stage, work, recover_if=None):
                 work(None, MagicMock())
 
             mock_txn.side_effect = run_work
@@ -245,7 +245,7 @@ class TestSyncDeleteAlwaysFixesUltimo:
             "routers.mdb_writer._fix_ultimo_status_mdb"
         ) as mock_fix:
 
-            def run_work(_nro, _stage, work):
+            def run_work(_nro, _stage, work, recover_if=None):
                 work(None, cursor)
 
             mock_txn.side_effect = run_work

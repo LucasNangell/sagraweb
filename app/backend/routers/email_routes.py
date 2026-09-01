@@ -950,6 +950,13 @@ def save_email_as_mht(
     Salva o e-mail completo no formato .mht dentro da subpasta Sefoc da OS.
     """
     try:
+        from services.os_protocolo_guard import OsProtocoloGuardError, require_protocolo_mysql
+
+        try:
+            request.ano = require_protocolo_mysql(request.os, request.ano)
+        except OsProtocoloGuardError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
         os_path = _get_os_folder_path(request.ano, request.os)
         if not os_path:
             raise HTTPException(status_code=404, detail="Pasta da OS não encontrada.")
@@ -1106,6 +1113,13 @@ def create_andamento(
     Cria um novo andamento para uma OS específica
     """
     logger.info(f"Creating andamento for OS {request.os}/{request.ano}")
+
+    from services.os_protocolo_guard import OsProtocoloGuardError, require_protocolo_mysql
+
+    try:
+        request.ano = require_protocolo_mysql(request.os, request.ano)
+    except OsProtocoloGuardError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     
     obs_formatada = format_andamento_obs(request.observacao or "")
     ponto_formatado = format_ponto(request.ponto)

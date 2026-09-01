@@ -3,6 +3,7 @@ import { Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { useSetoresLookup, useSituacoesLookup } from "@/api/hooks/useAuxLookups";
+import { fetchProtocoloLookup } from "@/api/email";
 import {
   createOsVinculo,
   deleteOsVinculo,
@@ -11,6 +12,12 @@ import {
 } from "@/api/os";
 import { queryKeys } from "@/api/query-keys";
 import { useAuthStore } from "@/features/auth/authStore";
+import {
+  OS_ANO_MAX,
+  OS_ANO_MIN,
+  normalizeAno,
+  parseOsAnoPair,
+} from "../osAnoUtils";
 import type { OsSearchRow } from "../types";
 
 interface OsVincularModalProps {
@@ -53,6 +60,18 @@ export function OsVincularModal({ row, open, onClose }: OsVincularModalProps) {
 
   const grupoConfig = grupoConfigQuery.data;
   const grupoJaDefinido = Boolean(grupoConfig?.grupo_id);
+
+  const vinculoPair = parseOsAnoPair(numero, vAno);
+  const vinculoProtoQuery = useQuery({
+    queryKey:
+      open && vinculoPair
+        ? queryKeys.email.protocolo(vinculoPair.ano, vinculoPair.os)
+        : ["os", "vinculoProtocolo", "idle"],
+    queryFn: () => fetchProtocoloLookup(vinculoPair!.os, vinculoPair!.ano),
+    enabled: open && vinculoPair != null,
+    staleTime: 60_000,
+  });
+  const vinculoFound = vinculoProtoQuery.data?.NroProtocolo != null;
 
   useEffect(() => {
     if (!open) {
@@ -112,10 +131,15 @@ export function OsVincularModal({ row, open, onClose }: OsVincularModalProps) {
   }
 
   const handleAdd = async () => {
-    const n = Number.parseInt(numero, 10);
-    const a = Number.parseInt(vAno, 10);
-    if (!n || !a) {
-      window.alert("Informe número e ano válidos.");
+    const pair = parseOsAnoPair(numero, vAno);
+    if (!pair) {
+      window.alert(
+        `Informe número e ano válidos (ano com 2 dígitos ou 4 dígitos entre ${OS_ANO_MIN} e ${OS_ANO_MAX}).`,
+      );
+      return;
+    }
+    if (!vinculoFound) {
+      window.alert(`OS ${pair.os}/${pair.ano} não encontrada.`);
       return;
     }
     if (!grupoJaDefinido && (!situacao.trim() || !setor.trim())) {
@@ -126,8 +150,8 @@ export function OsVincularModal({ row, open, onClose }: OsVincularModalProps) {
     }
     try {
       await addMutation.mutateAsync({
-        numero: n,
-        vano: a,
+        numero: pair.os,
+        vano: pair.ano,
         situacao: situacao.trim(),
         setor: setor.trim(),
       });
@@ -232,17 +256,34 @@ export function OsVincularModal({ row, open, onClose }: OsVincularModalProps) {
             placeholder="Ano"
             value={vAno}
             onChange={(e) => setVAno(e.target.value)}
+            onBlur={() => {
+              const expanded = normalizeAno(vAno);
+              if (expanded != null && String(expanded) !== vAno.trim()) {
+                setVAno(String(expanded));
+              }
+            }}
             className="h-9 w-24 rounded border border-sagra-border px-2 text-sm"
           />
           <button
             type="button"
-            disabled={addMutation.isPending}
+            disabled={addMutation.isPending || !vinculoFound}
             onClick={() => void handleAdd()}
             className="rounded bg-secondary-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
           >
             Salvar
           </button>
         </div>
+        {vinculoPair && vinculoProtoQuery.isFetching ? (
+          <p className="mt-1 text-xs text-neutral-500">Verificando OS…</p>
+        ) : vinculoPair && !vinculoFound ? (
+          <p className="mt-1 text-xs text-red-600">
+            OS {vinculoPair.os}/{vinculoPair.ano} não encontrada.
+          </p>
+        ) : vinculoFound && vinculoPair ? (
+          <p className="mt-1 text-xs text-neutral-600">
+            OS {vinculoPair.os}/{vinculoPair.ano} encontrada.
+          </p>
+        ) : null}
 
         <p className="mt-4 text-sm font-semibold">OSs já vinculadas:</p>
         <div className="mt-2 max-h-48 overflow-auto rounded border border-sagra-border bg-slate-50 p-2 text-sm">

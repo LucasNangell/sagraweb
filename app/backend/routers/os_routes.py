@@ -1467,6 +1467,12 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
         os_has_active_componentes,
         propagate_main_os_andamento_to_sub_os,
     )
+    from services.os_protocolo_guard import OsProtocoloGuardError, require_protocolo_mysql
+
+    try:
+        ano = require_protocolo_mysql(id, ano)
+    except OsProtocoloGuardError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     needs_main_confirm = os_has_active_componentes(id, ano) or count_sub_os(id, ano) > 0
     if needs_main_confirm and not item.confirm_main_os_target:
@@ -1904,6 +1910,14 @@ def create_vinculo(ano: int, id: int, req: VinculoRequest):
             get_grupo_id_for_os,
             resolve_grupo_for_new_vinculo,
         )
+
+        from services.os_protocolo_guard import OsProtocoloGuardError, normalize_ano
+
+        try:
+            ano = normalize_ano(ano)
+            req.ano = normalize_ano(req.ano)
+        except OsProtocoloGuardError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         # Validations
         if req.numero == id and req.ano == ano:

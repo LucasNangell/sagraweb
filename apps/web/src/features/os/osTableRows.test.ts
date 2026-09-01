@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  isParentOsInSearchResults,
   isSameOsSelection,
+  isSubOsRow,
   normalizeOsSelection,
   selectionRowKey,
   toMainOsSelection,
@@ -65,5 +67,30 @@ describe("toMainOsSelection", () => {
     expect(main.nr_os).toBe(2532);
     expect(main.ano).toBe(2026);
     expect(main.situacao).toBe("Em Execução");
+  });
+});
+
+describe("isParentOsInSearchResults", () => {
+  it("mantém Sub OS selecionada quando a lista só tem linhas de componente", () => {
+    expect(isSubOsRow(subRow)).toBe(true);
+    expect(isParentOsInSearchResults(subRow, [subRow])).toBe(true);
+    expect(
+      isParentOsInSearchResults(subRow, [
+        {
+          ...subRow,
+          sub_os_id: 8,
+          componente_nome: "Miolo",
+          display_label: "2532 [Miolo]",
+        },
+      ]),
+    ).toBe(true);
+  });
+
+  it("limpa seleção quando a OS saiu da página", () => {
+    expect(
+      isParentOsInSearchResults(subRow, [
+        { nr_os: 100, ano: 2026, kind: "main_os" },
+      ]),
+    ).toBe(false);
   });
 });

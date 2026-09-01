@@ -500,6 +500,99 @@ def _dedupe_os_search_rows(rows: list) -> list:
     return unique
 
 
+def _is_sub_os_search_row(row: Dict[str, Any]) -> bool:
+    return bool(row.get("is_sub_os") or row.get("kind") == "sub_os")
+
+
+def _sub_matches_andamento_filters(
+    sub: Dict[str, Any],
+    *,
+    setores: Optional[List[str]],
+    situacoes: Optional[List[str]],
+) -> bool:
+    if setores and str(sub.get("setor") or "").strip() not in setores:
+        return False
+    if situacoes and str(sub.get("situacao") or "").strip() not in situacoes:
+        return False
+    return True
+
+
+def _andamento_key(sub: Dict[str, Any]) -> Tuple[str, str]:
+    return (
+        str(sub.get("situacao") or "").strip(),
+        str(sub.get("setor") or "").strip(),
+    )
+
+
+def _should_show_component_rows(subs: List[Dict[str, Any]]) -> bool:
+    """Rótulo [Componente] só com 2+ Sub OSs e andamento atual diferente entre elas."""
+    if len(subs) < 2:
+        return False
+    keys = {_andamento_key(sub) for sub in subs}
+    if any(not situacao or not setor for situacao, setor in keys):
+        return False
+    return len(keys) > 1
+
+
+def _pick_sub_representative(subs: List[Dict[str, Any]]) -> Dict[str, Any]:
+    return max(
+        subs,
+        key=lambda s: str(s.get("last_update") or s.get("data_entrega") or ""),
+    )
+
+
+def _merge_parent_with_sub_os(
+    parent: Dict[str, Any],
+    child: Dict[str, Any],
+) -> Dict[str, Any]:
+    return {
+        **parent,
+        **child,
+        "nr_os": parent.get("nr_os"),
+        "ano": parent.get("ano"),
+        "titulo": parent.get("titulo"),
+        "solicitante": parent.get("solicitante"),
+        "prioridade": parent.get("prioridade"),
+        "produto": parent.get("produto"),
+        "formato": parent.get("formato"),
+        "entreg_periodo": parent.get("entreg_periodo"),
+        "data_entrada": parent.get("data_entrada"),
+        "kind": "sub_os",
+        "is_sub_os": True,
+        "has_sub_os": False,
+        "sub_os_count": 0,
+        "matched_via_sub_os": False,
+    }
+
+
+def _collapse_split_to_main_os(
+    parent: Dict[str, Any],
+    representative: Dict[str, Any],
+) -> Dict[str, Any]:
+    collapsed = {
+        **parent,
+        "situacao": representative.get("situacao"),
+        "setor": representative.get("setor"),
+        "last_update": representative.get("last_update"),
+        "observacao": representative.get("observacao"),
+        "kind": "main_os",
+        "is_sub_os": False,
+        "has_sub_os": False,
+        "sub_os_count": 0,
+        "matched_via_sub_os": False,
+    }
+    for key in (
+        "sub_os_id",
+        "display_label",
+        "componente_id",
+        "componente_nome",
+        "parent_nr_os",
+        "parent_ano",
+    ):
+        collapsed.pop(key, None)
+    return collapsed
+
+
 def _expand_split_os_search_rows(
     rows: List[Dict[str, Any]],
     *,
@@ -507,11 +600,11 @@ def _expand_split_os_search_rows(
     situacoes: Optional[List[str]] = None,
     include_finished: bool = True,
 ) -> List[Dict[str, Any]]:
-    """Substitui OS dividida pelas linhas de Sub OS que casam com o filtro."""
+    """Substitui OS dividida por linhas de Sub OS; colapsa se não há andamentos divergentes."""
     split_pairs: List[Tuple[int, int]] = []
     seen_pairs: set[Tuple[int, int]] = set()
     for row in rows or []:
-        if row.get("is_sub_os") or row.get("kind") == "sub_os":
+        if _is_sub_os_search_row(row):
             continue
         if not row.get("has_sub_os") and not (row.get("sub_os_count") or 0):
             continue
@@ -529,8 +622,8 @@ def _expand_split_os_search_rows(
 
     sub_rows = fetch_home_sub_os_rows_for_pairs(
         split_pairs,
-        setores=setores,
-        situacoes=situacoes,
+        setores=None,
+        situacoes=None,
         include_finished=include_finished,
     )
     by_parent: Dict[Tuple[int, int], List[Dict[str, Any]]] = {}
@@ -543,7 +636,7 @@ def _expand_split_os_search_rows(
 
     expanded: List[Dict[str, Any]] = []
     for row in rows or []:
-        if row.get("is_sub_os") or row.get("kind") == "sub_os":
+        if _is_sub_os_search_row(row):
             expanded.append(row)
             continue
         nro = row.get("nr_os")
@@ -555,25 +648,27 @@ def _expand_split_os_search_rows(
         if key not in seen_pairs:
             expanded.append({**row, "kind": row.get("kind") or "main_os"})
             continue
-        for child in by_parent.get(key, []):
-            merged = {
-                **row,
-                **child,
-                "nr_os": row.get("nr_os"),
-                "ano": row.get("ano"),
-                "titulo": row.get("titulo"),
-                "solicitante": row.get("solicitante"),
-                "prioridade": row.get("prioridade"),
-                "produto": row.get("produto"),
-                "formato": row.get("formato"),
-                "entreg_periodo": row.get("entreg_periodo"),
-                "data_entrada": row.get("data_entrada"),
-                "kind": "sub_os",
-                "is_sub_os": True,
-                "has_sub_os": False,
-                "matched_via_sub_os": False,
-            }
-            expanded.append(merged)
+        children = by_parent.get(key, [])
+        if not _should_show_component_rows(children):
+            matching = [
+                child
+                for child in children
+                if _sub_matches_andamento_filters(
+                    child, setores=setores, situacoes=situacoes
+                )
+            ]
+            if not matching:
+                continue
+            expanded.append(
+                _collapse_split_to_main_os(row, _pick_sub_representative(matching))
+            )
+            continue
+        for child in children:
+            if not _sub_matches_andamento_filters(
+                child, setores=setores, situacoes=situacoes
+            ):
+                continue
+            expanded.append(_merge_parent_with_sub_os(row, child))
     return expanded
 
 

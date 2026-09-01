@@ -127,7 +127,7 @@ class TestSplitAwareSearchFilter:
 
 
 class TestExpandSplitSearchRows:
-    def test_substitui_pai_por_sub_os_do_setor(self):
+    def test_colapsa_unico_componente_sem_rotulo(self):
         parent = {
             "nr_os": 1396,
             "ano": 2026,
@@ -146,8 +146,8 @@ class TestExpandSplitSearchRows:
                     "situacao": "Saída p/",
                     "setor": "SEFOC",
                     "sub_os_id": 11,
-                    "display_label": "1396 [Capa]",
-                    "componente_nome": "Capa",
+                    "display_label": "1396 [Arquivo]",
+                    "componente_nome": "Arquivo",
                     "componente_id": 1,
                     "parent_nr_os": 1396,
                     "parent_ano": 2026,
@@ -162,10 +162,140 @@ class TestExpandSplitSearchRows:
                 situacoes=["Saída p/"],
             )
         assert len(out) == 1
-        assert out[0]["kind"] == "sub_os"
-        assert out[0]["display_label"] == "1396 [Capa]"
+        assert out[0]["kind"] == "main_os"
+        assert out[0].get("display_label") is None
+        assert out[0].get("componente_nome") is None
         assert out[0]["titulo"] == "Revista"
         assert out[0]["has_sub_os"] is False
+        assert out[0]["is_sub_os"] is False
+
+    def test_colapsa_para_os_principal_quando_componentes_no_mesmo_setor(self):
+        parent = {
+            "nr_os": 1396,
+            "ano": 2026,
+            "situacao": "Saída p/",
+            "setor": "SEFOC",
+            "has_sub_os": True,
+            "titulo": "Revista",
+        }
+        with patch(
+            "services.os_search_service.fetch_home_sub_os_rows_for_pairs",
+            return_value=[
+                {
+                    "nr_os": 1396,
+                    "ano": 2026,
+                    "situacao": "Saída p/",
+                    "setor": "SEFOC",
+                    "sub_os_id": 11,
+                    "display_label": "1396 [Capa]",
+                    "parent_nr_os": 1396,
+                    "parent_ano": 2026,
+                    "last_update": "2026-04-01",
+                },
+                {
+                    "nr_os": 1396,
+                    "ano": 2026,
+                    "situacao": "Saída p/",
+                    "setor": "SEFOC",
+                    "sub_os_id": 12,
+                    "display_label": "1396 [Miolo]",
+                    "parent_nr_os": 1396,
+                    "parent_ano": 2026,
+                    "last_update": "2026-04-02",
+                },
+            ],
+        ):
+            out = _expand_split_os_search_rows(
+                [parent],
+                setores=["SEFOC"],
+                situacoes=["Saída p/"],
+            )
+        assert len(out) == 1
+        assert out[0]["kind"] == "main_os"
+        assert out[0]["is_sub_os"] is False
+        assert out[0].get("display_label") is None
+        assert out[0].get("sub_os_id") is None
+        assert out[0]["setor"] == "SEFOC"
+        assert out[0]["titulo"] == "Revista"
+
+    def test_mantem_sub_os_quando_setores_divergem(self):
+        parent = {
+            "nr_os": 1396,
+            "ano": 2026,
+            "situacao": "Saída p/",
+            "setor": "SEFOC",
+            "has_sub_os": True,
+        }
+        with patch(
+            "services.os_search_service.fetch_home_sub_os_rows_for_pairs",
+            return_value=[
+                {
+                    "nr_os": 1396,
+                    "ano": 2026,
+                    "situacao": "Saída p/",
+                    "setor": "SEFOC",
+                    "sub_os_id": 11,
+                    "display_label": "1396 [Capa]",
+                    "parent_nr_os": 1396,
+                    "parent_ano": 2026,
+                },
+                {
+                    "nr_os": 1396,
+                    "ano": 2026,
+                    "situacao": "Saída p/",
+                    "setor": "SIELT",
+                    "sub_os_id": 12,
+                    "display_label": "1396 [Miolo]",
+                    "parent_nr_os": 1396,
+                    "parent_ano": 2026,
+                },
+            ],
+        ):
+            out = _expand_split_os_search_rows([parent], setores=["SEFOC"])
+        assert len(out) == 1
+        assert out[0]["kind"] == "sub_os"
+        assert out[0]["display_label"] == "1396 [Capa]"
+
+    def test_mantem_sub_os_quando_situacoes_divergem(self):
+        parent = {
+            "nr_os": 1396,
+            "ano": 2026,
+            "situacao": "Saída p/",
+            "setor": "SEFOC",
+            "has_sub_os": True,
+        }
+        with patch(
+            "services.os_search_service.fetch_home_sub_os_rows_for_pairs",
+            return_value=[
+                {
+                    "nr_os": 1396,
+                    "ano": 2026,
+                    "situacao": "Saída p/",
+                    "setor": "SEFOC",
+                    "sub_os_id": 11,
+                    "display_label": "1396 [Capa]",
+                    "parent_nr_os": 1396,
+                    "parent_ano": 2026,
+                },
+                {
+                    "nr_os": 1396,
+                    "ano": 2026,
+                    "situacao": "Em Execução",
+                    "setor": "SEFOC",
+                    "sub_os_id": 12,
+                    "display_label": "1396 [Miolo]",
+                    "parent_nr_os": 1396,
+                    "parent_ano": 2026,
+                },
+            ],
+        ):
+            out = _expand_split_os_search_rows([parent], setores=["SEFOC"])
+        assert len(out) == 2
+        assert all(row["kind"] == "sub_os" for row in out)
+        assert {row["display_label"] for row in out} == {
+            "1396 [Capa]",
+            "1396 [Miolo]",
+        }
 
     def test_os_unida_permanece_principal(self):
         parent = {

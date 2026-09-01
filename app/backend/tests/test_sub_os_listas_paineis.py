@@ -109,3 +109,4 @@ class TestFetchSubOsQueueRows:
             sql = mock_db.execute_query.call_args[0][0]
             assert "ultimo_status = 1" in sql
             assert "row_kind" in sql
+            assert "s2.id <> s.id" in sql

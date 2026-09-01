@@ -65,7 +65,7 @@ function buildColumns(
       if (data.is_sub_os || data.kind === "sub_os") {
         return (
           <span className="font-medium text-secondary-blue">
-            {data.display_label ?? `${data.nr_os} [${data.componente_nome}]`}
+            {data.display_label ?? `${data.nr_os}`}
           </span>
         );
       }
@@ -740,7 +740,7 @@ export function OsOrdersTable({
                       <div className="flex items-start justify-between gap-2">
                         <span className="text-sm font-bold tabular-nums text-secondary-blue">
                           {data.is_sub_os || data.kind === "sub_os"
-                            ? (data.display_label ?? `${data.nr_os} [${data.componente_nome}]`)
+                            ? (data.display_label ?? `${data.nr_os}`)
                             : `OS ${data.nr_os}/${data.ano}`}
                         </span>
                         <span className="shrink-0 text-xs tabular-nums text-neutral-500">

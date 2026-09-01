@@ -87,6 +87,9 @@ const emptyForm = (): HistoryFormState => ({
 
 const FROZEN_SITUACOES = new Set(["Entregue", "Cancelada", "Cancelado"]);
 
+/** Oculto no frontend até o teste da feature de destino por componente terminar. */
+const SHOW_COMPONENTE_ESPECIFICO = false;
+
 function isEntregueSituacao(situacao: string): boolean {
   return situacao.trim() === "Entregue";
 }
@@ -168,9 +171,9 @@ export function OsHistoryPanel({
     return options;
   }, [selected, isSubOs, activeSubOsList, activeComponents]);
 
-  /** OS principal com Sub OSs e/ou componentes ativos pode lançar em componente específico. */
+  /** Só distingue componente quando o trabalho tem mais de um. */
   const needsDestinationSelector =
-    !isSubOs && (activeSubOsList.length > 0 || activeComponents.length > 0);
+    !isSubOs && activeComponents.length > 1;
 
   const situacoesQuery = useSituacoesLookup();
   const setoresQuery = useSetoresLookup();
@@ -1048,7 +1051,10 @@ export function OsHistoryPanel({
                     </label>
                   </div>
 
-                  {editing && !isEditMode && needsDestinationSelector ? (
+                  {SHOW_COMPONENTE_ESPECIFICO &&
+                  editing &&
+                  !isEditMode &&
+                  needsDestinationSelector ? (
                     <div className="flex min-w-0 shrink-0 flex-col gap-1.5" data-tour="os-history-componente" data-testid={homeTestIds.osHistoryComponente}>
                       <label className="flex items-center gap-2 text-xs text-neutral-800">
                         <input

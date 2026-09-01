@@ -333,6 +333,20 @@ def fetch_sub_os_queue_rows(
       AND s.congelada = 0
       AND sa.setor = %s
       AND sa.situacao NOT IN {FINISHED_SITUACOES}
+      AND EXISTS (
+          SELECT 1
+          FROM tab_os_sub_os s2
+          INNER JOIN tab_os_sub_os_andamento sa2
+              ON sa2.sub_os_id = s2.id AND sa2.ultimo_status = 1
+          WHERE s2.nro_protocolo = s.nro_protocolo
+            AND s2.ano_protocolo = s.ano_protocolo
+            AND s2.ativo = 1
+            AND s2.id <> s.id
+            AND (
+              TRIM(COALESCE(sa2.setor, '')) <> TRIM(COALESCE(sa.setor, ''))
+              OR TRIM(COALESCE(sa2.situacao, '')) <> TRIM(COALESCE(sa.situacao, ''))
+            )
+      )
       {situacao_filter}
     ORDER BY
         {_QUEUE_PRIORITY_ORDER}

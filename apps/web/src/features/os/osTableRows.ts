@@ -4,9 +4,18 @@ export function osRowKey(row: Pick<OsSearchRow, "ano" | "nr_os">): string {
   return `${row.ano}-${row.nr_os}`;
 }
 
+export function isSubOsRow(
+  row: Pick<OsSearchRow, "kind" | "is_sub_os"> | null | undefined,
+): boolean {
+  if (!row) {
+    return false;
+  }
+  return row.kind === "sub_os" || Boolean(row.is_sub_os);
+}
+
 /** Chave estável para seleção / virtualização (main vs sub). */
 export function selectionRowKey(row: OsSearchRow): string {
-  if (row.kind === "sub_os" || row.is_sub_os) {
+  if (isSubOsRow(row)) {
     const parentAno = row.parent_ano ?? row.ano;
     const parentNro = row.parent_nr_os ?? row.nr_os;
     return `sub:${parentAno}:${parentNro}:${row.sub_os_id ?? "?"}`;
@@ -135,30 +144,26 @@ export function normalizeOsSelection(row: OsSearchRow): OsSearchRow {
   };
 }
 
-/** OS principal ainda presente na página de busca (Sub OS depende do pai). */
+function rowParentKey(row: OsSearchRow): { nro: number; ano: number } {
+  if (isSubOsRow(row)) {
+    return {
+      nro: row.parent_nr_os ?? row.nr_os,
+      ano: row.parent_ano ?? row.ano,
+    };
+  }
+  return { nro: row.nr_os, ano: row.ano };
+}
+
+/** A OS da seleção ainda aparece na página (linha principal ou de componente). */
 export function isParentOsInSearchResults(
   selected: OsSearchRow,
   rows: OsSearchRow[],
 ): boolean {
-  if (!selected.is_sub_os && selected.kind !== "sub_os") {
-    return rows.some(
-      (r) =>
-        !r.is_sub_os &&
-        r.kind !== "sub_os" &&
-        r.nr_os === selected.nr_os &&
-        r.ano === selected.ano,
-    );
-  }
-
-  const parentAno = selected.parent_ano ?? selected.ano;
-  const parentNro = selected.parent_nr_os ?? selected.nr_os;
-  return rows.some(
-    (r) =>
-      !r.is_sub_os &&
-      r.kind !== "sub_os" &&
-      r.nr_os === parentNro &&
-      r.ano === parentAno,
-  );
+  const selectedKey = rowParentKey(selected);
+  return rows.some((row) => {
+    const key = rowParentKey(row);
+    return key.nro === selectedKey.nro && key.ano === selectedKey.ano;
+  });
 }
 
 /** Converte seleção Sub OS de volta para a OS principal (lista). */

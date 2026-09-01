@@ -115,6 +115,7 @@ class TestSubOsQueriesManualFilter:
             sql = mock_db.execute_query.call_args[0][0]
             assert "s.ativo = 1" in sql
             assert "sa_m" not in sql
+            assert "s2.id <> s.id" in sql
 
 
 class TestDeleteSubOsHistoryListable:

@@ -321,12 +321,6 @@ export function OsHomePage() {
 
   const localView = useMemo(() => {
     const raw = searchQuery.data?.data ?? [];
-    if (!canUseOsHomeLocalView(searchFilters)) {
-      return {
-        rows: raw,
-        totalRecords: searchQuery.data?.meta?.total_records,
-      };
-    }
     return applyOsHomeLocalView(raw, searchFilters);
   }, [searchFilters, searchQuery.data]);
 

@@ -99,8 +99,17 @@ describe("toOsHomeDatasetFilters", () => {
       ...baseFilters,
       anos: [],
       situacao: ["Em Execução"],
+      sorts: [
+        { column: "ano", dir: "desc" },
+        { column: "nr_os", dir: "desc" },
+      ],
+      sortBy: "ano",
+      sortDir: "desc",
     });
     expect(dataset.situacao).toEqual(["Em Execução"]);
+    expect(dataset.sortBy).toBe("ano");
+    expect(dataset.sortDir).toBe("asc");
+    expect(dataset.sorts).toEqual([{ column: "ano", dir: "asc" }]);
   });
 
   it("com ano, tira o intervalo de datas e mantém formato/papel", () => {
@@ -184,6 +193,41 @@ describe("osHomeDatasetQueryKey", () => {
     });
     expect(a).toEqual(b);
   });
+
+  it("não muda a chave quando só a ordenação muda, mesmo com formato/papel", () => {
+    const withGetFilters = {
+      ...baseFilters,
+      formatos: ["A4"],
+      papel: "couché",
+    };
+    const a = osHomeDatasetQueryKey(withGetFilters);
+    const b = osHomeDatasetQueryKey({
+      ...withGetFilters,
+      sorts: [
+        { column: "ano", dir: "desc" },
+        { column: "nr_os", dir: "desc" },
+      ],
+      sortBy: "ano",
+      sortDir: "desc",
+    });
+    expect(a).toEqual(b);
+    expect(
+      osHomeDatasetQueryKey({
+        ...baseFilters,
+        anos: [],
+        situacao: ["Em Execução"],
+        sorts: [{ column: "nr_os", dir: "desc" }],
+        sortBy: "nr_os",
+        sortDir: "desc",
+      }),
+    ).toEqual(
+      osHomeDatasetQueryKey({
+        ...baseFilters,
+        anos: [],
+        situacao: ["Em Execução"],
+      }),
+    );
+  });
 });
 
 describe("osHomePatchTriggersFetch", () => {
@@ -262,6 +306,26 @@ describe("osHomePatchTriggersFetch", () => {
         { ...baseFilters, anos: [] },
       ),
     ).toBe(true);
+  });
+
+  it("não dispara GET ao mudar só a ordenação, com ou sem ano", () => {
+    const sortPatch = {
+      sorts: [
+        { column: "ano" as const, dir: "desc" as const },
+        { column: "nr_os" as const, dir: "desc" as const },
+      ],
+      sortBy: "ano" as const,
+      sortDir: "desc" as const,
+    };
+    expect(
+      osHomePatchTriggersFetch(sortPatch, {
+        ...baseFilters,
+        situacao: ["Em Execução"],
+      }),
+    ).toBe(false);
+    expect(
+      osHomePatchTriggersFetch(sortPatch, { ...baseFilters, anos: [] }),
+    ).toBe(false);
   });
 });
 
@@ -489,5 +553,32 @@ describe("applyOsHomeLocalView", () => {
     );
     expect(result.rows.map((r) => r.nr_os)).toEqual([10, 20]);
     expect(result.totalRecords).toBe(2);
+  });
+
+  it("sem ano, não refiltra no cliente mas ainda ordena a fila", () => {
+    const result = applyOsHomeLocalView(
+      [
+        row({ nr_os: 5, ano: 2026, situacao: "Entregue" }),
+        row({ nr_os: 20, ano: 2026, situacao: "Em Execução" }),
+        row({ nr_os: 10, ano: 2025, situacao: "Entregue" }),
+      ],
+      {
+        ...baseFilters,
+        anos: [],
+        situacao: ["Em Execução"],
+        sorts: [
+          { column: "ano", dir: "desc" },
+          { column: "nr_os", dir: "desc" },
+        ],
+        sortBy: "ano",
+        sortDir: "desc",
+      },
+    );
+    expect(result.rows.map((r) => `${r.ano}-${r.nr_os}`)).toEqual([
+      "2026-20",
+      "2026-5",
+      "2025-10",
+    ]);
+    expect(result.totalRecords).toBe(3);
   });
 });

@@ -9,7 +9,7 @@ export function lastOsSearchRow(
 
 /**
  * Decide se a lista da home deve selecionar o último item (padrão dos andamentos).
- * Não sobrescreve clique do usuário enquanto o último item da mesma lista não mudar.
+ * Não troca a seleção se a OS atual ainda está no resultado (reordenar não é lista nova).
  */
 export function shouldAutoSelectLastOsRow(args: {
   lastRow: OsSearchRow | undefined;
@@ -20,9 +20,8 @@ export function shouldAutoSelectLastOsRow(args: {
   if (args.editing || !args.lastRow) {
     return null;
   }
-  const key = osRowKey(args.lastRow);
-  if (args.selected && args.lastAutoKey === key) {
+  if (args.selected) {
     return null;
   }
-  return { select: args.lastRow, nextAutoKey: key };
+  return { select: args.lastRow, nextAutoKey: osRowKey(args.lastRow) };
 }

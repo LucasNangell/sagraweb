@@ -48,7 +48,17 @@ describe("shouldAutoSelectLastOsRow", () => {
     expect(decision).toBeNull();
   });
 
-  it("volta ao último quando a identidade do último item muda", () => {
+  it("não troca a seleção quando só a ordem da lista muda", () => {
+    const decision = shouldAutoSelectLastOsRow({
+      lastRow: first,
+      selected: last,
+      lastAutoKey: "2026-99",
+      editing: false,
+    });
+    expect(decision).toBeNull();
+  });
+
+  it("não troca a seleção quando chega um item mais novo no fim", () => {
     const newer: OsSearchRow = { nr_os: 100, ano: 2026 };
     const decision = shouldAutoSelectLastOsRow({
       lastRow: newer,
@@ -56,7 +66,7 @@ describe("shouldAutoSelectLastOsRow", () => {
       lastAutoKey: "2026-99",
       editing: false,
     });
-    expect(decision).toEqual({ select: newer, nextAutoKey: "2026-100" });
+    expect(decision).toBeNull();
   });
 
   it("não seleciona durante edição de andamento", () => {

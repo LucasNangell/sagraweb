@@ -12,14 +12,20 @@ export function canUseOsHomeLocalView(filters: OsSearchFilters): boolean {
 
 /**
  * Filtros que vão no GET /os/search da home.
- * Com ano, remove visão (situação/setor/etc.) para reutilizar o cache do conjunto.
+ * Ordenação fica no cliente (fetchAll). Com ano, também tira visão (situação/setor/etc.).
  */
 export function toOsHomeDatasetFilters(filters: OsSearchFilters): OsSearchFilters {
+  const dataset: OsSearchFilters = {
+    ...filters,
+    sortBy: "ano",
+    sortDir: "asc",
+    sorts: [...DEFAULT_OS_SORTS],
+  };
   if (!canUseOsHomeLocalView(filters)) {
-    return filters;
+    return dataset;
   }
   return {
-    ...filters,
+    ...dataset,
     nrOs: undefined,
     exactOsLookup: false,
     titulo: "",
@@ -30,9 +36,6 @@ export function toOsHomeDatasetFilters(filters: OsSearchFilters): OsSearchFilter
     prioridade: [],
     includeOs: true,
     includeSp: true,
-    sortBy: "ano",
-    sortDir: "asc",
-    sorts: [...DEFAULT_OS_SORTS],
     dataEntradaDe: undefined,
     dataEntradaAte: undefined,
   };
@@ -326,12 +329,9 @@ export function applyOsHomeLocalView(
   rows: OsSearchRow[],
   filters: OsSearchFilters,
 ): { rows: OsSearchRow[]; totalRecords: number } {
-  if (!canUseOsHomeLocalView(filters)) {
-    return { rows, totalRecords: countUniqueOsProtocols(rows) };
-  }
-  const viewed = sortOsHomeViewRows(
-    applyOsHomeViewFilters(rows, filters),
-    filters,
-  );
+  const filtered = canUseOsHomeLocalView(filters)
+    ? applyOsHomeViewFilters(rows, filters)
+    : rows;
+  const viewed = sortOsHomeViewRows(filtered, filters);
   return { rows: viewed, totalRecords: countUniqueOsProtocols(viewed) };
 }

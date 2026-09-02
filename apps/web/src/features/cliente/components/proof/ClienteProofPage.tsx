@@ -23,7 +23,7 @@ import { ClienteProofFlipbookPanel } from "./ClienteProofFlipbookPanel";
 import { ClienteProofMockupPanel } from "./ClienteProofMockupPanel";
 import { ClienteProofPapelariaEditPanel } from "./ClienteProofPapelariaEditPanel";
 import {
-  ClienteProofAlteracoesAdicionaisModal,
+  ClienteProofAlteracoesDescriptionForm,
   ClienteProofExampleFileModal,
   ClienteProofPortalFloatingActions,
   ClienteProofPortalInstructionBanner,
@@ -131,12 +131,10 @@ export function ClienteProofPage({
   );
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [modal, setModal] = useState<"approve" | "reject" | null>(null);
-  const [alteracoesModalOpen, setAlteracoesModalOpen] = useState(false);
   const [exampleFileModalOpen, setExampleFileModalOpen] = useState(false);
   const [uploadedExampleFiles, setUploadedExampleFiles] = useState<string[]>([]);
   const [exampleUploadError, setExampleUploadError] = useState<string | null>(null);
   const [exampleUploadPending, setExampleUploadPending] = useState(false);
-  const [alteracoesModalError, setAlteracoesModalError] = useState<string | null>(null);
   const previewScrollRef = useRef<HTMLDivElement>(null);
 
   const proofQuery = useQuery({
@@ -262,13 +260,11 @@ export function ClienteProofPage({
       setModal(null);
       setEditMode(false);
       setAlteracoesRequestMode(false);
-      setAlteracoesModalOpen(false);
       setExampleFileModalOpen(false);
       void qc.invalidateQueries({ queryKey: ["cliente", "dashboard"] });
     },
     onError: (err: Error) => {
       setErrorMsg(err.message);
-      setAlteracoesModalError(err.message);
       setModal(null);
     },
   });
@@ -338,7 +334,7 @@ export function ClienteProofPage({
       const hasFiles = uploadedExampleFiles.length > 0;
       if (!hasFieldChanges && !hasAdditional && !hasFiles) {
         setErrorMsg(
-          'Informe alterações nos campos, em "Alterações adicionais" ou envie um arquivo de exemplo.',
+          "Descreva as alterações desejadas, altere os campos ou envie um arquivo de exemplo.",
         );
         return false;
       }
@@ -352,24 +348,11 @@ export function ClienteProofPage({
     setModal("reject");
   };
 
-  const handleAlteracoesModalSubmit = () => {
-    setAlteracoesModalError(null);
-    if (!alteracoesAdicionais.trim() && uploadedExampleFiles.length === 0) {
-      setAlteracoesModalError("Descreva as alterações desejadas ou envie um arquivo de exemplo.");
-      return;
-    }
-    if (!nomeCliente.trim() || !ponto.replace(/\D/g, "")) {
-      setAlteracoesModalError("Preencha nome e ponto antes de solicitar alterações.");
-      return;
-    }
-    if (isPapelaria && editMode) {
-      if (!validateRejectSubmission()) return;
-      setAlteracoesModalOpen(false);
-      setModal("reject");
-      return;
-    }
-    setAlteracoesModalOpen(false);
-    setModal("reject");
+  const handleCancelAlteracoes = () => {
+    if (respondMutation.isPending) return;
+    setEditMode(false);
+    setAlteracoesRequestMode(false);
+    setErrorMsg(null);
   };
 
   const handleExampleFiles = (files: FileList | File[]) => {
@@ -580,17 +563,19 @@ export function ClienteProofPage({
 
           {editMode && isPapelaria ? (
             <section className="rounded-2xl border border-sagra-border bg-white p-4 shadow-sm sm:p-5">
-              <button
-                type="button"
-                className="mb-3 inline-flex items-center gap-1 text-xs font-medium text-secondary-blue hover:underline"
-                onClick={() => {
-                  setEditMode(false);
-                  setAlteracoesRequestMode(false);
-                }}
-              >
-                <ArrowLeft className="size-3.5" aria-hidden />
-                Voltar à prova
-              </button>
+              {!publicPortal ? (
+                <button
+                  type="button"
+                  className="mb-3 inline-flex items-center gap-1 text-xs font-medium text-secondary-blue hover:underline"
+                  onClick={() => {
+                    setEditMode(false);
+                    setAlteracoesRequestMode(false);
+                  }}
+                >
+                  <ArrowLeft className="size-3.5" aria-hidden />
+                  Voltar à prova
+                </button>
+              ) : null}
               <h2 className="text-base font-bold text-secondary-blue">
                 Solicitação de alterações
               </h2>
@@ -637,58 +622,46 @@ export function ClienteProofPage({
                   </label>
                 ) : null}
               </div>
-              {errorMsg ? (
-                <p className="mt-3 text-sm text-red-700" role="alert">
-                  {errorMsg}
-                </p>
-              ) : null}
-              <button
-                type="button"
-                disabled={respondMutation.isPending}
-                className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-60"
-                onClick={handleConfirmReject}
-              >
-                Enviar solicitação de alterações
-              </button>
+              {publicPortal ? (
+                <ClienteProofAlteracoesDescriptionForm
+                  value={alteracoesAdicionais}
+                  loading={respondMutation.isPending}
+                  errorMsg={errorMsg}
+                  onChange={setAlteracoesAdicionais}
+                  onSubmit={handleConfirmReject}
+                  onCancel={handleCancelAlteracoes}
+                />
+              ) : (
+                <>
+                  {errorMsg ? (
+                    <p className="mt-3 text-sm text-red-700" role="alert">
+                      {errorMsg}
+                    </p>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={respondMutation.isPending}
+                    className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-60"
+                    onClick={handleConfirmReject}
+                  >
+                    Enviar solicitação de alterações
+                  </button>
+                </>
+              )}
             </section>
           ) : alteracoesRequestMode && publicPortal && !isPapelaria ? (
             <section className="rounded-2xl border border-sagra-border bg-white p-4 shadow-sm sm:p-5">
-              <button
-                type="button"
-                className="mb-3 inline-flex items-center gap-1 text-xs font-medium text-secondary-blue hover:underline"
-                onClick={() => setAlteracoesRequestMode(false)}
-              >
-                <ArrowLeft className="size-3.5" aria-hidden />
-                Voltar à prova
-              </button>
               <h2 className="text-base font-bold text-secondary-blue">
                 Solicitação de alterações
               </h2>
-              <p className="mt-2 text-sm text-neutral-600">
-                Utilize os botões na parte inferior da tela para descrever as alterações ou
-                enviar um arquivo de exemplo.
-              </p>
-              <div className="mt-4 rounded-xl border border-sagra-border bg-slate-50 px-3 py-2 text-sm">
-                <p className="font-medium text-neutral-800">{nomeCliente || "—"}</p>
-                <p className="text-neutral-600">
-                  Ponto {formatProofPontoDisplay(ponto, publicPortal)}
-                </p>
-              </div>
-              {errorMsg ? (
-                <p className="mt-3 text-sm text-red-700" role="alert">
-                  {errorMsg}
-                </p>
-              ) : null}
-              {(uploadedExampleFiles.length > 0 || alteracoesAdicionais.trim()) ? (
-                <button
-                  type="button"
-                  disabled={respondMutation.isPending}
-                  className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-60"
-                  onClick={handleConfirmReject}
-                >
-                  Enviar solicitação de alterações
-                </button>
-              ) : null}
+              <ClienteProofAlteracoesDescriptionForm
+                value={alteracoesAdicionais}
+                loading={respondMutation.isPending}
+                errorMsg={errorMsg}
+                onChange={setAlteracoesAdicionais}
+                onSubmit={handleConfirmReject}
+                onCancel={handleCancelAlteracoes}
+              />
             </section>
           ) : !alteracoesRequestMode ? (
             <ClienteProofActions
@@ -842,24 +815,9 @@ export function ClienteProofPage({
         <>
           <ClienteProofPortalFloatingActions
             visible={showPortalAlteracoesUi}
-            onAlteracoesAdicionais={() => {
-              setAlteracoesModalError(null);
-              setAlteracoesModalOpen(true);
-            }}
             onExampleFile={() => {
               setExampleUploadError(null);
               setExampleFileModalOpen(true);
-            }}
-          />
-          <ClienteProofAlteracoesAdicionaisModal
-            open={alteracoesModalOpen}
-            value={alteracoesAdicionais}
-            loading={respondMutation.isPending}
-            errorMsg={alteracoesModalError}
-            onChange={setAlteracoesAdicionais}
-            onSubmit={handleAlteracoesModalSubmit}
-            onClose={() => {
-              if (!respondMutation.isPending) setAlteracoesModalOpen(false);
             }}
           />
           <ClienteProofExampleFileModal

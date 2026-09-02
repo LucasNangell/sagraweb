@@ -1,107 +1,63 @@
-import { Loader2, MessageSquarePlus, Upload, X } from "lucide-react";
+import { Loader2, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { cn } from "@sagra/ui";
 
-interface ClienteProofAlteracoesAdicionaisModalProps {
-  open: boolean;
+interface ClienteProofAlteracoesDescriptionFormProps {
   value: string;
   loading?: boolean;
   errorMsg?: string | null;
   onChange: (value: string) => void;
   onSubmit: () => void;
-  onClose: () => void;
+  onCancel: () => void;
 }
 
-export function ClienteProofAlteracoesAdicionaisModal({
-  open,
+export function ClienteProofAlteracoesDescriptionForm({
   value,
   loading = false,
   errorMsg = null,
   onChange,
   onSubmit,
-  onClose,
-}: ClienteProofAlteracoesAdicionaisModalProps) {
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !loading) onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, loading, onClose]);
-
-  if (!open) return null;
-
+  onCancel,
+}: ClienteProofAlteracoesDescriptionFormProps) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="proof-alteracoes-adicionais-title"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-lg rounded-2xl border border-sagra-border bg-white p-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <h2
-            id="proof-alteracoes-adicionais-title"
-            className="text-lg font-bold text-secondary-blue"
-          >
-            Alterações adicionais
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={loading}
-            className="rounded-lg p-1 text-neutral-500 hover:bg-slate-100 disabled:opacity-60"
-            aria-label="Fechar"
-          >
-            <X className="size-5" aria-hidden />
-          </button>
-        </div>
-        <p className="mt-2 text-sm text-neutral-600">
-          Descreva alterações que não estão disponíveis nos campos de edição da prova.
+    <>
+      <label className="mt-4 flex flex-col gap-1 text-sm">
+        <span className="font-medium text-neutral-700">Descreva as alterações desejadas</span>
+        <textarea
+          className="min-h-32 rounded-xl border border-sagra-border px-3 py-2 text-sm"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Informe quais alterações você deseja."
+          disabled={loading}
+        />
+      </label>
+      {errorMsg ? (
+        <p className="mt-3 text-sm text-red-700" role="alert">
+          {errorMsg}
         </p>
-        <label className="mt-4 flex flex-col gap-1 text-sm">
-          <span className="font-medium text-neutral-700">Alterações desejadas</span>
-          <textarea
-            className="min-h-32 rounded-xl border border-sagra-border px-3 py-2 text-sm"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder="Informe quais alterações você deseja."
-            disabled={loading}
-          />
-        </label>
-        {errorMsg ? (
-          <p className="mt-3 text-sm text-red-700" role="alert">
-            {errorMsg}
-          </p>
-        ) : null}
-        <div className="mt-5 flex flex-wrap justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={loading}
-            className="inline-flex min-h-11 items-center rounded-xl border border-sagra-border px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-slate-50 disabled:opacity-60"
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            onClick={onSubmit}
-            disabled={loading || !value.trim()}
-            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-60"
-          >
-            {loading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-            Solicitar alterações
-          </button>
-        </div>
+      ) : null}
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={loading}
+          className="inline-flex min-h-11 items-center rounded-xl border border-sagra-border px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-slate-50 disabled:opacity-60"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={loading}
+          className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-60"
+        >
+          {loading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+          Solicitar alterações
+        </button>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -240,13 +196,11 @@ export function ClienteProofExampleFileModal({
 
 interface ClienteProofPortalFloatingActionsProps {
   visible: boolean;
-  onAlteracoesAdicionais: () => void;
   onExampleFile: () => void;
 }
 
 export function ClienteProofPortalFloatingActions({
   visible,
-  onAlteracoesAdicionais,
   onExampleFile,
 }: ClienteProofPortalFloatingActionsProps) {
   const [mounted, setMounted] = useState(false);
@@ -281,14 +235,6 @@ export function ClienteProofPortalFloatingActions({
         <Upload className="size-4" aria-hidden />
         Arquivo de exemplo
       </button>
-      <button
-        type="button"
-        onClick={onAlteracoesAdicionais}
-        className="pointer-events-auto inline-flex min-h-11 items-center gap-2 rounded-full bg-secondary-blue px-5 py-2 text-sm font-semibold text-white shadow-lg hover:bg-secondary-blue/90"
-      >
-        <MessageSquarePlus className="size-4" aria-hidden />
-        Alterações adicionais
-      </button>
     </div>,
     document.body,
   );
@@ -307,9 +253,8 @@ export function ClienteProofPortalInstructionBanner() {
         prova para aprovação.
       </p>
       <p className="mt-3">
-        Caso as alterações que você deseja não esteja disponível nos campo abaixo, clique no botão
-        &quot;Alterações adicionais&quot; na parte inferior da tela e informe quais alterações
-        deseja.
+        Caso as alterações que você deseja não estejam disponíveis nos campos abaixo, descreva-as
+        no campo da coluna esquerda.
       </p>
     </div>
   );

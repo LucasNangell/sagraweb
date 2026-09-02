@@ -411,7 +411,7 @@ export function OsFiltersPanel({
         </div>
 
         {advancedOpen ? (
-          <div className="grid grid-cols-1 gap-3 border-t border-sagra-border bg-slate-50/50 px-3 py-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 border-t border-sagra-border bg-slate-50/50 px-3 py-3 sm:grid-cols-3">
             <FilterField label="Data de entrada">
               <div className="flex min-w-0 flex-1 items-center gap-1.5">
                 <input

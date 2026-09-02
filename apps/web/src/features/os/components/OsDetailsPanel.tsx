@@ -133,7 +133,7 @@ export function OsDetailsPanel({
       )}
 
       {showDetailsFields && data && (
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-1.5 overflow-y-auto p-2 text-xs sm:grid-cols-2 lg:grid-cols-4 lg:grid-rows-[auto_minmax(0,1fr)] lg:overflow-hidden">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-1.5 overflow-y-auto p-2 text-xs sm:grid-cols-2 lg:grid-cols-[minmax(0,9fr)_minmax(0,9fr)_minmax(0,9fr)_minmax(0,13fr)] lg:grid-rows-[auto_minmax(0,1fr)] lg:overflow-hidden">
           <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2 lg:col-span-3">
             <div className="grid grid-cols-2 items-end gap-1.5 sm:grid-cols-[minmax(0,2.2fr)_minmax(3.25rem,0.55fr)_minmax(3.25rem,0.55fr)_minmax(3.25rem,0.55fr)_auto]">
               <Field label="Máquina" className="col-span-2 sm:col-span-1">

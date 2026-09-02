@@ -518,7 +518,6 @@ export function OsOrdersTable({
   const totalRecords = meta?.total_records;
   const isUpdating = isLoading || isFetching;
   const showLoadingOverlay = isFetching && rows.length > 0;
-  const lastSearchKey = rows.length > 0 ? osRowKey(rows[rows.length - 1]!) : "";
 
   const headerGroups = table.getHeaderGroups();
 
@@ -545,7 +544,7 @@ export function OsOrdersTable({
       list.scrollTop = list.scrollHeight;
     });
     return () => cancelAnimationFrame(frame);
-  }, [isFetching, isLoading, lastSearchKey, rows.length]);
+  }, [isFetching, isLoading, rows.length]);
 
   return (
     <section

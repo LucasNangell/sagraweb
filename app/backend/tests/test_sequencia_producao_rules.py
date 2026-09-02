@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import zipfile
+from xml.etree import ElementTree as ET
+
+from services.sequencia_producao_docx import write_sequencia_docx
 from services.sequencia_producao_rules import generate_sequencia_draft
 
 
@@ -84,3 +88,32 @@ def test_generated_draft_is_serializable():
     assert payload["version"] == 1
     assert payload["os"]["numero"] == 123
     assert payload["sections"][0]["blocks"]
+
+
+def test_write_sequencia_docx_uses_model_styles(tmp_path):
+    draft = generate_sequencia_draft(_sample_os(), [])
+    path = write_sequencia_docx(draft, tmp_path / "sequencia.docx")
+
+    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+    with zipfile.ZipFile(path) as docx:
+        document_xml = docx.read("word/document.xml").decode("utf-8")
+        styles_xml = docx.read("word/styles.xml").decode("utf-8")
+        numbering_xml = docx.read("word/numbering.xml").decode("utf-8")
+
+    assert "Sequência de Produção da OS 00123/2026" in document_xml
+    assert 'w:fill="800000"' in styles_xml
+    assert 'w:styleId="Tit1"' in styles_xml
+    assert 'w:styleId="TitA2n"' in styles_xml
+    assert 'w:styleId="TitA3n"' in styles_xml
+    assert 'w:styleId="Txt6Hif1"' in styles_xml
+    assert 'w:numId="37"' in numbering_xml
+
+    root = ET.fromstring(document_xml)
+    sect = root.find(".//w:sectPr", ns)
+    assert sect is not None
+    page = sect.find("w:pgSz", ns)
+    margins = sect.find("w:pgMar", ns)
+    assert page is not None
+    assert margins is not None
+    assert page.attrib["{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w"] == "8391"
+    assert margins.attrib["{http://schemas.openxmlformats.org/wordprocessingml/2006/main}left"] == "709"

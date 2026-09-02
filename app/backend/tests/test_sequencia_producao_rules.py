@@ -81,6 +81,7 @@ def test_generate_sequencia_warns_when_only_text_fields_are_available():
     assert any("Componentes técnicos" in warning for warning in draft.warnings)
     assert draft.sections[0].blocks
 
+
 def test_generated_draft_is_serializable():
     draft = generate_sequencia_draft(_sample_os(), [])
     payload = draft.model_dump(mode="json")
@@ -117,3 +118,17 @@ def test_write_sequencia_docx_uses_model_styles(tmp_path):
     assert margins is not None
     assert page.attrib["{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w"] == "8391"
     assert margins.attrib["{http://schemas.openxmlformats.org/wordprocessingml/2006/main}left"] == "709"
+
+    paragraphs = root.findall(".//w:p", ns)
+    def p_style(index: int) -> str | None:
+        p_style_el = paragraphs[index].find("./w:pPr/w:pStyle", ns)
+        if p_style_el is None:
+            return None
+        return p_style_el.attrib["{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val"]
+
+    assert p_style(0) == "Tit1"
+    assert paragraphs[0].find("./w:r/w:rPr/w:b", ns) is not None
+    assert p_style(2) == "TitA2n"
+    assert p_style(3) is None
+    assert p_style(4) == "TitA3n"
+    assert paragraphs[5].find("./w:pPr/w:numPr", ns) is None

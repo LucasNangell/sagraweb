@@ -261,6 +261,42 @@ export interface SystemCatalogItemRecord {
   updated_by_ponto?: string | null;
 }
 
+export type MachineGroupType = "geral" | "impressora";
+export type MachinePrintTechnology = "digital" | "offset";
+
+export interface MachineGroupRecord {
+  id: number;
+  nome: string;
+  tipo: MachineGroupType;
+  ativo: boolean;
+  ordem: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+  updated_by_ponto?: string | null;
+}
+
+export interface MachineConfigRecord {
+  grupo_id: number | null;
+  tecnologia: MachinePrintTechnology | null;
+  papel_max_altura_mm: number | null;
+  papel_max_largura_mm: number | null;
+  papel_padrao_altura_mm: number | null;
+  papel_padrao_largura_mm: number | null;
+  margem_superior_mm: number | null;
+  margem_direita_mm: number | null;
+  margem_inferior_mm: number | null;
+  margem_esquerda_mm: number | null;
+}
+
+export interface MachineAdminItem extends SystemCatalogAdminItem {
+  config: MachineConfigRecord;
+}
+
+export interface MachineCatalogConfigResponse {
+  groups: MachineGroupRecord[];
+  machines: MachineAdminItem[];
+}
+
 export interface CustoFuncaoRecord {
   id: number;
   nome: string;

@@ -80,7 +80,8 @@ export function formToSavePayload(
     Cores: val("val_cores", derived) || null,
     CoresDescricao: val("txt_cores_desc", derived) || null,
 
-    DescAcabamento: val("txt_acabamento", derived) || null,
+    DescAcabamento:
+      val("txt_acabamento", form) || val("txt_acabamento", derived) || null,
     Observ: val("txt_obs", derived) || null,
     ContatoTrab: val("txt_contato", derived) || null,
 

@@ -54,6 +54,7 @@ import {
   ConfigSidebarLayout,
   ConfigSubsection,
 } from "./ConfigSectionLayout";
+import { MachineGroupsPanel } from "./MachineGroupsPanel";
 import { ProdutoEtapasPanel } from "./ProdutoEtapasPanel";
 
 const CATEGORY_ICONS: Record<SystemCatalogCategoryKey, ReactNode> = {
@@ -118,6 +119,11 @@ export function SistemaSettingsSection() {
 
   const invalidateCatalog = () => {
     void qc.invalidateQueries({ queryKey: catalogQueryKey(activeCategory) });
+    if (activeCategory === "maquina") {
+      void qc.invalidateQueries({
+        queryKey: ["admin", "system-catalog", "maquinas-config"],
+      });
+    }
     void qc.invalidateQueries({ queryKey: ["aux"] });
   };
 
@@ -365,6 +371,8 @@ export function SistemaSettingsSection() {
                   )}
                 </div>
               ) : null}
+
+              {activeCategory === "maquina" ? <MachineGroupsPanel /> : null}
 
               <p className="text-[11px] leading-relaxed text-slate-500">
                 Itens com origem <strong>em uso</strong> vêm de OSs já cadastradas. Você pode

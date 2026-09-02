@@ -70,6 +70,42 @@ describe("campos de Entrega", () => {
     expect(payload.FrenteVerso).toBe(false);
   });
 
+  it("formToSavePayload preserva texto editado manualmente em DescAcabamento", () => {
+    const payload = formToSavePayload(
+      {
+        ...createEmptyGerenciaForm(),
+        txt_acabamento: "Dobra manual\nRefile",
+      },
+      { ano: "2025", id: "2465" },
+      "1234",
+      {
+        version: 1,
+        componentes: [
+          {
+            nome: "Miolo",
+            tipo: "MIOLO",
+            lotes: [
+              {
+                id: "l1",
+                paginas: 16,
+                maquina_link: "Offset",
+                papel_link: "Pólen",
+                cores_link: "P/B",
+                papel_desc: "",
+                cores_desc: "",
+                frente_verso: false,
+                acabamentos: [],
+              },
+            ],
+            acabamentos: [{ catalog_id: 8, label: "Espiral" }],
+          },
+        ],
+      },
+    );
+
+    expect(payload.DescAcabamento).toBe("Dobra manual\nRefile");
+  });
+
   it("grava MaquinaLink combinado e Papel/Cores Diversos quando os componentes divergem", () => {
     const payload = formToSavePayload(
       createEmptyGerenciaForm(),

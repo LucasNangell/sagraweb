@@ -478,7 +478,10 @@ export function useGerenciaOsEditor({
         ensureTechSpecIntegrity(techSpec),
         form,
       );
-      const formForSave = applyTechSpecToForm(form, safeSpec);
+      const formForSave = {
+        ...applyTechSpecToForm(form, safeSpec),
+        txt_acabamento: form.txt_acabamento,
+      };
       const payload = formToSavePayload(
         {
           ...formForSave,

@@ -22,6 +22,7 @@ import {
 } from "./analiseLabFontes";
 import {
   defaultFolhearModo,
+  normalizeFolhearModo,
   type AnaliseLabFolhearModo,
 } from "./analiseLabFolhearModo";
 
@@ -64,6 +65,11 @@ export function AnaliseLabSourcePicker({
   const [versaoLabel, setVersaoLabel] = useState(initialVersaoLabel || "");
   const [modo, setModo] = useState<"unico" | "capa_miolo">(
     initialModo === "capa_miolo" ? "capa_miolo" : "unico",
+  );
+  const [folhearModo, setFolhearModo] = useState<AnaliseLabFolhearModo>(() =>
+    initialFolhearModo
+      ? normalizeFolhearModo(initialFolhearModo, initialModo)
+      : defaultFolhearModo(initialModo),
   );
   const [fontes, setFontes] = useState<AnaliseLabFonte[]>(() =>
     initialFontes && initialFontes.length
@@ -137,7 +143,7 @@ export function AnaliseLabSourcePicker({
       ...legacy,
       fontes,
       crop_json: identityLabCropJson(modo),
-      folhear_modo: initialFolhearModo || defaultFolhearModo(modo),
+      folhear_modo: folhearModo,
     });
   };
 
@@ -193,6 +199,7 @@ export function AnaliseLabSourcePicker({
           type="button"
           onClick={() => {
             setModo("unico");
+            setFolhearModo(defaultFolhearModo("unico"));
             setSeededFor("");
             setFontes([]);
           }}
@@ -208,6 +215,7 @@ export function AnaliseLabSourcePicker({
           type="button"
           onClick={() => {
             setModo("capa_miolo");
+            setFolhearModo(defaultFolhearModo("capa_miolo"));
             setSeededFor("");
             setFontes([]);
           }}
@@ -227,6 +235,46 @@ export function AnaliseLabSourcePicker({
           Listando PDFs…
         </div>
       ) : null}
+
+      <section className="rounded border border-sagra-border bg-white p-3">
+        <h3 className="text-sm font-semibold text-neutral-800">
+          Exibição no Folhear
+        </h3>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <label
+            className={
+              folhearModo === "flipbook"
+                ? "inline-flex cursor-pointer items-center gap-2 rounded-lg border border-primary-green bg-primary-green/10 px-3 py-2 text-sm text-primary-green"
+                : "inline-flex cursor-pointer items-center gap-2 rounded-lg border border-sagra-border bg-white px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50"
+            }
+          >
+            <input
+              type="radio"
+              name="analise-lab-folhear-modo"
+              className="sr-only"
+              checked={folhearModo === "flipbook"}
+              onChange={() => setFolhearModo("flipbook")}
+            />
+            Flipbook
+          </label>
+          <label
+            className={
+              folhearModo === "folhas"
+                ? "inline-flex cursor-pointer items-center gap-2 rounded-lg border border-primary-green bg-primary-green/10 px-3 py-2 text-sm text-primary-green"
+                : "inline-flex cursor-pointer items-center gap-2 rounded-lg border border-sagra-border bg-white px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50"
+            }
+          >
+            <input
+              type="radio"
+              name="analise-lab-folhear-modo"
+              className="sr-only"
+              checked={folhearModo === "folhas"}
+              onChange={() => setFolhearModo("folhas")}
+            />
+            Folhas separadas
+          </label>
+        </div>
+      </section>
 
       <div className="grid min-h-0 flex-1 gap-3 overflow-hidden md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
         <FileColumn title="Não usados" empty="Nenhum PDF restante.">

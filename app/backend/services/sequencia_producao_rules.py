@@ -331,7 +331,7 @@ def generate_sequencia_draft(os_row: dict[str, Any], componentes_rows: list[dict
             confidence="review" if impressao_warnings else "automatic",
             warnings=impressao_warnings,
         ),
-        SequenciaBlock(id="acabamento", title="Acabamento", lines=_acabamento_lines(acabamento_text, kind)),
+        SequenciaBlock(id="acabamento", title="Acabamento", lines=[]),
     ]
     norm_acab = _norm(acabamento_text)
     if any(token in norm_acab for token in ("laminacao", "laminação", "bopp")):
@@ -349,16 +349,16 @@ def generate_sequencia_draft(os_row: dict[str, Any], componentes_rows: list[dict
     blocks.extend(
         [
             SequenciaBlock(id="corte", title="Corte", lines=corte_lines),
-            SequenciaBlock(id="dobra", title="Dobra", lines=_dobra_lines(componentes, kind), confidence="review"),
+            SequenciaBlock(id="dobra", title="Dobra (Dobradeira)", lines=_dobra_lines(componentes, kind), confidence="review"),
             SequenciaBlock(
                 id="alceamento",
-                title="Alceamento",
+                title="Alceamento (AM graphics)",
                 lines=[f"{_count_cadernos(componentes)} cadernos (empilhados)", "Um conjunto com todos os cadernos"]
                 if kind != "wire"
                 else ["Lâminas soltas na ordem da paginação."],
             ),
             _encadernacao_block(kind, acabamento_text),
-            SequenciaBlock(id="refile-final", title="Refile Final", lines=["Guilhotina no CEDI"]),
+            SequenciaBlock(id="refile-final", title="Refile Final (Guilhotina)", lines=["Guilhotina no CEDI"]),
         ]
     )
 

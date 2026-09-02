@@ -12,7 +12,6 @@ import { PRIORIDADE_GERENCIA, TURNO_GERENCIA } from "../constants";
 import type { GerenciaFormState, GerenciaFormUpdater } from "../types";
 import type { FormatoLookupItem } from "../formatoDimensions";
 import {
-  buildDescAcabamentoFromTechSpec,
   type TechSpec,
   type TechSpecChangeMeta,
 } from "../techSpec";
@@ -36,7 +35,6 @@ import {
 import { CalculosCustosPanel } from "./CalculosCustosPanel";
 import { FormatoCombobox } from "./FormatoCombobox";
 import { TrabalhoComponentes } from "./TrabalhoComponentes";
-import { AcabamentoField } from "./AcabamentoField";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { OrcamentoCamposEmbed } from "@/features/orcamento/components/OrcamentoCamposPanel";
 import { OrcamentoCotaHeaderButton } from "./OrcamentoCotaHeaderButton";
@@ -969,18 +967,20 @@ export function GerenciaTecnicosSection({
   );
 
   const acabamentosOs = (
-    <AcabamentoField
-      label="Acabamentos"
-      catalog={acabamentos}
-      selected={techSpec.acabamentosGerais ?? []}
-      displayValue={buildDescAcabamentoFromTechSpec(techSpec)}
-      multiline
-      readOnly={ro}
-      onChange={(next) =>
-        onTechSpecChange({ ...techSpec, acabamentosGerais: next })
-      }
-      techSpec={techSpec}
-    />
+    <Field label="Acabamentos">
+      <textarea
+        readOnly={ro}
+        rows={layout === "modal" ? textareaRows("txt_acabamento", 3) : 4}
+        value={form.txt_acabamento}
+        onChange={(e) => set(update, "txt_acabamento", e.target.value)}
+        className={cn(
+          gerenciaInputClass,
+          layout === "modal" ? "min-h-[4.5rem] resize-y" : "min-h-[72px] resize-y",
+        )}
+        aria-label="Acabamentos"
+        data-testid={homeTestIds.gerenciaField("Acabamentos")}
+      />
+    </Field>
   );
 
   const obsField = (

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+from copy import deepcopy
 from pathlib import Path
 
 from services.sequencia_producao_models import SequenciaDraft
@@ -173,7 +175,6 @@ def _add_text_line(doc, line: str) -> None:
         return
     style_name = "Txt7Hif1" if _is_nested_line(line) else "Txt6Hif1"
     paragraph = doc.add_paragraph(style=style_name)
-    _set_direct_numbering(paragraph, 39 if style_name == "Txt7Hif1" else 37)
     run = paragraph.add_run(line.strip())
     run.font.name = "Calibri"
     run.font.size = None
@@ -194,6 +195,192 @@ def _add_block_title(doc, title: str) -> None:
         doc.add_paragraph(parts[0], style="TitA3n")
 
 
+def _backend_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _resolve_template_path() -> Path | None:
+    configured = os.getenv("SEQUENCIA_PRODUCAO_TEMPLATE_DOCX")
+    candidates = [
+        Path(configured) if configured else None,
+        _backend_root() / "templates" / "sequencia_producao_template.docx",
+        _backend_root().parent.parent / "estudos" / "Seq Produçao.docx",
+    ]
+    for candidate in candidates:
+        if candidate and candidate.exists():
+            return candidate
+    return None
+
+
+def _style_id(paragraph) -> str | None:
+    p_style = paragraph._p.find("./w:pPr/w:pStyle", paragraph._p.nsmap)
+    return p_style.get(_qn("w:val")) if p_style is not None else None
+
+
+def _paragraph_text(paragraph) -> str:
+    return "".join(run.text for run in paragraph.runs).strip()
+
+
+def _has_direct_bold(paragraph) -> bool:
+    return paragraph._p.find(".//w:rPr/w:b", paragraph._p.nsmap) is not None
+
+
+def _is_blank_paragraph(paragraph) -> bool:
+    return not _paragraph_text(paragraph)
+
+
+def _template_paragraphs(doc) -> dict[str, object]:
+    mapping: dict[str, object] = {}
+    for paragraph in doc.paragraphs:
+        style_id = _style_id(paragraph)
+        text = _paragraph_text(paragraph)
+        if _is_blank_paragraph(paragraph):
+            if style_id == "Tit1":
+                mapping.setdefault("blank_title", deepcopy(paragraph._p))
+            elif style_id is None:
+                mapping.setdefault("blank_after_section", deepcopy(paragraph._p))
+            elif style_id == "Txt6":
+                ind = paragraph._p.find("./w:pPr/w:ind", paragraph._p.nsmap)
+                if ind is not None and ind.get(_qn("w:left")) == "0":
+                    mapping.setdefault("blank_body_zero", deepcopy(paragraph._p))
+                else:
+                    mapping.setdefault("blank_body", deepcopy(paragraph._p))
+            elif style_id == "Txt6Hif1":
+                mapping.setdefault("blank_list", deepcopy(paragraph._p))
+            elif style_id == "Txt7Hif1":
+                mapping.setdefault("blank_nested", deepcopy(paragraph._p))
+            mapping.setdefault("blank", deepcopy(paragraph._p))
+        if style_id == "Tit1" and text:
+            mapping["title"] = deepcopy(paragraph._p)
+        elif style_id == "TitA2n":
+            mapping.setdefault("section", deepcopy(paragraph._p))
+        elif style_id == "TitA3n":
+            mapping.setdefault("subsection", deepcopy(paragraph._p))
+        elif style_id == "Txt6Hif1":
+            if _has_direct_bold(paragraph):
+                mapping.setdefault("body_bold", deepcopy(paragraph._p))
+            elif text.startswith("-") and paragraph._p.find("./w:pPr/w:numPr", paragraph._p.nsmap) is not None:
+                mapping.setdefault("body_hanging", deepcopy(paragraph._p))
+            else:
+                mapping.setdefault("body", deepcopy(paragraph._p))
+        elif style_id == "Txt7Hif1":
+            if paragraph._p.find("./w:pPr/w:numPr", paragraph._p.nsmap) is not None:
+                mapping.setdefault("nested_hanging", deepcopy(paragraph._p))
+            else:
+                mapping.setdefault("nested", deepcopy(paragraph._p))
+    return mapping
+
+
+def _replace_paragraph_text(paragraph_element, text: str):
+    text_nodes = list(paragraph_element.iter(_qn("w:t")))
+    if not text_nodes:
+        run = _child(paragraph_element, "w:r")
+        text_node = _child(run, "w:t")
+        text_nodes = [text_node]
+    text_nodes[0].text = text
+    for node in text_nodes[1:]:
+        node.text = ""
+    return paragraph_element
+
+
+def _clone_template_paragraph(templates: dict[str, object], key: str, text: str):
+    source = templates.get(key)
+    if source is None:
+        source = templates.get("body")
+    if source is None:
+        from docx.oxml import OxmlElement
+
+        source = OxmlElement("w:p")
+    clone = deepcopy(source)
+    if not text:
+        return clone
+    return _replace_paragraph_text(clone, text)
+
+
+def _clear_document_body(doc) -> None:
+    body = doc._body._element
+    sect_pr = body.sectPr
+    for child in list(body):
+        if sect_pr is not None and child is sect_pr:
+            continue
+        body.remove(child)
+
+
+def _append_paragraph_element(doc, paragraph_element) -> None:
+    body = doc._body._element
+    sect_pr = body.sectPr
+    if sect_pr is None:
+        body.append(paragraph_element)
+    else:
+        body.insert(len(body) - 1, paragraph_element)
+
+
+def _add_template_paragraph(doc, templates: dict[str, object], key: str, text: str = "") -> None:
+    _append_paragraph_element(doc, _clone_template_paragraph(templates, key, text))
+
+
+def _body_template_key(line: str) -> str:
+    stripped = line.strip()
+    if not stripped:
+        return "body"
+    if _is_nested_line(stripped):
+        return "nested"
+    if stripped.startswith("-"):
+        return "body_hanging"
+    if _is_signature_line(stripped):
+        return "body_bold"
+    return "body"
+
+
+def _add_template_block_title(doc, templates: dict[str, object], title: str) -> None:
+    parts = [part.strip() for part in title.split(">") if part.strip()]
+    if not parts:
+        return
+    if len(parts) > 1:
+        _add_template_paragraph(doc, templates, "section", parts[0])
+        _add_template_paragraph(doc, templates, "blank_after_section")
+        _add_template_paragraph(doc, templates, "subsection", parts[1])
+    elif parts[0].lower() == "acabamento":
+        _add_template_paragraph(doc, templates, "section", parts[0])
+    else:
+        _add_template_paragraph(doc, templates, "subsection", parts[0])
+
+
+def _write_from_template(draft: SequenciaDraft, target_path: Path, template_path: Path) -> Path:
+    from docx import Document
+
+    doc = Document(template_path)
+    templates = _template_paragraphs(doc)
+    _clear_document_body(doc)
+
+    _add_template_paragraph(
+        doc,
+        templates,
+        "title",
+        f"Sequência de Produção da OS {draft.os.numero:05d}/{draft.os.ano}",
+    )
+    _add_template_paragraph(doc, templates, "blank_title")
+
+    for section_draft in draft.sections:
+        for block in section_draft.blocks:
+            if not block.title.strip() and not any(line.strip() for line in block.lines):
+                continue
+            _add_template_block_title(doc, templates, block.title.strip())
+            for line in block.lines:
+                if line.strip():
+                    _add_template_paragraph(doc, templates, _body_template_key(line), line.strip())
+            normalized_title = block.title.strip().lower()
+            separator = (
+                "blank_body_zero"
+                if normalized_title == "acabamento" or ">" in block.title
+                else "blank_body"
+            )
+            _add_template_paragraph(doc, templates, separator)
+
+    doc.save(target_path)
+    return target_path
+
+
 def write_sequencia_docx(draft: SequenciaDraft, target_path: str | Path) -> Path:
     try:
         from docx import Document
@@ -205,6 +392,10 @@ def write_sequencia_docx(draft: SequenciaDraft, target_path: str | Path) -> Path
 
     path = Path(target_path)
     path.parent.mkdir(parents=True, exist_ok=True)
+
+    template_path = _resolve_template_path()
+    if template_path is not None:
+        return _write_from_template(draft, path, template_path)
 
     doc = Document()
     section = doc.sections[0]

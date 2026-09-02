@@ -862,6 +862,25 @@ class SystemCatalogLabelActionRequest(BaseModel):
     label: str = Field(..., min_length=1, max_length=255)
 
 
+class MachineGroupCreateRequest(BaseModel):
+    nome: str = Field(..., min_length=1, max_length=120)
+    tipo: Literal["geral", "impressora"] = "geral"
+    ordem: int = Field(50, ge=0, le=9999)
+
+
+class MachineConfigUpdateRequest(BaseModel):
+    grupo_id: Optional[int] = None
+    tecnologia: Optional[Literal["digital", "offset"]] = None
+    papel_max_altura_mm: Optional[float] = Field(None, ge=0)
+    papel_max_largura_mm: Optional[float] = Field(None, ge=0)
+    papel_padrao_altura_mm: Optional[float] = Field(None, ge=0)
+    papel_padrao_largura_mm: Optional[float] = Field(None, ge=0)
+    margem_superior_mm: Optional[float] = Field(None, ge=0)
+    margem_direita_mm: Optional[float] = Field(None, ge=0)
+    margem_inferior_mm: Optional[float] = Field(None, ge=0)
+    margem_esquerda_mm: Optional[float] = Field(None, ge=0)
+
+
 @router.get(
     "/api/admin/system/catalog/categories",
     dependencies=[Depends(require_admin_config_access)],
@@ -870,6 +889,81 @@ def list_system_catalog_categories():
     from services import system_catalog_service as catalog_svc
 
     return {"categories": catalog_svc.list_categories_meta()}
+
+
+@router.get(
+    "/api/admin/system/maquinas/configuracao",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def list_machine_catalog_config():
+    from services import machine_catalog_service as machine_svc
+
+    try:
+        return machine_svc.list_machine_admin_view()
+    except Exception as exc:
+        logger.exception("Erro ao listar configurações de máquinas")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post(
+    "/api/admin/system/maquinas/grupos",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def create_machine_group(
+    body: MachineGroupCreateRequest,
+    session: SessionData = Depends(require_session),
+):
+    from services import machine_catalog_service as machine_svc
+
+    try:
+        group = machine_svc.create_group(
+            nome=body.nome,
+            tipo=body.tipo,
+            ordem=body.ordem,
+            updated_by_ponto=str(session.ponto),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Erro ao criar grupo de máquinas")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"group": group}
+
+
+@router.put(
+    "/api/admin/system/maquinas/configuracao/{maquina_rotulo:path}",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def update_machine_catalog_config(
+    maquina_rotulo: str,
+    body: MachineConfigUpdateRequest,
+    session: SessionData = Depends(require_session),
+):
+    from services import machine_catalog_service as machine_svc
+
+    try:
+        config = machine_svc.update_machine_config(
+            maquina_rotulo,
+            grupo_id=body.grupo_id,
+            tecnologia=body.tecnologia,
+            papel_max_altura_mm=body.papel_max_altura_mm,
+            papel_max_largura_mm=body.papel_max_largura_mm,
+            papel_padrao_altura_mm=body.papel_padrao_altura_mm,
+            papel_padrao_largura_mm=body.papel_padrao_largura_mm,
+            margem_superior_mm=body.margem_superior_mm,
+            margem_direita_mm=body.margem_direita_mm,
+            margem_inferior_mm=body.margem_inferior_mm,
+            margem_esquerda_mm=body.margem_esquerda_mm,
+            updated_by_ponto=str(session.ponto),
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Máquina não encontrada.") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Erro ao salvar configuração da máquina %s", maquina_rotulo)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"config": config}
 
 
 @router.get(
@@ -1769,5 +1863,3 @@ def admin_seed_orcamento_passos_priors(
         logger.exception("Erro ao aplicar priors de etapas de orçamento")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return result
-
-

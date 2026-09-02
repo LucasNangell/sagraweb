@@ -20,6 +20,10 @@ import type {
   SystemCatalogItemRecord,
   SystemCatalogListResponse,
   SystemCatalogVariacao,
+  MachineCatalogConfigResponse,
+  MachineConfigRecord,
+  MachineGroupRecord,
+  MachineGroupType,
   CustoFuncaoCreatePayload,
   CustoFuncaoListResponse,
   CustoFuncaoRecord,
@@ -697,6 +701,36 @@ export async function deleteSystemCatalogItem(
   return apiFetch(
     `/admin/system/catalog/${encodeURIComponent(category)}/${itemId}/delete`,
     { method: "POST" },
+  );
+}
+
+export async function fetchMachineCatalogConfig(): Promise<MachineCatalogConfigResponse> {
+  return apiFetch<MachineCatalogConfigResponse>("/admin/system/maquinas/configuracao");
+}
+
+export async function createMachineGroup(payload: {
+  nome: string;
+  tipo: MachineGroupType;
+  ordem?: number;
+}): Promise<{ group: MachineGroupRecord }> {
+  return apiFetch("/admin/system/maquinas/grupos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateMachineConfig(
+  maquinaRotulo: string,
+  payload: MachineConfigRecord,
+): Promise<{ config: MachineConfigRecord & { maquina_rotulo: string } }> {
+  return apiFetch(
+    `/admin/system/maquinas/configuracao/${encodeURIComponent(maquinaRotulo)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
   );
 }
 

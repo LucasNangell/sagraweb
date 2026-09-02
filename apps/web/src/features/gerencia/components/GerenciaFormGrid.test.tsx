@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { createEmptyGerenciaForm } from "../defaults";
@@ -7,11 +7,11 @@ import type { GerenciaFormState } from "../types";
 import { GerenciaFormGrid } from "./GerenciaFormGrid";
 import { GERENCIA_MODAL_SECTIONS, GERENCIA_SECTIONS } from "./GerenciaFormSections";
 
-function renderGrid(formPatch: Partial<GerenciaFormState> = {}) {
-  render(
+function renderGrid(formPatch: Partial<GerenciaFormState> = {}, update = vi.fn()) {
+  const result = render(
     <GerenciaFormGrid
       form={{ ...createEmptyGerenciaForm(), ...formPatch }}
-      update={vi.fn()}
+      update={update}
       readOnly={false}
       categorias={[]}
       produtos={[]}
@@ -26,6 +26,7 @@ function renderGrid(formPatch: Partial<GerenciaFormState> = {}) {
       onTechSpecChange={vi.fn()}
     />,
   );
+  return { ...result, update };
 }
 
 describe("GerenciaFormGrid", () => {
@@ -104,6 +105,22 @@ describe("GerenciaFormGrid", () => {
     expect(screen.getByLabelText("Acabamentos")).toBeInTheDocument();
     expect(screen.getByLabelText("Obs")).toBeInTheDocument();
     expect(screen.queryByLabelText("Acabamento")).not.toBeInTheDocument();
+  });
+
+  it("edita Acabamentos como texto livre sem abrir seletor", () => {
+    const update = vi.fn();
+    renderGrid({ txt_acabamento: "Dobra manual" }, update);
+
+    const field = screen.getByLabelText("Acabamentos");
+    expect(field.tagName).toBe("TEXTAREA");
+
+    fireEvent.click(field);
+    expect(screen.queryByRole("dialog", { name: "Incluir acabamentos" })).not.toBeInTheDocument();
+
+    fireEvent.change(field, { target: { value: "Dobra manual\nRefile" } });
+    expect(update).toHaveBeenCalledWith({
+      txt_acabamento: "Dobra manual\nRefile",
+    });
   });
 
   it("torna Data Entrega obrigatória quando a prioridade não é Normal", () => {

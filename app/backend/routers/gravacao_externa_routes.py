@@ -32,6 +32,7 @@ from services.gravacao_externa_service import (
     session_allows_operacao_fornecedor,
     update_session_arquivos,
     user_can_access_session,
+    user_can_send_mensagem,
     _fetch_arquivos,
 )
 from services.gravacao_externa_zip_job_service import (
@@ -417,14 +418,16 @@ def post_gravacao_externa_mensagem(
     body: GravacaoExternaMensagemCreate,
 ):
     ponto = _session_ponto(request)
-    is_operator = _has_operator_permission(request)
+    has_view = _has_view_permission(request)
     session = get_active_session(ano, id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão de Gravação Externa não encontrada.")
-    if not user_can_access_session(
+    is_fornecedor = fetch_user_fornecedor(ponto)
+    if not user_can_send_mensagem(
         session,
         ponto=ponto,
-        has_operator_permission=is_operator,
+        has_view_permission=has_view,
+        is_fornecedor=is_fornecedor,
     ):
         raise HTTPException(status_code=403, detail="Acesso negado.")
     msg = add_mensagem(
@@ -432,7 +435,8 @@ def post_gravacao_externa_mensagem(
         os_id=id,
         ponto=ponto,
         mensagem=body.mensagem,
-        is_operator=is_operator,
+        has_view_permission=has_view,
+        is_fornecedor=is_fornecedor,
     )
     return GravacaoExternaMensagemItem.model_validate(msg)
 

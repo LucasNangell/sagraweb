@@ -544,3 +544,75 @@ def test_preview_allows_view_without_operator(gravacao_client):
             os.unlink(tmp_path)
         except OSError:
             pass
+
+
+def test_post_mensagem_allows_view_without_operator(gravacao_client):
+    created = {
+        "id": 5,
+        "autor_ponto": "918.713",
+        "autor_nome": "Interno",
+        "autor_papel": "lancador",
+        "mensagem": "olá",
+        "criado_em": None,
+    }
+    with patch(
+        "routers.gravacao_externa_routes.get_active_session",
+        return_value={
+            "id": 2,
+            "os_ano": 2024,
+            "os_nro": 1209,
+            "lancado_por_ponto": "111.111",
+            "fornecedor_ponto": "222.222",
+            "status": "iniciada",
+        },
+    ), patch(
+        "routers.gravacao_externa_routes._has_view_permission",
+        return_value=True,
+    ), patch(
+        "routers.gravacao_externa_routes.fetch_user_fornecedor",
+        return_value=False,
+    ), patch(
+        "routers.gravacao_externa_routes.add_mensagem",
+        return_value=created,
+    ) as mock_add:
+        response = gravacao_client.post(
+            "/api/gravacao-externa/2024/1209/mensagens",
+            json={"mensagem": "olá"},
+            cookies=_auth_cookies(),
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["autor_papel"] == "lancador"
+    mock_add.assert_called_once()
+    assert mock_add.call_args.kwargs["has_view_permission"] is True
+    assert mock_add.call_args.kwargs["is_fornecedor"] is False
+
+
+def test_post_mensagem_rejects_unassigned_fornecedor(gravacao_client):
+    with patch(
+        "routers.gravacao_externa_routes.get_active_session",
+        return_value={
+            "id": 2,
+            "os_ano": 2024,
+            "os_nro": 1209,
+            "lancado_por_ponto": "111.111",
+            "fornecedor_ponto": "222.222",
+            "status": "iniciada",
+        },
+    ), patch(
+        "routers.gravacao_externa_routes._has_view_permission",
+        return_value=True,
+    ), patch(
+        "routers.gravacao_externa_routes.fetch_user_fornecedor",
+        return_value=True,
+    ), patch(
+        "routers.gravacao_externa_routes.add_mensagem",
+    ) as mock_add:
+        response = gravacao_client.post(
+            "/api/gravacao-externa/2024/1209/mensagens",
+            json={"mensagem": "olá"},
+            cookies=_auth_cookies(ponto=333333),
+        )
+
+    assert response.status_code == 403
+    mock_add.assert_not_called()

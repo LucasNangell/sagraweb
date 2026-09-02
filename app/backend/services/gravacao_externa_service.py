@@ -673,6 +673,20 @@ def session_allows_operacao_fornecedor(
     return ponto_matches(session.get("fornecedor_ponto"), ponto)
 
 
+def user_can_send_mensagem(
+    session: dict[str, Any],
+    *,
+    ponto: str,
+    has_view_permission: bool,
+    is_fornecedor: bool = False,
+) -> bool:
+    if session_allows_operacao_fornecedor(session, ponto):
+        return True
+    if is_fornecedor:
+        return False
+    return bool(has_view_permission)
+
+
 def require_session_access(
     session: dict[str, Any],
     *,
@@ -1189,14 +1203,120 @@ def iniciar_gravacao(
     return build_session_detail(updated)
 
 
-def _resolve_autor_papel(session: dict[str, Any], ponto: str, is_operator: bool) -> str:
+def _resolve_autor_papel(
+    session: dict[str, Any],
+    ponto: str,
+    *,
+    has_view_permission: bool,
+) -> str:
     from services.support_ponto_utils import ponto_matches
 
-    if ponto_matches(session.get("lancado_por_ponto"), ponto):
-        return "lancador"
-    if ponto_matches(session.get("fornecedor_ponto"), ponto) or is_operator:
+    if session_allows_operacao_fornecedor(session, ponto):
         return "operador"
+    if has_view_permission or ponto_matches(session.get("lancado_por_ponto"), ponto):
+        return "lancador"
     raise HTTPException(status_code=403, detail="Acesso negado.")
+
+
+def list_internal_gravacao_externa_notification_pontos(
+    *,
+    exclude_ponto: str | None = None,
+) -> list[str]:
+    """Pontos internos ativos com acesso à aba OPs pendentes no Birô."""
+    from security.user_permissions import is_user_permissions_customized
+
+    try:
+        users = (
+            db.execute_query(
+                """
+                SELECT Ponto
+                FROM tabUsuarios
+                WHERE COALESCE(AuthAtivo, 1) = 1
+                  AND COALESCE(Fornecedor, 0) <> 1
+                """
+            )
+            or []
+        )
+        perm_rows = db.execute_query("SELECT * FROM user_permissions") or []
+    except Exception as exc:
+        logger.debug("list internal gravacao-externa pontos: %s", exc)
+        return []
+
+    perms_by_ponto: dict[str, dict[str, Any]] = {}
+    for row in perm_rows:
+        key = _clean_ponto(str(row.get("Ponto") or ""))
+        if key:
+            perms_by_ponto[key] = row
+
+    exclude = _clean_ponto(exclude_ponto or "")
+    result: list[str] = []
+    seen: set[str] = set()
+    for user in users:
+        digits = _clean_ponto(str(user.get("Ponto") or ""))
+        if not digits or digits == exclude or digits in seen:
+            continue
+        overlay = perms_by_ponto.get(digits)
+        if overlay is None or not is_user_permissions_customized(overlay):
+            include = True
+        else:
+            include = bool(overlay.get("sb_gravacao_externa"))
+        if not include:
+            continue
+        seen.add(digits)
+        result.append(format_ponto(digits) or digits)
+    return result
+
+
+def _notify_gravacao_externa_mensagem(
+    *,
+    session: dict[str, Any],
+    sender_ponto: str,
+    papel: str,
+    thread_msg: dict[str, Any],
+    ano: int,
+    os_id: int,
+) -> None:
+    os_label = f"{os_id:05d}/{str(ano)[-2:]}"
+    sender_clean = _clean_ponto(sender_ponto)
+    if papel == "operador":
+        targets = list_internal_gravacao_externa_notification_pontos(
+            exclude_ponto=sender_ponto,
+        )
+        notif_msg = f"Nova mensagem de Gravação Externa na OS {os_label}."
+    else:
+        fornecedor = str(session.get("fornecedor_ponto") or "")
+        targets = [fornecedor] if fornecedor else []
+        notif_msg = f"Resposta sobre Gravação Externa na OS {os_label}."
+
+    detalhes = json.dumps(
+        {
+            "tipo": "gravacao_externa_mensagem",
+            "gravacao_externa_id": session["id"],
+            "os_ano": ano,
+            "os_nro": os_id,
+            "message_id": thread_msg["id"],
+        },
+        ensure_ascii=False,
+    )
+    for target in targets:
+        if not target or _clean_ponto(target) == sender_clean:
+            continue
+        notification_id = insert_user_notification(
+            ponto=_clean_ponto(target) or target,
+            nro=os_id,
+            ano=ano,
+            mensagem=notif_msg,
+            detalhes_json=detalhes,
+        )
+        push_user_notification(
+            target_ponto=target,
+            mensagem=notif_msg,
+            nro=os_id,
+            ano=ano,
+            notification_id=notification_id,
+            action="gravacao_externa_mensagem",
+            gravacao_message_id=int(thread_msg["id"]),
+        )
 
 
 def add_mensagem(
@@ -1205,7 +1325,8 @@ def add_mensagem(
     os_id: int,
     ponto: str,
     mensagem: str,
-    is_operator: bool,
+    has_view_permission: bool,
+    is_fornecedor: bool = False,
 ) -> dict[str, Any]:
     text = (mensagem or "").strip()
     if not text:
@@ -1219,12 +1340,18 @@ def add_mensagem(
     session = get_active_session(ano, os_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão de Gravação Externa não encontrada.")
-    require_session_access(
+    if not user_can_send_mensagem(
         session,
         ponto=ponto,
-        has_operator_permission=is_operator,
+        has_view_permission=has_view_permission,
+        is_fornecedor=is_fornecedor,
+    ):
+        raise HTTPException(status_code=403, detail="Acesso negado à sessão de Gravação Externa.")
+    papel = _resolve_autor_papel(
+        session,
+        ponto,
+        has_view_permission=has_view_permission,
     )
-    papel = _resolve_autor_papel(session, ponto, is_operator)
     nome = _lookup_usuario_nome(ponto) or ""
     ponto_fmt = format_ponto(_clean_ponto(ponto))
 
@@ -1246,44 +1373,14 @@ def add_mensagem(
         return _map_mensagem_row(row)
 
     thread_msg = db.execute_transaction([tx])[0]
-
-    os_label = f"{os_id:05d}/{str(ano)[-2:]}"
-    if papel == "operador":
-        target = str(session.get("lancado_por_ponto") or "")
-        notif_msg = f"Nova mensagem de Gravação Externa na OS {os_label}."
-    else:
-        iniciado = str(session.get("iniciado_por_ponto") or "")
-        target = iniciado or str(session.get("lancado_por_ponto") or "")
-        notif_msg = f"Resposta sobre Gravação Externa na OS {os_label}."
-
-    if target and _clean_ponto(target) != _clean_ponto(ponto):
-        detalhes = json.dumps(
-            {
-                "tipo": "gravacao_externa_mensagem",
-                "gravacao_externa_id": session["id"],
-                "os_ano": ano,
-                "os_nro": os_id,
-                "message_id": thread_msg["id"],
-            },
-            ensure_ascii=False,
-        )
-        notification_id = insert_user_notification(
-            ponto=_clean_ponto(target) or target,
-            nro=os_id,
-            ano=ano,
-            mensagem=notif_msg,
-            detalhes_json=detalhes,
-        )
-        push_user_notification(
-            target_ponto=target,
-            mensagem=notif_msg,
-            nro=os_id,
-            ano=ano,
-            notification_id=notification_id,
-            action="gravacao_externa_mensagem",
-            gravacao_message_id=int(thread_msg["id"]),
-        )
-
+    _notify_gravacao_externa_mensagem(
+        session=session,
+        sender_ponto=ponto,
+        papel=papel,
+        thread_msg=thread_msg,
+        ano=ano,
+        os_id=os_id,
+    )
     push_gravacao_externa_message(
         gravacao_externa_id=int(session["id"]),
         os_ano=ano,

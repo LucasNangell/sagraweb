@@ -24,6 +24,7 @@ from services.gravacao_externa_service import (
     is_gravacao_externa_situacao,
     session_allows_operacao_fornecedor,
     user_can_access_session,
+    user_can_send_mensagem,
     validate_arquivos_input,
 )
 
@@ -119,6 +120,43 @@ def test_user_can_access_session_fornecedor():
         has_operator_permission=False,
         is_fornecedor=True,
     )
+
+
+def test_user_can_send_mensagem_view_or_assigned_fornecedor():
+    session = {"lancado_por_ponto": "111", "fornecedor_ponto": "918.713"}
+    assert user_can_send_mensagem(
+        session,
+        ponto="222",
+        has_view_permission=True,
+        is_fornecedor=False,
+    )
+    assert not user_can_send_mensagem(
+        session,
+        ponto="222",
+        has_view_permission=False,
+        is_fornecedor=False,
+    )
+    assert user_can_send_mensagem(
+        session,
+        ponto="918713",
+        has_view_permission=False,
+        is_fornecedor=True,
+    )
+    assert not user_can_send_mensagem(
+        session,
+        ponto="456",
+        has_view_permission=True,
+        is_fornecedor=True,
+    )
+
+
+def test_resolve_autor_papel_internal_vs_fornecedor():
+    from services.gravacao_externa_service import _resolve_autor_papel
+
+    session = {"lancado_por_ponto": "111", "fornecedor_ponto": "918.713"}
+    assert _resolve_autor_papel(session, "222", has_view_permission=True) == "lancador"
+    assert _resolve_autor_papel(session, "111", has_view_permission=False) == "lancador"
+    assert _resolve_autor_papel(session, "918713", has_view_permission=True) == "operador"
 
 
 @patch("services.gravacao_externa_service._resolve_os_file_path")
@@ -566,3 +604,158 @@ def test_lancar_entrega_chapas_inserts_andamento_as_ultimo(
     assert captured["insert_params"][3] == SITUACAO_RECEBIDO
     assert captured["insert_params"][4] == SETOR_ENTREGA_CHAPAS
     assert "Chapas recebidas:" in captured["insert_params"][5]
+
+
+def test_list_internal_gravacao_externa_notification_pontos_filters():
+    from services.gravacao_externa_service import (
+        list_internal_gravacao_externa_notification_pontos,
+    )
+
+    with patch("services.gravacao_externa_service.db") as mock_db:
+        mock_db.execute_query.side_effect = [
+            [
+                {"Ponto": 918713},
+                {"Ponto": 222222},
+                {"Ponto": 333333},
+                {"Ponto": 444444},
+            ],
+            [
+                {"Ponto": 222222, "sb_gravacao_externa": 1},
+                {"Ponto": 333333, "sb_estoque": 1},
+                {"Ponto": 444444},
+            ],
+        ]
+        pontos = list_internal_gravacao_externa_notification_pontos(
+            exclude_ponto="918.713",
+        )
+
+    cleaned = {p.replace(".", "") for p in pontos}
+    assert cleaned == {"222222", "444444"}
+
+
+def _fake_mensagem_tx(captured: dict):
+    def fake_tx(ops):
+        cursor = MagicMock()
+        cursor.lastrowid = 5
+
+        def execute(sql, params=None):
+            sql_text = str(sql).upper()
+            if params and "INSERT" in sql_text and "TAB_OS_GRAVACAO_EXTERNA_MENSAGEM" in sql_text:
+                captured["papel"] = params[3]
+                captured["autor_ponto"] = params[1]
+                captured["mensagem"] = params[4]
+            cursor.fetchone.return_value = {
+                "Id": 5,
+                "AutorPonto": captured.get("autor_ponto") or "",
+                "AutorNome": "Nome",
+                "AutorPapel": captured.get("papel") or "",
+                "Mensagem": captured.get("mensagem") or "",
+                "CriadoEm": None,
+            }
+
+        cursor.execute.side_effect = execute
+        return [op(cursor) for op in ops]
+
+    return fake_tx
+
+
+@patch("services.gravacao_externa_service._lookup_usuario_nome", return_value="Interno")
+@patch("services.gravacao_externa_service.push_gravacao_externa_message")
+@patch("services.gravacao_externa_service.push_user_notification")
+@patch("services.gravacao_externa_service.insert_user_notification", return_value=77)
+@patch("services.gravacao_externa_service.list_internal_gravacao_externa_notification_pontos")
+@patch("services.gravacao_externa_service.get_active_session")
+@patch("services.gravacao_externa_service.db")
+def test_add_mensagem_internal_notifies_only_fornecedor(
+    mock_db,
+    mock_get_active,
+    mock_list_internal,
+    mock_insert,
+    mock_push,
+    _ws,
+    _nome,
+):
+    from services.gravacao_externa_service import add_mensagem
+
+    session = {
+        "id": 9,
+        "os_ano": 2024,
+        "os_nro": 1209,
+        "lancado_por_ponto": "222.222",
+        "fornecedor_ponto": "111.111",
+        "status": "iniciada",
+    }
+    mock_get_active.return_value = session
+    captured: dict = {}
+    mock_db.execute_transaction.side_effect = _fake_mensagem_tx(captured)
+
+    result = add_mensagem(
+        ano=2024,
+        os_id=1209,
+        ponto="918713",
+        mensagem="resposta interna",
+        has_view_permission=True,
+        is_fornecedor=False,
+    )
+
+    assert captured["papel"] == "lancador"
+    assert result["autor_papel"] == "lancador"
+    mock_list_internal.assert_not_called()
+    mock_insert.assert_called_once()
+    assert mock_insert.call_args.kwargs["ponto"].replace(".", "") == "111111"
+    mock_push.assert_called_once()
+    assert str(mock_push.call_args.kwargs["target_ponto"]).replace(".", "") == "111111"
+
+
+@patch("services.gravacao_externa_service._lookup_usuario_nome", return_value="CGraf")
+@patch("services.gravacao_externa_service.push_gravacao_externa_message")
+@patch("services.gravacao_externa_service.push_user_notification")
+@patch("services.gravacao_externa_service.insert_user_notification", return_value=88)
+@patch("services.gravacao_externa_service.list_internal_gravacao_externa_notification_pontos")
+@patch("services.gravacao_externa_service.get_active_session")
+@patch("services.gravacao_externa_service.db")
+def test_add_mensagem_fornecedor_fans_out_to_internals(
+    mock_db,
+    mock_get_active,
+    mock_list_internal,
+    mock_insert,
+    mock_push,
+    _ws,
+    _nome,
+):
+    from services.gravacao_externa_service import add_mensagem
+
+    session = {
+        "id": 9,
+        "os_ano": 2024,
+        "os_nro": 1209,
+        "lancado_por_ponto": "222.222",
+        "fornecedor_ponto": "111.111",
+        "status": "iniciada",
+    }
+    mock_get_active.return_value = session
+    mock_list_internal.return_value = ["222.222", "918.713"]
+    captured: dict = {}
+    mock_db.execute_transaction.side_effect = _fake_mensagem_tx(captured)
+
+    result = add_mensagem(
+        ano=2024,
+        os_id=1209,
+        ponto="111.111",
+        mensagem="msg do birô",
+        has_view_permission=True,
+        is_fornecedor=True,
+    )
+
+    assert captured["papel"] == "operador"
+    assert result["autor_papel"] == "operador"
+    mock_list_internal.assert_called_once()
+    assert mock_insert.call_count == 2
+    inserted = {
+        str(c.kwargs["ponto"]).replace(".", "") for c in mock_insert.call_args_list
+    }
+    assert inserted == {"222222", "918713"}
+    pushed = {
+        str(c.kwargs["target_ponto"]).replace(".", "") for c in mock_push.call_args_list
+    }
+    assert pushed == {"222222", "918713"}

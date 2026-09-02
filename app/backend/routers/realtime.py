@@ -329,6 +329,7 @@ class ConnectionManager:
             return json.dumps(subset, sort_keys=True, default=str)
         subset = {k: message[k] for k in sorted(message) if k in (
             "type", "id", "ano", "action", "target_user", "setor", "origem",
+            "overwriteConfig",
             "gravacao_message_id", "message_id",
             "os_ano", "os_nro", "gravacao_externa_id",
         )}
@@ -628,6 +629,15 @@ async def send_notification(request: Request):
         body = await request.json()
         if not isinstance(body, dict):
             raise HTTPException(status_code=400, detail="Payload inválido.")
+        from services.admin_reload_state import (
+            is_admin_force_reload,
+            record_admin_reload,
+        )
+
+        if is_admin_force_reload(body):
+            record_admin_reload(
+                overwrite_config=bool(body.get("overwriteConfig")),
+            )
         await manager.broadcast(body)
         return {"status": "queued", "listeners": len(manager.active_connections)}
     except HTTPException:
@@ -635,6 +645,14 @@ async def send_notification(request: Request):
     except Exception as e:
         logger.error("Erro no notify: %s", e)
         return {"status": "error", "detail": "Erro ao enfileirar notificação."}
+
+
+@router.get("/api/realtime/admin-reload")
+def get_admin_reload_command():
+    """Epoch do último Atualizar Clients — fallback HTTP quando o WS falha."""
+    from services.admin_reload_state import get_admin_reload_state
+
+    return get_admin_reload_state()
 
 
 async def _handle_websocket(websocket: WebSocket) -> None:

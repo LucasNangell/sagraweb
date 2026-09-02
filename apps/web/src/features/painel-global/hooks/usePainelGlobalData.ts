@@ -4,6 +4,7 @@ import { fetchAndamentos } from "@/api/pcp";
 import { fetchSetores } from "@/api/auxLookups";
 import { useAuthStore } from "@/features/auth/authStore";
 import { useOsFiltersStore } from "@/features/os/osFiltersStore";
+import { isAdminForceReload } from "@/features/realtime/adminForceRefresh";
 import { useUserPreferenceSync } from "@/hooks/useUserPreferenceSync";
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 
@@ -31,6 +32,8 @@ import type {
 
 interface PainelWsMessage {
   type?: string;
+  action?: string;
+  origem?: string;
   overwriteConfig?: boolean;
 }
 
@@ -273,6 +276,9 @@ export function usePainelGlobalData() {
     path: "/ws",
     onMessage: (data) => {
       if (data.type === "force_refresh") {
+        if (isAdminForceReload(data)) {
+          return;
+        }
         void handleForceRefresh(data.overwriteConfig);
         return;
       }

@@ -76,3 +76,23 @@ class TestAPIAccessMiddleware:
         client = TestClient(app)
         res = client.post("/api/realtime/notify", json={"type": "system_update"})
         assert res.status_code == 403
+
+    def test_notify_denied_with_sagra_api_prefix(self, monkeypatch):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from security.api_auth import APIAccessMiddleware
+
+        app = FastAPI()
+        app.add_middleware(APIAccessMiddleware)
+
+        @app.post("/sagra/api/realtime/notify")
+        def notify():
+            return {"ok": True}
+
+        monkeypatch.setattr(
+            "security.notify_auth.is_notify_authorized",
+            lambda _request: False,
+        )
+        client = TestClient(app)
+        res = client.post("/sagra/api/realtime/notify", json={"type": "system_update"})
+        assert res.status_code == 403

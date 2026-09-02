@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef } from "react";
 
 import { useAuthStore } from "@/features/auth/authStore";
+import { isAdminForceReload } from "@/features/realtime/adminForceRefresh";
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 
 import {
@@ -166,6 +167,9 @@ export function useOsRealtimeSync({
         return;
       }
       if (data.type === "force_refresh") {
+        if (isAdminForceReload(data)) {
+          return;
+        }
         scheduleListRefresh(0);
         onForceRefresh?.();
         return;

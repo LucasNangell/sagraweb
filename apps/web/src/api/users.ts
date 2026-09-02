@@ -30,7 +30,7 @@ export async function fetchUsuariosOnline(): Promise<Array<string | number>> {
 
 export async function postForceRefresh(
   payload: ForceRefreshPayload,
-): Promise<{ status: string; detail?: string }> {
+): Promise<{ status: string; detail?: string; listeners?: number }> {
   const res = await fetch(apiUrl("/realtime/notify"), {
     method: "POST",
     credentials: "include",
@@ -41,6 +41,7 @@ export async function postForceRefresh(
   const data = (await res.json().catch(() => null)) as {
     status?: string;
     detail?: string;
+    listeners?: number;
   } | null;
 
   if (!res.ok) {

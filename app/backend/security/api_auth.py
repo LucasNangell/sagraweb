@@ -363,7 +363,7 @@ class APIAccessMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Notify — autenticação dedicada (secret / IP legado / MASTER+sessão)
-        if path == "/api/realtime/notify" and method == "POST":
+        if api_path == "/api/realtime/notify" and method == "POST":
             from security.notify_auth import is_notify_authorized
 
             if is_notify_authorized(request):

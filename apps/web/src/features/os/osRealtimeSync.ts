@@ -22,6 +22,7 @@ export interface OsSystemUpdateMessage {
   id?: number;
   ano?: number;
   action?: string;
+  origem?: string;
   setor?: string;
   sub_os_id?: number;
   scope?: string;

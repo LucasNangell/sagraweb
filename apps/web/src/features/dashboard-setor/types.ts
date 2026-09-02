@@ -40,6 +40,7 @@ export interface DashboardWsMessage {
   id?: number;
   ano?: number;
   action?: string;
+  origem?: string;
   situacao?: string;
   sub_os_id?: number;
 }

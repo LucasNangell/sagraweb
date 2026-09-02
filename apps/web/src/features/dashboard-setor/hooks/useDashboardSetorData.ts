@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { fetchAndamentos } from "@/api/pcp";
 import { fetchSetores } from "@/api/auxLookups";
+import { isAdminForceReload } from "@/features/realtime/adminForceRefresh";
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 
 import { fetchDashboardSectorData } from "../api";
@@ -431,6 +432,9 @@ export function useDashboardSetorData({
     path: "/ws",
     onMessage: (data) => {
       if (data.type === "force_refresh") {
+        if (isAdminForceReload(data)) {
+          return;
+        }
         void fetchDataRef.current();
         return;
       }

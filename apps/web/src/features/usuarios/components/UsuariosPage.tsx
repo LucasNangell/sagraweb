@@ -81,7 +81,7 @@ export function UsuariosPage() {
 
     setForceAction(overwriteConfig ? "reset" : "refresh");
     try {
-      await forceRefreshMutation.mutateAsync({
+      const result = await forceRefreshMutation.mutateAsync({
         type: "force_refresh",
         action: "reload",
         id: 0,
@@ -89,7 +89,13 @@ export function UsuariosPage() {
         origem: "admin_panel",
         ...(overwriteConfig ? { overwriteConfig: true } : {}),
       });
-      showSuccess("Comando enviado com sucesso!");
+      if (result.listeners === 0) {
+        showSuccess(
+          "Comando enviado. Nenhum client com WebSocket agora; eles atualizam no próximo poll.",
+        );
+      } else {
+        showSuccess("Comando enviado com sucesso!");
+      }
     } catch (err) {
       showError(
         err instanceof Error ? err.message : "Erro de conexão ao enviar comando.",

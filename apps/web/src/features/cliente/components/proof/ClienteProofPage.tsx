@@ -44,6 +44,7 @@ import {
 import { ClienteProofStatusBadge, type ProofUiStatus } from "./ClienteProofStatusBadge";
 import { ClienteProofViewer } from "./ClienteProofViewer";
 import { resolvePdfViewerFit } from "./resolvePdfViewerFit";
+import { useProofGalNomeLookup } from "./useProofGalNomeLookup";
 
 interface ClienteProofPageProps {
   token: string;
@@ -162,6 +163,16 @@ export function ClienteProofPage({
     Boolean(isPapelaria && (papelaria?.campos_formulario?.length ?? 0) > 0);
   const portalTourStartedRef = useRef(false);
   const portalAlteracoesTourStartedRef = useRef(false);
+
+  const { pending: nomeLookupPending, lockNome: nomeLocked } = useProofGalNomeLookup({
+    enabled: Boolean(publicPortal && token && osId && ano && !done),
+    ano,
+    osId,
+    token,
+    pontoDigits: ponto,
+    nomeCliente,
+    onNomeChange: setNomeCliente,
+  });
 
   useEffect(() => {
     if (!publicPortal || !proofQuery.data || done || alteracoesRequestMode) {
@@ -661,24 +672,31 @@ export function ClienteProofPage({
               <div className="mt-4 space-y-3">
                 <label className="flex flex-col gap-1 text-sm">
                   <span className="font-medium text-neutral-700">
-                    Nome <span className="text-red-600">*</span>
+                    Número de ponto <span className="text-red-600">*</span>
                   </span>
-                  <input
-                    className="min-h-11 rounded-xl border border-sagra-border px-3 py-2 text-sm"
-                    value={nomeCliente}
-                    onChange={(e) => setNomeCliente(e.target.value)}
+                  <ClienteProofPontoInput
+                    value={ponto}
+                    onChange={(value) => {
+                      setPonto(value);
+                      setNomeCliente("");
+                    }}
+                    withPrefix={publicPortal}
                     disabled={respondMutation.isPending}
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-sm">
                   <span className="font-medium text-neutral-700">
-                    Número de ponto <span className="text-red-600">*</span>
+                    Nome <span className="text-red-600">*</span>
+                    {nomeLookupPending ? (
+                      <span className="ml-2 font-normal text-neutral-500">Buscando…</span>
+                    ) : null}
                   </span>
-                  <ClienteProofPontoInput
-                    value={ponto}
-                    onChange={setPonto}
-                    withPrefix={publicPortal}
-                    disabled={respondMutation.isPending}
+                  <input
+                    className="min-h-11 rounded-xl border border-sagra-border px-3 py-2 text-sm disabled:bg-neutral-50 disabled:text-neutral-500"
+                    value={nomeCliente}
+                    onChange={(e) => setNomeCliente(e.target.value)}
+                    disabled={respondMutation.isPending || nomeLocked}
+                    aria-busy={nomeLookupPending || undefined}
                   />
                 </label>
                 {!publicPortal ? (
@@ -747,7 +765,10 @@ export function ClienteProofPage({
               ponto={ponto}
               observacao={observacao}
               onNomeChange={setNomeCliente}
-              onPontoChange={setPonto}
+              onPontoChange={(value) => {
+                setPonto(value);
+                setNomeCliente("");
+              }}
               onObservacaoChange={setObservacao}
               onApproveClick={() => setModal("approve")}
               onRejectClick={handleRejectClick}
@@ -755,6 +776,8 @@ export function ClienteProofPage({
               errorMsg={errorMsg}
               requireObsForReject={!isPapelaria}
               publicPortal={publicPortal}
+              nomeLookupPending={nomeLookupPending}
+              nomeLocked={nomeLocked}
             />
           ) : null}
         </div>

@@ -4,6 +4,29 @@ import { describe, expect, it, vi } from "vitest";
 import { ClienteProofActions } from "./ClienteProofActions";
 
 describe("ClienteProofActions", () => {
+  it("exibe ponto acima do nome", () => {
+    render(
+      <ClienteProofActions
+        nomeCliente=""
+        ponto=""
+        observacao=""
+        onNomeChange={vi.fn()}
+        onPontoChange={vi.fn()}
+        onObservacaoChange={vi.fn()}
+        onApproveClick={vi.fn()}
+        onRejectClick={vi.fn()}
+        isPending={false}
+        errorMsg={null}
+      />,
+    );
+
+    const ponto = screen.getByLabelText(/número de ponto/i);
+    const nome = screen.getByLabelText(/^nome/i);
+    expect(
+      Boolean(ponto.compareDocumentPosition(nome) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true);
+  });
+
   it("exige nome e ponto para aprovar", () => {
     const onApprove = vi.fn();
     render(
@@ -134,5 +157,48 @@ describe("ClienteProofActions", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /aprovar prova/i }));
     expect(onApprove).toHaveBeenCalledTimes(1);
+  });
+
+  it("bloqueia o nome enquanto o lookup está em andamento", () => {
+    render(
+      <ClienteProofActions
+        nomeCliente=""
+        ponto="918713"
+        observacao=""
+        onNomeChange={vi.fn()}
+        onPontoChange={vi.fn()}
+        onObservacaoChange={vi.fn()}
+        onApproveClick={vi.fn()}
+        onRejectClick={vi.fn()}
+        isPending={false}
+        errorMsg={null}
+        publicPortal
+        nomeLookupPending
+        nomeLocked
+      />,
+    );
+
+    expect(screen.getByLabelText(/^nome/i)).toBeDisabled();
+    expect(screen.getByText(/buscando/i)).toBeInTheDocument();
+  });
+
+  it("libera o nome quando o lookup terminou sem resultado", () => {
+    render(
+      <ClienteProofActions
+        nomeCliente=""
+        ponto="918713"
+        observacao=""
+        onNomeChange={vi.fn()}
+        onPontoChange={vi.fn()}
+        onObservacaoChange={vi.fn()}
+        onApproveClick={vi.fn()}
+        onRejectClick={vi.fn()}
+        isPending={false}
+        errorMsg={null}
+        publicPortal
+      />,
+    );
+
+    expect(screen.getByLabelText(/^nome/i)).not.toBeDisabled();
   });
 });

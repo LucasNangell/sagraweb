@@ -62,3 +62,16 @@ class TestRateLimit:
         request = _mock_request("GET", "/api/os/search")
         for _ in range(100):
             assert rate_limit.check_rate_limit(request) is None
+
+    def test_pessoa_lookup_path_is_limited(self, monkeypatch):
+        from security import rate_limit
+
+        rate_limit._store.clear()
+        monkeypatch.setenv("SAGRA_RATE_LIMIT_ENABLED", "true")
+
+        request = _mock_request("GET", "/api/client/proof/2026/100/pessoa")
+        for _ in range(20):
+            assert rate_limit.check_rate_limit(request) is None
+        blocked = rate_limit.check_rate_limit(request)
+        assert blocked is not None
+        assert blocked.status_code == 429

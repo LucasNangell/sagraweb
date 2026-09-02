@@ -110,7 +110,7 @@ export const portalAprovacaoTour: GuidedTour = {
     {
       id: "resposta",
       title: "Identifique-se e responda",
-      body: "Informe nome e número de ponto para liberar os botões. Depois escolha Aprovar prova ou Solicitar alterações.",
+      body: "Informe o número de ponto e o nome para liberar os botões. Depois escolha Aprovar prova ou Solicitar alterações.",
       target: "proof-actions",
       placement: "right",
       advance: "next",

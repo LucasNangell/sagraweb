@@ -407,7 +407,26 @@ def get_proof_portal_data(ano: int, os_id: int, token: str = Query(...)):
     return payload
 
 
+@router.get("/client/proof/{ano}/{os_id}/pessoa")
+def lookup_proof_pessoa(
+    ano: int,
+    os_id: int,
+    token: str = Query(...),
+    ponto: str = Query(..., min_length=1, max_length=32),
+):
+    """Resolve o nome no GAL a partir do ponto. Token de prova obrigatório."""
+    from services.proof_gal_lookup_service import (
+        is_valid_ponto_digits,
+        lookup_display_name_for_ponto,
+        normalize_ponto_digits,
+    )
 
+    _validate_proof_token(os_id, ano, token)
+    digits = normalize_ponto_digits(ponto)
+    if not is_valid_ponto_digits(digits):
+        raise HTTPException(status_code=400, detail="Ponto inválido.")
+    nome = lookup_display_name_for_ponto(digits)
+    return {"nome": nome}
 
 
 @router.get("/client/proof/{ano}/{os_id}/pdf")

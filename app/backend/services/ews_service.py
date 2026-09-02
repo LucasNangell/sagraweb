@@ -5,6 +5,7 @@ import base64
 import hashlib
 import logging
 import os
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -14,6 +15,8 @@ from lxml import etree
 
 
 logger = logging.getLogger(__name__)
+
+_PONTO_ALIAS_RE = re.compile(r"^P_\d+$", re.IGNORECASE)
 
 
 class EWSUnavailableError(RuntimeError):
@@ -179,6 +182,30 @@ class EWSService:
             "m": "http://schemas.microsoft.com/exchange/services/2006/messages",
             "t": "http://schemas.microsoft.com/exchange/services/2006/types",
         }
+
+    @staticmethod
+    def _contact_person_name(contact, mailbox_name: str, ns: Dict[str, str]) -> str:
+        """Prefere DisplayName/GivenName; Mailbox.Name no GAL da Câmara costuma ser P_1234."""
+        mailbox_name = (mailbox_name or "").strip()
+        if contact is None:
+            return mailbox_name
+        full = (contact.findtext("./t:CompleteName/t:FullName", namespaces=ns) or "").strip()
+        display = (contact.findtext("./t:DisplayName", namespaces=ns) or "").strip()
+        given = (contact.findtext("./t:GivenName", namespaces=ns) or "").strip()
+        if not given:
+            given = (
+                contact.findtext("./t:CompleteName/t:FirstName", namespaces=ns) or ""
+            ).strip()
+        surname = (contact.findtext("./t:Surname", namespaces=ns) or "").strip()
+        if not surname:
+            surname = (
+                contact.findtext("./t:CompleteName/t:LastName", namespaces=ns) or ""
+            ).strip()
+        composed = " ".join(part for part in (given, surname) if part)
+        for candidate in (full, display, composed):
+            if candidate and not _PONTO_ALIAS_RE.fullmatch(candidate):
+                return candidate
+        return mailbox_name
 
     @staticmethod
     def _stable_short_id(s: str) -> int:
@@ -871,11 +898,7 @@ class EWSService:
                 if contact is not None:
                     cargo = (contact.findtext("./t:JobTitle", namespaces=ns) or "").strip()
                     departamento = (contact.findtext("./t:Department", namespaces=ns) or "").strip()
-                    full_name = (
-                        contact.findtext("./t:CompleteName/t:FullName", namespaces=ns) or ""
-                    ).strip()
-                    if full_name:
-                        name = full_name
+                name = self._contact_person_name(contact, name, ns)
 
             results.append(
                 {

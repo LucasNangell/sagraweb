@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from collections import defaultdict, deque
 from threading import Lock
@@ -30,6 +31,16 @@ _RATE_RULES: dict[tuple[str, str], tuple[int, int]] = {
     ("POST", "/api/users/identify"): (20, 900),
 }
 
+# (method, path_regex, bucket_alias, (max_requests, window_seconds))
+_RATE_PATH_REGEX: list[tuple[str, re.Pattern[str], str, tuple[int, int]]] = [
+    (
+        "GET",
+        re.compile(r"^/api/client/proof/\d+/\d+/pessoa$"),
+        "proof-pessoa-lookup",
+        (20, 60),
+    ),
+]
+
 _store: Dict[str, Deque[float]] = defaultdict(deque)
 _lock = Lock()
 
@@ -56,11 +67,18 @@ def check_rate_limit(request: Request) -> JSONResponse | None:
     method = request.method.upper()
     path = _normalize_path(request.url.path)
     rule = _RATE_RULES.get((method, path))
+    bucket_path = path
+    if rule is None:
+        for regex_method, pattern, alias, regex_rule in _RATE_PATH_REGEX:
+            if regex_method == method and pattern.match(path):
+                rule = regex_rule
+                bucket_path = alias
+                break
     if rule is None:
         return None
 
     max_requests, window_seconds = rule
-    key = _rate_key(request, method, path)
+    key = _rate_key(request, method, bucket_path)
     now = time.monotonic()
     cutoff = now - window_seconds
 

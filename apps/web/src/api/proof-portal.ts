@@ -118,6 +118,16 @@ export async function fetchProofPreviewPages(
   return proofApiFetch(`/client/proof/${ano}/${osId}/preview-pages?${params}`);
 }
 
+export async function fetchProofPessoaNome(
+  ano: number,
+  osId: number,
+  token: string,
+  pontoDigits: string,
+): Promise<{ nome: string | null }> {
+  const params = new URLSearchParams({ token, ponto: pontoDigits });
+  return proofApiFetch(`/client/proof/${ano}/${osId}/pessoa?${params}`);
+}
+
 /** Manifest do flipbook da Prova WEB no escopo do token do cliente. */
 export async function fetchProofFlipbookManifest(
   ano: number,

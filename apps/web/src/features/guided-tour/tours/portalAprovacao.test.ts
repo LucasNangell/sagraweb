@@ -40,6 +40,7 @@ describe("portalAprovacao waitUntil / shouldSkip", () => {
     );
 
     const resposta = tour?.steps.find((s) => s.id === "resposta");
+    expect(resposta?.body).toContain("número de ponto e o nome");
     expect(resposta?.advance).toBe("next");
     expect(resposta?.target).toBe("proof-actions");
     expect(resposta?.waitUntil).toBeUndefined();

@@ -18,6 +18,9 @@ interface ClienteProofActionsProps {
   requireObsForReject?: boolean;
   /** Portal público /portal/aprovacao — layout e validação específicos. */
   publicPortal?: boolean;
+  nomeLookupPending?: boolean;
+  /** Bloqueia o nome enquanto o lookup GAL do ponto não terminou. */
+  nomeLocked?: boolean;
 }
 
 export function ClienteProofActions({
@@ -34,6 +37,8 @@ export function ClienteProofActions({
   disabled = false,
   requireObsForReject = true,
   publicPortal = false,
+  nomeLookupPending = false,
+  nomeLocked = false,
 }: ClienteProofActionsProps) {
   const nomeOk = nomeCliente.trim().length > 0;
   const pontoOk = ponto.replace(/\D/g, "").length > 0;
@@ -50,22 +55,7 @@ export function ClienteProofActions({
         Confira o arquivo enviado e registre sua aprovação ou solicitação de ajuste.
       </p>
 
-      <label className="mt-4 flex flex-col gap-1 text-sm" data-tour="proof-field-nome">
-        <span className="font-medium text-neutral-700">
-          Nome <span className="text-red-600">*</span>
-        </span>
-        <input
-          className="min-h-11 rounded-xl border border-sagra-border px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary-blue"
-          value={nomeCliente}
-          onChange={(e) => onNomeChange(e.target.value)}
-          placeholder="Nome completo"
-          disabled={disabled || isPending}
-          required
-          aria-required="true"
-        />
-      </label>
-
-      <label className="mt-3 flex flex-col gap-1 text-sm" data-tour="proof-field-ponto">
+      <label className="mt-4 flex flex-col gap-1 text-sm" data-tour="proof-field-ponto">
         <span className="font-medium text-neutral-700">
           Número de ponto <span className="text-red-600">*</span>
         </span>
@@ -74,6 +64,25 @@ export function ClienteProofActions({
           onChange={onPontoChange}
           withPrefix={publicPortal}
           disabled={disabled || isPending}
+        />
+      </label>
+
+      <label className="mt-3 flex flex-col gap-1 text-sm" data-tour="proof-field-nome">
+        <span className="font-medium text-neutral-700">
+          Nome <span className="text-red-600">*</span>
+          {nomeLookupPending ? (
+            <span className="ml-2 font-normal text-neutral-500">Buscando…</span>
+          ) : null}
+        </span>
+        <input
+          className="min-h-11 rounded-xl border border-sagra-border px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary-blue disabled:bg-neutral-50 disabled:text-neutral-500"
+          value={nomeCliente}
+          onChange={(e) => onNomeChange(e.target.value)}
+          placeholder="Nome completo"
+          disabled={disabled || isPending || nomeLocked}
+          required
+          aria-required="true"
+          aria-busy={nomeLookupPending || undefined}
         />
       </label>
 

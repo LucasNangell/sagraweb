@@ -73,10 +73,49 @@ class TestResolveNames:
         svc = EWSService(ews_url="https://example.test/EWS/Exchange.asmx")
         svc._post = MagicMock(return_value=etree.fromstring(xml))
 
-        assert svc.resolve_names("inexistente") == []
+    def test_usa_display_name_quando_mailbox_e_alias_ponto(self):
+        from services.ews_service import EWSService
 
+        xml = b"""
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">
+  <soap:Body>
+    <m:ResolveNamesResponse xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+                             xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">
+      <m:ResponseMessages>
+        <m:ResolveNamesResponseMessage ResponseClass="Success">
+          <m:ResponseCode>NoError</m:ResponseCode>
+          <m:ResolutionSet TotalItemsInView="1" IncludesLastItemInRange="true">
+            <t:Resolution>
+              <t:Mailbox>
+                <t:Name>P_918713</t:Name>
+                <t:EmailAddress>pessoa@camara.leg.br</t:EmailAddress>
+                <t:RoutingType>SMTP</t:RoutingType>
+              </t:Mailbox>
+              <t:Contact>
+                <t:DisplayName>Joao da Silva</t:DisplayName>
+                <t:GivenName>Joao</t:GivenName>
+                <t:Surname>da Silva</t:Surname>
+                <t:JobTitle>Analista</t:JobTitle>
+                <t:Department>DEAPA</t:Department>
+              </t:Contact>
+            </t:Resolution>
+          </m:ResolutionSet>
+        </m:ResolveNamesResponseMessage>
+      </m:ResponseMessages>
+    </m:ResolveNamesResponse>
+  </soap:Body>
+</soap:Envelope>
+"""
+        svc = EWSService(ews_url="https://example.test/EWS/Exchange.asmx")
+        svc._post = MagicMock(return_value=etree.fromstring(xml))
 
-class TestGalResolveRoute:
+        items = svc.resolve_names("P_918713")
+
+        assert len(items) == 1
+        assert items[0]["name"] == "Joao da Silva"
+        assert items[0]["email"] == "pessoa@camara.leg.br"
     def test_resolve_gal_contacts(self, monkeypatch):
         from routers.email_routes import resolve_gal_contacts
 

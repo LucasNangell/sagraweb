@@ -232,7 +232,12 @@ def test_create_session_with_arquivos_overwrites_active(mock_db, mock_validate):
     )
     assert session_id == 99
     assert any("UPDATE tab_os_gravacao_externa" in s and "cancelada" in s for s in captured_sql)
-    assert any("INSERT INTO tab_os_gravacao_externa" in s for s in captured_sql)
+    assert any(
+        "INSERT INTO tab_os_gravacao_externa" in s
+        and "Observacao" in s
+        and "arquivo" not in s
+        for s in captured_sql
+    )
 
 
 @patch("services.gravacao_externa_service._notify_iniciar_gravacao")

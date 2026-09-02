@@ -126,6 +126,7 @@ class GravacaoExternaDetailResponse(BaseModel):
     recebido_por_ponto: Optional[str] = None
     recebido_por_nome: Optional[str] = None
     pagamento_nf_em: Optional[datetime] = None
+    observacao: Optional[str] = None
     arquivos: List[GravacaoExternaArquivoItem]
     mensagens: List[GravacaoExternaMensagemItem]
 

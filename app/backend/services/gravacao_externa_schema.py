@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS tab_os_gravacao_externa (
   Status VARCHAR(16) NOT NULL DEFAULT 'pendente',
   IniciadoPorPonto VARCHAR(32) DEFAULT NULL,
   IniciadoEm DATETIME DEFAULT NULL,
+  Observacao TEXT DEFAULT NULL,
   CriadoEm DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (Id),
   KEY idx_ge_os (OsAno, OsNro),
@@ -173,6 +174,11 @@ def _apply_externa_migrations() -> None:
             "tab_os_gravacao_externa",
             "PagamentoNfEm",
             "ALTER TABLE tab_os_gravacao_externa ADD COLUMN PagamentoNfEm DATETIME DEFAULT NULL",
+        ),
+        (
+            "tab_os_gravacao_externa",
+            "Observacao",
+            "ALTER TABLE tab_os_gravacao_externa ADD COLUMN Observacao TEXT DEFAULT NULL",
         ),
         (
             "tab_os_gravacao_externa_arquivo",

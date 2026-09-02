@@ -144,6 +144,162 @@ def test_lancar_externa_requires_specific_permission():
     _require_lancar_externa_permission(request)
 
 
+def test_insert_pendente_session_persists_observacao():
+    from services.gravacao_pendente_service import insert_pendente_session_cursor
+
+    cursor = MagicMock()
+    cursor.lastrowid = 8
+    captured: list[tuple[str, tuple]] = []
+
+    def execute(sql, params=None):
+        captured.append((" ".join(str(sql).split()), params or ()))
+
+    cursor.execute.side_effect = execute
+
+    insert_pendente_session_cursor(
+        cursor,
+        ano=2026,
+        os_id=100,
+        cod_status="001002026-03",
+        ponto_fmt="918.713",
+        lancado_por_nome="Test",
+        validated_arquivos=[
+            {
+                "absolute_path": r"\\server\a.tif",
+                "nome": "a.tif",
+                "tamanho_bytes": 10,
+                "ordem": 0,
+                "maquina": "M1",
+            }
+        ],
+        validated_chapas=[{"maquina": "M1", "quantidade": 2}],
+        observacao="  urgente frente  ",
+    )
+    insert_sql = next(s for s, _ in captured if "INSERT INTO tab_os_gravacao_pendente" in s)
+    assert "Observacao" in insert_sql
+    insert_params = next(p for s, p in captured if "INSERT INTO tab_os_gravacao_pendente" in s)
+    assert insert_params[-1] == "urgente frente"
+
+
+def test_insert_pendente_session_blank_observacao_is_null():
+    from services.gravacao_pendente_service import insert_pendente_session_cursor
+
+    cursor = MagicMock()
+    cursor.lastrowid = 8
+    captured: list[tuple] = []
+
+    def execute(sql, params=None):
+        captured.append((" ".join(str(sql).split()), params or ()))
+
+    cursor.execute.side_effect = execute
+
+    insert_pendente_session_cursor(
+        cursor,
+        ano=2026,
+        os_id=100,
+        cod_status="001002026-03",
+        ponto_fmt="918.713",
+        lancado_por_nome="Test",
+        validated_arquivos=[
+            {
+                "absolute_path": r"\\server\a.tif",
+                "nome": "a.tif",
+                "tamanho_bytes": 10,
+                "ordem": 0,
+                "maquina": "M1",
+            }
+        ],
+        validated_chapas=[{"maquina": "M1", "quantidade": 1}],
+        observacao="   ",
+    )
+    insert_params = next(p for s, p in captured if "INSERT INTO tab_os_gravacao_pendente" in s)
+    assert insert_params[-1] is None
+
+
+@patch("services.gravacao_pendente_service.build_pendente_detail", return_value={"id": 1})
+@patch("services.gravacao_pendente_service.list_active_pendente_by_juntada")
+@patch("services.gravacao_pendente_service.get_active_pendente_session")
+@patch("services.gravacao_pendente_service.db")
+def test_update_observacao_syncs_juntada(mock_db, get_session, list_juntada, _build):
+    from services.gravacao_pendente_service import update_pendente_session_observacao
+
+    session = {
+        "id": 1,
+        "status": "ativa",
+        "juntada_grupo_id": "g1",
+        "os_ano": 2026,
+        "os_nro": 100,
+    }
+    get_session.return_value = session
+    list_juntada.return_value = [{"id": 1}, {"id": 2}]
+    executed: list[tuple] = []
+
+    def fake_tx(ops):
+        cursor = MagicMock()
+
+        def execute(sql, params=None):
+            executed.append((" ".join(str(sql).split()), params))
+
+        cursor.execute.side_effect = execute
+        return [op(cursor) for op in ops]
+
+    mock_db.execute_transaction.side_effect = fake_tx
+
+    update_pendente_session_observacao(ano=2026, os_id=100, observacao="  nova obs  ")
+    updates = [p for s, p in executed if "SET Observacao" in s]
+    assert updates == [("nova obs", 1), ("nova obs", 2)]
+
+
+def test_observacao_edit_requires_pendente_permission():
+    from types import SimpleNamespace
+
+    from routers.gravacao_pendente_routes import _require_observacao_edit_permission
+
+    request = SimpleNamespace(state=SimpleNamespace(sagra_permissions={}))
+    with pytest.raises(HTTPException) as exc:
+        _require_observacao_edit_permission(request)
+    assert exc.value.status_code == 403
+
+
+@patch("routers.gravacao_pendente_routes.fetch_user_fornecedor", return_value=True)
+def test_observacao_edit_rejects_fornecedor(_mock_fornecedor):
+    from security.session_auth import SessionData
+    from types import SimpleNamespace
+
+    from routers.gravacao_pendente_routes import _require_observacao_edit_permission
+
+    request = SimpleNamespace(
+        state=SimpleNamespace(
+            sagra_permissions={"sb_gravacao_pendente": True},
+            sagra_session=SessionData(
+                ponto=918713, nome="Forn", ip="127.0.0.1", iat=1
+            ),
+        )
+    )
+    with pytest.raises(HTTPException) as exc:
+        _require_observacao_edit_permission(request)
+    assert exc.value.status_code == 403
+    assert "Fornecedor" in exc.value.detail
+
+
+@patch("routers.gravacao_pendente_routes.fetch_user_fornecedor", return_value=False)
+def test_observacao_edit_allows_internal(_mock_fornecedor):
+    from security.session_auth import SessionData
+    from types import SimpleNamespace
+
+    from routers.gravacao_pendente_routes import _require_observacao_edit_permission
+
+    request = SimpleNamespace(
+        state=SimpleNamespace(
+            sagra_permissions={"sb_gravacao_pendente": True},
+            sagra_session=SessionData(
+                ponto=918713, nome="Op", ip="127.0.0.1", iat=1
+            ),
+        )
+    )
+    _require_observacao_edit_permission(request)
+
+
 def test_format_gravacao_pendente_obs():
     text = format_gravacao_pendente_obs(
         [{"maquina": "M1", "quantidade": 5}],
@@ -337,6 +493,10 @@ def test_insert_pendente_session_cancels_previous_active():
     assert any("UPDATE tab_os_gravacao_pendente" in s and "cancelada" in s for s in captured_sql)
     assert any(
         "INSERT INTO tab_os_gravacao_pendente" in s and "JuntadaGrupoId" in s
+        for s in captured_sql
+    )
+    assert any(
+        "INSERT INTO tab_os_gravacao_pendente" in s and "Observacao" in s
         for s in captured_sql
     )
     assert any("INSERT INTO tab_os_gravacao_pendente_arquivo" in s for s in captured_sql)

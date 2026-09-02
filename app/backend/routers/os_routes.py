@@ -1747,6 +1747,7 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
                 validated_chapas=validated_gp_chapas,
                 cliente=lookup_os_solicitante(ano, id),
                 juntada_grupo_id=gp_juntada_grupo_id,
+                observacao=item.obs,
             )
             for j_ano, j_nr in gp_juntadas:
                 j_cod = _insert_andamento_for(j_nr, j_ano)
@@ -1761,6 +1762,7 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
                     validated_chapas=validated_gp_chapas,
                     cliente=lookup_os_solicitante(j_ano, j_nr),
                     juntada_grupo_id=gp_juntada_grupo_id,
+                    observacao=item.obs,
                 )
 
         return HistoryAddResponse(new_id=new_cod)

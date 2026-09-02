@@ -28,6 +28,7 @@ import {
 import { GravacaoExternaActions, GravacaoExternaStatusBadge } from "./GravacaoExternaActions";
 import { GravacaoExternaChatPanel } from "./GravacaoExternaChatPanel";
 import { GravacaoExternaEntregaModal } from "./GravacaoExternaEntregaModal";
+import { GravacaoObservacaoBox } from "./GravacaoObservacaoBox";
 import {
   GravacaoExternaArquivosPanel,
   GravacaoExternaPreview,
@@ -689,6 +690,7 @@ export function GravacaoExternaTab() {
               {downloadError}
             </div>
           ) : null}
+          <GravacaoObservacaoBox observacao={detail.observacao} />
           <div className="min-h-0 flex-1 overflow-y-auto">
             <GravacaoExternaArquivosPanel
               ano={selected.ano}

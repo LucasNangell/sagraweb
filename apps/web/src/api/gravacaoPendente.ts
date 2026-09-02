@@ -48,6 +48,7 @@ export interface GravacaoPendenteDetail {
   enviada_em?: string | null;
   enviada_por_ponto?: string | null;
   criado_em?: string | null;
+  observacao?: string | null;
   arquivos: GravacaoPendenteArquivo[];
   chapas: GravacaoPendenteChapa[];
 }
@@ -318,6 +319,21 @@ export async function enviarGravacaoPendenteParaExterna(
         : {}),
     }),
   });
+}
+
+export async function patchGravacaoPendenteObservacao(
+  ano: number,
+  nrOs: number,
+  observacao: string,
+) {
+  return apiFetch<GravacaoPendenteDetail>(
+    `/gravacao-pendente/${ano}/${nrOs}/observacao`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ observacao }),
+    },
+  );
 }
 
 export async function updateGravacaoPendenteArquivos(

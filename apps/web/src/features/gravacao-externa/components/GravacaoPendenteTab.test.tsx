@@ -43,6 +43,10 @@ vi.mock("@/api/hooks/useGravacaoPendente", () => ({
     mutateAsync: patchControle,
     isPending: false,
   }),
+  usePatchGravacaoPendenteObservacaoMutation: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
   useDeleteGravacaoPendenteControleMutation: () => ({
     mutateAsync: deleteControle,
     isPending: false,
@@ -52,6 +56,11 @@ vi.mock("@/api/hooks/useGravacaoPendente", () => ({
 
 vi.mock("@/features/auth/useAccessControl", () => ({
   useAccessControl: () => ({ can: () => canDelete }),
+}));
+
+vi.mock("@/features/auth/authStore", () => ({
+  useAuthStore: (sel: (s: { user: { fornecedor?: boolean } | null }) => unknown) =>
+    sel({ user: { fornecedor: false } }),
 }));
 
 vi.mock("@/hooks/useMatchMedia", () => ({ useMatchMedia: () => false }));

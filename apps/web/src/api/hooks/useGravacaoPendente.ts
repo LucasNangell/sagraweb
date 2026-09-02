@@ -11,6 +11,7 @@ import {
   fetchGravacaoPendenteHistorico,
   fetchGravacaoPendenteOsList,
   patchGravacaoPendenteControle,
+  patchGravacaoPendenteObservacao,
   patchGravacaoPendentePagamentoNf,
   putGravacaoPendenteFornecedorCotas,
   putGravacaoPendenteMaquinasConfig,
@@ -220,6 +221,29 @@ export function useEnviarGravacaoPendenteMutation() {
       });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.gravacaoExterna.prefix,
+      });
+    },
+  });
+}
+
+export function usePatchGravacaoPendenteObservacaoMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      ano,
+      nrOs,
+      observacao,
+    }: {
+      ano: number;
+      nrOs: number;
+      observacao: string;
+    }) => patchGravacaoPendenteObservacao(ano, nrOs, observacao),
+    onSuccess: (_data, vars) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.gravacaoPendente.detail(vars.ano, vars.nrOs),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.gravacaoPendente.prefix,
       });
     },
   });

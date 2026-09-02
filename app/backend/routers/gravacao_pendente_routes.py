@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
+from routers.setor_painel_routes import fetch_user_fornecedor
 from security.session_auth import SessionData, require_session
 from services.gravacao_externa_service import (
     ALLOWED_EXTENSIONS,
@@ -33,6 +34,7 @@ from services.gravacao_pendente_service import (
     update_cota_inicial_chapas,
     update_pagamento_nf,
     update_pendente_session_arquivos,
+    update_pendente_session_observacao,
     upsert_fornecedor_cota,
     upsert_maquina_config,
     user_can_access_pendente_session,
@@ -96,6 +98,7 @@ class GravacaoPendenteDetailResponse(BaseModel):
     status: str
     enviada_em: Optional[datetime] = None
     enviada_por_ponto: Optional[str] = None
+    observacao: Optional[str] = None
     criado_em: Optional[datetime] = None
     arquivos: List[GravacaoPendenteArquivoItem]
     chapas: List[GravacaoPendenteChapaItem]
@@ -287,6 +290,10 @@ class GravacaoPendenteArquivosUpdate(BaseModel):
     chapas: Optional[List[GravacaoPendenteChapaInput]] = None
 
 
+class GravacaoPendenteObservacaoUpdate(BaseModel):
+    observacao: str = ""
+
+
 class GravacaoPendenteChapasEstimateResponse(BaseModel):
     total_chapas: int = 0
     fonte: str = "none"
@@ -333,6 +340,16 @@ def _require_lancar_externa_permission(request: Request) -> None:
         raise HTTPException(
             status_code=403,
             detail="Permissão para lançar gravação externa necessária.",
+        )
+
+
+def _require_observacao_edit_permission(request: Request) -> None:
+    _require_pendente_permission(request)
+    ponto = _get_request_session(request).ponto
+    if fetch_user_fornecedor(ponto):
+        raise HTTPException(
+            status_code=403,
+            detail="Fornecedor não pode editar a observação.",
         )
 
 
@@ -571,6 +588,33 @@ def put_gravacao_pendente_arquivos(
             if body.chapas is not None
             else None
         ),
+    )
+    return GravacaoPendenteDetailResponse.model_validate(detail)
+
+
+@router.patch(
+    "/gravacao-pendente/{ano}/{id}/observacao",
+    response_model=GravacaoPendenteDetailResponse,
+)
+def patch_gravacao_pendente_observacao(
+    request: Request,
+    ano: int,
+    id: int,
+    body: GravacaoPendenteObservacaoUpdate,
+):
+    _require_observacao_edit_permission(request)
+    session = get_active_pendente_session(ano, id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão de Gravação Pendente não encontrada.")
+    require_pendente_session_access(
+        session,
+        ponto=str(_get_request_session(request).ponto),
+        has_pendente_permission=_has_pendente_permission(request),
+    )
+    detail = update_pendente_session_observacao(
+        ano=ano,
+        os_id=id,
+        observacao=body.observacao,
     )
     return GravacaoPendenteDetailResponse.model_validate(detail)
 

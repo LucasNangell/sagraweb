@@ -31,9 +31,11 @@ import {
   useGravacaoPendenteHistorico,
   useGravacaoPendenteOsList,
   usePatchGravacaoPendenteControleMutation,
+  usePatchGravacaoPendenteObservacaoMutation,
 } from "@/api/hooks/useGravacaoPendente";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useAccessControl } from "@/features/auth/useAccessControl";
+import { useAuthStore } from "@/features/auth/authStore";
 import { useMatchMedia } from "@/hooks/useMatchMedia";
 import { formatDateBr, formatDateTimeBr } from "@/lib/format";
 import {
@@ -41,6 +43,7 @@ import {
   formatOsJuntadaLabel,
 } from "../utils/formatOsJuntadaLabel";
 import { GravacaoFornecedorSelectModal } from "./GravacaoFornecedorSelectModal";
+import { GravacaoObservacaoBox } from "./GravacaoObservacaoBox";
 import { GravacaoPendenteControleEditModal } from "./GravacaoPendenteControleEditModal";
 import { GravacaoPendenteHistoricoCota } from "./GravacaoPendenteHistoricoCota";
 import {
@@ -92,8 +95,10 @@ function PendenteStatusBadge({ status }: { status: string }) {
 
 export function GravacaoPendenteTab() {
   const { can } = useAccessControl();
+  const user = useAuthStore((s) => s.user);
   const canDeleteControle = can("sb_gravacao_pendente_excluir");
   const canLancarExterna = can("sb_gravacao_externa_lancar");
+  const canEditObservacao = can("sb_gravacao_pendente") && !user?.fornecedor;
   const isMobile = useMatchMedia("(max-width: 767px)");
 
   const currentYear = new Date().getFullYear();
@@ -108,6 +113,7 @@ export function GravacaoPendenteTab() {
   const [editingControleItem, setEditingControleItem] =
     useState<GravacaoPendenteHistoricoItem | null>(null);
   const patchControleMutation = usePatchGravacaoPendenteControleMutation();
+  const patchObservacaoMutation = usePatchGravacaoPendenteObservacaoMutation();
   const deleteControleMutation = useDeleteGravacaoPendenteControleMutation();
 
   const listQuery = useGravacaoPendenteOsList({
@@ -396,6 +402,27 @@ export function GravacaoPendenteTab() {
           <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
             Arquivos ({arquivos.length})
           </h3>
+          <GravacaoObservacaoBox
+            observacao={detail.observacao}
+            editable={canEditObservacao}
+            saving={patchObservacaoMutation.isPending}
+            onSave={async (text) => {
+              try {
+                await patchObservacaoMutation.mutateAsync({
+                  ano: selected.ano,
+                  nrOs: selected.nr_os,
+                  observacao: text,
+                });
+              } catch (error) {
+                window.alert(
+                  error instanceof Error
+                    ? error.message
+                    : "Não foi possível salvar a observação.",
+                );
+                throw error;
+              }
+            }}
+          />
           <div className="min-h-0 flex-1 overflow-y-auto">
             <GravacaoExternaArquivosPanel
               ano={selected.ano}

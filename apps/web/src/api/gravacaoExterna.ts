@@ -73,6 +73,7 @@ export interface GravacaoExternaDetail {
   recebido_por_ponto?: string | null;
   recebido_por_nome?: string | null;
   pagamento_nf_em?: string | null;
+  observacao?: string | null;
   arquivos: GravacaoExternaArquivo[];
   mensagens: GravacaoExternaMensagem[];
 }

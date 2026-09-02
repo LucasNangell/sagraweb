@@ -233,6 +233,7 @@ def insert_session_with_arquivos_cursor(
     origem_pendente_id: int | None = None,
     fornecedor_ponto: str | None = None,
     juntada_grupo_id: str | None = None,
+    observacao: str | None = None,
 ) -> int:
     # Relançamento: encerra sessão ativa anterior e grava a nova com os arquivos atuais.
     cancel_active_externa_sessions_cursor(cursor, ano, os_id)
@@ -240,12 +241,13 @@ def insert_session_with_arquivos_cursor(
         format_ponto(_clean_ponto(fornecedor_ponto)) if fornecedor_ponto else None
     ) or None
     grupo_id = (juntada_grupo_id or "").strip() or None
+    obs_text = str(observacao or "").strip() or None
     cursor.execute(
         """
         INSERT INTO tab_os_gravacao_externa
             (OsAno, OsNro, CodStatus, LancadoPorPonto, LancadoPorNome, Status,
-             OrigemPendenteId, FornecedorPonto, JuntadaGrupoId)
-        VALUES (%s, %s, %s, %s, %s, 'pendente', %s, %s, %s)
+             OrigemPendenteId, FornecedorPonto, JuntadaGrupoId, Observacao)
+        VALUES (%s, %s, %s, %s, %s, 'pendente', %s, %s, %s, %s)
         """,
         (
             ano,
@@ -256,6 +258,7 @@ def insert_session_with_arquivos_cursor(
             origem_pendente_id,
             fornecedor_fmt,
             grupo_id,
+            obs_text,
         ),
     )
     session_id = int(cursor.lastrowid)
@@ -341,6 +344,7 @@ def _map_session_row(row: dict[str, Any]) -> dict[str, Any]:
         "origem_pendente_id": int(origem) if origem is not None else None,
         "fornecedor_ponto": row.get("FornecedorPonto"),
         "juntada_grupo_id": str(juntada).strip() if juntada else None,
+        "observacao": (str(row.get("Observacao") or "").strip() or None),
         "concluida_em": row.get("ConcluidaEm"),
         "concluida_por_ponto": row.get("ConcluidaPorPonto"),
         "entrega_lancada_em": row.get("EntregaLancadaEm"),

@@ -336,6 +336,11 @@ def _lookup_os_solicitante_cursor(cursor, ano: int, os_id: int) -> str | None:
     return text or None
 
 
+def _normalize_session_observacao(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
 def insert_pendente_session_cursor(
     cursor,
     *,
@@ -348,18 +353,21 @@ def insert_pendente_session_cursor(
     validated_chapas: list[dict[str, Any]],
     cliente: str | None = None,
     juntada_grupo_id: str | None = None,
+    observacao: str | None = None,
 ) -> int:
     # Relançamento: encerra sessão ativa anterior e grava a nova com os arquivos atuais.
     cancel_active_pendente_sessions_cursor(cursor, ano, os_id)
     cliente_snap = (cliente or "").strip() or _lookup_os_solicitante_cursor(cursor, ano, os_id)
     grupo_id = (juntada_grupo_id or "").strip() or None
+    obs_text = _normalize_session_observacao(observacao)
     cursor.execute(
         """
         INSERT INTO tab_os_gravacao_pendente
-            (OsAno, OsNro, CodStatus, LancadoPorPonto, LancadoPorNome, Cliente, Status, JuntadaGrupoId)
-        VALUES (%s, %s, %s, %s, %s, %s, 'ativa', %s)
+            (OsAno, OsNro, CodStatus, LancadoPorPonto, LancadoPorNome, Cliente, Status,
+             JuntadaGrupoId, Observacao)
+        VALUES (%s, %s, %s, %s, %s, %s, 'ativa', %s, %s)
         """,
-        (ano, os_id, cod_status, ponto_fmt, lancado_por_nome, cliente_snap, grupo_id),
+        (ano, os_id, cod_status, ponto_fmt, lancado_por_nome, cliente_snap, grupo_id, obs_text),
     )
     session_id = int(cursor.lastrowid)
     for arquivo in validated_arquivos:
@@ -404,6 +412,7 @@ def _map_pendente_session(row: dict[str, Any]) -> dict[str, Any]:
         "enviada_em": row.get("EnviadaEm"),
         "enviada_por_ponto": row.get("EnviadaPorPonto"),
         "juntada_grupo_id": str(juntada).strip() if juntada else None,
+        "observacao": _normalize_session_observacao(row.get("Observacao")),
         "criado_em": row.get("CriadoEm"),
     }
 
@@ -2059,6 +2068,39 @@ def update_pendente_session_arquivos(
     return build_pendente_detail(updated)
 
 
+def update_pendente_session_observacao(
+    *,
+    ano: int,
+    os_id: int,
+    observacao: str,
+) -> dict[str, Any]:
+    session = get_active_pendente_session(ano, os_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão de Gravação Pendente não encontrada.")
+    if session["status"] != "ativa":
+        raise HTTPException(
+            status_code=400,
+            detail="Só é possível alterar a observação antes de enviar para Gravação Externa.",
+        )
+    obs_text = _normalize_session_observacao(observacao)
+    targets = [session]
+    juntada_id = session.get("juntada_grupo_id")
+    if juntada_id:
+        targets = list_active_pendente_by_juntada(str(juntada_id)) or [session]
+
+    def tx(cursor):
+        for target in targets:
+            cursor.execute(
+                "UPDATE tab_os_gravacao_pendente SET Observacao = %s WHERE Id = %s",
+                (obs_text, int(target["id"])),
+            )
+        return int(session["id"])
+
+    db.execute_transaction([tx])
+    updated = get_active_pendente_session(ano, os_id) or session
+    return build_pendente_detail(updated)
+
+
 def _enviar_uma_pendente_para_externa_cursor(
     cursor,
     *,
@@ -2163,6 +2205,7 @@ def _enviar_uma_pendente_para_externa_cursor(
         origem_pendente_id=int(pendente["id"]),
         fornecedor_ponto=fornecedor_fmt,
         juntada_grupo_id=pendente.get("juntada_grupo_id"),
+        observacao=pendente.get("observacao"),
     )
 
     return new_cod

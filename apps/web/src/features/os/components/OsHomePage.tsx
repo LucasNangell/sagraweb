@@ -128,6 +128,10 @@ export function OsHomePage() {
   const debouncedNrOs = useDebouncedValue(filters.nrOs, 200);
   const debouncedTitulo = useDebouncedValue(filters.titulo, 450);
   const debouncedProcesso = useDebouncedValue(filters.processo, 450);
+  const debouncedPapel = useDebouncedValue(filters.papel, 450);
+  const debouncedCores = useDebouncedValue(filters.cores, 450);
+  const debouncedAcabamento = useDebouncedValue(filters.acabamento, 450);
+  const debouncedObservacao = useDebouncedValue(filters.observacao, 450);
 
   const debouncedDatasetChoices = useDebouncedValue(
     {
@@ -153,14 +157,26 @@ export function OsHomePage() {
             nrOs: filters.nrOs,
             titulo: filters.titulo,
             processo: debouncedProcesso,
+            papel: debouncedPapel,
+            cores: debouncedCores,
+            acabamento: debouncedAcabamento,
+            observacao: debouncedObservacao,
           }
         : {
             nrOs: debouncedNrOs,
             titulo: debouncedTitulo,
             processo: debouncedProcesso,
+            papel: debouncedPapel,
+            cores: debouncedCores,
+            acabamento: debouncedAcabamento,
+            observacao: debouncedObservacao,
           },
     [
+      debouncedAcabamento,
+      debouncedCores,
       debouncedNrOs,
+      debouncedObservacao,
+      debouncedPapel,
       debouncedProcesso,
       debouncedTitulo,
       filters.nrOs,
@@ -206,17 +222,29 @@ export function OsHomePage() {
 
   const isTextFilterPending = useMemo(() => {
     const processoPending = filters.processo !== debouncedProcesso;
+    const extraTextPending =
+      filters.papel !== debouncedPapel ||
+      filters.cores !== debouncedCores ||
+      filters.acabamento !== debouncedAcabamento ||
+      filters.observacao !== debouncedObservacao;
     if (localViewPending) {
-      return processoPending;
+      return (
+        processoPending || (!textBelowMinLength && extraTextPending)
+      );
     }
     return (
       !textBelowMinLength &&
       (filters.nrOs !== debouncedNrOs ||
         filters.titulo !== debouncedTitulo ||
-        processoPending)
+        processoPending ||
+        extraTextPending)
     );
   }, [
+    debouncedAcabamento,
+    debouncedCores,
     debouncedNrOs,
+    debouncedObservacao,
+    debouncedPapel,
     debouncedProcesso,
     debouncedTitulo,
     filters,
@@ -508,7 +536,14 @@ export function OsHomePage() {
       patch.solicitante !== undefined ||
       patch.solicitantes !== undefined ||
       patch.categorias !== undefined ||
-      patch.maquinas !== undefined
+      patch.maquinas !== undefined ||
+      patch.formatos !== undefined ||
+      patch.papel !== undefined ||
+      patch.cores !== undefined ||
+      patch.acabamento !== undefined ||
+      patch.observacao !== undefined ||
+      patch.dataEntradaDe !== undefined ||
+      patch.dataEntradaAte !== undefined
     ) {
       setSavedFilterName(null);
       setSavedFilterId("");

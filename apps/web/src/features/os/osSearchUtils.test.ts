@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildOsHomeSearchFilters,
   dedupeOsSearchRows,
+  hasOsHomeAdvancedFilters,
   isExactOsLookup,
   normalizeOsSearchFilters,
 } from "./osSearchUtils";
@@ -113,6 +114,42 @@ describe("buildOsHomeSearchFilters", () => {
       processo: "12.3",
     });
     expect(result.processo).toBe("123");
+  });
+
+  it("ignora textos avançados com menos de 3 caracteres sem âncora", () => {
+    const result = buildOsHomeSearchFilters(baseFilters, {
+      nrOs: undefined,
+      titulo: "",
+      processo: "",
+      papel: "co",
+      cores: "4x",
+      acabamento: "la",
+      observacao: "ur",
+    });
+    expect(result.papel).toBe("");
+    expect(result.cores).toBe("");
+    expect(result.acabamento).toBe("");
+    expect(result.observacao).toBe("");
+  });
+
+  it("envia textos avançados a partir de 3 caracteres", () => {
+    const result = buildOsHomeSearchFilters(baseFilters, {
+      nrOs: undefined,
+      titulo: "",
+      processo: "",
+      papel: "cou",
+    });
+    expect(result.papel).toBe("cou");
+  });
+});
+
+describe("hasOsHomeAdvancedFilters", () => {
+  it("é true com qualquer campo extra preenchido", () => {
+    expect(hasOsHomeAdvancedFilters({ ...baseFilters, papel: "a" })).toBe(true);
+    expect(
+      hasOsHomeAdvancedFilters({ ...baseFilters, dataEntradaDe: "2026-01-01" }),
+    ).toBe(true);
+    expect(hasOsHomeAdvancedFilters(baseFilters)).toBe(false);
   });
 });
 

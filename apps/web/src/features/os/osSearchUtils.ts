@@ -26,6 +26,30 @@ function processoMeetsMinDigits(value: string | undefined): boolean {
   return digits.length >= PROCESSO_MIN_FILTER_DIGITS;
 }
 
+export type OsHomeDebouncedText = Pick<
+  OsSearchFilters,
+  | "nrOs"
+  | "titulo"
+  | "processo"
+  | "papel"
+  | "cores"
+  | "acabamento"
+  | "observacao"
+>;
+
+/** Campos extras da faixa avançada (home). */
+export function hasOsHomeAdvancedFilters(filters: OsSearchFilters): boolean {
+  return Boolean(
+    (filters.formatos?.length ?? 0) > 0 ||
+      (filters.papel ?? "").trim() ||
+      (filters.cores ?? "").trim() ||
+      (filters.acabamento ?? "").trim() ||
+      (filters.observacao ?? "").trim() ||
+      (filters.dataEntradaDe ?? "").trim() ||
+      (filters.dataEntradaAte ?? "").trim(),
+  );
+}
+
 /** Ativa lookup exato quando Nr OS está preenchido (prioriza localizar a OS). */
 export function isExactOsLookup(filters: Pick<OsSearchFilters, "nrOs">): boolean {
   return filters.nrOs != null && !Number.isNaN(filters.nrOs);
@@ -34,7 +58,7 @@ export function isExactOsLookup(filters: Pick<OsSearchFilters, "nrOs">): boolean
 /** Filtros efetivos da busca na home (título/Nr OS/processo com debounce; demais imediatos). */
 export function buildOsHomeSearchFilters(
   filters: OsSearchFilters,
-  debouncedText: Pick<OsSearchFilters, "nrOs" | "titulo" | "processo">,
+  debouncedText: OsHomeDebouncedText,
 ): OsSearchFilters {
   // Ano default da home NÃO é âncora — evita FULLTEXT a cada 1–2 teclas.
   const hasAnchor =
@@ -51,6 +75,18 @@ export function buildOsHomeSearchFilters(
       : "",
     processo: processoMeetsMinDigits(debouncedText.processo)
       ? digitsOnly(debouncedText.processo ?? "")
+      : "",
+    papel: textMeetsMinLength(debouncedText.papel, hasAnchor)
+      ? debouncedText.papel
+      : "",
+    cores: textMeetsMinLength(debouncedText.cores, hasAnchor)
+      ? debouncedText.cores
+      : "",
+    acabamento: textMeetsMinLength(debouncedText.acabamento, hasAnchor)
+      ? debouncedText.acabamento
+      : "",
+    observacao: textMeetsMinLength(debouncedText.observacao, hasAnchor)
+      ? debouncedText.observacao
       : "",
   };
   const exactOsLookup = isExactOsLookup(merged);
@@ -80,6 +116,13 @@ export function normalizeOsSearchFilters(
     situacao: [...filters.situacao].sort(),
     setor: [...filters.setor].sort(),
     prioridade: [...filters.prioridade].sort(),
+    formatos: [...(filters.formatos ?? [])].sort(),
+    papel: (filters.papel ?? "").trim(),
+    cores: (filters.cores ?? "").trim(),
+    acabamento: (filters.acabamento ?? "").trim(),
+    observacao: (filters.observacao ?? "").trim(),
+    dataEntradaDe: (filters.dataEntradaDe ?? "").trim(),
+    dataEntradaAte: (filters.dataEntradaAte ?? "").trim(),
     includeFinished: filters.includeFinished,
     includeOs: filters.includeOs,
     includeSp: filters.includeSp,

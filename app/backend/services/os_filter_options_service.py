@@ -242,6 +242,42 @@ def search_requesters(
     return apply_catalog_to_filter_rows("cliente", list(rows or []), q=q, limit=limit)
 
 
+def search_formatos(*, q: Optional[str] = None, limit: int = DEFAULT_LIMIT) -> List[Dict[str, Any]]:
+    from services.system_catalog_service import apply_catalog_to_filter_rows
+
+    limit = min(max(1, limit), MAX_LIMIT)
+    q_norm = normalize_label(q or "")
+
+    if not q_norm:
+        rows = db.execute_query(
+            """
+            SELECT FormatoLink AS value, FormatoLink AS label,
+                   COUNT(*) AS count
+            FROM tabDetalhesServico
+            WHERE FormatoLink IS NOT NULL AND TRIM(FormatoLink) != ''
+            GROUP BY FormatoLink
+            ORDER BY count DESC, FormatoLink ASC
+            LIMIT %(limit)s
+            """,
+            {"limit": limit},
+        )
+    else:
+        rows = db.execute_query(
+            """
+            SELECT FormatoLink AS value, FormatoLink AS label,
+                   COUNT(*) AS count
+            FROM tabDetalhesServico
+            WHERE FormatoLink IS NOT NULL
+              AND FormatoLink LIKE %(needle)s ESCAPE '\\\\'
+            GROUP BY FormatoLink
+            ORDER BY FormatoLink ASC
+            LIMIT %(limit)s
+            """,
+            {"needle": _like_contains((q or "").strip()), "limit": limit},
+        )
+    return apply_catalog_to_filter_rows("formato", list(rows or []), q=q, limit=limit)
+
+
 def backfill_filter_products() -> Dict[str, Any]:
     from os_filter_options_schema import ensure_os_filter_options_schema
 

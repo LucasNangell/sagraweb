@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from database import db
@@ -301,6 +302,37 @@ def _escape_sql_like_prefix(term: str) -> str:
         .replace("%", "\\%")
         .replace("_", "\\_")
     )
+
+
+def _parse_iso_date(value: Optional[str]) -> Optional[date]:
+    raw = (value or "").strip()[:10]
+    if len(raw) != 10:
+        return None
+    try:
+        return datetime.strptime(raw, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _details_attr_like_exists_sql(
+    *,
+    alias: str,
+    columns: List[str],
+    param_key: str,
+    term: str,
+    params: dict,
+) -> str:
+    params[param_key] = f"%{_escape_sql_like_prefix(term)}%"
+    ors = " OR ".join(
+        f"{alias}.{col} LIKE %({param_key})s ESCAPE '\\\\'" for col in columns
+    )
+    return f"""
+     AND EXISTS (
+        SELECT 1 FROM tabDetalhesServico AS {alias}
+        WHERE {alias}.NroProtocoloLinkDet = p.NroProtocolo
+          AND {alias}.AnoProtocoloLinkDet = p.AnoProtocolo
+          AND ({ors})
+     )"""
 
 
 def _should_use_active_materialized_driver(
@@ -1193,6 +1225,13 @@ def execute_os_search(
     processo: Optional[str] = None,
     categorias: Optional[List[str]] = None,
     maquinas: Optional[List[str]] = None,
+    formatos: Optional[List[str]] = None,
+    papel: Optional[str] = None,
+    cores: Optional[str] = None,
+    acabamento: Optional[str] = None,
+    observacao: Optional[str] = None,
+    data_entrada_de: Optional[str] = None,
+    data_entrada_ate: Optional[str] = None,
     include_finished: bool = False,
     include_os: bool = True,
     include_sp: bool = True,
@@ -1222,6 +1261,7 @@ def execute_os_search(
     clean_solicitantes = _clean_multi_filter_values(solicitantes)
     clean_categorias = _clean_multi_filter_values(categorias)
     clean_maquinas = _clean_multi_filter_values(maquinas)
+    clean_formatos = _clean_multi_filter_values(formatos)
     if len(clean_anos) > OS_SEARCH_MAX_MULTI_FILTER_ITEMS:
         raise ValueError(
             f"Máximo de {OS_SEARCH_MAX_MULTI_FILTER_ITEMS} anos por busca"
@@ -1242,6 +1282,10 @@ def execute_os_search(
         raise ValueError(
             f"Máximo de {OS_SEARCH_MAX_MULTI_FILTER_ITEMS} máquinas por busca"
         )
+    if len(clean_formatos) > OS_SEARCH_MAX_MULTI_FILTER_ITEMS:
+        raise ValueError(
+            f"Máximo de {OS_SEARCH_MAX_MULTI_FILTER_ITEMS} formatos por busca"
+        )
 
     produto_term = (
         None
@@ -1257,6 +1301,14 @@ def execute_os_search(
         )
     )
     processo_term = _processo_filter_term(processo)
+    papel_term = _os_search_like_term(papel, has_nr_os=has_nr_os, has_ano=has_ano)
+    cores_term = _os_search_like_term(cores, has_nr_os=has_nr_os, has_ano=has_ano)
+    acabamento_term = _os_search_like_term(
+        acabamento, has_nr_os=has_nr_os, has_ano=has_ano
+    )
+    observacao_term = _os_search_like_term(
+        observacao, has_nr_os=has_nr_os, has_ano=has_ano
+    )
     sort_key = (sort_by or "").strip()
 
     clean_situacao = [s.strip() for s in (situacao or []) if s and s.strip()]
@@ -1417,6 +1469,15 @@ def execute_os_search(
             filters += " AND p.AnoProtocolo = %(ano)s"
         params["ano"] = ano
 
+    entrada_de = _parse_iso_date(data_entrada_de)
+    entrada_ate = _parse_iso_date(data_entrada_ate)
+    if entrada_de:
+        filters += " AND p.DataEntrada >= %(entrada_de)s"
+        params["entrada_de"] = entrada_de.isoformat()
+    if entrada_ate:
+        filters += " AND p.DataEntrada < %(entrada_ate_excl)s"
+        params["entrada_ate_excl"] = (entrada_ate + timedelta(days=1)).isoformat()
+
     if processo_term:
         if len(processo_term) >= OS_SEARCH_PROCESSO_FULL_DIGITS:
             filters += " AND p.ProcessoSolicit = %(processo_exact)s"
@@ -1440,6 +1501,53 @@ def execute_os_search(
          )"""
         for i, val in enumerate(clean_produtos):
             params[f"prod_sel_{i}"] = val
+
+    if clean_formatos:
+        fmt_placeholders = ", ".join(
+            f"%(fmt_sel_{i})s" for i in range(len(clean_formatos))
+        )
+        filters += f"""
+         AND EXISTS (
+            SELECT 1 FROM tabDetalhesServico AS d_fmt
+            WHERE d_fmt.NroProtocoloLinkDet = p.NroProtocolo
+              AND d_fmt.AnoProtocoloLinkDet = p.AnoProtocolo
+              AND d_fmt.FormatoLink IN ({fmt_placeholders})
+         )"""
+        for i, val in enumerate(clean_formatos):
+            params[f"fmt_sel_{i}"] = val
+
+    if papel_term:
+        filters += _details_attr_like_exists_sql(
+            alias="d_papel",
+            columns=["PapelLink", "PapelDescricao"],
+            param_key="papel_like",
+            term=papel_term,
+            params=params,
+        )
+    if cores_term:
+        filters += _details_attr_like_exists_sql(
+            alias="d_cores",
+            columns=["Cores", "CoresDescricao"],
+            param_key="cores_like",
+            term=cores_term,
+            params=params,
+        )
+    if acabamento_term:
+        filters += _details_attr_like_exists_sql(
+            alias="d_acab",
+            columns=["DescAcabamento"],
+            param_key="acabamento_like",
+            term=acabamento_term,
+            params=params,
+        )
+    if observacao_term:
+        filters += _details_attr_like_exists_sql(
+            alias="d_obs",
+            columns=["Observ"],
+            param_key="observacao_like",
+            term=observacao_term,
+            params=params,
+        )
 
     text_search_modes: List[str] = []
 

@@ -84,6 +84,16 @@ export interface OsSearchFilters {
   situacao: string[];
   setor: string[];
   prioridade: string[];
+  /** Formatos (detalhes) — multi, estilo produto. */
+  formatos?: string[];
+  papel?: string;
+  cores?: string;
+  acabamento?: string;
+  /** Observação do detalhe (`tabDetalhesServico.Observ`), não do andamento. */
+  observacao?: string;
+  /** Intervalo de data de entrada (YYYY-MM-DD). */
+  dataEntradaDe?: string;
+  dataEntradaAte?: string;
   includeFinished: boolean;
   includeOs: boolean;
   includeSp: boolean;

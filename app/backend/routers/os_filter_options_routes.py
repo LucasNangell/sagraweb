@@ -10,6 +10,7 @@ from services.os_filter_options_service import (
     DEFAULT_LIMIT,
     MAX_LIMIT,
     fetch_distinct_years,
+    search_formatos,
     search_products,
     search_requesters,
 )
@@ -54,4 +55,13 @@ def get_filter_requesters(
     categorias: Optional[List[str]] = Query(None),
 ):
     rows = search_requesters(q=q, limit=limit, categorias=categorias)
+    return FilterOptionsResponse(data=[FilterOptionItem.model_validate(r) for r in rows])
+
+
+@router.get("/os/filter-options/formatos", response_model=FilterOptionsResponse)
+def get_filter_formatos(
+    q: Optional[str] = Query(None),
+    limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+):
+    rows = search_formatos(q=q, limit=limit)
     return FilterOptionsResponse(data=[FilterOptionItem.model_validate(r) for r in rows])

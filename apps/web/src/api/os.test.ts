@@ -110,6 +110,27 @@ describe("buildOsSearchQueryString", () => {
     expect(qs).not.toContain("fetch_all=");
     expect(qs).toContain("limit=1");
   });
+
+  it("envia filtros avançados", () => {
+    const qs = buildOsSearchQueryString({
+      ...base,
+      formatos: ["A4", "A5"],
+      papel: "couché",
+      cores: "4x4",
+      acabamento: "laminação",
+      observacao: "miolo",
+      dataEntradaDe: "2026-01-10",
+      dataEntradaAte: "2026-02-20",
+    });
+    expect(qs).toContain("formatos=A4");
+    expect(qs).toContain("formatos=A5");
+    expect(qs).toContain("papel=couch");
+    expect(qs).toContain("cores=4x4");
+    expect(qs).toContain("acabamento=");
+    expect(qs).toContain("observacao=miolo");
+    expect(qs).toContain("data_entrada_de=2026-01-10");
+    expect(qs).toContain("data_entrada_ate=2026-02-20");
+  });
 });
 
 describe("buildOsExportQueryString", () => {

@@ -71,6 +71,25 @@ export function buildOsSearchQueryString(filters: OsSearchFilters): string {
   appendList(params, "situacao", filters.situacao);
   appendList(params, "setor", filters.setor);
   appendList(params, "prioridade", filters.prioridade);
+  appendList(params, "formatos", filters.formatos ?? []);
+  if (filters.papel?.trim()) {
+    params.append("papel", filters.papel.trim());
+  }
+  if (filters.cores?.trim()) {
+    params.append("cores", filters.cores.trim());
+  }
+  if (filters.acabamento?.trim()) {
+    params.append("acabamento", filters.acabamento.trim());
+  }
+  if (filters.observacao?.trim()) {
+    params.append("observacao", filters.observacao.trim());
+  }
+  if (filters.dataEntradaDe?.trim()) {
+    params.append("data_entrada_de", filters.dataEntradaDe.trim());
+  }
+  if (filters.dataEntradaAte?.trim()) {
+    params.append("data_entrada_ate", filters.dataEntradaAte.trim());
+  }
 
   params.append("include_finished", String(filters.includeFinished));
   params.append("include_os", String(filters.includeOs));

@@ -5,7 +5,7 @@ vi.mock("@/api/client", () => ({
 }));
 
 import { apiFetch } from "@/api/client";
-import { fetchOsFilterRequesters } from "./osFilterOptions";
+import { fetchOsFilterFormatos, fetchOsFilterRequesters } from "./osFilterOptions";
 
 describe("fetchOsFilterRequesters", () => {
   beforeEach(() => {
@@ -27,5 +27,20 @@ describe("fetchOsFilterRequesters", () => {
     await fetchOsFilterRequesters("jo", 30);
     const url = String(vi.mocked(apiFetch).mock.calls[0]?.[0]);
     expect(url).not.toContain("categorias=");
+  });
+});
+
+describe("fetchOsFilterFormatos", () => {
+  beforeEach(() => {
+    vi.mocked(apiFetch).mockReset();
+    vi.mocked(apiFetch).mockResolvedValue({ data: [] });
+  });
+
+  it("chama GET /os/filter-options/formatos", async () => {
+    await fetchOsFilterFormatos("a4", 30);
+    const url = String(vi.mocked(apiFetch).mock.calls[0]?.[0]);
+    expect(url).toContain("/os/filter-options/formatos?");
+    expect(url).toContain("q=a4");
+    expect(url).toContain("limit=30");
   });
 });

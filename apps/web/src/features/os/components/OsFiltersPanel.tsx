@@ -1,9 +1,10 @@
 import { cn } from "@sagra/ui";
 import { ChevronDown, ChevronUp, Eraser, Filter, RefreshCw } from "lucide-react";
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
+  useOsFilterFormatos,
   useOsFilterProducts,
   useOsFilterRequesters,
   useOsFilterYears,
@@ -18,6 +19,7 @@ import { MultiSelect } from "@/components/ui/multi-select";
 import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { homeTestIds } from "@/lib/testId";
+import { hasOsHomeAdvancedFilters } from "../osSearchUtils";
 import { useOsFiltersStore } from "../osFiltersStore";
 import { formatProcessoMask } from "../processoMask";
 import { PRIORIDADE_OPTIONS } from "../types";
@@ -57,12 +59,25 @@ export function OsFiltersPanel({
   const [requesterSearch, setRequesterSearch] = useState("");
   const debouncedRequesterSearch = useDebouncedValue(requesterSearch, 250);
 
+  const [formatosOpen, setFormatosOpen] = useState(false);
+  const [formatoSearch, setFormatoSearch] = useState("");
+  const debouncedFormatoSearch = useDebouncedValue(formatoSearch, 250);
+  const hasAdvanced = hasOsHomeAdvancedFilters(filters);
+  const [advancedOpen, setAdvancedOpen] = useState(hasAdvanced);
+
+  useEffect(() => {
+    if (hasAdvanced) {
+      setAdvancedOpen(true);
+    }
+  }, [hasAdvanced]);
+
   const setoresQuery = useSetoresLookup();
   const situacoesQuery = useSituacoesLookup();
   const categoriasQuery = useCategoriasLookup();
   const maquinasQuery = useMaquinasLookup();
   const yearsQuery = useOsFilterYears();
   const productsQuery = useOsFilterProducts(debouncedProductSearch, productsOpen);
+  const formatosQuery = useOsFilterFormatos(debouncedFormatoSearch, formatosOpen);
   const requestersQuery = useOsFilterRequesters(
     debouncedRequesterSearch,
     requestersOpen,
@@ -370,7 +385,10 @@ export function OsFiltersPanel({
             <button
               type="button"
               title="Limpar filtros"
-              onClick={onResetFilters}
+              onClick={() => {
+                setAdvancedOpen(false);
+                onResetFilters();
+              }}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
               data-testid={homeTestIds.osFiltersClear}
             >
@@ -391,6 +409,118 @@ export function OsFiltersPanel({
             </button>
           </div>
         </div>
+
+        {advancedOpen ? (
+          <div className="grid grid-cols-1 gap-3 border-t border-sagra-border bg-slate-50/50 px-3 py-3 sm:grid-cols-2">
+            <FilterField label="Data de entrada">
+              <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                <input
+                  type="date"
+                  value={filters.dataEntradaDe ?? ""}
+                  onChange={(e) =>
+                    onPatchFilters({
+                      dataEntradaDe: e.target.value,
+                      page: 1,
+                    })
+                  }
+                  className={cn(inputClass, "min-w-0 flex-1")}
+                  aria-label="Data de entrada de"
+                  data-testid={homeTestIds.osFiltersDataEntradaDe}
+                />
+                <span className="shrink-0 text-xs text-neutral-500">até</span>
+                <input
+                  type="date"
+                  value={filters.dataEntradaAte ?? ""}
+                  onChange={(e) =>
+                    onPatchFilters({
+                      dataEntradaAte: e.target.value,
+                      page: 1,
+                    })
+                  }
+                  className={cn(inputClass, "min-w-0 flex-1")}
+                  aria-label="Data de entrada até"
+                  data-testid={homeTestIds.osFiltersDataEntradaAte}
+                />
+              </div>
+            </FilterField>
+            <SearchableMultiSelect
+              label="Formato"
+              labelSide="left"
+              className="min-w-0 w-full flex-none"
+              testId={homeTestIds.osFiltersFormato}
+              value={filters.formatos ?? []}
+              onChange={(formatos) => onPatchFilters({ formatos, page: 1 })}
+              options={formatosQuery.data?.data ?? []}
+              isLoading={formatosQuery.isFetching}
+              searchQuery={formatoSearch}
+              onSearchChange={setFormatoSearch}
+              onOpen={() => setFormatosOpen(true)}
+            />
+            <FilterField label="Papel">
+              <input
+                type="text"
+                value={filters.papel ?? ""}
+                onChange={(e) =>
+                  onPatchFilters({ papel: e.target.value, page: 1 })
+                }
+                className={cn(inputClass, "min-w-0 flex-1")}
+                data-testid={homeTestIds.osFiltersPapel}
+              />
+            </FilterField>
+            <FilterField label="Cores">
+              <input
+                type="text"
+                value={filters.cores ?? ""}
+                onChange={(e) =>
+                  onPatchFilters({ cores: e.target.value, page: 1 })
+                }
+                className={cn(inputClass, "min-w-0 flex-1")}
+                data-testid={homeTestIds.osFiltersCores}
+              />
+            </FilterField>
+            <FilterField label="Acabamento">
+              <input
+                type="text"
+                value={filters.acabamento ?? ""}
+                onChange={(e) =>
+                  onPatchFilters({ acabamento: e.target.value, page: 1 })
+                }
+                className={cn(inputClass, "min-w-0 flex-1")}
+                data-testid={homeTestIds.osFiltersAcabamento}
+              />
+            </FilterField>
+            <FilterField label="Observação">
+              <input
+                type="text"
+                value={filters.observacao ?? ""}
+                onChange={(e) =>
+                  onPatchFilters({ observacao: e.target.value, page: 1 })
+                }
+                className={cn(inputClass, "min-w-0 flex-1")}
+                data-testid={homeTestIds.osFiltersObservacao}
+              />
+            </FilterField>
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={() => setAdvancedOpen((open) => !open)}
+          className="flex h-6 w-full items-center justify-center border-t border-sagra-border bg-slate-50/80 text-neutral-500 hover:bg-slate-100"
+          aria-expanded={advancedOpen}
+          aria-label={
+            advancedOpen
+              ? "Recolher filtros avançados"
+              : "Expandir filtros avançados"
+          }
+          data-testid={homeTestIds.osFiltersAdvancedToggle}
+        >
+          {advancedOpen ? (
+            <ChevronUp className="size-4" />
+          ) : (
+            <ChevronDown className="size-4" />
+          )}
+        </button>
       </div>
     </section>
   );

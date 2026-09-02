@@ -31,6 +31,8 @@ export function toOsHomeDatasetFilters(filters: OsSearchFilters): OsSearchFilter
     includeSp: true,
     sortBy: "ano",
     sortDir: "asc",
+    dataEntradaDe: undefined,
+    dataEntradaAte: undefined,
   };
 }
 
@@ -53,6 +55,16 @@ export function osHomeDatasetQueryKey(filters: OsSearchFilters) {
 
 function cleanList(values: string[] | undefined): string[] {
   return (values ?? []).map((v) => v.trim()).filter(Boolean);
+}
+
+/** YYYY-MM-DD a partir de datetime ISO ou MySQL. */
+export function osEntryDateKey(value: unknown): string {
+  if (value == null || value === "") {
+    return "";
+  }
+  const text = typeof value === "string" ? value : String(value);
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match?.[1] ?? "";
 }
 
 function displayedAndamentoMatches(
@@ -144,6 +156,20 @@ export function applyOsHomeViewFilters(
     if (tituloActive) {
       const titulo = String(row.titulo ?? "").toLowerCase();
       if (!titulo.includes(tituloTerm)) {
+        return false;
+      }
+    }
+    const de = (filters.dataEntradaDe ?? "").trim();
+    const ate = (filters.dataEntradaAte ?? "").trim();
+    if (de || ate) {
+      const key = osEntryDateKey(row.data_entrada);
+      if (!key) {
+        return false;
+      }
+      if (de && key < de) {
+        return false;
+      }
+      if (ate && key > ate) {
         return false;
       }
     }

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import {
+  fetchOsFilterFormatos,
   fetchOsFilterProducts,
   fetchOsFilterRequesters,
   fetchOsFilterYears,
@@ -41,6 +42,17 @@ export function useOsFilterRequesters(
     queryKey: ["os-filter-requesters", term, cats],
     queryFn: ({ signal }) =>
       fetchOsFilterRequesters(term, 30, { signal }, cats),
+    enabled,
+    staleTime: OPTIONS_STALE_MS,
+    gcTime: OPTIONS_GC_MS,
+  });
+}
+
+export function useOsFilterFormatos(q: string, enabled: boolean) {
+  const term = q.trim();
+  return useQuery({
+    queryKey: ["os-filter-formatos", term],
+    queryFn: ({ signal }) => fetchOsFilterFormatos(term, 30, { signal }),
     enabled,
     staleTime: OPTIONS_STALE_MS,
     gcTime: OPTIONS_GC_MS,

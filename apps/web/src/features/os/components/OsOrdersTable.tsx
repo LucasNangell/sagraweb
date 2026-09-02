@@ -160,22 +160,32 @@ function buildColumns(
   {
     accessorKey: "setor",
     header: "Setor",
-    size: 58,
+    size: 180,
     cell: ({ row, getValue }) => {
       const v = getValue<string | null>();
       if ((row.original.is_sub_os || row.original.kind === "sub_os") && !v) {
         return <span className="text-neutral-400">—</span>;
       }
-      return v ?? "";
+      const text = v ?? "";
+      return (
+        <span className="block truncate" title={text}>
+          {text}
+        </span>
+      );
     },
   },
   {
     accessorKey: "prioridade",
     header: "Prioridade",
-    size: 104,
+    size: 80,
     cell: ({ getValue }) => {
       const v = getValue<string | null>();
-      return <span className={prioClass(v)}>{v ?? ""}</span>;
+      const text = v ?? "";
+      return (
+        <span className={cn("block truncate", prioClass(v))} title={text}>
+          {text}
+        </span>
+      );
     },
   },
   {

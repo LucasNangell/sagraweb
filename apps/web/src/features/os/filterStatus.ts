@@ -3,24 +3,46 @@ import type { OsSearchFilters } from "./types";
 
 const MAX_VALUES_SHOWN = 3;
 
-/** True se título legado tem 1–2 caracteres sem âncora. */
+/** True se título legado ou textos avançados têm 1–2 caracteres sem âncora. */
 export function hasTextFilterBelowMinLength(filters: OsSearchFilters): boolean {
   const hasAnchor =
     filters.nrOs != null ||
     filters.produtos.length > 0 ||
     filters.solicitantes.length > 0;
+  const short = (value: string | undefined) => {
+    const trimmed = (value ?? "").trim();
+    return trimmed.length > 0 && trimmed.length < OS_TEXT_SEARCH_MIN_CHARS;
+  };
   if (hasAnchor) {
     return false;
   }
-  const titulo = (filters.titulo ?? "").trim();
-  return titulo.length > 0 && titulo.length < OS_TEXT_SEARCH_MIN_CHARS;
+  return (
+    short(filters.titulo) ||
+    short(filters.papel) ||
+    short(filters.cores) ||
+    short(filters.acabamento) ||
+    short(filters.observacao)
+  );
 }
 
 export function getTextFilterMinLengthHint(filters: OsSearchFilters): string | null {
   if (!hasTextFilterBelowMinLength(filters)) {
     return null;
   }
-  return `Digite pelo menos ${OS_TEXT_SEARCH_MIN_CHARS} caracteres em Título`;
+  const short = (value: string | undefined) => {
+    const trimmed = (value ?? "").trim();
+    return trimmed.length > 0 && trimmed.length < OS_TEXT_SEARCH_MIN_CHARS;
+  };
+  const fields: [string | undefined, string][] = [
+    [filters.titulo, "Título"],
+    [filters.papel, "Papel"],
+    [filters.cores, "Cores"],
+    [filters.acabamento, "Acabamento"],
+    [filters.observacao, "Observação"],
+  ];
+  const named = fields.find(([value]) => short(value));
+  const label = named?.[1] ?? "Título";
+  return `Digite pelo menos ${OS_TEXT_SEARCH_MIN_CHARS} caracteres em ${label}`;
 }
 
 function summarizeValues(values: string[], max = MAX_VALUES_SHOWN): string {
@@ -47,6 +69,14 @@ export function getActiveFilterLabels(filters: OsSearchFilters): string[] {
   if (filters.situacao.length) active.push("Situação");
   if (filters.setor.length) active.push("Setor");
   if (filters.prioridade.length) active.push("Prioridade");
+  if ((filters.formatos ?? []).length) active.push("Formato");
+  if (filters.papel?.trim()) active.push("Papel");
+  if (filters.cores?.trim()) active.push("Cores");
+  if (filters.acabamento?.trim()) active.push("Acabamento");
+  if (filters.observacao?.trim()) active.push("Observação");
+  if (filters.dataEntradaDe?.trim() || filters.dataEntradaAte?.trim()) {
+    active.push("Data de entrada");
+  }
   return active;
 }
 
@@ -83,6 +113,18 @@ export function getActiveFilterValueSummary(filters: OsSearchFilters): string[] 
   }
   if (filters.setor.length) parts.push(summarizeValues(filters.setor));
   if (filters.situacao.length) parts.push(summarizeValues(filters.situacao));
+  if ((filters.formatos ?? []).length) {
+    parts.push(summarizeValues(filters.formatos ?? []));
+  }
+  if (filters.papel?.trim()) parts.push(filters.papel.trim());
+  if (filters.cores?.trim()) parts.push(filters.cores.trim());
+  if (filters.acabamento?.trim()) parts.push(filters.acabamento.trim());
+  if (filters.observacao?.trim()) parts.push(filters.observacao.trim());
+  const de = (filters.dataEntradaDe ?? "").trim();
+  const ate = (filters.dataEntradaAte ?? "").trim();
+  if (de || ate) {
+    parts.push([de || "…", ate || "…"].join("–"));
+  }
   return parts;
 }
 

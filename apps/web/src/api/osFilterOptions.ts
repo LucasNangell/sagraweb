@@ -36,6 +36,22 @@ export async function fetchOsFilterProducts(
   );
 }
 
+export async function fetchOsFilterFormatos(
+  q?: string,
+  limit = 30,
+  init?: RequestInit,
+): Promise<FilterOptionsResponse> {
+  const params = new URLSearchParams();
+  if (q?.trim()) {
+    params.set("q", q.trim());
+  }
+  params.set("limit", String(limit));
+  return apiFetch<FilterOptionsResponse>(
+    `/os/filter-options/formatos?${params}`,
+    init,
+  );
+}
+
 export async function fetchOsFilterRequesters(
   q?: string,
   limit = 30,

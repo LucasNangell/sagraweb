@@ -8,6 +8,7 @@ import pytest
 from services.os_filter_options_service import (
     _like_contains,
     normalize_label,
+    search_formatos,
     search_products,
     search_requesters,
 )
@@ -169,6 +170,89 @@ class TestMultiSelectSearch:
             execute_os_search(produtos=too_many, simple_pagination=True)
 
 
+class TestAdvancedDetailsSearch:
+    @patch(_FT, return_value=False)
+    @patch(_DB)
+    @patch(_ENRICH, side_effect=lambda r: r)
+    def test_formatos_in_exists(self, _enrich, mock_db, _ft):
+        mock_db.execute_query.return_value = []
+        execute_os_search(formatos=["A4", "A5"], simple_pagination=True)
+        sql = str(mock_db.execute_query.call_args.args[0])
+        params = mock_db.execute_query.call_args.args[1]
+        assert "d_fmt.FormatoLink IN" in sql
+        assert "EXISTS" in sql
+        assert params["fmt_sel_0"] == "A4"
+        assert params["fmt_sel_1"] == "A5"
+
+    @patch(_FT, return_value=False)
+    @patch(_DB)
+    @patch(_ENRICH, side_effect=lambda r: r)
+    def test_max_formatos_raises(self, _enrich, mock_db, _ft):
+        too_many = [f"F{i}" for i in range(OS_SEARCH_MAX_MULTI_FILTER_ITEMS + 1)]
+        with pytest.raises(ValueError, match="formatos"):
+            execute_os_search(formatos=too_many, simple_pagination=True)
+
+    @patch(_FT, return_value=False)
+    @patch(_DB)
+    @patch(_ENRICH, side_effect=lambda r: r)
+    def test_papel_like_exists(self, _enrich, mock_db, _ft):
+        mock_db.execute_query.return_value = []
+        execute_os_search(papel="couche", simple_pagination=True)
+        sql = str(mock_db.execute_query.call_args.args[0])
+        params = mock_db.execute_query.call_args.args[1]
+        assert "PapelLink LIKE %(papel_like)s" in sql
+        assert "PapelDescricao LIKE %(papel_like)s" in sql
+        assert params["papel_like"] == "%couche%"
+
+    @patch(_FT, return_value=False)
+    @patch(_DB)
+    @patch(_ENRICH, side_effect=lambda r: r)
+    def test_cores_acabamento_observacao_like(self, _enrich, mock_db, _ft):
+        mock_db.execute_query.return_value = []
+        execute_os_search(
+            cores="4x4",
+            acabamento="laminacao",
+            observacao="urgente",
+            simple_pagination=True,
+        )
+        sql = str(mock_db.execute_query.call_args.args[0])
+        params = mock_db.execute_query.call_args.args[1]
+        assert "Cores LIKE %(cores_like)s" in sql
+        assert "CoresDescricao LIKE %(cores_like)s" in sql
+        assert "DescAcabamento LIKE %(acabamento_like)s" in sql
+        assert "Observ LIKE %(observacao_like)s" in sql
+        assert params["cores_like"] == "%4x4%"
+        assert params["acabamento_like"] == "%laminacao%"
+        assert params["observacao_like"] == "%urgente%"
+
+    @patch(_FT, return_value=False)
+    @patch(_DB)
+    @patch(_ENRICH, side_effect=lambda r: r)
+    def test_short_papel_not_in_sql(self, _enrich, mock_db, _ft):
+        mock_db.execute_query.return_value = []
+        execute_os_search(papel="co", simple_pagination=True)
+        sql = str(mock_db.execute_query.call_args.args[0])
+        assert "papel_like" not in sql
+        assert "PapelLink" not in sql
+
+    @patch(_FT, return_value=False)
+    @patch(_DB)
+    @patch(_ENRICH, side_effect=lambda r: r)
+    def test_data_entrada_range(self, _enrich, mock_db, _ft):
+        mock_db.execute_query.return_value = []
+        execute_os_search(
+            data_entrada_de="2026-01-10",
+            data_entrada_ate="2026-01-20",
+            simple_pagination=True,
+        )
+        sql = str(mock_db.execute_query.call_args.args[0])
+        params = mock_db.execute_query.call_args.args[1]
+        assert "p.DataEntrada >= %(entrada_de)s" in sql
+        assert "p.DataEntrada < %(entrada_ate_excl)s" in sql
+        assert params["entrada_de"] == "2026-01-10"
+        assert params["entrada_ate_excl"] == "2026-01-21"
+
+
 class TestFilterOptionsNormalize:
     def test_normalize_label(self):
         assert normalize_label("  João  ") == "joao"
@@ -196,6 +280,38 @@ class TestFilterOptionsProducts:
         assert "produto_normalizado LIKE %(needle)s" in sql
         assert "ESCAPE" in sql
         assert params["needle"] == "%cart%"
+
+
+class TestFilterOptionsFormatos:
+    @patch(
+        "services.system_catalog_service.apply_catalog_to_filter_rows",
+        side_effect=lambda _cat, rows, **_kw: rows,
+    )
+    @patch("services.os_filter_options_service.db")
+    def test_blank_q_groups_formatolink(self, mock_db, catalog):
+        mock_db.execute_query.return_value = [
+            {"value": "A4", "label": "A4", "count": 10},
+        ]
+        rows = search_formatos(q="", limit=30)
+        assert rows[0]["value"] == "A4"
+        sql = mock_db.execute_query.call_args.args[0]
+        assert "FormatoLink" in sql
+        assert "GROUP BY FormatoLink" in sql
+        assert catalog.call_args.args[0] == "formato"
+
+    @patch(
+        "services.system_catalog_service.apply_catalog_to_filter_rows",
+        side_effect=lambda _cat, rows, **_kw: rows,
+    )
+    @patch("services.os_filter_options_service.db")
+    def test_contains_search(self, mock_db, _catalog):
+        mock_db.execute_query.return_value = []
+        search_formatos(q="a4", limit=30)
+        sql = mock_db.execute_query.call_args.args[0]
+        params = mock_db.execute_query.call_args.args[1]
+        assert "FormatoLink LIKE %(needle)s" in sql
+        assert "ESCAPE" in sql
+        assert params["needle"] == "%a4%"
 
 
 class TestFilterOptionsRequesters:

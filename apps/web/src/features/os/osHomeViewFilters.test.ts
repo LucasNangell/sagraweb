@@ -101,6 +101,37 @@ describe("toOsHomeDatasetFilters", () => {
     });
     expect(dataset.situacao).toEqual(["Em Execução"]);
   });
+
+  it("com ano, tira o intervalo de datas e mantém formato/papel", () => {
+    const dataset = toOsHomeDatasetFilters({
+      ...baseFilters,
+      formatos: ["A4"],
+      papel: "couché",
+      cores: "4x4",
+      acabamento: "laminação",
+      observacao: "urgente",
+      dataEntradaDe: "2026-01-01",
+      dataEntradaAte: "2026-03-31",
+    });
+    expect(dataset.formatos).toEqual(["A4"]);
+    expect(dataset.papel).toBe("couché");
+    expect(dataset.cores).toBe("4x4");
+    expect(dataset.acabamento).toBe("laminação");
+    expect(dataset.observacao).toBe("urgente");
+    expect(dataset.dataEntradaDe).toBeUndefined();
+    expect(dataset.dataEntradaAte).toBeUndefined();
+  });
+
+  it("sem ano, mantém o intervalo de datas no GET", () => {
+    const dataset = toOsHomeDatasetFilters({
+      ...baseFilters,
+      anos: [],
+      dataEntradaDe: "2026-01-01",
+      dataEntradaAte: "2026-03-31",
+    });
+    expect(dataset.dataEntradaDe).toBe("2026-01-01");
+    expect(dataset.dataEntradaAte).toBe("2026-03-31");
+  });
 });
 
 describe("osHomeDatasetQueryKey", () => {
@@ -142,6 +173,16 @@ describe("osHomeDatasetQueryKey", () => {
     );
     expect(a).not.toEqual(b);
   });
+
+  it("com ano, intervalo de datas não muda a chave do GET", () => {
+    const a = osHomeDatasetQueryKey(baseFilters);
+    const b = osHomeDatasetQueryKey({
+      ...baseFilters,
+      dataEntradaDe: "2026-01-01",
+      dataEntradaAte: "2026-03-31",
+    });
+    expect(a).toEqual(b);
+  });
 });
 
 describe("osHomePatchTriggersFetch", () => {
@@ -177,6 +218,33 @@ describe("osHomePatchTriggersFetch", () => {
     expect(
       osHomePatchTriggersFetch(
         { situacao: ["Em Execução"] },
+        { ...baseFilters, anos: [] },
+      ),
+    ).toBe(true);
+  });
+
+  it("não dispara GET ao mudar data de entrada com ano", () => {
+    expect(
+      osHomePatchTriggersFetch(
+        { dataEntradaDe: "2026-01-01", dataEntradaAte: "2026-02-01" },
+        baseFilters,
+      ),
+    ).toBe(false);
+  });
+
+  it("dispara GET ao mudar formato ou papel", () => {
+    expect(osHomePatchTriggersFetch({ formatos: ["A4"] }, baseFilters)).toBe(
+      true,
+    );
+    expect(osHomePatchTriggersFetch({ papel: "couché" }, baseFilters)).toBe(
+      true,
+    );
+  });
+
+  it("dispara GET ao mudar data de entrada sem ano", () => {
+    expect(
+      osHomePatchTriggersFetch(
+        { dataEntradaDe: "2026-01-01" },
         { ...baseFilters, anos: [] },
       ),
     ).toBe(true);
@@ -267,6 +335,21 @@ describe("applyOsHomeViewFilters", () => {
       situacao: ["Em Execução"],
     });
     expect(filtered).toHaveLength(rows.length);
+  });
+
+  it("filtra data_entrada localmente quando há ano", () => {
+    const dated: OsSearchRow[] = [
+      row({ nr_os: 1, ano: 2026, data_entrada: "2026-01-10T08:00:00" }),
+      row({ nr_os: 2, ano: 2026, data_entrada: "2026-02-15" }),
+      row({ nr_os: 3, ano: 2026, data_entrada: "2026-03-20 12:00:00" }),
+      row({ nr_os: 4, ano: 2026, data_entrada: null }),
+    ];
+    const filtered = applyOsHomeViewFilters(dated, {
+      ...baseFilters,
+      dataEntradaDe: "2026-02-01",
+      dataEntradaAte: "2026-02-28",
+    });
+    expect(filtered.map((r) => r.nr_os)).toEqual([2]);
   });
 });
 

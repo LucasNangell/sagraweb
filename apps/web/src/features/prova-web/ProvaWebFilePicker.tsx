@@ -228,6 +228,7 @@ export function ProvaWebFilePicker({
   if (phase === "crop") {
     return (
       <>
+        <div className="flex min-h-0 flex-1 flex-col">
         <ProvaWebCropAssistant
           ano={ano}
           osId={osId}
@@ -267,10 +268,11 @@ export function ProvaWebFilePicker({
           onConfirm={handleCropConfirm}
         />
         {saveError && (
-          <p className="mx-auto max-w-5xl px-4 pb-4 text-sm text-sagra-danger">
+          <p className="mx-auto max-w-5xl shrink-0 px-4 pb-4 text-sm text-sagra-danger">
             {saveError}
           </p>
         )}
+        </div>
         <ProvaWebExistingModal
           open={askExisting}
           versao={record?.versao ?? 1}
@@ -295,7 +297,7 @@ export function ProvaWebFilePicker({
 
   return (
     <>
-    <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 p-4">
+    <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-4 p-4">
       <div className="rounded-2xl border border-sagra-border bg-white p-4 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div>

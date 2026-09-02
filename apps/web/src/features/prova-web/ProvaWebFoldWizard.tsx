@@ -582,8 +582,8 @@ export function ProvaWebFoldWizard({
   }, [selectedOp, topology, folheto.creases]);
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 p-4">
-      <div>
+    <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-4 p-4">
+      <div className="shrink-0">
         <h2 className="text-sm font-semibold text-neutral-800">
           Assistente — Folheto dobrado
         </h2>
@@ -1252,7 +1252,7 @@ export function ProvaWebFoldWizard({
 
       </div>
 
-      <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 border-t border-sagra-border bg-slate-50/95 py-3 backdrop-blur">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-t border-sagra-border bg-slate-50/95 py-3">
         <button
           type="button"
           onClick={onBack}

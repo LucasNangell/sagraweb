@@ -185,7 +185,8 @@ export function ProvaWebBoxWizard({
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-4 p-4">
+    <div className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col gap-4 p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto pb-2">
       <div className="rounded-2xl border border-sagra-border bg-white p-4 shadow-sm">
         <div className="flex items-start gap-2">
           <button
@@ -404,8 +405,10 @@ export function ProvaWebBoxWizard({
         ) : null}
 
         {error ? <p className="mt-3 text-sm text-sagra-danger">{error}</p> : null}
+      </div>
+      </div>
 
-        <div className="mt-4 flex justify-end gap-2">
+      <div className="flex shrink-0 justify-end gap-2 border-t border-sagra-border bg-slate-50/95 py-3">
           <button
             type="button"
             onClick={onBack}
@@ -424,7 +427,6 @@ export function ProvaWebBoxWizard({
             ) : null}
             Gerar Prova WEB
           </button>
-        </div>
       </div>
     </div>
   );

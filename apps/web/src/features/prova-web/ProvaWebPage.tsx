@@ -102,11 +102,6 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
     staleTime: 60_000,
   });
 
-  /** Só o viewer/mockup trava a janela; picker/assistente precisam de scroll. */
-  const lockViewport = Boolean(
-    info && hasRecord && !showPicker && manifestQuery.data,
-  );
-
   useEffect(() => {
     document.title = `Prova WEB — OS ${osId}/${ano}`;
   }, [ano, osId]);
@@ -242,13 +237,7 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
   };
 
   return (
-    <div
-      className={
-        lockViewport
-          ? "flex h-dvh max-h-dvh flex-col overflow-hidden bg-sagra-bg text-sagra-text"
-          : "flex min-h-dvh flex-col bg-sagra-bg text-sagra-text"
-      }
-    >
+    <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-sagra-bg text-sagra-text">
       <header className="flex h-14 shrink-0 items-center gap-3 bg-secondary-blue px-3 text-white shadow-md sm:h-16 sm:px-4">
         <img
           src={logoUrl}
@@ -360,13 +349,7 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
         </p>
       ) : null}
 
-      <main
-        className={
-          lockViewport
-            ? "flex min-h-0 flex-1 flex-col overflow-hidden"
-            : "flex min-h-0 flex-1 flex-col"
-        }
-      >
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {infoQuery.isLoading && (
           <CenteredState>
             <Loader2

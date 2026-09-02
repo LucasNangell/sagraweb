@@ -84,6 +84,7 @@ class SubOsHistoryRow(BaseModel):
     data: Optional[str] = None
     ultimo_status: bool = False
     ponto: Optional[str] = None
+    usuario_nome: Optional[str] = None
     cod_status_espelho: Optional[str] = None
     source_type: Optional[str] = None
     source_cod_status: Optional[str] = None

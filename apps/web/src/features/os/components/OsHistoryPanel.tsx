@@ -31,7 +31,7 @@ import {
 } from "@/features/analise/analiseAccess";
 import { useAccessControl } from "@/features/auth/useAccessControl";
 import { useAuthStore } from "@/features/auth/authStore";
-import { formatDateBr, formatPonto } from "@/lib/format";
+import { formatDateBr, formatPonto, sanitizePontoDigits } from "@/lib/format";
 import { homeTestIds } from "@/lib/testId";
 import {
   formatAndamentoObsHoraStamp,
@@ -96,6 +96,23 @@ const SHOW_COMPONENTE_ESPECIFICO = false;
 
 function isEntregueSituacao(situacao: string): boolean {
   return situacao.trim() === "Entregue";
+}
+
+function formatUsuarioPontoLabel(
+  ponto: string | number | null | undefined,
+  nome: string | null | undefined,
+): string {
+  const pontoLabel = formatPonto(ponto);
+  const nomeLabel = (nome ?? "").trim();
+  if (!pontoLabel || !nomeLabel) {
+    return pontoLabel;
+  }
+  return `${pontoLabel} (${nomeLabel})`;
+}
+
+function pontoFromUsuarioLabel(value: string): string {
+  const pontoOnly = value.split("(", 1)[0] ?? value;
+  return sanitizePontoDigits(pontoOnly);
 }
 
 /** "" = não escolhido; "main" = OS principal; "sub:123" = Sub OS; "comp:456" = componente sem Sub OS */
@@ -282,7 +299,7 @@ export function OsHistoryPanel({
       situacao: row.SituacaoLink ?? "",
       setor: row.SetorLink ?? "",
       obs: row.Observaçao ?? "",
-      usuario: formatPonto(row.Ponto ?? ""),
+      usuario: formatUsuarioPontoLabel(row.Ponto, row.usuario_nome),
     });
     if (!editing) {
       setIsEditMode(false);
@@ -322,7 +339,7 @@ export function OsHistoryPanel({
         situacao: subRow.situacao ?? "",
         setor: subRow.setor ?? "",
         obs: subRow.observacao ?? "",
-        usuario: formatPonto(subRow.ponto ?? ""),
+        usuario: formatUsuarioPontoLabel(subRow.ponto, subRow.usuario_nome),
       });
     } else {
       selectHistoryRow(last as OsHistoryRow);
@@ -414,7 +431,7 @@ export function OsHistoryPanel({
       situacao: "",
       setor: "",
       obs: "",
-      usuario: user ? formatPonto(user.ponto) : "",
+      usuario: user ? formatUsuarioPontoLabel(user.ponto, user.nome) : "",
     });
   };
 
@@ -459,7 +476,7 @@ export function OsHistoryPanel({
     situacao: form.situacao,
     setor: form.setor,
     obs: form.obs,
-    usuario: form.usuario,
+    usuario: pontoFromUsuarioLabel(form.usuario),
     confirm_main_os_target: true,
   });
 
@@ -976,7 +993,10 @@ export function OsHistoryPanel({
                                   situacao: subRow.situacao ?? "",
                                   setor: subRow.setor ?? "",
                                   obs: subRow.observacao ?? "",
-                                  usuario: formatPonto(subRow.ponto ?? ""),
+                                  usuario: formatUsuarioPontoLabel(
+                                    subRow.ponto,
+                                    subRow.usuario_nome,
+                                  ),
                                 });
                               }
                             }}

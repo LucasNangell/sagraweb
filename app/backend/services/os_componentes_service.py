@@ -748,12 +748,14 @@ def _generate_next_cod_status(cursor, nro: int, ano: int) -> str:
 def list_sub_os_history(sub_os_id: int) -> List[Dict[str, Any]]:
     rows = db.execute_query(
         """
-        SELECT id, situacao, setor, observacao, data, ultimo_status, ponto,
-               cod_status_espelho, source_type, source_cod_status,
-               herdado_da_os_principal, criado_em, criado_por
-        FROM tab_os_sub_os_andamento
-        WHERE sub_os_id = %s
-        ORDER BY data ASC, id ASC
+        SELECT sa.id, sa.situacao, sa.setor, sa.observacao, sa.data,
+               sa.ultimo_status, sa.ponto, u.Nome AS usuario_nome,
+               sa.cod_status_espelho, sa.source_type, sa.source_cod_status,
+               sa.herdado_da_os_principal, sa.criado_em, sa.criado_por
+        FROM tab_os_sub_os_andamento sa
+        LEFT JOIN tabUsuarios u ON u.Ponto = CAST(REPLACE(REPLACE(COALESCE(sa.ponto, ''), '.', ''), '-', '') AS UNSIGNED)
+        WHERE sa.sub_os_id = %s
+        ORDER BY sa.data ASC, sa.id ASC
         """,
         (sub_os_id,),
     )

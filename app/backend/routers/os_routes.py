@@ -1488,9 +1488,11 @@ def get_os_edit_lock(ano: int, id: int, request: Request):
 @router.get("/os/{ano}/{id}/history", response_model=List[HistoryRow])
 def get_os_history(ano: int, id: int):
     query = (
-        "SELECT CodStatus, SituacaoLink, SetorLink, Data, Ponto, Observaçao "
-        "FROM tabAndamento "
-        "WHERE NroProtocoloLink = %(id)s AND AnoProtocoloLink = %(ano)s "
+        "SELECT a.CodStatus, a.SituacaoLink, a.SetorLink, a.Data, a.Ponto, "
+        "a.Observaçao, u.Nome AS usuario_nome "
+        "FROM tabAndamento a "
+        "LEFT JOIN tabUsuarios u ON u.Ponto = CAST(REPLACE(REPLACE(COALESCE(a.Ponto, ''), '.', ''), '-', '') AS UNSIGNED) "
+        "WHERE a.NroProtocoloLink = %(id)s AND a.AnoProtocoloLink = %(ano)s "
         f"{_OS_HISTORY_ORDER_SQL}"
     )
     try:

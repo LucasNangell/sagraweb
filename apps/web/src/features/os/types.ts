@@ -196,6 +196,7 @@ export interface SubOsHistoryRow {
   data?: string | null;
   ultimo_status: boolean;
   ponto?: string | null;
+  usuario_nome?: string | null;
   cod_status_espelho?: string | null;
   source_type?: string | null;
   source_cod_status?: string | null;
@@ -216,6 +217,7 @@ export interface OsHistoryRow {
   SetorLink?: string | null;
   Data?: string | null;
   Ponto?: string | null;
+  usuario_nome?: string | null;
   Observaçao?: string | null;
 }
 

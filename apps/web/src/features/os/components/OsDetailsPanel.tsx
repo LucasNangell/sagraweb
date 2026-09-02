@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { useOsDetails } from "@/api/hooks/useOsDetails";
 import { useOsComponentes } from "@/api/hooks/useSubOs";
 import { toCheck } from "@/features/gerencia/utils";
-import { formatDateForInput } from "@/lib/format";
+import { formatDateBr } from "@/lib/format";
 import { homeTestIds } from "@/lib/testId";
 import {
   EMPTY_TECH_FIELD,
@@ -166,15 +166,24 @@ export function OsDetailsPanel({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
               <Field label="Formato">
                 <ReadonlyInput value={data.FormatoLink} testId={homeTestIds.osDetails("formato")} />
               </Field>
               <Field label="Prioridade">
                 <ReadonlyInput value={data.EntregPrazoLink} testId={homeTestIds.osDetails("prioridade")} />
               </Field>
-              <Field label="Data" className="col-span-2 sm:col-span-1">
-                <ReadonlyInput value={formatDateForInput(data.EntregData)} testId={homeTestIds.osDetails("data")} />
+              <Field label="Data de entrega">
+                <ReadonlyInput
+                  value={formatDateBr(data.EntregData)}
+                  testId={homeTestIds.osDetails("data")}
+                />
+              </Field>
+              <Field label="Turno">
+                <ReadonlyInput
+                  value={data.EntregPeriodo}
+                  testId={homeTestIds.osDetails("turno")}
+                />
               </Field>
             </div>
           </div>

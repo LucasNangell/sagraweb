@@ -13,10 +13,18 @@ import {
   ArrowUpDown,
   ChevronDown,
   ChevronRight as ChevronRightIcon,
+  ChevronUp,
   FileSpreadsheet,
   Loader2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 
 import { fetchSubOsList } from "@/api/os";
 import { formatDateBr } from "@/lib/format";
@@ -29,9 +37,15 @@ import {
   osRowKey,
 } from "../osTableRows";
 import type { OsSearchMeta, OsSearchRow, OsSortColumn, OsSortDir, SubOsRow } from "../types";
+import {
+  cycleOsSortKeys,
+  osSortHeaderMeta,
+  resolveOsSorts,
+  type OsSortKey,
+} from "../osSortKeys";
 import { OsRowContextMenu } from "./OsContextMenu";
 
-const ROW_HEIGHT = 36;
+const ROW_HEIGHT = 28;
 const MOBILE_CARD_HEIGHT = 120;
 
 function prioClass(prioridade: string | null | undefined): string {
@@ -118,7 +132,7 @@ function buildColumns(
   {
     accessorKey: "produto",
     header: "Produto",
-    size: 118,
+    size: 150,
     cell: ({ getValue }) => (
       <span className="block truncate" title={String(getValue() ?? "")}>
         {getValue<string | null>() ?? ""}
@@ -138,7 +152,7 @@ function buildColumns(
   {
     accessorKey: "titulo",
     header: "Título",
-    size: 360,
+    size: 350,
     cell: ({ getValue }) => (
       <span className="block truncate" title={String(getValue() ?? "")}>
         {getValue<string | null>() ?? ""}
@@ -148,7 +162,7 @@ function buildColumns(
   {
     accessorKey: "situacao",
     header: "Situação",
-    size: 102,
+    size: 140,
     cell: ({ row, getValue }) => {
       const v = getValue<string | null>();
       if ((row.original.is_sub_os || row.original.kind === "sub_os") && !v) {
@@ -160,7 +174,7 @@ function buildColumns(
   {
     accessorKey: "setor",
     header: "Setor",
-    size: 180,
+    size: 100,
     cell: ({ row, getValue }) => {
       const v = getValue<string | null>();
       if ((row.original.is_sub_os || row.original.kind === "sub_os") && !v) {
@@ -177,7 +191,7 @@ function buildColumns(
   {
     accessorKey: "prioridade",
     header: "Prioridade",
-    size: 80,
+    size: 95,
     cell: ({ getValue }) => {
       const v = getValue<string | null>();
       const text = v ?? "";
@@ -211,12 +225,16 @@ interface OsOrdersTableProps {
   selectionLocked?: boolean;
   sortBy?: OsSortColumn;
   sortDir?: OsSortDir;
-  onSortChange: (sortBy?: OsSortColumn, sortDir?: OsSortDir) => void;
+  sorts?: OsSortKey[];
+  onSortChange: (sorts: OsSortKey[]) => void;
   onExportReport?: () => void;
   isExporting?: boolean;
   exportDisabled?: boolean;
   /** Duplo clique na linha abre o modal de detalhes da gerência. */
   onOpenGerenciaDetail?: (row: OsSearchRow) => void;
+  /** Lista ocupa o espaço dos painéis de detalhes e histórico. */
+  listExpanded?: boolean;
+  onListExpandedChange?: (expanded: boolean) => void;
 }
 
 export function OsOrdersTable({
@@ -231,11 +249,14 @@ export function OsOrdersTable({
   selectionLocked = false,
   sortBy,
   sortDir,
+  sorts,
   onSortChange,
   onExportReport,
   isExporting = false,
   exportDisabled = false,
   onOpenGerenciaDetail,
+  listExpanded = false,
+  onListExpandedChange,
 }: OsOrdersTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [, startSelectionTransition] = useTransition();
@@ -356,16 +377,31 @@ export function OsOrdersTable({
     }
   }, [selectionLocked]);
 
+  const collapseListIfExpanded = useCallback(() => {
+    if (listExpanded) {
+      onListExpandedChange?.(false);
+    }
+  }, [listExpanded, onListExpandedChange]);
+
   const handleSelectRow = useCallback(
     (row: OsSearchRow | null) => {
       if (selectionLocked) {
         return;
       }
+      collapseListIfExpanded();
       startSelectionTransition(() => {
         onSelectRow(row ? normalizeOsSelection(row) : null);
       });
     },
-    [onSelectRow, selectionLocked],
+    [collapseListIfExpanded, onSelectRow, selectionLocked],
+  );
+
+  const handleContextSelectRow = useCallback(
+    (row: OsSearchRow | null) => {
+      collapseListIfExpanded();
+      onSelectRow(row);
+    },
+    [collapseListIfExpanded, onSelectRow],
   );
 
   const handleOpenGerenciaDetail = useCallback(
@@ -444,9 +480,14 @@ export function OsOrdersTable({
     [hasSubOsMap, expandedOs, toggleExpand],
   );
 
+  const activeSorts = useMemo(
+    () => resolveOsSorts({ sorts, sortBy, sortDir }),
+    [sortBy, sortDir, sorts],
+  );
+
   const sorting: SortingState = useMemo(
-    () => (sortBy ? [{ id: sortBy, desc: sortDir === "desc" }] : []),
-    [sortBy, sortDir],
+    () => activeSorts.map((item) => ({ id: item.column, desc: item.dir === "desc" })),
+    [activeSorts],
   );
 
   const table = useReactTable({
@@ -454,21 +495,6 @@ export function OsOrdersTable({
     columns,
     state: { sorting },
     manualSorting: true,
-    onSortingChange: (updater) => {
-      const next =
-        typeof updater === "function" ? updater(sorting) : updater;
-      if (next.length === 0) {
-        onSortChange(undefined, undefined);
-        return;
-      }
-      const col = next[0];
-      if (!col) {
-        onSortChange(undefined, undefined);
-        return;
-      }
-      const id = col.id as OsSortColumn;
-      onSortChange(id, col.desc ? "desc" : "asc");
-    },
     getCoreRowModel: getCoreRowModel(),
     getRowId: (row) => displayRowId(row),
   });
@@ -562,27 +588,44 @@ export function OsOrdersTable({
             {headerGroups.map((hg) => (
               <tr key={hg.id}>
                 {hg.headers.map((header) => {
-                  const sorted = header.column.getIsSorted();
+                  const meta = osSortHeaderMeta(activeSorts, header.id);
                   return (
                     <th
                       key={header.id}
-                      className="cursor-pointer select-none whitespace-nowrap px-2 py-2 text-left text-xs font-semibold"
+                      className="cursor-pointer select-none whitespace-nowrap px-2 py-1.5 text-left text-xs font-semibold"
                       style={{ width: header.column.getSize() }}
-                      onClick={header.column.getToggleSortingHandler()}
+                      onClick={() =>
+                        onSortChange(
+                          cycleOsSortKeys(
+                            activeSorts,
+                            header.id as OsSortColumn,
+                          ),
+                        )
+                      }
                       data-testid={homeTestIds.osTableSort(header.id)}
                     >
-                      <span className="inline-flex items-center gap-1">
+                      <span className="inline-flex items-center gap-0.5">
                         {flexRender(
                           header.column.columnDef.header,
                           header.getContext(),
                         )}
-                        {sorted === "asc" ? (
-                          <ArrowUp className="size-3.5" />
-                        ) : sorted === "desc" ? (
-                          <ArrowDown className="size-3.5" />
-                        ) : (
-                          <ArrowUpDown className="size-3.5 opacity-50" />
-                        )}
+                        <span className="inline-flex flex-col items-center justify-center leading-none">
+                          {meta.badge ? (
+                            <span
+                              className="text-[0.55rem] font-bold leading-none"
+                              data-testid={homeTestIds.osTableSortBadge(header.id)}
+                            >
+                              {meta.badge}
+                            </span>
+                          ) : null}
+                          {meta.dir === "desc" ? (
+                            <ArrowUp className="size-3.5" />
+                          ) : meta.dir === "asc" ? (
+                            <ArrowDown className="size-3.5" />
+                          ) : (
+                            <ArrowUpDown className="size-3.5 opacity-50" />
+                          )}
+                        </span>
                       </span>
                     </th>
                   );
@@ -640,7 +683,7 @@ export function OsOrdersTable({
                     <OsRowContextMenu
                       key={displayRowId(data)}
                       row={data}
-                      onSelectRow={onSelectRow}
+                      onSelectRow={handleContextSelectRow}
                     >
                       <tr
                         data-index={virtualRow.index}
@@ -723,7 +766,7 @@ export function OsOrdersTable({
                   <OsRowContextMenu
                     key={`mobile-${displayRowId(data)}`}
                     row={data}
-                    onSelectRow={onSelectRow}
+                    onSelectRow={handleContextSelectRow}
                   >
                     <button
                       type="button"
@@ -828,6 +871,27 @@ export function OsOrdersTable({
           </button>
         ) : null}
       </div>
+
+      {onListExpandedChange ? (
+        <button
+          type="button"
+          onClick={() => onListExpandedChange(!listExpanded)}
+          disabled={selectionLocked}
+          className="hidden h-6 w-full items-center justify-center border-t border-sagra-border bg-slate-50/80 text-neutral-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 lg:flex"
+          aria-expanded={listExpanded}
+          aria-controls={homeTestIds.osHomeDetailsHistory}
+          aria-label={
+            listExpanded ? "Recolher lista de OS" : "Expandir lista de OS"
+          }
+          data-testid={homeTestIds.osTableExpandToggle}
+        >
+          {listExpanded ? (
+            <ChevronUp className="size-4" />
+          ) : (
+            <ChevronDown className="size-4" />
+          )}
+        </button>
+      ) : null}
     </section>
   );
 }

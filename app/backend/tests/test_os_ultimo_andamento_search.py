@@ -11,6 +11,7 @@ from services.os_search_service import (
     _materialized_andamento_join_sql,
     _os_search_default_date_sql,
     _os_search_priority_rank_sql,
+    _parse_os_search_sorts,
     execute_os_search,
 )
 from services.os_ultimo_andamento_service import (
@@ -75,6 +76,29 @@ class TestOsSearchDefaultOrder:
         assert "p.DataEntrada DESC" in sql
         assert "p.AnoProtocolo DESC" in sql
         assert "p.NroProtocolo DESC" in sql
+
+    def test_multi_sorts_orders_each_key_without_extra_tiebreak(self):
+        sql = _build_os_search_order_clause(
+            "ano",
+            "desc",
+            "",
+            situacao_col="a_op.situacao",
+            setor_col="a_op.setor",
+            sorts=[("ano", "desc"), ("nr_os", "asc")],
+        )
+        assert sql.strip() == (
+            "ORDER BY p.AnoProtocolo DESC, p.NroProtocolo ASC"
+        )
+
+    def test_parse_sorts_tokens_prefer_queue_over_legacy(self):
+        parsed = _parse_os_search_sorts(
+            ["ano:desc", "nr_os:asc"],
+            "solicitante",
+            "desc",
+        )
+        assert parsed == [("ano", "desc"), ("nr_os", "asc")]
+        assert _parse_os_search_sorts(None, "ano", "asc") == [("ano", "asc")]
+        assert _parse_os_search_sorts([], None, None) == []
 
 
 class TestOperacionalSelectSql:

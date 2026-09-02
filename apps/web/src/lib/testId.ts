@@ -99,11 +99,15 @@ export const homeTestIds = {
 
   osTable: "os-table",
   osTableSort: (column: string) => testId("os-table-sort", column),
+  osTableSortBadge: (column: string) => testId("os-table-sort-badge", column),
   osTableRow: (ano: number | string, nrOs: number | string) =>
     testId("os-table-row", ano, nrOs),
   osTableExpand: (ano: number | string, nrOs: number | string) =>
     testId("os-table-expand", ano, nrOs),
+  osTableExpandToggle: "os-table-expand-toggle",
   osTableReport: "os-table-report",
+
+  osHomeDetailsHistory: "os-home-details-history",
 
   osDetails: (field: string) => testId("os-details", field),
 

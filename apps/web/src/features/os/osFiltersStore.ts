@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 import { getDefaultAnos } from "./osFilterDefaults";
+import { DEFAULT_OS_SORTS, sanitizeOsSorts, sortsToFilterPatch } from "./osSortKeys";
 import type { OsSearchFilters } from "./types";
 import { DEFAULT_PAGE_SIZE } from "./types";
 
@@ -36,6 +37,7 @@ export const defaultOsFilters = (): OsSearchFilters => ({
   limit: DEFAULT_PAGE_SIZE,
   sortBy: "ano",
   sortDir: "asc",
+  sorts: [...DEFAULT_OS_SORTS],
   fetchAll: true,
 });
 
@@ -70,11 +72,16 @@ export const useOsFiltersStore = create<OsFiltersState>()(
           },
         }),
 
-      resetFilters: () =>
+      resetFilters: () => {
+        const current = get().filters;
         set({
-          filters: defaultOsFilters(),
+          filters: {
+            ...defaultOsFilters(),
+            ...sortsToFilterPatch(current.sorts ?? DEFAULT_OS_SORTS),
+          },
           globalSearch: "",
-        }),
+        });
+      },
 
       setPage: (page) =>
         set({
@@ -87,6 +94,9 @@ export const useOsFiltersStore = create<OsFiltersState>()(
         filters: {
           includeOs: state.filters.includeOs,
           includeSp: state.filters.includeSp,
+          sorts: state.filters.sorts,
+          sortBy: state.filters.sortBy,
+          sortDir: state.filters.sortDir,
         },
       }),
       merge: (persisted, current) => {
@@ -94,6 +104,20 @@ export const useOsFiltersStore = create<OsFiltersState>()(
         if (!p?.filters) {
           return current;
         }
+        const restoredSorts = sanitizeOsSorts(p.filters.sorts);
+        const sortPatch =
+          restoredSorts !== undefined
+            ? sortsToFilterPatch(restoredSorts)
+            : p.filters.sortBy
+              ? sortsToFilterPatch(
+                  sanitizeOsSorts([
+                    {
+                      column: p.filters.sortBy,
+                      dir: p.filters.sortDir === "desc" ? "desc" : "asc",
+                    },
+                  ]) ?? DEFAULT_OS_SORTS,
+                )
+              : {};
         return {
           ...current,
           filters: {
@@ -101,6 +125,7 @@ export const useOsFiltersStore = create<OsFiltersState>()(
             includeFinished: true,
             includeOs: p.filters.includeOs ?? current.filters.includeOs,
             includeSp: p.filters.includeSp ?? current.filters.includeSp,
+            ...sortPatch,
           },
         };
       },

@@ -134,6 +134,30 @@ class TestHomeFetchAllFastPathEligibility:
             include_finished=True,
         )
 
+    def test_all_queue_keys_must_be_fast_sorts(self):
+        assert _can_use_home_fetch_all_fast_path(
+            fetch_all=True,
+            pcp_order=False,
+            exact_os_lookup=False,
+            sort_key="ano",
+            sort_keys=["ano", "nr_os"],
+            clean_situacao=[],
+            clean_setor=[],
+            has_ano=True,
+            include_finished=True,
+        )
+        assert not _can_use_home_fetch_all_fast_path(
+            fetch_all=True,
+            pcp_order=False,
+            exact_os_lookup=False,
+            sort_key="ano",
+            sort_keys=["ano", "situacao"],
+            clean_situacao=[],
+            clean_setor=[],
+            has_ano=True,
+            include_finished=True,
+        )
+
     def test_paginated_search_is_not_eligible(self):
         assert not _can_use_home_fetch_all_fast_path(
             fetch_all=False,

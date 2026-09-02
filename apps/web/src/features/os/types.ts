@@ -101,6 +101,8 @@ export interface OsSearchFilters {
   limit: number;
   sortBy?: OsSortColumn;
   sortDir?: OsSortDir;
+  /** Fila cumulativa da home (1º, 2º, …). `sortBy`/`sortDir` espelham o primeiro. */
+  sorts?: Array<{ column: OsSortColumn; dir: OsSortDir }>;
   /** Busca por Nr OS: fast path SQL; situação/setor/prioridade/OS/SP aplicados após enrich. */
   exactOsLookup?: boolean;
   /** Home: GET /os/search com teto alto (sem paginação de UI). */
@@ -130,6 +132,7 @@ export interface OsDetails {
   ModelosArq?: string | null;
   Pags?: string | number | null;
   EntregData?: string | null;
+  EntregPeriodo?: string | null;
   DescAcabamento?: string | null;
   PapelLink?: string | null;
   PapelDescricao?: string | null;

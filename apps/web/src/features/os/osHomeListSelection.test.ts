@@ -15,6 +15,7 @@ describe("defaultOsFilters", () => {
     const filters = defaultOsFilters();
     expect(filters.sortBy).toBe("ano");
     expect(filters.sortDir).toBe("asc");
+    expect(filters.sorts).toEqual([{ column: "ano", dir: "asc" }]);
     expect(filters.fetchAll).toBe(true);
   });
 });

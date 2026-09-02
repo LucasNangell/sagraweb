@@ -1,4 +1,5 @@
 import { digitsOnly, PROCESSO_MIN_FILTER_DIGITS } from "./processoMask";
+import { resolveOsSorts } from "./osSortKeys";
 import type { OsSearchFilters, OsSearchResponse, OsSearchRow } from "./types";
 
 /** Mínimo de caracteres para disparar busca textual pesada (espelha backend). */
@@ -130,6 +131,7 @@ export function normalizeOsSearchFilters(
     limit: filters.limit,
     sortBy: filters.sortBy,
     sortDir: filters.sortDir,
+    sorts: resolveOsSorts(filters),
     exactOsLookup: filters.exactOsLookup === true,
     fetchAll: filters.fetchAll === true,
   };

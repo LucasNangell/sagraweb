@@ -102,6 +102,29 @@ describe("buildOsSearchQueryString", () => {
     expect(qs).toContain("sort_dir=asc");
   });
 
+  it("envia a fila sorts e omite quando vazia", () => {
+    const withSorts = buildOsSearchQueryString({
+      ...base,
+      sorts: [
+        { column: "ano", dir: "desc" },
+        { column: "nr_os", dir: "asc" },
+      ],
+      sortBy: "ano",
+      sortDir: "desc",
+    });
+    expect(withSorts).toContain("sorts=ano%3Adesc");
+    expect(withSorts).toContain("sorts=nr_os%3Aasc");
+
+    const empty = buildOsSearchQueryString({
+      ...base,
+      sorts: [],
+      sortBy: undefined,
+      sortDir: undefined,
+    });
+    expect(empty).not.toContain("sorts=");
+    expect(empty).not.toContain("sort_by=");
+  });
+
   it("não envia fetch_all no preview de relatório", () => {
     const qs = buildOsSearchQueryString({
       ...base,

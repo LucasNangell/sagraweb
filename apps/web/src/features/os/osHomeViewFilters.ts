@@ -1,6 +1,7 @@
 import { osSearchQueryKey } from "./osSearchQueryKey";
+import { DEFAULT_OS_SORTS, resolveOsSorts } from "./osSortKeys";
 import { OS_TEXT_SEARCH_MIN_CHARS } from "./osSearchUtils";
-import type { OsSearchFilters, OsSearchRow, OsSortColumn } from "./types";
+import type { OsSearchFilters, OsSearchRow, OsSortColumn, OsSortDir } from "./types";
 
 const OS_NR_SP_THRESHOLD = 5000;
 
@@ -31,6 +32,7 @@ export function toOsHomeDatasetFilters(filters: OsSearchFilters): OsSearchFilter
     includeSp: true,
     sortBy: "ano",
     sortDir: "asc",
+    sorts: [...DEFAULT_OS_SORTS],
     dataEntradaDe: undefined,
     dataEntradaAte: undefined,
   };
@@ -226,59 +228,85 @@ function fieldValue(row: OsSearchRow, key: OsSortColumn): string {
   }
 }
 
+function cmpByColumn(
+  a: OsSearchRow,
+  b: OsSearchRow,
+  key: OsSortColumn,
+  dir: 1 | -1,
+): number {
+  if (key === "ano") {
+    return (a.ano - b.ano) * dir;
+  }
+  if (key === "nr_os") {
+    return (a.nr_os - b.nr_os) * dir;
+  }
+  if (key === "prioridade") {
+    return (prioRank(a.prioridade) - prioRank(b.prioridade)) * dir;
+  }
+  return cmpText(fieldValue(a, key), fieldValue(b, key)) * dir;
+}
+
+function sortDirSign(dir: OsSortDir | undefined): 1 | -1 {
+  return dir === "desc" ? -1 : 1;
+}
+
 export function sortOsHomeViewRows(
   rows: OsSearchRow[],
-  filters: Pick<OsSearchFilters, "sortBy" | "sortDir">,
+  filters: Pick<OsSearchFilters, "sortBy" | "sortDir" | "sorts">,
 ): OsSearchRow[] {
-  const key = (filters.sortBy ?? "") as OsSortColumn | "";
-  const dir: 1 | -1 = filters.sortDir === "desc" ? -1 : 1;
+  const sorts = resolveOsSorts(filters);
   const copy = rows.slice();
   copy.sort((a, b) => {
-    if (key === "ano") {
-      if (a.ano !== b.ano) {
-        return (a.ano - b.ano) * dir;
-      }
-      return (a.nr_os - b.nr_os) * dir;
-    }
-    if (key === "nr_os") {
-      if (a.nr_os !== b.nr_os) {
-        return (a.nr_os - b.nr_os) * dir;
-      }
-      return (a.ano - b.ano) * dir;
-    }
-    if (key === "prioridade") {
-      const rank = (prioRank(a.prioridade) - prioRank(b.prioridade)) * dir;
+    if (sorts.length === 0) {
+      const rank = prioRank(a.prioridade) - prioRank(b.prioridade);
       if (rank !== 0) {
         return rank;
       }
-      const dates = cmpText(rowSortDate(a), rowSortDate(b)) * dir;
+      const dates = cmpText(rowSortDate(a), rowSortDate(b));
       if (dates !== 0) {
         return dates;
       }
       return stableTiebreak(a, b);
     }
-    if (
-      key === "produto" ||
-      key === "titulo" ||
-      key === "solicitante" ||
-      key === "situacao" ||
-      key === "setor" ||
-      key === "data_entrada" ||
-      key === "data_entrega"
-    ) {
-      const byField = cmpText(fieldValue(a, key), fieldValue(b, key)) * dir;
+
+    if (sorts.length === 1) {
+      const key = sorts[0]!.column;
+      const dir = sortDirSign(sorts[0]!.dir);
+      if (key === "ano") {
+        if (a.ano !== b.ano) {
+          return (a.ano - b.ano) * dir;
+        }
+        return (a.nr_os - b.nr_os) * dir;
+      }
+      if (key === "nr_os") {
+        if (a.nr_os !== b.nr_os) {
+          return (a.nr_os - b.nr_os) * dir;
+        }
+        return (a.ano - b.ano) * dir;
+      }
+      if (key === "prioridade") {
+        const rank = cmpByColumn(a, b, key, dir);
+        if (rank !== 0) {
+          return rank;
+        }
+        const dates = cmpText(rowSortDate(a), rowSortDate(b)) * dir;
+        if (dates !== 0) {
+          return dates;
+        }
+        return stableTiebreak(a, b);
+      }
+      const byField = cmpByColumn(a, b, key, dir);
       if (byField !== 0) {
         return byField;
       }
       return stableTiebreak(a, b);
     }
-    const rank = prioRank(a.prioridade) - prioRank(b.prioridade);
-    if (rank !== 0) {
-      return rank;
-    }
-    const dates = cmpText(rowSortDate(a), rowSortDate(b));
-    if (dates !== 0) {
-      return dates;
+
+    for (const item of sorts) {
+      const byKey = cmpByColumn(a, b, item.column, sortDirSign(item.dir));
+      if (byKey !== 0) {
+        return byKey;
+      }
     }
     return stableTiebreak(a, b);
   });

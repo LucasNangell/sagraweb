@@ -78,6 +78,7 @@ describe("toOsHomeDatasetFilters", () => {
     expect(dataset.includeSp).toBe(true);
     expect(dataset.sortBy).toBe("ano");
     expect(dataset.sortDir).toBe("asc");
+    expect(dataset.sorts).toEqual([{ column: "ano", dir: "asc" }]);
     expect(dataset.anos).toEqual([2026]);
   });
 
@@ -195,6 +196,19 @@ describe("osHomePatchTriggersFetch", () => {
     ).toBe(false);
     expect(
       osHomePatchTriggersFetch({ sortBy: "situacao", sortDir: "asc" }, baseFilters),
+    ).toBe(false);
+    expect(
+      osHomePatchTriggersFetch(
+        {
+          sorts: [
+            { column: "ano", dir: "desc" },
+            { column: "nr_os", dir: "desc" },
+          ],
+          sortBy: "ano",
+          sortDir: "desc",
+        },
+        baseFilters,
+      ),
     ).toBe(false);
   });
 
@@ -416,6 +430,27 @@ describe("sortOsHomeViewRows", () => {
       { sortBy: "data_entrada", sortDir: "asc" },
     );
     expect(sorted.map((r) => r.nr_os)).toEqual([3, 1, 2]);
+  });
+
+  it("acumula ano desc e nr_os desc na visão local", () => {
+    const sorted = sortOsHomeViewRows(
+      [
+        row({ nr_os: 20, ano: 2026 }),
+        row({ nr_os: 10, ano: 2025 }),
+        row({ nr_os: 5, ano: 2026 }),
+      ],
+      {
+        sorts: [
+          { column: "ano", dir: "desc" },
+          { column: "nr_os", dir: "desc" },
+        ],
+      },
+    );
+    expect(sorted.map((r) => `${r.ano}-${r.nr_os}`)).toEqual([
+      "2026-20",
+      "2026-5",
+      "2025-10",
+    ]);
   });
 });
 

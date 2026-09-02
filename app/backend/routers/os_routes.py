@@ -1138,6 +1138,7 @@ def search_os(
     include_total: bool = False,
     sort_by: Optional[str] = None,
     sort_dir: Optional[str] = None,
+    sorts: Optional[List[str]] = Query(None),
     exact_os_lookup: bool = False,
     painel: bool = Query(False, description="Painel TV: omite enrich live/sub-OS extra"),
     fetch_all: bool = Query(
@@ -1186,6 +1187,7 @@ def search_os(
             simple_pagination=simple_pagination,
             sort_by=sort_by,
             sort_dir=sort_dir,
+            sorts=sorts,
             include_total=include_total or not simple_pagination,
             exact_os_lookup=exact_os_lookup,
             painel=painel,
@@ -1232,6 +1234,7 @@ def export_os_search_xlsx(
     include_sp: bool = True,
     sort_by: Optional[str] = None,
     sort_dir: Optional[str] = None,
+    sorts: Optional[List[str]] = Query(None),
     exact_os_lookup: bool = False,
 ):
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -1270,6 +1273,7 @@ def export_os_search_xlsx(
             include_sp=include_sp,
             sort_by=sort_by,
             sort_dir=sort_dir,
+            sorts=sorts,
             exact_os_lookup=exact_os_lookup,
         )
         output = build_os_list_xlsx(rows)

@@ -105,6 +105,11 @@ export function buildOsSearchQueryString(filters: OsSearchFilters): string {
   params.append("page", String(filters.page));
   params.append("limit", String(filters.limit));
 
+  if (filters.sorts && filters.sorts.length > 0) {
+    for (const item of filters.sorts) {
+      params.append("sorts", `${item.column}:${item.dir}`);
+    }
+  }
   if (filters.sortBy) {
     params.append("sort_by", filters.sortBy);
   }

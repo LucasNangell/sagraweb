@@ -98,6 +98,41 @@ def _sort_columns(situacao_col: str, setor_col: str) -> dict:
     }
 
 
+_OS_SEARCH_SORT_KEYS = frozenset({*OS_SEARCH_SORT_COLUMNS_BASE.keys(), "situacao", "setor"})
+
+
+def _parse_os_search_sorts(
+    sorts: Optional[List[str]],
+    sort_by: Optional[str],
+    sort_dir: Optional[str],
+) -> List[Tuple[str, str]]:
+    parsed: List[Tuple[str, str]] = []
+    seen: set[str] = set()
+    for raw in sorts or []:
+        text = (raw or "").strip()
+        if not text:
+            continue
+        if ":" in text:
+            key, _, direction = text.partition(":")
+        else:
+            key, direction = text, "asc"
+        key = key.strip().lower()
+        direction = "desc" if direction.strip().lower() == "desc" else "asc"
+        if key not in _OS_SEARCH_SORT_KEYS or key in seen:
+            continue
+        seen.add(key)
+        parsed.append((key, direction))
+        if len(parsed) >= len(_OS_SEARCH_SORT_KEYS):
+            break
+    if parsed:
+        return parsed
+    key = (sort_by or "").strip()
+    if key in _OS_SEARCH_SORT_KEYS:
+        direction = "desc" if (sort_dir or "").strip().lower() == "desc" else "asc"
+        return [(key, direction)]
+    return []
+
+
 def _os_search_priority_rank_sql(*, alias: str = "p") -> str:
     """Prometido (1) → Solicitado (2) → demais (3). TRIM tolera variações de texto."""
     prazo = f"TRIM(COALESCE({alias}.EntregPrazoLink, ''))"
@@ -737,6 +772,19 @@ def _expand_split_os_search_rows(
     return expanded
 
 
+def _sort_key_sql_fragment(
+    key: str,
+    direction: str,
+    sort_map: dict,
+) -> Optional[str]:
+    col = sort_map.get(key)
+    if not col:
+        return None
+    if key == "prioridade":
+        return f"{_os_search_priority_rank_sql()} {direction}"
+    return f"{col} {direction}"
+
+
 def _build_os_search_order_clause(
     sort_by: Optional[str],
     sort_dir: Optional[str],
@@ -744,33 +792,58 @@ def _build_os_search_order_clause(
     *,
     situacao_col: str,
     setor_col: str,
+    sorts: Optional[List[Tuple[str, str]]] = None,
 ) -> str:
     sort_map = _sort_columns(situacao_col, setor_col)
-    key = (sort_by or "").strip()
-    col = sort_map.get(key)
-    if not col:
+    keys = list(sorts) if sorts else []
+    if not keys:
+        key = (sort_by or "").strip()
+        if key:
+            direction = "DESC" if (sort_dir or "").strip().lower() == "desc" else "ASC"
+            keys = [(key, direction.lower())]
+    if not keys:
         return f"ORDER BY {order_prefix}{OS_SEARCH_DEFAULT_ORDER}"
 
-    direction = "DESC" if (sort_dir or "").strip().lower() == "desc" else "ASC"
-    if key == "prioridade":
-        body = OS_SEARCH_PRIO_ORDER_DESC if direction == "DESC" else OS_SEARCH_PRIO_ORDER_ASC
-        return f"ORDER BY {order_prefix}{body}"
-
-    if key == "ano":
+    if len(keys) == 1:
+        key, raw_dir = keys[0]
+        col = sort_map.get(key)
+        if not col:
+            return f"ORDER BY {order_prefix}{OS_SEARCH_DEFAULT_ORDER}"
+        direction = "DESC" if raw_dir == "desc" else "ASC"
+        if key == "prioridade":
+            body = OS_SEARCH_PRIO_ORDER_DESC if direction == "DESC" else OS_SEARCH_PRIO_ORDER_ASC
+            return f"ORDER BY {order_prefix}{body}"
+        if key == "ano":
+            return (
+                f"ORDER BY {order_prefix}p.AnoProtocolo {direction}, "
+                f"p.NroProtocolo {direction}"
+            )
+        if key == "nr_os":
+            return (
+                f"ORDER BY {order_prefix}p.NroProtocolo {direction}, "
+                f"p.AnoProtocolo {direction}"
+            )
         return (
-            f"ORDER BY {order_prefix}p.AnoProtocolo {direction}, "
-            f"p.NroProtocolo {direction}"
-        )
-    if key == "nr_os":
-        return (
-            f"ORDER BY {order_prefix}p.NroProtocolo {direction}, "
-            f"p.AnoProtocolo {direction}"
+            f"ORDER BY {order_prefix}{col} {direction}, "
+            f"{_os_search_stable_tiebreak_sql()}"
         )
 
-    return (
-        f"ORDER BY {order_prefix}{col} {direction}, "
-        f"{_os_search_stable_tiebreak_sql()}"
-    )
+    fragments: List[str] = []
+    used: set[str] = set()
+    for key, raw_dir in keys:
+        direction = "DESC" if raw_dir == "desc" else "ASC"
+        fragment = _sort_key_sql_fragment(key, direction, sort_map)
+        if not fragment:
+            continue
+        fragments.append(fragment)
+        used.add(key)
+    if not fragments:
+        return f"ORDER BY {order_prefix}{OS_SEARCH_DEFAULT_ORDER}"
+    if "ano" not in used:
+        fragments.append("p.AnoProtocolo DESC")
+    if "nr_os" not in used:
+        fragments.append("p.NroProtocolo DESC")
+    return f"ORDER BY {order_prefix}" + ", ".join(fragments)
 
 
 def _chunks(items: List[Any], size: int) -> List[List[Any]]:
@@ -801,6 +874,7 @@ def _can_use_home_fetch_all_fast_path(
     pcp_order: bool,
     exact_os_lookup: bool,
     sort_key: str,
+    sort_keys: Optional[List[str]] = None,
     clean_situacao: List[str],
     clean_setor: List[str],
     has_ano: bool,
@@ -809,7 +883,10 @@ def _can_use_home_fetch_all_fast_path(
     """Home fetch_all: protocolos + enrich em lote, sem ROW_NUMBER em tabAndamento."""
     if not fetch_all or pcp_order or exact_os_lookup:
         return False
-    if (sort_key or "").strip() not in _HOME_FETCH_ALL_FAST_SORTS:
+    keys = [k.strip() for k in (sort_keys or []) if k and k.strip()]
+    if not keys:
+        keys = [(sort_key or "").strip()]
+    if any(k not in _HOME_FETCH_ALL_FAST_SORTS for k in keys):
         return False
     needs_andamento_filter = bool(clean_situacao or clean_setor) or not include_finished
     if needs_andamento_filter and not has_ano:
@@ -1098,6 +1175,7 @@ def _execute_home_fetch_all(
     params: dict,
     sort_by: Optional[str],
     sort_dir: Optional[str],
+    sorts: Optional[List[Tuple[str, str]]] = None,
     limit: int,
     include_finished: bool,
     include_total: bool,
@@ -1108,7 +1186,8 @@ def _execute_home_fetch_all(
 ) -> Dict[str, Any]:
     """Lista completa da home: tabProtocolos + enrich em lote, sem ROW_NUMBER/COUNT."""
     sort_key = (sort_by or "").strip()
-    need_details_join = sort_key in ("produto", "titulo")
+    sort_key_names = [k for k, _ in (sorts or [])] or ([sort_key] if sort_key else [])
+    need_details_join = any(k in ("produto", "titulo") for k in sort_key_names)
     details_join = _details_display_join_sql(need_join=need_details_join)
     titulo_select = "d.Titulo AS titulo" if need_details_join else "NULL AS titulo"
     produto_select = (
@@ -1120,6 +1199,7 @@ def _execute_home_fetch_all(
         "",
         situacao_col="NULL",
         setor_col="NULL",
+        sorts=sorts,
     )
     query_params = dict(params)
     query_params["limit"] = limit
@@ -1241,6 +1321,7 @@ def execute_os_search(
     simple_pagination: bool = True,
     sort_by: Optional[str] = None,
     sort_dir: Optional[str] = None,
+    sorts: Optional[List[str]] = None,
     include_total: bool = False,
     exact_os_lookup: bool = False,
     painel: bool = False,
@@ -1309,7 +1390,9 @@ def execute_os_search(
     observacao_term = _os_search_like_term(
         observacao, has_nr_os=has_nr_os, has_ano=has_ano
     )
-    sort_key = (sort_by or "").strip()
+    parsed_sorts = _parse_os_search_sorts(sorts, sort_by, sort_dir)
+    sort_key = parsed_sorts[0][0] if parsed_sorts else (sort_by or "").strip()
+    sort_key_names = [k for k, _ in parsed_sorts] or ([sort_key] if sort_key else [])
 
     clean_situacao = [s.strip() for s in (situacao or []) if s and s.strip()]
     clean_setor = [s.strip() for s in (setor or []) if s and s.strip()]
@@ -1322,6 +1405,7 @@ def execute_os_search(
         pcp_order=pcp_order,
         exact_os_lookup=skip_choice_filters,
         sort_key=sort_key,
+        sort_keys=sort_key_names,
         clean_situacao=clean_situacao,
         clean_setor=clean_setor,
         has_ano=has_ano,
@@ -1348,7 +1432,7 @@ def execute_os_search(
         and details_mode_preview == "fulltext"
         and bool(titulo_term or produto_term)
         and not pcp_order
-        and sort_key not in ("situacao", "setor")
+        and not any(k in ("situacao", "setor") for k in sort_key_names)
         and not clean_situacao
         and not clean_setor
     )
@@ -1642,6 +1726,7 @@ def execute_os_search(
             params=params,
             sort_by=sort_by,
             sort_dir=sort_dir,
+            sorts=parsed_sorts,
             limit=limit,
             include_finished=include_finished,
             include_total=include_total,
@@ -1651,7 +1736,7 @@ def execute_os_search(
             text_search_modes=text_search_modes,
         )
 
-    need_details_join = sort_key in ("produto", "titulo")
+    need_details_join = any(k in ("produto", "titulo") for k in sort_key_names)
 
     pcp_select = ""
     pcp_join = ""
@@ -1746,6 +1831,7 @@ def execute_os_search(
             order_prefix,
             situacao_col=situacao_col,
             setor_col=setor_col,
+            sorts=parsed_sorts,
         )
 
     core_select = f"""

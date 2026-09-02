@@ -35,6 +35,10 @@ import {
   shouldAutoSelectLastOsRow,
 } from "../osHomeListSelection";
 import {
+  osHomeDetailsPaneClassName,
+  osHomeListPaneClassName,
+} from "../osHomeListLayout";
+import {
   getDefaultYearValue,
   resolveDefaultYear,
 } from "../osFilterDefaults";
@@ -45,6 +49,7 @@ import {
   toOsHomeDatasetFilters,
 } from "../osHomeViewFilters";
 import { buildOsHomeSearchFilters } from "../osSearchUtils";
+import { sortsToFilterPatch, type OsSortKey } from "../osSortKeys";
 import {
   savedFilterToOsPatch,
   userDefaultToOsPatch,
@@ -52,7 +57,7 @@ import {
 import { useOsFiltersStore } from "../osFiltersStore";
 import { useOsSelectionStore } from "../osSelectionStore";
 import type { ProvaFichaCorOptions } from "../utils/requisicaoReportUrl";
-import type { OsSearchRow, OsSortColumn, OsSortDir, SavedFilter } from "../types";
+import type { OsSearchRow, SavedFilter } from "../types";
 import { OsAuditLogModal } from "./OsAuditLogModal";
 import { OsDetailsPanel } from "./OsDetailsPanel";
 import { OsFiltersPanel } from "./OsFiltersPanel";
@@ -108,6 +113,7 @@ export function OsHomePage() {
   const [mobileView, setMobileView] = useState<
     "list" | "details" | "history"
   >("list");
+  const [listExpanded, setListExpanded] = useState(false);
   const requestedMobileView = useGuidedTourStore((s) => s.requestedMobileView);
   const [prefsBootstrapped, setPrefsBootstrapped] = useState(homeDefaultPrefsApplied);
   const [isExportingReport, setIsExportingReport] = useState(false);
@@ -597,11 +603,12 @@ export function OsHomePage() {
   }, [selected]);
 
   const handleSortChange = useCallback(
-    (sortBy?: OsSortColumn, sortDir?: OsSortDir) => {
-      if (osHomePatchTriggersFetch({ sortBy, sortDir, page: 1 }, filters)) {
+    (sorts: OsSortKey[]) => {
+      const patch = { ...sortsToFilterPatch(sorts), page: 1 as const };
+      if (osHomePatchTriggersFetch(patch, filters)) {
         markUserListFetch();
       }
-      patchFilters({ sortBy, sortDir, page: 1 });
+      patchFilters(patch);
     },
     [filters, markUserListFetch, patchFilters],
   );
@@ -729,9 +736,9 @@ export function OsHomePage() {
         ) : null}
 
         <div
-          className={cn(
-            "min-h-[min(50vh,360px)] flex-none md:min-h-[clamp(160px,32vh,360px)] md:flex-[5] md:overflow-hidden lg:min-h-[180px]",
-            mobileView !== "list" ? "hidden lg:block" : "block",
+          className={osHomeListPaneClassName(
+            listExpanded,
+            mobileView,
           )}
         >
           <OsOrdersTable
@@ -750,21 +757,21 @@ export function OsHomePage() {
             selectionLocked={historyEditing}
             sortBy={filters.sortBy}
             sortDir={filters.sortDir}
+            sorts={filters.sorts}
             onSortChange={handleSortChange}
             onExportReport={() => void handleExportReport()}
             isExporting={isExportingReport}
             exportDisabled={!prefsBootstrapped || textBelowMinLength}
             onOpenGerenciaDetail={handleOpenGerenciaDetail}
+            listExpanded={listExpanded}
+            onListExpandedChange={setListExpanded}
           />
         </div>
 
         <section
-          className={cn(
-            "flex min-h-0 flex-col gap-2 md:grid md:grid-cols-1 md:gap-2 lg:grid-cols-2 lg:gap-3",
-            mobileView === "list"
-              ? "hidden lg:grid lg:flex-none lg:min-h-[220px] lg:overflow-hidden md:min-h-[clamp(200px,38vh,420px)] md:flex-[4]"
-              : "min-h-0 flex-1 overflow-hidden md:flex-none md:min-h-[clamp(200px,38vh,420px)] md:flex-[4] lg:min-h-[220px] lg:overflow-hidden",
-          )}
+          id={homeTestIds.osHomeDetailsHistory}
+          data-testid={homeTestIds.osHomeDetailsHistory}
+          className={osHomeDetailsPaneClassName(listExpanded, mobileView)}
           aria-label="Detalhes e histórico da OS"
         >
           <div

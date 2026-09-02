@@ -33,6 +33,10 @@ import { useAccessControl } from "@/features/auth/useAccessControl";
 import { useAuthStore } from "@/features/auth/authStore";
 import { formatDateBr, formatPonto } from "@/lib/format";
 import { homeTestIds } from "@/lib/testId";
+import {
+  formatAndamentoObsHoraStamp,
+  insertAndamentoObsHoraStamp,
+} from "../andamentoObsHoraStamp";
 import { dedupeOsHistoryRows } from "../osHistoryUtils";
 import { silentRefreshOsSearch } from "../osRealtimeSync";
 import { useOsFiltersStore } from "../osFiltersStore";
@@ -262,6 +266,8 @@ export function OsHistoryPanel({
 
   const lastAutoKeyRef = useRef<string | null>(null);
   const historyListRef = useRef<HTMLDivElement>(null);
+  const obsTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const pendingObsCursorRef = useRef<number | null>(null);
 
   const resetForm = useCallback(() => {
     void lock.release();
@@ -349,6 +355,21 @@ export function OsHistoryPanel({
     rows.length,
   ]);
 
+  useEffect(() => {
+    const pos = pendingObsCursorRef.current;
+    if (pos == null) {
+      return;
+    }
+    pendingObsCursorRef.current = null;
+    const el = obsTextareaRef.current;
+    if (!el) {
+      return;
+    }
+    el.focus();
+    el.setSelectionRange(pos, pos);
+    el.scrollTop = el.scrollHeight;
+  }, [form.obs]);
+
   const canSaveNew = useMemo(() => {
     if (!editing || isEditMode) {
       return true;
@@ -406,6 +427,17 @@ export function OsHistoryPanel({
     if (!ok) return;
     setIsEditMode(true);
     setEditing(true);
+  };
+
+  const showObsHoraButton = editing && isEditMode;
+
+  const insertHoraStamp = () => {
+    const stamp = formatAndamentoObsHoraStamp(new Date(), user?.nome ?? "");
+    setForm((f) => {
+      const { text, cursor } = insertAndamentoObsHoraStamp(f.obs, stamp);
+      pendingObsCursorRef.current = cursor;
+      return { ...f, obs: text };
+    });
   };
 
   const cancelEdit = () => {
@@ -1095,19 +1127,37 @@ export function OsHistoryPanel({
                     </div>
                   ) : null}
 
-                  <label className="flex min-h-[5rem] min-w-0 flex-1 flex-col text-xs" data-tour="os-history-obs" data-testid={homeTestIds.osHistoryObs}>
-                <span className="shrink-0 font-semibold text-neutral-600">
-                  Observação
-                </span>
-                <textarea
-                  value={form.obs}
-                  disabled={!editing}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, obs: e.target.value }))
-                  }
-                  className="mt-0.5 min-h-[5rem] w-full flex-1 resize-none rounded border border-sagra-border px-2 py-1.5 text-xs disabled:bg-slate-50"
-                />
-              </label>
+                  <div
+                    className="flex min-h-[5rem] min-w-0 flex-1 flex-col text-xs"
+                    data-tour="os-history-obs"
+                    data-testid={homeTestIds.osHistoryObs}
+                  >
+                    <div className="flex shrink-0 items-center justify-between gap-1">
+                      <span className="font-semibold text-neutral-600">
+                        Observação
+                      </span>
+                      {showObsHoraButton ? (
+                        <button
+                          type="button"
+                          data-testid={homeTestIds.osHistoryObsHora}
+                          aria-label="Inserir data e hora na observação"
+                          onClick={insertHoraStamp}
+                          className="rounded border border-sagra-border bg-white px-1.5 py-0.5 text-[10px] font-semibold text-neutral-700 hover:bg-slate-50"
+                        >
+                          Hora
+                        </button>
+                      ) : null}
+                    </div>
+                    <textarea
+                      ref={obsTextareaRef}
+                      value={form.obs}
+                      disabled={!editing}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, obs: e.target.value }))
+                      }
+                      className="mt-0.5 min-h-[5rem] w-full flex-1 resize-none rounded border border-sagra-border px-2 py-1.5 text-xs disabled:bg-slate-50"
+                    />
+                  </div>
                 </div>
               </div>
 

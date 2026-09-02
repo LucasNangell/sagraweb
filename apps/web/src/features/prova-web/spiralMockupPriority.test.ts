@@ -59,7 +59,8 @@ describe("defaultEspiralCrop", () => {
     const u = defaultEspiralCrop("unico");
     expect(u.sourceKind).toBe("unico");
     expect(u.edge).toBe("left");
-    expect(u.holeCount).toBe(14);
+    expect(u.holeCount).toBe(40);
+    expect(u.holeDiameterMm).toBe(3);
     expect(u.capa).toBeUndefined();
 
     const c = defaultEspiralCrop("capa_miolo");

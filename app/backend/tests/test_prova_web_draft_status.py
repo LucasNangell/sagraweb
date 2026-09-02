@@ -133,3 +133,28 @@ def test_delete_version(monkeypatch: pytest.MonkeyPatch) -> None:
     assert svc.delete_prova_web_version(2026, 10, 1) is True
     assert deleted
     assert svc.delete_prova_web_version(2026, 10, 1) is False
+
+
+def test_cliente_aprovou_true(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        svc.db,
+        "execute_query",
+        lambda *_a, **_k: [{"ok": 1}],
+    )
+    assert svc.prova_web_cliente_aprovou(2026, 10, 2) is True
+
+
+def test_cliente_aprovou_false(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: list[Any] = []
+
+    def fake_execute(sql: str, params=None):
+        captured.append((sql, params))
+        return []
+
+    monkeypatch.setattr(svc.db, "execute_query", fake_execute)
+    assert svc.prova_web_cliente_aprovou(2026, 10, 2) is False
+    assert captured
+    sql, params = captured[0]
+    assert "tabProofTokens" in sql
+    assert "Aprovado = 1" in sql
+    assert params == (10, 2026, "2")

@@ -3,9 +3,11 @@ import type { ProvaWebEspiralCrop } from "@/api/provaWeb";
 export type SpiralEdge = "left" | "top";
 
 export const SPIRAL_HOLE_COUNT_MIN = 4;
-export const SPIRAL_HOLE_COUNT_MAX = 40;
+export const SPIRAL_HOLE_COUNT_MAX = 80;
+export const SPIRAL_HOLE_COUNT_DEFAULT = 40;
 export const SPIRAL_HOLE_DIA_MIN = 2;
 export const SPIRAL_HOLE_DIA_MAX = 12;
+export const SPIRAL_HOLE_DIA_DEFAULT = 3;
 export const SPIRAL_MARGIN_MIN = 3;
 export const SPIRAL_MARGIN_MAX = 30;
 
@@ -13,12 +15,12 @@ export const SPIRAL_MARGIN_MAX = 30;
 const HOLE_PITCH_MM = 13;
 
 export function clampHoleCount(n: number): number {
-  if (!Number.isFinite(n)) return 14;
+  if (!Number.isFinite(n)) return SPIRAL_HOLE_COUNT_DEFAULT;
   return Math.max(SPIRAL_HOLE_COUNT_MIN, Math.min(SPIRAL_HOLE_COUNT_MAX, Math.round(n)));
 }
 
 export function clampHoleDiameterMm(mm: number): number {
-  if (!Number.isFinite(mm)) return 5;
+  if (!Number.isFinite(mm)) return SPIRAL_HOLE_DIA_DEFAULT;
   return Math.max(SPIRAL_HOLE_DIA_MIN, Math.min(SPIRAL_HOLE_DIA_MAX, mm));
 }
 
@@ -33,7 +35,7 @@ export function clampMarginFromEdgeMm(mm: number): number {
  */
 export function suggestHoleCount(
   usableSpanMm: number,
-  holeDiameterMm = 5,
+  holeDiameterMm = SPIRAL_HOLE_DIA_DEFAULT,
 ): number {
   const span = Math.max(20, usableSpanMm);
   const pitch = Math.max(holeDiameterMm * 1.8, HOLE_PITCH_MM);
@@ -75,7 +77,9 @@ export function clampSpiralParams(
   "edge" | "holeCount" | "holeDiameterMm" | "marginFromEdgeMm"
 > {
   const edge: SpiralEdge = partial.edge === "top" ? "top" : "left";
-  const holeDiameterMm = clampHoleDiameterMm(partial.holeDiameterMm ?? 5);
+  const holeDiameterMm = clampHoleDiameterMm(
+    partial.holeDiameterMm ?? SPIRAL_HOLE_DIA_DEFAULT,
+  );
   let marginFromEdgeMm = clampMarginFromEdgeMm(partial.marginFromEdgeMm ?? 8);
   if (usable) {
     const maxM = maxMarginForFormat(usable.w, usable.h, edge);
@@ -84,7 +88,7 @@ export function clampSpiralParams(
   }
   return {
     edge,
-    holeCount: clampHoleCount(partial.holeCount ?? 14),
+    holeCount: clampHoleCount(partial.holeCount ?? SPIRAL_HOLE_COUNT_DEFAULT),
     holeDiameterMm,
     marginFromEdgeMm,
   };

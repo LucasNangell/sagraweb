@@ -300,6 +300,8 @@ export interface ProvaWebInfo {
   record: ProvaWebRecord | null;
   versionCount?: number;
   portalUrl?: string | null;
+  /** Cliente já aprovou a versão atual no portal. */
+  clienteAprovou?: boolean;
   isPapelaria: boolean;
   osFolderFound: boolean;
   titulo: string;

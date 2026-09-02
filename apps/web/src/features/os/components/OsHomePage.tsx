@@ -71,6 +71,7 @@ import { OsPrintModeModal } from "./OsPrintModeModal";
 import { SettingsModal } from "@/features/settings/components/SettingsModal";
 import { OsVincularModal } from "./OsVincularModal";
 import { OsNotificarModal } from "./OsNotificarModal";
+import { OsSaveCurrentFiltersModal } from "./OsSaveCurrentFiltersModal";
 
 /** Sobrevive à navegação SPA; zera no refresh (novo carregamento do módulo). */
 let homeDefaultPrefsApplied = false;
@@ -107,6 +108,7 @@ export function OsHomePage() {
     ProvaFichaCorOptions | undefined
   >(undefined);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [saveFiltersOpen, setSaveFiltersOpen] = useState(false);
   const [folderBrowserOpen, setFolderBrowserOpen] = useState(false);
   const [moverPastasOpen, setMoverPastasOpen] = useState(false);
   const [notificarOpen, setNotificarOpen] = useState(false);
@@ -671,6 +673,11 @@ export function OsHomePage() {
             ? () => setSettingsOpen(true)
             : undefined
         }
+        onSaveCurrentFilters={
+          can("sb_configuracoes")
+            ? () => setSaveFiltersOpen(true)
+            : undefined
+        }
       />
 
       <div className="flex min-h-min flex-1 flex-col gap-2 md:min-h-0 md:overflow-hidden">
@@ -870,6 +877,12 @@ export function OsHomePage() {
       <SettingsModal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+      />
+
+      <OsSaveCurrentFiltersModal
+        open={saveFiltersOpen}
+        onClose={() => setSaveFiltersOpen(false)}
+        onSaved={(nome) => setSavedFilterName(nome)}
       />
 
       {/* Expõe abertura de modais para o menu de contexto via eventos customizados */}

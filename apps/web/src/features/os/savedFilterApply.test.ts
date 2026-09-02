@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   hasAnySavedFilterCriteria,
+  osFiltersToSavedPayload,
   savedFilterToOsPatch,
   userDefaultToOsPatch,
 } from "./savedFilterApply";
+import { defaultOsFilters } from "./osFiltersStore";
 import type { SavedFilter } from "./types";
 
 const baseFilter: SavedFilter = {
@@ -75,5 +77,29 @@ describe("savedFilterApply", () => {
         setores: [],
       }),
     ).toBeNull();
+  });
+
+  it("osFiltersToSavedPayload faz round-trip com savedFilterToOsPatch", () => {
+    const withNr: SavedFilter = {
+      ...baseFilter,
+      criterios: { ...baseFilter.criterios!, nr_os: 2244, processo: "12345" },
+    };
+    const payload = osFiltersToSavedPayload({
+      ...defaultOsFilters(),
+      ...savedFilterToOsPatch(withNr),
+    });
+    expect(payload.situacoes).toEqual(withNr.situacoes);
+    expect(payload.setores).toEqual(withNr.setores);
+    expect(payload.criterios).toEqual({
+      nr_os: 2244,
+      anos: [2026],
+      processo: "12345",
+      categorias: ["Deputado"],
+      solicitantes: ["João"],
+      titulo: "Obra",
+      produtos: ["Cartão"],
+      maquinas: ["A1"],
+      prioridade: ["Normal"],
+    });
   });
 });

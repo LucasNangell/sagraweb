@@ -46,6 +46,21 @@ function isRenderReady(status: ProvaWebRenderStatus | undefined): boolean {
   return !status || status === "ready";
 }
 
+export function discardProvaWebConfirmMessage(
+  versao: number,
+  isDraft: boolean,
+  versionCount: number,
+): string {
+  if (isDraft) {
+    return `Descartar o rascunho da Prova ${versao}? Os arquivos renderizados serão apagados e a versão deixará de existir.`;
+  }
+  const previous =
+    versionCount > 1
+      ? " A versão anterior voltará a ser a prova atual."
+      : "";
+  return `Descartar a Prova ${versao}? O link do cliente deixará de funcionar e os arquivos serão apagados.${previous}`;
+}
+
 export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
   const queryClient = useQueryClient();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -74,6 +89,7 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
   const record = info?.record ?? null;
   const hasRecord = Boolean(record);
   const isDraft = Boolean(record?.isDraft || record?.status === "rascunho");
+  const canDiscard = hasRecord && !info?.clienteAprovou;
   const showPicker =
     !optimisticGenerating && (pickerOpen || (Boolean(info) && !hasRecord));
   const portalUrl = info?.portalUrl?.trim() || "";
@@ -199,17 +215,33 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
   };
 
   const handleDiscard = async () => {
-    if (!record?.versao || actionBusy) return;
+    if (!record?.versao || actionBusy || !canDiscard) return;
     const versao = record.versao;
     const ok = window.confirm(
-      `Descartar o rascunho da Prova ${versao}? Os arquivos renderizados serão apagados e a versão deixará de existir.`,
+      discardProvaWebConfirmMessage(versao, isDraft, info?.versionCount ?? 0),
     );
     if (!ok) return;
     setActionBusy(true);
     setActionError(null);
     try {
-      await discardProvaWeb(ano, osId, versao);
-      setPickerOpen(true);
+      const res = await discardProvaWeb(ano, osId, versao);
+      setPickerOpen(!res.record);
+      queryClient.removeQueries({
+        queryKey: ["prova-web-manifest", ano, osId],
+      });
+      queryClient.setQueryData(
+        ["prova-web-info", ano, osId],
+        (prev: ProvaWebInfo | undefined) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            record: res.record,
+            versionCount: res.versionCount ?? (res.record ? prev.versionCount : 0),
+            portalUrl: null,
+            clienteAprovou: false,
+          };
+        },
+      );
       invalidateProvaQueries();
     } catch (err) {
       setActionError(
@@ -327,6 +359,18 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
                     <span className="hidden sm:inline">
                       {linkCopied ? "Copiado" : "Copiar link do cliente"}
                     </span>
+                  </button>
+                ) : null}
+                {canDiscard ? (
+                  <button
+                    type="button"
+                    disabled={actionBusy}
+                    onClick={() => void handleDiscard()}
+                    className="flex items-center gap-1.5 rounded-md border border-white/30 px-2 py-1.5 text-sm font-medium hover:bg-white/10 disabled:opacity-50 sm:px-3"
+                    title="Descartar esta prova. O link do cliente deixará de funcionar."
+                  >
+                    <Trash2 className="size-4 shrink-0" aria-hidden />
+                    <span className="hidden sm:inline">Descartar</span>
                   </button>
                 ) : null}
                 <button

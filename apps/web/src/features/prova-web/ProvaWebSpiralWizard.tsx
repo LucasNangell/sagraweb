@@ -11,6 +11,12 @@ import {
 import { defaultCapaCrop } from "./ProvaWebCoverWizard";
 import { ProvaWebCropPanel } from "./ProvaWebCropPanel";
 import {
+  SPIRAL_HOLE_COUNT_DEFAULT,
+  SPIRAL_HOLE_COUNT_MAX,
+  SPIRAL_HOLE_COUNT_MIN,
+  SPIRAL_HOLE_DIA_DEFAULT,
+  SPIRAL_HOLE_DIA_MAX,
+  SPIRAL_HOLE_DIA_MIN,
   clampHoleCount,
   clampHoleDiameterMm,
   clampMarginFromEdgeMm,
@@ -26,8 +32,8 @@ export function defaultEspiralCrop(
   return {
     sourceKind,
     edge: "left",
-    holeCount: 14,
-    holeDiameterMm: 5,
+    holeCount: SPIRAL_HOLE_COUNT_DEFAULT,
+    holeDiameterMm: SPIRAL_HOLE_DIA_DEFAULT,
     marginFromEdgeMm: 8,
     crop: emptyCropSides("trimbox"),
     ...(sourceKind === "capa_miolo"
@@ -72,10 +78,10 @@ export function ProvaWebSpiralWizard({
     initial?.edge === "top" ? "top" : "left",
   );
   const [holeCount, setHoleCount] = useState(
-    clampHoleCount(initial?.holeCount ?? 14),
+    clampHoleCount(initial?.holeCount ?? SPIRAL_HOLE_COUNT_DEFAULT),
   );
   const [holeDiameterMm, setHoleDiameterMm] = useState(
-    clampHoleDiameterMm(initial?.holeDiameterMm ?? 5),
+    clampHoleDiameterMm(initial?.holeDiameterMm ?? SPIRAL_HOLE_DIA_DEFAULT),
   );
   const [marginFromEdgeMm, setMarginFromEdgeMm] = useState(
     clampMarginFromEdgeMm(initial?.marginFromEdgeMm ?? 8),
@@ -94,7 +100,6 @@ export function ProvaWebSpiralWizard({
     return c ? { ...emptyCropSides(), ...c } : emptyCropSides("trimbox");
   });
   const [pageIndex, setPageIndex] = useState(0);
-  const [suggestedApplied, setSuggestedApplied] = useState(false);
 
   const usableW = Math.max(
     20,
@@ -114,20 +119,6 @@ export function ProvaWebSpiralWizard({
       clampMarginFromEdgeMm(Math.min(m, marginMax)),
     );
   }, [marginMax]);
-
-  // Uma vez: se usuário não tinha holeCount salvo e há formato, sugerir
-  useEffect(() => {
-    if (suggestedApplied || initial?.holeCount != null) return;
-    if (formatoLarguraMm == null && formatoAlturaMm == null) return;
-    setHoleCount(suggested);
-    setSuggestedApplied(true);
-  }, [
-    suggestedApplied,
-    initial?.holeCount,
-    formatoLarguraMm,
-    formatoAlturaMm,
-    suggested,
-  ]);
 
   const spiralGuides = useMemo(
     () =>
@@ -244,11 +235,15 @@ export function ProvaWebSpiralWizard({
             Nº de furos
             <input
               type="number"
-              min={4}
-              max={40}
+              min={SPIRAL_HOLE_COUNT_MIN}
+              max={SPIRAL_HOLE_COUNT_MAX}
               value={holeCount}
               onChange={(e) =>
-                setHoleCount(clampHoleCount(Number(e.target.value) || 14))
+                setHoleCount(
+                  clampHoleCount(
+                    Number(e.target.value) || SPIRAL_HOLE_COUNT_DEFAULT,
+                  ),
+                )
               }
               className="w-24 rounded-lg border border-sagra-border bg-white px-2 py-1.5 text-sm tabular-nums"
             />
@@ -257,13 +252,15 @@ export function ProvaWebSpiralWizard({
             Ø furo (mm)
             <input
               type="number"
-              min={2}
-              max={12}
+              min={SPIRAL_HOLE_DIA_MIN}
+              max={SPIRAL_HOLE_DIA_MAX}
               step={0.5}
               value={holeDiameterMm}
               onChange={(e) =>
                 setHoleDiameterMm(
-                  clampHoleDiameterMm(Number(e.target.value) || 5),
+                  clampHoleDiameterMm(
+                    Number(e.target.value) || SPIRAL_HOLE_DIA_DEFAULT,
+                  ),
                 )
               }
               className="w-24 rounded-lg border border-sagra-border bg-white px-2 py-1.5 text-sm tabular-nums"

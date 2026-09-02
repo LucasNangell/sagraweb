@@ -37,6 +37,7 @@ from services.prova_web_record_service import (
     mark_prova_web_render_pending,
     next_prova_web_versao,
     normalize_prova_web_folhear_modo,
+    prova_web_cliente_aprovou,
     resolve_record_sources,
     set_prova_web_status,
 )
@@ -363,6 +364,7 @@ def get_prova_web(ano: int, os_id: int, request: Request):
             logger.warning(
                 "Prova WEB: portalUrl indisponível (%s/%s): %s", os_id, ano, exc
             )
+    versao_atual = record.get("versao") if record else None
     return {
         "ano": ano,
         "os": os_id,
@@ -372,6 +374,11 @@ def get_prova_web(ano: int, os_id: int, request: Request):
         "isPapelaria": _is_papelaria_os(ano, os_id),
         "osFolderFound": bool(folder and os.path.isdir(folder)),
         **info,
+        "clienteAprovou": (
+            prova_web_cliente_aprovou(ano, os_id, int(versao_atual))
+            if versao_atual is not None
+            else False
+        ),
     }
 
 
@@ -789,10 +796,10 @@ def descartar_prova_web(ano: int, os_id: int, versao: int, request: Request):
     record = get_prova_web_record_by_versao(ano, os_id, versao)
     if not record:
         raise HTTPException(status_code=404, detail="Prova WEB não encontrada.")
-    if not record.get("isDraft"):
+    if prova_web_cliente_aprovou(ano, os_id, versao):
         raise HTTPException(
             status_code=409,
-            detail="Só é possível descartar provas em rascunho.",
+            detail="Não é possível descartar uma prova já aprovada pelo cliente.",
         )
     cancel_prova_web_render(ano, os_id, versao)
     folder = _os_folder(ano, os_id)

@@ -95,7 +95,12 @@ export const homeTestIds = {
   osFiltersAcabamento: "os-filters-acabamento",
   osFiltersObservacao: "os-filters-observacao",
   osFiltersClear: "os-filters-clear",
+  osFiltersSave: "os-filters-save",
   osFiltersRefresh: "os-filters-refresh",
+  osSaveFiltersRoot: "os-save-filters-root",
+  osSaveFiltersName: "os-save-filters-name",
+  osSaveFiltersSubmit: "os-save-filters-submit",
+  osSaveFiltersCancel: "os-save-filters-cancel",
 
   osTable: "os-table",
   osTableSort: (column: string) => testId("os-table-sort", column),

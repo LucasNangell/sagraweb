@@ -27,6 +27,31 @@ export function normalizeSavedFilterCriterios(
   };
 }
 
+/** Recorte persistível dos filtros da Home (mesmo schema de “Criar filtros”). */
+export function osFiltersToSavedPayload(
+  filters: OsSearchFilters,
+): Pick<SavedFilter, "situacoes" | "setores" | "criterios"> {
+  return {
+    situacoes: filters.situacao ?? [],
+    setores: filters.setor ?? [],
+    criterios: {
+      nr_os: filters.nrOs ?? null,
+      anos: Array.isArray(filters.anos)
+        ? filters.anos.filter((n) => Number.isFinite(n))
+        : [],
+      processo: (filters.processo ?? "").replace(/\D/g, ""),
+      categorias: Array.isArray(filters.categorias) ? filters.categorias : [],
+      solicitantes: Array.isArray(filters.solicitantes)
+        ? filters.solicitantes
+        : [],
+      titulo: typeof filters.titulo === "string" ? filters.titulo : "",
+      produtos: Array.isArray(filters.produtos) ? filters.produtos : [],
+      maquinas: Array.isArray(filters.maquinas) ? filters.maquinas : [],
+      prioridade: Array.isArray(filters.prioridade) ? filters.prioridade : [],
+    },
+  };
+}
+
 /** Patch de store ao aplicar filtro salvo (ou default preferências). */
 export function savedFilterToOsPatch(
   filter: Pick<SavedFilter, "situacoes" | "setores" | "criterios">,

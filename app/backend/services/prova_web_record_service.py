@@ -188,6 +188,23 @@ def get_prova_web_record_by_versao(
     return _row_to_record(rows[0])
 
 
+def prova_web_cliente_aprovou(ano: int, os_id: int, versao: int) -> bool:
+    """True se o cliente já aprovou esta versão da Prova WEB no portal."""
+    rows = db.execute_query(
+        """
+        SELECT 1 AS ok
+        FROM tabProofTokens
+        WHERE NroProtocolo = %s AND AnoProtocolo = %s
+          AND TipoProva = 'prova_web'
+          AND Versao = %s
+          AND Aprovado = 1
+        LIMIT 1
+        """,
+        (os_id, ano, str(int(versao))),
+    )
+    return bool(rows)
+
+
 def set_prova_web_status(ano: int, os_id: int, versao: int, status: str) -> None:
     if status not in (STATUS_RASCUNHO, STATUS_PUBLICADO):
         raise ValueError(f"Status inválido: {status}")

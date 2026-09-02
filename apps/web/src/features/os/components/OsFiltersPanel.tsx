@@ -1,5 +1,12 @@
 import { cn } from "@sagra/ui";
-import { ChevronDown, ChevronUp, Eraser, Filter, RefreshCw } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Eraser,
+  Filter,
+  RefreshCw,
+  Save,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -35,6 +42,7 @@ interface OsFiltersPanelProps {
   onPatchFilters: (patch: Partial<OsSearchFilters>) => void;
   onResetFilters: () => void;
   onOpenSettings?: () => void;
+  onSaveCurrentFilters?: () => void;
 }
 
 export function OsFiltersPanel({
@@ -47,6 +55,7 @@ export function OsFiltersPanel({
   onPatchFilters,
   onResetFilters,
   onOpenSettings,
+  onSaveCurrentFilters,
 }: OsFiltersPanelProps) {
   const filters = useOsFiltersStore((s) => s.filters);
   const [mobileExpanded, setMobileExpanded] = useState(false);
@@ -382,18 +391,32 @@ export function OsFiltersPanel({
           </div>
 
           <div className="os-filter-actions flex w-full shrink-0 items-center justify-end gap-1.5 border-t border-sagra-border pt-3 lg:w-auto lg:flex-col lg:justify-center lg:border-t-0 lg:border-l lg:pl-4 lg:pt-0">
-            <button
-              type="button"
-              title="Limpar filtros"
-              onClick={() => {
-                setAdvancedOpen(false);
-                onResetFilters();
-              }}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-              data-testid={homeTestIds.osFiltersClear}
-            >
-              <Eraser className="size-3.5" />
-            </button>
+            <div className="flex flex-col gap-1.5">
+              <button
+                type="button"
+                title="Limpar filtros"
+                onClick={() => {
+                  setAdvancedOpen(false);
+                  onResetFilters();
+                }}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                data-testid={homeTestIds.osFiltersClear}
+              >
+                <Eraser className="size-3.5" />
+              </button>
+              {onSaveCurrentFilters ? (
+                <button
+                  type="button"
+                  title="Salvar filtros"
+                  aria-label="Salvar filtros"
+                  onClick={onSaveCurrentFilters}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-sagra-border text-neutral-600 hover:bg-slate-50"
+                  data-testid={homeTestIds.osFiltersSave}
+                >
+                  <Save className="size-3.5" />
+                </button>
+              ) : null}
+            </div>
             <button
               type="button"
               title="Atualizar"

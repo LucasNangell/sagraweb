@@ -4,6 +4,12 @@ import type { ProvaWebSpiralMockupMeta } from "@/api/provaWeb";
 
 import { configureRenderer } from "./fold-engine/foldMaterials";
 import { boxCorners, spiralFitDistanceFromCorners } from "./spiralFit";
+import {
+  SPIRAL_HOLE_COUNT_DEFAULT,
+  SPIRAL_HOLE_DIA_DEFAULT,
+  clampHoleCount,
+  clampHoleDiameterMm,
+} from "./spiralBinding";
 
 export type SpiralPageTurnArgs = {
   dir: 1 | -1;
@@ -78,7 +84,7 @@ function holePositionsMm(
 ): Array<{ x: number; y: number }> {
   const w = Math.max(40, meta.pageWidthMm);
   const h = Math.max(40, meta.pageHeightMm);
-  const n = Math.max(4, Math.min(40, meta.holeCount || 14));
+  const n = clampHoleCount(meta.holeCount ?? SPIRAL_HOLE_COUNT_DEFAULT);
   const margin = Math.max(3, meta.marginFromEdgeMm || 8);
   const edge = meta.edge === "top" ? "top" : "left";
   const out: Array<{ x: number; y: number }> = [];
@@ -103,7 +109,10 @@ function buildWireCurve(
 ): THREE.CatmullRomCurve3 {
   const edge = meta.edge === "top" ? "top" : "left";
   const holes = holePositionsMm(meta);
-  const R = Math.max(depthMm * 0.62 + 2.8, (meta.holeDiameterMm || 5) * 1.05);
+  const R = Math.max(
+    depthMm * 0.62 + 2.8,
+    (meta.holeDiameterMm || SPIRAL_HOLE_DIA_DEFAULT) * 1.05,
+  );
   const pts: THREE.Vector3[] = [];
   const stepsPerLoop = 28;
 
@@ -171,7 +180,12 @@ export async function createSpiralScene(
   const w = Math.max(40, spiralMockup.pageWidthMm);
   const h = Math.max(40, spiralMockup.pageHeightMm);
   const d = Math.max(4, spiralMockup.blockThicknessMm ?? 8);
-  const holeR = Math.max(1, (spiralMockup.holeDiameterMm || 5) / 2);
+  const holeR = Math.max(
+    1,
+    clampHoleDiameterMm(
+      spiralMockup.holeDiameterMm ?? SPIRAL_HOLE_DIA_DEFAULT,
+    ) / 2,
+  );
   const edge = spiralMockup.edge === "top" ? "top" : "left";
 
   const [frontTex, backTex] = await Promise.all([

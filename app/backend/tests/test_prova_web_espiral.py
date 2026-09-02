@@ -15,8 +15,8 @@ def test_espiral_config_defaults():
     cfg = _espiral_config(None)
     assert cfg["sourceKind"] == "unico"
     assert cfg["edge"] == "left"
-    assert cfg["holeCount"] == 14
-    assert cfg["holeDiameterMm"] == 5.0
+    assert cfg["holeCount"] == 40
+    assert cfg["holeDiameterMm"] == 3.0
 
 
 def test_espiral_config_clamps_and_edge():
@@ -34,10 +34,12 @@ def test_espiral_config_clamps_and_edge():
     )
     assert cfg["sourceKind"] == "capa_miolo"
     assert cfg["edge"] == "top"
-    assert cfg["holeCount"] == 40
+    assert cfg["holeCount"] == 80
     assert cfg["holeDiameterMm"] == 2.0
     assert cfg["marginFromEdgeMm"] == 30.0
     assert cfg["capa"] is None or cfg["capa"].get("lombadaMm") == 0
+    cfg_mid = _espiral_config({"espiral": {"holeCount": 50}})
+    assert cfg_mid["holeCount"] == 50
 
 
 def test_book_mockup_meta_ignores_espiral_mode():

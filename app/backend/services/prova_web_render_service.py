@@ -563,14 +563,14 @@ def _espiral_config(crop_json: Optional[dict[str, Any]]) -> dict[str, Any]:
     if kind not in ("unico", "capa_miolo"):
         kind = "unico"
     try:
-        hole_count = int((raw or {}).get("holeCount") or 14)
+        hole_count = int((raw or {}).get("holeCount") or 40)
     except (TypeError, ValueError):
-        hole_count = 14
-    hole_count = max(4, min(40, hole_count))
+        hole_count = 40
+    hole_count = max(4, min(80, hole_count))
     try:
-        hole_d = float((raw or {}).get("holeDiameterMm") or 5)
+        hole_d = float((raw or {}).get("holeDiameterMm") or 3)
     except (TypeError, ValueError):
-        hole_d = 5.0
+        hole_d = 3.0
     hole_d = max(2.0, min(12.0, hole_d))
     try:
         margin = float((raw or {}).get("marginFromEdgeMm") or 8)

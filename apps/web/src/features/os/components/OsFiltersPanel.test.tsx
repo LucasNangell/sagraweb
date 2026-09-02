@@ -24,6 +24,7 @@ vi.mock("@/api/hooks/useAuxLookups", () => ({
 function renderPanel(
   onPatchFilters = vi.fn(),
   onResetFilters = vi.fn(),
+  extra: Partial<Parameters<typeof OsFiltersPanel>[0]> = {},
 ) {
   return render(
     <OsFiltersPanel
@@ -34,6 +35,7 @@ function renderPanel(
       titleStatus="Filtros de Pesquisa"
       onPatchFilters={onPatchFilters}
       onResetFilters={onResetFilters}
+      {...extra}
     />,
   );
 }
@@ -83,5 +85,27 @@ describe("OsFiltersPanel advanced filters", () => {
     const search = screen.getByPlaceholderText("Digite para filtrar...");
     fireEvent.change(search, { target: { value: "A5" } });
     expect(onPatchFilters).not.toHaveBeenCalled();
+  });
+});
+
+describe("OsFiltersPanel save current filters", () => {
+  beforeEach(() => {
+    useOsFiltersStore.setState({
+      filters: defaultOsFilters(),
+      globalSearch: "",
+      filtersExpanded: true,
+    });
+  });
+
+  it("não mostra o botão de salvar sem callback", () => {
+    renderPanel();
+    expect(screen.queryByTestId("os-filters-save")).not.toBeInTheDocument();
+  });
+
+  it("mostra o botão e dispara o callback", () => {
+    const onSaveCurrentFilters = vi.fn();
+    renderPanel(vi.fn(), vi.fn(), { onSaveCurrentFilters });
+    fireEvent.click(screen.getByTestId("os-filters-save"));
+    expect(onSaveCurrentFilters).toHaveBeenCalledTimes(1);
   });
 });

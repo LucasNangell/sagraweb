@@ -368,7 +368,7 @@ export function GravacaoPendenteTab() {
             ) : (
               <Send className="size-4" />
             )}
-            Lançar gravação externa
+            Enviar para gravação externa
           </button>
         ) : null}
       </div>

@@ -39,7 +39,7 @@ export const SIDEBAR_PERMISSION_COLUMNS: PermissionColumn[] = [
   { key: "sb_gravacao_externa_operador", label: "OpG", title: "Operador Grv. Externa" },
   { key: "sb_gravacao_pendente_excluir", label: "ExG", title: "Excluir controle de chapas" },
   { key: "sb_gravacao_externa_entrega", label: "Rec", title: "Lançar recebimento das chapas" },
-  { key: "sb_gravacao_externa_lancar", label: "LGx", title: "Lançar gravação externa" },
+  { key: "sb_gravacao_externa_lancar", label: "LGx", title: "Enviar para gravação externa" },
   { key: "sb_cotas_graf", label: "Cot", title: "Cotas Graf" },
   { key: "sb_estoque", label: "Est", title: "Estoque (operador)" },
   { key: "sb_estoque_gerente", label: "EGe", title: "Estoque (gerente)" },

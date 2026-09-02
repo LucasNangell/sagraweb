@@ -521,7 +521,7 @@ def test_progressive_publish_writes_partial_manifest(tmp_path: Path) -> None:
         assert man_path.is_file()
         data = json.loads(man_path.read_text(encoding="utf-8"))
         assert data.get("partial") is True
-        assert len(data["pages"]) == len(published)
+        assert 1 <= len(data["pages"]) <= len(published)
 
     manifest = render_svc.ensure_prova_web_pages(
         2026,
@@ -540,3 +540,54 @@ def test_progressive_publish_writes_partial_manifest(tmp_path: Path) -> None:
     cache = render_svc.resolve_web_render_dir(str(os_folder), "AnaliseLab")
     assert (Path(cache) / "page_1.png").is_file()
     assert (Path(cache) / "page_3.png").is_file()
+    data = json.loads((Path(cache) / "manifest.json").read_text(encoding="utf-8"))
+    assert data.get("partial") is False
+    assert data["pageCount"] == 3
+
+
+def test_progressive_publish_continues_when_partial_manifest_is_locked(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import fitz
+
+    from services import prova_web_render_service as render_svc
+
+    os_folder = tmp_path / "os"
+    pdf = os_folder / "doc.pdf"
+    os_folder.mkdir()
+    doc = fitz.open()
+    for _ in range(2):
+        doc.new_page(width=200, height=300)
+    doc.save(str(pdf))
+    doc.close()
+
+    real_write = render_svc._write_manifest_json
+    partial_attempts = {"count": 0}
+
+    def flaky_write(path: str, manifest: dict, *, required: bool = True) -> bool:
+        if manifest.get("partial"):
+            partial_attempts["count"] += 1
+            return False
+        return real_write(path, manifest, required=required)
+
+    monkeypatch.setattr(render_svc, "_write_manifest_json", flaky_write)
+
+    manifest = render_svc.ensure_prova_web_pages(
+        2026,
+        1,
+        mode="unico",
+        source_paths=[str(pdf)],
+        os_folder=str(os_folder),
+        pasta_render="AnaliseLab",
+        crop_json={"unico": empty_crop()},
+        progressive_publish=True,
+    )
+
+    assert partial_attempts["count"] >= 1
+    assert manifest.get("partial") is False
+    assert manifest["pageCount"] == 2
+    cache = render_svc.resolve_web_render_dir(str(os_folder), "AnaliseLab")
+    data = json.loads((Path(cache) / "manifest.json").read_text(encoding="utf-8"))
+    assert data.get("partial") is False
+    assert data["pageCount"] == 2

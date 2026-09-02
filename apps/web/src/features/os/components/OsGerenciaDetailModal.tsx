@@ -100,7 +100,7 @@ export function OsGerenciaDetailModal({
   const composing = mode.kind !== "existing";
   const formEditable = composing || editing;
   const showHistoricoTab = canHistorico && !composing;
-  const showSequenciaProducaoTab = !composing;
+  const showSequenciaProducaoTab = false;
   const vinculosQuery = useQuery({
     queryKey:
       open && row != null && !composing

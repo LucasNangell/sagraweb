@@ -13,6 +13,8 @@ import json
 import logging
 import os
 import re
+import threading
+import time
 from typing import Any, Callable, Optional
 
 from services.prova_web_crop_service import (
@@ -39,6 +41,10 @@ _MANIFEST_NAME = "manifest.json"
 _WEB_RELATIVE = os.path.join("Sefoc", "AdminDocs", "WEB")
 _PASTA_RENDER_RE = re.compile(r"^(Prova[1-9]\d*|AnaliseLab)$")
 LAB_PASTA_RENDER = "AnaliseLab"
+_MANIFEST_REPLACE_RETRIES = 8
+_MANIFEST_REPLACE_DELAY_S = 0.15
+_PARTIAL_MANIFEST_MIN_INTERVAL_S = 1.0
+_PARTIAL_MANIFEST_EVERY_N_PAGES = 5
 
 # Versão da lógica de composição do livro. Incrementar invalida caches antigos.
 _LAYOUT_VERSION = 6
@@ -95,11 +101,58 @@ def _materialize_page_file(
     return _page_dict_from_entry(number, entry)
 
 
-def _write_manifest_json(manifest_path: str, manifest: dict[str, Any]) -> None:
-    tmp_path = f"{manifest_path}.tmp"
-    with open(tmp_path, "w", encoding="utf-8") as fh:
-        json.dump(manifest, fh, ensure_ascii=False)
-    os.replace(tmp_path, manifest_path)
+def _manifest_tmp_path(manifest_path: str) -> str:
+    stamp = int(time.time() * 1000)
+    return (
+        f"{manifest_path}.{os.getpid()}.{threading.get_ident()}.{stamp}.tmp"
+    )
+
+
+def _is_transient_replace_error(exc: OSError) -> bool:
+    winerror = getattr(exc, "winerror", None)
+    if winerror in (5, 32, 33):
+        return True
+    return isinstance(exc, PermissionError)
+
+
+def _replace_file(src: str, dst: str) -> None:
+    os.replace(src, dst)
+
+
+def _write_manifest_json(
+    manifest_path: str,
+    manifest: dict[str, Any],
+    *,
+    required: bool = True,
+) -> bool:
+    tmp_path = _manifest_tmp_path(manifest_path)
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as fh:
+            json.dump(manifest, fh, ensure_ascii=False)
+
+        for attempt in range(_MANIFEST_REPLACE_RETRIES):
+            try:
+                _replace_file(tmp_path, manifest_path)
+                return True
+            except OSError as exc:
+                exhausted_retries = attempt == _MANIFEST_REPLACE_RETRIES - 1
+                if not _is_transient_replace_error(exc) or exhausted_retries:
+                    if required:
+                        raise
+                    logger.warning(
+                        "Manifesto parcial bloqueado pela rede; render continua (%s): %s",
+                        manifest_path,
+                        exc,
+                    )
+                    return False
+                time.sleep(_MANIFEST_REPLACE_DELAY_S * (attempt + 1))
+    finally:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+    return False
 
 ROLE_COVER_FRONT = "cover-front"
 ROLE_COVER_FRONT_INSIDE = "cover-front-inside"
@@ -949,8 +1002,11 @@ def ensure_prova_web_pages(
         return existing
 
     published_pages: list[dict[str, Any]] = []
+    last_partial_manifest_at = 0.0
+    last_partial_manifest_count = 0
 
     def _publish_entry(entry: dict[str, Any], *, expected_total: Optional[int] = None) -> dict[str, Any]:
+        nonlocal last_partial_manifest_at, last_partial_manifest_count
         number = len(published_pages) + 1
         page_meta = _materialize_page_file(cache_dir, number, entry)
         published_pages.append(page_meta)
@@ -980,7 +1036,24 @@ def ensure_prova_web_pages(
             }
             if expected_total is not None:
                 partial_manifest["expectedPageCount"] = int(expected_total)
-            _write_manifest_json(manifest_path, partial_manifest)
+            now = time.monotonic()
+            should_write_partial = (
+                len(published_pages) == 1
+                or (
+                    expected_total is not None
+                    and len(published_pages) >= int(expected_total)
+                )
+                or len(published_pages) - last_partial_manifest_count
+                >= _PARTIAL_MANIFEST_EVERY_N_PAGES
+                or now - last_partial_manifest_at >= _PARTIAL_MANIFEST_MIN_INTERVAL_S
+            )
+            if should_write_partial and _write_manifest_json(
+                manifest_path,
+                partial_manifest,
+                required=False,
+            ):
+                last_partial_manifest_at = now
+                last_partial_manifest_count = len(published_pages)
             if page_published_callback:
                 try:
                     page_published_callback(page_meta)

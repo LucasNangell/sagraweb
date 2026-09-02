@@ -104,7 +104,7 @@ def test_folha_dobrada_render_emits_fold_mockup(
     cache.mkdir()
 
     monkeypatch.setattr(render_svc, "ensure_web_render_dir", lambda *_a, **_k: str(cache))
-    monkeypatch.setattr(render_svc, "render_scale", lambda: 1.0)
+    monkeypatch.setattr(render_svc, "render_scale", lambda *args, **kwargs: 1.0)
 
     crop = {
         "folheto": {
@@ -168,7 +168,7 @@ def test_folha_dobrada_single_page_no_verso(
     cache = tmp_path / "web2"
     cache.mkdir()
     monkeypatch.setattr(render_svc, "ensure_web_render_dir", lambda *_a, **_k: str(cache))
-    monkeypatch.setattr(render_svc, "render_scale", lambda: 1.0)
+    monkeypatch.setattr(render_svc, "render_scale", lambda *args, **kwargs: 1.0)
 
     manifest = render_svc.ensure_prova_web_pages(
         2026,

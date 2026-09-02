@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { queryKeys } from "@/api/query-keys";
+import { ANDAMENTOS_TOUR_TITLE } from "@/features/guided-tour/tours/andamentos";
 import { useGuidedTourStore } from "@/features/guided-tour/tourStore";
 
 import { SupportHelpMenu } from "./SupportHelpMenu";
@@ -38,13 +39,13 @@ describe("SupportHelpMenu tutorial guiado", () => {
     useGuidedTourStore.getState().stop();
   });
 
-  it("mostra Tutorial guiado e inicia Como fazer andamentos?", () => {
+  it("mostra Tutorial guiado e inicia o tour de andamentos", () => {
     renderMenu();
 
     fireEvent.click(screen.getByRole("button", { name: "Ajuda" }));
     fireEvent.click(screen.getByRole("menuitem", { name: /Tutorial guiado/i }));
     fireEvent.click(
-      screen.getByRole("menuitem", { name: "Como fazer andamentos?" }),
+      screen.getByRole("menuitem", { name: ANDAMENTOS_TOUR_TITLE }),
     );
 
     expect(navigate).toHaveBeenCalledWith({ to: "/" });

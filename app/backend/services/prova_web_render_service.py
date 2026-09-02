@@ -1,7 +1,9 @@
 """
 Renderização das páginas da Prova WEB (flipbook).
 
-PyMuPDF rasteriza cada página com crop em mm (ou TrimBox legado) em ~216 dpi.
+PyMuPDF rasteriza cada página com crop em mm (ou TrimBox legado).
+Documentos com menos de 50 páginas-fonte usam ~288 dpi (escala 4.0);
+os demais permanecem em ~216 dpi (escala 3.0).
 O resultado fica em Sefoc/AdminDocs/WEB/ProvaN na pasta da OS.
 """
 from __future__ import annotations
@@ -23,7 +25,9 @@ from services.prova_web_crop_service import (
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_RENDER_SCALE = 3.0  # 3.0 => ~216 dpi
+_DEFAULT_RENDER_SCALE = 3.0  # 3.0 => ~216 dpi (provas longas)
+_HIGH_RENDER_SCALE = 4.0  # 4.0 => ~288 dpi (provas curtas)
+_HIGH_RES_MAX_PAGES = 50
 _MIN_RENDER_SCALE = 1.0
 _MAX_RENDER_SCALE = 4.0
 _MAX_PAGES = 400
@@ -169,15 +173,58 @@ def delete_web_render_dir(os_folder: str, pasta_render: str) -> None:
         shutil.rmtree(render_dir, ignore_errors=True)
 
 
-def render_scale() -> float:
+def render_scale(page_count: Optional[int] = None) -> float:
+    """Escala PyMuPDF: 4.0 se page_count < 50; senão 3.0. Env sobrescreve tudo."""
     raw = (os.environ.get("SAGRA_PROVA_WEB_RENDER_SCALE") or "").strip()
-    if not raw:
-        return _DEFAULT_RENDER_SCALE
+    if raw:
+        try:
+            value = float(raw)
+            return max(_MIN_RENDER_SCALE, min(_MAX_RENDER_SCALE, value))
+        except ValueError:
+            pass
+    if page_count is not None and page_count < _HIGH_RES_MAX_PAGES:
+        return _HIGH_RENDER_SCALE
+    return _DEFAULT_RENDER_SCALE
+
+
+def _manifest_source_page_count(manifest: Optional[dict[str, Any]]) -> Optional[int]:
+    if not isinstance(manifest, dict):
+        return None
+    for key in ("totalSourcePages", "pageCount"):
+        raw = manifest.get(key)
+        try:
+            n = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if n > 0:
+            return n
+    return None
+
+
+def _source_page_count(paths: list[str]) -> int:
+    import fitz
+
+    total = 0
+    for path in paths:
+        with fitz.open(path) as doc:
+            total += len(doc)
+    return total
+
+
+def _page_count_for_scale(
+    existing: Optional[dict[str, Any]],
+    source_paths: list[str],
+) -> Optional[int]:
+    counted = _manifest_source_page_count(existing)
+    if counted is not None:
+        return counted
+    if not source_paths:
+        return None
     try:
-        value = float(raw)
-    except ValueError:
-        return _DEFAULT_RENDER_SCALE
-    return max(_MIN_RENDER_SCALE, min(_MAX_RENDER_SCALE, value))
+        return _source_page_count(source_paths)
+    except Exception:
+        logger.debug("Prova WEB: falha ao contar páginas-fonte", exc_info=True)
+        return None
 
 
 def resolve_os_relative_pdf(os_folder: str, relative: str) -> str:
@@ -878,22 +925,28 @@ def ensure_prova_web_pages(
             except Exception:
                 logger.debug("Prova WEB: progresso callback falhou", exc_info=True)
 
-    scale = render_scale()
-    key = _cache_key(mode, source_paths, scale, crop_json)
     cache_dir = ensure_web_render_dir(os_folder, pasta_render)
     manifest_path = os.path.join(cache_dir, _MANIFEST_NAME)
 
+    existing: Optional[dict[str, Any]] = None
     if os.path.isfile(manifest_path) and not progressive_publish:
         try:
             with open(manifest_path, encoding="utf-8") as fh:
-                existing = json.load(fh)
-            if (
-                not existing.get("partial")
-                and _manifest_matches(existing, mode, source_paths, scale, crop_json)
-            ):
-                return existing
+                loaded = json.load(fh)
+            if isinstance(loaded, dict):
+                existing = loaded
         except (OSError, json.JSONDecodeError):
-            pass
+            existing = None
+
+    scale = render_scale(_page_count_for_scale(existing, source_paths))
+    key = _cache_key(mode, source_paths, scale, crop_json)
+
+    if (
+        existing
+        and not existing.get("partial")
+        and _manifest_matches(existing, mode, source_paths, scale, crop_json)
+    ):
+        return existing
 
     published_pages: list[dict[str, Any]] = []
 
@@ -1494,7 +1547,7 @@ def try_load_cached_manifest(
             existing = json.load(fh)
     except (OSError, json.JSONDecodeError):
         return None
-    scale = render_scale()
+    scale = render_scale(_page_count_for_scale(existing, source_paths))
     if not _manifest_matches(existing, mode, source_paths, scale, crop_json):
         return None
     return existing

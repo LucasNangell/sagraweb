@@ -541,7 +541,18 @@ def rerender_lab_pages(
     if not targets:
         raise ValueError("Nenhuma página válida para regeneração parcial.")
 
-    scale = render_scale()
+    stored = manifest.get("renderScale")
+    try:
+        scale = float(stored)
+    except (TypeError, ValueError):
+        scale = 0.0
+    if scale <= 0:
+        stored_pages = manifest.get("totalSourcePages") or manifest.get("pageCount")
+        try:
+            page_count = int(stored_pages) if stored_pages is not None else None
+        except (TypeError, ValueError):
+            page_count = None
+        scale = render_scale(page_count)
     matrix = fitz.Matrix(scale, scale)
     total = len(targets)
     _progress(0, total)

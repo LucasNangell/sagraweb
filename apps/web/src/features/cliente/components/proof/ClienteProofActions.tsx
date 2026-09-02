@@ -41,13 +41,16 @@ export function ClienteProofActions({
   const requireObs = requireObsForReject && !publicPortal;
 
   return (
-    <section className="rounded-2xl border border-sagra-border bg-white p-4 shadow-sm sm:p-5">
+    <section
+      data-tour="proof-actions"
+      className="rounded-2xl border border-sagra-border bg-white p-4 shadow-sm sm:p-5"
+    >
       <h2 className="text-base font-bold text-secondary-blue">Sua resposta</h2>
       <p className="mt-1 text-sm text-neutral-600">
         Confira o arquivo enviado e registre sua aprovação ou solicitação de ajuste.
       </p>
 
-      <label className="mt-4 flex flex-col gap-1 text-sm">
+      <label className="mt-4 flex flex-col gap-1 text-sm" data-tour="proof-field-nome">
         <span className="font-medium text-neutral-700">
           Nome <span className="text-red-600">*</span>
         </span>
@@ -62,7 +65,7 @@ export function ClienteProofActions({
         />
       </label>
 
-      <label className="mt-3 flex flex-col gap-1 text-sm">
+      <label className="mt-3 flex flex-col gap-1 text-sm" data-tour="proof-field-ponto">
         <span className="font-medium text-neutral-700">
           Número de ponto <span className="text-red-600">*</span>
         </span>
@@ -97,6 +100,7 @@ export function ClienteProofActions({
       ) : null}
 
       <div
+        data-tour="proof-actions-buttons"
         className={
           publicPortal
             ? "mt-5 flex flex-row gap-2"
@@ -105,6 +109,7 @@ export function ClienteProofActions({
       >
         <button
           type="button"
+          data-tour="proof-reject"
           disabled={
             disabled ||
             isPending ||
@@ -124,6 +129,7 @@ export function ClienteProofActions({
         </button>
         <button
           type="button"
+          data-tour="proof-approve"
           disabled={disabled || isPending || !nomeOk || !pontoOk}
           onClick={onApproveClick}
           className={

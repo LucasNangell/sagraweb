@@ -140,7 +140,7 @@ def test_caixa_render_emits_box_mockup(
     cache = tmp_path / "web"
     cache.mkdir()
     monkeypatch.setattr(render_svc, "ensure_web_render_dir", lambda *_a, **_k: str(cache))
-    monkeypatch.setattr(render_svc, "render_scale", lambda: 1.0)
+    monkeypatch.setattr(render_svc, "render_scale", lambda *args, **kwargs: 1.0)
 
     crop = {
         "caixa": {
@@ -200,7 +200,7 @@ def test_caixa_render_separate_files(
     cache = tmp_path / "web"
     cache.mkdir()
     monkeypatch.setattr(render_svc, "ensure_web_render_dir", lambda *_a, **_k: str(cache))
-    monkeypatch.setattr(render_svc, "render_scale", lambda: 1.0)
+    monkeypatch.setattr(render_svc, "render_scale", lambda *args, **kwargs: 1.0)
 
     crop = {
         "caixa": {

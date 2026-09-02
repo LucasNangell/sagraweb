@@ -22,6 +22,8 @@ export interface TourStep {
   shouldSkip?: () => boolean;
   waitingBody?: (ctx: TourStepContext) => string | null;
   waitUntil?: (ctx: TourStepContext) => boolean;
+  /** Se verdadeiro neste passo, o overlay chama `complete()` em vez de avançar. */
+  completeWhen?: () => boolean;
   beforeShow?: () => void;
   mobileView?: TourMobileView;
 }

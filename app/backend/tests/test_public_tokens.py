@@ -139,7 +139,7 @@ class TestProofAndamentoRegistration:
         assert result["situacao"] == "Saída p/"
         assert "Prova v2 aprovada pelo cliente (João Silva - 918.713)" in result["obs"]
 
-    def test_reject_registers_em_execucao_sefoc_with_alteracoes(self, monkeypatch):
+    def test_reject_registers_saida_p_sefoc_with_alteracoes(self, monkeypatch):
         from routers.proof_portal_routes import _register_proof_andamento
 
         captured = self._mock_transaction(monkeypatch)
@@ -154,7 +154,7 @@ class TestProofAndamentoRegistration:
             client_ip="127.0.0.1",
         )
 
-        assert result["situacao"] == "Em Execução"
+        assert result["situacao"] == "Saída p/"
         assert (
             "O cliente (Maria Souza - 12.345) solicitou as seguintes alterações:"
             in result["obs"]
@@ -163,7 +163,7 @@ class TestProofAndamentoRegistration:
         assert "Ajustar margem" in result["obs"]
 
         insert = captured["insert"]
-        assert insert[3] == "Em Execução"
+        assert insert[3] == "Saída p/"
         assert insert[4] == "SEFOC"
         assert insert[6] == "12.345"
 
@@ -183,10 +183,10 @@ class TestProofAndamentoRegistration:
             papelaria_alteracao=True,
         )
 
-        assert result["situacao"] == "Em Execução"
+        assert result["situacao"] == "Saída p/"
         assert "Alterar Prova 3" in result["obs"]
         insert = captured["insert"]
-        assert insert[3] == "Em Execução"
+        assert insert[3] == "Saída p/"
         assert insert[4] == "SEFOC"
 
 

@@ -897,23 +897,18 @@ def _register_proof_andamento(
         else nome_cliente
     )
 
+    situacao = "Saída p/"
     if aprovado:
-
-        situacao = "Saída p/"
-
         obs = f"Prova v{versao} aprovada pelo cliente ({ident_cliente})"
-
+    elif papelaria_alteracao:
+        ver = str(versao or "1").strip() or "1"
+        obs = f"Alterar Prova {ver}"
     else:
-        situacao = "Em Execução"
-        if papelaria_alteracao:
-            ver = str(versao or "1").strip() or "1"
-            obs = f"Alterar Prova {ver}"
-        else:
-            obs_cliente = preserve_line_breaks(observacao.strip())
-            obs = (
-                f"O cliente ({ident_cliente}) solicitou as seguintes alterações:\n"
-                f"{obs_cliente}"
-            )
+        obs_cliente = preserve_line_breaks(observacao.strip())
+        obs = (
+            f"O cliente ({ident_cliente}) solicitou as seguintes alterações:\n"
+            f"{obs_cliente}"
+        )
 
     obs_formatada = format_andamento_obs(obs)
 

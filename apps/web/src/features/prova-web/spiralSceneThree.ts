@@ -41,7 +41,10 @@ export type SpiralSceneHandle = {
   dispose: () => void;
 };
 
-async function loadTexture(url: string | null): Promise<THREE.Texture | null> {
+async function loadTexture(
+  url: string | null,
+  anisotropy = 8,
+): Promise<THREE.Texture | null> {
   if (!url) return null;
   try {
     const res = await fetch(url, { credentials: "include" });
@@ -54,7 +57,7 @@ async function loadTexture(url: string | null): Promise<THREE.Texture | null> {
         (tex) => {
           URL.revokeObjectURL(objUrl);
           tex.colorSpace = THREE.SRGBColorSpace;
-          tex.anisotropy = 8;
+          tex.anisotropy = Math.max(1, anisotropy);
           tex.needsUpdate = true;
           resolve(tex);
         },
@@ -286,6 +289,15 @@ export async function createSpiralScene(
   });
   configureRenderer(renderer, "faithful");
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const textureAnisotropy = renderer.capabilities.getMaxAnisotropy();
+  if (frontTex) {
+    frontTex.anisotropy = textureAnisotropy;
+    frontTex.needsUpdate = true;
+  }
+  if (backTex) {
+    backTex.anisotropy = textureAnisotropy;
+    backTex.needsUpdate = true;
+  }
 
   let disposed = false;
   let needsRender = true;
@@ -409,8 +421,8 @@ export async function createSpiralScene(
   ) => {
     if (disposed) return;
     const [f, b] = await Promise.all([
-      loadTexture(frontUrl),
-      loadTexture(backUrl),
+      loadTexture(frontUrl, textureAnisotropy),
+      loadTexture(backUrl, textureAnisotropy),
     ]);
     if (disposed) {
       f?.dispose();
@@ -431,11 +443,11 @@ export async function createSpiralScene(
       Boolean(leafBackUrl) && leafBackUrl === blockBackUrl;
 
     const [nextFront, blockBack, leafBackDistinct] = await Promise.all([
-      loadTexture(nextFrontUrl),
-      loadTexture(blockBackUrl),
+      loadTexture(nextFrontUrl, textureAnisotropy),
+      loadTexture(blockBackUrl, textureAnisotropy),
       shareLeafAndBlockBack
         ? Promise.resolve(null)
-        : loadTexture(leafBackUrl),
+        : loadTexture(leafBackUrl, textureAnisotropy),
     ]);
     if (disposed) {
       nextFront?.dispose();

@@ -16,6 +16,13 @@ import {
 import type { PapelariaField } from "@/features/papelaria/types";
 import { parsePreviewConfigJson } from "@/features/papelaria/preview";
 import { getPapelariaMockupConfig } from "@/features/papelaria/mockup";
+import {
+  hasSeenPortalAprovacaoAlteracoesTour,
+  hasSeenPortalAprovacaoTour,
+  PORTAL_APROVACAO_ALTERACOES_TOUR_ID,
+  PORTAL_APROVACAO_TOUR_ID,
+} from "@/features/guided-tour/tourSeen";
+import { useGuidedTourStore } from "@/features/guided-tour/tourStore";
 
 import { ClienteProofActions } from "./ClienteProofActions";
 import { ClienteProofDecisionModal } from "./ClienteProofDecisionModal";
@@ -25,7 +32,6 @@ import { ClienteProofPapelariaEditPanel } from "./ClienteProofPapelariaEditPanel
 import {
   ClienteProofAlteracoesDescriptionForm,
   ClienteProofExampleFileModal,
-  ClienteProofPortalFloatingActions,
   ClienteProofPortalInstructionBanner,
   ClienteProofRelevoSecoBanner,
   isRelevoSecoCores,
@@ -152,6 +158,68 @@ export function ClienteProofPage({
   const showRelevoSecoNotice =
     !showFlipbook &&
     isRelevoSecoCores(papelaria?.cores ?? proofQuery.data?.cores);
+  const hasEditableFields =
+    Boolean(isPapelaria && (papelaria?.campos_formulario?.length ?? 0) > 0);
+  const portalTourStartedRef = useRef(false);
+  const portalAlteracoesTourStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (!publicPortal || !proofQuery.data || done || alteracoesRequestMode) {
+      return;
+    }
+    if (hasSeenPortalAprovacaoTour() || portalTourStartedRef.current) {
+      return;
+    }
+    const tour = useGuidedTourStore.getState();
+    if (tour.tourId) {
+      return;
+    }
+    portalTourStartedRef.current = true;
+    tour.start(PORTAL_APROVACAO_TOUR_ID);
+  }, [publicPortal, proofQuery.data, done, alteracoesRequestMode]);
+
+  useEffect(() => {
+    if (!publicPortal || !proofQuery.data || done || !alteracoesRequestMode) {
+      return;
+    }
+    if (
+      hasSeenPortalAprovacaoAlteracoesTour() ||
+      portalAlteracoesTourStartedRef.current
+    ) {
+      return;
+    }
+    const tour = useGuidedTourStore.getState();
+    portalAlteracoesTourStartedRef.current = true;
+    if (tour.tourId === PORTAL_APROVACAO_TOUR_ID) {
+      tour.complete();
+    }
+    useGuidedTourStore.getState().start(PORTAL_APROVACAO_ALTERACOES_TOUR_ID);
+  }, [publicPortal, proofQuery.data, done, alteracoesRequestMode]);
+
+  useEffect(() => {
+    if (alteracoesRequestMode) {
+      return;
+    }
+    const tour = useGuidedTourStore.getState();
+    if (tour.tourId !== PORTAL_APROVACAO_ALTERACOES_TOUR_ID) {
+      return;
+    }
+    tour.stop();
+    portalAlteracoesTourStartedRef.current = false;
+  }, [alteracoesRequestMode]);
+
+  useEffect(() => {
+    if (!done) {
+      return;
+    }
+    const tour = useGuidedTourStore.getState();
+    if (
+      tour.tourId === PORTAL_APROVACAO_TOUR_ID ||
+      tour.tourId === PORTAL_APROVACAO_ALTERACOES_TOUR_ID
+    ) {
+      tour.complete();
+    }
+  }, [done]);
 
   const previewQuery = useQuery({
     queryKey: ["portal", "aprovacao", "preview-pages", token, osId, ano],
@@ -355,6 +423,11 @@ export function ClienteProofPage({
     setErrorMsg(null);
   };
 
+  const handleOpenExampleFile = () => {
+    setExampleUploadError(null);
+    setExampleFileModalOpen(true);
+  };
+
   const handleExampleFiles = (files: FileList | File[]) => {
     const list = Array.from(files);
     if (!list.length) return;
@@ -409,9 +482,6 @@ export function ClienteProofPage({
   let uiStatus: ProofUiStatus = "pending";
   if (done === "approved") uiStatus = "approved";
   if (done === "rejected") uiStatus = "adjustment_requested";
-
-  const showPortalAlteracoesUi =
-    publicPortal && (editMode || alteracoesRequestMode) && !done;
 
   if (done) {
     const summary = submissionSummary;
@@ -527,6 +597,10 @@ export function ClienteProofPage({
 
   return (
     <div
+      data-tour={publicPortal ? "portal-proof-page" : undefined}
+      data-tour-alteracoes={alteracoesRequestMode ? "true" : "false"}
+      data-tour-editable-fields={hasEditableFields ? "true" : "false"}
+      data-tour-approve-modal={modal === "approve" ? "true" : "false"}
       className={cn(
         fillHeight && "flex min-h-0 w-full flex-1 flex-col",
         fillHeight && !editMode && "h-full min-h-0 overflow-hidden",
@@ -627,9 +701,11 @@ export function ClienteProofPage({
                   value={alteracoesAdicionais}
                   loading={respondMutation.isPending}
                   errorMsg={errorMsg}
+                  uploadedFiles={uploadedExampleFiles}
                   onChange={setAlteracoesAdicionais}
                   onSubmit={handleConfirmReject}
                   onCancel={handleCancelAlteracoes}
+                  onExampleFile={handleOpenExampleFile}
                 />
               ) : (
                 <>
@@ -658,9 +734,11 @@ export function ClienteProofPage({
                 value={alteracoesAdicionais}
                 loading={respondMutation.isPending}
                 errorMsg={errorMsg}
+                uploadedFiles={uploadedExampleFiles}
                 onChange={setAlteracoesAdicionais}
                 onSubmit={handleConfirmReject}
                 onCancel={handleCancelAlteracoes}
+                onExampleFile={handleOpenExampleFile}
               />
             </section>
           ) : !alteracoesRequestMode ? (
@@ -694,7 +772,10 @@ export function ClienteProofPage({
           {showRelevoSecoNotice ? <ClienteProofRelevoSecoBanner /> : null}
           {editMode && isPapelaria ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 lg:p-5">
-              <article className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-sagra-border bg-white shadow-sm">
+              <article
+                className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-sagra-border bg-white shadow-sm"
+                data-tour="proof-editable-fields"
+              >
                 <header className="border-b border-sagra-border px-4 py-3">
                   <h3 className="text-xs font-bold uppercase tracking-wide text-neutral-600">
                     Prévia em tempo real — informações do trabalho
@@ -731,20 +812,6 @@ export function ClienteProofPage({
                   )}
                 </div>
               </article>
-            </div>
-          ) : alteracoesRequestMode && publicPortal && !isPapelaria ? (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <ClienteProofPortalInstructionBanner />
-              <div className="min-h-0 flex-1 overflow-hidden p-4 lg:p-5">
-                <ClienteProofViewer
-                  pdfUrl={pdfUrl}
-                  osLabel={osLabel}
-                  hasPdf={Boolean(data?.hasPdf)}
-                  arquivoNome={data?.arquivoNome}
-                  fillHeight={fillHeight}
-                  pdfFit={pdfFit}
-                />
-              </div>
             </div>
           ) : showFlipbook ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
@@ -812,25 +879,16 @@ export function ClienteProofPage({
       />
 
       {publicPortal ? (
-        <>
-          <ClienteProofPortalFloatingActions
-            visible={showPortalAlteracoesUi}
-            onExampleFile={() => {
-              setExampleUploadError(null);
-              setExampleFileModalOpen(true);
-            }}
-          />
-          <ClienteProofExampleFileModal
-            open={exampleFileModalOpen}
-            loading={exampleUploadPending}
-            errorMsg={exampleUploadError}
-            uploadedFiles={uploadedExampleFiles}
-            onUpload={handleExampleFiles}
-            onClose={() => {
-              if (!exampleUploadPending) setExampleFileModalOpen(false);
-            }}
-          />
-        </>
+        <ClienteProofExampleFileModal
+          open={exampleFileModalOpen}
+          loading={exampleUploadPending}
+          errorMsg={exampleUploadError}
+          uploadedFiles={uploadedExampleFiles}
+          onUpload={handleExampleFiles}
+          onClose={() => {
+            if (!exampleUploadPending) setExampleFileModalOpen(false);
+          }}
+        />
       ) : null}
     </div>
   );

@@ -108,6 +108,7 @@ export function GuidedTourOverlay() {
   const stepIndex = useGuidedTourStore((s) => s.stepIndex);
   const next = useGuidedTourStore((s) => s.next);
   const stop = useGuidedTourStore((s) => s.stop);
+  const complete = useGuidedTourStore((s) => s.complete);
   const selectedOs = useOsSelectionStore((s) => s.selected);
 
   const tour = tourId ? getTour(tourId) : undefined;
@@ -208,11 +209,16 @@ export function GuidedTourOverlay() {
   }, [step, next]);
 
   useEffect(() => {
-    if (!step || step.advance !== "wait" || !step.waitUntil) {
+    if (!step || (!step.waitUntil && !step.completeWhen)) {
       return;
     }
     const tick = () => {
       if (advancingRef.current) {
+        return;
+      }
+      if (step.completeWhen?.()) {
+        advancingRef.current = true;
+        complete();
         return;
       }
       const ctx = { selectedOs: useOsSelectionStore.getState().selected };
@@ -228,7 +234,7 @@ export function GuidedTourOverlay() {
       window.clearInterval(id);
       unsub();
     };
-  }, [step, next]);
+  }, [step, next, complete]);
 
   useEffect(() => {
     if (!step) {
@@ -293,7 +299,7 @@ export function GuidedTourOverlay() {
           {showNext ? (
             <button
               type="button"
-              onClick={next}
+              onClick={isLast ? complete : next}
               className="rounded bg-primary-green px-3 py-1.5 text-xs font-semibold text-white"
               data-testid={homeTestIds.guidedTourNext}
             >

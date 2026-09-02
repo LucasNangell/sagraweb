@@ -34,7 +34,14 @@ export function readTourControlValue(tourId: string): string {
   return "";
 }
 
+export function readTourTargetAttr(tourId: string, attr: string): string | null {
+  return queryTourTarget(tourId)?.getAttribute(attr) ?? null;
+}
+
 export function readTourPanelAttr(attr: string): string | null {
-  const el = queryTourTarget("os-history-panel");
-  return el?.getAttribute(attr) ?? null;
+  return readTourTargetAttr("os-history-panel", attr);
+}
+
+export function readProofPageAttr(attr: string): string | null {
+  return readTourTargetAttr("portal-proof-page", attr);
 }

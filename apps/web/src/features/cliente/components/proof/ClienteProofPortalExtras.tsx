@@ -1,6 +1,5 @@
 import { Loader2, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 
 import { cn } from "@sagra/ui";
 
@@ -8,22 +7,26 @@ interface ClienteProofAlteracoesDescriptionFormProps {
   value: string;
   loading?: boolean;
   errorMsg?: string | null;
+  uploadedFiles?: string[];
   onChange: (value: string) => void;
   onSubmit: () => void;
   onCancel: () => void;
+  onExampleFile: () => void;
 }
 
 export function ClienteProofAlteracoesDescriptionForm({
   value,
   loading = false,
   errorMsg = null,
+  uploadedFiles = [],
   onChange,
   onSubmit,
   onCancel,
+  onExampleFile,
 }: ClienteProofAlteracoesDescriptionFormProps) {
   return (
     <>
-      <label className="mt-4 flex flex-col gap-1 text-sm">
+      <label className="mt-4 flex flex-col gap-1 text-sm" data-tour="proof-alteracoes-texto">
         <span className="font-medium text-neutral-700">Descreva as alterações desejadas</span>
         <textarea
           className="min-h-32 rounded-xl border border-sagra-border px-3 py-2 text-sm"
@@ -33,6 +36,25 @@ export function ClienteProofAlteracoesDescriptionForm({
           disabled={loading}
         />
       </label>
+      <button
+        type="button"
+        data-tour="proof-example-file"
+        onClick={onExampleFile}
+        disabled={loading}
+        className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-sagra-border bg-white px-4 py-2 text-sm font-semibold text-secondary-blue hover:bg-slate-50 disabled:opacity-60"
+      >
+        <Upload className="size-4" aria-hidden />
+        Arquivo de exemplo
+      </button>
+      {uploadedFiles.length > 0 ? (
+        <ul className="mt-2 space-y-1 text-sm text-neutral-700">
+          {uploadedFiles.map((name) => (
+            <li key={name} className="rounded-lg bg-green-50 px-3 py-1.5 text-green-900">
+              Arquivo enviado: {name}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {errorMsg ? (
         <p className="mt-3 text-sm text-red-700" role="alert">
           {errorMsg}
@@ -191,52 +213,6 @@ export function ClienteProofExampleFileModal({
         </div>
       </div>
     </div>
-  );
-}
-
-interface ClienteProofPortalFloatingActionsProps {
-  visible: boolean;
-  onExampleFile: () => void;
-}
-
-export function ClienteProofPortalFloatingActions({
-  visible,
-  onExampleFile,
-}: ClienteProofPortalFloatingActionsProps) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!visible || !mounted) return null;
-
-  return createPortal(
-    <div
-      role="group"
-      aria-label="Ações de alteração da prova"
-      className="pointer-events-none"
-      style={{
-        position: "fixed",
-        right: "max(1.25rem, env(safe-area-inset-right, 0px))",
-        bottom: "max(1.25rem, env(safe-area-inset-bottom, 0px))",
-        zIndex: 120,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "flex-end",
-        gap: "0.5rem",
-      }}
-    >
-      <button
-        type="button"
-        onClick={onExampleFile}
-        className="pointer-events-auto inline-flex min-h-11 items-center gap-2 rounded-full border border-sagra-border bg-white px-4 py-2 text-sm font-semibold text-secondary-blue shadow-lg hover:bg-slate-50"
-      >
-        <Upload className="size-4" aria-hidden />
-        Arquivo de exemplo
-      </button>
-    </div>,
-    document.body,
   );
 }
 

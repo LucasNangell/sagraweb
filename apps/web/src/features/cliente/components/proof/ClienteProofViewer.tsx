@@ -133,6 +133,7 @@ export function ClienteProofViewer({
 
   return (
     <div
+      data-tour="proof-pdf-viewer"
       className={cn(
         "overflow-hidden border-sagra-border bg-white shadow-sm",
         fillHeight

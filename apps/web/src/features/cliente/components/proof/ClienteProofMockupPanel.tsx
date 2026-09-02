@@ -121,6 +121,7 @@ function MockupPanelShell({
 }) {
   return (
     <div
+      data-tour="proof-mockup-stage"
       className={cn(
         "relative flex min-h-0 flex-col rounded-2xl border border-sagra-border bg-white shadow-sm",
         fillHeight ? "z-20 flex-1 overflow-hidden" : "overflow-hidden",

@@ -143,7 +143,10 @@ export function ProvaWebViewerShell({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center justify-center gap-1 border-b border-sagra-border bg-white px-3 py-2">
+      <div
+        className="flex shrink-0 items-center justify-center gap-1 border-b border-sagra-border bg-white px-3 py-2"
+        data-tour="proof-viewer-tabs"
+      >
         {isFold || isBox || isSpiral ? (
           <>
             <TabButton
@@ -151,12 +154,14 @@ export function ProvaWebViewerShell({
               onClick={() => setTab("mockup")}
               icon={<Box className="size-3.5" aria-hidden />}
               label="Mockup 3D"
+              tourId="proof-tab-mockup"
             />
             <TabButton
               active={tab === "folhear"}
               onClick={() => setTab("folhear")}
               icon={<BookOpen className="size-3.5" aria-hidden />}
               label="Folhear"
+              tourId="proof-tab-folhear"
             />
           </>
         ) : (
@@ -166,6 +171,7 @@ export function ProvaWebViewerShell({
               onClick={() => setTab("folhear")}
               icon={<BookOpen className="size-3.5" aria-hidden />}
               label="Folhear"
+              tourId="proof-tab-folhear"
             />
             {showMockupTab ? (
               <TabButton
@@ -173,6 +179,7 @@ export function ProvaWebViewerShell({
                 onClick={() => setTab("mockup")}
                 icon={<Box className="size-3.5" aria-hidden />}
                 label="Mockup 3D"
+                tourId="proof-tab-mockup"
               />
             ) : null}
           </>
@@ -183,45 +190,56 @@ export function ProvaWebViewerShell({
             onClick={() => setTab("pdf")}
             icon={<FileText className="size-3.5" aria-hidden />}
             label="PDF"
+            tourId="proof-tab-pdf"
           />
         ) : null}
       </div>
 
       {tab === "pdf" && showPdfTab ? (
-        <ProvaWebPdfPanel
-          ano={ano}
-          osId={osId}
-          sources={pdfSources}
-          buildPdfUrl={buildPdfUrl}
-        />
+        <div className="flex min-h-0 flex-1 flex-col" data-tour="proof-pdf-viewer">
+          <ProvaWebPdfPanel
+            ano={ano}
+            osId={osId}
+            sources={pdfSources}
+            buildPdfUrl={buildPdfUrl}
+          />
+        </div>
       ) : tab === "folhear" || !showMockupTab ? (
         folhearPane
       ) : isFold && foldMockup ? (
-        <ProvaWebFoldMockup3D
-          pages={manifest.pages}
-          foldMockup={foldMockup}
-          pageUrl={resolvedPageUrl}
-        />
+        <div className="flex min-h-0 flex-1 flex-col" data-tour="proof-mockup-stage">
+          <ProvaWebFoldMockup3D
+            pages={manifest.pages}
+            foldMockup={foldMockup}
+            pageUrl={resolvedPageUrl}
+          />
+        </div>
       ) : isBox && boxMockup ? (
-        <ProvaWebBoxMockup3D
-          pages={manifest.pages}
-          boxMockup={boxMockup}
-          pageUrl={resolvedPageUrl}
-        />
+        <div className="flex min-h-0 flex-1 flex-col" data-tour="proof-mockup-stage">
+          <ProvaWebBoxMockup3D
+            pages={manifest.pages}
+            boxMockup={boxMockup}
+            pageUrl={resolvedPageUrl}
+          />
+        </div>
       ) : isSpiral && spiralMockup ? (
-        <ProvaWebSpiralMockup3D
-          pages={manifest.pages}
-          spiralMockup={spiralMockup}
-          pageUrl={resolvedPageUrl}
-        />
+        <div className="flex min-h-0 flex-1 flex-col" data-tour="proof-mockup-stage">
+          <ProvaWebSpiralMockup3D
+            pages={manifest.pages}
+            spiralMockup={spiralMockup}
+            pageUrl={resolvedPageUrl}
+          />
+        </div>
       ) : (
         bookMockup && (
-          <ProvaWebBookMockup3D
-            pages={manifest.pages}
-            bookMockup={bookMockup}
-            pageUrl={resolvedPageUrl}
-            spineUrl={spineUrl}
-          />
+          <div className="flex min-h-0 flex-1 flex-col" data-tour="proof-mockup-stage">
+            <ProvaWebBookMockup3D
+              pages={manifest.pages}
+              bookMockup={bookMockup}
+              pageUrl={resolvedPageUrl}
+              spineUrl={spineUrl}
+            />
+          </div>
         )
       )}
     </div>
@@ -285,16 +303,19 @@ function TabButton({
   onClick,
   icon,
   label,
+  tourId,
 }: {
   active: boolean;
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
+  tourId?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      data-tour={tourId}
       className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
         active
           ? "bg-primary-green text-white shadow-sm"

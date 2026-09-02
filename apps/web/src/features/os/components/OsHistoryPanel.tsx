@@ -94,6 +94,30 @@ const FROZEN_SITUACOES = new Set(["Entregue", "Cancelada", "Cancelado"]);
 /** Oculto no frontend até o teste da feature de destino por componente terminar. */
 const SHOW_COMPONENTE_ESPECIFICO = false;
 
+export function mergeGravacaoPendenteObservacoes(
+  homeObs: string,
+  biroObs: string,
+): string {
+  const homeText = homeObs.trim();
+  const biroText = biroObs.trim();
+  return [
+    homeText,
+    biroText ? `Observação para o Birô:\n${biroText}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+export function buildGravacaoPendenteObservacaoPayload(
+  homeObs: string,
+  biroObs: string,
+): Pick<HistoryPayload, "obs" | "gravacao_pendente_observacao_biro"> {
+  return {
+    obs: mergeGravacaoPendenteObservacoes(homeObs, biroObs),
+    gravacao_pendente_observacao_biro: biroObs.trim(),
+  };
+}
+
 function isEntregueSituacao(situacao: string): boolean {
   return situacao.trim() === "Entregue";
 }
@@ -707,10 +731,14 @@ export function OsHistoryPanel({
 
   const handleGravacaoPendenteConfirm = (result: GravacaoPendenteLaunchResult) => {
     setGravacaoPendenteModalOpen(false);
+    const obsPayload = buildGravacaoPendenteObservacaoPayload(
+      form.obs,
+      result.obs,
+    );
     void saveHistory({
       ...buildPayload(),
       setor: SETOR_GRAVACAO_PENDENTE,
-      obs: result.obs || form.obs,
+      ...obsPayload,
       gravacao_pendente_arquivos: result.arquivos.map((f) => ({
         absolute_path: f.absolute_path,
         nome: f.nome,
@@ -1326,7 +1354,7 @@ export function OsHistoryPanel({
       <GravacaoPendenteLaunchModal
         row={selected}
         open={gravacaoPendenteModalOpen}
-        initialObs={form.obs}
+        initialObs=""
         saving={saving}
         onClose={() => setGravacaoPendenteModalOpen(false)}
         onConfirm={handleGravacaoPendenteConfirm}

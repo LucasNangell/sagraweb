@@ -263,6 +263,7 @@ class HistoryItem(BaseModel):
     gravacao_pendente_arquivos: Optional[List[GravacaoPendenteArquivoInput]] = None
     gravacao_pendente_chapas: Optional[List[GravacaoPendenteChapaInput]] = None
     gravacao_pendente_juntadas: Optional[List[GravacaoPendenteJuntadaInput]] = None
+    gravacao_pendente_observacao_biro: Optional[str] = None
     face_token: Optional[str] = None
     from_tablet: Optional[bool] = False
     replicar_alvo: Optional[str] = None  # "juntada" | "vinculo" (default)
@@ -1604,6 +1605,7 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
     gp_juntada_grupo_id: str | None = None
     gp_lancador_nome: str | None = None
     obs_formatada = format_andamento_obs(item.obs)
+    gp_observacao_biro = None
 
     if is_gravacao_pendente_situacao(item.situacao):
         item.setor = SETOR_GRAVACAO_PENDENTE
@@ -1640,6 +1642,9 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        gp_observacao_biro = item.gravacao_pendente_observacao_biro
+        if gp_observacao_biro is None:
+            gp_observacao_biro = item.obs
         if gp_juntadas:
             import uuid
 
@@ -1747,7 +1752,7 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
                 validated_chapas=validated_gp_chapas,
                 cliente=lookup_os_solicitante(ano, id),
                 juntada_grupo_id=gp_juntada_grupo_id,
-                observacao=item.obs,
+                observacao=gp_observacao_biro,
             )
             for j_ano, j_nr in gp_juntadas:
                 j_cod = _insert_andamento_for(j_nr, j_ano)
@@ -1762,7 +1767,7 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
                     validated_chapas=validated_gp_chapas,
                     cliente=lookup_os_solicitante(j_ano, j_nr),
                     juntada_grupo_id=gp_juntada_grupo_id,
-                    observacao=item.obs,
+                    observacao=gp_observacao_biro,
                 )
 
         return HistoryAddResponse(new_id=new_cod)

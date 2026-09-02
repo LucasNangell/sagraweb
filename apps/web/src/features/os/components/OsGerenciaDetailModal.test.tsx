@@ -111,13 +111,16 @@ describe("buildGerenciaModalNavSections", () => {
     expect(
       buildGerenciaModalNavSections({
         showHistorico: false,
+        showSequenciaProducao: false,
         showVinculos: false,
       }).map((s) => s.id),
     ).not.toContain("vinculos");
     const withVinculos = buildGerenciaModalNavSections({
       showHistorico: true,
+      showSequenciaProducao: true,
       showVinculos: true,
     });
+    expect(withVinculos.map((s) => s.id)).toContain("sequencia-producao");
     expect(withVinculos.map((s) => s.id)).toContain("vinculos");
     expect(withVinculos.find((s) => s.id === "vinculos")?.label).toBe(
       "Vínculos da OS",

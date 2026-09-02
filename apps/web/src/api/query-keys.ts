@@ -24,6 +24,8 @@ export const queryKeys = {
     notificacaoWatch: (ano: number, id: number) =>
       ["os", "notificacaoWatch", ano, id] as const,
     componentes: (ano: number, id: number) => ["os", "componentes", ano, id] as const,
+    sequenciaProducao: (ano: number, id: number) =>
+      ["os", "sequenciaProducao", ano, id] as const,
     subOs: (ano: number, id: number) => ["os", "subOs", ano, id] as const,
     subOsSummary: (ano: number, id: number) => ["os", "subOsSummary", ano, id] as const,
     subOsHistory: (ano: number, id: number, subOsId: number) =>

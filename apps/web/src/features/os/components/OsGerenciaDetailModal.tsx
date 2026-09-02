@@ -34,17 +34,26 @@ import {
   type OsGerenciaModalMode,
 } from "../contextMenuActions";
 import { OsGerenciaAuditHistoryPanel } from "./OsGerenciaAuditHistoryPanel";
+import { OsSequenciaProducaoTab } from "./OsSequenciaProducaoTab";
 import { OsVinculosEditor } from "./OsVinculosEditor";
 import type { OsSearchRow } from "../types";
 
-export type GerenciaModalNavId = GerenciaSectionId | "historico" | "vinculos";
+export type GerenciaModalNavId =
+  | GerenciaSectionId
+  | "sequencia-producao"
+  | "historico"
+  | "vinculos";
 
 export function buildGerenciaModalNavSections(options: {
   showHistorico: boolean;
   showVinculos: boolean;
+  showSequenciaProducao?: boolean;
 }): { id: GerenciaModalNavId; label: string }[] {
   return [
     ...GERENCIA_MODAL_SECTIONS,
+    ...(options.showSequenciaProducao
+      ? [{ id: "sequencia-producao" as const, label: "Sequência de produção" }]
+      : []),
     ...(options.showVinculos
       ? [{ id: "vinculos" as const, label: "Vínculos da OS" }]
       : []),
@@ -91,6 +100,7 @@ export function OsGerenciaDetailModal({
   const composing = mode.kind !== "existing";
   const formEditable = composing || editing;
   const showHistoricoTab = canHistorico && !composing;
+  const showSequenciaProducaoTab = !composing;
   const vinculosQuery = useQuery({
     queryKey:
       open && row != null && !composing
@@ -160,7 +170,10 @@ export function OsGerenciaDetailModal({
     if (section === "vinculos" && !showVinculosTab) {
       setSection("solicitante");
     }
-  }, [section, showHistoricoTab, showVinculosTab]);
+    if (section === "sequencia-producao" && !showSequenciaProducaoTab) {
+      setSection("solicitante");
+    }
+  }, [section, showHistoricoTab, showSequenciaProducaoTab, showVinculosTab]);
 
   const requestClose = useCallback(() => {
     if (arquivosModal) return;
@@ -320,6 +333,7 @@ export function OsGerenciaDetailModal({
 
   const navSections = buildGerenciaModalNavSections({
     showHistorico: showHistoricoTab,
+    showSequenciaProducao: showSequenciaProducaoTab,
     showVinculos: showVinculosTab,
   });
   const activeLabel =
@@ -430,7 +444,9 @@ export function OsGerenciaDetailModal({
               <div
                 className={cn(
                   "min-h-0 flex-1 overscroll-contain p-3.5 sm:p-4",
-                  section === "material" || section === "historico"
+                  section === "material" ||
+                    section === "historico" ||
+                    section === "sequencia-producao"
                     ? "flex flex-col overflow-hidden"
                     : "overflow-y-auto",
                 )}
@@ -448,6 +464,16 @@ export function OsGerenciaDetailModal({
                       key={`${row.ano}-${row.nr_os}`}
                       row={row}
                       readOnly={!canVincularOs}
+                    />
+                  ) : null
+                ) : section === "sequencia-producao" ? (
+                  showSequenciaProducaoTab ? (
+                    <OsSequenciaProducaoTab
+                      ano={row.ano}
+                      osId={row.nr_os}
+                      readOnly={!formEditable}
+                      canEdit={canEdit}
+                      osDirty={formEditable && dirty}
                     />
                   ) : null
                 ) : loading ? (

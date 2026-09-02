@@ -27,6 +27,7 @@ shapely>=2.0,<3.0
 Jinja2>=3.1.0
 openpyxl>=3.1.0
 pandas>=2.0.0
+python-docx>=1.1.0
 onnxruntime>=1.16.0,<2.0
 xlrd>=2.0.1
 # Portal cliente — upload direto ao Google Drive (evita banda zrok)

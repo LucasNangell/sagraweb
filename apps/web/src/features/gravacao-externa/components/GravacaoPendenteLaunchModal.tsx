@@ -946,13 +946,15 @@ export function GravacaoPendenteLaunchModal({
 
             {!isEdit ? (
               <label className="block text-xs">
-                <span className="font-semibold text-neutral-600">Observação</span>
+                <span className="font-semibold text-neutral-600">
+                  Observação para o Birô
+                </span>
                 <textarea
                   value={obs}
                   onChange={(e) => setObs(e.target.value)}
                   rows={3}
                   className="mt-1 w-full resize-none rounded-md border border-slate-300 px-2 py-1.5 text-sm"
-                  placeholder="Observações adicionais (opcional)"
+                  placeholder="Observações para o Birô (opcional)"
                 />
               </label>
             ) : null}

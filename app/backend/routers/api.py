@@ -57,6 +57,7 @@ from routers import (
     prova_web_routes,
     analise_lab_routes,
     orcamento_routes,
+    sync_andamentos_status_routes,
 )
 from security.api_auth import APIAccessMiddleware, is_master_client, resolve_client_ip
 from logging_setup import configure_root_api_logging
@@ -888,6 +889,7 @@ app.include_router(os_arquivos_routes.router, prefix="/api")
 app.include_router(sequencia_producao_routes.router, prefix="/api")
 app.include_router(os_fluxo_producao_routes.router, prefix="/api")
 app.include_router(dev_features_routes.router, prefix="/api")
+app.include_router(sync_andamentos_status_routes.router, prefix="/api")
 app.include_router(cliente_gabinete_routes.router)
 app.include_router(proof_portal_routes.router, prefix="/api")
 app.include_router(analise_routes.router, prefix="/api")

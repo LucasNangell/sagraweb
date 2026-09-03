@@ -30,6 +30,11 @@ import {
   mergeLoadedWindow,
   seedLoadedWindow,
 } from "./flipbookFit";
+import {
+  flipbookPageStackCounts,
+  flipbookPageStackWidthPx,
+  PAGE_STACK_MAX_PX,
+} from "./flipbookPageStack";
 import { BOOK_EXTRA_KIND_LABELS } from "./provaWebBookExtras";
 import { ProvaWebFoldMockup3D } from "./ProvaWebFoldMockup3D";
 import {
@@ -217,6 +222,13 @@ function ProvaWebFlipbookHorizontal({
     [visiblePages],
   );
   const isSpread = visiblePages.length > 1;
+  const pageStack = useMemo(() => {
+    const counts = flipbookPageStackCounts(total, pageIndex);
+    return {
+      left: flipbookPageStackWidthPx(counts.left),
+      right: flipbookPageStackWidthPx(counts.right),
+    };
+  }, [pageIndex, total]);
 
   const pageMeta = useMemo(() => {
     const first = pages.find((p) => p.role === "page") ?? pages[0];
@@ -264,7 +276,7 @@ function ProvaWebFlipbookHorizontal({
     const el = stageRef.current;
     if (!el) return;
     const measure = () => {
-      const padX = 32;
+      const padX = 32 + PAGE_STACK_MAX_PX * 2;
       const padY = 16;
       const gutter = Math.max(0, stageGutterRight || 0);
       setStageSize({
@@ -582,6 +594,18 @@ function ProvaWebFlipbookHorizontal({
             maxWidth: "100%",
           }}
         >
+          <div
+            className="prova-web-page-stack prova-web-page-stack--left"
+            style={{ width: pageStack.left }}
+            hidden={pageStack.left <= 0}
+            aria-hidden
+          />
+          <div
+            className="prova-web-page-stack prova-web-page-stack--right"
+            style={{ width: pageStack.right }}
+            hidden={pageStack.right <= 0}
+            aria-hidden
+          />
           <div
             key={`book-${cacheKey ?? "x"}-${total}`}
             ref={bookRef}

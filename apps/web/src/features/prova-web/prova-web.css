@@ -20,6 +20,40 @@
   height: 100%;
 }
 
+.prova-web-page-stack {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  pointer-events: none;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: repeating-linear-gradient(
+    180deg,
+    #f8f8f8 0px,
+    #f8f8f8 2px,
+    #e8e8e8 2px,
+    #e8e8e8 3px
+  );
+  transition: width 180ms ease;
+}
+
+.prova-web-page-stack--left {
+  right: 100%;
+  border-radius: 2px 0 0 2px;
+  box-shadow: inset -1px 0 0 rgba(15, 23, 42, 0.08);
+}
+
+.prova-web-page-stack--right {
+  left: 100%;
+  border-radius: 0 2px 2px 0;
+  box-shadow: inset 1px 0 0 rgba(15, 23, 42, 0.08);
+}
+
+.prova-web-page-stack[hidden] {
+  display: none;
+}
+
 .prova-web-page {
   position: relative;
   background: #ffffff;

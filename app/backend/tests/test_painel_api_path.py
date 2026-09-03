@@ -18,3 +18,11 @@ def test_admin_reload_poll_is_painel_anonymous_get():
     assert is_painel_api_route("/api/realtime/admin-reload", "GET") is True
     assert is_painel_api_route("/sagra/api/realtime/admin-reload", "GET") is True
     assert is_painel_api_route("/api/realtime/admin-reload", "POST") is False
+
+
+def test_sync_andamentos_service_status_is_painel_anonymous_get():
+    assert is_painel_api_route("/api/sync-andamentos/service-status", "GET") is True
+    assert is_painel_api_route(
+        "/sagra/api/sync-andamentos/service-status", "GET"
+    ) is True
+    assert is_painel_api_route("/api/sync-andamentos/service-status", "POST") is False

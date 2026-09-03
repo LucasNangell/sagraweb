@@ -28,6 +28,7 @@ _PAINEL_AUX_GET_PREFIXES = (
 
 _PAINEL_API_GET_EXACT = frozenset({
     "/api/realtime/admin-reload",
+    "/api/sync-andamentos/service-status",
 })
 _PAINEL_API_GET_PREFIXES = _PAINEL_DATA_GET_PREFIXES
 

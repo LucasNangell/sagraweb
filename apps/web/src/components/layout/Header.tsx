@@ -2,6 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { LogOut, User } from "lucide-react";
 
 import { useAuthStore } from "@/features/auth/authStore";
+import { useSyncAndamentosServiceAlert } from "@/features/sync-andamentos/useSyncAndamentosServiceAlert";
 import { NotificationCenter } from "@/features/support/components/NotificationCenter";
 import { homeTestIds } from "@/lib/testId";
 import logoUrl from "@/logo.png";
@@ -10,6 +11,7 @@ export function Header() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const syncAndamentosAlert = useSyncAndamentosServiceAlert();
 
   const handleLogout = async () => {
     await logout();
@@ -17,7 +19,13 @@ export function Header() {
   };
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-2 bg-secondary-blue px-3 text-white shadow-md sm:h-16 sm:gap-3 sm:px-4 lg:h-20 lg:px-6">
+    <header
+      className={[
+        "flex h-14 shrink-0 items-center justify-between gap-2 px-3 text-white shadow-md sm:h-16 sm:gap-3 sm:px-4 lg:h-20 lg:px-6",
+        syncAndamentosAlert ? "bg-red-800" : "bg-secondary-blue",
+      ].join(" ")}
+      role={syncAndamentosAlert ? "alert" : undefined}
+    >
       <div className="flex min-w-0 items-center gap-2 sm:gap-3 lg:gap-4">
         <img
           src={logoUrl}
@@ -29,8 +37,15 @@ export function Header() {
             SAGRA Web
           </h1>
           <p className="hidden text-xs text-white/70 sm:block">
-            Sistema de Acompanhamento Gráfico
+            {syncAndamentosAlert
+              ? "Os dados podem estar desatualizados"
+              : "Sistema de Acompanhamento Gráfico"}
           </p>
+          {syncAndamentosAlert ? (
+            <p className="truncate text-xs font-medium text-white sm:hidden">
+              Os dados podem estar desatualizados
+            </p>
+          ) : null}
         </div>
       </div>
 

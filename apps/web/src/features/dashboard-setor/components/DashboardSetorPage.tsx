@@ -12,6 +12,8 @@ import {
 } from "../configStorage";
 import { DEFAULT_DASHBOARD_CONFIG } from "../constants";
 import { normalizeDashboardConfigFromRemote } from "../normalizeConfig";
+import { useSyncAndamentosServiceAlert } from "@/features/sync-andamentos/useSyncAndamentosServiceAlert";
+
 import { useDashboardFreshness } from "../hooks/useDashboardFreshness";
 import { useDashboardSetorData } from "../hooks/useDashboardSetorData";
 import { usePriorityAlert } from "../hooks/usePriorityAlert";
@@ -95,6 +97,8 @@ export function DashboardSetorPage() {
     fetchError,
   });
 
+  const syncAndamentosAlert = useSyncAndamentosServiceAlert();
+
   const visibleColumns = getVisibleDashboardColumns(columns);
   const visibleColumnCount = Math.max(visibleColumns.length, 1);
 
@@ -129,14 +133,25 @@ export function DashboardSetorPage() {
 
   return (
     <div className="dashboard-setor-page">
-      <header className="dashboard-setor-header">
+      <header
+        className={[
+          "dashboard-setor-header",
+          syncAndamentosAlert ? "dashboard-setor-header--sync-alert" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
         <div className="dashboard-setor-header-left">
           <div className="dashboard-setor-status-indicator">
             <span
               className={`dashboard-setor-connection-status ${freshness.statusClass}`}
               aria-hidden
             />
-            <span>{freshness.label}</span>
+            <span>
+              {syncAndamentosAlert
+                ? "Sync andamentos parado"
+                : freshness.label}
+            </span>
           </div>
         </div>
 

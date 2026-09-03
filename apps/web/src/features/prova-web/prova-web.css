@@ -31,10 +31,6 @@
   overflow: visible;
 }
 
-.prova-web-page[data-density="hard"] {
-  background: #f4f2ee;
-}
-
 .prova-web-page--special {
   overflow: hidden;
   box-shadow:

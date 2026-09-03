@@ -40,6 +40,7 @@ import {
   verticalFoldPanels,
 } from "./provaWebSpecialTreatment";
 import { ProvaWebSpiralVerticalPager } from "./ProvaWebSpiralVerticalPager";
+import { softenFlipbookPages } from "./softenFlipbookPages";
 import { shouldUseVerticalSpiralPager } from "./spiralFlipMode";
 import "./prova-web.css";
 
@@ -254,10 +255,9 @@ function ProvaWebFlipbookHorizontal({
     });
   }, [stageSize, pageMeta, pageBleedFraction]);
 
-  /** Slot estável de 2 páginas (centrado no estágio). */
+  /** Slot e PageFlip sempre 2p: capa `showCover` na direita, virada soft em landscape. */
   const slotWidth = baseSize.width * 2;
-  /** Largura do PageFlip: 1p na capa/contracapa, 2p no miolo. */
-  const bookWidth = isSpread ? slotWidth : baseSize.width;
+  const bookWidth = slotWidth;
 
   // Medir estágio real (header/tabs/padding).
   useEffect(() => {
@@ -310,6 +310,7 @@ function ProvaWebFlipbookHorizontal({
       minHeight: Math.round(baseSize.height / 4),
       maxHeight: baseSize.height * 2,
       showCover: true,
+      usePortrait: false,
       maxShadowOpacity: 0.5,
       flippingTime: 600,
       mobileScrollSupport: false,
@@ -318,6 +319,7 @@ function ProvaWebFlipbookHorizontal({
     });
 
     flip.loadFromHTML(el.querySelectorAll<HTMLElement>(".prova-web-page"));
+    softenFlipbookPages(flip);
     let alive = true;
     flip.on("flip", (e) => {
       if (!alive) return;
@@ -396,21 +398,20 @@ function ProvaWebFlipbookHorizontal({
     settings.maxHeight = baseSize.height * 2;
     const parent = bookRef.current;
     if (parent) {
-      const w = isSpread ? baseSize.width * 2 : baseSize.width;
+      const w = baseSize.width * 2;
       parent.style.minWidth = `${w}px`;
       parent.style.minHeight = `${baseSize.height}px`;
       parent.style.width = `${w}px`;
       parent.style.height = `${baseSize.height}px`;
       parent.style.maxWidth = `${w}px`;
-      // Fechado: flush à direita do slot 2p (capa alinhada aos balões).
-      parent.style.margin = isSpread ? "0" : "0 0 0 auto";
+      parent.style.margin = "0";
     }
     try {
       flip.update();
     } catch {
       // PageFlip ainda inicializando
     }
-  }, [baseSize.width, baseSize.height, isSpread]);
+  }, [baseSize.width, baseSize.height]);
 
   // Sync jump field when not focused
   useEffect(() => {
@@ -588,8 +589,7 @@ function ProvaWebFlipbookHorizontal({
             style={{
               width: bookWidth,
               height: baseSize.height,
-              // Anula `.prova-web-book { margin: 0 auto }` — capa flush direita.
-              margin: isSpread ? 0 : "0 0 0 auto",
+              margin: 0,
             }}
           >
             {pages.map((page) => {
@@ -599,11 +599,7 @@ function ProvaWebFlipbookHorizontal({
                 <div
                   key={page.page}
                   className={pageClassName(pageBleedFraction, Boolean(specialTreatment))}
-                  data-density={
-                    page.role === "cover-front" || page.role === "cover-back"
-                      ? "hard"
-                      : "soft"
-                  }
+                  data-density="soft"
                 >
                   {src ? (
                     <div className="relative h-full w-full">

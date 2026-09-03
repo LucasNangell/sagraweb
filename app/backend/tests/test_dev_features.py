@@ -20,19 +20,27 @@ def test_defaults_disabled(dev_features_mod) -> None:
     mod, _ = dev_features_mod
     payload = mod.get_features_payload()
     assert payload["enabled"]["sequencia_producao"] is False
+    assert payload["enabled"]["fluxo_producao"] is False
     assert payload["features"][0]["id"] == "sequencia_producao"
     assert payload["features"][0]["enabled"] is False
+    assert any(f["id"] == "fluxo_producao" for f in payload["features"])
     assert mod.is_feature_enabled("sequencia_producao") is False
+    assert mod.is_feature_enabled("fluxo_producao") is False
 
 
 def test_persist_and_reload(dev_features_mod) -> None:
     mod, settings_path = dev_features_mod
-    updated = mod.set_features_enabled({"sequencia_producao": True})
+    updated = mod.set_features_enabled(
+        {"sequencia_producao": True, "fluxo_producao": True}
+    )
     assert updated["enabled"]["sequencia_producao"] is True
+    assert updated["enabled"]["fluxo_producao"] is True
     assert settings_path.is_file()
     raw = json.loads(settings_path.read_text(encoding="utf-8"))
     assert raw["sequencia_producao"] is True
+    assert raw["fluxo_producao"] is True
     assert mod.get_features_payload()["enabled"]["sequencia_producao"] is True
+    assert mod.get_features_payload()["enabled"]["fluxo_producao"] is True
 
 
 def test_ignores_unknown_keys(dev_features_mod) -> None:

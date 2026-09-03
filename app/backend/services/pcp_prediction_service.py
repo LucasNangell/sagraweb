@@ -29,8 +29,12 @@ import pandas as pd
 
 from database import db
 from services.andamento_table import get_andamento_table
+from services import expediente_service
 
 logger = logging.getLogger(__name__)
+
+# Floor de ano para treino histórico (OS legadas ≤2023 só guardam o último andamento).
+ANO_MIN_HISTORICO_PREVISAO = 2024
 
 _HIST_CACHE: Dict[str, tuple[float, pd.DataFrame]] = {}
 
@@ -102,80 +106,31 @@ def _min_samples_for_outlier_filter() -> int:
 
 
 def _business_open_hour() -> int:
-    try:
-        return max(0, min(23, int(os.getenv("SAGRA_PCP_BUSINESS_OPEN_HOUR", "6"))))
-    except (TypeError, ValueError):
-        return 6
+    return expediente_service.business_open_hour()
 
 
 def _business_close_hour() -> int:
-    try:
-        return max(1, min(24, int(os.getenv("SAGRA_PCP_BUSINESS_CLOSE_HOUR", "22"))))
-    except (TypeError, ValueError):
-        return 22
+    return expediente_service.business_close_hour()
 
 
 def _day_business_bounds(dt: datetime) -> Tuple[datetime, datetime]:
-    open_h = _business_open_hour()
-    close_h = _business_close_hour()
-    day_start = dt.replace(hour=open_h, minute=0, second=0, microsecond=0)
-    day_end = dt.replace(hour=close_h, minute=0, second=0, microsecond=0)
-    return day_start, day_end
+    return expediente_service.day_business_bounds(dt)
 
 
 def _next_business_day_open(dt: datetime) -> datetime:
-    open_h = _business_open_hour()
-    base = dt.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
-    return base.replace(hour=open_h, minute=0, second=0, microsecond=0)
+    return expediente_service.next_business_day_open(dt)
 
 
 def _clamp_to_business_window(dt: datetime) -> datetime:
-    """Posiciona o instante no início do próximo horário útil, se fora da janela."""
-    day_start, day_end = _day_business_bounds(dt)
-    if dt < day_start:
-        return day_start
-    if dt >= day_end:
-        return _next_business_day_open(dt)
-    return dt
+    return expediente_service.clamp_to_business_window(dt)
 
 
 def _business_hours_between(start: datetime, end: datetime) -> float:
-    """Horas úteis (6h–22h) entre dois instantes."""
-    if end <= start:
-        return 0.0
-
-    total_hours = 0.0
-    cursor = start
-    while cursor < end:
-        day_start, day_end = _day_business_bounds(cursor)
-        window_start = max(cursor, day_start)
-        window_end = min(end, day_end)
-        if window_start < window_end:
-            total_hours += (window_end - window_start).total_seconds() / 3600.0
-        if end <= day_end:
-            break
-        cursor = _next_business_day_open(cursor)
-    return total_hours
+    return expediente_service.business_hours_between(start, end)
 
 
 def _add_business_hours(start: datetime, hours: float) -> datetime:
-    """Soma horas úteis a partir de um instante, respeitando 6h–22h."""
-    if hours <= 0:
-        return _clamp_to_business_window(start)
-
-    remaining_minutes = hours * 60.0
-    cursor = _clamp_to_business_window(start)
-    while remaining_minutes > 0:
-        _, day_end = _day_business_bounds(cursor)
-        available_minutes = max((day_end - cursor).total_seconds() / 60.0, 0.0)
-        if available_minutes <= 0:
-            cursor = _next_business_day_open(cursor)
-            continue
-        if remaining_minutes <= available_minutes:
-            return cursor + timedelta(minutes=remaining_minutes)
-        remaining_minutes -= available_minutes
-        cursor = _next_business_day_open(cursor)
-    return cursor
+    return expediente_service.add_business_hours(start, hours)
 
 
 def _priority_score(prioridade: str | None) -> float:
@@ -251,6 +206,7 @@ def _fetch_historical_rows(
         SELECT DISTINCT a.NroProtocoloLink AS nr_os, a.AnoProtocoloLink AS ano
         FROM {andamento_tbl} AS a
         WHERE a.`Data` >= DATE_SUB(NOW(), INTERVAL %s MONTH)
+          AND a.AnoProtocoloLink >= %s
           AND (
               a.SituacaoLink = 'Entregue'
               OR {_FINISHED_SETOR_SQL.strip()}
@@ -328,7 +284,7 @@ def _fetch_historical_rows(
       AND ranked.remaining_hours > 0
       {situacao_filter}
     """
-    params: List[Any] = [lookback, base_setor, *situacao_params]
+    params: List[Any] = [lookback, ANO_MIN_HISTORICO_PREVISAO, base_setor, *situacao_params]
     rows = db.execute_query(sql, tuple(params)) or []
     if not rows:
         return pd.DataFrame()
@@ -365,7 +321,7 @@ def _get_training_df(
     *,
     allowed_situacoes: Sequence[str] | None = None,
 ) -> pd.DataFrame:
-    cache_key = f"{base_setor}|{','.join(allowed_situacoes or [])}"
+    cache_key = f"{base_setor}|{','.join(allowed_situacoes or [])}|min{ANO_MIN_HISTORICO_PREVISAO}"
     ttl = _cache_ttl_sec()
     cached = _HIST_CACHE.get(cache_key)
     if cached and (time.time() - cached[0]) < ttl:

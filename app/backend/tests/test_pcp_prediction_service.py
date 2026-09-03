@@ -148,6 +148,13 @@ def test_add_business_hours_skips_night():
     assert result == datetime(2026, 6, 16, 7, 0, 0)
 
 
+def test_add_business_hours_skips_weekend_via_expediente():
+    # sexta 21h + 2h → segunda 7h (expediente pula sáb/dom)
+    start = datetime(2026, 6, 19, 21, 0, 0)
+    result = _add_business_hours(start, 2.0)
+    assert result == datetime(2026, 6, 22, 7, 0, 0)
+
+
 def test_clamp_before_open_moves_to_same_day_open():
     dt = datetime(2026, 6, 15, 4, 30, 0)
     assert _clamp_to_business_window(dt) == datetime(2026, 6, 15, 6, 0, 0)

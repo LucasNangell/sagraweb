@@ -29,6 +29,14 @@ FEATURE_CATALOG: List[FeatureDef] = [
         ),
         "default": False,
     },
+    {
+        "id": "fluxo_producao",
+        "label": "Fluxo de produção",
+        "description": (
+            "Mostra a aba Fluxo de produção (Gantt) no detalhe da OS (modal de gerência)."
+        ),
+        "default": False,
+    },
 ]
 
 _KNOWN_IDS = {item["id"] for item in FEATURE_CATALOG}

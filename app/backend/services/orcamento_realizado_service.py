@@ -81,7 +81,7 @@ def stints_from_andamentos(rows: list[dict]) -> list[dict]:
     Sequência de permanência por setor: andamento i até i+1, horas úteis 6h–22h.
     Retrabalho e cancelamento não geram stint de aprendizado.
     """
-    from services.pcp_prediction_service import _business_hours_between
+    from services.expediente_service import business_hours_between as _business_hours_between
 
     ordered = sorted(
         rows or [],

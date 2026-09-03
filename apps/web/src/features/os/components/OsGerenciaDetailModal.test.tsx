@@ -137,6 +137,23 @@ describe("buildGerenciaModalNavSections", () => {
       "Vínculos da OS",
     );
   });
+
+  it("inclui Fluxo de Produção só quando pedido", () => {
+    expect(
+      buildGerenciaModalNavSections({
+        showHistorico: false,
+        showFluxoProducao: false,
+        showVinculos: false,
+      }).map((s) => s.id),
+    ).not.toContain("fluxo-producao");
+    expect(
+      buildGerenciaModalNavSections({
+        showHistorico: true,
+        showFluxoProducao: true,
+        showVinculos: false,
+      }).map((s) => s.id),
+    ).toContain("fluxo-producao");
+  });
 });
 
 describe("OsGerenciaDetailModal vínculos", () => {
@@ -183,6 +200,30 @@ describe("OsGerenciaDetailModal sequência de produção", () => {
     renderModal();
     expect(screen.getByTestId("os-gerencia-section-sequencia-producao")).toHaveTextContent(
       "Sequência de produção",
+    );
+  });
+});
+
+describe("OsGerenciaDetailModal fluxo de produção", () => {
+  beforeEach(() => {
+    fetchOsVinculos.mockReset();
+    fetchOsVinculos.mockResolvedValue([]);
+    useDevFeature.mockReset();
+  });
+
+  it("oculta a aba quando a flag está desligada", () => {
+    useDevFeature.mockReturnValue(false);
+    renderModal();
+    expect(
+      screen.queryByTestId("os-gerencia-section-fluxo-producao"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("mostra a aba quando a flag fluxo_producao está ligada", () => {
+    useDevFeature.mockImplementation((id: string) => id === "fluxo_producao");
+    renderModal();
+    expect(screen.getByTestId("os-gerencia-section-fluxo-producao")).toHaveTextContent(
+      "Fluxo de Produção",
     );
   });
 });

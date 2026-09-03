@@ -25,10 +25,14 @@ def _codigos(passo: dict) -> list[str]:
     return [str(f.get("codigo")) for f in passo.get("funcoes") or []]
 
 
-def test_livro_nove_passos_dual_tecnologia():
+def test_livro_dez_passos_dual_tecnologia():
     passos = passos_para_produto("Livro")
     assert passos is not None
-    assert len(passos) == 9
+    assert len(passos) == 10
+
+    corte = _by_nome(passos, "corte do papel")
+    assert corte["setor_link"] == "SEPAC"
+    assert corte["setup_min"] == 15
 
     sielt = _by_nome(passos, "SIELT")
     assert sielt["tecnologia"] == "digital"
@@ -56,10 +60,11 @@ def test_livro_nove_passos_dual_tecnologia():
     assert sefoc["setup_min"] == 15
 
 
-def test_ct_visita_sete_passos_sielt_004():
+def test_ct_visita_oito_passos_sielt_004():
     passos = passos_para_produto("Ct Visita")
     assert passos is not None
-    assert len(passos) == 7
+    assert len(passos) == 8
+    assert _by_nome(passos, "corte do papel")["setor_link"] == "SEPAC"
     sielt = _by_nome(passos, "SIELT")
     assert sielt["tecnologia"] == "digital"
     assert sielt["setup_min"] == 10

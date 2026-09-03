@@ -1,3 +1,4 @@
 {
-  "sequencia_producao": false
+  "sequencia_producao": false,
+  "fluxo_producao": true
 }

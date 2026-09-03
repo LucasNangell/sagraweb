@@ -37,11 +37,13 @@ import {
 import { OsGerenciaAuditHistoryPanel } from "./OsGerenciaAuditHistoryPanel";
 import { OsSequenciaProducaoTab } from "./OsSequenciaProducaoTab";
 import { OsVinculosEditor } from "./OsVinculosEditor";
+import { ProducaoGanttPanel } from "./ProducaoGanttPanel";
 import type { OsSearchRow } from "../types";
 
 export type GerenciaModalNavId =
   | GerenciaSectionId
   | "sequencia-producao"
+  | "fluxo-producao"
   | "historico"
   | "vinculos";
 
@@ -49,11 +51,15 @@ export function buildGerenciaModalNavSections(options: {
   showHistorico: boolean;
   showVinculos: boolean;
   showSequenciaProducao?: boolean;
+  showFluxoProducao?: boolean;
 }): { id: GerenciaModalNavId; label: string }[] {
   return [
     ...GERENCIA_MODAL_SECTIONS,
     ...(options.showSequenciaProducao
       ? [{ id: "sequencia-producao" as const, label: "Sequência de produção" }]
+      : []),
+    ...(options.showFluxoProducao
+      ? [{ id: "fluxo-producao" as const, label: "Fluxo de Produção" }]
       : []),
     ...(options.showVinculos
       ? [{ id: "vinculos" as const, label: "Vínculos da OS" }]
@@ -103,6 +109,8 @@ export function OsGerenciaDetailModal({
   const showHistoricoTab = canHistorico && !composing;
   const sequenciaProducaoEnabled = useDevFeature("sequencia_producao");
   const showSequenciaProducaoTab = sequenciaProducaoEnabled && !composing;
+  const fluxoProducaoEnabled = useDevFeature("fluxo_producao");
+  const showFluxoProducaoTab = fluxoProducaoEnabled && !composing;
   const vinculosQuery = useQuery({
     queryKey:
       open && row != null && !composing
@@ -175,7 +183,16 @@ export function OsGerenciaDetailModal({
     if (section === "sequencia-producao" && !showSequenciaProducaoTab) {
       setSection("solicitante");
     }
-  }, [section, showHistoricoTab, showSequenciaProducaoTab, showVinculosTab]);
+    if (section === "fluxo-producao" && !showFluxoProducaoTab) {
+      setSection("solicitante");
+    }
+  }, [
+    section,
+    showHistoricoTab,
+    showSequenciaProducaoTab,
+    showFluxoProducaoTab,
+    showVinculosTab,
+  ]);
 
   const requestClose = useCallback(() => {
     if (arquivosModal) return;
@@ -336,6 +353,7 @@ export function OsGerenciaDetailModal({
   const navSections = buildGerenciaModalNavSections({
     showHistorico: showHistoricoTab,
     showSequenciaProducao: showSequenciaProducaoTab,
+    showFluxoProducao: showFluxoProducaoTab,
     showVinculos: showVinculosTab,
   });
   const activeLabel =
@@ -448,7 +466,8 @@ export function OsGerenciaDetailModal({
                   "min-h-0 flex-1 overscroll-contain p-3.5 sm:p-4",
                   section === "material" ||
                     section === "historico" ||
-                    section === "sequencia-producao"
+                    section === "sequencia-producao" ||
+                    section === "fluxo-producao"
                     ? "flex flex-col overflow-hidden"
                     : "overflow-y-auto",
                 )}
@@ -476,6 +495,14 @@ export function OsGerenciaDetailModal({
                       readOnly={!formEditable}
                       canEdit={canEdit}
                       osDirty={formEditable && dirty}
+                    />
+                  ) : null
+                ) : section === "fluxo-producao" ? (
+                  showFluxoProducaoTab ? (
+                    <ProducaoGanttPanel
+                      ano={row.ano}
+                      osId={row.nr_os}
+                      enabled={section === "fluxo-producao"}
                     />
                   ) : null
                 ) : loading ? (

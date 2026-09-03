@@ -48,6 +48,7 @@ from routers import (
     admin_os_materialized_routes,
     os_arquivos_routes,
     sequencia_producao_routes,
+    os_fluxo_producao_routes,
     dev_features_routes,
     cliente_gabinete_routes,
     proof_portal_routes,
@@ -885,6 +886,7 @@ app.include_router(os_filter_options_routes.router, prefix="/api")
 app.include_router(os_sub_os_routes.router, prefix="/api")
 app.include_router(os_arquivos_routes.router, prefix="/api")
 app.include_router(sequencia_producao_routes.router, prefix="/api")
+app.include_router(os_fluxo_producao_routes.router, prefix="/api")
 app.include_router(dev_features_routes.router, prefix="/api")
 app.include_router(cliente_gabinete_routes.router)
 app.include_router(proof_portal_routes.router, prefix="/api")
@@ -1159,6 +1161,18 @@ def startup_init():
         ensure_orcamento_schema()
     except Exception as exc:
         logger.error("Erro ao garantir schema Orçamento no startup: %s", exc)
+
+    try:
+        from calendario_nao_util_schema import ensure_calendario_nao_util_schema
+        ensure_calendario_nao_util_schema()
+    except Exception as exc:
+        logger.error("Erro ao garantir schema calendário não útil no startup: %s", exc)
+
+    try:
+        from os_fluxo_baseline_schema import ensure_os_fluxo_baseline_schema
+        ensure_os_fluxo_baseline_schema()
+    except Exception as exc:
+        logger.error("Erro ao garantir schema fluxo baseline no startup: %s", exc)
 
     try:
         from prova_web_schema import ensure_prova_web_schema

@@ -90,6 +90,13 @@ def after_andamento_changed(
 
     )
 
+    try:
+        from services.os_fluxo_producao_service import invalidate_fluxo_producao_cache
+
+        invalidate_fluxo_producao_cache(ano, nro)
+    except Exception:
+        logger.debug("Falha ao invalidar cache de fluxo de produção", exc_info=True)
+
     _maybe_aprender_orcamento(nro, ano, situacao or result.get("situacao"), cursor=cursor)
 
     return result

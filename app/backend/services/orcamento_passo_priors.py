@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-PASSOS_PRIORS_VERSAO = 1
+PASSOS_PRIORS_VERSAO = 2
 
 FAMILIA_E = "E"
 
@@ -43,6 +43,17 @@ def _passo(
         "min_por_folha": folha,
         "funcoes": _crew(*funcoes),
     }
+
+
+def _corte(ordem: int, *, setup: float = 15, folha: float = 0.02) -> dict[str, Any]:
+    return _passo(
+        ordem,
+        "Preparação - corte do papel",
+        "SEPAC",
+        setup=setup,
+        folha=folha,
+        funcoes=("ACAB",),
+    )
 
 
 def _espera(ordem: int) -> dict[str, Any]:
@@ -99,6 +110,7 @@ def familia_a(
         ),
         _espera(20),
         _passo(30, "SEFOC montagem pós-aprovação", "SEFOC", setup=10, funcoes=("PRE",)),
+        _corte(35),
         _passo(
             40,
             "SIELT impressão digital",
@@ -153,6 +165,7 @@ def familia_b(
         ),
         _espera(20),
         _passo(30, "SEFOC montagem pós-aprovação", "SEFOC", setup=15, funcoes=("PRE",)),
+        _corte(35),
         _passo(
             40,
             "SIELT impressão digital",
@@ -199,6 +212,7 @@ def familia_c() -> list[dict[str, Any]]:
         _passo(10, "SEFOC pré-montagem", "SEFOC", setup=10, funcoes=("PRE",)),
         _espera(20),
         _passo(30, "SEFOC montagem pós-aprovação", "SEFOC", setup=10, funcoes=("PRE",)),
+        _corte(35),
         _passo(
             40,
             "SIELT impressão digital",

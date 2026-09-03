@@ -28,7 +28,7 @@ import { SetorPainelDefaultsSection } from "@/features/usuarios/components/Setor
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 
 const FORCE_REFRESH_CONFIRM =
-  "TEM CERTEZA? Isso irá recarregar a página de TODOS os usuários conectados imediatamente.";
+  "TEM CERTEZA? Isso irá recarregar a página de TODOS os usuários conectados (em até ~8s via poll).";
 
 const FORCE_REFRESH_RESET_CONFIRM =
   "ATENÇÃO: Isso irá recarregar todos os dashboards e SOBRESCREVER as configurações locais pelo arquivo global (config_painel_global.json). Deseja continuar?";
@@ -89,17 +89,28 @@ export function UsuariosPage() {
         origem: "admin_panel",
         ...(overwriteConfig ? { overwriteConfig: true } : {}),
       });
-      if (result.listeners === 0) {
-        showSuccess(
-          "Comando enviado. Nenhum client com WebSocket agora; eles atualizam no próximo poll.",
+      const listeners = result.listeners ?? 0;
+      showSuccess(
+        listeners === 0
+          ? "Comando enviado. Nenhum client conectado agora; eles atualizam no próximo poll (até ~8s)."
+          : "Comando enviado. Os clients atualizam em até ~8s via poll.",
+      );
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "TimeoutError") {
+        showError(
+          "Tempo esgotado ao enviar o comando. Reinicie a API se o servidor estiver travado.",
+        );
+      } else if (err instanceof Error && err.name === "AbortError") {
+        showError(
+          "Tempo esgotado ao enviar o comando. Reinicie a API se o servidor estiver travado.",
         );
       } else {
-        showSuccess("Comando enviado com sucesso!");
+        showError(
+          err instanceof Error
+            ? err.message
+            : "Erro de conexão ao enviar comando.",
+        );
       }
-    } catch (err) {
-      showError(
-        err instanceof Error ? err.message : "Erro de conexão ao enviar comando.",
-      );
     } finally {
       setForceAction(null);
     }

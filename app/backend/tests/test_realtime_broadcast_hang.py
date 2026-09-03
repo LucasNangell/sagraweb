@@ -1,4 +1,4 @@
-"""Regressão: fanout WS com peer travado não prende o event loop / notify."""
+"""Regressão: fanout WS com peer travado / admin force_refresh via poll."""
 from __future__ import annotations
 
 import asyncio
@@ -42,11 +42,10 @@ async def test_broadcast_times_out_hanging_peer_and_keeps_healthy():
     ]
 
     message = {
-        "type": "force_refresh",
-        "action": "reload",
-        "origem": "admin_panel",
-        "id": 0,
-        "ano": 0,
+        "type": "system_update",
+        "action": "update",
+        "id": 1,
+        "ano": 2026,
     }
 
     started = time.monotonic()
@@ -60,7 +59,7 @@ async def test_broadcast_times_out_hanging_peer_and_keeps_healthy():
 
 
 @pytest.mark.asyncio
-async def test_send_notification_returns_without_awaiting_broadcast():
+async def test_admin_force_refresh_uses_poll_only_no_ws_fanout():
     from routers.realtime import send_notification
 
     body = {
@@ -75,11 +74,6 @@ async def test_send_notification_returns_without_awaiting_broadcast():
     request.json = AsyncMock(return_value=body)
     request.headers = Headers({})
 
-    scheduled: list = []
-
-    def _capture(msg):
-        scheduled.append(msg)
-
     with (
         patch(
             "security.notify_auth.is_notify_authorized",
@@ -89,7 +83,7 @@ async def test_send_notification_returns_without_awaiting_broadcast():
             "services.admin_reload_state.record_admin_reload",
             return_value={"epoch": 1, "overwriteConfig": False},
         ) as record_mock,
-        patch("routers.realtime.schedule_broadcast", side_effect=_capture) as sched_mock,
+        patch("routers.realtime.schedule_broadcast") as sched_mock,
         patch("routers.realtime.manager") as mgr_mock,
     ):
         mgr_mock.active_connections = [object(), object()]
@@ -97,7 +91,39 @@ async def test_send_notification_returns_without_awaiting_broadcast():
 
     assert result["status"] == "queued"
     assert result["listeners"] == 2
+    assert result["delivery"] == "poll"
     record_mock.assert_called_once_with(overwrite_config=False)
-    sched_mock.assert_called_once_with(body)
-    assert scheduled == [body]
+    sched_mock.assert_not_called()
     mgr_mock.broadcast.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_non_admin_notify_still_schedules_broadcast():
+    from routers.realtime import send_notification
+
+    body = {
+        "type": "system_update",
+        "action": "update",
+        "id": 42,
+        "ano": 2026,
+    }
+
+    request = MagicMock(spec=Request)
+    request.json = AsyncMock(return_value=body)
+    request.headers = Headers({})
+
+    with (
+        patch(
+            "security.notify_auth.is_notify_authorized",
+            return_value=True,
+        ),
+        patch("routers.realtime.schedule_broadcast") as sched_mock,
+        patch("routers.realtime.manager") as mgr_mock,
+    ):
+        mgr_mock.active_connections = [object()]
+        result = await send_notification(request)
+
+    assert result["status"] == "queued"
+    assert result["listeners"] == 1
+    assert "delivery" not in result
+    sched_mock.assert_called_once_with(body)

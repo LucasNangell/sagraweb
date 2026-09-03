@@ -158,6 +158,102 @@ describe("campos de Entrega", () => {
     expect(payload.CoresDescricao).toBe("Capa: 4x4 | Miolo: 1x1");
   });
 
+  it("grava MaquinaLink só com a máquina real quando o outro lote é Ignorada", () => {
+    const payload = formToSavePayload(
+      createEmptyGerenciaForm(),
+      { ano: "2025", id: "2465" },
+      "1234",
+      {
+        version: 1,
+        componentes: [
+          {
+            nome: "Capa",
+            tipo: "CAPA",
+            lotes: [
+              {
+                id: "c",
+                paginas: 4,
+                maquina_link: "Offset",
+                papel_link: "",
+                cores_link: "",
+                papel_desc: "",
+                cores_desc: "",
+                frente_verso: false,
+                acabamentos: [],
+              },
+            ],
+          },
+          {
+            nome: "Miolo",
+            tipo: "MIOLO",
+            lotes: [
+              {
+                id: "m",
+                paginas: 16,
+                maquina_link: "Ignorada",
+                papel_link: "",
+                cores_link: "",
+                papel_desc: "",
+                cores_desc: "",
+                frente_verso: false,
+                acabamentos: [],
+              },
+            ],
+          },
+        ],
+      },
+    );
+    expect(payload.MaquinaLink).toBe("Offset");
+  });
+
+  it("grava MaquinaLink Digital Cor/PB a partir dos lotes Digital Cor e Digital PB", () => {
+    const payload = formToSavePayload(
+      createEmptyGerenciaForm(),
+      { ano: "2025", id: "2465" },
+      "1234",
+      {
+        version: 1,
+        componentes: [
+          {
+            nome: "Capa",
+            tipo: "CAPA",
+            lotes: [
+              {
+                id: "c",
+                paginas: 4,
+                maquina_link: "Digital Cor",
+                papel_link: "",
+                cores_link: "",
+                papel_desc: "",
+                cores_desc: "",
+                frente_verso: false,
+                acabamentos: [],
+              },
+            ],
+          },
+          {
+            nome: "Miolo",
+            tipo: "MIOLO",
+            lotes: [
+              {
+                id: "m",
+                paginas: 16,
+                maquina_link: "Digital PB",
+                papel_link: "",
+                cores_link: "",
+                papel_desc: "",
+                cores_desc: "",
+                frente_verso: false,
+                acabamentos: [],
+              },
+            ],
+          },
+        ],
+      },
+    );
+    expect(payload.MaquinaLink).toBe("Digital Cor/PB");
+  });
+
   it("formToSavePayload grava FrenteVerso se algum lote for F/V", () => {
     const payload = formToSavePayload(
       createEmptyGerenciaForm(),

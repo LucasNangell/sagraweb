@@ -166,6 +166,35 @@ export function splitCapaMioloMaquina(
   return { capa, miolo };
 }
 
+/**
+ * Inverso de splitCapaMioloMaquina: comprime prefixo compartilhado
+ * ("Digital Cor" + "Digital PB" → "Digital Cor/PB").
+ */
+export function joinCapaMioloMaquina(capa: string, miolo: string): string {
+  const left = capa.trim();
+  const right = miolo.trim();
+  if (!left || !right) return left || right;
+
+  const leftParts = left.split(/\s+/).filter(Boolean);
+  const prefix = leftParts.slice(0, -1).join(" ");
+  if (!prefix) return `${left}/${right}`;
+
+  const prefixKey = stripAccents(prefix).toLowerCase();
+  const rightKey = stripAccents(right).toLowerCase();
+  const prefixWithSpace = `${prefixKey} `;
+  if (!rightKey.startsWith(prefixWithSpace)) return `${left}/${right}`;
+
+  const suffix = right.slice(prefix.length).trim();
+  if (!suffix || suffix.includes(" ") || /\d/.test(suffix)) {
+    return `${left}/${right}`;
+  }
+  return `${left}/${suffix}`;
+}
+
+function isIgnoredMaquina(value: string): boolean {
+  return value.trim().toLowerCase() === "ignorada";
+}
+
 function maquinaForTipo(osMaquina: string, tipo?: ComponenteTipo): string {
   const combined = osMaquina.trim();
   const split = splitCapaMioloMaquina(combined);
@@ -1111,7 +1140,44 @@ function collectLoteFieldValues(
 
 /** MaquinaLink da OS: uma máquina ou "Maquina1/Maquina2" se os componentes divergem. */
 export function buildMaquinaLinkFromTechSpec(spec: TechSpec): string {
-  return collectLoteFieldValues(spec, (lote) => lote.maquina_link).join("/");
+  const values = collectLoteFieldValues(spec, (lote) => lote.maquina_link).filter(
+    (v) => !isIgnoredMaquina(v),
+  );
+  if (values.length === 0) return "";
+  if (values.length === 1) return values[0];
+  if (values.length === 2) {
+    const capaMaquina = firstLoteMaquinaByTipo(spec, "CAPA");
+    const mioloMaquina = firstLoteMaquinaByTipo(spec, "MIOLO");
+    if (
+      capaMaquina &&
+      mioloMaquina &&
+      !isIgnoredMaquina(capaMaquina) &&
+      !isIgnoredMaquina(mioloMaquina)
+    ) {
+      const capaKey = capaMaquina.trim().toLowerCase();
+      const mioloKey = mioloMaquina.trim().toLowerCase();
+      const pair = new Set(values.map((v) => v.toLowerCase()));
+      if (pair.has(capaKey) && pair.has(mioloKey) && capaKey !== mioloKey) {
+        return joinCapaMioloMaquina(capaMaquina, mioloMaquina);
+      }
+    }
+    return joinCapaMioloMaquina(values[0], values[1]);
+  }
+  return values.join("/");
+}
+
+function firstLoteMaquinaByTipo(
+  spec: TechSpec,
+  tipo: ComponenteTipo,
+): string | undefined {
+  for (const comp of spec.componentes) {
+    if (comp.tipo !== tipo) continue;
+    for (const lote of comp.lotes) {
+      const value = lote.maquina_link.trim();
+      if (value) return value;
+    }
+  }
+  return undefined;
 }
 
 /** PapelLink da OS: o papel único ou "Diversos". */

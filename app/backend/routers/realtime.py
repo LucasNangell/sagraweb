@@ -663,10 +663,16 @@ async def send_notification(request: Request):
         )
 
         if is_admin_force_reload(body):
+            # Só epoch/poll — fanout WS no mesmo event loop congela a API
+            # com sockets half-open (wait_for não interrompe send_json bloqueante).
             record_admin_reload(
                 overwrite_config=bool(body.get("overwriteConfig")),
             )
-        # Não aguardar fanout: socket half-open travava o event loop da API.
+            return {
+                "status": "queued",
+                "listeners": len(manager.active_connections),
+                "delivery": "poll",
+            }
         schedule_broadcast(body)
         return {"status": "queued", "listeners": len(manager.active_connections)}
     except HTTPException:

@@ -4,6 +4,7 @@ import { createEmptyGerenciaForm } from "./defaults";
 import {
   applyTechSpecToForm,
   buildDescAcabamentoFromTechSpec,
+  buildMaquinaLinkFromTechSpec,
   buildPapelDescFromTechSpec,
   calculateCotaPagesFromTechSpec,
   calculateTotalPagesFromTechSpec,
@@ -17,6 +18,7 @@ import {
   impressaoAfterCoresChange,
   impressaoAfterFvChange,
   isGenericoComponente,
+  joinCapaMioloMaquina,
   parseLabeledMemo,
   specHasFrenteVerso,
   specHasLoteFormatoOverride,
@@ -623,6 +625,90 @@ describe("máquina Capa/Miolo com barra", () => {
       capa: "Digital Cor",
       miolo: "SM74",
     });
+  });
+
+  it("comprime Digital Cor + Digital PB para Digital Cor/PB", () => {
+    expect(joinCapaMioloMaquina("Digital Cor", "Digital PB")).toBe("Digital Cor/PB");
+  });
+
+  it("não comprime PM52 + SM74", () => {
+    expect(joinCapaMioloMaquina("PM52", "SM74")).toBe("PM52/SM74");
+  });
+
+  it("round-trip Digital Cor/PB via split e join", () => {
+    const split = splitCapaMioloMaquina("Digital Cor/PB");
+    expect(split).not.toBeNull();
+    expect(joinCapaMioloMaquina(split!.capa, split!.miolo)).toBe("Digital Cor/PB");
+  });
+
+  it("buildMaquinaLinkFromTechSpec exclui Ignorada e mantém a máquina real", () => {
+    const spec: TechSpec = {
+      version: 1,
+      componentes: [
+        {
+          nome: "Capa",
+          tipo: "CAPA",
+          lotes: [lote({ id: "c", paginas: 4, maquina_link: "Offset" })],
+        },
+        {
+          nome: "Miolo",
+          tipo: "MIOLO",
+          lotes: [lote({ id: "m", paginas: 16, maquina_link: "Ignorada" })],
+        },
+      ],
+    };
+    expect(buildMaquinaLinkFromTechSpec(spec)).toBe("Offset");
+  });
+
+  it("buildMaquinaLinkFromTechSpec não grava Ignorada sozinha", () => {
+    const spec: TechSpec = {
+      version: 1,
+      componentes: [
+        {
+          nome: "Arquivo",
+          lotes: [lote({ id: "a", maquina_link: "Ignorada" })],
+        },
+      ],
+    };
+    expect(buildMaquinaLinkFromTechSpec(spec)).toBe("");
+  });
+
+  it("buildMaquinaLinkFromTechSpec grava Digital Cor/PB a partir dos lotes", () => {
+    const spec: TechSpec = {
+      version: 1,
+      componentes: [
+        {
+          nome: "Capa",
+          tipo: "CAPA",
+          lotes: [lote({ id: "c", paginas: 4, maquina_link: "Digital Cor" })],
+        },
+        {
+          nome: "Miolo",
+          tipo: "MIOLO",
+          lotes: [lote({ id: "m", paginas: 16, maquina_link: "Digital PB" })],
+        },
+      ],
+    };
+    expect(buildMaquinaLinkFromTechSpec(spec)).toBe("Digital Cor/PB");
+  });
+
+  it("buildMaquinaLinkFromTechSpec mantém PM52/SM74", () => {
+    const spec: TechSpec = {
+      version: 1,
+      componentes: [
+        {
+          nome: "Capa",
+          tipo: "CAPA",
+          lotes: [lote({ id: "c", paginas: 4, maquina_link: "PM52" })],
+        },
+        {
+          nome: "Miolo",
+          tipo: "MIOLO",
+          lotes: [lote({ id: "m", paginas: 16, maquina_link: "SM74" })],
+        },
+      ],
+    };
+    expect(buildMaquinaLinkFromTechSpec(spec)).toBe("PM52/SM74");
   });
 
   it("hidrata capa e miolo a partir do campo Máquina da OS", () => {

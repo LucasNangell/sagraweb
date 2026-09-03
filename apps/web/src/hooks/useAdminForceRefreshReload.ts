@@ -12,7 +12,7 @@ import {
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 
 const POLL_WS_DOWN_MS = 8_000;
-const POLL_WS_UP_MS = 20_000;
+const POLL_WS_UP_MS = 8_000;
 
 async function maybeReloadFromState(
   seenEpochRef: MutableRefObject<number | null>,

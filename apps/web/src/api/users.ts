@@ -30,18 +30,25 @@ export async function fetchUsuariosOnline(): Promise<Array<string | number>> {
 
 export async function postForceRefresh(
   payload: ForceRefreshPayload,
-): Promise<{ status: string; detail?: string; listeners?: number }> {
+): Promise<{
+  status: string;
+  detail?: string;
+  listeners?: number;
+  delivery?: string;
+}> {
   const res = await fetch(apiUrl("/realtime/notify"), {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(8_000),
   });
 
   const data = (await res.json().catch(() => null)) as {
     status?: string;
     detail?: string;
     listeners?: number;
+    delivery?: string;
   } | null;
 
   if (!res.ok) {

@@ -875,6 +875,7 @@ export function EmailTemplatesSection() {
                         {VARIANTE_LABELS[m.variante]}
                         {m.ativo ? " · ativo" : ""}
                         {m.anexar_pdf ? " · anexo" : ""}
+                        {m.preferir_prova_web ? " · prova WEB" : ""}
                       </span>
                     </button>
                   ))}

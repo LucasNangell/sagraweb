@@ -120,6 +120,8 @@ export function EmailPendenciaDetail({
   const proofUsesAttachment =
     isProofMode &&
     (ptQuery.data?.anexar_pdf === true || ptQuery.data?.send_mode === "anexo");
+  const proofPrefersProvaWeb =
+    isProofMode && ptQuery.data?.send_mode === "prova_web";
   const ptUsesInline =
     emailType === "pt" &&
     (ptQuery.data?.use_inline_body === true || ptQuery.data?.send_mode === "sem_portal");
@@ -283,6 +285,7 @@ export function EmailPendenciaDetail({
     proofFilesQuery.isError,
     proofFilesQuery.data?.files.length ?? 0,
     selectedProofFile,
+    proofPrefersProvaWeb,
   );
   const timbradoBlocked =
     isTimbradoMode && !(ptQuery.data?.timbrado_attachments?.length);
@@ -312,7 +315,12 @@ export function EmailPendenciaDetail({
       window.alert("Preencha o número da versão (ex: 1, 2, 3...)");
       return;
     }
-    if (emailType === "proof" && !isApogee && !selectedProofFile.trim()) {
+    if (
+      emailType === "proof" &&
+      !isApogee &&
+      !proofPrefersProvaWeb &&
+      !selectedProofFile.trim()
+    ) {
       window.alert("Selecione o PDF de prova que será enviado ao cliente.");
       return;
     }

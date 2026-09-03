@@ -191,6 +191,7 @@ export interface EmailTemplateModelRecord {
   html: string;
   ativo: boolean;
   anexar_pdf: boolean;
+  preferir_prova_web: boolean;
   content_mode: "custom" | "preset";
   preset_id?: string | null;
   ordem: number;

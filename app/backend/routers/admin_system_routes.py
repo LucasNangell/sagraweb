@@ -639,6 +639,7 @@ class EmailTemplateModelCreateRequest(BaseModel):
     assunto: str = ""
     html: str = ""
     anexar_pdf: bool = False
+    preferir_prova_web: bool = False
     content_mode: Literal["custom", "preset"] = "custom"
     preset_id: str = ""
     ordem: int = 50
@@ -649,6 +650,7 @@ class EmailTemplateModelUpdateRequest(BaseModel):
     assunto: Optional[str] = None
     html: Optional[str] = None
     anexar_pdf: Optional[bool] = None
+    preferir_prova_web: Optional[bool] = None
     content_mode: Optional[Literal["custom", "preset"]] = None
     preset_id: Optional[str] = None
     ordem: Optional[int] = None
@@ -694,6 +696,7 @@ def create_email_template_model_endpoint(
             assunto=body.assunto,
             html=body.html,
             anexar_pdf=body.anexar_pdf,
+            preferir_prova_web=body.preferir_prova_web,
             content_mode=body.content_mode,
             preset_id=body.preset_id or None,
             ordem=body.ordem,
@@ -725,6 +728,7 @@ def update_email_template_model_endpoint(
             assunto=body.assunto,
             html=body.html,
             anexar_pdf=body.anexar_pdf,
+            preferir_prova_web=body.preferir_prova_web,
             content_mode=body.content_mode,
             preset_id=body.preset_id,
             ordem=body.ordem,

@@ -124,6 +124,74 @@ class TestResolveProofSendPlan:
         assert plan["use_attachment"] is True
         assert plan["variante"] == "sem_portal"
 
+    def test_uses_prova_web_preference_when_active(self, monkeypatch):
+        from services import email_template_model_service as svc
+
+        monkeypatch.setattr(
+            svc,
+            "resolve_active_email_template_for_grupo",
+            lambda grupo: {
+                "id": 3,
+                "ativo": True,
+                "anexar_pdf": False,
+                "preferir_prova_web": True,
+                "variante": "portal",
+            },
+        )
+        plan = svc.resolve_proof_send_plan(100)
+        assert plan["use_attachment"] is False
+        assert plan["prefer_prova_web"] is True
+        assert plan["variante"] == "portal"
+
+
+class TestProofEmailPreview:
+    def test_prefer_prova_web_falls_back_to_portal_when_not_ready(self, monkeypatch):
+        from routers import email_routes
+        from services import email_template_model_service as svc
+
+        monkeypatch.setattr(
+            svc,
+            "resolve_proof_send_plan",
+            lambda _os: {
+                "grupo": "prova_os",
+                "variante": "portal",
+                "model": {
+                    "id": 10,
+                    "grupo": "prova_os",
+                    "variante": "portal",
+                    "assunto": "Prova {{nr_os}}",
+                    "html": '<html><body><a href="{{link}}">Abrir prova</a></body></html>',
+                    "content_mode": "custom",
+                    "preferir_prova_web": True,
+                    "anexar_pdf": False,
+                    "ativo": True,
+                },
+                "use_attachment": False,
+                "prefer_prova_web": True,
+                "legacy_fallback": False,
+            },
+        )
+        monkeypatch.setattr(svc, "has_prova_web_ready_for_send", lambda *_a, **_k: (False, ""))
+        monkeypatch.setattr(
+            "services.activation_email_service.resolve_link_web_base",
+            lambda: "http://test.local",
+        )
+        monkeypatch.setattr(
+            email_routes.db,
+            "execute_query",
+            lambda sql, params=None: (
+                [{"solicitante": "Dep", "produto": "Cartaz"}]
+                if "tabProtocolos" in sql
+                else []
+            ),
+        )
+
+        payload = email_routes._build_proof_html_preview_payload(100, 2026)
+
+        assert payload["send_mode"] == "portal"
+        assert "/portal/prova/preview" in payload["html"]
+        assert "prova-web-preview" not in payload["html"]
+
 
 class TestActivateExclusivePerGrupo:
     def test_activate_deactivates_other_variants_in_same_grupo(self, monkeypatch):
@@ -156,6 +224,97 @@ class TestActivateExclusivePerGrupo:
 
 
 class TestSendProofWithAttachment:
+    def test_proof_send_uses_prova_web_link_when_preferred(self, monkeypatch):
+        from routers import email_routes
+        from routers.email_routes import EmailPTRequest, send_pt_email
+
+        sent: dict = {}
+
+        class FakeEws:
+            def find_folder_id(self, *_a, **_k):
+                return None
+
+            def send_email(self, **kwargs):
+                sent.update(kwargs)
+
+        cfg = MagicMock()
+        cfg.send_mailbox_os_lt_5000 = "sepim@test.local"
+
+        monkeypatch.setattr(
+            email_routes,
+            "_resolve_ews_for_ponto",
+            lambda _p: (FakeEws(), cfg),
+        )
+        monkeypatch.setattr(
+            "services.proof_files_service.resolve_proof_pdf_path",
+            lambda *_a, **_k: pytest.fail("Não deveria resolver PDF com Prova WEB disponível"),
+        )
+        monkeypatch.setattr(
+            "services.email_template_model_service.resolve_proof_send_plan",
+            lambda _os: {
+                "grupo": "prova_os",
+                "variante": "portal",
+                "model": {
+                    "id": 10,
+                    "grupo": "prova_os",
+                    "variante": "portal",
+                    "assunto": "Prova {{nr_os}}",
+                    "html": '<html><body><a href="{{link}}">Prova WEB</a></body></html>',
+                    "content_mode": "custom",
+                    "preferir_prova_web": True,
+                    "anexar_pdf": False,
+                    "ativo": True,
+                },
+                "use_attachment": False,
+                "prefer_prova_web": True,
+                "legacy_fallback": False,
+            },
+        )
+        monkeypatch.setattr(
+            "services.email_template_model_service.resolve_prova_web_link_for_send",
+            lambda *_a, **_k: (
+                "http://test/portal/aprovacao/web-token?os=100&ano=2026",
+                "2",
+            ),
+        )
+        monkeypatch.setattr(
+            email_routes.db,
+            "execute_query",
+            lambda sql, params=None: (
+                [{"solicitante": "Dep", "produto": "Cartaz"}]
+                if "tabProtocolos" in sql
+                else []
+            ),
+        )
+        monkeypatch.setattr(
+            "services.email_template_service.get_global_send_mailboxes",
+            lambda: {"os_gte_5000": None, "os_lt_5000": None},
+        )
+        monkeypatch.setattr(
+            "config_manager.config_manager.is_mdb_write_enabled",
+            lambda: False,
+        )
+
+        session = MagicMock()
+        session.ponto = "918713"
+
+        req = EmailPTRequest(
+            os=100,
+            ano=2026,
+            to=["cliente@test.local"],
+            ponto="918713",
+            type="proof",
+            register_andamento=False,
+        )
+
+        result = send_pt_email(req, session)
+
+        assert result["success"] is True
+        assert result["attachments"] == []
+        assert result["proof_file"] is None
+        assert sent.get("attachments") == []
+        assert "portal/aprovacao/web-token" in (sent.get("html_body") or "")
+
     def test_proof_send_attaches_pdf_when_plan_requires(self, monkeypatch, tmp_path):
         from routers import email_routes
         from routers.email_routes import EmailPTRequest, send_pt_email

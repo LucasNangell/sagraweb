@@ -2,7 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Send } from "lucide-react";
 import { useMemo } from "react";
 
-import { activateEmailTemplateModel, fetchEmailTemplateModels } from "@/api/adminSystem";
+import {
+  activateEmailTemplateModel,
+  fetchEmailTemplateModels,
+  updateEmailTemplateModel,
+} from "@/api/adminSystem";
 import type {
   EmailTemplateModelGrupo,
   EmailTemplateModelRecord,
@@ -10,7 +14,7 @@ import type {
 
 import { ConfigSubsection } from "./ConfigSectionLayout";
 
-type DispatchMode = "portal" | "anexo" | "inline";
+type DispatchMode = "portal" | "prova_web" | "anexo" | "inline";
 
 const GRUPOS: Array<{
   grupo: EmailTemplateModelGrupo;
@@ -50,6 +54,7 @@ function modeFromActiveModel(
   isProva: boolean,
 ): DispatchMode | null {
   if (!active) return null;
+  if (isProva && active.preferir_prova_web) return "prova_web";
   if (active.variante === "portal") return "portal";
   if (isProva) return "anexo";
   return "inline";
@@ -59,10 +64,19 @@ function findModelForMode(
   models: EmailTemplateModelRecord[],
   grupo: EmailTemplateModelGrupo,
   mode: DispatchMode,
+  active?: EmailTemplateModelRecord | null,
 ): EmailTemplateModelRecord | null {
   const inGrupo = models.filter((m) => m.grupo === grupo);
-  if (mode === "portal") {
+  if (mode === "prova_web" || mode === "portal") {
+    if (active?.variante === "portal") return active;
     return (
+      inGrupo.find(
+        (m) =>
+          m.variante === "portal" &&
+          !m.preferir_prova_web &&
+          m.nome.startsWith("Padrão"),
+      ) ??
+      inGrupo.find((m) => m.variante === "portal" && !m.preferir_prova_web) ??
       inGrupo.find((m) => m.variante === "portal" && m.nome.startsWith("Padrão")) ??
       inGrupo.find((m) => m.variante === "portal") ??
       null
@@ -87,6 +101,7 @@ function findModelForMode(
 
 function modeLabel(mode: DispatchMode, isProva: boolean): string {
   if (mode === "portal") return "Link do portal";
+  if (mode === "prova_web") return "Link de prova WEB";
   if (mode === "anexo") return "Anexo PDF no e-mail";
   return "Corpo inline (sem link do portal)";
 }
@@ -101,7 +116,22 @@ export function EmailDispatchModePanel() {
   const models = modelsQuery.data?.models ?? [];
 
   const activateMutation = useMutation({
-    mutationFn: (modelId: number) => activateEmailTemplateModel(modelId),
+    mutationFn: async ({
+      modelId,
+      preferirProvaWeb,
+    }: {
+      modelId: number;
+      preferirProvaWeb?: boolean;
+    }) => {
+      const updated =
+        preferirProvaWeb === undefined
+          ? null
+          : await updateEmailTemplateModel(modelId, {
+              preferir_prova_web: preferirProvaWeb,
+            });
+      if (updated?.model.ativo) return updated;
+      return activateEmailTemplateModel(modelId);
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "email-template-models"] });
     },
@@ -120,16 +150,28 @@ export function EmailDispatchModePanel() {
     [models],
   );
 
-  const onSelectMode = (grupo: EmailTemplateModelGrupo, mode: DispatchMode, isProva: boolean) => {
-    const target = findModelForMode(models, grupo, mode);
+  const onSelectMode = (
+    grupo: EmailTemplateModelGrupo,
+    mode: DispatchMode,
+    isProva: boolean,
+  ) => {
+    const active = activeModelForGrupo(models, grupo);
+    const target = findModelForMode(models, grupo, mode, active);
     if (!target) {
       window.alert(
         `Nenhum modelo «${modeLabel(mode, isProva)}» encontrado para ${grupo}. Verifique a seção «Modelos de envio».`,
       );
       return;
     }
-    if (target.ativo) return;
-    activateMutation.mutate(target.id);
+    const preferirProvaWeb =
+      isProva && mode === "prova_web"
+        ? true
+        : isProva && mode === "portal"
+          ? false
+          : undefined;
+    if (target.ativo && preferirProvaWeb === undefined) return;
+    if (target.ativo && preferirProvaWeb === target.preferir_prova_web) return;
+    activateMutation.mutate({ modelId: target.id, preferirProvaWeb });
   };
 
   return (
@@ -138,7 +180,7 @@ export function EmailDispatchModePanel() {
       title={
         <span className="flex items-center gap-1.5 normal-case tracking-normal text-secondary-blue">
           <Send className="size-3.5" aria-hidden />
-          Tipo de envio ativo (portal ou anexo)
+          Tipo de envio ativo
         </span>
       }
       description="Define como o SAGRA envia provas e problemas técnicos. O conteúdo HTML do modelo ativo pode ser editado na seção «Modelos de envio» acima."
@@ -167,7 +209,11 @@ export function EmailDispatchModePanel() {
               <legend className="px-1 text-xs font-semibold text-slate-800">{label}</legend>
               <p className="mb-2 text-[10px] text-slate-500">{hint}</p>
               <div className="flex flex-wrap gap-x-4 gap-y-2">
-                {(isProva ? (["portal", "anexo"] as const) : (["portal", "inline"] as const)).map(
+                {(
+                  isProva
+                    ? (["portal", "prova_web", "anexo"] as const)
+                    : (["portal", "inline"] as const)
+                ).map(
                   (mode) => (
                     <label
                       key={mode}
@@ -190,6 +236,7 @@ export function EmailDispatchModePanel() {
                 <p className="mt-2 text-[10px] text-slate-500">
                   Modelo ativo: <strong>{active.nome}</strong>
                   {active.anexar_pdf ? " · com anexo PDF" : ""}
+                  {active.preferir_prova_web ? " · prioriza Prova WEB" : ""}
                 </p>
               ) : (
                 <p className="mt-2 text-[10px] text-amber-700">

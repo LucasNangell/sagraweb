@@ -147,6 +147,7 @@ def ensure_email_template_model_schema() -> None:
             Html LONGTEXT NOT NULL,
             Ativo TINYINT(1) NOT NULL DEFAULT 0,
             AnexarPdf TINYINT(1) NOT NULL DEFAULT 0,
+            PreferirProvaWeb TINYINT(1) NOT NULL DEFAULT 0,
             ContentMode VARCHAR(16) NOT NULL DEFAULT 'custom',
             PresetId VARCHAR(64) NULL,
             Ordem INT NOT NULL DEFAULT 0,
@@ -158,6 +159,29 @@ def ensure_email_template_model_schema() -> None:
             KEY idx_email_tpl_grupo_variante (Grupo, Variante),
             KEY idx_email_tpl_ativo (Grupo, Variante, Ativo)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        """
+    )
+    _ensure_email_template_model_columns()
+
+
+def _ensure_email_template_model_columns() -> None:
+    rows = db.execute_query(
+        """
+        SELECT 1 AS ok
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'tabEmailTemplateModel'
+          AND COLUMN_NAME = 'PreferirProvaWeb'
+        LIMIT 1
+        """
+    )
+    if rows:
+        return
+    db.execute_query(
+        """
+        ALTER TABLE tabEmailTemplateModel
+        ADD COLUMN PreferirProvaWeb TINYINT(1) NOT NULL DEFAULT 0
+        AFTER AnexarPdf
         """
     )
 
@@ -172,6 +196,7 @@ def _row_to_dict(row: Dict[str, Any]) -> Dict[str, Any]:
         "html": str(row.get("Html") or ""),
         "ativo": bool(row.get("Ativo")),
         "anexar_pdf": bool(row.get("AnexarPdf")),
+        "preferir_prova_web": bool(row.get("PreferirProvaWeb")),
         "content_mode": str(row.get("ContentMode") or "custom"),
         "preset_id": row.get("PresetId"),
         "ordem": int(row.get("Ordem") or 0),
@@ -226,9 +251,9 @@ def ensure_default_email_template_models() -> None:
         db.execute_query(
             """
             INSERT INTO tabEmailTemplateModel
-                (Grupo, Variante, Nome, Assunto, Html, Ativo, AnexarPdf,
+                (Grupo, Variante, Nome, Assunto, Html, Ativo, AnexarPdf, PreferirProvaWeb,
                  ContentMode, PresetId, Ordem, LegacyTemplateId)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 grupo,
@@ -238,6 +263,7 @@ def ensure_default_email_template_models() -> None:
                 html,
                 1 if spec.get("ativo") else 0,
                 1 if spec.get("anexar_pdf") else 0,
+                1 if spec.get("preferir_prova_web") else 0,
                 mode,
                 preset,
                 spec.get("ordem", 0),
@@ -292,6 +318,7 @@ def _validate_model_fields(
     assunto: str,
     html: str,
     anexar_pdf: bool,
+    preferir_prova_web: bool = False,
     is_new: bool = False,
 ) -> None:
     if grupo not in VALID_GRUPOS:
@@ -306,6 +333,12 @@ def _validate_model_fields(
         raise ValueError("Anexar PDF não se aplica a problemas técnicos.")
     if anexar_pdf and variante == "portal":
         raise ValueError("Anexar PDF só se aplica a modelos sem portal.")
+    if preferir_prova_web and not grupo.startswith("prova_"):
+        raise ValueError("Link de Prova WEB só se aplica a modelos de prova.")
+    if preferir_prova_web and variante != "portal":
+        raise ValueError("Link de Prova WEB só se aplica a modelos com portal.")
+    if preferir_prova_web and anexar_pdf:
+        raise ValueError("Link de Prova WEB não pode ser usado com anexo PDF.")
     if variante == "portal":
         anexar_pdf = False
     if variante == "sem_portal" and grupo == "problema_tecnico":
@@ -351,6 +384,7 @@ def create_email_template_model(
     assunto: str,
     html: str,
     anexar_pdf: bool = False,
+    preferir_prova_web: bool = False,
     content_mode: str = "custom",
     preset_id: Optional[str] = None,
     ordem: int = 50,
@@ -362,15 +396,16 @@ def create_email_template_model(
         assunto=assunto,
         html=html,
         anexar_pdf=anexar_pdf,
+        preferir_prova_web=preferir_prova_web,
         is_new=True,
     )
     legacy_id = LEGACY_BY_GRUPO.get(grupo)
     db.execute_query(
         """
         INSERT INTO tabEmailTemplateModel
-            (Grupo, Variante, Nome, Assunto, Html, Ativo, AnexarPdf,
+            (Grupo, Variante, Nome, Assunto, Html, Ativo, AnexarPdf, PreferirProvaWeb,
              ContentMode, PresetId, Ordem, LegacyTemplateId, UpdatedByPonto)
-        VALUES (%s, %s, %s, %s, %s, 0, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, 0, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             grupo,
@@ -379,6 +414,7 @@ def create_email_template_model(
             assunto,
             html,
             1 if anexar_pdf else 0,
+            1 if preferir_prova_web else 0,
             content_mode,
             preset_id,
             ordem,
@@ -398,6 +434,7 @@ def update_email_template_model(
     assunto: Optional[str] = None,
     html: Optional[str] = None,
     anexar_pdf: Optional[bool] = None,
+    preferir_prova_web: Optional[bool] = None,
     content_mode: Optional[str] = None,
     preset_id: Optional[str] = None,
     ordem: Optional[int] = None,
@@ -409,6 +446,11 @@ def update_email_template_model(
         "assunto": assunto if assunto is not None else current["assunto"],
         "html": html if html is not None else current["html"],
         "anexar_pdf": anexar_pdf if anexar_pdf is not None else current["anexar_pdf"],
+        "preferir_prova_web": (
+            preferir_prova_web
+            if preferir_prova_web is not None
+            else current.get("preferir_prova_web", False)
+        ),
         "content_mode": content_mode if content_mode is not None else current["content_mode"],
         "preset_id": preset_id if preset_id is not None else current.get("preset_id"),
         "ordem": ordem if ordem is not None else current["ordem"],
@@ -418,17 +460,20 @@ def update_email_template_model(
         merged["preset_id"] = None
     if current["variante"] == "portal":
         merged["anexar_pdf"] = False
+    if current["variante"] != "portal" or merged["anexar_pdf"]:
+        merged["preferir_prova_web"] = False
     _validate_model_fields(
         grupo=current["grupo"],
         variante=current["variante"],
         assunto=merged["assunto"],
         html=merged["html"],
         anexar_pdf=merged["anexar_pdf"],
+        preferir_prova_web=merged["preferir_prova_web"],
     )
     db.execute_query(
         """
         UPDATE tabEmailTemplateModel SET
-            Nome = %s, Assunto = %s, Html = %s, AnexarPdf = %s,
+            Nome = %s, Assunto = %s, Html = %s, AnexarPdf = %s, PreferirProvaWeb = %s,
             ContentMode = %s, PresetId = %s, Ordem = %s, UpdatedByPonto = %s
         WHERE Id = %s
         """,
@@ -437,6 +482,7 @@ def update_email_template_model(
             merged["assunto"],
             merged["html"],
             1 if merged["anexar_pdf"] else 0,
+            1 if merged["preferir_prova_web"] else 0,
             merged["content_mode"],
             merged.get("preset_id"),
             merged["ordem"],
@@ -614,11 +660,13 @@ def resolve_proof_send_plan(os_id: int) -> Dict[str, Any]:
     active = resolve_active_email_template_for_grupo(grupo)
     if active:
         use_attachment = bool(active.get("anexar_pdf"))
+        prefer_prova_web = bool(active.get("preferir_prova_web")) and not use_attachment
         return {
             "grupo": grupo,
             "variante": active.get("variante") or ("sem_portal" if use_attachment else "portal"),
             "model": active,
             "use_attachment": use_attachment,
+            "prefer_prova_web": prefer_prova_web,
             "legacy_fallback": False,
         }
     return {
@@ -626,8 +674,76 @@ def resolve_proof_send_plan(os_id: int) -> Dict[str, Any]:
         "variante": "portal",
         "model": None,
         "use_attachment": False,
+        "prefer_prova_web": False,
         "legacy_fallback": True,
     }
+
+
+def resolve_prova_web_link_for_send(
+    ano: int,
+    os_id: int,
+    *,
+    ponto_envio: Optional[str] = None,
+) -> Tuple[str, str]:
+    """
+    Retorna (url, versao) de Prova WEB publicada e pronta para envio.
+
+    Se não houver Prova WEB utilizável, retorna ("", "") para manter o fluxo
+    atual de link do portal PDF.
+    """
+    try:
+        from routers.proof_portal_routes import (
+            build_proof_portal_url,
+            ensure_prova_web_token,
+        )
+        from services.prova_web_record_service import (
+            get_prova_web_record,
+            is_render_ready,
+        )
+
+        record = get_prova_web_record(ano, os_id)
+        if not record or record.get("isDraft") or not is_render_ready(record):
+            return "", ""
+        versao = str(int(record.get("versao") or 1))
+        token = ensure_prova_web_token(
+            os_id,
+            ano,
+            versao=versao,
+            ponto_envio=ponto_envio,
+        )
+        return build_proof_portal_url(os_id, ano, token), versao
+    except Exception as exc:
+        logger.warning(
+            "Link de Prova WEB indisponível para envio (%s/%s): %s",
+            os_id,
+            ano,
+            exc,
+        )
+    return "", ""
+
+
+def has_prova_web_ready_for_send(ano: int, os_id: int) -> Tuple[bool, str]:
+    """
+    Verifica se há Prova WEB publicada e renderizada sem criar token de envio.
+    """
+    try:
+        from services.prova_web_record_service import (
+            get_prova_web_record,
+            is_render_ready,
+        )
+
+        record = get_prova_web_record(ano, os_id)
+        if not record or record.get("isDraft") or not is_render_ready(record):
+            return False, ""
+        return True, str(int(record.get("versao") or 1))
+    except Exception as exc:
+        logger.warning(
+            "Disponibilidade de Prova WEB indisponível para preview (%s/%s): %s",
+            os_id,
+            ano,
+            exc,
+        )
+        return False, ""
 
 
 def resolve_pt_send_plan() -> Dict[str, Any]:

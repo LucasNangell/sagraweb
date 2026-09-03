@@ -222,6 +222,7 @@ def _build_proof_html_preview_payload(
 ) -> dict:
     """Monta prévia de envio de prova usando o modelo ativo (tabEmailTemplateModel)."""
     from services.email_template_model_service import (
+        has_prova_web_ready_for_send,
         render_proof_email,
         resolve_proof_send_plan,
     )
@@ -229,6 +230,16 @@ def _build_proof_html_preview_payload(
     resolved_versao = (versao or "").strip() or "1"
     proof_plan = resolve_proof_send_plan(os_id)
     use_attachment = bool(proof_plan.get("use_attachment"))
+    prova_web_ready = False
+    if proof_plan.get("prefer_prova_web") and not use_attachment:
+        prova_web_ready, prova_web_versao = has_prova_web_ready_for_send(ano, os_id)
+        if prova_web_ready and prova_web_versao:
+            resolved_versao = prova_web_versao
+    send_mode = (
+        "anexo"
+        if use_attachment
+        else ("prova_web" if prova_web_ready else "portal")
+    )
 
     solicitante = "Solicitante"
     produto = "Produto"
@@ -256,7 +267,8 @@ def _build_proof_html_preview_payload(
             from services.activation_email_service import resolve_link_web_base
 
             host = resolve_link_web_base().rstrip("/")
-            proof_link = f"{host}/portal/prova/preview?os={os_id}&ano={ano}"
+            preview_kind = "prova-web-preview" if send_mode == "prova_web" else "preview"
+            proof_link = f"{host}/portal/prova/{preview_kind}?os={os_id}&ano={ano}"
         except Exception as exc_link:
             logger.warning("Link de prévia do portal de prova indisponível: %s", exc_link)
             proof_link = "https://exemplo.portal/prova/preview"
@@ -307,7 +319,7 @@ def _build_proof_html_preview_payload(
         "type": "proof",
         "detected_attachment": found_pdf_name,
         "debug_path": debug_path,
-        "send_mode": "anexo" if use_attachment else "portal",
+        "send_mode": send_mode,
         "anexar_pdf": use_attachment,
         "template_model_id": (proof_plan.get("model") or {}).get("id"),
     }
@@ -1570,6 +1582,7 @@ def send_pt_email(request: EmailPTRequest, session: SessionData = Depends(requir
         elif email_type == "proof":
             from services.email_template_model_service import (
                 render_proof_email,
+                resolve_prova_web_link_for_send,
                 resolve_proof_send_plan,
             )
             from services.proof_files_service import (
@@ -1578,26 +1591,47 @@ def send_pt_email(request: EmailPTRequest, session: SessionData = Depends(requir
                 validate_proof_pdf_size,
             )
 
-            if not (request.proof_filename or "").strip():
-                raise HTTPException(
-                    status_code=400,
-                    detail="Selecione o PDF de prova que será enviado ao cliente.",
-                )
-
-            pdf_path = resolve_proof_pdf_path(
-                request.ano,
-                request.os,
-                request.proof_filename,
-            )
-            proof_file_basename = os.path.basename(pdf_path)
-            parsed_ver = extract_prova_version_from_filename(proof_file_basename)
-            if parsed_ver is not None:
-                nova_versao = str(parsed_ver)
-            else:
-                nova_versao = (request.versao or "").strip() or "1"
-
             plan = resolve_proof_send_plan(request.os)
             use_attachment = bool(plan.get("use_attachment"))
+            prefer_prova_web = bool(plan.get("prefer_prova_web"))
+
+            proof_link = ""
+            prova_web_link_used = False
+            if prefer_prova_web and not use_attachment:
+                proof_link, prova_web_versao = resolve_prova_web_link_for_send(
+                    request.ano,
+                    request.os,
+                    ponto_envio=str(session.ponto),
+                )
+                if proof_link:
+                    nova_versao = prova_web_versao or nova_versao
+                    prova_web_link_used = True
+                    send_mode_label = "prova_web"
+                    logger.info(
+                        "Prova: envio priorizando link de Prova WEB (modelo id=%s, OS %s/%s)",
+                        (plan.get("model") or {}).get("id"),
+                        request.os,
+                        request.ano,
+                    )
+
+            if not prova_web_link_used:
+                if not (request.proof_filename or "").strip():
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Selecione o PDF de prova que será enviado ao cliente.",
+                    )
+
+                pdf_path = resolve_proof_pdf_path(
+                    request.ano,
+                    request.os,
+                    request.proof_filename,
+                )
+                proof_file_basename = os.path.basename(pdf_path)
+                parsed_ver = extract_prova_version_from_filename(proof_file_basename)
+                if parsed_ver is not None:
+                    nova_versao = str(parsed_ver)
+                else:
+                    nova_versao = (request.versao or "").strip() or "1"
 
             q_dados = """
                 SELECT
@@ -1616,7 +1650,6 @@ def send_pt_email(request: EmailPTRequest, session: SessionData = Depends(requir
                 solicitante = res_dados[0].get("solicitante") or "Solicitante"
                 produto = res_dados[0].get("produto") or "Produto"
 
-            proof_link = ""
             if use_attachment:
                 validate_proof_pdf_size(pdf_path)
                 attachments_to_send = [pdf_path]
@@ -1626,7 +1659,7 @@ def send_pt_email(request: EmailPTRequest, session: SessionData = Depends(requir
                     (plan.get("model") or {}).get("id"),
                     proof_file_basename,
                 )
-            else:
+            elif not prova_web_link_used:
                 from routers.proof_portal_routes import (
                     build_proof_portal_url,
                     ensure_proof_token,

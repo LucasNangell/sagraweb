@@ -66,7 +66,7 @@ function variantHint(grupo: EmailTemplateModelGrupo, variante: EmailTemplateMode
     return "Quando este modelo estiver ativo e «habilitar envio de anexo» estiver ligado, o PDF selecionado da prova será anexado ao e-mail.";
   }
   if (variante === "portal" && grupo.startsWith("prova_")) {
-    return "Envio com link do portal de aprovação (sem anexo PDF no e-mail).";
+    return "Envio com link do portal de aprovação ou da Prova WEB, conforme o modelo ativo.";
   }
   return "Relatório com link do portal do cliente quando aplicável.";
 }

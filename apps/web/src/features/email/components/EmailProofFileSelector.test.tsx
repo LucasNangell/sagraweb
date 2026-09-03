@@ -150,6 +150,12 @@ describe("isProofSendBlocked", () => {
 
   });
 
+  it("libera proof sem PDF quando modo Prova WEB permite fallback no backend", () => {
+
+    expect(isProofSendBlocked("proof", false, false, 2, "", true)).toBe(false);
+
+  });
+
 
 
   it("libera proof com PDF selecionado manualmente", () => {

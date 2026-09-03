@@ -275,6 +275,7 @@ export async function createEmailTemplateModel(payload: {
   assunto: string;
   html: string;
   anexar_pdf?: boolean;
+  preferir_prova_web?: boolean;
   content_mode?: "custom" | "preset";
   preset_id?: string;
   ordem?: number;
@@ -293,6 +294,7 @@ export async function updateEmailTemplateModel(
     assunto: string;
     html: string;
     anexar_pdf: boolean;
+    preferir_prova_web: boolean;
     content_mode: "custom" | "preset";
     preset_id: string;
     ordem: number;

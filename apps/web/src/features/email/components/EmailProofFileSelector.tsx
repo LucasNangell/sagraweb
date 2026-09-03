@@ -360,9 +360,13 @@ export function isProofSendBlocked(
 
   selectedFilename: string,
 
+  allowWithoutPdf = false,
+
 ): boolean {
 
   if (emailType !== "proof") return false;
+
+  if (allowWithoutPdf) return false;
 
   return (
 

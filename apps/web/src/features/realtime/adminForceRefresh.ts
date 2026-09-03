@@ -2,6 +2,8 @@ import { fetchRemotePainelConfig } from "@/features/painel-global/painelGlobalAp
 import { PAINEL_CONFIG_STORAGE_KEY } from "@/features/painel-global/painelConfigStore";
 
 export const ADMIN_RELOAD_EPOCH_STORAGE_KEY = "sagra_admin_reload_epoch";
+/** Espalha thundering herd após Atualizar Clients (poll + reconnect). */
+export const ADMIN_RELOAD_JITTER_MS = 15_000;
 
 export interface AdminForceRefreshMessage {
   type?: string;
@@ -85,6 +87,12 @@ export async function applyAdminClientReload(
     return;
   }
   reloadInFlight = true;
+  const jitterMs = Math.floor(Math.random() * ADMIN_RELOAD_JITTER_MS);
+  if (jitterMs > 0) {
+    await new Promise<void>((resolve) => {
+      window.setTimeout(resolve, jitterMs);
+    });
+  }
   if (overwriteConfig) {
     try {
       await applyPainelGlobalOverwrite();

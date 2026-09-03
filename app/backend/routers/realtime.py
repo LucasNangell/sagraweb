@@ -148,7 +148,10 @@ class ConnectionManager:
         if ponto and scope == "authenticated":
             try:
                 ponto_clean = int("".join(filter(str.isdigit, str(ponto))))
-                db.execute_query(
+                # Fora do event loop — reconnect em massa no force_refresh
+                # não pode bloquear HTTP/WS com UPDATE síncrono no pool.
+                await asyncio.to_thread(
+                    db.execute_query,
                     "UPDATE tabUsuarios SET UltimoAcesso = NOW() WHERE Ponto = %s",
                     (ponto_clean,),
                 )

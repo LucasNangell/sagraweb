@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  ADMIN_RELOAD_JITTER_MS,
+  applyAdminClientReload,
   isAdminForceReload,
+  resetAdminClientReloadGateForTests,
   shouldReloadForAdminEpoch,
 } from "./adminForceRefresh";
 
@@ -58,5 +61,34 @@ describe("shouldReloadForAdminEpoch", () => {
   it("ignora epoch zero (nunca houve comando)", () => {
     expect(shouldReloadForAdminEpoch(0, 0)).toBe(false);
     expect(shouldReloadForAdminEpoch(0, null)).toBe(false);
+  });
+});
+
+describe("applyAdminClientReload jitter", () => {
+  beforeEach(() => {
+    resetAdminClientReloadGateForTests();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    resetAdminClientReloadGateForTests();
+    vi.restoreAllMocks();
+  });
+
+  it("atrasa location.reload com jitter antes de recarregar", async () => {
+    const reload = vi.fn();
+    vi.stubGlobal("location", { reload });
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+
+    const pending = applyAdminClientReload(false);
+    expect(reload).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(ADMIN_RELOAD_JITTER_MS * 0.5 - 1);
+    expect(reload).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    await pending;
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 });

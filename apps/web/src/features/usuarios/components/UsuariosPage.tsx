@@ -28,7 +28,7 @@ import { SetorPainelDefaultsSection } from "@/features/usuarios/components/Setor
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 
 const FORCE_REFRESH_CONFIRM =
-  "TEM CERTEZA? Isso irá recarregar a página de TODOS os usuários conectados (em até ~8s via poll).";
+  "TEM CERTEZA? Isso irá recarregar a página de TODOS os usuários conectados (espalhado em até ~20s).";
 
 const FORCE_REFRESH_RESET_CONFIRM =
   "ATENÇÃO: Isso irá recarregar todos os dashboards e SOBRESCREVER as configurações locais pelo arquivo global (config_painel_global.json). Deseja continuar?";
@@ -92,8 +92,8 @@ export function UsuariosPage() {
       const listeners = result.listeners ?? 0;
       showSuccess(
         listeners === 0
-          ? "Comando enviado. Nenhum client conectado agora; eles atualizam no próximo poll (até ~8s)."
-          : "Comando enviado. Os clients atualizam em até ~8s via poll.",
+          ? "Comando enviado. Nenhum client conectado agora; eles atualizam no próximo poll (até ~20s)."
+          : "Comando enviado. Os clients atualizam espalhados em até ~20s.",
       );
     } catch (err) {
       if (err instanceof DOMException && err.name === "TimeoutError") {

@@ -13,5 +13,5 @@ export function resolvePhysical(
 
 /** Espessura efetiva de render (papel + gap visual). */
 export function renderThicknessMm(p: FoldPhysicalProperties): number {
-  return Math.max(0.04, p.paperThicknessMm + p.renderGapMm);
+  return Math.max(0.02, p.paperThicknessMm + p.renderGapMm);
 }

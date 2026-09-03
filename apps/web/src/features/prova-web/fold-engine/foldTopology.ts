@@ -1,3 +1,13 @@
+import * as THREE from "three";
+
+import {
+  adjacentMovingPanelId,
+  evaluateFoldState,
+  makeIdentityPanelMatrices,
+  resolveWorldHinge,
+  type PanelMatrixMap,
+  type ResolveMovingFn,
+} from "./foldKinematics";
 import { panelId, quantizeMm, uniqueSortedBreaks } from "./foldNormalization";
 import type {
   FoldAdjacencyEdge,
@@ -8,6 +18,18 @@ import type {
   FoldSheetDefinition,
   FoldTopology,
 } from "./foldTypes";
+
+/** Progresso com ops anteriores à corrente fechadas (wizard / validação). */
+export function progressWithPriorsClosed(
+  operations: FoldOperation[],
+  current: FoldOperation,
+): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const o of operations) {
+    out.set(o.id, o.order < current.order ? 0 : 1);
+  }
+  return out;
+}
 
 export function buildFoldTopology(def: FoldSheetDefinition): FoldTopology {
   const widthMm = quantizeMm(def.widthMm);
@@ -157,6 +179,194 @@ export function resolveMovingPanels(
   // Se o BFS alcançou todos os painéis, a dobra não separa — inválido
   if (visited.size >= topology.panels.length) return new Set();
   return visited;
+}
+
+const WORLD_SIDE_EPS_MM = 0.75;
+
+function hasActivePriorFold(
+  operations: FoldOperation[],
+  operation: FoldOperation,
+  progressByOp: Map<string, number>,
+): boolean {
+  return operations.some(
+    (o) =>
+      o.id !== operation.id &&
+      o.order < operation.order &&
+      (progressByOp.get(o.id) ?? 1) < 1 - 1e-9,
+  );
+}
+
+/**
+ * Conjunto móvel com consciência de pilha: após dobras anteriores, partição
+ * pelo plano do vinco no espaço mundial (ex.: zine A3→A6, 3ª dobra).
+ * Sem histórico ativo, delega ao BFS plano.
+ */
+export function resolveMovingPanelsWithHistory(args: {
+  topology: FoldTopology;
+  operation: FoldOperation;
+  creases: FoldCrease[];
+  operations: FoldOperation[];
+  progressByOp: Map<string, number>;
+  /** Matrizes já com ops anteriores aplicadas (hot path do solver). */
+  priorMatrices?: PanelMatrixMap;
+  thicknessMm?: number;
+}): Set<string> {
+  const {
+    topology,
+    operation,
+    creases,
+    operations,
+    progressByOp,
+    thicknessMm,
+  } = args;
+  const flat = resolveMovingPanels(topology, operation, creases);
+  if (flat.size === 0) return flat;
+
+  if (!hasActivePriorFold(operations, operation, progressByOp)) {
+    return flat;
+  }
+
+  const crease = creases.find((c) => c.id === operation.creaseId);
+  if (!crease) return flat;
+
+  let matrices = args.priorMatrices;
+  if (!matrices) {
+    const priorOps = operations.filter((o) => o.order < operation.order);
+    const nested = evaluateFoldState({
+      topology,
+      creases,
+      operations: priorOps,
+      progressByOp,
+      resolveMoving: (op, prior) =>
+        resolveMovingPanelsWithHistory({
+          topology,
+          operation: op,
+          creases,
+          operations: priorOps,
+          progressByOp,
+          priorMatrices: prior,
+          thicknessMm,
+        }),
+      thicknessMm,
+    });
+    matrices = nested.matrices;
+  }
+
+  const hinge = resolveWorldHinge(
+    topology,
+    crease,
+    flat,
+    matrices,
+    operation.id,
+  );
+  if (!hinge.ok) return flat;
+
+  const axis = hinge.direction.clone().normalize();
+  if (axis.lengthSq() < 1e-12) return flat;
+
+  const seedId =
+    adjacentMovingPanelId(topology, crease, flat) ??
+    flat.values().next().value;
+  if (typeof seedId !== "string") return flat;
+  const seedMat = matrices.get(seedId) ?? makeIdentityPanelMatrices(topology).get(seedId);
+  if (!seedMat) return flat;
+
+  const origin = hinge.point;
+  const seedCenter = new THREE.Vector3(0, 0, 0).applyMatrix4(seedMat);
+  const toSeed = seedCenter.clone().sub(origin);
+  const radial = toSeed
+    .clone()
+    .sub(axis.clone().multiplyScalar(toSeed.dot(axis)));
+  if (radial.lengthSq() < 1e-8) return flat;
+  radial.normalize();
+
+  const moving = new Set<string>();
+  for (const p of topology.panels) {
+    const mat = matrices.get(p.id);
+    if (!mat) continue;
+    const center = new THREE.Vector3(0, 0, 0).applyMatrix4(mat);
+    const toP = center.clone().sub(origin);
+    const radialP = toP
+      .clone()
+      .sub(axis.clone().multiplyScalar(toP.dot(axis)));
+    const side = radialP.dot(radial);
+    if (side > WORLD_SIDE_EPS_MM) {
+      moving.add(p.id);
+    } else if (side >= -WORLD_SIDE_EPS_MM && flat.has(p.id)) {
+      // Quase no plano: só inclui se o BFS plano também marcar (evita miolo).
+      moving.add(p.id);
+    }
+  }
+
+  if (moving.size === 0 || moving.size >= topology.panels.length) return flat;
+  return moving;
+}
+
+export function createHistoryAwareResolveMoving(args: {
+  topology: FoldTopology;
+  creases: FoldCrease[];
+  operations: FoldOperation[];
+  progressByOp: Map<string, number>;
+  thicknessMm?: number;
+}): ResolveMovingFn {
+  return (op, priorMatrices) =>
+    resolveMovingPanelsWithHistory({
+      topology: args.topology,
+      operation: op,
+      creases: args.creases,
+      operations: args.operations,
+      progressByOp: args.progressByOp,
+      priorMatrices,
+      thicknessMm: args.thicknessMm,
+    });
+}
+
+/**
+ * Aviso: grade 2×3 com V→H→V no vinco interior da aba já fechada
+ * (descasca uma coluna). Sugerir preset zine 2×4.
+ */
+export function detectInteriorPeelAfterFlap(
+  topology: FoldTopology,
+  creases: FoldCrease[],
+  operations: FoldOperation[],
+): { code: string; message: string } | null {
+  const cols = new Set(topology.panels.map((p) => p.column)).size;
+  const rows = new Set(topology.panels.map((p) => p.row)).size;
+  if (cols !== 3 || rows !== 2) return null;
+
+  const sorted = [...operations].sort((a, b) => a.order - b.order);
+  if (sorted.length < 3) return null;
+  const [o1, o2, o3] = sorted;
+  if (!o1 || !o2 || !o3) return null;
+
+  const c1 = creases.find((c) => c.id === o1.creaseId);
+  const c2 = creases.find((c) => c.id === o2.creaseId);
+  const c3 = creases.find((c) => c.id === o3.creaseId);
+  if (!c1 || !c2 || !c3) return null;
+  if (c1.axis !== "vertical" || c2.axis !== "horizontal" || c3.axis !== "vertical") {
+    return null;
+  }
+  if (c1.id === c3.id) return null;
+
+  const m1 = resolveMovingPanels(topology, o1, creases);
+  const m3 = resolveMovingPanels(topology, o3, creases);
+  if (m1.size === 0 || m3.size === 0) return null;
+  // 3ª é subconjunto próprio da 1ª → descasca interior da aba
+  let subset = m3.size < m1.size;
+  if (!subset) return null;
+  for (const id of m3) {
+    if (!m1.has(id)) {
+      subset = false;
+      break;
+    }
+  }
+  if (!subset) return null;
+
+  return {
+    code: "interior_peel_zine",
+    message:
+      "A 3ª dobra vertical separa só uma coluna da aba já fechada. Para zine A3→A6 (metades sucessivas), use o preset “Zine A3→A6” (grade 2×4).",
+  };
 }
 
 function pickSeedPanels(

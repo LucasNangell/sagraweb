@@ -1911,18 +1911,19 @@ def ensure_prova_web_pages(
                 meta_v = _render_page_png(page_v, matrix, png_v)
                 ordered.append({**meta_v, "role": ROLE_SHEET_BACK, "path": png_v})
                 folheto_cfg["pageVerso"] = int(verso_idx)
+            elif len(doc) >= 2:
+                # Sem verso válido: PDF duplex → outra página (repara frente==verso
+                # após clamp prematuro no wizard, ou pageVerso omitido).
+                alt = 0 if frente_idx != 0 else 1
+                _check_abort()
+                page_v = doc.load_page(alt)
+                _apply_mm_crop(page_v, crop_mm)
+                png_v = os.path.join(cache_dir, "body_1.png")
+                meta_v = _render_page_png(page_v, matrix, png_v)
+                ordered.append({**meta_v, "role": ROLE_SHEET_BACK, "path": png_v})
+                folheto_cfg["pageVerso"] = alt
             else:
-                # Uma página: se o PDF tem 2+, usar a 2ª como verso implícito
-                if len(doc) >= 2 and verso_idx is None:
-                    _check_abort()
-                    page_v = doc.load_page(1)
-                    _apply_mm_crop(page_v, crop_mm)
-                    png_v = os.path.join(cache_dir, "body_1.png")
-                    meta_v = _render_page_png(page_v, matrix, png_v)
-                    ordered.append({**meta_v, "role": ROLE_SHEET_BACK, "path": png_v})
-                    folheto_cfg["pageVerso"] = 1
-                else:
-                    folheto_cfg["pageVerso"] = None
+                folheto_cfg["pageVerso"] = None
             _progress(len(ordered), max(len(ordered), 1))
 
             # Dimensões úteis a partir da face renderizada

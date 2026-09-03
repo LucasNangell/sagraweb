@@ -105,6 +105,58 @@ def is_legacy_folheto(raw: Optional[dict[str, Any]]) -> bool:
 def sheet_from_preset(
     preset: str, width_mm: float, height_mm: float
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    # Zine: 4 vincos (V 1/4·1/2·3/4 + H 1/2) e só 3 operações.
+    if preset == "zine_metades":
+        creases = [
+            {
+                "id": "cv1",
+                "axis": "vertical",
+                "positionMm": quantize_mm(width_mm * 0.25),
+            },
+            {
+                "id": "cv2",
+                "axis": "vertical",
+                "positionMm": quantize_mm(width_mm * 0.5),
+            },
+            {
+                "id": "cv3",
+                "axis": "vertical",
+                "positionMm": quantize_mm(width_mm * 0.75),
+            },
+            {
+                "id": "ch",
+                "axis": "horizontal",
+                "positionMm": quantize_mm(height_mm * 0.5),
+            },
+        ]
+        operations = [
+            {
+                "id": "o1",
+                "creaseId": "cv2",
+                "order": 1,
+                "movingSide": "positive",
+                "towards": "front",
+                "targetAngleDeg": 180,
+            },
+            {
+                "id": "o2",
+                "creaseId": "ch",
+                "order": 2,
+                "movingSide": "positive",
+                "towards": "front",
+                "targetAngleDeg": 180,
+            },
+            {
+                "id": "o3",
+                "creaseId": "cv1",
+                "order": 3,
+                "movingSide": "positive",
+                "towards": "front",
+                "targetAngleDeg": 180,
+            },
+        ]
+        return creases, operations
+
     specs = _PRESET_SPECS.get(preset) or _PRESET_SPECS["biparte_vertical"]
     creases: list[dict[str, Any]] = []
     operations: list[dict[str, Any]] = []

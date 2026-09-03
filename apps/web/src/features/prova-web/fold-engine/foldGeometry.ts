@@ -67,7 +67,7 @@ export function createPanelBoxMesh(args: {
 
   const w = args.panel.widthMm;
   const h = args.panel.heightMm;
-  const t = Math.max(0.04, args.thickness);
+  const t = Math.max(0.02, args.thickness);
 
   const geo = new THREE.BoxGeometry(w, h, t);
   disposables.push(geo);

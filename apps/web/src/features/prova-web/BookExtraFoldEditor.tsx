@@ -13,14 +13,17 @@ import { emptyCropSides } from "@/api/provaWeb";
 
 import {
   buildFoldTopology,
-  resolveMovingPanels,
+  progressWithPriorsClosed,
+  resolveMovingPanelsWithHistory,
   syncOperationsToBasePanel,
 } from "./fold-engine";
 import { FoldSchemaPreview } from "./FoldSchemaPreview";
 import {
   applyFoldModelConfig,
   applyPresetToFolheto,
+  clampCreasePosition,
   defaultFolhetoCrop,
+  ensureMirrorCrease,
   FOLD_LINE_COLORS,
   FOLD_PRESET_OPTIONS,
   packFoldModelConfig,
@@ -134,9 +137,9 @@ export function BookExtraFoldEditor({
         operations: [],
         backArtworkTransform: { mirrorX: false, mirrorY: false, rotationDeg: 0 },
         physical: {
-          paperThicknessMm: 0.22,
-          renderGapMm: 0.015,
-          creaseRadiusMm: 0.35,
+          paperThicknessMm: 0.028,
+          renderGapMm: 0.002,
+          creaseRadiusMm: 0.08,
         },
       });
     }
@@ -150,11 +153,17 @@ export function BookExtraFoldEditor({
   const movingIds = useMemo(() => {
     if (!selectedOp || !value.creases.length) return new Set<string>();
     try {
-      return resolveMovingPanels(topology, selectedOp, value.creases);
+      return resolveMovingPanelsWithHistory({
+        topology,
+        operation: selectedOp,
+        creases: value.creases,
+        operations: value.operations,
+        progressByOp: progressWithPriorsClosed(value.operations, selectedOp),
+      });
     } catch {
       return new Set<string>();
     }
-  }, [selectedOp, topology, value.creases]);
+  }, [selectedOp, topology, value.creases, value.operations]);
 
   const setDraft = (patch: Partial<BookExtraFoldDraft>) => {
     onChange({ ...value, ...patch });
@@ -213,9 +222,32 @@ export function BookExtraFoldEditor({
   };
 
   const addCrease = (axis: "vertical" | "horizontal") => {
+    const span = axis === "vertical" ? w : h;
+    const sameAxis = value.creases.filter((c) => c.axis === axis);
+    const midTaken = sameAxis.some(
+      (c) => Math.abs(c.positionMm - span * 0.5) < 15,
+    );
+    const preferredFrac = midTaken ? 0.25 : 0.5;
     const id = `c${Date.now().toString(36)}`;
-    const positionMm = Math.round((axis === "vertical" ? w : h) * 50) / 100;
-    const crease: FoldCrease = { id, axis, positionMm };
+    const crease: FoldCrease = {
+      id,
+      axis,
+      positionMm: clampCreasePosition(
+        span * preferredFrac,
+        axis,
+        w,
+        h,
+        value.creases,
+      ),
+    };
+    let mirrorSeq = 0;
+    const creases = ensureMirrorCrease(
+      [...value.creases, crease],
+      axis,
+      crease.positionMm,
+      span,
+      () => `c${Date.now().toString(36)}_m${mirrorSeq++}`,
+    );
     const op: FoldOperation = {
       id: `o${Date.now().toString(36)}`,
       creaseId: id,
@@ -226,7 +258,7 @@ export function BookExtraFoldEditor({
     };
     setDraft({
       preset: "personalizada",
-      creases: [...value.creases, crease],
+      creases,
       operations: [...value.operations, op],
     });
     setSelectedOpId(op.id);

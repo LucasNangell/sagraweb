@@ -156,6 +156,65 @@ def test_folha_dobrada_render_emits_fold_mockup(
     assert (cache / "page_2.png").is_file()
 
 
+def test_folha_dobrada_repairs_frente_verso_collision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """frente==verso (bug do clamp pageCount=1) ainda gera sheet-back no PDF duplex."""
+    pdf = tmp_path / "duplex.pdf"
+    doc = fitz.open()
+    doc.new_page(width=400, height=300)
+    doc.new_page(width=400, height=300)
+    doc.save(pdf)
+    doc.close()
+
+    cache = tmp_path / "web-collision"
+    cache.mkdir()
+    monkeypatch.setattr(render_svc, "ensure_web_render_dir", lambda *_a, **_k: str(cache))
+    monkeypatch.setattr(render_svc, "render_scale", lambda *args, **kwargs: 1.0)
+
+    crop = {
+        "folheto": {
+            "preset": "biparte_vertical",
+            "crop": {
+                "top": 0,
+                "right": 0,
+                "bottom": 0,
+                "left": 0,
+                "source": "manual",
+            },
+            "creases": [
+                {"id": "c1", "axis": "vertical", "positionMm": 105},
+            ],
+            "operations": [
+                {
+                    "id": "o1",
+                    "creaseId": "c1",
+                    "order": 1,
+                    "movingSide": "positive",
+                    "towards": "front",
+                    "targetAngleDeg": 180,
+                }
+            ],
+            "pageFrente": 0,
+            "pageVerso": 0,
+        }
+    }
+
+    manifest = render_svc.ensure_prova_web_pages(
+        2026,
+        3,
+        mode=render_svc.MODE_FOLHA_DOBRADA,
+        source_paths=[str(pdf)],
+        os_folder=str(tmp_path),
+        pasta_render="Prova1",
+        crop_json=crop,
+    )
+
+    assert manifest["pageCount"] == 2
+    assert manifest["pages"][1]["role"] == "sheet-back"
+    assert manifest["foldMockup"]["hasVerso"] is True
+
+
 def test_folha_dobrada_single_page_no_verso(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

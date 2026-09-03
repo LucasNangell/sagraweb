@@ -1,5 +1,10 @@
 import { quantizeMm, uniqueSortedBreaks } from "./foldNormalization";
-import { buildFoldTopology, resolveMovingPanels } from "./foldTopology";
+import {
+  buildFoldTopology,
+  detectInteriorPeelAfterFlap,
+  progressWithPriorsClosed,
+  resolveMovingPanelsWithHistory,
+} from "./foldTopology";
 import type {
   FoldCrease,
   FoldOperation,
@@ -64,7 +69,14 @@ export function validateFoldDefinition(
 
   const topology = buildFoldTopology(def);
   for (const op of def.operations) {
-    const moving = resolveMovingPanels(topology, op, def.creases);
+    const moving = resolveMovingPanelsWithHistory({
+      topology,
+      operation: op,
+      creases: def.creases,
+      operations: def.operations,
+      progressByOp: progressWithPriorsClosed(def.operations, op),
+      thicknessMm: def.thicknessMm,
+    });
     if (moving.size === 0) {
       issues.push({
         level: "error",
@@ -80,6 +92,19 @@ export function validateFoldDefinition(
     }
   }
 
+  const peel = detectInteriorPeelAfterFlap(
+    topology,
+    def.creases,
+    def.operations,
+  );
+  if (peel) {
+    issues.push({
+      level: "warning",
+      code: peel.code,
+      message: peel.message,
+    });
+  }
+
   // Phase conflicts: same phaseId sharing panel ids
   const byPhase = new Map<string, FoldOperation[]>();
   for (const op of def.operations) {
@@ -92,7 +117,14 @@ export function validateFoldDefinition(
     if (ops.length < 2) continue;
     const used = new Set<string>();
     for (const op of ops) {
-      const moving = resolveMovingPanels(topology, op, def.creases);
+      const moving = resolveMovingPanelsWithHistory({
+        topology,
+        operation: op,
+        creases: def.creases,
+        operations: def.operations,
+        progressByOp: progressWithPriorsClosed(def.operations, op),
+        thicknessMm: def.thicknessMm,
+      });
       for (const id of moving) {
         if (used.has(id)) {
           issues.push({

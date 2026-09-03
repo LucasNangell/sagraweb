@@ -180,6 +180,24 @@ const cruzadoH: FoldPresetGenerator = (w, h) => ({
   ],
 });
 
+/**
+ * Zine A3→A6: três metades sucessivas (V meio → H → V 1/4).
+ * Grade 2×4; o vinco em 3/4 fica coincidente com 1/4 após a 1ª dobra.
+ */
+const zineMetades: FoldPresetGenerator = (w, h) => ({
+  creases: [
+    crease("cv1", "vertical", 0.25, w),
+    crease("cv2", "vertical", 0.5, w),
+    crease("cv3", "vertical", 0.75, w),
+    crease("ch", "horizontal", 0.5, h),
+  ],
+  operations: [
+    op("o1", "cv2", 1, "positive", "front"),
+    op("o2", "ch", 2, "positive", "front"),
+    op("o3", "cv1", 3, "positive", "front"),
+  ],
+});
+
 export const FOLD_PRESET_GENERATORS: Record<string, FoldPresetGenerator> = {
   biparte_vertical: (w) => ({
     creases: [crease("c1", "vertical", 0.5, w)],
@@ -199,6 +217,7 @@ export const FOLD_PRESET_GENERATORS: Record<string, FoldPresetGenerator> = {
   paralela_dupla: paralelaDupla,
   cruzado_v_primeiro: cruzadoV,
   cruzado_h_primeiro: cruzadoH,
+  zine_metades: zineMetades,
   personalizada: (w) => ({
     creases: [crease("c1", "vertical", 0.5, w)],
     operations: [op("o1", "c1", 1, "positive", "front")],
@@ -255,6 +274,11 @@ export const FOLD_PRESET_OPTIONS: Array<{
     id: "cruzado_h_primeiro",
     label: "Cruzada (H primeiro)",
     hint: "Grade 2×2",
+  },
+  {
+    id: "zine_metades",
+    label: "Zine A3→A6",
+    hint: "3 metades · grade 2×4",
   },
   { id: "personalizada", label: "Personalizada", hint: "Editar vincos livremente" },
 ];

@@ -25,7 +25,7 @@ import {
 import { addStudioLights, configureRenderer, type ColorMode } from "./foldMaterials";
 import { resolveOperationProgress } from "./foldProgress";
 import { resolvePhysical, renderThicknessMm } from "./foldStacking";
-import { buildFoldTopology, resolveMovingPanels } from "./foldTopology";
+import { buildFoldTopology, createHistoryAwareResolveMoving } from "./foldTopology";
 import type {
   ArtworkTransform,
   FoldSheetDefinition,
@@ -53,6 +53,8 @@ export type FoldSceneHandle = {
   operations: FoldOperation[];
   setOrbit: (rotX: number, rotY: number) => void;
   setHingeAnglesFromUnfold: (unfold01: number) => void;
+  /** Progresso explícito por operação (0 fechado / 1 aberto). */
+  setProgressByOp: (progressByOp: Map<string, number>) => void;
   setZoom: (factor: number) => void;
   fitView: () => void;
   pickPanel: (ndcX: number, ndcY: number) => string | null;
@@ -72,6 +74,27 @@ export type FoldSceneHandle = {
 
 async function loadTexture(url: string | null): Promise<THREE.Texture | null> {
   if (!url) return null;
+  const apply = (tex: THREE.Texture) => {
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    tex.needsUpdate = true;
+    return tex;
+  };
+  // Data/blob URLs: TextureLoader direto (fetch+credentials falha ou é inútil).
+  if (url.startsWith("data:") || url.startsWith("blob:")) {
+    try {
+      return await new Promise<THREE.Texture>((resolve, reject) => {
+        new THREE.TextureLoader().load(
+          url,
+          (tex) => resolve(apply(tex)),
+          undefined,
+          reject,
+        );
+      });
+    } catch {
+      return null;
+    }
+  }
   try {
     const res = await fetch(url, { credentials: "include" });
     if (!res.ok) return null;
@@ -82,10 +105,7 @@ async function loadTexture(url: string | null): Promise<THREE.Texture | null> {
         objUrl,
         (tex) => {
           URL.revokeObjectURL(objUrl);
-          tex.colorSpace = THREE.SRGBColorSpace;
-          tex.anisotropy = 8;
-          tex.needsUpdate = true;
-          resolve(tex);
+          resolve(apply(tex));
         },
         undefined,
         (err) => {
@@ -258,13 +278,17 @@ export async function createFoldScene(
     }
   };
 
-  const resolveMoving = (op: FoldOperation) =>
-    resolveMovingPanels(topology, op, def.creases);
-
   const evaluate = (unfold01: number) => {
     const progress =
       opProgressOverride ??
       resolveOperationProgress(def.operations, unfold01);
+    const resolveMoving = createHistoryAwareResolveMoving({
+      topology,
+      creases: def.creases,
+      operations: def.operations,
+      progressByOp: progress,
+      thicknessMm: thickness,
+    });
     const safeAngles = computeSafeAngleOverrides({
       topology,
       creases: def.creases,
@@ -321,6 +345,12 @@ export async function createFoldScene(
       if (!opProgressOverride.has(k)) opProgressOverride.set(k, v);
     }
     opProgressOverride.set(operationId, Math.min(1, Math.max(0, open01)));
+    evaluate(0);
+    pendingRender = true;
+  };
+
+  const setProgressByOp = (progressByOp: Map<string, number>) => {
+    opProgressOverride = new Map(progressByOp);
     evaluate(0);
     pendingRender = true;
   };
@@ -394,7 +424,16 @@ export async function createFoldScene(
         panelMeshes,
       ),
     operationForPanel: (panelId, unfold01) => {
-      const progress = resolveOperationProgress(def.operations, unfold01);
+      const progress =
+        opProgressOverride ??
+        resolveOperationProgress(def.operations, unfold01);
+      const resolveMoving = createHistoryAwareResolveMoving({
+        topology,
+        creases: def.creases,
+        operations: def.operations,
+        progressByOp: progress,
+        thicknessMm: thickness,
+      });
       // Prefer operation that still has this panel in moving set and isn't fully open
       const candidates = [...def.operations]
         .sort((a, b) => b.order - a.order)
@@ -406,6 +445,7 @@ export async function createFoldScene(
       return candidates[0]?.id ?? null;
     },
     setOperationProgress,
+    setProgressByOp,
     getErrors: () => lastErrors,
     requestRender,
     resize,

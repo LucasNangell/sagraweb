@@ -294,11 +294,16 @@ export function adjacentMovingPanelId(
 /**
  * Índice de camada (1..) para empilhar abas na mesma face/suporte.
  */
+export type ResolveMovingFn = (
+  op: FoldOperation,
+  priorMatrices?: PanelMatrixMap,
+) => Set<string>;
+
 export function stackLayerIndex(
   operations: FoldOperation[],
   current: FoldOperation,
   progressByOp: Map<string, number>,
-  resolveMoving: (op: FoldOperation) => Set<string>,
+  resolveMoving: ResolveMovingFn,
   allPanelIds: string[],
 ): number {
   const currentMoving = resolveMoving(current);
@@ -333,7 +338,7 @@ export function evaluateFoldState(args: {
   creases: FoldCrease[];
   operations: FoldOperation[];
   progressByOp: Map<string, number>;
-  resolveMoving: (op: FoldOperation) => Set<string>;
+  resolveMoving: ResolveMovingFn;
   angleOverride?: Map<string, number>;
   /** Espessura render (papel + gap) para empilhamento. */
   thicknessMm?: number;
@@ -345,7 +350,7 @@ export function evaluateFoldState(args: {
   const panelLayer = new Map<string, number>();
   const sorted = [...args.operations].sort((a, b) => a.order - b.order);
   const allPanelIds = args.topology.panels.map((p) => p.id);
-  const thickness = Math.max(0.05, args.thicknessMm ?? 0.235);
+  const thickness = Math.max(0.02, args.thicknessMm ?? 0.03);
   // Normal da frente da folha aberta (+Z). Sinal não depende da pose intermediária.
   const frontNormal = new THREE.Vector3(0, 0, 1);
 
@@ -361,7 +366,7 @@ export function evaluateFoldState(args: {
       const open01 = args.progressByOp.get(operation.id) ?? 1;
       if (open01 >= 1 - 1e-9) continue;
 
-      const moving = args.resolveMoving(operation);
+      const moving = args.resolveMoving(operation, before);
       if (moving.size === 0) continue;
 
       const crease = args.creases.find((c) => c.id === operation.creaseId);
@@ -447,8 +452,8 @@ export function evaluateFoldState(args: {
         args.resolveMoving,
         allPanelIds,
       );
-      // Empilhamento mínimo (só espessura) — gap extra abre a dobra visualmente.
-      const stackAmt = thickness * layer * (1 - open01);
+      // Empilhamento mínimo — fator <1 aproxima as faces na dobradiça.
+      const stackAmt = thickness * 0.55 * layer * (1 - open01);
       const stackDir =
         operation.towards === "front"
           ? frontNormal.clone()

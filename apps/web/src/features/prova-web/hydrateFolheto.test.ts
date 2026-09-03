@@ -4,7 +4,38 @@ import {
   defaultFolhetoCrop,
   hydrateFolhetoFromInitial,
   isLegacyFolhetoConfig,
+  resolveFolhetoDuplexPages,
 } from "./provaWebFoldPresets";
+
+describe("resolveFolhetoDuplexPages", () => {
+  it("restaura frente=1 / verso=0 quando ambos colidem em 0 (clamp pageCount=1)", () => {
+    expect(resolveFolhetoDuplexPages(2, 0, 0)).toEqual({
+      pageFrente: 1,
+      pageVerso: 0,
+    });
+  });
+
+  it("restaura padrão quando verso some e frente ficou em 0", () => {
+    expect(resolveFolhetoDuplexPages(2, 0, null)).toEqual({
+      pageFrente: 1,
+      pageVerso: 0,
+    });
+  });
+
+  it("preserva invertido frente=0 / verso=1", () => {
+    expect(resolveFolhetoDuplexPages(2, 0, 1)).toEqual({
+      pageFrente: 0,
+      pageVerso: 1,
+    });
+  });
+
+  it("PDF de uma página: sem verso", () => {
+    expect(resolveFolhetoDuplexPages(1, 1, 0)).toEqual({
+      pageFrente: 0,
+      pageVerso: null,
+    });
+  });
+});
 
 describe("hydrateFolhetoFromInitial", () => {
   it("restaura creases, operações e crop do cropJson", () => {

@@ -57,6 +57,7 @@ export type FoldPresetId =
   | "paralela_dupla"
   | "cruzado_v_primeiro"
   | "cruzado_h_primeiro"
+  | "zine_metades"
   | "personalizada"
   /** @deprecated legado — assistente exige reconfiguração */
   | "triptico_vertical"

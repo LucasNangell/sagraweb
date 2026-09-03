@@ -2,7 +2,10 @@ import * as THREE from "three";
 import { OBB } from "three/examples/jsm/math/OBB.js";
 
 import type { PanelMatrixMap } from "./foldKinematics";
-import { evaluateFoldState } from "./foldKinematics";
+import {
+  evaluateFoldState,
+  type PanelMatrixMap,
+} from "./foldKinematics";
 import type { FoldCrease, FoldOperation, FoldTopology } from "./foldTypes";
 
 export function findMaximumSafeAngle(
@@ -85,7 +88,7 @@ function previouslyFoldedFlapPairs(
   operations: FoldOperation[],
   current: FoldOperation,
   progressByOp: Map<string, number>,
-  resolveMoving: (op: FoldOperation) => Set<string>,
+  resolveMoving: (op: FoldOperation, priorMatrices?: PanelMatrixMap) => Set<string>,
   currentMoving: Set<string>,
 ): Set<string> {
   const out = new Set<string>();
@@ -115,7 +118,7 @@ export function computeSafeAngleOverrides(args: {
   creases: FoldCrease[];
   operations: FoldOperation[];
   progressByOp: Map<string, number>;
-  resolveMoving: (op: FoldOperation) => Set<string>;
+  resolveMoving: (op: FoldOperation, priorMatrices?: PanelMatrixMap) => Set<string>;
   thickness: number;
 }): Map<string, number> {
   const overrides = new Map<string, number>();

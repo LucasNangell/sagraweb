@@ -71,14 +71,121 @@ export function clampCreasePosition(
     .filter((c) => c.axis === axis)
     .map((c) => c.positionMm)
     .sort((a, b) => a - b);
-  let lo = MIN_PANEL_MM;
-  let hi = span - MIN_PANEL_MM;
-  for (const p of same) {
-    if (p < positionMm) lo = Math.max(lo, p + MIN_PANEL_MM);
-    if (p > positionMm) hi = Math.min(hi, p - MIN_PANEL_MM);
+
+  const round = (v: number) => Math.round(v * 100) / 100;
+
+  const fits = (pos: number) => {
+    if (pos + 1e-6 < MIN_PANEL_MM || pos - 1e-6 > span - MIN_PANEL_MM) {
+      return false;
+    }
+    for (const p of same) {
+      if (Math.abs(p - pos) + 1e-6 < MIN_PANEL_MM) return false;
+    }
+    return true;
+  };
+
+  if (fits(positionMm)) return round(positionMm);
+
+  // Posição pedida colide (ex.: 2ª vertical no mesmo meio) — escolher o
+  // ponto válido no maior vão, o mais próximo do pedido.
+  const pts = [0, ...same, span];
+  let best: number | null = null;
+  let bestDist = Infinity;
+  let bestGap = -1;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i]!;
+    const b = pts[i + 1]!;
+    const gap = b - a;
+    if (gap + 1e-6 < 2 * MIN_PANEL_MM) continue;
+    const lo = a + MIN_PANEL_MM;
+    const hi = b - MIN_PANEL_MM;
+    const candidate = Math.max(lo, Math.min(hi, positionMm));
+    const dist = Math.abs(candidate - positionMm);
+    if (
+      best == null ||
+      dist < bestDist - 1e-6 ||
+      (Math.abs(dist - bestDist) < 1e-6 && gap > bestGap)
+    ) {
+      best = candidate;
+      bestDist = dist;
+      bestGap = gap;
+    }
   }
-  if (hi < lo) return Math.round(((lo + hi) / 2) * 100) / 100;
-  return Math.round(Math.max(lo, Math.min(hi, positionMm)) * 100) / 100;
+
+  if (best != null) return round(best);
+  // Folha sem espaço tipográfico: meio do maior vão (mesmo inválido p/ UI).
+  let mid = span / 2;
+  let maxGap = -1;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i]!;
+    const b = pts[i + 1]!;
+    if (b - a > maxGap) {
+      maxGap = b - a;
+      mid = (a + b) / 2;
+    }
+  }
+  return round(mid);
+}
+
+/**
+ * Metades sucessivas (A3→A6): se já há vinco no meio do eixo e o novo cai
+ * perto de 1/4 (ou 3/4), acrescenta o espelho estrutural `span - pos` sem op.
+ * Não aplica a carteira/tríptico (já há dois vincos fora do “só meio”).
+ *
+ * `creases` pode já incluir o vinco principal em `positionMm`.
+ */
+export function ensureMirrorCrease(
+  creases: FoldCrease[],
+  axis: FoldCrease["axis"],
+  positionMm: number,
+  span: number,
+  nextId: () => string,
+): FoldCrease[] {
+  const same = creases.filter((c) => c.axis === axis);
+  const mid = span * 0.5;
+  const hasMid = same.some(
+    (c) => Math.abs(c.positionMm - mid) + 1e-6 < MIN_PANEL_MM,
+  );
+  if (!hasMid) return creases;
+
+  const nearQuarter =
+    Math.abs(positionMm - span * 0.25) + 1e-6 < MIN_PANEL_MM ||
+    Math.abs(positionMm - span * 0.75) + 1e-6 < MIN_PANEL_MM;
+  if (!nearQuarter) return creases;
+
+  const mirrorPos = Math.round((span - positionMm) * 100) / 100;
+  if (
+    mirrorPos + 1e-6 < MIN_PANEL_MM ||
+    mirrorPos - 1e-6 > span - MIN_PANEL_MM
+  ) {
+    return creases;
+  }
+  if (Math.abs(mirrorPos - positionMm) + 1e-6 < MIN_PANEL_MM) {
+    return creases;
+  }
+  if (
+    same.some((c) => Math.abs(c.positionMm - mirrorPos) + 1e-6 < MIN_PANEL_MM)
+  ) {
+    return creases;
+  }
+
+  // Além do meio / novo / espelho: se sobrar outro vinco → carteira/tríptico.
+  const extras = same.filter(
+    (c) =>
+      Math.abs(c.positionMm - mid) + 1e-6 >= MIN_PANEL_MM &&
+      Math.abs(c.positionMm - positionMm) + 1e-6 >= MIN_PANEL_MM &&
+      Math.abs(c.positionMm - mirrorPos) + 1e-6 >= MIN_PANEL_MM,
+  );
+  if (extras.length > 0) return creases;
+
+  return [
+    ...creases,
+    {
+      id: nextId(),
+      axis,
+      positionMm: mirrorPos,
+    },
+  ];
 }
 
 export function toSheetDefinition(
@@ -116,6 +223,36 @@ export function defaultFolhetoCrop(
     backArtworkTransform: { ...DEFAULT_ARTWORK_BACK },
     physical: { ...DEFAULT_PHYSICAL },
   };
+}
+
+/**
+ * Índices frente/verso válidos para o PDF.
+ * Se N≥2 e frente===verso (ex.: clamp com pageCount=1 antes do meta),
+ * restaura o padrão tipográfico frente=1 / verso=0.
+ */
+export function resolveFolhetoDuplexPages(
+  pageCount: number,
+  pageFrente: number | null | undefined,
+  pageVerso: number | null | undefined,
+): { pageFrente: number; pageVerso: number | null } {
+  const n = Math.max(1, Math.floor(pageCount));
+  const maxIdx = n - 1;
+  const hasVerso = n >= 2;
+  let frente = Math.max(
+    0,
+    Math.min(maxIdx, Math.floor(pageFrente ?? (hasVerso ? 1 : 0))),
+  );
+  let verso: number | null = hasVerso
+    ? Math.max(0, Math.min(maxIdx, Math.floor(pageVerso ?? 0)))
+    : null;
+  if (hasVerso && verso === frente) {
+    frente = Math.min(1, maxIdx);
+    verso = 0;
+    if (verso === frente) {
+      verso = 1;
+    }
+  }
+  return { pageFrente: frente, pageVerso: verso };
 }
 
 /** Hidrata cropJson.folheto salvo; legado ou inválido → null (wizard recomeça). */

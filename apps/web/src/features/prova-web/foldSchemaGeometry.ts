@@ -2,7 +2,10 @@ import type { CSSProperties } from "react";
 
 import { FOLD_LINE_COLORS } from "./provaWebFoldPresets";
 import { duplexBackBandMm, duplexMirrorPositionMm } from "./fold-engine/foldDuplex";
-import { resolveMovingPanels } from "./fold-engine/foldTopology";
+import {
+  progressWithPriorsClosed,
+  resolveMovingPanelsWithHistory,
+} from "./fold-engine/foldTopology";
 import type {
   FoldCrease,
   FoldOperation,
@@ -58,7 +61,13 @@ export function buildFoldArrowGeoms(args: {
   return sorted.flatMap((op, opIndex) => {
     const crease = creases.find((c) => c.id === op.creaseId);
     if (!crease) return [];
-    const moving = resolveMovingPanels(topology, op, creases);
+    const moving = resolveMovingPanelsWithHistory({
+      topology,
+      operation: op,
+      creases,
+      operations,
+      progressByOp: progressWithPriorsClosed(operations, op),
+    });
     if (moving.size === 0) return [];
 
     const movingPanels = topology.panels.filter((p) => moving.has(p.id));

@@ -32,24 +32,29 @@ import {
 
 import {
   buildFoldTopology,
-  resolveMovingPanels,
+  progressWithPriorsClosed,
+  resolveMovingPanelsWithHistory,
   resolveMovingSideForBase,
   syncOperationsToBasePanel,
   validateFoldDefinition,
 } from "./fold-engine";
 import { ProvaWebCropPanel } from "./ProvaWebCropPanel";
 import { FoldSchemaPreview } from "./FoldSchemaPreview";
+import { FoldStepPreview } from "./FoldStepPreview";
+import { useProvaWebPdfPageRaster } from "./useProvaWebPdfPageRaster";
 import {
   applyFoldModelConfig,
   applyPresetToFolheto,
   clampCreasePosition,
   creasesAsFoldLines,
   defaultFolhetoCrop,
+  ensureMirrorCrease,
   FOLD_LINE_COLORS,
   FOLD_PRESET_OPTIONS,
   hydrateFolhetoFromInitial,
   isLegacyFolhetoConfig,
   packFoldModelConfig,
+  resolveFolhetoDuplexPages,
   sheetFromPreset,
   toSheetDefinition,
   usableAfterCrop,
@@ -147,6 +152,19 @@ export function ProvaWebFoldWizard({
   );
   const hasErrors = issues.some((i) => i.level === "error");
 
+  const pageFrenteIdx = Math.max(0, folheto.pageFrente ?? 0);
+  const stepArtFront = useProvaWebPdfPageRaster({
+    ano,
+    osId,
+    relativePath: arquivoUnico,
+    pageIndex: pageFrenteIdx,
+    crop: folheto.crop,
+    pageWidthMm: pageW,
+    pageHeightMm: pageH,
+    enabled: folheto.creases.length > 0 && folheto.operations.length > 0,
+  });
+  const stepArtLoading = stepArtFront.loading;
+
   const setCrop = useCallback(
     (crop: CropSidesMm) => {
       setFolheto((prev) => {
@@ -181,18 +199,15 @@ export function ProvaWebFoldWizard({
 
   useEffect(() => {
     setFolheto((p) => {
-      const hasVerso = pageCount >= 2;
-      const defaultFrente = hasVerso ? 1 : 0;
-      const defaultVerso = hasVerso ? 0 : null;
+      const duplex = resolveFolhetoDuplexPages(
+        pageCount,
+        p.pageFrente,
+        p.pageVerso,
+      );
       return {
         ...p,
-        pageFrente: Math.max(
-          0,
-          Math.min(pageCount - 1, p.pageFrente ?? defaultFrente),
-        ),
-        pageVerso: hasVerso
-          ? Math.max(0, Math.min(pageCount - 1, p.pageVerso ?? defaultVerso!))
-          : null,
+        pageFrente: duplex.pageFrente,
+        pageVerso: duplex.pageVerso,
         backArtworkTransform: {
           ...(p.backArtworkTransform ?? DEFAULT_ARTWORK_BACK),
           mirrorX: true,
@@ -201,34 +216,26 @@ export function ProvaWebFoldWizard({
     });
   }, [pageCount]);
 
-  const cropJson: ProvaWebCropJson = useMemo(
-    () => ({
+  const cropJson: ProvaWebCropJson = useMemo(() => {
+    const duplex = resolveFolhetoDuplexPages(
+      pageCount,
+      folheto.pageFrente,
+      folheto.pageVerso,
+    );
+    return {
       folheto: {
         ...folheto,
         preset: "personalizada",
-        pageFrente: Math.max(
-          0,
-          Math.min(
-            pageCount - 1,
-            folheto.pageFrente ?? (pageCount >= 2 ? 1 : 0),
-          ),
-        ),
-        pageVerso:
-          pageCount >= 2
-            ? Math.max(
-                0,
-                Math.min(pageCount - 1, folheto.pageVerso ?? 0),
-              )
-            : null,
+        pageFrente: duplex.pageFrente,
+        pageVerso: duplex.pageVerso,
         backArtworkTransform: {
           ...(folheto.backArtworkTransform ?? DEFAULT_ARTWORK_BACK),
           mirrorX: true,
         },
         panelPages: undefined,
       },
-    }),
-    [folheto, pageCount],
-  );
+    };
+  }, [folheto, pageCount]);
 
   const currentModelConfig = useCallback((): FoldModelConfig => {
     return packFoldModelConfig(folheto, usable.w, usable.h);
@@ -501,11 +508,17 @@ export function ProvaWebFoldWizard({
       const n = maxN + 1;
       const id = `c${n}`;
       const span = axis === "vertical" ? usable.w : usable.h;
+      // Preferir 1/4 se o meio já tem vinco do mesmo eixo (ex.: 3ª dobra zine).
+      const sameAxis = prev.creases.filter((c) => c.axis === axis);
+      const midTaken = sameAxis.some(
+        (c) => Math.abs(c.positionMm - span * 0.5) < 15,
+      );
+      const preferredFrac = midTaken ? 0.25 : 0.5;
       const crease: FoldCrease = {
         id,
         axis,
         positionMm: clampCreasePosition(
-          span * 0.5,
+          span * preferredFrac,
           axis,
           usable.w,
           usable.h,
@@ -514,7 +527,14 @@ export function ProvaWebFoldWizard({
       };
       const maxOrder = Math.max(0, ...prev.operations.map((o) => o.order));
       let movingSide: FoldMovingSide = "positive";
-      const creasesDraft = [...prev.creases, crease];
+      let idSeq = n + 1;
+      let creasesDraft = ensureMirrorCrease(
+        [...prev.creases, crease],
+        axis,
+        crease.positionMm,
+        span,
+        () => `c${idSeq++}`,
+      );
       const defDraft = toSheetDefinition(
         { ...prev, creases: creasesDraft, operations: prev.operations },
         usable.w,
@@ -578,8 +598,14 @@ export function ProvaWebFoldWizard({
     null;
   const movingIds = useMemo(() => {
     if (!selectedOp) return new Set<string>();
-    return resolveMovingPanels(topology, selectedOp, folheto.creases);
-  }, [selectedOp, topology, folheto.creases]);
+    return resolveMovingPanelsWithHistory({
+      topology,
+      operation: selectedOp,
+      creases: folheto.creases,
+      operations: folheto.operations,
+      progressByOp: progressWithPriorsClosed(folheto.operations, selectedOp),
+    });
+  }, [selectedOp, topology, folheto.creases, folheto.operations]);
 
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-4 p-4">
@@ -1055,13 +1081,13 @@ export function ProvaWebFoldWizard({
           )}
           {folheto.creases.length > 0 && (
             <p className="text-[11px] text-neutral-500">
-              Clique no número da operação abaixo para destacar a aba móvel no
-              esquema. Ordem = sequência de fechamento (1 fecha primeiro; última
-              fica por cima).
+              Configure uma dobra por vez. Abaixo de cada passo aparece a prévia
+              do resultado já fechado; a próxima dobra é definida em cima desse
+              estado. Clique no número para destacar a aba móvel no esquema.
             </p>
           )}
 
-          <ul className="space-y-2">
+          <div className="space-y-4">
             {[...folheto.operations]
               .sort((a, b) => a.order - b.order)
               .map((o, i) => {
@@ -1071,14 +1097,14 @@ export function ProvaWebFoldWizard({
                   1,
                 );
                 return (
-                  <li
-                    key={o.id}
-                    className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 ${
-                      selectedOp?.id === o.id
-                        ? "border-primary-green bg-primary-green/5"
-                        : "border-sagra-border bg-slate-50"
-                    }`}
-                  >
+                  <div key={o.id} className="space-y-2">
+                    <div
+                      className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 ${
+                        selectedOp?.id === o.id
+                          ? "border-primary-green bg-primary-green/5"
+                          : "border-sagra-border bg-slate-50"
+                      }`}
+                    >
                     <button
                       type="button"
                       className="flex size-7 items-center justify-center rounded-full text-xs font-bold text-white"
@@ -1220,10 +1246,40 @@ export function ProvaWebFoldWizard({
                         <Trash2 className="size-3.5" />
                       </button>
                     </div>
-                  </li>
+                    </div>
+                    {!hasErrors && (
+                      <FoldStepPreview
+                        folheto={folheto}
+                        topology={topology}
+                        usable={usable}
+                        stepOrder={o.order}
+                        frontDataUrl={stepArtFront.raster?.dataUrl ?? null}
+                        artLoading={stepArtLoading}
+                      />
+                    )}
+                  </div>
                 );
               })}
-          </ul>
+          </div>
+
+          {folheto.creases.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => addCrease("vertical")}
+                className="inline-flex items-center gap-1 rounded-lg border border-primary-green/40 bg-primary-green/5 px-3 py-1.5 text-xs font-medium text-neutral-800 hover:bg-primary-green/10"
+              >
+                <Plus className="size-3.5" /> Próxima dobra vertical
+              </button>
+              <button
+                type="button"
+                onClick={() => addCrease("horizontal")}
+                className="inline-flex items-center gap-1 rounded-lg border border-primary-green/40 bg-primary-green/5 px-3 py-1.5 text-xs font-medium text-neutral-800 hover:bg-primary-green/10"
+              >
+                <Plus className="size-3.5" /> Próxima dobra horizontal
+              </button>
+            </div>
+          )}
 
           {issues.length > 0 && (
             <ul className="space-y-1 text-xs">

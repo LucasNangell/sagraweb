@@ -35,6 +35,8 @@ _SUPPORT_WS_TYPES = frozenset({
 })
 
 _BROADCAST_DEDUPE_SEC = 1.0
+# Timeout por peer no fanout WS — evita hang do event loop com sockets half-open.
+_WS_SEND_TIMEOUT_SEC = 2.0
 _broadcast_lock = threading.Lock()
 _last_broadcast_at: Dict[str, float] = {}
 
@@ -368,7 +370,8 @@ class ConnectionManager:
 
         if not self.active_connections:
             logger.debug("Broadcast WS sem clientes: %s", message.get("type"))
-        to_remove = []
+
+        targets: List[Dict[str, Any]] = []
         for conn in self.active_connections:
             subscribed, owner_match, assigned_match, subscribed_global = self._delivery_flags(
                 conn, message
@@ -414,14 +417,39 @@ class ConnectionManager:
                     should_deliver,
                     reason,
                 )
-            if not should_deliver:
-                continue
+            if should_deliver:
+                targets.append(conn)
+
+        async def _send_one(conn: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             websocket = conn["ws"]
             try:
-                await websocket.send_json(message)
+                await asyncio.wait_for(
+                    websocket.send_json(message),
+                    timeout=_WS_SEND_TIMEOUT_SEC,
+                )
+                return None
             except Exception as exc:
-                logger.error("Erro ao enviar mensagem WS: %s", exc)
-                to_remove.append(conn)
+                logger.error(
+                    "Erro ao enviar mensagem WS (timeout=%ss): %s",
+                    _WS_SEND_TIMEOUT_SEC,
+                    exc,
+                )
+                return conn
+
+        if not targets:
+            return
+
+        results = await asyncio.gather(
+            *(_send_one(conn) for conn in targets),
+            return_exceptions=True,
+        )
+        to_remove: List[Dict[str, Any]] = []
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error("Erro inesperado no fanout WS: %s", result)
+                continue
+            if result is not None:
+                to_remove.append(result)
 
         for conn in to_remove:
             self.disconnect(conn["ws"])
@@ -638,7 +666,8 @@ async def send_notification(request: Request):
             record_admin_reload(
                 overwrite_config=bool(body.get("overwriteConfig")),
             )
-        await manager.broadcast(body)
+        # Não aguardar fanout: socket half-open travava o event loop da API.
+        schedule_broadcast(body)
         return {"status": "queued", "listeners": len(manager.active_connections)}
     except HTTPException:
         raise

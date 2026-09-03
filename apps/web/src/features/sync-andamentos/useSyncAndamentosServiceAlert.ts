@@ -6,7 +6,7 @@ import {
 } from "./api";
 
 /** Intervalo de poll do status SCM do sync andamentos. */
-export const SYNC_ANDAMENTOS_STATUS_POLL_MS = 30_000;
+export const SYNC_ANDAMENTOS_STATUS_POLL_MS = 10_000;
 
 export function useSyncAndamentosServiceAlert(enabled = true): boolean {
   const [alert, setAlert] = useState(false);

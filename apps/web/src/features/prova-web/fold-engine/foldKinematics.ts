@@ -321,6 +321,8 @@ export function stackLayerIndex(
 export type FoldSolveResult = {
   matrices: PanelMatrixMap;
   errors: string[];
+  /** Camada de empilhamento (0 = base; maior = por cima). */
+  panelLayer: Map<string, number>;
 };
 
 /**
@@ -340,6 +342,7 @@ export function evaluateFoldState(args: {
   /** Folha aberta: sinal de towards é sempre relativo a esta pose (estável). */
   const flatMatrices = makeIdentityPanelMatrices(args.topology);
   const errors: string[] = [];
+  const panelLayer = new Map<string, number>();
   const sorted = [...args.operations].sort((a, b) => a.order - b.order);
   const allPanelIds = args.topology.panels.map((p) => p.id);
   const thickness = Math.max(0.05, args.thicknessMm ?? 0.235);
@@ -444,6 +447,7 @@ export function evaluateFoldState(args: {
         args.resolveMoving,
         allPanelIds,
       );
+      // Empilhamento mínimo (só espessura) — gap extra abre a dobra visualmente.
       const stackAmt = thickness * layer * (1 - open01);
       const stackDir =
         operation.towards === "front"
@@ -463,11 +467,13 @@ export function evaluateFoldState(args: {
           continue;
         }
         matrices.set(panelId, next);
+        const prevLayer = panelLayer.get(panelId) ?? 0;
+        if (layer > prevLayer) panelLayer.set(panelId, layer);
       }
     }
   }
 
-  return { matrices, errors };
+  return { matrices, errors, panelLayer };
 }
 
 export function matrixIsFinite(m: THREE.Matrix4): boolean {

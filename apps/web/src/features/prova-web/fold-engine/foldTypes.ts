@@ -76,9 +76,9 @@ export interface FoldPhysicalProperties {
 }
 
 export const DEFAULT_PHYSICAL: FoldPhysicalProperties = {
-  paperThicknessMm: 0.22,
-  renderGapMm: 0.015,
-  creaseRadiusMm: 0.35,
+  paperThicknessMm: 0.06,
+  renderGapMm: 0.008,
+  creaseRadiusMm: 0.18,
 };
 
 export interface FoldSheetDefinition {

@@ -9,6 +9,18 @@ export interface GerenciaSettings {
   os_arquivos_client_email_enabled: boolean;
 }
 
+export interface DevFeatureItem {
+  id: string;
+  label: string;
+  description: string;
+  enabled: boolean;
+}
+
+export interface DevFeaturesConfig {
+  features: DevFeatureItem[];
+  enabled: Record<string, boolean>;
+}
+
 export interface CotasGrafSemestreInfo {
   semestre_id: number;
   ano: number;

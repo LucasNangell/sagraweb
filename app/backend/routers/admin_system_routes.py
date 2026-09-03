@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, EmailStr, Field
@@ -56,6 +56,10 @@ class PreAnaliseChecksSaveRequest(BaseModel):
 
 class GerenciaSettingsSaveRequest(BaseModel):
     os_arquivos_client_email_enabled: bool
+
+
+class DevFeaturesSaveRequest(BaseModel):
+    enabled: Dict[str, bool] = Field(default_factory=dict)
 
 
 class IniciarNovoSemestreRequest(BaseModel):
@@ -151,6 +155,26 @@ def save_gerencia_settings_config(body: GerenciaSettingsSaveRequest):
 
     set_os_arquivos_client_email_enabled(body.os_arquivos_client_email_enabled)
     return get_public_settings()
+
+
+@router.get(
+    "/api/admin/system/dev-features",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def get_dev_features_config():
+    from services.dev_features import get_features_payload
+
+    return get_features_payload()
+
+
+@router.put(
+    "/api/admin/system/dev-features",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def save_dev_features_config(body: DevFeaturesSaveRequest):
+    from services.dev_features import set_features_enabled
+
+    return set_features_enabled(body.enabled or {})
 
 
 def _serialize_semestre_cotas(info: dict) -> dict:

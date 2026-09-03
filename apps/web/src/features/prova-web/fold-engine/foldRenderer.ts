@@ -120,9 +120,19 @@ export async function createFoldScene(
   foldMockup: ProvaWebFoldMockupMeta,
   frontUrl: string | null,
   backUrl: string | null,
-  options?: { colorMode?: ColorMode },
+  options?: {
+    colorMode?: ColorMode;
+    maxPixelRatio?: number;
+    /** Padding do enquadramento (1 = justo; maior = mais folga). Padrão 1.08. */
+    fitPadding?: number;
+  },
 ): Promise<FoldSceneHandle> {
   const colorMode: ColorMode = options?.colorMode ?? "faithful";
+  const maxPixelRatio = Math.max(1, options?.maxPixelRatio ?? 2);
+  const fitPaddingBase = Math.max(
+    1.01,
+    Math.min(1.6, options?.fitPadding ?? 1.08),
+  );
   const def = definitionFromMeta(foldMockup);
   const issues = validateFoldDefinition(def);
   if (hasBlockingErrors(issues) || foldMockup.ready === false) {
@@ -197,8 +207,11 @@ export async function createFoldScene(
     canvas,
     antialias: true,
     alpha: false,
+    logarithmicDepthBuffer: true,
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setPixelRatio(
+    Math.min(window.devicePixelRatio || 1, maxPixelRatio),
+  );
   configureRenderer(renderer, colorMode);
 
   const raycaster = new THREE.Raycaster();
@@ -209,7 +222,10 @@ export async function createFoldScene(
   let pendingRender = true;
   let opProgressOverride: Map<string, number> | null = null;
 
-  const applyMatrices = (matrices: PanelMatrixMap) => {
+  const applyMatrices = (
+    matrices: PanelMatrixMap,
+    panelLayer?: Map<string, number>,
+  ) => {
     for (const [id, mat] of matrices) {
       if (!matrixIsFinite(mat)) continue;
       const g = panelGroups.get(id);
@@ -217,6 +233,28 @@ export async function createFoldScene(
       g.matrixAutoUpdate = false;
       g.matrix.copy(mat);
       g.updateMatrixWorld(true);
+      const layer = panelLayer?.get(id) ?? 0;
+      g.renderOrder = layer;
+      g.traverse((obj) => {
+        if ((obj as THREE.Mesh).isMesh) {
+          obj.renderOrder = layer;
+          const mesh = obj as THREE.Mesh;
+          const mats = Array.isArray(mesh.material)
+            ? mesh.material
+            : [mesh.material];
+          for (const matl of mats) {
+            if (
+              matl &&
+              "polygonOffset" in matl &&
+              (matl as THREE.MeshBasicMaterial).polygonOffset
+            ) {
+              (matl as THREE.MeshBasicMaterial).polygonOffsetFactor =
+                -1 - layer * 2;
+              (matl as THREE.MeshBasicMaterial).polygonOffsetUnits = 1;
+            }
+          }
+        }
+      });
     }
   };
 
@@ -245,7 +283,7 @@ export async function createFoldScene(
       thicknessMm: thickness,
     });
     lastErrors = result.errors;
-    applyMatrices(result.matrices);
+    applyMatrices(result.matrices, result.panelLayer);
   };
 
   const applyFixedSheetPivot = () => {
@@ -289,7 +327,12 @@ export async function createFoldScene(
 
   const fitView = () => {
     const sphere = contentBoundingSphere(contentGroup);
-    fitCameraToSphere(camera, sphere, camera.aspect, 1.25 / zoom);
+    fitCameraToSphere(
+      camera,
+      sphere,
+      camera.aspect,
+      fitPaddingBase / zoom,
+    );
     pendingRender = true;
   };
 

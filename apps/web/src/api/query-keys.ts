@@ -37,6 +37,9 @@ export const queryKeys = {
     defaultFilters: (ponto: string, context = "os") =>
       ["settings", "defaultFilters", ponto, context] as const,
   },
+  devFeatures: {
+    all: ["dev-features"] as const,
+  },
   notifications: (ponto: string) => ["notifications", ponto] as const,
   pcp: {
     queue: (setor: string) => ["pcp", "queue", setor] as const,

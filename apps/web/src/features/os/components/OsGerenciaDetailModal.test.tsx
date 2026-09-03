@@ -16,6 +16,7 @@ const { allowed } = vi.hoisted(() => ({
 }));
 
 const fetchOsVinculos = vi.fn();
+const useDevFeature = vi.fn(() => false);
 
 vi.mock("@/api/os", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/api/os")>();
@@ -24,6 +25,10 @@ vi.mock("@/api/os", async (importOriginal) => {
     fetchOsVinculos: (...args: unknown[]) => fetchOsVinculos(...args),
   };
 });
+
+vi.mock("@/features/configuracoes/hooks/useDevFeature", () => ({
+  useDevFeature: (...args: unknown[]) => useDevFeature(...args),
+}));
 
 vi.mock("@/features/auth/useAccessControl", () => ({
   useAccessControl: () => ({
@@ -87,6 +92,12 @@ vi.mock("./OsVinculosEditor", () => ({
   OsVinculosEditor: () => <div data-testid="os-vinculos-editor-stub">editor</div>,
 }));
 
+vi.mock("./OsSequenciaProducaoTab", () => ({
+  OsSequenciaProducaoTab: () => (
+    <div data-testid="os-sequencia-producao-tab-stub">sequência</div>
+  ),
+}));
+
 import {
   buildGerenciaModalNavSections,
   OsGerenciaDetailModal,
@@ -131,6 +142,8 @@ describe("buildGerenciaModalNavSections", () => {
 describe("OsGerenciaDetailModal vínculos", () => {
   beforeEach(() => {
     fetchOsVinculos.mockReset();
+    useDevFeature.mockReset();
+    useDevFeature.mockReturnValue(false);
   });
 
   it("mostra o botão Vincular OS ao lado de Duplicar OS", () => {
@@ -146,6 +159,30 @@ describe("OsGerenciaDetailModal vínculos", () => {
     renderModal();
     expect(await screen.findByTestId("os-gerencia-section-vinculos")).toHaveTextContent(
       "Vínculos da OS",
+    );
+  });
+});
+
+describe("OsGerenciaDetailModal sequência de produção", () => {
+  beforeEach(() => {
+    fetchOsVinculos.mockReset();
+    fetchOsVinculos.mockResolvedValue([]);
+    useDevFeature.mockReset();
+  });
+
+  it("oculta a aba quando a flag de desenvolvimento está desligada", () => {
+    useDevFeature.mockReturnValue(false);
+    renderModal();
+    expect(
+      screen.queryByTestId("os-gerencia-section-sequencia-producao"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("mostra a aba quando a flag de desenvolvimento está ligada", () => {
+    useDevFeature.mockReturnValue(true);
+    renderModal();
+    expect(screen.getByTestId("os-gerencia-section-sequencia-producao")).toHaveTextContent(
+      "Sequência de produção",
     );
   });
 });

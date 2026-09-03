@@ -28,6 +28,12 @@ export interface ProvaWebFoldMockup3DProps {
   pages: ProvaWebPageMeta[];
   foldMockup: ProvaWebFoldMockupMeta;
   pageUrl: (page: ProvaWebPageMeta) => string;
+  /** Ângulos iniciais de órbita em graus (X / Y). Padrão: pose do folheto. */
+  initialOrbitDeg?: { x: number; y: number };
+  /** Teto do devicePixelRatio do WebGL (padrão 2). */
+  maxPixelRatio?: number;
+  /** Padding do enquadramento inicial (menor = preenche mais a área). */
+  fitPadding?: number;
 }
 
 function easeOutCubic(t: number): number {
@@ -42,7 +48,20 @@ export function ProvaWebFoldMockup3D({
   pages,
   foldMockup,
   pageUrl,
+  initialOrbitDeg,
+  maxPixelRatio,
+  fitPadding,
 }: ProvaWebFoldMockup3DProps) {
+  const initialRot = useMemo(() => {
+    if (initialOrbitDeg == null) {
+      return { x: DEFAULT_ROT_X, y: DEFAULT_ROT_Y };
+    }
+    return {
+      x: (initialOrbitDeg.x * Math.PI) / 180,
+      y: (initialOrbitDeg.y * Math.PI) / 180,
+    };
+  }, [initialOrbitDeg?.x, initialOrbitDeg?.y]);
+
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<FoldSceneHandle | null>(null);
@@ -54,12 +73,12 @@ export function ProvaWebFoldMockup3D({
     rotY: number;
     rotX: number;
   } | null>(null);
-  const rotRef = useRef({ x: DEFAULT_ROT_X, y: DEFAULT_ROT_Y });
+  const rotRef = useRef(initialRot);
   const unfoldRef = useRef(0);
   const zoomRef = useRef(1);
 
-  const [rotX, setRotX] = useState(DEFAULT_ROT_X);
-  const [rotY, setRotY] = useState(DEFAULT_ROT_Y);
+  const [rotX, setRotX] = useState(initialRot.x);
+  const [rotY, setRotY] = useState(initialRot.y);
   const [unfold, setUnfold] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [ready, setReady] = useState(false);
@@ -190,7 +209,7 @@ export function ProvaWebFoldMockup3D({
           foldMockup,
           frontUrl,
           backUrl,
-          { colorMode: "faithful" },
+          { colorMode: "faithful", maxPixelRatio, fitPadding },
         );
         if (cancelled) {
           handle.dispose();
@@ -199,12 +218,22 @@ export function ProvaWebFoldMockup3D({
         sceneRef.current = handle;
         handle.setOrbit(rotRef.current.x, rotRef.current.y);
         handle.setHingeAnglesFromUnfold(unfoldRef.current / 100);
-        handle.setZoom(zoomRef.current);
         const rect = stage.getBoundingClientRect();
         handle.resize(rect.width, Math.max(1, rect.height));
+        handle.setZoom(zoomRef.current);
+        handle.fitView();
         setReady(true);
         handle.requestRender();
         handle.render();
+        // Reenquadra após o layout do diálogo estabilizar
+        requestAnimationFrame(() => {
+          if (cancelled || sceneRef.current !== handle) return;
+          const next = stage.getBoundingClientRect();
+          handle.resize(next.width, Math.max(1, next.height));
+          handle.fitView();
+          handle.requestRender();
+          handle.render();
+        });
       } catch (err) {
         if (!cancelled) {
           setError(
@@ -220,7 +249,7 @@ export function ProvaWebFoldMockup3D({
       sceneRef.current?.dispose();
       sceneRef.current = null;
     };
-  }, [foldMockup, frontUrl, backUrl, cancelUnfoldAnim]);
+  }, [foldMockup, frontUrl, backUrl, maxPixelRatio, fitPadding, cancelUnfoldAnim]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -300,7 +329,7 @@ export function ProvaWebFoldMockup3D({
   };
 
   const resetView = () => {
-    applyOrbit(DEFAULT_ROT_X, DEFAULT_ROT_Y);
+    applyOrbit(initialRot.x, initialRot.y);
     applyZoom(1);
     sceneRef.current?.fitView();
     kickRender();

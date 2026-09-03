@@ -7,6 +7,7 @@ import type {
   GravacaoEmailNotificationSettings,
   EmailTemplateRecord,
   GerenciaSettings,
+  DevFeaturesConfig,
   CotasGrafSemestreInfo,
   CotasGrafProximoSemestreInfo,
   IniciarNovoSemestrePayload,
@@ -62,6 +63,20 @@ export async function saveGerenciaSettingsConfig(
   payload: GerenciaSettings,
 ): Promise<GerenciaSettings> {
   return apiFetch<GerenciaSettings>("/admin/system/gerencia-settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchDevFeaturesConfig(): Promise<DevFeaturesConfig> {
+  return apiFetch<DevFeaturesConfig>("/admin/system/dev-features");
+}
+
+export async function saveDevFeaturesConfig(payload: {
+  enabled: Record<string, boolean>;
+}): Promise<DevFeaturesConfig> {
+  return apiFetch<DevFeaturesConfig>("/admin/system/dev-features", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),

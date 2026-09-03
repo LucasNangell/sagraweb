@@ -3,16 +3,19 @@ import { useCallback, useState } from "react";
 
 import {
   emptyCropSides,
+  type ProvaWebBookExtras,
   type CropSidesMm,
   type ProvaWebCapaCrop,
   type ProvaWebCropJson,
   type ProvaWebModo,
 } from "@/api/provaWeb";
 import { ProvaWebBoxWizard } from "./ProvaWebBoxWizard";
+import { ProvaWebBookExtrasPanel } from "./ProvaWebBookExtrasPanel";
 import { defaultCapaCrop, ProvaWebCoverWizard } from "./ProvaWebCoverWizard";
 import { ProvaWebCropPanel } from "./ProvaWebCropPanel";
 import { ProvaWebFoldWizard } from "./ProvaWebFoldWizard";
 import { ProvaWebSpiralWizard } from "./ProvaWebSpiralWizard";
+import { emptyBookExtras, normalizeBookExtras } from "./provaWebBookExtras";
 
 export interface ProvaWebCropAssistantProps {
   ano: number;
@@ -160,17 +163,24 @@ function ProvaWebBookCropAssistant({
       ? { ...defaultCapaCrop("spread"), ...initialCropJson.capa }
       : defaultCapaCrop("spread"),
   );
+  const [bookExtras, setBookExtras] = useState<ProvaWebBookExtras>(() =>
+    initialCropJson?.bookExtras
+      ? normalizeBookExtras(initialCropJson.bookExtras)
+      : emptyBookExtras(),
+  );
   const [pageIndex, setPageIndex] = useState(0);
 
   const stableUnico = useCallback((c: CropSidesMm) => setUnicoCrop(c), []);
   const stableMiolo = useCallback((c: CropSidesMm) => setMioloCrop(c), []);
 
   const handleGenerate = () => {
+    const extras =
+      bookExtras.inserts.length > 0 ? { bookExtras: normalizeBookExtras(bookExtras) } : {};
     if (modo === "unico") {
-      onConfirm({ unico: unicoCrop });
+      onConfirm({ unico: unicoCrop, ...extras });
       return;
     }
-    onConfirm({ miolo: mioloCrop, capa });
+    onConfirm({ miolo: mioloCrop, capa, ...extras });
   };
 
   return (
@@ -187,21 +197,33 @@ function ProvaWebBookCropAssistant({
 
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto pb-2">
         {modo === "unico" && arquivoUnico && (
-          <section className="rounded-2xl border border-sagra-border bg-white p-4 shadow-sm">
-            <ProvaWebCropPanel
+          <>
+            <section className="rounded-2xl border border-sagra-border bg-white p-4 shadow-sm">
+              <ProvaWebCropPanel
+                ano={ano}
+                osId={osId}
+                relativePath={arquivoUnico}
+                title="Crop do arquivo único (mm)"
+                crop={unicoCrop}
+                onChange={stableUnico}
+                pageIndex={pageIndex}
+                onPageIndexChange={setPageIndex}
+                formatoLabel={formato}
+                formatoLarguraMm={formatoLarguraMm}
+                formatoAlturaMm={formatoAlturaMm}
+              />
+            </section>
+            <ProvaWebBookExtrasPanel
               ano={ano}
               osId={osId}
-              relativePath={arquivoUnico}
-              title="Crop do arquivo único (mm)"
-              crop={unicoCrop}
-              onChange={stableUnico}
-              pageIndex={pageIndex}
-              onPageIndexChange={setPageIndex}
-              formatoLabel={formato}
-              formatoLarguraMm={formatoLarguraMm}
-              formatoAlturaMm={formatoAlturaMm}
+              mode="unico"
+              arquivoUnico={arquivoUnico}
+              arquivoCapa={arquivoCapa}
+              arquivoMiolo={arquivoMiolo}
+              value={bookExtras}
+              onChange={setBookExtras}
             />
-          </section>
+          </>
         )}
 
         {modo === "capa_miolo" && (
@@ -250,6 +272,17 @@ function ProvaWebBookCropAssistant({
                 <p className="text-sm text-neutral-500">Selecione a capa.</p>
               )}
             </section>
+
+            <ProvaWebBookExtrasPanel
+              ano={ano}
+              osId={osId}
+              mode="capa_miolo"
+              arquivoUnico={arquivoUnico}
+              arquivoCapa={arquivoCapa}
+              arquivoMiolo={arquivoMiolo}
+              value={bookExtras}
+              onChange={setBookExtras}
+            />
           </>
         )}
       </div>

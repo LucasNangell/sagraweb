@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_RENDER_SCALE = 3.0  # 3.0 => ~216 dpi (provas longas)
 _HIGH_RENDER_SCALE = 4.0  # 4.0 => ~288 dpi (provas curtas)
+_SPECIAL_PAGE_RENDER_SCALE = 6.0  # ~432 dpi — páginas especiais com dobra (mockup 3D)
 _HIGH_RES_MAX_PAGES = 50
 _MIN_RENDER_SCALE = 1.0
 _MAX_RENDER_SCALE = 4.0
@@ -47,7 +48,7 @@ _PARTIAL_MANIFEST_MIN_INTERVAL_S = 1.0
 _PARTIAL_MANIFEST_EVERY_N_PAGES = 5
 
 # Versão da lógica de composição do livro. Incrementar invalida caches antigos.
-_LAYOUT_VERSION = 6
+_LAYOUT_VERSION = 8
 
 _SPINE_ASSET_NAME = "spine.png"
 _ALLOWED_RENDER_ASSETS = frozenset({_SPINE_ASSET_NAME})
@@ -69,7 +70,7 @@ PagePublishedCallback = Callable[[dict[str, Any]], None]
 
 
 def _page_dict_from_entry(number: int, entry: dict[str, Any]) -> dict[str, Any]:
-    return {
+    page = {
         "page": number,
         "file": f"page_{number}.png",
         "width": entry["width"],
@@ -79,6 +80,12 @@ def _page_dict_from_entry(number: int, entry: dict[str, Any]) -> dict[str, Any]:
         "role": entry["role"],
         "blank": bool(entry.get("blank")),
     }
+    for key in ("sourcePage", "sourceSequence", "componente"):
+        if key in entry:
+            page[key] = entry.get(key)
+    if "sourcePath" in entry and entry.get("sourcePath"):
+        page["sourcePath"] = os.path.basename(str(entry.get("sourcePath")))
+    return page
 
 
 def _materialize_page_file(
@@ -514,6 +521,34 @@ def _render_page_png(
     }
 
 
+def _matrix_for_book_extra_page(
+    base_scale: float,
+    inserts: list[dict[str, Any]],
+    *,
+    source_component: str,
+    source_page: int,
+) -> Any:
+    """PyMuPDF Matrix; páginas de dobra especiais usam escala maior (~432 dpi)."""
+    import fitz
+
+    scale = float(base_scale)
+    for insert in inserts:
+        if str(insert.get("sourceComponent") or "") != source_component:
+            continue
+        kind = str(insert.get("kind") or "")
+        if kind not in _BOOK_EXTRA_FOLD_KINDS:
+            continue
+        try:
+            start = int(insert["sourcePageStart"])
+            end = int(insert["sourcePageEnd"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if start <= source_page <= end:
+            scale = max(scale, _SPECIAL_PAGE_RENDER_SCALE)
+            break
+    return fitz.Matrix(scale, scale)
+
+
 def _spine_clip_rect(
     page: Any,
     crop_mm: Optional[dict[str, Any]],
@@ -600,6 +635,334 @@ def _book_mockup_meta(
     if spine_file:
         meta["spineFile"] = spine_file
     return meta
+
+
+_BOOK_EXTRA_KINDS = frozenset(
+    {"insert", "large-sheet", "foldout", "gatefold", "zfold", "custom-fold"}
+)
+_BOOK_EXTRA_FOLD_KINDS = frozenset(
+    {"foldout", "gatefold", "zfold", "custom-fold"}
+)
+_BOOK_EXTRA_SOURCE_COMPONENTS = {
+    "unico": "Arq. Único",
+    "miolo": "Miolo",
+    "capa": "Capa",
+}
+
+
+def _clamp_float(value: Any, *, default: float, min_value: float, max_value: float) -> float:
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        n = default
+    return round(max(min_value, min(max_value, n)), 2)
+
+
+def _clamp_int(value: Any, *, default: int, min_value: int, max_value: int) -> int:
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        n = default
+    return max(min_value, min(max_value, n))
+
+
+def _normalize_book_extras(crop_json: Optional[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not isinstance(crop_json, dict):
+        return []
+    raw = crop_json.get("bookExtras")
+    if not isinstance(raw, dict):
+        return []
+    inserts_raw = raw.get("inserts")
+    if not isinstance(inserts_raw, list):
+        return []
+    inserts: list[dict[str, Any]] = []
+    used_ids: set[str] = set()
+    for index, item in enumerate(inserts_raw[:80], start=1):
+        if not isinstance(item, dict):
+            continue
+        source_key = str(item.get("sourceComponent") or "miolo").strip().lower()
+        if source_key not in _BOOK_EXTRA_SOURCE_COMPONENTS:
+            source_key = "miolo"
+        kind = str(item.get("kind") or "insert").strip().lower()
+        if kind not in _BOOK_EXTRA_KINDS:
+            kind = "insert"
+        start = _clamp_int(
+            item.get("sourcePageStart"),
+            default=1,
+            min_value=1,
+            max_value=9999,
+        )
+        end = _clamp_int(
+            item.get("sourcePageEnd"),
+            default=start,
+            min_value=start,
+            max_value=9999,
+        )
+        safe_id = re.sub(
+            r"[^a-zA-Z0-9_-]+",
+            "-",
+            str(item.get("id") or f"encarte-{index}").strip(),
+        )[:48]
+        if not safe_id:
+            safe_id = f"encarte-{index}"
+        if safe_id in used_ids:
+            safe_id = f"{safe_id}-{index}"
+        used_ids.add(safe_id)
+        label = str(item.get("label") or "").strip()[:80] or "Encarte"
+        width_mm = _clamp_float(
+            item.get("widthMm"),
+            default=210.0,
+            min_value=10.0,
+            max_value=2000.0,
+        )
+        height_mm = _clamp_float(
+            item.get("heightMm"),
+            default=297.0,
+            min_value=10.0,
+            max_value=2000.0,
+        )
+        closed_w = (
+            None
+            if item.get("closedWidthMm") is None
+            else _clamp_float(
+                item.get("closedWidthMm"),
+                default=width_mm,
+                min_value=10.0,
+                max_value=2000.0,
+            )
+        )
+        closed_h = (
+            None
+            if item.get("closedHeightMm") is None
+            else _clamp_float(
+                item.get("closedHeightMm"),
+                default=height_mm,
+                min_value=10.0,
+                max_value=2000.0,
+            )
+        )
+        fold_lines = []
+        raw_lines = item.get("foldLines")
+        if isinstance(raw_lines, list):
+            for line in raw_lines[:12]:
+                if not isinstance(line, dict):
+                    continue
+                axis = str(line.get("axis") or "").strip().lower()
+                if axis not in ("vertical", "horizontal"):
+                    continue
+                fold_lines.append(
+                    {
+                        "axis": axis,
+                        "positionMm": _clamp_float(
+                            line.get("positionMm"),
+                            default=0.0,
+                            min_value=0.0,
+                            max_value=2000.0,
+                        ),
+                    }
+                )
+        has_verso = bool(item.get("hasVerso")) and kind in _BOOK_EXTRA_FOLD_KINDS
+        if has_verso and end == start:
+            has_verso = False
+        fold_config = (
+            _normalize_book_extra_fold_config(item.get("foldConfig"))
+            if kind == "custom-fold"
+            else None
+        )
+        inserts.append(
+            {
+                "id": safe_id,
+                "label": label,
+                "sourceComponent": source_key,
+                "sourcePageStart": start,
+                "sourcePageEnd": end,
+                "kind": kind,
+                "widthMm": width_mm,
+                "heightMm": height_mm,
+                "closedWidthMm": closed_w,
+                "closedHeightMm": closed_h,
+                "foldLines": fold_lines,
+                "hasVerso": has_verso,
+                "foldConfig": fold_config,
+                "notes": str(item.get("notes") or "").strip()[:240] or None,
+            }
+        )
+    return inserts
+
+
+def _normalize_book_extra_fold_config(raw: Any) -> Optional[dict[str, Any]]:
+    if not isinstance(raw, dict):
+        return None
+    creases_raw = raw.get("creases")
+    if not isinstance(creases_raw, list):
+        return None
+    creases: list[dict[str, Any]] = []
+    crease_ids: set[str] = set()
+    for index, item in enumerate(creases_raw[:12], start=1):
+        if not isinstance(item, dict):
+            continue
+        axis = str(item.get("axis") or "").strip().lower()
+        if axis not in ("vertical", "horizontal"):
+            continue
+        try:
+            frac = float(item.get("positionFrac"))
+        except (TypeError, ValueError):
+            continue
+        if not (0.02 < frac < 0.98):
+            continue
+        safe_id = re.sub(
+            r"[^a-zA-Z0-9_-]+",
+            "-",
+            str(item.get("id") or f"c{index}").strip(),
+        )[:32] or f"c{index}"
+        if safe_id in crease_ids:
+            safe_id = f"{safe_id}-{index}"
+        crease_ids.add(safe_id)
+        creases.append(
+            {
+                "id": safe_id,
+                "axis": axis,
+                "positionFrac": round(frac, 6),
+            }
+        )
+    if not creases:
+        return None
+    ops_raw = raw.get("operations")
+    if not isinstance(ops_raw, list):
+        return None
+    operations: list[dict[str, Any]] = []
+    for index, item in enumerate(ops_raw[:12], start=1):
+        if not isinstance(item, dict):
+            continue
+        crease_id = str(item.get("creaseId") or "").strip()
+        if crease_id not in crease_ids:
+            continue
+        moving = str(item.get("movingSide") or "positive").strip().lower()
+        if moving not in ("negative", "positive"):
+            moving = "positive"
+        towards = str(item.get("towards") or "front").strip().lower()
+        if towards not in ("front", "back"):
+            towards = "front"
+        order = _clamp_int(item.get("order"), default=index, min_value=1, max_value=32)
+        angle = _clamp_int(
+            item.get("targetAngleDeg"),
+            default=180,
+            min_value=1,
+            max_value=180,
+        )
+        safe_id = re.sub(
+            r"[^a-zA-Z0-9_-]+",
+            "-",
+            str(item.get("id") or f"o{index}").strip(),
+        )[:32] or f"o{index}"
+        op: dict[str, Any] = {
+            "id": safe_id,
+            "creaseId": crease_id,
+            "order": order,
+            "movingSide": moving,
+            "towards": towards,
+            "targetAngleDeg": angle,
+        }
+        phase = str(item.get("phaseId") or "").strip()
+        if phase:
+            op["phaseId"] = phase[:32]
+        try:
+            stagger = float(item.get("startAfterPrevOpen01"))
+        except (TypeError, ValueError):
+            stagger = None
+        if stagger is not None and abs(stagger - 1.0) > 1e-6:
+            op["startAfterPrevOpen01"] = max(0.0, min(1.0, stagger))
+        operations.append(op)
+    if not operations:
+        return None
+    base_panel = raw.get("basePanelId")
+    return {
+        "version": 1,
+        "creases": creases,
+        "operations": operations,
+        "basePanelId": (
+            None
+            if base_panel is None or base_panel == ""
+            else str(base_panel)[:32]
+        ),
+    }
+
+
+def _book_extra_for_page(
+    page: dict[str, Any],
+    inserts: list[dict[str, Any]],
+) -> Optional[dict[str, Any]]:
+    page_component = str(page.get("componente") or "").strip()
+    try:
+        source_page = int(page.get("sourcePage") or 0)
+    except (TypeError, ValueError):
+        source_page = 0
+    for insert in inserts:
+        component = _BOOK_EXTRA_SOURCE_COMPONENTS.get(
+            str(insert.get("sourceComponent") or ""), ""
+        )
+        if component and page_component != component:
+            continue
+        if (
+            source_page >= int(insert["sourcePageStart"])
+            and source_page <= int(insert["sourcePageEnd"])
+        ):
+            return insert
+    return None
+
+
+def _book_structure_meta(
+    *,
+    mode: str,
+    pages: list[dict[str, Any]],
+    crop_json: Optional[dict[str, Any]],
+    book_mockup: Optional[dict[str, Any]],
+) -> Optional[dict[str, Any]]:
+    if mode not in (MODE_UNICO, MODE_CAPA_MIOLO):
+        return None
+    inserts = _normalize_book_extras(crop_json)
+    if not inserts:
+        return None
+    first_page = next((p for p in pages if not p.get("blank")), pages[0] if pages else None)
+    if not first_page:
+        return None
+    page_w_mm = (
+        float(book_mockup.get("pageWidthMm"))
+        if isinstance(book_mockup, dict) and book_mockup.get("pageWidthMm")
+        else pt_to_mm(float(first_page["widthPt"]))
+    )
+    page_h_mm = (
+        float(book_mockup.get("pageHeightMm"))
+        if isinstance(book_mockup, dict) and book_mockup.get("pageHeightMm")
+        else pt_to_mm(float(first_page["heightPt"]))
+    )
+    items: list[dict[str, Any]] = []
+    matched_ids: set[str] = set()
+    last_insert_id: Optional[str] = None
+    for page in pages:
+        insert = _book_extra_for_page(page, inserts)
+        if insert:
+            page["specialTreatment"] = insert
+            matched_ids.add(str(insert["id"]))
+            if last_insert_id == insert["id"] and items and items[-1]["type"] == "insert":
+                items[-1]["pages"].append(page["page"])
+            else:
+                items.append({"type": "insert", "insert": insert, "pages": [page["page"]]})
+                last_insert_id = str(insert["id"])
+            continue
+        last_insert_id = None
+        items.append({"type": "page", "page": page["page"]})
+    if not matched_ids:
+        return None
+    active_inserts = [insert for insert in inserts if insert["id"] in matched_ids]
+    return {
+        "version": 1,
+        "pageWidthMm": round(page_w_mm, 2),
+        "pageHeightMm": round(page_h_mm, 2),
+        "hasSpecialPages": bool(active_inserts),
+        "inserts": active_inserts,
+        "items": items,
+    }
 
 
 def _espiral_config(crop_json: Optional[dict[str, Any]]) -> dict[str, Any]:
@@ -731,6 +1094,7 @@ def _render_cover_pages(
     cache_dir: str,
     miolo_width_pt: Optional[float],
     capa_cfg: Optional[dict[str, Any]] = None,
+    source_path: Optional[str] = None,
 ) -> tuple[list[dict[str, Any]], Optional[str]]:
     """
     Renderiza páginas da capa em PNGs temporários (cover_*.png) e retorna
@@ -787,7 +1151,17 @@ def _render_cover_pages(
                 for clip, role, _side in halves:
                     png_path = os.path.join(cache_dir, f"cover_{len(entries)}.png")
                     meta = _render_page_png(page, matrix, png_path, clip=clip)
-                    entries.append({**meta, "role": role, "path": png_path})
+                    entries.append(
+                        {
+                            **meta,
+                            "role": role,
+                            "path": png_path,
+                            "sourcePath": source_path,
+                            "sourcePage": page_index + 1,
+                            "sourceSequence": page_index + 1,
+                            "componente": "Capa",
+                        }
+                    )
                 continue
 
             lombada_half_pt = mm_to_pt(float(cfg.get("lombadaMm") or 0)) / 2.0
@@ -810,7 +1184,17 @@ def _render_cover_pages(
             for clip, role in halves:
                 png_path = os.path.join(cache_dir, f"cover_{len(entries)}.png")
                 meta = _render_page_png(page, matrix, png_path, clip=clip)
-                entries.append({**meta, "role": role, "path": png_path})
+                entries.append(
+                    {
+                        **meta,
+                        "role": role,
+                        "path": png_path,
+                        "sourcePath": source_path,
+                        "sourcePage": page_index + 1,
+                        "sourceSequence": page_index + 1,
+                        "componente": "Capa",
+                    }
+                )
         return entries, spine_file
 
     # Páginas soltas: mapeamento por sheets (1 role por página) ou ordem clássica.
@@ -838,7 +1222,17 @@ def _render_cover_pages(
             _apply_mm_crop(page, crop_mm)
             png_path = os.path.join(cache_dir, f"cover_{len(entries)}.png")
             meta = _render_page_png(page, matrix, png_path)
-            entries.append({**meta, "role": role, "path": png_path})
+            entries.append(
+                {
+                    **meta,
+                    "role": role,
+                    "path": png_path,
+                    "sourcePath": source_path,
+                    "sourcePage": index + 1,
+                    "sourceSequence": index + 1,
+                    "componente": "Capa",
+                }
+            )
         return entries, spine_file
 
     roles = _cover_roles_for_count(count)
@@ -847,7 +1241,17 @@ def _render_cover_pages(
         _apply_mm_crop(page, crop_mm)
         png_path = os.path.join(cache_dir, f"cover_{len(entries)}.png")
         meta = _render_page_png(page, matrix, png_path)
-        entries.append({**meta, "role": roles[index], "path": png_path})
+        entries.append(
+            {
+                **meta,
+                "role": roles[index],
+                "path": png_path,
+                "sourcePath": source_path,
+                "sourcePage": index + 1,
+                "sourceSequence": index + 1,
+                "componente": "Capa",
+            }
+        )
     return entries, spine_file
 
 
@@ -1311,7 +1715,12 @@ def ensure_prova_web_pages(
             with fitz.open(capa_path) as capa_doc:
                 total_source_pages += len(capa_doc)
                 cover_entries, spine_file = _render_cover_pages(
-                    capa_doc, matrix, cache_dir, miolo_width_pt, capa_cfg
+                    capa_doc,
+                    matrix,
+                    cache_dir,
+                    miolo_width_pt,
+                    capa_cfg,
+                    source_path=capa_path,
                 )
 
             if mode == MODE_CAPA_MIOLO:
@@ -1353,6 +1762,10 @@ def ensure_prova_web_pages(
                     **_render_page_png(page, matrix, png0),
                     "role": ROLE_PAGE,
                     "path": png0,
+                    "sourcePath": miolo_path,
+                    "sourcePage": 1,
+                    "sourceSequence": 1,
+                    "componente": "Miolo",
                 }
 
             front_a = _resolve_cover(ROLE_COVER_FRONT, first_body_ref)
@@ -1373,7 +1786,15 @@ def ensure_prova_web_pages(
                         _apply_mm_crop(page, miolo_crop)
                         png_path = os.path.join(cache_dir, f"body_{index}.png")
                         meta = _render_page_png(page, matrix, png_path)
-                        entry = {**meta, "role": ROLE_PAGE, "path": png_path}
+                        entry = {
+                            **meta,
+                            "role": ROLE_PAGE,
+                            "path": png_path,
+                            "sourcePath": miolo_path,
+                            "sourcePage": index + 1,
+                            "sourceSequence": index + 1,
+                            "componente": "Miolo",
+                        }
                     last_body = entry
                     _publish_entry(entry, expected_total=expected_total)
                     body_done += 1
@@ -1406,14 +1827,29 @@ def ensure_prova_web_pages(
                         miolo_width_pt = float(page.rect.width)
                     png_path = os.path.join(cache_dir, f"body_{index}.png")
                     meta = _render_page_png(page, matrix, png_path)
-                    body_entries.append({**meta, "role": ROLE_PAGE, "path": png_path})
+                    body_entries.append(
+                        {
+                            **meta,
+                            "role": ROLE_PAGE,
+                            "path": png_path,
+                            "sourcePath": miolo_path,
+                            "sourcePage": index + 1,
+                            "sourceSequence": index + 1,
+                            "componente": "Miolo",
+                        }
+                    )
                     _progress(index + 1, body_count)
 
             _check_abort()
             with fitz.open(capa_path) as capa_doc:
                 total_source_pages += len(capa_doc)
                 cover_entries, spine_file = _render_cover_pages(
-                    capa_doc, matrix, cache_dir, miolo_width_pt, capa_cfg
+                    capa_doc,
+                    matrix,
+                    cache_dir,
+                    miolo_width_pt,
+                    capa_cfg,
+                    source_path=capa_path,
                 )
 
             if mode == MODE_CAPA_MIOLO:
@@ -1531,7 +1967,15 @@ def ensure_prova_web_pages(
                     role = ROLE_PAGE
                 png_path = os.path.join(cache_dir, f"body_{index}.png")
                 meta = _render_page_png(page, matrix, png_path)
-                entry = {**meta, "role": role, "path": png_path}
+                entry = {
+                    **meta,
+                    "role": role,
+                    "path": png_path,
+                    "sourcePath": pdf_path,
+                    "sourcePage": index + 1,
+                    "sourceSequence": index + 1,
+                    "componente": "Arq. Único",
+                }
                 if progressive_publish:
                     _publish_entry(entry, expected_total=count)
                 else:
@@ -1553,6 +1997,13 @@ def ensure_prova_web_pages(
         if espiral_cfg is None:
             espiral_cfg = _espiral_config(crop_json)
         spiral_mockup = _spiral_mockup_meta(espiral_cfg, pages)
+
+    book_structure = _book_structure_meta(
+        mode=mode,
+        pages=pages,
+        crop_json=crop_json,
+        book_mockup=book_mockup,
+    )
 
     interior = next(
         (
@@ -1580,6 +2031,8 @@ def ensure_prova_web_pages(
     }
     if book_mockup:
         manifest["bookMockup"] = book_mockup
+    if book_structure:
+        manifest["bookStructure"] = book_structure
     if fold_mockup:
         manifest["foldMockup"] = fold_mockup
     if spiral_mockup:

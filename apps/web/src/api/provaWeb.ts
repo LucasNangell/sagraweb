@@ -252,11 +252,52 @@ export interface ProvaWebCropJson {
   unico?: CropSidesMm;
   miolo?: CropSidesMm;
   capa?: ProvaWebCapaCrop;
+  bookExtras?: ProvaWebBookExtras;
   folheto?: ProvaWebFolhetoCrop;
   espiral?: ProvaWebEspiralCrop;
   caixa?: ProvaWebCaixaCrop;
   /** Overrides do Análise Lab (página/arquivo/todos). Ignorado pela Prova WEB. */
   lab?: ProvaWebLabCropJson;
+}
+
+export type ProvaWebBookExtraSource = "unico" | "miolo" | "capa";
+
+export type ProvaWebBookExtraKind =
+  | "insert"
+  | "large-sheet"
+  | "foldout"
+  | "gatefold"
+  | "zfold"
+  | "custom-fold";
+
+export interface ProvaWebBookExtraFoldLine {
+  axis: "vertical" | "horizontal";
+  positionMm: number;
+}
+
+export interface ProvaWebBookExtraInsert {
+  id: string;
+  label: string;
+  sourceComponent: ProvaWebBookExtraSource;
+  /** Página 1-based dentro do PDF do componente. */
+  sourcePageStart: number;
+  sourcePageEnd: number;
+  kind: ProvaWebBookExtraKind;
+  widthMm: number;
+  heightMm: number;
+  closedWidthMm?: number | null;
+  closedHeightMm?: number | null;
+  foldLines?: ProvaWebBookExtraFoldLine[];
+  /** true = sourcePageStart é frente e sourcePageEnd é verso. */
+  hasVerso?: boolean;
+  /** Geometria portátil (só para custom-fold). */
+  foldConfig?: FoldModelConfig | null;
+  notes?: string | null;
+}
+
+export interface ProvaWebBookExtras {
+  version: 1;
+  inserts: ProvaWebBookExtraInsert[];
 }
 
 export interface ProvaWebRenderProgress {
@@ -355,6 +396,7 @@ export interface ProvaWebPageMeta {
   /** Índice 1-based no componente concatenado (miolo/capa/único). */
   sourceSequence?: number | null;
   componente?: string | null;
+  specialTreatment?: ProvaWebBookStructureInsert | null;
 }
 
 /** Manifest de renderização — comum ao visualizador interno e ao portal do cliente. */
@@ -365,6 +407,47 @@ export interface ProvaWebBookMockupMeta {
   spineFile?: string;
   /** URL absoluta ou relativa (/api/...) para spine.png. */
   spineUrl?: string;
+}
+
+export interface ProvaWebBookStructurePageItem {
+  type: "page";
+  page: number;
+}
+
+export interface ProvaWebBookStructureInsert {
+  id: string;
+  label: string;
+  sourceComponent: ProvaWebBookExtraSource;
+  sourcePageStart: number;
+  sourcePageEnd: number;
+  kind: ProvaWebBookExtraKind;
+  widthMm: number;
+  heightMm: number;
+  closedWidthMm?: number | null;
+  closedHeightMm?: number | null;
+  foldLines?: ProvaWebBookExtraFoldLine[];
+  hasVerso?: boolean;
+  foldConfig?: FoldModelConfig | null;
+  notes?: string | null;
+}
+
+export interface ProvaWebBookStructureInsertItem {
+  type: "insert";
+  insert: ProvaWebBookStructureInsert;
+  pages: number[];
+}
+
+export type ProvaWebBookStructureItem =
+  | ProvaWebBookStructurePageItem
+  | ProvaWebBookStructureInsertItem;
+
+export interface ProvaWebBookStructure {
+  version: 1;
+  pageWidthMm: number;
+  pageHeightMm: number;
+  hasSpecialPages: boolean;
+  inserts: ProvaWebBookStructureInsert[];
+  items: ProvaWebBookStructureItem[];
 }
 
 export interface FoldMockupPanel {
@@ -472,6 +555,8 @@ export interface ProvaWebManifestBase {
   folhearModo?: ProvaWebFolhearModo;
   /** Presente quando capa+miolo com lombadaMm > 0. */
   bookMockup?: ProvaWebBookMockupMeta;
+  /** Estrutura física do livro quando há páginas especiais/encartes. */
+  bookStructure?: ProvaWebBookStructure;
   /** Presente no modo folha_dobrada. */
   foldMockup?: ProvaWebFoldMockupMeta;
   /** Presente no modo espiral. */

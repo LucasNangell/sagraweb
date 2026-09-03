@@ -48,6 +48,7 @@ from routers import (
     admin_os_materialized_routes,
     os_arquivos_routes,
     sequencia_producao_routes,
+    dev_features_routes,
     cliente_gabinete_routes,
     proof_portal_routes,
     support_routes,
@@ -884,6 +885,7 @@ app.include_router(os_filter_options_routes.router, prefix="/api")
 app.include_router(os_sub_os_routes.router, prefix="/api")
 app.include_router(os_arquivos_routes.router, prefix="/api")
 app.include_router(sequencia_producao_routes.router, prefix="/api")
+app.include_router(dev_features_routes.router, prefix="/api")
 app.include_router(cliente_gabinete_routes.router)
 app.include_router(proof_portal_routes.router, prefix="/api")
 app.include_router(analise_routes.router, prefix="/api")

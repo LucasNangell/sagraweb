@@ -35,6 +35,13 @@
   background: #f4f2ee;
 }
 
+.prova-web-page--special {
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 0 2px rgba(14, 116, 144, 0.32),
+    inset 0 0 28px rgba(14, 116, 144, 0.1);
+}
+
 .prova-web-page img {
   display: block;
   width: 100%;
@@ -47,6 +54,408 @@
 .prova-web-page > .relative {
   width: 100%;
   height: 100%;
+}
+
+.prova-web-page--bleed > .relative {
+  overflow: visible;
+}
+
+.prova-web-page--special > .relative {
+  overflow: hidden;
+}
+
+.prova-web-special-real-size {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  z-index: 3;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: inset 0 0 0 2px rgba(14, 116, 144, 0.28);
+  transform: translateY(-50%);
+}
+
+.prova-web-page.--left .prova-web-special-real-size {
+  right: 0;
+  left: auto;
+}
+
+.prova-web-page.--right .prova-web-special-real-size {
+  right: auto;
+  left: 0;
+}
+
+.prova-web-special-real-size img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+}
+
+.prova-web-special-marks {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.prova-web-special-marks__badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  max-width: calc(100% - 16px);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.78);
+  padding: 4px 7px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.prova-web-special-fold-line,
+.prova-web-special-fold-panel,
+.prova-web-special-preview__panel,
+.prova-web-special-preview__fold-line {
+  position: absolute;
+  pointer-events: none;
+}
+
+.prova-web-special-fold-panel,
+.prova-web-special-preview__panel {
+  inset-block: 0;
+  z-index: 3;
+}
+
+.prova-web-special-fold-line,
+.prova-web-special-preview__fold-line {
+  z-index: 5;
+}
+
+.prova-web-special-fold-panel--front {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.12), rgba(8, 145, 178, 0.06));
+}
+
+.prova-web-special-fold-panel--back {
+  background: linear-gradient(90deg, rgba(15, 23, 42, 0.12), rgba(255, 255, 255, 0.05));
+}
+
+.prova-web-special-fold-line--v,
+.prova-web-special-preview__fold-line--v {
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  transform: translateX(-1px);
+}
+
+.prova-web-special-fold-line--h,
+.prova-web-special-preview__fold-line--h {
+  right: 0;
+  left: 0;
+  height: 2px;
+  transform: translateY(-1px);
+}
+
+.prova-web-special-fold-line {
+  background:
+    linear-gradient(to bottom, rgba(8, 145, 178, 0), rgba(8, 145, 178, 0.95) 12%, rgba(8, 145, 178, 0.95) 88%, rgba(8, 145, 178, 0)),
+    repeating-linear-gradient(to bottom, rgba(255, 255, 255, 0.9) 0 8px, transparent 8px 15px);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.55),
+    0 0 10px rgba(8, 145, 178, 0.5);
+}
+
+.prova-web-special-fold-line--h {
+  background:
+    linear-gradient(to right, rgba(8, 145, 178, 0), rgba(8, 145, 178, 0.95) 12%, rgba(8, 145, 178, 0.95) 88%, rgba(8, 145, 178, 0)),
+    repeating-linear-gradient(to right, rgba(255, 255, 255, 0.9) 0 8px, transparent 8px 15px);
+}
+
+.prova-web-special-preview {
+  position: absolute;
+  bottom: 10px;
+  z-index: 20;
+  max-width: min(380px, calc(100% - 20px));
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.26);
+  padding: 8px;
+  cursor: zoom-in;
+  pointer-events: auto;
+  text-align: left;
+  transition:
+    transform 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.prova-web-special-preview--single,
+.prova-web-special-preview--left {
+  left: 10px;
+}
+
+.prova-web-special-preview--right {
+  right: 10px;
+}
+
+.prova-web-special-preview:hover {
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.32);
+  transform: translateY(-1px);
+}
+
+.prova-web-special-preview:focus-visible {
+  outline: 3px solid rgba(14, 116, 144, 0.48);
+  outline-offset: 3px;
+}
+
+.prova-web-special-preview__header {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 7px;
+  color: #0f172a;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.prova-web-special-preview__header strong,
+.prova-web-special-preview__header span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prova-web-special-preview__header span {
+  flex: 0 0 auto;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.prova-web-special-preview__sheet {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.22);
+  background: #fff;
+  transform: rotateX(4deg);
+  transform-origin: center bottom;
+  box-shadow:
+    0 10px 18px rgba(15, 23, 42, 0.22),
+    inset 24px 0 30px rgba(15, 23, 42, 0.07),
+    inset -24px 0 30px rgba(15, 23, 42, 0.07);
+}
+
+.prova-web-special-preview__sheet::before,
+.prova-web-special-preview__sheet::after {
+  position: absolute;
+  inset-block: 0;
+  z-index: 2;
+  width: 24%;
+  pointer-events: none;
+  content: "";
+}
+
+.prova-web-special-preview__sheet::before {
+  left: 0;
+  background: linear-gradient(90deg, rgba(15, 23, 42, 0.16), transparent);
+}
+
+.prova-web-special-preview__sheet::after {
+  right: 0;
+  background: linear-gradient(270deg, rgba(255, 255, 255, 0.58), transparent);
+}
+
+.prova-web-special-preview__sheet[data-kind="gatefold"]::before,
+.prova-web-special-preview__sheet[data-kind="gatefold"]::after {
+  width: 30%;
+}
+
+.prova-web-special-preview__sheet[data-kind="zfold"] {
+  transform: rotateX(4deg) skewY(-1deg);
+}
+
+.prova-web-special-preview__sheet img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+}
+
+.prova-web-special-preview__fold-line {
+  background: rgba(8, 145, 178, 0.96);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.72),
+    0 0 12px rgba(8, 145, 178, 0.56);
+}
+
+.prova-web-special-preview__panel {
+  z-index: 1;
+}
+
+.prova-web-special-preview__panel--front {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.2), rgba(8, 145, 178, 0.08));
+}
+
+.prova-web-special-preview__panel--back {
+  background: linear-gradient(90deg, rgba(15, 23, 42, 0.16), rgba(255, 255, 255, 0.04));
+}
+
+.prova-web-special-isolated {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: auto;
+  background: rgba(15, 23, 42, 0.86);
+  padding: 28px 18px;
+}
+
+.prova-web-special-isolated--fold3d {
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.prova-web-special-isolated__panel {
+  display: flex;
+  min-width: min(100%, 360px);
+  max-width: min(100%, 1280px);
+  flex-direction: column;
+  gap: 12px;
+}
+
+.prova-web-special-isolated__panel--fold3d {
+  flex: 1;
+  width: 100%;
+  max-width: min(100%, 1400px);
+  min-height: 0;
+  height: calc(100vh - 56px);
+  margin: 0 auto;
+}
+
+.prova-web-special-isolated__stage {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.prova-web-special-isolated__stage .prova-web-fold-mockup {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+}
+
+.prova-web-special-isolated__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  color: #fff;
+}
+
+.prova-web-special-isolated__header div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.prova-web-special-isolated__header strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.prova-web-special-isolated__header span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.prova-web-special-isolated__header button {
+  flex: 0 0 auto;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(15, 23, 42, 0.54);
+  padding: 8px;
+  color: #fff;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease;
+}
+
+.prova-web-special-isolated__header button:hover {
+  border-color: rgba(255, 255, 255, 0.48);
+  background: rgba(15, 23, 42, 0.78);
+}
+
+.prova-web-special-isolated__sheet {
+  position: relative;
+  max-width: calc(100vw - 36px);
+  max-height: calc(100vh - 130px);
+  overflow: hidden;
+  align-self: center;
+  background: #fff;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.42);
+}
+
+.prova-web-special-isolated__sheet img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+}
+
+.prova-web-special-isolated__panel-fold,
+.prova-web-special-isolated__fold-line {
+  position: absolute;
+  pointer-events: none;
+}
+
+.prova-web-special-isolated__panel-fold {
+  inset-block: 0;
+  z-index: 2;
+}
+
+.prova-web-special-isolated__panel-fold--front {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.2), rgba(8, 145, 178, 0.08));
+}
+
+.prova-web-special-isolated__panel-fold--back {
+  background: linear-gradient(90deg, rgba(15, 23, 42, 0.16), rgba(255, 255, 255, 0.04));
+}
+
+.prova-web-special-isolated__fold-line {
+  z-index: 4;
+  background: rgba(8, 145, 178, 0.96);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.72),
+    0 0 12px rgba(8, 145, 178, 0.56);
+}
+
+.prova-web-special-isolated__fold-line--v {
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  transform: translateX(-1px);
+}
+
+.prova-web-special-isolated__fold-line--h {
+  right: 0;
+  left: 0;
+  height: 2px;
+  transform: translateY(-1px);
 }
 
 .prova-web-page-placeholder {
@@ -149,4 +558,232 @@
     rgba(0, 0, 0, 0.1) 55%,
     rgba(0, 0, 0, 0) 100%
   );
+}
+
+.prova-web-physical-fs {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+}
+
+.prova-web-physical-stage {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  padding: 24px;
+  perspective: 1800px;
+}
+
+.prova-web-physical-spread,
+.prova-web-physical-insert-wrap {
+  transform-origin: center center;
+  transition: transform 160ms ease;
+}
+
+.prova-web-physical-turn {
+  position: relative;
+  transform-style: preserve-3d;
+  transform-origin: center center;
+  transition: transform 160ms ease;
+}
+
+.prova-web-physical-spread {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  filter: drop-shadow(0 18px 28px rgba(15, 23, 42, 0.28));
+}
+
+.prova-web-physical-spread--right-cover {
+  justify-content: flex-end;
+}
+
+.prova-web-physical-spread--left-cover {
+  justify-content: flex-start;
+}
+
+.prova-web-physical-page {
+  position: relative;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: inset -18px 0 26px rgba(15, 23, 42, 0.08);
+}
+
+.prova-web-physical-page + .prova-web-physical-page {
+  box-shadow:
+    inset 18px 0 26px rgba(15, 23, 42, 0.08),
+    inset 1px 0 0 rgba(15, 23, 42, 0.18);
+}
+
+.prova-web-physical-leaf {
+  position: absolute;
+  top: 0;
+  z-index: 6;
+  overflow: hidden;
+  background: #fff;
+  box-shadow:
+    0 18px 34px rgba(15, 23, 42, 0.3),
+    inset -22px 0 34px rgba(15, 23, 42, 0.12);
+  pointer-events: none;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+}
+
+.prova-web-physical-leaf::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  opacity: 0;
+}
+
+.prova-web-physical-leaf--forward {
+  right: 0;
+  transform-origin: left center;
+  animation: prova-web-physical-leaf-forward 560ms cubic-bezier(0.2, 0.68, 0.18, 1);
+}
+
+.prova-web-physical-leaf--back {
+  left: 0;
+  transform-origin: right center;
+  animation: prova-web-physical-leaf-back 560ms cubic-bezier(0.2, 0.68, 0.18, 1);
+}
+
+.prova-web-physical-leaf--forward::after {
+  background:
+    linear-gradient(90deg, rgba(15, 23, 42, 0.24), transparent 36%),
+    linear-gradient(270deg, rgba(255, 255, 255, 0.5), transparent 42%);
+  animation: prova-web-physical-turn-sheen 560ms ease-out;
+}
+
+.prova-web-physical-leaf--back::after {
+  background:
+    linear-gradient(270deg, rgba(15, 23, 42, 0.24), transparent 36%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.5), transparent 42%);
+  animation: prova-web-physical-turn-sheen 560ms ease-out;
+}
+
+.prova-web-physical-page img,
+.prova-web-physical-leaf img,
+.prova-web-physical-insert__page img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+}
+
+.prova-web-physical-insert-wrap {
+  filter: drop-shadow(0 18px 30px rgba(15, 23, 42, 0.32));
+}
+
+.prova-web-physical-insert {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  background: #fff;
+  transform: rotateX(5deg);
+}
+
+.prova-web-physical-insert[data-kind="foldout"],
+.prova-web-physical-insert[data-kind="gatefold"],
+.prova-web-physical-insert[data-kind="zfold"] {
+  box-shadow:
+    inset 28px 0 34px rgba(15, 23, 42, 0.08),
+    inset -28px 0 34px rgba(15, 23, 42, 0.08);
+}
+
+.prova-web-physical-insert__badge {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 4;
+  max-width: calc(100% - 24px);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.78);
+  padding: 5px 8px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.prova-web-physical-insert__page {
+  position: absolute;
+  inset-block: 0;
+  overflow: hidden;
+  background: #fff;
+}
+
+.prova-web-physical-fold-line {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  background: rgba(12, 74, 110, 0.55);
+}
+
+.prova-web-physical-fold-line--v {
+  top: 0;
+  bottom: 0;
+  width: 2px;
+}
+
+.prova-web-physical-fold-line--h {
+  right: 0;
+  left: 0;
+  height: 2px;
+}
+
+@keyframes prova-web-physical-leaf-forward {
+  0% {
+    opacity: 1;
+    transform: rotateY(0deg) translateZ(2px);
+  }
+
+  52% {
+    opacity: 0.98;
+    transform: rotateY(-92deg) translateZ(16px);
+  }
+
+  100% {
+    opacity: 0;
+    transform: rotateY(-166deg) translateZ(2px);
+  }
+}
+
+@keyframes prova-web-physical-leaf-back {
+  0% {
+    opacity: 1;
+    transform: rotateY(0deg) translateZ(2px);
+  }
+
+  52% {
+    opacity: 0.98;
+    transform: rotateY(92deg) translateZ(16px);
+  }
+
+  100% {
+    opacity: 0;
+    transform: rotateY(166deg) translateZ(2px);
+  }
+}
+
+@keyframes prova-web-physical-turn-sheen {
+  0% {
+    opacity: 0;
+  }
+
+  35% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
 }

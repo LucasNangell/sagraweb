@@ -3,6 +3,7 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  X,
   Maximize2,
   Minimize2,
   ZoomIn,
@@ -19,6 +20,7 @@ import {
 
 import {
   provaWebPageUrl,
+  type ProvaWebBookStructureInsert,
   type ProvaWebManifestBase,
   type ProvaWebPageMeta,
 } from "@/api/provaWeb";
@@ -28,9 +30,20 @@ import {
   mergeLoadedWindow,
   seedLoadedWindow,
 } from "./flipbookFit";
+import { BOOK_EXTRA_KIND_LABELS } from "./provaWebBookExtras";
+import { ProvaWebFoldMockup3D } from "./ProvaWebFoldMockup3D";
+import {
+  foldMockupFromSpecialTreatment,
+  resolvedSpecialFoldLines,
+  specialTreatmentPagePixels,
+  specialTreatmentScale,
+  verticalFoldPanels,
+} from "./provaWebSpecialTreatment";
 import { ProvaWebSpiralVerticalPager } from "./ProvaWebSpiralVerticalPager";
 import { shouldUseVerticalSpiralPager } from "./spiralFlipMode";
 import "./prova-web.css";
+
+const SPECIAL_FOLD_ORBIT_DEG = { x: 0, y: 0 } as const;
 
 /** Mantém a página pedida se ela estiver no spread; senão a da esquerda. */
 function preferredSyncPage(
@@ -179,6 +192,8 @@ function ProvaWebFlipbookHorizontal({
   const [cssFullscreen, setCssFullscreen] = useState(false);
   const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
   const [flipping, setFlipping] = useState(false);
+  const [isolatedSpecialPage, setIsolatedSpecialPage] =
+    useState<ProvaWebPageMeta | null>(null);
 
   pageIndexRef.current = pageIndex;
 
@@ -188,6 +203,18 @@ function ProvaWebFlipbookHorizontal({
     () => resolveVisiblePages(pages, pageIndex),
     [pages, pageIndex],
   );
+  const activeSpecialPages = useMemo(
+    () =>
+      visiblePages
+        .map((page, idx) => ({
+          page,
+          side: visiblePages.length === 1 ? "single" : idx === 0 ? "left" : "right",
+        }))
+        .filter((item): item is { page: ProvaWebPageMeta; side: "single" | "left" | "right" } =>
+          Boolean(item.page.specialTreatment),
+        ),
+    [visiblePages],
+  );
   const isSpread = visiblePages.length > 1;
 
   const pageMeta = useMemo(() => {
@@ -195,8 +222,21 @@ function ProvaWebFlipbookHorizontal({
     return {
       width: first?.width || 800,
       height: first?.height || 1130,
+      widthPt: first?.widthPt || 0,
+      heightPt: first?.heightPt || 0,
     };
   }, [pages]);
+  const basePageMm = useMemo(() => {
+    const widthMm = Number(manifest.bookStructure?.pageWidthMm);
+    const heightMm = Number(manifest.bookStructure?.pageHeightMm);
+    if (Number.isFinite(widthMm) && widthMm > 0 && Number.isFinite(heightMm) && heightMm > 0) {
+      return { widthMm, heightMm };
+    }
+    return {
+      widthMm: pointsToMm(pageMeta.widthPt),
+      heightMm: pointsToMm(pageMeta.heightPt),
+    };
+  }, [manifest.bookStructure?.pageHeightMm, manifest.bookStructure?.pageWidthMm, pageMeta]);
 
   const baseSize = useMemo(() => {
     if (stageSize.w < 40 || stageSize.h < 40) {
@@ -471,6 +511,12 @@ function ProvaWebFlipbookHorizontal({
         }
         return;
       }
+      if (isolatedSpecialPage) {
+        if (event.key === "Escape") {
+          setIsolatedSpecialPage(null);
+        }
+        return;
+      }
       if (event.key === "Escape" && cssFullscreen) {
         exitCssFullscreen();
         return;
@@ -503,6 +549,7 @@ function ProvaWebFlipbookHorizontal({
     goNext,
     goPrev,
     goStart,
+    isolatedSpecialPage,
     zoomOpen,
   ]);
 
@@ -547,14 +594,11 @@ function ProvaWebFlipbookHorizontal({
           >
             {pages.map((page) => {
               const src = loadedSrc[page.page];
+              const specialTreatment = page.specialTreatment ?? null;
               return (
                 <div
                   key={page.page}
-                  className={
-                    pageBleedFraction > 0
-                      ? "prova-web-page prova-web-page--bleed"
-                      : "prova-web-page"
-                  }
+                  className={pageClassName(pageBleedFraction, Boolean(specialTreatment))}
                   data-density={
                     page.role === "cover-front" || page.role === "cover-back"
                       ? "hard"
@@ -563,18 +607,32 @@ function ProvaWebFlipbookHorizontal({
                 >
                   {src ? (
                     <div className="relative h-full w-full">
-                      <img
-                        src={src}
-                        alt={pageAlt(page, total)}
-                        loading="eager"
-                        draggable={false}
-                      />
-                      {renderPageOverlay
-                        ? renderPageOverlay(page, {
-                            width: baseSize.width,
-                            height: baseSize.height,
-                          })
-                        : null}
+                      {specialTreatment ? (
+                        <SpecialPageRealSize
+                          page={page}
+                          treatment={specialTreatment}
+                          src={src}
+                          total={total}
+                          basePixelSize={baseSize}
+                          basePageMm={basePageMm}
+                          renderPageOverlay={renderPageOverlay}
+                        />
+                      ) : (
+                        <>
+                          <img
+                            src={src}
+                            alt={pageAlt(page, total)}
+                            loading="eager"
+                            draggable={false}
+                          />
+                          {renderPageOverlay
+                            ? renderPageOverlay(page, {
+                                width: baseSize.width,
+                                height: baseSize.height,
+                              })
+                            : null}
+                        </>
+                      )}
                     </div>
                   ) : (
                     <div
@@ -596,6 +654,15 @@ function ProvaWebFlipbookHorizontal({
                 gutterRight: Math.max(0, stageGutterRight || 0),
               })
             : null}
+          {activeSpecialPages.map(({ page, side }) => (
+            <SpecialTreatmentStagePreview
+              key={page.page}
+              page={page}
+              side={side}
+              src={loadedSrc[page.page] ?? pageUrl(page)}
+              onOpen={() => setIsolatedSpecialPage(page)}
+            />
+          ))}
         </div>
       </div>
 
@@ -701,6 +768,15 @@ function ProvaWebFlipbookHorizontal({
           </div>
         </div>
       )}
+      {isolatedSpecialPage?.specialTreatment ? (
+        <SpecialTreatmentIsolatedView
+          page={isolatedSpecialPage}
+          src={loadedSrc[isolatedSpecialPage.page] ?? pageUrl(isolatedSpecialPage)}
+          allPages={pages}
+          resolvePageUrl={(p) => loadedSrc[p.page] ?? pageUrl(p)}
+          onClose={() => setIsolatedSpecialPage(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -727,6 +803,312 @@ function ToolbarButton({
     >
       {children}
     </button>
+  );
+}
+
+function SpecialPageRealSize({
+  page,
+  treatment,
+  src,
+  total,
+  basePixelSize,
+  basePageMm,
+  renderPageOverlay,
+}: {
+  page: ProvaWebPageMeta;
+  treatment: ProvaWebBookStructureInsert;
+  src: string;
+  total: number;
+  basePixelSize: { width: number; height: number };
+  basePageMm: { widthMm: number; heightMm: number };
+  renderPageOverlay?: ProvaWebFlipbookProps["renderPageOverlay"];
+}) {
+  const realSize = specialTreatmentPagePixels({
+    treatment,
+    basePixelSize,
+    basePageMm,
+  });
+  return (
+    <div
+      className="prova-web-special-real-size"
+      style={{ width: realSize.width, height: realSize.height }}
+    >
+      <img src={src} alt={pageAlt(page, total)} loading="eager" draggable={false} />
+      {renderPageOverlay
+        ? renderPageOverlay(page, { width: realSize.width, height: realSize.height })
+        : null}
+      <SpecialPageTreatmentMarks treatment={treatment} />
+    </div>
+  );
+}
+
+function pageClassName(pageBleedFraction: number, special: boolean): string {
+  const classes = ["prova-web-page"];
+  if (pageBleedFraction > 0) classes.push("prova-web-page--bleed");
+  if (special) classes.push("prova-web-page--special");
+  return classes.join(" ");
+}
+
+function SpecialPageTreatmentMarks({
+  treatment,
+}: {
+  treatment: ProvaWebBookStructureInsert;
+}) {
+  const lines = resolvedSpecialFoldLines(treatment);
+  return (
+    <div className="prova-web-special-marks" data-kind={treatment.kind} aria-hidden>
+      <FoldPanels treatment={treatment} className="prova-web-special-fold-panel" />
+      <span className="prova-web-special-marks__badge">
+        {BOOK_EXTRA_KIND_LABELS[treatment.kind]}
+      </span>
+      {lines.map((line, index) => (
+        <FoldLine
+          key={`${line.axis}-${line.positionMm}-${index}`}
+          treatment={treatment}
+          axis={line.axis}
+          positionMm={line.positionMm}
+          className="prova-web-special-fold-line"
+        />
+      ))}
+    </div>
+  );
+}
+
+function SpecialTreatmentStagePreview({
+  page,
+  side,
+  src,
+  onOpen,
+}: {
+  page: ProvaWebPageMeta;
+  side: "single" | "left" | "right";
+  src: string;
+  onOpen: () => void;
+}) {
+  const treatment = page.specialTreatment;
+  if (!treatment) return null;
+  const lines = resolvedSpecialFoldLines(treatment);
+  const scale = specialTreatmentScale(treatment);
+  return (
+    <button
+      type="button"
+      className={`prova-web-special-preview prova-web-special-preview--${side}`}
+      onClick={onOpen}
+      aria-label={`Visualizar ${treatment.label} isolado`}
+    >
+      <div className="prova-web-special-preview__header">
+        <strong>{treatment.label}</strong>
+        <span>
+          {scale.width.toFixed(1)}×{scale.height.toFixed(1)} mm
+        </span>
+      </div>
+      <div
+        className="prova-web-special-preview__sheet"
+        data-kind={treatment.kind}
+        style={{ width: scale.previewWidth, height: scale.previewHeight }}
+      >
+        <img src={src} alt={`Prévia de ${treatment.label}`} draggable={false} />
+        <FoldPanels treatment={treatment} className="prova-web-special-preview__panel" />
+        {lines.map((line, index) => (
+          <FoldLine
+            key={`${line.axis}-${line.positionMm}-${index}`}
+            treatment={treatment}
+            axis={line.axis}
+            positionMm={line.positionMm}
+            className="prova-web-special-preview__fold-line"
+          />
+        ))}
+      </div>
+    </button>
+  );
+}
+
+function SpecialTreatmentIsolatedView({
+  page,
+  src,
+  allPages,
+  resolvePageUrl,
+  onClose,
+}: {
+  page: ProvaWebPageMeta;
+  src: string;
+  allPages: ProvaWebPageMeta[];
+  resolvePageUrl: (page: ProvaWebPageMeta) => string;
+  onClose: () => void;
+}) {
+  const treatment = page.specialTreatment;
+  const foldMockup = useMemo(
+    () => (treatment ? foldMockupFromSpecialTreatment(treatment) : null),
+    [treatment],
+  );
+  const mockupPages = useMemo(() => {
+    if (!treatment) return [page];
+    const frontMeta =
+      findSpecialSourcePage(
+        allPages,
+        treatment,
+        treatment.sourcePageStart,
+        page,
+      ) ?? page;
+    const front: ProvaWebPageMeta = { ...frontMeta, role: "sheet-front" };
+    if (!treatment.hasVerso) return [front];
+    const backMeta = findSpecialSourcePage(
+      allPages,
+      treatment,
+      treatment.sourcePageEnd,
+      frontMeta,
+    );
+    if (!backMeta || backMeta.page === frontMeta.page) return [front];
+    return [front, { ...backMeta, role: "sheet-back" as const }];
+  }, [allPages, page, treatment]);
+  const mockupPageUrl = useCallback(
+    (p: ProvaWebPageMeta) => resolvePageUrl(p),
+    [resolvePageUrl],
+  );
+  if (!treatment) return null;
+  const lines = resolvedSpecialFoldLines(treatment);
+  const scale = specialTreatmentScale(treatment);
+  const displayWidth = Math.min(1200, Math.max(320, 520 * scale.ratio));
+  const displayHeight = displayWidth / scale.ratio;
+  const useFold3d = Boolean(foldMockup);
+  return (
+    <div
+      className={
+        useFold3d
+          ? "prova-web-special-isolated prova-web-special-isolated--fold3d"
+          : "prova-web-special-isolated"
+      }
+      role="dialog"
+      aria-modal="true"
+      aria-label={treatment.label}
+      onClick={onClose}
+    >
+      <div
+        className={
+          useFold3d
+            ? "prova-web-special-isolated__panel prova-web-special-isolated__panel--fold3d"
+            : "prova-web-special-isolated__panel"
+        }
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="prova-web-special-isolated__header">
+          <div>
+            <strong>{treatment.label}</strong>
+            <span>
+              {BOOK_EXTRA_KIND_LABELS[treatment.kind]} · {scale.width.toFixed(1)}×
+              {scale.height.toFixed(1)} mm
+              {treatment.hasVerso ? " · frente+verso" : ""}
+            </span>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Fechar">
+            <X className="size-5" aria-hidden />
+          </button>
+        </div>
+        {foldMockup ? (
+          <div className="prova-web-special-isolated__stage">
+            <ProvaWebFoldMockup3D
+              pages={mockupPages}
+              foldMockup={foldMockup}
+              pageUrl={mockupPageUrl}
+              initialOrbitDeg={SPECIAL_FOLD_ORBIT_DEG}
+              maxPixelRatio={4}
+              fitPadding={1.02}
+            />
+          </div>
+        ) : (
+          <div
+            className="prova-web-special-isolated__sheet"
+            data-kind={treatment.kind}
+            style={{ width: displayWidth, height: displayHeight }}
+          >
+            <img src={src} alt={`Página ${page.page}`} draggable={false} />
+            <FoldPanels treatment={treatment} className="prova-web-special-isolated__panel-fold" />
+            {lines.map((line, index) => (
+              <FoldLine
+                key={`${line.axis}-${line.positionMm}-${index}`}
+                treatment={treatment}
+                axis={line.axis}
+                positionMm={line.positionMm}
+                className="prova-web-special-isolated__fold-line"
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function findSpecialSourcePage(
+  pages: ProvaWebPageMeta[],
+  treatment: ProvaWebBookStructureInsert,
+  sourcePage: number,
+  preferNear: ProvaWebPageMeta,
+): ProvaWebPageMeta | null {
+  if (!sourcePage) return null;
+  const componenteWanted =
+    treatment.sourceComponent === "capa"
+      ? "Capa"
+      : treatment.sourceComponent === "unico"
+        ? "Arq. Único"
+        : "Miolo";
+  const matches = pages.filter(
+    (p) =>
+      p.sourcePage === sourcePage &&
+      (!p.componente || p.componente === componenteWanted),
+  );
+  if (!matches.length) {
+    return pages.find((p) => p.sourcePage === sourcePage) ?? null;
+  }
+  return (
+    matches.find((p) => p.page === preferNear.page) ?? matches[0] ?? null
+  );
+}
+
+function FoldPanels({
+  treatment,
+  className,
+}: {
+  treatment: ProvaWebBookStructureInsert;
+  className: string;
+}) {
+  return (
+    <>
+      {verticalFoldPanels(treatment).map((panel) => (
+        <span
+          key={panel.index}
+          className={`${className} ${className}--${panel.index % 2 === 0 ? "front" : "back"}`}
+          style={{ left: `${panel.leftPct}%`, width: `${panel.widthPct}%` }}
+        />
+      ))}
+    </>
+  );
+}
+
+function FoldLine({
+  treatment,
+  axis,
+  positionMm,
+  className,
+}: {
+  treatment: ProvaWebBookStructureInsert;
+  axis: "vertical" | "horizontal";
+  positionMm: number;
+  className: string;
+}) {
+  const pct =
+    axis === "vertical"
+      ? (positionMm / Math.max(1, treatment.widthMm)) * 100
+      : (positionMm / Math.max(1, treatment.heightMm)) * 100;
+  return (
+    <span
+      className={
+        axis === "vertical"
+          ? `${className} ${className}--v`
+          : `${className} ${className}--h`
+      }
+      style={axis === "vertical" ? { left: `${pct}%` } : { top: `${pct}%` }}
+    />
   );
 }
 
@@ -785,4 +1167,8 @@ function pageAlt(page: ProvaWebPageMeta, total: number): string {
     default:
       return `Página ${page.page} de ${total}`;
   }
+}
+
+function pointsToMm(value: number) {
+  return Math.max(1, (Math.max(1, value) * 25.4) / 72);
 }

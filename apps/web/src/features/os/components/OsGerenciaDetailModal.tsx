@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchOsVinculos } from "@/api/os";
 import { queryKeys } from "@/api/query-keys";
 import { useAccessControl } from "@/features/auth/useAccessControl";
+import { useDevFeature } from "@/features/configuracoes/hooks/useDevFeature";
 import {
   GERENCIA_MODAL_SECTIONS,
   renderGerenciaSection,
@@ -100,7 +101,8 @@ export function OsGerenciaDetailModal({
   const composing = mode.kind !== "existing";
   const formEditable = composing || editing;
   const showHistoricoTab = canHistorico && !composing;
-  const showSequenciaProducaoTab = false;
+  const sequenciaProducaoEnabled = useDevFeature("sequencia_producao");
+  const showSequenciaProducaoTab = sequenciaProducaoEnabled && !composing;
   const vinculosQuery = useQuery({
     queryKey:
       open && row != null && !composing

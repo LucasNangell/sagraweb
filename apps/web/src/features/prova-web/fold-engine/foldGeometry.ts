@@ -67,7 +67,7 @@ export function createPanelBoxMesh(args: {
 
   const w = args.panel.widthMm;
   const h = args.panel.heightMm;
-  const t = Math.max(0.05, args.thickness);
+  const t = Math.max(0.04, args.thickness);
 
   const geo = new THREE.BoxGeometry(w, h, t);
   disposables.push(geo);
@@ -133,8 +133,8 @@ export function createPanelBoxMesh(args: {
     return m;
   };
 
-  // Arte só nos planos (afastados da superfície do box) para eliminar flickering
-  const zGap = Math.max(0.02, t * 0.15);
+  // Arte colada à superfície (gap mínimo) para a dobra parecer contínua
+  const zGap = Math.max(0.008, t * 0.08);
 
   const frontPlane = new THREE.PlaneGeometry(w, h);
   frontPlane.setAttribute(
@@ -158,7 +158,7 @@ export function createPanelBoxMesh(args: {
   disposables.push(backPlane);
   const backMesh = new THREE.Mesh(
     backPlane,
-    mkFaceMat(args.backTex, 0xe8e2d8, args.faithfulColors, -1),
+    mkFaceMat(args.backTex, 0xffffff, args.faithfulColors, -1),
   );
   // Rotação Y=π: verso olha para −Z. Remap duplex fica nos UVs (mirrorX).
   backMesh.rotation.y = Math.PI;

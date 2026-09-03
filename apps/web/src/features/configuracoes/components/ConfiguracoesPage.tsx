@@ -5,6 +5,7 @@ import {
   ClipboardList,
   Coins,
   Database,
+  FlaskConical,
   IdCard,
   Mail,
   Package,
@@ -18,6 +19,7 @@ import { BoxModelsSection } from "./BoxModelsSection";
 import { CotasGrafSettingsSection } from "./CotasGrafSettingsSection";
 import { CredenciaisDepolModelosSection } from "./CredenciaisDepolModelosSection";
 import { CustosSettingsSection } from "./CustosSettingsSection";
+import { DesenvolvimentoSettingsSection } from "./DesenvolvimentoSettingsSection";
 import { EmailTemplatesSection } from "./EmailTemplatesSection";
 import { GerenciaSettingsSection } from "./GerenciaSettingsSection";
 import { OrcamentoSettingsSection } from "./OrcamentoSettingsSection";
@@ -37,7 +39,8 @@ type ConfigTab =
   | "caixas"
   | "sistema"
   | "custos"
-  | "orcamento";
+  | "orcamento"
+  | "desenvolvimento";
 
 const TAB_META: Record<
   ConfigTab,
@@ -100,6 +103,12 @@ const TAB_META: Record<
     description:
       "Alíquotas, cliques, formatos e textos do ofício usados no cálculo Digital/Offset. Preços de material vêm do estoque.",
     icon: <Calculator className="size-3.5" aria-hidden />,
+  },
+  desenvolvimento: {
+    label: "Desenvolvimento",
+    description:
+      "Habilite ou oculte ferramentas, páginas e botões ainda em desenvolvimento para os usuários.",
+    icon: <FlaskConical className="size-3.5" aria-hidden />,
   },
 };
 
@@ -242,6 +251,15 @@ export function ConfiguracoesPage() {
             className="configuracoes-tab-panel"
           >
             <OrcamentoSettingsSection />
+          </div>
+          <div
+            role="tabpanel"
+            id="config-panel-desenvolvimento"
+            aria-labelledby="config-tab-desenvolvimento"
+            hidden={activeTab !== "desenvolvimento"}
+            className="configuracoes-tab-panel"
+          >
+            <DesenvolvimentoSettingsSection />
           </div>
         </div>
       </div>

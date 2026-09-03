@@ -246,6 +246,153 @@ def test_book_mockup_and_spine_with_lombada(tmp_path: Path) -> None:
     assert "bookMockup" not in out0
 
 
+def test_book_extras_marks_special_page_inside_miolo(tmp_path: Path) -> None:
+    capa = tmp_path / "capa.pdf"
+    doc = fitz.open()
+    doc.new_page(width=841.89, height=595.28)
+    doc.new_page(width=841.89, height=595.28)
+    doc.save(capa)
+    doc.close()
+
+    miolo = tmp_path / "miolo.pdf"
+    doc = fitz.open()
+    doc.new_page(width=420, height=595)
+    doc.new_page(width=842, height=595)
+    doc.new_page(width=420, height=595)
+    doc.save(miolo)
+    doc.close()
+
+    os_folder = tmp_path / "os"
+    (os_folder / "Sefoc" / "AdminDocs" / "WEB").mkdir(parents=True)
+
+    crop_json = {
+        "miolo": {"top": 0, "right": 0, "bottom": 0, "left": 0, "source": "manual"},
+        "capa": {
+            "layout": "spread",
+            "lombadaMm": 8,
+            "crop": {"top": 0, "right": 0, "bottom": 0, "left": 0, "source": "manual"},
+        },
+        "bookExtras": {
+            "version": 1,
+            "inserts": [
+                {
+                    "id": "encarte-miolo",
+                    "label": "Encarte do miolo",
+                    "sourceComponent": "miolo",
+                    "sourcePageStart": 2,
+                    "sourcePageEnd": 2,
+                    "kind": "foldout",
+                    "widthMm": 420,
+                    "heightMm": 297,
+                    "foldLines": [{"axis": "vertical", "positionMm": 210}],
+                }
+            ],
+        },
+    }
+
+    out = render_svc.ensure_prova_web_pages(
+        2026,
+        4,
+        mode="capa_miolo",
+        source_paths=[str(capa), str(miolo)],
+        os_folder=str(os_folder),
+        pasta_render="Prova1",
+        crop_json=crop_json,
+    )
+
+    structure = out.get("bookStructure")
+    assert structure is not None
+    assert structure["hasSpecialPages"] is True
+    insert_item = next(item for item in structure["items"] if item["type"] == "insert")
+    assert insert_item["insert"]["id"] == "encarte-miolo"
+    assert insert_item["insert"]["sourceComponent"] == "miolo"
+
+    special_pages = [p for p in out["pages"] if p.get("specialTreatment")]
+    assert len(special_pages) == 1
+    assert special_pages[0]["componente"] == "Miolo"
+    assert special_pages[0]["sourcePage"] == 2
+    assert special_pages[0]["specialTreatment"]["kind"] == "foldout"
+
+
+def test_book_extras_custom_fold_and_has_verso(tmp_path: Path) -> None:
+    capa = tmp_path / "capa.pdf"
+    doc = fitz.open()
+    doc.new_page(width=841.89, height=595.28)
+    doc.new_page(width=841.89, height=595.28)
+    doc.save(capa)
+    doc.close()
+
+    miolo = tmp_path / "miolo.pdf"
+    doc = fitz.open()
+    doc.new_page(width=420, height=595)
+    doc.new_page(width=842, height=595)
+    doc.new_page(width=842, height=595)
+    doc.save(miolo)
+    doc.close()
+
+    os_folder = tmp_path / "os"
+    (os_folder / "Sefoc" / "AdminDocs" / "WEB").mkdir(parents=True)
+
+    crop_json = {
+        "miolo": {"top": 0, "right": 0, "bottom": 0, "left": 0, "source": "manual"},
+        "capa": {
+            "layout": "spread",
+            "lombadaMm": 8,
+            "crop": {"top": 0, "right": 0, "bottom": 0, "left": 0, "source": "manual"},
+        },
+        "bookExtras": {
+            "version": 1,
+            "inserts": [
+                {
+                    "id": "custom-miolo",
+                    "label": "Dobra custom",
+                    "sourceComponent": "miolo",
+                    "sourcePageStart": 2,
+                    "sourcePageEnd": 3,
+                    "kind": "custom-fold",
+                    "widthMm": 420,
+                    "heightMm": 297,
+                    "hasVerso": True,
+                    "foldLines": [{"axis": "vertical", "positionMm": 210}],
+                    "foldConfig": {
+                        "version": 1,
+                        "creases": [
+                            {"id": "c1", "axis": "vertical", "positionFrac": 0.5}
+                        ],
+                        "operations": [
+                            {
+                                "id": "o1",
+                                "creaseId": "c1",
+                                "order": 1,
+                                "movingSide": "positive",
+                                "towards": "front",
+                                "targetAngleDeg": 180,
+                            }
+                        ],
+                    },
+                }
+            ],
+        },
+    }
+
+    out = render_svc.ensure_prova_web_pages(
+        2026,
+        5,
+        mode="capa_miolo",
+        source_paths=[str(capa), str(miolo)],
+        os_folder=str(os_folder),
+        pasta_render="Prova1",
+        crop_json=crop_json,
+    )
+
+    special_pages = [p for p in out["pages"] if p.get("specialTreatment")]
+    assert len(special_pages) >= 1
+    treatment = special_pages[0]["specialTreatment"]
+    assert treatment["kind"] == "custom-fold"
+    assert treatment["hasVerso"] is True
+    assert treatment["foldConfig"]["creases"][0]["positionFrac"] == 0.5
+
+
 def test_orelhas_narrow_cover_faces(tmp_path: Path) -> None:
     pdf = tmp_path / "spread.pdf"
     doc = fitz.open()

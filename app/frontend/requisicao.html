@@ -21,7 +21,7 @@
             --ficha-obs-cor-max: 35px;
             --ficha-obs-papel-max: 35px;
             --ficha-acabamento-max: 90px;
-            --ficha-obs-gerais-max: 72px;
+            --ficha-obs-gerais-max: 120px;
             --ficha-insumos-max: 55px;
             --ficha-material-max: 55px;
         }
@@ -138,14 +138,24 @@
             background-color: #fff;
             border-radius: 6px;
             padding: 4px 8px;
-            font-size: 14px;
+            font-size: 12px;
             font-weight: bold;
             min-height: 20px;
             display: flex;
             align-items: center;
             box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
         }
-
+        .value-box-menor {
+            background-color: #fff;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 9px;
+            font-weight: bold;
+            min-height: 20px;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+        }
         /* Overlay Carimbo Style */
         .overlay-carimbo {
             position: absolute;
@@ -159,6 +169,63 @@
             pointer-events: none;
             /* Allows clicking through if necessary */
             z-index: 10;
+        }
+
+        .overlay-carimbo-entrega {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+            max-width: 90%;
+            max-height: 90%;
+            height: auto;
+            object-fit: contain;
+            pointer-events: none;
+            z-index: 10;
+            mix-blend-mode: multiply;
+        }
+
+        .ficha-carimbo-entrega-spacer {
+            visibility: hidden;
+        }
+
+        .ficha-carimbo-entrega-box {
+            position: relative;
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            min-height: 50px;
+            box-sizing: border-box;
+        }
+
+        .ficha-tech-row {
+            align-items: stretch;
+        }
+
+        .ficha-tech-row > .col.flex-1 {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .ficha-acabamento-wrap.section-box {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .ficha-acabamento-wrap .field-group {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            margin-bottom: 0;
+        }
+
+        .ficha-acabamento.value-box.textarea {
+            flex: 1;
+            min-height: 28px;
         }
 
         .ficha-top-header {
@@ -295,7 +362,6 @@
             }
 
             #a5-scale {
-                transform: none !important;
                 width: var(--a5-width) !important;
                 height: auto !important;
                 max-width: var(--a5-width) !important;
@@ -328,13 +394,13 @@
             /* HEADER SECTION - AJUSTE DE GRID */
             .header-section {
                 display: grid !important;
-                grid-template-columns: 140px 1fr 1.2fr 150px !important;
+                grid-template-columns: 130px 1fr 1.2fr 140px !important;
                 gap: 3px !important;
-                margin-bottom: 5px !important;
+                margin-bottom: 2px !important;
             }
 
             .section-box {
-                margin-bottom: 8px !important;
+                margin-bottom: 3px !important;
                 padding: 3px !important;
                 border-radius: 4px !important;
                 border-width: 1px !important;
@@ -351,7 +417,17 @@
                 word-wrap: break-word !important;
                 word-break: break-word !important;
             }
-
+            .value-box-menor {
+                font-size: 9px !important;
+                padding: 2px 4px !important;
+                min-height: 18px !important;
+                border-radius: 3px !important;
+                line-height: 1.2 !important;
+                /* white-space: normal !important; */
+                overflow: visible !important;
+                word-wrap: break-word !important;
+                word-break: break-word !important;
+            }
             .label {
                 font-size: 8px !important;
                 margin-bottom: 0 !important;
@@ -414,8 +490,8 @@
 
             /* OBSERVAÇÕES GERAIS, INSUMOS E MATERIAL ENTREGUE */
             .ficha-obs-row {
-                min-height: 72px !important;
-                max-height: 90px !important;
+                min-height: 80px !important;
+                max-height: 144px !important;
                 align-items: stretch !important;
                 overflow: hidden !important;
             }
@@ -425,8 +501,12 @@
                 overflow: hidden !important;
             }
 
+            .overlay-carimbo-entrega {
+                mix-blend-mode: multiply !important;
+            }
+
             .ficha-obs-gerais.value-box.textarea {
-                min-height: 62px !important;
+                min-height: 70px !important;
                 max-height: var(--ficha-obs-gerais-max) !important;
                 overflow: hidden !important;
             }
@@ -443,19 +523,50 @@
                 max-height: var(--ficha-material-max) !important;
             }
 
-            /* ÁREA DE AÇABAMENTO */
-            .ficha-acabamento.value-box.textarea {
-                max-height: var(--ficha-acabamento-max) !important;
-                min-height: 28px !important;
-                font-size: 8px !important;
-                line-height: 1.15 !important;
+            /* ÁREA DE ACABAMENTO — estica até a base da coluna Papel */
+            .ficha-tech-row {
+                align-items: stretch !important;
+            }
+
+            .ficha-tech-row > .col.flex-1 {
+                display: flex !important;
+                flex-direction: column !important;
+            }
+
+            .ficha-acabamento-wrap.section-box {
+                flex: 1 !important;
+                height: auto !important;
+                max-height: none !important;
+                display: flex !important;
+                flex-direction: column !important;
+                min-height: 0 !important;
                 overflow: hidden !important;
             }
 
-            .ficha-acabamento-wrap.section-box,
             .ficha-acabamento-wrap .field-group {
+                flex: 1 !important;
                 height: auto !important;
-                max-height: calc(var(--ficha-acabamento-max) + 24px) !important;
+                max-height: none !important;
+                display: flex !important;
+                flex-direction: column !important;
+                min-height: 0 !important;
+                margin-bottom: 0 !important;
+            }
+
+            .ficha-acabamento.value-box.textarea {
+                flex: 1 !important;
+                min-height: 28px !important;
+                max-height: none !important;
+                height: auto !important;
+                font-size: 8px !important;
+                line-height: 1.15 !important;
+                overflow: hidden !important;
+                align-items: flex-start !important;
+            }
+
+            .ficha-carimbo-entrega-box {
+                min-height: 70px !important;
+                max-height: var(--ficha-obs-gerais-max) !important;
                 overflow: hidden !important;
             }
 
@@ -463,7 +574,7 @@
             .ficha-top-header {
                 min-height: 32px !important;
                 padding: 3px 2px !important;
-                margin-bottom: 4px !important;
+                margin-bottom: 2px !important;
             }
 
             #barcode {
@@ -494,7 +605,7 @@
                 display: block !important;
                 text-align: right !important;
                 font-size: 7px !important;
-                margin-top: 5px !important;
+                margin-top: 2px !important;
                 margin-right: 5px !important;
                 bottom: auto !important;
                 right: auto !important;
@@ -505,7 +616,7 @@
             .container::after {
                 content: '';
                 display: block;
-                height: 2mm !important;
+                height: 0 !important;
             }
 
             /* REMOVER ESPAÇOS DESNECESSÁRIOS */
@@ -633,16 +744,16 @@
                     <div class="section-box" style="flex: 0 0 140px;">
                         <div class="field-group">
                             <span class="label">Data</span>
-                            <div class="value-box">{{ data_atual }}</div>
+                            <div class="value-box-menor">{{ data_atual }}</div>
                         </div>
                         <div class="row" style="margin-top: 5px;">
                             <div class="field-group flex-1">
                                 <span class="label" style="font-size: 10px;">RS Entregue</span>
-                                <div class="value-box">{{ rs_entregue }}</div>
+                                <div class="value-box-menor">{{ rs_entregue }}</div>
                             </div>
                             <div class="field-group flex-1">
                                 <span class="label" style="font-size: 10px;">RS Lançada</span>
-                                <div class="value-box">{{ rs_lancada }}</div>
+                                <div class="value-box-menor">{{ rs_lancada }}</div>
                             </div>
                         </div>
                     </div>
@@ -650,11 +761,11 @@
                     <div class="section-box" style="flex: 1;">
                         <div class="field-group">
                             <span class="label">Processo</span>
-                            <div class="value-box">{{ processo }}</div>
+                            <div class="value-box-menor">{{ processo }}</div>
                         </div>
                         <div class="field-group" style="margin-top: 5px;">
                             <span class="label">CS</span>
-                            <div class="value-box">{{ cs }}</div>
+                            <div class="value-box-menor">{{ cs }}</div>
                         </div>
                     </div>
 
@@ -662,16 +773,16 @@
                         <div style="flex: 1;">
                             <div class="field-group">
                                 <span class="label">Cota Repro</span>
-                                <div class="value-box" style="justify-content: flex-end;">{{ cota_repro }}</div>
+                                <div class="value-box-menor" style="justify-content: flex-end;">{{ cota_repro }}</div>
                             </div>
                             <div class="field-group" style="margin-top: 5px;">
                                 <span class="label">Cota Cartão</span>
-                                <div class="value-box">{{ cota_cartao }}</div>
+                                <div class="value-box-menor">{{ cota_cartao }}</div>
                             </div>
                         </div>
                         <div class="field-group" style="width: 60px; margin-left: 5px; justify-content: center;">
                             <span class="label">Debitar</span>
-                            <div class="value-box"
+                            <div class="value-box-menor"
                                 style="height: 40px; justify-content: center; text-align: center; font-size: 11px;">
                                 {{ debitar_usuario }}
                             </div>
@@ -683,11 +794,11 @@
                         <div class="row">
                             <div class="field-group flex-1">
                                 <span class="label">Modelos</span>
-                                <div class="value-box">{{ modelos_qtd }}</div>
+                                <div class="value-box-menor">{{ modelos_qtd }}</div>
                             </div>
                             <div class="field-group flex-1">
                                 <span class="label">Tiragem</span>
-                                <div class="value-box" id="tiragem-display" style="justify-content: flex-end;">{{
+                                <div class="value-box-menor" id="tiragem-display" style="justify-content: flex-end;">{{
                                     tiragem_qtd }}</div>
                             </div>
                         </div>
@@ -742,7 +853,7 @@
                 </div>
 
                 <div class="section-header">Informações Técnicas</div>
-                <div class="row">
+                <div class="row ficha-tech-row">
                     <div class="col flex-3">
                         <div class="section-box">
                             <div class="grid-tech">
@@ -820,15 +931,21 @@
                         <div class="section-header" style="font-size: 14px;">Observações Gerais:</div>
                         <div class="section-box" style="flex: 1; height: 100%;">
                             <div class="value-box textarea ficha-obs-gerais"
-                                style="font-weight: normal; font-size: 11px;">{{ obs_gerais
-                                }}
-                            </div>
+                                style="font-weight: normal; font-size: 11px;">{{ obs_gerais }}</div>
                         </div>
                     </div>
 
                     <div class="col flex-1">
-                        <div class="section-box" style="height: 100%; padding: 0;">
-                            <div class="row" style="height: 100%; gap: 0;">
+                        {% if show_carimbo_entrega %}
+                        <div class="section-header ficha-carimbo-entrega-spacer" style="font-size: 14px;" aria-hidden="true">Observações Gerais:</div>
+                        {% endif %}
+                        <div class="section-box" style="height: 100%; position: relative;{% if show_carimbo_entrega %} flex: 1; display: flex; flex-direction: column;{% else %} padding: 0;{% endif %}">
+                            {% if show_carimbo_entrega %}
+                            <div class="value-box ficha-carimbo-entrega-box">
+                                <img src="{{ carimbo_entrega_src }}" class="overlay-carimbo-entrega" alt="Entrega">
+                            </div>
+                            {% endif %}
+                            <div class="row" style="height: 100%; gap: 0;{% if show_carimbo_entrega %} visibility: hidden; position: absolute; inset: 0;{% endif %}">
                                 <div class="col flex-1" style="padding: 5px; border-right: 2px solid #b0b0b0;">
                                     <div class="section-header" style="font-size: 11px;">Insumos Fornecidos</div>
                                     <div class="value-box textarea ficha-insumos" style="flex: 1; min-height: 50px; height: 100%; font-weight: normal;">
@@ -864,9 +981,17 @@
                                     <span class="label">Forma de Entrega</span>
                                     <div class="value-box">{{ forma_entrega }}</div>
                                 </div>
-                                <div class="field-group flex-1">
-                                    <span class="label">Data</span>
-                                    <div class="value-box">{{ data_entrega }}</div>
+                                <div class="col flex-1">
+                                    <div class="field-group">
+                                        <span class="label">Data</span>
+                                        <div class="value-box">{{ data_entrega }}</div>
+                                    </div>
+                                    {% if show_turno %}
+                                    <div class="field-group ficha-turno" style="margin-top: 3px;">
+                                        <span class="label">Turno</span>
+                                        <div class="value-box">{{ turno }}</div>
+                                    </div>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>
@@ -914,7 +1039,7 @@
             }
 
             var FICHA_FIELD_MIN_HEIGHTS = {
-                'ficha-obs-gerais': 65,
+                'ficha-obs-gerais': 70,
                 'ficha-insumos': 50,
                 'ficha-material-entregue': 50,
                 'ficha-contato': 28,
@@ -924,7 +1049,7 @@
             };
 
             var FICHA_FIELD_MAX_HEIGHTS = {
-                'ficha-obs-gerais': 72,
+                'ficha-obs-gerais': 120,
                 'ficha-insumos': 55,
                 'ficha-material-entregue': 55,
                 'ficha-contato': 42,
@@ -965,6 +1090,9 @@
             }
 
             function autoSizeTextarea(box) {
+                if (box.classList.contains('ficha-acabamento')) {
+                    return;
+                }
                 var minFieldH = getFichaFieldMinHeight(box);
                 var maxFieldH = getFichaFieldMaxHeight(box);
                 var floorH = minFieldH > 0 ? minFieldH : 30;
@@ -991,11 +1119,14 @@
                 var fieldGroup = acabamentoBox.closest('.field-group');
                 var sectionBox = acabamentoBox.closest('.section-box');
                 if (fieldGroup) {
-                    fieldGroup.style.setProperty('height', 'auto', 'important');
+                    fieldGroup.style.removeProperty('height');
                 }
                 if (sectionBox) {
-                    sectionBox.style.setProperty('height', 'auto', 'important');
+                    sectionBox.style.removeProperty('height');
                 }
+                acabamentoBox.style.removeProperty('height');
+                acabamentoBox.style.removeProperty('max-height');
+                acabamentoBox.style.removeProperty('min-height');
             }
 
             function fitPrintPageScale() {
@@ -1014,7 +1145,7 @@
 
                 var scale = contentH > maxH ? maxH / contentH : 1;
                 if (scale < 1) {
-                    scaleEl.style.transform = 'scale(' + scale + ')';
+                    scaleEl.style.setProperty('transform', 'scale(' + scale + ')', 'important');
                     scaleEl.style.transformOrigin = 'top left';
                 }
 
@@ -1027,8 +1158,21 @@
                 fitPrintPageScale();
             }
 
+            function sanitizeObsGeraisContent() {
+                var obsEl = document.querySelector('.ficha-obs-gerais');
+                if (!obsEl || !obsEl.textContent) return;
+                var raw = obsEl.textContent;
+                var norm = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+                var cleaned = norm.replace(/\n(?:[ \t]*\n)+/g, '\n');
+                if (cleaned !== raw) {
+                    obsEl.textContent = cleaned;
+                }
+            }
+
             // Mesmo ajuste de alturas usado na impressão — garante pré-visualização fiel.
             function adjustLayoutForFit() {
+                sanitizeObsGeraisContent();
+
                 const textareas = document.querySelectorAll('.value-box.textarea');
                 textareas.forEach(function (box) {
                     autoSizeTextarea(box);

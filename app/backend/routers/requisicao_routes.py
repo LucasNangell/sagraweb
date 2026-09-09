@@ -4,9 +4,10 @@ from database import db
 from jinja2 import Template
 from os_calc_fields import is_papelaria_os
 import base64
-import os
 import datetime
 import logging
+import os
+import re
 import unicodedata
 
 router = APIRouter()
@@ -98,6 +99,17 @@ def _build_prova_ficha_obs_cor(capa: str, miolo: str) -> str:
     return f"Capa: {labels[capa]}\nMiolo: {labels[miolo]}"
 
 
+def _normalize_obs_gerais(text: str | None) -> str:
+    """Normaliza observações gerais da OS.
+    Remove quebras no início/fim e colapsa 2 ou mais quebras de linha consecutivas
+    (linhas em branco) para no máximo uma quebra de linha simples (\\n).
+    """
+    if not text:
+        return ""
+    normalized = str(text).replace("\r\n", "\n").replace("\r", "\n").strip()
+    return re.sub(r"\n(?:[ \t]*\n)+", "\n", normalized)
+
+
 @router.get("/reports/requisicao/{ano}/{id}")
 def generate_requisicao(
     ano: int,
@@ -179,7 +191,7 @@ def generate_requisicao(
             "obs_papel": get('PapelDescricao'),
             "servico_acabamento": get('DescAcabamento'),
             # Footer
-            "obs_gerais": get('Observ'),
+            "obs_gerais": _normalize_obs_gerais(get('Observ')),
             "insumos": get('InsumosFornecidos'),
             "material_entregue": get('MaterialFornecido'),
             "resp_grafica": get('ResponsavelGrafLink'),

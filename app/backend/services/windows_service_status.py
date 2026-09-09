@@ -1,15 +1,24 @@
 """Consulta status de serviços Windows via `sc query` (sem pywin32)."""
 from __future__ import annotations
 
+import json
 import logging
+import os
 import re
 import subprocess
 import sys
-from typing import Optional
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
 SYNC_ANDAMENTOS_SERVICE_NAME = "SAGRA-SyncAndamentos"
+DIVERGENCIA_STATUS_FILENAME = "sync_divergencia_monitor.json"
+# Status do monitor mais antigo que isto não alimenta alert de dados.
+DIVERGENCIA_STATUS_STALE_SECONDS = int(
+    os.getenv("MONITOR_SYNC_STATUS_STALE_SECONDS", "300")
+)
 
 _STATE_RE = re.compile(
     r"STATE\s*:\s*\d+\s+(\w+)",
@@ -102,20 +111,113 @@ def query_windows_service(service_name: str) -> dict:
         }
 
 
+def resolve_sync_log_dir() -> Path:
+    """Diretório de logs do sync/monitor (SYNC_LOG_DIR ou logs/sync sob a raiz)."""
+    env = (os.getenv("SYNC_LOG_DIR") or "").strip()
+    if env:
+        return Path(env).resolve()
+
+    cwd_candidate = Path.cwd() / "logs" / "sync"
+    if cwd_candidate.is_dir():
+        return cwd_candidate.resolve()
+
+    # app/backend/services → repo root (3 níveis acima)
+    here = Path(__file__).resolve()
+    repo_root = here.parents[3]
+    return (repo_root / "logs" / "sync").resolve()
+
+
+def _parse_iso_utc(value: Any) -> Optional[datetime]:
+    if not value or not isinstance(value, str):
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+    try:
+        if raw.endswith("Z"):
+            raw = raw[:-1] + "+00:00"
+        dt = datetime.fromisoformat(raw)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def read_divergencia_monitor_status(
+    *,
+    path: Optional[Path] = None,
+    now: Optional[datetime] = None,
+    stale_seconds: int = DIVERGENCIA_STATUS_STALE_SECONDS,
+) -> dict:
+    """
+    Lê sync_divergencia_monitor.json.
+
+    Retorna dict com:
+      data_stale (bool), mdb_count, mysql_count, checked_at, status_fresh, phase
+    """
+    empty = {
+        "data_stale": False,
+        "mdb_count": None,
+        "mysql_count": None,
+        "checked_at": None,
+        "status_fresh": False,
+        "phase": None,
+    }
+    status_path = path or (resolve_sync_log_dir() / DIVERGENCIA_STATUS_FILENAME)
+    if not status_path.is_file():
+        return empty
+
+    try:
+        data = json.loads(status_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.warning("Falha ao ler %s: %s", status_path, exc)
+        return empty
+
+    if not isinstance(data, dict):
+        return empty
+
+    checked = _parse_iso_utc(data.get("checked_at") or data.get("written_at"))
+    now_utc = now or datetime.now(timezone.utc)
+    fresh = False
+    if checked is not None:
+        age = (now_utc - checked).total_seconds()
+        fresh = age <= stale_seconds
+
+    alert_flag = bool(data.get("alert"))
+    data_stale = bool(fresh and alert_flag)
+
+    return {
+        "data_stale": data_stale,
+        "mdb_count": data.get("count_mdb"),
+        "mysql_count": data.get("count_mysql"),
+        "checked_at": data.get("checked_at") or data.get("written_at"),
+        "status_fresh": fresh,
+        "phase": data.get("phase"),
+    }
+
+
 def build_sync_andamentos_service_status(
     *,
     is_development: bool,
     query_result: Optional[dict] = None,
+    divergencia: Optional[dict] = None,
 ) -> dict:
-    """Monta payload da API a partir do SCM (ou resultado já consultado)."""
+    """Monta payload da API a partir do SCM + status do monitor de divergência."""
     result = query_result or query_windows_service(SYNC_ANDAMENTOS_SERVICE_NAME)
     exists = bool(result.get("exists"))
     status = result.get("status")
     query_ok = bool(result.get("query_ok"))
     healthy = exists and status == "Running"
-    # Em desenvolvimento não alerta (máquina local sem NSSM).
+    # Em desenvolvimento não alerta SCM (máquina local sem NSSM).
     # Se a query falhou sem STATE claro, também não alerta (evita falso positivo).
-    alert = (not is_development) and query_ok and (not healthy)
+    scm_alert = (not is_development) and query_ok and (not healthy)
+
+    div = divergencia if divergencia is not None else read_divergencia_monitor_status()
+    data_stale = bool(div.get("data_stale"))
+    # Divergência de dados alerta também em development (é sinal do monitor, não do SCM).
+    alert = scm_alert or data_stale
+
     return {
         "service_name": result.get("service_name") or SYNC_ANDAMENTOS_SERVICE_NAME,
         "exists": exists,
@@ -123,4 +225,7 @@ def build_sync_andamentos_service_status(
         "query_ok": query_ok,
         "healthy": healthy,
         "alert": alert,
+        "data_stale": data_stale,
+        "mdb_count": div.get("mdb_count"),
+        "mysql_count": div.get("mysql_count"),
     }

@@ -1,9 +1,13 @@
 """Testes do status SCM SAGRA-SyncAndamentos."""
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
 from services.windows_service_status import (
     build_sync_andamentos_service_status,
     parse_sc_query_output,
+    read_divergencia_monitor_status,
 )
 
 
@@ -78,9 +82,11 @@ class TestBuildSyncAndamentosServiceStatus:
                 "status": "Running",
                 "query_ok": True,
             },
+            divergencia={"data_stale": False, "mdb_count": None, "mysql_count": None},
         )
         assert payload["healthy"] is True
         assert payload["alert"] is False
+        assert payload["data_stale"] is False
 
     def test_stopped_alerts_in_production(self):
         payload = build_sync_andamentos_service_status(
@@ -91,6 +97,7 @@ class TestBuildSyncAndamentosServiceStatus:
                 "status": "Stopped",
                 "query_ok": True,
             },
+            divergencia={"data_stale": False, "mdb_count": None, "mysql_count": None},
         )
         assert payload["healthy"] is False
         assert payload["alert"] is True
@@ -104,6 +111,7 @@ class TestBuildSyncAndamentosServiceStatus:
                 "status": None,
                 "query_ok": True,
             },
+            divergencia={"data_stale": False, "mdb_count": None, "mysql_count": None},
         )
         assert payload["healthy"] is False
         assert payload["alert"] is True
@@ -117,6 +125,7 @@ class TestBuildSyncAndamentosServiceStatus:
                 "status": None,
                 "query_ok": True,
             },
+            divergencia={"data_stale": False, "mdb_count": None, "mysql_count": None},
         )
         assert payload["alert"] is False
 
@@ -129,5 +138,74 @@ class TestBuildSyncAndamentosServiceStatus:
                 "status": None,
                 "query_ok": False,
             },
+            divergencia={"data_stale": False, "mdb_count": None, "mysql_count": None},
         )
         assert payload["alert"] is False
+
+    def test_data_stale_ors_into_alert_even_when_running(self):
+        payload = build_sync_andamentos_service_status(
+            is_development=False,
+            query_result={
+                "service_name": "SAGRA-SyncAndamentos",
+                "exists": True,
+                "status": "Running",
+                "query_ok": True,
+            },
+            divergencia={
+                "data_stale": True,
+                "mdb_count": 100,
+                "mysql_count": 95,
+            },
+        )
+        assert payload["healthy"] is True
+        assert payload["alert"] is True
+        assert payload["data_stale"] is True
+        assert payload["mdb_count"] == 100
+        assert payload["mysql_count"] == 95
+
+    def test_data_stale_alerts_in_development(self):
+        payload = build_sync_andamentos_service_status(
+            is_development=True,
+            query_result={
+                "service_name": "SAGRA-SyncAndamentos",
+                "exists": True,
+                "status": "Running",
+                "query_ok": True,
+            },
+            divergencia={"data_stale": True, "mdb_count": 1, "mysql_count": 2},
+        )
+        assert payload["alert"] is True
+        assert payload["data_stale"] is True
+
+
+class TestReadDivergenciaMonitorStatus:
+    def test_missing_file(self, tmp_path: Path):
+        result = read_divergencia_monitor_status(path=tmp_path / "missing.json")
+        assert result["data_stale"] is False
+        assert result["status_fresh"] is False
+
+    def test_fresh_alert(self, tmp_path: Path):
+        now = datetime(2026, 9, 4, 12, 0, 0, tzinfo=timezone.utc)
+        path = tmp_path / "sync_divergencia_monitor.json"
+        path.write_text(
+            '{"alert": true, "count_mdb": 10, "count_mysql": 9, '
+            '"checked_at": "2026-09-04T12:00:00+00:00", "phase": "alerting"}',
+            encoding="utf-8",
+        )
+        result = read_divergencia_monitor_status(path=path, now=now, stale_seconds=300)
+        assert result["data_stale"] is True
+        assert result["mdb_count"] == 10
+        assert result["mysql_count"] == 9
+        assert result["status_fresh"] is True
+
+    def test_stale_file_ignored(self, tmp_path: Path):
+        now = datetime(2026, 9, 4, 12, 0, 0, tzinfo=timezone.utc)
+        old = (now - timedelta(seconds=600)).isoformat()
+        path = tmp_path / "sync_divergencia_monitor.json"
+        path.write_text(
+            f'{{"alert": true, "count_mdb": 10, "count_mysql": 9, "checked_at": "{old}"}}',
+            encoding="utf-8",
+        )
+        result = read_divergencia_monitor_status(path=path, now=now, stale_seconds=300)
+        assert result["data_stale"] is False
+        assert result["status_fresh"] is False

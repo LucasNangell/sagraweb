@@ -167,6 +167,43 @@ Cheque `logs\sync\sync_andamentos.log` e a tabela MySQL `log_sync_andamentos`.
 | Baseline de conflito (MySQL) | tabela `sync_andamento_baseline` |
 | Stdout/stderr do NSSM | `logs\sync\service_stdout.log`, `service_stderr.log` |
 | Log do watchdog externo | `logs\sync\watchdog_external.log` |
+| Monitor divergência (status) | `logs\sync\sync_divergencia_monitor.json` |
+| Monitor divergência (log) | `logs\sync\monitor_sync_andamentos.log` |
+
+## Monitor de divergência (somente leitura)
+
+Serviço complementar **`SAGRA-MonitorSyncAndamentos`** (`monitor_sync_andamentos_service.py`):
+
+- Compara `COUNT(CodStatus)` de `tabandamento` dos últimos **10 dias** (MDB OS + Papelaria vs MySQL).
+- **Não altera** nenhum banco (apenas `SELECT`/`COUNT`).
+- Divergência persistente **>30s** → reinicia `SAGRA-SyncAndamentos` (1× por episódio).
+- Se após **60s** do restart a divergência continuar → `alert=true` no JSON; a API
+  (`GET /api/sync-andamentos/service-status`) faz OR no `alert` e o header do sistema /
+  painel setor fica vermelho.
+- Status com `checked_at` mais antigo que 5 min **não** mantém o alerta de dados.
+- A API lê o mesmo `logs\sync\sync_divergencia_monitor.json` (junction `shared\logs`
+  ou `SYNC_LOG_DIR` alinhado ao AppDirectory do monitor).
+- **Conta do serviço:** use a **mesma** conta Log on de `SAGRA-SyncAndamentos`.
+  O driver ACE precisa criar/atualizar o `.ldb` no share; `LocalSystem` só funciona
+  se a conta de computador tiver **Modify** no DFS. Erro típico sem isso:
+  ODBC `-1032` com path `(unknown)`.
+
+```powershell
+# Mesma pasta do sync (ex. sync-runtime) — requer Admin + nssm
+.\instalar-servico-monitor-sync.ps1 -Start -InstallDeps
+# Se o Sync nao for LocalSystem:
+#   nssm edit SAGRA-MonitorSyncAndamentos  → Log on = mesma conta do Sync
+.\status-servico-monitor-sync.ps1
+# .\parar-servico-monitor-sync.ps1
+# .\desinstalar-servico-monitor-sync.ps1
+```
+
+Conferir conta atual:
+
+```powershell
+Get-CimInstance Win32_Service -Filter "Name='SAGRA-SyncAndamentos'" | Select Name, StartName, State
+Get-CimInstance Win32_Service -Filter "Name='SAGRA-MonitorSyncAndamentos'" | Select Name, StartName, State
+```
 
 ### Heartbeat (exemplo)
 

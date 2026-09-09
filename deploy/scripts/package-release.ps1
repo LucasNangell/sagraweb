@@ -264,7 +264,11 @@ $syncServiceScripts = @(
     "desinstalar-servico-sync.ps1",
     "status-servico-sync.ps1",
     "watchdog-sync.ps1",
-    "instalar-watchdog-sync.ps1"
+    "instalar-watchdog-sync.ps1",
+    "instalar-servico-monitor-sync.ps1",
+    "parar-servico-monitor-sync.ps1",
+    "desinstalar-servico-monitor-sync.ps1",
+    "status-servico-monitor-sync.ps1"
 )
 foreach ($name in $syncServiceScripts) {
     $src = Join-Path $PSScriptRoot "..\templates\$name"
@@ -289,6 +293,14 @@ if (Test-Path -LiteralPath $syncOld) {
     Write-Host "sync_andamentos_v2_Old.py incluido na raiz do pacote (obrigatorio para o service)"
 } else {
     Write-Warning "sync_andamentos_v2_Old.py nao encontrado em $Root - sync usara fallback app/services/sync_andamentos_v2.py"
+}
+
+$monitorService = Join-Path $Root "monitor_sync_andamentos_service.py"
+if (Test-Path -LiteralPath $monitorService) {
+    Copy-Item -LiteralPath $monitorService (Join-Path $Release "monitor_sync_andamentos_service.py") -Force
+    Write-Host "monitor_sync_andamentos_service.py incluido na raiz do pacote"
+} else {
+    Write-Warning "monitor_sync_andamentos_service.py nao encontrado em $Root"
 }
 
 Write-Step "Bibliotecas OCR embutidas (python_pkgs, sem pip no servidor)"

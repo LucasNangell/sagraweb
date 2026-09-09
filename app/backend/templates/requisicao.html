@@ -21,7 +21,7 @@
             --ficha-obs-cor-max: 35px;
             --ficha-obs-papel-max: 35px;
             --ficha-acabamento-max: 90px;
-            --ficha-obs-gerais-max: 72px;
+            --ficha-obs-gerais-max: 120px;
             --ficha-insumos-max: 55px;
             --ficha-material-max: 55px;
         }
@@ -362,7 +362,6 @@
             }
 
             #a5-scale {
-                transform: none !important;
                 width: var(--a5-width) !important;
                 height: auto !important;
                 max-width: var(--a5-width) !important;
@@ -397,11 +396,11 @@
                 display: grid !important;
                 grid-template-columns: 130px 1fr 1.2fr 140px !important;
                 gap: 3px !important;
-                margin-bottom: 5px !important;
+                margin-bottom: 2px !important;
             }
 
             .section-box {
-                margin-bottom: 8px !important;
+                margin-bottom: 3px !important;
                 padding: 3px !important;
                 border-radius: 4px !important;
                 border-width: 1px !important;
@@ -491,8 +490,8 @@
 
             /* OBSERVAÇÕES GERAIS, INSUMOS E MATERIAL ENTREGUE */
             .ficha-obs-row {
-                min-height: 72px !important;
-                max-height: 90px !important;
+                min-height: 80px !important;
+                max-height: 144px !important;
                 align-items: stretch !important;
                 overflow: hidden !important;
             }
@@ -507,7 +506,7 @@
             }
 
             .ficha-obs-gerais.value-box.textarea {
-                min-height: 62px !important;
+                min-height: 70px !important;
                 max-height: var(--ficha-obs-gerais-max) !important;
                 overflow: hidden !important;
             }
@@ -566,7 +565,7 @@
             }
 
             .ficha-carimbo-entrega-box {
-                min-height: 62px !important;
+                min-height: 70px !important;
                 max-height: var(--ficha-obs-gerais-max) !important;
                 overflow: hidden !important;
             }
@@ -575,7 +574,7 @@
             .ficha-top-header {
                 min-height: 32px !important;
                 padding: 3px 2px !important;
-                margin-bottom: 4px !important;
+                margin-bottom: 2px !important;
             }
 
             #barcode {
@@ -606,7 +605,7 @@
                 display: block !important;
                 text-align: right !important;
                 font-size: 7px !important;
-                margin-top: 5px !important;
+                margin-top: 2px !important;
                 margin-right: 5px !important;
                 bottom: auto !important;
                 right: auto !important;
@@ -617,7 +616,7 @@
             .container::after {
                 content: '';
                 display: block;
-                height: 2mm !important;
+                height: 0 !important;
             }
 
             /* REMOVER ESPAÇOS DESNECESSÁRIOS */
@@ -932,9 +931,7 @@
                         <div class="section-header" style="font-size: 14px;">Observações Gerais:</div>
                         <div class="section-box" style="flex: 1; height: 100%;">
                             <div class="value-box textarea ficha-obs-gerais"
-                                style="font-weight: normal; font-size: 11px;">{{ obs_gerais
-                                }}
-                            </div>
+                                style="font-weight: normal; font-size: 11px;">{{ obs_gerais }}</div>
                         </div>
                     </div>
 
@@ -1042,7 +1039,7 @@
             }
 
             var FICHA_FIELD_MIN_HEIGHTS = {
-                'ficha-obs-gerais': 65,
+                'ficha-obs-gerais': 70,
                 'ficha-insumos': 50,
                 'ficha-material-entregue': 50,
                 'ficha-contato': 28,
@@ -1052,7 +1049,7 @@
             };
 
             var FICHA_FIELD_MAX_HEIGHTS = {
-                'ficha-obs-gerais': 72,
+                'ficha-obs-gerais': 120,
                 'ficha-insumos': 55,
                 'ficha-material-entregue': 55,
                 'ficha-contato': 42,
@@ -1148,7 +1145,7 @@
 
                 var scale = contentH > maxH ? maxH / contentH : 1;
                 if (scale < 1) {
-                    scaleEl.style.transform = 'scale(' + scale + ')';
+                    scaleEl.style.setProperty('transform', 'scale(' + scale + ')', 'important');
                     scaleEl.style.transformOrigin = 'top left';
                 }
 
@@ -1161,8 +1158,21 @@
                 fitPrintPageScale();
             }
 
+            function sanitizeObsGeraisContent() {
+                var obsEl = document.querySelector('.ficha-obs-gerais');
+                if (!obsEl || !obsEl.textContent) return;
+                var raw = obsEl.textContent;
+                var norm = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+                var cleaned = norm.replace(/\n(?:[ \t]*\n)+/g, '\n');
+                if (cleaned !== raw) {
+                    obsEl.textContent = cleaned;
+                }
+            }
+
             // Mesmo ajuste de alturas usado na impressão — garante pré-visualização fiel.
             function adjustLayoutForFit() {
+                sanitizeObsGeraisContent();
+
                 const textareas = document.querySelectorAll('.value-box.textarea');
                 textareas.forEach(function (box) {
                     autoSizeTextarea(box);

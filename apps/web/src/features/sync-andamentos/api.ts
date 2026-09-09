@@ -7,6 +7,10 @@ export interface SyncAndamentosServiceStatus {
   query_ok: boolean;
   healthy: boolean;
   alert: boolean;
+  /** Contagens MDB/MySQL divergentes após restart do sync (monitor). */
+  data_stale?: boolean;
+  mdb_count?: number | null;
+  mysql_count?: number | null;
 }
 
 export async function fetchSyncAndamentosServiceStatus(): Promise<SyncAndamentosServiceStatus> {

@@ -64,6 +64,7 @@ class IPPermission(BaseModel):
     sb_estoque_gerente: bool = False
     sb_lombada: bool = False
     sb_credenciais_depol: bool = False
+    sb_manipular_imagem: bool = False
 
 class AccessRequest(BaseModel):
     ip: str
@@ -122,6 +123,7 @@ class IPPermissionUpdate(BaseModel):
     sb_estoque_gerente: Optional[bool] = None
     sb_lombada: Optional[bool] = None
     sb_credenciais_depol: Optional[bool] = None
+    sb_manipular_imagem: Optional[bool] = None
 
 class IPDelete(BaseModel):
     id: int
@@ -183,6 +185,7 @@ def _full_access_permissions(client_ip: str) -> dict:
         "sb_estoque_gerente": True,
         "sb_lombada": True,
         "sb_credenciais_depol": True,
+        "sb_manipular_imagem": True,
         "ip": client_ip,
     }
 
@@ -258,6 +261,7 @@ def get_client_permissions(client_ip: str) -> dict:
                     'sb_estoque_gerente': bool(exact_match.get('sb_estoque_gerente', False)),
                     'sb_lombada': bool(exact_match.get('sb_lombada', False)),
                     'sb_credenciais_depol': bool(exact_match.get('sb_credenciais_depol', False)),
+                    'sb_manipular_imagem': bool(exact_match.get('sb_manipular_imagem', False)),
                     'ip': client_ip  # Retorna o IP do cliente
                 }
                 cache[client_ip] = (now, result)
@@ -313,6 +317,7 @@ def get_client_permissions(client_ip: str) -> dict:
                         'sb_estoque_gerente': bool(ip_data.get('sb_estoque_gerente', False)),
                         'sb_lombada': bool(ip_data.get('sb_lombada', False)),
                         'sb_credenciais_depol': bool(ip_data.get('sb_credenciais_depol', False)),
+                        'sb_manipular_imagem': bool(ip_data.get('sb_manipular_imagem', False)),
                         'ip': client_ip  # Retorna o IP do cliente
                     }
                     cache[client_ip] = (now, result)
@@ -374,6 +379,7 @@ def _to_permissions_response(
         sb_estoque_gerente=bool(perms.get("sb_estoque_gerente", False)),
         sb_lombada=bool(perms.get("sb_lombada", False)),
         sb_credenciais_depol=bool(perms.get("sb_credenciais_depol", False)),
+        sb_manipular_imagem=bool(perms.get("sb_manipular_imagem", False)),
         ponto=ponto,
     )
 
@@ -486,7 +492,7 @@ async def add_ip(data: IPPermission, ponto: Optional[int] = None, nome_usuario: 
                         sb_inicio=%s, sb_gerencia=%s, sb_email=%s, sb_analise=%s,
                         sb_papelaria=%s, sb_usuario=%s, sb_configuracoes=%s,
                         sb_relatorio=%s, sb_dashboard_setor=%s, sb_admin_ips=%s,
-                        sb_pcp=%s, sb_usuarios=%s, sb_active_computers=%s, sb_gravacao=%s, sb_cotas_graf=%s, sb_gravacao_externa=%s, sb_gravacao_pendente=%s, sb_gravacao_externa_operador=%s, sb_gravacao_pendente_excluir=%s, sb_gravacao_externa_entrega=%s, sb_gravacao_externa_lancar=%s, sb_estoque=%s, sb_estoque_gerente=%s, sb_lombada=%s, sb_credenciais_depol=%s
+                        sb_pcp=%s, sb_usuarios=%s, sb_active_computers=%s, sb_gravacao=%s, sb_cotas_graf=%s, sb_gravacao_externa=%s, sb_gravacao_pendente=%s, sb_gravacao_externa_operador=%s, sb_gravacao_pendente_excluir=%s, sb_gravacao_externa_entrega=%s, sb_gravacao_externa_lancar=%s, sb_estoque=%s, sb_estoque_gerente=%s, sb_lombada=%s, sb_credenciais_depol=%s, sb_manipular_imagem=%s
                     WHERE id=%s
                 """, (
                     data.descricao, data.grupo, data.ativo,
@@ -495,7 +501,7 @@ async def add_ip(data: IPPermission, ponto: Optional[int] = None, nome_usuario: 
                     data.sb_inicio, data.sb_gerencia, data.sb_email, data.sb_analise,
                     data.sb_papelaria, data.sb_usuario, data.sb_configuracoes,
                     data.sb_relatorio, data.sb_dashboard_setor, data.sb_admin_ips,
-                    data.sb_pcp, data.sb_usuarios, data.sb_active_computers, data.sb_gravacao, data.sb_cotas_graf, data.sb_gravacao_externa, data.sb_gravacao_pendente, data.sb_gravacao_externa_operador, data.sb_gravacao_pendente_excluir, data.sb_gravacao_externa_entrega, data.sb_gravacao_externa_lancar, data.sb_estoque, data.sb_estoque_gerente, data.sb_lombada, data.sb_credenciais_depol,
+                    data.sb_pcp, data.sb_usuarios, data.sb_active_computers, data.sb_gravacao, data.sb_cotas_graf, data.sb_gravacao_externa, data.sb_gravacao_pendente, data.sb_gravacao_externa_operador, data.sb_gravacao_pendente_excluir, data.sb_gravacao_externa_entrega, data.sb_gravacao_externa_lancar, data.sb_estoque, data.sb_estoque_gerente, data.sb_lombada, data.sb_credenciais_depol, data.sb_manipular_imagem,
                     ip_id
                 ))
             else:
@@ -508,13 +514,13 @@ async def add_ip(data: IPPermission, ponto: Optional[int] = None, nome_usuario: 
                         sb_inicio, sb_gerencia, sb_email, sb_analise,
                         sb_papelaria, sb_usuario, sb_configuracoes,
                         sb_relatorio, sb_dashboard_setor, sb_admin_ips,
-                        sb_pcp, sb_usuarios, sb_active_computers, sb_gravacao, sb_cotas_graf, sb_gravacao_externa, sb_gravacao_pendente, sb_gravacao_externa_operador, sb_gravacao_pendente_excluir, sb_gravacao_externa_entrega, sb_gravacao_externa_lancar, sb_estoque, sb_estoque_gerente, sb_lombada, sb_credenciais_depol
+                        sb_pcp, sb_usuarios, sb_active_computers, sb_gravacao, sb_cotas_graf, sb_gravacao_externa, sb_gravacao_pendente, sb_gravacao_externa_operador, sb_gravacao_pendente_excluir, sb_gravacao_externa_entrega, sb_gravacao_externa_lancar, sb_estoque, sb_estoque_gerente, sb_lombada, sb_credenciais_depol, sb_manipular_imagem
                     ) VALUES (
                         %s, %s, %s, %s,
                         %s, %s, %s, %s, %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s, %s, %s,
                         %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     )
                 """, (
                     data.ip, data.descricao, data.grupo, data.ativo,
@@ -523,7 +529,7 @@ async def add_ip(data: IPPermission, ponto: Optional[int] = None, nome_usuario: 
                     data.sb_inicio, data.sb_gerencia, data.sb_email, data.sb_analise,
                     data.sb_papelaria, data.sb_usuario, data.sb_configuracoes,
                     data.sb_relatorio, data.sb_dashboard_setor, data.sb_admin_ips,
-                    data.sb_pcp, data.sb_usuarios, data.sb_active_computers, data.sb_gravacao, data.sb_cotas_graf, data.sb_gravacao_externa, data.sb_gravacao_pendente, data.sb_gravacao_externa_operador, data.sb_gravacao_pendente_excluir, data.sb_gravacao_externa_entrega, data.sb_gravacao_externa_lancar, data.sb_estoque, data.sb_estoque_gerente, data.sb_lombada, data.sb_credenciais_depol
+                    data.sb_pcp, data.sb_usuarios, data.sb_active_computers, data.sb_gravacao, data.sb_cotas_graf, data.sb_gravacao_externa, data.sb_gravacao_pendente, data.sb_gravacao_externa_operador, data.sb_gravacao_pendente_excluir, data.sb_gravacao_externa_entrega, data.sb_gravacao_externa_lancar, data.sb_estoque, data.sb_estoque_gerente, data.sb_lombada, data.sb_credenciais_depol, data.sb_manipular_imagem
                 ))
 
             # 2. Se fornecido Ponto e Nome, cadastrar/atualizar na tabUsuarios

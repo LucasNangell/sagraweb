@@ -36,7 +36,8 @@ export type PermissionKey =
   | "sb_estoque"
   | "sb_estoque_gerente"
   | "sb_lombada"
-  | "sb_credenciais_depol";
+  | "sb_credenciais_depol"
+  | "sb_manipular_imagem";
 
 export interface Permissions extends Record<PermissionKey, boolean> {
   painelSetores: string[];
@@ -82,6 +83,7 @@ export const PERMISSION_KEYS: PermissionKey[] = [
   "sb_estoque_gerente",
   "sb_lombada",
   "sb_credenciais_depol",
+  "sb_manipular_imagem",
 ];
 
 export interface SessionUser {
@@ -135,6 +137,7 @@ export interface PermissionsResponse {
   sb_estoque_gerente?: boolean;
   sb_lombada?: boolean;
   sb_credenciais_depol?: boolean;
+  sb_manipular_imagem?: boolean;
 }
 
 export interface SessionCreateResponse {

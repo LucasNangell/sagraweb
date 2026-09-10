@@ -9,6 +9,7 @@ import {
   HardDrive,
   Home,
   IdCard,
+  Image,
   Inbox,
   LayoutDashboard,
   Mail,
@@ -57,6 +58,12 @@ export const NAV_ITEMS: NavItem[] = [
     to: "/credenciais-depol",
     icon: IdCard,
     permission: "sb_credenciais_depol",
+  },
+  {
+    label: "Manipular Imagem",
+    to: "/manipular-imagem",
+    icon: Image,
+    permission: "sb_manipular_imagem",
   },
   {
     label: "Relatórios",
@@ -146,6 +153,7 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionKey> = {
   "/analise-lab": "sb_analise",
   "/papelaria": "sb_papelaria",
   "/credenciais-depol": "sb_credenciais_depol",
+  "/manipular-imagem": "sb_manipular_imagem",
   "/relatorios": "sb_relatorio",
   "/painel/setor": "sb_dashboard_setor",
   "/painel/global": "sb_dashboard_global",

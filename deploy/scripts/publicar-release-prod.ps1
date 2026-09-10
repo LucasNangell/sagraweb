@@ -59,6 +59,26 @@ Write-DeployStep "1/6 Junctions e validacao"
 & (Join-Path $PSScriptRoot "finish-release-junctions.ps1") -ProdLocalPath $ProdPath -ReleaseName $ReleaseName
 if ($LASTEXITCODE -ne 0) { throw "Junctions falharam" }
 
+# Validacao funcional no MESMO python do PATH usado pelos launchers da API.
+# Deve falhar antes de parar a API atual ou alterar current.
+Write-DeployStep "Preflight TIFF no Python de producao"
+$tiffCheck = Join-Path $targetRelease "check_tiff_runtime.py"
+if (-not (Test-Path -LiteralPath $tiffCheck)) {
+    throw "Release sem preflight TIFF. Gere novamente pelo deploy-release-dev.bat."
+}
+$previousPythonPath = $env:PYTHONPATH
+try {
+    $env:PYTHONPATH = @(
+        (Join-Path $targetRelease "python_pkgs"),
+        (Join-Path $targetRelease "app\backend"),
+        (Join-Path $targetRelease "app\services")
+    ) -join ";"
+    & python $tiffCheck --release-root $targetRelease
+    if ($LASTEXITCODE -ne 0) { throw "Preflight TIFF falhou; API atual preservada. Verifique o erro acima." }
+} finally {
+    $env:PYTHONPATH = $previousPythonPath
+}
+
 # 2) Parar API somente se porta em uso
 Write-DeployStep "2/6 Parar API (se necessario)"
 if (Test-SagraPortListening -Port $port) {

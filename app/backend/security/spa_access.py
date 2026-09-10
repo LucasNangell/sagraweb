@@ -29,6 +29,7 @@ SPA_ROUTE_PERMISSIONS: dict[str, str] = {
     "/cotas-graf": "sb_cotas_graf",
     "/estoque": "sb_estoque",
     "/credenciais-depol": "sb_credenciais_depol",
+    "/manipular-imagem": "sb_manipular_imagem",
     "/prova-web": "ctx_prova_web",
     "/orcamento": "ctx_orcamento",
     "/gravacao-externa": "sb_gravacao_externa",

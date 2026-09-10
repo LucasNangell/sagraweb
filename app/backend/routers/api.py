@@ -23,6 +23,7 @@ from routers import (
     papelaria_routes,
     papelaria_worker_routes,
     credenciais_depol_routes,
+    manipular_imagem_routes,
     settings_routes,
     ip_admin_routes,
     auth_routes,
@@ -1108,6 +1109,12 @@ def startup_init():
         logger.error("Erro ao garantir schema Gravação Pendente no startup: %s", exc)
 
     try:
+        from services.tif_graphics_learning_schema import ensure_tif_graphics_learning_schema
+        ensure_tif_graphics_learning_schema()
+    except Exception as exc:
+        logger.error("Erro ao garantir schema de aprendizado TIFF no startup: %s", exc)
+
+    try:
         from services.gravacao_pendente_service import repair_orphan_pendente_andamentos
 
         repaired_p = repair_orphan_pendente_andamentos()
@@ -1224,6 +1231,7 @@ app.include_router(gravacao_routes.router, prefix="/api")
 app.include_router(cotas_graf_routes.router, prefix="/api")
 app.include_router(estoque_routes.router, prefix="/api")
 app.include_router(credenciais_depol_routes.router, prefix="/api")
+app.include_router(manipular_imagem_routes.router, prefix="/api")
 app.include_router(gravacao_externa_routes.router, prefix="/api")
 app.include_router(gravacao_pendente_routes.router, prefix="/api")
 app.include_router(network_files_routes.router, prefix="/api")

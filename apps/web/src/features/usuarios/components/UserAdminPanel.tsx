@@ -73,6 +73,7 @@ const PERMISSION_LABELS: Partial<Record<PermissionKey, string>> = {
   sb_lombada: "Lombada",
   sb_dashboard_tablet: "Painel tablet",
   sb_credenciais_depol: "Credenciais DEPOL",
+  sb_manipular_imagem: "Manipular Imagem",
 };
 
 interface UserAdminActions {

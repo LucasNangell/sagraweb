@@ -123,6 +123,7 @@ def build_painel_only_permissions(client_ip: str) -> dict:
         "sb_estoque_gerente": False,
         "sb_lombada": False,
         "sb_credenciais_depol": False,
+        "sb_manipular_imagem": False,
         "ip": client_ip,
     })
 

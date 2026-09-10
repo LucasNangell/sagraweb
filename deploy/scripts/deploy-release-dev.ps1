@@ -81,6 +81,14 @@ $deployArgs = @{
     ReleaseName  = $ReleaseName
     SkipBuild    = $true
 }
+# Inclusive com -SkipBuild, nao enviar pacote anterior sem as bibliotecas TIFF.
+$packageRoot = Join-Path $DevRoot "deploy\release"
+$tiffCheck = Join-Path $packageRoot "check_tiff_runtime.py"
+if (-not (Test-Path -LiteralPath $tiffCheck)) {
+    throw "Pacote sem validador TIFF. Rode deploy-release-dev.bat sem -SkipBuild."
+}
+& python $tiffCheck --release-root $packageRoot --package-only
+if ($LASTEXITCODE -ne 0) { throw "Pacote TIFF invalido. Refaca o build antes do envio." }
 if ($ProdPath) { $deployArgs.ProdPath = $ProdPath }
 if ($WhatIf) { $deployArgs.WhatIf = $true }
 

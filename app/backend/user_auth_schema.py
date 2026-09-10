@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS user_permissions (
     sb_estoque_gerente TINYINT(1) DEFAULT 0,
     sb_lombada TINYINT(1) DEFAULT 0,
     sb_credenciais_depol TINYINT(1) DEFAULT 0,
+    sb_manipular_imagem TINYINT(1) DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -77,6 +78,7 @@ _USER_PERMISSIONS_EXTRA_COLUMNS: tuple[tuple[str, str], ...] = (
     ("sb_lombada", "TINYINT(1) DEFAULT 0"),
     ("sb_dashboard_tablet", "TINYINT(1) DEFAULT 0"),
     ("sb_credenciais_depol", "TINYINT(1) DEFAULT 0"),
+    ("sb_manipular_imagem", "TINYINT(1) DEFAULT 0"),
     ("ctx_prova_web", "TINYINT(1) DEFAULT 0"),
     ("ctx_orcamento", "TINYINT(1) DEFAULT 0"),
 )

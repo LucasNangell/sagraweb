@@ -1,12 +1,17 @@
 import { cn } from "@sagra/ui";
-import { useQuery } from "@tanstack/react-query";
-import { FileImage, FileText, Loader2, Trash2, X } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, FileImage, FileText, Loader2, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { fetchMaquinas } from "@/api/auxLookups";
 import { fetchGravacaoPendenteChapasEstimate } from "@/api/gravacaoPendente";
 import { fetchOsDetails } from "@/api/os";
-import type { NetworkFilePick } from "@/api/networkFiles";
+import {
+  correctNetworkGraphics,
+  loadNetworkFilePreviewBlobUrl,
+  type NetworkFileInspection,
+  type NetworkFilePick,
+} from "@/api/networkFiles";
 import { queryKeys } from "@/api/query-keys";
 import { formatOsLabel } from "@/lib/format";
 import { homeTestIds } from "@/lib/testId";
@@ -16,6 +21,7 @@ import { formatOsListLabel } from "../utils/formatOsJuntadaLabel";
 import { hydrateGravacaoPendenteLaunch } from "../utils/hydrateGravacaoPendenteLaunch";
 import { parsePlateFilename } from "../utils/plateFilenameUtils";
 import { NetworkFolderBrowserModal } from "./NetworkFolderBrowserModal";
+import { useNetworkFileInspections, networkInspectionKey as inspectionKey } from "../hooks/useNetworkFileInspections";
 
 export interface GravacaoPendenteChapaInput {
   maquina: string;
@@ -65,6 +71,12 @@ type BrowserTarget =
   | { kind: "espelho"; rowKey: string }
   | { kind: "tif"; rowKey: string }
   | null;
+
+type PreviewTarget = {
+  kind: "pdf" | "tif";
+  rowKey: string;
+  file: NetworkFilePick;
+} | null;
 
 function emptyChapaRow(): ChapaRow {
   return {
@@ -161,6 +173,151 @@ function summarizeTifGroups(arquivos: NetworkFilePick[]): {
   };
 }
 
+function inspectionByPath(
+  inspections: NetworkFileInspection[] | undefined,
+): Map<string, NetworkFileInspection> {
+  return new Map((inspections ?? []).map((item) => [inspectionKey(item.absolute_path, item.maquina), item]));
+}
+
+function NetworkPreviewPane({ target, inspection, maquina, correcting, correctionError, onCorrect }: {
+  target: PreviewTarget;
+  inspection?: NetworkFileInspection;
+  maquina: string;
+  correcting: boolean;
+  correctionError: string | null;
+  onCorrect: (blank: boolean) => void;
+}) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!target) {
+      setPreviewUrl(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    let objectUrl: string | null = null;
+    setPreviewUrl(null);
+    setError(null);
+    setLoading(true);
+
+    loadNetworkFilePreviewBlobUrl(target.file, controller.signal)
+      .then((url) => {
+        if (controller.signal.aborted) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        objectUrl = url;
+        setPreviewUrl(url);
+      })
+      .catch((e) => {
+        if (!controller.signal.aborted) {
+          setError(e instanceof Error ? e.message : "Não foi possível carregar o preview.");
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      controller.abort();
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [target]);
+
+  if (!target) {
+    return (
+      <aside className="flex h-full min-h-0 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-sm text-slate-500">
+        Selecione um PDF ou TIF para visualizar.
+      </aside>
+    );
+  }
+
+  const isPdf = target.kind === "pdf";
+
+  return (
+    <aside className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
+        {isPdf ? (
+          <FileText className="size-4 shrink-0 text-red-600" />
+        ) : (
+          <FileImage className="size-4 shrink-0 text-blue-600" />
+        )}
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800" title={target.file.nome}>
+          {target.file.nome}
+        </span>
+      </div>
+      <div className="relative min-h-0 flex-1 bg-slate-100">
+        {loading ? (
+          <div className="flex h-full items-center justify-center">
+            <Loader2 className="size-6 animate-spin text-primary-green" />
+          </div>
+        ) : error ? (
+          <div className="flex h-full items-center justify-center p-4 text-center text-sm text-red-600">
+            {error}
+          </div>
+        ) : isPdf && previewUrl ? (
+          <iframe title={`Preview ${target.file.nome}`} src={previewUrl} className="h-full w-full border-0" />
+        ) : previewUrl ? (
+          <div className="flex h-full min-h-0 items-center justify-center overflow-auto p-4">
+            <img
+              src={previewUrl}
+              alt={target.file.nome}
+              className="block max-h-full max-w-full object-contain shadow-sm"
+            />
+          </div>
+        ) : (
+          <div className="flex h-full items-center justify-center p-4 text-center text-sm text-slate-500">
+            Preview indisponível.
+          </div>
+        )}
+      </div>
+      {!isPdf ? (
+        <div className="flex h-28 shrink-0 flex-col justify-center gap-1.5 border-t border-slate-200 px-3 py-2">
+          <div className="flex items-center justify-between gap-2 text-xs text-slate-600">
+            <span className="min-w-0 truncate" title={maquina}>
+              {maquina || "Selecione uma máquina"} · {inspection?.cor || "Cor não identificada"}
+            </span>
+            <span className="shrink-0">
+              {inspection?.blank_graphics === true ? "Sem grafismo" : inspection?.blank_graphics === false ? "Com grafismo" : "Detecção inconclusiva"}
+            </span>
+          </div>
+          <div className="flex justify-end gap-2">
+            {inspection?.blank_graphics == null ? (
+              <button type="button" className={BTN_SECONDARY}
+                disabled={!maquina.trim() || !inspection?.inspection_token || correcting || loading || !!error}
+                onClick={() => onCorrect(false)}>Possui grafismo</button>
+            ) : null}
+            <button type="button" className={BTN_SECONDARY}
+              disabled={!maquina.trim() || !inspection?.inspection_token || inspection.status !== "done" || correcting || loading || !!error}
+              title="Corrigir a detecção e usar este exemplo no aprendizado"
+              onClick={() => onCorrect(inspection?.blank_graphics !== true)}>
+              {correcting ? <Loader2 className="size-3 animate-spin" /> : null}
+              {inspection?.blank_graphics === true ? "Possui grafismo" : "Não possui grafismo"}
+            </button>
+          </div>
+          <p aria-live="polite" className={cn("truncate text-right text-xs", correctionError ? "text-red-600" : "text-slate-500")}
+            title={correctionError || undefined}>
+            {correctionError || (!inspection?.inspection_token
+              ? inspection?.reason || "Aguardando inspeção do TIFF…"
+              : inspection?.detection_source === "feedback"
+                ? "Correção salva para o aprendizado."
+                : "A detecção está errada? Corrija pelo botão acima.")}
+          </p>
+        </div>
+      ) : null}
+    </aside>
+  );
+}
+
 export function GravacaoPendenteLaunchModal({
   row,
   open,
@@ -173,6 +330,7 @@ export function GravacaoPendenteLaunchModal({
   onConfirm,
 }: GravacaoPendenteLaunchModalProps) {
   const isEdit = mode === "edit";
+  const queryClient = useQueryClient();
   const [browserOpen, setBrowserOpen] = useState(false);
   const [browserTarget, setBrowserTarget] = useState<BrowserTarget>(null);
   const [chapas, setChapas] = useState<ChapaRow[]>([emptyChapaRow()]);
@@ -183,6 +341,7 @@ export function GravacaoPendenteLaunchModal({
   const [obs, setObs] = useState(initialObs);
   const [autoChapasLoading, setAutoChapasLoading] = useState<Record<string, boolean>>({});
   const [autoChapasError, setAutoChapasError] = useState<Record<string, string>>({});
+  const [previewTarget, setPreviewTarget] = useState<PreviewTarget>(null);
 
   const maquinasQuery = useQuery({
     queryKey: queryKeys.gerencia.maquinas,
@@ -193,6 +352,23 @@ export function GravacaoPendenteLaunchModal({
 
   const allEspelhosPdf = useMemo(
     () => chapas.flatMap((c) => c.espelhosPdf),
+    [chapas],
+  );
+
+  const allTifFiles = useMemo(
+    () => chapas.flatMap((c) => c.arquivos.map((file) => ({ ...file, maquina: c.maquina }))),
+    [chapas],
+  );
+
+  const allPreviewFiles = useMemo(
+    () => [
+      ...chapas.flatMap((c) =>
+        c.espelhosPdf.map((file) => ({ kind: "pdf" as const, rowKey: c.key, file })),
+      ),
+      ...chapas.flatMap((c) =>
+        c.arquivos.map((file) => ({ kind: "tif" as const, rowKey: c.key, file })),
+      ),
+    ],
     [chapas],
   );
 
@@ -214,6 +390,50 @@ export function GravacaoPendenteLaunchModal({
     enabled: open && allEspelhosPdf.length > 0,
     staleTime: 60_000,
   });
+
+  const tifInspectionQuery = useNetworkFileInspections(allTifFiles, open);
+
+  const tifInspectionMap = useMemo(
+    () => inspectionByPath(tifInspectionQuery.data?.files),
+    [tifInspectionQuery.data],
+  );
+
+  const feedbackMutation = useMutation({
+    mutationFn: correctNetworkGraphics,
+    onSuccess: (updated) => tifInspectionQuery.acceptCorrection(updated),
+    onError: (_error, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["networkFiles", "inspect", inspectionKey(variables.absolute_path, variables.maquina)], exact: true,
+      });
+    },
+  });
+  const previewMaquina = chapas.find((c) => c.key === previewTarget?.rowKey)?.maquina ?? "";
+  const previewInspection = previewTarget?.kind === "tif"
+    ? tifInspectionMap.get(inspectionKey(previewTarget.file.absolute_path, previewMaquina))
+    : undefined;
+  const feedbackMatchesPreview = feedbackMutation.variables && previewTarget &&
+    inspectionKey(feedbackMutation.variables.absolute_path, feedbackMutation.variables.maquina) ===
+    inspectionKey(previewTarget.file.absolute_path, previewMaquina);
+
+  function handleCorrectGraphics(blank: boolean) {
+    if (!previewTarget || !previewInspection?.inspection_token || !previewMaquina.trim() || feedbackMutation.isPending) return;
+    feedbackMutation.mutate({
+      absolute_path: previewTarget.file.absolute_path,
+      maquina: previewMaquina,
+      blank_graphics: blank,
+      inspection_token: previewInspection.inspection_token,
+      feedback_revision: previewInspection.feedback_revision ?? 0,
+    });
+  }
+
+  const blankTifCount = useMemo(
+    () =>
+      allTifFiles.filter(
+        (file) => tifInspectionMap.get(inspectionKey(file.absolute_path, file.maquina))?.blank_graphics === true,
+      ).length,
+    [allTifFiles, tifInspectionMap],
+  );
+  const failedTifCount = [...tifInspectionMap.values()].filter(item => item.status === "error").length;
 
   const pdfPageCount = useMemo(() => {
     if (allEspelhosPdf.length === 0 || !espelhosEstimateQuery.isSuccess) {
@@ -248,6 +468,7 @@ export function GravacaoPendenteLaunchModal({
       setBrowserTarget(null);
       setAutoChapasLoading({});
       setAutoChapasError({});
+      setPreviewTarget(null);
       return;
     }
 
@@ -264,9 +485,23 @@ export function GravacaoPendenteLaunchModal({
     setBrowserTarget(null);
     setAutoChapasLoading({});
     setAutoChapasError({});
+    setPreviewTarget(null);
     // Hidrata apenas ao abrir o modal (snapshot do momento do clique).
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
   }, [open]);
+
+  useEffect(() => {
+    if (!previewTarget) return;
+    const stillExists = allPreviewFiles.some(
+      (item) =>
+        item.rowKey === previewTarget.rowKey &&
+        item.kind === previewTarget.kind &&
+        item.file.absolute_path === previewTarget.file.absolute_path,
+    );
+    if (!stillExists) {
+      setPreviewTarget(null);
+    }
+  }, [allPreviewFiles, previewTarget]);
 
   useEffect(() => {
     if (!open) return;
@@ -564,7 +799,7 @@ export function GravacaoPendenteLaunchModal({
         aria-label={`Gravação Pendente — OS ${formatOsLabel(row)}`}
         data-testid={homeTestIds.osGravacaoRoot}
       >
-        <div className="flex max-h-[min(90vh,760px)] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
+        <div className="flex h-[min(94vh,860px)] w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
             <h3 className="text-base font-semibold text-secondary-blue">
               {isEdit ? "Alterar arquivos" : "Gravação Pendente"} — OS {formatOsLabel(row)}
@@ -581,7 +816,8 @@ export function GravacaoPendenteLaunchModal({
             </button>
           </div>
 
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+          <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-4 overflow-hidden px-4 py-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] lg:grid-rows-[minmax(0,1fr)]">
+            <div className="min-h-0 space-y-4 overflow-y-auto pr-1 [overflow-anchor:none] [scrollbar-gutter:stable]">
             {!isEdit ? (
               <section>
                 <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -668,9 +904,40 @@ export function GravacaoPendenteLaunchModal({
             ) : null}
 
             <section>
-              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div className="mb-2 flex h-10 items-center gap-3">
+              <h4 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Chapas por máquina
               </h4>
+              <div className="flex h-10 min-w-0 flex-1 flex-col justify-start gap-0.5 overflow-y-auto text-xs [scrollbar-gutter:stable]" aria-live="polite" data-testid="tif-inspection-status">
+              {blankTifCount > 0 ? (
+                <div className="flex items-center gap-1 text-red-800">
+                  <AlertTriangle className="size-3.5 shrink-0" />
+                  <span>
+                    {blankTifCount} TIF{blankTifCount === 1 ? "" : "s"} sem grafismo detectado.
+                  </span>
+                </div>
+              ) : null}
+              {tifInspectionQuery.isFetching ? (
+                <div className="flex items-center gap-1 text-slate-600">
+                  <Loader2 className="size-3.5 shrink-0 animate-spin" />
+                  Processados {tifInspectionQuery.completed} de {tifInspectionQuery.total} TIFFs…
+                </div>
+              ) : null}
+              {tifInspectionQuery.isError ? (
+                <div role="alert" className="text-amber-900">
+                  <p>Verificação interrompida: {tifInspectionQuery.error.message}</p>
+                  <button type="button" className="mt-1 font-semibold underline" onClick={() => void tifInspectionQuery.refetch()}>
+                    Tentar novamente
+                  </button>
+                </div>
+              ) : null}
+              {failedTifCount > 0 ? (
+                <p role="alert" className="text-amber-800">
+                  {failedTifCount} TIFF(s) não puderam ser verificados. Confira os itens sinalizados.
+                </p>
+              ) : null}
+              </div>
+              </div>
               <div className="space-y-3">
                 {chapas.map((chapaRow, index) => {
                   const hasTifs = chapaRow.arquivos.length > 0;
@@ -778,15 +1045,28 @@ export function GravacaoPendenteLaunchModal({
                       PDFs ({chapaRow.espelhosPdf.length})
                     </p>
 
+                    <div className="mt-1 h-10 overflow-y-auto [overflow-anchor:none] [scrollbar-gutter:stable]" data-testid="machine-pdf-list">
                     {chapaRow.espelhosPdf.length > 0 ? (
-                      <ul className="mt-1 max-h-28 space-y-1 overflow-y-auto">
+                      <ul className="space-y-1">
                         {chapaRow.espelhosPdf.map((arq) => (
                           <li
                             key={arq.absolute_path}
-                            className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs"
+                            className={cn(
+                              "flex items-center gap-2 rounded-md border bg-white px-2 py-1.5 text-xs",
+                              previewTarget?.rowKey === chapaRow.key && previewTarget?.file.absolute_path === arq.absolute_path
+                                ? "border-primary-green ring-1 ring-primary-green/40"
+                                : "border-slate-200",
+                            )}
                           >
-                            <FileText className="size-3.5 shrink-0 text-red-600" />
-                            <span className="min-w-0 flex-1 truncate">{arq.nome}</span>
+                            <button
+                              type="button"
+                              onClick={() => setPreviewTarget({ kind: "pdf", rowKey: chapaRow.key, file: arq })}
+                              className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                              title={arq.nome}
+                            >
+                              <FileText className="size-3.5 shrink-0 text-red-600" />
+                              <span className="min-w-0 flex-1 truncate">{arq.nome}</span>
+                            </button>
                             <button
                               type="button"
                               onClick={() =>
@@ -814,72 +1094,101 @@ export function GravacaoPendenteLaunchModal({
                     ) : (
                       <p className="mt-1 text-xs text-slate-500">Nenhum PDF selecionado.</p>
                     )}
+                    </div>
 
-                    <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                    <div className="mt-2 flex h-4 items-center gap-2">
+                    <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                       TIFs ({chapaRow.arquivos.length})
                     </p>
+                    {autoChapasLoading[chapaRow.key] ? (
+                      <span className="inline-flex min-w-0 items-center gap-1 text-xs text-slate-500">
+                        <Loader2 className="size-3 shrink-0 animate-spin" />
+                        Calculando chapas…
+                      </span>
+                    ) : null}
+                    {autoChapasError[chapaRow.key] ? (
+                      <span className="min-w-0 truncate text-xs text-red-600" title={autoChapasError[chapaRow.key]}>
+                        {autoChapasError[chapaRow.key]}
+                      </span>
+                    ) : null}
+                    </div>
 
+                    <div className="mt-1 h-44 overflow-y-auto [overflow-anchor:none] [scrollbar-gutter:stable]" data-testid="machine-tif-list">
                     {chapaRow.arquivos.length > 0 ? (
-                      <ul className="mt-1 max-h-28 space-y-1 overflow-y-auto">
-                        {chapaRow.arquivos.map((arq) => (
-                          <li
-                            key={arq.absolute_path}
-                            className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs"
-                          >
-                            <FileImage className="size-3.5 shrink-0 text-blue-600" />
-                            <span className="min-w-0 flex-1 truncate">{arq.nome}</span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setChapas((prev) =>
-                                  prev.map((item) =>
-                                    item.key === chapaRow.key
-                                      ? {
-                                          ...item,
-                                          arquivos: item.arquivos.filter(
-                                            (p) => p.absolute_path !== arq.absolute_path,
-                                          ),
-                                        }
-                                      : item,
-                                  ),
-                                )
-                              }
-                              className={cn(BTN_ICON_DANGER, "size-6")}
-                              title="Remover"
+                      <ul className="space-y-1">
+                        {chapaRow.arquivos.map((arq) => {
+                          const inspection = tifInspectionMap.get(inspectionKey(arq.absolute_path, chapaRow.maquina));
+                          const blankGraphics = inspection?.blank_graphics === true;
+                          const selected = previewTarget?.rowKey === chapaRow.key && previewTarget?.file.absolute_path === arq.absolute_path;
+                          return (
+                            <li
+                              key={arq.absolute_path}
+                              className={cn(
+                                "flex items-center gap-2 rounded-md border bg-white px-2 py-1.5 text-xs",
+                                blankGraphics
+                                  ? "border-red-500 ring-1 ring-red-200"
+                                  : selected
+                                    ? "border-primary-green ring-1 ring-primary-green/40"
+                                    : "border-slate-200",
+                              )}
                             >
-                              <Trash2 className="size-3" />
-                            </button>
-                          </li>
-                        ))}
+                              <button
+                                type="button"
+                                onClick={() => setPreviewTarget({ kind: "tif", rowKey: chapaRow.key, file: arq })}
+                                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                                title={inspection?.reason ? `${arq.nome} — ${inspection.reason}` : arq.nome}
+                              >
+                                <FileImage
+                                  className={cn(
+                                    "size-3.5 shrink-0",
+                                    blankGraphics ? "text-red-600" : "text-blue-600",
+                                  )}
+                                />
+                                <span className="min-w-0 flex-1 truncate">{arq.nome}</span>
+                                {blankGraphics ? (
+                                  <span className="shrink-0 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
+                                    Sem grafismo
+                                  </span>
+                                ) : inspection?.status === "error" ? (
+                                  <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">Não verificado</span>
+                                ) : null}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setChapas((prev) =>
+                                    prev.map((item) =>
+                                      item.key === chapaRow.key
+                                        ? {
+                                            ...item,
+                                            arquivos: item.arquivos.filter(
+                                              (p) => p.absolute_path !== arq.absolute_path,
+                                            ),
+                                          }
+                                        : item,
+                                    ),
+                                  )
+                                }
+                                className={cn(BTN_ICON_DANGER, "size-6")}
+                                title="Remover"
+                              >
+                                <Trash2 className="size-3" />
+                              </button>
+                            </li>
+                          );
+                        })}
                       </ul>
                     ) : (
                       <p className="mt-1 text-xs text-slate-500">Nenhum TIF selecionado.</p>
                     )}
+                    </div>
 
-                    {autoChapasLoading[chapaRow.key] ? (
-                      <p className="mt-1 inline-flex items-center gap-1 text-xs text-slate-500">
-                        <Loader2 className="size-3 animate-spin" />
-                        Calculando chapas…
-                      </p>
-                    ) : null}
-                    {autoChapasError[chapaRow.key] ? (
-                      <p className="mt-1 text-xs text-red-600">{autoChapasError[chapaRow.key]}</p>
-                    ) : null}
                   </div>
                   );
                 })}
               </div>
-
-              <div className="mt-3 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setChapas((prev) => [...prev, emptyChapaRow()])}
-                  className={BTN_SECONDARY}
-                >
-                  + Máquina
-                </button>
-              </div>
-
+              <div className="mt-3 flex items-start gap-3">
+              <div className="min-w-0 flex-1">
               {allEspelhosPdf.length > 0 ? (
                 <>
                   {espelhosEstimateQuery.isLoading ? (
@@ -937,6 +1246,15 @@ export function GravacaoPendenteLaunchModal({
                   Carregando máquinas…
                 </p>
               ) : null}
+              </div>
+                <button
+                  type="button"
+                  onClick={() => setChapas((prev) => [...prev, emptyChapaRow()])}
+                  className={cn(BTN_SECONDARY, "shrink-0")}
+                >
+                  + Máquina
+                </button>
+              </div>
               <datalist id="gravacao-pendente-maquinas">
                 {(maquinasQuery.data ?? []).map((m) => (
                   <option key={m} value={m} />
@@ -958,6 +1276,15 @@ export function GravacaoPendenteLaunchModal({
                 />
               </label>
             ) : null}
+
+            </div>
+
+            <div className="min-h-0 overflow-hidden">
+              <NetworkPreviewPane target={previewTarget} inspection={previewInspection}
+                maquina={previewMaquina} correcting={feedbackMutation.isPending}
+                correctionError={feedbackMatchesPreview && feedbackMutation.error ? feedbackMutation.error.message : null}
+                onCorrect={handleCorrectGraphics} />
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">

@@ -33,6 +33,7 @@ portfolio-imports/
 storage/
 __pycache__/
 .pytest_cache/
+/data/tif_graphics_cache/
 *.pyc
 *.log
 *.mdb

@@ -243,6 +243,8 @@ Write-Step "DiretÃ³rios de dados (vazios)"
 Write-Step "Arquivos raiz do pacote"
 Copy-Item (Join-Path $Root "app\backend\requirements.txt") (Join-Path $Release "requirements.txt") -Force
 Copy-Item (Join-Path $PSScriptRoot "..\templates\requirements-ocr.txt") (Join-Path $Release "requirements-ocr.txt") -Force
+Copy-Item (Join-Path $PSScriptRoot "..\templates\requirements-tiff.txt") (Join-Path $Release "requirements-tiff.txt") -Force
+Copy-Item (Join-Path $PSScriptRoot "check_tiff_runtime.py") (Join-Path $Release "check_tiff_runtime.py") -Force
 Copy-Item (Join-Path $PSScriptRoot "..\templates\LEIA-ME-DEPLOY.md") (Join-Path $Release "LEIA-ME.md") -Force
 Copy-Item (Join-Path $PSScriptRoot "..\templates\iniciar-api.bat") (Join-Path $Release "iniciar-api.bat") -Force
 Copy-Item (Join-Path $PSScriptRoot "..\templates\parar-api.bat") (Join-Path $Release "parar-api.bat") -Force
@@ -367,6 +369,21 @@ if (-not $imagingNative) {
     throw "python_pkgs/PIL sem _imaging* apos install — pacote invalido para o servidor."
 }
 Write-Host "python_pkgs OK (alvo $prodAbi; nativo: $($imagingNative.Name -join ', '))"
+
+Write-Step "Bibliotecas TIFF embutidas (sem alterar NumPy da API)"
+$tiffRequirements = Join-Path $Release "requirements-tiff.txt"
+& $py -m pip download --python-version $prodPyTag --only-binary=:all: `
+    --platform win_amd64 --implementation cp --abi $prodAbi --no-deps `
+    -d $wheelsDir -r $tiffRequirements
+if ($LASTEXITCODE -ne 0) { throw "Falha ao baixar wheels TIFF para $prodAbi. Release abortada." }
+& $py -m pip install --target $vendorDir --no-compile --no-deps --no-index --find-links $wheelsDir `
+    --platform win_amd64 --python-version $prodPyTag --implementation cp --abi $prodAbi `
+    --only-binary=:all: -r $tiffRequirements
+if ($LASTEXITCODE -ne 0) { throw "Falha ao embutir tifffile/imagecodecs. Release abortada." }
+@{ python_tag = $prodPyTag; python_version = $prodPyVersion } | ConvertTo-Json |
+    Set-Content (Join-Path $Release "tiff-runtime.json") -Encoding UTF8
+& $py (Join-Path $Release "check_tiff_runtime.py") --release-root $Release --package-only
+if ($LASTEXITCODE -ne 0) { throw "Pacote TIFF incompleto ou ABI incorreto. Release abortada." }
 
 $version = Get-Date -Format "yyyy-MM-dd HH:mm"
 @"

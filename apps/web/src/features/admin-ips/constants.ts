@@ -45,6 +45,7 @@ export const SIDEBAR_PERMISSION_COLUMNS: PermissionColumn[] = [
   { key: "sb_estoque_gerente", label: "EGe", title: "Estoque (gerente)" },
   { key: "sb_lombada", label: "Lom", title: "Lombada" },
   { key: "sb_credenciais_depol", label: "Dep", title: "Credenciais DEPOL" },
+  { key: "sb_manipular_imagem", label: "Img", title: "Manipular Imagem" },
 ];
 
 export const ALL_PERMISSION_COLUMNS: PermissionColumn[] = [
@@ -96,6 +97,7 @@ export function buildDefaultNewIpPayload(
     sb_estoque_gerente: false,
     sb_lombada: false,
     sb_credenciais_depol: false,
+    sb_manipular_imagem: false,
   };
 }
 

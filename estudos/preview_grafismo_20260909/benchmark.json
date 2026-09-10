@@ -1,0 +1,220 @@
+{
+  "source": "C:\\dev\\SagraWeb\\docs\\2026_OS 00801-PM-Coedi-Livro_Congre (Cad 0 A) (C).tif",
+  "python": "3.14.2 (tags/v3.14.2:df79316, Dec  5 2025, 17:18:21) [MSC v.1944 64 bit (AMD64)]",
+  "versions": {
+    "pillow": "12.1.0",
+    "tifffile": "2026.9.9",
+    "imagecodecs": "2026.8.16",
+    "numpy": "2.4.0"
+  },
+  "runs": [
+    {
+      "mode": "pillow_preview",
+      "decode_s": 0.7743943000095896,
+      "png_bytes": 38505,
+      "elapsed_s": 0.824931800016202,
+      "peak_working_set_mib": 2152.9296875,
+      "repeat": 1
+    },
+    {
+      "mode": "pillow_preview",
+      "decode_s": 0.7849091000389308,
+      "png_bytes": 38505,
+      "elapsed_s": 0.8363621000316925,
+      "peak_working_set_mib": 2152.9140625,
+      "repeat": 2
+    },
+    {
+      "mode": "pillow_preview",
+      "decode_s": 0.7810656999936327,
+      "png_bytes": 38505,
+      "elapsed_s": 0.8299419000395574,
+      "peak_working_set_mib": 2152.91796875,
+      "repeat": 3
+    },
+    {
+      "mode": "tifffile_full_study",
+      "decode_copy_s": 1.3286551999626681,
+      "study_uniformity": 0.9916950900823776,
+      "study_says_blank": true,
+      "elapsed_s": 1.3695032999967225,
+      "peak_working_set_mib": 4148.23046875,
+      "repeat": 1
+    },
+    {
+      "mode": "tifffile_full_study",
+      "decode_copy_s": 1.3477619999903254,
+      "study_uniformity": 0.9916950900823776,
+      "study_says_blank": true,
+      "elapsed_s": 1.408229599997867,
+      "peak_working_set_mib": 4148.25390625,
+      "repeat": 2
+    },
+    {
+      "mode": "tifffile_full_study",
+      "decode_copy_s": 1.3209421000210568,
+      "study_uniformity": 0.9916950900823776,
+      "study_says_blank": true,
+      "elapsed_s": 1.360812500002794,
+      "peak_working_set_mib": 4148.25390625,
+      "repeat": 3
+    },
+    {
+      "mode": "tifffile_segments",
+      "strips": 13,
+      "ink_fraction": 0.007746862321217231,
+      "ink_per_vertical_decile": [
+        0,
+        0,
+        0,
+        7636765,
+        0,
+        0,
+        0,
+        0,
+        256610,
+        8772599
+      ],
+      "bands": [
+        {
+          "y0": 15750,
+          "y1": 16628,
+          "ink": 7625218
+        },
+        {
+          "y0": 16908,
+          "y1": 16916,
+          "ink": 11547
+        },
+        {
+          "y0": 36750,
+          "y1": 36758,
+          "ink": 11547
+        },
+        {
+          "y0": 37038,
+          "y1": 37699,
+          "ink": 169561
+        },
+        {
+          "y0": 38640,
+          "y1": 38648,
+          "ink": 42525
+        },
+        {
+          "y0": 38928,
+          "y1": 40811,
+          "ink": 8805576
+        }
+      ],
+      "elapsed_s": 1.9301489999634214,
+      "peak_working_set_mib": 227.3125,
+      "repeat": 1
+    },
+    {
+      "mode": "tifffile_segments",
+      "strips": 13,
+      "ink_fraction": 0.007746862321217231,
+      "ink_per_vertical_decile": [
+        0,
+        0,
+        0,
+        7636765,
+        0,
+        0,
+        0,
+        0,
+        256610,
+        8772599
+      ],
+      "bands": [
+        {
+          "y0": 15750,
+          "y1": 16628,
+          "ink": 7625218
+        },
+        {
+          "y0": 16908,
+          "y1": 16916,
+          "ink": 11547
+        },
+        {
+          "y0": 36750,
+          "y1": 36758,
+          "ink": 11547
+        },
+        {
+          "y0": 37038,
+          "y1": 37699,
+          "ink": 169561
+        },
+        {
+          "y0": 38640,
+          "y1": 38648,
+          "ink": 42525
+        },
+        {
+          "y0": 38928,
+          "y1": 40811,
+          "ink": 8805576
+        }
+      ],
+      "elapsed_s": 1.9340820999932475,
+      "peak_working_set_mib": 227.46875,
+      "repeat": 2
+    },
+    {
+      "mode": "tifffile_segments",
+      "strips": 13,
+      "ink_fraction": 0.007746862321217231,
+      "ink_per_vertical_decile": [
+        0,
+        0,
+        0,
+        7636765,
+        0,
+        0,
+        0,
+        0,
+        256610,
+        8772599
+      ],
+      "bands": [
+        {
+          "y0": 15750,
+          "y1": 16628,
+          "ink": 7625218
+        },
+        {
+          "y0": 16908,
+          "y1": 16916,
+          "ink": 11547
+        },
+        {
+          "y0": 36750,
+          "y1": 36758,
+          "ink": 11547
+        },
+        {
+          "y0": 37038,
+          "y1": 37699,
+          "ink": 169561
+        },
+        {
+          "y0": 38640,
+          "y1": 38648,
+          "ink": 42525
+        },
+        {
+          "y0": 38928,
+          "y1": 40811,
+          "ink": 8805576
+        }
+      ],
+      "elapsed_s": 1.9277207999839447,
+      "peak_working_set_mib": 227.46484375,
+      "repeat": 3
+    }
+  ],
+  "note": "Local; cache de SO nao limpo; nao representa SMB nem latencia de producao. Tempos excluem imports."
+}

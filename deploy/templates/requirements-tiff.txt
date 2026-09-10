@@ -1,0 +1,6 @@
+# Wheels para o Python 3.10 x64 de producao (tambem disponiveis para 3.11/3.12).
+# imagecodecs 2024.6.1 suporta NumPy 1 e 2; nao substituir o NumPy da API
+# no python_pkgs, pois pandas/OpenCV/ONNX compartilham a instalacao existente.
+# A publicacao testa o NumPy instalado (>=1.24) e os codecs antes de parar a API.
+tifffile==2024.8.30
+imagecodecs==2024.6.1

@@ -61,6 +61,7 @@ _PERMISSION_BOOL_KEYS = (
     "sb_lombada",
     "sb_dashboard_tablet",
     "sb_credenciais_depol",
+    "sb_manipular_imagem",
 )
 
 

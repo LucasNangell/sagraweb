@@ -363,3 +363,92 @@ class TestDeputadoEmailsEndpoint:
         assert result.email_dep == ""
         assert result.email_gab == ""
         assert result.email_contato == "contato@org.br"
+
+
+class TestCamaraHttpSession:
+    def test_sessao_ignora_proxy_do_ambiente(self, monkeypatch):
+        from services import deputados_camara_service as svc
+
+        monkeypatch.delenv("CAMARA_HTTPS_PROXY", raising=False)
+        monkeypatch.delenv("CAMARA_HTTP_PROXY", raising=False)
+        monkeypatch.setenv("HTTPS_PROXY", "http://10.120.1.14:3128")
+        svc._http_session = None
+        captured: dict[str, object] = {}
+
+        class FakeResp:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"dados": []}
+
+        class FakeSession:
+            def __init__(self):
+                self.trust_env = True
+                self.proxies = {"https": "http://10.120.1.14:3128"}
+                self.headers = {}
+
+            def get(self, url, params=None, timeout=None):
+                captured["session"] = self
+                captured["url"] = url
+                return FakeResp()
+
+        monkeypatch.setattr(svc.requests, "Session", FakeSession)
+        try:
+            svc._http_get("https://dadosabertos.camara.leg.br/api/v2/deputados")
+            sess = captured["session"]
+            assert sess.trust_env is False
+            assert sess.proxies == {}
+            assert sess.headers.get("Accept") == "application/json"
+            assert "SAGRA-Web" in str(sess.headers.get("User-Agent") or "")
+        finally:
+            svc._http_session = None
+
+    def test_sessao_usa_proxy_explicito(self, monkeypatch):
+        from services import deputados_camara_service as svc
+
+        monkeypatch.setenv("CAMARA_HTTPS_PROXY", "http://proxy.interno:3128")
+        session = svc.requests.Session()
+        svc._configure_camara_session_proxies(session)
+        assert session.trust_env is False
+        assert session.proxies == {
+            "http": "http://proxy.interno:3128",
+            "https": "http://proxy.interno:3128",
+        }
+
+
+class TestListaDeputadosCache:
+    def test_falha_http_nao_cacheia_lista_vazia(self, monkeypatch):
+        from services import deputados_camara_service as svc
+
+        svc._lista_cache = [{"id": 1, "nome": "Jonas"}]
+        svc._lista_cache_at = 0.0
+
+        def boom(*_a, **_k):
+            raise RuntimeError("proxy timeout")
+
+        monkeypatch.setattr(svc, "listar_deputados_paginado", boom)
+        result = svc.listar_todos_deputados(force_refresh=True)
+        assert result == [{"id": 1, "nome": "Jonas"}]
+        assert svc._lista_cache == [{"id": 1, "nome": "Jonas"}]
+
+    def test_listagem_vazia_nao_sobrescreve_cache(self, monkeypatch):
+        from services import deputados_camara_service as svc
+
+        svc._lista_cache = [{"id": 2, "nome": "Maria"}]
+        svc._lista_cache_at = 0.0
+        monkeypatch.setattr(svc, "listar_deputados_paginado", lambda *a, **k: [])
+        result = svc.listar_todos_deputados(force_refresh=True)
+        assert result == [{"id": 2, "nome": "Maria"}]
+        assert svc._lista_cache == [{"id": 2, "nome": "Maria"}]
+
+    def test_listagem_vazia_sem_cache_nao_grava_vazio(self, monkeypatch):
+        from services import deputados_camara_service as svc
+
+        svc._lista_cache = None
+        svc._lista_cache_at = 0.0
+        monkeypatch.setattr(svc, "listar_deputados_paginado", lambda *a, **k: [])
+        result = svc.listar_todos_deputados(force_refresh=True)
+        assert result == []
+        assert svc._lista_cache is None
+

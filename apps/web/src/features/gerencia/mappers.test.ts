@@ -154,8 +154,64 @@ describe("campos de Entrega", () => {
     expect(payload.MaquinaLink).toBe("Offset/Digital");
     expect(payload.PapelLink).toBe("Diversos");
     expect(payload.Cores).toBe("Diversas");
-    expect(payload.PapelDescricao).toBe("Capa: Couché 250g | Miolo: Pólen 80g");
-    expect(payload.CoresDescricao).toBe("Capa: 4x4 | Miolo: 1x1");
+    expect(payload.PapelDescricao).toBeNull();
+    expect(payload.CoresDescricao).toBeNull();
+  });
+
+  it("preserva observações de PapelDescricao/CoresDescricao do formulário no save", () => {
+    const form = {
+      ...createEmptyGerenciaForm(),
+      txt_papel_desc: "Usar reserva do almoxarifado",
+      txt_cores_desc: "Pantone conforme amostra",
+    };
+    const payload = formToSavePayload(
+      form,
+      { ano: "2025", id: "2465" },
+      "1234",
+      {
+        version: 1,
+        componentes: [
+          {
+            nome: "Capa",
+            tipo: "CAPA",
+            lotes: [
+              {
+                id: "c",
+                paginas: 4,
+                maquina_link: "Offset",
+                papel_link: "Couché 250g",
+                cores_link: "4x4",
+                papel_desc: "",
+                cores_desc: "",
+                frente_verso: false,
+                acabamentos: [],
+              },
+            ],
+          },
+          {
+            nome: "Miolo",
+            tipo: "MIOLO",
+            lotes: [
+              {
+                id: "m",
+                paginas: 16,
+                maquina_link: "Digital",
+                papel_link: "Pólen 80g",
+                cores_link: "1x1",
+                papel_desc: "",
+                cores_desc: "",
+                frente_verso: false,
+                acabamentos: [],
+              },
+            ],
+          },
+        ],
+      },
+    );
+    expect(payload.PapelDescricao).toBe("Usar reserva do almoxarifado");
+    expect(payload.CoresDescricao).toBe("Pantone conforme amostra");
+    expect(payload.PapelLink).toBe("Diversos");
+    expect(payload.Cores).toBe("Diversas");
   });
 
   it("grava MaquinaLink só com a máquina real quando o outro lote é Ignorada", () => {
@@ -283,5 +339,40 @@ describe("campos de Entrega", () => {
       },
     );
     expect(payload.FrenteVerso).toBe(true);
+  });
+});
+
+describe("SetorAndamento na criação", () => {
+  it("não envia SetorAndamento em edição", () => {
+    const payload = formToSavePayload(
+      createEmptyGerenciaForm(),
+      { ano: "2025", id: "2465" },
+      "1234",
+      undefined,
+      "SEORG",
+    );
+    expect(payload.SetorAndamento).toBeUndefined();
+  });
+
+  it("envia SetorAndamento em nova OS", () => {
+    const payload = formToSavePayload(
+      createEmptyGerenciaForm(),
+      { action: "new", type: "normal" },
+      "1234",
+      undefined,
+      "SEORG",
+    );
+    expect(payload.SetorAndamento).toBe("SEORG");
+  });
+
+  it("envia SetorAndamento em duplicata", () => {
+    const payload = formToSavePayload(
+      createEmptyGerenciaForm(),
+      { action: "duplicate", ano: "2025", id: "10" },
+      "1234",
+      undefined,
+      "  SECOG  ",
+    );
+    expect(payload.SetorAndamento).toBe("SECOG");
   });
 });

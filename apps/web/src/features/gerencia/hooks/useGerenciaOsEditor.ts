@@ -453,22 +453,31 @@ export function useGerenciaOsEditor({
     update,
   ]);
 
-  const save = useCallback(async (): Promise<SaveOsResponse | null> => {
+  const validateForSave = useCallback((): boolean => {
     if (!form.val_produto) {
       window.alert("Selecione um Produto.");
-      return null;
+      return false;
     }
     if (!form.val_titulo.trim()) {
       window.alert("Informe o Título.");
-      return null;
+      return false;
     }
     if (!form.req_solicitante.trim()) {
       window.alert("Informe o Solicitante.");
-      return null;
+      return false;
     }
     const entregaError = validateEntregaDataForSave(form);
     if (entregaError) {
       window.alert(entregaError);
+      return false;
+    }
+    return true;
+  }, [form]);
+
+  const save = useCallback(async (
+    setorAndamento?: string | null,
+  ): Promise<SaveOsResponse | null> => {
+    if (!validateForSave()) {
       return null;
     }
 
@@ -481,6 +490,8 @@ export function useGerenciaOsEditor({
       const formForSave = {
         ...applyTechSpecToForm(form, safeSpec),
         txt_acabamento: form.txt_acabamento,
+        txt_papel_desc: form.txt_papel_desc,
+        txt_cores_desc: form.txt_cores_desc,
       };
       const payload = formToSavePayload(
         {
@@ -493,6 +504,7 @@ export function useGerenciaOsEditor({
         search,
         ponto,
         safeSpec,
+        setorAndamento,
       );
       const result = await saveOs(payload);
       if (result.status === "ok") {
@@ -514,7 +526,7 @@ export function useGerenciaOsEditor({
     } finally {
       setSaving(false);
     }
-  }, [applyLoadedState, form, ponto, search, techSpec]);
+  }, [applyLoadedState, aux.formatos, form, ponto, search, techSpec, validateForSave]);
 
   return {
     form,
@@ -524,6 +536,7 @@ export function useGerenciaOsEditor({
     loading: loading || aux.loading,
     saving,
     save,
+    validateForSave,
     dirty,
     resetToSnapshot,
     snapshot,

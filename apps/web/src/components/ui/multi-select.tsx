@@ -15,6 +15,8 @@ interface MultiSelectProps {
   onChange: (value: string[]) => void;
   placeholder?: string;
   disabled?: boolean;
+  /** Lista ainda carregando — vazio mostra "Carregando..." em vez de "Nenhuma opção". */
+  isLoading?: boolean;
   className?: string;
   /** `top` (padrão) = rótulo acima; `left` = rótulo à esquerda com ":". */
   labelSide?: "top" | "left";
@@ -54,6 +56,7 @@ export function MultiSelect({
   onChange,
   placeholder = "Selecione...",
   disabled = false,
+  isLoading = false,
   className,
   labelSide = "top",
   hideLabel = false,
@@ -225,7 +228,9 @@ export function MultiSelect({
           </div>
           <div className="max-h-52 overflow-y-auto py-1">
             {normalized.length === 0 ? (
-              <p className="px-3 py-2 text-sm text-neutral-500">Carregando...</p>
+              <p className="px-3 py-2 text-sm text-neutral-500">
+                {isLoading ? "Carregando..." : "Nenhuma opção"}
+              </p>
             ) : visibleOptions.length === 0 ? (
               <p className="px-3 py-2 text-sm text-neutral-500">Nenhuma opção</p>
             ) : (

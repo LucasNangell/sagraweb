@@ -755,6 +755,7 @@ export interface SaveOsPayload {
   ElemGrafArteGab?: boolean;
   ElemGrafAssinatura?: boolean;
   Calculos?: Record<string, string | number>;
+  SetorAndamento?: string | null;
   TechSpec?: {
     version?: number;
     acabamentosGerais?: Array<{

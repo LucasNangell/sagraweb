@@ -845,6 +845,8 @@ def _write_protocolo(
     cota_col = cota_protocolo_column(nro)
     if cota_col in avail:
         proto_fields = (*proto_fields, cota_col)
+    if "ReqLançada" in avail:
+        proto_fields = (*proto_fields, "ReqLançada")
     params = tuple(proto.get(f) for f in proto_fields)
     if _protocolo_exists(cursor, nro, ano):
         set_sql = ", ".join(f"{col}=?" for col in proto_fields)
@@ -878,6 +880,8 @@ def _write_protocolo(
         ]
         if cota_col in avail:
             base_cols.append(cota_col)
+        if "ReqLançada" in avail:
+            base_cols.append("ReqLançada")
         optional_mapped = _map_protocolo_cols_for_mdb(
             avail,
             _PROTO_INSERT_OPTIONAL_NULL_COLS,

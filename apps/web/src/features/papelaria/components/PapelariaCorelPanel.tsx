@@ -147,6 +147,12 @@ export function validateRequiredFields(
     .map((f) => f.label);
 }
 
+export function dadosForProvaCdrExistente(
+  _fieldValues?: Record<string, string>,
+): Record<string, string> {
+  return {};
+}
+
 export function PapelariaCorelPanel({ osId, osAno }: Props) {
   const anoNum = osAno ? parseInt(osAno, 10) : NaN;
   const nroNum = osId ? parseInt(osId, 10) : NaN;
@@ -666,7 +672,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
       ano: anoNum,
       nro: nroNum,
       modelo_id: selectedModelId,
-      dados: dadosForJob,
+      dados: dadosForProvaCdrExistente(dadosForJob),
       lancar_andamento: lancarAndamento,
       arquivo_cdr: arquivoCdr,
     });
@@ -1116,14 +1122,15 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
                           <>
                             Usa o arquivo{" "}
                             <span className="font-mono">{cdrFiles[0].filename}</span> da
-                            pasta da OS (qualquer .cdr, exceto cópia de segurança) — não
-                            recria o Corel a partir do modelo.
+                            pasta da OS (qualquer .cdr, exceto cópia de segurança) —
+                            exporta PDF/mockup sem reaplicar os campos do formulário
+                            nem alterar o Corel.
                           </>
                         ) : (
                           <>
                             Há {cdrFiles.length} arquivos .cdr na pasta da OS. O
                             sistema perguntará qual usar e exportará PDF/mockup sem
-                            alterar o Corel.
+                            reaplicar os campos nem alterar o Corel.
                           </>
                         )}
                       </p>
@@ -1187,7 +1194,8 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
             </h3>
             <p className="mt-2 text-center text-sm text-slate-600">
               Há mais de um .cdr na pasta desta OS. Escolha o arquivo pronto para
-              gerar a prova (PDF e mockup), sem alterar o Corel.
+              gerar a prova (PDF e mockup), sem reaplicar os campos nem alterar o
+              Corel.
             </p>
             <div className="mt-4 max-h-56 space-y-2 overflow-y-auto">
               {cdrFiles.map((file) => (

@@ -1,17 +1,39 @@
 """
-Remove máscara índice 0 de PNG/JPG (lógica alinhada a imagem.py / DetectorMascaras).
-Opera em bytes para upload HTTP.
+Remove máscaras de PNG/JPG (lógica alinhada a imagem.py / DetectorMascaras).
+Opera em bytes para upload HTTP, com limiar e intensidade ajustáveis.
+
+Otimizações (sem perda de qualidade no download):
+- Cache em memória do detector após /analisar (reuso em /processar via job_id).
+- Preview pode reduzir resolução só para visualização.
+- Detecção chroma amostra pixels para achar cores; máscara final permanece full-res.
 """
 from __future__ import annotations
 
+import threading
+import time
+import uuid
+from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from PIL import Image
 
 EXTENSOES_SUPORTADAS = {".png", ".jpg", ".jpeg"}
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+PREVIEW_MAX_EDGE = 1280
+CHROMA_SAMPLE_MAX = 250_000
+JOB_TTL_SECONDS = 15 * 60
+JOB_MAX_ENTRIES = 32
+
+
+def _clamp_pct(value: float | int, default: float) -> float:
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        v = default
+    return max(0.0, min(100.0, v))
 
 
 class MascaraDetectada:
@@ -71,6 +93,7 @@ class DetectorMascarasBytes:
                 tipo="alpha",
                 mascara=np.ones_like(alpha, dtype=bool),
                 descricao="Imagem completamente transparente",
+                metadados={"modo_limiar": "fix"},
             ))
             return
 
@@ -80,12 +103,14 @@ class DetectorMascarasBytes:
                 tipo="alpha_binaria",
                 mascara=alpha > 127,
                 descricao="Máscara alpha binária (0/255)",
+                metadados={"modo_limiar": "alpha"},
             ))
         else:
             self.mascaras.append(MascaraDetectada(
                 tipo="alpha_suave",
                 mascara=alpha > 0,
                 descricao=f"Máscara alpha suave (min={alpha.min()}, max={alpha.max()})",
+                metadados={"modo_limiar": "alpha"},
             ))
 
     def _detectar_grayscale(self):
@@ -111,12 +136,14 @@ class DetectorMascarasBytes:
                         f"Imagem P&B quase binária "
                         f"({quase_binaria.mean():.1%} pixels em 0/255)"
                     ),
+                    metadados={"modo_limiar": "cinza"},
                 ))
             else:
                 self.mascaras.append(MascaraDetectada(
                     tipo="grayscale",
                     mascara=cinza > 0,
                     descricao="Imagem grayscale (R≈G≈B)",
+                    metadados={"modo_limiar": "cinza"},
                 ))
 
     def _detectar_cor_uniforme(self):
@@ -126,22 +153,31 @@ class DetectorMascarasBytes:
         if visiveis.size == 0:
             return
 
-        quantizado = (visiveis // 16).astype(np.uint8)
+        # Amostra só para ranquear cores dominantes; a máscara é aplicada em full-res.
+        n = len(visiveis)
+        if n > CHROMA_SAMPLE_MAX:
+            step = max(1, n // CHROMA_SAMPLE_MAX)
+            amostra = visiveis[::step]
+        else:
+            amostra = visiveis
+
+        quantizado = (amostra // 16).astype(np.uint8)
         cores, contagens = np.unique(
             quantizado.reshape(-1, 3), axis=0, return_counts=True
         )
         ordem = np.argsort(contagens)[::-1]
+        base_tol = 20 if self.tem_alpha else 35
+        amostra_n = len(amostra)
 
         for i in ordem[:3]:
             cor_top = cores[i]
-            fracao = contagens[i] / len(visiveis)
+            fracao = contagens[i] / amostra_n
             if fracao < 0.20:
                 continue
 
             cor_real = (cor_top.astype(np.int32) * 16 + 8).astype(np.uint8)
-            tol = 20 if self.tem_alpha else 35
             diff = np.abs(rgb.astype(np.int32) - cor_real.astype(np.int32))
-            mascara = np.all(diff < tol, axis=2)
+            mascara = np.all(diff < base_tol, axis=2)
 
             if any(
                 m.tipo == "chroma_key"
@@ -157,7 +193,12 @@ class DetectorMascarasBytes:
                     f"Cor uniforme RGB{tuple(int(x) for x in cor_real)} "
                     f"({fracao:.1%} da imagem)"
                 ),
-                metadados={"cor": cor_real.tolist(), "fracao": fracao},
+                metadados={
+                    "cor": cor_real.tolist(),
+                    "fracao": float(fracao),
+                    "modo_limiar": "chroma",
+                    "tol_base": base_tol,
+                },
             ))
 
     def _detectar_quase_binaria(self):
@@ -178,9 +219,22 @@ class DetectorMascarasBytes:
                         f"Canal {nome} quase binário "
                         f"({quase_bin.mean():.1%} pixels perto de 0/255)"
                     ),
+                    metadados={"modo_limiar": "canal", "canal": nome},
                 ))
 
-    def apagar_mascara_para_png_bytes(self, indice: int = 0) -> bytes:
+    def listar_info(self) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for i, m in enumerate(self.mascaras):
+            out.append({
+                "indice": i,
+                "tipo": m.tipo,
+                "descricao": m.descricao,
+                "cobertura": round(m.cobertura * 100, 2),
+                "modo_limiar": m.metadados.get("modo_limiar", "fix"),
+            })
+        return out
+
+    def _mascara_com_limiar(self, indice: int, limiar: float) -> np.ndarray:
         if not self.mascaras:
             raise ValueError("Nenhuma máscara detectada na imagem.")
         if indice < 0 or indice >= len(self.mascaras):
@@ -190,26 +244,196 @@ class DetectorMascarasBytes:
             )
 
         m = self.mascaras[indice]
+        modo = m.metadados.get("modo_limiar", "fix")
+        limiar = _clamp_pct(limiar, 50.0)
+
+        if modo == "alpha":
+            # limiar 0 = conservador (quase nada); 50 ≈ >127; 100 = agressivo (>0)
+            threshold = int(round(255 * (1.0 - limiar / 100.0)))
+            return self.rgba[:, :, 3] > threshold
+
+        if modo == "cinza":
+            r, g, b = self.rgba[:, :, 0], self.rgba[:, :, 1], self.rgba[:, :, 2]
+            cinza = ((r.astype(np.int32) + g + b) / 3).astype(np.uint8)
+            threshold = int(round(255 * (1.0 - limiar / 100.0)))
+            return cinza > threshold
+
+        if modo == "canal":
+            canal_nome = m.metadados.get("canal", "R")
+            canal_map = {"R": 0, "G": 1, "B": 2}
+            canal = self.rgba[:, :, canal_map.get(canal_nome, 0)]
+            threshold = int(round(255 * (1.0 - limiar / 100.0)))
+            return canal > threshold
+
+        if modo == "chroma":
+            cor = m.metadados.get("cor")
+            tol_base = int(m.metadados.get("tol_base", 20))
+            if not cor:
+                return m.mascara
+            # limiar 50 = tol_base; 0 = tol mínimo; 100 = 2x tol_base
+            tol = max(1, int(round(tol_base * (limiar / 50.0))))
+            rgb = self.rgba[:, :, :3]
+            diff = np.abs(rgb.astype(np.int32) - np.asarray(cor, dtype=np.int32))
+            return np.all(diff < tol, axis=2)
+
+        # fixo: limiar não altera a forma; só a intensidade na aplicação
+        return m.mascara
+
+    def apagar_mascara_para_png_bytes(
+        self,
+        indice: int = 0,
+        *,
+        intensidade: float = 100.0,
+        limiar: float = 50.0,
+        preview: bool = False,
+    ) -> bytes:
+        intensidade = _clamp_pct(intensidade, 100.0)
+        limiar = _clamp_pct(limiar, 50.0)
+        mascara = self._mascara_com_limiar(indice, limiar)
         img = self.rgba.copy()
+        t = intensidade / 100.0
 
-        if self.tem_alpha:
-            img[m.mascara, 3] = 0
-        else:
-            img[m.mascara, 0] = 255
-            img[m.mascara, 1] = 255
-            img[m.mascara, 2] = 255
-            img[m.mascara, 3] = 255
+        if t > 0:
+            if self.tem_alpha:
+                alpha = img[:, :, 3].astype(np.float32)
+                alpha[mascara] = alpha[mascara] * (1.0 - t)
+                img[:, :, 3] = np.clip(np.rint(alpha), 0, 255).astype(np.uint8)
+            else:
+                # JPG: mistura em direção ao branco na região da máscara
+                for c in range(3):
+                    canal = img[:, :, c].astype(np.float32)
+                    canal[mascara] = canal[mascara] * (1.0 - t) + 255.0 * t
+                    img[:, :, c] = np.clip(np.rint(canal), 0, 255).astype(np.uint8)
+                img[mascara, 3] = 255
 
-        out = BytesIO()
-        Image.fromarray(img, "RGBA").save(out, "PNG")
-        return out.getvalue()
+        return _encode_png(img, preview=preview)
+
+
+def _encode_png(img: np.ndarray, *, preview: bool) -> bytes:
+    pil = Image.fromarray(img, "RGBA")
+    compress = 3 if preview else 6
+    if preview:
+        w, h = pil.size
+        longest = max(w, h)
+        if longest > PREVIEW_MAX_EDGE:
+            scale = PREVIEW_MAX_EDGE / longest
+            pil = pil.resize(
+                (max(1, int(w * scale)), max(1, int(h * scale))),
+                Image.Resampling.BILINEAR,
+            )
+    out = BytesIO()
+    pil.save(out, "PNG", compress_level=compress, optimize=False)
+    return out.getvalue()
+
+
+@dataclass
+class _CachedJob:
+    detector: DetectorMascarasBytes
+    created_at: float
+
+
+_jobs: dict[str, _CachedJob] = {}
+_jobs_lock = threading.Lock()
+
+
+def _purge_jobs_locked(now: float | None = None) -> None:
+    now = time.monotonic() if now is None else now
+    expired = [
+        job_id
+        for job_id, job in _jobs.items()
+        if now - job.created_at > JOB_TTL_SECONDS
+    ]
+    for job_id in expired:
+        del _jobs[job_id]
+    while len(_jobs) > JOB_MAX_ENTRIES:
+        oldest_id = min(_jobs.items(), key=lambda item: item[1].created_at)[0]
+        del _jobs[oldest_id]
+
+
+def store_job(detector: DetectorMascarasBytes) -> str:
+    job_id = uuid.uuid4().hex
+    with _jobs_lock:
+        _purge_jobs_locked()
+        _jobs[job_id] = _CachedJob(detector=detector, created_at=time.monotonic())
+    return job_id
+
+
+def get_job(job_id: str) -> DetectorMascarasBytes:
+    with _jobs_lock:
+        _purge_jobs_locked()
+        job = _jobs.get(job_id)
+        if job is None:
+            raise ValueError(
+                "Sessão de imagem expirada ou inválida. Envie o arquivo novamente."
+            )
+        job.created_at = time.monotonic()
+        return job.detector
+
+
+def clear_jobs_for_tests() -> None:
+    with _jobs_lock:
+        _jobs.clear()
+
+
+def analisar_mascaras(content: bytes, filename: str) -> dict[str, Any]:
+    det = DetectorMascarasBytes(content, filename)
+    job_id = store_job(det)
+    return {
+        "job_id": job_id,
+        "filename": det.filename,
+        "tem_alpha": det.tem_alpha,
+        "largura": int(det.rgba.shape[1]),
+        "altura": int(det.rgba.shape[0]),
+        "mascaras": det.listar_info(),
+    }
+
+
+def aplicar_mascara(
+    content: bytes,
+    filename: str,
+    *,
+    mascara_idx: int = 0,
+    intensidade: float = 100.0,
+    limiar: float = 50.0,
+    preview: bool = False,
+) -> tuple[bytes, str]:
+    det = DetectorMascarasBytes(content, filename)
+    png = det.apagar_mascara_para_png_bytes(
+        mascara_idx,
+        intensidade=intensidade,
+        limiar=limiar,
+        preview=preview,
+    )
+    stem = Path(det.filename).stem or "imagem"
+    return png, f"{stem}_sem_mascara_{mascara_idx}.png"
+
+
+def aplicar_mascara_job(
+    job_id: str,
+    *,
+    mascara_idx: int = 0,
+    intensidade: float = 100.0,
+    limiar: float = 50.0,
+    preview: bool = False,
+) -> tuple[bytes, str]:
+    det = get_job(job_id)
+    png = det.apagar_mascara_para_png_bytes(
+        mascara_idx,
+        intensidade=intensidade,
+        limiar=limiar,
+        preview=preview,
+    )
+    stem = Path(det.filename).stem or "imagem"
+    return png, f"{stem}_sem_mascara_{mascara_idx}.png"
 
 
 def remover_mascara_0(content: bytes, filename: str) -> tuple[bytes, str]:
-    """
-    Remove a máscara índice 0 e retorna (png_bytes, nome_sugerido).
-    """
-    det = DetectorMascarasBytes(content, filename)
-    png = det.apagar_mascara_para_png_bytes(0)
-    stem = Path(det.filename).stem or "imagem"
-    return png, f"{stem}_sem_mascara_0.png"
+    """Compat: remove máscara 0 com intensidade total e limiar padrão."""
+    return aplicar_mascara(
+        content,
+        filename,
+        mascara_idx=0,
+        intensidade=100.0,
+        limiar=50.0,
+        preview=False,
+    )

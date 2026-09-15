@@ -23,7 +23,21 @@ import {
   setGerenciaCoefA4PorProduto,
   toCheck,
   validateEntregaDataForSave,
+  defaultEntradaInicialSetor,
 } from "./utils";
+
+describe("defaultEntradaInicialSetor", () => {
+  it("usa o setor do usuário quando informado", () => {
+    expect(defaultEntradaInicialSetor("SEORG")).toBe("SEORG");
+    expect(defaultEntradaInicialSetor("  SECOG  ")).toBe("SECOG");
+  });
+
+  it("cai em SEFOC quando o usuário não tem setor", () => {
+    expect(defaultEntradaInicialSetor(null)).toBe("SEFOC");
+    expect(defaultEntradaInicialSetor("")).toBe("SEFOC");
+    expect(defaultEntradaInicialSetor(undefined)).toBe("SEFOC");
+  });
+});
 
 describe("validateEntregaDataForSave", () => {
   it("não exige data quando a prioridade é Normal", () => {

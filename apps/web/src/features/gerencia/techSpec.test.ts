@@ -346,11 +346,25 @@ describe("campos OS de máquina, papel e cores", () => {
   });
 
   it("grava PapelLink Diversos e Cores Diversas sem alterar as descrições", () => {
+    const base = createEmptyGerenciaForm();
+    const withObs = {
+      ...base,
+      txt_papel_desc: "Observação de papel original",
+      txt_cores_desc: "Observação de cores original",
+    };
+    const form = applyTechSpecToForm(withObs, mixedSpec);
+    expect(form.val_papel).toBe("Diversos");
+    expect(form.val_cores).toBe("Diversas");
+    expect(form.txt_papel_desc).toBe("Observação de papel original");
+    expect(form.txt_cores_desc).toBe("Observação de cores original");
+  });
+
+  it("não preenche PapelDescricao/CoresDescricao a partir do TechSpec", () => {
     const form = applyTechSpecToForm(createEmptyGerenciaForm(), mixedSpec);
     expect(form.val_papel).toBe("Diversos");
     expect(form.val_cores).toBe("Diversas");
-    expect(form.txt_papel_desc).toBe("Capa: Couché 250g | Miolo: Pólen 80g");
-    expect(form.txt_cores_desc).toBe("Capa: 4x4 | Miolo: 1x1");
+    expect(form.txt_papel_desc).toBe("");
+    expect(form.txt_cores_desc).toBe("");
   });
 
   it("mantém o valor único quando todos os componentes coincidem", () => {

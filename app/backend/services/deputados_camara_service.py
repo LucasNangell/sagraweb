@@ -28,10 +28,12 @@ DEPUTADOS_URL = f"{API_BASE}/deputados"
 REQUEST_TIMEOUT = 12
 _CACHE_TTL_SEC = 6 * 60 * 60  # 6 h — lista completa em memória
 _CACHE_DEPUTADO_DB_TTL_SEC = 7 * 24 * 60 * 60  # 7 dias — e-mails/dados no MySQL
+USER_AGENT = "SAGRA-Web/papelaria (papelaria.deapa@camara.leg.br)"
 _schema_email_ok = False
 
 _lista_cache: list[dict[str, Any]] | None = None
 _lista_cache_at: float = 0.0
+_http_session: requests.Session | None = None
 
 
 @dataclass
@@ -252,8 +254,49 @@ def _parse_deputado(id_dep: int, list_item: dict[str, Any], detail: dict[str, An
     )
 
 
+def _configure_camara_session_proxies(session: requests.Session) -> None:
+    """
+    O requests herda HTTP_PROXY/HTTPS_PROXY do Windows. No servidor de produção
+    isso costuma apontar para um proxy interno inacessível a partir do CGrafSysVM,
+    causando timeout no prefill da Papelaria. Por padrão usamos conexão direta.
+    Defina CAMARA_HTTPS_PROXY no .env apenas se a API da Câmara exigir proxy.
+    """
+    try:
+        import config_manager  # noqa: F401
+    except ImportError:
+        pass
+    explicit = (
+        (os.environ.get("CAMARA_HTTPS_PROXY") or "").strip()
+        or (os.environ.get("CAMARA_HTTP_PROXY") or "").strip()
+    )
+    session.trust_env = False
+    if explicit:
+        session.proxies = {"http": explicit, "https": explicit}
+        logger.info(
+            "API Câmara: usando proxy explícito (CAMARA_HTTPS_PROXY / CAMARA_HTTP_PROXY)"
+        )
+    else:
+        session.proxies = {}
+        logger.debug("API Câmara: conexão direta (proxy de ambiente ignorado)")
+
+
+def _camara_session() -> requests.Session:
+    global _http_session
+    if _http_session is None:
+        session = requests.Session()
+        session.headers.update(
+            {
+                "Accept": "application/json",
+                "User-Agent": USER_AGENT,
+            }
+        )
+        _configure_camara_session_proxies(session)
+        _http_session = session
+    return _http_session
+
+
 def _http_get(url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-    resp = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
+    resp = _camara_session().get(url, params=params, timeout=REQUEST_TIMEOUT)
     resp.raise_for_status()
     return resp.json()
 
@@ -299,6 +342,8 @@ def listar_deputados_paginado(
             payload = _http_get(DEPUTADOS_URL, params)
         except Exception as exc:
             logger.error("Erro listagem deputados (página %s): %s", pagina, exc)
+            if pagina == 1 and not resultados:
+                raise
             break
 
         lote = payload.get("dados") or []
@@ -328,7 +373,18 @@ def listar_todos_deputados(force_refresh: bool = False) -> list[dict[str, Any]]:
     ):
         return _lista_cache
 
-    todos = listar_deputados_paginado()
+    try:
+        todos = listar_deputados_paginado()
+    except Exception as exc:
+        logger.warning("API Câmara indisponível (listagem completa): %s", exc)
+        return list(_lista_cache or [])
+
+    if not todos:
+        logger.warning(
+            "Listagem de deputados da Câmara veio vazia — cache em memória não atualizado."
+        )
+        return list(_lista_cache or [])
+
     _lista_cache = todos
     _lista_cache_at = now
     logger.info("Cache deputados Câmara atualizado: %s registros", len(todos))

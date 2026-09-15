@@ -4,6 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultOsFilters, useOsFiltersStore } from "../osFiltersStore";
 import { OsFiltersPanel } from "./OsFiltersPanel";
 
+const categoriasLookup = vi.hoisted(() => ({
+  data: [] as string[],
+  isLoading: false,
+}));
+
 vi.mock("@/api/hooks/useOsFilterOptions", () => ({
   useOsFilterYears: () => ({ data: { data: [2026] }, isLoading: false }),
   useOsFilterProducts: () => ({ data: { data: [] }, isFetching: false }),
@@ -15,7 +20,7 @@ vi.mock("@/api/hooks/useOsFilterOptions", () => ({
 }));
 
 vi.mock("@/api/hooks/useAuxLookups", () => ({
-  useCategoriasLookup: () => ({ data: [], isLoading: false }),
+  useCategoriasLookup: () => categoriasLookup,
   useMaquinasLookup: () => ({ data: [], isLoading: false }),
   useSetoresLookup: () => ({ data: [], isLoading: false }),
   useSituacoesLookup: () => ({ data: [], isLoading: false }),
@@ -42,6 +47,8 @@ function renderPanel(
 
 describe("OsFiltersPanel advanced filters", () => {
   beforeEach(() => {
+    categoriasLookup.data = [];
+    categoriasLookup.isLoading = false;
     useOsFiltersStore.setState({
       filters: defaultOsFilters(),
       globalSearch: "",
@@ -90,6 +97,8 @@ describe("OsFiltersPanel advanced filters", () => {
 
 describe("OsFiltersPanel save current filters", () => {
   beforeEach(() => {
+    categoriasLookup.data = [];
+    categoriasLookup.isLoading = false;
     useOsFiltersStore.setState({
       filters: defaultOsFilters(),
       globalSearch: "",
@@ -107,5 +116,34 @@ describe("OsFiltersPanel save current filters", () => {
     renderPanel(vi.fn(), vi.fn(), { onSaveCurrentFilters });
     fireEvent.click(screen.getByTestId("os-filters-save"));
     expect(onSaveCurrentFilters).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("OsFiltersPanel categoria lookup", () => {
+  beforeEach(() => {
+    categoriasLookup.data = [];
+    categoriasLookup.isLoading = false;
+    useOsFiltersStore.setState({
+      filters: defaultOsFilters(),
+      globalSearch: "",
+      filtersExpanded: true,
+    });
+  });
+
+  it("desabilita Categoria só no primeiro carregamento sem opções", () => {
+    categoriasLookup.isLoading = true;
+    renderPanel();
+    const trigger = screen.getByTestId("os-filters-categoria");
+    expect(trigger).toBeDisabled();
+    expect(trigger).toHaveTextContent("Carregando...");
+  });
+
+  it("mantém Categoria habilitada com opções em cache mesmo recarregando", () => {
+    categoriasLookup.data = ["Deputado", "Orgao"];
+    categoriasLookup.isLoading = true;
+    renderPanel();
+    const trigger = screen.getByTestId("os-filters-categoria");
+    expect(trigger).not.toBeDisabled();
+    expect(trigger).toHaveTextContent("Todos");
   });
 });

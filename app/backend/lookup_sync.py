@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, List, Optional
@@ -18,6 +19,9 @@ from config_manager import config_manager
 from database import db
 
 logger = logging.getLogger(__name__)
+
+_LOOKUP_POPULATED_TTL_SEC = 300.0
+_lookup_populated_until_monotonic: float = 0.0
 
 _LOOKUP_DDL = {
     "tabcategorias": """
@@ -160,12 +164,47 @@ def _normalize_mdb_cell(value: Any) -> Any:
     return value
 
 
+def _empty_lookup_tables() -> List[str]:
+    return [
+        table
+        for table in _LOOKUP_DDL
+        if not _table_exists(table) or _table_empty(table)
+    ]
+
+
+def _mark_lookups_populated() -> None:
+    global _lookup_populated_until_monotonic
+    _lookup_populated_until_monotonic = time.monotonic() + _LOOKUP_POPULATED_TTL_SEC
+
+
 def sync_lookup_tables_from_mdb_if_empty() -> None:
     """
     Preenche tabcategorias, tabPapel, tabCores e tabFormatos no MySQL quando vazias,
     copiando dados do MDB OS Atual.
+
+    Não abre o Access se as tabelas já tiverem dados, se o TTL em memória
+    ainda valer, ou se MYSQL_ONLY estiver ativo.
     """
+    now = time.monotonic()
+    if (
+        _lookup_populated_until_monotonic > 0
+        and now < _lookup_populated_until_monotonic
+    ):
+        return
+
     ensure_mysql_lookup_tables()
+    missing = _empty_lookup_tables()
+    if not missing:
+        _mark_lookups_populated()
+        return
+
+    if config_manager.is_mysql_only():
+        logger.info(
+            "Lookups vazios (%s) em MYSQL_ONLY; não sincroniza MDB",
+            ", ".join(missing),
+        )
+        return
+
     conn = _mdb_connection()
     if conn is None:
         return
@@ -182,6 +221,9 @@ def sync_lookup_tables_from_mdb_if_empty() -> None:
             conn.close()
         except Exception:
             pass
+
+    if not _empty_lookup_tables():
+        _mark_lookups_populated()
 
 
 # --- Espessuras da calculadora de lombada (CalcularLombada2010.mdb) ---

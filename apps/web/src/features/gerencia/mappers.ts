@@ -31,6 +31,7 @@ export function formToSavePayload(
   params: GerenciaSearchParams,
   ponto: string,
   techSpec?: TechSpec,
+  setorAndamento?: string | null,
 ): SaveOsPayload {
   const isEdit = isGerenciaEditMode(params);
   const spec = ensureGenericoComponentes(
@@ -76,9 +77,11 @@ export function formToSavePayload(
     EntregaFormaLink: val("val_forma_entrega", derived) || null,
 
     PapelLink: val("val_papel", derived) || null,
-    PapelDescricao: val("txt_papel_desc", derived) || null,
+    PapelDescricao:
+      val("txt_papel_desc", form) || val("txt_papel_desc", derived) || null,
     Cores: val("val_cores", derived) || null,
-    CoresDescricao: val("txt_cores_desc", derived) || null,
+    CoresDescricao:
+      val("txt_cores_desc", form) || val("txt_cores_desc", derived) || null,
 
     DescAcabamento:
       val("txt_acabamento", form) || val("txt_acabamento", derived) || null,
@@ -116,5 +119,8 @@ export function formToSavePayload(
     TechSpec: spec,
 
     PontoUsuario: ponto,
+    ...(isEdit
+      ? {}
+      : { SetorAndamento: setorAndamento?.trim() || null }),
   };
 }

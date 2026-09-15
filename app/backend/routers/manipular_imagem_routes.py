@@ -1,10 +1,10 @@
-"""API Manipular Imagem — remove máscara 0 de PNG/JPG enviados pelo usuário."""
+"""API Manipular Imagem — analisa e remove máscaras de PNG/JPG com limiar/intensidade."""
 from __future__ import annotations
 
 import logging
 from urllib.parse import quote
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 
 from services import manipular_imagem_service as svc
@@ -25,29 +25,91 @@ def _require_access(request: Request) -> None:
         )
 
 
-@router.post("/processar")
-async def processar_imagem(
-    request: Request,
-    file: UploadFile = File(...),
-):
-    _require_access(request)
-
+def _read_upload(file: UploadFile, content: bytes) -> str:
     filename = file.filename or "imagem.png"
-    content = await file.read()
     if len(content) > svc.MAX_UPLOAD_BYTES:
         raise HTTPException(
             status_code=413,
             detail=f"Arquivo muito grande (máx. {svc.MAX_UPLOAD_BYTES // (1024 * 1024)} MB).",
         )
+    return filename
+
+
+def _bool_form(value: bool | str | None) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+@router.post("/analisar")
+async def analisar_imagem(
+    request: Request,
+    file: UploadFile = File(...),
+):
+    _require_access(request)
+    content = await file.read()
+    filename = _read_upload(file, content)
+    try:
+        return svc.analisar_mascaras(content, filename)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception:
+        logger.exception("Falha ao analisar imagem (%s)", filename)
+        raise HTTPException(
+            status_code=500,
+            detail="Falha ao analisar a imagem.",
+        ) from None
+
+
+@router.post("/processar")
+async def processar_imagem(
+    request: Request,
+    file: UploadFile | None = File(None),
+    job_id: str | None = Form(None),
+    mascara_idx: int = Form(0),
+    intensidade: float = Form(100),
+    limiar: float = Form(50),
+    preview: str = Form("false"),
+):
+    _require_access(request)
+    is_preview = _bool_form(preview)
+    job = (job_id or "").strip() or None
 
     try:
-        png_bytes, out_name = svc.remover_mascara_0(content, filename)
+        if job:
+            png_bytes, out_name = svc.aplicar_mascara_job(
+                job,
+                mascara_idx=mascara_idx,
+                intensidade=intensidade,
+                limiar=limiar,
+                preview=is_preview,
+            )
+        else:
+            if file is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Informe job_id ou envie o arquivo.",
+                )
+            content = await file.read()
+            filename = _read_upload(file, content)
+            png_bytes, out_name = svc.aplicar_mascara(
+                content,
+                filename,
+                mascara_idx=mascara_idx,
+                intensidade=intensidade,
+                limiar=limiar,
+                preview=is_preview,
+            )
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except IndexError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception:
-        logger.exception("Falha ao processar imagem (%s)", filename)
+        logger.exception("Falha ao processar imagem (job=%s)", job)
         raise HTTPException(
             status_code=500,
             detail="Falha ao processar a imagem.",

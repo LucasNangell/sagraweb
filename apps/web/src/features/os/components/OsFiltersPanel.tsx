@@ -290,7 +290,17 @@ export function OsFiltersPanel({
                     page: 1,
                   })
                 }
-                disabled={categoriasQuery.isLoading}
+                disabled={
+                  categoriasQuery.isLoading &&
+                  (categoriasQuery.data ?? []).length === 0
+                }
+                placeholder={
+                  categoriasQuery.isLoading &&
+                  (categoriasQuery.data ?? []).length === 0
+                    ? "Carregando..."
+                    : "Todos"
+                }
+                isLoading={categoriasQuery.isLoading}
               />
               <SearchableMultiSelect
                 label="Nome"

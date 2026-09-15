@@ -36,6 +36,16 @@ vi.mock("@/features/auth/useAccessControl", () => ({
   }),
 }));
 
+vi.mock("@/features/auth/authStore", () => ({
+  useAuthStore: (sel: (s: { user: { setor: string | null } }) => unknown) =>
+    sel({ user: { setor: "SEFOC" } }),
+}));
+
+vi.mock("@/api/hooks/useAuxLookups", () => ({
+  useSetoresLookup: () => ({ data: ["SEFOC", "SEIMP"], isLoading: false }),
+  useSituacoesLookup: () => ({ data: [], isLoading: false }),
+}));
+
 vi.mock("@/features/os/hooks/useOsEditLock", () => ({
   useOsEditLock: () => ({
     acquire: vi.fn(async () => true),
@@ -57,6 +67,7 @@ vi.mock("@/features/gerencia/hooks/useGerenciaOsEditor", () => ({
     loading: false,
     saving: false,
     save: vi.fn(),
+    validateForSave: () => true,
     dirty: false,
     resetToSnapshot: vi.fn(),
     deputyPhoto: null,

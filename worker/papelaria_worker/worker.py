@@ -52,6 +52,30 @@ _load_wait_logged = False
 _processing_job = False
 _last_auto_update_check = 0.0
 
+TIPO_JOB_CREATE = "create"
+TIPO_JOB_EXPORT_EXISTING_CDR = "export_existing_cdr"
+TIPO_JOB_CREDENCIAIS_DEPOL = "credenciais_depol"
+TIPO_JOB_TIMBRADO_A4_DIGITAL = "timbrado_a4_digital"
+KNOWN_WORKER_TIPOS = frozenset(
+    {
+        TIPO_JOB_CREATE,
+        TIPO_JOB_EXPORT_EXISTING_CDR,
+        TIPO_JOB_CREDENCIAIS_DEPOL,
+        TIPO_JOB_TIMBRADO_A4_DIGITAL,
+    }
+)
+
+
+def resolve_worker_tipo_job(job: dict) -> str:
+    """Exporta PDF se o tipo for export_existing_cdr ou houver input_cdr_path."""
+    tipo = str(job.get("tipo_job") or "").strip()
+    input_cdr = str(job.get("input_cdr_path") or "").strip()
+    if input_cdr or tipo == TIPO_JOB_EXPORT_EXISTING_CDR:
+        return TIPO_JOB_EXPORT_EXISTING_CDR
+    if not tipo:
+        return TIPO_JOB_CREATE
+    return tipo
+
 
 def _should_stop() -> bool:
     return _shutdown
@@ -271,14 +295,20 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
     _ativar_protecao_suspensao(cfg)
     logging.info("Processando job #%s — OS %s/%s", job_id, job["nro"], job["ano"])
 
-    tipo_job = (job.get("tipo_job") or "create").strip()
+    tipo_job = resolve_worker_tipo_job(job)
     output_dir = job["output_dir"]
-    cdr_name = job["output_cdr_name"]
-    pdf_name = job["output_pdf_name"]
-    output_cdr = os.path.join(output_dir, cdr_name)
+    cdr_name = str(job.get("output_cdr_name") or "").strip()
+    pdf_name = str(job.get("output_pdf_name") or "").strip()
+    output_cdr = os.path.join(output_dir, cdr_name) if cdr_name else ""
     output_pdf = os.path.join(output_dir, pdf_name)
 
-    if tipo_job == "export_existing_cdr":
+    if tipo_job not in KNOWN_WORKER_TIPOS:
+        msg = f"Tipo de job não suportado: {tipo_job}"
+        logging.error("Job #%s — %s", job_id, msg)
+        api.fail(job_id, msg, retryable=False)
+        return
+
+    if tipo_job == TIPO_JOB_EXPORT_EXISTING_CDR:
         input_cdr = (job.get("input_cdr_path") or "").strip()
         try:
             validar_acesso_export_cdr(input_cdr, output_dir)
@@ -286,7 +316,7 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
             logging.error("Job #%s — pré-validação export CDR falhou: %s", job_id, exc)
             api.fail(job_id, str(exc), retryable=False)
             return
-    elif tipo_job == "credenciais_depol":
+    elif tipo_job == TIPO_JOB_CREDENCIAIS_DEPOL:
         dados_pre = job.get("dados") or {}
         jpg_dir = str(dados_pre.get("jpg_dir") or "").strip()
         svg_dir = str(dados_pre.get("svg_dir") or "").strip()
@@ -305,7 +335,7 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
             logging.error("Job #%s — %s", job_id, msg)
             api.fail(job_id, msg, retryable=False)
             return
-    elif tipo_job == "timbrado_a4_digital":
+    elif tipo_job == TIPO_JOB_TIMBRADO_A4_DIGITAL:
         caminho_modelo = _resolve_model_path(cfg.models_dir, job["arquivo_modelo"])
         templates_dir = resolve_timbrado_a4_digital_templates_dir(
             cfg.models_dir,
@@ -376,7 +406,7 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
     heartbeat_thread.start()
 
     try:
-        if tipo_job == "export_existing_cdr":
+        if tipo_job == TIPO_JOB_EXPORT_EXISTING_CDR:
             input_cdr = (job.get("input_cdr_path") or "").strip()
             api.append_log(
                 job_id,
@@ -391,7 +421,7 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 job_timeout_sec=cfg.job_timeout_sec,
                 job_id=job_id,
             )
-        elif tipo_job == "credenciais_depol":
+        elif tipo_job == TIPO_JOB_CREDENCIAIS_DEPOL:
             dados = job.get("dados") or {}
             n_itens = len(dados.get("itens") or [])
             api.append_log(
@@ -408,7 +438,7 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 job_timeout_sec=cfg.job_timeout_sec,
                 job_id=job_id,
             )
-        elif tipo_job == "timbrado_a4_digital":
+        elif tipo_job == TIPO_JOB_TIMBRADO_A4_DIGITAL:
             modelo = {
                 "produto": job.get("produto"),
                 "cores": job.get("cores"),
@@ -444,7 +474,7 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 exclusoes=job.get("exclusoes") or [],
                 preview_config=job.get("preview_config"),
             )
-        else:
+        elif tipo_job == TIPO_JOB_CREATE:
             modelo = {
                 "produto": job.get("produto"),
                 "cores": job.get("cores"),
@@ -467,6 +497,8 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 campos_dinamicos_layout=job.get("campos_dinamicos_layout"),
                 exclusoes=job.get("exclusoes") or [],
             )
+        else:
+            raise CorelGenerationError(f"Tipo de job não suportado: {tipo_job}")
         if cancel_requested.is_set():
             api.append_log(
                 job_id,
@@ -484,11 +516,11 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
         log_resumo = "; ".join(result.logs[-5:]) if result.logs else "OK"
         cdr_for_complete = cdr_name
         artefatos_complete = None
-        if tipo_job == "export_existing_cdr":
+        if tipo_job == TIPO_JOB_EXPORT_EXISTING_CDR:
             input_cdr = (job.get("input_cdr_path") or "").strip()
             if input_cdr:
                 cdr_for_complete = os.path.basename(input_cdr)
-        elif tipo_job == "timbrado_a4_digital":
+        elif tipo_job == TIPO_JOB_TIMBRADO_A4_DIGITAL:
             cdr_for_complete = ""
             pdf_name = ""
             artefatos_complete = list(getattr(result, "artefatos", []) or [])

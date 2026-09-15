@@ -1,7 +1,7 @@
 # API única — servidor de produção (mesmo destino para .exe, python worker.py e painel admin)
 api_base_url: "https://cgrafsysvm.redecamara.camara.gov.br/sagra/api"
 # Inspeção de .cdr no admin (DEV): aponte para a mesma API do painel, ex.:
-#api_base_url: "http://127.0.0.1:8001/api"
+# api_base_url: "http://127.0.0.1:8001/api"
 ssl_verify: false
 
 worker_secret: "dsajkfhkdjsfleuwahfkKHKHKJGEKkhdsfkjhHKFhkjhkjdhakhKJH"

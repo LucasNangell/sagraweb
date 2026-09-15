@@ -1198,7 +1198,7 @@ function formatFieldValue(lote: TechSpecLote, kind: "papel" | "cores"): string {
   return kind === "papel" ? lotePapelValue(lote) : loteCoresValue(lote);
 }
 
-/** Monta PapelDescricao agregada para gravação no MDB. */
+/** Monta resumo de papel a partir do TechSpec (legado / testes; não gravar no MDB). */
 export function buildPapelDescFromTechSpec(spec: TechSpec): string {
   const parts: string[] = [];
   for (const comp of spec.componentes) {
@@ -1210,7 +1210,7 @@ export function buildPapelDescFromTechSpec(spec: TechSpec): string {
   return parts.join(" | ");
 }
 
-/** Monta CoresDescricao agregada para gravação no MDB. */
+/** Monta resumo de cores a partir do TechSpec (legado / testes; não gravar no MDB). */
 export function buildCoresDescFromTechSpec(spec: TechSpec): string {
   const parts: string[] = [];
   for (const comp of spec.componentes) {
@@ -1337,7 +1337,8 @@ export function getCalculosDisplayRows(
     .filter((r): r is ComponenteCalcResumo => r !== null);
 }
 
-/** Atualiza cálculos e campos legados (Pags, papel, cores, máquina, acabamento) para o MDB. */
+/** Atualiza cálculos e campos legados (Pags, papel, cores, máquina, acabamento) para o MDB.
+ * PapelDescricao / CoresDescricao são observações livres — não regenerar a partir do TechSpec. */
 export function applyTechSpecToForm(
   form: GerenciaFormState,
   spec: TechSpec,
@@ -1353,8 +1354,6 @@ export function applyTechSpecToForm(
     val_maquina: buildMaquinaLinkFromTechSpec(safe),
     val_papel: buildPapelLinkFromTechSpec(safe),
     val_cores: buildCoresLinkFromTechSpec(safe),
-    txt_papel_desc: buildPapelDescFromTechSpec(safe),
-    txt_cores_desc: buildCoresDescFromTechSpec(safe),
     txt_acabamento: buildDescAcabamentoFromTechSpec(safe),
     chk_fv: specHasFrenteVerso(safe),
   };

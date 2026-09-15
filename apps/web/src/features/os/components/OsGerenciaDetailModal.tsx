@@ -12,9 +12,10 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { fetchOsVinculos } from "@/api/os";
+import { fetchOsVinculos, type SaveOsResponse } from "@/api/os";
 import { queryKeys } from "@/api/query-keys";
 import { useAccessControl } from "@/features/auth/useAccessControl";
+import { useAuthStore } from "@/features/auth/authStore";
 import { useDevFeature } from "@/features/configuracoes/hooks/useDevFeature";
 import {
   GERENCIA_MODAL_SECTIONS,
@@ -22,6 +23,7 @@ import {
   type GerenciaSectionId,
 } from "@/features/gerencia/components/GerenciaFormSections";
 import { NovaOsArquivosModal } from "@/features/gerencia/components/NovaOsArquivosModal";
+import { NovaOsSetorModal } from "@/features/gerencia/components/NovaOsSetorModal";
 import { useGerenciaOsEditor } from "@/features/gerencia/hooks/useGerenciaOsEditor";
 import { OrcamentoEditorProvider } from "@/features/orcamento/hooks/useOrcamentoEditor";
 import { useOsEditLock } from "@/features/os/hooks/useOsEditLock";
@@ -86,6 +88,7 @@ export function OsGerenciaDetailModal({
   onClose,
 }: OsGerenciaDetailModalProps) {
   const { can } = useAccessControl();
+  const userSetor = useAuthStore((s) => s.user?.setor);
   const canEdit = can("ctx_editar_os");
   const canNovaOs = can("ctx_nova_os");
   const canDuplicarOs = can("ctx_duplicar_os");
@@ -103,6 +106,7 @@ export function OsGerenciaDetailModal({
     origemId?: number;
     origemAno?: number;
   } | null>(null);
+  const [setorModalOpen, setSetorModalOpen] = useState(false);
 
   const composing = mode.kind !== "existing";
   const formEditable = composing || editing;
@@ -140,6 +144,7 @@ export function OsGerenciaDetailModal({
     loading,
     saving,
     save,
+    validateForSave,
     dirty,
     resetToSnapshot,
     deputyPhoto,
@@ -163,6 +168,7 @@ export function OsGerenciaDetailModal({
       setMode(EXISTING_MODE);
       setSection("solicitante");
       setArquivosModal(null);
+      setSetorModalOpen(false);
     }
   }, [open, lock.release]);
 
@@ -171,6 +177,7 @@ export function OsGerenciaDetailModal({
     setEditing(false);
     setMode(EXISTING_MODE);
     setSection("solicitante");
+    setSetorModalOpen(false);
   }, [row?.ano, row?.nr_os, lock.release]);
 
   useEffect(() => {
@@ -273,9 +280,7 @@ export function OsGerenciaDetailModal({
     window.dispatchEvent(new CustomEvent("sagra:os-print-ficha"));
   };
 
-  const handleSave = async () => {
-    const result = await save();
-    if (!result) return;
+  const applySaveResult = (result: SaveOsResponse) => {
     if (result.status !== "ok") {
       window.alert(result.message || "Erro ao salvar OS.");
       return;
@@ -322,6 +327,24 @@ export function OsGerenciaDetailModal({
         `OS salva com sucesso! (OS: ${result.id}/${result.ano})`,
     );
     void lock.release();
+  };
+
+  const handleSave = async () => {
+    if (composing) {
+      if (!validateForSave()) return;
+      setSetorModalOpen(true);
+      return;
+    }
+    const result = await save();
+    if (!result) return;
+    applySaveResult(result);
+  };
+
+  const handleConfirmSetor = async (setor: string) => {
+    const result = await save(setor);
+    if (!result) return;
+    setSetorModalOpen(false);
+    applySaveResult(result);
   };
 
   if (!open || !row) {
@@ -609,7 +632,7 @@ export function OsGerenciaDetailModal({
                 <button
                   type="button"
                   onClick={() => void handleSave()}
-                  disabled={saving}
+                  disabled={saving || setorModalOpen}
                   className="inline-flex items-center gap-2 rounded-lg bg-primary-green px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-green/90 disabled:opacity-60"
                   data-testid={homeTestIds.osGerenciaSave}
                 >
@@ -625,6 +648,14 @@ export function OsGerenciaDetailModal({
           </div>
         </footer>
       </div>
+
+      <NovaOsSetorModal
+        open={setorModalOpen}
+        defaultSetor={userSetor}
+        confirming={saving}
+        onClose={() => setSetorModalOpen(false)}
+        onConfirm={(setor) => void handleConfirmSetor(setor)}
+      />
 
       <NovaOsArquivosModal
         open={arquivosModal != null}

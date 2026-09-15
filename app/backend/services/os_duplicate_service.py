@@ -133,8 +133,8 @@ def duplicate_os_sql(
 
         cur.execute(
             f"""
-            INSERT INTO tabProtocolos (NroProtocolo, AnoProtocolo, {COLS_PROTOCOLO})
-            SELECT %s, %s, {COLS_PROTOCOLO}
+            INSERT INTO tabProtocolos (NroProtocolo, AnoProtocolo, {COLS_PROTOCOLO}, ReqLançada)
+            SELECT %s, %s, {COLS_PROTOCOLO}, 1
             FROM tabProtocolos
             WHERE NroProtocolo = %s AND AnoProtocolo = %s
             """,

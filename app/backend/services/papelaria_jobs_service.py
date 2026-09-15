@@ -481,12 +481,8 @@ def create_export_existing_cdr_job(
 
     chosen = select_os_usable_cdr(ano, nro, arquivo_cdr)
 
-    dados_clean = _sanitize_dados(dados)
-    dados_clean[INPUT_CDR_DADOS_KEY] = chosen["relative_path"]
-    if "gabinete" in dados_clean and dados_clean["gabinete"]:
-        dados_clean["gabinete"] = models_svc.normalizar_gabinete(dados_clean["gabinete"])
-    if "uf" in dados_clean and dados_clean["uf"]:
-        dados_clean["uf"] = dados_clean["uf"].upper()
+    _sanitize_dados(dados)
+    dados_clean = {INPUT_CDR_DADOS_KEY: chosen["relative_path"]}
 
     ordem = next_queue_position()
     produto_os = (os_row.get("produto") or modelo["produto"] or "").strip()
@@ -1573,6 +1569,34 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
 
     from services.papelaria_live_preview_service import overlay_campos_com_templates_preview
 
+    if job["tipo_job"] == TIPO_JOB_EXPORT_EXISTING_CDR:
+        input_cdr_path = resolve_export_input_cdr_path(
+            job["ano_protocolo"],
+            job["nro_protocolo"],
+            input_cdr_rel,
+        )
+        return {
+            "job_id": job["id"],
+            "ano": job["ano_protocolo"],
+            "nro": job["nro_protocolo"],
+            "tipo_job": job["tipo_job"],
+            "produto": job["produto"],
+            "modelo_id": job["modelo_id"],
+            "arquivo_modelo": job["arquivo_modelo"],
+            "campos": {},
+            "dados": {},
+            "campos_dinamicos_layout": {},
+            "exclusoes": [],
+            "preview_config": None,
+            "frente_versao": modelo.get("frente_versao"),
+            "cores": modelo.get("cores"),
+            "output_dir": output_dir,
+            "output_cdr_name": "",
+            "output_pdf_name": pdf_name,
+            "tentativas": job.get("tentativas") or 0,
+            "input_cdr_path": input_cdr_path,
+        }
+
     payload: dict[str, Any] = {
         "job_id": job["id"],
         "ano": job["ano_protocolo"],
@@ -1596,13 +1620,6 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
         "output_pdf_name": pdf_name,
         "tentativas": job.get("tentativas") or 0,
     }
-
-    if job["tipo_job"] == TIPO_JOB_EXPORT_EXISTING_CDR:
-        payload["input_cdr_path"] = resolve_export_input_cdr_path(
-            job["ano_protocolo"],
-            job["nro_protocolo"],
-            input_cdr_rel,
-        )
 
     if job["tipo_job"] == TIPO_JOB_TIMBRADO_A4_DIGITAL:
         payload["output_dir"] = resolve_os_timbrado_digital_dir(

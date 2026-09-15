@@ -1,6 +1,7 @@
 """Testes do serviço de duplicação de OS e settings DEPOL auto-OS."""
 from __future__ import annotations
 
+import inspect
 from datetime import date
 from unittest.mock import MagicMock
 
@@ -11,6 +12,7 @@ from services.os_duplicate_service import (
     COLS_DETALHES,
     COLS_PROTOCOLO,
     DuplicateOsResult,
+    duplicate_os_sql,
     format_ponto_for_andamento,
     sql_ident_list,
 )
@@ -23,6 +25,12 @@ def test_duplicate_sql_columns_are_unique():
         dups = [c for c in cols if cols.count(c) > 1]
         assert dups == [], f"coluna repetida no INSERT de duplicar OS: {dups}"
     assert "FormatoLink" in sql_ident_list(COLS_DETALHES)
+
+
+def test_duplicate_sql_marca_req_lancada():
+    src = inspect.getsource(duplicate_os_sql)
+    assert "ReqLançada" in src
+    assert "SELECT %s, %s, {COLS_PROTOCOLO}, 1" in src
 
 
 def test_format_ponto_for_andamento_digits():

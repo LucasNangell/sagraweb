@@ -73,6 +73,16 @@ class TestEntregaPersistence:
         assert "data.EntregaFormaLink" in src
         assert "data.EntregPeriodo" in src
 
+    def test_save_os_insert_marca_req_lancada(self):
+        src = inspect.getsource(save_os)
+        insert_src = src.split("INSERT INTO tabProtocolos", 1)[1].split(
+            "CAMPOS TAB DETALHES", 1
+        )[0]
+        update_src = src.split("INSERT INTO tabProtocolos", 1)[0]
+        assert "ReqLançada" in insert_src
+        assert "True" in insert_src
+        assert "ReqLançada" not in update_src
+
     def test_prepare_os_protocol_params_includes_entrega(self):
         params = prepare_os_protocol_params(
             {
@@ -80,11 +90,13 @@ class TestEntregaPersistence:
                 "ResponsavelGrafLink": "Daniela",
                 "EntregaFormaLink": "Avisar Contato",
                 "EntregPeriodo": "Noite",
+                "ReqLançada": 1,
             }
         )
         assert params["ResponsavelGrafLink"] == "Daniela"
         assert params["EntregaFormaLink"] == "Avisar Contato"
         assert params["EntregPeriodo"] == "Noite"
+        assert params["ReqLançada"] is True
 
 
 class TestEntregaDataObrigatoria:

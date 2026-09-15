@@ -1248,6 +1248,85 @@ class TestExportExistingCdrJob:
         assert job["status"] == "pending"
         assert job["dados"][svc.INPUT_CDR_DADOS_KEY] == "Sefoc/layout_pronto.cdr"
 
+    def test_cria_job_descarta_campos_do_formulario(self, monkeypatch):
+        from services import papelaria_jobs_service as svc
+
+        captured = {}
+
+        class _FakeCursor:
+            lastrowid = 56
+
+            def execute(self, sql, params=None):
+                captured["params"] = params
+
+        def fake_transaction(operations):
+            cursor = _FakeCursor()
+            return [op(cursor) for op in operations]
+
+        def fake_query(sql, params=None):
+            if "FROM tabProtocolos" in sql:
+                return [{"NroProtocolo": 5954, "AnoProtocolo": 2026, "produto": "Ct Visita"}]
+            if "SELECT * FROM tabPapelariaJobs WHERE ID" in sql:
+                return [
+                    {
+                        "ID": 56,
+                        "NroProtocolo": 5954,
+                        "AnoProtocolo": 2026,
+                        "TipoJob": svc.TIPO_JOB_EXPORT_EXISTING_CDR,
+                        "Produto": "Ct Visita",
+                        "ModeloID": 1,
+                        "ArquivoModelo": "CtVisitaFV.cdr",
+                        "DadosJson": captured.get("params", {}).get("dados") or "{}",
+                        "Status": "pending",
+                        "Prioridade": 0,
+                        "OrdemFila": 4,
+                        "SolicitadoPor": "918713",
+                        "SolicitadoEm": None,
+                        "IniciadoEm": None,
+                        "ConcluidoEm": None,
+                        "WorkerID": None,
+                        "ArquivoCdrGerado": None,
+                        "ArquivoPdfGerado": None,
+                        "Erro": None,
+                        "Tentativas": 0,
+                        "Versao": 1,
+                        "JobPaiID": None,
+                    }
+                ]
+            if "MAX(OrdemFila)" in sql:
+                return [{"next_pos": 4}]
+            return []
+
+        monkeypatch.setattr(svc.db, "execute_query", fake_query)
+        monkeypatch.setattr(svc.db, "execute_transaction", fake_transaction)
+        with patch.object(
+            svc,
+            "broadcast_job_update",
+        ), patch(
+            "services.papelaria_models_service.get_modelo_by_id",
+            return_value=MODEL_SAMPLE,
+        ), patch.object(
+            svc,
+            "select_os_usable_cdr",
+            return_value={
+                "filename": "layout_pronto.cdr",
+                "relative_path": "Sefoc/layout_pronto.cdr",
+                "absolute_path": r"\\server\os\Sefoc\layout_pronto.cdr",
+                "mtime": 1.0,
+            },
+        ):
+            job = svc.create_export_existing_cdr_job(
+                ano=2026,
+                nro=5954,
+                modelo_id=1,
+                dados={"nome_deputado": "Fulano", "email": "a@b.c"},
+                solicitado_por="918713",
+                arquivo_cdr="Sefoc/layout_pronto.cdr",
+            )
+
+        assert job["dados"] == {svc.INPUT_CDR_DADOS_KEY: "Sefoc/layout_pronto.cdr"}
+        assert "nome_deputado" not in job["dados"]
+
     def test_recusa_cdr_fora_da_lista(self, monkeypatch):
         from services import papelaria_jobs_service as svc
 
@@ -1345,8 +1424,16 @@ class TestExportExistingCdrJob:
             "produto": "Ct Visita",
             "modelo_id": 1,
             "arquivo_modelo": "CtVisitaFV.cdr",
-            "dados": {svc.INPUT_CDR_DADOS_KEY: "Sefoc/layout_pronto.cdr"},
+            "dados": {
+                svc.INPUT_CDR_DADOS_KEY: "Sefoc/layout_pronto.cdr",
+                "nome_deputado": "Fulano",
+                "email": "a@b.c",
+            },
             "tentativas": 0,
+        }
+        modelo = {
+            **MODEL_SAMPLE,
+            "campos": {"nome_deputado": "{nome_deputado}"},
         }
 
         monkeypatch.setattr(svc, "get_job", lambda job_id: job if job_id == 77 else None)
@@ -1362,12 +1449,18 @@ class TestExportExistingCdrJob:
         )
         with patch(
             "services.papelaria_models_service.get_modelo_by_id",
-            return_value=MODEL_SAMPLE,
+            return_value=modelo,
         ):
             payload = svc.build_worker_job_payload(77)
 
         assert payload["tipo_job"] == svc.TIPO_JOB_EXPORT_EXISTING_CDR
         assert payload["input_cdr_path"] == str(chosen.resolve())
+        assert payload["campos"] == {}
+        assert payload["dados"] == {}
+        assert payload["exclusoes"] == []
+        assert payload["campos_dinamicos_layout"] == {}
+        assert payload["preview_config"] is None
+        assert payload["output_cdr_name"] == ""
         assert svc.INPUT_CDR_DADOS_KEY not in payload["dados"]
         assert payload["output_pdf_name"].endswith(".pdf")
 

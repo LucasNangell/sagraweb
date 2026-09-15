@@ -2,6 +2,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { Loader2, Save, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import type { SaveOsResponse } from "@/api/os";
+import { useAuthStore } from "@/features/auth/authStore";
 import { useOsEditLock } from "@/features/os/hooks/useOsEditLock";
 
 import { useGerenciaOsEditor } from "../hooks/useGerenciaOsEditor";
@@ -9,6 +11,7 @@ import { isGerenciaEditMode } from "../mappers";
 import type { GerenciaSearchParams } from "../types";
 import { GerenciaFormGrid } from "./GerenciaFormGrid";
 import { NovaOsArquivosModal } from "./NovaOsArquivosModal";
+import { NovaOsSetorModal } from "./NovaOsSetorModal";
 
 interface GerenciaPageProps {
   search: GerenciaSearchParams;
@@ -16,6 +19,7 @@ interface GerenciaPageProps {
 
 export function GerenciaPage({ search }: GerenciaPageProps) {
   const navigate = useNavigate();
+  const userSetor = useAuthStore((s) => s.user?.setor);
   const readOnly = search.modo === "detalhes";
   const wantsEditLock = isGerenciaEditMode(search) && !readOnly;
   const lockAno = search.ano ? parseInt(search.ano, 10) : null;
@@ -36,6 +40,7 @@ export function GerenciaPage({ search }: GerenciaPageProps) {
     loading,
     saving,
     save,
+    validateForSave,
     resetToSnapshot,
     deputyPhoto,
     fetchDeputadoIfNeeded,
@@ -50,6 +55,7 @@ export function GerenciaPage({ search }: GerenciaPageProps) {
     origemId?: number;
     origemAno?: number;
   } | null>(null);
+  const [setorModalOpen, setSetorModalOpen] = useState(false);
 
   useEffect(() => {
     if (loadError) {
@@ -83,40 +89,57 @@ export function GerenciaPage({ search }: GerenciaPageProps) {
     void navigate({ to: "/" });
   };
 
+  const isNewOs = search.action === "new" || search.action === "duplicate";
+
+  const applySaveResult = (result: SaveOsResponse, wasNewOs: boolean) => {
+    if (result.status !== "ok") {
+      window.alert(result.message || "Erro ao salvar OS.");
+      return;
+    }
+    const persistAno = result.ano ?? (search.ano ? parseInt(search.ano, 10) : null);
+    const persistId = result.id ?? (search.id ? parseInt(search.id, 10) : null);
+    const osNum = persistId ?? 0;
+    const showArquivosModal =
+      wasNewOs && osNum > 0 && osNum < 5000 && persistAno;
+    if (showArquivosModal) {
+      setArquivosModal({
+        ano: persistAno,
+        osId: osNum,
+        origemId:
+          search.action === "duplicate" && search.id
+            ? parseInt(search.id, 10)
+            : undefined,
+        origemAno:
+          search.action === "duplicate" && search.ano
+            ? parseInt(search.ano, 10)
+            : undefined,
+      });
+      return;
+    }
+    window.alert(
+      result.message ||
+        `OS salva com sucesso! (OS: ${result.id}/${result.ano})`,
+    );
+    void lock.release();
+    void navigate({ to: "/" });
+  };
+
   const handleSave = async () => {
-    const wasNewOs = search.action === "new" || search.action === "duplicate";
+    if (isNewOs) {
+      if (!validateForSave()) return;
+      setSetorModalOpen(true);
+      return;
+    }
     const result = await save();
     if (!result) return;
-    if (result.status === "ok") {
-      const persistAno = result.ano ?? (search.ano ? parseInt(search.ano, 10) : null);
-      const persistId = result.id ?? (search.id ? parseInt(search.id, 10) : null);
-      const osNum = persistId ?? 0;
-      const showArquivosModal =
-        wasNewOs && osNum > 0 && osNum < 5000 && persistAno;
-      if (showArquivosModal) {
-        setArquivosModal({
-          ano: persistAno,
-          osId: osNum,
-          origemId:
-            search.action === "duplicate" && search.id
-              ? parseInt(search.id, 10)
-              : undefined,
-          origemAno:
-            search.action === "duplicate" && search.ano
-              ? parseInt(search.ano, 10)
-              : undefined,
-        });
-        return;
-      }
-      window.alert(
-        result.message ||
-          `OS salva com sucesso! (OS: ${result.id}/${result.ano})`,
-      );
-      void lock.release();
-      void navigate({ to: "/" });
-    } else {
-      window.alert(result.message || "Erro ao salvar OS.");
-    }
+    applySaveResult(result, false);
+  };
+
+  const handleConfirmSetor = async (setor: string) => {
+    const result = await save(setor);
+    if (!result) return;
+    setSetorModalOpen(false);
+    applySaveResult(result, true);
   };
 
   if (loading || (wantsEditLock && lock.acquiring)) {
@@ -179,7 +202,7 @@ export function GerenciaPage({ search }: GerenciaPageProps) {
         {!viewOnly ? (
           <button
             type="button"
-            disabled={saving}
+            disabled={saving || setorModalOpen}
             onClick={() => void handleSave()}
             className="pointer-events-auto flex items-center gap-2 rounded-lg bg-primary-green px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-primary-green/90 disabled:opacity-60"
           >
@@ -192,6 +215,14 @@ export function GerenciaPage({ search }: GerenciaPageProps) {
           </button>
         ) : null}
       </div>
+
+      <NovaOsSetorModal
+        open={setorModalOpen}
+        defaultSetor={userSetor}
+        confirming={saving}
+        onClose={() => setSetorModalOpen(false)}
+        onConfirm={(setor) => void handleConfirmSetor(setor)}
+      />
 
       <NovaOsArquivosModal
         open={arquivosModal != null}

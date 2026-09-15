@@ -159,6 +159,11 @@ export const homeTestIds = {
   osArquivosConfirm: "os-arquivos-confirm",
   osArquivosSkip: "os-arquivos-skip",
 
+  osNovaSetorRoot: "os-nova-setor-root",
+  osNovaSetorSelect: "os-nova-setor-select",
+  osNovaSetorConfirm: "os-nova-setor-confirm",
+  osNovaSetorCancel: "os-nova-setor-cancel",
+
   osAuditRoot: "os-audit-root",
   osAuditClose: "os-audit-close",
 

@@ -399,7 +399,18 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                 onChange={(categorias) =>
                   patchCriterios({ categorias, solicitantes: [] })
                 }
-                disabled={disabled || categoriasQuery.isLoading}
+                disabled={
+                  disabled ||
+                  (categoriasQuery.isLoading &&
+                    (categoriasQuery.data ?? []).length === 0)
+                }
+                placeholder={
+                  categoriasQuery.isLoading &&
+                  (categoriasQuery.data ?? []).length === 0
+                    ? "Carregando..."
+                    : "Todos"
+                }
+                isLoading={categoriasQuery.isLoading}
               />
               <SearchableMultiSelect
                 label="Nome"

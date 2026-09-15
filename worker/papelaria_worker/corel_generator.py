@@ -1448,6 +1448,66 @@ def _fechar_documento_corel(doc: Any, logs: list[str]) -> None:
         logs.append(f"Aviso ao fechar documento: {exc}")
 
 
+def _stat_arquivo(path: str) -> tuple[int, float]:
+    info = os.stat(path)
+    return info.st_size, info.st_mtime
+
+
+def _caminho_documento_aberto(doc: Any) -> str:
+    for attr in ("FullFileName", "FileName"):
+        try:
+            value = str(getattr(doc, attr) or "").strip()
+        except Exception:
+            value = ""
+        if value:
+            return value
+    return ""
+
+
+def _assert_documento_e_copia_temp(
+    doc: Any,
+    temp_cdr_path: str,
+    caminho_origem: str,
+    logs: list[str],
+) -> None:
+    aberto = _caminho_documento_aberto(doc)
+    if not aberto:
+        logs.append("Aviso: Corel não informou o caminho do documento aberto.")
+        return
+    aberto_abs = os.path.normcase(os.path.abspath(aberto))
+    temp_abs = os.path.normcase(os.path.abspath(temp_cdr_path))
+    origem_abs = os.path.normcase(os.path.abspath(caminho_origem))
+    if aberto_abs == origem_abs:
+        raise CorelGenerationError(
+            "Corel abriu o arquivo original da OS em vez da cópia temporária."
+        )
+    temp_name = os.path.normcase(os.path.basename(temp_abs))
+    aberto_name = os.path.normcase(os.path.basename(aberto_abs))
+    if aberto_abs != temp_abs and aberto_name != temp_name:
+        logs.append(
+            f"Aviso: documento aberto em {aberto} (esperado {temp_cdr_path})."
+        )
+
+
+def _fechar_documento_sem_salvar(doc: Any, logs: list[str]) -> None:
+    try:
+        try:
+            doc.Dirty = False
+        except Exception:
+            pass
+        closed = False
+        try:
+            doc.Close(False)
+            closed = True
+        except TypeError:
+            pass
+        if not closed:
+            doc.Close()
+        logs.append("Documento Corel fechado sem gravar.")
+    except Exception as exc:
+        logs.append(f"Aviso ao fechar documento: {exc}")
+
+
 def _copiar_arquivo_final(
     origem: str,
     destino: str,
@@ -2113,6 +2173,8 @@ def _exportar_prova_cdr_existente_impl(
     if not os.path.isfile(caminho_cdr):
         raise CorelGenerationError(f"Corel da OS não encontrado: {caminho_cdr}")
 
+    origem_stat = _stat_arquivo(caminho_cdr)
+
     os.makedirs(os.path.dirname(temp_cdr_path), exist_ok=True)
     if os.path.exists(temp_cdr_path):
         os.remove(temp_cdr_path)
@@ -2145,10 +2207,10 @@ def _exportar_prova_cdr_existente_impl(
                     corel.Visible = corel_visible
                     logs.append(f"CorelDRAW aberto (Visible={corel_visible}).")
 
-                _preparar_corel_para_edicao(corel, logs)
-
-                doc = corel.OpenDocument(os.path.abspath(temp_cdr_path))
+                temp_abs = os.path.abspath(temp_cdr_path)
+                doc = corel.OpenDocument(temp_abs)
                 logs.append(f"Documento aberto — {doc.Pages.Count} página(s).")
+                _assert_documento_e_copia_temp(doc, temp_abs, caminho_cdr, logs)
 
                 temp_pdf_path = os.path.join(os.path.dirname(temp_cdr_path), "working.pdf")
                 exportar_pdf(corel, doc, temp_pdf_path, logs)
@@ -2188,11 +2250,7 @@ def _exportar_prova_cdr_existente_impl(
                 raise CorelGenerationError(humanizar_erro_corel(exc)) from exc
             finally:
                 if doc is not None:
-                    try:
-                        doc.Close()
-                        logs.append("Documento Corel fechado.")
-                    except Exception as close_exc:
-                        logs.append(f"Aviso ao fechar documento: {close_exc}")
+                    _fechar_documento_sem_salvar(doc, logs)
                 if not reuse_corel_session:
                     try:
                         import pythoncom
@@ -2203,6 +2261,13 @@ def _exportar_prova_cdr_existente_impl(
     finally:
         if reuse_corel_session:
             _release_corel_after_job(logs, completed=job_completed)
+        try:
+            if _stat_arquivo(caminho_cdr) != origem_stat:
+                logs.append(
+                    "ERRO: o Corel original da OS foi modificado na exportação."
+                )
+        except OSError:
+            logs.append("ERRO: não foi possível conferir o Corel original após a exportação.")
 
 
 def exportar_prova_de_cdr_existente(

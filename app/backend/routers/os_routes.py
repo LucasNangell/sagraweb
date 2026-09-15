@@ -384,8 +384,29 @@ class SaveOSRequest(BaseModel):
     # Usuário que está salvando (pela sessão)
     PontoUsuario: Optional[str] = None
 
+    # Setor do andamento "Entrada Inicial" (somente INSERT)
+    SetorAndamento: Optional[str] = None
+
     Calculos: Optional[CalculosPayload] = None
     TechSpec: Optional[TechSpecPayload] = None
+
+
+def resolve_entrada_inicial_setor(
+    setor_andamento: Optional[str] = None,
+    ponto: Optional[str] = None,
+) -> str:
+    """Setor da Entrada Inicial: payload, senão setor do usuário, senão SEFOC."""
+    text = (setor_andamento or "").strip()
+    if text:
+        return text
+    ponto_limpo = "".join(filter(str.isdigit, str(ponto or "")))
+    if ponto_limpo:
+        from routers.setor_painel_routes import fetch_user_setor
+
+        user_setor = fetch_user_setor(ponto_limpo)
+        if user_setor:
+            return user_setor
+    return "SEFOC"
 
 
 _CALC_DETALHES_SQL_COLS = (
@@ -849,8 +870,9 @@ def save_os(data: SaveOSRequest, request: Request):
                     ResponsavelGrafLink, EntregaFormaLink, EntregPeriodo,
                     {cota_col},
                     DebitarCGRAF,
+                    ReqLançada,
                     OrgInteressado
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, COALESCE(%s, 'Câmara dos Deputados'))
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, COALESCE(%s, 'Câmara dos Deputados'))
             """
             cursor.execute(query_proto, (
                 final_id, current_year,
@@ -861,6 +883,7 @@ def save_os(data: SaveOSRequest, request: Request):
                 data.ResponsavelGrafLink, data.EntregaFormaLink, data.EntregPeriodo,
                 cota_estimada,
                 bool(data.DebitarCGRAF),
+                True,
                 data.OrgInteressado 
             ))
 
@@ -948,13 +971,19 @@ def save_os(data: SaveOSRequest, request: Request):
 
             ponto_limpo = ''.join(filter(str.isdigit, data.PontoUsuario or ''))
             ponto_fmt = format_ponto(ponto_limpo)
+            setor_entrada = resolve_entrada_inicial_setor(
+                data.SetorAndamento, data.PontoUsuario
+            )
             
             query_hist = """
                 INSERT INTO tabAndamento 
                 (CodStatus, NroProtocoloLink, AnoProtocoloLink, SituacaoLink, SetorLink, Data, UltimoStatus, Observaçao, Ponto)
-                VALUES (%s, %s, %s, 'Entrada Inicial', 'SEFOC', NOW(), 1, %s, %s)
+                VALUES (%s, %s, %s, 'Entrada Inicial', %s, NOW(), 1, %s, %s)
             """
-            cursor.execute(query_hist, (new_cod_status, final_id, current_year, obs_texto, ponto_fmt))
+            cursor.execute(
+                query_hist,
+                (new_cod_status, final_id, current_year, setor_entrada, obs_texto, ponto_fmt),
+            )
             
             log_os_save(
                 cursor,
@@ -970,7 +999,7 @@ def save_os(data: SaveOSRequest, request: Request):
                 ano=current_year,
                 cod_status=new_cod_status,
                 situacao="Entrada Inicial",
-                setor="SEFOC",
+                setor=setor_entrada,
                 obs=obs_texto,
                 ponto=ponto_fmt,
             )

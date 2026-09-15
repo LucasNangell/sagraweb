@@ -48,6 +48,14 @@ export function validateEntregaDataForSave(
   return "Informe a Data Entrega.";
 }
 
+/** Setor padrão da Entrada Inicial: setor do usuário, senão SEFOC. */
+export function defaultEntradaInicialSetor(
+  userSetor?: string | null,
+): string {
+  const text = userSetor?.trim();
+  return text || "SEFOC";
+}
+
 /** Cota estimada: arredonda para cima e exibe sem casas decimais (pt-BR: 1.234). */
 export function formatCotaEstimada(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "0";
@@ -74,7 +82,7 @@ function joinCapaMioloValues(...values: string[]): string {
   return values.map((v) => v.trim()).filter(Boolean).join(", ");
 }
 
-/** Monta PapelDescricao a partir dos papéis selecionados em Capa/Miolo. */
+/** Monta resumo de papel a partir de Capa/Miolo (legado; não usar para gravar memos MDB). */
 export function buildPapelDescFromCapaMiolo(
   form: Pick<
     GerenciaFormState,
@@ -92,7 +100,7 @@ export function buildPapelDescFromCapaMiolo(
   return parts.join(", ");
 }
 
-/** Monta CoresDescricao a partir das cores selecionadas em Capa/Miolo. */
+/** Monta resumo de cores a partir de Capa/Miolo (legado; não usar para gravar memos MDB). */
 export function buildCoresDescFromCapaMiolo(
   form: Pick<
     GerenciaFormState,
@@ -133,7 +141,6 @@ export function isCoresCapaMioloKey(
   return (CORES_CAPA_MIOLO_KEYS as readonly string[]).includes(key);
 }
 
-/** Atualiza txt_papel_desc / txt_cores_desc quando um campo Capa/Miolo muda. */
 /** Preenche altura/largura quando o formato é pré-definido ou contém medidas (ex.: 210 x 297). */
 export function patchFormatoDimensions(
   prev: GerenciaFormState,
@@ -172,18 +179,13 @@ export function patchFormatoFromDimensions(
   return formato ? { ...patch, val_formato: formato } : { ...patch };
 }
 
+/** Atualiza só o campo Capa/Miolo; não reescreve memos de observação (PapelDescricao/CoresDescricao). */
 export function patchCapaMioloDescFields(
   prev: GerenciaFormState,
   key: keyof GerenciaFormState,
   value: GerenciaFormState[keyof GerenciaFormState],
 ): Partial<GerenciaFormState> {
-  const merged = { ...prev, [key]: value } as GerenciaFormState;
-  if (isPapelCapaMioloKey(key)) {
-    return { [key]: value, txt_papel_desc: buildPapelDescFromCapaMiolo(merged) };
-  }
-  if (isCoresCapaMioloKey(key)) {
-    return { [key]: value, txt_cores_desc: buildCoresDescFromCapaMiolo(merged) };
-  }
+  void prev;
   return { [key]: value };
 }
 

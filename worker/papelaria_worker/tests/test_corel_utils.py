@@ -4,6 +4,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from unittest.mock import MagicMock
+
 import pytest
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -239,3 +241,101 @@ class TestHumanizarErroCorel:
         saida = tmp_path / "Sefoc"
         validar_acesso_export_cdr(str(cdr), str(saida))
         assert saida.is_dir()
+
+
+class TestExportProvaSemAlterar:
+    def test_fecha_sem_salvar(self):
+        from corel_generator import _fechar_documento_sem_salvar
+
+        calls: list[object] = []
+
+        class Doc:
+            Dirty = True
+
+            def Close(self, save=None):
+                calls.append(save)
+
+        logs: list[str] = []
+        doc = Doc()
+        _fechar_documento_sem_salvar(doc, logs)
+        assert calls == [False]
+        assert doc.Dirty is False
+        assert any("sem gravar" in line for line in logs)
+
+    def test_rejeita_documento_aberto_na_origem(self, tmp_path):
+        from corel_generator import (
+            CorelGenerationError,
+            _assert_documento_e_copia_temp,
+        )
+
+        origem = tmp_path / "pronto.cdr"
+        origem.write_bytes(b"x")
+        temp = tmp_path / "working.cdr"
+        temp.write_bytes(b"x")
+
+        class Doc:
+            FullFileName = str(origem.resolve())
+
+        with pytest.raises(CorelGenerationError, match="original da OS"):
+            _assert_documento_e_copia_temp(Doc(), str(temp), str(origem), [])
+
+    def test_export_abre_copia_temp_e_fecha_sem_salvar(self, tmp_path, monkeypatch):
+        from pathlib import Path
+
+        import corel_generator as cg
+
+        origem = tmp_path / "os" / "pronto.cdr"
+        origem.parent.mkdir()
+        origem.write_bytes(b"cdr-original")
+        temp_cdr = tmp_path / "temp" / "working.cdr"
+        temp_cdr.parent.mkdir()
+        out_pdf = tmp_path / "out" / "prova.pdf"
+        out_pdf.parent.mkdir()
+
+        opened: dict[str, object] = {}
+
+        class Doc:
+            def __init__(self, path: str):
+                self.FullFileName = path
+                self.Dirty = True
+                self.Pages = MagicMock(Count=1)
+
+            def Close(self, save=None):
+                opened["close"] = save
+
+        class Corel:
+            Visible = False
+
+            def OpenDocument(self, path):
+                opened["path"] = path
+                doc = Doc(path)
+                opened["doc"] = doc
+                return doc
+
+        fake_session = MagicMock()
+        fake_session.has_application.return_value = True
+        fake_session.get_application.return_value = Corel()
+
+        def fake_export(corel, doc, path, logs):
+            Path(path).write_bytes(b"%PDF-1.4 " + b"x" * 2048)
+
+        monkeypatch.setattr(cg, "_corel_session", fake_session)
+        monkeypatch.setattr(cg, "exportar_pdf", fake_export)
+        monkeypatch.setattr(cg, "_release_corel_after_job", lambda logs, completed=False: None)
+
+        logs: list[str] = []
+        cg._exportar_prova_cdr_existente_impl(
+            str(origem),
+            str(temp_cdr),
+            str(out_pdf),
+            False,
+            logs,
+            reuse_corel_session=True,
+        )
+
+        assert opened["close"] is False
+        assert Path(str(opened["path"])).name == "working.cdr"
+        assert origem.read_bytes() == b"cdr-original"
+        assert out_pdf.is_file()
+        assert fake_session.get_application.called
+

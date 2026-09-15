@@ -28,8 +28,10 @@ import {
 } from "@/api/papelaria";
 import { fetchOsFolderBrowse } from "@/api/os";
 import { queryKeys } from "@/api/query-keys";
+import { useAuthStore } from "@/features/auth/authStore";
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 import { tryOpenFileLocally } from "@/lib/sagraLocalOpener";
+import { authenticatedWsPath } from "@/lib/websocket";
 import { OsFolderRequiredGateModal } from "@/features/os/components/OsFolderRequiredGateModal";
 import { PapelariaProofPanel } from "./PapelariaProofPanel";
 import {
@@ -159,6 +161,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
   const hasOs = Number.isFinite(anoNum) && Number.isFinite(nroNum);
 
   const queryClient = useQueryClient();
+  const ponto = useAuthStore((s) => s.user?.ponto);
   const [selectedModelId, setSelectedModelId] = useState<number | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [excludedFields, setExcludedFields] = useState<string[]>([]);
@@ -215,52 +218,6 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
     enabled: selectedModelId !== null,
   });
 
-  const jobsQuery = useQuery({
-    queryKey: queryKeys.papelaria.jobsOs(anoNum, nroNum),
-    queryFn: () => fetchPapelariaJobsForOs(anoNum, nroNum),
-    enabled: hasOs,
-    refetchInterval: 12_000,
-  });
-
-  const activeJobQuery = useQuery({
-    queryKey: queryKeys.papelaria.job(activeJobId ?? 0),
-    queryFn: () => fetchPapelariaJob(activeJobId!),
-    enabled: activeJobId !== null,
-    refetchInterval: (query) => {
-      const status = query.state.data?.status;
-      const revisao = query.state.data?.prova_revisao;
-      const tipoJob = query.state.data?.tipo_job;
-      if (!status) return 2_000;
-      if (status === "pending" || status === "processing") return 2_000;
-      if (tipoJob === "timbrado_a4_digital" || revisao === "n_a") {
-        return false;
-      }
-      if (
-        status === "completed" &&
-        revisao !== "approved" &&
-        revisao !== "discarded"
-      ) {
-        return 5_000;
-      }
-      return false;
-    },
-  });
-
-  useEffect(() => {
-    if (activeJobId === null || !jobsQuery.data?.length) return;
-    const listed = jobsQuery.data.find((j) => j.id === activeJobId);
-    const cached = activeJobQuery.data;
-    if (
-      listed?.status === "completed" &&
-      cached &&
-      cached.status !== "completed"
-    ) {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.papelaria.job(activeJobId),
-      });
-    }
-  }, [activeJobId, activeJobQuery.data, jobsQuery.data, queryClient]);
-
   const refreshPapelariaJobs = useCallback(() => {
     void queryClient.invalidateQueries({
       queryKey: queryKeys.papelaria.jobsOs(anoNum, nroNum),
@@ -275,7 +232,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
     }
   }, [activeJobId, anoNum, nroNum, queryClient]);
 
-  useSagraWebSocket<{
+  const { status: papelariaWsStatus } = useSagraWebSocket<{
     type?: string;
     job_id?: number;
     ano?: number;
@@ -283,7 +240,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
     id?: number;
     action?: string;
   }>({
-    path: "/ws",
+    path: authenticatedWsPath(ponto != null ? String(ponto) : null),
     enabled: hasOs,
     onMessage: (data) => {
       if (data.type === "system_update" && data.action === "proof_responded") {
@@ -305,6 +262,55 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
       }
     },
   });
+  const papelariaWsConnected = papelariaWsStatus === "connected";
+
+  const jobsQuery = useQuery({
+    queryKey: queryKeys.papelaria.jobsOs(anoNum, nroNum),
+    queryFn: () => fetchPapelariaJobsForOs(anoNum, nroNum),
+    enabled: hasOs,
+    refetchInterval: papelariaWsConnected ? 60_000 : 12_000,
+  });
+
+  const activeJobQuery = useQuery({
+    queryKey: queryKeys.papelaria.job(activeJobId ?? 0),
+    queryFn: () => fetchPapelariaJob(activeJobId!),
+    enabled: activeJobId !== null,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      const revisao = query.state.data?.prova_revisao;
+      const tipoJob = query.state.data?.tipo_job;
+      if (!status) return papelariaWsConnected ? 8_000 : 2_000;
+      if (status === "pending" || status === "processing") {
+        return papelariaWsConnected ? 8_000 : 2_000;
+      }
+      if (tipoJob === "timbrado_a4_digital" || revisao === "n_a") {
+        return false;
+      }
+      if (
+        status === "completed" &&
+        revisao !== "approved" &&
+        revisao !== "discarded"
+      ) {
+        return papelariaWsConnected ? 15_000 : 5_000;
+      }
+      return false;
+    },
+  });
+
+  useEffect(() => {
+    if (activeJobId === null || !jobsQuery.data?.length) return;
+    const listed = jobsQuery.data.find((j) => j.id === activeJobId);
+    const cached = activeJobQuery.data;
+    if (
+      listed?.status === "completed" &&
+      cached &&
+      cached.status !== "completed"
+    ) {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.papelaria.job(activeJobId),
+      });
+    }
+  }, [activeJobId, activeJobQuery.data, jobsQuery.data, queryClient]);
 
   const createJobMutation = useMutation({
     mutationFn: createPapelariaJob,

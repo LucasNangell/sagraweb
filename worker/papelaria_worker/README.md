@@ -2,6 +2,8 @@
 
 Processa jobs da fila `tabPapelariaJobs` em uma **máquina Windows dedicada** com CorelDRAW instalado. O servidor SAGRA **não** executa Corel/COM.
 
+**Um processo worker por PC.** Corel COM é single-instance; um segundo `worker.py` / `.exe` no mesmo computador é recusado (lock em `temp_dir`). Escale a fila com **mais PCs**, não com dois processos na mesma máquina.
+
 ## Requisitos da máquina
 
 - Windows 10/11 ou Windows Server

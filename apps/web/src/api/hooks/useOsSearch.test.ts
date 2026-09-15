@@ -6,11 +6,11 @@ import {
 } from "./useOsSearch";
 
 describe("useOsSearch constants", () => {
-  it("usa staleTime moderado com invalidação via WebSocket", () => {
-    expect(OS_SEARCH_STALE_MS).toBe(30_000);
+  it("usa staleTime 0 com invalidação via WebSocket", () => {
+    expect(OS_SEARCH_STALE_MS).toBe(0);
   });
 
-  it("define polling de segurança leve de 120 segundos", () => {
+  it("não faz poll contínuo da home (fallback só com WS offline)", () => {
     expect(OS_SEARCH_SAFETY_POLL_MS).toBe(120_000);
   });
 });

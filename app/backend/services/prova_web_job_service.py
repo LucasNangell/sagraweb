@@ -96,12 +96,16 @@ class _ProvaWebJobRuntime:
 
     def enqueue(self, ano: int, os_id: int, versao: int) -> bool:
         """Agenda um novo job; invalida job anterior da mesma versão."""
+        from resilience.heavy_jobs import inprocess_heavy_jobs
+
+        if not inprocess_heavy_jobs():
+            return False
         key = (int(ano), int(os_id), int(versao))
         executor = self._ensure_executor()
         with self._lock:
             job_gen = self._bump_gen(key)
             future = executor.submit(
-                self._run_job, int(ano), int(os_id), int(versao), job_gen
+                self._run_job_cpu, int(ano), int(os_id), int(versao), job_gen
             )
             self._inflight[key] = future
 
@@ -113,6 +117,20 @@ class _ProvaWebJobRuntime:
 
             future.add_done_callback(_cleanup)
         return True
+
+    def _run_job_cpu(self, ano: int, os_id: int, versao: int, job_gen: int) -> None:
+        from resilience.cpu_jobs import cpu_job_slot
+
+        try:
+            with cpu_job_slot(label="prova-web", timeout_sec=600.0, http_error=False):
+                self._run_job(ano, os_id, versao, job_gen)
+        except TimeoutError:
+            logger.warning(
+                "Prova WEB: sem slot CPU OS %s/%s v%s",
+                os_id,
+                ano,
+                versao,
+            )
 
     def _run_job(self, ano: int, os_id: int, versao: int, job_gen: int) -> None:
         if self.is_stale(ano, os_id, versao, job_gen):
@@ -314,7 +332,11 @@ def recover_prova_web_render_jobs() -> dict[str, Any]:
     No startup: running órfãos → pending; reenfileira pending.
     Deve ser chamado após ensure_prova_web_schema.
     """
-    _runtime.start()
+    from resilience.heavy_jobs import inprocess_heavy_jobs
+
+    start_runtime = inprocess_heavy_jobs()
+    if start_runtime:
+        _runtime.start()
     reset = 0
     enqueued = 0
     try:
@@ -345,4 +367,7 @@ def recover_prova_web_render_jobs() -> dict[str, Any]:
 
 
 def start_prova_web_job_runtime() -> None:
-    _runtime.start()
+    from resilience.heavy_jobs import inprocess_heavy_jobs
+
+    if inprocess_heavy_jobs():
+        _runtime.start()

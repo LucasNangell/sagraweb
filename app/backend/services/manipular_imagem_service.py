@@ -370,22 +370,58 @@ def get_job(job_id: str) -> DetectorMascarasBytes:
         return job.detector
 
 
+class PreviewStaleError(Exception):
+    """Preview superado por um request mais novo do mesmo job."""
+
+
+_preview_gen: dict[str, int] = {}
+_preview_lock = threading.Lock()
+
+
+def note_preview_generation(job_id: str, generation: int) -> int:
+    """Registra a geração mais nova; retorna a vigente."""
+    job_id = (job_id or "").strip()
+    gen = int(generation or 0)
+    if not job_id or gen <= 0:
+        return gen
+    with _preview_lock:
+        current = _preview_gen.get(job_id, 0)
+        if gen >= current:
+            _preview_gen[job_id] = gen
+            return gen
+        return current
+
+
+def is_preview_stale(job_id: str, generation: int) -> bool:
+    job_id = (job_id or "").strip()
+    gen = int(generation or 0)
+    if not job_id or gen <= 0:
+        return False
+    with _preview_lock:
+        return _preview_gen.get(job_id, 0) > gen
+
+
 def clear_jobs_for_tests() -> None:
     with _jobs_lock:
         _jobs.clear()
+    with _preview_lock:
+        _preview_gen.clear()
 
 
 def analisar_mascaras(content: bytes, filename: str) -> dict[str, Any]:
-    det = DetectorMascarasBytes(content, filename)
-    job_id = store_job(det)
-    return {
-        "job_id": job_id,
-        "filename": det.filename,
-        "tem_alpha": det.tem_alpha,
-        "largura": int(det.rgba.shape[1]),
-        "altura": int(det.rgba.shape[0]),
-        "mascaras": det.listar_info(),
-    }
+    from resilience.cpu_jobs import cpu_job_slot
+
+    with cpu_job_slot(label="manipular-analisar", timeout_sec=60.0):
+        det = DetectorMascarasBytes(content, filename)
+        job_id = store_job(det)
+        return {
+            "job_id": job_id,
+            "filename": det.filename,
+            "tem_alpha": det.tem_alpha,
+            "largura": int(det.rgba.shape[1]),
+            "altura": int(det.rgba.shape[0]),
+            "mascaras": det.listar_info(),
+        }
 
 
 def aplicar_mascara(
@@ -397,13 +433,16 @@ def aplicar_mascara(
     limiar: float = 50.0,
     preview: bool = False,
 ) -> tuple[bytes, str]:
-    det = DetectorMascarasBytes(content, filename)
-    png = det.apagar_mascara_para_png_bytes(
-        mascara_idx,
-        intensidade=intensidade,
-        limiar=limiar,
-        preview=preview,
-    )
+    from resilience.cpu_jobs import cpu_job_slot
+
+    with cpu_job_slot(label="manipular-processar", timeout_sec=60.0):
+        det = DetectorMascarasBytes(content, filename)
+        png = det.apagar_mascara_para_png_bytes(
+            mascara_idx,
+            intensidade=intensidade,
+            limiar=limiar,
+            preview=preview,
+        )
     stem = Path(det.filename).stem or "imagem"
     return png, f"{stem}_sem_mascara_{mascara_idx}.png"
 
@@ -415,14 +454,26 @@ def aplicar_mascara_job(
     intensidade: float = 100.0,
     limiar: float = 50.0,
     preview: bool = False,
+    preview_generation: int = 0,
 ) -> tuple[bytes, str]:
-    det = get_job(job_id)
-    png = det.apagar_mascara_para_png_bytes(
-        mascara_idx,
-        intensidade=intensidade,
-        limiar=limiar,
-        preview=preview,
-    )
+    from resilience.cpu_jobs import cpu_job_slot
+
+    if preview_generation:
+        note_preview_generation(job_id, preview_generation)
+        if is_preview_stale(job_id, preview_generation):
+            raise PreviewStaleError("preview stale")
+    with cpu_job_slot(label="manipular-processar", timeout_sec=60.0):
+        if preview_generation and is_preview_stale(job_id, preview_generation):
+            raise PreviewStaleError("preview stale")
+        det = get_job(job_id)
+        png = det.apagar_mascara_para_png_bytes(
+            mascara_idx,
+            intensidade=intensidade,
+            limiar=limiar,
+            preview=preview,
+        )
+    if preview_generation and is_preview_stale(job_id, preview_generation):
+        raise PreviewStaleError("preview stale")
     stem = Path(det.filename).stem or "imagem"
     return png, f"{stem}_sem_mascara_{mascara_idx}.png"
 

@@ -3,6 +3,7 @@ import bootstrap_paths  # noqa: F401 — sys.path antes dos routers
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 import logging
 import uvicorn
@@ -753,12 +754,20 @@ class SlowRequestLoggingMiddleware(BaseHTTPMiddleware):
                 elapsed_ms,
                 response.status_code,
             )
+        query = str(request.url.query or "")
+        if "fetch_all=true" in query.lower():
+            logger.info(
+                "os_search fetch_all request %.0fms status=%s",
+                elapsed_ms,
+                response.status_code,
+            )
         return response
 
 
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(SlowRequestLoggingMiddleware)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # --- ROTAS DE MONITORAMENTO ---
 @app.get("/health/live")
@@ -830,6 +839,16 @@ def get_connected_ips(request: Request):
         {"ip": ip, "last_seen": datetime.fromtimestamp(ts).strftime('%H:%M:%S')}
         for ip, ts in active_ips.items()
     ]
+
+
+@app.get("/api/runtime-metrics")
+def get_runtime_metrics(request: Request):
+    """Baseline de carga: pool MySQL, WS, dumps home, fila papelaria, CPU do processo."""
+    if not is_master_client(request):
+        raise HTTPException(status_code=403, detail="Acesso restrito ao MASTER_IP.")
+    from services.runtime_metrics_service import collect_runtime_metrics
+
+    return collect_runtime_metrics()
 
 @app.get("/api/download/folder-opener")
 async def download_folder_opener():

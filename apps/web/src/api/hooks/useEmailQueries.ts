@@ -22,7 +22,7 @@ import {
 import { queryKeys } from "@/api/query-keys";
 
 const EMAIL_SETOR = "SEFOC";
-const INBOX_POLL_MS = 5000;
+const INBOX_POLL_MS = 15_000;
 
 export function useEmailConfig() {
   return useQuery({
@@ -39,6 +39,7 @@ export function useEmailInbox(enabled = true, refreshIntervalSec = INBOX_POLL_MS
     queryFn: fetchEmailInbox,
     enabled,
     refetchInterval: enabled ? pollMs : false,
+    refetchIntervalInBackground: false,
     staleTime: 0,
     /** Mantém a última lista na tela se um refresh falhar (ex.: Exchange indisponível). */
     placeholderData: (previous) => previous,

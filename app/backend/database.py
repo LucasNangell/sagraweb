@@ -5,6 +5,7 @@ from contextlib import contextmanager
 import logging
 import os
 from queue import Queue, Empty
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ def _db_read_timeout() -> int:
 
 def _db_pool_size() -> int:
     try:
-        return max(2, int(os.getenv("SAGRA_DB_POOL_SIZE", "10")))
+        return max(2, int(os.getenv("SAGRA_DB_POOL_SIZE", "20")))
     except (TypeError, ValueError):
         return 10
 
@@ -46,22 +47,32 @@ def _query_preview(query: str | None) -> str:
 
 
 class ConnectionPool:
-    def __init__(self, max_connections=10, **db_config):
+    def __init__(self, max_connections=20, **db_config):
         self.pool = Queue(maxsize=max_connections)
         self.max_connections = max_connections
         self.db_config = db_config
         self.created_connections = 0
         self._in_use = 0
+        self._stats_lock = threading.Lock()
 
         for _ in range(max_connections):
             self.pool.put(None)
 
+    def snapshot(self) -> dict:
+        with self._stats_lock:
+            return {
+                "in_use": self._in_use,
+                "max": self.max_connections,
+            }
+
     def _log_pool_pressure(self) -> None:
         threshold = max(1, int(self.max_connections * 0.8))
-        if self._in_use >= threshold:
+        with self._stats_lock:
+            in_use = self._in_use
+        if in_use >= threshold:
             logger.warning(
                 "Pool MySQL em uso elevado: %s/%s conexões ativas",
-                self._in_use,
+                in_use,
                 self.max_connections,
             )
 
@@ -82,7 +93,8 @@ class ConnectionPool:
                         logger.warning("Erro ao fechar conexão morta do pool: %s", e_close)
                     conn = self._create_new_connection()
 
-            self._in_use += 1
+            with self._stats_lock:
+                self._in_use += 1
             self._log_pool_pressure()
             return conn
 
@@ -115,8 +127,9 @@ class ConnectionPool:
                     raise DatabaseConnectionError(str(e)) from e
 
     def return_connection(self, conn):
-        if self._in_use > 0:
-            self._in_use -= 1
+        with self._stats_lock:
+            if self._in_use > 0:
+                self._in_use -= 1
         if conn is None:
             return
         try:

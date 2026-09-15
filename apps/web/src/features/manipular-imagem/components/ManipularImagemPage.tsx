@@ -62,6 +62,7 @@ export function ManipularImagemPage() {
       limiar: debouncedLimiar,
       intensidade: debouncedIntensidade,
       preview: true,
+      previewGeneration: requestId,
     })
       .then((result) => {
         if (requestId !== previewRequestId.current) return;
@@ -73,6 +74,7 @@ export function ManipularImagemPage() {
       })
       .catch((err) => {
         if (requestId !== previewRequestId.current) return;
+        if (err instanceof Error && err.name === "PreviewStaleError") return;
         setError(
           err instanceof Error ? err.message : "Falha ao gerar o preview.",
         );

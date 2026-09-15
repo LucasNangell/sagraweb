@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { resolveWebSocketUrl } from "@/lib/websocket";
+import {
+  sagraWebSocketHub,
+  type SharedWsStatus,
+} from "@/lib/sagraWebSocketHub";
 
-export type WebSocketStatus =
-  | "connecting"
-  | "connected"
-  | "disconnected"
-  | "error";
+export type WebSocketStatus = SharedWsStatus;
 
 export interface UseSagraWebSocketOptions<T> {
   path: string;
@@ -28,210 +27,93 @@ const defaultParse = <T,>(raw: string): T | null => {
   }
 };
 
+function parseUnknown<T>(
+  raw: unknown,
+  parseMessage: (raw: string) => T | null,
+): T | null {
+  if (raw == null) {
+    return null;
+  }
+  if (typeof raw === "string") {
+    return parseMessage(raw);
+  }
+  return raw as T;
+}
+
 export function useSagraWebSocket<T = unknown>({
   path,
   enabled = true,
-  reconnectBaseMs = 1000,
-  reconnectMaxMs = 30_000,
-  heartbeatMs = 25_000,
   onMessage,
   onOpen,
   onClose,
   parseMessage = defaultParse,
 }: UseSagraWebSocketOptions<T>) {
-  const [status, setStatus] = useState<WebSocketStatus>("disconnected");
+  const [status, setStatus] = useState<WebSocketStatus>(() =>
+    enabled ? sagraWebSocketHub.getStatus(path) : "disconnected",
+  );
   const [lastError, setLastError] = useState<string | null>(null);
   const [lastMessage, setLastMessage] = useState<T | null>(null);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
-  const wsRef = useRef<WebSocket | null>(null);
-  const timerRef = useRef<number | null>(null);
-  const heartbeatRef = useRef<number | null>(null);
-  const attemptRef = useRef(0);
   const onMessageRef = useRef(onMessage);
   onMessageRef.current = onMessage;
   const onOpenRef = useRef(onOpen);
   onOpenRef.current = onOpen;
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const parseRef = useRef(parseMessage);
+  parseRef.current = parseMessage;
+  const prevStatusRef = useRef<WebSocketStatus>(status);
 
-  const clearTimer = () => {
-    if (timerRef.current != null) {
-      window.clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  };
-  const clearHeartbeat = () => {
-    if (heartbeatRef.current != null) {
-      window.clearInterval(heartbeatRef.current);
-      heartbeatRef.current = null;
-    }
-  };
+  const send = useCallback(
+    (data: unknown) => sagraWebSocketHub.send(path, data),
+    [path],
+  );
 
-  const scheduleReconnectRef = useRef<() => void>(() => {});
+  const disconnect = useCallback(() => {
+    setStatus("disconnected");
+  }, []);
 
-  const connectRef = useRef<() => void>(() => {});
+  const reconnect = useCallback(() => {
+    sagraWebSocketHub.reconnect(path);
+  }, [path]);
 
-  connectRef.current = () => {
+  useEffect(() => {
     if (!enabled) {
+      setStatus("disconnected");
       return;
     }
-    clearTimer();
-
-    if (wsRef.current) {
-      const prev = wsRef.current;
-      wsRef.current = null;
-      prev.onclose = null;
-      prev.onerror = null;
-      if (
-        prev.readyState === WebSocket.CONNECTING ||
-        prev.readyState === WebSocket.OPEN
-      ) {
-        try {
-          prev.close();
-        } catch {
-          /* ignore */
-        }
-      }
-    }
-
-    setStatus("connecting");
-
-    let ws: WebSocket;
-    try {
-      ws = new WebSocket(resolveWebSocketUrl(path));
-    } catch (err) {
-      setStatus("error");
-      setLastError(err instanceof Error ? err.message : "Falha ao abrir WebSocket");
-      scheduleReconnectRef.current();
-      return;
-    }
-
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      attemptRef.current = 0;
-      setReconnectAttempt(0);
-      setStatus("connected");
-      setLastError(null);
-      clearHeartbeat();
-      heartbeatRef.current = window.setInterval(() => {
-        if (ws.readyState !== WebSocket.OPEN) {
-          return;
-        }
-        try {
-          ws.send(JSON.stringify({ type: "ping", ts: Date.now() }));
-        } catch (err) {
-          if (import.meta.env.DEV) {
-            console.warn("[ws] heartbeat falhou:", err);
-          }
-          try {
-            ws.close();
-          } catch {
-            /* ignore */
-          }
-        }
-      }, heartbeatMs);
-      if (import.meta.env.DEV) {
-        console.info("[ws] conectado:", resolveWebSocketUrl(path));
-      }
-      onOpenRef.current?.();
-    };
-
-    ws.onmessage = (event) => {
-      const parsed = parseMessage(String(event.data));
+    sagraWebSocketHub.acquire(path);
+    const offMsg = sagraWebSocketHub.addMessageListener(path, (raw) => {
+      const parsed = parseUnknown(raw, (text) => parseRef.current(text));
       if (parsed == null) {
         return;
       }
       setLastMessage(parsed);
       onMessageRef.current?.(parsed);
-    };
-
-    ws.onerror = () => {
-      setStatus("error");
-      setLastError("Erro na conexão WebSocket");
-      if (import.meta.env.DEV) {
-        console.warn("[ws] erro:", resolveWebSocketUrl(path));
+    });
+    const offStatus = sagraWebSocketHub.addStatusListener(path, (next) => {
+      const prev = prevStatusRef.current;
+      prevStatusRef.current = next;
+      setStatus(next);
+      if (next === "connected" && prev !== "connected") {
+        setLastError(null);
+        setReconnectAttempt(0);
+        onOpenRef.current?.();
       }
-    };
-
-    ws.onclose = () => {
-      clearHeartbeat();
-      wsRef.current = null;
-      setStatus("disconnected");
-      onCloseRef.current?.();
-      scheduleReconnectRef.current();
-    };
-  };
-
-  scheduleReconnectRef.current = () => {
-    clearTimer();
-    const next = attemptRef.current + 1;
-    attemptRef.current = next;
-    setReconnectAttempt(next);
-    let delay = Math.min(reconnectBaseMs * 2 ** (next - 1), reconnectMaxMs);
-    if (document.hidden) {
-      delay = Math.max(delay, reconnectMaxMs);
-    }
-    timerRef.current = window.setTimeout(() => connectRef.current(), delay);
-  };
-
-  const disconnect = useCallback(() => {
-    clearTimer();
-    clearHeartbeat();
-    attemptRef.current = 0;
-    setReconnectAttempt(0);
-    if (wsRef.current) {
-      const ws = wsRef.current;
-      wsRef.current = null;
-      ws.onclose = null;
-      ws.onerror = null;
-      if (
-        ws.readyState === WebSocket.CONNECTING ||
-        ws.readyState === WebSocket.OPEN
-      ) {
-        try {
-          ws.close();
-        } catch {
-          /* ignore */
-        }
+      if (next === "disconnected" && prev === "connected") {
+        onCloseRef.current?.();
       }
-    }
-    setStatus("disconnected");
-  }, []);
-
-  const reconnect = useCallback(() => {
-    attemptRef.current = 0;
-    setReconnectAttempt(0);
-    connectRef.current();
-  }, []);
-
-  const send = useCallback((data: unknown) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-      return false;
-    }
-    try {
-      ws.send(JSON.stringify(data));
-      return true;
-    } catch {
-      return false;
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!enabled) {
-      disconnect();
-      return;
-    }
-    // Evita rajada de conexões WS quando Vite monta vários hooks ao mesmo tempo (StrictMode).
-    const jitterMs = Math.floor(Math.random() * 400);
-    const timer = window.setTimeout(() => connectRef.current(), jitterMs);
+      if (next === "error") {
+        setLastError("Erro na conexão WebSocket");
+      }
+    });
     return () => {
-      window.clearTimeout(timer);
-      disconnect();
+      offMsg();
+      offStatus();
+      sagraWebSocketHub.release(path);
     };
-  }, [disconnect, enabled, path]);
+  }, [enabled, path]);
 
   return {
     status,

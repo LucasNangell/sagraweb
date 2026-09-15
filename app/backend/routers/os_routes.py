@@ -1,10 +1,9 @@
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from typing import Callable, List, Optional, Tuple
-import concurrent.futures
 import logging
 import os
-import glob
+import time
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 from os_calc_fields import (
@@ -79,6 +78,7 @@ from services.os_search_service import (
     _dedupe_os_search_rows,
     _os_search_andamento_join_sql,
     _os_search_like_term,
+    build_os_search_etag,
     execute_os_search,
 )
 
@@ -431,6 +431,8 @@ def get_os_path(ano: int, id: int):
             return OsPathResponse(path=local_path)
 
         return OsPathResponse(path="Pasta não encontrada na rede.")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting path: {e}")
         return OsPathResponse(path=f"Erro: {str(e)}")
@@ -461,9 +463,19 @@ def _resolve_os_relative_path(os_root: str, relative: Optional[str]) -> str:
 
 
 def _resolve_os_root_path(ano: int, os_id: int) -> Optional[str]:
+    from resilience.fs_timeout import FsTimeoutError, isdir_with_timeout
+
     path = _get_os_folder_path(ano, os_id)
-    if path and os.path.isdir(path):
-        return path
+    if path:
+        try:
+            if isdir_with_timeout(path):
+                return path
+        except FsTimeoutError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Pasta da OS indisponível na rede (timeout). Tente novamente.",
+                headers={"Retry-After": "10"},
+            ) from exc
     local_path = os.path.abspath(f"storage_test/{ano}/{os_id}")
     if os.path.isdir(local_path):
         return local_path
@@ -716,8 +728,17 @@ def _get_os_folder_path(ano: int, id: int) -> Optional[str]:
     
     logger.info(f"DEBUG PATH: Searching for OS {id}/{ano} in {base_path}")
     logger.info(f"DEBUG PATH: Pattern used: {os_pattern}")
-    
-    found = glob.glob(os_pattern)
+
+    from resilience.fs_timeout import FsTimeoutError, glob_with_timeout
+
+    try:
+        found = glob_with_timeout(os_pattern)
+    except FsTimeoutError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Pasta da OS indisponível na rede (timeout). Tente novamente.",
+            headers={"Retry-After": "10"},
+        ) from exc
     if found:
         logger.info(f"DEBUG PATH: Found: {found[0]}")
         return found[0]
@@ -1135,6 +1156,7 @@ def duplicate_os(ano: int, id: int, req: DuplicateRequest):
 
 @router.get("/os/search", response_model=OsSearchResponse)
 def search_os(
+    request: Request,
     response: Response,
     nr_os: Optional[int] = None,
     ano: Optional[int] = None,
@@ -1185,6 +1207,7 @@ def search_os(
         if nr_os is not None:
             exact_os_lookup = True
 
+        started = time.perf_counter()
         result = execute_os_search(
             nr_os=nr_os,
             ano=ano,
@@ -1223,6 +1246,21 @@ def search_os(
             painel=painel,
             fetch_all=fetch_all,
         )
+        etag = build_os_search_etag(result)
+        response.headers["ETag"] = etag
+        if fetch_all:
+            try:
+                from services.runtime_metrics_service import record_os_search_fetch_all
+
+                record_os_search_fetch_all(
+                    rows=len(result.get("data") or []),
+                    elapsed_ms=(time.perf_counter() - started) * 1000.0,
+                )
+            except Exception:
+                pass
+        inm = (request.headers.get("if-none-match") or "").strip()
+        if fetch_all and inm and inm == etag:
+            return Response(status_code=304, headers={"ETag": etag})
         return OsSearchResponse.model_validate(result)
     except HTTPException:
         raise
@@ -2611,18 +2649,14 @@ def delete_os_history(ano: int, id: int, cod_status: str):
         logger.error(f"Erro ao excluir {cod_status}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-_LISTDIR_TIMEOUT_SEC = 30
-
-
 def _listdir_with_timeout(folder: str) -> List[str]:
     """Evita travar a API quando a pasta de rede (DFS) não responde."""
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(os.listdir, folder)
-        try:
-            return list(future.result(timeout=_LISTDIR_TIMEOUT_SEC))
-        except concurrent.futures.TimeoutError as exc:
-            logger.warning("Timeout (%ss) ao listar pasta da OS: %s", _LISTDIR_TIMEOUT_SEC, folder)
-            raise TimeoutError(f"Pasta da OS indisponível (timeout): {folder}") from exc
+    from resilience.fs_timeout import FsTimeoutError, listdir_with_timeout
+
+    try:
+        return listdir_with_timeout(folder)
+    except FsTimeoutError as exc:
+        raise TimeoutError(str(exc)) from exc
 
 
 @router.get("/os/{ano}/{id}/versions", response_model=OsVersionsResponse)
@@ -2630,7 +2664,15 @@ def get_os_versions(ano: int, id: int):
     try:
         os_folder = _get_os_folder_path(ano, id)
         versions = []
-        if os_folder and os.path.exists(os_folder):
+        from resilience.fs_timeout import FsTimeoutError, path_exists_with_timeout
+
+        folder_exists = False
+        if os_folder:
+            try:
+                folder_exists = path_exists_with_timeout(os_folder)
+            except FsTimeoutError:
+                folder_exists = False
+        if os_folder and folder_exists:
             try:
                 subitems = _listdir_with_timeout(os_folder)
             except TimeoutError:

@@ -195,6 +195,22 @@ class ConnectionManager:
         self.active_connections = [c for c in self.active_connections if c["ws"] != websocket]
         logger.info("WebSocket desconectado. Total: %s", len(self.active_connections))
 
+    def stats(self) -> Dict[str, Any]:
+        pontos = {
+            str(c.get("ponto") or "")
+            for c in self.active_connections
+            if c.get("ponto")
+        }
+        scopes: Dict[str, int] = {}
+        for c in self.active_connections:
+            scope = str(c.get("scope") or "unknown")
+            scopes[scope] = scopes.get(scope, 0) + 1
+        return {
+            "connections": len(self.active_connections),
+            "unique_pontos": len(pontos),
+            "scopes": scopes,
+        }
+
     def get_active_clients(self):
         clients = []
         for conn in self.active_connections:

@@ -46,6 +46,36 @@ from auto_update import try_auto_update
 from power import allow_sleep, prevent_sleep
 from system_load import collect_system_load, is_local_load_acceptable
 
+_instance_lock_fh = None
+
+
+def acquire_single_instance_lock(temp_dir: str):
+    """Impede dois workers Corel no mesmo PC (COM single-instance)."""
+    global _instance_lock_fh
+    os.makedirs(temp_dir, exist_ok=True)
+    path = os.path.join(temp_dir, "papelaria-worker.lock")
+    fh = open(path, "a+", encoding="utf-8")
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fh.close()
+        return None
+    fh.seek(0)
+    fh.truncate()
+    fh.write(str(os.getpid()))
+    fh.flush()
+    _instance_lock_fh = fh
+    return fh
+
+
 _shutdown = False
 _corel_wait_logged = False
 _load_wait_logged = False
@@ -668,6 +698,13 @@ def main(argv: list[str] | None = None) -> int:
 
     cfg = load_config(args.config)
     _setup_logging(cfg.logs_dir, console=not is_frozen())
+
+    if not acquire_single_instance_lock(cfg.temp_dir):
+        logging.error(
+            "Outro worker Papelaria já está em execução neste PC. "
+            "Corel COM não permite dois processos; use outro computador."
+        )
+        return 2
 
     if config_embutida_no_exe():
         logging.info("Configuração embutida no executável — API %s", cfg.api_base_url)

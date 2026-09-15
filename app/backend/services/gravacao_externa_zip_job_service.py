@@ -446,10 +446,14 @@ class _ZipJobRuntime:
             return self._gen.get(session_id, 0) != int(job_gen)
 
     def enqueue(self, session_id: int, signature: str) -> bool:
+        from resilience.heavy_jobs import inprocess_heavy_jobs
+
+        if not inprocess_heavy_jobs():
+            return False
         executor = self._ensure_executor()
         with self._lock:
             job_gen = self._bump_gen(session_id)
-            future = executor.submit(self._run_job, int(session_id), signature, job_gen)
+            future = executor.submit(self._run_job_cpu, int(session_id), signature, job_gen)
             self._inflight[session_id] = future
 
             def _cleanup(fut: Future, sid: int = session_id) -> None:
@@ -460,6 +464,15 @@ class _ZipJobRuntime:
 
             future.add_done_callback(_cleanup)
         return True
+
+    def _run_job_cpu(self, session_id: int, signature: str, job_gen: int) -> None:
+        from resilience.cpu_jobs import cpu_job_slot
+
+        try:
+            with cpu_job_slot(label="zip-ge", timeout_sec=600.0, http_error=False):
+                self._run_job(session_id, signature, job_gen)
+        except TimeoutError:
+            logger.warning("ZIP GE: sem slot CPU sessão %s", session_id)
 
     def _run_job(self, session_id: int, signature: str, job_gen: int) -> None:
         if self.is_stale(session_id, job_gen):
@@ -608,12 +621,19 @@ def resolve_ready_zip(session: dict[str, Any]) -> Optional[dict[str, Any]]:
 
 
 def start_zip_job_runtime() -> None:
-    _runtime.start()
+    from resilience.heavy_jobs import inprocess_heavy_jobs
+
+    if inprocess_heavy_jobs():
+        _runtime.start()
 
 
 def recover_zip_jobs() -> dict[str, Any]:
     """No startup: gerando órfãos → pendente; reenfileira pendente; limpa .part."""
-    _runtime.start()
+    from resilience.heavy_jobs import inprocess_heavy_jobs
+
+    start_runtime = inprocess_heavy_jobs()
+    if start_runtime:
+        _runtime.start()
     reset = 0
     enqueued = 0
     try:

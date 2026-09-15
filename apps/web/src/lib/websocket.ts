@@ -23,3 +23,8 @@ export function resolveWebSocketUrl(path: string): string {
   }
   return `${protocol}//${host}${apiPrefix}/ws/${query}`;
 }
+
+export function authenticatedWsPath(ponto: string | null | undefined): string {
+  const digits = String(ponto ?? "").trim();
+  return digits ? `/ws?ponto=${encodeURIComponent(digits)}` : "/ws";
+}

@@ -38,7 +38,7 @@ export function EmailPage() {
   const refreshIntervalSec =
     configQuery.data?.refresh_interval_sec && configQuery.data.configured
       ? configQuery.data.refresh_interval_sec
-      : 5;
+      : 15;
 
   const inboxQuery = useEmailInbox(true, refreshIntervalSec * 1000);
   const pendenciasQuery = useEmailPendencias(activeTab === "pendencias");

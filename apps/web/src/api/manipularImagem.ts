@@ -24,6 +24,8 @@ export interface ManipularImagemParams {
   limiar?: number;
   /** Preview reduz resolução; download deve usar false. */
   preview?: boolean;
+  /** Gerações mais novas cancelam o preview no servidor. */
+  previewGeneration?: number;
 }
 
 export interface ManipularImagemResult {
@@ -96,9 +98,18 @@ export async function processarManipularImagem(
     headers: {
       Accept: "image/png",
       "X-Requested-With": "XMLHttpRequest",
+      ...(params.previewGeneration
+        ? { "X-Sagra-Preview-Gen": String(params.previewGeneration) }
+        : {}),
     },
     body: form,
   });
+
+  if (res.status === 409) {
+    const err = new Error("preview-stale");
+    err.name = "PreviewStaleError";
+    throw err;
+  }
 
   if (!res.ok) {
     throw await readApiError(res);

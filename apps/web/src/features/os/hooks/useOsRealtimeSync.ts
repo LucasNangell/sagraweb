@@ -186,19 +186,6 @@ export function useOsRealtimeSync({
     }
   }, [triggerSafeRefresh, wsStatus]);
 
-  // Safety poll mesmo com WS conectado: cobre sync/notify silenciosos ou eventos perdidos.
-  useEffect(() => {
-    if (wsStatus !== "connected") {
-      return;
-    }
-    const timer = window.setInterval(() => {
-      if (!document.hidden) {
-        triggerSafeRefresh();
-      }
-    }, 45_000);
-    return () => window.clearInterval(timer);
-  }, [triggerSafeRefresh, wsStatus]);
-
   useEffect(() => {
     if (wsStatus === "connected") {
       return;

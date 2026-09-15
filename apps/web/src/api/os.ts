@@ -17,6 +17,8 @@ import type {
 } from "@/features/os/types";
 import { digitsOnly } from "@/features/os/processoMask";
 
+const osSearchEtagCache = new Map<string, { etag: string; body: OsSearchResponse }>();
+
 function appendList(
   params: URLSearchParams,
   key: string,
@@ -128,7 +130,40 @@ export async function searchOs(
   init?: RequestInit,
 ): Promise<OsSearchResponse> {
   const qs = buildOsSearchQueryString(filters);
-  return apiFetch<OsSearchResponse>(`/os/search?${qs}`, init);
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "X-Requested-With": "XMLHttpRequest",
+  };
+  const cached = filters.fetchAll ? osSearchEtagCache.get(qs) : undefined;
+  if (cached?.etag) {
+    headers["If-None-Match"] = cached.etag;
+  }
+  const extraHeaders = init?.headers;
+  if (extraHeaders && extraHeaders instanceof Headers) {
+    extraHeaders.forEach((value, key) => {
+      headers[key] = value;
+    });
+  } else if (extraHeaders && !Array.isArray(extraHeaders)) {
+    Object.assign(headers, extraHeaders);
+  }
+  const res = await fetch(apiUrl(`/os/search?${qs}`), {
+    credentials: "include",
+    ...init,
+    headers,
+  });
+  if (res.status === 304 && cached) {
+    return cached.body;
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(text.trim() || `API ${res.status}`);
+  }
+  const body = (await res.json()) as OsSearchResponse;
+  const etag = res.headers.get("ETag");
+  if (filters.fetchAll && etag) {
+    osSearchEtagCache.set(qs, { etag, body });
+  }
+  return body;
 }
 
 /** Query string para exportação — mesmos filtros da lista, sem paginação. */

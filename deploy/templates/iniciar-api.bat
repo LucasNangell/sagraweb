@@ -118,6 +118,10 @@ if exist "%PREP_LOGS_PS%" (
 
 rem Sync de andamentos NAO inicia com a API.
 rem Inicie manualmente: _iniciar-sync-andamentos.cmd  (ou nssm start SAGRA-SyncAndamentos)
+rem
+rem NÃO adicione --workers ao uvicorn: WS, jobs in-memory e cache Manipular Imagem
+rem não cruzam processos. Jobs pesados opcionais: iniciar-heavy-jobs.bat
+rem + SAGRA_INPROCESS_HEAVY_JOBS=0 neste .env da API.
 
 rem Escuta em 127.0.0.1: o Nginx repassa o IP real via X-Forwarded-For
 python -m uvicorn routers.api:app --host 127.0.0.1 --port %PORT% --proxy-headers --forwarded-allow-ips=127.0.0.1,10.1.1.73

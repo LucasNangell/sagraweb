@@ -1,21 +1,15 @@
 /**
- * Conexão WebSocket única por aba para chat de suporte.
- * Evita múltiplos sockets competindo por subscribe/delivery.
+ * Chat de suporte no WebSocket compartilhado da aba (mesmo `/ws?ponto=` da home).
  */
-import { resolveWebSocketUrl } from "@/lib/websocket";
+import { sagraWebSocketHub, type SharedWsStatus } from "@/lib/sagraWebSocketHub";
 import { supportWsLog, supportWsLogSend } from "@/lib/supportWsDebug";
 
-export type SupportHubStatus = "connecting" | "connected" | "disconnected" | "error";
+export type SupportHubStatus = SharedWsStatus;
 
 type MessageListener = (data: unknown) => void;
 type StatusListener = (status: SupportHubStatus) => void;
 
-const RECONNECT_BASE_MS = 1000;
-const RECONNECT_MAX_MS = 30_000;
-const HEARTBEAT_MS = 25_000;
-
 class SupportWebSocketHub {
-  private ws: WebSocket | null = null;
   private path = "";
   private ponto: string | null = null;
   private refCount = 0;
@@ -23,9 +17,8 @@ class SupportWebSocketHub {
   private statusListeners = new Set<StatusListener>();
   private subscribedTickets = new Set<number>();
   private status: SupportHubStatus = "disconnected";
-  private reconnectTimer: number | null = null;
-  private heartbeatTimer: number | null = null;
-  private reconnectAttempt = 0;
+  private offMessage: (() => void) | null = null;
+  private offStatus: (() => void) | null = null;
 
   acquire(ponto: string | null): void {
     if (!ponto) {
@@ -34,24 +27,18 @@ class SupportWebSocketHub {
     this.refCount += 1;
     const path = `/ws?ponto=${encodeURIComponent(ponto)}`;
     const pathChanged = this.path !== path;
+    if (pathChanged && this.path) {
+      this.detachSocket();
+    }
     this.path = path;
     this.ponto = ponto;
-    if (pathChanged) {
-      this.closeSocket();
-    }
-    if (
-      !this.ws ||
-      this.ws.readyState === WebSocket.CLOSED ||
-      this.ws.readyState === WebSocket.CLOSING
-    ) {
-      this.openSocket();
-    }
+    this.attachSocket();
   }
 
   release(): void {
     this.refCount = Math.max(0, this.refCount - 1);
     if (this.refCount === 0) {
-      this.closeSocket();
+      this.detachSocket();
       this.path = "";
       this.ponto = null;
     }
@@ -73,16 +60,10 @@ class SupportWebSocketHub {
   }
 
   send(data: unknown): boolean {
-    const ws = this.ws;
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
+    if (!this.path) {
       return false;
     }
-    try {
-      ws.send(JSON.stringify(data));
-      return true;
-    } catch {
-      return false;
-    }
+    return sagraWebSocketHub.send(this.path, data);
   }
 
   subscribe(ticketId: number, reason = "hub"): boolean {
@@ -92,7 +73,6 @@ class SupportWebSocketHub {
     supportWsLogSend("SUPPORT HUB SUBSCRIBE", payload, sent);
     supportWsLog("SUPPORT HUB SUBSCRIBE", `${reason} ticket=${ticketId}`, {
       sent,
-      wsState: this.ws?.readyState,
       queued: !sent,
     });
     return true;
@@ -119,106 +99,21 @@ class SupportWebSocketHub {
     }
   }
 
-  private clearReconnectTimer(): void {
-    if (this.reconnectTimer != null) {
-      window.clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-  }
-
-  private clearHeartbeat(): void {
-    if (this.heartbeatTimer != null) {
-      window.clearInterval(this.heartbeatTimer);
-      this.heartbeatTimer = null;
-    }
-  }
-
-  private scheduleReconnect(): void {
-    if (this.refCount === 0 || !this.path) {
-      return;
-    }
-    this.clearReconnectTimer();
-    const next = this.reconnectAttempt + 1;
-    this.reconnectAttempt = next;
-    let delay = Math.min(RECONNECT_BASE_MS * 2 ** (next - 1), RECONNECT_MAX_MS);
-    if (document.hidden) {
-      delay = Math.max(delay, RECONNECT_MAX_MS);
-    }
-    this.reconnectTimer = window.setTimeout(() => this.openSocket(), delay);
-  }
-
   private resubscribeAll(): void {
     for (const ticketId of this.subscribedTickets) {
       this.send({ type: "support_subscribe", ticket_id: ticketId });
     }
   }
 
-  private openSocket(): void {
-    if (this.refCount === 0 || !this.path) {
+  private attachSocket(): void {
+    if (!this.path) {
       return;
     }
-    if (
-      this.ws &&
-      (this.ws.readyState === WebSocket.OPEN ||
-        this.ws.readyState === WebSocket.CONNECTING)
-    ) {
+    if (this.offMessage && this.offStatus) {
       return;
     }
-    this.clearReconnectTimer();
-
-    if (this.ws) {
-      try {
-        this.ws.onclose = null;
-        this.ws.close();
-      } catch {
-        /* ignore */
-      }
-      this.ws = null;
-    }
-
-    this.setStatus("connecting");
-
-    let ws: WebSocket;
-    try {
-      ws = new WebSocket(resolveWebSocketUrl(this.path));
-    } catch (err) {
-      this.setStatus("error");
-      supportWsLog("SUPPORT HUB ERROR", "open failed", err);
-      this.scheduleReconnect();
-      return;
-    }
-
-    this.ws = ws;
-
-    ws.onopen = () => {
-      this.reconnectAttempt = 0;
-      this.setStatus("connected");
-      this.clearHeartbeat();
-      this.heartbeatTimer = window.setInterval(() => {
-        if (ws.readyState !== WebSocket.OPEN) {
-          return;
-        }
-        try {
-          ws.send(JSON.stringify({ type: "ping", ts: Date.now() }));
-        } catch {
-          try {
-            ws.close();
-          } catch {
-            /* ignore */
-          }
-        }
-      }, HEARTBEAT_MS);
-      supportWsLog("SUPPORT HUB OPEN", this.path, { ponto: this.ponto });
-      this.resubscribeAll();
-    };
-
-    ws.onmessage = (event) => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(String(event.data));
-      } catch {
-        return;
-      }
+    sagraWebSocketHub.acquire(this.path);
+    this.offMessage = sagraWebSocketHub.addMessageListener(this.path, (parsed) => {
       if (
         import.meta.env.DEV &&
         parsed &&
@@ -231,34 +126,27 @@ class SupportWebSocketHub {
       for (const listener of this.listeners) {
         listener(parsed);
       }
-    };
-
-    ws.onerror = () => {
-      this.setStatus("error");
-      supportWsLog("SUPPORT HUB ERROR", this.path);
-    };
-
-    ws.onclose = () => {
-      this.clearHeartbeat();
-      this.ws = null;
-      this.setStatus("disconnected");
-      supportWsLog("SUPPORT HUB CLOSE", this.path);
-      this.scheduleReconnect();
-    };
+    });
+    this.offStatus = sagraWebSocketHub.addStatusListener(this.path, (next) => {
+      const prev = this.status;
+      this.setStatus(next);
+      if (next === "connected" && prev !== "connected") {
+        supportWsLog("SUPPORT HUB OPEN", this.path, { ponto: this.ponto });
+        this.resubscribeAll();
+      }
+      if (next === "disconnected") {
+        supportWsLog("SUPPORT HUB CLOSE", this.path);
+      }
+    });
   }
 
-  private closeSocket(): void {
-    this.clearReconnectTimer();
-    this.clearHeartbeat();
-    this.reconnectAttempt = 0;
-    if (this.ws) {
-      try {
-        this.ws.onclose = null;
-        this.ws.close();
-      } catch {
-        /* ignore */
-      }
-      this.ws = null;
+  private detachSocket(): void {
+    this.offMessage?.();
+    this.offStatus?.();
+    this.offMessage = null;
+    this.offStatus = null;
+    if (this.path) {
+      sagraWebSocketHub.release(this.path);
     }
     this.setStatus("disconnected");
   }

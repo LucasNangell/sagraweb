@@ -1,6 +1,7 @@
 """API Manipular Imagem — analisa e remove máscaras de PNG/JPG com limiar/intensidade."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from urllib.parse import quote
 
@@ -43,6 +44,16 @@ def _bool_form(value: bool | str | None) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _preview_generation(request: Request) -> int:
+    raw = (request.headers.get("X-Sagra-Preview-Gen") or "").strip()
+    if not raw:
+        return 0
+    try:
+        return max(0, int(raw))
+    except (TypeError, ValueError):
+        return 0
+
+
 @router.post("/analisar")
 async def analisar_imagem(
     request: Request,
@@ -52,7 +63,9 @@ async def analisar_imagem(
     content = await file.read()
     filename = _read_upload(file, content)
     try:
-        return svc.analisar_mascaras(content, filename)
+        return await asyncio.to_thread(svc.analisar_mascaras, content, filename)
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception:
@@ -76,15 +89,18 @@ async def processar_imagem(
     _require_access(request)
     is_preview = _bool_form(preview)
     job = (job_id or "").strip() or None
+    preview_gen = _preview_generation(request)
 
     try:
         if job:
-            png_bytes, out_name = svc.aplicar_mascara_job(
+            png_bytes, out_name = await asyncio.to_thread(
+                svc.aplicar_mascara_job,
                 job,
                 mascara_idx=mascara_idx,
                 intensidade=intensidade,
                 limiar=limiar,
                 preview=is_preview,
+                preview_generation=preview_gen,
             )
         else:
             if file is None:
@@ -94,7 +110,8 @@ async def processar_imagem(
                 )
             content = await file.read()
             filename = _read_upload(file, content)
-            png_bytes, out_name = svc.aplicar_mascara(
+            png_bytes, out_name = await asyncio.to_thread(
+                svc.aplicar_mascara,
                 content,
                 filename,
                 mascara_idx=mascara_idx,
@@ -104,6 +121,8 @@ async def processar_imagem(
             )
     except HTTPException:
         raise
+    except svc.PreviewStaleError:
+        return Response(status_code=409)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except IndexError as e:

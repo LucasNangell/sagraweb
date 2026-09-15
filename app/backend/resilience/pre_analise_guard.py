@@ -5,7 +5,6 @@ Evita saturar o worker Uvicorn com jobs simultâneos ou pastas enormes.
 from __future__ import annotations
 
 import os
-import os
 import threading
 from contextlib import contextmanager
 from typing import Any
@@ -76,7 +75,14 @@ def pre_analise_job_slot():
             headers={"Retry-After": "10"},
         )
     try:
-        yield
+        from resilience.cpu_jobs import cpu_job_slot
+
+        with cpu_job_slot(
+            label="pre-analise",
+            timeout_sec=max(deadline, 30.0),
+            http_error=True,
+        ):
+            yield
     finally:
         with _lock:
             _active_jobs = max(0, _active_jobs - 1)

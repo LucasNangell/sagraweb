@@ -136,11 +136,15 @@ class _LabJobRuntime:
             return self._gen.get(key, 0) != int(job_gen)
 
     def enqueue(self, ano: int, os_id: int) -> bool:
+        from resilience.heavy_jobs import inprocess_heavy_jobs
+
+        if not inprocess_heavy_jobs():
+            return False
         key = (int(ano), int(os_id))
         executor = self._ensure_executor()
         with self._lock:
             job_gen = self._bump_gen(key)
-            future = executor.submit(self._run_job, int(ano), int(os_id), job_gen)
+            future = executor.submit(self._run_job_cpu, int(ano), int(os_id), job_gen)
             self._inflight[key] = future
 
             def _cleanup(fut: Future, k: tuple[int, int] = key) -> None:
@@ -151,6 +155,15 @@ class _LabJobRuntime:
 
             future.add_done_callback(_cleanup)
         return True
+
+    def _run_job_cpu(self, ano: int, os_id: int, job_gen: int) -> None:
+        from resilience.cpu_jobs import cpu_job_slot
+
+        try:
+            with cpu_job_slot(label="analise-lab", timeout_sec=600.0, http_error=False):
+                self._run_job(ano, os_id, job_gen)
+        except TimeoutError:
+            logger.warning("Análise Lab: sem slot CPU OS %s/%s", os_id, ano)
 
     def _run_job(self, ano: int, os_id: int, job_gen: int) -> None:
         if self.is_stale(ano, os_id, job_gen):
@@ -396,7 +409,11 @@ def cancel_analise_lab_render(ano: int, os_id: int) -> None:
 
 
 def recover_analise_lab_render_jobs() -> dict[str, Any]:
-    _runtime.start()
+    from resilience.heavy_jobs import inprocess_heavy_jobs
+
+    start_runtime = inprocess_heavy_jobs()
+    if start_runtime:
+        _runtime.start()
     reset = 0
     enqueued = 0
     try:

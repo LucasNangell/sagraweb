@@ -9,7 +9,9 @@ import {
   writeStoredAdminReloadEpoch,
   type AdminForceRefreshMessage,
 } from "@/features/realtime/adminForceRefresh";
+import { useAuthStore } from "@/features/auth/authStore";
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
+import { authenticatedWsPath } from "@/lib/websocket";
 
 const POLL_WS_DOWN_MS = 8_000;
 const POLL_WS_UP_MS = 8_000;
@@ -37,9 +39,10 @@ async function maybeReloadFromState(
 
 export function useAdminForceRefreshReload() {
   const seenEpochRef = useRef<number | null>(readStoredAdminReloadEpoch());
+  const ponto = useAuthStore((s) => s.user?.ponto);
 
   const { status: wsStatus } = useSagraWebSocket<AdminForceRefreshMessage>({
-    path: "/ws",
+    path: authenticatedWsPath(ponto != null ? String(ponto) : null),
     onMessage: (data) => {
       if (!isAdminForceReload(data)) {
         return;

@@ -16,6 +16,11 @@ no Windows Server, com:
 | `tabAndamento` | Bidirecional (INSERT/UPDATE; delete MySQL quando MDB confirma ausência) |
 | `tabProtocolos` / `tabDetalhesServico` | Somente **MDB → MySQL** |
 
+**Exclusão MDB:** ausência confirmada no Access propaga `DELETE` no MySQL e grava tombstone
+durável em `deleted_andamentos` (com `content_hash`). O catch-up MySQL→MDB **não**
+ressuscita esses CodStatus. Tombstones só saem se o conteúdo divergir do hash
+(reuso legítimo) ou por limpeza manual explícita de `deleted_andamentos`.
+
 **UltimoStatus:** autoridade MySQL = **maior CodStatus** operacional (exclui espelhos Sub OS);
 espelhado no MDB após mutações. Heal one-shot **na VM de produção** (não no DEV):
 

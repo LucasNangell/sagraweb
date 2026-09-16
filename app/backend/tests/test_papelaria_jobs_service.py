@@ -1690,6 +1690,54 @@ class TestTimbradoA4DigitalJob:
         assert job["tipo_job"] == svc.TIPO_JOB_TIMBRADO_A4_DIGITAL
         assert captured["params"]["tipo"] == svc.TIPO_JOB_TIMBRADO_A4_DIGITAL
 
+    def test_build_worker_payload_digital_sem_cdr(self, monkeypatch, tmp_path):
+        from services import papelaria_jobs_service as svc
+
+        sefoc = tmp_path / "Sefoc"
+        sefoc.mkdir()
+        job = {
+            "id": 88,
+            "ano_protocolo": 2026,
+            "nro_protocolo": 5954,
+            "tipo_job": svc.TIPO_JOB_TIMBRADO_A4_DIGITAL,
+            "produto": "Timbrado A4 (Digital)",
+            "modelo_id": 24,
+            "arquivo_modelo": "TimbradoA4.cdr",
+            "dados": {"nome_deputado": "Ana", "email": "a@b.com"},
+            "tentativas": 0,
+        }
+
+        monkeypatch.setattr(svc, "get_job", lambda job_id: job if job_id == 88 else None)
+        monkeypatch.setattr(
+            svc,
+            "resolve_os_papelaria_dir",
+            lambda ano, nro, create=False: str(sefoc),
+        )
+        monkeypatch.setattr(
+            svc,
+            "get_os_folder_basename",
+            lambda ano, nro: "05954-Pasta",
+        )
+        monkeypatch.setattr(
+            "routers.os_routes._get_os_folder_path",
+            lambda ano, nro: str(tmp_path),
+        )
+        with patch(
+            "services.papelaria_models_service.get_modelo_by_id",
+            return_value=TIMBRADO_DIGITAL_MODEL,
+        ):
+            payload = svc.build_worker_job_payload(88)
+
+        digital_dir = sefoc / "Digital"
+        assert payload["tipo_job"] == svc.TIPO_JOB_TIMBRADO_A4_DIGITAL
+        assert payload["output_cdr_name"] == ""
+        assert payload["output_pdf_name"] == ""
+        assert payload["output_dir"] == str(digital_dir)
+        assert payload["output_docx_cor"] == "05954-Pasta-TimbradoA4Digital-Cor.docx"
+        assert payload["output_docx_pb"] == "05954-Pasta-TimbradoA4Digital-PB.docx"
+        assert payload["output_cabecalho_svg"]
+        assert payload["output_rodape_svg"]
+
     def test_complete_sem_prova_revisao_pending(self, monkeypatch, tmp_path):
         from services import papelaria_jobs_service as svc
 

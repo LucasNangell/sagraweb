@@ -14,12 +14,14 @@ from typing import Any, Optional
 
 from corel_generator import (
     CorelGenerationError,
+    _assert_documento_e_copia_temp,
     _corel_session,
-    _fechar_documento_corel,
+    _fechar_documento_sem_salvar,
     _is_com_disconnect_error,
     _preparar_corel_para_edicao,
     _release_corel_after_job,
     _sincronizar_documento_corel,
+    _stat_arquivo,
     aplicar_campo,
     construir_indice_shapes_documento,
     encerrar_corel_forcadamente,
@@ -790,10 +792,7 @@ def _exportar_shape_imagem(
                     _ativar_documento(source_doc, logs, rotulo)
             except Exception:
                 pass
-            try:
-                temp_doc.Close()
-            except Exception:
-                pass
+            _fechar_documento_sem_salvar(temp_doc, logs)
 
 
 def _preencher_e_exportar_imagens(
@@ -822,13 +821,26 @@ def _preencher_e_exportar_imagens(
     shutil.copy(fonte_modelo, temp_cdr)
     logs.append("Cópia temp do TimbradoA4.cdr criada.")
 
+    origem_abs = os.path.abspath(caminho_modelo)
+    fonte_abs = os.path.abspath(fonte_modelo)
+    origem_stat = _stat_arquivo(origem_abs)
+    cache_stat = (
+        _stat_arquivo(fonte_abs)
+        if os.path.normcase(fonte_abs) != os.path.normcase(origem_abs)
+        else None
+    )
+
     job_completed = False
     doc = None
     try:
         corel = _corel_session.get_application(corel_visible, force_new=False)
         _preparar_corel_para_edicao(corel, logs)
-        doc = corel.OpenDocument(os.path.abspath(temp_cdr))
+        temp_abs = os.path.abspath(temp_cdr)
+        doc = corel.OpenDocument(temp_abs)
         logs.append(f"Documento aberto — {doc.Pages.Count} página(s).")
+        _assert_documento_e_copia_temp(doc, temp_abs, origem_abs, logs)
+        if cache_stat is not None:
+            _assert_documento_e_copia_temp(doc, temp_abs, fonte_abs, logs)
 
         campos = overlay_campos_com_templates_preview(
             modelo.get("campos") or {},
@@ -886,14 +898,29 @@ def _preencher_e_exportar_imagens(
         return path_cab, path_rod
     finally:
         if doc is not None:
-            try:
-                _fechar_documento_corel(doc, logs)
-            except Exception:
-                try:
-                    doc.Close()
-                except Exception:
-                    pass
+            _fechar_documento_sem_salvar(doc, logs)
         _release_corel_after_job(logs, completed=job_completed)
+        try:
+            if _stat_arquivo(origem_abs) != origem_stat:
+                logs.append(
+                    "ERRO: o modelo Corel original foi modificado na geração "
+                    "Timbrado A4 Digital."
+                )
+        except OSError:
+            logs.append(
+                "ERRO: não foi possível conferir o modelo Corel original após a geração."
+            )
+        if cache_stat is not None:
+            try:
+                if _stat_arquivo(fonte_abs) != cache_stat:
+                    logs.append(
+                        "ERRO: o cache do modelo Corel foi modificado na geração "
+                        "Timbrado A4 Digital."
+                    )
+            except OSError:
+                logs.append(
+                    "ERRO: não foi possível conferir o cache do modelo Corel após a geração."
+                )
 
 
 def _titulo_inline_shape(ishape: Any) -> str:

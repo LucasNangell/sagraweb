@@ -1027,8 +1027,11 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             )
             self._invalidate_for_conn(conn)
 
-    def detect_and_register_deletions(self, mysql_codes, mdb_all_codes):
+    def detect_and_register_deletions(self, mysql_codes, mdb_all_codes, mysql_data=None):
         excluidos_confirmados = set()
+        mysql_by_code = {
+            a["CodStatus"]: a for a in (mysql_data or []) if a.get("CodStatus")
+        }
         try:
             conn = self.conn_mgr.get_mysql()
             cursor = conn.cursor()
@@ -1070,7 +1073,12 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                     continue
                 _, nro, ano, origem = cache[code]
                 self.mark_as_deleted(
-                    code, nro, ano, origem, motivo="Exclusao confirmada no MDB"
+                    code,
+                    nro,
+                    ano,
+                    origem,
+                    andamento=mysql_by_code.get(code),
+                    motivo="Exclusao confirmada no MDB",
                 )
                 self.logger.logger.info(
                     f"[DETECCAO] CodStatus {code} excluido do MDB {origem} (Verificado)."
@@ -1129,7 +1137,9 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             mdb_all_codes = mdb_os_codes | mdb_pap_codes
 
             self._hb.mark_progress("detect_deletions")
-            excluidos = self.detect_and_register_deletions(mysql_codes, mdb_all_codes)
+            excluidos = self.detect_and_register_deletions(
+                mysql_codes, mdb_all_codes, mysql_data=mysql_data
+            )
 
             self._hb.mark_progress("update_cache")
             self.update_cache(mdb_os_data, mdb_pap_data)
@@ -1216,10 +1226,36 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
 
                 self.ensure_mysql_ultimo_status_from_mdb(nro, ano)
 
+            # Deletes antes do catch-up: exclusão MDB não pode ser desfeita por INSERT y2m
+            self._hb.mark_progress("deletes")
+            if excluidos:
+                for code in excluidos:
+                    and_ = next((a for a in mysql_data if a["CodStatus"] == code), None)
+                    if and_:
+                        self.delete_mysql(code, and_)
+                        self._forget_baseline(code)
+                        self._cycle_stats["del_y"] += 1
+                        touched_os.add(
+                            (and_["NroProtocoloLink"], and_["AnoProtocoloLink"])
+                        )
+                        self.ensure_mysql_ultimo_status_from_mdb(
+                            and_["NroProtocoloLink"], and_["AnoProtocoloLink"]
+                        )
+
             if bidi:
                 self._hb.mark_progress("inserts_y2m")
                 novos_no_mysql = mysql_codes - mdb_all_codes
                 for code in novos_no_mysql:
+                    if code in excluidos:
+                        self._svc_log.info(
+                            "[CATCHUP] skip CodStatus=%s motivo=excluido", code
+                        )
+                        continue
+                    if self.is_deleted(code):
+                        self._svc_log.info(
+                            "[CATCHUP] skip CodStatus=%s motivo=tombstone", code
+                        )
+                        continue
                     and_ = next((a for a in mysql_data if a["CodStatus"] == code), None)
                     if not and_:
                         continue
@@ -1247,21 +1283,6 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
 
                 remaining = len(mysql_codes - mdb_all_codes) - self._cycle_stats["ins_y2m"]
                 self._cycle_stats["mysql_only_remaining"] = max(0, remaining)
-
-            self._hb.mark_progress("deletes")
-            if excluidos:
-                for code in excluidos:
-                    and_ = next((a for a in mysql_data if a["CodStatus"] == code), None)
-                    if and_:
-                        self.delete_mysql(code, and_)
-                        self._forget_baseline(code)
-                        self._cycle_stats["del_y"] += 1
-                        touched_os.add(
-                            (and_["NroProtocoloLink"], and_["AnoProtocoloLink"])
-                        )
-                        self.ensure_mysql_ultimo_status_from_mdb(
-                            and_["NroProtocoloLink"], and_["AnoProtocoloLink"]
-                        )
 
             self._hb.mark_progress("ultimo_heal")
             self._heal_os_batch(touched_os)

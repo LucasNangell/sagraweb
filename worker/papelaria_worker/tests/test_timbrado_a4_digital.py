@@ -20,6 +20,7 @@ from timbrado_a4_digital_generator import (  # noqa: E402
     _coletar_shapes_por_nomes,
     _deslocamento_para_pagina,
     _exportar_shape_imagem,
+    _preencher_e_exportar_imagens,
     _substituir_inline_por_imagem,
     _tentar_export_arquivo,
     _tentar_export_bitmap_png,
@@ -450,3 +451,121 @@ def test_word_encaixa_faixa_pela_proporcao_do_arquivo(tmp_path):
     assert pic.Height == pytest.approx(28.0)
     assert pic.Width == pytest.approx(28.0 * 384.0 / 62.0)
     assert pic.Width < 328.0
+
+
+def _modelo_minimo_timbrado() -> dict:
+    return {"campos": {"Cabecalho": "{nome}", "Rodape": "{email}"}}
+
+
+def test_preencher_fecha_sem_salvar_e_nao_altera_modelo(tmp_path):
+    modelo_cdr = tmp_path / "TimbradoA4.cdr"
+    modelo_cdr.write_bytes(b"modelo")
+    before = (modelo_cdr.stat().st_size, modelo_cdr.stat().st_mtime)
+    temp_job = tmp_path / "job"
+    temp_job.mkdir()
+    temp_cdr = temp_job / "timbrado_digital_working.cdr"
+    close_args: list[object] = []
+
+    class Doc:
+        Dirty = True
+        FullFileName = str(temp_cdr)
+        Pages = MagicMock(Count=1)
+
+        def Close(self, save=None):
+            close_args.append(save)
+
+    doc = Doc()
+    corel = MagicMock()
+    corel.OpenDocument.return_value = doc
+    cab = tmp_path / "cab.svg"
+    rod = tmp_path / "rod.svg"
+    cab.write_text("<svg/>")
+    rod.write_text("<svg/>")
+
+    with (
+        patch("timbrado_a4_digital_generator._corel_session") as session,
+        patch("timbrado_a4_digital_generator._preparar_corel_para_edicao"),
+        patch(
+            "timbrado_a4_digital_generator.overlay_campos_com_templates_preview",
+            return_value={"Cabecalho": "x", "Rodape": "y"},
+        ),
+        patch(
+            "timbrado_a4_digital_generator.construir_indice_shapes_documento",
+            return_value={},
+        ),
+        patch("timbrado_a4_digital_generator.aplicar_campo"),
+        patch("timbrado_a4_digital_generator._sincronizar_documento_corel"),
+        patch(
+            "timbrado_a4_digital_generator._coletar_shapes_por_nomes",
+            side_effect=[[MagicMock()], [MagicMock()]],
+        ),
+        patch(
+            "timbrado_a4_digital_generator._exportar_shape_imagem",
+            side_effect=[str(cab), str(rod)],
+        ),
+        patch("timbrado_a4_digital_generator._release_corel_after_job"),
+    ):
+        session.get_application.return_value = corel
+        logs: list[str] = []
+        got = _preencher_e_exportar_imagens(
+            modelo=_modelo_minimo_timbrado(),
+            dados={"nome_deputado": "Ana"},
+            caminho_modelo=str(modelo_cdr),
+            temp_job_dir=str(temp_job),
+            cabecalho_stem=str(tmp_path / "cab"),
+            rodape_stem=str(tmp_path / "rod"),
+            corel_visible=False,
+            models_cache_dir="",
+            logs=logs,
+        )
+
+    assert got == (str(cab), str(rod))
+    assert close_args == [False]
+    assert doc.Dirty is False
+    after = (modelo_cdr.stat().st_size, modelo_cdr.stat().st_mtime)
+    assert after == before
+    assert any("sem gravar" in line for line in logs)
+    assert not any(line.startswith("ERRO:") for line in logs)
+
+
+def test_preencher_rejeita_abrir_modelo_original(tmp_path):
+    modelo_cdr = tmp_path / "TimbradoA4.cdr"
+    modelo_cdr.write_bytes(b"modelo")
+    temp_job = tmp_path / "job"
+    temp_job.mkdir()
+    close_args: list[object] = []
+
+    class Doc:
+        Dirty = True
+        FullFileName = str(modelo_cdr.resolve())
+        Pages = MagicMock(Count=1)
+
+        def Close(self, save=None):
+            close_args.append(save)
+
+    doc = Doc()
+    corel = MagicMock()
+    corel.OpenDocument.return_value = doc
+
+    with (
+        patch("timbrado_a4_digital_generator._corel_session") as session,
+        patch("timbrado_a4_digital_generator._preparar_corel_para_edicao"),
+        patch("timbrado_a4_digital_generator._release_corel_after_job"),
+    ):
+        session.get_application.return_value = corel
+        logs: list[str] = []
+        with pytest.raises(CorelGenerationError, match="cópia temporária"):
+            _preencher_e_exportar_imagens(
+                modelo=_modelo_minimo_timbrado(),
+                dados={"nome_deputado": "Ana"},
+                caminho_modelo=str(modelo_cdr),
+                temp_job_dir=str(temp_job),
+                cabecalho_stem=str(tmp_path / "cab"),
+                rodape_stem=str(tmp_path / "rod"),
+                corel_visible=False,
+                models_cache_dir="",
+                logs=logs,
+            )
+
+    assert close_args == [False]
+    assert doc.Dirty is False

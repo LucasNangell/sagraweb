@@ -13,6 +13,7 @@ if str(_ROOT) not in sys.path:
 
 import worker as worker_mod  # noqa: E402
 from corel_generator import GenerationResult  # noqa: E402
+from timbrado_a4_digital_generator import TimbradoDigitalResult  # noqa: E402
 from worker import resolve_worker_tipo_job  # noqa: E402
 
 
@@ -186,3 +187,41 @@ class TestProcessJobDispatch:
         gerar.assert_called_once()
         exportar.assert_not_called()
         assert api.completed
+
+    def test_timbrado_digital_nao_chama_gerar_arquivo(
+        self, patched_runtime, monkeypatch, tmp_path
+    ):
+        gerar, exportar, cfg = patched_runtime
+        templates = tmp_path / "templates"
+        templates.mkdir()
+        cfg.timbrado_a4_digital_templates_dir = str(templates)
+        digital = MagicMock(
+            return_value=TimbradoDigitalResult(
+                artefatos=["a-Cor.docx", "a-PB.docx"],
+                logs=["ok"],
+            )
+        )
+        monkeypatch.setattr(worker_mod, "gerar_timbrado_a4_digital", digital)
+        api = FakeApi()
+        worker_mod._process_job_body(
+            api,
+            cfg,
+            _job(
+                tipo_job="timbrado_a4_digital",
+                arquivo_modelo="TimbradoA4.cdr",
+                produto="Timbrado A4 (Digital)",
+                output_cdr_name="",
+                output_pdf_name="",
+                output_cabecalho_svg="cabecalho.svg",
+                output_rodape_svg="rodape.svg",
+                output_docx_cor="a-Cor.docx",
+                output_docx_pb="a-PB.docx",
+            ),
+        )
+        digital.assert_called_once()
+        gerar.assert_not_called()
+        exportar.assert_not_called()
+        assert api.completed
+        assert api.completed[0][1] == ""
+        assert api.completed[0][2] == ""
+        assert api.completed[0][3] == ["a-Cor.docx", "a-PB.docx"]

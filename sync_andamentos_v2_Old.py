@@ -418,6 +418,9 @@ class AndamentosSynchronizer:
         """
         Verifica se é uma RESSURREIÇÃO (mesmo conteúdo de registro excluído)
         ou um NOVO REGISTRO legítimo (conteúdo diferente).
+
+        Tombstone sem content_hash bloqueia (não falha aberto). Só libera inserção
+        quando há hash armazenado e o payload atual diverge (reuso legítimo).
         """
         try:
             conn = self.conn_mgr.get_mysql()
@@ -434,6 +437,13 @@ class AndamentosSynchronizer:
                 return False  # Não está excluído, permitir
             
             stored_hash = result['content_hash']
+            if not stored_hash:
+                self.logger.logger.warning(
+                    f"[BLOQUEADO] CodStatus {codstatus} tem tombstone sem content_hash. "
+                    f"Tratando como ressurreição (bloqueio)."
+                )
+                return True
+
             current_hash = self._calculate_content_hash(andamento)
             
             # Se hash é diferente, é um NOVO registro legítimo
@@ -736,12 +746,20 @@ class AndamentosSynchronizer:
             self.logger.logger.error(f"[ERRO] Erro ao verificar existência no MDB ({origem}): {e}")
             return True 
 
-    def detect_and_register_deletions(self, mysql_codes: Set[str], mdb_all_codes: Set[str]) -> Set[str]:
+    def detect_and_register_deletions(
+        self,
+        mysql_codes: Set[str],
+        mdb_all_codes: Set[str],
+        mysql_data: List[Dict] = None,
+    ) -> Set[str]:
         """
         Detecta registros que sumiram do MDB (comparando com cache) e registra exclusão.
         Retorna conjunto de CodStatus que devem ser excluídos do MySQL.
         """
         excluidos_confirmados = set()
+        mysql_by_code = {
+            a["CodStatus"]: a for a in (mysql_data or []) if a.get("CodStatus")
+        }
         
         try:
             conn = self.conn_mgr.get_mysql()
@@ -785,7 +803,14 @@ class AndamentosSynchronizer:
                 if code not in cache: continue
                 _, nro, ano, origem = cache[code]
                 
-                self.mark_as_deleted(code, nro, ano, origem, motivo='Exclusão confirmada no MDB')
+                self.mark_as_deleted(
+                    code,
+                    nro,
+                    ano,
+                    origem,
+                    andamento=mysql_by_code.get(code),
+                    motivo='Exclusão confirmada no MDB',
+                )
                 self.logger.logger.info(f"[DETECÇÃO] CodStatus {code} excluído do MDB {origem} (Verificado).")
                 
             return excluidos_confirmados
@@ -1208,7 +1233,7 @@ class AndamentosSynchronizer:
             return str(andamento)
 
     def delete_mysql(self, codstatus: str, andamento: Dict):
-        """Remove andamento do MySQL E registra na tabela deleted_andamentos."""
+        """Remove andamento do MySQL e mantém tombstone durável em deleted_andamentos."""
         try:
             self.backup_mgr.backup('MySQL', andamento)
             
@@ -1232,8 +1257,6 @@ class AndamentosSynchronizer:
             cursor = conn.cursor()
             
             cursor.execute("DELETE FROM tabandamento WHERE CodStatus = %s", (codstatus,))
-
-            cursor.execute("DELETE FROM deleted_andamentos WHERE codstatus = %s", (codstatus,))
             
             conn.commit()
             cursor.close()
@@ -1241,7 +1264,7 @@ class AndamentosSynchronizer:
             self.logger.log(
                 'DELETE', 'MDB', 'MySQL', codstatus,
                 nro, ano,
-                'Exclusão propagada e removida de deleted_andamentos'
+                'Exclusão propagada; tombstone mantido em deleted_andamentos'
             )
         except Exception as e:
             conn.rollback()
@@ -1621,7 +1644,9 @@ class AndamentosSynchronizer:
             mdb_all_codes = mdb_os_codes | mdb_pap_codes
             
             # PASSO 1: DETECTAR E REGISTRAR EXCLUSÕES
-            excluidos = self.detect_and_register_deletions(mysql_codes, mdb_all_codes)
+            excluidos = self.detect_and_register_deletions(
+                mysql_codes, mdb_all_codes, mysql_data=mysql_data
+            )
             
             # Atualizar cache APÓS detectar exclusões
             self.update_cache(mdb_os_data, mdb_pap_data)

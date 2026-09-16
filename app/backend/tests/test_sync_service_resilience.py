@@ -598,6 +598,52 @@ def test_perform_sync_catchup_insert_mdb(tmp_path, monkeypatch):
     assert mysql_row["CodStatus"] in sync._baseline
 
 
+def test_perform_sync_mdb_delete_skips_catchup_and_deletes_mysql(tmp_path, monkeypatch):
+    """Exclusão confirmada no MDB não pode ser desfeita pelo catch-up MySQL→MDB."""
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    mysql_row = _sample_andamento(CodStatus="000882026-77", Observaçao="ainda no mysql")
+    monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
+    monkeypatch.setattr(svc, "SYNC_MYSQL_TO_MDB_CATCHUP", True)
+    _wire_perform_sync(sync, [mysql_row], [])
+    sync.detect_and_register_deletions = MagicMock(
+        return_value={mysql_row["CodStatus"]}
+    )
+    sync.is_deleted = MagicMock(return_value=False)
+    sync.perform_sync()
+    sync.insert_mdb.assert_not_called()
+    sync.delete_mysql.assert_called_once()
+    assert sync.delete_mysql.call_args.args[0] == mysql_row["CodStatus"]
+    assert sync._hb.snapshot()["stats"]["del_y"] == 1
+    assert sync._hb.snapshot()["stats"]["ins_y2m"] == 0
+    assert mysql_row["CodStatus"] not in sync._baseline
+
+
+def test_perform_sync_catchup_skips_tombstoned_code(tmp_path, monkeypatch):
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    mysql_row = _sample_andamento(CodStatus="000882026-88", Observaçao="tombstone")
+    monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
+    monkeypatch.setattr(svc, "SYNC_MYSQL_TO_MDB_CATCHUP", True)
+    _wire_perform_sync(sync, [mysql_row], [])
+    sync.is_deleted = MagicMock(return_value=True)
+    sync.perform_sync()
+    sync.insert_mdb.assert_not_called()
+    sync.delete_mysql.assert_not_called()
+    assert sync._hb.snapshot()["stats"]["ins_y2m"] == 0
+
+
+def test_is_resurrection_blocks_when_tombstone_has_null_hash(tmp_path, monkeypatch):
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    row = _sample_andamento()
+    cursor = MagicMock()
+    cursor.fetchone.return_value = {"content_hash": None}
+    conn = MagicMock()
+    conn.cursor.return_value = cursor
+    sync.conn_mgr.get_mysql = MagicMock(return_value=conn)
+    sync._remove_from_deleted = MagicMock()
+    assert sync.is_resurrection(row["CodStatus"], row) is True
+    sync._remove_from_deleted.assert_not_called()
+
+
 def test_perform_sync_update_mysql_to_mdb_when_mysql_changed(tmp_path, monkeypatch):
     sync = _make_sync_for_notify(tmp_path, monkeypatch)
     orig = _sample_andamento(SituacaoLink="AccessOld", Observaçao="from mdb")

@@ -1635,6 +1635,8 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
         payload["output_rodape_svg"] = artifacts["rodape_svg"]
         payload["output_docx_cor"] = artifacts["docx_cor"]
         payload["output_docx_pb"] = artifacts["docx_pb"]
+        payload["output_cdr_name"] = ""
+        payload["output_pdf_name"] = ""
 
     return payload
 

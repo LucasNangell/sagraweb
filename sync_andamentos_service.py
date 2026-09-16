@@ -42,15 +42,25 @@ from typing import Any, Dict, List, Optional, Set
 # ---------------------------------------------------------------------------
 # Bootstrap de path (mesmo padrão de sync_andamentos_v2.py)
 # ---------------------------------------------------------------------------
+# IMPORTANTE: app/backend deve vir ANTES de app/services.
+# Em app/services existe um pacote aninhado `services/` (legado) que sombreia
+# app/backend/services e quebra `from services.andamento_operacional import ...`
+# (usado por mdb_writer / UltimoStatus).
 _ROOT_DIR = os.path.abspath(os.path.dirname(__file__))
-if _ROOT_DIR not in sys.path:
-    sys.path.insert(0, _ROOT_DIR)
 _BACKEND_DIR = os.path.join(_ROOT_DIR, "app", "backend")
-if os.path.isdir(_BACKEND_DIR) and _BACKEND_DIR not in sys.path:
-    sys.path.insert(0, _BACKEND_DIR)
 _SERVICES_DIR = os.path.join(_ROOT_DIR, "app", "services")
-if os.path.isdir(_SERVICES_DIR) and _SERVICES_DIR not in sys.path:
-    sys.path.insert(0, _SERVICES_DIR)
+
+# Limpa entradas duplicadas e reinsere na ordem correta
+for _p in (_SERVICES_DIR, _BACKEND_DIR, _ROOT_DIR):
+    while _p in sys.path:
+        sys.path.remove(_p)
+
+sys.path.insert(0, _ROOT_DIR)
+if os.path.isdir(_BACKEND_DIR):
+    sys.path.insert(0, _BACKEND_DIR)
+# Legado (sync_tables etc.): só no final, nunca antes do backend
+if os.path.isdir(_SERVICES_DIR):
+    sys.path.append(_SERVICES_DIR)
 
 # ---------------------------------------------------------------------------
 # Import do módulo legado (lógica de sincronia intacta)
@@ -147,6 +157,10 @@ def _empty_cycle_stats() -> Dict[str, int]:
         "mysql_only_remaining": 0,
         "conflitos": 0,
         "baseline_rows": 0,
+        "os_del_candidates": 0,
+        "os_del_executed": 0,
+        "os_del_quarantined": 0,
+        "os_del_aborted": 0,
     }
 
 
@@ -222,6 +236,39 @@ class InstanceMutex:
             return False
         return True
 
+    def acquire_with_retry(
+        self,
+        *,
+        timeout_sec: float = 45.0,
+        interval_sec: float = 1.5,
+        log: Optional[logging.Logger] = None,
+    ) -> bool:
+        """Evita exit 2 imediato em overlap stop/start (NSSM throttle → PAUSED)."""
+        deadline = time.monotonic() + max(timeout_sec, 0.0)
+        attempt = 0
+        while True:
+            attempt += 1
+            if self.acquire():
+                if attempt > 1 and log is not None:
+                    log.info(
+                        "[MUTEX] Adquirido apos %s tentativa(s) (%s)",
+                        attempt,
+                        self.name,
+                    )
+                return True
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            if log is not None and (attempt == 1 or attempt % 5 == 0):
+                log.warning(
+                    "[MUTEX] Outra instancia ainda segura %s "
+                    "(tentativa %s, restante %.0fs) - aguardando...",
+                    self.name,
+                    attempt,
+                    remaining,
+                )
+            time.sleep(min(interval_sec, max(remaining, 0.1)))
+
     def release(self) -> None:
         if self._handle is None:
             return
@@ -230,6 +277,41 @@ class InstanceMutex:
         except Exception:
             pass
         self._handle = None
+
+
+def _preflight_imports(log: logging.Logger) -> None:
+    """Falhas claras no boot (evita crash opaco → NSSM PAUSED)."""
+    missing: List[str] = []
+    for mod_name in ("sync_policy", "sync_os_deletes"):
+        path = os.path.join(_ROOT_DIR, f"{mod_name}.py")
+        if not os.path.isfile(path):
+            missing.append(path)
+    if missing:
+        raise FileNotFoundError(
+            "Arquivos obrigatorios ausentes na raiz do sync: "
+            + "; ".join(missing)
+            + ". Copie sync_policy.py e sync_os_deletes.py para o AppDirectory."
+        )
+    try:
+        import services  # noqa: F401
+        from services import andamento_operacional as _ao  # noqa: F401
+    except Exception as e:
+        services_pkg = None
+        try:
+            import services as _svc
+
+            services_pkg = getattr(_svc, "__file__", repr(_svc))
+        except Exception:
+            pass
+        raise ImportError(
+            "Falha ao importar services.andamento_operacional "
+            f"(services={services_pkg!r}; sys.path[0:3]={sys.path[:3]!r}): {e}"
+        ) from e
+    log.info(
+        "[PREFLIGHT] sync_policy/sync_os_deletes/andamento_operacional OK "
+        "(backend=%s)",
+        _BACKEND_DIR,
+    )
 
 
 # ===========================================================================
@@ -1033,6 +1115,12 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             a["CodStatus"]: a for a in (mysql_data or []) if a.get("CodStatus")
         }
         try:
+            from sync_os_deletes import os_keys_pending_or_deleted
+
+            os_protected = os_keys_pending_or_deleted(self.conn_mgr)
+        except Exception:
+            os_protected = set()
+        try:
             conn = self.conn_mgr.get_mysql()
             cursor = conn.cursor()
             cursor.execute(
@@ -1050,6 +1138,9 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                 if code not in cache:
                     continue
                 _, nro, ano, origem = cache[code]
+                # OS em exclusão/quarentena: não contar no SAFETY LOCK de andamentos
+                if (int(nro), int(ano)) in os_protected:
+                    continue
                 if not self.verify_mdb_existence(code, origem):
                     excluidos_confirmados.add(code)
 
@@ -1087,6 +1178,17 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
         except Exception as e:
             self.logger.logger.error(f"[ERRO] Erro ao detectar exclusoes: {e}")
             return set()
+
+    def _load_effective_policies(self):
+        from sync_policy import apply_env_kill_switches, load_policies
+
+        conn = self.conn_mgr.get_mysql()
+        cur = conn.cursor(dictionary=True)
+        try:
+            policies = load_policies(cur)
+        finally:
+            cur.close()
+        return apply_env_kill_switches(policies)
 
     # ------------------------------------------------------------------
     # perform_sync: tabAndamento bidirecional + heartbeat
@@ -1130,6 +1232,26 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                 return
 
             self._ensure_baseline_ready()
+
+            try:
+                policies = self._load_effective_policies()
+            except Exception as e:
+                self._svc_log.warning("[POLICY] falha ao carregar sync_policy: %s", e)
+                policies = {}
+
+            and_policy = policies.get("tabAndamento") or {}
+            # Sem policy no DB: manter comportamento atual (bi ligado).
+            and_enabled = bool(and_policy.get("enabled", True))
+            and_mode = and_policy.get("mode") or "bi"
+            bidi_policy = and_enabled and (and_mode == "bi")
+            # Env kill-switch already applied in _load_effective_policies;
+            # still require module flags for emergency.
+            bidi = (
+                bidi
+                and bidi_policy
+                and SYNC_TABANDAMENTO_BIDI
+                and SYNC_MYSQL_TO_MDB_CATCHUP
+            )
 
             mysql_codes = {a["CodStatus"] for a in mysql_data}
             mdb_os_codes = {a["CodStatus"] for a in mdb_os_data}
@@ -1242,6 +1364,25 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                             and_["NroProtocoloLink"], and_["AnoProtocoloLink"]
                         )
 
+            # Exclusão segura de OS (Protocolos/Detalhes + andamentos)
+            self._hb.mark_progress("os_deletes")
+            try:
+                from sync_os_deletes import OsDeleteManager
+
+                os_result = OsDeleteManager(self).run_phase(policies)
+                self._cycle_stats["os_del_candidates"] = os_result.candidates
+                self._cycle_stats["os_del_executed"] = os_result.executed
+                self._cycle_stats["os_del_quarantined"] = os_result.quarantined
+                if os_result.aborted:
+                    self._cycle_stats["os_del_aborted"] = 1
+            except Exception as e:
+                self._svc_log.error("[OS_DEL] fase falhou: %s", e)
+                self._svc_log.error(traceback.format_exc())
+                try:
+                    self.conn_mgr.invalidate_mysql()
+                except Exception:
+                    pass
+
             if bidi:
                 self._hb.mark_progress("inserts_y2m")
                 novos_no_mysql = mysql_codes - mdb_all_codes
@@ -1261,6 +1402,11 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                         continue
                     nro = and_["NroProtocoloLink"]
                     ano = and_["AnoProtocoloLink"]
+                    if self.is_os_deleted(nro, ano):
+                        self._svc_log.info(
+                            "[CATCHUP] skip CodStatus=%s motivo=deleted_os", code
+                        )
+                        continue
                     try:
                         mdb_conn = self.conn_mgr.get_mdb_by_nro(nro)
                         destino = self.conn_mgr.get_mdb_name_by_nro(nro)
@@ -1569,10 +1715,20 @@ def main() -> int:
     log.info("Log dir: %s", log_dir)
 
     global _MUTEX, _ACTIVE_SYNC
+    try:
+        _preflight_imports(log)
+    except Exception as e:
+        log.error("[PREFLIGHT] %s", e)
+        print(f"[ERRO][PREFLIGHT] {e}")
+        return 1
+
     _MUTEX = InstanceMutex()
-    if not _MUTEX.acquire():
+    if not _MUTEX.acquire_with_retry(timeout_sec=45.0, interval_sec=1.5, log=log):
         msg = (
-            f"Outra instancia ja esta em execucao (mutex {SYNC_MUTEX_NAME}). Abortando."
+            f"Outra instancia ja esta em execucao (mutex {SYNC_MUTEX_NAME}) "
+            "apos 45s. Feche janelas manuais/_iniciar-sync ou: "
+            "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
+            "Where-Object CommandLine -match sync_andamentos_service"
         )
         log.error(msg)
         print(f"[ERRO] {msg}")

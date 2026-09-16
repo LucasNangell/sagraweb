@@ -38,6 +38,28 @@ import sys
 # CONFIGURAÇÃO
 #=====================================================================
 
+# Allowlist: campos que o MDB pode gravar no MySQL (protege campos só-web).
+_PROTOCOL_SYNC_ALLOWLIST = {
+    "NroProtocolo", "AnoProtocolo",
+    "CodigoRequisic", "CategoriaLink", "NomeUsuario", "Titular", "OrgInteressado",
+    "SiglaOrgao", "GabSalaUsuario", "Andar", "Localizacao", "RamalUsuario",
+    "DataEntrada", "ProcessoSolicit", "CSnro", "EntregPrazoLink", "EntregData", "ContatoTrab",
+    "RetiradaNome", "RetiradaPonto", "DataRecebimento", "PontoEntrega", "SetorEntrega",
+    "CancelamentoMotivo", "CancelamentoSetor",
+}
+_DETAILS_SYNC_ALLOWLIST = {
+    "NroProtocoloLinkDet", "AnoProtocoloLinkDet",
+    "Titulo", "TipoPublicacaoLink", "FormatoLink", "MaquinaLink", "Tiragem", "Pags",
+    "FrenteVerso", "ModelosArq", "PapelLink", "PapelDescricao", "Cores", "CoresDescricao",
+    "DescAcabamento", "Observ", "TiragemSolicitada", "CotaTotal", "MaterialFornecido",
+    "Fotolito", "ModeloDobra", "ProvaImpressa", "InsumosFornecidos",
+    "ElemGrafBrasao", "ElemGrafTimbre", "ElemGrafArteGab", "ElemGrafAssinatura",
+}
+_MYSQL_ONLY_PROTECTED = {
+    "email_pt_html", "email_pt_versao", "email_pt_data",
+    "DataSincronizacao", "OrigemMDB", "HashRegistro", "ID", "id",
+}
+
 @dataclass
 class Config:
     mysql_host: str
@@ -242,6 +264,14 @@ class SyncLogger:
                     INDEX idx_deleted_at (deleted_at)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             """)
+
+            try:
+                from sync_policy import ensure_sync_control_tables
+
+                ensure_sync_control_tables(cursor)
+                self.logger.info("[OK] Tabelas de controle OS/policy criadas/verificadas")
+            except Exception as e_ctl:
+                self.logger.error(f"[ERRO] Tabelas de controle OS/policy: {e_ctl}")
             
             conn.commit()
             cursor.close()
@@ -413,6 +443,31 @@ class AndamentosSynchronizer:
         except Exception as e:
             self.logger.logger.error(f"[ERRO] Erro ao verificar exclusão: {e}")
             return False
+
+    def is_os_deleted(self, nro: int, ano: int, mysql_conn=None) -> bool:
+        """Tombstone de OS inteira (deleted_os).
+
+        Prefira passar mysql_conn no BG_SYNC (conexão dedicada) — o conn_mgr
+        compartilhado NÃO é thread-safe com o ciclo principal.
+        """
+        try:
+            from sync_os_deletes import is_os_deleted
+
+            return is_os_deleted(mysql_conn if mysql_conn is not None else self.conn_mgr, nro, ano)
+        except Exception as e:
+            self.logger.logger.error(f"[ERRO] Erro ao verificar deleted_os: {e}")
+            return False
+
+    def _sync_allowed_columns(
+        self, columns: List[str], allowlist: Set[str], pk_fields: List[str]
+    ) -> List[str]:
+        allowed = []
+        for col in columns:
+            if col in pk_fields:
+                allowed.append(col)
+            elif col in allowlist and col not in _MYSQL_ONLY_PROTECTED:
+                allowed.append(col)
+        return allowed
     
     def is_resurrection(self, codstatus: str, andamento: Dict) -> bool:
         """
@@ -848,8 +903,14 @@ class AndamentosSynchronizer:
     # ===================================================================
     
     def sync_os_data_from_mdb(self, nro: int, ano: int, origem: str):
-        """Sincroniza dados da OS (tabProtocolos e tabDetalhesServico) do MDB para MySQL."""
+        """Sincroniza dados da OS (tabProtocolos e tabDetalhesServico) do MDB para MySQL (allowlist)."""
         try:
+            if self.is_os_deleted(nro, ano):
+                self.logger.logger.info(
+                    f"[SYNC_OS] skip OS {nro}/{ano}: tombstone deleted_os"
+                )
+                return
+
             mdb_conn = self.conn_mgr.get_mdb_by_nro(nro)
             mdb_cursor = mdb_conn.cursor()
 
@@ -863,27 +924,36 @@ class AndamentosSynchronizer:
                 columns = [desc[0] for desc in mdb_cursor.description]
                 data = dict(zip(columns, row))
                 pk_cols = ["NroProtocolo", "AnoProtocolo"]
-                set_cols = [col for col in columns if col not in pk_cols]
+                sync_cols = self._sync_allowed_columns(
+                    columns, _PROTOCOL_SYNC_ALLOWLIST, pk_cols
+                )
+                set_cols = [col for col in sync_cols if col not in pk_cols]
 
                 mysql_conn = self.conn_mgr.get_mysql()
-                mysql_cursor = mysql_conn.cursor()
+                mysql_cursor = mysql_conn.cursor(dictionary=True)
                 mysql_cursor.execute(
-                    "SELECT COUNT(*) FROM tabProtocolos WHERE NroProtocolo = %s AND AnoProtocolo = %s",
+                    "SELECT * FROM tabProtocolos WHERE NroProtocolo = %s AND AnoProtocolo = %s",
                     (nro, ano)
                 )
-                exists = mysql_cursor.fetchone()[0] > 0
-                if exists:
-                    set_clause = ", ".join([f"{col} = %s" for col in set_cols])
-                    params = [data[col] for col in set_cols] + [data["NroProtocolo"], data["AnoProtocolo"]]
-                    mysql_cursor.execute(
-                        f"UPDATE tabProtocolos SET {set_clause} WHERE NroProtocolo = %s AND AnoProtocolo = %s",
-                        params
-                    )
-                    self.logger.logger.info(f"[SYNC_OS] tabProtocolos atualizado: OS {nro}/{ano}")
+                mysql_row = mysql_cursor.fetchone()
+                if mysql_row:
+                    if set_cols and self._records_differ_generic(
+                        {k: data.get(k) for k in sync_cols},
+                        {k: mysql_row.get(k) for k in sync_cols},
+                        _MYSQL_ONLY_PROTECTED,
+                    ):
+                        set_clause = ", ".join([f"`{col}` = %s" for col in set_cols])
+                        params = [data[col] for col in set_cols] + [nro, ano]
+                        mysql_cursor.execute(
+                            f"UPDATE tabProtocolos SET {set_clause} "
+                            f"WHERE NroProtocolo = %s AND AnoProtocolo = %s",
+                            params
+                        )
+                        self.logger.logger.info(f"[SYNC_OS] tabProtocolos atualizado: OS {nro}/{ano}")
                 else:
-                    col_clause = ", ".join(columns)
-                    val_clause = ", ".join(["%s"] * len(columns))
-                    params = [data[col] for col in columns]
+                    col_clause = ", ".join([f"`{c}`" for c in sync_cols])
+                    val_clause = ", ".join(["%s"] * len(sync_cols))
+                    params = [data[col] for col in sync_cols]
                     mysql_cursor.execute(
                         f"INSERT INTO tabProtocolos ({col_clause}) VALUES ({val_clause})",
                         params
@@ -904,27 +974,37 @@ class AndamentosSynchronizer:
                 columns = [desc[0] for desc in mdb_cursor.description]
                 data = dict(zip(columns, row))
                 pk_cols = ["NroProtocoloLinkDet", "AnoProtocoloLinkDet"]
-                set_cols = [col for col in columns if col not in pk_cols]
+                sync_cols = self._sync_allowed_columns(
+                    columns, _DETAILS_SYNC_ALLOWLIST, pk_cols
+                )
+                set_cols = [col for col in sync_cols if col not in pk_cols]
 
                 mysql_conn = self.conn_mgr.get_mysql()
-                mysql_cursor = mysql_conn.cursor()
+                mysql_cursor = mysql_conn.cursor(dictionary=True)
                 mysql_cursor.execute(
-                    "SELECT COUNT(*) FROM tabDetalhesServico WHERE NroProtocoloLinkDet = %s AND AnoProtocoloLinkDet = %s",
+                    "SELECT * FROM tabDetalhesServico "
+                    "WHERE NroProtocoloLinkDet = %s AND AnoProtocoloLinkDet = %s",
                     (nro, ano)
                 )
-                exists = mysql_cursor.fetchone()[0] > 0
-                if exists:
-                    set_clause = ", ".join([f"{col} = %s" for col in set_cols])
-                    params = [data[col] for col in set_cols] + [data["NroProtocoloLinkDet"], data["AnoProtocoloLinkDet"]]
-                    mysql_cursor.execute(
-                        f"UPDATE tabDetalhesServico SET {set_clause} WHERE NroProtocoloLinkDet = %s AND AnoProtocoloLinkDet = %s",
-                        params
-                    )
-                    self.logger.logger.info(f"[SYNC_OS] tabDetalhesServico atualizado: OS {nro}/{ano}")
+                mysql_row = mysql_cursor.fetchone()
+                if mysql_row:
+                    if set_cols and self._records_differ_generic(
+                        {k: data.get(k) for k in sync_cols},
+                        {k: mysql_row.get(k) for k in sync_cols},
+                        _MYSQL_ONLY_PROTECTED,
+                    ):
+                        set_clause = ", ".join([f"`{col}` = %s" for col in set_cols])
+                        params = [data[col] for col in set_cols] + [nro, ano]
+                        mysql_cursor.execute(
+                            f"UPDATE tabDetalhesServico SET {set_clause} "
+                            f"WHERE NroProtocoloLinkDet = %s AND AnoProtocoloLinkDet = %s",
+                            params
+                        )
+                        self.logger.logger.info(f"[SYNC_OS] tabDetalhesServico atualizado: OS {nro}/{ano}")
                 else:
-                    col_clause = ", ".join(columns)
-                    val_clause = ", ".join(["%s"] * len(columns))
-                    params = [data[col] for col in columns]
+                    col_clause = ", ".join([f"`{c}`" for c in sync_cols])
+                    val_clause = ", ".join(["%s"] * len(sync_cols))
+                    params = [data[col] for col in sync_cols]
                     mysql_cursor.execute(
                         f"INSERT INTO tabDetalhesServico ({col_clause}) VALUES ({val_clause})",
                         params
@@ -1062,6 +1142,17 @@ class AndamentosSynchronizer:
             nro = andamento['NroProtocoloLink']
             ano = andamento['AnoProtocoloLink']
 
+            if self.is_os_deleted(nro, ano):
+                self.logger.logger.warning(
+                    f"[BLOQUEADO] CodStatus {codstatus} OS {nro}/{ano} em deleted_os"
+                )
+                self.logger.log(
+                    'INSERT_BLOCKED', origem, 'MySQL', codstatus,
+                    nro, ano,
+                    'Bloqueado: OS tombstonada em deleted_os'
+                )
+                return
+
             if self.is_resurrection(codstatus, andamento):
                 current_time = time.time()
                 last_warning = self._blocked_warnings_cache.get(codstatus, 0)
@@ -1135,6 +1226,13 @@ class AndamentosSynchronizer:
         """Insere registro no MDB, mas apenas se NÃO estiver na lista de exclusões."""
         try:
             codstatus = andamento['CodStatus']
+            nro = andamento.get('NroProtocoloLink')
+            ano = andamento.get('AnoProtocoloLink')
+            if nro is not None and ano is not None and self.is_os_deleted(int(nro), int(ano)):
+                self.logger.logger.warning(
+                    f"[BLOQUEADO] CodStatus {codstatus} OS {nro}/{ano} em deleted_os (insert_mdb)"
+                )
+                return
             if self.is_resurrection(codstatus, andamento):
                 current_time = time.time()
                 last_warning = self._blocked_warnings_cache.get(codstatus, 0)
@@ -1490,6 +1588,12 @@ class AndamentosSynchronizer:
                             table_name: str, pk_fields: List[str], year_field: str, nro_field: str,
                             ignore_fields: Set[str]):
         db_name = "OS_Atual" if is_os else "Papelaria"
+        allowlist = (
+            _PROTOCOL_SYNC_ALLOWLIST
+            if table_name == "tabProtocolos"
+            else _DETAILS_SYNC_ALLOWLIST
+        )
+        ignore_all = set(ignore_fields) | set(_MYSQL_ONLY_PROTECTED)
         
         # 1. Ler MDB
         mdb_cursor = mdb_conn.cursor()
@@ -1504,6 +1608,8 @@ class AndamentosSynchronizer:
         for row in mdb_rows:
             mdb_records.append(dict(zip(columns, row)))
         mdb_cursor.close()
+
+        sync_cols = self._sync_allowed_columns(columns, allowlist, pk_fields)
         
         # 2. Ler MySQL
         mysql_cursor = mysql_conn.cursor(dictionary=True)
@@ -1525,20 +1631,29 @@ class AndamentosSynchronizer:
         
         for mdb_rec in mdb_records:
             pk = get_pk_val(mdb_rec, pk_fields)
+            nro_val = mdb_rec.get(nro_field) or mdb_rec.get(pk_fields[0])
+            ano_val = mdb_rec.get(year_field) or mdb_rec.get(pk_fields[1])
+            try:
+                if nro_val is not None and ano_val is not None and self.is_os_deleted(
+                    int(nro_val), int(ano_val), mysql_conn=mysql_conn
+                ):
+                    continue
+            except (TypeError, ValueError):
+                pass
             if pk not in mysql_map:
                 inserts.append(mdb_rec)
             else:
                 mysql_rec = mysql_map[pk]
-                if self._records_differ_generic(mdb_rec, mysql_rec, ignore_fields):
+                if self._records_differ_generic(mdb_rec, mysql_rec, ignore_all):
                     updates.append(mdb_rec)
                     
         # Inserções no MySQL
         if inserts:
             mysql_cursor = mysql_conn.cursor()
             for mdb_rec in inserts:
-                col_names = ", ".join([f"`{col}`" for col in columns])
-                placeholders = ", ".join(["%s"] * len(columns))
-                values = [mdb_rec[col] for col in columns]
+                col_names = ", ".join([f"`{col}`" for col in sync_cols])
+                placeholders = ", ".join(["%s"] * len(sync_cols))
+                values = [mdb_rec.get(col) for col in sync_cols]
                 
                 query = f"INSERT INTO {table_name} ({col_names}) VALUES ({placeholders})"
                 mysql_cursor.execute(query, values)
@@ -1552,10 +1667,12 @@ class AndamentosSynchronizer:
         if updates:
             mysql_cursor = mysql_conn.cursor()
             for mdb_rec in updates:
-                set_cols = [col for col in columns if col not in pk_fields]
+                set_cols = [col for col in sync_cols if col not in pk_fields]
+                if not set_cols:
+                    continue
                 set_clause = ", ".join([f"`{col}` = %s" for col in set_cols])
                 
-                values = [mdb_rec[col] for col in set_cols]
+                values = [mdb_rec.get(col) for col in set_cols]
                 for f in pk_fields:
                     values.append(mdb_rec[f])
                     

@@ -10,6 +10,7 @@ import {
   Mail,
   Package,
   Printer,
+  RefreshCw,
   Settings,
   Wallet,
 } from "lucide-react";
@@ -26,6 +27,7 @@ import { OrcamentoSettingsSection } from "./OrcamentoSettingsSection";
 import { PapelariaProdutosAdminSection } from "./PapelariaProdutosAdminSection";
 import { PapelariaWorkerQueueSection } from "./PapelariaWorkerQueueSection";
 import { PreAnaliseChecksSection } from "./PreAnaliseChecksSection";
+import { SincronizacaoSettingsSection } from "./SincronizacaoSettingsSection";
 import { SistemaSettingsSection } from "./SistemaSettingsSection";
 import "./configuracoesPage.css";
 
@@ -40,6 +42,7 @@ type ConfigTab =
   | "sistema"
   | "custos"
   | "orcamento"
+  | "sincronizacao"
   | "desenvolvimento";
 
 const TAB_META: Record<
@@ -103,6 +106,12 @@ const TAB_META: Record<
     description:
       "Alíquotas, cliques, formatos e textos do ofício usados no cálculo Digital/Offset. Preços de material vêm do estoque.",
     icon: <Calculator className="size-3.5" aria-hidden />,
+  },
+  sincronizacao: {
+    label: "Sincronização",
+    description:
+      "Política MDB↔MySQL por tabela, status dos serviços Windows e fila segura de exclusões de OS.",
+    icon: <RefreshCw className="size-3.5" aria-hidden />,
   },
   desenvolvimento: {
     label: "Desenvolvimento",
@@ -251,6 +260,15 @@ export function ConfiguracoesPage() {
             className="configuracoes-tab-panel"
           >
             <OrcamentoSettingsSection />
+          </div>
+          <div
+            role="tabpanel"
+            id="config-panel-sincronizacao"
+            aria-labelledby="config-tab-sincronizacao"
+            hidden={activeTab !== "sincronizacao"}
+            className="configuracoes-tab-panel"
+          >
+            <SincronizacaoSettingsSection />
           </div>
           <div
             role="tabpanel"

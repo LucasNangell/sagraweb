@@ -173,6 +173,12 @@ if (-not (Test-Path -LiteralPath $scriptPy)) {
 if (-not (Test-Path -LiteralPath $scriptOld)) {
     throw "Arquivo obrigatorio nao encontrado: $scriptOld (logica herdada pelo service)."
 }
+foreach ($extra in @("sync_policy.py", "sync_os_deletes.py")) {
+    $extraPath = Join-Path $Root $extra
+    if (-not (Test-Path -LiteralPath $extraPath)) {
+        throw "Arquivo obrigatorio nao encontrado: $extraPath (copie junto com o service)."
+    }
+}
 
 $nssm = Resolve-Nssm -Hint $NssmPath -RootPath $Root
 $python = Resolve-Python -Hint $PythonExe
@@ -191,12 +197,12 @@ $stderrLog = Join-Path $logsSync "service_stderr.log"
 
 $backend = Join-Path $Root "app\backend"
 $services = Join-Path $Root "app\services"
+# backend ANTES de app\services: evita sombra do pacote legado app\services\services
 $pythonPath = "$backend;$services"
 $pythonPkgs = Join-Path $Root "python_pkgs"
 if (Test-Path -LiteralPath $pythonPkgs) {
     $pythonPath = "$pythonPkgs;$pythonPath"
 }
-
 Write-Host "Root:         $Root"
 Write-Host "NSSM:         $nssm"
 Write-Host "Python:       $python"
@@ -244,9 +250,10 @@ Write-Host "StartType NSSM: $nssmStart"
 & $nssm set $ServiceName AppRotateBytes 10485760
 & $nssm set $ServiceName AppExit Default Restart
 & $nssm set $ServiceName AppRestartDelay 5000
-# Throttle maior: evita PAUSED quando o processo demora a estabilizar no boot
-& $nssm set $ServiceName AppThrottle 20000
-& $nssm set $ServiceName AppStopMethodConsole 5000
+# Throttle alto: saida rapida (mutex/import) + restart em <Throttle → SERVICE_PAUSED
+$AppThrottleMs = 45000
+& $nssm set $ServiceName AppThrottle $AppThrottleMs
+& $nssm set $ServiceName AppStopMethodConsole 8000
 & $nssm set $ServiceName AppStopMethodSkip 0
 
 # Ambiente do processo: PYTHONPATH + secret de notify (se existir em config\.env)
@@ -298,9 +305,32 @@ Write-Host "Start (NSSM):"
 & $nssm get $ServiceName Start
 
 if ($Start) {
+    # Mata ghost console (mutex) e espera o throttle do NSSM antes de start
+    Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -and $_.CommandLine -match "sync_andamentos_service\.py" } |
+        ForEach-Object {
+            Write-Host "Encerrando instancia ghost PID $($_.ProcessId)..."
+            Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+        }
+
+    $svcPre = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+    if ($svcPre -and $svcPre.Status -ne "Stopped") {
+        Write-Host "Parando antes do start (status=$($svcPre.Status))..."
+        & $nssm stop $ServiceName 2>$null | Out-Null
+        $deadline = (Get-Date).AddSeconds(25)
+        do {
+            Start-Sleep -Milliseconds 500
+            $svcPre.Refresh()
+        } while ($svcPre.Status -ne "Stopped" -and (Get-Date) -lt $deadline)
+    }
+
+    $waitSec = [math]::Ceiling($AppThrottleMs / 1000.0) + 2
+    Write-Host "Aguardando ${waitSec}s (limpar AppThrottle NSSM)..."
+    Start-Sleep -Seconds $waitSec
+
     Write-Host "Iniciando servico..."
     & $nssm start $ServiceName
-    Start-Sleep -Seconds 3
+    Start-Sleep -Seconds 5
     $svc = Get-Service -Name $ServiceName
     Write-Host "Status: $($svc.Status)"
 
@@ -309,34 +339,36 @@ if ($Start) {
         Write-Host "AVISO: servico ficou PAUSED (NSSM throttle apos saida rapida do processo)."
         Write-Host "Ultimas linhas de service_stderr.log:"
         if (Test-Path -LiteralPath $stderrLog) {
-            Get-Content -LiteralPath $stderrLog -Tail 30 -ErrorAction SilentlyContinue
+            Get-Content -LiteralPath $stderrLog -Tail 40 -ErrorAction SilentlyContinue
         } else {
             Write-Host "(arquivo ausente: $stderrLog)"
         }
         Write-Host ""
-        Write-Host "Tentando nssm restart..."
-        # nssm continue/restart escreve em stderr com "Unexpected status" - nao abortar o script
+        Write-Host "Tentando recuperacao: stop + espera throttle + start..."
         $prevEap = $ErrorActionPreference
         $ErrorActionPreference = "Continue"
         & $nssm stop $ServiceName 2>$null | Out-Null
-        Start-Sleep -Seconds 2
+        Start-Sleep -Seconds $waitSec
         & $nssm start $ServiceName 2>&1 | ForEach-Object { Write-Host $_ }
         $ErrorActionPreference = $prevEap
-        Start-Sleep -Seconds 4
+        Start-Sleep -Seconds 5
         $svc.Refresh()
         Write-Host "Status apos retry: $($svc.Status)"
         if ($svc.Status -ne "Running") {
-            Write-Host "FALHA: servico nao entrou em Running. Veja $stderrLog"
-            Write-Host "Se o log mostrar ModuleNotFoundError, rode:"
-            Write-Host "  .\instalar-servico-sync.ps1 -Start -InstallDeps"
+            Write-Host "FALHA: servico nao entrou em Running. Veja $stderrLog e logs\sync\sync_andamentos.log"
+            Write-Host "Checklist rapido:"
+            Write-Host "  Test-Path sync_policy.py ; Test-Path sync_os_deletes.py"
+            Write-Host "  Get-Content logs\sync\service_stderr.log -Tail 40"
+            Write-Host "  python .\sync_andamentos_service.py   # console: veja o erro real"
+            Write-Host "Se ModuleNotFoundError de deps: .\instalar-servico-sync.ps1 -Start -InstallDeps"
             exit 1
         }
     }
 } else {
     $hint = if ($ManualStart) {
-        "Servico instalado (Start=Manual / DEMAND). Para iniciar: nssm start $ServiceName   ou   -Start"
+        "Servico instalado (Start=Manual / DEMAND). Para iniciar: .\iniciar-servico-sync.ps1   ou   nssm start $ServiceName"
     } else {
-        "Servico instalado (Start=Automatic / AUTO). Sobe com o Windows. Para iniciar agora: nssm start $ServiceName   ou   -Start"
+        "Servico instalado (Start=Automatic / AUTO). Sobe com o Windows. Para iniciar agora: .\iniciar-servico-sync.ps1"
     }
     Write-Host $hint
 }

@@ -11,15 +11,38 @@ no Windows Server, com:
 
 **Contrato de tabelas:**
 
-| Tabela | Direção |
-|--------|---------|
-| `tabAndamento` | Bidirecional (INSERT/UPDATE; delete MySQL quando MDB confirma ausência) |
-| `tabProtocolos` / `tabDetalhesServico` | Somente **MDB → MySQL** |
+A política efetiva por tabela vive em MySQL (`sync_policy`) e é editável em
+**Admin → Configurações → Sincronização**. Env flags só **desligam** (kill-switch).
 
-**Exclusão MDB:** ausência confirmada no Access propaga `DELETE` no MySQL e grava tombstone
+| Tabela | Default | Direção | Exclusão |
+|--------|---------|---------|----------|
+| `tabAndamento` | enabled / bi / on | Bidirecional | DELETE MySQL quando MDB confirma ausência + tombstone |
+| `tabProtocolos` | enabled / uni / **dryrun** | MDB → MySQL (allowlist) | Exclusão de OS segura (ver abaixo) |
+| `tabDetalhesServico` | enabled / uni / **dryrun** | MDB → MySQL (allowlist) | Acompanha Protocolos |
+
+**Exclusão de andamento (MDB):** ausência confirmada no Access propaga `DELETE` no MySQL e grava tombstone
 durável em `deleted_andamentos` (com `content_hash`). O catch-up MySQL→MDB **não**
 ressuscita esses CodStatus. Tombstones só saem se o conteúdo divergir do hash
 (reuso legítimo) ou por limpeza manual explícita de `deleted_andamentos`.
+
+**Exclusão de OS (MDB → MySQL):** MDB é a única autoridade. O sync **nunca** apaga no Access.
+Pipeline em [`sync_os_deletes.py`](../sync_os_deletes.py):
+
+1. Só é candidata OS que **já estava** em `cache_os_mdb` (OS nova só-MySQL do dual-write não entra).
+2. Reverificação direta nos **dois** MDBs; erro ODBC → aborta a fase.
+3. Queda de volume >10% vs cache → aborta e alerta.
+4. Escrita web recente (`tab_os_audit_log`, 300s) → skip.
+5. Dwell: ≥2 ciclos e ≥120s em `sync_os_pending_delete`.
+6. Híbrido: lote ≤3 e `delete_policy=on` executa; senão quarentena (`blocked`) para aprovação no frontend.
+7. Execução atômica: `backup_os` → `deleted_os` + tombstones em `deleted_andamentos` → DELETE andamentos/detalhes/protocolo.
+
+**Rollout:** deixe Protocolos/Detalhes em `dryrun`, valide a fila na aba Sincronização, depois mude
+para `on`. Emergência: `SYNC_OS_DELETE_POLICY=off` no env do serviço **ou** `delete_policy=off` no frontend.
+
+**Controle de serviço pelo frontend:** rode como Admin
+[`deploy/templates/conceder-controle-servico.ps1`](../deploy/templates/conceder-controle-servico.ps1)
+`-Account "CONTA_DA_API"` para conceder start/stop só a `SAGRA-SyncAndamentos` e
+`SAGRA-MonitorSyncAndamentos`.
 
 **UltimoStatus:** autoridade MySQL = **maior CodStatus** operacional (exclui espelhos Sub OS);
 espelhado no MDB após mutações. Heal one-shot **na VM de produção** (não no DEV):
@@ -35,7 +58,8 @@ O script força `ENV=production` e aborta se o MySQL for localhost.
 
 A lógica base permanece em [`sync_andamentos_v2_Old.py`](../sync_andamentos_v2_Old.py).
 O runner [`sync_andamentos_service.py`](../sync_andamentos_service.py) subclassifica conexões,
-supervisão e o ciclo bidirecional de `tabAndamento`.
+supervisão e o ciclo bidirecional de `tabAndamento`. Módulos obrigatórios na raiz do release:
+`sync_policy.py`, `sync_os_deletes.py`.
 
 Flags de emergência (env):
 
@@ -43,6 +67,8 @@ Flags de emergência (env):
 - `SYNC_MYSQL_TO_MDB_CATCHUP=true` (default) — se `false`, desliga sentido MySQL→MDB
 - `SYNC_CONFLICT_WINNER=mdb` (default) — desempate quando os dois lados mudaram no mesmo ciclo;
   use `mysql` só como escape hatch
+- `SYNC_OS_DELETE_POLICY=off|dryrun|on` — força delete_policy de Protocolos/Detalhes
+- `SYNC_OS_DELETE_AUTO_LIMIT=3` — lote máximo automático por ciclo
 
 ### Conflito de UPDATE (mesmo CodStatus)
 
@@ -300,6 +326,9 @@ nssm set SAGRA-SyncAndamentos Start SERVICE_AUTO_START
 # Status resumido (servico + heartbeat + tail do log)
 .\status-servico-sync.ps1
 
+# Iniciar (limpa Paused/throttle; preferivel ao services.msc)
+.\iniciar-servico-sync.ps1
+
 # Parar
 .\parar-servico-sync.ps1
 
@@ -380,11 +409,14 @@ Se a home/painel não atualizar: procure `[NOTIFY] falha` em `logs\sync\sync_and
 
 | Sintoma | Causa provável | Ação |
 |---------|----------------|------|
-| Serviço sobe e cai com exit 2 | Janela manual/`_iniciar-sync` ainda aberta | Feche a outra instância |
+| Serviço sobe e cai com exit 2 | Janela manual/`_iniciar-sync` ainda aberta | Feche a outra instância; o service espera o mutex por 45s |
+| Status **Paused** logo após Iniciar | NSSM AppThrottle (processo saiu em <45s) ou Start no services.msc sem limpar throttle | No AppDirectory: `.\iniciar-servico-sync.ps1`. Veja `service_stderr.log` |
 | Heartbeat STALE com serviço Running | Travamento ODBC sem exit **ou** watchdog externo parado | `.\status-servico-sync.ps1`; se tarefa ausente/Disabled, `.\instalar-watchdog-sync.ps1`; alívio: `nssm restart` |
 | Tarefa watchdog Disabled / ausente | Operador parou o watchdog paralelo | `.\instalar-watchdog-sync.ps1` no AppDirectory do NSSM |
 | `[SKIP] MDB indisponivel` contínuo | Share/`I:` fora ou conta sem acesso | Verifique UNC e credenciais da conta do serviço |
 | `mysql-connector` / `dotenv` ImportError | Dep não instalada | `pip install --no-user python-dotenv mysql-connector-python` |
+| `No module named 'services.andamento_operacional'` no push UltimoStatus | `app\services` no `sys.path` antes de `app\backend` (pacote legado `app\services\services` sombreia o backend) | Atualize `sync_andamentos_service.py` (bootstrap com backend primeiro) e `.\iniciar-servico-sync.ps1` |
+| `sync_policy` / `sync_os_deletes` ausentes | Release incompleto na raiz do sync | Copie os dois `.py` para o AppDirectory e `.\iniciar-servico-sync.ps1` |
 | Home/painel demora a refletir MDB | Notify falhando ou serviço antigo | Reinicie o serviço; confira `[NOTIFY]` no log |
 | Edição no Access some sozinha | Serviço antigo ainda usa `Data` como LWW | Atualize `sync_andamentos_service.py`; confira `[CONFLITO]` / `upd_m2y` no heartbeat |
 | Após TRUNCATE do baseline o Access “ganha tudo” | Esperado no primeiro ciclo sem hash | Só trunque se quiser reseed; divergências adotam o MDB |

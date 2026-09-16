@@ -262,6 +262,7 @@ Copy-Item (Join-Path $PSScriptRoot "..\templates\publicar-release.bat") (Join-Pa
 # Sync 24/7 — NSSM service + watchdog externo
 $syncServiceScripts = @(
     "instalar-servico-sync.ps1",
+    "iniciar-servico-sync.ps1",
     "parar-servico-sync.ps1",
     "desinstalar-servico-sync.ps1",
     "status-servico-sync.ps1",
@@ -270,7 +271,8 @@ $syncServiceScripts = @(
     "instalar-servico-monitor-sync.ps1",
     "parar-servico-monitor-sync.ps1",
     "desinstalar-servico-monitor-sync.ps1",
-    "status-servico-monitor-sync.ps1"
+    "status-servico-monitor-sync.ps1",
+    "conceder-controle-servico.ps1"
 )
 foreach ($name in $syncServiceScripts) {
     $src = Join-Path $PSScriptRoot "..\templates\$name"
@@ -295,6 +297,16 @@ if (Test-Path -LiteralPath $syncOld) {
     Write-Host "sync_andamentos_v2_Old.py incluido na raiz do pacote (obrigatorio para o service)"
 } else {
     Write-Warning "sync_andamentos_v2_Old.py nao encontrado em $Root - sync usara fallback app/services/sync_andamentos_v2.py"
+}
+
+foreach ($extraSync in @("sync_policy.py", "sync_os_deletes.py")) {
+    $extraPath = Join-Path $Root $extraSync
+    if (Test-Path -LiteralPath $extraPath) {
+        Copy-Item -LiteralPath $extraPath (Join-Path $Release $extraSync) -Force
+        Write-Host "$extraSync incluido na raiz do pacote (obrigatorio para exclusao segura de OS)"
+    } else {
+        Write-Warning "$extraSync nao encontrado em $Root"
+    }
 }
 
 $monitorService = Join-Path $Root "monitor_sync_andamentos_service.py"

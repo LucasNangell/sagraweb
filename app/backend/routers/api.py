@@ -48,6 +48,7 @@ from routers import (
     admin_system_routes,
     admin_box_model_routes,
     admin_os_materialized_routes,
+    admin_sync_routes,
     os_arquivos_routes,
     sequencia_producao_routes,
     os_fluxo_producao_routes,
@@ -898,6 +899,7 @@ app.include_router(user_admin_routes.router)
 app.include_router(setor_painel_routes.router)
 app.include_router(tablet_face_routes.router)
 app.include_router(admin_system_routes.router)
+app.include_router(admin_sync_routes.router)
 app.include_router(admin_box_model_routes.router)
 app.include_router(admin_os_materialized_routes.router, prefix="/api")
 

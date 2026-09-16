@@ -35,7 +35,9 @@ if (-not $svc) {
     if ($svc.Status -eq "Paused") {
         Write-Host ""
         Write-Host "AVISO: Status Paused = processo saiu rapido e NSSM entrou em throttle."
-        Write-Host "Veja service_stderr.log abaixo e rode: .\instalar-servico-sync.ps1 -Start"
+        Write-Host "NAO use Start no services.msc. No AppDirectory do NSSM rode:"
+        Write-Host "  .\iniciar-servico-sync.ps1"
+        Write-Host "  (faz stop + espera AppThrottle + start; mata python ghost do sync)"
     }
 }
 

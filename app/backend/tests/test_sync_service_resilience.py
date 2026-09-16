@@ -493,11 +493,38 @@ def _wire_perform_sync(sync, mysql_rows, mdb_os_rows, mdb_pap_rows=None):
     sync.ensure_mysql_ultimo_status_from_mdb = MagicMock()
     sync._heal_os_batch = MagicMock()
     sync._heal_broken_ultimo_flags = MagicMock(return_value=0)
+    sync._load_effective_policies = MagicMock(
+        return_value={
+            "tabAndamento": {
+                "enabled": True,
+                "mode": "bi",
+                "delete_policy": "on",
+            },
+            "tabProtocolos": {
+                "enabled": True,
+                "mode": "uni",
+                "delete_policy": "dryrun",
+            },
+            "tabDetalhesServico": {
+                "enabled": True,
+                "mode": "uni",
+                "delete_policy": "dryrun",
+            },
+        }
+    )
+    sync.is_os_deleted = MagicMock(return_value=False)
+    sync.is_deleted = MagicMock(return_value=False)
     sync.conn_mgr.get_mdb_by_nro = MagicMock(return_value=MagicMock())
     sync.conn_mgr.get_mdb_name_by_nro = MagicMock(return_value="OS_Atual")
     sync.conn_mgr.get_mdb_os = MagicMock()
     sync.conn_mgr.get_mdb_pap = MagicMock()
+    # Evita fase OS_DEL tocar MySQL real nos testes
+    import sync_os_deletes as _osdel
 
+    sync._os_del_mgr_stub = MagicMock()
+    sync._os_del_mgr_stub.run_phase = MagicMock(
+        return_value=_osdel.OsDeletePhaseResult()
+    )
 
 def test_andamentos_differ_formats_both_sides(tmp_path, monkeypatch):
     sync = _make_sync_for_notify(tmp_path, monkeypatch)

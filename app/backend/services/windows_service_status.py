@@ -14,11 +14,15 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 SYNC_ANDAMENTOS_SERVICE_NAME = "SAGRA-SyncAndamentos"
+MONITOR_SYNC_SERVICE_NAME = "SAGRA-MonitorSyncAndamentos"
 DIVERGENCIA_STATUS_FILENAME = "sync_divergencia_monitor.json"
+HEARTBEAT_FILENAME = "sync_heartbeat.json"
 # Status do monitor mais antigo que isto não alimenta alert de dados.
 DIVERGENCIA_STATUS_STALE_SECONDS = int(
     os.getenv("MONITOR_SYNC_STATUS_STALE_SECONDS", "300")
 )
+HEARTBEAT_STALE_SECONDS = int(os.getenv("SYNC_HEARTBEAT_STALE_SECONDS", "180"))
+
 
 _STATE_RE = re.compile(
     r"STATE\s*:\s*\d+\s+(\w+)",
@@ -197,6 +201,68 @@ def read_divergencia_monitor_status(
     }
 
 
+def read_sync_heartbeat(
+    *,
+    path: Optional[Path] = None,
+    now: Optional[datetime] = None,
+    stale_seconds: int = HEARTBEAT_STALE_SECONDS,
+) -> dict:
+    """
+    Lê logs/sync/sync_heartbeat.json.
+
+    Retorna: phase, age_sec, cycles, consecutive_errors, last_error, last_cycle_at,
+    written_at, stats, stale, present.
+    """
+    empty = {
+        "present": False,
+        "phase": None,
+        "age_sec": None,
+        "cycles": None,
+        "consecutive_errors": None,
+        "last_error": None,
+        "last_cycle_at": None,
+        "written_at": None,
+        "stats": None,
+        "stale": True,
+        "tabandamento_bidi": None,
+    }
+    hb_path = path or (resolve_sync_log_dir() / HEARTBEAT_FILENAME)
+    if not hb_path.is_file():
+        return empty
+    try:
+        data = json.loads(hb_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.warning("Falha ao ler %s: %s", hb_path, exc)
+        return empty
+    if not isinstance(data, dict):
+        return empty
+
+    ref = _parse_iso_utc(data.get("last_cycle_at")) or _parse_iso_utc(
+        data.get("written_at")
+    )
+    now_utc = now or datetime.now(timezone.utc)
+    age = None
+    stale = True
+    if ref is not None:
+        age = (now_utc - ref).total_seconds()
+        stale = age > stale_seconds
+
+    return {
+        "present": True,
+        "phase": data.get("phase"),
+        "age_sec": round(age, 1) if age is not None else None,
+        "cycles": data.get("cycles"),
+        "consecutive_errors": data.get("consecutive_errors"),
+        "last_error": data.get("last_error"),
+        "last_cycle_at": data.get("last_cycle_at"),
+        "written_at": data.get("written_at"),
+        "stats": data.get("stats"),
+        "stale": stale,
+        "tabandamento_bidi": data.get("tabandamento_bidi"),
+        "pid": data.get("pid"),
+    }
+
+
 def build_sync_andamentos_service_status(
     *,
     is_development: bool,
@@ -229,3 +295,29 @@ def build_sync_andamentos_service_status(
         "mdb_count": div.get("mdb_count"),
         "mysql_count": div.get("mysql_count"),
     }
+
+
+def build_admin_sync_status(*, is_development: bool) -> dict:
+    """Payload enriquecido para a aba Sincronização."""
+    sync_svc = build_sync_andamentos_service_status(is_development=is_development)
+    monitor = query_windows_service(MONITOR_SYNC_SERVICE_NAME)
+    hb = read_sync_heartbeat()
+    div = read_divergencia_monitor_status()
+    return {
+        "services": {
+            "sync_andamentos": {
+                **sync_svc,
+                "heartbeat": hb,
+            },
+            "monitor_sync": {
+                "service_name": MONITOR_SYNC_SERVICE_NAME,
+                "exists": bool(monitor.get("exists")),
+                "status": monitor.get("status"),
+                "query_ok": bool(monitor.get("query_ok")),
+                "healthy": bool(monitor.get("exists"))
+                and monitor.get("status") == "Running",
+            },
+        },
+        "divergencia": div,
+    }
+

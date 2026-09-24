@@ -26,6 +26,7 @@ from services.gravacao_externa_service import (
     list_os_gravacao_aguardando_entrega,
     list_os_gravacao_externa,
     render_session_composite_preview,
+    remove_externa_from_queue,
     get_or_build_preview_png,
     require_session_access,
     resolve_arquivo_absolute_path,
@@ -68,6 +69,7 @@ class GravacaoExternaOsItem(BaseModel):
     lancado_por_ponto: Optional[str] = None
     lancado_por_nome: Optional[str] = None
     fornecedor_ponto: Optional[str] = None
+    fornecedor_nome: Optional[str] = None
     concluida_em: Optional[datetime] = None
     concluida_por_ponto: Optional[str] = None
     gravacao_criado_em: Optional[datetime] = None
@@ -158,6 +160,13 @@ class GravacaoExternaZipStatusResponse(BaseModel):
     etag: Optional[str] = None
 
 
+class GravacaoExternaQueueRemovalResponse(BaseModel):
+    removed: bool
+    gravacao_externa_id: int
+    removed_ids: List[int] = Field(default_factory=list)
+    juntada_grupo_id: Optional[str] = None
+
+
 def _get_request_session(request: Request) -> SessionData:
     session = getattr(request.state, "sagra_session", None)
     if isinstance(session, SessionData):
@@ -202,6 +211,20 @@ def _require_operator_permission(request: Request) -> None:
         raise HTTPException(
             status_code=403,
             detail="Permissão de operador de Gravação Externa necessária.",
+        )
+
+
+def _require_pending_queue_management_permission(request: Request) -> None:
+    perms = getattr(request.state, "sagra_permissions", None) or {}
+    if not perms.get("sb_gravacao_pendente"):
+        raise HTTPException(
+            status_code=403,
+            detail="Permissão Gravações Pendentes necessária.",
+        )
+    if fetch_user_fornecedor(_session_ponto(request)):
+        raise HTTPException(
+            status_code=403,
+            detail="Fornecedor não pode remover OS da fila do Birô.",
         )
 
 
@@ -307,6 +330,28 @@ def list_gravacao_externa_aguardando_entrega(
         limit=limit,
         offset=offset,
     )
+
+
+@router.post(
+    "/gravacao-externa/fila/{gravacao_externa_id}/remover",
+    response_model=GravacaoExternaQueueRemovalResponse,
+)
+def post_remover_gravacao_externa_fila(
+    request: Request,
+    gravacao_externa_id: int,
+):
+    _require_pending_queue_management_permission(request)
+    try:
+        result = remove_externa_from_queue(gravacao_externa_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info(
+        "Fila do Birô removida por %s: sessão=%s, sessões_afetadas=%s",
+        _session_ponto(request),
+        gravacao_externa_id,
+        result.get("removed_ids"),
+    )
+    return GravacaoExternaQueueRemovalResponse.model_validate(result)
 
 
 @router.get("/gravacao-externa/{ano}/{id}", response_model=GravacaoExternaDetailResponse)

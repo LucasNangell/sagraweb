@@ -9,6 +9,7 @@ import {
   iniciarGravacaoExterna,
   lancarEntregaChapas,
   postGravacaoExternaMensagem,
+  removerOsGravacaoExterna,
   updateGravacaoExternaArquivos,
   type GravacaoExternaListFilters,
 } from "@/api/gravacaoExterna";
@@ -98,6 +99,19 @@ export function useIniciarGravacaoExternaMutation() {
       });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.gravacaoExterna.detail(vars.ano, vars.nrOs),
+      });
+    },
+  });
+}
+
+export function useRemoverOsGravacaoExternaMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (gravacaoExternaId: number) =>
+      removerOsGravacaoExterna(gravacaoExternaId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.gravacaoExterna.prefix,
       });
     },
   });

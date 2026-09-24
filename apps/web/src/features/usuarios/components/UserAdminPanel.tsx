@@ -1,11 +1,24 @@
-import { Loader2, Mail, Pencil, Save, Trash2, UserPlus, X } from "lucide-react";
-import { createContext, useCallback, useContext, useState } from "react";
+import {
+  Check,
+  Copy,
+  KeyRound,
+  Loader2,
+  Mail,
+  Pencil,
+  Save,
+  Trash2,
+  UserPlus,
+  X,
+} from "lucide-react";
+import { createContext, useCallback, useContext, useRef, useState } from "react";
 
 import {
   createAuthUser,
   deleteAuthUser,
   fetchUserIps,
   fetchUserPermissions,
+  generatePasswordLink,
+  type PasswordLinkResponse,
   resendActivation,
   updateUserIps,
   updateUserPermissions,
@@ -101,6 +114,96 @@ interface UserAdminProviderProps {
   onUserUpdated?: () => void;
 }
 
+function CopyableLink({
+  link,
+  label,
+  hint,
+  onDismiss,
+}: {
+  link: string;
+  label: string;
+  hint?: string;
+  onDismiss?: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
+
+  const handleCopy = async () => {
+    let ok = false;
+    // navigator.clipboard só existe em contexto seguro (HTTPS/localhost); a intranet usa HTTP.
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(link);
+        ok = true;
+      } catch {
+        ok = false;
+      }
+    }
+    if (!ok && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+      try {
+        ok = document.execCommand("copy");
+      } catch {
+        ok = false;
+      }
+    }
+    setCopyFailed(!ok);
+    if (ok) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-3">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">{label}</p>
+        {onDismiss ? (
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="cursor-pointer rounded p-0.5 text-emerald-800 hover:bg-emerald-100"
+            aria-label="Fechar link"
+          >
+            <X className="size-4" aria-hidden />
+          </button>
+        ) : null}
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          ref={inputRef}
+          type="text"
+          readOnly
+          value={link}
+          aria-label={label}
+          onFocus={(e) => e.currentTarget.select()}
+          className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs"
+        />
+        <button
+          type="button"
+          onClick={() => void handleCopy()}
+          className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+        >
+          {copied ? (
+            <Check className="size-3.5 text-primary-green" aria-hidden />
+          ) : (
+            <Copy className="size-3.5" aria-hidden />
+          )}
+          {copied ? "Copiado" : "Copiar"}
+        </button>
+      </div>
+      {hint ? <p className="mt-1 text-xs text-slate-600">{hint}</p> : null}
+      {copyFailed ? (
+        <p className="mt-1 text-xs text-red-700">
+          Não foi possível copiar automaticamente. Selecione o link e use Ctrl+C.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function UserCadastroForm({
   onSuccess,
   onError,
@@ -119,6 +222,8 @@ export function UserCadastroForm({
   const [setor, setSetor] = useState("SEFOC");
   const [fornecedor, setFornecedor] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [createdLink, setCreatedLink] = useState<{ ponto: number; link: string } | null>(null);
+  const hasEmail = Boolean(email.trim());
 
   const pontoGalQuery = (() => {
     const digits = sanitizePontoDigits(ponto);
@@ -135,28 +240,32 @@ export function UserCadastroForm({
       onError("Informe o nome completo.");
       return;
     }
-    if (!email.trim()) {
-      onError("Informe o e-mail.");
-      return;
-    }
     if (!setor.trim()) {
       onError("Selecione o setor.");
       return;
     }
 
     setCreating(true);
+    setCreatedLink(null);
     try {
-      await createAuthUser({
+      const result = await createAuthUser({
         ponto: pontoNum,
         nome: nome.trim(),
-        email: email.trim(),
+        email: email.trim() || null,
         setor: setor.trim(),
         fornecedor,
       });
+      const activationLink = result?.activation_link;
+      if (activationLink) {
+        setCreatedLink({ ponto: pontoNum, link: activationLink });
+      }
+      const detalhe = activationLink
+        ? "Copie o link abaixo e envie ao usuário para definir a senha."
+        : "E-mail de ativação enviado.";
       onSuccess(
         fornecedor
-          ? `Usuário ${pontoNum} cadastrado como Fornecedor. Conceda também a permissão "Gravação Externa" se necessário.`
-          : `Usuário ${pontoNum} cadastrado. E-mail de ativação enviado.`,
+          ? `Usuário ${pontoNum} cadastrado como Fornecedor. ${detalhe} Conceda também a permissão "Gravação Externa" se necessário.`
+          : `Usuário ${pontoNum} cadastrado. ${detalhe}`,
       );
       setPonto("");
       setNome("");
@@ -177,7 +286,9 @@ export function UserCadastroForm({
         Cadastrar usuário (acesso internet)
       </h2>
       <p className="mt-1 text-sm text-slate-600">
-        Apenas MASTER. O usuário receberá e-mail para ativar o cadastro e definir a senha.
+        Apenas MASTER. Com e-mail, o usuário recebe o link de ativação por e-mail; sem e-mail, o
+        link para definir a senha é exibido aqui para ser copiado. O login pode ser feito pelo
+        ponto.
       </p>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -215,7 +326,7 @@ export function UserCadastroForm({
         <div>
           <EmailGalLookupField
             variant="form"
-            label="E-mail"
+            label="E-mail (opcional)"
             inputId="cadastro-email"
             value={email}
             onChange={setEmail}
@@ -224,7 +335,8 @@ export function UserCadastroForm({
             onError={onError}
           />
           <p className="mt-0.5 text-xs text-slate-500">
-            Informe o e-mail ou use a lupa para buscar no catálogo pelo ponto (P_…), nome ou e-mail.
+            Opcional. Informe o e-mail ou use a lupa para buscar no catálogo pelo ponto (P_…), nome
+            ou e-mail.
           </p>
         </div>
         <div>
@@ -274,8 +386,19 @@ export function UserCadastroForm({
         ) : (
           <UserPlus className="size-4" aria-hidden />
         )}
-        Cadastrar e enviar e-mail
+        {hasEmail ? "Cadastrar e enviar e-mail" : "Cadastrar"}
       </button>
+
+      {createdLink ? (
+        <div className="mt-4">
+          <CopyableLink
+            link={createdLink.link}
+            label={`Link para definir senha — ponto ${createdLink.ponto}`}
+            hint="Envie este link ao usuário para definir a senha (válido por 48h)."
+            onDismiss={() => setCreatedLink(null)}
+          />
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -293,6 +416,8 @@ export function UserAdminProvider({
   const [editFornecedor, setEditFornecedor] = useState(false);
   const [editIps, setEditIps] = useState("");
   const [editSaving, setEditSaving] = useState(false);
+  const [passwordLink, setPasswordLink] = useState<PasswordLinkResponse | null>(null);
+  const [passwordLinkBusy, setPasswordLinkBusy] = useState(false);
   const [permPonto, setPermPonto] = useState<number | null>(null);
   const [permLoading, setPermLoading] = useState(false);
   const [permSaving, setPermSaving] = useState(false);
@@ -334,6 +459,7 @@ export function UserAdminProvider({
       setEditNome((nome ?? "").trim());
       setEditSetor(setor?.trim() || "SEFOC");
       setEditFornecedor(fornecedor === true || fornecedor === 1);
+      setPasswordLink(null);
       setFaceStatus(null);
       try {
         const data = await fetchUserIps(pontoNum);
@@ -350,6 +476,25 @@ export function UserAdminProvider({
     },
     [],
   );
+
+  const closeEditUser = () => {
+    setEditPonto(null);
+    setPasswordLink(null);
+  };
+
+  const handleGeneratePasswordLink = async () => {
+    if (editPonto === null) return;
+    setPasswordLinkBusy(true);
+    try {
+      const result = await generatePasswordLink(editPonto);
+      setPasswordLink(result);
+      onUserUpdated?.();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Erro ao gerar link de redefinição de senha.");
+    } finally {
+      setPasswordLinkBusy(false);
+    }
+  };
 
   const saveEditUser = async () => {
     if (editPonto === null) return;
@@ -375,7 +520,7 @@ export function UserAdminProvider({
         .filter(Boolean);
       await updateUserIps(editPonto, ips);
       onSuccess(`Usuário ${editPonto} atualizado.`);
-      setEditPonto(null);
+      closeEditUser();
       onUserUpdated?.();
     } catch (err) {
       onError(err instanceof Error ? err.message : "Erro ao salvar usuário.");
@@ -442,7 +587,7 @@ export function UserAdminProvider({
     try {
       await deleteAuthUser(pontoNum);
       onSuccess(`Usuário ${pontoNum} excluído.`);
-      if (editPonto === pontoNum) setEditPonto(null);
+      if (editPonto === pontoNum) closeEditUser();
       if (permPonto === pontoNum) setPermPonto(null);
       onUserUpdated?.();
     } catch (err) {
@@ -480,12 +625,12 @@ export function UserAdminProvider({
 
       {editPonto !== null ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-semibold">Editar usuário — Ponto {editPonto}</h3>
               <button
                 type="button"
-                onClick={() => setEditPonto(null)}
+                onClick={closeEditUser}
                 className="cursor-pointer rounded p-1 hover:bg-slate-100"
                 aria-label="Fechar"
               >
@@ -557,6 +702,44 @@ export function UserAdminProvider({
                   Um IP por linha (ou separados por vírgula). Se informados, acesso na intranet
                   fora destes IPs exige senha.
                 </p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Senha (acesso internet)
+                </p>
+                <p className="mb-2 text-xs text-slate-600">
+                  Gera um link para o usuário definir uma nova senha. Nenhum e-mail é enviado.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void handleGeneratePasswordLink()}
+                  disabled={passwordLinkBusy || editPonto === null}
+                  className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {passwordLinkBusy ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                  ) : (
+                    <KeyRound className="size-4" aria-hidden />
+                  )}
+                  Redefinir senha
+                </button>
+                {passwordLink ? (
+                  <div className="mt-3">
+                    <CopyableLink
+                      link={passwordLink.link}
+                      label={
+                        passwordLink.tipo === "reset"
+                          ? "Link de redefinição de senha"
+                          : "Link de ativação da conta"
+                      }
+                      hint={
+                        passwordLink.tipo === "reset"
+                          ? "Envie este link ao usuário para redefinir a senha (válido por 24h)."
+                          : "A conta ainda não foi ativada: envie este link ao usuário para definir a senha (válido por 48h)."
+                      }
+                    />
+                  </div>
+                ) : null}
               </div>
               <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
@@ -776,6 +959,7 @@ export function UserRowActions({
   fornecedor,
   email,
   emailVerified,
+  contaInternet,
 }: {
   ponto: number;
   nome?: string | null;
@@ -783,6 +967,7 @@ export function UserRowActions({
   fornecedor?: boolean | number | null;
   email?: string | null;
   emailVerified?: number | boolean | null;
+  contaInternet?: number | boolean | null;
 }) {
   const actions = useUserAdminActions();
   const currentPonto = useAuthStore((s) => s.user?.ponto);
@@ -790,6 +975,7 @@ export function UserRowActions({
 
   const verified = emailVerified === true || emailVerified === 1;
   const hasEmail = Boolean(email?.trim());
+  const hasInternetAccount = hasEmail || contaInternet === true || contaInternet === 1;
   const canDelete = currentPonto == null || Number(currentPonto) !== Number(ponto);
 
   return (
@@ -802,7 +988,7 @@ export function UserRowActions({
         <Pencil className="size-3" aria-hidden />
         Editar
       </button>
-      {hasEmail ? (
+      {hasInternetAccount ? (
         <button
           type="button"
           onClick={() => void actions.openPermissions(ponto)}

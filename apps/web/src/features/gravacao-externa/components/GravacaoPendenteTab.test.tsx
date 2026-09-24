@@ -5,10 +5,15 @@ import { GravacaoPendenteTab } from "./GravacaoPendenteTab";
 
 const patchControle = vi.fn();
 const deleteControle = vi.fn();
+const adicionarOs = vi.fn();
+const removerOs = vi.fn();
 let canDelete = true;
+let canPending = true;
+let listItems: Array<Record<string, unknown>> = [];
+let detailData: Record<string, unknown> | null = null;
 
 vi.mock("@/api/hooks/useGravacaoPendente", () => ({
-  useGravacaoPendenteOsList: () => ({ data: { items: [] }, isPending: false }),
+  useGravacaoPendenteOsList: () => ({ data: { items: listItems }, isPending: false }),
   useGravacaoPendenteHistorico: () => ({
     data: {
       items: [
@@ -34,7 +39,7 @@ vi.mock("@/api/hooks/useGravacaoPendente", () => ({
     },
     isPending: false,
   }),
-  useGravacaoPendenteDetail: () => ({ data: null }),
+  useGravacaoPendenteDetail: () => ({ data: detailData, isLoading: false }),
   useGravacaoPendenteFornecedores: () => ({
     data: { items: [{ ponto: "918.713", nome: "Forn" }] },
     isPending: false,
@@ -52,10 +57,21 @@ vi.mock("@/api/hooks/useGravacaoPendente", () => ({
     isPending: false,
   }),
   useEnviarGravacaoPendenteMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useAdicionarOsGravacaoPendenteMutation: () => ({
+    mutateAsync: adicionarOs,
+    isPending: false,
+  }),
+  useRemoverOsGravacaoPendenteMutation: () => ({
+    mutateAsync: removerOs,
+    isPending: false,
+  }),
 }));
 
 vi.mock("@/features/auth/useAccessControl", () => ({
-  useAccessControl: () => ({ can: () => canDelete }),
+  useAccessControl: () => ({
+    can: (key: string) =>
+      key === "sb_gravacao_pendente_excluir" ? canDelete : canPending,
+  }),
 }));
 
 vi.mock("@/features/auth/authStore", () => ({
@@ -74,6 +90,30 @@ vi.mock("./GravacaoExternaPreview", () => ({
 vi.mock("./GravacaoFornecedorSelectModal", () => ({
   GravacaoFornecedorSelectModal: () => null,
 }));
+vi.mock("./GravacaoPendenteAdicionarOsModal", () => ({
+  GravacaoPendenteAdicionarOsModal: ({ open }: { open: boolean }) =>
+    open ? <div role="dialog" aria-label="Adicionar OS à Gravação Pendente" /> : null,
+}));
+vi.mock("./GravacaoQueueItemContextMenu", () => ({
+  GravacaoQueueItemContextMenu: ({
+    children,
+    enabled,
+    label,
+    onRemove,
+  }: {
+    children: React.ReactNode;
+    enabled: boolean;
+    label: string;
+    onRemove: () => void;
+  }) => (
+    <>
+      {children}
+      {enabled ? (
+        <button type="button" aria-label={`Menu de contexto ${label}`} onClick={onRemove} />
+      ) : null}
+    </>
+  ),
+}));
 
 describe("GravacaoPendenteTab controle", () => {
   beforeEach(() => {
@@ -81,7 +121,14 @@ describe("GravacaoPendenteTab controle", () => {
     patchControle.mockResolvedValue({});
     deleteControle.mockReset();
     deleteControle.mockResolvedValue({});
+    adicionarOs.mockReset();
+    adicionarOs.mockResolvedValue({});
+    removerOs.mockReset();
+    removerOs.mockResolvedValue({});
     canDelete = true;
+    canPending = true;
+    listItems = [];
+    detailData = null;
   });
 
   it("usa novos títulos e ordem das colunas", () => {
@@ -148,5 +195,66 @@ describe("GravacaoPendenteTab controle", () => {
     render(<GravacaoPendenteTab />);
     expect(screen.queryByRole("button", { name: "Excluir controle OS 00100/26" })).toBeNull();
     expect(screen.getByRole("button", { name: "Editar controle OS 00100/26" })).toBeTruthy();
+  });
+
+  it("mantém o envio no detalhe e adiciona o novo botão no rodapé da lista", () => {
+    listItems = [
+      {
+        nr_os: 101,
+        ano: 2026,
+        solicitante: "Cliente",
+        gravacao_pendente_id: 42,
+        gravacao_pendente_status: "ativa",
+      },
+    ];
+    detailData = {
+      id: 42,
+      os_ano: 2026,
+      os_nro: 101,
+      cod_status: "manual",
+      lancado_por_ponto: "918.713",
+      status: "ativa",
+      arquivos: [],
+      chapas: [],
+    };
+
+    render(<GravacaoPendenteTab />);
+
+    expect(
+      screen.queryByRole("button", { name: "Enviar para gravação externa" }),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar OS" }));
+    expect(
+      screen.getByRole("dialog", { name: "Adicionar OS à Gravação Pendente" }),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByText("00101/26"));
+    expect(
+      screen.getByRole("button", { name: "Enviar para gravação externa" }),
+    ).toBeEnabled();
+  });
+
+  it("remove pelo menu somente com acesso à página de OPs para gravação externa", async () => {
+    listItems = [
+      {
+        nr_os: 101,
+        ano: 2026,
+        gravacao_pendente_id: 42,
+        gravacao_pendente_status: "ativa",
+      },
+    ];
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    const { unmount } = render(<GravacaoPendenteTab />);
+    fireEvent.click(screen.getByRole("button", { name: "Menu de contexto OS 00101/26" }));
+    await waitFor(() => expect(removerOs).toHaveBeenCalledWith(42));
+    unmount();
+
+    canPending = false;
+    render(<GravacaoPendenteTab />);
+    expect(
+      screen.queryByRole("button", { name: "Menu de contexto OS 00101/26" }),
+    ).toBeNull();
   });
 });

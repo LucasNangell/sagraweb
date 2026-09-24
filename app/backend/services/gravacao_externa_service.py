@@ -89,51 +89,98 @@ def cancel_active_externa_sessions_cursor(cursor, ano: int, os_id: int) -> None:
     )
 
 
-def cleanup_stale_externa_sessions() -> list[dict[str, Any]]:
-    """Cancela sessões ativas cuja OS não está mais no fluxo operacional Grav. Externa."""
-    from services.andamento_operacional import ultimo_operacional_cod_subquery
+def remove_externa_from_queue(gravacao_externa_id: int) -> dict[str, Any]:
+    """Remove uma sessão (ou sua juntada) da fila do Birô sem apagar seus dados."""
+    try:
+        externa_id = int(gravacao_externa_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("gravacao_externa_id inválido") from exc
+    if externa_id <= 0:
+        raise ValueError("gravacao_externa_id inválido")
 
-    ultimo_cod = ultimo_operacional_cod_subquery("ge.OsNro", "ge.OsAno")
-    rows = db.execute_query(
-        f"""
-        SELECT ge.Id, ge.OsNro, ge.OsAno, ge.CodStatus
-        FROM tab_os_gravacao_externa ge
-        WHERE ge.Status IN ('pendente', 'iniciada')
-          AND NOT EXISTS (
-            SELECT 1
-            FROM tabAndamento a
-            WHERE a.CodStatus = {ultimo_cod}
-              AND (
-                a.SituacaoLink = %s
-                OR (
-                    a.SetorLink = %s
-                    AND a.SituacaoLink IN (%s, %s)
-                )
-              )
-          )
-        ORDER BY ge.Id ASC
-        """,
-        (
-            SITUACAO_GRAVACAO_EXTERNA,
-            SETOR_GRAV_EXTERNA,
-            SITUACAO_SAIDA_P,
-            SITUACAO_RECEBIDO,
-        ),
-    )
-    cleaned: list[dict[str, Any]] = []
-    for row in rows or []:
-        os_id = int(row["OsNro"])
-        ano = int(row["OsAno"])
-        cancel_active_externa_sessions(ano, os_id)
-        cleaned.append(
-            {
-                "gravacao_externa_id": int(row["Id"]),
-                "os_id": os_id,
-                "ano": ano,
-                "cod_status": row.get("CodStatus"),
-            }
+    def tx(cursor):
+        cursor.execute(
+            """
+            SELECT Id, JuntadaGrupoId, Status
+            FROM tab_os_gravacao_externa
+            WHERE Id = %s
+            LIMIT 1
+            FOR UPDATE
+            """,
+            (externa_id,),
         )
-    return cleaned
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(
+                status_code=404,
+                detail="Sessão de Gravação Externa não encontrada.",
+            )
+
+        if isinstance(row, dict):
+            juntada_raw = row.get("JuntadaGrupoId")
+            status = str(row.get("Status") or "")
+        else:
+            juntada_raw = row[1] if len(row) > 1 else None
+            status = str(row[2] if len(row) > 2 else "")
+        if status not in ACTIVE_STATUSES:
+            raise HTTPException(
+                status_code=409,
+                detail="A OS não está mais na lista pendente do Birô.",
+            )
+
+        juntada_id = str(juntada_raw).strip() if juntada_raw else None
+        target_ids = [externa_id]
+        if juntada_id:
+            cursor.execute(
+                """
+                SELECT Id
+                FROM tab_os_gravacao_externa
+                WHERE JuntadaGrupoId = %s
+                  AND Status IN ('pendente', 'iniciada')
+                ORDER BY Id
+                FOR UPDATE
+                """,
+                (juntada_id,),
+            )
+            target_ids = [
+                int(group_row.get("Id") if isinstance(group_row, dict) else group_row[0])
+                for group_row in (cursor.fetchall() or [])
+            ]
+            if externa_id not in target_ids:
+                target_ids.append(externa_id)
+
+        updated_ids: list[int] = []
+        for target_id in target_ids:
+            cursor.execute(
+                """
+                UPDATE tab_os_gravacao_externa
+                SET Status = 'cancelada'
+                WHERE Id = %s AND Status IN ('pendente', 'iniciada')
+                """,
+                (target_id,),
+            )
+            if cursor.rowcount == 1:
+                updated_ids.append(target_id)
+
+        if externa_id not in updated_ids:
+            raise HTTPException(
+                status_code=409,
+                detail="A OS não está mais na lista pendente do Birô.",
+            )
+        return {
+            "removed": True,
+            "gravacao_externa_id": externa_id,
+            "removed_ids": updated_ids,
+            "juntada_grupo_id": juntada_id,
+        }
+
+    results = db.execute_transaction([tx])
+    return results[0]
+
+
+def cleanup_stale_externa_sessions() -> list[dict[str, Any]]:
+    """Legado sem efeito: a fila do Birô não depende mais do último andamento."""
+    return []
 
 
 def _normalize_relative_path(relative: str) -> str:
@@ -495,21 +542,8 @@ def list_os_gravacao_externa(
     from services.andamento_operacional import ultimo_operacional_cod_subquery
 
     params: dict[str, Any] = {"limit": limit, "offset": offset}
-    ultimo_cod = ultimo_operacional_cod_subquery("p.NroProtocolo", "p.AnoProtocolo")
-    filters = """
-        WHERE a.CodStatus = {ultimo_cod}
-          AND (
-            a.SituacaoLink = %(situacao_legado)s
-            OR (
-                a.SetorLink = %(setor_operacional)s
-                AND a.SituacaoLink IN (%(sit_saida)s, %(sit_recebido)s)
-            )
-          )
-    """.format(ultimo_cod=ultimo_cod)
-    params["situacao_legado"] = SITUACAO_GRAVACAO_EXTERNA
-    params["setor_operacional"] = SETOR_GRAV_EXTERNA
-    params["sit_saida"] = SITUACAO_SAIDA_P
-    params["sit_recebido"] = SITUACAO_RECEBIDO
+    ultimo_cod = ultimo_operacional_cod_subquery("ge.OsNro", "ge.OsAno")
+    filters = "WHERE ge.Status IN ('pendente', 'iniciada')"
 
     if ano:
         filters += " AND p.AnoProtocolo = %(ano)s"
@@ -538,30 +572,15 @@ def list_os_gravacao_externa(
             fornecedor_ponto
         ).strip()
         params["fornecedor_ponto"] = fornecedor_fmt
-        ge_join = """
-        INNER JOIN tab_os_gravacao_externa ge
-            ON ge.OsAno = p.AnoProtocolo
-           AND ge.OsNro = p.NroProtocolo
-           AND ge.Status IN ('pendente', 'iniciada')
-           AND ge.FornecedorPonto = %(fornecedor_ponto)s
-        """
-    else:
-        ge_join = """
-        LEFT JOIN tab_os_gravacao_externa ge
-            ON ge.OsAno = p.AnoProtocolo
-           AND ge.OsNro = p.NroProtocolo
-           AND ge.Status IN ('pendente', 'iniciada')
-        """
+        filters += " AND ge.FornecedorPonto = %(fornecedor_ponto)s"
 
     count_sql = f"""
         SELECT COUNT(*) AS cnt FROM (
             SELECT COALESCE(ge.JuntadaGrupoId, CONCAT(p.AnoProtocolo, '-', p.NroProtocolo)) AS gkey
-            FROM tabProtocolos p
-            INNER JOIN tabAndamento a
-                ON a.NroProtocoloLink = p.NroProtocolo
-               AND a.AnoProtocoloLink = p.AnoProtocolo
-               AND a.CodStatus = {ultimo_cod}
-            {ge_join}
+            FROM tab_os_gravacao_externa ge
+            INNER JOIN tabProtocolos p
+                ON p.AnoProtocolo = ge.OsAno
+               AND p.NroProtocolo = ge.OsNro
             {filters}
             GROUP BY gkey
         ) t
@@ -584,6 +603,7 @@ def list_os_gravacao_externa(
             ge.LancadoPorPonto AS lancado_por_ponto,
             ge.LancadoPorNome AS lancado_por_nome,
             ge.FornecedorPonto AS fornecedor_ponto,
+            uf.Nome AS fornecedor_nome,
             ge.CriadoEm AS gravacao_criado_em,
             ge.JuntadaGrupoId AS juntada_grupo_id,
             (
@@ -600,14 +620,24 @@ def list_os_gravacao_externa(
                   AND d.AnoProtocoloLinkDet = p.AnoProtocolo
                 LIMIT 1
             ) AS titulo
-        FROM tabProtocolos p
-        INNER JOIN tabAndamento a
-            ON a.NroProtocoloLink = p.NroProtocolo
-           AND a.AnoProtocoloLink = p.AnoProtocolo
+        FROM tab_os_gravacao_externa ge
+        INNER JOIN tabProtocolos p
+            ON p.AnoProtocolo = ge.OsAno
+           AND p.NroProtocolo = ge.OsNro
+        LEFT JOIN tabAndamento a
+            ON a.NroProtocoloLink = ge.OsNro
+           AND a.AnoProtocoloLink = ge.OsAno
            AND a.CodStatus = {ultimo_cod}
-        {ge_join}
+        LEFT JOIN tabUsuarios uf
+            ON uf.Ponto = NULLIF(
+                CAST(
+                    REPLACE(REPLACE(IFNULL(ge.FornecedorPonto, ''), '.', ''), '-', '')
+                    AS UNSIGNED
+                ),
+                0
+            )
         {filters}
-        ORDER BY a.`Data` DESC, p.NroProtocolo DESC
+        ORDER BY ge.CriadoEm DESC, ge.Id DESC
         LIMIT 2000
     """
     list_params = {k: v for k, v in params.items() if k not in ("limit", "offset")}
@@ -631,6 +661,7 @@ def list_os_gravacao_externa(
                 "lancado_por_ponto": row.get("lancado_por_ponto"),
                 "lancado_por_nome": row.get("lancado_por_nome"),
                 "fornecedor_ponto": row.get("fornecedor_ponto"),
+                "fornecedor_nome": row.get("fornecedor_nome"),
                 "gravacao_criado_em": row.get("gravacao_criado_em"),
                 "juntada_grupo_id": str(juntada).strip() if juntada else None,
             }
@@ -2019,6 +2050,7 @@ def list_os_gravacao_aguardando_entrega(
             ge.LancadoPorPonto AS lancado_por_ponto,
             ge.LancadoPorNome AS lancado_por_nome,
             ge.FornecedorPonto AS fornecedor_ponto,
+            uf.Nome AS fornecedor_nome,
             ge.ConcluidaEm AS concluida_em,
             ge.ConcluidaPorPonto AS concluida_por_ponto,
             ge.CriadoEm AS gravacao_criado_em,
@@ -2041,6 +2073,14 @@ def list_os_gravacao_aguardando_entrega(
         FROM tab_os_gravacao_externa ge
         INNER JOIN tabProtocolos p
             ON p.NroProtocolo = ge.OsNro AND p.AnoProtocolo = ge.OsAno
+        LEFT JOIN tabUsuarios uf
+            ON uf.Ponto = NULLIF(
+                CAST(
+                    REPLACE(REPLACE(IFNULL(ge.FornecedorPonto, ''), '.', ''), '-', '')
+                    AS UNSIGNED
+                ),
+                0
+            )
         {filters}
         ORDER BY ge.ConcluidaEm DESC, ge.Id DESC
         LIMIT 2000
@@ -2067,6 +2107,7 @@ def list_os_gravacao_aguardando_entrega(
                 "lancado_por_ponto": row.get("lancado_por_ponto"),
                 "lancado_por_nome": row.get("lancado_por_nome"),
                 "fornecedor_ponto": row.get("fornecedor_ponto"),
+                "fornecedor_nome": row.get("fornecedor_nome"),
                 "concluida_em": row.get("concluida_em"),
                 "concluida_por_ponto": row.get("concluida_por_ponto"),
                 "gravacao_criado_em": row.get("gravacao_criado_em"),

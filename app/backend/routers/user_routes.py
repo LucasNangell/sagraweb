@@ -121,7 +121,9 @@ def list_users():
         users_db = db.execute_query(
             """
             SELECT Ponto, Nome, Setor, Fornecedor, UltimoAcesso, IPUltimoAcesso,
-                   Email, EmailVerified, AuthAtivo
+                   Email, EmailVerified, AuthAtivo,
+                   (Email IS NOT NULL OR PasswordHash IS NOT NULL
+                    OR ActivationToken IS NOT NULL OR EmailVerified = 1) AS ContaInternet
             FROM tabUsuarios ORDER BY UltimoAcesso DESC LIMIT 100
             """
         )

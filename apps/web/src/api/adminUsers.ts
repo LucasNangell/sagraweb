@@ -14,16 +14,41 @@ export interface AuthUserRow {
 export interface CreateAuthUserPayload {
   ponto: number;
   nome: string;
-  email: string;
+  email?: string | null;
   setor?: string | null;
   fornecedor?: boolean;
 }
 
-export async function createAuthUser(payload: CreateAuthUserPayload): Promise<void> {
-  await apiFetch("/admin/users", {
+export interface CreateAuthUserResponse {
+  status: string;
+  ponto: number;
+  email: string | null;
+  /** Presente quando o cadastro foi feito sem e-mail. */
+  activation_link?: string;
+  expires_at?: string;
+}
+
+export async function createAuthUser(
+  payload: CreateAuthUserPayload,
+): Promise<CreateAuthUserResponse> {
+  return apiFetch<CreateAuthUserResponse>("/admin/users", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+  });
+}
+
+export interface PasswordLinkResponse {
+  status: string;
+  ponto: number;
+  tipo: "reset" | "ativacao";
+  link: string;
+  expires_at?: string;
+}
+
+export async function generatePasswordLink(ponto: number): Promise<PasswordLinkResponse> {
+  return apiFetch<PasswordLinkResponse>(`/admin/users/${ponto}/password-link`, {
+    method: "POST",
   });
 }
 

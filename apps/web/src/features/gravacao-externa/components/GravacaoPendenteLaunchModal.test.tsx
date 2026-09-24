@@ -61,6 +61,22 @@ function renderModal() {
   );
 }
 
+function renderLaunchModal() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <GravacaoPendenteLaunchModal
+        open
+        row={{ nr_os: 801, ano: 2026 } as never}
+        onClose={() => undefined}
+        onConfirm={() => undefined}
+      />
+    </QueryClientProvider>,
+  );
+}
+
 describe("GravacaoPendenteLaunchModal preview e inspeção", () => {
   beforeEach(() => {
     URL.revokeObjectURL = vi.fn();
@@ -165,5 +181,27 @@ describe("GravacaoPendenteLaunchModal preview e inspeção", () => {
     await waitFor(() => expect(inspectNetworkFiles).toHaveBeenLastCalledWith([
       expect.objectContaining({ maquina: "SM74" }),
     ], expect.objectContaining({ signal: expect.any(AbortSignal) })));
+  });
+
+  it("mantém a seção de juntadas oculta por padrão e limpa os dados ao desmarcar", async () => {
+    renderLaunchModal();
+
+    const checkbox = screen.getByRole("checkbox", { name: "Juntada de OSs" });
+    expect(checkbox).not.toBeChecked();
+    expect(screen.queryByText("OSs juntadas (mesma chapa)")).not.toBeInTheDocument();
+
+    fireEvent.click(checkbox);
+    expect(screen.getByText("OSs juntadas (mesma chapa)")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText("Nº OS"), {
+      target: { value: "802" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "+ OS" }));
+    expect(await screen.findByText("00802/26")).toBeInTheDocument();
+
+    fireEvent.click(checkbox);
+    expect(screen.queryByText("OSs juntadas (mesma chapa)")).not.toBeInTheDocument();
+    fireEvent.click(checkbox);
+    expect(screen.queryByText("00802/26")).not.toBeInTheDocument();
   });
 });

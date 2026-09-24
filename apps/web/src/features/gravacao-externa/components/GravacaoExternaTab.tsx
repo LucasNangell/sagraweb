@@ -11,6 +11,7 @@ import {
   useGravacaoExternaOsList,
   useIniciarGravacaoExternaMutation,
   useLancarEntregaChapasMutation,
+  useRemoverOsGravacaoExternaMutation,
 } from "@/api/hooks/useGravacaoExterna";
 import { useAuthStore } from "@/features/auth/authStore";
 import { useAccessControl } from "@/features/auth/useAccessControl";
@@ -29,6 +30,7 @@ import { GravacaoExternaActions, GravacaoExternaStatusBadge } from "./GravacaoEx
 import { GravacaoExternaChatPanel } from "./GravacaoExternaChatPanel";
 import { GravacaoExternaEntregaModal } from "./GravacaoExternaEntregaModal";
 import { GravacaoObservacaoBox } from "./GravacaoObservacaoBox";
+import { GravacaoQueueItemContextMenu } from "./GravacaoQueueItemContextMenu";
 import {
   GravacaoExternaArquivosPanel,
   GravacaoExternaPreview,
@@ -44,6 +46,35 @@ function formatOsListLabel(item: GravacaoExternaOsItem): string {
 
 function listItemHasSession(item: GravacaoExternaOsItem): boolean {
   return item.gravacao_status !== "sem_sessao" && item.gravacao_externa_id != null;
+}
+
+const SEM_FORNECEDOR_LABEL = "Sem fornecedor";
+
+function fornecedorLabel(item: GravacaoExternaOsItem): string {
+  return item.fornecedor_nome?.trim() || item.fornecedor_ponto?.trim() || SEM_FORNECEDOR_LABEL;
+}
+
+interface FornecedorGroup {
+  key: string;
+  label: string;
+  items: GravacaoExternaOsItem[];
+}
+
+function groupItemsByFornecedor(items: GravacaoExternaOsItem[]): FornecedorGroup[] {
+  const groups = new Map<string, FornecedorGroup>();
+  for (const item of items) {
+    const key = item.fornecedor_ponto?.trim() || "";
+    const group = groups.get(key);
+    if (group) {
+      group.items.push(item);
+    } else {
+      groups.set(key, { key, label: fornecedorLabel(item), items: [item] });
+    }
+  }
+  return [...groups.values()].sort((a, b) => {
+    if (!a.key !== !b.key) return a.key ? -1 : 1;
+    return a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" });
+  });
 }
 
 function formatDownloadBytes(bytes: number): string {
@@ -87,6 +118,8 @@ export function GravacaoExternaTab() {
   const canConcluirSemSessao = can("sb_gravacao_externa_operador");
   const canDownload = canOperate;
   const canLancarRecebimento = can("sb_gravacao_externa_entrega");
+  const canManagePendingQueue = can("sb_gravacao_pendente") && !user?.fornecedor;
+  const groupByFornecedor = !user?.fornecedor;
   const ponto = user?.ponto != null ? String(user.ponto) : null;
   const isMobile = useMatchMedia("(max-width: 767px)");
 
@@ -128,6 +161,11 @@ export function GravacaoExternaTab() {
 
   const listQuery = segment === "em_andamento" ? andamentoQuery : aguardandoQuery;
   const isAguardando = segment === "aguardando_entrega";
+  const listItems = listQuery.data?.items;
+  const fornecedorGroups = useMemo(
+    () => (groupByFornecedor && listItems ? groupItemsByFornecedor(listItems) : []),
+    [groupByFornecedor, listItems],
+  );
 
   const selectedHasSession = selected != null && listItemHasSession(selected);
 
@@ -141,6 +179,7 @@ export function GravacaoExternaTab() {
   const iniciarMutation = useIniciarGravacaoExternaMutation();
   const concluirMutation = useConcluirGravacaoExternaMutation();
   const entregaMutation = useLancarEntregaChapasMutation();
+  const removerMutation = useRemoverOsGravacaoExternaMutation();
 
   const { toast, clearToast } = useGravacaoExternaRealtime(
     selected?.ano ?? null,
@@ -178,6 +217,28 @@ export function GravacaoExternaTab() {
     setSelected(null);
     setPreviewSelection(null);
     setEntregaModalOpen(false);
+  };
+
+  const handleRemoveFromQueue = async (item: GravacaoExternaOsItem) => {
+    if (item.gravacao_externa_id == null) return;
+    const isJuntada = (item.membros?.length ?? 0) > 1;
+    const confirmed = window.confirm(
+      isJuntada
+        ? `Remover a juntada ${formatOsListLabel(item)} da lista de OPs pendentes no Birô?\n\nTodas as OSs desta juntada serão removidas. Arquivos, histórico e andamentos serão preservados.`
+        : `Remover a OS ${formatOsListLabel(item)} da lista de OPs pendentes no Birô?\n\nArquivos, histórico e andamentos serão preservados.`,
+    );
+    if (!confirmed) return;
+    try {
+      await removerMutation.mutateAsync(item.gravacao_externa_id);
+      if (selected?.gravacao_externa_id === item.gravacao_externa_id) {
+        setSelected(null);
+        setPreviewSelection(null);
+      }
+    } catch (error) {
+      window.alert(
+        error instanceof Error ? error.message : "Não foi possível remover a OS da lista.",
+      );
+    }
   };
 
   const handleIniciar = async () => {
@@ -288,6 +349,41 @@ export function GravacaoExternaTab() {
     }
   };
 
+  const renderListItem = (item: GravacaoExternaOsItem) => {
+    const active = selected?.nr_os === item.nr_os && selected?.ano === item.ano;
+    return (
+      <li key={`${item.ano}-${item.nr_os}`}>
+        <GravacaoQueueItemContextMenu
+          enabled={!isAguardando && canManagePendingQueue && item.gravacao_externa_id != null}
+          label={`OS ${formatOsListLabel(item)}`}
+          removing={removerMutation.isPending}
+          onRemove={() => handleRemoveFromQueue(item)}
+        >
+          <button
+            type="button"
+            onClick={() => handleSelectOs(item)}
+            className={cn(
+              "w-full rounded-lg border px-3 py-2.5 text-left transition-colors",
+              active
+                ? "border-primary-green bg-primary-green/10"
+                : "border-neutral-200 bg-white hover:border-neutral-300",
+            )}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold text-neutral-900">{formatOsListLabel(item)}</span>
+              <GravacaoExternaStatusBadge
+                status={isAguardando ? "concluida" : item.gravacao_status}
+              />
+            </div>
+            <p className="mt-0.5 truncate text-xs text-neutral-600">
+              {formatOsCardSubtitle(item)}
+            </p>
+          </button>
+        </GravacaoQueueItemContextMenu>
+      </li>
+    );
+  };
+
   const listPanel = (
     <div className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 space-y-2 border-b border-neutral-200 p-3">
@@ -368,39 +464,22 @@ export function GravacaoExternaTab() {
               ? "Nenhuma OS aguardando entrega de chapas."
               : "Nenhuma OS em Gravação Externa (setor Grav. Externa)."}
           </p>
+        ) : groupByFornecedor ? (
+          <div className="space-y-3">
+            {fornecedorGroups.map((group) => (
+              <section key={group.key || "sem-fornecedor"} aria-label={group.label}>
+                <h3 className="sticky top-0 z-[1] flex items-center justify-between gap-2 bg-white px-1 py-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  <span className="truncate" title={group.label}>
+                    {group.label}
+                  </span>
+                  <span className="shrink-0 tabular-nums">{group.items.length}</span>
+                </h3>
+                <ul className="space-y-1">{group.items.map(renderListItem)}</ul>
+              </section>
+            ))}
+          </div>
         ) : (
-          <ul className="space-y-1">
-            {listQuery.data?.items.map((item) => {
-              const active =
-                selected?.nr_os === item.nr_os && selected?.ano === item.ano;
-              return (
-                <li key={`${item.ano}-${item.nr_os}`}>
-                  <button
-                    type="button"
-                    onClick={() => handleSelectOs(item)}
-                    className={cn(
-                      "w-full rounded-lg border px-3 py-2.5 text-left transition-colors",
-                      active
-                        ? "border-primary-green bg-primary-green/10"
-                        : "border-neutral-200 bg-white hover:border-neutral-300",
-                    )}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold text-neutral-900">
-                        {formatOsListLabel(item)}
-                      </span>
-                      <GravacaoExternaStatusBadge
-                        status={isAguardando ? "concluida" : item.gravacao_status}
-                      />
-                    </div>
-                    <p className="mt-0.5 truncate text-xs text-neutral-600">
-                      {formatOsCardSubtitle(item)}
-                    </p>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <ul className="space-y-1">{listItems?.map(renderListItem)}</ul>
         )}
       </div>
     </div>
@@ -434,9 +513,9 @@ export function GravacaoExternaTab() {
             {selected.solicitante}
             {selected.produto ? ` · ${selected.produto}` : ""}
           </p>
-          {selected.fornecedor_ponto ? (
+          {selected.fornecedor_nome?.trim() || selected.fornecedor_ponto ? (
             <p className="text-xs text-neutral-500">
-              Fornecedor: {selected.fornecedor_ponto}
+              Fornecedor: {selected.fornecedor_nome?.trim() || selected.fornecedor_ponto}
             </p>
           ) : null}
         </div>

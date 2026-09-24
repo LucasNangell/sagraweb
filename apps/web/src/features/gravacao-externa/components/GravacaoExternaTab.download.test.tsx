@@ -1,6 +1,8 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const removerOs = vi.fn();
+
 vi.mock("@/api/hooks/useGravacaoExterna", () => ({
   GRAVACAO_EXTERNA_SAFETY_POLL_MS: 60_000,
   useGravacaoExternaOsList: () => ({
@@ -45,18 +47,26 @@ vi.mock("@/api/hooks/useGravacaoExterna", () => ({
   useIniciarGravacaoExternaMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useConcluirGravacaoExternaMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useLancarEntregaChapasMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRemoverOsGravacaoExternaMutation: () => ({
+    mutateAsync: removerOs,
+    isPending: false,
+  }),
 }));
 
 vi.mock("@/features/auth/authStore", () => ({
   useAuthStore: (sel: (s: { user: { ponto: number } }) => unknown) =>
-    sel({ user: { ponto: 918713 } }),
+    sel({ user: { ponto: 918713, fornecedor: false } }),
 }));
 
 let canOperatePerm = true;
+let canPendingPerm = true;
 vi.mock("@/features/auth/useAccessControl", () => ({
   useAccessControl: () => ({
-    can: (key: string) =>
-      key === "sb_gravacao_externa_operador" ? canOperatePerm : true,
+    can: (key: string) => {
+      if (key === "sb_gravacao_externa_operador") return canOperatePerm;
+      if (key === "sb_gravacao_pendente") return canPendingPerm;
+      return true;
+    },
   }),
 }));
 
@@ -91,11 +101,35 @@ vi.mock("./GravacaoExternaChatPanel", () => ({
   GravacaoExternaChatPanel: () => null,
 }));
 
+vi.mock("./GravacaoQueueItemContextMenu", () => ({
+  GravacaoQueueItemContextMenu: ({
+    children,
+    enabled,
+    label,
+    onRemove,
+  }: {
+    children: React.ReactNode;
+    enabled: boolean;
+    label: string;
+    onRemove: () => void;
+  }) => (
+    <>
+      {children}
+      {enabled ? (
+        <button type="button" aria-label={`Menu de contexto ${label}`} onClick={onRemove} />
+      ) : null}
+    </>
+  ),
+}));
+
 import { GravacaoExternaTab } from "./GravacaoExternaTab";
 
 describe("GravacaoExternaTab download-all", () => {
   beforeEach(() => {
     canOperatePerm = true;
+    canPendingPerm = true;
+    removerOs.mockReset();
+    removerOs.mockResolvedValue({});
     downloadMock.mockReset();
     downloadMock.mockImplementation(
       async (opts: { onPhase?: (p: string) => void }) => {
@@ -108,7 +142,7 @@ describe("GravacaoExternaTab download-all", () => {
 
   it("shows preparing banner when Baixar todos is clicked", async () => {
     render(<GravacaoExternaTab />);
-    fireEvent.click(screen.getByRole("button", { name: /01209\/24/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^01209\/24/i }));
 
     const downloadBtn = await screen.findByRole("button", { name: /Baixar todos/i });
     fireEvent.click(downloadBtn);
@@ -124,8 +158,22 @@ describe("GravacaoExternaTab download-all", () => {
   it("hides Baixar todos without operator permission", async () => {
     canOperatePerm = false;
     render(<GravacaoExternaTab />);
-    fireEvent.click(screen.getByRole("button", { name: /01209\/24/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^01209\/24/i }));
     await screen.findByText("arquivos-panel");
     expect(screen.queryByRole("button", { name: /Baixar todos/i })).toBeNull();
+  });
+
+  it("remove da fila do Birô somente com acesso à página de OPs pendentes", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { unmount } = render(<GravacaoExternaTab />);
+    fireEvent.click(screen.getByRole("button", { name: "Menu de contexto OS 01209/24" }));
+    await waitFor(() => expect(removerOs).toHaveBeenCalledWith(1));
+    unmount();
+
+    canPendingPerm = false;
+    render(<GravacaoExternaTab />);
+    expect(
+      screen.queryByRole("button", { name: "Menu de contexto OS 01209/24" }),
+    ).toBeNull();
   });
 });

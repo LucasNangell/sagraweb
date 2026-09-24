@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -36,6 +37,8 @@ SETOR_GRAVACAO_PENDENTE = "SEGEP"
 ACTIVE_PENDENTE_STATUSES = frozenset({"ativa"})
 ALLOWED_MAQUINAS_CONFIG = frozenset({"Komori", "SM74", "PM52"})
 COTA_AJUSTE_MODES = frozenset({"set", "inc", "dec"})
+ORIGEM_PENDENTE_ANDAMENTO = "andamento"
+ORIGEM_PENDENTE_MANUAL = "manual"
 
 
 def is_gravacao_pendente_situacao(situacao: str | None) -> bool:
@@ -65,6 +68,94 @@ def cancel_active_pendente_sessions(ano: int, os_id: int) -> None:
         (ano, os_id),
     )
     logger.info("Sessões Gravação Pendente canceladas para OS %s/%s", os_id, ano)
+
+
+def remove_pendente_from_queue(gravacao_pendente_id: int) -> dict[str, Any]:
+    """Remove uma sessão (ou sua juntada) da fila ativa sem apagar o histórico."""
+    try:
+        pendente_id = int(gravacao_pendente_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("gravacao_pendente_id inválido") from exc
+    if pendente_id <= 0:
+        raise ValueError("gravacao_pendente_id inválido")
+
+    def tx(cursor):
+        cursor.execute(
+            """
+            SELECT Id, JuntadaGrupoId, Status
+            FROM tab_os_gravacao_pendente
+            WHERE Id = %s
+            LIMIT 1
+            FOR UPDATE
+            """,
+            (pendente_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(
+                status_code=404,
+                detail="Sessão de Gravação Pendente não encontrada.",
+            )
+
+        if isinstance(row, dict):
+            juntada_raw = row.get("JuntadaGrupoId")
+            status = str(row.get("Status") or "")
+        else:
+            juntada_raw = row[1] if len(row) > 1 else None
+            status = str(row[2] if len(row) > 2 else "")
+        if status not in ACTIVE_PENDENTE_STATUSES:
+            raise HTTPException(
+                status_code=409,
+                detail="A OS não está mais na lista de Gravação Pendente.",
+            )
+
+        juntada_id = str(juntada_raw).strip() if juntada_raw else None
+        target_ids = [pendente_id]
+        if juntada_id:
+            cursor.execute(
+                """
+                SELECT Id
+                FROM tab_os_gravacao_pendente
+                WHERE JuntadaGrupoId = %s AND Status = 'ativa'
+                ORDER BY Id
+                FOR UPDATE
+                """,
+                (juntada_id,),
+            )
+            target_ids = [
+                int(group_row.get("Id") if isinstance(group_row, dict) else group_row[0])
+                for group_row in (cursor.fetchall() or [])
+            ]
+            if pendente_id not in target_ids:
+                target_ids.append(pendente_id)
+
+        updated_ids: list[int] = []
+        for target_id in target_ids:
+            cursor.execute(
+                """
+                UPDATE tab_os_gravacao_pendente
+                SET Status = 'cancelada'
+                WHERE Id = %s AND Status = 'ativa'
+                """,
+                (target_id,),
+            )
+            if cursor.rowcount == 1:
+                updated_ids.append(target_id)
+
+        if pendente_id not in updated_ids:
+            raise HTTPException(
+                status_code=409,
+                detail="A OS não está mais na lista de Gravação Pendente.",
+            )
+        return {
+            "removed": True,
+            "gravacao_pendente_id": pendente_id,
+            "removed_ids": updated_ids,
+            "juntada_grupo_id": juntada_id,
+        }
+
+    results = db.execute_transaction([tx])
+    return results[0]
 
 
 def reactivate_pendente_after_externa_cancel(ano: int, os_id: int) -> Optional[int]:
@@ -354,6 +445,7 @@ def insert_pendente_session_cursor(
     cliente: str | None = None,
     juntada_grupo_id: str | None = None,
     observacao: str | None = None,
+    origem: str = ORIGEM_PENDENTE_ANDAMENTO,
 ) -> int:
     # Relançamento: encerra sessão ativa anterior e grava a nova com os arquivos atuais.
     cancel_active_pendente_sessions_cursor(cursor, ano, os_id)
@@ -363,11 +455,21 @@ def insert_pendente_session_cursor(
     cursor.execute(
         """
         INSERT INTO tab_os_gravacao_pendente
-            (OsAno, OsNro, CodStatus, LancadoPorPonto, LancadoPorNome, Cliente, Status,
+            (OsAno, OsNro, CodStatus, Origem, LancadoPorPonto, LancadoPorNome, Cliente, Status,
              JuntadaGrupoId, Observacao)
-        VALUES (%s, %s, %s, %s, %s, %s, 'ativa', %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, 'ativa', %s, %s)
         """,
-        (ano, os_id, cod_status, ponto_fmt, lancado_por_nome, cliente_snap, grupo_id, obs_text),
+        (
+            ano,
+            os_id,
+            cod_status,
+            origem,
+            ponto_fmt,
+            lancado_por_nome,
+            cliente_snap,
+            grupo_id,
+            obs_text,
+        ),
     )
     session_id = int(cursor.lastrowid)
     for arquivo in validated_arquivos:
@@ -405,6 +507,7 @@ def _map_pendente_session(row: dict[str, Any]) -> dict[str, Any]:
         "os_ano": int(row["OsAno"]),
         "os_nro": int(row["OsNro"]),
         "cod_status": str(row.get("CodStatus") or ""),
+        "origem": str(row.get("Origem") or ORIGEM_PENDENTE_ANDAMENTO),
         "lancado_por_ponto": str(row.get("LancadoPorPonto") or ""),
         "lancado_por_nome": row.get("LancadoPorNome"),
         "cliente": row.get("Cliente"),
@@ -498,6 +601,93 @@ def validate_gravacao_pendente_juntadas(
         seen.add(key)
         result.append(key)
     return result
+
+
+def create_manual_pendente_session(
+    *,
+    ano: int,
+    os_id: int,
+    operador_ponto: str,
+    arquivos: list[dict[str, Any]],
+    chapas: list[dict[str, Any]],
+    observacao: str = "",
+    juntadas: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Inclui uma OS na fila pendente sem criar ou alterar tabAndamento."""
+    if not os_exists(ano, os_id):
+        raise ValueError(f"OS {os_id}/{ano} não encontrada.")
+
+    validated_arquivos = validate_network_arquivos_input(arquivos)
+    validated_chapas = validate_chapas_input(
+        chapas,
+        allow_empty=arquivos_are_pdf_only(validated_arquivos),
+    )
+    membros = validate_gravacao_pendente_juntadas(
+        principal_ano=ano,
+        principal_nr=os_id,
+        juntadas=juntadas,
+    )
+    targets = [(ano, os_id), *membros]
+    grupo_id = str(uuid.uuid4()) if membros else None
+    ponto_fmt = format_ponto(_clean_ponto(operador_ponto))
+    lancado_por_nome = _lookup_usuario_nome(ponto_fmt)
+
+    def tx(cursor):
+        # Serializa inclusões da mesma OS e impede que duplo clique/replay substitua
+        # silenciosamente uma sessão ativa criada pela primeira requisição.
+        for target_ano, target_os in sorted(targets):
+            cursor.execute(
+                """
+                SELECT NroProtocolo
+                FROM tabProtocolos
+                WHERE AnoProtocolo = %s AND NroProtocolo = %s
+                FOR UPDATE
+                """,
+                (target_ano, target_os),
+            )
+            cursor.fetchone()
+            cursor.execute(
+                """
+                SELECT Id
+                FROM tab_os_gravacao_pendente
+                WHERE OsAno = %s AND OsNro = %s AND Status = 'ativa'
+                LIMIT 1
+                """,
+                (target_ano, target_os),
+            )
+            if cursor.fetchone():
+                raise ValueError(
+                    f"OS {target_os}/{target_ano} já está na lista de gravação pendente."
+                )
+
+        ids: list[int] = []
+        for target_ano, target_os in targets:
+            ids.append(
+                insert_pendente_session_cursor(
+                    cursor,
+                    ano=target_ano,
+                    os_id=target_os,
+                    cod_status="manual",
+                    ponto_fmt=ponto_fmt,
+                    lancado_por_nome=lancado_por_nome,
+                    validated_arquivos=validated_arquivos,
+                    validated_chapas=validated_chapas,
+                    juntada_grupo_id=grupo_id,
+                    observacao=observacao,
+                    origem=ORIGEM_PENDENTE_MANUAL,
+                )
+            )
+        return ids
+
+    db.execute_transaction([tx])
+    session = get_active_pendente_session(ano, os_id)
+    if not session:
+        raise RuntimeError("Falha ao criar sessão de Gravação Pendente.")
+
+    from services.gravacao_preview_cache_service import enqueue_preview_warmup
+
+    enqueue_preview_warmup(validated_arquivos)
+    return build_pendente_detail(session)
 
 
 def format_os_list_label(nr_os: int, ano: int) -> str:
@@ -726,6 +916,7 @@ def repair_orphan_pendente_andamentos() -> list[dict[str, Any]]:
         SELECT gp.Id, gp.OsNro, gp.OsAno, gp.CodStatus, gp.LancadoPorPonto, gp.JuntadaGrupoId
         FROM tab_os_gravacao_pendente gp
         WHERE gp.Status = 'ativa'
+          AND COALESCE(gp.Origem, 'andamento') <> 'manual'
           AND gp.CodStatus IS NOT NULL
           AND gp.CodStatus != ''
           AND NOT EXISTS (
@@ -896,10 +1087,8 @@ def list_os_gravacao_pendente(
     params: dict[str, Any] = {"limit": limit, "offset": offset}
     ultimo_cod = ultimo_operacional_cod_subquery("p.NroProtocolo", "p.AnoProtocolo")
     filters = """
-        WHERE a.SituacaoLink = %(situacao)s
-          AND a.CodStatus = {ultimo_cod}
-    """.format(ultimo_cod=ultimo_cod)
-    params["situacao"] = SITUACAO_GRAVACAO_PENDENTE
+        WHERE gp.Status = 'ativa'
+    """
 
     if ano:
         filters += " AND p.AnoProtocolo = %(ano)s"
@@ -938,17 +1127,16 @@ def list_os_gravacao_pendente(
                   AND d.AnoProtocoloLinkDet = p.AnoProtocolo
                 LIMIT 1
             ) AS produto
-        FROM tabProtocolos p
-        INNER JOIN tabAndamento a
+        FROM tab_os_gravacao_pendente gp
+        INNER JOIN tabProtocolos p
+            ON p.AnoProtocolo = gp.OsAno
+           AND p.NroProtocolo = gp.OsNro
+        LEFT JOIN tabAndamento a
             ON a.NroProtocoloLink = p.NroProtocolo
            AND a.AnoProtocoloLink = p.AnoProtocolo
            AND a.CodStatus = {ultimo_cod}
-        LEFT JOIN tab_os_gravacao_pendente gp
-            ON gp.OsAno = p.AnoProtocolo
-           AND gp.OsNro = p.NroProtocolo
-           AND gp.Status = 'ativa'
         {filters}
-        ORDER BY a.`Data` DESC, p.NroProtocolo DESC
+        ORDER BY gp.CriadoEm DESC, gp.Id DESC
         LIMIT 2000
     """
     list_params = {k: v for k, v in params.items() if k not in ("limit", "offset")}
@@ -980,15 +1168,14 @@ def list_os_gravacao_pendente(
     count_group_sql = f"""
         SELECT COUNT(*) AS cnt FROM (
             SELECT COALESCE(gp.JuntadaGrupoId, CONCAT(p.AnoProtocolo, '-', p.NroProtocolo)) AS gkey
-            FROM tabProtocolos p
-            INNER JOIN tabAndamento a
+            FROM tab_os_gravacao_pendente gp
+            INNER JOIN tabProtocolos p
+                ON p.AnoProtocolo = gp.OsAno
+               AND p.NroProtocolo = gp.OsNro
+            LEFT JOIN tabAndamento a
                 ON a.NroProtocoloLink = p.NroProtocolo
                AND a.AnoProtocoloLink = p.AnoProtocolo
                AND a.CodStatus = {ultimo_cod}
-            LEFT JOIN tab_os_gravacao_pendente gp
-                ON gp.OsAno = p.AnoProtocolo
-               AND gp.OsNro = p.NroProtocolo
-               AND gp.Status = 'ativa'
             {filters}
             GROUP BY gkey
         ) t

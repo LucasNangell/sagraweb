@@ -20,6 +20,7 @@ from services.gravacao_pendente_service import (
     _fetch_pendente_arquivos,
     build_historico_cota_summary,
     build_pendente_detail,
+    create_manual_pendente_session,
     delete_controle_lancamento,
     enviar_para_gravacao_externa,
     estimate_chapas_from_validated_arquivos,
@@ -28,6 +29,7 @@ from services.gravacao_pendente_service import (
     list_fornecedores,
     list_historico_concluidas,
     list_os_gravacao_pendente,
+    remove_pendente_from_queue,
     recalc_cotas_from_fornecedores,
     require_pendente_session_access,
     update_controle_lancamento,
@@ -290,6 +292,20 @@ class GravacaoPendenteArquivosUpdate(BaseModel):
     chapas: Optional[List[GravacaoPendenteChapaInput]] = None
 
 
+class GravacaoPendenteAdicionarBody(BaseModel):
+    arquivos: List[GravacaoPendenteArquivoInput] = Field(..., min_length=1)
+    chapas: List[GravacaoPendenteChapaInput] = Field(default_factory=list)
+    observacao: str = ""
+    juntadas: List[GravacaoPendenteOsMembro] = Field(default_factory=list)
+
+
+class GravacaoPendenteQueueRemovalResponse(BaseModel):
+    removed: bool
+    gravacao_pendente_id: int
+    removed_ids: List[int] = Field(default_factory=list)
+    juntada_grupo_id: Optional[str] = None
+
+
 class GravacaoPendenteObservacaoUpdate(BaseModel):
     observacao: str = ""
 
@@ -351,6 +367,20 @@ def _require_observacao_edit_permission(request: Request) -> None:
             status_code=403,
             detail="Fornecedor não pode editar a observação.",
         )
+
+
+def _require_queue_management_permission(request: Request) -> None:
+    _require_pendente_permission(request)
+    ponto = _get_request_session(request).ponto
+    if fetch_user_fornecedor(ponto):
+        raise HTTPException(
+            status_code=403,
+            detail="Fornecedor não pode gerenciar a fila de Gravação Pendente.",
+        )
+
+
+def _require_adicionar_permission(request: Request) -> None:
+    _require_queue_management_permission(request)
 
 
 @router.get("/gravacao-pendente/os", response_model=GravacaoPendenteOsListResponse)
@@ -552,6 +582,54 @@ def get_gravacao_pendente_detail(request: Request, ano: int, id: int):
     )
     detail = build_pendente_detail(session)
     return GravacaoPendenteDetailResponse.model_validate(detail)
+
+
+@router.post(
+    "/gravacao-pendente/{ano}/{id}/adicionar",
+    response_model=GravacaoPendenteDetailResponse,
+)
+def post_adicionar_gravacao_pendente(
+    request: Request,
+    ano: int,
+    id: int,
+    body: GravacaoPendenteAdicionarBody,
+):
+    _require_adicionar_permission(request)
+    try:
+        detail = create_manual_pendente_session(
+            ano=ano,
+            os_id=id,
+            operador_ponto=str(_get_request_session(request).ponto),
+            arquivos=[item.model_dump() for item in body.arquivos],
+            chapas=[item.model_dump() for item in body.chapas],
+            observacao=body.observacao,
+            juntadas=[item.model_dump() for item in body.juntadas],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return GravacaoPendenteDetailResponse.model_validate(detail)
+
+
+@router.post(
+    "/gravacao-pendente/fila/{gravacao_pendente_id}/remover",
+    response_model=GravacaoPendenteQueueRemovalResponse,
+)
+def post_remover_gravacao_pendente_fila(
+    request: Request,
+    gravacao_pendente_id: int,
+):
+    _require_queue_management_permission(request)
+    try:
+        result = remove_pendente_from_queue(gravacao_pendente_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info(
+        "Fila Gravação Pendente removida por %s: sessão=%s, sessões_afetadas=%s",
+        _get_request_session(request).ponto,
+        gravacao_pendente_id,
+        result.get("removed_ids"),
+    )
+    return GravacaoPendenteQueueRemovalResponse.model_validate(result)
 
 
 @router.put("/gravacao-pendente/{ano}/{id}/arquivos", response_model=GravacaoPendenteDetailResponse)

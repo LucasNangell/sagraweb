@@ -19,6 +19,7 @@ export interface GravacaoExternaOsItem {
   lancado_por_ponto?: string | null;
   lancado_por_nome?: string | null;
   fornecedor_ponto?: string | null;
+  fornecedor_nome?: string | null;
   concluida_em?: string | null;
   concluida_por_ponto?: string | null;
   gravacao_criado_em?: string | null;
@@ -33,6 +34,13 @@ export interface GravacaoExternaOsListResponse {
   total: number;
   limit: number;
   offset: number;
+}
+
+export interface GravacaoExternaQueueRemovalResponse {
+  removed: boolean;
+  gravacao_externa_id: number;
+  removed_ids: number[];
+  juntada_grupo_id?: string | null;
 }
 
 export interface GravacaoExternaArquivo {
@@ -119,6 +127,15 @@ export async function fetchGravacaoExternaDetail(
   nrOs: number,
 ): Promise<GravacaoExternaDetail> {
   return apiFetch<GravacaoExternaDetail>(`/gravacao-externa/${ano}/${nrOs}`);
+}
+
+export async function removerOsGravacaoExterna(
+  gravacaoExternaId: number,
+): Promise<GravacaoExternaQueueRemovalResponse> {
+  return apiFetch<GravacaoExternaQueueRemovalResponse>(
+    `/gravacao-externa/fila/${gravacaoExternaId}/remover`,
+    { method: "POST" },
+  );
 }
 
 export async function iniciarGravacaoExterna(

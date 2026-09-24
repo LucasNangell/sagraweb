@@ -215,10 +215,6 @@ export const homeTestIds = {
   osGravacaoClose: "os-gravacao-close",
   osGravacaoConfirm: "os-gravacao-confirm",
   osGravacaoCancel: "os-gravacao-cancel",
-  osGravacaoConcluirRoot: "os-gravacao-concluir-root",
-  osGravacaoConcluirClose: "os-gravacao-concluir-close",
-  osGravacaoConcluirConfirm: "os-gravacao-concluir-confirm",
-  osGravacaoConcluirCancel: "os-gravacao-concluir-cancel",
 
   supportAssignedRoot: "support-assigned-root",
   supportAssignedClose: "support-assigned-close",

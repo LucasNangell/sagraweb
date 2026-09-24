@@ -316,7 +316,7 @@ export function UsuariosPage() {
                         </td>
                         <td className="px-4 py-3 text-xs">
                           {user.Email || "-"}
-                          {user.Email && !user.EmailVerified ? (
+                          {(user.Email || user.ContaInternet) && !user.EmailVerified ? (
                             <span className="ml-1 text-amber-600">(pendente)</span>
                           ) : null}
                         </td>
@@ -336,6 +336,7 @@ export function UsuariosPage() {
                             fornecedor={user.Fornecedor}
                             email={user.Email}
                             emailVerified={user.EmailVerified}
+                            contaInternet={user.ContaInternet}
                           />
                         </td>
                       </tr>

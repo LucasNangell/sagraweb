@@ -93,6 +93,40 @@ def test_reactivate_pendente_skips_when_ativa_exists(mock_db):
 
 
 @patch("services.gravacao_pendente_service.db")
+def test_remove_pendente_from_queue_cancels_joined_group_without_deleting(mock_db):
+    from services.gravacao_pendente_service import remove_pendente_from_queue
+
+    executed: list[str] = []
+    cursor = MagicMock()
+    current_one = None
+    current_all = []
+
+    def execute(sql, _params=None):
+        nonlocal current_one, current_all
+        normalized = " ".join(str(sql).split())
+        executed.append(normalized)
+        if normalized.startswith("SELECT Id, JuntadaGrupoId, Status"):
+            current_one = {"Id": 42, "JuntadaGrupoId": "grupo-1", "Status": "ativa"}
+        elif normalized.startswith("SELECT Id FROM tab_os_gravacao_pendente"):
+            current_all = [{"Id": 42}, {"Id": 43}]
+        elif normalized.startswith("UPDATE tab_os_gravacao_pendente"):
+            cursor.rowcount = 1
+
+    cursor.execute.side_effect = execute
+    cursor.fetchone.side_effect = lambda: current_one
+    cursor.fetchall.side_effect = lambda: current_all
+    mock_db.execute_transaction.side_effect = lambda ops: [op(cursor) for op in ops]
+
+    result = remove_pendente_from_queue(42)
+
+    assert result["removed_ids"] == [42, 43]
+    assert result["juntada_grupo_id"] == "grupo-1"
+    assert len([sql for sql in executed if sql.startswith("UPDATE")]) == 2
+    assert not any(sql.startswith("DELETE") for sql in executed)
+    assert not any("tabAndamento" in sql for sql in executed)
+
+
+@patch("services.gravacao_pendente_service.db")
 def test_delete_controle_lancamento_removes_only_parent_row(mock_db):
     executed: list[str] = []
 
@@ -142,6 +176,29 @@ def test_lancar_externa_requires_specific_permission():
 
     request.state.sagra_permissions["sb_gravacao_externa_lancar"] = True
     _require_lancar_externa_permission(request)
+
+
+@patch("routers.gravacao_pendente_routes.fetch_user_fornecedor", return_value=True)
+def test_adicionar_os_rejects_fornecedor(_fetch_fornecedor):
+    from types import SimpleNamespace
+
+    from routers.gravacao_pendente_routes import _require_adicionar_permission
+    from security.session_auth import SessionData
+
+    request = SimpleNamespace(
+        state=SimpleNamespace(
+            sagra_permissions={"sb_gravacao_pendente": True},
+            sagra_session=SessionData(
+                ponto=918713,
+                nome="Fornecedor",
+                ip="127.0.0.1",
+                iat=0,
+            ),
+        )
+    )
+    with pytest.raises(HTTPException) as exc:
+        _require_adicionar_permission(request)
+    assert exc.value.status_code == 403
 
 
 def test_insert_pendente_session_persists_observacao():
@@ -214,6 +271,125 @@ def test_insert_pendente_session_blank_observacao_is_null():
     )
     insert_params = next(p for s, p in captured if "INSERT INTO tab_os_gravacao_pendente" in s)
     assert insert_params[-1] is None
+
+
+@patch("services.gravacao_preview_cache_service.enqueue_preview_warmup")
+@patch("services.gravacao_pendente_service.build_pendente_detail", return_value={"id": 8})
+@patch(
+    "services.gravacao_pendente_service.get_active_pendente_session",
+    return_value={"id": 8},
+)
+@patch("services.gravacao_pendente_service._lookup_usuario_nome", return_value="Operador")
+@patch("services.gravacao_pendente_service.os_exists", return_value=True)
+@patch("services.gravacao_pendente_service.validate_network_arquivos_input")
+@patch("services.gravacao_pendente_service.db")
+def test_create_manual_pendente_does_not_insert_andamento(
+    mock_db,
+    validate_arquivos,
+    _os_exists,
+    _lookup_nome,
+    _get_active,
+    _build_detail,
+    _warmup,
+):
+    from services.gravacao_pendente_service import create_manual_pendente_session
+
+    validate_arquivos.return_value = [
+        {
+            "absolute_path": r"\\server\a.tif",
+            "nome": "a.tif",
+            "tamanho_bytes": 10,
+            "ordem": 0,
+            "maquina": "M1",
+        }
+    ]
+    executed: list[tuple[str, tuple]] = []
+
+    def fake_tx(operations):
+        cursor = MagicMock()
+        cursor.lastrowid = 8
+        last_sql = ""
+
+        def execute(sql, params=None):
+            nonlocal last_sql
+            last_sql = " ".join(str(sql).split())
+            executed.append((last_sql, params or ()))
+
+        def fetchone():
+            if "SELECT Id FROM tab_os_gravacao_pendente" in last_sql:
+                return None
+            if "SELECT NomeUsuario" in last_sql:
+                return {"NomeUsuario": "Cliente"}
+            return {"NroProtocolo": 100}
+
+        cursor.execute.side_effect = execute
+        cursor.fetchone.side_effect = fetchone
+        return [operation(cursor) for operation in operations]
+
+    mock_db.execute_transaction.side_effect = fake_tx
+
+    result = create_manual_pendente_session(
+        ano=2026,
+        os_id=100,
+        operador_ponto="918713",
+        arquivos=[{"absolute_path": r"\\server\a.tif", "nome": "a.tif"}],
+        chapas=[{"maquina": "M1", "quantidade": 1}],
+        observacao="urgente",
+    )
+
+    assert result == {"id": 8}
+    assert not any("tabAndamento" in sql for sql, _ in executed)
+    insert_sql, insert_params = next(
+        item for item in executed if "INSERT INTO tab_os_gravacao_pendente" in item[0]
+    )
+    assert "Origem" in insert_sql
+    assert "manual" in insert_params
+
+
+@patch("services.gravacao_pendente_service.db")
+def test_list_pendente_is_sourced_from_active_session_not_current_andamento(mock_db):
+    from services.gravacao_pendente_service import list_os_gravacao_pendente
+
+    mock_db.execute_query.side_effect = [
+        [
+            {
+                "nr_os": 100,
+                "ano": 2026,
+                "solicitante": "Cliente",
+                "nome_usuario": "Cliente",
+                "produto": "Livro",
+                "situacao": "Outro andamento",
+                "setor": "Outro setor",
+                "last_update": None,
+                "gravacao_pendente_id": 8,
+                "gravacao_pendente_status": "ativa",
+                "lancado_por_ponto": "918.713",
+                "lancado_por_nome": "Operador",
+                "gravacao_criado_em": None,
+                "juntada_grupo_id": None,
+            }
+        ],
+        [{"cnt": 1}],
+    ]
+
+    items, total = list_os_gravacao_pendente()
+
+    assert total == 1
+    assert items[0]["situacao"] == "Outro andamento"
+    list_sql = " ".join(mock_db.execute_query.call_args_list[0].args[0].split())
+    assert "FROM tab_os_gravacao_pendente gp" in list_sql
+    assert "WHERE gp.Status = 'ativa'" in list_sql
+    assert "a.SituacaoLink =" not in list_sql
+
+
+@patch("services.gravacao_pendente_service.db")
+def test_repair_orphan_ignores_manual_sessions(mock_db):
+    from services.gravacao_pendente_service import repair_orphan_pendente_andamentos
+
+    mock_db.execute_query.return_value = []
+    assert repair_orphan_pendente_andamentos() == []
+    sql = " ".join(mock_db.execute_query.call_args.args[0].split())
+    assert "COALESCE(gp.Origem, 'andamento') <> 'manual'" in sql
 
 
 @patch("services.gravacao_pendente_service.build_pendente_detail", return_value={"id": 1})

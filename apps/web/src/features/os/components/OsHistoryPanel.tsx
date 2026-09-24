@@ -60,13 +60,10 @@ import {
   GravacaoPendenteLaunchModal,
   type GravacaoPendenteLaunchResult,
 } from "@/features/gravacao-externa/components/GravacaoPendenteLaunchModal";
-import { GravacaoConcluirInterceptModal } from "@/features/gravacao-externa/components/GravacaoConcluirInterceptModal";
 import {
-  isEmGravacaoExternaOperacional,
   isGravacaoPendenteSituacao,
   SETOR_GRAVACAO_PENDENTE,
 } from "@/features/gravacao-externa/constants";
-import { concluirGravacaoExterna } from "@/api/gravacaoExterna";
 
 interface OsHistoryPanelProps {
   selected: OsSearchRow | null;
@@ -241,14 +238,6 @@ export function OsHistoryPanel({
   const [tourSaved, setTourSaved] = useState(false);
   const [entregaModalOpen, setEntregaModalOpen] = useState(false);
   const [gravacaoPendenteModalOpen, setGravacaoPendenteModalOpen] = useState(false);
-  const [gravacaoInterceptOpen, setGravacaoInterceptOpen] = useState(false);
-  const [gravacaoInterceptSaving, setGravacaoInterceptSaving] = useState(false);
-  const [gravacaoInterceptChapas, setGravacaoInterceptChapas] = useState<
-    { maquina: string; quantidade: number }[]
-  >([]);
-  const [pendingAfterConcluir, setPendingAfterConcluir] = useState<HistoryPayload | null>(
-    null,
-  );
   const [unirModalOpen, setUnirModalOpen] = useState(false);
   const [pendingUnirPayload, setPendingUnirPayload] = useState<HistoryPayload | null>(
     null,
@@ -574,9 +563,6 @@ export function OsHistoryPanel({
       !isSubOs &&
       !andamentoTarget.startsWith("sub:") &&
       !andamentoTarget.startsWith("comp:");
-    const lastHistForGuard =
-      dedupeOsHistoryRows(historyQuery.data ?? []).at(-1) ?? null;
-
     if (
       !payloadOverride &&
       !isEditMode &&
@@ -594,21 +580,6 @@ export function OsHistoryPanel({
       launchingOnMainOs
     ) {
       setGravacaoPendenteModalOpen(true);
-      return;
-    }
-
-    if (
-      !payloadOverride &&
-      !isEditMode &&
-      launchingOnMainOs &&
-      isEmGravacaoExternaOperacional(
-        lastHistForGuard?.SituacaoLink,
-        lastHistForGuard?.SetorLink,
-      )
-    ) {
-      setPendingAfterConcluir(payload);
-      setGravacaoInterceptChapas([]);
-      setGravacaoInterceptOpen(true);
       return;
     }
 
@@ -750,30 +721,6 @@ export function OsHistoryPanel({
         ano: j.ano,
       })),
     });
-  };
-
-  const handleGravacaoInterceptConfirm = async () => {
-    if (!selected || !pendingAfterConcluir) return;
-    setGravacaoInterceptSaving(true);
-    try {
-      await concluirGravacaoExterna(selected.ano, selected.nr_os);
-      const nextPayload = pendingAfterConcluir;
-      setGravacaoInterceptOpen(false);
-      setPendingAfterConcluir(null);
-      await saveHistory(nextPayload);
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.gravacaoExterna.prefix,
-      });
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.os.history(selected.ano, selected.nr_os),
-      });
-    } catch (e) {
-      window.alert(
-        `Erro ao concluir Gravação Externa: ${e instanceof Error ? e.message : "falha"}`,
-      );
-    } finally {
-      setGravacaoInterceptSaving(false);
-    }
   };
 
   const handleDelete = async () => {
@@ -1360,24 +1307,6 @@ export function OsHistoryPanel({
         onConfirm={handleGravacaoPendenteConfirm}
       />
 
-      <GravacaoConcluirInterceptModal
-        open={gravacaoInterceptOpen}
-        osLabel={
-          selected
-            ? `${String(selected.nr_os).padStart(5, "0")}/${String(selected.ano).slice(-2)}`
-            : ""
-        }
-        chapas={gravacaoInterceptChapas}
-        pendingSituacao={pendingAfterConcluir?.situacao ?? form.situacao}
-        pendingSetor={pendingAfterConcluir?.setor ?? form.setor}
-        saving={gravacaoInterceptSaving || saving}
-        onClose={() => {
-          if (gravacaoInterceptSaving) return;
-          setGravacaoInterceptOpen(false);
-          setPendingAfterConcluir(null);
-        }}
-        onConfirm={() => void handleGravacaoInterceptConfirm()}
-      />
     </>
   );
 }

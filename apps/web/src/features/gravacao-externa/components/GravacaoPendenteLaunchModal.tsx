@@ -51,6 +51,8 @@ interface GravacaoPendenteLaunchModalProps {
   open: boolean;
   /** launch = novo andamento; edit = alterar sessão existente */
   mode?: "launch" | "edit";
+  /** Define se o modal cria um andamento ou apenas inclui a OS na fila. */
+  workflow?: "andamento" | "fila";
   initialObs?: string;
   initialArquivos?: GravacaoPendenteArquivoLaunch[];
   initialChapas?: GravacaoPendenteChapaInput[];
@@ -322,6 +324,7 @@ export function GravacaoPendenteLaunchModal({
   row,
   open,
   mode = "launch",
+  workflow = "andamento",
   initialObs = "",
   initialArquivos,
   initialChapas,
@@ -330,10 +333,12 @@ export function GravacaoPendenteLaunchModal({
   onConfirm,
 }: GravacaoPendenteLaunchModalProps) {
   const isEdit = mode === "edit";
+  const isFila = workflow === "fila";
   const queryClient = useQueryClient();
   const [browserOpen, setBrowserOpen] = useState(false);
   const [browserTarget, setBrowserTarget] = useState<BrowserTarget>(null);
   const [chapas, setChapas] = useState<ChapaRow[]>([emptyChapaRow()]);
+  const [juntadaEnabled, setJuntadaEnabled] = useState(false);
   const [juntadas, setJuntadas] = useState<GravacaoPendenteJuntadaOs[]>([]);
   const [juntadaNumero, setJuntadaNumero] = useState("");
   const [juntadaAno, setJuntadaAno] = useState("");
@@ -460,6 +465,7 @@ export function GravacaoPendenteLaunchModal({
   useEffect(() => {
     if (!open) {
       setChapas([emptyChapaRow()]);
+      setJuntadaEnabled(false);
       setJuntadas([]);
       setJuntadaNumero("");
       setJuntadaAno("");
@@ -477,6 +483,7 @@ export function GravacaoPendenteLaunchModal({
       initialChapas ?? [],
     );
     setChapas(hydrated.chapas);
+    setJuntadaEnabled(false);
     setJuntadas([]);
     setJuntadaNumero("");
     setJuntadaAno(row?.ano != null ? String(row.ano) : "");
@@ -802,7 +809,7 @@ export function GravacaoPendenteLaunchModal({
         <div className="flex h-[min(94vh,860px)] w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
             <h3 className="text-base font-semibold text-secondary-blue">
-              {isEdit ? "Alterar arquivos" : "Gravação Pendente"} — OS {formatOsLabel(row)}
+              {isEdit ? "Alterar arquivos" : isFila ? "Adicionar OS" : "Gravação Pendente"} — OS {formatOsLabel(row)}
             </h3>
             <button
               type="button"
@@ -820,15 +827,35 @@ export function GravacaoPendenteLaunchModal({
             <div className="min-h-0 space-y-4 overflow-y-auto pr-1 [overflow-anchor:none] [scrollbar-gutter:stable]">
             {!isEdit ? (
               <section>
-                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  OSs juntadas (mesma chapa)
-                </h4>
-                <p className="mb-2 text-xs text-slate-500">
-                  A OS atual ({formatOsListLabel(row.nr_os, row.ano)}) já está incluída.
-                  Adicione outras OSs que compartilham esta chapa — o andamento será
-                  lançado em todas.
-                </p>
-                <div className="grid grid-cols-[minmax(0,1fr)_5.5rem_auto] items-center gap-2">
+                <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={juntadaEnabled}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      setJuntadaEnabled(enabled);
+                      if (!enabled) {
+                        setJuntadas([]);
+                        setJuntadaNumero("");
+                        setJuntadaAno(row?.ano != null ? String(row.ano) : "");
+                      }
+                    }}
+                    className="size-4 rounded border-slate-300 text-primary-green focus:ring-primary-green"
+                  />
+                  Juntada de OSs
+                </label>
+
+                {juntadaEnabled ? (
+                  <div className="mt-3">
+                    <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      OSs juntadas (mesma chapa)
+                    </h4>
+                    <p className="mb-2 text-xs text-slate-500">
+                      A OS atual ({formatOsListLabel(row.nr_os, row.ano)}) já está incluída.
+                      Adicione outras OSs que compartilham esta chapa — elas serão
+                      {isFila ? " incluídas na mesma fila, sem lançar andamento." : " lançadas no mesmo andamento."}
+                    </p>
+                    <div className="grid grid-cols-[minmax(0,1fr)_5.5rem_auto] items-center gap-2">
                   <input
                     type="number"
                     min={1}
@@ -867,39 +894,41 @@ export function GravacaoPendenteLaunchModal({
                       "+ OS"
                     )}
                   </button>
-                </div>
-                {juntadas.length > 0 ? (
-                  <ul className="mt-2 space-y-1">
-                    {juntadas.map((j) => (
-                      <li
-                        key={`${j.ano}-${j.nr_os}`}
-                        className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm"
-                      >
-                        <span className="min-w-0 flex-1 font-medium tabular-nums">
-                          {formatOsListLabel(j.nr_os, j.ano)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setJuntadas((prev) =>
-                              prev.filter(
-                                (x) => !(x.nr_os === j.nr_os && x.ano === j.ano),
-                              ),
-                            )
-                          }
-                          className={cn(BTN_ICON_DANGER, "size-7")}
-                          title="Remover"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mt-2 text-xs text-slate-500">
-                    Nenhuma OS adicional. Opcional para papelaria / chapa compartilhada.
-                  </p>
-                )}
+                    </div>
+                    {juntadas.length > 0 ? (
+                      <ul className="mt-2 space-y-1">
+                        {juntadas.map((j) => (
+                          <li
+                            key={`${j.ano}-${j.nr_os}`}
+                            className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm"
+                          >
+                            <span className="min-w-0 flex-1 font-medium tabular-nums">
+                              {formatOsListLabel(j.nr_os, j.ano)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setJuntadas((prev) =>
+                                  prev.filter(
+                                    (x) => !(x.nr_os === j.nr_os && x.ano === j.ano),
+                                  ),
+                                )
+                              }
+                              className={cn(BTN_ICON_DANGER, "size-7")}
+                              title="Remover"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-xs text-slate-500">
+                        Nenhuma OS adicional. Opcional para papelaria / chapa compartilhada.
+                      </p>
+                    )}
+                  </div>
+                ) : null}
               </section>
             ) : null}
 
@@ -1305,7 +1334,7 @@ export function GravacaoPendenteLaunchModal({
               data-testid={homeTestIds.osGravacaoConfirm}
             >
               {saving ? <Loader2 className="size-4 animate-spin" /> : null}
-              {isEdit ? "Salvar alterações" : "Confirmar lançamento"}
+              {isEdit ? "Salvar alterações" : isFila ? "Adicionar OS" : "Confirmar lançamento"}
             </button>
           </div>
         </div>

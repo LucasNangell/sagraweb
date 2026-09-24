@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 from routers.andamento_helpers import (
     format_gravacao_concluida_obs,
@@ -81,6 +82,64 @@ def test_is_em_gravacao_externa_operacional():
     assert is_em_gravacao_externa_operacional(SITUACAO_GRAVACAO_EXTERNA, "SEFOC")
     assert not is_em_gravacao_externa_operacional(SITUACAO_SAIDA_P, "Gravação")
     assert not is_em_gravacao_externa_operacional(SITUACAO_GRAV_CONCLUIDA, "SEGEP")
+
+
+@patch("services.gravacao_externa_service.db")
+def test_remove_externa_from_queue_cancels_joined_group_without_deleting(mock_db):
+    from services.gravacao_externa_service import remove_externa_from_queue
+
+    executed: list[str] = []
+    cursor = MagicMock()
+    current_one = None
+    current_all = []
+
+    def execute(sql, _params=None):
+        nonlocal current_one, current_all
+        normalized = " ".join(str(sql).split())
+        executed.append(normalized)
+        if normalized.startswith("SELECT Id, JuntadaGrupoId, Status"):
+            current_one = {
+                "Id": 84,
+                "JuntadaGrupoId": "grupo-1",
+                "Status": "iniciada",
+            }
+        elif normalized.startswith("SELECT Id FROM tab_os_gravacao_externa"):
+            current_all = [{"Id": 84}, {"Id": 85}]
+        elif normalized.startswith("UPDATE tab_os_gravacao_externa"):
+            cursor.rowcount = 1
+
+    cursor.execute.side_effect = execute
+    cursor.fetchone.side_effect = lambda: current_one
+    cursor.fetchall.side_effect = lambda: current_all
+    mock_db.execute_transaction.side_effect = lambda ops: [op(cursor) for op in ops]
+
+    result = remove_externa_from_queue(84)
+
+    assert result["removed_ids"] == [84, 85]
+    assert result["juntada_grupo_id"] == "grupo-1"
+    assert len([sql for sql in executed if sql.startswith("UPDATE")]) == 2
+    assert not any(sql.startswith("DELETE") for sql in executed)
+    assert not any("tabAndamento" in sql for sql in executed)
+
+
+def test_remove_externa_queue_requires_pendente_page_permission():
+    from types import SimpleNamespace
+
+    from routers.gravacao_externa_routes import (
+        _require_pending_queue_management_permission,
+    )
+
+    request = SimpleNamespace(state=SimpleNamespace(sagra_permissions={}))
+    with pytest.raises(HTTPException) as exc:
+        _require_pending_queue_management_permission(request)
+    assert exc.value.status_code == 403
+
+    request.state.sagra_permissions["sb_gravacao_pendente"] = True
+    with (
+        patch("routers.gravacao_externa_routes._session_ponto", return_value="123"),
+        patch("routers.gravacao_externa_routes.fetch_user_fornecedor", return_value=False),
+    ):
+        _require_pending_queue_management_permission(request)
 
 
 def test_user_can_access_session_operator():
@@ -197,23 +256,81 @@ def test_list_os_gravacao_externa_query(mock_db):
                 "lancado_por_ponto": "918.713",
                 "lancado_por_nome": "Test User",
                 "fornecedor_ponto": "918.713",
+                "fornecedor_nome": "Birô Teste",
                 "gravacao_criado_em": datetime(2026, 7, 7, 17, 47, 41),
                 "produto": "Folheto",
                 "titulo": "Titulo",
             }
         ],
     ]
-    items, total = list_os_gravacao_externa(ano=2025, limit=10, offset=0)
+    items, total = list_os_gravacao_externa(
+        ano=2025,
+        limit=10,
+        offset=0,
+        fornecedor_ponto="918.713",
+    )
     assert total == 1
     assert len(items) == 1
     validated = GravacaoExternaOsItem.model_validate(items[0])
     assert validated.nr_os == 1036
     assert validated.fornecedor_ponto == "918.713"
+    assert validated.fornecedor_nome == "Birô Teste"
     list_sql = mock_db.execute_query.call_args_list[1][0][0]
-    assert "ORDER BY a.`Data` DESC" in list_sql
+    assert "FROM tab_os_gravacao_externa ge" in list_sql
+    assert "WHERE ge.Status IN ('pendente', 'iniciada')" in list_sql
+    assert "ORDER BY ge.CriadoEm DESC, ge.Id DESC" in list_sql
+    assert "a.SituacaoLink =" not in list_sql
     assert "ge.FornecedorPonto" in list_sql
+    assert "ge.FornecedorPonto = %(fornecedor_ponto)s" in list_sql
     assert "p.Titulo" not in list_sql
     assert "IdDetalhesServico" not in list_sql
+
+
+@patch("services.gravacao_externa_service.db")
+def test_cleanup_stale_sessions_does_not_use_andamentos_to_cancel_queue(mock_db):
+    from services.gravacao_externa_service import cleanup_stale_externa_sessions
+
+    assert cleanup_stale_externa_sessions() == []
+    mock_db.execute_query.assert_not_called()
+
+
+@patch(
+    "services.gravacao_externa_service._get_ultimo_operacional",
+    return_value=("Saída p/", "Grav. Externa"),
+)
+@patch("services.os_edit_lock_service.enforce_interactive_lock")
+@patch("services.os_componentes_service.count_sub_os", return_value=0)
+@patch("services.os_componentes_service.os_has_active_componentes", return_value=False)
+@patch("services.os_protocolo_guard.require_protocolo_mysql", return_value=2026)
+@patch("routers.os_routes.db")
+def test_add_history_allows_regular_progress_while_external_session_is_active(
+    mock_db,
+    _require_protocolo,
+    _has_components,
+    _count_sub_os,
+    _lock,
+    get_ultimo,
+):
+    from routers.os_routes import HistoryItem, add_os_history
+
+    mock_db.execute_transaction.side_effect = RuntimeError("reached-transaction")
+
+    with pytest.raises(HTTPException) as exc:
+        add_os_history(
+            2026,
+            1036,
+            HistoryItem(
+                situacao="Em Execução",
+                setor="SEFOC",
+                obs="Andamento normal",
+                usuario="918713",
+            ),
+            MagicMock(),
+        )
+
+    assert exc.value.status_code == 500
+    assert exc.value.detail == "reached-transaction"
+    get_ultimo.assert_not_called()
 
 
 @patch("services.gravacao_externa_service.validate_arquivos_input")

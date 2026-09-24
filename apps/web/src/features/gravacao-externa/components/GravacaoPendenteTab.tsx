@@ -6,6 +6,7 @@ import {
   Clock,
   Loader2,
   Pencil,
+  Plus,
   Search,
   Send,
   Trash2,
@@ -25,6 +26,7 @@ import {
   gravacaoPendentePreviewUrl,
 } from "@/api/gravacaoPendente";
 import {
+  useAdicionarOsGravacaoPendenteMutation,
   useEnviarGravacaoPendenteMutation,
   useDeleteGravacaoPendenteControleMutation,
   useGravacaoPendenteDetail,
@@ -32,6 +34,7 @@ import {
   useGravacaoPendenteOsList,
   usePatchGravacaoPendenteControleMutation,
   usePatchGravacaoPendenteObservacaoMutation,
+  useRemoverOsGravacaoPendenteMutation,
 } from "@/api/hooks/useGravacaoPendente";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useAccessControl } from "@/features/auth/useAccessControl";
@@ -43,9 +46,11 @@ import {
   formatOsJuntadaLabel,
 } from "../utils/formatOsJuntadaLabel";
 import { GravacaoFornecedorSelectModal } from "./GravacaoFornecedorSelectModal";
+import { GravacaoPendenteAdicionarOsModal } from "./GravacaoPendenteAdicionarOsModal";
 import { GravacaoObservacaoBox } from "./GravacaoObservacaoBox";
 import { GravacaoPendenteControleEditModal } from "./GravacaoPendenteControleEditModal";
 import { GravacaoPendenteHistoricoCota } from "./GravacaoPendenteHistoricoCota";
+import { GravacaoQueueItemContextMenu } from "./GravacaoQueueItemContextMenu";
 import {
   GravacaoExternaArquivosPanel,
   GravacaoExternaPreview,
@@ -99,6 +104,7 @@ export function GravacaoPendenteTab() {
   const canDeleteControle = can("sb_gravacao_pendente_excluir");
   const canLancarExterna = can("sb_gravacao_externa_lancar");
   const canEditObservacao = can("sb_gravacao_pendente") && !user?.fornecedor;
+  const canManageQueue = can("sb_gravacao_pendente") && !user?.fornecedor;
   const isMobile = useMatchMedia("(max-width: 767px)");
 
   const currentYear = new Date().getFullYear();
@@ -108,6 +114,7 @@ export function GravacaoPendenteTab() {
   const [selected, setSelected] = useState<GravacaoPendenteOsItem | null>(null);
   const [previewSelection, setPreviewSelection] = useState<PreviewSelection | null>(null);
   const [fornecedorModalOpen, setFornecedorModalOpen] = useState(false);
+  const [adicionarModalOpen, setAdicionarModalOpen] = useState(false);
   const [fornecedores, setFornecedores] = useState<GravacaoPendenteFornecedorItem[]>([]);
   const [controleExpanded, setControleExpanded] = useState(false);
   const [editingControleItem, setEditingControleItem] =
@@ -115,6 +122,7 @@ export function GravacaoPendenteTab() {
   const patchControleMutation = usePatchGravacaoPendenteControleMutation();
   const patchObservacaoMutation = usePatchGravacaoPendenteObservacaoMutation();
   const deleteControleMutation = useDeleteGravacaoPendenteControleMutation();
+  const removerMutation = useRemoverOsGravacaoPendenteMutation();
 
   const listQuery = useGravacaoPendenteOsList({
     ano: ano ?? undefined,
@@ -160,6 +168,7 @@ export function GravacaoPendenteTab() {
   );
 
   const enviarMutation = useEnviarGravacaoPendenteMutation();
+  const adicionarMutation = useAdicionarOsGravacaoPendenteMutation();
 
   const detail = detailQuery.data;
   const arquivos = detail?.arquivos ?? [];
@@ -176,6 +185,28 @@ export function GravacaoPendenteTab() {
   const handleSelectOs = (item: GravacaoPendenteOsItem) => {
     setSelected(item);
     setPreviewSelection(null);
+  };
+
+  const handleRemoveFromQueue = async (item: GravacaoPendenteOsItem) => {
+    if (item.gravacao_pendente_id == null) return;
+    const isJuntada = (item.membros?.length ?? 0) > 1;
+    const confirmed = window.confirm(
+      isJuntada
+        ? `Remover a juntada ${formatOsListLabel(item)} da lista de OPs para Gravação Externa?\n\nTodas as OSs desta juntada serão removidas. Arquivos, histórico e andamentos serão preservados.`
+        : `Remover a OS ${formatOsListLabel(item)} da lista de OPs para Gravação Externa?\n\nArquivos, histórico e andamentos serão preservados.`,
+    );
+    if (!confirmed) return;
+    try {
+      await removerMutation.mutateAsync(item.gravacao_pendente_id);
+      if (selected?.gravacao_pendente_id === item.gravacao_pendente_id) {
+        setSelected(null);
+        setPreviewSelection(null);
+      }
+    } catch (error) {
+      window.alert(
+        error instanceof Error ? error.message : "Não foi possível remover a OS da lista.",
+      );
+    }
   };
 
   const doEnviar = async (fornecedorPonto?: string) => {
@@ -274,7 +305,7 @@ export function GravacaoPendenteTab() {
           <p className="p-4 text-sm text-red-600">Erro ao carregar a lista.</p>
         ) : (listQuery.data?.items.length ?? 0) === 0 ? (
           <p className="p-4 text-center text-sm text-neutral-500">
-            Nenhuma OS com andamento Gravação Pendente.
+            Nenhuma OS disponível para envio à Gravação Externa.
           </p>
         ) : (
           <ul className="space-y-1">
@@ -283,32 +314,52 @@ export function GravacaoPendenteTab() {
                 selected?.nr_os === item.nr_os && selected?.ano === item.ano;
               return (
                 <li key={`${item.ano}-${item.nr_os}`}>
-                  <button
-                    type="button"
-                    onClick={() => handleSelectOs(item)}
-                    className={cn(
-                      "w-full rounded-lg border px-3 py-2.5 text-left transition-colors",
-                      active
-                        ? "border-primary-green bg-primary-green/10"
-                        : "border-neutral-200 bg-white hover:border-neutral-300",
-                    )}
+                  <GravacaoQueueItemContextMenu
+                    enabled={canManageQueue && item.gravacao_pendente_id != null}
+                    label={`OS ${formatOsListLabel(item)}`}
+                    removing={removerMutation.isPending}
+                    onRemove={() => handleRemoveFromQueue(item)}
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold text-neutral-900">
-                        {formatOsListLabel(item)}
-                      </span>
-                      <PendenteStatusBadge status={item.gravacao_pendente_status} />
-                    </div>
-                    <p className="mt-0.5 truncate text-xs text-neutral-600">
-                      {formatOsCardSubtitle(item)}
-                    </p>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectOs(item)}
+                      className={cn(
+                        "w-full rounded-lg border px-3 py-2.5 text-left transition-colors",
+                        active
+                          ? "border-primary-green bg-primary-green/10"
+                          : "border-neutral-200 bg-white hover:border-neutral-300",
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-neutral-900">
+                          {formatOsListLabel(item)}
+                        </span>
+                        <PendenteStatusBadge status={item.gravacao_pendente_status} />
+                      </div>
+                      <p className="mt-0.5 truncate text-xs text-neutral-600">
+                        {formatOsCardSubtitle(item)}
+                      </p>
+                    </button>
+                  </GravacaoQueueItemContextMenu>
                 </li>
               );
             })}
           </ul>
         )}
       </div>
+
+      {canManageQueue ? (
+        <div className="shrink-0 border-t border-neutral-200 bg-white p-3">
+          <button
+            type="button"
+            onClick={() => setAdicionarModalOpen(true)}
+            className="inline-flex w-full items-center justify-center gap-2 rounded bg-primary-green px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus className="size-4" />
+            Adicionar OS
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 
@@ -367,7 +418,7 @@ export function GravacaoPendenteTab() {
             type="button"
             disabled={enviarMutation.isPending}
             onClick={() => void handleEnviar()}
-            className="inline-flex items-center gap-2 rounded bg-primary-green px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded bg-primary-green px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {enviarMutation.isPending ? (
               <Loader2 className="size-4 animate-spin" />
@@ -722,6 +773,36 @@ export function GravacaoPendenteTab() {
           setFornecedores([]);
         }}
         onConfirm={(ponto) => void doEnviar(ponto)}
+      />
+
+      <GravacaoPendenteAdicionarOsModal
+        open={adicionarModalOpen}
+        saving={adicionarMutation.isPending}
+        onClose={() => setAdicionarModalOpen(false)}
+        onConfirm={(row, result) => {
+          void adicionarMutation
+            .mutateAsync({
+              ano: row.ano,
+              nrOs: row.nr_os,
+              body: {
+                arquivos: result.arquivos,
+                chapas: result.chapas,
+                observacao: result.obs,
+                juntadas: result.juntadas,
+              },
+            })
+            .then(() => {
+              setAdicionarModalOpen(false);
+              window.alert("OS adicionada à lista de Gravação Pendente.");
+            })
+            .catch((error) => {
+              window.alert(
+                error instanceof Error
+                  ? error.message
+                  : "Não foi possível adicionar a OS.",
+              );
+            });
+        }}
       />
 
       <GravacaoPendenteControleEditModal

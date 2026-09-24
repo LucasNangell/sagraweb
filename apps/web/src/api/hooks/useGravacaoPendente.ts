@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  adicionarOsGravacaoPendente,
   adjustGravacaoPendenteCotaDetalhes,
   adjustGravacaoPendenteCotaInicial,
   deleteGravacaoPendenteControle,
@@ -15,8 +16,10 @@ import {
   patchGravacaoPendentePagamentoNf,
   putGravacaoPendenteFornecedorCotas,
   putGravacaoPendenteMaquinasConfig,
+  removerOsGravacaoPendente,
   updateGravacaoPendenteArquivos,
   type GravacaoPendenteControleUpdateBody,
+  type GravacaoPendenteAdicionarBody,
   type GravacaoPendenteCotaAdjustMode,
   type GravacaoPendenteListFilters,
   type GravacaoPendenteMaquinaPrecoItem,
@@ -32,6 +35,17 @@ export function useGravacaoPendenteOsList(
     queryFn: () => fetchGravacaoPendenteOsList(filters),
     enabled,
     staleTime: 15_000,
+  });
+}
+
+export function useGravacaoPendenteHasItems(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.gravacaoPendente.list({ badge: true, limit: 1 }),
+    queryFn: () => fetchGravacaoPendenteOsList({ limit: 1 }),
+    enabled,
+    refetchInterval: enabled ? 15_000 : false,
+    staleTime: 10_000,
+    select: (data) => (data.total ?? data.items.length) > 0,
   });
 }
 
@@ -221,6 +235,39 @@ export function useEnviarGravacaoPendenteMutation() {
       });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.gravacaoExterna.prefix,
+      });
+    },
+  });
+}
+
+export function useAdicionarOsGravacaoPendenteMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      ano,
+      nrOs,
+      body,
+    }: {
+      ano: number;
+      nrOs: number;
+      body: GravacaoPendenteAdicionarBody;
+    }) => adicionarOsGravacaoPendente(ano, nrOs, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.gravacaoPendente.prefix,
+      });
+    },
+  });
+}
+
+export function useRemoverOsGravacaoPendenteMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (gravacaoPendenteId: number) =>
+      removerOsGravacaoPendente(gravacaoPendenteId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.gravacaoPendente.prefix,
       });
     },
   });

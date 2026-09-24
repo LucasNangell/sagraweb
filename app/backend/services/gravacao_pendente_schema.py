@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS tab_os_gravacao_pendente (
   OsAno INT NOT NULL,
   OsNro INT NOT NULL,
   CodStatus VARCHAR(32) NOT NULL,
+  Origem VARCHAR(32) NOT NULL DEFAULT 'andamento',
   LancadoPorPonto VARCHAR(32) NOT NULL,
   LancadoPorNome VARCHAR(128) DEFAULT NULL,
   Cliente VARCHAR(255) DEFAULT NULL,
@@ -140,6 +141,12 @@ _FORNECEDOR_COTA_MIGRATIONS = (
 )
 
 _PENDENTE_MIGRATIONS = (
+    (
+        "tab_os_gravacao_pendente",
+        "Origem",
+        "ALTER TABLE tab_os_gravacao_pendente "
+        "ADD COLUMN Origem VARCHAR(32) NOT NULL DEFAULT 'andamento' AFTER CodStatus",
+    ),
     (
         "tab_os_gravacao_pendente",
         "Cliente",

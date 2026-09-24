@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 import { useEmailNotificationStatus } from "@/api/hooks/useEmailQueries";
+import { useGravacaoPendenteHasItems } from "@/api/hooks/useGravacaoPendente";
 import { useAccessControl } from "@/features/auth/useAccessControl";
 import { useLombadaUiStore } from "@/features/lombada/lombadaUiStore";
 import { useOsSelectionStore } from "@/features/os/osSelectionStore";
@@ -35,11 +36,11 @@ const navItemClassName = (collapsed: boolean) =>
 function NavItemContent({
   item,
   collapsed,
-  showEmailIndicator,
+  showIndicator,
 }: {
   item: NavItem;
   collapsed: boolean;
-  showEmailIndicator: boolean;
+  showIndicator: boolean;
 }) {
   const Icon = item.icon;
   const mobileShort =
@@ -49,8 +50,9 @@ function NavItemContent({
     <>
       <span className="relative shrink-0">
         <Icon className="size-6 text-secondary-blue md:size-5" />
-        {showEmailIndicator ? (
+        {showIndicator ? (
           <span
+            data-testid="sidebar-nav-indicator"
             className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-sagra-danger ring-2 ring-white"
             aria-hidden
           />
@@ -81,6 +83,11 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     (emailNotifyQuery.data?.inbox_count ?? 0) +
       (emailNotifyQuery.data?.pendencias_count ?? 0) >
       0;
+
+  const gravacaoPendenteNotifyEnabled = isReady && can("sb_gravacao_pendente");
+  const gravacaoPendenteQuery = useGravacaoPendenteHasItems(gravacaoPendenteNotifyEnabled);
+  const hasGravacaoPendente =
+    gravacaoPendenteNotifyEnabled && gravacaoPendenteQuery.data === true;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -141,10 +148,15 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           {navItems.map((item) => {
             const key = navItemKey(item);
             const showEmailIndicator = item.to === "/email" && hasEmailActivity;
+            const showGravacaoIndicator =
+              item.to === "/gravacao-externa" && hasGravacaoPendente;
+            const showIndicator = showEmailIndicator || showGravacaoIndicator;
             const linkTitle = collapsed
               ? showEmailIndicator
                 ? `${item.label} (novos itens)`
-                : item.label
+                : showGravacaoIndicator
+                  ? `${item.label} (OSs pendentes)`
+                  : item.label
               : undefined;
 
             if (item.action === "lombada-calculator") {
@@ -160,7 +172,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                     <NavItemContent
                       item={item}
                       collapsed={collapsed}
-                      showEmailIndicator={false}
+                      showIndicator={false}
                     />
                   </button>
                 </li>
@@ -223,7 +235,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                   <NavItemContent
                     item={item}
                     collapsed={collapsed}
-                    showEmailIndicator={showEmailIndicator}
+                    showIndicator={showIndicator}
                   />
                 </Link>
               </li>

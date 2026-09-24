@@ -9,6 +9,7 @@ export interface UsuarioRecord {
   Email?: string | null;
   EmailVerified?: number | boolean | null;
   AuthAtivo?: number | boolean | null;
+  ContaInternet?: number | boolean | null;
 }
 
 export interface UsuarioRow extends UsuarioRecord {

@@ -1638,34 +1638,6 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
     from services.network_files_service import validate_network_arquivos_input
     from services.os_vinculo_grupo_service import _lookup_usuario_nome
 
-    # Guarda: OS em Grav. Externa operacional não pode receber andamento manual
-    # fora do fluxo POST /gravacao-externa/.../concluir.
-    from services.gravacao_externa_service import (
-        SETOR_GRAV_EXTERNA,
-        SITUACAO_GRAV_CONCLUIDA,
-        _get_ultimo_operacional,
-        is_em_gravacao_externa_operacional,
-    )
-
-    last_sit, last_setor = _get_ultimo_operacional(ano, id)
-    if is_em_gravacao_externa_operacional(last_sit, last_setor):
-        new_sit = str(item.situacao or "").strip()
-        new_setor = str(item.setor or "").strip()
-        is_concluir_via_history = (
-            new_sit == SITUACAO_GRAV_CONCLUIDA and new_setor == "SEGEP"
-        )
-        if not is_concluir_via_history:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "gravacao_externa_pendente_conclusao",
-                    "message": (
-                        "Conclua a Gravação Externa (Gravação Ext. Concluída) antes de "
-                        "lançar outro andamento."
-                    ),
-                },
-            )
-
     validated_gp_arquivos = None
     validated_gp_chapas = None
     gp_juntadas: list[tuple[int, int]] = []
@@ -1892,26 +1864,6 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
             nro=id,
             ano=ano,
         )
-
-        try:
-            from services.gravacao_externa_service import (
-                cancel_active_externa_sessions,
-                is_em_gravacao_externa_operacional,
-            )
-            from services.gravacao_pendente_service import (
-                cancel_active_pendente_sessions,
-                is_gravacao_pendente_situacao,
-            )
-
-            if not is_em_gravacao_externa_operacional(item.situacao, item.setor):
-                cancel_active_externa_sessions(ano, id)
-            if not is_gravacao_pendente_situacao(item.situacao):
-                cancel_active_pendente_sessions(ano, id)
-        except Exception as exc:
-            logger.warning(
-                "Falha ao cancelar sessão Gravação Externa/Pendente após novo andamento: %s",
-                exc,
-            )
 
         release_lock_for_request(request, id, ano)
         return response
@@ -2577,30 +2529,6 @@ def delete_os_history(ano: int, id: int, cod_status: str):
     try:
         raw = db.execute_transaction([transaction_logic])[0]
         affected_sub_os_ids = list(raw.get("affected_sub_os_ids") or [])
-
-        deleted_situacao = str(raw.get("situacao") or "")
-        deleted_setor = str(raw.get("setor") or "")
-        try:
-            from services.gravacao_externa_service import (
-                cancel_active_externa_sessions,
-                is_em_gravacao_externa_operacional,
-            )
-            from services.gravacao_pendente_service import (
-                cancel_active_pendente_sessions,
-                is_gravacao_pendente_situacao,
-                reactivate_pendente_after_externa_cancel,
-            )
-
-            if is_em_gravacao_externa_operacional(deleted_situacao, deleted_setor):
-                cancel_active_externa_sessions(ano, id)
-                reactivate_pendente_after_externa_cancel(ano, id)
-            if is_gravacao_pendente_situacao(deleted_situacao):
-                cancel_active_pendente_sessions(ano, id)
-        except Exception as exc:
-            logger.warning(
-                "Falha ao cancelar sessão Gravação Externa/Pendente após exclusão de andamento: %s",
-                exc,
-            )
 
         try:
             from services.os_componentes_service import sync_sub_os_congelada_flags

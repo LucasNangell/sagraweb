@@ -19,7 +19,8 @@ from security.user_permissions import (
     get_user_permissions_raw,
     upsert_user_permissions,
 )
-from services.activation_email_service import send_activation_email
+from services.activation_email_service import build_activation_link, send_activation_email
+from services.password_reset_email_service import build_password_reset_link
 from services.user_registered_ips_service import list_user_ips_detail, set_user_ips
 
 logger = logging.getLogger(__name__)
@@ -30,9 +31,18 @@ router = APIRouter(tags=["user-admin"])
 class UserCreateRequest(BaseModel):
     ponto: int | str
     nome: str = Field(..., min_length=2, max_length=255)
-    email: EmailStr
+    email: Optional[EmailStr] = None
     setor: Optional[str] = Field(None, max_length=32)
     fornecedor: bool = False
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def blank_email_to_none(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
 
     @field_validator("ponto", mode="before")
     @classmethod
@@ -110,19 +120,24 @@ def _to_permissions_response(perms: dict, ponto: int) -> ClientPermissionsRespon
 
 @router.post("/api/admin/users", dependencies=[Depends(require_master_ip)])
 async def create_auth_user(body: UserCreateRequest):
-    """Cadastra usuário e envia e-mail de ativação (MASTER)."""
+    """Cadastra usuário (MASTER).
+
+    Com e-mail: envia e-mail de ativação. Sem e-mail: retorna o link de ativação
+    para o administrador repassar ao usuário.
+    """
     ponto = body.ponto
     nome = body.nome.strip()
-    email = str(body.email).strip().lower()
+    email = str(body.email).strip().lower() if body.email else None
     setor = (body.setor or "").strip() or None
     fornecedor = 1 if body.fornecedor else 0
 
-    existing_email = db.execute_query(
-        "SELECT Ponto FROM tabUsuarios WHERE Email = %s AND Ponto != %s",
-        (email, ponto),
-    )
-    if existing_email:
-        raise HTTPException(status_code=409, detail="E-mail já cadastrado para outro ponto.")
+    if email:
+        existing_email = db.execute_query(
+            "SELECT Ponto FROM tabUsuarios WHERE Email = %s AND Ponto != %s",
+            (email, ponto),
+        )
+        if existing_email:
+            raise HTTPException(status_code=409, detail="E-mail já cadastrado para outro ponto.")
 
     token = generate_activation_token()
     expires = datetime.now() + timedelta(hours=48)
@@ -153,6 +168,15 @@ async def create_auth_user(body: UserCreateRequest):
 
     if fornecedor:
         upsert_user_permissions(ponto, {"sb_gravacao_externa": True})
+
+    if not email:
+        return {
+            "status": "ok",
+            "ponto": ponto,
+            "email": None,
+            "activation_link": build_activation_link(token),
+            "expires_at": expires.isoformat(),
+        }
 
     try:
         send_activation_email(to_email=email, nome=nome, token=token)
@@ -333,6 +357,62 @@ async def resend_activation(ponto: int):
 
     send_activation_email(to_email=email, nome=nome, token=token)
     return {"status": "ok", "message": "E-mail de ativação reenviado."}
+
+
+@router.post(
+    "/api/admin/users/{ponto}/password-link",
+    dependencies=[Depends(require_master_ip)],
+)
+async def generate_password_link(ponto: int):
+    """Gera link de redefinição (conta ativa) ou de ativação (conta pendente) sem enviar e-mail."""
+    rows = db.execute_query(
+        """
+        SELECT Ponto, EmailVerified, PasswordHash, AuthAtivo
+        FROM tabUsuarios WHERE Ponto = %s
+        """,
+        (ponto,),
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    row = rows[0]
+    if not row.get("AuthAtivo", 1):
+        raise HTTPException(status_code=400, detail="Conta desativada.")
+
+    token = generate_activation_token()
+    if row.get("EmailVerified") and row.get("PasswordHash"):
+        expires = datetime.now() + timedelta(hours=24)
+        db.execute_query(
+            """
+            UPDATE tabUsuarios
+            SET PasswordResetToken = %s, PasswordResetExpires = %s
+            WHERE Ponto = %s
+            """,
+            (token, expires, ponto),
+        )
+        return {
+            "status": "ok",
+            "ponto": ponto,
+            "tipo": "reset",
+            "link": build_password_reset_link(token),
+            "expires_at": expires.isoformat(),
+        }
+
+    expires = datetime.now() + timedelta(hours=48)
+    db.execute_query(
+        """
+        UPDATE tabUsuarios
+        SET ActivationToken = %s, ActivationExpires = %s
+        WHERE Ponto = %s
+        """,
+        (token, expires, ponto),
+    )
+    return {
+        "status": "ok",
+        "ponto": ponto,
+        "tipo": "ativacao",
+        "link": build_activation_link(token),
+        "expires_at": expires.isoformat(),
+    }
 
 
 @router.get(

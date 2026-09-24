@@ -53,6 +53,20 @@ export interface GravacaoPendenteDetail {
   chapas: GravacaoPendenteChapa[];
 }
 
+export interface GravacaoPendenteAdicionarBody {
+  arquivos: { absolute_path: string; nome: string; maquina?: string | null }[];
+  chapas: { maquina: string; quantidade: number }[];
+  observacao?: string;
+  juntadas?: GravacaoPendenteOsMembro[];
+}
+
+export interface GravacaoPendenteQueueRemovalResponse {
+  removed: boolean;
+  gravacao_pendente_id: number;
+  removed_ids: number[];
+  juntada_grupo_id?: string | null;
+}
+
 export interface GravacaoPendenteHistoricoItem {
   gravacao_pendente_id?: number | null;
   gravacao_externa_id?: number | null;
@@ -319,6 +333,30 @@ export async function enviarGravacaoPendenteParaExterna(
         : {}),
     }),
   });
+}
+
+export async function adicionarOsGravacaoPendente(
+  ano: number,
+  nrOs: number,
+  body: GravacaoPendenteAdicionarBody,
+) {
+  return apiFetch<GravacaoPendenteDetail>(
+    `/gravacao-pendente/${ano}/${nrOs}/adicionar`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export async function removerOsGravacaoPendente(
+  gravacaoPendenteId: number,
+): Promise<GravacaoPendenteQueueRemovalResponse> {
+  return apiFetch<GravacaoPendenteQueueRemovalResponse>(
+    `/gravacao-pendente/fila/${gravacaoPendenteId}/remover`,
+    { method: "POST" },
+  );
 }
 
 export async function patchGravacaoPendenteObservacao(

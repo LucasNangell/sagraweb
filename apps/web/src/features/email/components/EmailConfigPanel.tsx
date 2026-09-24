@@ -65,14 +65,6 @@ export function EmailConfigPanel({
   const [selectedFolders, setSelectedFolders] = useState<
     Record<string, EmailMonitoredFolder>
   >({});
-  const [sendRoutingByType, setSendRoutingByType] = useState<
-    Record<EmailTypeKey, string>
-  >({
-    pt: "",
-    proof: "",
-    apogee: "",
-    reply: "",
-  });
   const [sentFolderRoutingByMailboxType, setSentFolderRoutingByMailboxType] =
     useState<
       Record<string, Partial<Record<EmailTypeKey, EmailMonitoredFolder>>>
@@ -100,13 +92,6 @@ export function EmailConfigPanel({
       }
     }
     setSelectedFolders(nextSelected);
-    const routing = config.send_routing?.by_type ?? {};
-    setSendRoutingByType({
-      pt: routing.pt ?? "",
-      proof: routing.proof ?? "",
-      apogee: routing.apogee ?? "",
-      reply: routing.reply ?? "",
-    });
     const byMailbox = config.sent_folder_routing?.by_mailbox ?? {};
     const normalizedByMailbox: Record<
       string,
@@ -267,10 +252,6 @@ export function EmailConfigPanel({
     });
   };
 
-  const updateSendMailbox = (emailType: EmailTypeKey, mailbox: string) => {
-    setSendRoutingByType((current) => ({ ...current, [emailType]: mailbox }));
-  };
-
   const updateSentFolder = (emailType: EmailTypeKey, folder: EmailFolderInfo) => {
     if (!routingMailbox) return;
     setSentFolderRoutingByMailboxType((current) => ({
@@ -343,7 +324,8 @@ export function EmailConfigPanel({
     try {
       await saveMutation.mutateAsync({
         monitored_targets: monitoredTargets,
-        send_routing: { by_type: sendRoutingByType },
+        // Remetente vem das Contas de envio (OS < / ≥ 5000); limpa overrides antigos.
+        send_routing: { by_type: {} },
         sent_folder_routing: { by_mailbox: sentFolderRoutingByMailboxType },
         config_version: 2,
       });
@@ -620,9 +602,16 @@ export function EmailConfigPanel({
                 </p>
               </div>
 
+              <div className="rounded-md border border-sky-100 bg-sky-50/70 px-3 py-2 text-xs text-slate-700">
+                O remetente (From) é definido em{" "}
+                <strong>Configurações → E-mails do sistema → Contas de envio</strong>
+                {" "}(OS &lt; 5000 / OS ≥ 5000). Aqui você só escolhe a pasta de
+                enviados por tipo, na conta selecionada acima.
+              </div>
+
               <div className="space-y-2">
                 {EMAIL_TYPES.map((emailType) => {
-                  const mailbox = sendRoutingByType[emailType];
+                  const mailbox = routingMailbox ?? "";
                   const target =
                     mailbox && sentFolderRoutingByMailboxType[mailbox]
                       ? sentFolderRoutingByMailboxType[mailbox][emailType]
@@ -635,29 +624,13 @@ export function EmailConfigPanel({
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Tipo: {emailType}
                       </p>
-                      <div className="mt-2 grid gap-2 md:grid-cols-2">
-                        <select
-                          className={emailInputClass}
-                          value={mailbox}
-                          onChange={(e) =>
-                            updateSendMailbox(emailType, e.target.value)
-                          }
-                        >
-                          <option value="">Usar fallback legado/global</option>
-                          {mailboxes
-                            .filter((item) => item.accessible)
-                            .map((item) => (
-                              <option key={item.address} value={item.address}>
-                                {item.address}
-                              </option>
-                            ))}
-                        </select>
-                        <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs text-slate-700">
-                          <Mail className="mr-2 size-3.5 text-slate-400" />
-                          {target?.name
-                            ? `${target.name} (${mailbox})`
-                            : "Pasta padrão de enviados (fallback)"}
-                        </div>
+                      <div className="mt-2 flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                        <Mail className="mr-2 size-3.5 shrink-0 text-slate-400" />
+                        {target?.name
+                          ? `${target.name} (${mailbox})`
+                          : mailbox
+                            ? `Pasta padrão de enviados em ${mailbox}`
+                            : "Selecione uma conta acima para configurar a pasta"}
                       </div>
                       {mailbox && sentFolders.length > 0 ? (
                         <div className="mt-2 max-h-28 space-y-1 overflow-y-auto rounded-md border border-slate-200 bg-white p-2">

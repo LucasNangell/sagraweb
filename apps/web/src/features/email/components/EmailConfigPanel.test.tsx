@@ -47,7 +47,7 @@ describe("EmailConfigPanel", () => {
     expect(mutateAsyncMock).toHaveBeenCalledWith(
       expect.objectContaining({
         monitored_targets: expect.any(Array),
-        send_routing: expect.objectContaining({ by_type: expect.any(Object) }),
+        send_routing: expect.objectContaining({ by_type: {} }),
         sent_folder_routing: expect.objectContaining({
           by_mailbox: expect.any(Object),
         }),

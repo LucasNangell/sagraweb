@@ -8,3 +8,56 @@
 {"timestamp": "2026-09-09T12:23:17.240468", "type": "mouse", "window": "teste de digitação - Pesquisa Google - Google Chrome", "data": {"button": "left", "position": [3239, 20], "action": "click"}}
 {"timestamp": "2026-09-09T12:23:18.696442", "type": "mouse", "window": "Monitoramento de atividade - DeepSeek - Google Chrome", "data": {"button": "left", "position": [4427, 1753], "action": "click"}}
 {"timestamp": "2026-09-09T12:23:19.291072", "type": "text", "window": "monitora.py - estudos - Visual Studio Code", "data": {"text": "\u0003"}}
+{"timestamp": "2026-09-21T14:14:44.908437", "type": "mouse", "window": "C:\\WINDOWS\\system32\\cmd.exe ", "data": {"button": "left", "position": [2332, 161], "action": "click"}}
+{"timestamp": "2026-09-21T14:14:46.156584", "type": "mouse", "window": "", "data": {"button": "left", "position": [1576, 596], "action": "click"}}
+{"timestamp": "2026-09-21T14:15:05.668320", "type": "mouse", "window": "Program Manager", "data": {"button": "left", "position": [777, 350], "action": "click"}}
+{"timestamp": "2026-09-21T14:15:07.044184", "type": "mouse", "window": "Program Manager", "data": {"button": "left", "position": [565, 312], "action": "click"}}
+{"timestamp": "2026-09-21T14:15:07.340162", "type": "mouse", "window": "Program Manager", "data": {"button": "left", "position": [553, 314], "action": "click"}}
+{"timestamp": "2026-09-21T14:15:08.340200", "type": "mouse", "window": "Program Manager", "data": {"button": "left", "position": [708, 455], "action": "click"}}
+{"timestamp": "2026-09-21T14:15:10.204134", "type": "mouse", "window": "Program Manager", "data": {"button": "left", "position": [2192, 412], "action": "click"}}
+{"timestamp": "2026-09-21T14:15:17.644398", "type": "mouse", "window": "Program Manager", "data": {"button": "left", "position": [1179, 430], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:01.164307", "type": "mouse", "window": "", "data": {"button": "left", "position": [987, 1129], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:07.941886", "type": "mouse", "window": "Program Manager", "data": {"button": "left", "position": [1169, 1404], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:09.388770", "type": "mouse", "window": "", "data": {"button": "left", "position": [1196, 1421], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:11.460734", "type": "text", "window": "Pesquisar", "data": {"text": "ch"}}
+{"timestamp": "2026-09-21T14:16:11.461948", "type": "mouse", "window": "Pesquisar", "data": {"button": "left", "position": [1022, 706], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:14.242753", "type": "mouse", "window": "Google Chrome", "data": {"button": "left", "position": [2980, 1234], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:16.327169", "type": "mouse", "window": "Google Chrome", "data": {"button": "left", "position": [2924, 1593], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:19.283498", "type": "mouse", "window": "Nova guia - Google Chrome", "data": {"button": "left", "position": [3590, 1264], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:21.067443", "type": "mouse", "window": "Nova guia - Google Chrome", "data": {"button": "left", "position": [3433, 561], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:22.258861", "type": "mouse", "window": "Nova guia anônima - Google Chrome", "data": {"button": "left", "position": [2994, 1262], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:24.459817", "type": "text", "window": "Nova guia anônima - Google Chrome", "data": {"text": "..."}}
+{"timestamp": "2026-09-21T14:16:25.915218", "type": "mouse", "window": "10.1.2.12/Lap/Get - Google Chrome", "data": {"button": "left", "position": [3123, 1380], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:31.981098", "type": "text", "window": "10.1.2.12/Lap/Get - Google Chrome", "data": {"text": "a2_F44e70b4@"}}
+{"timestamp": "2026-09-21T14:16:33.909057", "type": "mouse", "window": "Local Admin Password Solution - Google Chrome", "data": {"button": "left", "position": [3147, 1567], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:34.078316", "type": "mouse", "window": "Local Admin Password Solution - Google Chrome", "data": {"button": "left", "position": [3147, 1567], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:39.052592", "type": "text", "window": "Local Admin Password Solution - Google Chrome", "data": {"text": "DC-"}}
+{"timestamp": "2026-09-21T14:16:39.053858", "type": "mouse", "window": "Local Admin Password Solution - Google Chrome", "data": {"button": "left", "position": [3154, 1622], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:40.359129", "type": "mouse", "window": "Local Admin Password Solution - Google Chrome", "data": {"button": "left", "position": [3297, 1636], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:40.524488", "type": "mouse", "window": "Local Admin Password Solution - Google Chrome", "data": {"button": "left", "position": [3297, 1636], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:40.661458", "type": "mouse", "window": "Local Admin Password Solution - Google Chrome", "data": {"button": "left", "position": [3297, 1636], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:40.797359", "type": "mouse", "window": "Local Admin Password Solution - Google Chrome", "data": {"button": "left", "position": [3297, 1636], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:41.603709", "type": "mouse", "window": "Local Admin Password Solution - Google Chrome", "data": {"button": "left", "position": [1430, 1128], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:45.348059", "type": "mouse", "window": "Acesso Negado ao Arquivo", "data": {"button": "left", "position": [1196, 600], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:47.637211", "type": "mouse", "window": "Acesso Negado ao Arquivo", "data": {"button": "left", "position": [1447, 612], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:49.325620", "type": "mouse", "window": "Local Admin Password Solution - Google Chrome", "data": {"button": "left", "position": [1447, 612], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:50.021375", "type": "mouse", "window": "Program Manager", "data": {"button": "left", "position": [1235, 535], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:50.444042", "type": "mouse", "window": "Program Manager", "data": {"button": "left", "position": [1242, 626], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:51.205462", "type": "mouse", "window": "Program Manager", "data": {"button": "left", "position": [1343, 811], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:51.750242", "type": "mouse", "window": "Program Manager", "data": {"button": "left", "position": [1405, 795], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:55.150580", "type": "mouse", "window": "Acesso Negado ao Arquivo", "data": {"button": "left", "position": [1092, 573], "action": "click"}}
+{"timestamp": "2026-09-21T14:16:55.653965", "type": "mouse", "window": "Acesso Negado ao Arquivo", "data": {"button": "left", "position": [1224, 606], "action": "click"}}
+{"timestamp": "2026-09-21T14:17:04.070837", "type": "mouse", "window": "Local Admin Password Solution - Google Chrome", "data": {"button": "left", "position": [1594, 598], "action": "click"}}
+{"timestamp": "2026-09-21T14:17:06.960174", "type": "mouse", "window": "Program Manager", "data": {"button": "left", "position": [3614, 1222], "action": "click"}}
+{"timestamp": "2026-09-21T14:17:21.532218", "type": "mouse", "window": "Nova guia - Google Chrome", "data": {"button": "left", "position": [3610, 1221], "action": "click"}}
+{"timestamp": "2026-09-21T14:17:23.044162", "type": "mouse", "window": "", "data": {"button": "left", "position": [1371, 1420], "action": "click"}}
+{"timestamp": "2026-09-21T14:17:25.196445", "type": "mouse", "window": "", "data": {"button": "left", "position": [1106, 935], "action": "click"}}
+{"timestamp": "2026-09-21T14:17:30.092384", "type": "mouse", "window": "monitora.py - Atalho", "data": {"button": "left", "position": [1290, 235], "action": "click"}}
+{"timestamp": "2026-09-24T13:23:50.606619", "type": "mouse", "window": "monitora.py - Atalho", "data": {"button": "left", "position": [-719, 523], "action": "click"}}
+{"timestamp": "2026-09-24T13:23:55.734564", "type": "mouse", "window": " ativa menu completo.txt - Bloco de notas", "data": {"button": "left", "position": [3608, 16], "action": "click"}}
+{"timestamp": "2026-09-24T13:23:56.790620", "type": "mouse", "window": "", "data": {"button": "left", "position": [1754, 1017], "action": "click"}}
+{"timestamp": "2026-09-24T13:25:40.926528", "type": "mouse", "window": "Assistência Remota do Windows - Sendo ajudado por André Luis Dias de Souza", "data": {"button": "left", "position": [1252, 414], "action": "click"}}
+{"timestamp": "2026-09-24T13:25:45.800202", "type": "mouse", "window": "Excluir Vários Arquivos", "data": {"button": "left", "position": [1350, 722], "action": "click"}}
+{"timestamp": "2026-09-24T13:25:54.589353", "type": "mouse", "window": "Acesso Negado ao Arquivo", "data": {"button": "left", "position": [496, 615], "action": "click"}}
+{"timestamp": "2026-09-24T13:27:14.990605", "type": "mouse", "window": "", "data": {"button": "left", "position": [1192, 816], "action": "click"}}
+{"timestamp": "2026-09-24T13:27:20.518430", "type": "mouse", "window": "monitora.py - Atalho", "data": {"button": "left", "position": [1192, 122], "action": "click"}}

@@ -517,6 +517,7 @@ def _resolve_send_plan(
     global_send_mailboxes: dict[str, str],
 ):
     type_key = _routing_type_key(email_type)
+    # Remetente: sempre Contas de envio (OS < 5000 / ≥ 5000). by_type não sobrescreve From.
     global_default = (
         global_send_mailboxes.get("os_gte_5000")
         if os_id >= 5000
@@ -527,18 +528,8 @@ def _resolve_send_plan(
         if os_id >= 5000
         else cfg.send_mailbox_os_lt_5000
     )
-    send_routing = cfg.send_routing if isinstance(cfg.send_routing, dict) else {}
-    mailbox_overrides = send_routing.get("by_type")
-    selected_mailbox = ""
-    mailbox_source = "legacy"
-    if isinstance(mailbox_overrides, dict):
-        selected_mailbox = str(mailbox_overrides.get(type_key) or "").strip()
-        if selected_mailbox:
-            mailbox_source = "v2"
-    if not selected_mailbox:
-        selected_mailbox = str(global_default or "").strip()
-        if selected_mailbox:
-            mailbox_source = "global"
+    selected_mailbox = str(global_default or "").strip()
+    mailbox_source = "global" if selected_mailbox else "legacy"
     if not selected_mailbox:
         selected_mailbox = str(legacy_default or "").strip()
         mailbox_source = "legacy"
@@ -1851,7 +1842,7 @@ def send_pt_email(request: EmailPTRequest, session: SessionData = Depends(requir
         # --- ENVIO VIA EWS ---
         service, cfg = _resolve_ews_for_ponto(str(session.ponto))
         
-        # Remetente/Pasta: V2 por usuário com fallback global/legado.
+        # Remetente: Contas de envio (OS < / ≥ 5000); pasta: sent_folder_routing.
         from services.email_template_service import get_global_send_mailboxes
 
         global_boxes = get_global_send_mailboxes()

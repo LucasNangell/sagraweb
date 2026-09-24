@@ -157,7 +157,7 @@ def send_client_arquivos_email(*, to_email: str, os_id: int, ano: int, token: st
         "yes",
     )
     service = EWSService(ews_url=ews_url, verify_ssl=verify_ssl)
-    from_mailbox = resolve_send_mailbox(os_id, "os_lt_5000") or None
+    from_mailbox = resolve_send_mailbox(os_id) or None
     service.send_email(
         to=[to_email.strip()],
         subject=subject,

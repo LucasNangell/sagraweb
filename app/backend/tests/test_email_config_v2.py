@@ -15,14 +15,15 @@ def _cfg(**kwargs):
     return SimpleNamespace(**base)
 
 
-def test_resolve_send_plan_prefers_v2_over_global_and_legacy():
+def test_resolve_send_plan_uses_global_over_by_type_override():
+    """Contas de envio (global) vencem send_routing.by_type para o From."""
     from routers.email_routes import _resolve_send_plan
 
     cfg = _cfg(
         send_routing={"by_type": {"pt": "v2.pt@camara.leg.br"}},
         sent_folder_routing={
             "by_mailbox": {
-                "v2.pt@camara.leg.br": {
+                "global.lt@camara.leg.br": {
                     "pt": {"id": "folder-123", "name": "Saida PT", "parent": "sentitems"}
                 }
             }
@@ -40,10 +41,33 @@ def test_resolve_send_plan_prefers_v2_over_global_and_legacy():
         global_send_mailboxes=global_boxes,
     )
 
-    assert plan["mailbox"] == "v2.pt@camara.leg.br"
-    assert plan["mailbox_source"] == "v2"
+    assert plan["mailbox"] == "global.lt@camara.leg.br"
+    assert plan["mailbox_source"] == "global"
     assert plan["target_folder"]["name"] == "Saida PT"
     assert plan["folder_source"] == "v2"
+
+
+def test_resolve_send_plan_uses_papelaria_global_for_os_gte_5000():
+    from routers.email_routes import _resolve_send_plan
+
+    cfg = _cfg(
+        send_routing={"by_type": {"proof": "sepim.ignored@camara.leg.br"}},
+        sent_folder_routing={},
+    )
+    global_boxes = {
+        "os_lt_5000": "global.lt@camara.leg.br",
+        "os_gte_5000": "global.gte@camara.leg.br",
+    }
+
+    plan = _resolve_send_plan(
+        cfg=cfg,
+        os_id=7000,
+        email_type="proof",
+        global_send_mailboxes=global_boxes,
+    )
+
+    assert plan["mailbox"] == "global.gte@camara.leg.br"
+    assert plan["mailbox_source"] == "global"
 
 
 def test_resolve_send_plan_falls_back_to_global_and_legacy_folder():

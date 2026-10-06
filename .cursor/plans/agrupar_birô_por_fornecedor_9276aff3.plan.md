@@ -16,7 +16,7 @@ todos:
     status: completed
   - id: validar
     content: Rodar pnpm test e typecheck
-    status: in_progress
+    status: completed
 isProject: false
 ---
 

@@ -104,9 +104,20 @@ Use `nginx/conf/nginx.conf` como referência. Rotas SAGRA:
 
 Reinicie o Nginx após ajustar caminhos.
 
-### 6. Serviço Windows (recomendado)
+### 6. Watchdog de disponibilidade (recomendado)
 
-Registre `iniciar-api.bat` ou `app\backend\run_api.py` no **NSSM** / Tarefa Agendada para reinício automático.
+Instale o serviço que monitora a API e o `SAGRA-SyncAndamentos` com limiar,
+cooldown, circuit breaker e janela segura de manutenção:
+
+```powershell
+.\instalar-servico-watchdog-sistema.ps1 -Root "C:\Sistemas CGraf\Sagra Web" -Start
+.\status-watchdog-sistema.ps1 -Root "C:\Sistemas CGraf\Sagra Web"
+```
+
+O watchdog reinicia somente o componente afetado; falha isolada de MySQL/DFS não
+provoca restart em cascata. A API reiniciada herda a conta do watchdog — configure a
+conta técnica em `nssm edit SAGRA-SystemWatchdog`, se aplicável. Consulte
+`docs/RUNBOOK_WATCHDOG_SISTEMA.md` no repositório de origem.
 
 ## Rollback para UI legada
 

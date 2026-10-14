@@ -7,6 +7,7 @@ A SPA pública vive em /sagra/; normalize_spa_path remove esse prefixo.
 from __future__ import annotations
 
 import os
+import re
 from typing import Optional
 
 from fastapi import Request
@@ -33,6 +34,7 @@ SPA_ROUTE_PERMISSIONS: dict[str, str] = {
     "/prova-web": "ctx_prova_web",
     "/orcamento": "ctx_orcamento",
     "/gravacao-externa": "sb_gravacao_externa",
+    "/mensagens": "__AUTHENTICATED_ONLY__",
     "/usuarios": "sb_usuarios",
     "/admin/ips": "sb_admin_ips",
     "/admin/mensagens": "sb_admin_ips",
@@ -59,6 +61,7 @@ LEGACY_HTML_PERMISSIONS: dict[str, str] = {
 }
 
 _MASTER_ONLY = "__MASTER_ONLY__"
+_AUTHENTICATED_ONLY = "__AUTHENTICATED_ONLY__"
 
 _STATIC_SUFFIXES = (
     ".js",
@@ -186,6 +189,8 @@ def required_permission_for_spa_path(app_path: str) -> Optional[str]:
 
     if matched is not None:
         return matched
+    if re.fullmatch(r"/os/\d+/\d+/fluxo-producao", app_path):
+        return "sb_gerencia"
     if app_path.endswith(".html"):
         return LEGACY_HTML_PERMISSIONS.get(app_path, _MASTER_ONLY)
     return _MASTER_ONLY
@@ -225,6 +230,8 @@ def has_screen_access_for_spa_path(app_path: str, perms: dict) -> bool:
     required = required_permission_for_spa_path(app_path)
     if required is None:
         return True
+    if required == _AUTHENTICATED_ONLY:
+        return True
     if required == _MASTER_ONLY:
         return False
 
@@ -249,7 +256,9 @@ def resolve_default_spa_route(perms: dict) -> Optional[str]:
     Primeira rota SPA liberada pela ACL (ordem de SPA_ROUTE_PERMISSIONS).
     None se o usuário não tem nenhum módulo de tela.
     """
-    for route in SPA_ROUTE_PERMISSIONS:
+    for route, required in SPA_ROUTE_PERMISSIONS.items():
+        if required == _AUTHENTICATED_ONLY:
+            continue
         if has_screen_access_for_spa_path(route, perms):
             return route
     return None

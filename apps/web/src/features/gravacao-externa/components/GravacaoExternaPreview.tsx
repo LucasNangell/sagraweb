@@ -30,14 +30,18 @@ export interface GravacaoPreviewArquivo {
   maquina?: string | null;
 }
 
-export type PreviewSelection =
+export type PreviewSelection = (
   | { kind: "file"; arquivo: GravacaoPreviewArquivo }
   | {
       kind: "composite";
       groupKey: string;
       chapaLabel: string | null;
       displayLabel: string;
-    };
+    }
+) & {
+  /** Sessão dona do arquivo quando o detalhe reúne várias sessões da mesma OS. */
+  sessionId?: number | null;
+};
 
 interface GravacaoExternaPreviewProps {
   ano: number;

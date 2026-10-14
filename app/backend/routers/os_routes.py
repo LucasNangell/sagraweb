@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Literal, Optional, Tuple
 import logging
 import os
 import time
@@ -264,6 +264,7 @@ class HistoryItem(BaseModel):
     gravacao_pendente_chapas: Optional[List[GravacaoPendenteChapaInput]] = None
     gravacao_pendente_juntadas: Optional[List[GravacaoPendenteJuntadaInput]] = None
     gravacao_pendente_observacao_biro: Optional[str] = None
+    gravacao_pendente_componente: Literal["todos", "capa", "miolo"] = "todos"
     face_token: Optional[str] = None
     from_tablet: Optional[bool] = False
     replicar_alvo: Optional[str] = None  # "juntada" | "vinculo" (default)
@@ -616,7 +617,7 @@ def get_os_folder_plan(ano: int, id: int):
     plan = plan_os_folder(
         nr_os=id,
         ano=ano,
-        solicitante=meta["solicitante"],
+        solicitante=meta["folder_solicitante"],
         produto=meta["produto"],
     )
     return OsFolderPlanResponse(**plan)
@@ -644,7 +645,7 @@ def create_os_folder(ano: int, id: int):
         path, folder_name = ensure_os_folder_on_network(
             nr_os=id,
             ano=ano,
-            solicitante=meta["solicitante"],
+            solicitante=meta["folder_solicitante"],
             produto=meta["produto"],
         )
     except Exception as exc:
@@ -1636,6 +1637,10 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
         validate_gravacao_pendente_juntadas,
     )
     from services.network_files_service import validate_network_arquivos_input
+    from services.gravacao_componente import (
+        normalize_gravacao_componente,
+        with_gravacao_componente_obs_prefix,
+    )
     from services.os_vinculo_grupo_service import _lookup_usuario_nome
 
     validated_gp_arquivos = None
@@ -1645,6 +1650,7 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
     gp_lancador_nome: str | None = None
     obs_formatada = format_andamento_obs(item.obs)
     gp_observacao_biro = None
+    gp_componente = normalize_gravacao_componente(item.gravacao_pendente_componente)
 
     if is_gravacao_pendente_situacao(item.situacao):
         item.setor = SETOR_GRAVACAO_PENDENTE
@@ -1678,6 +1684,7 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
                     {"numero": j.numero, "ano": j.ano}
                     for j in (item.gravacao_pendente_juntadas or [])
                 ],
+                componente=gp_componente,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1704,7 +1711,9 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
                 obs_body,
                 format_juntada_membros_label(membros),
             )
-        obs_formatada = format_andamento_obs(obs_body)
+        obs_formatada = format_andamento_obs(
+            with_gravacao_componente_obs_prefix(obs_body, gp_componente)
+        )
 
     def transaction_logic(cursor):
         from services.gravacao_pendente_service import lookup_os_solicitante
@@ -1792,6 +1801,7 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
                 cliente=lookup_os_solicitante(ano, id),
                 juntada_grupo_id=gp_juntada_grupo_id,
                 observacao=gp_observacao_biro,
+                componente=gp_componente,
             )
             for j_ano, j_nr in gp_juntadas:
                 j_cod = _insert_andamento_for(j_nr, j_ano)
@@ -1807,6 +1817,7 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
                     cliente=lookup_os_solicitante(j_ano, j_nr),
                     juntada_grupo_id=gp_juntada_grupo_id,
                     observacao=gp_observacao_biro,
+                    componente=gp_componente,
                 )
 
         return HistoryAddResponse(new_id=new_cod)

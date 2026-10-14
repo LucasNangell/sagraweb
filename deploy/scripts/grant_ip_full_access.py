@@ -3,8 +3,8 @@
 Cadastra ou atualiza IPs em ip_permissions com acesso total (todas as flags = 1).
 
 Uso (a partir da raiz do projeto ou app/backend):
-  python deploy/scripts/grant_ip_full_access.py 10.120.1.14
-  python deploy/scripts/grant_ip_full_access.py 10.120.1.14 127.0.0.1
+  python deploy/scripts/grant_ip_full_access.py 10.120.2.11
+  python deploy/scripts/grant_ip_full_access.py 10.120.2.11 127.0.0.1
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ import bootstrap_paths  # noqa: F401
 from database import Database
 from ip_permissions_schema import ensure_ip_permissions_schema
 
-DEFAULT_IPS = ("10.120.1.14", "127.0.0.1", "::1")
+DEFAULT_IPS = ("10.120.2.11", "127.0.0.1", "::1")
 
 UPSERT_SQL = """
 INSERT INTO ip_permissions (

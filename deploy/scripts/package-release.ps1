@@ -16,11 +16,28 @@ $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$AllowedOutputRoot = [System.IO.Path]::GetFullPath((Join-Path $Root "deploy")).TrimEnd('\')
 if ($OutDir) {
-    $Release = (Resolve-Path -LiteralPath $OutDir -ErrorAction SilentlyContinue)
-    if (-not $Release) { $Release = $OutDir }
+    $Release = [System.IO.Path]::GetFullPath($OutDir)
 } else {
-    $Release = Join-Path $Root "deploy\release"
+    $Release = [System.IO.Path]::GetFullPath((Join-Path $Root "deploy\release"))
+}
+$allowedPrefix = $AllowedOutputRoot + [System.IO.Path]::DirectorySeparatorChar
+if (-not $Release.StartsWith($allowedPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "OutDir recusado: o pacote deve ficar dentro de $AllowedOutputRoot"
+}
+$guardPath = $Release
+while ($guardPath -and $guardPath.StartsWith($AllowedOutputRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+    if (Test-Path -LiteralPath $guardPath) {
+        $guardItem = Get-Item -LiteralPath $guardPath -Force
+        if ($guardItem.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw "OutDir recusado: destino ou ancestral e junction/symlink ($guardPath)"
+        }
+    }
+    if ($guardPath.Equals($AllowedOutputRoot, [System.StringComparison]::OrdinalIgnoreCase)) { break }
+    $parent = Split-Path $guardPath -Parent
+    if (-not $parent -or $parent -eq $guardPath) { throw "OutDir recusado: ancestral invalido" }
+    $guardPath = [System.IO.Path]::GetFullPath($parent)
 }
 
 $ExcludeDirNames = @(
@@ -138,6 +155,18 @@ function Write-Step([string]$Msg) {
     Write-Host "==> $Msg" -ForegroundColor Cyan
 }
 
+function Get-Sha256Hex([string]$Path) {
+    $stream = [System.IO.File]::OpenRead($Path)
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = $sha256.ComputeHash($stream)
+        return (-join ($bytes | ForEach-Object { $_.ToString("x2") }))
+    } finally {
+        $sha256.Dispose()
+        $stream.Dispose()
+    }
+}
+
 Write-Step "SAGRA Web - pacote de producao"
 Write-Host "Origem:  $Root"
 Write-Host "Destino: $Release"
@@ -150,17 +179,66 @@ New-Item -ItemType Directory -Path $Release -Force | Out-Null
 
 if (-not $SkipBuild) {
     Write-Step "Build SPA (Vite)"
-    Push-Location (Join-Path $Root "apps\web")
-    $env:NODE_ENV = "production"
-    $env:VITE_BASE_PATH = "/sagra/"
-    $env:VITE_API_PREFIX = "/sagra/api"
-    Write-Host "Build SPA: base /sagra/; API em /sagra/api (OBS usa /api)"
-    pnpm exec vite build
-    if ($LASTEXITCODE -ne 0) {
-        Pop-Location
-        throw "Falha no build do frontend"
+    $webRoot = Join-Path $Root "apps\web"
+    $viteCmd = Join-Path $webRoot "node_modules\.bin\vite.cmd"
+    $vitePackagePath = Join-Path $webRoot "node_modules\vite"
+    $viteCli = Join-Path $vitePackagePath "bin\vite.js"
+    $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+    if (-not $nodeCommand) {
+        throw "Node.js nao encontrado no PATH; instale a versao declarada pelo projeto antes de gerar o pacote"
     }
-    Pop-Location
+    $hasViteCmd = Test-Path -LiteralPath $viteCmd -PathType Leaf
+    $viteCliCandidates = @()
+    $vitePackage = Get-Item -LiteralPath $vitePackagePath -Force -ErrorAction SilentlyContinue
+    if ($vitePackage -and $vitePackage.Target) {
+        foreach ($target in @($vitePackage.Target)) {
+            if ($target) {
+                # Para pnpm, use primeiro o alvo fisico da junction em vez do
+                # caminho relativo usado pelo shim .cmd.
+                $viteCliCandidates += Join-Path $target "bin\vite.js"
+            }
+        }
+    }
+    $viteCliCandidates += $viteCli
+    $resolvedViteCli = $null
+    foreach ($candidate in ($viteCliCandidates | Select-Object -Unique)) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            $resolvedViteCli = $candidate
+            break
+        }
+    }
+    if (-not $resolvedViteCli -and -not $hasViteCmd) {
+        throw "Vite local nao encontrado. Verificados: $viteCmd e $($viteCliCandidates -join '; '). Instale as dependencias com pnpm 9.15.0 antes de gerar o pacote"
+    }
+
+    $previousNodeEnv = $env:NODE_ENV
+    $previousBasePath = $env:VITE_BASE_PATH
+    $previousApiPrefix = $env:VITE_API_PREFIX
+    $buildExitCode = 1
+    Push-Location $webRoot
+    try {
+        $env:NODE_ENV = "production"
+        $env:VITE_BASE_PATH = "/sagra/"
+        $env:VITE_API_PREFIX = "/sagra/api"
+        Write-Host "Build SPA: base /sagra/; API em /sagra/api (OBS usa /api)"
+        # Nao use `pnpm exec`, pois ele pode disparar uma instalacao implicita
+        # durante o release. O alvo fisico do pnpm evita falha de junction no
+        # vite.cmd; o shim fica como fallback para outros layouts locais.
+        if ($resolvedViteCli) {
+            & $nodeCommand.Source $resolvedViteCli build
+        } else {
+            & $viteCmd build
+        }
+        $buildExitCode = $LASTEXITCODE
+    } finally {
+        $env:NODE_ENV = $previousNodeEnv
+        $env:VITE_BASE_PATH = $previousBasePath
+        $env:VITE_API_PREFIX = $previousApiPrefix
+        Pop-Location
+    }
+    if ($buildExitCode -ne 0) {
+        throw "Falha no build do frontend (Vite retornou codigo $buildExitCode)"
+    }
 } else {
     Write-Host "(build ignorado: -SkipBuild)" -ForegroundColor Yellow
 }
@@ -259,7 +337,9 @@ Copy-Item (Join-Path $PSScriptRoot "..\templates\deploy-release-prod.bat") (Join
 Copy-Item (Join-Path $PSScriptRoot "..\templates\publicar-release.ps1") (Join-Path $Release "publicar-release.ps1") -Force
 Copy-Item (Join-Path $PSScriptRoot "..\templates\publicar-release.bat") (Join-Path $Release "publicar-release.bat") -Force
 
-# Sync 24/7 — NSSM service + watchdog externo
+# Sync 24/7 — NSSM service; recuperacao fica com o SAGRA-SystemWatchdog.
+# watchdog-sync.ps1/instalar-watchdog-sync.ps1 seguem so como legado (rollback):
+# o instalador do SystemWatchdog desativa a tarefa e o legado recusa coexistir.
 $syncServiceScripts = @(
     "instalar-servico-sync.ps1",
     "iniciar-servico-sync.ps1",
@@ -283,12 +363,42 @@ foreach ($name in $syncServiceScripts) {
     }
 }
 
+$systemWatchdogScripts = @(
+    "instalar-servico-watchdog-sistema.ps1",
+    "status-watchdog-sistema.ps1",
+    "suspender-watchdog-sistema.ps1",
+    "retomar-watchdog-sistema.ps1",
+    "desinstalar-servico-watchdog-sistema.ps1"
+)
+foreach ($name in $systemWatchdogScripts) {
+    $src = Join-Path $PSScriptRoot "..\templates\$name"
+    if (Test-Path -LiteralPath $src) {
+        Copy-Item -LiteralPath $src (Join-Path $Release $name) -Force
+    } else {
+        throw "Template obrigatorio do watchdog ausente: $src"
+    }
+}
+
+$systemWatchdog = Join-Path $Root "system_watchdog_service.py"
+if (Test-Path -LiteralPath $systemWatchdog) {
+    Copy-Item -LiteralPath $systemWatchdog (Join-Path $Release "system_watchdog_service.py") -Force
+    Write-Host "system_watchdog_service.py incluido na raiz do pacote"
+} else {
+    throw "system_watchdog_service.py obrigatorio nao encontrado em $Root"
+}
+$systemWatchdogRunbook = Join-Path $Root "docs\RUNBOOK_WATCHDOG_SISTEMA.md"
+if (Test-Path -LiteralPath $systemWatchdogRunbook) {
+    Copy-Item -LiteralPath $systemWatchdogRunbook (Join-Path $Release "RUNBOOK_WATCHDOG_SISTEMA.md") -Force
+} else {
+    throw "Runbook obrigatorio do watchdog ausente: $systemWatchdogRunbook"
+}
+
 $syncService = Join-Path $Root "sync_andamentos_service.py"
 if (Test-Path -LiteralPath $syncService) {
     Copy-Item -LiteralPath $syncService (Join-Path $Release "sync_andamentos_service.py") -Force
     Write-Host "sync_andamentos_service.py incluido na raiz do pacote"
 } else {
-    Write-Warning "sync_andamentos_service.py nao encontrado em $Root"
+    throw "sync_andamentos_service.py obrigatorio nao encontrado em $Root"
 }
 
 $syncOld = Join-Path $Root "sync_andamentos_v2_Old.py"
@@ -314,7 +424,7 @@ if (Test-Path -LiteralPath $monitorService) {
     Copy-Item -LiteralPath $monitorService (Join-Path $Release "monitor_sync_andamentos_service.py") -Force
     Write-Host "monitor_sync_andamentos_service.py incluido na raiz do pacote"
 } else {
-    Write-Warning "monitor_sync_andamentos_service.py nao encontrado em $Root"
+    throw "monitor_sync_andamentos_service.py obrigatorio nao encontrado em $Root"
 }
 
 Write-Step "Bibliotecas OCR embutidas (python_pkgs, sem pip no servidor)"
@@ -427,5 +537,33 @@ $versionJson = @{
     source = "dev_package"
 } | ConvertTo-Json -Compress
 $versionJson | Set-Content (Join-Path $Release "app\frontend\version.json") -Encoding utf8
+
+Write-Step "Manifesto de integridade (SHA-256)"
+$criticalFiles = @(
+    "system_watchdog_service.py",
+    "sync_andamentos_service.py",
+    "monitor_sync_andamentos_service.py",
+    "instalar-servico-watchdog-sistema.ps1",
+    "status-watchdog-sistema.ps1",
+    "suspender-watchdog-sistema.ps1",
+    "retomar-watchdog-sistema.ps1",
+    "iniciar-api-detached.ps1",
+    "iniciar-api.bat",
+    "app/backend/routers/api.py",
+    "app/frontend/index.html"
+)
+$integrityFiles = [ordered]@{}
+foreach ($relative in $criticalFiles) {
+    $criticalPath = Join-Path $Release $relative
+    if (-not (Test-Path -LiteralPath $criticalPath -PathType Leaf)) {
+        throw "Arquivo critico ausente ao gerar manifesto: $relative"
+    }
+    $integrityFiles[$relative.Replace('\', '/')] = Get-Sha256Hex $criticalPath
+}
+[ordered]@{
+    algorithm = "SHA256"
+    generated_at = (Get-Date).ToUniversalTime().ToString("o")
+    files = $integrityFiles
+} | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $Release "RELEASE-INTEGRITY.json") -Encoding UTF8
 
 Write-Host "Copie a pasta inteira para o servidor (ex.: C:\Sistemas\SagraWeb)" -ForegroundColor Green

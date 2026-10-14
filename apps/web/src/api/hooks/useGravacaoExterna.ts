@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   concluirGravacaoExterna,
@@ -11,8 +11,10 @@ import {
   postGravacaoExternaMensagem,
   removerOsGravacaoExterna,
   updateGravacaoExternaArquivos,
+  type GravacaoExternaDetail,
   type GravacaoExternaListFilters,
 } from "@/api/gravacaoExterna";
+import { combineDetailResults } from "@/api/hooks/combineDetailResults";
 import { queryKeys } from "@/api/query-keys";
 import { applyGravacaoMensagemToCache } from "@/features/gravacao-externa/utils/gravacaoExternaThreadCache";
 
@@ -57,13 +59,14 @@ export function useGravacaoExternaDetail(
   nrOs: number | null,
   enabled = true,
   pollOptions: GravacaoExternaQueryPollOptions = {},
+  gravacaoExternaId: number | null = null,
 ) {
   return useQuery({
     queryKey:
       ano != null && nrOs != null
-        ? queryKeys.gravacaoExterna.detail(ano, nrOs)
+        ? queryKeys.gravacaoExterna.detail(ano, nrOs, gravacaoExternaId)
         : ["gravacaoExterna", "detail", "none"],
-    queryFn: () => fetchGravacaoExternaDetail(ano!, nrOs!),
+    queryFn: () => fetchGravacaoExternaDetail(ano!, nrOs!, gravacaoExternaId),
     enabled: enabled && ano != null && nrOs != null,
     staleTime: 0,
     refetchOnWindowFocus: true,
@@ -72,17 +75,43 @@ export function useGravacaoExternaDetail(
   });
 }
 
+/** Detalhes de vários envios da mesma OS (card agrupado), com as mesmas query keys. */
+export function useGravacaoExternaDetails(
+  ano: number | null,
+  nrOs: number | null,
+  gravacaoExternaIds: number[],
+  enabled = true,
+  pollOptions: GravacaoExternaQueryPollOptions = {},
+) {
+  return useQueries({
+    queries: gravacaoExternaIds.map((gravacaoExternaId) => ({
+      queryKey:
+        ano != null && nrOs != null
+          ? queryKeys.gravacaoExterna.detail(ano, nrOs, gravacaoExternaId)
+          : (["gravacaoExterna", "detail", "none", gravacaoExternaId] as const),
+      queryFn: () => fetchGravacaoExternaDetail(ano!, nrOs!, gravacaoExternaId),
+      enabled: enabled && ano != null && nrOs != null,
+      staleTime: 0,
+      refetchOnWindowFocus: true,
+      refetchInterval: pollOptions.refetchInterval ?? false,
+      refetchIntervalInBackground: false,
+    })),
+    combine: combineDetailResults<GravacaoExternaDetail>,
+  });
+}
+
 export function useGravacaoExternaMensagens(
   ano: number | null,
   nrOs: number | null,
   enabled = true,
+  gravacaoExternaId: number | null = null,
 ) {
   return useQuery({
     queryKey:
       ano != null && nrOs != null
-        ? queryKeys.gravacaoExterna.mensagens(ano, nrOs)
+        ? queryKeys.gravacaoExterna.mensagens(ano, nrOs, gravacaoExternaId)
         : ["gravacaoExterna", "mensagens", "none"],
-    queryFn: () => fetchGravacaoExternaMensagens(ano!, nrOs!),
+    queryFn: () => fetchGravacaoExternaMensagens(ano!, nrOs!, gravacaoExternaId),
     enabled: enabled && ano != null && nrOs != null,
     staleTime: 5_000,
   });
@@ -91,14 +120,14 @@ export function useGravacaoExternaMensagens(
 export function useIniciarGravacaoExternaMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ ano, nrOs }: { ano: number; nrOs: number }) =>
-      iniciarGravacaoExterna(ano, nrOs),
+    mutationFn: ({ ano, nrOs, gravacaoExternaId }: { ano: number; nrOs: number; gravacaoExternaId?: number | null }) =>
+      iniciarGravacaoExterna(ano, nrOs, gravacaoExternaId),
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.gravacaoExterna.prefix,
       });
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.gravacaoExterna.detail(vars.ano, vars.nrOs),
+        queryKey: queryKeys.gravacaoExterna.detail(vars.ano, vars.nrOs, vars.gravacaoExternaId),
       });
     },
   });
@@ -124,15 +153,17 @@ export function usePostGravacaoExternaMensagemMutation() {
       ano,
       nrOs,
       mensagem,
+      gravacaoExternaId,
     }: {
       ano: number;
       nrOs: number;
       mensagem: string;
-    }) => postGravacaoExternaMensagem(ano, nrOs, mensagem),
+      gravacaoExternaId?: number | null;
+    }) => postGravacaoExternaMensagem(ano, nrOs, mensagem, gravacaoExternaId),
     onSuccess: (data, vars) => {
-      applyGravacaoMensagemToCache(queryClient, vars.ano, vars.nrOs, data);
+      applyGravacaoMensagemToCache(queryClient, vars.ano, vars.nrOs, data, vars.gravacaoExternaId);
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.gravacaoExterna.detail(vars.ano, vars.nrOs),
+        queryKey: queryKeys.gravacaoExterna.detail(vars.ano, vars.nrOs, vars.gravacaoExternaId),
       });
     },
   });
@@ -141,14 +172,14 @@ export function usePostGravacaoExternaMensagemMutation() {
 export function useConcluirGravacaoExternaMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ ano, nrOs }: { ano: number; nrOs: number }) =>
-      concluirGravacaoExterna(ano, nrOs),
+    mutationFn: ({ ano, nrOs, gravacaoExternaId }: { ano: number; nrOs: number; gravacaoExternaId?: number | null }) =>
+      concluirGravacaoExterna(ano, nrOs, gravacaoExternaId),
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.gravacaoExterna.prefix,
       });
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.gravacaoExterna.detail(vars.ano, vars.nrOs),
+        queryKey: queryKeys.gravacaoExterna.detail(vars.ano, vars.nrOs, vars.gravacaoExternaId),
       });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.gravacaoPendente.prefix,
@@ -165,22 +196,24 @@ export function useLancarEntregaChapasMutation() {
       nrOs,
       recebidoPorPonto,
       recebidoPorNome,
+      gravacaoExternaId,
     }: {
       ano: number;
       nrOs: number;
       recebidoPorPonto: string;
       recebidoPorNome: string;
+      gravacaoExternaId?: number | null;
     }) =>
       lancarEntregaChapas(ano, nrOs, {
         recebidoPorPonto,
         recebidoPorNome,
-      }),
+      }, gravacaoExternaId),
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.gravacaoExterna.prefix,
       });
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.gravacaoExterna.detail(vars.ano, vars.nrOs),
+        queryKey: queryKeys.gravacaoExterna.detail(vars.ano, vars.nrOs, vars.gravacaoExternaId),
       });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.gravacaoPendente.prefix,
@@ -196,17 +229,19 @@ export function useUpdateGravacaoExternaArquivosMutation() {
       ano,
       nrOs,
       arquivos,
+      gravacaoExternaId,
     }: {
       ano: number;
       nrOs: number;
       arquivos: { absolute_path: string; nome: string; maquina?: string | null }[];
-    }) => updateGravacaoExternaArquivos(ano, nrOs, arquivos),
+      gravacaoExternaId?: number | null;
+    }) => updateGravacaoExternaArquivos(ano, nrOs, arquivos, gravacaoExternaId),
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.gravacaoExterna.prefix,
       });
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.gravacaoExterna.detail(vars.ano, vars.nrOs),
+        queryKey: queryKeys.gravacaoExterna.detail(vars.ano, vars.nrOs, vars.gravacaoExternaId),
       });
     },
   });

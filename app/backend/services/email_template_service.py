@@ -493,29 +493,52 @@ def _read_file_template(filename: str) -> str:
     return ""
 
 
-def render_template_string(template: str, variables: Optional[Dict[str, Any]] = None) -> str:
+_LEFTOVER_PLACEHOLDER_RE = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
+_PRESERVED_PLACEHOLDERS = frozenset({"conteudo"})
+
+
+def render_template_string(
+    template: str,
+    variables: Optional[Dict[str, Any]] = None,
+    *,
+    use_sample_defaults: bool = False,
+) -> str:
+    """
+    Substitui {{variavel}} pelos valores informados.
+
+    Valores de exemplo (SAMPLE_PREVIEW_VARS) só entram com use_sample_defaults=True
+    (pré-visualização/teste); em envios reais, variáveis ausentes ficam vazias.
+    """
     if not template:
         return ""
-    vars_map = dict(SAMPLE_PREVIEW_VARS)
+    caller_vars: Dict[str, str] = {}
     if variables:
         for key, value in variables.items():
             if value is not None:
-                vars_map[str(key)] = str(value)
-    nr = vars_map.get("nr_os", "")
-    try:
-        nr_int = int(str(nr).strip() or "0")
-        vars_map.setdefault("nr_os_padded", f"{nr_int:04d}")
-    except ValueError:
-        vars_map.setdefault("nr_os_padded", str(nr))
-    ano = str(vars_map.get("ano", ""))
-    if ano and "ano_curto" not in vars_map:
-        vars_map["ano_curto"] = ano[-2:]
+                caller_vars[str(key)] = str(value)
+    vars_map: Dict[str, str] = dict(SAMPLE_PREVIEW_VARS) if use_sample_defaults else {}
+    vars_map.update(caller_vars)
+
+    if "nr_os_padded" not in caller_vars and "nr_os" in caller_vars:
+        nr = caller_vars["nr_os"].strip()
+        try:
+            vars_map["nr_os_padded"] = f"{int(nr or '0'):04d}"
+        except ValueError:
+            vars_map["nr_os_padded"] = nr
+    if "ano_curto" not in caller_vars and caller_vars.get("ano", "").strip():
+        vars_map["ano_curto"] = caller_vars["ano"].strip()[-2:]
 
     result = template
     for key, value in vars_map.items():
         token = "{{" + key + "}}"
         if token in result:
-            result = result.replace(token, str(value))
+            result = result.replace(token, value)
+
+    if not use_sample_defaults:
+        result = _LEFTOVER_PLACEHOLDER_RE.sub(
+            lambda m: m.group(0) if m.group(1) in _PRESERVED_PLACEHOLDERS else "",
+            result,
+        )
     return result
 
 
@@ -935,8 +958,8 @@ def render_template_for_preview(
         html_src = eff.get("html") or ""
 
     variables = dict(SAMPLE_PREVIEW_VARS)
-    rendered_subject = render_template_string(subject_src, variables)
-    rendered_html = render_template_string(html_src, variables)
+    rendered_subject = render_template_string(subject_src, variables, use_sample_defaults=True)
+    rendered_html = render_template_string(html_src, variables, use_sample_defaults=True)
     from_mailbox = _resolve_from_mailbox_for_test(defaults.get("mailbox_key"))
     return {
         "subject": rendered_subject,

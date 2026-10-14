@@ -279,3 +279,79 @@ def test_check_vinculo_replicacao_other_situacao_uses_juntada(
     assert result.origem == "juntada"
     assert result.juntada_grupo_id == "g1"
     mock_check_vinculo.assert_not_called()
+
+
+def test_enviar_juntada_por_id_exato_processa_todas_as_os():
+    from services.gravacao_pendente_service import enviar_para_gravacao_externa
+
+    anchor = {
+        "id": 10,
+        "os_ano": 2026,
+        "os_nro": 100,
+        "juntada_grupo_id": "g1",
+        "lancado_por_ponto": "918.713",
+        "lancado_por_nome": "Operador",
+        "componente": "todos",
+    }
+    sister = {
+        **anchor,
+        "id": 11,
+        "os_nro": 200,
+    }
+    arquivos = [{"nome": "a.pdf", "absolute_path": r"\\server\a.pdf"}]
+
+    with (
+        patch(
+            "services.gravacao_pendente_service.resolve_fornecedor_ponto",
+            return_value="222.222",
+        ),
+        patch(
+            "services.gravacao_pendente_service.get_active_pendente_session",
+            return_value=anchor,
+        ),
+        patch(
+            "services.gravacao_pendente_service.list_active_pendente_by_juntada",
+            return_value=[anchor, sister],
+        ),
+        patch(
+            "services.gravacao_pendente_service.build_pendente_detail",
+            return_value={"arquivos": arquivos},
+        ),
+        patch(
+            "services.gravacao_pendente_service._enviar_uma_pendente_para_externa_cursor",
+            side_effect=[("001002026-02", 101), ("002002026-03", 102)],
+        ) as enviar_uma,
+        patch("services.gravacao_pendente_service.db") as mock_db,
+        patch(
+            "services.gravacao_pendente_service._notify_enviar_gravacao_externa"
+        ) as notify,
+        patch("services.gravacao_pendente_service.send_gravacao_notification_email"),
+        patch("services.gravacao_pendente_service._lookup_usuario_nome"),
+        patch(
+            "services.gravacao_pendente_service.get_session_by_id",
+            return_value={"id": 101},
+        ),
+        patch(
+            "services.gravacao_pendente_service.build_session_detail",
+            return_value={"id": 101},
+        ),
+        patch("services.gravacao_preview_cache_service.enqueue_preview_warmup"),
+    ):
+        mock_db.execute_transaction.side_effect = lambda operations: [
+            operation(MagicMock()) for operation in operations
+        ]
+
+        result = enviar_para_gravacao_externa(
+            ano=2026,
+            os_id=100,
+            operador_ponto="918713",
+            fornecedor_ponto="222222",
+            gravacao_pendente_id=10,
+        )
+
+    assert result == {"id": 101}
+    assert [call.kwargs["pendente"]["id"] for call in enviar_uma.call_args_list] == [
+        10,
+        11,
+    ]
+    assert notify.call_count == 2

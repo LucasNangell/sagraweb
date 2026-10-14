@@ -1,7 +1,8 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  Script unico PROD: junctions, parar API (se necessario), ativar release, corrigir config, subir API, health check.
+  Script unico PROD: junctions, parar API (se necessario), ativar release, corrigir config, subir API, health check,
+  reiniciar SystemWatchdog, Sync andamentos e Monitor (tudo com o lock de manutencao do watchdog ativo).
 
   Executar NO SERVIDOR 10.1.1.73:
 
@@ -31,6 +32,7 @@ if (-not $ConfirmProductionSwitch) {
 }
 
 $ProdPath = Resolve-DeployProdPath -ProdPath $ProdPath
+Assert-SafeReleaseName -ReleaseName $ReleaseName
 $layout = Get-ReleaseLayoutPaths $ProdPath
 $targetRelease = Join-Path $layout.Releases $ReleaseName
 $currentRoot = Join-Path $ProdPath "current"
@@ -79,51 +81,138 @@ try {
     $env:PYTHONPATH = $previousPythonPath
 }
 
-# 2) Parar API somente se porta em uso
-Write-DeployStep "2/6 Parar API (se necessario)"
-if (Test-SagraPortListening -Port $port) {
-    Write-Host "Porta $port em uso - parando API..."
-    Stop-SagraApiForDeploy -ProdPath $ProdPath -FreePortTimeoutSec 5
-    Start-Sleep -Seconds 1
+$maintenanceEntered = $false
+try {
+    $null = Enter-SystemWatchdogMaintenance -ProdPath $ProdPath -Reason "publicar release $ReleaseName"
+    $maintenanceEntered = $true
+
+    # 2) Parar API somente se porta em uso
+    Write-DeployStep "2/6 Parar API (se necessario)"
     if (Test-SagraPortListening -Port $port) {
-        throw "Porta $port ainda em uso. Execute parar-api.bat como Administrador."
+        Write-Host "Porta $port em uso - parando API..."
+        Stop-SagraApiForDeploy -ProdPath $ProdPath -FreePortTimeoutSec 5
+        Start-Sleep -Seconds 1
+        if (Test-SagraPortListening -Port $port) {
+            throw "Porta $port ainda em uso. Execute parar-api.bat como Administrador."
+        }
+        Write-DeployOk "Porta $port livre"
+    } else {
+        Write-DeployOk "Porta $port ja estava livre - API nao estava rodando"
     }
-    Write-DeployOk "Porta $port livre"
-} else {
-    Write-DeployOk "Porta $port ja estava livre - API nao estava rodando"
+
+    # 3) Ativar current -> release
+    Write-DeployStep "3/6 Ativar current"
+    & (Join-Path $PSScriptRoot "activate-release.ps1") `
+        -ReleaseName $ReleaseName `
+        -ProdPath $ProdPath `
+        -ConfirmProductionSwitch `
+        -SkipHealthCheck
+
+    # 4) Config shared -> release + remover BOM
+    Write-DeployStep "4/6 Config (shared + sem BOM)"
+    Connect-ReleaseToShared -ReleasePath $targetRelease -SharedRoot $layout.Shared -ProdLocalPath $ProdPath | Out-Null
+    Repair-DeployConfigBom -ProdPath $ProdPath -ReleaseName $ReleaseName
+
+    # 5) Subir API
+    Write-DeployStep "5/6 Iniciar API em current\"
+    Start-SagraApiForDeploy -CurrentRoot $currentRoot -InteractiveApi:$InteractiveApi
+
+    # 6) Health check
+    Write-DeployStep "6/6 Health check"
+    $health = Wait-SagraHealthCheck -ProdPath $ProdPath -TimeoutSec $HealthWaitSec
+    if (-not $health.Ok) {
+        Write-DeployErr "Health falhou: $($health.Body)"
+        Write-Host "  Logs: $currentRoot\logs\api\uvicorn_stderr.log" -ForegroundColor Yellow
+        if ($activeNow -and $activeNow -ne $ReleaseName) {
+            Write-DeployStep "Rollback automatico para $activeNow"
+            try {
+                if (Test-SagraPortListening -Port $port) {
+                    Stop-SagraApiForDeploy -ProdPath $ProdPath -FreePortTimeoutSec 10
+                }
+                $rollbackPath = Update-CurrentPointer -ProdPath $ProdPath -ReleaseName $activeNow -ConfirmProductionSwitch
+                Connect-ReleaseToShared -ReleasePath $rollbackPath -SharedRoot $layout.Shared -ProdLocalPath $ProdPath | Out-Null
+                Repair-DeployConfigBom -ProdPath $ProdPath -ReleaseName $activeNow
+                Start-SagraApiForDeploy -CurrentRoot $currentRoot
+                $rollbackHealth = Wait-SagraHealthCheck -ProdPath $ProdPath -TimeoutSec $HealthWaitSec
+                if ($rollbackHealth.Ok) {
+                    Write-DeployLog -ProdPath $ProdPath -Level "WARN" -Message "Release $ReleaseName falhou health; rollback automatico para $activeNow OK"
+                } else {
+                    Write-DeployLog -ProdPath $ProdPath -Level "ERROR" -Message "Release $ReleaseName falhou e health do rollback $activeNow tambem falhou: $($rollbackHealth.Body)"
+                }
+            } catch {
+                Write-DeployLog -ProdPath $ProdPath -Level "ERROR" -Message "Falha no rollback automatico para ${activeNow}: $_"
+            }
+        } else {
+            Write-DeployWarn "Sem release anterior conhecida para rollback automatico."
+        }
+        exit 1
+    }
+    Write-DeployOk "Health: $($health.Body)"
+
+    # Atualiza o processo do watchdog para o codigo da nova release enquanto o
+    # lock de manutencao ainda esta ativo. Ausencia do servico nao bloqueia deploy.
+    $watchdogService = Get-Service -Name "SAGRA-SystemWatchdog" -ErrorAction SilentlyContinue
+    if ($watchdogService) {
+        Write-DeployStep "Atualizar watchdog de disponibilidade"
+        try {
+            $watchdogCode = Join-Path $currentRoot "system_watchdog_service.py"
+            $expectedHash = (Get-FileHash -LiteralPath $watchdogCode -Algorithm SHA256).Hash.ToLowerInvariant()
+            $watchdogStartedAfter = (Get-Date).ToUniversalTime()
+            if ($watchdogService.Status -eq "Running") {
+                Restart-Service -Name $watchdogService.Name -Force -ErrorAction Stop
+            } else {
+                Start-Service -Name $watchdogService.Name -ErrorAction Stop
+            }
+            $watchdogService.WaitForStatus("Running", [TimeSpan]::FromSeconds(30))
+            $watchdogStatusPath = Join-Path $layout.Shared "run\system_watchdog_status.json"
+            $watchdogDeadline = (Get-Date).AddSeconds(60)
+            $watchdogUpdated = $false
+            do {
+                if (Test-Path -LiteralPath $watchdogStatusPath -PathType Leaf) {
+                    try {
+                        $watchdogStatus = Get-Content -LiteralPath $watchdogStatusPath -Raw -Encoding UTF8 | ConvertFrom-Json
+                        $checkedAt = [datetime]::Parse([string]$watchdogStatus.checked_at).ToUniversalTime()
+                        if ($checkedAt -ge $watchdogStartedAfter.AddSeconds(-2) -and [string]$watchdogStatus.code_sha256 -eq $expectedHash) {
+                            $watchdogUpdated = $true
+                            break
+                        }
+                    } catch {}
+                }
+                Start-Sleep -Seconds 1
+            } while ((Get-Date) -lt $watchdogDeadline)
+            if ($watchdogUpdated) {
+                Write-DeployOk "Watchdog atualizado e status validado"
+            } else {
+                Write-DeployWarn "Watchdog iniciou, mas nao confirmou o hash da nova release em 60s; confira status-watchdog-sistema.ps1"
+            }
+        } catch {
+            Write-DeployWarn "Nao foi possivel atualizar o watchdog sem interromper o deploy: $_"
+        }
+    }
+
+    # Sync e Monitor executam o codigo de current\; sem restart seguiriam com a
+    # release anterior ate um reinicio acidental. Falhas aqui so geram aviso: o
+    # SystemWatchdog recupera os servicos assim que o lock for removido.
+    Write-DeployStep "Atualizar Sync andamentos e Monitor"
+    $syncRestartedAfter = (Get-Date).ToUniversalTime()
+    $syncRestarted = Restart-SagraBackgroundServiceForDeploy -Name "SAGRA-SyncAndamentos"
+    $null = Restart-SagraBackgroundServiceForDeploy -Name "SAGRA-MonitorSyncAndamentos"
+    if ($syncRestarted) {
+        $syncHeartbeat = Join-Path $currentRoot "logs\sync\sync_heartbeat.json"
+        if (Wait-SyncHeartbeatRenewed -HeartbeatPath $syncHeartbeat -StartedAfterUtc $syncRestartedAfter) {
+            Write-DeployOk "Sync com processo novo e primeiro ciclo concluido"
+        } else {
+            Write-DeployWarn "Sync reiniciou, mas nao concluiu ciclo em 120s; confira $syncHeartbeat"
+        }
+    }
+} finally {
+    if ($maintenanceEntered) {
+        Exit-SystemWatchdogMaintenance -ProdPath $ProdPath
+    }
 }
-
-# 3) Ativar current -> release
-Write-DeployStep "3/6 Ativar current"
-& (Join-Path $PSScriptRoot "activate-release.ps1") `
-    -ReleaseName $ReleaseName `
-    -ProdPath $ProdPath `
-    -ConfirmProductionSwitch `
-    -SkipHealthCheck
-
-# 4) Config shared -> release + remover BOM
-Write-DeployStep "4/6 Config (shared + sem BOM)"
-Connect-ReleaseToShared -ReleasePath $targetRelease -SharedRoot $layout.Shared -ProdLocalPath $ProdPath | Out-Null
-Repair-DeployConfigBom -ProdPath $ProdPath -ReleaseName $ReleaseName
-
-# 5) Subir API
-Write-DeployStep "5/6 Iniciar API em current\"
-Start-SagraApiForDeploy -CurrentRoot $currentRoot -InteractiveApi:$InteractiveApi
-
-# 6) Health check
-Write-DeployStep "6/6 Health check"
-$health = Wait-SagraHealthCheck -ProdPath $ProdPath -TimeoutSec $HealthWaitSec
-if (-not $health.Ok) {
-    Write-DeployErr "Health falhou: $($health.Body)"
-    Write-Host "  Logs: $currentRoot\logs\api\uvicorn_stderr.log" -ForegroundColor Yellow
-    Write-Host "  Rollback: powershell -File deploy\scripts\rollback_release.ps1 -ConfirmProductionSwitch" -ForegroundColor Yellow
-    exit 1
-}
-Write-DeployOk "Health: $($health.Body)"
 
 Write-DeployLog -ProdPath $ProdPath -Message "publicar-release-prod OK: $ReleaseName"
 Write-DeployStep "Concluido"
 Write-Host "Release publicada: $currentRoot" -ForegroundColor Green
 Write-Host "Teste: home, login, /papelaria" -ForegroundColor Green
-# Independencia: publicar reinicia so a API - NAO start/stop SAGRA-SyncAndamentos (NSSM).
-Write-Host "Sync andamentos (NSSM): intacto - publicar nao toca o servico." -ForegroundColor DarkGray
+Write-Host "Sync andamentos e Monitor (NSSM): reiniciados dentro do lock de manutencao." -ForegroundColor DarkGray

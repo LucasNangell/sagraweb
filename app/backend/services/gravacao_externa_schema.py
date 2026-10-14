@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS tab_os_gravacao_externa (
   OsAno INT NOT NULL,
   OsNro INT NOT NULL,
   CodStatus VARCHAR(32) NOT NULL,
+  Componente VARCHAR(16) NOT NULL DEFAULT 'todos',
   LancadoPorPonto VARCHAR(32) NOT NULL,
   LancadoPorNome VARCHAR(128) DEFAULT NULL,
   Status VARCHAR(16) NOT NULL DEFAULT 'pendente',
@@ -130,6 +131,12 @@ def _ensure_ge_fornecedor_index() -> None:
 
 def _apply_externa_migrations() -> None:
     migrations = (
+        (
+            "tab_os_gravacao_externa",
+            "Componente",
+            "ALTER TABLE tab_os_gravacao_externa "
+            "ADD COLUMN Componente VARCHAR(16) NOT NULL DEFAULT 'todos' AFTER CodStatus",
+        ),
         (
             "tab_os_gravacao_externa",
             "OrigemPendenteId",

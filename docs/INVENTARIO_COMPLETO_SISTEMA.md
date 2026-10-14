@@ -29,7 +29,7 @@ Gerenciar o ciclo de vida de **Ordens de Serviço (OS)** gráficas: busca, cria�
 |--------|--------------|-----------|
 | **Operador LAN** | Ponto + nome (`POST /api/auth/session`) | Terminal interno; permissões baseadas em IP |
 | **Operador externo** | E-mail/ponto + senha (`POST /api/auth/login`) | Acesso via internet (Cloudflare/zrok); overlay de permissões por usuário |
-| **MASTER** | IP privilegiado (`10.120.1.14`, servidor local, loopback) | Acesso total; rotas `/api/admin/*` |
+| **MASTER** | IP privilegiado (`10.120.2.11`, servidor local, loopback) | Acesso total; rotas `/api/admin/*` |
 | **Admin IPs** | IP + permissão `sb_admin_ips` | Gestão de IPs, configurações de sistema, templates de e-mail |
 | **Admin usuários** | IP + permissão `sb_usuarios` | Cadastro de usuários, permissões individuais, clientes gabinete |
 | **Cliente gabinete** | E-mail + senha (`POST /api/auth/cliente/login`) | Portal `/cliente` — acompanhamento de OS próprias |
@@ -929,7 +929,7 @@ Save OS → MySQL commit → fila async `mdb_writer` → Access MDB. Sync andame
 
 ### 10.3 MASTER
 
-IPs: `10.120.1.14`, servidor local `10.1.1.73`, loopback, trusted proxies.  
+IPs: `10.120.2.11`, servidor local `10.1.1.73`, loopback, trusted proxies.  
 Libera: todas rotas `/api/admin/*`, connected-ips, sync.
 
 ### 10.4 Rotas públicas

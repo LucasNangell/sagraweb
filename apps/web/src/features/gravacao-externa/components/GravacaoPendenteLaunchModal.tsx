@@ -39,11 +39,14 @@ export interface GravacaoPendenteJuntadaOs {
   ano: number;
 }
 
+export type GravacaoComponente = "todos" | "capa" | "miolo";
+
 export interface GravacaoPendenteLaunchResult {
   arquivos: GravacaoPendenteArquivoLaunch[];
   chapas: GravacaoPendenteChapaInput[];
   obs: string;
   juntadas: GravacaoPendenteJuntadaOs[];
+  componente: GravacaoComponente;
 }
 
 interface GravacaoPendenteLaunchModalProps {
@@ -56,6 +59,7 @@ interface GravacaoPendenteLaunchModalProps {
   initialObs?: string;
   initialArquivos?: GravacaoPendenteArquivoLaunch[];
   initialChapas?: GravacaoPendenteChapaInput[];
+  initialComponente?: GravacaoComponente;
   saving?: boolean;
   onClose: () => void;
   onConfirm: (result: GravacaoPendenteLaunchResult) => void;
@@ -328,6 +332,7 @@ export function GravacaoPendenteLaunchModal({
   initialObs = "",
   initialArquivos,
   initialChapas,
+  initialComponente = "todos",
   saving = false,
   onClose,
   onConfirm,
@@ -339,6 +344,7 @@ export function GravacaoPendenteLaunchModal({
   const [browserTarget, setBrowserTarget] = useState<BrowserTarget>(null);
   const [chapas, setChapas] = useState<ChapaRow[]>([emptyChapaRow()]);
   const [juntadaEnabled, setJuntadaEnabled] = useState(false);
+  const [componente, setComponente] = useState<GravacaoComponente>(initialComponente);
   const [juntadas, setJuntadas] = useState<GravacaoPendenteJuntadaOs[]>([]);
   const [juntadaNumero, setJuntadaNumero] = useState("");
   const [juntadaAno, setJuntadaAno] = useState("");
@@ -466,6 +472,7 @@ export function GravacaoPendenteLaunchModal({
     if (!open) {
       setChapas([emptyChapaRow()]);
       setJuntadaEnabled(false);
+      setComponente("todos");
       setJuntadas([]);
       setJuntadaNumero("");
       setJuntadaAno("");
@@ -484,6 +491,7 @@ export function GravacaoPendenteLaunchModal({
     );
     setChapas(hydrated.chapas);
     setJuntadaEnabled(false);
+    setComponente(initialComponente);
     setJuntadas([]);
     setJuntadaNumero("");
     setJuntadaAno(row?.ano != null ? String(row.ano) : "");
@@ -612,14 +620,14 @@ export function GravacaoPendenteLaunchModal({
 
   const isDirty = useMemo(() => {
     if (obs.trim()) return true;
-    if (juntadas.length > 0) return true;
+    if (juntadas.length > 0 || componente !== initialComponente) return true;
     return chapas.some(
       (c) =>
         c.maquina.trim().length > 0 ||
         c.arquivos.length > 0 ||
         c.espelhosPdf.length > 0,
     );
-  }, [obs, chapas, juntadas]);
+  }, [obs, chapas, juntadas, componente, initialComponente]);
 
   const addJuntada = async () => {
     if (!row || isEdit) return;
@@ -695,6 +703,23 @@ export function GravacaoPendenteLaunchModal({
   };
 
   const handleConfirm = () => {
+    if (!isEdit && juntadaEnabled) {
+      if (juntadaBusy) {
+        window.alert("Aguarde a validação da OS que está sendo adicionada à juntada.");
+        return;
+      }
+      if (juntadaNumero.trim()) {
+        window.alert('Clique em "+ OS" para incluir a OS informada na juntada antes de confirmar.');
+        return;
+      }
+      if (juntadas.length === 0) {
+        window.alert(
+          'Adicione ao menos uma OS à juntada pelo botão "+ OS" ou desmarque "Juntada de OSs".',
+        );
+        return;
+      }
+    }
+
     const allTifArquivos: GravacaoPendenteArquivoLaunch[] = [];
     const pdfArquivos: GravacaoPendenteArquivoLaunch[] = [];
     const parsedChapas: GravacaoPendenteChapaInput[] = [];
@@ -785,6 +810,7 @@ export function GravacaoPendenteLaunchModal({
       chapas: parsedChapas,
       obs: obs.trim(),
       juntadas,
+      componente,
     });
   };
 
@@ -1329,7 +1355,7 @@ export function GravacaoPendenteLaunchModal({
             <button
               type="button"
               onClick={handleConfirm}
-              disabled={saving}
+              disabled={saving || juntadaBusy}
               className="inline-flex items-center justify-center gap-2 rounded-md bg-primary-green px-4 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
               data-testid={homeTestIds.osGravacaoConfirm}
             >

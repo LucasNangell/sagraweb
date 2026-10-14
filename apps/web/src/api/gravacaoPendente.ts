@@ -1,5 +1,7 @@
 import { apiFetch, apiUrl } from "@/lib/api";
 
+export type GravacaoComponente = "todos" | "capa" | "miolo";
+
 export interface GravacaoPendenteOsMembro {
   nr_os: number;
   ano: number;
@@ -15,6 +17,7 @@ export interface GravacaoPendenteOsItem {
   last_update?: string | null;
   gravacao_pendente_id?: number | null;
   gravacao_pendente_status: string;
+  componente?: GravacaoComponente;
   lancado_por_ponto?: string | null;
   lancado_por_nome?: string | null;
   gravacao_criado_em?: string | null;
@@ -37,11 +40,26 @@ export interface GravacaoPendenteChapa {
   quantidade: number;
 }
 
+/** Parte da sessão desmembrada por máquina e já enviada ao Birô. */
+export interface GravacaoPendenteEnvioParcial {
+  gravacao_pendente_id: number;
+  gravacao_externa_id?: number | null;
+  externa_status?: string | null;
+  componente?: GravacaoComponente;
+  fornecedor_ponto?: string | null;
+  fornecedor_nome?: string | null;
+  enviada_em?: string | null;
+  maquinas: string[];
+  arquivos: GravacaoPendenteArquivo[];
+  chapas: GravacaoPendenteChapa[];
+}
+
 export interface GravacaoPendenteDetail {
   id: number;
   os_ano: number;
   os_nro: number;
   cod_status: string;
+  componente?: GravacaoComponente;
   lancado_por_ponto: string;
   lancado_por_nome?: string | null;
   status: string;
@@ -49,8 +67,10 @@ export interface GravacaoPendenteDetail {
   enviada_por_ponto?: string | null;
   criado_em?: string | null;
   observacao?: string | null;
+  desmembrada_de_id?: number | null;
   arquivos: GravacaoPendenteArquivo[];
   chapas: GravacaoPendenteChapa[];
+  envios?: GravacaoPendenteEnvioParcial[];
 }
 
 export interface GravacaoPendenteAdicionarBody {
@@ -58,6 +78,7 @@ export interface GravacaoPendenteAdicionarBody {
   chapas: { maquina: string; quantidade: number }[];
   observacao?: string;
   juntadas?: GravacaoPendenteOsMembro[];
+  componente?: GravacaoComponente;
 }
 
 export interface GravacaoPendenteQueueRemovalResponse {
@@ -209,8 +230,14 @@ export async function fetchGravacaoPendenteOsList(filters: GravacaoPendenteListF
   );
 }
 
-export async function fetchGravacaoPendenteDetail(ano: number, nrOs: number) {
-  return apiFetch<GravacaoPendenteDetail>(`/gravacao-pendente/${ano}/${nrOs}`);
+function withPendenteId(path: string, gravacaoPendenteId?: number | null): string {
+  if (gravacaoPendenteId == null) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}gravacao_pendente_id=${gravacaoPendenteId}`;
+}
+
+export async function fetchGravacaoPendenteDetail(ano: number, nrOs: number, gravacaoPendenteId?: number | null) {
+  return apiFetch<GravacaoPendenteDetail>(withPendenteId(`/gravacao-pendente/${ano}/${nrOs}`, gravacaoPendenteId));
 }
 
 export async function fetchGravacaoPendenteHistorico(limit = 100) {
@@ -321,16 +348,30 @@ export async function deleteGravacaoPendenteControle(gravacaoPendenteId: number)
 export async function enviarGravacaoPendenteParaExterna(
   ano: number,
   nrOs: number,
-  opts?: { fornecedorPonto?: string | null },
+  opts?: {
+    fornecedorPonto?: string | null;
+    gravacaoPendenteId?: number | null;
+    /** Todas as sessões ativas do card da OS (capa/miolo). */
+    gravacaoPendenteIds?: number[];
+    /** Envia só os arquivos destas máquinas; vazio envia tudo. */
+    maquinas?: string[];
+  },
 ) {
   return apiFetch(`/gravacao-pendente/${ano}/${nrOs}/enviar`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       setor: "Grav. Externa",
+      ...(opts?.gravacaoPendenteId != null
+        ? { gravacao_pendente_id: opts.gravacaoPendenteId }
+        : {}),
       ...(opts?.fornecedorPonto
         ? { fornecedor_ponto: opts.fornecedorPonto }
         : {}),
+      ...(opts?.gravacaoPendenteIds?.length
+        ? { gravacao_pendente_ids: opts.gravacaoPendenteIds }
+        : {}),
+      ...(opts?.maquinas?.length ? { maquinas: opts.maquinas } : {}),
     }),
   });
 }
@@ -363,9 +404,10 @@ export async function patchGravacaoPendenteObservacao(
   ano: number,
   nrOs: number,
   observacao: string,
+  gravacaoPendenteId?: number | null,
 ) {
   return apiFetch<GravacaoPendenteDetail>(
-    `/gravacao-pendente/${ano}/${nrOs}/observacao`,
+    withPendenteId(`/gravacao-pendente/${ano}/${nrOs}/observacao`, gravacaoPendenteId),
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -379,8 +421,9 @@ export async function updateGravacaoPendenteArquivos(
   nrOs: number,
   arquivos: { absolute_path: string; nome: string; maquina?: string | null }[],
   chapas?: { maquina: string; quantidade: number }[],
+  gravacaoPendenteId?: number | null,
 ) {
-  return apiFetch<GravacaoPendenteDetail>(`/gravacao-pendente/${ano}/${nrOs}/arquivos`, {
+  return apiFetch<GravacaoPendenteDetail>(withPendenteId(`/gravacao-pendente/${ano}/${nrOs}/arquivos`, gravacaoPendenteId), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -413,19 +456,21 @@ export async function fetchGravacaoPendenteChapasEstimate(
   );
 }
 
-export function gravacaoPendentePreviewUrl(ano: number, nrOs: number, arquivoId: number): string {
-  return apiUrl(`/gravacao-pendente/${ano}/${nrOs}/arquivos/${arquivoId}/preview`);
+export function gravacaoPendentePreviewUrl(ano: number, nrOs: number, arquivoId: number, gravacaoPendenteId?: number | null): string {
+  return apiUrl(withPendenteId(`/gravacao-pendente/${ano}/${nrOs}/arquivos/${arquivoId}/preview`, gravacaoPendenteId));
 }
 
 export function gravacaoPendenteCompositePreviewUrl(
   ano: number,
   nrOs: number,
   groupKey: string,
+  gravacaoPendenteId?: number | null,
 ): string {
   const params = new URLSearchParams({ group_key: groupKey });
+  if (gravacaoPendenteId != null) params.set("gravacao_pendente_id", String(gravacaoPendenteId));
   return apiUrl(`/gravacao-pendente/${ano}/${nrOs}/preview-composite?${params.toString()}`);
 }
 
-export function gravacaoPendenteDownloadUrl(ano: number, nrOs: number, arquivoId: number): string {
-  return apiUrl(`/gravacao-pendente/${ano}/${nrOs}/arquivos/${arquivoId}/download`);
+export function gravacaoPendenteDownloadUrl(ano: number, nrOs: number, arquivoId: number, gravacaoPendenteId?: number | null): string {
+  return apiUrl(withPendenteId(`/gravacao-pendente/${ano}/${nrOs}/arquivos/${arquivoId}/download`, gravacaoPendenteId));
 }

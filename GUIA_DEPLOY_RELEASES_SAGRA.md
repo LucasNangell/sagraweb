@@ -89,6 +89,10 @@ powershell -File deploy\scripts\rollback_release.ps1 -ConfirmProductionSwitch -T
 **Independente do sync:** activate / rollback / publicar **nao** start/stop do servico Windows
 `SAGRA-SyncAndamentos` (NSSM). Ver `docs/RUNBOOK_SYNC_ANDAMENTOS_SERVICO.md`.
 
+O monitor geral de disponibilidade é o serviço `SAGRA-SystemWatchdog`; ele verifica
+`/health/live`, `/health` e o heartbeat do Sync, com proteção contra restart storm.
+Instalação e operação: `docs/RUNBOOK_WATCHDOG_SISTEMA.md`.
+
 ---
 
 ## 6. Validacao

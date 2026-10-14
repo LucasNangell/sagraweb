@@ -41,7 +41,7 @@ DEFAULT_CONFIG = {
     "server_port": 8050,
     "api_external_url": "http://127.0.0.1:8050",
     "allowed_ips": {
-        "master": "10.120.1.14",
+        "master": "10.120.2.11",
         "local_network": "10.1.1.73",
     },
     "db_host": "10.1.1.73",

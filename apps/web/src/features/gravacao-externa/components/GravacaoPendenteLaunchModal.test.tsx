@@ -77,6 +77,31 @@ function renderLaunchModal() {
   );
 }
 
+function renderLaunchModalWithFiles(onConfirm = vi.fn()) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <GravacaoPendenteLaunchModal
+        open
+        row={{ nr_os: 801, ano: 2026 } as never}
+        initialChapas={[{ maquina: "KOMORI", quantidade: 1 }]}
+        initialArquivos={[
+          {
+            absolute_path: String.raw`\\server\share\espelho.pdf`,
+            nome: "espelho.pdf",
+            maquina: "KOMORI",
+          },
+        ]}
+        onClose={() => undefined}
+        onConfirm={onConfirm}
+      />
+    </QueryClientProvider>,
+  );
+  return onConfirm;
+}
+
 describe("GravacaoPendenteLaunchModal preview e inspeção", () => {
   beforeEach(() => {
     URL.revokeObjectURL = vi.fn();
@@ -203,5 +228,46 @@ describe("GravacaoPendenteLaunchModal preview e inspeção", () => {
     expect(screen.queryByText("OSs juntadas (mesma chapa)")).not.toBeInTheDocument();
     fireEvent.click(checkbox);
     expect(screen.queryByText("00802/26")).not.toBeInTheDocument();
+  });
+
+  it("não confirma uma juntada sem OS adicional efetivamente incluída", () => {
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+    const onConfirm = renderLaunchModalWithFiles();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Juntada de OSs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar lançamento" }));
+
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(alert).toHaveBeenCalledWith(expect.stringContaining("Adicione ao menos uma OS"));
+    alert.mockRestore();
+  });
+
+  it("envia todas as OSs adicionadas no payload da juntada", async () => {
+    const onConfirm = renderLaunchModalWithFiles();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Juntada de OSs" }));
+    fireEvent.change(screen.getByPlaceholderText("Nº OS"), {
+      target: { value: "802" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "+ OS" }));
+    expect(await screen.findByText("00802/26")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar lançamento" }));
+
+    expect(onConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        juntadas: [{ nr_os: 802, ano: 2026 }],
+      }),
+    );
+  });
+
+  it("não exibe seleção de componentes e lança a OS inteira", () => {
+    const onConfirm = renderLaunchModalWithFiles();
+
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+    expect(screen.queryByText("Partes da OS enviadas")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar lançamento" }));
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ componente: "todos" }));
   });
 });

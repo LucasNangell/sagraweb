@@ -100,11 +100,29 @@ export async function refreshGravacaoExternaDetail(
 
   rawMessage?: Record<string, unknown>,
 
+  gravacaoExternaId?: number | null,
+
 ): Promise<void> {
+
+  if (gravacaoExternaId != null) {
+    // Telas sem id (chat do lançador na OS) usam o detalhe padrão da OS; a mensagem
+    // pode ser de outro envio, então só o servidor sabe se ela pertence a esse cache.
+    void qc.refetchQueries({
+      queryKey: queryKeys.gravacaoExterna.detail(ano, nrOs, null),
+      exact: true,
+      type: "active",
+    });
+  }
 
   if (rawMessage) {
 
-    const result = applyGravacaoMensagemToCache(qc, ano, nrOs, rawMessage);
+    const result = applyGravacaoMensagemToCache(
+      qc,
+      ano,
+      nrOs,
+      rawMessage,
+      gravacaoExternaId,
+    );
 
     if (import.meta.env.DEV) {
 
@@ -124,7 +142,7 @@ export async function refreshGravacaoExternaDetail(
 
   await qc.refetchQueries({
 
-    queryKey: queryKeys.gravacaoExterna.detail(ano, nrOs),
+    queryKey: queryKeys.gravacaoExterna.detail(ano, nrOs, gravacaoExternaId),
 
     type: "all",
 
@@ -184,7 +202,13 @@ export async function handleGravacaoExternaMensagemWs(
 
     }
 
-    await refreshGravacaoExternaDetail(qc, os.ano, os.nrOs, data.message);
+    await refreshGravacaoExternaDetail(
+      qc,
+      os.ano,
+      os.nrOs,
+      data.message,
+      data.gravacao_externa_id,
+    );
 
     return;
 
@@ -230,7 +254,11 @@ export async function handleGravacaoExternaMensagemWs(
 
       await qc.invalidateQueries({
 
-        queryKey: queryKeys.gravacaoExterna.detail(os.ano, os.nrOs),
+        queryKey: queryKeys.gravacaoExterna.detail(
+          os.ano,
+          os.nrOs,
+          data.gravacao_externa_id,
+        ),
 
       });
 
@@ -238,7 +266,13 @@ export async function handleGravacaoExternaMensagemWs(
 
     }
 
-    await refreshGravacaoExternaDetail(qc, os.ano, os.nrOs, data.message);
+    await refreshGravacaoExternaDetail(
+      qc,
+      os.ano,
+      os.nrOs,
+      data.message,
+      data.gravacao_externa_id,
+    );
 
   }
 

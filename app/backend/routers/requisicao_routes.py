@@ -5,6 +5,7 @@ from jinja2 import Template
 from os_calc_fields import is_papelaria_os
 import base64
 import datetime
+from decimal import Decimal
 import logging
 import os
 import re
@@ -36,6 +37,34 @@ def format_bool(val):
         if v in ['sim', 's', 'true', '1']: return "Sim"
         return "Não"
     return "Não"
+
+
+_MILHAR_PT_BR_RE = re.compile(r"^\d{1,3}(\.\d{3})+$")
+
+
+def _format_milhar(value) -> str:
+    """Formata inteiro com separador de milhar pt-BR; vazio/ inválido não lança."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        value = int(value)
+    if isinstance(value, (int, float, Decimal)):
+        try:
+            number = int(round(value))
+        except (TypeError, ValueError, OverflowError, ArithmeticError):
+            return str(value)
+    else:
+        text = str(value).strip()
+        if not text:
+            return ""
+        try:
+            if _MILHAR_PT_BR_RE.match(text):
+                number = int(text.replace(".", ""))
+            else:
+                number = int(round(float(text.replace(",", "."))))
+        except (TypeError, ValueError, OverflowError):
+            return text
+    return f"{number:,}".replace(",", ".")
 
 
 def _resolve_template_path() -> str:
@@ -161,12 +190,12 @@ def generate_requisicao(
             "rs_lancada": format_bool(get('ReqLançada')),
             "processo": get('ProcessoSolicit'),
             "cs": get('CSnro'),
-            "cota_repro": f"{int(get('CotaRepro')):,}".replace(",", "."),
+            "cota_repro": _format_milhar(row.get('CotaRepro')),
             "cota_cartao": get('CotaCartao'),
             "debitar_usuario": "Contador CGRAF" if str(get('DebitarCGRAF')) == '1' else "Usuário",
-            "numero_pedido": f"{'SP ' if get('NroProtocolo') > 5000 else 'OS '}{get('NroProtocolo'):05d}/{str(get('AnoProtocolo'))[-2:]}",
+            "numero_pedido": f"{'SP ' if is_papelaria_os(id) else 'OS '}{id:05d}/{str(ano)[-2:]}",
             "modelos_qtd": get('ModelosArq'),
-            "tiragem_qtd": f"{int(get('Tiragem')):,}".replace(",", "."),
+            "tiragem_qtd": _format_milhar(row.get('Tiragem')),
 
             # Solicitante
             "solicitante_categoria": get('CategoriaLink'),
@@ -205,7 +234,7 @@ def generate_requisicao(
             "timestamp_impressao": timestamp_str
         }
 
-        context["ficha_tipo"] = _ficha_tipo(mode, get("NroProtocolo"))
+        context["ficha_tipo"] = _ficha_tipo(mode, id)
 
         if mode in ("prova", "prova_ficha"):
             context["tiragem_qtd"] = "1"
@@ -256,5 +285,5 @@ def generate_requisicao(
         return HTMLResponse(content=rendered_html)
 
     except Exception as e:
-        logger.error(f"Erro gerando requisicao: {e}")
+        logger.exception("Erro gerando requisicao ano=%s id=%s", ano, id)
         return HTMLResponse(content=f"<h1>Erro Interno: {str(e)}</h1>", status_code=500)

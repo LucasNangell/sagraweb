@@ -8,9 +8,17 @@ from __future__ import annotations
 
 import re
 from typing import TYPE_CHECKING
+from urllib.parse import urlencode
 
 from security.painel_access import is_painel_api_route, is_painel_data_api_route
-from security.spa_access import is_public_spa_path, normalize_spa_path
+from security.spa_access import (
+    _MASTER_ONLY,
+    api_url_prefix,
+    is_public_spa_path,
+    is_spa_navigation_request,
+    normalize_spa_path,
+    required_permission_for_spa_path,
+)
 
 if TYPE_CHECKING:
     from starlette.requests import Request
@@ -82,7 +90,7 @@ def is_cloudflare_public_path(path: str, method: str) -> bool:
     if norm in _EXACT_PATHS:
         return True
 
-    if norm.startswith("/login"):
+    if norm in ("/login", "/login/activate", "/login/forgot", "/login/reset"):
         return True
 
     if any(norm.startswith(prefix) for prefix in _PUBLIC_PREFIXES):
@@ -162,6 +170,21 @@ def is_trusted_public_host(request: "Request") -> bool:
     if _hostname_is_public(_request_host(request)):
         return True
     return _hostname_is_public(_host_from_origin_referer(request))
+
+
+def protected_spa_login_redirect(request: "Request") -> str | None:
+    """Destino de login para deep links protegidos, sem liberar APIs ou rotas desconhecidas."""
+    if not is_trusted_public_host(request) or not is_spa_navigation_request(request):
+        return None
+
+    app_path = normalize_spa_path(request.url.path or "")
+    required = required_permission_for_spa_path(app_path)
+    if required is None or required == _MASTER_ONLY:
+        return None
+
+    prefix = api_url_prefix(request)
+    login_path = f"{prefix}/login" if prefix else "/login"
+    return f"{login_path}?{urlencode({'redirect': app_path})}"
 
 
 def _referer_is_painel(request: "Request") -> bool:

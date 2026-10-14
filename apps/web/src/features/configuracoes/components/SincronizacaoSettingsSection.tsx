@@ -1,6 +1,7 @@
 import { cn } from "@sagra/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   CheckCircle2,
   Loader2,
   Play,
@@ -23,7 +24,12 @@ import {
   type SyncMode,
   type SyncPolicyRow,
   type SyncTableName,
+  type SystemWatchdogSyncStatus,
 } from "@/api/adminSync";
+import {
+  SYNC_ALERT_REASON_LABELS,
+  type SyncAlertReason,
+} from "@/features/sync-andamentos/api";
 
 import {
   ConfigErrorState,
@@ -229,6 +235,12 @@ export function SincronizacaoSettingsSection() {
               />
             </div>
           )}
+          {statusQuery.data ? (
+            <SyncAlertSummary
+              reasons={syncSvc?.alert_reasons ?? []}
+              watchdog={statusQuery.data.system_watchdog}
+            />
+          ) : null}
           {counts ? (
             <p className="mt-3 text-xs text-slate-600">
               Fila de exclusões OS: pendentes {counts.pending ?? 0}, quarentena{" "}
@@ -441,6 +453,43 @@ export function SincronizacaoSettingsSection() {
           )}
         </ConfigSectionBody>
       </ConfigSection>
+    </div>
+  );
+}
+
+function SyncAlertSummary({
+  reasons,
+  watchdog,
+}: {
+  reasons: SyncAlertReason[];
+  watchdog?: SystemWatchdogSyncStatus;
+}) {
+  const watchdogLine = !watchdog?.available
+    ? "SystemWatchdog: sem status (não instalado ou sem acesso a shared\\run)"
+    : watchdog.maintenance
+      ? "SystemWatchdog: manutenção ativa — recuperação suspensa"
+      : !watchdog.fresh
+        ? "SystemWatchdog: status desatualizado — serviço parado?"
+        : `SystemWatchdog: ${watchdog.overall ?? "—"}`;
+  return (
+    <div className="mt-3 flex flex-col gap-1 text-xs">
+      {reasons.length > 0 ? (
+        <ul
+          className="flex flex-col gap-1 rounded-lg border border-red-200 bg-red-50 p-2 text-red-800"
+          data-testid="sync-alert-reasons"
+        >
+          {reasons.map((reason) => (
+            <li key={reason} className="flex items-center gap-1.5">
+              <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
+              {SYNC_ALERT_REASON_LABELS[reason] ?? reason}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <p className="text-slate-600">{watchdogLine}</p>
+      {watchdog?.last_action_ok === false && watchdog.last_action_detail ? (
+        <p className="text-slate-500">Última ação: {watchdog.last_action_detail}</p>
+      ) : null}
     </div>
   );
 }

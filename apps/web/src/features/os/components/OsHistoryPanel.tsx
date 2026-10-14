@@ -720,6 +720,7 @@ export function OsHistoryPanel({
         numero: j.nr_os,
         ano: j.ano,
       })),
+      gravacao_pendente_componente: result.componente,
     });
   };
 

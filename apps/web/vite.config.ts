@@ -41,9 +41,9 @@ if (basePath !== "/" && basePath !== "") {
 
 /**
  * Fallback só quando o browser acessa via localhost no próprio servidor dev.
- * Acesso LAN (outra máquina → http://10.120.1.14:5173) usa o IP real do cliente.
+ * Acesso LAN (outra máquina → http://10.120.2.11:5173) usa o IP real do cliente.
  */
-const devClientIp = process.env["VITE_DEV_CLIENT_IP"]?.trim() || "10.120.1.14";
+const devClientIp = process.env["VITE_DEV_CLIENT_IP"]?.trim() || "10.120.2.11";
 
 function normalizeClientIp(raw: string | undefined): string | null {
   if (!raw) return null;
@@ -253,7 +253,7 @@ export default defineConfig(({ mode }) => {
     },
   },
   server: {
-    /** Permite acesso via IP da LAN (ex.: http://10.120.1.14:5173) */
+    /** Permite acesso via IP da LAN (ex.: http://10.120.2.11:5173) */
     host: process.env["VITE_DEV_HOST"] !== "false",
     port: Number(process.env["VITE_DEV_PORT"]) || 5173,
     strictPort: true,

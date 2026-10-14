@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Cadastra ou atualiza user_permissions com acesso total (equivalente ao IP MASTER / 10.120.1.14).
+Cadastra ou atualiza user_permissions com acesso total (equivalente ao IP MASTER / 10.120.2.11).
 
 Uso (raiz do projeto, com config/.env apontando ao MySQL):
   python deploy/scripts/grant_user_full_access.py 918713
@@ -82,7 +82,7 @@ def grant(ponto: int) -> None:
     print(f"OK: ponto {ponto} ({nome})")
     print(f"    E-mail: {email}")
     print("    AuthAtivo=1, EmailVerified=1")
-    print("    user_permissions: todas as flags ativas (nível MASTER / 10.120.1.14)")
+    print("    user_permissions: todas as flags ativas (nível MASTER / 10.120.2.11)")
     print("\nFaça logout/login no SPA (ou cgraf.online) para recarregar permissões.")
 
 

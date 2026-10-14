@@ -60,6 +60,77 @@ class TestRenderEmailModel:
         assert "HTML editado no modelo ativo" in html
 
 
+class TestRenderTemplateStringNoSampleLeak:
+    def test_missing_titulo_does_not_use_sample_value(self):
+        from services.email_template_service import render_template_string
+
+        subject = render_template_string(
+            "Prova OS {{nr_os}} - {{titulo}}",
+            {"nr_os": 100, "ano": 2026},
+        )
+        assert "exemplo" not in subject.lower()
+        assert subject == "Prova OS 100 - "
+
+    def test_nr_os_padded_and_ano_curto_come_from_real_values(self):
+        from services.email_template_service import render_template_string
+
+        subject = render_template_string(
+            "OS {{nr_os_padded}}/{{ano_curto}}",
+            {"nr_os": 42, "ano": 2025},
+        )
+        assert subject == "OS 0042/25"
+
+    def test_preview_keeps_sample_values(self, monkeypatch):
+        from services import email_template_service as svc
+
+        monkeypatch.setattr(
+            svc,
+            "get_template_defaults",
+            lambda _tid: {"label": "Teste", "mailbox_key": None},
+        )
+        monkeypatch.setattr(
+            svc,
+            "get_global_send_mailboxes",
+            lambda: {"os_lt_5000": "", "os_gte_5000": "", "activation": ""},
+        )
+        draft = svc.render_template_for_preview(
+            "proof_os",
+            subject="Prova {{nr_os_padded}} - {{titulo}}",
+            html="<p>{{titulo}}</p>",
+        )
+        assert draft["subject"] == "Prova 1234 - Título de exemplo da publicação"
+        assert "Título de exemplo da publicação" in draft["html"]
+
+    def test_proof_model_subject_with_titulo_uses_real_title(self):
+        from services.email_template_model_service import render_email_model
+
+        model = {
+            "grupo": "prova_os",
+            "variante": "portal",
+            "assunto": "Cgraf: Prova {{versao}} OS {{nr_os_padded}}/{{ano_curto}} - {{titulo}}",
+            "html": "<html><body>{{link}}</body></html>",
+            "content_mode": "custom",
+        }
+        subject, _ = render_email_model(
+            model,
+            {"nr_os": 321, "ano": 2026, "versao": "2", "titulo": "Cartaz Evento", "link": "x"},
+        )
+        assert subject == "Cgraf: Prova 2 OS 0321/26 - Cartaz Evento"
+
+    def test_unsubstituted_conteudo_still_raises(self):
+        from services.email_template_model_service import render_email_model
+
+        model = {
+            "grupo": "problema_tecnico",
+            "variante": "portal",
+            "assunto": "PT",
+            "html": "<html>{{conteudo}}</html>",
+            "content_mode": "custom",
+        }
+        with pytest.raises(ValueError, match="conteudo"):
+            render_email_model(model, {"nr_os": "1", "ano": "2026"})
+
+
 class TestRenderProofEmail:
     def test_uses_active_model_not_legacy(self, monkeypatch):
         from services import email_template_model_service as svc
@@ -258,7 +329,7 @@ class TestSendProofWithAttachment:
                     "id": 10,
                     "grupo": "prova_os",
                     "variante": "portal",
-                    "assunto": "Prova {{nr_os}}",
+                    "assunto": "Prova {{nr_os}} - {{titulo}}",
                     "html": '<html><body><a href="{{link}}">Prova WEB</a></body></html>',
                     "content_mode": "custom",
                     "preferir_prova_web": True,
@@ -281,7 +352,7 @@ class TestSendProofWithAttachment:
             email_routes.db,
             "execute_query",
             lambda sql, params=None: (
-                [{"solicitante": "Dep", "produto": "Cartaz"}]
+                [{"solicitante": "Dep", "produto": "Cartaz", "titulo": "Convite Sessão Solene"}]
                 if "tabProtocolos" in sql
                 else []
             ),
@@ -310,6 +381,7 @@ class TestSendProofWithAttachment:
         result = send_pt_email(req, session)
 
         assert result["success"] is True
+        assert sent.get("subject") == "Prova 100 - Convite Sessão Solene"
         assert result["attachments"] == []
         assert result["proof_file"] is None
         assert sent.get("attachments") == []

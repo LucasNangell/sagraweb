@@ -18,9 +18,16 @@ from services.gravacao_externa_service import (
     SITUACAO_SAIDA_P,
     build_session_detail,
     get_active_session,
+    get_session_by_id,
     insert_session_with_arquivos_cursor,
 )
 from services.gravacao_externa_email_service import send_gravacao_notification_email
+from services.gravacao_componente import (
+    COMPONENTE_TODOS,
+    normalize_gravacao_componente,
+    normalize_stored_gravacao_componente,
+    with_gravacao_componente_obs_prefix,
+)
 from services.network_files_service import validate_network_arquivos_input
 
 try:
@@ -446,24 +453,84 @@ def insert_pendente_session_cursor(
     juntada_grupo_id: str | None = None,
     observacao: str | None = None,
     origem: str = ORIGEM_PENDENTE_ANDAMENTO,
+    componente: str = COMPONENTE_TODOS,
 ) -> int:
-    # Relançamento: encerra sessão ativa anterior e grava a nova com os arquivos atuais.
-    cancel_active_pendente_sessions_cursor(cursor, ano, os_id)
+    componente_normalized = normalize_gravacao_componente(componente)
+    cursor.execute(
+        """
+        SELECT Id, Componente
+        FROM tab_os_gravacao_pendente
+        WHERE OsAno = %s AND OsNro = %s AND Status = 'ativa'
+        FOR UPDATE
+        """,
+        (ano, os_id),
+    )
+    active_rows = cursor.fetchall() or []
+    active_components = {
+        normalize_gravacao_componente(
+            row.get("Componente") if isinstance(row, dict) else row[1]
+        )
+        for row in active_rows
+    }
+    cursor.execute(
+        """
+        SELECT Componente
+        FROM tab_os_gravacao_externa
+        WHERE OsAno = %s AND OsNro = %s AND Status IN ('pendente', 'iniciada')
+        FOR UPDATE
+        """,
+        (ano, os_id),
+    )
+    external_components = {
+        normalize_gravacao_componente(
+            row.get("Componente") if isinstance(row, dict) else row[0]
+        )
+        for row in (cursor.fetchall() or [])
+    }
+    external_conflict = bool(external_components) and (
+        componente_normalized == COMPONENTE_TODOS
+        or COMPONENTE_TODOS in external_components
+        or componente_normalized in external_components
+    )
+    if external_conflict:
+        raise ValueError(
+            "A OS já possui esse componente em gravação externa. Conclua ou remova o envio no Birô antes de adicioná-lo novamente."
+        )
+    if componente_normalized == COMPONENTE_TODOS:
+        if any(active != COMPONENTE_TODOS for active in active_components):
+            raise ValueError(
+                "A OS já possui Capa ou Miolo na fila. Remova essas partes antes de enviar todos os componentes."
+            )
+        cancel_active_pendente_sessions_cursor(cursor, ano, os_id)
+    else:
+        if COMPONENTE_TODOS in active_components:
+            raise ValueError(
+                "A OS já possui todos os componentes na fila. Remova esse envio antes de separar Capa e Miolo."
+            )
+        cursor.execute(
+            """
+            UPDATE tab_os_gravacao_pendente
+            SET Status = 'cancelada'
+            WHERE OsAno = %s AND OsNro = %s AND Status = 'ativa' AND Componente = %s
+            """,
+            (ano, os_id, componente_normalized),
+        )
     cliente_snap = (cliente or "").strip() or _lookup_os_solicitante_cursor(cursor, ano, os_id)
     grupo_id = (juntada_grupo_id or "").strip() or None
     obs_text = _normalize_session_observacao(observacao)
     cursor.execute(
         """
         INSERT INTO tab_os_gravacao_pendente
-            (OsAno, OsNro, CodStatus, Origem, LancadoPorPonto, LancadoPorNome, Cliente, Status,
+            (OsAno, OsNro, CodStatus, Origem, Componente, LancadoPorPonto, LancadoPorNome, Cliente, Status,
              JuntadaGrupoId, Observacao)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, 'ativa', %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'ativa', %s, %s)
         """,
         (
             ano,
             os_id,
             cod_status,
             origem,
+            componente_normalized,
             ponto_fmt,
             lancado_por_nome,
             cliente_snap,
@@ -508,6 +575,7 @@ def _map_pendente_session(row: dict[str, Any]) -> dict[str, Any]:
         "os_nro": int(row["OsNro"]),
         "cod_status": str(row.get("CodStatus") or ""),
         "origem": str(row.get("Origem") or ORIGEM_PENDENTE_ANDAMENTO),
+        "componente": normalize_stored_gravacao_componente(row.get("Componente")),
         "lancado_por_ponto": str(row.get("LancadoPorPonto") or ""),
         "lancado_por_nome": row.get("LancadoPorNome"),
         "cliente": row.get("Cliente"),
@@ -517,7 +585,17 @@ def _map_pendente_session(row: dict[str, Any]) -> dict[str, Any]:
         "juntada_grupo_id": str(juntada).strip() if juntada else None,
         "observacao": _normalize_session_observacao(row.get("Observacao")),
         "criado_em": row.get("CriadoEm"),
+        "desmembrada_de_id": _optional_int(row.get("DesmembradaDeId")),
     }
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def list_active_pendente_by_juntada(juntada_grupo_id: str) -> list[dict[str, Any]]:
@@ -572,8 +650,10 @@ def validate_gravacao_pendente_juntadas(
     principal_ano: int,
     principal_nr: int,
     juntadas: list[dict[str, Any]] | None,
+    componente: str = COMPONENTE_TODOS,
 ) -> list[tuple[int, int]]:
     """Normaliza e valida OSs juntadas (exclui a principal). Retorna lista (ano, nr)."""
+    componente_normalized = normalize_gravacao_componente(componente)
     if not juntadas:
         return []
     seen: set[tuple[int, int]] = set()
@@ -592,10 +672,34 @@ def validate_gravacao_pendente_juntadas(
             continue
         if not os_exists(ano, nr):
             raise ValueError(f"OS {nr}/{ano} não encontrada.")
-        active = get_active_pendente_session(ano, nr)
-        if active:
+        active_rows = db.execute_query(
+            """
+            SELECT Componente
+            FROM tab_os_gravacao_pendente
+            WHERE OsAno = %s AND OsNro = %s AND Status = 'ativa'
+            """,
+            (ano, nr),
+        )
+        active_components = {
+            normalize_stored_gravacao_componente(active.get("Componente"))
+            for active in (active_rows or [])
+        }
+        if not active_components:
+            legacy_active = get_active_pendente_session(ano, nr)
+            if legacy_active:
+                active_components.add(
+                    normalize_stored_gravacao_componente(
+                        legacy_active.get("componente")
+                    )
+                )
+        conflict = bool(active_components) and (
+            componente_normalized == COMPONENTE_TODOS
+            or COMPONENTE_TODOS in active_components
+            or componente_normalized in active_components
+        )
+        if conflict:
             raise ValueError(
-                f"OS {nr}/{ano} já possui Gravação Pendente ativa. "
+                f"OS {nr}/{ano} já possui Gravação Pendente ativa para esse componente. "
                 "Encerre ou envie antes de juntá-la neste lançamento."
             )
         seen.add(key)
@@ -612,11 +716,13 @@ def create_manual_pendente_session(
     chapas: list[dict[str, Any]],
     observacao: str = "",
     juntadas: list[dict[str, Any]] | None = None,
+    componente: str = COMPONENTE_TODOS,
 ) -> dict[str, Any]:
     """Inclui uma OS na fila pendente sem criar ou alterar tabAndamento."""
     if not os_exists(ano, os_id):
         raise ValueError(f"OS {os_id}/{ano} não encontrada.")
 
+    componente_normalized = normalize_gravacao_componente(componente)
     validated_arquivos = validate_network_arquivos_input(arquivos)
     validated_chapas = validate_chapas_input(
         chapas,
@@ -626,6 +732,7 @@ def create_manual_pendente_session(
         principal_ano=ano,
         principal_nr=os_id,
         juntadas=juntadas,
+        componente=componente_normalized,
     )
     targets = [(ano, os_id), *membros]
     grupo_id = str(uuid.uuid4()) if membros else None
@@ -648,16 +755,27 @@ def create_manual_pendente_session(
             cursor.fetchone()
             cursor.execute(
                 """
-                SELECT Id
+                SELECT Id, Componente
                 FROM tab_os_gravacao_pendente
                 WHERE OsAno = %s AND OsNro = %s AND Status = 'ativa'
-                LIMIT 1
                 """,
                 (target_ano, target_os),
             )
-            if cursor.fetchone():
+            active_rows = cursor.fetchall() or []
+            active_components = {
+                normalize_gravacao_componente(
+                    active.get("Componente") if isinstance(active, dict) else active[1]
+                )
+                for active in active_rows
+            }
+            conflict = bool(active_components) and (
+                componente_normalized == COMPONENTE_TODOS
+                or COMPONENTE_TODOS in active_components
+                or componente_normalized in active_components
+            )
+            if conflict:
                 raise ValueError(
-                    f"OS {target_os}/{target_ano} já está na lista de gravação pendente."
+                    f"OS {target_os}/{target_ano} já possui esse componente na lista de gravação pendente."
                 )
 
         ids: list[int] = []
@@ -675,12 +793,13 @@ def create_manual_pendente_session(
                     juntada_grupo_id=grupo_id,
                     observacao=observacao,
                     origem=ORIGEM_PENDENTE_MANUAL,
+                    componente=componente_normalized,
                 )
             )
         return ids
 
-    db.execute_transaction([tx])
-    session = get_active_pendente_session(ano, os_id)
+    created_ids = db.execute_transaction([tx])[0]
+    session = get_active_pendente_session(ano, os_id) if created_ids else None
     if not session:
         raise RuntimeError("Falha ao criar sessão de Gravação Pendente.")
 
@@ -805,7 +924,13 @@ def _aggregate_list_items_by_juntada(
         if gid:
             key = f"g:{gid}"
         else:
-            key = f"s:{item['ano']}-{item['nr_os']}"
+            session_id = item.get("gravacao_externa_id") or item.get("gravacao_pendente_id")
+            if session_id is not None:
+                # Partes desmembradas do mesmo componente são sessões distintas.
+                key = f"s:id-{session_id}"
+            else:
+                componente = normalize_gravacao_componente(item.get("componente"))
+                key = f"s:{item['ano']}-{item['nr_os']}-{componente}"
 
         membro = {"nr_os": int(item["nr_os"]), "ano": int(item["ano"])}
         if key not in groups:
@@ -845,6 +970,7 @@ def _aggregate_list_items_by_juntada(
                 "concluida_por_ponto",
                 "chapas_por_maquina",
                 "total_chapas",
+                "componente",
             ):
                 if field in item:
                     g[field] = item[field]
@@ -1027,7 +1153,31 @@ def _map_pendente_chapa(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def get_active_pendente_session(ano: int, os_id: int) -> Optional[dict[str, Any]]:
+def get_pendente_session_by_id(session_id: int) -> Optional[dict[str, Any]]:
+    rows = db.execute_query(
+        "SELECT * FROM tab_os_gravacao_pendente WHERE Id = %s LIMIT 1",
+        (session_id,),
+    )
+    if not rows:
+        return None
+    return _map_pendente_session(rows[0])
+
+
+def get_active_pendente_session(
+    ano: int,
+    os_id: int,
+    session_id: int | None = None,
+) -> Optional[dict[str, Any]]:
+    if session_id is not None:
+        session = get_pendente_session_by_id(int(session_id))
+        if (
+            not session
+            or int(session["os_ano"]) != int(ano)
+            or int(session["os_nro"]) != int(os_id)
+            or session["status"] != "ativa"
+        ):
+            return None
+        return session
     rows = db.execute_query(
         """
         SELECT * FROM tab_os_gravacao_pendente
@@ -1064,6 +1214,90 @@ def _fetch_pendente_chapas(session_id: int) -> list[dict[str, Any]]:
         (session_id,),
     )
     return [_map_pendente_chapa(r) for r in rows]
+
+
+def get_viewable_pendente_session(
+    ano: int,
+    os_id: int,
+    session_id: int | None = None,
+) -> Optional[dict[str, Any]]:
+    """Sessão ativa ou, por id explícito, parte desmembrada já enviada (somente leitura)."""
+    session = get_active_pendente_session(ano, os_id, session_id)
+    if session or session_id is None:
+        return session
+    candidate = get_pendente_session_by_id(int(session_id))
+    if (
+        candidate
+        and int(candidate["os_ano"]) == int(ano)
+        and int(candidate["os_nro"]) == int(os_id)
+        and candidate.get("status") == "enviada"
+        and candidate.get("desmembrada_de_id")
+    ):
+        return candidate
+    return None
+
+
+def list_pendente_envios_parciais(parent_id: int) -> list[dict[str, Any]]:
+    """Partes desmembradas e enviadas ao Birô a partir de uma sessão pendente."""
+    rows = db.execute_query(
+        """
+        SELECT
+            gp.Id AS gravacao_pendente_id,
+            gp.Componente AS componente,
+            gp.EnviadaEm AS enviada_em,
+            ge.Id AS gravacao_externa_id,
+            ge.Status AS externa_status,
+            ge.FornecedorPonto AS fornecedor_ponto,
+            uf.Nome AS fornecedor_nome
+        FROM tab_os_gravacao_pendente gp
+        LEFT JOIN tab_os_gravacao_externa ge
+            ON ge.Id = (
+                SELECT MAX(ge2.Id)
+                FROM tab_os_gravacao_externa ge2
+                WHERE ge2.OrigemPendenteId = gp.Id
+            )
+        LEFT JOIN tabUsuarios uf
+            ON uf.Ponto = NULLIF(
+                CAST(
+                    REPLACE(REPLACE(IFNULL(ge.FornecedorPonto, ''), '.', ''), '-', '')
+                    AS UNSIGNED
+                ),
+                0
+            )
+        WHERE gp.DesmembradaDeId = %s
+          AND gp.Status = 'enviada'
+        ORDER BY gp.Id ASC
+        """,
+        (int(parent_id),),
+    )
+    envios: list[dict[str, Any]] = []
+    for row in rows or []:
+        child_id = int(row["gravacao_pendente_id"])
+        arquivos = _fetch_pendente_arquivos(child_id)
+        chapas = _fetch_pendente_chapas(child_id)
+        maquinas: list[str] = []
+        seen: set[str] = set()
+        for name in [c.get("maquina") for c in chapas] + [a.get("maquina") for a in arquivos]:
+            key = _norm_maquina_key(name)
+            if key and key not in seen:
+                seen.add(key)
+                maquinas.append(str(name).strip())
+        externa_id = row.get("gravacao_externa_id")
+        envios.append(
+            {
+                "gravacao_pendente_id": child_id,
+                "gravacao_externa_id": int(externa_id) if externa_id is not None else None,
+                "externa_status": row.get("externa_status"),
+                "componente": normalize_stored_gravacao_componente(row.get("componente")),
+                "fornecedor_ponto": row.get("fornecedor_ponto"),
+                "fornecedor_nome": row.get("fornecedor_nome"),
+                "enviada_em": row.get("enviada_em"),
+                "maquinas": maquinas,
+                "arquivos": arquivos,
+                "chapas": chapas,
+            }
+        )
+    return envios
 
 
 def build_pendente_detail(session: dict[str, Any]) -> dict[str, Any]:
@@ -1120,6 +1354,7 @@ def list_os_gravacao_pendente(
             gp.LancadoPorNome AS lancado_por_nome,
             gp.CriadoEm AS gravacao_criado_em,
             gp.JuntadaGrupoId AS juntada_grupo_id,
+            gp.Componente AS componente,
             (
                 SELECT d.TipoPublicacaoLink
                 FROM tabDetalhesServico d
@@ -1160,6 +1395,7 @@ def list_os_gravacao_pendente(
                 "lancado_por_nome": row.get("lancado_por_nome"),
                 "gravacao_criado_em": row.get("gravacao_criado_em"),
                 "juntada_grupo_id": str(juntada).strip() if juntada else None,
+                "componente": normalize_stored_gravacao_componente(row.get("componente")),
             }
         )
     aggregated = _enrich_juntada_membros_from_sessions(
@@ -1167,7 +1403,10 @@ def list_os_gravacao_pendente(
     )
     count_group_sql = f"""
         SELECT COUNT(*) AS cnt FROM (
-            SELECT COALESCE(gp.JuntadaGrupoId, CONCAT(p.AnoProtocolo, '-', p.NroProtocolo)) AS gkey
+            SELECT COALESCE(
+                gp.JuntadaGrupoId,
+                CONCAT('s-', gp.Id)
+            ) AS gkey
             FROM tab_os_gravacao_pendente gp
             INNER JOIN tabProtocolos p
                 ON p.AnoProtocolo = gp.OsAno
@@ -1950,6 +2189,16 @@ def resolve_fornecedor_ponto(fornecedor_ponto: str | None) -> str:
     raise HTTPException(status_code=400, detail="Fornecedor inválido ou inativo.")
 
 
+_HISTORICO_LATEST_ROOTS_SQL = """
+    SELECT MAX(Id) AS root_id
+    FROM tab_os_gravacao_pendente
+    WHERE Status <> 'cancelada'
+      AND CriadoEm >= %s
+      AND DesmembradaDeId IS NULL
+    GROUP BY OsAno, OsNro
+"""
+
+
 def list_historico_concluidas(
     *,
     limit: int = 100,
@@ -1957,26 +2206,34 @@ def list_historico_concluidas(
 ) -> tuple[list[dict[str, Any]], int, int]:
     desde = ensure_controle_list_desde()
 
-    # Uma linha por OS (sessão pendente mais recente após o cutoff).
+    # Uma linha por OS (sessão raiz mais recente após o cutoff) + uma linha por
+    # parte desmembrada por máquina dessa raiz (fornecedor/datas/NF próprios).
     count_row = db.execute_query(
-        """
+        f"""
         SELECT COUNT(*) AS cnt
         FROM (
             SELECT gp.OsAno, gp.OsNro
             FROM tab_os_gravacao_pendente gp
             WHERE gp.Status <> 'cancelada'
               AND gp.CriadoEm >= %s
+              AND gp.DesmembradaDeId IS NULL
             GROUP BY gp.OsAno, gp.OsNro
+            UNION ALL
+            SELECT c.OsAno, c.Id
+            FROM tab_os_gravacao_pendente c
+            INNER JOIN ({_HISTORICO_LATEST_ROOTS_SQL}) roots
+                ON roots.root_id = c.DesmembradaDeId
+            WHERE c.Status <> 'cancelada'
         ) uniq
         """,
-        (desde,),
+        (desde, desde),
     )
     total = int((count_row[0] if count_row else {}).get("cnt") or 0)
 
     total_chapas = get_total_chapas_gravadas_concluidas()
 
     rows = db.execute_query(
-        """
+        f"""
         SELECT
             gp.Id AS gravacao_pendente_id,
             ge.Id AS gravacao_externa_id,
@@ -2011,11 +2268,14 @@ def list_historico_concluidas(
             ) AS total_chapas_os
         FROM tab_os_gravacao_pendente gp
         INNER JOIN (
-            SELECT OsAno, OsNro, MAX(Id) AS max_id
-            FROM tab_os_gravacao_pendente
-            WHERE Status <> 'cancelada'
-              AND CriadoEm >= %s
-            GROUP BY OsAno, OsNro
+            SELECT roots.root_id AS max_id
+            FROM ({_HISTORICO_LATEST_ROOTS_SQL}) roots
+            UNION ALL
+            SELECT c.Id AS max_id
+            FROM tab_os_gravacao_pendente c
+            INNER JOIN ({_HISTORICO_LATEST_ROOTS_SQL}) roots_c
+                ON roots_c.root_id = c.DesmembradaDeId
+            WHERE c.Status <> 'cancelada'
         ) latest_gp ON latest_gp.max_id = gp.Id
         LEFT JOIN (
             SELECT ge1.*
@@ -2048,7 +2308,7 @@ def list_historico_concluidas(
         ORDER BY gp.CriadoEm DESC, gp.Id DESC
         LIMIT %s OFFSET %s
         """,
-        (desde, limit, offset),
+        (desde, desde, limit, offset),
     )
 
     items = []
@@ -2184,8 +2444,9 @@ def update_pendente_session_arquivos(
     os_id: int,
     arquivos: list[dict[str, str]],
     chapas: list[dict[str, Any]] | None = None,
+    gravacao_pendente_id: int | None = None,
 ) -> dict[str, Any]:
-    session = get_active_pendente_session(ano, os_id)
+    session = get_active_pendente_session(ano, os_id, gravacao_pendente_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão de Gravação Pendente não encontrada.")
     if session["status"] != "ativa":
@@ -2251,7 +2512,11 @@ def update_pendente_session_arquivos(
     from services.gravacao_preview_cache_service import enqueue_preview_warmup
 
     enqueue_preview_warmup(validated)
-    updated = get_active_pendente_session(ano, os_id) or session
+    updated = (
+        get_pendente_session_by_id(int(session["id"]))
+        if gravacao_pendente_id is not None
+        else get_active_pendente_session(ano, os_id)
+    ) or session
     return build_pendente_detail(updated)
 
 
@@ -2260,8 +2525,9 @@ def update_pendente_session_observacao(
     ano: int,
     os_id: int,
     observacao: str,
+    gravacao_pendente_id: int | None = None,
 ) -> dict[str, Any]:
-    session = get_active_pendente_session(ano, os_id)
+    session = get_active_pendente_session(ano, os_id, gravacao_pendente_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão de Gravação Pendente não encontrada.")
     if session["status"] != "ativa":
@@ -2284,7 +2550,11 @@ def update_pendente_session_observacao(
         return int(session["id"])
 
     db.execute_transaction([tx])
-    updated = get_active_pendente_session(ano, os_id) or session
+    updated = (
+        get_pendente_session_by_id(int(session["id"]))
+        if gravacao_pendente_id is not None
+        else get_active_pendente_session(ano, os_id)
+    ) or session
     return build_pendente_detail(updated)
 
 
@@ -2296,8 +2566,15 @@ def _enviar_uma_pendente_para_externa_cursor(
     ponto_fmt: str,
     setor_link: str,
     fornecedor_fmt: str | None,
-) -> str:
-    """Marca pendente como enviada, cria andamento + sessão externa. Retorna new_cod."""
+    allow_coexisting_parts: bool = False,
+    juntada_label_grupo_id: str | None = None,
+) -> tuple[str, int]:
+    """Marca pendente como enviada e cria andamento + sessão externa.
+
+    ``juntada_label_grupo_id`` permite rotular a juntada pelo grupo original
+    quando a sessão foi desmembrada nesta mesma transação (grupo novo ainda
+    não visível fora dela).
+    """
     ano = int(pendente["os_ano"])
     os_id = int(pendente["os_nro"])
     cursor.execute(
@@ -2340,9 +2617,14 @@ def _enviar_uma_pendente_para_externa_cursor(
             }
         )
 
-    obs_body = with_juntada_obs_prefix(
-        format_gravacao_envio_externa_obs(chapas_rows),
-        juntada_membros_label(pendente.get("juntada_grupo_id")),
+    obs_body = with_gravacao_componente_obs_prefix(
+        with_juntada_obs_prefix(
+            format_gravacao_envio_externa_obs(chapas_rows),
+            juntada_membros_label(
+                juntada_label_grupo_id or pendente.get("juntada_grupo_id")
+            ),
+        ),
+        pendente.get("componente"),
     )
     obs = format_andamento_obs(obs_body)
     new_cod = next_cod_status_for_os(cursor, os_id, ano)
@@ -2381,7 +2663,7 @@ def _enviar_uma_pendente_para_externa_cursor(
             }
         )
 
-    insert_session_with_arquivos_cursor(
+    externa_id = insert_session_with_arquivos_cursor(
         cursor,
         ano=ano,
         os_id=os_id,
@@ -2393,9 +2675,12 @@ def _enviar_uma_pendente_para_externa_cursor(
         fornecedor_ponto=fornecedor_fmt,
         juntada_grupo_id=pendente.get("juntada_grupo_id"),
         observacao=pendente.get("observacao"),
+        componente=pendente.get("componente"),
+        allow_replace_active=False,
+        allow_coexisting_parts=allow_coexisting_parts,
     )
 
-    return new_cod
+    return new_cod, externa_id
 
 
 def enviar_para_gravacao_externa(
@@ -2405,15 +2690,32 @@ def enviar_para_gravacao_externa(
     operador_ponto: str,
     setor: str = DEFAULT_SETOR_ENVIO_EXTERNA,
     fornecedor_ponto: str | None = None,
+    gravacao_pendente_id: int | None = None,
+    gravacao_pendente_ids: list[int] | None = None,
+    maquinas: list[str] | None = None,
 ) -> dict[str, Any]:
     """Registra andamento Gravação Externa e cria sessão externa a partir da pendente.
 
     Se a sessão fizer parte de uma juntada, envia todas as sessões ativas do grupo.
+    Com ``gravacao_pendente_ids`` (todas as sessões do card da OS) e/ou ``maquinas``
+    usa o envio por unidades, que permite enviar só as máquinas selecionadas.
     """
     setor_link = (setor or DEFAULT_SETOR_ENVIO_EXTERNA).strip() or DEFAULT_SETOR_ENVIO_EXTERNA
     fornecedor_fmt = resolve_fornecedor_ponto(fornecedor_ponto)
 
-    pendente = get_active_pendente_session(ano, os_id)
+    if gravacao_pendente_ids or maquinas:
+        return _enviar_unidades_para_externa(
+            ano=ano,
+            os_id=os_id,
+            operador_ponto=operador_ponto,
+            setor_link=setor_link,
+            fornecedor_fmt=fornecedor_fmt,
+            gravacao_pendente_id=gravacao_pendente_id,
+            gravacao_pendente_ids=gravacao_pendente_ids or [],
+            maquinas=maquinas or [],
+        )
+
+    pendente = get_active_pendente_session(ano, os_id, gravacao_pendente_id)
     if not pendente:
         raise HTTPException(status_code=404, detail="Sessão de Gravação Pendente não encontrada.")
 
@@ -2430,10 +2732,10 @@ def enviar_para_gravacao_externa(
     ponto_fmt = format_ponto(_clean_ponto(operador_ponto))
 
     def tx(cursor):
-        codes: list[tuple[int, int, str]] = []
+        codes: list[tuple[int, int, str, int]] = []
         for target in targets:
             # Usa arquivos da âncora (mesmos paths em todas as sessões do grupo).
-            new_cod = _enviar_uma_pendente_para_externa_cursor(
+            new_cod, externa_id = _enviar_uma_pendente_para_externa_cursor(
                 cursor,
                 pendente=target,
                 arquivos=arquivos,
@@ -2441,11 +2743,13 @@ def enviar_para_gravacao_externa(
                 setor_link=setor_link,
                 fornecedor_fmt=fornecedor_fmt,
             )
-            codes.append((int(target["os_ano"]), int(target["os_nro"]), new_cod))
+            codes.append(
+                (int(target["os_ano"]), int(target["os_nro"]), new_cod, externa_id)
+            )
         return codes
 
     codes = db.execute_transaction([tx])[0]
-    for a, n, new_cod in codes:
+    for a, n, new_cod, _externa_id in codes:
         _notify_enviar_gravacao_externa(
             ano=a,
             os_id=n,
@@ -2460,12 +2764,367 @@ def enviar_para_gravacao_externa(
         target_nome=_lookup_usuario_nome(fornecedor_fmt),
         operador_ponto=ponto_fmt,
     )
-    session = get_active_session(ano, os_id)
+    anchor_externa_id = next(
+        (
+            externa_id
+            for a, n, _new_cod, externa_id in codes
+            if int(a) == int(ano) and int(n) == int(os_id)
+        ),
+        None,
+    )
+    session = (
+        get_session_by_id(anchor_externa_id)
+        if gravacao_pendente_id is not None and anchor_externa_id
+        else get_active_session(ano, os_id)
+    )
     if not session:
         raise HTTPException(status_code=500, detail="Falha ao criar sessão externa.")
     from services.gravacao_preview_cache_service import enqueue_preview_warmup
 
     enqueue_preview_warmup(arquivos)
+    return build_session_detail(session)
+
+
+def _norm_maquina_key(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _resolve_envio_units(
+    *,
+    ano: int,
+    os_id: int,
+    gravacao_pendente_id: int | None,
+    gravacao_pendente_ids: list[int],
+) -> list[tuple[dict[str, Any], list[dict[str, Any]]]]:
+    """Sessões âncora do card (capa/miolo) e respectivas irmãs de juntada."""
+    requested: list[int] = []
+    for raw in gravacao_pendente_ids:
+        sid = _optional_int(raw)
+        if sid and sid > 0 and sid not in requested:
+            requested.append(sid)
+
+    anchors: list[dict[str, Any]] = []
+    if requested:
+        for sid in requested:
+            session = get_pendente_session_by_id(sid)
+            if not session or session.get("status") != "ativa":
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Um dos lançamentos desta OS já foi enviado ou removido. "
+                        "Atualize a página e tente novamente."
+                    ),
+                )
+            anchors.append(session)
+    else:
+        session = get_active_pendente_session(ano, os_id, gravacao_pendente_id)
+        if not session:
+            raise HTTPException(
+                status_code=404, detail="Sessão de Gravação Pendente não encontrada."
+            )
+        anchors.append(session)
+
+    units: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
+    seen: set[int] = set()
+    for anchor in anchors:
+        anchor_id = int(anchor["id"])
+        if anchor_id in seen:
+            continue
+        targets = [anchor]
+        gid = anchor.get("juntada_grupo_id")
+        if gid:
+            targets = list_active_pendente_by_juntada(str(gid)) or [anchor]
+            if not any(int(t["id"]) == anchor_id for t in targets):
+                targets = [anchor, *targets]
+        if not any(
+            int(t["os_ano"]) == int(ano) and int(t["os_nro"]) == int(os_id) for t in targets
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Lançamento selecionado não pertence a esta OS.",
+            )
+        targets = [t for t in targets if int(t["id"]) not in seen]
+        seen.update(int(t["id"]) for t in targets)
+        units.append((anchor, targets))
+    return units
+
+
+def _lock_active_pendente_cursor(cursor, session_id: int) -> None:
+    cursor.execute(
+        """
+        SELECT Id FROM tab_os_gravacao_pendente
+        WHERE Id = %s AND Status = 'ativa'
+        FOR UPDATE
+        """,
+        (session_id,),
+    )
+    if not cursor.fetchone():
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Lançamento já enviado para Gravação Externa ou removido da lista. "
+                "Atualize a página."
+            ),
+        )
+
+
+def _fetch_pendente_arquivos_cursor(cursor, session_id: int) -> list[dict[str, Any]]:
+    cursor.execute(
+        """
+        SELECT * FROM tab_os_gravacao_pendente_arquivo
+        WHERE GravacaoPendenteId = %s
+        ORDER BY Ordem ASC, Id ASC
+        """,
+        (session_id,),
+    )
+    return [_map_pendente_arquivo(r) for r in (cursor.fetchall() or [])]
+
+
+def _fetch_pendente_chapa_maquina_keys_cursor(cursor, session_id: int) -> set[str]:
+    cursor.execute(
+        """
+        SELECT Maquina FROM tab_os_gravacao_pendente_chapa
+        WHERE GravacaoPendenteId = %s
+        """,
+        (session_id,),
+    )
+    keys: set[str] = set()
+    for row in cursor.fetchall() or []:
+        key = _norm_maquina_key(row.get("Maquina") if isinstance(row, dict) else row[0])
+        if key:
+            keys.add(key)
+    return keys
+
+
+def _pendente_has_partes_cursor(cursor, session_id: int) -> bool:
+    cursor.execute(
+        """
+        SELECT Id FROM tab_os_gravacao_pendente
+        WHERE DesmembradaDeId = %s
+        LIMIT 1
+        """,
+        (session_id,),
+    )
+    return bool(cursor.fetchone())
+
+
+def _desmembrar_pendente_cursor(
+    cursor,
+    *,
+    parent: dict[str, Any],
+    maquina_keys: list[str],
+    juntada_grupo_id: str | None,
+) -> dict[str, Any]:
+    """Cria sessão-filha e move para ela arquivos/chapas das máquinas informadas."""
+    parent_id = int(parent["id"])
+    cursor.execute(
+        """
+        INSERT INTO tab_os_gravacao_pendente
+            (OsAno, OsNro, CodStatus, Origem, Componente, LancadoPorPonto, LancadoPorNome,
+             Cliente, Status, JuntadaGrupoId, Observacao, CriadoEm, DesmembradaDeId)
+        SELECT OsAno, OsNro, CodStatus, Origem, Componente, LancadoPorPonto, LancadoPorNome,
+               Cliente, 'ativa', %s, Observacao, CriadoEm, Id
+        FROM tab_os_gravacao_pendente
+        WHERE Id = %s AND Status = 'ativa'
+        """,
+        (juntada_grupo_id, parent_id),
+    )
+    if cursor.rowcount != 1:
+        raise HTTPException(
+            status_code=409,
+            detail="Lançamento já enviado para Gravação Externa. Atualize a página.",
+        )
+    child_id = int(cursor.lastrowid)
+    placeholders = ", ".join(["%s"] * len(maquina_keys))
+    params = (child_id, parent_id, *maquina_keys)
+    cursor.execute(
+        f"""
+        UPDATE tab_os_gravacao_pendente_arquivo
+        SET GravacaoPendenteId = %s
+        WHERE GravacaoPendenteId = %s
+          AND LOWER(TRIM(Maquina)) IN ({placeholders})
+        """,
+        params,
+    )
+    cursor.execute(
+        f"""
+        UPDATE tab_os_gravacao_pendente_chapa
+        SET GravacaoPendenteId = %s
+        WHERE GravacaoPendenteId = %s
+          AND LOWER(TRIM(Maquina)) IN ({placeholders})
+        """,
+        params,
+    )
+    return {
+        **parent,
+        "id": child_id,
+        "status": "ativa",
+        "juntada_grupo_id": juntada_grupo_id,
+        "desmembrada_de_id": parent_id,
+    }
+
+
+def _enviar_unidades_para_externa(
+    *,
+    ano: int,
+    os_id: int,
+    operador_ponto: str,
+    setor_link: str,
+    fornecedor_fmt: str | None,
+    gravacao_pendente_id: int | None,
+    gravacao_pendente_ids: list[int],
+    maquinas: list[str],
+) -> dict[str, Any]:
+    """Envia as sessões do card da OS; com ``maquinas`` envia só essas máquinas.
+
+    Sessões com máquinas fora da seleção são desmembradas: a filha recebe os
+    arquivos/chapas selecionados e é enviada; a original segue ativa.
+    """
+    selected_names: dict[str, str] = {}
+    for raw in maquinas:
+        key = _norm_maquina_key(raw)
+        if key and key not in selected_names:
+            selected_names[key] = str(raw).strip()
+    selected_keys = set(selected_names)
+
+    units = _resolve_envio_units(
+        ano=ano,
+        os_id=os_id,
+        gravacao_pendente_id=gravacao_pendente_id,
+        gravacao_pendente_ids=gravacao_pendente_ids,
+    )
+    ponto_fmt = format_ponto(_clean_ponto(operador_ponto))
+
+    def tx(cursor):
+        codes: list[tuple[int, int, str, int]] = []
+        sent_arquivos: list[dict[str, Any]] = []
+        available_keys: set[str] = set()
+        for anchor, targets in units:
+            for target in targets:
+                _lock_active_pendente_cursor(cursor, int(target["id"]))
+            anchor_id = int(anchor["id"])
+            anchor_arquivos = _fetch_pendente_arquivos_cursor(cursor, anchor_id)
+            unit_keys = {
+                key
+                for key in (_norm_maquina_key(a.get("maquina")) for a in anchor_arquivos)
+                if key
+            } | _fetch_pendente_chapa_maquina_keys_cursor(cursor, anchor_id)
+            available_keys |= unit_keys
+
+            if selected_keys:
+                chosen = selected_keys & unit_keys
+                if not chosen:
+                    continue
+                # Sem arquivos restantes, a sessão original ficaria ativa e vazia.
+                partial = any(
+                    _norm_maquina_key(a.get("maquina")) not in chosen for a in anchor_arquivos
+                )
+            else:
+                chosen = set()
+                partial = False
+
+            if partial:
+                arquivos_envio = [
+                    a for a in anchor_arquivos if _norm_maquina_key(a.get("maquina")) in chosen
+                ]
+                if not arquivos_envio:
+                    nomes = ", ".join(sorted(selected_names[k] for k in chosen))
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Nenhum arquivo vinculado à(s) máquina(s) {nomes}.",
+                    )
+                new_gid = str(uuid.uuid4()) if anchor.get("juntada_grupo_id") else None
+                for target in targets:
+                    child = _desmembrar_pendente_cursor(
+                        cursor,
+                        parent=target,
+                        maquina_keys=sorted(chosen),
+                        juntada_grupo_id=new_gid,
+                    )
+                    new_cod, externa_id = _enviar_uma_pendente_para_externa_cursor(
+                        cursor,
+                        pendente=child,
+                        arquivos=arquivos_envio,
+                        ponto_fmt=ponto_fmt,
+                        setor_link=setor_link,
+                        fornecedor_fmt=fornecedor_fmt,
+                        allow_coexisting_parts=True,
+                        juntada_label_grupo_id=target.get("juntada_grupo_id"),
+                    )
+                    codes.append(
+                        (int(target["os_ano"]), int(target["os_nro"]), new_cod, externa_id)
+                    )
+            else:
+                if not anchor_arquivos:
+                    raise HTTPException(
+                        status_code=400, detail="Nenhum arquivo na sessão pendente."
+                    )
+                arquivos_envio = anchor_arquivos
+                allow_parts = any(
+                    _pendente_has_partes_cursor(cursor, int(t["id"])) for t in targets
+                )
+                for target in targets:
+                    new_cod, externa_id = _enviar_uma_pendente_para_externa_cursor(
+                        cursor,
+                        pendente=target,
+                        arquivos=arquivos_envio,
+                        ponto_fmt=ponto_fmt,
+                        setor_link=setor_link,
+                        fornecedor_fmt=fornecedor_fmt,
+                        allow_coexisting_parts=allow_parts,
+                    )
+                    codes.append(
+                        (int(target["os_ano"]), int(target["os_nro"]), new_cod, externa_id)
+                    )
+            sent_arquivos.extend(arquivos_envio)
+
+        missing = selected_keys - available_keys
+        if missing:
+            nomes = ", ".join(sorted(selected_names[k] for k in missing))
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Máquina(s) {nomes} não está(ão) mais disponível(is) para envio. "
+                    "Atualize a página."
+                ),
+            )
+        if not codes:
+            raise HTTPException(
+                status_code=400,
+                detail="Nenhuma das máquinas selecionadas está disponível para envio.",
+            )
+        return codes, sent_arquivos
+
+    codes, sent_arquivos = db.execute_transaction([tx])[0]
+    for a, n, new_cod, _externa_id in codes:
+        _notify_enviar_gravacao_externa(
+            ano=a,
+            os_id=n,
+            new_cod=str(new_cod),
+            setor=setor_link,
+        )
+    send_gravacao_notification_email(
+        event="encaminhada",
+        ano=ano,
+        os_id=os_id,
+        target_ponto=fornecedor_fmt,
+        target_nome=_lookup_usuario_nome(fornecedor_fmt),
+        operador_ponto=ponto_fmt,
+    )
+    anchor_externa_id = next(
+        (
+            externa_id
+            for a, n, _new_cod, externa_id in codes
+            if int(a) == int(ano) and int(n) == int(os_id)
+        ),
+        codes[0][3],
+    )
+    session = get_session_by_id(anchor_externa_id)
+    if not session:
+        raise HTTPException(status_code=500, detail="Falha ao criar sessão externa.")
+    from services.gravacao_preview_cache_service import enqueue_preview_warmup
+
+    enqueue_preview_warmup(sent_arquivos)
     return build_session_detail(session)
 
 

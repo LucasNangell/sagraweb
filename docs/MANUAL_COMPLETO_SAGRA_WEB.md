@@ -1123,7 +1123,7 @@ Cookie **separado** de `sagra_session` — sessões staff e cliente são indepen
 
 | Item | Valor |
 |------|-------|
-| IPs master | `10.120.1.14` (`allowed_ips.master`), servidor `10.1.1.73`, loopback |
+| IPs master | `10.120.2.11` (`allowed_ips.master`), servidor `10.1.1.73`, loopback |
 | Acesso exclusivo | `/api/admin/*`, `/api/sync/*`, `/api/connected-ips` |
 | Decorators | `require_master_ip`, `require_admin_config_access` |
 

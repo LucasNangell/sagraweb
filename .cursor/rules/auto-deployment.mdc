@@ -21,6 +21,7 @@ Deploy **Windows + PowerShell**; sem Docker ou GitHub Actions no repositório.
 2. Empacotar: `pnpm package:release` → `deploy/release/`.
 3. Deploy remoto: `deploy/scripts/deploy_release.ps1`, `deploy-producao.ps1`.
 4. Servidor: releases versionadas + `shared/` persistente (`config`, logs, `Modelos`).
+5. Watchdog: `SAGRA-SystemWatchdog` monitora API + `SAGRA-SyncAndamentos`; ver `deploy/templates/instalar-servico-watchdog-sistema.ps1` e `docs/RUNBOOK_WATCHDOG_SISTEMA.md`.
 
 ## Scripts úteis
 

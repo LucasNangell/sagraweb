@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -29,6 +29,7 @@ from services.gravacao_externa_service import (
     remove_externa_from_queue,
     get_or_build_preview_png,
     require_session_access,
+    resolve_active_session,
     resolve_arquivo_absolute_path,
     session_allows_operacao_fornecedor,
     update_session_arquivos,
@@ -66,6 +67,7 @@ class GravacaoExternaOsItem(BaseModel):
     last_update: Optional[datetime] = None
     gravacao_externa_id: Optional[int] = None
     gravacao_status: str = "sem_sessao"
+    componente: Literal["todos", "capa", "miolo"] = "todos"
     lancado_por_ponto: Optional[str] = None
     lancado_por_nome: Optional[str] = None
     fornecedor_ponto: Optional[str] = None
@@ -115,6 +117,7 @@ class GravacaoExternaDetailResponse(BaseModel):
     os_ano: int
     os_nro: int
     cod_status: str
+    componente: Literal["todos", "capa", "miolo"] = "todos"
     lancado_por_ponto: str
     lancado_por_nome: Optional[str] = None
     status: str
@@ -233,7 +236,12 @@ def _maybe_iniciar_on_download(request: Request, ano: int, os_id: int, session: 
     if str(session.get("status") or "") != "pendente":
         return
     try:
-        iniciar_gravacao(ano=ano, os_id=os_id, operador_ponto=_session_ponto(request))
+        iniciar_gravacao(
+            ano=ano,
+            os_id=os_id,
+            operador_ponto=_session_ponto(request),
+            gravacao_externa_id=int(session["id"]),
+        )
     except HTTPException:
         raise
     except Exception as exc:
@@ -273,6 +281,17 @@ def _caller_fornecedor_ponto(request: Request) -> Optional[str]:
     if fetch_user_fornecedor(ponto):
         return format_ponto(_clean_ponto(ponto)) or str(ponto).strip()
     return None
+
+
+def _resolve_route_active_session(
+    ano: int,
+    os_id: int,
+    gravacao_externa_id: int | None,
+) -> dict | None:
+    """Preserva clientes legados por OS e usa identidade exata nos clientes novos."""
+    if gravacao_externa_id is None:
+        return get_active_session(ano, os_id)
+    return resolve_active_session(ano, os_id, gravacao_externa_id)
 
 
 @router.get("/gravacao-externa/os", response_model=GravacaoExternaOsListResponse)
@@ -355,8 +374,13 @@ def post_remover_gravacao_externa_fila(
 
 
 @router.get("/gravacao-externa/{ano}/{id}", response_model=GravacaoExternaDetailResponse)
-def get_gravacao_externa_detail(request: Request, ano: int, id: int):
-    session = get_active_session(ano, id)
+def get_gravacao_externa_detail(
+    request: Request,
+    ano: int,
+    id: int,
+    gravacao_externa_id: Optional[int] = Query(None, ge=1),
+):
+    session = _resolve_route_active_session(ano, id, gravacao_externa_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão de Gravação Externa não encontrada.")
     _require_view_or_fornecedor_access(request, session)
@@ -365,13 +389,23 @@ def get_gravacao_externa_detail(request: Request, ano: int, id: int):
 
 
 @router.post("/gravacao-externa/{ano}/{id}/iniciar", response_model=GravacaoExternaDetailResponse)
-def post_iniciar_gravacao(request: Request, ano: int, id: int):
-    session = get_active_session(ano, id)
+def post_iniciar_gravacao(
+    request: Request,
+    ano: int,
+    id: int,
+    gravacao_externa_id: Optional[int] = Query(None, ge=1),
+):
+    session = _resolve_route_active_session(ano, id, gravacao_externa_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão de Gravação Externa não encontrada.")
     _require_operator_or_assigned_fornecedor(request, session)
     ponto = _session_ponto(request)
-    detail = iniciar_gravacao(ano=ano, os_id=id, operador_ponto=ponto)
+    detail = iniciar_gravacao(
+        ano=ano,
+        os_id=id,
+        operador_ponto=ponto,
+        gravacao_externa_id=gravacao_externa_id,
+    )
     return GravacaoExternaDetailResponse.model_validate(detail)
 
 
@@ -381,10 +415,11 @@ def put_gravacao_externa_arquivos(
     ano: int,
     id: int,
     body: GravacaoExternaArquivosUpdate,
+    gravacao_externa_id: Optional[int] = Query(None, ge=1),
 ):
     ponto = _session_ponto(request)
     is_operator = _has_operator_permission(request)
-    session = get_active_session(ano, id)
+    session = _resolve_route_active_session(ano, id, gravacao_externa_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão de Gravação Externa não encontrada.")
     require_session_access(
@@ -403,20 +438,33 @@ def put_gravacao_externa_arquivos(
             }
             for a in body.arquivos
         ],
+        gravacao_externa_id=gravacao_externa_id,
     )
     return GravacaoExternaDetailResponse.model_validate(detail)
 
 
 @router.post("/gravacao-externa/{ano}/{id}/concluir", response_model=GravacaoExternaDetailResponse)
-def post_concluir_gravacao(request: Request, ano: int, id: int):
-    session = get_active_session(ano, id)
+def post_concluir_gravacao(
+    request: Request,
+    ano: int,
+    id: int,
+    gravacao_externa_id: Optional[int] = Query(None, ge=1),
+):
+    session = _resolve_route_active_session(ano, id, gravacao_externa_id)
+    if gravacao_externa_id is not None and not session:
+        raise HTTPException(status_code=404, detail="Sessão de Gravação Externa não encontrada.")
     if session:
         _require_operator_or_assigned_fornecedor(request, session)
     else:
         # Sem sessão/arquivos: só operador (não fornecedor).
         _require_operator_permission(request)
     ponto = _session_ponto(request)
-    detail = concluir_gravacao(ano=ano, os_id=id, operador_ponto=ponto)
+    detail = concluir_gravacao(
+        ano=ano,
+        os_id=id,
+        operador_ponto=ponto,
+        gravacao_externa_id=gravacao_externa_id,
+    )
     return GravacaoExternaDetailResponse.model_validate(detail)
 
 
@@ -429,6 +477,7 @@ def post_entrega_chapas(
     ano: int,
     id: int,
     body: GravacaoExternaEntregaBody,
+    gravacao_externa_id: Optional[int] = Query(None, ge=1),
 ):
     _require_view_permission(request)
     _require_entrega_permission(request)
@@ -437,12 +486,18 @@ def post_entrega_chapas(
         os_id=id,
         recebido_por_ponto=body.recebido_por_ponto,
         recebido_por_nome=body.recebido_por_nome,
+        gravacao_externa_id=gravacao_externa_id,
     )
     return GravacaoExternaDetailResponse.model_validate(detail)
 
 
 @router.get("/gravacao-externa/{ano}/{id}/mensagens", response_model=List[GravacaoExternaMensagemItem])
-def get_gravacao_externa_mensagens(request: Request, ano: int, id: int):
+def get_gravacao_externa_mensagens(
+    request: Request,
+    ano: int,
+    id: int,
+    gravacao_externa_id: Optional[int] = Query(None, ge=1),
+):
     ponto = _session_ponto(request)
     is_operator = _has_operator_permission(request)
     msgs = list_mensagens(
@@ -451,6 +506,7 @@ def get_gravacao_externa_mensagens(request: Request, ano: int, id: int):
         ponto=ponto,
         is_operator=is_operator,
         has_view_permission=_has_view_permission(request),
+        gravacao_externa_id=gravacao_externa_id,
     )
     return [GravacaoExternaMensagemItem.model_validate(m) for m in msgs]
 
@@ -461,10 +517,11 @@ def post_gravacao_externa_mensagem(
     ano: int,
     id: int,
     body: GravacaoExternaMensagemCreate,
+    gravacao_externa_id: Optional[int] = Query(None, ge=1),
 ):
     ponto = _session_ponto(request)
     has_view = _has_view_permission(request)
-    session = get_active_session(ano, id)
+    session = _resolve_route_active_session(ano, id, gravacao_externa_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão de Gravação Externa não encontrada.")
     is_fornecedor = fetch_user_fornecedor(ponto)
@@ -482,12 +539,18 @@ def post_gravacao_externa_mensagem(
         mensagem=body.mensagem,
         has_view_permission=has_view,
         is_fornecedor=is_fornecedor,
+        gravacao_externa_id=gravacao_externa_id,
     )
     return GravacaoExternaMensagemItem.model_validate(msg)
 
 
-def _require_zip_session(request: Request, ano: int, os_id: int) -> dict:
-    session = get_active_session(ano, os_id)
+def _require_zip_session(
+    request: Request,
+    ano: int,
+    os_id: int,
+    gravacao_externa_id: int | None = None,
+) -> dict:
+    session = _resolve_route_active_session(ano, os_id, gravacao_externa_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão não encontrada.")
     _require_operator_or_assigned_fornecedor(request, session)
@@ -512,8 +575,13 @@ def _zip_file_response(row: dict) -> FileResponse:
     "/gravacao-externa/{ano}/{id}/arquivos/zip",
     response_model=GravacaoExternaZipStatusResponse,
 )
-def post_gravacao_externa_zip(request: Request, ano: int, id: int):
-    session = _require_zip_session(request, ano, id)
+def post_gravacao_externa_zip(
+    request: Request,
+    ano: int,
+    id: int,
+    gravacao_externa_id: Optional[int] = Query(None, ge=1),
+):
+    session = _require_zip_session(request, ano, id, gravacao_externa_id)
     _maybe_iniciar_on_download(request, ano, id, session)
     job = enqueue_zip_job(session)
     payload = GravacaoExternaZipStatusResponse.model_validate(job)
@@ -525,15 +593,25 @@ def post_gravacao_externa_zip(request: Request, ano: int, id: int):
     "/gravacao-externa/{ano}/{id}/arquivos/zip",
     response_model=GravacaoExternaZipStatusResponse,
 )
-def get_gravacao_externa_zip(request: Request, ano: int, id: int):
-    session = _require_zip_session(request, ano, id)
+def get_gravacao_externa_zip(
+    request: Request,
+    ano: int,
+    id: int,
+    gravacao_externa_id: Optional[int] = Query(None, ge=1),
+):
+    session = _require_zip_session(request, ano, id, gravacao_externa_id)
     job = get_zip_job_status(session)
     return GravacaoExternaZipStatusResponse.model_validate(job)
 
 
 @router.get("/gravacao-externa/{ano}/{id}/arquivos/zip/download")
-def download_gravacao_externa_zip(request: Request, ano: int, id: int):
-    session = _require_zip_session(request, ano, id)
+def download_gravacao_externa_zip(
+    request: Request,
+    ano: int,
+    id: int,
+    gravacao_externa_id: Optional[int] = Query(None, ge=1),
+):
+    session = _require_zip_session(request, ano, id, gravacao_externa_id)
     row = resolve_ready_zip(session)
     if not row:
         raise HTTPException(
@@ -548,8 +626,9 @@ def download_all_gravacao_externa_arquivos(
     request: Request,
     ano: int,
     id: int,
+    gravacao_externa_id: Optional[int] = Query(None, ge=1),
 ):
-    session = _require_zip_session(request, ano, id)
+    session = _require_zip_session(request, ano, id, gravacao_externa_id)
     _maybe_iniciar_on_download(request, ano, id, session)
     row = resolve_ready_zip(session)
     if row:
@@ -567,8 +646,9 @@ def download_gravacao_externa_arquivo(
     ano: int,
     id: int,
     arq_id: int,
+    gravacao_externa_id: Optional[int] = Query(None, ge=1),
 ):
-    session = get_active_session(ano, id)
+    session = _resolve_route_active_session(ano, id, gravacao_externa_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão não encontrada.")
     _require_operator_or_assigned_fornecedor(request, session)
@@ -591,8 +671,9 @@ def preview_gravacao_externa_arquivo(
     ano: int,
     id: int,
     arq_id: int,
+    gravacao_externa_id: Optional[int] = Query(None, ge=1),
 ):
-    session = get_active_session(ano, id)
+    session = _resolve_route_active_session(ano, id, gravacao_externa_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão não encontrada.")
     _require_view_or_fornecedor_access(request, session)
@@ -622,8 +703,9 @@ def preview_gravacao_externa_composite(
     ano: int,
     id: int,
     group_key: str = Query(..., min_length=1),
+    gravacao_externa_id: Optional[int] = Query(None, ge=1),
 ):
-    session = get_active_session(ano, id)
+    session = _resolve_route_active_session(ano, id, gravacao_externa_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão não encontrada.")
     _require_view_or_fornecedor_access(request, session)

@@ -35,10 +35,23 @@ def ensure_tokens_table() -> None:
     db.execute_query(_TOKENS_DDL)
 
 
+def _folder_solicitante(
+    categoria: Optional[str],
+    sigla_orgao: Optional[str],
+    solicitante: str,
+) -> str:
+    """Trecho do solicitante no nome da pasta: SiglaOrgao para categoria Orgao, se preenchida."""
+    sigla = (sigla_orgao or "").strip()
+    if (categoria or "").strip().casefold() == "orgao" and sigla:
+        return sigla
+    return solicitante
+
+
 def _fetch_os_meta(ano: int, os_id: int) -> dict:
     rows = db.execute_query(
         """
-        SELECT p.NomeUsuario AS solicitante, d.Titulo AS titulo, d.TipoPublicacaoLink AS produto
+        SELECT p.NomeUsuario AS solicitante, p.CategoriaLink AS categoria, p.SiglaOrgao AS sigla_orgao,
+               d.Titulo AS titulo, d.TipoPublicacaoLink AS produto
         FROM tabProtocolos p
         LEFT JOIN tabDetalhesServico d
           ON d.NroProtocoloLinkDet = p.NroProtocolo AND d.AnoProtocoloLinkDet = p.AnoProtocolo
@@ -49,8 +62,12 @@ def _fetch_os_meta(ano: int, os_id: int) -> dict:
     if not rows:
         raise ValueError(f"OS {os_id}/{ano} não encontrada.")
     row = rows[0]
+    solicitante = (row.get("solicitante") or "Cliente").strip()
     return {
-        "solicitante": (row.get("solicitante") or "Cliente").strip(),
+        "solicitante": solicitante,
+        "folder_solicitante": _folder_solicitante(
+            row.get("categoria"), row.get("sigla_orgao"), solicitante
+        ),
         "titulo": (row.get("titulo") or "Sem título").strip(),
         "produto": (row.get("produto") or "Produto").strip(),
     }
@@ -228,7 +245,7 @@ def upload_files_to_original(
     os_dir, _folder_label = ensure_os_folder_on_network(
         nr_os=os_id,
         ano=ano,
-        solicitante=meta["solicitante"],
+        solicitante=meta["folder_solicitante"],
         produto=meta["produto"],
     )
     final_dir, folder_name = resolve_initial_original_dir(os_dir)
@@ -315,7 +332,7 @@ def prepare_original_dir(os_id: int, ano: int) -> Tuple[str, str]:
     os_dir, _ = ensure_os_folder_on_network(
         nr_os=os_id,
         ano=ano,
-        solicitante=meta["solicitante"],
+        solicitante=meta["folder_solicitante"],
         produto=meta["produto"],
     )
     return resolve_initial_original_dir(os_dir)

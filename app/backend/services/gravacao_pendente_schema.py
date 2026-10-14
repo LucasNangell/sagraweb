@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS tab_os_gravacao_pendente (
   OsNro INT NOT NULL,
   CodStatus VARCHAR(32) NOT NULL,
   Origem VARCHAR(32) NOT NULL DEFAULT 'andamento',
+  Componente VARCHAR(16) NOT NULL DEFAULT 'todos',
   LancadoPorPonto VARCHAR(32) NOT NULL,
   LancadoPorNome VARCHAR(128) DEFAULT NULL,
   Cliente VARCHAR(255) DEFAULT NULL,
@@ -149,6 +150,12 @@ _PENDENTE_MIGRATIONS = (
     ),
     (
         "tab_os_gravacao_pendente",
+        "Componente",
+        "ALTER TABLE tab_os_gravacao_pendente "
+        "ADD COLUMN Componente VARCHAR(16) NOT NULL DEFAULT 'todos' AFTER Origem",
+    ),
+    (
+        "tab_os_gravacao_pendente",
         "Cliente",
         "ALTER TABLE tab_os_gravacao_pendente ADD COLUMN Cliente VARCHAR(255) DEFAULT NULL",
     ),
@@ -162,6 +169,11 @@ _PENDENTE_MIGRATIONS = (
         "Observacao",
         "ALTER TABLE tab_os_gravacao_pendente ADD COLUMN Observacao TEXT DEFAULT NULL",
     ),
+    (
+        "tab_os_gravacao_pendente",
+        "DesmembradaDeId",
+        "ALTER TABLE tab_os_gravacao_pendente ADD COLUMN DesmembradaDeId INT DEFAULT NULL",
+    ),
 )
 
 _ARQUIVO_MIGRATIONS = (
@@ -173,6 +185,12 @@ _ARQUIVO_MIGRATIONS = (
 )
 
 _EXTERNA_MIGRATIONS = (
+    (
+        "tab_os_gravacao_externa",
+        "Componente",
+        "ALTER TABLE tab_os_gravacao_externa "
+        "ADD COLUMN Componente VARCHAR(16) NOT NULL DEFAULT 'todos' AFTER CodStatus",
+    ),
     (
         "tab_os_gravacao_externa",
         "OrigemPendenteId",
@@ -472,6 +490,16 @@ def ensure_gravacao_pendente_schema() -> None:
                     logger.info("Índice idx_gp_juntada adicionado")
                 except Exception as exc:
                     logger.warning("Índice idx_gp_juntada ignorado: %s", exc)
+        if _column_exists("tab_os_gravacao_pendente", "DesmembradaDeId"):
+            if not _index_exists("tab_os_gravacao_pendente", "idx_gp_desmembrada"):
+                try:
+                    db.execute_query(
+                        "ALTER TABLE tab_os_gravacao_pendente "
+                        "ADD INDEX idx_gp_desmembrada (DesmembradaDeId)"
+                    )
+                    logger.info("Índice idx_gp_desmembrada adicionado")
+                except Exception as exc:
+                    logger.warning("Índice idx_gp_desmembrada ignorado: %s", exc)
         if _column_exists("tab_os_gravacao_externa", "JuntadaGrupoId"):
             if not _index_exists("tab_os_gravacao_externa", "idx_ge_juntada"):
                 try:

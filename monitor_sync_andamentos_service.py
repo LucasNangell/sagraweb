@@ -4,9 +4,15 @@ SAGRA — Monitor de divergência MDB ↔ MySQL (somente leitura)
 Compara COUNT(CodStatus) de tabandamento (últimos 10 dias) nos MDBs
 OS Atual + Papelaria Atual versus MySQL.
 
-Se a diferença persistir >30s → reinicia o serviço SAGRA-SyncAndamentos.
+Se a diferença persistir >30s → pede recuperação ao SAGRA-SystemWatchdog
+(campo recovery_request do JSON de status), que é a única autoridade sobre o
+serviço. Sem o SystemWatchdog em execução, reinicia SAGRA-SyncAndamentos
+diretamente (start/restart verificado, nunca stop às cegas).
 Se após 60s do restart a divergência continuar → grava alert=true no JSON
 lido pela API (header vermelho no sistema / painel setor).
+
+Divergência só conta com o sync Running, heartbeat fresco há mais de 90s e
+fora do lock de manutenção: sync parado é assunto do SAGRA-SystemWatchdog.
 
 Nunca altera dados em Access nem MySQL (apenas SELECT/COUNT).
 """
@@ -18,13 +24,14 @@ import json
 import logging
 import os
 import signal
-import subprocess
 import sys
 import threading
 import time
+import uuid
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 # ---------------------------------------------------------------------------
@@ -37,11 +44,16 @@ _BACKEND_DIR = os.path.join(_ROOT_DIR, "app", "backend")
 if os.path.isdir(_BACKEND_DIR) and _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
 
+import system_watchdog_service as swd  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Configuração via ambiente
 # ---------------------------------------------------------------------------
 SYNC_ANDAMENTOS_SERVICE_NAME = os.getenv(
     "SYNC_ANDAMENTOS_SERVICE_NAME", "SAGRA-SyncAndamentos"
+)
+SYSTEM_WATCHDOG_SERVICE_NAME = os.getenv(
+    "SYSTEM_WATCHDOG_SERVICE_NAME", swd.WATCHDOG_SERVICE_NAME
 )
 MONITOR_MUTEX_NAME = os.getenv(
     "MONITOR_SYNC_MUTEX_NAME", r"Global\SagraMonitorSyncAndamentos"
@@ -53,18 +65,31 @@ SYNC_LOG_BACKUP_COUNT = int(os.getenv("SYNC_LOG_BACKUP_COUNT", "5"))
 MONITOR_POLL_SECONDS = float(os.getenv("MONITOR_SYNC_POLL_SECONDS", "10"))
 MONITOR_DAYS = int(os.getenv("MONITOR_SYNC_DAYS", "10"))
 MONITOR_DIVERGE_SECONDS = float(os.getenv("MONITOR_SYNC_DIVERGE_SECONDS", "30"))
+# Divergência contínua acima deste limite pede recuperação mesmo com o MySQL
+# avançando (contagens que nunca se igualam por chegada constante de registros).
+MONITOR_DIVERGE_MAX_SECONDS = float(os.getenv("MONITOR_SYNC_DIVERGE_MAX_SECONDS", "300"))
 MONITOR_ALERT_AFTER_RESTART_SECONDS = float(
     os.getenv("MONITOR_SYNC_ALERT_AFTER_RESTART_SECONDS", "60")
 )
 MONITOR_CONNECT_TIMEOUT = int(os.getenv("MONITOR_SYNC_CONNECT_TIMEOUT", "30"))
 MONITOR_QUERY_TIMEOUT = int(os.getenv("MONITOR_SYNC_QUERY_TIMEOUT", "60"))
+MONITOR_SYNC_READY_GRACE_SECONDS = float(
+    os.getenv("MONITOR_SYNC_READY_GRACE_SECONDS", "90")
+)
+MONITOR_HEARTBEAT_FRESH_SECONDS = float(
+    os.getenv("MONITOR_SYNC_HEARTBEAT_FRESH_SECONDS", "60")
+)
+MAINTENANCE_MAX_SECONDS = int(os.getenv("SYSTEM_WATCHDOG_MAINTENANCE_MAX_SECONDS", "1800"))
 
 STATUS_FILENAME = "sync_divergencia_monitor.json"
+HEARTBEAT_FILENAME = "sync_heartbeat.json"
 STATUS_PHASE_IDLE = "idle"
 STATUS_PHASE_DIVERGED = "diverged"
 STATUS_PHASE_RESTARTED = "restarted"
 STATUS_PHASE_ALERTING = "alerting"
 STATUS_PHASE_READ_ERROR = "read_error"
+STATUS_PHASE_WAITING_SYNC = "waiting_sync"
+STATUS_PHASE_MAINTENANCE = "maintenance"
 
 
 # ===========================================================================
@@ -79,6 +104,21 @@ class MonitorState:
     restarted_mono: Optional[float] = None
     alert_active: bool = False
     restart_done_this_episode: bool = False
+    # Contagens no início da janela atual e início da divergência contínua.
+    diverged_mdb: Optional[int] = None
+    diverged_mysql: Optional[int] = None
+    episode_origin_mono: Optional[float] = None
+
+
+def _mysql_caught_up(
+    state: MonitorState, mdb_total: Optional[int], mysql_total: Optional[int]
+) -> bool:
+    """MySQL alcançou a contagem do MDB vista no início da janela: o sync avança."""
+    if None in (state.diverged_mdb, state.diverged_mysql, mdb_total, mysql_total):
+        return False
+    if state.diverged_mdb > state.diverged_mysql:
+        return mysql_total >= state.diverged_mdb
+    return mysql_total <= state.diverged_mdb
 
 
 @dataclass
@@ -94,6 +134,9 @@ def tick_monitor(
     now_mono: float,
     diverge_seconds: float = MONITOR_DIVERGE_SECONDS,
     alert_after_restart_seconds: float = MONITOR_ALERT_AFTER_RESTART_SECONDS,
+    mdb_total: Optional[int] = None,
+    mysql_total: Optional[int] = None,
+    diverge_max_seconds: float = MONITOR_DIVERGE_MAX_SECONDS,
 ) -> TickResult:
     """
     Avança a máquina de estados.
@@ -102,6 +145,11 @@ def tick_monitor(
       - True  → contagens iguais (recupera)
       - False → divergente
       - None  → falha de leitura (não reinicia / não alerta dados)
+
+    Com mdb_total/mysql_total, a janela de divergência recomeça sempre que o
+    MySQL alcança a contagem do MDB do início da janela (sync com atraso, mas
+    avançando). Divergência contínua por diverge_max_seconds pede recuperação
+    mesmo assim.
     """
     if counts_equal is None:
         # Mantém episódio em curso; só marca fase de erro de leitura se estava idle.
@@ -126,57 +174,146 @@ def tick_monitor(
             state=MonitorState(
                 phase=STATUS_PHASE_DIVERGED,
                 first_diverged_mono=now_mono,
-                restarted_mono=None,
-                alert_active=False,
-                restart_done_this_episode=False,
+                diverged_mdb=mdb_total,
+                diverged_mysql=mysql_total,
+                episode_origin_mono=now_mono,
             )
         )
 
-    elapsed_diverge = now_mono - state.first_diverged_mono
+    origin = (
+        state.first_diverged_mono
+        if state.episode_origin_mono is None
+        else state.episode_origin_mono
+    )
+    max_exceeded = now_mono - origin >= diverge_max_seconds
 
-    if not state.restart_done_this_episode and elapsed_diverge >= diverge_seconds:
+    if _mysql_caught_up(state, mdb_total, mysql_total):
+        # Sync avançando: nova janela; alerta e pedido anterior deixam de valer.
+        if not max_exceeded:
+            return TickResult(
+                state=MonitorState(
+                    phase=STATUS_PHASE_DIVERGED,
+                    first_diverged_mono=now_mono,
+                    diverged_mdb=mdb_total,
+                    diverged_mysql=mysql_total,
+                    episode_origin_mono=origin,
+                )
+            )
+        state = replace(
+            state,
+            first_diverged_mono=now_mono,
+            diverged_mdb=mdb_total,
+            diverged_mysql=mysql_total,
+            restarted_mono=None,
+            alert_active=False,
+            restart_done_this_episode=False,
+        )
+
+    elapsed_diverge = now_mono - state.first_diverged_mono
+    window = {
+        "first_diverged_mono": state.first_diverged_mono,
+        "diverged_mdb": state.diverged_mdb,
+        "diverged_mysql": state.diverged_mysql,
+    }
+
+    if not state.restart_done_this_episode and (
+        elapsed_diverge >= diverge_seconds or max_exceeded
+    ):
         return TickResult(
             state=MonitorState(
                 phase=STATUS_PHASE_RESTARTED,
-                first_diverged_mono=state.first_diverged_mono,
                 restarted_mono=now_mono,
-                alert_active=False,
                 restart_done_this_episode=True,
+                # O limite de divergência contínua volta a contar do pedido.
+                episode_origin_mono=now_mono,
+                **window,
             ),
             should_restart=True,
         )
 
     if state.restart_done_this_episode and state.restarted_mono is not None:
         elapsed_after = now_mono - state.restarted_mono
-        if elapsed_after >= alert_after_restart_seconds:
-            return TickResult(
-                state=MonitorState(
-                    phase=STATUS_PHASE_ALERTING,
-                    first_diverged_mono=state.first_diverged_mono,
-                    restarted_mono=state.restarted_mono,
-                    alert_active=True,
-                    restart_done_this_episode=True,
-                )
-            )
+        alerting = elapsed_after >= alert_after_restart_seconds
         return TickResult(
             state=MonitorState(
-                phase=STATUS_PHASE_RESTARTED,
-                first_diverged_mono=state.first_diverged_mono,
+                phase=STATUS_PHASE_ALERTING if alerting else STATUS_PHASE_RESTARTED,
                 restarted_mono=state.restarted_mono,
-                alert_active=False,
+                alert_active=alerting,
                 restart_done_this_episode=True,
+                episode_origin_mono=origin,
+                **window,
             )
         )
 
     return TickResult(
         state=MonitorState(
             phase=STATUS_PHASE_DIVERGED,
-            first_diverged_mono=state.first_diverged_mono,
-            restarted_mono=None,
-            alert_active=False,
-            restart_done_this_episode=False,
+            episode_origin_mono=origin,
+            **window,
         )
     )
+
+
+def _parse_epoch(value: Any) -> Optional[float]:
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.timestamp()
+
+
+def read_sync_heartbeat_info(path: str) -> Dict[str, Any]:
+    try:
+        with open(path, "r", encoding="utf-8-sig") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return {"started_at": None, "written_at": None, "phase": None}
+    if not isinstance(data, dict):
+        return {"started_at": None, "written_at": None, "phase": None}
+    return {
+        "started_at": _parse_epoch(data.get("started_at")),
+        "written_at": _parse_epoch(data.get("written_at")),
+        "phase": data.get("phase"),
+    }
+
+
+def sync_gate_reason(
+    *,
+    maintenance_active: bool,
+    service_status: Optional[str],
+    heartbeat: Dict[str, Any],
+    now_epoch: float,
+    ready_grace_seconds: float = MONITOR_SYNC_READY_GRACE_SECONDS,
+    heartbeat_fresh_seconds: float = MONITOR_HEARTBEAT_FRESH_SECONDS,
+) -> Optional[str]:
+    """None quando a divergência pode ser avaliada; senão o motivo da espera."""
+    if maintenance_active:
+        return STATUS_PHASE_MAINTENANCE
+    if service_status != "Running":
+        return STATUS_PHASE_WAITING_SYNC
+    started = heartbeat.get("started_at")
+    written = heartbeat.get("written_at")
+    if started is None or written is None or heartbeat.get("phase") == "stopped":
+        return STATUS_PHASE_WAITING_SYNC
+    if now_epoch - written > heartbeat_fresh_seconds:
+        return STATUS_PHASE_WAITING_SYNC
+    if now_epoch - started < ready_grace_seconds:
+        return STATUS_PHASE_WAITING_SYNC
+    return None
+
+
+def hold_episode(state: MonitorState, now_mono: float) -> MonitorState:
+    """
+    Sync indisponível: o episódio não avança. Sem restart pendente, recomeça do
+    zero; com restart já feito, a janela de alerta volta a contar do retorno.
+    """
+    if state.restart_done_this_episode:
+        return replace(state, restarted_mono=now_mono)
+    return MonitorState()
 
 
 # ===========================================================================
@@ -527,89 +664,34 @@ def fetch_counts(
 # ===========================================================================
 
 
-def _find_nssm() -> Optional[str]:
-    candidates = [
-        os.path.join(_ROOT_DIR, "deploy", "tools", "nssm.exe"),
-        os.path.join(_ROOT_DIR, "tools", "nssm.exe"),
-    ]
-    for path in candidates:
-        if os.path.isfile(path):
-            return path
-    try:
-        completed = subprocess.run(
-            ["where", "nssm"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-        line = (completed.stdout or "").strip().splitlines()
-        if line and os.path.isfile(line[0].strip()):
-            return line[0].strip()
-    except Exception:
-        pass
-    return None
-
-
 def restart_sync_andamentos(log: logging.Logger) -> bool:
-    """Reinicia SAGRA-SyncAndamentos. Retorna True se o comando foi aceito."""
+    """
+    Inicia (se Stopped) ou reinicia SAGRA-SyncAndamentos e confirma Running.
+    Nunca envia stop a um serviço que acabou de subir: o resultado vale pelo
+    estado final no SCM, não pelo exit code do nssm.
+    """
     if sys.platform != "win32":
         log.warning("Restart ignorado (plataforma != win32)")
         return False
     name = SYNC_ANDAMENTOS_SERVICE_NAME
-    nssm = _find_nssm()
-    try:
-        if nssm:
-            log.info("Reiniciando %s via nssm restart...", name)
-            completed = subprocess.run(
-                [nssm, "restart", name],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=120,
-                check=False,
-            )
-            if completed.returncode == 0:
-                return True
-            log.warning(
-                "nssm restart exit=%s stdout=%s stderr=%s — tentando sc stop/start",
-                completed.returncode,
-                (completed.stdout or "").strip()[:200],
-                (completed.stderr or "").strip()[:200],
-            )
-        log.info("Reiniciando %s via sc stop/start...", name)
-        stop = subprocess.run(
-            ["sc", "stop", name],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=60,
-            check=False,
-        )
-        time.sleep(3)
-        start = subprocess.run(
-            ["sc", "start", name],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=60,
-            check=False,
-        )
-        ok = start.returncode == 0
-        if not ok:
-            log.error(
-                "sc start falhou (stop=%s start=%s): %s",
-                stop.returncode,
-                start.returncode,
-                (start.stderr or start.stdout or "")[:300],
-            )
-        return ok
-    except Exception as exc:
-        log.error("Falha ao reiniciar %s: %s", name, exc)
+    status = swd.query_windows_service(name).get("status")
+    if status is None or status in swd.SERVICE_TRANSITION_STATES:
+        log.warning("Restart adiado: %s status=%s", name, status)
         return False
+    start_only = status == "Stopped"
+    log.info(
+        "%s %s (status=%s)...",
+        "Iniciando" if start_only else "Reiniciando",
+        name,
+        status,
+    )
+    nssm = swd.resolve_nssm_path([Path(_ROOT_DIR)])
+    ok, detail = swd.recover_service(name, nssm, start_only=start_only)
+    if ok:
+        log.info("%s Running apos recuperacao", name)
+    else:
+        log.error("Recuperacao de %s falhou: %s", name, detail)
+    return ok
 
 
 # ===========================================================================
@@ -624,6 +706,11 @@ class MonitorLoop:
         self.state = MonitorState()
         self._stop = threading.Event()
         self._mdb = MdbCountSession(log)
+        self.maintenance_file = swd.default_maintenance_file(Path(_ROOT_DIR))
+        self.heartbeat_path = os.path.join(os.path.dirname(status.path), HEARTBEAT_FILENAME)
+        self._last_gate: Optional[str] = None
+        self._sync_status: Optional[str] = None
+        self._recovery_request: Optional[Dict[str, str]] = None
 
     def request_stop(self, *_args) -> None:
         self.log.info("Sinal de parada recebido")
@@ -634,32 +721,83 @@ class MonitorLoop:
             return None
         return mdb_total == mysql
 
+    def _gate_reason(self) -> Optional[str]:
+        now_epoch = time.time()
+        maintenance = swd.maintenance_status(
+            Path(self.maintenance_file), now_epoch, MAINTENANCE_MAX_SECONDS
+        )
+        self._sync_status = swd.query_windows_service(SYNC_ANDAMENTOS_SERVICE_NAME).get(
+            "status"
+        )
+        return sync_gate_reason(
+            maintenance_active=bool(maintenance.get("active")),
+            service_status=self._sync_status,
+            heartbeat=read_sync_heartbeat_info(self.heartbeat_path),
+            now_epoch=now_epoch,
+        )
+
+    def _dispatch_recovery(self, mdb_total: Optional[int], mysql_c: Optional[int]) -> None:
+        reason = f"divergencia persistente mdb={mdb_total} mysql={mysql_c}"
+        watchdog_status = swd.query_windows_service(SYSTEM_WATCHDOG_SERVICE_NAME).get("status")
+        if watchdog_status == "Running":
+            self._recovery_request = {
+                "id": uuid.uuid4().hex,
+                "requested_at": datetime.now(timezone.utc).isoformat(),
+                "reason": reason,
+            }
+            self.log.warning(
+                "%s - pedido de recuperacao %s enviado ao %s",
+                reason,
+                self._recovery_request["id"],
+                SYSTEM_WATCHDOG_SERVICE_NAME,
+            )
+            return
+        self.log.warning(
+            "%s - %s indisponivel (status=%s); reinicio direto de %s",
+            reason,
+            SYSTEM_WATCHDOG_SERVICE_NAME,
+            watchdog_status,
+            SYNC_ANDAMENTOS_SERVICE_NAME,
+        )
+        if not restart_sync_andamentos(self.log):
+            self.log.error("Restart do sync falhou; episódio segue sem novo restart")
+
     def run_once(self, now_mono: Optional[float] = None) -> TickResult:
         now = time.monotonic() if now_mono is None else now_mono
         os_c, pap_c, mdb_total, mysql_c = fetch_counts(self.log, self._mdb)
         equal = self._counts_equal(mdb_total, mysql_c)
-        result = tick_monitor(
-            self.state,
-            counts_equal=equal,
-            now_mono=now,
-            diverge_seconds=MONITOR_DIVERGE_SECONDS,
-            alert_after_restart_seconds=MONITOR_ALERT_AFTER_RESTART_SECONDS,
-        )
-        self.state = result.state
+        gate = self._gate_reason()
+        if gate != self._last_gate:
+            self.log.info(
+                "Avaliacao de divergencia %s (sync=%s)",
+                f"suspensa: {gate}" if gate else "retomada",
+                self._sync_status,
+            )
+            self._last_gate = gate
+        if gate:
+            self.state = hold_episode(self.state, now)
+            result = TickResult(state=self.state)
+        else:
+            result = tick_monitor(
+                self.state,
+                counts_equal=equal,
+                now_mono=now,
+                diverge_seconds=MONITOR_DIVERGE_SECONDS,
+                alert_after_restart_seconds=MONITOR_ALERT_AFTER_RESTART_SECONDS,
+                mdb_total=mdb_total,
+                mysql_total=mysql_c,
+                diverge_max_seconds=MONITOR_DIVERGE_MAX_SECONDS,
+            )
+            self.state = result.state
 
         if result.should_restart:
-            self.log.warning(
-                "Divergência persistente (mdb=%s mysql=%s) — reiniciando %s",
-                mdb_total,
-                mysql_c,
-                SYNC_ANDAMENTOS_SERVICE_NAME,
-            )
-            ok = restart_sync_andamentos(self.log)
-            if not ok:
-                self.log.error("Restart do sync falhou; episódio segue sem novo restart")
+            self._dispatch_recovery(mdb_total, mysql_c)
+        if not self.state.restart_done_this_episode:
+            self._recovery_request = None
 
         payload = {
-            "phase": self.state.phase,
+            "phase": gate or self.state.phase,
+            "gate": gate,
             "alert": bool(self.state.alert_active),
             "diverged": equal is False,
             "count_mdb_os": os_c,
@@ -670,13 +808,15 @@ class MonitorLoop:
             "read_ok": equal is not None,
             "restart_done_this_episode": self.state.restart_done_this_episode,
             "service_target": SYNC_ANDAMENTOS_SERVICE_NAME,
+            "sync_service_status": self._sync_status,
+            "recovery_request": self._recovery_request,
         }
         try:
             self.status.write(payload)
         except Exception as exc:
             self.log.warning("Falha ao gravar status JSON: %s", exc)
 
-        if equal is True:
+        if gate is None and equal is True:
             self.log.info(
                 "OK mdb=%s mysql=%s (os=%s pap=%s)",
                 mdb_total,
@@ -684,7 +824,7 @@ class MonitorLoop:
                 os_c,
                 pap_c,
             )
-        elif equal is False:
+        elif gate is None and equal is False:
             self.log.warning(
                 "DIVERGENTE mdb=%s mysql=%s phase=%s alert=%s",
                 mdb_total,
@@ -696,10 +836,11 @@ class MonitorLoop:
 
     def run(self) -> int:
         self.log.info(
-            "Monitor iniciado (dias=%s poll=%ss diverge=%ss alert_after=%ss)",
+            "Monitor iniciado (dias=%s poll=%ss diverge=%ss diverge_max=%ss alert_after=%ss)",
             MONITOR_DAYS,
             MONITOR_POLL_SECONDS,
             MONITOR_DIVERGE_SECONDS,
+            MONITOR_DIVERGE_MAX_SECONDS,
             MONITOR_ALERT_AFTER_RESTART_SECONDS,
         )
         try:

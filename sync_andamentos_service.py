@@ -35,7 +35,7 @@ import sys
 import threading
 import time
 import traceback
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from logging.handlers import RotatingFileHandler
 from typing import Any, Dict, List, Optional, Set
 
@@ -125,6 +125,18 @@ SYNC_BACKOFF_MIN = _env_float("SYNC_BACKOFF_MIN", 5.0)
 SYNC_BACKOFF_MAX = _env_float("SYNC_BACKOFF_MAX", 60.0)
 # 0 desliga. Recicla conexoes ODBC/MySQL entre ciclos para evitar handle zumbi.
 SYNC_CONN_RECYCLE_SECONDS = _env_float("SYNC_CONN_RECYCLE_SECONDS", 900.0)
+# Abaixo do AppStopMethodConsole (8000 ms) do NSSM: thread presa em ODBC nao
+# pode deixar o servico em StopPending.
+SYNC_SHUTDOWN_DEADLINE_SECONDS = _env_float("SYNC_SHUTDOWN_DEADLINE_SECONDS", 6.0)
+# Erro ACE -1812/HY001 persistente: reciclar MDB a cada N falhas e, se durar
+# mais que EXIT_AFTER (0 desliga), sair para o NSSM relancar processo limpo.
+SYNC_MDB_FATAL_RESET_AFTER = max(1, _env_int("SYNC_MDB_FATAL_RESET_AFTER", 5))
+SYNC_MDB_FATAL_EXIT_AFTER_SECONDS = _env_float("SYNC_MDB_FATAL_EXIT_AFTER_SECONDS", 120.0)
+SYNC_MDB_FATAL_MIN_UPTIME_SECONDS = _env_float("SYNC_MDB_FATAL_MIN_UPTIME_SECONDS", 600.0)
+MDB_FATAL_EXIT_CODE = 18
+# Intervalo mínimo para a varredura de flags voltar a curar a mesma OS. Uma OS
+# cuja correção não converge não pode gravar no MDB a cada ciclo.
+SYNC_ULTIMO_HEAL_RETRY_SECONDS = max(0.0, _env_float("SYNC_ULTIMO_HEAL_RETRY_SECONDS", 600.0))
 # Mantido por compatibilidade; o notify sempre usa base interna (uvicorn).
 SYNC_NOTIFY_INTERNAL_BASE = _env_bool("SYNC_NOTIFY_INTERNAL_BASE", True)
 SYNC_NOTIFY_FAIL_LOG_INTERVAL = _env_float("SYNC_NOTIFY_FAIL_LOG_INTERVAL", 60.0)
@@ -141,8 +153,146 @@ SYNC_LOG_MAX_BYTES = _env_int("SYNC_LOG_MAX_BYTES", 10 * 1024 * 1024)
 SYNC_LOG_BACKUP_COUNT = _env_int("SYNC_LOG_BACKUP_COUNT", 5)
 _BASELINE_PRUNE_EVERY = 50
 
+# Reconciliação MDB -> MySQL de tabelas relacionadas à OS. É propositalmente
+# independente do ciclo rápido de tabAndamento: um valor só é escrito depois de
+# permanecer igual no MDB durante N leituras consecutivas.
+SYNC_RELATED_RECONCILE_ENABLED = _env_bool("SYNC_RELATED_RECONCILE_ENABLED", True)
+SYNC_RELATED_RECONCILE_INTERVAL = max(
+    1.0, _env_float("SYNC_RELATED_RECONCILE_INTERVAL", 10.0)
+)
+SYNC_RELATED_RECONCILE_STABLE_CYCLES = max(
+    1, _env_int("SYNC_RELATED_RECONCILE_STABLE_CYCLES", 3)
+)
+SYNC_RELATED_RECONCILE_MAX_WRITES = max(
+    1, _env_int("SYNC_RELATED_RECONCILE_MAX_WRITES", 100)
+)
+_RELATED_TABLE_SPECS = (
+    {
+        "table": "tabProtocolos",
+        "pk_fields": ("NroProtocolo", "AnoProtocolo"),
+        "nro_field": "NroProtocolo",
+        "year_field": "AnoProtocolo",
+        "allowlist": core._PROTOCOL_SYNC_ALLOWLIST,
+    },
+    {
+        "table": "tabDetalhesServico",
+        "pk_fields": ("NroProtocoloLinkDet", "AnoProtocoloLinkDet"),
+        "nro_field": "NroProtocoloLinkDet",
+        "year_field": "AnoProtocoloLinkDet",
+        "allowlist": core._DETAILS_SYNC_ALLOWLIST,
+    },
+)
+
 # Sentinel para distinguir "MySQL retornou lista vazia" de "falha de leitura"
 _MYSQL_READ_FAILED = object()
+_PROCESS_STARTED_MONO = time.monotonic()
+_MDB_FATAL_MARKERS = ("-1812", "hy001")
+
+
+def is_mdb_fatal_error(text: str) -> bool:
+    lowered = (text or "").lower()
+    return any(marker in lowered for marker in _MDB_FATAL_MARKERS)
+
+
+class MdbFatalErrorTracker:
+    """
+    Sequência de erros ACE -1812/HY001 (recurso/arquivo temporário do Access).
+    A cada `reset_after` erros pede descarte das conexões MDB; se a sequência
+    dura `exit_after_seconds` e o processo já viveu `min_uptime_seconds`, pede
+    saída para o NSSM relançar com o motor ACE limpo. O tempo mínimo de vida
+    impede laço de reinícios quando a causa é externa ao processo.
+    """
+
+    def __init__(
+        self,
+        reset_after: int,
+        exit_after_seconds: float,
+        min_uptime_seconds: float,
+        process_started_mono: float,
+    ):
+        self.reset_after = max(1, int(reset_after))
+        self.exit_after_seconds = float(exit_after_seconds)
+        self.min_uptime_seconds = float(min_uptime_seconds)
+        self.process_started_mono = float(process_started_mono)
+        self.streak = 0
+        self.first_error_mono: Optional[float] = None
+
+    def observe_success(self) -> None:
+        self.streak = 0
+        self.first_error_mono = None
+
+    def observe_error(self, text: str, now_mono: float) -> str:
+        if not is_mdb_fatal_error(text):
+            return "ignored"
+        if self.first_error_mono is None:
+            self.first_error_mono = now_mono
+        self.streak += 1
+        streak_age = now_mono - self.first_error_mono
+        uptime = now_mono - self.process_started_mono
+        if (
+            self.exit_after_seconds > 0
+            and streak_age >= self.exit_after_seconds
+            and uptime >= self.min_uptime_seconds
+        ):
+            return "exit"
+        if self.streak % self.reset_after == 0:
+            return "reset"
+        return "count"
+
+
+def _exit_for_clean_restart(code: int) -> None:
+    os._exit(code)
+
+
+class StableRelatedMismatchGate:
+    """Exige a mesma divergência MDB/MySQL em ciclos consecutivos antes de escrever."""
+
+    def __init__(self, required_cycles: int):
+        self.required_cycles = max(1, int(required_cycles))
+        self._pending: Dict[tuple, Dict[str, Any]] = {}
+
+    def observe(self, identity: tuple, desired_hash: str, current_hash: Optional[str]) -> bool:
+        """Retorna True após a divergência atingir o limiar, até ela ser tratada."""
+        if desired_hash == current_hash:
+            self._pending.pop(identity, None)
+            return False
+
+        pending = self._pending.get(identity)
+        if (
+            pending is None
+            or pending["desired_hash"] != desired_hash
+            or pending["current_hash"] != current_hash
+        ):
+            self._pending[identity] = {
+                "desired_hash": desired_hash,
+                "current_hash": current_hash,
+                "cycles": 1,
+            }
+            return self.required_cycles == 1
+
+        pending["cycles"] += 1
+        return pending["cycles"] >= self.required_cycles
+
+    def mark_write_failed(self, identity: tuple) -> None:
+        """Mantém a evidência estável para nova tentativa no próximo ciclo."""
+        pending = self._pending.get(identity)
+        if pending:
+            pending["cycles"] = self.required_cycles - 1
+
+    def mark_written(self, identity: tuple) -> None:
+        self._pending.pop(identity, None)
+
+    def discard(self, identity: tuple) -> None:
+        self._pending.pop(identity, None)
+
+    def discard_not_seen(self, scope: tuple, seen_identities: Set[tuple]) -> None:
+        for identity in list(self._pending):
+            if identity[:2] == scope and identity not in seen_identities:
+                self._pending.pop(identity, None)
+
+    def pending_cycles(self, identity: tuple) -> int:
+        pending = self._pending.get(identity)
+        return int(pending["cycles"]) if pending else 0
 
 
 def _empty_cycle_stats() -> Dict[str, int]:
@@ -507,9 +657,519 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
         self._cycle_stats = _empty_cycle_stats()
         self._init_baseline_state()
         self._last_conn_recycle_mono = time.monotonic()
+        self._related_mismatch_gate = StableRelatedMismatchGate(
+            SYNC_RELATED_RECONCILE_STABLE_CYCLES
+        )
 
         # Sempre patch: Old usa get_api_base() relativo (/sagra/api) que quebra requests.
         self._install_reliable_notify()
+
+    # ------------------------------------------------------------------
+    # tabProtocolos/tabDetalhesServico: reconciliação estável e isolada
+    # ------------------------------------------------------------------
+    def _related_gate(self) -> StableRelatedMismatchGate:
+        # Também atende instâncias montadas por testes legados com __new__.
+        gate = getattr(self, "_related_mismatch_gate", None)
+        if gate is None:
+            gate = StableRelatedMismatchGate(SYNC_RELATED_RECONCILE_STABLE_CYCLES)
+            self._related_mismatch_gate = gate
+        return gate
+
+    def _mdb_fatal_tracker(self) -> MdbFatalErrorTracker:
+        tracker = getattr(self, "_mdb_fatal_errors", None)
+        if tracker is None:
+            tracker = MdbFatalErrorTracker(
+                SYNC_MDB_FATAL_RESET_AFTER,
+                SYNC_MDB_FATAL_EXIT_AFTER_SECONDS,
+                SYNC_MDB_FATAL_MIN_UPTIME_SECONDS,
+                _PROCESS_STARTED_MONO,
+            )
+            self._mdb_fatal_errors = tracker
+        return tracker
+
+    def _note_mdb_error(self, text: str) -> None:
+        tracker = self._mdb_fatal_tracker()
+        action = tracker.observe_error(text, time.monotonic())
+        if action == "reset":
+            self._svc_log.warning(
+                "[MDB] %s erros -1812/HY001 consecutivos - descartando conexoes MDB",
+                tracker.streak,
+            )
+            self.conn_mgr.invalidate_mdb_os()
+            self.conn_mgr.invalidate_mdb_pap()
+        elif action == "exit":
+            self._svc_log.critical(
+                "[MDB] erros -1812/HY001 persistem ha %.0fs (%s seguidos) - "
+                "encerrando com codigo %s para o NSSM relancar o motor ACE limpo",
+                time.monotonic() - (tracker.first_error_mono or time.monotonic()),
+                tracker.streak,
+                MDB_FATAL_EXIT_CODE,
+            )
+            self._hb.mark_cycle_error(f"mdb_fatal_exit: {text}")
+            try:
+                self._hb.write()
+            except Exception:
+                pass
+            for handler in list(self._svc_log.handlers) + list(logging.getLogger().handlers):
+                try:
+                    handler.flush()
+                except Exception:
+                    pass
+            _exit_for_clean_restart(MDB_FATAL_EXIT_CODE)
+
+    @staticmethod
+    def _related_normalize(value: Any) -> str:
+        """Normalização compatível com o comparador legado, sem falsos positivos de tipo."""
+        if value is None:
+            return ""
+        if isinstance(value, bool):
+            return "1" if value else "0"
+        if isinstance(value, datetime):
+            if value.hour == 0 and value.minute == 0 and value.second == 0:
+                return value.strftime("%Y-%m-%d")
+            return value.strftime("%Y-%m-%d %H:%M:%S")
+        if isinstance(value, date):
+            return value.strftime("%Y-%m-%d")
+
+        value_str = str(value).strip()
+        try:
+            number = float(value_str)
+            return str(int(number)) if number.is_integer() else str(number)
+        except ValueError:
+            pass
+
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d"):
+            try:
+                parsed = datetime.strptime(value_str, fmt)
+                if parsed.hour == 0 and parsed.minute == 0 and parsed.second == 0:
+                    return parsed.strftime("%Y-%m-%d")
+                return parsed.strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                continue
+        return value_str
+
+    @classmethod
+    def _related_row_hash(cls, record: Dict[str, Any], columns: List[str]) -> str:
+        payload = [(column, cls._related_normalize(record.get(column))) for column in columns]
+        encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _related_source_filter(spec: Dict[str, Any], is_os: bool) -> str:
+        comparator = "<" if is_os else ">="
+        return (
+            f"WHERE {spec['year_field']} >= {{placeholder_year}} "
+            f"AND {spec['nro_field']} {comparator} {{placeholder_split}}"
+        )
+
+    def _load_related_policies(self, mysql_conn) -> Optional[Dict[str, Dict[str, Any]]]:
+        """Lê as políticas usando a conexão dedicada do worker; em erro, falha fechado."""
+        try:
+            from sync_policy import apply_env_kill_switches, load_policies
+
+            cursor = mysql_conn.cursor(dictionary=True)
+            try:
+                return apply_env_kill_switches(load_policies(cursor))
+            finally:
+                cursor.close()
+        except Exception as exc:
+            self._svc_log.error("[RELATED_SYNC] políticas indisponíveis; nenhuma escrita: %s", exc)
+            return None
+
+    def _related_tombstones(self, mysql_conn) -> Optional[Set[tuple]]:
+        """Não permite recriar OS tombstoned; erro de leitura interrompe a reconciliação."""
+        try:
+            cursor = mysql_conn.cursor(dictionary=True)
+            try:
+                cursor.execute("SELECT nro, ano FROM deleted_os")
+                return {
+                    (row.get("nro"), row.get("ano"))
+                    for row in cursor.fetchall()
+                }
+            finally:
+                cursor.close()
+        except Exception as exc:
+            self._svc_log.error(
+                "[RELATED_SYNC] tombstones indisponíveis; reconciliação abortada: %s", exc
+            )
+            return None
+
+    @staticmethod
+    def _unique_related_records(
+        records: List[Dict[str, Any]], pk_fields: tuple, label: str
+    ) -> Dict[tuple, Dict[str, Any]]:
+        indexed: Dict[tuple, Dict[str, Any]] = {}
+        for record in records:
+            key = tuple(record.get(field) for field in pk_fields)
+            if any(value is None for value in key):
+                raise ValueError(f"chave nula em {label}: {key}")
+            if key in indexed:
+                raise ValueError(f"chave duplicada em {label}: {key}")
+            indexed[key] = record
+        return indexed
+
+    def _read_related_table(self, mdb_conn, mysql_conn, spec: Dict[str, Any], is_os: bool):
+        """Lê uma tabela em ambas as pontas com o mesmo recorte legado de OS/Papelaria."""
+        from sync_policy import OS_MIN_YEAR
+
+        table = spec["table"]
+        source_filter = self._related_source_filter(spec, is_os)
+        mdb_query = (
+            f"SELECT * FROM {table} "
+            + source_filter.format(placeholder_year="?", placeholder_split="?")
+        )
+        mysql_query = (
+            f"SELECT * FROM `{table}` "
+            + source_filter.format(placeholder_year="%s", placeholder_split="%s")
+        )
+        params = (OS_MIN_YEAR, 5000)
+
+        mdb_cursor = mdb_conn.cursor()
+        try:
+            mdb_cursor.execute(mdb_query, params)
+            mdb_columns = [desc[0] for desc in mdb_cursor.description]
+            mdb_records = [dict(zip(mdb_columns, row)) for row in mdb_cursor.fetchall()]
+        finally:
+            mdb_cursor.close()
+
+        sync_columns = self._sync_allowed_columns(
+            mdb_columns, spec["allowlist"], list(spec["pk_fields"])
+        )
+        missing_pk = [field for field in spec["pk_fields"] if field not in sync_columns]
+        if missing_pk:
+            raise ValueError(f"chave ausente no MDB de {table}: {missing_pk}")
+
+        mysql_cursor = mysql_conn.cursor(dictionary=True)
+        try:
+            mysql_cursor.execute(mysql_query, params)
+            mysql_records = list(mysql_cursor.fetchall() or [])
+        finally:
+            mysql_cursor.close()
+
+        return mdb_records, mysql_records, sync_columns
+
+    def _apply_related_candidates(
+        self,
+        mysql_conn,
+        spec: Dict[str, Any],
+        source_name: str,
+        candidates: List[Dict[str, Any]],
+        sync_columns: List[str],
+    ) -> None:
+        """Revalida cada linha dentro da transação antes de INSERT/UPDATE no MySQL."""
+        table = spec["table"]
+        pk_fields = spec["pk_fields"]
+        mutable_columns = [column for column in sync_columns if column not in pk_fields]
+        cursor = mysql_conn.cursor(dictionary=True)
+        written: List[tuple] = []
+        try:
+            for candidate in candidates:
+                record = candidate["record"]
+                key = candidate["key"]
+                identity = candidate["identity"]
+                where_clause = " AND ".join(f"`{field}` = %s" for field in pk_fields)
+                selected_columns = ", ".join(f"`{column}`" for column in sync_columns)
+                cursor.execute(
+                    f"SELECT {selected_columns} FROM `{table}` WHERE {where_clause} FOR UPDATE",
+                    key,
+                )
+                live_record = cursor.fetchone()
+                live_hash = (
+                    self._related_row_hash(live_record, sync_columns)
+                    if live_record is not None
+                    else None
+                )
+                if live_hash != candidate["current_hash"]:
+                    # Outra gravação ocorreu após a leitura. Não a sobrescrevemos.
+                    self._related_gate().mark_write_failed(identity)
+                    self._svc_log.warning(
+                        "[RELATED_SYNC] %s %s/%s mudou durante a confirmação; aguardando novos ciclos",
+                        table,
+                        key[0],
+                        key[1],
+                    )
+                    continue
+
+                if live_record is None:
+                    columns_clause = ", ".join(f"`{column}`" for column in sync_columns)
+                    placeholders = ", ".join("%s" for _ in sync_columns)
+                    cursor.execute(
+                        f"INSERT INTO `{table}` ({columns_clause}) VALUES ({placeholders})",
+                        [record.get(column) for column in sync_columns],
+                    )
+                    operation = "INSERT"
+                elif mutable_columns:
+                    set_clause = ", ".join(f"`{column}` = %s" for column in mutable_columns)
+                    cursor.execute(
+                        f"UPDATE `{table}` SET {set_clause} WHERE {where_clause}",
+                        [record.get(column) for column in mutable_columns] + list(key),
+                    )
+                    operation = "UPDATE"
+                else:
+                    continue
+
+                written.append(identity)
+                self._svc_log.info(
+                    "[RELATED_SYNC] %s confirmado após %s ciclos: %s %s/%s (%s)",
+                    table,
+                    SYNC_RELATED_RECONCILE_STABLE_CYCLES,
+                    operation,
+                    key[0],
+                    key[1],
+                    source_name,
+                )
+
+            mysql_conn.commit()
+        except Exception:
+            mysql_conn.rollback()
+            for candidate in candidates:
+                self._related_gate().mark_write_failed(candidate["identity"])
+            raise
+        else:
+            for identity in written:
+                self._related_gate().mark_written(identity)
+        finally:
+            cursor.close()
+
+    def _reconcile_related_table(
+        self,
+        mdb_conn,
+        mysql_conn,
+        source_name: str,
+        is_os: bool,
+        spec: Dict[str, Any],
+        tombstones: Set[tuple],
+    ) -> None:
+        table = spec["table"]
+        scope = (source_name, table)
+        policies = self._related_policies
+        policy = policies.get(table) or {}
+        if not policy.get("enabled", True) or policy.get("mode", "uni") != "uni":
+            self._related_gate().discard_not_seen(scope, set())
+            self._svc_log.info("[RELATED_SYNC] %s desabilitada pela política", table)
+            return
+
+        mdb_records, mysql_records, sync_columns = self._read_related_table(
+            mdb_conn, mysql_conn, spec, is_os
+        )
+        mdb_by_key = self._unique_related_records(
+            mdb_records, spec["pk_fields"], f"MDB {source_name}/{table}"
+        )
+        mysql_by_key = self._unique_related_records(
+            mysql_records, spec["pk_fields"], f"MySQL/{table}"
+        )
+
+        candidates: List[Dict[str, Any]] = []
+        seen_identities: Set[tuple] = set()
+        for key, mdb_record in mdb_by_key.items():
+            identity = scope + key
+            seen_identities.add(identity)
+            os_key = (mdb_record.get(spec["nro_field"]), mdb_record.get(spec["year_field"]))
+            if os_key in tombstones:
+                self._related_gate().discard(identity)
+                continue
+
+            desired_hash = self._related_row_hash(mdb_record, sync_columns)
+            mysql_record = mysql_by_key.get(key)
+            current_hash = (
+                self._related_row_hash(mysql_record, sync_columns)
+                if mysql_record is not None
+                else None
+            )
+            if not self._related_gate().observe(identity, desired_hash, current_hash):
+                continue
+            candidates.append(
+                {
+                    "record": mdb_record,
+                    "key": key,
+                    "identity": identity,
+                    "current_hash": current_hash,
+                }
+            )
+
+        self._related_gate().discard_not_seen(scope, seen_identities)
+        if not candidates:
+            return
+
+        to_apply = candidates[:SYNC_RELATED_RECONCILE_MAX_WRITES]
+        if len(candidates) > len(to_apply):
+            self._svc_log.warning(
+                "[RELATED_SYNC] limite de %s escritas por ciclo atingido em %s; restante aguardará",
+                SYNC_RELATED_RECONCILE_MAX_WRITES,
+                table,
+            )
+        self._apply_related_candidates(
+            mysql_conn, spec, source_name, to_apply, sync_columns
+        )
+
+    def _reconcile_related_tables(self) -> None:
+        """Executa um ciclo seguro, fora do caminho e do estado de tabAndamento."""
+        if not SYNC_RELATED_RECONCILE_ENABLED:
+            return
+
+        mysql_conn = None
+        try:
+            mysql_conn = mysql.connector.connect(
+                host=self.config.mysql_host,
+                port=self.config.mysql_port,
+                user=self.config.mysql_user,
+                password=self.config.mysql_password,
+                database=self.config.mysql_database,
+                charset="utf8mb4",
+                autocommit=False,
+                connection_timeout=SYNC_CONNECT_TIMEOUT,
+            )
+            isolation_cursor = mysql_conn.cursor()
+            try:
+                isolation_cursor.execute("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED")
+            finally:
+                isolation_cursor.close()
+            self._related_policies = self._load_related_policies(mysql_conn)
+            if self._related_policies is None:
+                return
+            tombstones = self._related_tombstones(mysql_conn)
+            if tombstones is None:
+                return
+
+            for source_name, is_os, path in (
+                ("OS_Atual", True, self.config.mdb_os_atual_path),
+                ("Papelaria", False, self.config.mdb_papelaria_path),
+            ):
+                if not os.path.isfile(path):
+                    self._svc_log.error("[RELATED_SYNC] MDB indisponível: %s", path)
+                    continue
+                mdb_conn = None
+                try:
+                    driver = "{Microsoft Access Driver (*.mdb, *.accdb)}"
+                    mdb_conn = pyodbc.connect(
+                        f"DRIVER={driver};DBQ={path};",
+                        autocommit=False,
+                        timeout=SYNC_CONNECT_TIMEOUT,
+                    )
+                    for spec in _RELATED_TABLE_SPECS:
+                        self._reconcile_related_table(
+                            mdb_conn, mysql_conn, source_name, is_os, spec, tombstones
+                        )
+                except Exception as exc:
+                    mysql_conn.rollback()
+                    self._svc_log.error(
+                        "[RELATED_SYNC] ciclo abortado para %s; a tabela em erro foi revertida: %s",
+                        source_name,
+                        exc,
+                    )
+                finally:
+                    if mdb_conn is not None:
+                        try:
+                            mdb_conn.close()
+                        except Exception:
+                            pass
+        except Exception as exc:
+            if mysql_conn is not None:
+                try:
+                    mysql_conn.rollback()
+                except Exception:
+                    pass
+            self._svc_log.error("[RELATED_SYNC] falha ao preparar ciclo: %s", exc)
+        finally:
+            if mysql_conn is not None:
+                try:
+                    mysql_conn.close()
+                except Exception:
+                    pass
+
+    def _run_background_sync(self):
+        """Worker exclusivo de Protocolos/Detalhes; nunca aciona nem altera tabAndamento."""
+        self._svc_log.info(
+            "[RELATED_SYNC] iniciado: intervalo=%ss, confirmação=%s ciclos, max_escritas=%s",
+            SYNC_RELATED_RECONCILE_INTERVAL,
+            SYNC_RELATED_RECONCILE_STABLE_CYCLES,
+            SYNC_RELATED_RECONCILE_MAX_WRITES,
+        )
+        while self.running:
+            started = time.monotonic()
+            self._reconcile_related_tables()
+            remaining = max(0.0, SYNC_RELATED_RECONCILE_INTERVAL - (time.monotonic() - started))
+            while self.running and remaining > 0:
+                step = min(0.2, remaining)
+                time.sleep(step)
+                remaining -= step
+        self._svc_log.info("[RELATED_SYNC] finalizado")
+
+    def sync_os_data_from_mdb(self, nro: int, ano: int, origem: str):
+        """
+        Mantém a pré-condição de FK do fluxo de tabAndamento sem fazer UPDATE
+        antecipado de dados da OS. Alterações de Protocolos/Detalhes seguem
+        exclusivamente a reconciliação estável em segundo plano.
+        """
+        try:
+            if self.is_os_deleted(nro, ano):
+                self._svc_log.info(
+                    "[RELATED_SYNC] protocolo %s/%s ignorado: OS tombstoned", nro, ano
+                )
+                return
+
+            mdb_conn = self.conn_mgr.get_mdb_by_nro(nro)
+            mdb_cursor = mdb_conn.cursor()
+            try:
+                mdb_cursor.execute(
+                    "SELECT * FROM tabProtocolos WHERE NroProtocolo = ? AND AnoProtocolo = ?",
+                    (nro, ano),
+                )
+                row = mdb_cursor.fetchone()
+                if row is None:
+                    self._svc_log.warning(
+                        "[RELATED_SYNC] protocolo %s/%s ausente no MDB %s", nro, ano, origem
+                    )
+                    return
+                columns = [desc[0] for desc in mdb_cursor.description]
+                record = dict(zip(columns, row))
+            finally:
+                mdb_cursor.close()
+
+            pk_fields = ("NroProtocolo", "AnoProtocolo")
+            sync_columns = self._sync_allowed_columns(
+                columns, core._PROTOCOL_SYNC_ALLOWLIST, list(pk_fields)
+            )
+            if any(field not in sync_columns for field in pk_fields):
+                raise ValueError("chave de tabProtocolos ausente no MDB")
+
+            mysql_conn = self.conn_mgr.get_mysql()
+            mysql_cursor = mysql_conn.cursor(dictionary=True)
+            try:
+                mysql_cursor.execute(
+                    "SELECT 1 FROM tabProtocolos WHERE NroProtocolo = %s AND AnoProtocolo = %s",
+                    (nro, ano),
+                )
+                if mysql_cursor.fetchone() is not None:
+                    # Atualizações são deliberadamente adiadas até confirmação estável.
+                    return
+
+                columns_clause = ", ".join(f"`{column}`" for column in sync_columns)
+                placeholders = ", ".join("%s" for _ in sync_columns)
+                mysql_cursor.execute(
+                    f"INSERT INTO tabProtocolos ({columns_clause}) VALUES ({placeholders})",
+                    [record.get(column) for column in sync_columns],
+                )
+                mysql_conn.commit()
+                self._svc_log.info(
+                    "[RELATED_SYNC] protocolo %s/%s inserido como pré-condição de tabAndamento (%s)",
+                    nro,
+                    ano,
+                    origem,
+                )
+            except Exception:
+                mysql_conn.rollback()
+                raise
+            finally:
+                mysql_cursor.close()
+        except Exception as exc:
+            # Nunca impede a rotina principal de tratar seu próprio erro/retentativa.
+            self._svc_log.error(
+                "[RELATED_SYNC] falha ao garantir protocolo para tabAndamento %s/%s: %s",
+                nro,
+                ano,
+                exc,
+            )
 
     def _install_reliable_notify(self) -> None:
         """
@@ -712,6 +1372,7 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             cursor.close()
             return result
         except Exception as e:
+            self._last_mdb_read_error = str(e)
             self.logger.logger.error(f"[ERRO CRÍTICO] Erro ao ler MDB: {e}")
             self.logger.logger.error("Abortando leitura para evitar inconsistências.")
             self._invalidate_for_conn(conn)
@@ -788,17 +1449,26 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             self.ensure_mysql_ultimo_status_from_mdb(int(nro), int(ano))
 
     def _heal_broken_ultimo_flags(self, limit: int = 50) -> int:
+        # A janela de data só escolhe as OS; as flags são contadas em todos os
+        # andamentos da OS. Contar só na janela marcava como quebrada, a cada
+        # ciclo, toda OS cujo último andamento canônico é anterior à janela.
         try:
             conn = self.conn_mgr.get_mysql()
             cur = conn.cursor(dictionary=True)
             data_limite = self.get_data_limite()
             cur.execute(
                 """
-                SELECT NroProtocoloLink AS nro, AnoProtocoloLink AS ano,
-                       SUM(UltimoStatus = 1) AS flags
-                FROM tabandamento
-                WHERE Data >= %s AND AnoProtocoloLink >= 2024
-                GROUP BY NroProtocoloLink, AnoProtocoloLink
+                SELECT a.NroProtocoloLink AS nro, a.AnoProtocoloLink AS ano,
+                       SUM(a.UltimoStatus = 1) AS flags
+                FROM tabandamento a
+                INNER JOIN (
+                    SELECT DISTINCT NroProtocoloLink, AnoProtocoloLink
+                    FROM tabandamento
+                    WHERE Data >= %s AND AnoProtocoloLink >= 2024
+                ) recentes
+                  ON recentes.NroProtocoloLink = a.NroProtocoloLink
+                 AND recentes.AnoProtocoloLink = a.AnoProtocoloLink
+                GROUP BY a.NroProtocoloLink, a.AnoProtocoloLink
                 HAVING flags <> 1
                 LIMIT %s
                 """,
@@ -810,16 +1480,37 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             self._svc_log.warning("[ULTIMO] scan de flags falhou: %s", e)
             return 0
 
+        retry_at = getattr(self, "_ultimo_heal_retry_at", None)
+        if retry_at is None:
+            retry_at = {}
+            self._ultimo_heal_retry_at = retry_at
+        now = time.monotonic()
+        for key in [k for k, until in retry_at.items() if until <= now]:
+            retry_at.pop(key, None)
+
         heals = 0
+        skipped = 0
         for row in rows:
             nro = row.get("nro") if isinstance(row, dict) else row[0]
             ano = row.get("ano") if isinstance(row, dict) else row[1]
             if nro is None or ano is None:
                 continue
-            self.ensure_mysql_ultimo_status_from_mdb(int(nro), int(ano))
+            key = (int(nro), int(ano))
+            if key in retry_at:
+                skipped += 1
+                continue
+            self.ensure_mysql_ultimo_status_from_mdb(key[0], key[1])
+            if SYNC_ULTIMO_HEAL_RETRY_SECONDS > 0:
+                retry_at[key] = now + SYNC_ULTIMO_HEAL_RETRY_SECONDS
             heals += 1
             self._cycle_stats["ultimo_heals"] = (
                 self._cycle_stats.get("ultimo_heals", 0) + 1
+            )
+        if skipped:
+            self._svc_log.debug(
+                "[ULTIMO] %s OS aguardando nova tentativa de heal (%.0fs)",
+                skipped,
+                SYNC_ULTIMO_HEAL_RETRY_SECONDS,
             )
         return heals
 
@@ -1220,6 +1911,7 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                     "[ABORT] Falha na leitura do MDB OS_Atual. Ciclo de sincronizacao abortado."
                 )
                 self._hb.mark_cycle_error("mdb_os_read_failed")
+                self._note_mdb_error(getattr(self, "_last_mdb_read_error", ""))
                 return
 
             self._hb.mark_progress("read_mdb_pap")
@@ -1229,7 +1921,9 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                     "[ABORT] Falha na leitura do MDB Papelaria. Ciclo de sincronizacao abortado."
                 )
                 self._hb.mark_cycle_error("mdb_pap_read_failed")
+                self._note_mdb_error(getattr(self, "_last_mdb_read_error", ""))
                 return
+            self._mdb_fatal_tracker().observe_success()
 
             self._ensure_baseline_ready()
 
@@ -1458,6 +2152,7 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                 self.conn_mgr.get_mysql().rollback()
             except Exception:
                 self.conn_mgr.invalidate_mysql()
+            self._note_mdb_error(str(e))
 
     def _maybe_recycle_connections(self) -> None:
         interval = SYNC_CONN_RECYCLE_SECONDS
@@ -1682,9 +2377,68 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
 
 _ACTIVE_SYNC: Optional[ResilientSynchronizer] = None
 _MUTEX: Optional[InstanceMutex] = None
+_SHUTDOWN_TIMER: Optional[threading.Timer] = None
+_SHUTDOWN_LOCK = threading.Lock()
+_CONSOLE_HANDLER = None
+# CTRL_C, CTRL_BREAK, CTRL_CLOSE, CTRL_SHUTDOWN. CTRL_LOGOFF (5) fica de fora:
+# servicos o recebem sempre que um usuario sai da sessao.
+_CONSOLE_STOP_EVENTS = (0, 1, 2, 6)
+
+
+def _force_exit_after_deadline() -> None:
+    try:
+        sys.stderr.write(
+            f"[SHUTDOWN] encerramento excedeu {SYNC_SHUTDOWN_DEADLINE_SECONDS:.0f}s - os._exit(0)\n"
+        )
+        sys.stderr.flush()
+    except Exception:
+        pass
+    os._exit(0)
+
+
+def arm_shutdown_deadline(seconds: float = SYNC_SHUTDOWN_DEADLINE_SECONDS) -> bool:
+    """Garante o fim do processo em `seconds` apos o pedido de parada (idempotente)."""
+    global _SHUTDOWN_TIMER
+    if seconds <= 0:
+        return False
+    with _SHUTDOWN_LOCK:
+        if _SHUTDOWN_TIMER is not None:
+            return False
+        timer = threading.Timer(seconds, _force_exit_after_deadline)
+        timer.daemon = True
+        timer.start()
+        _SHUTDOWN_TIMER = timer
+    return True
+
+
+def _install_console_deadline_handler() -> None:
+    """
+    O handler Python de SIGINT so roda quando a thread principal volta ao
+    interpretador; presa em ODBC, nunca armaria o prazo. O handler de console
+    do Windows roda em thread propria e devolve False para o Python seguir.
+    """
+    global _CONSOLE_HANDLER
+    if sys.platform != "win32" or _CONSOLE_HANDLER is not None:
+        return
+    try:
+        from ctypes import wintypes
+
+        handler_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.DWORD)
+
+        def _on_console_event(event: int) -> bool:
+            if event in _CONSOLE_STOP_EVENTS:
+                arm_shutdown_deadline()
+            return False
+
+        handler = handler_type(_on_console_event)
+        if ctypes.windll.kernel32.SetConsoleCtrlHandler(handler, True):
+            _CONSOLE_HANDLER = handler
+    except Exception:
+        pass
 
 
 def _handle_stop(signum, _frame):
+    arm_shutdown_deadline()
     log = logging.getLogger("sync_andamentos_service")
     log.info("[SINAL] Recebido sinal %s - solicitando parada", signum)
     global _ACTIVE_SYNC
@@ -1693,6 +2447,7 @@ def _handle_stop(signum, _frame):
 
 
 def _install_signal_handlers() -> None:
+    _install_console_deadline_handler()
     for sig_name in ("SIGINT", "SIGTERM", "SIGBREAK"):
         sig = getattr(signal, sig_name, None)
         if sig is None:

@@ -26,12 +26,14 @@ $toProcess = @()
 if ($AllPending) {
     $toProcess = Get-ChildItem -LiteralPath $releasesDir -Directory | Select-Object -ExpandProperty Name
 } elseif ($ReleaseName) {
+    Assert-SafeReleaseName -ReleaseName $ReleaseName
     $toProcess = @($ReleaseName)
 } else {
     throw "Informe -ReleaseName ou -AllPending"
 }
 
 foreach ($name in $toProcess) {
+    Assert-SafeReleaseName -ReleaseName $name
     $releasePath = Join-Path $releasesDir $name
     if (-not (Test-Path -LiteralPath $releasePath)) {
         Write-DeployWarn "Release ignorada (inexistente): $name"

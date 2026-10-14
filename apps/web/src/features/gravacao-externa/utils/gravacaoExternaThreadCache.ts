@@ -61,13 +61,14 @@ export function applyGravacaoMensagemToCache(
   ano: number,
   nrOs: number,
   rawMessage: GravacaoExternaMensagem | Record<string, unknown>,
+  gravacaoExternaId?: number | null,
 ): MergeGravacaoMessageResult {
   const message = normalizeGravacaoMensagem(rawMessage);
   if (!message) {
     return "cache_miss";
   }
 
-  const detailKey = queryKeys.gravacaoExterna.detail(ano, nrOs);
+  const detailKey = queryKeys.gravacaoExterna.detail(ano, nrOs, gravacaoExternaId);
   let result: MergeGravacaoMessageResult = "cache_miss";
   qc.setQueryData<GravacaoExternaDetail | undefined>(detailKey, (old) => {
     const merged = mergeGravacaoMensagemIntoDetail(old, message);

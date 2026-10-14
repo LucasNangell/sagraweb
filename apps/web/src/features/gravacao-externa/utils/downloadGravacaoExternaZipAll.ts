@@ -148,11 +148,14 @@ function quotedEtag(etag: string | null | undefined): string | null {
 async function waitForZipReady(opts: {
   ano: number;
   nrOs: number;
+  gravacaoExternaId?: number | null;
   pollIntervalMs: number;
   signal?: AbortSignal;
   onProgress?: (progress: DownloadAllProgress) => void;
 }): Promise<GravacaoExternaZipStatus> {
-  let job = await startGravacaoExternaZip(opts.ano, opts.nrOs);
+  let job = opts.gravacaoExternaId == null
+    ? await startGravacaoExternaZip(opts.ano, opts.nrOs)
+    : await startGravacaoExternaZip(opts.ano, opts.nrOs, opts.gravacaoExternaId);
   const emit = (current: GravacaoExternaZipStatus) => {
     opts.onProgress?.({
       phase: "preparing",
@@ -167,7 +170,9 @@ async function waitForZipReady(opts: {
       throw new ApiDownloadError(job.erro?.trim() || "Falha ao preparar o ZIP.");
     }
     await sleep(opts.pollIntervalMs, opts.signal);
-    job = await getGravacaoExternaZipStatus(opts.ano, opts.nrOs);
+    job = opts.gravacaoExternaId == null
+      ? await getGravacaoExternaZipStatus(opts.ano, opts.nrOs)
+      : await getGravacaoExternaZipStatus(opts.ano, opts.nrOs, opts.gravacaoExternaId);
     emit(job);
   }
   return job;
@@ -311,6 +316,7 @@ async function downloadZipInChunks(opts: {
 export async function downloadGravacaoExternaZipAll(opts: {
   ano: number;
   nrOs: number;
+  gravacaoExternaId?: number | null;
   fallbackFilename: string;
   onPhase?: (phase: DownloadAllPhase) => void;
   onProgress?: (progress: DownloadAllProgress) => void;
@@ -323,6 +329,7 @@ export async function downloadGravacaoExternaZipAll(opts: {
   const {
     ano,
     nrOs,
+    gravacaoExternaId,
     fallbackFilename,
     onPhase,
     onProgress,
@@ -371,11 +378,14 @@ export async function downloadGravacaoExternaZipAll(opts: {
     const job = await waitForZipReady({
       ano,
       nrOs,
+      gravacaoExternaId,
       pollIntervalMs,
       signal,
       onProgress,
     });
-    const url = gravacaoExternaZipDownloadUrl(ano, nrOs);
+    const url = gravacaoExternaId == null
+      ? gravacaoExternaZipDownloadUrl(ano, nrOs)
+      : gravacaoExternaZipDownloadUrl(ano, nrOs, gravacaoExternaId);
 
     if (!handle) {
       emit("started");

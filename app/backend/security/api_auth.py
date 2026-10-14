@@ -132,7 +132,7 @@ def _trusted_proxy_peers() -> set[str]:
 
     master, local = _get_allowed_ips_config()
     server_host = str(config_manager.get("server_host") or local or "10.1.1.73")
-    return {master, local, server_host, "127.0.0.1", "::1", "10.1.1.73", "10.120.1.14"}
+    return {master, local, server_host, "127.0.0.1", "::1", "10.1.1.73", "10.120.2.11"}
 
 
 def _ips_from_forwarded_headers(request: Request) -> list[str]:
@@ -179,7 +179,7 @@ def resolve_client_ip(request: Request) -> str:
 
 
 def is_privileged_ip(ip: str) -> bool:
-    """MASTER (10.120.1.14), servidor local e loopback — acesso total."""
+    """MASTER (10.120.2.11), servidor local e loopback — acesso total."""
     if not ip or ip == "unknown":
         return False
     master, local = _get_allowed_ips_config()
@@ -214,7 +214,7 @@ def _get_allowed_ips_config():
 
     allowed = config_manager.get("allowed_ips") or {}
 
-    master = allowed.get("master") or config_manager.get("allowed_ips.master") or "10.120.1.14"
+    master = allowed.get("master") or config_manager.get("allowed_ips.master") or "10.120.2.11"
 
     local = allowed.get("local_network") or config_manager.get("allowed_ips.local_network") or "10.1.1.73"
 

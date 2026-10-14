@@ -76,6 +76,29 @@ describe("gravacaoExternaNotificationHandlers", () => {
     });
   });
 
+  it("também atualiza o detalhe sem id (chat da OS) quando a mensagem é de um envio", async () => {
+    const qc = new QueryClient();
+    const refetchSpy = vi.spyOn(qc, "refetchQueries").mockResolvedValue([] as never);
+
+    await refreshGravacaoExternaDetail(
+      qc,
+      2026,
+      1209,
+      { id: 1, autor_ponto: "900001", autor_papel: "operador", mensagem: "Oi" },
+      84,
+    );
+
+    expect(refetchSpy).toHaveBeenCalledWith({
+      queryKey: queryKeys.gravacaoExterna.detail(2026, 1209, null),
+      exact: true,
+      type: "active",
+    });
+    expect(refetchSpy).toHaveBeenCalledWith({
+      queryKey: queryKeys.gravacaoExterna.detail(2026, 1209, 84),
+      type: "all",
+    });
+  });
+
   it("skips refetch on notification_new without message when conversation is open", async () => {
     const qc = new QueryClient();
     useGravacaoExternaUiStore.getState().setViewingOs(2026, 1209);

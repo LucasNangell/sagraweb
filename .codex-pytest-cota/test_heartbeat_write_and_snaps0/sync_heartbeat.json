@@ -1,0 +1,28 @@
+{
+  "pid": 18740,
+  "started_at": "2026-09-29T23:02:48.372368+00:00",
+  "last_cycle_at": "2026-09-29T23:02:48.372768+00:00",
+  "phase": "idle",
+  "cycles": 1,
+  "consecutive_errors": 0,
+  "last_error": null,
+  "stall_seconds": 0.0,
+  "stats": {
+    "ins_m2y": 0,
+    "upd_m2y": 0,
+    "ins_y2m": 0,
+    "upd_y2m": 0,
+    "del_y": 0,
+    "ultimo_heals": 0,
+    "safety_lock_aborts": 0,
+    "mysql_only_remaining": 0,
+    "conflitos": 0,
+    "baseline_rows": 0,
+    "os_del_candidates": 0,
+    "os_del_executed": 0,
+    "os_del_quarantined": 0,
+    "os_del_aborted": 0
+  },
+  "tabandamento_bidi": true,
+  "written_at": "2026-09-29T23:02:48.372782+00:00"
+}

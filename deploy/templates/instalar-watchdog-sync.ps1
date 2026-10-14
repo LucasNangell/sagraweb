@@ -19,6 +19,10 @@ function Assert-Admin {
 
 Assert-Admin
 
+if (Get-Service -Name "SAGRA-SystemWatchdog" -ErrorAction SilentlyContinue) {
+    throw "SAGRA-SystemWatchdog ja esta instalado. O watchdog legado nao pode ser reativado em paralelo."
+}
+
 if (-not $Root) {
     $Root = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 }

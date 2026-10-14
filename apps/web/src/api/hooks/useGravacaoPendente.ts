@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   adicionarOsGravacaoPendente,
@@ -20,10 +20,12 @@ import {
   updateGravacaoPendenteArquivos,
   type GravacaoPendenteControleUpdateBody,
   type GravacaoPendenteAdicionarBody,
+  type GravacaoPendenteDetail,
   type GravacaoPendenteCotaAdjustMode,
   type GravacaoPendenteListFilters,
   type GravacaoPendenteMaquinaPrecoItem,
 } from "@/api/gravacaoPendente";
+import { combineDetailResults } from "@/api/hooks/combineDetailResults";
 import { queryKeys } from "@/api/query-keys";
 
 export function useGravacaoPendenteOsList(
@@ -53,15 +55,37 @@ export function useGravacaoPendenteDetail(
   ano: number | null,
   nrOs: number | null,
   enabled = true,
+  gravacaoPendenteId: number | null = null,
 ) {
   return useQuery({
     queryKey:
       ano != null && nrOs != null
-        ? queryKeys.gravacaoPendente.detail(ano, nrOs)
+        ? queryKeys.gravacaoPendente.detail(ano, nrOs, gravacaoPendenteId)
         : ["gravacaoPendente", "detail", "none"],
-    queryFn: () => fetchGravacaoPendenteDetail(ano!, nrOs!),
+    queryFn: () => fetchGravacaoPendenteDetail(ano!, nrOs!, gravacaoPendenteId),
     enabled: enabled && ano != null && nrOs != null,
     staleTime: 10_000,
+  });
+}
+
+/** Detalhes de várias sessões da mesma OS (card agrupado), com as mesmas query keys. */
+export function useGravacaoPendenteDetails(
+  ano: number | null,
+  nrOs: number | null,
+  gravacaoPendenteIds: number[],
+  enabled = true,
+) {
+  return useQueries({
+    queries: gravacaoPendenteIds.map((gravacaoPendenteId) => ({
+      queryKey:
+        ano != null && nrOs != null
+          ? queryKeys.gravacaoPendente.detail(ano, nrOs, gravacaoPendenteId)
+          : (["gravacaoPendente", "detail", "none", gravacaoPendenteId] as const),
+      queryFn: () => fetchGravacaoPendenteDetail(ano!, nrOs!, gravacaoPendenteId),
+      enabled: enabled && ano != null && nrOs != null,
+      staleTime: 10_000,
+    })),
+    combine: combineDetailResults<GravacaoPendenteDetail>,
   });
 }
 
@@ -221,18 +245,35 @@ export function useEnviarGravacaoPendenteMutation() {
       ano,
       nrOs,
       fornecedorPonto,
+      gravacaoPendenteId,
+      gravacaoPendenteIds,
+      maquinas,
     }: {
       ano: number;
       nrOs: number;
       fornecedorPonto?: string | null;
-    }) => enviarGravacaoPendenteParaExterna(ano, nrOs, { fornecedorPonto }),
+      gravacaoPendenteId?: number | null;
+      gravacaoPendenteIds?: number[];
+      maquinas?: string[];
+    }) =>
+      enviarGravacaoPendenteParaExterna(ano, nrOs, {
+        fornecedorPonto,
+        gravacaoPendenteId,
+        gravacaoPendenteIds,
+        maquinas,
+      }),
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.gravacaoPendente.prefix,
       });
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.gravacaoPendente.detail(vars.ano, vars.nrOs),
+        queryKey: queryKeys.gravacaoPendente.detail(vars.ano, vars.nrOs, vars.gravacaoPendenteId),
       });
+      for (const id of vars.gravacaoPendenteIds ?? []) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.gravacaoPendente.detail(vars.ano, vars.nrOs, id),
+        });
+      }
       void queryClient.invalidateQueries({
         queryKey: queryKeys.gravacaoExterna.prefix,
       });
@@ -280,14 +321,16 @@ export function usePatchGravacaoPendenteObservacaoMutation() {
       ano,
       nrOs,
       observacao,
+      gravacaoPendenteId,
     }: {
       ano: number;
       nrOs: number;
       observacao: string;
-    }) => patchGravacaoPendenteObservacao(ano, nrOs, observacao),
+      gravacaoPendenteId?: number | null;
+    }) => patchGravacaoPendenteObservacao(ano, nrOs, observacao, gravacaoPendenteId),
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.gravacaoPendente.detail(vars.ano, vars.nrOs),
+        queryKey: queryKeys.gravacaoPendente.detail(vars.ano, vars.nrOs, vars.gravacaoPendenteId),
       });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.gravacaoPendente.prefix,
@@ -304,15 +347,17 @@ export function useUpdateGravacaoPendenteArquivosMutation() {
       nrOs,
       arquivos,
       chapas,
+      gravacaoPendenteId,
     }: {
       ano: number;
       nrOs: number;
       arquivos: { absolute_path: string; nome: string; maquina?: string | null }[];
       chapas?: { maquina: string; quantidade: number }[];
-    }) => updateGravacaoPendenteArquivos(ano, nrOs, arquivos, chapas),
+      gravacaoPendenteId?: number | null;
+    }) => updateGravacaoPendenteArquivos(ano, nrOs, arquivos, chapas, gravacaoPendenteId),
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.gravacaoPendente.detail(vars.ano, vars.nrOs),
+        queryKey: queryKeys.gravacaoPendente.detail(vars.ano, vars.nrOs, vars.gravacaoPendenteId),
       });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.gravacaoPendente.prefix,

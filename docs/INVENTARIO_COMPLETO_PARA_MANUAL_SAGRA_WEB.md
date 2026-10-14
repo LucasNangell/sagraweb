@@ -674,7 +674,7 @@ Produção atual: mysql_only=true, sync_andamentos_enabled=false
 
 ### 9.4 MASTER **[CERTO]**
 
-IPs: `10.120.1.14` (config `allowed_ips.master`), servidor `10.1.1.73`, loopback.  
+IPs: `10.120.2.11` (config `allowed_ips.master`), servidor `10.1.1.73`, loopback.  
 Acesso: todas rotas `/api/admin/*`, `/api/sync/*`, `/api/connected-ips`.
 
 ### 9.5 Onde permissões são aplicadas **[CERTO]**

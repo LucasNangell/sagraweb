@@ -130,7 +130,12 @@ def _resolve_sefoc_folder(ano: int, os_id: int) -> Path:
     root = _resolve_os_root_path(ano, os_id)
     if not root:
         meta = _fetch_os_folder_meta(ano, os_id)
-        created_path, _ = ensure_os_folder_on_network(os_id, ano, meta)
+        created_path, _ = ensure_os_folder_on_network(
+            nr_os=os_id,
+            ano=ano,
+            solicitante=meta["folder_solicitante"],
+            produto=meta["produto"],
+        )
         root = created_path
     sefoc = Path(root) / "Sefoc"
     sefoc.mkdir(parents=True, exist_ok=True)

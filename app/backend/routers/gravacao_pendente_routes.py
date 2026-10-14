@@ -26,9 +26,11 @@ from services.gravacao_pendente_service import (
     estimate_chapas_from_validated_arquivos,
     get_active_pendente_session,
     get_detalhes_config,
+    get_viewable_pendente_session,
     list_fornecedores,
     list_historico_concluidas,
     list_os_gravacao_pendente,
+    list_pendente_envios_parciais,
     remove_pendente_from_queue,
     recalc_cotas_from_fornecedores,
     require_pendente_session_access,
@@ -66,6 +68,7 @@ class GravacaoPendenteOsItem(BaseModel):
     gravacao_criado_em: Optional[datetime] = None
     juntada_grupo_id: Optional[str] = None
     membros: List[GravacaoPendenteOsMembro] = []
+    componente: Literal["todos", "capa", "miolo"] = "todos"
 
 
 class GravacaoPendenteOsListResponse(BaseModel):
@@ -90,6 +93,19 @@ class GravacaoPendenteChapaItem(BaseModel):
     quantidade: int
 
 
+class GravacaoPendenteEnvioParcialItem(BaseModel):
+    gravacao_pendente_id: int
+    gravacao_externa_id: Optional[int] = None
+    externa_status: Optional[str] = None
+    componente: Literal["todos", "capa", "miolo"] = "todos"
+    fornecedor_ponto: Optional[str] = None
+    fornecedor_nome: Optional[str] = None
+    enviada_em: Optional[datetime] = None
+    maquinas: List[str] = Field(default_factory=list)
+    arquivos: List[GravacaoPendenteArquivoItem] = Field(default_factory=list)
+    chapas: List[GravacaoPendenteChapaItem] = Field(default_factory=list)
+
+
 class GravacaoPendenteDetailResponse(BaseModel):
     id: int
     os_ano: int
@@ -98,12 +114,15 @@ class GravacaoPendenteDetailResponse(BaseModel):
     lancado_por_ponto: str
     lancado_por_nome: Optional[str] = None
     status: str
+    componente: Literal["todos", "capa", "miolo"] = "todos"
     enviada_em: Optional[datetime] = None
     enviada_por_ponto: Optional[str] = None
     observacao: Optional[str] = None
     criado_em: Optional[datetime] = None
+    desmembrada_de_id: Optional[int] = None
     arquivos: List[GravacaoPendenteArquivoItem]
     chapas: List[GravacaoPendenteChapaItem]
+    envios: List[GravacaoPendenteEnvioParcialItem] = Field(default_factory=list)
 
 
 class GravacaoPendenteHistoricoItem(BaseModel):
@@ -274,6 +293,9 @@ class GravacaoPendenteControleUpdateResponse(BaseModel):
 class EnviarGravacaoExternaBody(BaseModel):
     setor: str = Field(default="Grav. Externa", min_length=1)
     fornecedor_ponto: Optional[str] = None
+    gravacao_pendente_id: Optional[int] = Field(default=None, ge=1)
+    gravacao_pendente_ids: List[int] = Field(default_factory=list, max_length=50)
+    maquinas: List[str] = Field(default_factory=list, max_length=20)
 
 
 class GravacaoPendenteChapaInput(BaseModel):
@@ -297,6 +319,7 @@ class GravacaoPendenteAdicionarBody(BaseModel):
     chapas: List[GravacaoPendenteChapaInput] = Field(default_factory=list)
     observacao: str = ""
     juntadas: List[GravacaoPendenteOsMembro] = Field(default_factory=list)
+    componente: Literal["todos", "capa", "miolo"] = "todos"
 
 
 class GravacaoPendenteQueueRemovalResponse(BaseModel):
@@ -571,8 +594,13 @@ def delete_gravacao_pendente_controle(request: Request, gravacao_pendente_id: in
 
 
 @router.get("/gravacao-pendente/{ano}/{id}", response_model=GravacaoPendenteDetailResponse)
-def get_gravacao_pendente_detail(request: Request, ano: int, id: int):
-    session = get_active_pendente_session(ano, id)
+def get_gravacao_pendente_detail(
+    request: Request,
+    ano: int,
+    id: int,
+    gravacao_pendente_id: Optional[int] = Query(None, ge=1),
+):
+    session = get_viewable_pendente_session(ano, id, gravacao_pendente_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão de Gravação Pendente não encontrada.")
     require_pendente_session_access(
@@ -581,6 +609,8 @@ def get_gravacao_pendente_detail(request: Request, ano: int, id: int):
         has_pendente_permission=_has_pendente_permission(request),
     )
     detail = build_pendente_detail(session)
+    if session.get("status") == "ativa":
+        detail["envios"] = list_pendente_envios_parciais(int(session["id"]))
     return GravacaoPendenteDetailResponse.model_validate(detail)
 
 
@@ -604,6 +634,7 @@ def post_adicionar_gravacao_pendente(
             chapas=[item.model_dump() for item in body.chapas],
             observacao=body.observacao,
             juntadas=[item.model_dump() for item in body.juntadas],
+            componente=body.componente,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -638,8 +669,9 @@ def put_gravacao_pendente_arquivos(
     ano: int,
     id: int,
     body: GravacaoPendenteArquivosUpdate,
+    gravacao_pendente_id: Optional[int] = Query(None, ge=1),
 ):
-    session = get_active_pendente_session(ano, id)
+    session = get_active_pendente_session(ano, id, gravacao_pendente_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão de Gravação Pendente não encontrada.")
     require_pendente_session_access(
@@ -666,6 +698,7 @@ def put_gravacao_pendente_arquivos(
             if body.chapas is not None
             else None
         ),
+        gravacao_pendente_id=gravacao_pendente_id,
     )
     return GravacaoPendenteDetailResponse.model_validate(detail)
 
@@ -679,9 +712,10 @@ def patch_gravacao_pendente_observacao(
     ano: int,
     id: int,
     body: GravacaoPendenteObservacaoUpdate,
+    gravacao_pendente_id: Optional[int] = Query(None, ge=1),
 ):
     _require_observacao_edit_permission(request)
-    session = get_active_pendente_session(ano, id)
+    session = get_active_pendente_session(ano, id, gravacao_pendente_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão de Gravação Pendente não encontrada.")
     require_pendente_session_access(
@@ -693,6 +727,7 @@ def patch_gravacao_pendente_observacao(
         ano=ano,
         os_id=id,
         observacao=body.observacao,
+        gravacao_pendente_id=gravacao_pendente_id,
     )
     return GravacaoPendenteDetailResponse.model_validate(detail)
 
@@ -755,13 +790,19 @@ def post_enviar_gravacao_externa(
     session = _get_request_session(request)
     from routers.gravacao_externa_routes import GravacaoExternaDetailResponse
 
-    detail = enviar_para_gravacao_externa(
-        ano=ano,
-        os_id=id,
-        operador_ponto=str(session.ponto),
-        setor=body.setor.strip(),
-        fornecedor_ponto=body.fornecedor_ponto,
-    )
+    try:
+        detail = enviar_para_gravacao_externa(
+            ano=ano,
+            os_id=id,
+            operador_ponto=str(session.ponto),
+            setor=body.setor.strip(),
+            fornecedor_ponto=body.fornecedor_ponto,
+            gravacao_pendente_id=body.gravacao_pendente_id,
+            gravacao_pendente_ids=body.gravacao_pendente_ids,
+            maquinas=body.maquinas,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return GravacaoExternaDetailResponse.model_validate(detail)
 
 
@@ -786,9 +827,15 @@ def _get_pendente_arquivo(session_id: int, arquivo_id: int) -> dict:
 
 
 @router.get("/gravacao-pendente/{ano}/{id}/arquivos/{arq_id}/download")
-def download_gravacao_pendente_arquivo(request: Request, ano: int, id: int, arq_id: int):
+def download_gravacao_pendente_arquivo(
+    request: Request,
+    ano: int,
+    id: int,
+    arq_id: int,
+    gravacao_pendente_id: Optional[int] = Query(None, ge=1),
+):
     _require_pendente_permission(request)
-    session = get_active_pendente_session(ano, id)
+    session = get_viewable_pendente_session(ano, id, gravacao_pendente_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão não encontrada.")
     arquivo = _get_pendente_arquivo(int(session["id"]), arq_id)
@@ -803,9 +850,15 @@ def download_gravacao_pendente_arquivo(request: Request, ano: int, id: int, arq_
 
 
 @router.get("/gravacao-pendente/{ano}/{id}/arquivos/{arq_id}/preview")
-def preview_gravacao_pendente_arquivo(request: Request, ano: int, id: int, arq_id: int):
+def preview_gravacao_pendente_arquivo(
+    request: Request,
+    ano: int,
+    id: int,
+    arq_id: int,
+    gravacao_pendente_id: Optional[int] = Query(None, ge=1),
+):
     _require_pendente_permission(request)
-    session = get_active_pendente_session(ano, id)
+    session = get_viewable_pendente_session(ano, id, gravacao_pendente_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão não encontrada.")
     arquivo = _get_pendente_arquivo(int(session["id"]), arq_id)
@@ -833,9 +886,10 @@ def preview_gravacao_pendente_composite(
     ano: int,
     id: int,
     group_key: str = Query(..., min_length=1),
+    gravacao_pendente_id: Optional[int] = Query(None, ge=1),
 ):
     _require_pendente_permission(request)
-    session = get_active_pendente_session(ano, id)
+    session = get_viewable_pendente_session(ano, id, gravacao_pendente_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão não encontrada.")
     arquivos = _fetch_pendente_arquivos(int(session["id"]))

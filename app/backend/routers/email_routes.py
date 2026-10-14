@@ -243,11 +243,13 @@ def _build_proof_html_preview_payload(
 
     solicitante = "Solicitante"
     produto = "Produto"
+    titulo = ""
     try:
         q_dados = """
             SELECT
                 p.NomeUsuario as solicitante,
-                d.TipoPublicacaoLink as produto
+                d.TipoPublicacaoLink as produto,
+                d.Titulo as titulo
             FROM tabProtocolos p
             LEFT JOIN tabDetalhesServico d ON
                 p.NroProtocolo = d.NroProtocoloLinkDet AND
@@ -258,6 +260,7 @@ def _build_proof_html_preview_payload(
         if res_dados:
             solicitante = res_dados[0].get("solicitante") or solicitante
             produto = res_dados[0].get("produto") or produto
+            titulo = res_dados[0].get("titulo") or ""
     except Exception as e_det:
         logger.warning("Erro buscando detalhes OS preview email prova: %s", e_det)
 
@@ -278,6 +281,7 @@ def _build_proof_html_preview_payload(
         "ano": ano,
         "versao": resolved_versao,
         "produto": produto,
+        "titulo": titulo,
         "solicitante": solicitante,
         "link": proof_link,
         "jobname": str(os_id),
@@ -339,11 +343,13 @@ def _build_timbrado_digital_html_preview_payload(
     plan = resolve_timbrado_digital_send_plan()
     solicitante = "Solicitante"
     produto = "Produto"
+    titulo = ""
     try:
         q_dados = """
             SELECT
                 p.NomeUsuario as solicitante,
-                d.TipoPublicacaoLink as produto
+                d.TipoPublicacaoLink as produto,
+                d.Titulo as titulo
             FROM tabProtocolos p
             LEFT JOIN tabDetalhesServico d ON
                 p.NroProtocolo = d.NroProtocoloLinkDet AND
@@ -354,6 +360,7 @@ def _build_timbrado_digital_html_preview_payload(
         if res_dados:
             solicitante = res_dados[0].get("solicitante") or solicitante
             produto = res_dados[0].get("produto") or produto
+            titulo = res_dados[0].get("titulo") or ""
     except Exception as e_det:
         logger.warning("Erro buscando detalhes OS preview Timbrado Digital: %s", e_det)
 
@@ -361,6 +368,7 @@ def _build_timbrado_digital_html_preview_payload(
         "nr_os": os_id,
         "ano": ano,
         "produto": produto,
+        "titulo": titulo,
         "solicitante": solicitante,
         "versao": "1",
         "link": "",
@@ -1627,7 +1635,8 @@ def send_pt_email(request: EmailPTRequest, session: SessionData = Depends(requir
             q_dados = """
                 SELECT
                     p.NomeUsuario as solicitante,
-                    d.TipoPublicacaoLink as produto
+                    d.TipoPublicacaoLink as produto,
+                    d.Titulo as titulo
                 FROM tabProtocolos p
                 LEFT JOIN tabDetalhesServico d ON
                     p.NroProtocolo = d.NroProtocoloLinkDet AND
@@ -1637,9 +1646,11 @@ def send_pt_email(request: EmailPTRequest, session: SessionData = Depends(requir
             res_dados = db.execute_query(q_dados, {"os": request.os, "ano": request.ano})
             solicitante = "Solicitante"
             produto = "Produto"
+            titulo = ""
             if res_dados:
                 solicitante = res_dados[0].get("solicitante") or "Solicitante"
                 produto = res_dados[0].get("produto") or "Produto"
+                titulo = res_dados[0].get("titulo") or ""
 
             if use_attachment:
                 validate_proof_pdf_size(pdf_path)
@@ -1675,6 +1686,7 @@ def send_pt_email(request: EmailPTRequest, session: SessionData = Depends(requir
                 "ano": request.ano,
                 "versao": nova_versao,
                 "produto": produto,
+                "titulo": titulo,
                 "solicitante": solicitante,
                 "link": proof_link,
                 "jobname": str(request.os),
@@ -1708,7 +1720,8 @@ def send_pt_email(request: EmailPTRequest, session: SessionData = Depends(requir
             q_dados = """
                 SELECT
                     p.NomeUsuario as solicitante,
-                    d.TipoPublicacaoLink as produto
+                    d.TipoPublicacaoLink as produto,
+                    d.Titulo as titulo
                 FROM tabProtocolos p
                 LEFT JOIN tabDetalhesServico d ON
                     p.NroProtocolo = d.NroProtocoloLinkDet AND
@@ -1718,15 +1731,18 @@ def send_pt_email(request: EmailPTRequest, session: SessionData = Depends(requir
             res_dados = db.execute_query(q_dados, {"os": request.os, "ano": request.ano})
             solicitante = "Solicitante"
             produto = "Produto"
+            titulo = ""
             if res_dados:
                 solicitante = res_dados[0].get("solicitante") or "Solicitante"
                 produto = res_dados[0].get("produto") or "Produto"
+                titulo = res_dados[0].get("titulo") or ""
 
             variables = {
                 "nr_os": request.os,
                 "ano": request.ano,
                 "versao": nova_versao,
                 "produto": produto,
+                "titulo": titulo,
                 "solicitante": solicitante,
                 "link": "",
                 "jobname": str(request.os),

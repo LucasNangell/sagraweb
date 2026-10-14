@@ -15,7 +15,7 @@ vi.mock("@/api/hooks/useGravacaoExterna", () => ({
           produto: null,
           situacao: "Gravação Externa",
           gravacao_externa_id: 1,
-          gravacao_externa_status: "pendente",
+          gravacao_status: "pendente",
         },
       ],
       total: 1,
@@ -24,18 +24,20 @@ vi.mock("@/api/hooks/useGravacaoExterna", () => ({
     isError: false,
     refetch: vi.fn(),
   }),
-  useGravacaoExternaDetail: () => ({
-    data: {
-      id: 1,
+  useGravacaoExternaDetails: (_ano: number, _nrOs: number, ids: number[]) => ({
+    data: ids.map((id) => ({
+      id,
       os_ano: 2024,
       os_nro: 1209,
       status: "pendente",
       lancado_por_ponto: "918.713",
       arquivos: [{ id: 10, nome: "a.tif", relative: "a.tif", ordem: 0 }],
       mensagens: [],
-    },
+    })),
+    failed: ids.map(() => false),
     isLoading: false,
     isError: false,
+    error: null,
     refetch: vi.fn(),
   }),
   useGravacaoExternaAguardandoEntrega: () => ({
@@ -152,7 +154,9 @@ describe("GravacaoExternaTab download-all", () => {
         screen.getByText(/Preparando arquivos para download/i),
       ).toBeInTheDocument();
     });
-    expect(downloadMock).toHaveBeenCalled();
+    expect(downloadMock).toHaveBeenCalledWith(
+      expect.objectContaining({ ano: 2024, nrOs: 1209, gravacaoExternaId: 1 }),
+    );
   });
 
   it("hides Baixar todos without operator permission", async () => {

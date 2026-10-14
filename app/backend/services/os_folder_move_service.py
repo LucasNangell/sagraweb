@@ -341,7 +341,7 @@ def execute_folder_move(
         dest_dir, _folder_name = ensure_os_folder_on_network(
             nr_os=dest_id,
             ano=dest_ano,
-            solicitante=dest_meta["solicitante"],
+            solicitante=dest_meta["folder_solicitante"],
             produto=dest_meta["produto"],
         )
 

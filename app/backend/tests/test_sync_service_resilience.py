@@ -57,6 +57,90 @@ def test_heartbeat_marks_errors(tmp_hb):
     assert snap2["last_error"] is None
 
 
+def test_related_mismatch_requires_three_identical_cycles():
+    gate = svc.StableRelatedMismatchGate(3)
+    identity = ("OS_Atual", "tabProtocolos", 84, 2026)
+
+    assert gate.observe(identity, "mdb-v1", "mysql-v0") is False
+    assert gate.pending_cycles(identity) == 1
+    assert gate.observe(identity, "mdb-v1", "mysql-v0") is False
+    assert gate.pending_cycles(identity) == 2
+    assert gate.observe(identity, "mdb-v1", "mysql-v0") is True
+    assert gate.pending_cycles(identity) == 3
+
+
+def test_related_mismatch_resets_when_any_side_changes_or_converges():
+    gate = svc.StableRelatedMismatchGate(3)
+    identity = ("Papelaria", "tabDetalhesServico", 5001, 2026)
+
+    assert gate.observe(identity, "mdb-v1", "mysql-v0") is False
+    assert gate.observe(identity, "mdb-v1", "mysql-v0") is False
+
+    # Uma gravação concorrente no MySQL cancela a confirmação já acumulada.
+    assert gate.observe(identity, "mdb-v1", "mysql-v2") is False
+    assert gate.pending_cycles(identity) == 1
+
+    # Se os lados convergem, não fica nenhuma atualização pendente.
+    assert gate.observe(identity, "mdb-v1", "mdb-v1") is False
+    assert gate.pending_cycles(identity) == 0
+
+
+def test_related_mismatch_can_retry_after_failed_transaction_without_new_detection():
+    gate = svc.StableRelatedMismatchGate(3)
+    identity = ("OS_Atual", "tabDetalhesServico", 85, 2026)
+
+    for _ in range(3):
+        ready = gate.observe(identity, "mdb-v1", "mysql-v0")
+    assert ready is True
+
+    gate.mark_write_failed(identity)
+    assert gate.observe(identity, "mdb-v1", "mysql-v0") is True
+
+    gate.mark_written(identity)
+    assert gate.pending_cycles(identity) == 0
+
+
+def test_related_table_reconciliation_only_submits_stable_difference():
+    sync = svc.ResilientSynchronizer.__new__(svc.ResilientSynchronizer)
+    sync._svc_log = MagicMock()
+    sync._related_mismatch_gate = svc.StableRelatedMismatchGate(3)
+    spec = svc._RELATED_TABLE_SPECS[0]
+    sync._related_policies = {
+        "tabProtocolos": {"enabled": True, "mode": "uni"},
+    }
+
+    mdb_record = {"NroProtocolo": 84, "AnoProtocolo": 2026, "NomeUsuario": "MDB"}
+    mysql_record = {"NroProtocolo": 84, "AnoProtocolo": 2026, "NomeUsuario": "MySQL"}
+    sync._read_related_table = MagicMock(
+        return_value=([mdb_record], [mysql_record], list(mdb_record))
+    )
+    sync._apply_related_candidates = MagicMock()
+
+    for _ in range(2):
+        sync._reconcile_related_table(
+            MagicMock(), MagicMock(), "OS_Atual", True, spec, set()
+        )
+    sync._apply_related_candidates.assert_not_called()
+
+    sync._reconcile_related_table(MagicMock(), MagicMock(), "OS_Atual", True, spec, set())
+    submitted = sync._apply_related_candidates.call_args.args[3]
+    assert len(submitted) == 1
+    assert submitted[0]["record"] == mdb_record
+
+
+def test_protocol_allowlist_includes_cota_repro_from_mdb():
+    columns = ["NroProtocolo", "AnoProtocolo", "CotaRepro", "email_pt_html"]
+    allowed = svc.core.AndamentosSynchronizer._sync_allowed_columns(
+        None,
+        columns,
+        svc.core._PROTOCOL_SYNC_ALLOWLIST,
+        ["NroProtocolo", "AnoProtocolo"],
+    )
+
+    assert "CotaRepro" in allowed
+    assert "email_pt_html" not in allowed
+
+
 def test_mark_cycle_error_does_not_reset_stall(tmp_hb, monkeypatch):
     hb = tmp_hb
     mono = {"t": 1000.0}
@@ -685,3 +769,171 @@ def test_perform_sync_update_mysql_to_mdb_when_mysql_changed(tmp_path, monkeypat
     sync.update_mysql.assert_not_called()
     assert sync._hb.snapshot()["stats"]["upd_y2m"] == 1
 
+
+def test_shutdown_deadline_forces_exit_once(monkeypatch):
+    import threading
+
+    fired = threading.Event()
+    monkeypatch.setattr(svc, "_SHUTDOWN_TIMER", None)
+    monkeypatch.setattr(svc, "_force_exit_after_deadline", fired.set)
+
+    assert svc.arm_shutdown_deadline(0.05) is True
+    assert svc.arm_shutdown_deadline(0.05) is False
+    assert fired.wait(2.0)
+
+
+def test_shutdown_deadline_disabled_with_zero(monkeypatch):
+    monkeypatch.setattr(svc, "_SHUTDOWN_TIMER", None)
+    assert svc.arm_shutdown_deadline(0) is False
+
+
+def test_stop_signal_arms_deadline_before_stopping(monkeypatch):
+    order = []
+    monkeypatch.setattr(svc, "arm_shutdown_deadline", lambda *_a: order.append("deadline"))
+    monkeypatch.setattr(svc, "_ACTIVE_SYNC", SimpleNamespace(stop=lambda: order.append("stop")))
+
+    svc._handle_stop(2, None)
+
+    assert order == ["deadline", "stop"]
+
+
+ACE_1812 = "('HY001', '[HY001] [Microsoft][Driver ODBC Microsoft Access] (-1812)')"
+
+
+def test_mdb_fatal_tracker_resets_then_exits_after_streak_and_uptime():
+    tracker = svc.MdbFatalErrorTracker(
+        reset_after=3, exit_after_seconds=100, min_uptime_seconds=500, process_started_mono=0
+    )
+    assert tracker.observe_error("timeout de rede", 1000) == "ignored"
+    assert tracker.observe_error(ACE_1812, 1000) == "count"
+    assert tracker.observe_error(ACE_1812, 1010) == "count"
+    assert tracker.observe_error(ACE_1812, 1020) == "reset"
+    assert tracker.observe_error(ACE_1812, 1100) == "exit"
+
+    tracker.observe_success()
+    assert tracker.streak == 0
+    assert tracker.observe_error(ACE_1812, 1200) == "count"
+
+
+def test_mdb_fatal_tracker_never_exits_young_process():
+    tracker = svc.MdbFatalErrorTracker(
+        reset_after=100, exit_after_seconds=10, min_uptime_seconds=600, process_started_mono=0
+    )
+    assert tracker.observe_error(ACE_1812, 100) == "count"
+    assert tracker.observe_error(ACE_1812, 300) == "count"
+    assert tracker.observe_error(ACE_1812, 600) == "exit"
+
+
+def _wire_mdb_pap_failure(sync, monkeypatch, error_text):
+    _wire_perform_sync(sync, [], [])
+
+    def failing_read(conn):
+        if conn is sync.conn_mgr.get_mdb_pap():
+            sync._last_mdb_read_error = error_text
+            return None
+        return []
+
+    sync.read_mdb = MagicMock(side_effect=failing_read)
+    sync.conn_mgr.invalidate_mdb_os = MagicMock()
+    sync.conn_mgr.invalidate_mdb_pap = MagicMock()
+    exits = []
+    monkeypatch.setattr(svc, "_exit_for_clean_restart", exits.append)
+    return exits
+
+
+def test_perform_sync_resets_mdb_connections_on_repeated_1812(tmp_path, monkeypatch):
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    monkeypatch.setattr(svc, "SYNC_MDB_FATAL_RESET_AFTER", 2)
+    monkeypatch.setattr(svc, "SYNC_MDB_FATAL_EXIT_AFTER_SECONDS", 3600.0)
+    exits = _wire_mdb_pap_failure(sync, monkeypatch, ACE_1812)
+
+    sync.perform_sync()
+    sync.conn_mgr.invalidate_mdb_pap.assert_not_called()
+    sync.perform_sync()
+
+    sync.conn_mgr.invalidate_mdb_os.assert_called_once()
+    sync.conn_mgr.invalidate_mdb_pap.assert_called_once()
+    assert exits == []
+
+
+def test_perform_sync_exits_for_clean_restart_when_1812_persists(tmp_path, monkeypatch):
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    monkeypatch.setattr(svc, "SYNC_MDB_FATAL_EXIT_AFTER_SECONDS", 0.0001)
+    monkeypatch.setattr(svc, "SYNC_MDB_FATAL_MIN_UPTIME_SECONDS", 0.0)
+    exits = _wire_mdb_pap_failure(sync, monkeypatch, ACE_1812)
+
+    sync.perform_sync()
+    import time as _time
+
+    _time.sleep(0.01)
+    sync.perform_sync()
+
+    assert exits == [svc.MDB_FATAL_EXIT_CODE]
+    assert "mdb_fatal_exit" in sync._hb.snapshot()["last_error"]
+
+
+def test_perform_sync_success_clears_1812_streak(tmp_path, monkeypatch):
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    _wire_perform_sync(sync, [], [], [])
+    sync._mdb_fatal_tracker().observe_error(ACE_1812, 0.0)
+
+    sync.perform_sync()
+
+    assert sync._mdb_fatal_tracker().streak == 0
+
+
+
+def _make_sync_for_heal_scan(rows):
+    sync = svc.ResilientSynchronizer.__new__(svc.ResilientSynchronizer)
+    sync._svc_log = MagicMock()
+    sync._cycle_stats = svc._empty_cycle_stats()
+    cursor = MagicMock()
+    cursor.fetchall.return_value = rows
+    conn = MagicMock()
+    conn.cursor.return_value = cursor
+    sync.conn_mgr = MagicMock()
+    sync.conn_mgr.get_mysql.return_value = conn
+    sync.get_data_limite = MagicMock(return_value="2026-09-21")
+    sync.ensure_mysql_ultimo_status_from_mdb = MagicMock()
+    return sync, cursor
+
+
+def test_heal_scan_counts_flags_over_whole_os_not_only_date_window():
+    sync, cursor = _make_sync_for_heal_scan([])
+
+    sync._heal_broken_ultimo_flags(limit=30)
+
+    sql = " ".join(cursor.execute.call_args.args[0].split())
+    # A janela de data fica só na subquery que escolhe as OS recentes.
+    assert "INNER JOIN ( SELECT DISTINCT NroProtocoloLink, AnoProtocoloLink" in sql
+    assert sql.index("WHERE Data >= %s") < sql.index(") recentes")
+    assert "SUM(a.UltimoStatus = 1) AS flags" in sql
+    assert cursor.execute.call_args.args[1] == ("2026-09-21", 30)
+
+
+def test_heal_scan_does_not_retry_same_os_every_cycle(monkeypatch):
+    monkeypatch.setattr(svc, "SYNC_ULTIMO_HEAL_RETRY_SECONDS", 600.0)
+    rows = [{"nro": 1417, "ano": 2026, "flags": 0}, {"nro": 2413, "ano": 2025, "flags": 0}]
+    sync, _cursor = _make_sync_for_heal_scan(rows)
+
+    assert sync._heal_broken_ultimo_flags() == 2
+    assert sync._heal_broken_ultimo_flags() == 0
+    assert sync._heal_broken_ultimo_flags() == 0
+
+    assert sync.ensure_mysql_ultimo_status_from_mdb.call_count == 2
+    assert sync._cycle_stats["ultimo_heals"] == 2
+
+
+def test_heal_scan_retries_os_after_interval(monkeypatch):
+    monkeypatch.setattr(svc, "SYNC_ULTIMO_HEAL_RETRY_SECONDS", 600.0)
+    sync, _cursor = _make_sync_for_heal_scan([{"nro": 1481, "ano": 2026, "flags": 2}])
+    clock = [1000.0]
+    monkeypatch.setattr(svc.time, "monotonic", lambda: clock[0])
+
+    assert sync._heal_broken_ultimo_flags() == 1
+    clock[0] += 599.0
+    assert sync._heal_broken_ultimo_flags() == 0
+    clock[0] += 2.0
+    assert sync._heal_broken_ultimo_flags() == 1
+
+    assert sync.ensure_mysql_ultimo_status_from_mdb.call_count == 2

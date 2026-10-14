@@ -92,7 +92,11 @@ export function useGravacaoExternaRealtime(
 
       if (matchesOpenOs && os != null) {
         void queryClient.refetchQueries({
-          queryKey: queryKeys.gravacaoExterna.detail(os.ano, os.nrOs),
+          queryKey: queryKeys.gravacaoExterna.detail(
+            os.ano,
+            os.nrOs,
+            data.gravacao_externa_id,
+          ),
           type: "all",
         });
 

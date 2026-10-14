@@ -25,6 +25,7 @@ if (-not $ConfirmProductionSwitch) {
 }
 
 $ProdPath = Resolve-DeployProdPath -ProdPath $ProdPath
+Assert-SafeReleaseName -ReleaseName $ReleaseName
 $layout = Get-ReleaseLayoutPaths $ProdPath
 $targetRelease = Join-Path $layout.Releases $ReleaseName
 
@@ -59,5 +60,5 @@ if (-not $SkipHealthCheck) {
 
 Write-DeployStep "Concluido"
 Write-Host "Release ativa em: $(Join-Path $ProdPath 'current')" -ForegroundColor Green
-# Independencia: este script NAO start/stop/reinicia SAGRA-SyncAndamentos (NSSM).
-Write-Host "Sync andamentos (NSSM): intacto - publish/activate nao toca o servico." -ForegroundColor DarkGray
+# Este script NAO reinicia SAGRA-SyncAndamentos; publicar-release-prod.ps1 o faz no fim, com o lock ativo.
+Write-Host "Sync andamentos (NSSM): intacto - activate nao toca o servico." -ForegroundColor DarkGray

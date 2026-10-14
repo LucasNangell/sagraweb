@@ -258,6 +258,7 @@ export interface HistoryPayload {
   gravacao_pendente_arquivos?: GravacaoPendenteArquivoInput[];
   gravacao_pendente_chapas?: GravacaoPendenteChapaInput[];
   gravacao_pendente_juntadas?: { numero: number; ano: number }[];
+  gravacao_pendente_componente?: "todos" | "capa" | "miolo";
   /** Texto exclusivo da sessão de Gravação Pendente/Externa; não inclui observação digitada na home. */
   gravacao_pendente_observacao_biro?: string;
   /** Painel tablet: token do reconhecimento facial (sobrescreve usuario no backend). */

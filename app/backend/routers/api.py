@@ -1,7 +1,7 @@
 import bootstrap_paths  # noqa: F401 — sys.path antes dos routers
 
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -204,7 +204,7 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         allowed = config_manager.get("allowed_ips") or {}
-        master_ip = allowed.get("master") or "10.120.1.14"
+        master_ip = allowed.get("master") or "10.120.2.11"
         local_ip = allowed.get("local_network") or config_manager.get("server_host", "10.1.1.73")
         api_prefix = api_url_prefix(request)
         api_client_prefix = config_manager.get_api_path_prefix()
@@ -604,7 +604,11 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
 app.add_middleware(AccessControlMiddleware)
 
 # --- SEGURANÇA CLOUDFLARE TUNNEL / DOMÍNIO PÚBLICO ---
-from security.cloudflare_access import is_cloudflare_public_request, is_trusted_public_host
+from security.cloudflare_access import (
+    is_cloudflare_public_request,
+    is_trusted_public_host,
+    protected_spa_login_redirect,
+)
 
 
 class CloudflareTunnelSecurityMiddleware(BaseHTTPMiddleware):
@@ -634,6 +638,15 @@ class CloudflareTunnelSecurityMiddleware(BaseHTTPMiddleware):
                 request.headers.get("x-forwarded-host") or request.headers.get("host"),
             )
             return await call_next(request)
+
+        login_redirect = protected_spa_login_redirect(request)
+        if login_redirect:
+            logger.info(
+                "Cloudflare: deep link protegido redirecionado ao login %s -> %s",
+                path,
+                login_redirect,
+            )
+            return RedirectResponse(url=login_redirect, status_code=302)
 
         logger.warning(
             "Cloudflare: acesso bloqueado %s %s de %s (host=%s)",

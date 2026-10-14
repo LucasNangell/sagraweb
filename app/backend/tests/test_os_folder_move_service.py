@@ -88,9 +88,9 @@ def test_execute_folder_move_renames_and_transfers(
     (origem_root / "Sefoc" / "prova.pdf").write_text("y", encoding="utf-8")
 
     mock_meta.side_effect = [
-        {"solicitante": "Destino", "produto": "Produto"},
+        {"solicitante": "Destino", "folder_solicitante": "Destino", "produto": "Produto"},
         {"solicitante": "Origem", "produto": "Produto"},
-        {"solicitante": "Destino", "produto": "Produto"},
+        {"solicitante": "Destino", "folder_solicitante": "Destino", "produto": "Produto"},
     ]
     mock_ensure.return_value = (str(dest_root), "06000-Dest-Produto")
     os.makedirs(dest_root, exist_ok=True)
@@ -160,9 +160,9 @@ def test_execute_folder_move_transfers_other_folders_without_rename(
     (origem_root / "Outra" / "extra.pdf").write_text("z", encoding="utf-8")
 
     mock_meta.side_effect = [
-        {"solicitante": "Destino", "produto": "Produto"},
+        {"solicitante": "Destino", "folder_solicitante": "Destino", "produto": "Produto"},
         {"solicitante": "Origem", "produto": "Produto"},
-        {"solicitante": "Destino", "produto": "Produto"},
+        {"solicitante": "Destino", "folder_solicitante": "Destino", "produto": "Produto"},
     ]
     mock_ensure.return_value = (str(dest_root), "06000-Dest-Produto")
     os.makedirs(dest_root, exist_ok=True)
@@ -332,7 +332,7 @@ def test_execute_repeticao_rejects_incomplete_origem_without_confirm(
     os.makedirs(origem_root / "Original")
     os.makedirs(dest_root, exist_ok=True)
     mock_meta.side_effect = [
-        {"solicitante": "Destino", "produto": "Produto"},
+        {"solicitante": "Destino", "folder_solicitante": "Destino", "produto": "Produto"},
         {"solicitante": "Origem", "produto": "Produto"},
     ]
     monkeypatch.setattr(
@@ -369,9 +369,9 @@ def test_execute_repeticao_appends_observ_when_confirmed(
     os.makedirs(origem_root / "Original")
     os.makedirs(dest_root, exist_ok=True)
     mock_meta.side_effect = [
-        {"solicitante": "Destino", "produto": "Produto"},
+        {"solicitante": "Destino", "folder_solicitante": "Destino", "produto": "Produto"},
         {"solicitante": "Origem", "produto": "Produto"},
-        {"solicitante": "Destino", "produto": "Produto"},
+        {"solicitante": "Destino", "folder_solicitante": "Destino", "produto": "Produto"},
     ]
     mock_ensure.return_value = (str(dest_root), "06000-Dest-Produto")
     monkeypatch.setattr(
@@ -412,9 +412,9 @@ def test_execute_mover_pastas_ignores_incomplete_origem(
     os.makedirs(origem_root / "Original")
     os.makedirs(dest_root, exist_ok=True)
     mock_meta.side_effect = [
-        {"solicitante": "Destino", "produto": "Produto"},
+        {"solicitante": "Destino", "folder_solicitante": "Destino", "produto": "Produto"},
         {"solicitante": "Origem", "produto": "Produto"},
-        {"solicitante": "Destino", "produto": "Produto"},
+        {"solicitante": "Destino", "folder_solicitante": "Destino", "produto": "Produto"},
     ]
     mock_ensure.return_value = (str(dest_root), "06000-Dest-Produto")
     monkeypatch.setattr(
@@ -450,7 +450,7 @@ def test_execute_repeticao_when_entregue_appends_without_incomplete_confirm(
     mock_meta.side_effect = [
         {"solicitante": "A", "produto": "Produto"},
         {"solicitante": "A", "produto": "Produto"},
-        {"solicitante": "Destino", "produto": "Produto"},
+        {"solicitante": "Destino", "folder_solicitante": "Destino", "produto": "Produto"},
     ]
     mock_ensure.return_value = (str(dest_root), "06000-Dest-Produto")
     result = execute_folder_move(

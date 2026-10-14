@@ -18,7 +18,7 @@ if (-not $Root) {
 $Root = [System.IO.Path]::GetFullPath($Root)
 $logsRoot = Join-Path $Root "logs"
 
-foreach ($sub in @("api", "sync")) {
+foreach ($sub in @("api", "sync", "system")) {
     $dir = Join-Path $logsRoot $sub
     if (-not (Test-Path -LiteralPath $dir)) {
         New-Item -ItemType Directory -Path $dir -Force | Out-Null

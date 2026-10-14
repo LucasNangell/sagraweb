@@ -61,6 +61,21 @@ class TestSpaAccessHelpers:
         assert has_screen_access_for_spa_path("/orcamento", {"ctx_orcamento": True})
         assert not has_screen_access_for_spa_path("/orcamento", {"sb_gerencia": True})
 
+    def test_authenticated_only_and_dynamic_deep_links_are_mapped(self):
+        from security.spa_access import (
+            _AUTHENTICATED_ONLY,
+            has_screen_access_for_spa_path,
+            required_permission_for_spa_path,
+        )
+
+        assert required_permission_for_spa_path("/mensagens") == _AUTHENTICATED_ONLY
+        assert has_screen_access_for_spa_path("/mensagens", {}) is True
+        assert (
+            required_permission_for_spa_path("/os/2026/123/fluxo-producao")
+            == "sb_gerencia"
+        )
+        assert required_permission_for_spa_path("/os/invalida") == "__MASTER_ONLY__"
+
 
 class TestResolveClientIpCloudflare:
     def test_cf_connecting_ip_preferred_over_xff(self):

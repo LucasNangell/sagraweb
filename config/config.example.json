@@ -6,7 +6,7 @@
     "mysql_only": true,
     "sync_andamentos_enabled": false,
     "allowed_ips": {
-        "master": "10.120.1.14",
+        "master": "10.120.2.11",
         "local_network": "10.1.1.73"
     },
     "db_host": "10.1.1.73",

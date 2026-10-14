@@ -23,6 +23,7 @@ function formatTime(value: string | null | undefined): string {
 interface GravacaoExternaChatPanelProps {
   ano: number;
   nrOs: number;
+  gravacaoExternaId?: number | null;
   currentPonto: string | null;
   compact?: boolean;
   /** Preenche a altura do container pai (coluna lateral). */
@@ -36,6 +37,7 @@ interface GravacaoExternaChatPanelProps {
 export function GravacaoExternaChatPanel({
   ano,
   nrOs,
+  gravacaoExternaId = null,
   currentPonto,
   compact = false,
   fill = false,
@@ -47,7 +49,7 @@ export function GravacaoExternaChatPanel({
   const postMutation = usePostGravacaoExternaMensagemMutation();
   const detailQuery = useGravacaoExternaDetail(ano, nrOs, true, {
     refetchInterval: safetyPollMs,
-  });
+  }, gravacaoExternaId);
   const mensagens = detailQuery.data?.mensagens ?? [];
 
   useGravacaoExternaChatRealtime(ano, nrOs, currentPonto, !realtimeOwnedExternally);
@@ -67,7 +69,7 @@ export function GravacaoExternaChatPanel({
     const trimmed = text.trim();
     if (!trimmed || postMutation.isPending) return;
     try {
-      await postMutation.mutateAsync({ ano, nrOs, mensagem: trimmed });
+      await postMutation.mutateAsync({ ano, nrOs, mensagem: trimmed, gravacaoExternaId });
       setText("");
       scrollToBottom();
     } catch {

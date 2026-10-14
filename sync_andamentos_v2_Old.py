@@ -43,7 +43,7 @@ _PROTOCOL_SYNC_ALLOWLIST = {
     "NroProtocolo", "AnoProtocolo",
     "CodigoRequisic", "CategoriaLink", "NomeUsuario", "Titular", "OrgInteressado",
     "SiglaOrgao", "GabSalaUsuario", "Andar", "Localizacao", "RamalUsuario",
-    "DataEntrada", "ProcessoSolicit", "CSnro", "EntregPrazoLink", "EntregData", "ContatoTrab",
+    "DataEntrada", "ProcessoSolicit", "CSnro", "CotaRepro", "EntregPrazoLink", "EntregData", "ContatoTrab",
     "RetiradaNome", "RetiradaPonto", "DataRecebimento", "PontoEntrega", "SetorEntrega",
     "CancelamentoMotivo", "CancelamentoSetor",
 }

@@ -127,4 +127,7 @@ Write-Host @"
 
   (Script completo: deploy\scripts\publicar-release-prod.ps1)
 
+  Ou, daqui mesmo (DEV, via WinRM):
+  publicar-ultimo-release-remoto.bat
+
 "@ -ForegroundColor Yellow

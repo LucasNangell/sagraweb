@@ -83,6 +83,37 @@ class TestCloudflarePublicRequest:
         req = _request("cgrafsysvm.camara.leg.br", "/gerencia")
         assert is_cloudflare_public_request(req) is False
 
+    def test_protected_spa_deep_links_redirect_to_login(self):
+        from security.cloudflare_access import protected_spa_login_redirect
+
+        expected = {
+            "/sagra/gravacao-externa": "%2Fgravacao-externa",
+            "/sagra/mensagens": "%2Fmensagens",
+            "/sagra/os/2026/123/fluxo-producao": (
+                "%2Fos%2F2026%2F123%2Ffluxo-producao"
+            ),
+        }
+        for path, redirect in expected.items():
+            req = _request("cgrafsysvm.camara.leg.br", path)
+            assert protected_spa_login_redirect(req) == (
+                f"/sagra/login?redirect={redirect}"
+            )
+
+    def test_api_and_unknown_paths_do_not_become_login_redirects(self):
+        from security.cloudflare_access import protected_spa_login_redirect
+
+        for path in (
+            "/sagra/api/gravacao-externa/jobs",
+            "/sagra/rota-interna-desconhecida",
+        ):
+            req = _request("cgrafsysvm.camara.leg.br", path)
+            assert protected_spa_login_redirect(req) is None
+
+    def test_unknown_login_prefix_is_not_public(self):
+        from security.cloudflare_access import is_cloudflare_public_path
+
+        assert is_cloudflare_public_path("/sagra/login-inexistente", "GET") is False
+
     def test_password_session_allows_internal_routes_on_camara_leg(self, monkeypatch):
         from security.cloudflare_access import is_cloudflare_public_request
         from security.public_access import AUTH_MODE_PASSWORD
@@ -155,3 +186,56 @@ class TestCloudflarePublicRequest:
         )
         req = _request("cgrafsysvm.camara.leg.br", "/gerencia")
         assert is_cloudflare_public_request(req) is False
+
+
+class TestCloudflareMiddlewareNavigation:
+    @staticmethod
+    def _app():
+        from fastapi import FastAPI
+
+        from routers.api import CloudflareTunnelSecurityMiddleware
+
+        app = FastAPI()
+        app.add_middleware(CloudflareTunnelSecurityMiddleware)
+
+        @app.get("/sagra/gravacao-externa")
+        def protected_page():
+            return {"ok": True}
+
+        @app.get("/sagra/api/private")
+        def private_api():
+            return {"ok": True}
+
+        return app
+
+    def test_direct_protected_page_redirects_to_login(self):
+        from fastapi.testclient import TestClient
+
+        client = TestClient(self._app(), follow_redirects=False)
+        response = client.get(
+            "/sagra/gravacao-externa",
+            headers={
+                "Host": "cgrafsysvm.camara.leg.br",
+                "Accept": "text/html",
+            },
+        )
+
+        assert response.status_code == 302
+        assert response.headers["location"] == (
+            "/sagra/login?redirect=%2Fgravacao-externa"
+        )
+
+    def test_private_api_remains_blocked(self):
+        from fastapi.testclient import TestClient
+
+        client = TestClient(self._app(), follow_redirects=False)
+        response = client.get(
+            "/sagra/api/private",
+            headers={
+                "Host": "cgrafsysvm.camara.leg.br",
+                "Accept": "application/json",
+            },
+        )
+
+        assert response.status_code == 403
+        assert response.json()["error"] == "Access Denied"

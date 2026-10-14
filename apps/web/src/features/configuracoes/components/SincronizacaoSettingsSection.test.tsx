@@ -143,4 +143,47 @@ describe("SincronizacaoSettingsSection", () => {
       expect(approveSyncPendingDelete).toHaveBeenCalledWith(886, 2026),
     );
   });
+
+  it("mostra motivos do alerta e falha do SystemWatchdog", async () => {
+    const base = await vi.mocked(fetchSyncAdminStatus)();
+    vi.mocked(fetchSyncAdminStatus).mockResolvedValue({
+      ...base,
+      services: {
+        ...base.services,
+        sync_andamentos: {
+          ...base.services.sync_andamentos,
+          status: "Stopped",
+          healthy: false,
+          alert: true,
+          alert_reasons: ["SCM_NOT_RUNNING", "RECOVERY_FAILED"],
+        },
+      },
+      system_watchdog: {
+        available: true,
+        fresh: true,
+        maintenance: false,
+        unhealthy_since: "2026-10-05T08:00:00+00:00",
+        circuit_open_until: null,
+        last_action_ok: false,
+        alert_reasons: ["RECOVERY_FAILED"],
+        checked_at: "2026-10-05T08:06:00+00:00",
+        overall: "degraded",
+        last_action_detail: "status final=Stopped",
+      },
+    });
+    renderSection();
+    const list = await screen.findByTestId("sync-alert-reasons");
+    expect(list).toHaveTextContent("Serviço do sync não está em execução");
+    expect(list).toHaveTextContent("Última tentativa de recuperação automática falhou");
+    expect(screen.getByText("SystemWatchdog: degraded")).toBeInTheDocument();
+    expect(screen.getByText(/Última ação: status final=Stopped/)).toBeInTheDocument();
+  });
+
+  it("sem status do SystemWatchdog não exibe alerta", async () => {
+    renderSection();
+    await waitFor(() => {
+      expect(screen.getByText(/SystemWatchdog: sem status/)).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("sync-alert-reasons")).toBeNull();
+  });
 });

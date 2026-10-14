@@ -1,44 +1,49 @@
 import { cn } from "@sagra/ui";
 import { ArrowLeft, CheckCircle2, Loader2, PackageCheck, Search } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
-import type { GravacaoExternaOsItem } from "@/api/gravacaoExterna";
+import {
+  gravacaoExternaCompositePreviewUrl,
+  gravacaoExternaDownloadUrl,
+  gravacaoExternaPreviewUrl,
+  type GravacaoExternaOsItem,
+} from "@/api/gravacaoExterna";
 import {
   useConcluirGravacaoExternaMutation,
   GRAVACAO_EXTERNA_SAFETY_POLL_MS,
   useGravacaoExternaAguardandoEntrega,
-  useGravacaoExternaDetail,
+  useGravacaoExternaDetails,
   useGravacaoExternaOsList,
-  useIniciarGravacaoExternaMutation,
   useLancarEntregaChapasMutation,
   useRemoverOsGravacaoExternaMutation,
 } from "@/api/hooks/useGravacaoExterna";
 import { useAuthStore } from "@/features/auth/authStore";
 import { useAccessControl } from "@/features/auth/useAccessControl";
-import {
-  downloadGravacaoExternaZipAll,
-  type DownloadAllPhase,
-  type DownloadAllProgress,
-} from "@/features/gravacao-externa/utils/downloadGravacaoExternaZipAll";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useMatchMedia } from "@/hooks/useMatchMedia";
 import {
   formatOsCardSubtitle,
   formatOsJuntadaLabel,
 } from "../utils/formatOsJuntadaLabel";
-import { GravacaoExternaActions, GravacaoExternaStatusBadge } from "./GravacaoExternaActions";
-import { GravacaoExternaChatPanel } from "./GravacaoExternaChatPanel";
-import { GravacaoExternaEntregaModal } from "./GravacaoExternaEntregaModal";
-import { GravacaoObservacaoBox } from "./GravacaoObservacaoBox";
-import { GravacaoQueueItemContextMenu } from "./GravacaoQueueItemContextMenu";
 import {
-  GravacaoExternaArquivosPanel,
-  GravacaoExternaPreview,
-  type PreviewSelection,
-} from "./GravacaoExternaPreview";
+  gravacaoComponenteLabel,
+  groupGravacaoItemsByOs,
+  type GravacaoOsGroup,
+} from "../utils/groupGravacaoItemsByOs";
+import { GravacaoExternaStatusBadge } from "./GravacaoExternaActions";
+import { GravacaoExternaChatPanel } from "./GravacaoExternaChatPanel";
+import {
+  GravacaoExternaEnvioSection,
+  gravacaoFornecedorKey,
+  gravacaoFornecedorLabel,
+} from "./GravacaoExternaEnvioSection";
+import { GravacaoExternaEntregaModal } from "./GravacaoExternaEntregaModal";
+import { GravacaoQueueItemContextMenu } from "./GravacaoQueueItemContextMenu";
+import { GravacaoExternaPreview, type PreviewSelection } from "./GravacaoExternaPreview";
 import { useGravacaoExternaRealtime } from "../hooks/useGravacaoExternaRealtime";
 
 type ExternaListSegment = "em_andamento" | "aguardando_entrega";
+type ExternaOsGroup = GravacaoOsGroup<GravacaoExternaOsItem>;
 
 function formatOsListLabel(item: GravacaoExternaOsItem): string {
   return formatOsJuntadaLabel(item.membros, item);
@@ -48,40 +53,51 @@ function listItemHasSession(item: GravacaoExternaOsItem): boolean {
   return item.gravacao_status !== "sem_sessao" && item.gravacao_externa_id != null;
 }
 
-const SEM_FORNECEDOR_LABEL = "Sem fornecedor";
-
-function fornecedorLabel(item: GravacaoExternaOsItem): string {
-  return item.fornecedor_nome?.trim() || item.fornecedor_ponto?.trim() || SEM_FORNECEDOR_LABEL;
+function externaSessionId(item: GravacaoExternaOsItem): number | null {
+  return item.gravacao_externa_id ?? null;
 }
 
-interface FornecedorGroup {
-  key: string;
-  label: string;
-  items: GravacaoExternaOsItem[];
-}
+const STATUS_RANK: Record<string, number> = {
+  sem_sessao: 0,
+  pendente: 1,
+  iniciada: 2,
+  concluida: 3,
+};
 
-function groupItemsByFornecedor(items: GravacaoExternaOsItem[]): FornecedorGroup[] {
-  const groups = new Map<string, FornecedorGroup>();
-  for (const item of items) {
-    const key = item.fornecedor_ponto?.trim() || "";
-    const group = groups.get(key);
-    if (group) {
-      group.items.push(item);
-    } else {
-      groups.set(key, { key, label: fornecedorLabel(item), items: [item] });
+/** Status do card: o envio menos avançado da OS. */
+function groupStatus(group: ExternaOsGroup): string {
+  let best = group.anchor.gravacao_status;
+  for (const session of group.sessions) {
+    if ((STATUS_RANK[session.gravacao_status] ?? 99) < (STATUS_RANK[best] ?? 99)) {
+      best = session.gravacao_status;
     }
   }
-  return [...groups.values()].sort((a, b) => {
+  return best;
+}
+
+interface FornecedorBadge {
+  key: string;
+  label: string;
+}
+
+function groupFornecedores(group: ExternaOsGroup): FornecedorBadge[] {
+  const byKey = new Map<string, FornecedorBadge>();
+  for (const session of group.sessions) {
+    const key = gravacaoFornecedorKey(session);
+    if (!byKey.has(key)) {
+      byKey.set(key, { key, label: gravacaoFornecedorLabel(session) });
+    }
+  }
+  return [...byKey.values()].sort((a, b) => {
     if (!a.key !== !b.key) return a.key ? -1 : 1;
     return a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" });
   });
 }
 
-function formatDownloadBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+function envioLabel(item: GravacaoExternaOsItem): string {
+  return [gravacaoFornecedorLabel(item), gravacaoComponenteLabel(item.componente)]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function GravacaoRealtimeToast({
@@ -114,12 +130,13 @@ function GravacaoRealtimeToast({
 export function GravacaoExternaTab() {
   const user = useAuthStore((s) => s.user);
   const { can } = useAccessControl();
-  const canOperate = can("sb_gravacao_externa_operador") || Boolean(user?.fornecedor);
+  const isFornecedor = Boolean(user?.fornecedor);
+  const canOperate = can("sb_gravacao_externa_operador") || isFornecedor;
   const canConcluirSemSessao = can("sb_gravacao_externa_operador");
   const canDownload = canOperate;
   const canLancarRecebimento = can("sb_gravacao_externa_entrega");
   const canManagePendingQueue = can("sb_gravacao_pendente") && !user?.fornecedor;
-  const groupByFornecedor = !user?.fornecedor;
+  const showFornecedorBadges = !user?.fornecedor;
   const ponto = user?.ponto != null ? String(user.ponto) : null;
   const isMobile = useMatchMedia("(max-width: 767px)");
 
@@ -128,19 +145,11 @@ export function GravacaoExternaTab() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
   const [segment, setSegment] = useState<ExternaListSegment>("em_andamento");
-  const [selected, setSelected] = useState<GravacaoExternaOsItem | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [fornecedorFilter, setFornecedorFilter] = useState<string | null>(null);
+  const [focusedSessionId, setFocusedSessionId] = useState<number | null>(null);
   const [previewSelection, setPreviewSelection] = useState<PreviewSelection | null>(null);
-  const [downloadPhase, setDownloadPhase] = useState<DownloadAllPhase>("idle");
-  const [downloadError, setDownloadError] = useState<string | null>(null);
-  const [downloadProgress, setDownloadProgress] = useState<DownloadAllProgress | null>(null);
-  const [entregaModalOpen, setEntregaModalOpen] = useState(false);
-  const downloadAbortRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    return () => {
-      downloadAbortRef.current?.abort();
-    };
-  }, []);
+  const [entregaItem, setEntregaItem] = useState<GravacaoExternaOsItem | null>(null);
 
   const listFilters = {
     ano: ano ?? undefined,
@@ -162,21 +171,61 @@ export function GravacaoExternaTab() {
   const listQuery = segment === "em_andamento" ? andamentoQuery : aguardandoQuery;
   const isAguardando = segment === "aguardando_entrega";
   const listItems = listQuery.data?.items;
-  const fornecedorGroups = useMemo(
-    () => (groupByFornecedor && listItems ? groupItemsByFornecedor(listItems) : []),
-    [groupByFornecedor, listItems],
+  const groups = useMemo(
+    () => groupGravacaoItemsByOs(listItems ?? [], externaSessionId),
+    [listItems],
   );
+  const selectedGroup = useMemo(
+    () => groups.find((g) => g.key === selectedKey) ?? null,
+    [groups, selectedKey],
+  );
+  const selected = selectedGroup?.anchor ?? null;
 
-  const selectedHasSession = selected != null && listItemHasSession(selected);
+  const visibleSessions = useMemo(() => {
+    if (!selectedGroup) return [];
+    if (fornecedorFilter == null) return selectedGroup.sessions;
+    const filtered = selectedGroup.sessions.filter(
+      (s) => gravacaoFornecedorKey(s) === fornecedorFilter,
+    );
+    return filtered.length > 0 ? filtered : selectedGroup.sessions;
+  }, [selectedGroup, fornecedorFilter]);
+  const sessionItems = useMemo(
+    () => (selectedGroup ? selectedGroup.sessions.filter(listItemHasSession) : []),
+    [selectedGroup],
+  );
+  const sessionIds = useMemo(
+    () => sessionItems.map((s) => s.gravacao_externa_id as number),
+    [sessionItems],
+  );
+  const visibleSessionItems = useMemo(
+    () => visibleSessions.filter(listItemHasSession),
+    [visibleSessions],
+  );
+  const selectedHasSession = visibleSessionItems.length > 0;
+  const multiEnvio = visibleSessionItems.length > 1;
 
-  const detailQuery = useGravacaoExternaDetail(
+  const focusedSession =
+    visibleSessionItems.find((s) => s.gravacao_externa_id === focusedSessionId) ??
+    visibleSessionItems[0] ??
+    null;
+  const focusedId = focusedSession?.gravacao_externa_id ?? null;
+
+  const detailQuery = useGravacaoExternaDetails(
     selected?.ano ?? null,
     selected?.nr_os ?? null,
-    selectedHasSession && !isAguardando,
+    sessionIds,
+    sessionIds.length > 0 && !isAguardando,
     { refetchInterval: GRAVACAO_EXTERNA_SAFETY_POLL_MS },
   );
+  const detailFor = (id: number | null | undefined) => {
+    const idx = id == null ? -1 : sessionIds.indexOf(id);
+    return {
+      detail: idx >= 0 ? detailQuery.data[idx] : undefined,
+      failed: idx >= 0 ? Boolean(detailQuery.failed[idx]) : false,
+    };
+  };
+  const focusedDetailState = detailFor(focusedId);
 
-  const iniciarMutation = useIniciarGravacaoExternaMutation();
   const concluirMutation = useConcluirGravacaoExternaMutation();
   const entregaMutation = useLancarEntregaChapasMutation();
   const removerMutation = useRemoverOsGravacaoExternaMutation();
@@ -192,9 +241,6 @@ export function GravacaoExternaTab() {
     },
   );
 
-  const detail = detailQuery.data;
-  const arquivos = detail?.arquivos ?? [];
-
   const years = useMemo(() => {
     const ys: number[] = [];
     for (let y = currentYear; y >= currentYear - 5; y -= 1) {
@@ -203,70 +249,89 @@ export function GravacaoExternaTab() {
     return ys;
   }, [currentYear]);
 
-  const handleSelectOs = (item: GravacaoExternaOsItem) => {
-    setSelected(item);
+  const clearSelection = () => {
+    setSelectedKey(null);
+    setFornecedorFilter(null);
+    setFocusedSessionId(null);
     setPreviewSelection(null);
-    setDownloadPhase("idle");
-    setDownloadError(null);
-    setDownloadProgress(null);
-    setEntregaModalOpen(false);
+    setEntregaItem(null);
+  };
+
+  const handleSelectOs = (group: ExternaOsGroup, fornecedorKey: string | null = null) => {
+    setSelectedKey(group.key);
+    setFornecedorFilter(fornecedorKey);
+    setFocusedSessionId(null);
+    setPreviewSelection(null);
+    setEntregaItem(null);
+  };
+
+  const handleFornecedorBadge = (group: ExternaOsGroup, fornecedorKey: string) => {
+    if (selectedKey === group.key && fornecedorFilter === fornecedorKey) {
+      setFornecedorFilter(null);
+      return;
+    }
+    handleSelectOs(group, fornecedorKey);
   };
 
   const handleSegmentChange = (next: ExternaListSegment) => {
     setSegment(next);
-    setSelected(null);
-    setPreviewSelection(null);
-    setEntregaModalOpen(false);
+    clearSelection();
   };
 
-  const handleRemoveFromQueue = async (item: GravacaoExternaOsItem) => {
-    if (item.gravacao_externa_id == null) return;
+  const handleRemoveFromQueue = async (group: ExternaOsGroup) => {
+    const item = group.anchor;
+    const ids = group.sessions
+      .map((s) => s.gravacao_externa_id)
+      .filter((id): id is number => id != null);
+    if (ids.length === 0) return;
     const isJuntada = (item.membros?.length ?? 0) > 1;
+    const envios = ids.length > 1 ? ` (${ids.length} envios)` : "";
     const confirmed = window.confirm(
       isJuntada
-        ? `Remover a juntada ${formatOsListLabel(item)} da lista de OPs pendentes no Birô?\n\nTodas as OSs desta juntada serão removidas. Arquivos, histórico e andamentos serão preservados.`
-        : `Remover a OS ${formatOsListLabel(item)} da lista de OPs pendentes no Birô?\n\nArquivos, histórico e andamentos serão preservados.`,
+        ? `Remover a juntada ${formatOsListLabel(item)}${envios} da lista de OPs pendentes no Birô?\n\nTodas as OSs desta juntada serão removidas. Arquivos, histórico e andamentos serão preservados.`
+        : `Remover a OS ${formatOsListLabel(item)}${envios} da lista de OPs pendentes no Birô?\n\nArquivos, histórico e andamentos serão preservados.`,
     );
     if (!confirmed) return;
-    try {
-      await removerMutation.mutateAsync(item.gravacao_externa_id);
-      if (selected?.gravacao_externa_id === item.gravacao_externa_id) {
-        setSelected(null);
-        setPreviewSelection(null);
+    const errors: string[] = [];
+    const removed = new Set<number>();
+    for (const id of ids) {
+      if (removed.has(id)) continue;
+      try {
+        const result = await removerMutation.mutateAsync(id);
+        removed.add(id);
+        for (const removedId of result?.removed_ids ?? []) removed.add(removedId);
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : String(error));
       }
-    } catch (error) {
+    }
+    if (selectedKey === group.key && errors.length < ids.length) {
+      clearSelection();
+    }
+    if (errors.length > 0) {
       window.alert(
-        error instanceof Error ? error.message : "Não foi possível remover a OS da lista.",
+        errors.length === ids.length
+          ? errors[0] || "Não foi possível remover a OS da lista."
+          : `Parte da OS não pôde ser removida: ${errors.join(" · ")}`,
       );
     }
   };
 
-  const handleIniciar = async () => {
-    if (!selected) return;
-    try {
-      await iniciarMutation.mutateAsync({
-        ano: selected.ano,
-        nrOs: selected.nr_os,
-      });
-    } catch (e) {
-      window.alert(
-        e instanceof Error ? e.message : "Não foi possível iniciar a gravação.",
-      );
-    }
-  };
-
-  const handleConcluir = async () => {
-    if (!selected) return;
-    if (!window.confirm("Confirmar conclusão da Gravação Externa desta OS?")) {
+  const handleConcluir = async (session: GravacaoExternaOsItem) => {
+    const outros = multiEnvio ? ` (${envioLabel(session)})` : "";
+    if (!window.confirm(`Confirmar conclusão da Gravação Externa desta OS${outros}?`)) {
       return;
     }
     try {
       await concluirMutation.mutateAsync({
-        ano: selected.ano,
-        nrOs: selected.nr_os,
+        ano: session.ano,
+        nrOs: session.nr_os,
+        gravacaoExternaId: session.gravacao_externa_id,
       });
-      setSelected(null);
-      setPreviewSelection(null);
+      if ((selectedGroup?.sessions.length ?? 0) <= 1) {
+        clearSelection();
+      } else if (previewSelection?.sessionId === session.gravacao_externa_id) {
+        setPreviewSelection(null);
+      }
       window.alert("Gravação Externa concluída.");
     } catch (e) {
       window.alert(
@@ -279,17 +344,20 @@ export function GravacaoExternaTab() {
     recebidoPorPonto: string;
     recebidoPorNome: string;
   }) => {
-    if (!selected) return;
+    if (!entregaItem) return;
     try {
       await entregaMutation.mutateAsync({
-        ano: selected.ano,
-        nrOs: selected.nr_os,
+        ano: entregaItem.ano,
+        nrOs: entregaItem.nr_os,
         recebidoPorPonto: payload.recebidoPorPonto,
         recebidoPorNome: payload.recebidoPorNome,
+        gravacaoExternaId: entregaItem.gravacao_externa_id,
       });
       window.alert("Recebimento das chapas lançado.");
-      setEntregaModalOpen(false);
-      setSelected(null);
+      setEntregaItem(null);
+      if ((selectedGroup?.sessions.length ?? 0) <= 1) {
+        clearSelection();
+      }
     } catch (e) {
       window.alert(
         e instanceof Error ? e.message : "Não foi possível lançar o recebimento.",
@@ -297,88 +365,92 @@ export function GravacaoExternaTab() {
     }
   };
 
-  const downloadBusy =
-    downloadPhase === "preparing" || downloadPhase === "saving";
-
-  const handleCancelDownload = () => {
-    downloadAbortRef.current?.abort();
-    downloadAbortRef.current = null;
-    setDownloadPhase("idle");
-    setDownloadProgress(null);
-    setDownloadError(null);
+  const handleDownloaded = () => {
+    void detailQuery.refetch();
+    void andamentoQuery.refetch();
   };
 
-  const handleDownloadAll = async () => {
-    if (!selected || downloadBusy) return;
-    setDownloadError(null);
-    setDownloadProgress(null);
-    downloadAbortRef.current?.abort();
-    const controller = new AbortController();
-    downloadAbortRef.current = controller;
-    const fallbackFilename = `gravacao_externa_OS_${String(selected.nr_os).padStart(5, "0")}_${selected.ano}.zip`;
-    try {
-      await downloadGravacaoExternaZipAll({
-        ano: selected.ano,
-        nrOs: selected.nr_os,
-        fallbackFilename,
-        signal: controller.signal,
-        onProgress: (progress) => {
-          if (controller.signal.aborted) return;
-          setDownloadProgress(progress);
-        },
-        onPhase: (phase) => {
-          if (controller.signal.aborted) return;
-          setDownloadPhase(phase);
-          if (phase === "started") {
-            window.setTimeout(() => {
-              if (controller.signal.aborted) return;
-              setDownloadPhase((current) => (current === "started" ? "idle" : current));
-            }, 4000);
-          }
-        },
-      });
-      if (controller.signal.aborted) return;
-      void detailQuery.refetch();
-      void andamentoQuery.refetch();
-    } catch (e) {
-      if (controller.signal.aborted) return;
-      setDownloadPhase("error");
-      setDownloadError(
-        e instanceof Error ? e.message : "Não foi possível baixar os arquivos.",
-      );
-    }
-  };
+  const previewSessionId = previewSelection?.sessionId ?? focusedId;
+  const getExternaPreviewUrl = useCallback(
+    (a: number, n: number, arquivoId: number) =>
+      gravacaoExternaPreviewUrl(a, n, arquivoId, previewSessionId),
+    [previewSessionId],
+  );
+  const getExternaCompositeUrl = useCallback(
+    (a: number, n: number, groupKey: string) =>
+      gravacaoExternaCompositePreviewUrl(a, n, groupKey, previewSessionId),
+    [previewSessionId],
+  );
+  const getExternaDownloadUrl = useCallback(
+    (a: number, n: number, arquivoId: number) =>
+      gravacaoExternaDownloadUrl(a, n, arquivoId, previewSessionId),
+    [previewSessionId],
+  );
 
-  const renderListItem = (item: GravacaoExternaOsItem) => {
-    const active = selected?.nr_os === item.nr_os && selected?.ano === item.ano;
+  const renderListItem = (group: ExternaOsGroup) => {
+    const item = group.anchor;
+    const active = selectedKey === group.key;
+    const fornecedores = showFornecedorBadges ? groupFornecedores(group) : [];
     return (
-      <li key={`${item.ano}-${item.nr_os}`}>
+      <li key={group.key}>
         <GravacaoQueueItemContextMenu
-          enabled={!isAguardando && canManagePendingQueue && item.gravacao_externa_id != null}
+          enabled={
+            !isAguardando &&
+            canManagePendingQueue &&
+            group.sessions.some((s) => s.gravacao_externa_id != null)
+          }
           label={`OS ${formatOsListLabel(item)}`}
           removing={removerMutation.isPending}
-          onRemove={() => handleRemoveFromQueue(item)}
+          onRemove={() => handleRemoveFromQueue(group)}
         >
-          <button
-            type="button"
-            onClick={() => handleSelectOs(item)}
+          <div
             className={cn(
-              "w-full rounded-lg border px-3 py-2.5 text-left transition-colors",
+              "rounded-lg border transition-colors",
               active
                 ? "border-primary-green bg-primary-green/10"
                 : "border-neutral-200 bg-white hover:border-neutral-300",
             )}
           >
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-semibold text-neutral-900">{formatOsListLabel(item)}</span>
-              <GravacaoExternaStatusBadge
-                status={isAguardando ? "concluida" : item.gravacao_status}
-              />
-            </div>
-            <p className="mt-0.5 truncate text-xs text-neutral-600">
-              {formatOsCardSubtitle(item)}
-            </p>
-          </button>
+            <button
+              type="button"
+              onClick={() => handleSelectOs(group)}
+              className={cn("w-full px-3 pt-2.5 text-left", fornecedores.length ? "pb-1" : "pb-2.5")}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-neutral-900">{formatOsListLabel(item)}</span>
+                <GravacaoExternaStatusBadge
+                  status={isAguardando ? "concluida" : groupStatus(group)}
+                />
+              </div>
+              <p className="mt-0.5 truncate text-xs text-neutral-600">
+                {formatOsCardSubtitle(item)}
+              </p>
+            </button>
+            {fornecedores.length > 0 ? (
+              <div className="flex flex-wrap gap-1 px-3 pb-2.5">
+                {fornecedores.map((f) => {
+                  const pressed = active && fornecedorFilter === f.key;
+                  return (
+                    <button
+                      key={f.key || "sem-fornecedor"}
+                      type="button"
+                      title="Exibir espelhos de chapa"
+                      aria-pressed={pressed}
+                      onClick={() => handleFornecedorBadge(group, f.key)}
+                      className={cn(
+                        "inline-flex max-w-full cursor-pointer truncate rounded-full border px-2 py-0.5 text-[11px] font-semibold transition-colors",
+                        pressed
+                          ? "border-blue-600 bg-blue-600 text-white"
+                          : "border-blue-100 bg-blue-50 text-blue-700 hover:border-blue-300",
+                      )}
+                    >
+                      {f.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
         </GravacaoQueueItemContextMenu>
       </li>
     );
@@ -464,26 +536,23 @@ export function GravacaoExternaTab() {
               ? "Nenhuma OS aguardando entrega de chapas."
               : "Nenhuma OS em Gravação Externa (setor Grav. Externa)."}
           </p>
-        ) : groupByFornecedor ? (
-          <div className="space-y-3">
-            {fornecedorGroups.map((group) => (
-              <section key={group.key || "sem-fornecedor"} aria-label={group.label}>
-                <h3 className="sticky top-0 z-[1] flex items-center justify-between gap-2 bg-white px-1 py-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  <span className="truncate" title={group.label}>
-                    {group.label}
-                  </span>
-                  <span className="shrink-0 tabular-nums">{group.items.length}</span>
-                </h3>
-                <ul className="space-y-1">{group.items.map(renderListItem)}</ul>
-              </section>
-            ))}
-          </div>
         ) : (
-          <ul className="space-y-1">{listItems?.map(renderListItem)}</ul>
+          <ul className="space-y-1">{groups.map(renderListItem)}</ul>
         )}
       </div>
     </div>
   );
+
+  const mobileBackButton = isMobile ? (
+    <button
+      type="button"
+      onClick={clearSelection}
+      className="inline-flex items-center gap-1 rounded border border-neutral-300 px-2 py-1 text-xs"
+    >
+      <ArrowLeft className="size-3.5" />
+      Voltar
+    </button>
+  ) : null;
 
   const aguardandoDetailPanel = !selected ? (
     <div className="flex h-full items-center justify-center p-8 text-center text-sm text-neutral-500">
@@ -491,71 +560,84 @@ export function GravacaoExternaTab() {
     </div>
   ) : (
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-3 md:p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            {isMobile && (
-              <button
-                type="button"
-                onClick={() => setSelected(null)}
-                className="inline-flex items-center gap-1 rounded border border-neutral-300 px-2 py-1 text-xs"
-              >
-                <ArrowLeft className="size-3.5" />
-                Voltar
-              </button>
-            )}
-            <h2 className="text-lg font-semibold text-neutral-900">
-              OS {formatOsListLabel(selected)}
-            </h2>
-            <GravacaoExternaStatusBadge status="concluida" />
-          </div>
-          <p className="mt-1 text-sm text-neutral-600">
-            {selected.solicitante}
-            {selected.produto ? ` · ${selected.produto}` : ""}
-          </p>
-          {selected.fornecedor_nome?.trim() || selected.fornecedor_ponto ? (
-            <p className="text-xs text-neutral-500">
-              Fornecedor: {selected.fornecedor_nome?.trim() || selected.fornecedor_ponto}
-            </p>
-          ) : null}
+      <div>
+        <div className="flex flex-wrap items-center gap-2">
+          {mobileBackButton}
+          <h2 className="text-lg font-semibold text-neutral-900">
+            OS {formatOsListLabel(selected)}
+          </h2>
+          <GravacaoExternaStatusBadge status="concluida" />
         </div>
-        {canLancarRecebimento && (
-          <button
-            type="button"
-            onClick={() => setEntregaModalOpen(true)}
-            disabled={entregaMutation.isPending}
-            className="inline-flex items-center gap-2 rounded bg-primary-green px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-          >
-            {entregaMutation.isPending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <PackageCheck className="size-4" />
-            )}
-            Lançar recebimento das chapas
-          </button>
-        )}
+        <p className="mt-1 text-sm text-neutral-600">
+          {selected.solicitante}
+          {selected.produto ? ` · ${selected.produto}` : ""}
+        </p>
       </div>
 
-      {(selected.chapas_por_maquina?.length ?? 0) > 0 ? (
-        <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-            Chapas
-          </h3>
-          <ul className="mt-1 flex flex-wrap gap-2 text-sm text-neutral-800">
-            {selected.chapas_por_maquina?.map((c) => (
-              <li
-                key={c.maquina}
-                className="rounded-full border border-neutral-300 bg-white px-2.5 py-0.5"
-              >
-                {c.maquina}: <strong>{c.quantidade}</strong>
-              </li>
-            ))}
-          </ul>
-          {selected.total_chapas != null ? (
-            <p className="mt-1 text-xs text-neutral-500">Total: {selected.total_chapas}</p>
-          ) : null}
-        </div>
-      ) : null}
+      {visibleSessions.map((session) => {
+        const fornecedor = gravacaoFornecedorLabel(session);
+        const componente = gravacaoComponenteLabel(session.componente);
+        const receiving =
+          entregaMutation.isPending && entregaItem?.gravacao_externa_id === session.gravacao_externa_id;
+        return (
+          <section
+            key={session.gravacao_externa_id ?? `${session.ano}-${session.nr_os}`}
+            aria-label={`Envio ${envioLabel(session)}`}
+            className="space-y-2 rounded-lg border border-neutral-200 p-3"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                {session.fornecedor_nome?.trim() || session.fornecedor_ponto ? (
+                  <p className="text-sm font-semibold text-neutral-800">
+                    Fornecedor: {fornecedor}
+                    {componente ? (
+                      <span className="ml-2 text-xs font-medium text-blue-700">{componente}</span>
+                    ) : null}
+                  </p>
+                ) : componente ? (
+                  <p className="text-xs font-medium text-blue-700">{componente}</p>
+                ) : null}
+              </div>
+              {canLancarRecebimento && (
+                <button
+                  type="button"
+                  onClick={() => setEntregaItem(session)}
+                  disabled={entregaMutation.isPending}
+                  className="inline-flex items-center gap-2 rounded bg-primary-green px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+                >
+                  {receiving ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <PackageCheck className="size-4" />
+                  )}
+                  Lançar recebimento das chapas
+                </button>
+              )}
+            </div>
+
+            {(session.chapas_por_maquina?.length ?? 0) > 0 ? (
+              <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Chapas
+                </h3>
+                <ul className="mt-1 flex flex-wrap gap-2 text-sm text-neutral-800">
+                  {session.chapas_por_maquina?.map((c) => (
+                    <li
+                      key={c.maquina}
+                      className="rounded-full border border-neutral-300 bg-white px-2.5 py-0.5"
+                    >
+                      {c.maquina}: <strong>{c.quantidade}</strong>
+                    </li>
+                  ))}
+                </ul>
+                {session.total_chapas != null ? (
+                  <p className="mt-1 text-xs text-neutral-500">Total: {session.total_chapas}</p>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
+        );
+      })}
     </div>
   );
 
@@ -580,7 +662,7 @@ export function GravacaoExternaTab() {
         <button
           type="button"
           disabled={concluirMutation.isPending}
-          onClick={() => void handleConcluir()}
+          onClick={() => void handleConcluir(selected)}
           className="inline-flex items-center gap-2 rounded border border-primary-green bg-white px-4 py-2 text-sm font-medium text-primary-green hover:bg-primary-green/5 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {concluirMutation.isPending ? (
@@ -592,11 +674,11 @@ export function GravacaoExternaTab() {
         </button>
       ) : null}
     </div>
-  ) : detailQuery.isLoading ? (
+  ) : detailQuery.isLoading && detailQuery.data.every((d) => d == null) ? (
     <div className="flex h-full items-center justify-center">
       <Loader2 className="size-8 animate-spin text-primary-green" />
     </div>
-  ) : detailQuery.isError || !detail ? (
+  ) : detailQuery.isError && detailQuery.data.every((d) => d == null) ? (
     <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
       <p className="text-sm text-neutral-600">Não foi possível carregar os detalhes.</p>
       <p className="text-xs text-neutral-500">
@@ -607,189 +689,49 @@ export function GravacaoExternaTab() {
     </div>
   ) : (
     <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 overflow-hidden p-3 md:p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            {isMobile && (
-              <button
-                type="button"
-                onClick={() => setSelected(null)}
-                className="inline-flex items-center gap-1 rounded border border-neutral-300 px-2 py-1 text-xs"
-              >
-                <ArrowLeft className="size-3.5" />
-                Voltar
-              </button>
-            )}
-            <h2 className="text-lg font-semibold text-neutral-900">
-              OS {formatOsListLabel(selected)}
-            </h2>
-            <GravacaoExternaStatusBadge status={detail.status} />
-          </div>
-          <p className="mt-1 text-sm text-neutral-600">
-            {selected.solicitante}
-            {selected.produto ? ` · ${selected.produto}` : ""}
-          </p>
-          <p className="text-xs text-neutral-500">
-            Lançado por {detail.lancado_por_nome || detail.lancado_por_ponto}
-          </p>
-        </div>
+      <div>
         <div className="flex flex-wrap items-center gap-2">
-          <GravacaoExternaActions
-            detail={detail}
-            canOperate={canOperate}
-            onIniciar={() => void handleIniciar()}
-            onConcluir={() => void handleConcluir()}
-            iniciando={iniciarMutation.isPending}
-            concluindo={concluirMutation.isPending}
-          />
+          {mobileBackButton}
+          <h2 className="text-lg font-semibold text-neutral-900">
+            OS {formatOsListLabel(selected)}
+          </h2>
         </div>
+        <p className="mt-1 text-sm text-neutral-600">
+          {selected.solicitante}
+          {selected.produto ? ` · ${selected.produto}` : ""}
+        </p>
       </div>
 
-      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-3 overflow-hidden lg:grid-cols-[minmax(200px,28%)_minmax(0,1fr)]">
-        <div className="flex min-h-[200px] min-w-0 flex-col gap-2 overflow-hidden lg:min-h-0">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-              Arquivos ({arquivos.length})
-            </h3>
-            {arquivos.length > 0 && canDownload ? (
-              <div className="flex items-center gap-1">
-                {downloadBusy ? (
-                  <button
-                    type="button"
-                    onClick={handleCancelDownload}
-                    className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
-                  >
-                    Cancelar
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  disabled={downloadBusy}
-                  onClick={() => void handleDownloadAll()}
-                  className="inline-flex items-center gap-1 rounded border border-neutral-300 bg-white px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-60"
-                  title="Baixar todos os arquivos em ZIP"
-                >
-                  {downloadBusy ? (
-                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                  ) : null}
-                  {downloadPhase === "error"
-                    ? "Tentar novamente"
-                    : downloadPhase === "saving"
-                      ? "Salvando…"
-                      : downloadBusy
-                        ? "Preparando…"
-                        : "Baixar todos"}
-                </button>
-              </div>
-            ) : null}
-          </div>
-          {downloadPhase === "preparing" ? (
-            <div
-              className="space-y-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
-              role="status"
-              aria-live="polite"
-            >
-              <div className="flex items-start gap-2">
-                <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-amber-700" />
-                <p>
-                  <span className="font-semibold">Preparando arquivos para download…</span>{" "}
-                  {downloadProgress?.totalArquivos
-                    ? `${downloadProgress.arquivosProntos ?? 0} de ${downloadProgress.totalArquivos} arquivos.`
-                    : "Aguarde a montagem do ZIP."}
-                </p>
-              </div>
-              {downloadProgress?.totalArquivos ? (
-                <div className="h-1.5 overflow-hidden rounded bg-amber-100">
-                  <div
-                    className="h-full bg-amber-600 transition-all"
-                    style={{
-                      width: `${Math.min(
-                        100,
-                        Math.round(
-                          ((downloadProgress.arquivosProntos ?? 0) /
-                            Math.max(1, downloadProgress.totalArquivos)) *
-                            100,
-                        ),
-                      )}%`,
-                    }}
-                  />
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          {downloadPhase === "saving" ? (
-            <div
-              className="space-y-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
-              role="status"
-              aria-live="polite"
-            >
-              <div className="flex items-start gap-2">
-                <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-amber-700" />
-                <p>
-                  <span className="font-semibold">Salvando o ZIP no local escolhido…</span>{" "}
-                  {downloadProgress?.totalBytes
-                    ? `${formatDownloadBytes(downloadProgress.bytesReceived ?? 0)} de ${formatDownloadBytes(downloadProgress.totalBytes)}.`
-                    : "Não feche esta aba até concluir."}
-                </p>
-              </div>
-              {downloadProgress?.totalBytes ? (
-                <div className="h-1.5 overflow-hidden rounded bg-amber-100">
-                  <div
-                    className="h-full bg-amber-600 transition-all"
-                    style={{
-                      width: `${Math.min(
-                        100,
-                        Math.round(
-                          ((downloadProgress.bytesReceived ?? 0) /
-                            Math.max(1, downloadProgress.totalBytes)) *
-                            100,
-                        ),
-                      )}%`,
-                    }}
-                  />
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          {downloadPhase === "started" ? (
-            <div
-              className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900"
-              role="status"
-              aria-live="polite"
-            >
-              Download iniciado pelo navegador. Acompanhe a barra de downloads do
-              navegador até o ZIP terminar por completo.
-            </div>
-          ) : null}
-          {downloadPhase === "error" && downloadError ? (
-            <div
-              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800"
-              role="alert"
-            >
-              {downloadError}
-            </div>
-          ) : null}
-          <GravacaoObservacaoBox observacao={detail.observacao} />
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <GravacaoExternaArquivosPanel
-              ano={selected.ano}
-              nrOs={selected.nr_os}
-              arquivos={arquivos}
-              selection={previewSelection}
-              groupByMachine
-              chapasPorMaquina={selected.chapas_por_maquina ?? []}
-              canDownload={canDownload}
-              onSelect={(arq) => setPreviewSelection({ kind: "file", arquivo: arq })}
-              onSelectComposite={(chapa) =>
-                setPreviewSelection({
-                  kind: "composite",
-                  groupKey: chapa.groupKey,
-                  chapaLabel: chapa.chapaLabel,
-                  displayLabel: chapa.displayLabel,
-                })
-              }
-            />
-          </div>
+      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-3 overflow-hidden lg:grid-cols-[minmax(240px,32%)_minmax(0,1fr)]">
+        <div className="min-h-[200px] min-w-0 space-y-3 overflow-y-auto lg:min-h-0">
+          {visibleSessionItems.map((session) => {
+            const id = session.gravacao_externa_id as number;
+            const state = detailFor(id);
+            return (
+              <GravacaoExternaEnvioSection
+                key={id}
+                item={session}
+                detail={state.detail}
+                failed={state.failed}
+                showOrigem={multiEnvio}
+                focused={focusedId === id}
+                onFocus={() => setFocusedSessionId(id)}
+                canConcluir={isFornecedor}
+                canDownload={canDownload}
+                concluindo={
+                  concluirMutation.isPending &&
+                  concluirMutation.variables?.gravacaoExternaId === id
+                }
+                onConcluir={() => void handleConcluir(session)}
+                previewSelection={previewSelection}
+                onSelectPreview={(selection) => {
+                  setFocusedSessionId(id);
+                  setPreviewSelection(selection);
+                }}
+                onDownloaded={handleDownloaded}
+              />
+            );
+          })}
         </div>
         <div className="flex min-h-[280px] min-w-0 flex-col overflow-hidden lg:min-h-0 lg:h-full">
           <GravacaoExternaPreview
@@ -797,14 +739,18 @@ export function GravacaoExternaTab() {
             nrOs={selected.nr_os}
             selection={previewSelection}
             canDownload={canDownload}
+            getPreviewUrl={getExternaPreviewUrl}
+            getCompositePreviewUrl={getExternaCompositeUrl}
+            getDownloadUrl={getExternaDownloadUrl}
           />
         </div>
       </div>
 
-      {isMobile ? (
+      {isMobile && focusedSession ? (
         <GravacaoExternaChatPanel
           ano={selected.ano}
           nrOs={selected.nr_os}
+          gravacaoExternaId={focusedId}
           currentPonto={ponto}
           realtimeOwnedExternally
         />
@@ -824,18 +770,20 @@ export function GravacaoExternaTab() {
     <div className="flex h-full items-center justify-center p-4 text-center text-sm text-neutral-500">
       Mensagens disponíveis quando a OS tiver arquivos vinculados.
     </div>
-  ) : detailQuery.isLoading ? (
+  ) : !focusedDetailState.detail && !focusedDetailState.failed ? (
     <div className="flex h-full items-center justify-center">
       <Loader2 className="size-6 animate-spin text-primary-green" />
     </div>
-  ) : detailQuery.isError || !detail ? (
+  ) : !focusedDetailState.detail ? (
     <div className="flex h-full items-center justify-center p-4 text-center text-sm text-neutral-500">
       Não foi possível carregar as mensagens.
     </div>
   ) : (
     <GravacaoExternaChatPanel
+      key={focusedId ?? "none"}
       ano={selected.ano}
       nrOs={selected.nr_os}
+      gravacaoExternaId={focusedId}
       currentPonto={ponto}
       fill
       realtimeOwnedExternally
@@ -861,10 +809,10 @@ export function GravacaoExternaTab() {
       )}
 
       <GravacaoExternaEntregaModal
-        open={entregaModalOpen}
-        item={selected}
+        open={entregaItem != null}
+        item={entregaItem}
         saving={entregaMutation.isPending}
-        onClose={() => setEntregaModalOpen(false)}
+        onClose={() => setEntregaItem(null)}
         onConfirm={(payload) => void handleEntrega(payload)}
       />
 

@@ -39,6 +39,20 @@ function Normalize-DeployPath {
     return $p.TrimEnd('\')
 }
 
+function Test-SafeReleaseName {
+    param([string]$ReleaseName)
+    if ([string]::IsNullOrWhiteSpace($ReleaseName)) { return $false }
+    if ($ReleaseName -in @(".", "..")) { return $false }
+    return ($ReleaseName -match '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$')
+}
+
+function Assert-SafeReleaseName {
+    param([Parameter(Mandatory = $true)][string]$ReleaseName)
+    if (-not (Test-SafeReleaseName -ReleaseName $ReleaseName)) {
+        throw "Nome de release invalido: use apenas letras, numeros, ponto, sublinhado e hifen."
+    }
+}
+
 function Resolve-DeployProdPath {
     param([string]$ProdPath = "")
     if ($ProdPath) {
@@ -152,6 +166,99 @@ function Write-DeployLog {
         "ERROR" { Write-DeployErr $Message }
         default { Write-DeployOk $Message }
     }
+}
+
+function Get-SystemWatchdogMaintenancePath {
+    param([Parameter(Mandatory = $true)][string]$ProdPath)
+    return (Join-Path $ProdPath "shared\run\system-watchdog.maintenance")
+}
+
+function Enter-SystemWatchdogMaintenance {
+    param(
+        [Parameter(Mandatory = $true)][string]$ProdPath,
+        [string]$Reason = "deploy"
+    )
+    $path = Get-SystemWatchdogMaintenancePath -ProdPath $ProdPath
+    $parent = Split-Path $path -Parent
+    New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    $tmp = "$path.$PID.tmp"
+    $payload = [ordered]@{
+        owner = "deploy"
+        reason = $Reason
+        pid = $PID
+        created_at = (Get-Date).ToUniversalTime().ToString("o")
+    } | ConvertTo-Json -Compress
+    Set-Content -LiteralPath $tmp -Value $payload -Encoding UTF8
+    Move-Item -LiteralPath $tmp -Destination $path -Force
+    Write-DeployOk "Watchdog suspenso durante manutencao: $path"
+    return $path
+}
+
+function Exit-SystemWatchdogMaintenance {
+    param([Parameter(Mandatory = $true)][string]$ProdPath)
+    $path = Get-SystemWatchdogMaintenancePath -ProdPath $ProdPath
+    Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $path) {
+        Write-DeployWarn "Lock do watchdog nao pode ser removido; expira automaticamente em ate 30 min: $path"
+    } else {
+        Write-DeployOk "Watchdog liberado apos manutencao"
+    }
+}
+
+function Restart-SagraBackgroundServiceForDeploy {
+    # Deve rodar com o lock de manutencao ativo: o SystemWatchdog e o monitor
+    # ignoram a janela de parada em vez de disputar o restart.
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [int]$TimeoutSec = 45
+    )
+    $service = Get-Service -Name $Name -ErrorAction SilentlyContinue
+    if (-not $service) {
+        Write-DeployWarn "$Name nao instalado - nada a reiniciar"
+        return $false
+    }
+    try {
+        if ($service.Status -eq "Running") {
+            Restart-Service -Name $Name -Force -ErrorAction Stop
+        } else {
+            $service.Refresh()
+            if ($service.Status -eq "Stopped") {
+                Start-Service -Name $Name -ErrorAction Stop
+            }
+        }
+        $service.WaitForStatus("Running", [TimeSpan]::FromSeconds($TimeoutSec))
+        Write-DeployOk "$Name reiniciado com o codigo da nova release"
+        return $true
+    } catch {
+        Write-DeployWarn "Falha ao reiniciar ${Name}: $_ (o SystemWatchdog assume apos o fim do lock)"
+        return $false
+    }
+}
+
+function Wait-SyncHeartbeatRenewed {
+    param(
+        [Parameter(Mandatory = $true)][string]$HeartbeatPath,
+        [Parameter(Mandatory = $true)][datetime]$StartedAfterUtc,
+        [int]$TimeoutSec = 120
+    )
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    $threshold = $StartedAfterUtc.AddSeconds(-2)
+    do {
+        if (Test-Path -LiteralPath $HeartbeatPath -PathType Leaf) {
+            try {
+                $hb = Get-Content -LiteralPath $HeartbeatPath -Raw -Encoding UTF8 | ConvertFrom-Json
+                if ($hb.started_at -and $hb.last_cycle_at) {
+                    $startedAt = [datetimeoffset]::Parse([string]$hb.started_at).UtcDateTime
+                    $lastCycle = [datetimeoffset]::Parse([string]$hb.last_cycle_at).UtcDateTime
+                    if ($startedAt -ge $threshold -and $lastCycle -ge $startedAt) {
+                        return $true
+                    }
+                }
+            } catch {}
+        }
+        Start-Sleep -Seconds 2
+    } while ((Get-Date) -lt $deadline)
+    return $false
 }
 
 function Test-DeployPathWritable {
@@ -718,6 +825,41 @@ function Test-ReleaseIntegrity {
         }
     }
 
+    $manifestPath = Join-Path $ReleasePath "RELEASE-INTEGRITY.json"
+    if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
+        try {
+            $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($manifest.algorithm -ne "SHA256" -or $null -eq $manifest.files) {
+                throw "formato de manifesto invalido"
+            }
+            $releaseFull = [System.IO.Path]::GetFullPath($ReleasePath).TrimEnd('\')
+            $releasePrefix = $releaseFull + [System.IO.Path]::DirectorySeparatorChar
+            foreach ($property in $manifest.files.PSObject.Properties) {
+                $relative = [string]$property.Name
+                if ([string]::IsNullOrWhiteSpace($relative) -or [System.IO.Path]::IsPathRooted($relative)) {
+                    throw "caminho invalido no manifesto: $relative"
+                }
+                $full = [System.IO.Path]::GetFullPath((Join-Path $releaseFull $relative.Replace('/', '\')))
+                if (-not $full.StartsWith($releasePrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    throw "caminho fora da release no manifesto: $relative"
+                }
+                if (-not (Test-Path -LiteralPath $full -PathType Leaf)) {
+                    throw "arquivo do manifesto ausente: $relative"
+                }
+                $actual = (Get-FileHash -LiteralPath $full -Algorithm SHA256).Hash.ToLowerInvariant()
+                if ($actual -ne ([string]$property.Value).ToLowerInvariant()) {
+                    throw "hash divergente: $relative"
+                }
+            }
+            Write-DeployOk "Manifesto SHA-256 da release"
+        } catch {
+            Write-DeployErr "Manifesto de integridade invalido: $_"
+            $failed = $true
+        }
+    } else {
+        Write-DeployWarn "Release legada sem RELEASE-INTEGRITY.json"
+    }
+
     if ($failed) {
         throw "Validacao da release falhou em $ReleasePath"
     }
@@ -737,7 +879,8 @@ function Get-ActiveReleaseName {
     $layout = Get-ReleaseLayoutPaths $ProdPath
     if (Test-Path -LiteralPath $layout.CurrentReleaseFile) {
         $name = (Get-Content -LiteralPath $layout.CurrentReleaseFile -Raw -ErrorAction SilentlyContinue).Trim()
-        if ($name) { return $name }
+        if ($name -and (Test-SafeReleaseName -ReleaseName $name)) { return $name }
+        if ($name) { Write-DeployWarn "current-release.txt contem nome invalido; valor ignorado" }
     }
     return $null
 }
@@ -760,6 +903,8 @@ function Update-CurrentPointer {
     if (-not $ConfirmProductionSwitch) {
         throw "Atualizacao de current exige -ConfirmProductionSwitch (producao nao sera alterada sem confirmacao explicita)."
     }
+
+    Assert-SafeReleaseName -ReleaseName $ReleaseName
 
     $layout = Get-ReleaseLayoutPaths $ProdPath
     $releasePath = Join-Path $layout.Releases $ReleaseName

@@ -22,6 +22,13 @@ from services.gravacao_externa_realtime_service import (
 )
 from services.notification_push_service import insert_user_notification, push_user_notification
 from services.gravacao_externa_email_service import send_gravacao_notification_email
+from services.gravacao_componente import (
+    COMPONENTE_TODOS,
+    gravacao_componente_label,
+    normalize_gravacao_componente,
+    normalize_stored_gravacao_componente,
+    with_gravacao_componente_obs_prefix,
+)
 from services.os_vinculo_grupo_service import _clean_ponto, _lookup_usuario_nome
 
 logger = logging.getLogger(__name__)
@@ -281,9 +288,25 @@ def insert_session_with_arquivos_cursor(
     fornecedor_ponto: str | None = None,
     juntada_grupo_id: str | None = None,
     observacao: str | None = None,
+    componente: str = COMPONENTE_TODOS,
+    allow_replace_active: bool = True,
+    allow_coexisting_parts: bool = False,
 ) -> int:
-    # Relançamento: encerra sessão ativa anterior e grava a nova com os arquivos atuais.
-    cancel_active_externa_sessions_cursor(cursor, ano, os_id)
+    """Cria sessão externa com arquivos.
+
+    ``allow_coexisting_parts`` só deve ser usado para partes desmembradas por
+    máquina de uma mesma sessão pendente: as partes são disjuntas e podem
+    coexistir com o mesmo componente ativo no Birô.
+    """
+    componente_normalized = normalize_gravacao_componente(componente)
+    if not allow_coexisting_parts:
+        _guard_active_externa_componente_cursor(
+            cursor,
+            ano=ano,
+            os_id=os_id,
+            componente_normalized=componente_normalized,
+            allow_replace_active=allow_replace_active,
+        )
     fornecedor_fmt = (
         format_ponto(_clean_ponto(fornecedor_ponto)) if fornecedor_ponto else None
     ) or None
@@ -292,14 +315,15 @@ def insert_session_with_arquivos_cursor(
     cursor.execute(
         """
         INSERT INTO tab_os_gravacao_externa
-            (OsAno, OsNro, CodStatus, LancadoPorPonto, LancadoPorNome, Status,
+            (OsAno, OsNro, CodStatus, Componente, LancadoPorPonto, LancadoPorNome, Status,
              OrigemPendenteId, FornecedorPonto, JuntadaGrupoId, Observacao)
-        VALUES (%s, %s, %s, %s, %s, 'pendente', %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, 'pendente', %s, %s, %s, %s)
         """,
         (
             ano,
             os_id,
             cod_status,
+            componente_normalized,
             ponto_fmt,
             lancado_por_nome,
             origem_pendente_id,
@@ -348,6 +372,62 @@ def insert_session_with_arquivos_cursor(
     return session_id
 
 
+def _guard_active_externa_componente_cursor(
+    cursor,
+    *,
+    ano: int,
+    os_id: int,
+    componente_normalized: str,
+    allow_replace_active: bool,
+) -> None:
+    cursor.execute(
+        """
+        SELECT Id, Componente
+        FROM tab_os_gravacao_externa
+        WHERE OsAno = %s AND OsNro = %s AND Status IN ('pendente', 'iniciada')
+        FOR UPDATE
+        """,
+        (ano, os_id),
+    )
+    active_rows = cursor.fetchall() or []
+    active_components = {
+        normalize_gravacao_componente(
+            row.get("Componente") if isinstance(row, dict) else row[1]
+        )
+        for row in active_rows
+    }
+    if componente_normalized == COMPONENTE_TODOS:
+        if active_components:
+            if not allow_replace_active or any(
+                active != COMPONENTE_TODOS for active in active_components
+            ):
+                raise ValueError(
+                    "A OS já possui um envio ativo em gravação externa. Conclua ou remova esse envio antes de enviar todos os componentes."
+                )
+        if allow_replace_active:
+            cancel_active_externa_sessions_cursor(cursor, ano, os_id)
+    else:
+        if COMPONENTE_TODOS in active_components:
+            raise ValueError(
+                "A OS já possui todos os componentes em gravação externa. Conclua ou remova esse envio antes de separar Capa e Miolo."
+            )
+        if componente_normalized in active_components:
+            if not allow_replace_active:
+                raise ValueError(
+                    f"A OS já possui {gravacao_componente_label(componente_normalized)} em gravação externa. Conclua ou remova esse envio antes de enviar a mesma parte novamente."
+                )
+        if allow_replace_active:
+            cursor.execute(
+                """
+                UPDATE tab_os_gravacao_externa
+                SET Status = 'cancelada'
+                WHERE OsAno = %s AND OsNro = %s
+                  AND Status IN ('pendente', 'iniciada') AND Componente = %s
+                """,
+                (ano, os_id, componente_normalized),
+            )
+
+
 def create_session_with_arquivos(
     *,
     ano: int,
@@ -382,6 +462,7 @@ def _map_session_row(row: dict[str, Any]) -> dict[str, Any]:
         "os_ano": int(row["OsAno"]),
         "os_nro": int(row["OsNro"]),
         "cod_status": str(row.get("CodStatus") or ""),
+        "componente": normalize_stored_gravacao_componente(row.get("Componente")),
         "lancado_por_ponto": str(row.get("LancadoPorPonto") or ""),
         "lancado_por_nome": row.get("LancadoPorNome"),
         "status": str(row.get("Status") or "pendente"),
@@ -438,6 +519,24 @@ def get_active_session(ano: int, os_id: int) -> Optional[dict[str, Any]]:
     if not rows:
         return None
     return _map_session_row(rows[0])
+
+
+def resolve_active_session(
+    ano: int,
+    os_id: int,
+    session_id: int | None = None,
+) -> Optional[dict[str, Any]]:
+    if session_id is None:
+        return get_active_session(ano, os_id)
+    session = get_session_by_id(int(session_id))
+    if (
+        not session
+        or int(session["os_ano"]) != int(ano)
+        or int(session["os_nro"]) != int(os_id)
+        or session["status"] not in ACTIVE_STATUSES
+    ):
+        return None
+    return session
 
 
 def get_session_by_id(session_id: int) -> Optional[dict[str, Any]]:
@@ -576,7 +675,10 @@ def list_os_gravacao_externa(
 
     count_sql = f"""
         SELECT COUNT(*) AS cnt FROM (
-            SELECT COALESCE(ge.JuntadaGrupoId, CONCAT(p.AnoProtocolo, '-', p.NroProtocolo)) AS gkey
+            SELECT COALESCE(
+                ge.JuntadaGrupoId,
+                CONCAT('s-', ge.Id)
+            ) AS gkey
             FROM tab_os_gravacao_externa ge
             INNER JOIN tabProtocolos p
                 ON p.AnoProtocolo = ge.OsAno
@@ -606,6 +708,7 @@ def list_os_gravacao_externa(
             uf.Nome AS fornecedor_nome,
             ge.CriadoEm AS gravacao_criado_em,
             ge.JuntadaGrupoId AS juntada_grupo_id,
+            ge.Componente AS componente,
             (
                 SELECT d.TipoPublicacaoLink
                 FROM tabDetalhesServico d
@@ -664,6 +767,7 @@ def list_os_gravacao_externa(
                 "fornecedor_nome": row.get("fornecedor_nome"),
                 "gravacao_criado_em": row.get("gravacao_criado_em"),
                 "juntada_grupo_id": str(juntada).strip() if juntada else None,
+                "componente": normalize_stored_gravacao_componente(row.get("componente")),
             }
         )
     from services.gravacao_pendente_service import (
@@ -1149,8 +1253,9 @@ def iniciar_gravacao(
     ano: int,
     os_id: int,
     operador_ponto: str,
+    gravacao_externa_id: int | None = None,
 ) -> dict[str, Any]:
-    session = get_active_session(ano, os_id)
+    session = resolve_active_session(ano, os_id, gravacao_externa_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão de Gravação Externa não encontrada.")
 
@@ -1170,26 +1275,28 @@ def iniciar_gravacao(
     for target in targets:
         t_ano = int(target["os_ano"])
         t_nro = int(target["os_nro"])
-        situacao_atual, setor_atual = _get_ultimo_operacional(t_ano, t_nro)
-        ja_recebido = (
-            str(situacao_atual or "").strip() == SITUACAO_RECEBIDO
-            and str(setor_atual or "").strip() == SETOR_GRAV_EXTERNA
-        )
-        if target["status"] == "iniciada" and ja_recebido:
+        if target["status"] == "iniciada":
             continue
         if target["status"] != "iniciada":
             any_status_change = True
         chapas = _fetch_chapas_origem_pendente(target.get("origem_pendente_id"))
         obs = format_andamento_obs(
-            with_juntada_obs_prefix(
-                format_gravacao_recebido_obs(chapas),
-                juntada_membros_label(target.get("juntada_grupo_id")),
+            with_gravacao_componente_obs_prefix(
+                with_juntada_obs_prefix(
+                    format_gravacao_recebido_obs(chapas),
+                    juntada_membros_label(target.get("juntada_grupo_id")),
+                ),
+                target.get("componente"),
             )
         )
-        work.append((target, not ja_recebido, obs))
+        work.append((target, True, obs))
 
     if not work:
-        updated = get_active_session(ano, os_id) or session
+        updated = (
+            get_session_by_id(int(session["id"]))
+            if gravacao_externa_id is not None
+            else get_active_session(ano, os_id)
+        ) or session
         updated["status"] = "iniciada"
         return build_session_detail(updated)
 
@@ -1211,7 +1318,11 @@ def iniciar_gravacao(
     for a, n, new_cod in codes:
         _notify_iniciar_gravacao(ano=a, os_id=n, new_cod=str(new_cod))
 
-    updated = get_active_session(ano, os_id) or session
+    updated = (
+        get_session_by_id(int(session["id"]))
+        if gravacao_externa_id is not None
+        else get_active_session(ano, os_id)
+    ) or session
     updated["status"] = "iniciada"
 
     launcher = str(session.get("lancado_por_ponto") or "")
@@ -1358,6 +1469,7 @@ def add_mensagem(
     mensagem: str,
     has_view_permission: bool,
     is_fornecedor: bool = False,
+    gravacao_externa_id: int | None = None,
 ) -> dict[str, Any]:
     text = (mensagem or "").strip()
     if not text:
@@ -1368,7 +1480,7 @@ def add_mensagem(
             detail=f"Mensagem excede {MESSAGE_MAX_LENGTH} caracteres.",
         )
 
-    session = get_active_session(ano, os_id)
+    session = resolve_active_session(ano, os_id, gravacao_externa_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão de Gravação Externa não encontrada.")
     if not user_can_send_mensagem(
@@ -1429,8 +1541,9 @@ def list_mensagens(
     ponto: str,
     is_operator: bool,
     has_view_permission: bool = False,
+    gravacao_externa_id: int | None = None,
 ) -> list[dict[str, Any]]:
-    session = get_active_session(ano, os_id)
+    session = resolve_active_session(ano, os_id, gravacao_externa_id)
     if not session:
         return []
     if has_view_permission:
@@ -1458,8 +1571,9 @@ def update_session_arquivos(
     ano: int,
     os_id: int,
     arquivos: list[dict[str, str]],
+    gravacao_externa_id: int | None = None,
 ) -> dict[str, Any]:
-    session = get_active_session(ano, os_id)
+    session = resolve_active_session(ano, os_id, gravacao_externa_id)
     if not session:
         raise HTTPException(status_code=404, detail="Sessão de Gravação Externa não encontrada.")
     if session["status"] != "pendente":
@@ -1504,7 +1618,11 @@ def update_session_arquivos(
         os_nro=os_id,
         lancado_por_ponto=str(session.get("lancado_por_ponto") or ""),
     )
-    updated = get_active_session(ano, os_id) or session
+    updated = (
+        get_session_by_id(int(session["id"]))
+        if gravacao_externa_id is not None
+        else get_active_session(ano, os_id)
+    ) or session
     return build_session_detail(updated)
 
 
@@ -1856,9 +1974,12 @@ def _run_concluir_targets(
             continue
         chapas = _fetch_chapas_origem_pendente(target.get("origem_pendente_id"))
         obs = format_andamento_obs(
-            with_juntada_obs_prefix(
-                format_gravacao_concluida_obs(chapas),
-                juntada_membros_label(target.get("juntada_grupo_id")),
+            with_gravacao_componente_obs_prefix(
+                with_juntada_obs_prefix(
+                    format_gravacao_concluida_obs(chapas),
+                    juntada_membros_label(target.get("juntada_grupo_id")),
+                ),
+                target.get("componente"),
             )
         )
         prepared.append((target, obs))
@@ -1907,8 +2028,9 @@ def concluir_gravacao(
     ano: int,
     os_id: int,
     operador_ponto: str,
+    gravacao_externa_id: int | None = None,
 ) -> dict[str, Any]:
-    session = get_active_session(ano, os_id)
+    session = resolve_active_session(ano, os_id, gravacao_externa_id)
     ponto_andamento = format_ponto(_clean_ponto(operador_ponto))
 
     if session:
@@ -1953,7 +2075,7 @@ def concluir_gravacao(
         return build_session_detail(concluded)
 
     # Sem sessão ativa: reparar irmãs se a âncora já estiver concluída no grupo.
-    concluded_anchor = get_concluida_session(ano, os_id)
+    concluded_anchor = get_concluida_session(ano, os_id, gravacao_externa_id)
     if concluded_anchor and concluded_anchor.get("juntada_grupo_id"):
         sisters = list_active_externa_by_juntada(
             str(concluded_anchor["juntada_grupo_id"])
@@ -1978,7 +2100,22 @@ def concluir_gravacao(
     )
 
 
-def get_concluida_session(ano: int, os_id: int) -> Optional[dict[str, Any]]:
+def get_concluida_session(
+    ano: int,
+    os_id: int,
+    session_id: int | None = None,
+) -> Optional[dict[str, Any]]:
+    if session_id is not None:
+        session = get_session_by_id(int(session_id))
+        if (
+            not session
+            or int(session["os_ano"]) != int(ano)
+            or int(session["os_nro"]) != int(os_id)
+            or session["status"] != "concluida"
+            or session.get("entrega_lancada_em") is not None
+        ):
+            return None
+        return session
     rows = db.execute_query(
         """
         SELECT * FROM tab_os_gravacao_externa
@@ -2027,7 +2164,10 @@ def list_os_gravacao_aguardando_entrega(
 
     count_sql = f"""
         SELECT COUNT(*) AS cnt FROM (
-            SELECT COALESCE(ge.JuntadaGrupoId, CONCAT(ge.OsAno, '-', ge.OsNro)) AS gkey
+            SELECT COALESCE(
+                ge.JuntadaGrupoId,
+                CONCAT('s-', ge.Id)
+            ) AS gkey
             FROM tab_os_gravacao_externa ge
             INNER JOIN tabProtocolos p
                 ON p.NroProtocolo = ge.OsNro AND p.AnoProtocolo = ge.OsAno
@@ -2056,6 +2196,7 @@ def list_os_gravacao_aguardando_entrega(
             ge.CriadoEm AS gravacao_criado_em,
             ge.OrigemPendenteId AS origem_pendente_id,
             ge.JuntadaGrupoId AS juntada_grupo_id,
+            ge.Componente AS componente,
             (
                 SELECT d.TipoPublicacaoLink
                 FROM tabDetalhesServico d
@@ -2112,6 +2253,7 @@ def list_os_gravacao_aguardando_entrega(
                 "concluida_por_ponto": row.get("concluida_por_ponto"),
                 "gravacao_criado_em": row.get("gravacao_criado_em"),
                 "juntada_grupo_id": str(juntada).strip() if juntada else None,
+                "componente": normalize_stored_gravacao_componente(row.get("componente")),
                 "chapas_por_maquina": chapas,
                 "total_chapas": sum(int(c.get("quantidade") or 0) for c in chapas),
             }
@@ -2211,8 +2353,9 @@ def lancar_entrega_chapas(
     os_id: int,
     recebido_por_ponto: str,
     recebido_por_nome: str | None = None,
+    gravacao_externa_id: int | None = None,
 ) -> dict[str, Any]:
-    session = get_concluida_session(ano, os_id)
+    session = get_concluida_session(ano, os_id, gravacao_externa_id)
     if not session:
         raise HTTPException(
             status_code=404,
@@ -2264,9 +2407,12 @@ def lancar_entrega_chapas(
     for target in targets:
         chapas = _fetch_chapas_origem_pendente(target.get("origem_pendente_id"))
         obs = format_andamento_obs(
-            with_juntada_obs_prefix(
-                format_gravacao_entrega_obs(chapas),
-                juntada_membros_label(target.get("juntada_grupo_id")),
+            with_gravacao_componente_obs_prefix(
+                with_juntada_obs_prefix(
+                    format_gravacao_entrega_obs(chapas),
+                    juntada_membros_label(target.get("juntada_grupo_id")),
+                ),
+                target.get("componente"),
             )
         )
         prepared.append((target, obs))

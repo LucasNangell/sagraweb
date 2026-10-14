@@ -182,6 +182,16 @@ function normalizeRoutePath(path: string): string {
 export function canAccessRoute(permissions: Permissions, path: string): boolean {
   const normalized = normalizeRoutePath(path);
 
+  if (normalized === "/mensagens") {
+    return true;
+  }
+  if (/^\/os\/\d+\/\d+\/fluxo-producao$/.test(normalized)) {
+    return hasPermission(permissions, "sb_gerencia");
+  }
+  if (/^\/impressao\/requisicao\/\d+\/\d+$/.test(normalized)) {
+    return hasPermission(permissions, "ctx_imprimir_ficha");
+  }
+
   if (normalized === "/painel/setor" || normalized.startsWith("/painel/setor/")) {
     return hasPainelSetorAccess(permissions);
   }

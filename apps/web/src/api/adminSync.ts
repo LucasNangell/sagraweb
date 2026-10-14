@@ -1,4 +1,8 @@
 import { apiFetch } from "@/api/client";
+import type {
+  SyncAlertReason,
+  SyncWatchdogSummary,
+} from "@/features/sync-andamentos/api";
 
 export type SyncTableName =
   | "tabProtocolos"
@@ -39,13 +43,22 @@ export type SyncServiceCard = {
   query_ok: boolean;
   healthy: boolean;
   alert?: boolean;
+  alert_reasons?: SyncAlertReason[];
   data_stale?: boolean;
   mdb_count?: number | null;
   mysql_count?: number | null;
   heartbeat?: SyncHeartbeat;
+  watchdog?: SyncWatchdogSummary;
+};
+
+export type SystemWatchdogSyncStatus = SyncWatchdogSummary & {
+  checked_at: string | null;
+  overall: string | null;
+  last_action_detail: string | null;
 };
 
 export type SyncAdminStatus = {
+  system_watchdog?: SystemWatchdogSyncStatus;
   services: {
     sync_andamentos: SyncServiceCard;
     monitor_sync: SyncServiceCard;

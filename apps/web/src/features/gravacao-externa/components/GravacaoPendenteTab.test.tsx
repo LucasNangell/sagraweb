@@ -7,10 +7,18 @@ const patchControle = vi.fn();
 const deleteControle = vi.fn();
 const adicionarOs = vi.fn();
 const removerOs = vi.fn();
+const enviarOs = vi.fn();
+const fetchFornecedores = vi.fn();
 let canDelete = true;
 let canPending = true;
 let listItems: Array<Record<string, unknown>> = [];
 let detailData: Record<string, unknown> | null = null;
+let detailsById: Record<number, Record<string, unknown>> = {};
+
+vi.mock("@/api/gravacaoPendente", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/api/gravacaoPendente")>()),
+  fetchGravacaoPendenteFornecedores: () => fetchFornecedores(),
+}));
 
 vi.mock("@/api/hooks/useGravacaoPendente", () => ({
   useGravacaoPendenteOsList: () => ({ data: { items: listItems }, isPending: false }),
@@ -39,7 +47,12 @@ vi.mock("@/api/hooks/useGravacaoPendente", () => ({
     },
     isPending: false,
   }),
-  useGravacaoPendenteDetail: () => ({ data: detailData, isLoading: false }),
+  useGravacaoPendenteDetails: (_ano: number, _nrOs: number, ids: number[]) => ({
+    data: ids.map((id) => detailsById[id] ?? (detailData?.["id"] === id ? detailData : undefined)),
+    isLoading: false,
+    isError: false,
+    error: null,
+  }),
   useGravacaoPendenteFornecedores: () => ({
     data: { items: [{ ponto: "918.713", nome: "Forn" }] },
     isPending: false,
@@ -56,7 +69,7 @@ vi.mock("@/api/hooks/useGravacaoPendente", () => ({
     mutateAsync: deleteControle,
     isPending: false,
   }),
-  useEnviarGravacaoPendenteMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useEnviarGravacaoPendenteMutation: () => ({ mutateAsync: enviarOs, isPending: false }),
   useAdicionarOsGravacaoPendenteMutation: () => ({
     mutateAsync: adicionarOs,
     isPending: false,
@@ -125,10 +138,15 @@ describe("GravacaoPendenteTab controle", () => {
     adicionarOs.mockResolvedValue({});
     removerOs.mockReset();
     removerOs.mockResolvedValue({});
+    enviarOs.mockReset();
+    enviarOs.mockResolvedValue({});
+    fetchFornecedores.mockReset();
+    fetchFornecedores.mockResolvedValue({ items: [{ ponto: "918.713", nome: "Forn" }] });
     canDelete = true;
     canPending = true;
     listItems = [];
     detailData = null;
+    detailsById = {};
   });
 
   it("usa novos títulos e ordem das colunas", () => {
@@ -256,5 +274,183 @@ describe("GravacaoPendenteTab controle", () => {
     expect(
       screen.queryByRole("button", { name: "Menu de contexto OS 00101/26" }),
     ).toBeNull();
+  });
+
+  describe("card por OS e envio por máquina", () => {
+    const capaMioloItems = () => [
+      {
+        nr_os: 101,
+        ano: 2026,
+        solicitante: "Cliente",
+        componente: "capa",
+        gravacao_pendente_id: 42,
+        gravacao_pendente_status: "ativa",
+      },
+      {
+        nr_os: 101,
+        ano: 2026,
+        solicitante: "Cliente",
+        componente: "miolo",
+        gravacao_pendente_id: 43,
+        gravacao_pendente_status: "ativa",
+      },
+    ];
+    const sessionDetail = (
+      id: number,
+      componente: string,
+      chapas: Array<{ maquina: string; quantidade: number }>,
+      extra: Record<string, unknown> = {},
+    ) => ({
+      id,
+      os_ano: 2026,
+      os_nro: 101,
+      cod_status: "manual",
+      componente,
+      lancado_por_ponto: "918.713",
+      status: "ativa",
+      arquivos: chapas.map((c, i) => ({
+        id: id * 100 + i,
+        nome: `${c.maquina}.pdf`,
+        maquina: c.maquina,
+      })),
+      chapas: chapas.map((c, i) => ({ id: id * 10 + i, ...c })),
+      ...extra,
+    });
+
+    beforeEach(() => {
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      vi.spyOn(window, "alert").mockImplementation(() => undefined);
+    });
+
+    it("mostra um único card por OS sem chip de componente", () => {
+      listItems = capaMioloItems();
+      render(<GravacaoPendenteTab />);
+
+      expect(screen.getAllByText("00101/26")).toHaveLength(1);
+      expect(screen.queryByText("Capa")).toBeNull();
+      expect(screen.queryByText("Miolo")).toBeNull();
+    });
+
+    it("soma chapas por máquina entre capa e miolo e envia todos sem seleção", async () => {
+      listItems = capaMioloItems();
+      detailsById = {
+        42: sessionDetail(42, "capa", [{ maquina: "Komori", quantidade: 2 }]),
+        43: sessionDetail(43, "miolo", [
+          { maquina: "Komori", quantidade: 3 },
+          { maquina: "Heidelberg", quantidade: 4 },
+        ]),
+      };
+      render(<GravacaoPendenteTab />);
+      fireEvent.click(screen.getByText("00101/26"));
+
+      const komori = screen.getByRole("button", { name: /Komori: 5/ });
+      expect(komori).toHaveAttribute("aria-pressed", "false");
+      expect(komori.className).toContain("cursor-pointer");
+      expect(screen.getByRole("button", { name: /Heidelberg: 4/ })).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("button", { name: "Enviar para gravação externa" }));
+      await waitFor(() => expect(enviarOs).toHaveBeenCalledTimes(1));
+      expect(enviarOs).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ano: 2026,
+          nrOs: 101,
+          fornecedorPonto: "918.713",
+          gravacaoPendenteIds: [42, 43],
+          maquinas: undefined,
+        }),
+      );
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", { name: "Enviar para gravação externa" }),
+        ).toBeNull(),
+      );
+    });
+
+    it("envia somente as máquinas selecionadas e mantém a OS aberta", async () => {
+      listItems = capaMioloItems();
+      detailsById = {
+        42: sessionDetail(42, "capa", [{ maquina: "Komori", quantidade: 2 }]),
+        43: sessionDetail(43, "miolo", [{ maquina: "Heidelberg", quantidade: 4 }]),
+      };
+      render(<GravacaoPendenteTab />);
+      fireEvent.click(screen.getByText("00101/26"));
+
+      const heidelberg = screen.getByRole("button", { name: /Heidelberg: 4/ });
+      fireEvent.click(heidelberg);
+      expect(heidelberg).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByText("Somente: Heidelberg")).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("button", { name: "Enviar para gravação externa" }));
+      await waitFor(() => expect(enviarOs).toHaveBeenCalledTimes(1));
+      expect(enviarOs).toHaveBeenCalledWith(
+        expect.objectContaining({
+          gravacaoPendenteIds: [42, 43],
+          maquinas: ["Heidelberg"],
+        }),
+      );
+      expect(window.confirm).toHaveBeenCalledWith(
+        expect.stringContaining("somente os arquivos de Heidelberg"),
+      );
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: /Heidelberg: 4/ })).toHaveAttribute(
+          "aria-pressed",
+          "false",
+        ),
+      );
+      expect(
+        screen.getByRole("button", { name: "Enviar para gravação externa" }),
+      ).toBeTruthy();
+    });
+
+    it("selecionar todas as máquinas equivale a enviar a OS inteira", async () => {
+      listItems = capaMioloItems().slice(0, 1);
+      detailsById = {
+        42: sessionDetail(42, "capa", [{ maquina: "Komori", quantidade: 2 }]),
+      };
+      render(<GravacaoPendenteTab />);
+      fireEvent.click(screen.getByText("00101/26"));
+      fireEvent.click(screen.getByRole("button", { name: /Komori: 2/ }));
+      expect(screen.queryByText(/Somente:/)).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Enviar para gravação externa" }));
+      await waitFor(() => expect(enviarOs).toHaveBeenCalledTimes(1));
+      expect(enviarOs).toHaveBeenCalledWith(expect.objectContaining({ maquinas: undefined }));
+    });
+
+    it("sinaliza máquinas já enviadas ao Birô", () => {
+      listItems = capaMioloItems().slice(0, 1);
+      detailsById = {
+        42: sessionDetail(42, "capa", [{ maquina: "Komori", quantidade: 2 }], {
+          envios: [
+            {
+              gravacao_pendente_id: 77,
+              gravacao_externa_id: 501,
+              fornecedor_ponto: "1.234",
+              fornecedor_nome: "Birô Alfa",
+              maquinas: ["Heidelberg"],
+              arquivos: [{ id: 9, nome: "h.pdf", maquina: "Heidelberg" }],
+              chapas: [{ id: 1, maquina: "Heidelberg", quantidade: 4 }],
+            },
+          ],
+        }),
+      };
+      render(<GravacaoPendenteTab />);
+      fireEvent.click(screen.getByText("00101/26"));
+
+      expect(screen.getByTitle("Enviado para o Birô Birô Alfa").textContent).toContain(
+        "Heidelberg",
+      );
+      expect(screen.getByText(/Enviado p\/ Birô Birô Alfa · Heidelberg/)).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /Heidelberg: 4/ })).toBeNull();
+    });
+
+    it("remove todas as sessões do card pelo menu", async () => {
+      listItems = capaMioloItems();
+      render(<GravacaoPendenteTab />);
+      fireEvent.click(screen.getByRole("button", { name: "Menu de contexto OS 00101/26" }));
+      await waitFor(() => expect(removerOs).toHaveBeenCalledTimes(2));
+      expect(removerOs).toHaveBeenNthCalledWith(1, 42);
+      expect(removerOs).toHaveBeenNthCalledWith(2, 43);
+    });
   });
 });

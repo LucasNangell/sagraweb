@@ -12,7 +12,7 @@ INSERT INTO ip_permissions (
     sb_admin_ips, sb_pcp, sb_usuarios, sb_active_computers, sb_gravacao
 ) VALUES
 (
-    '10.120.1.14', 'Estação dev — acesso total', 'Administradores', 1,
+    '10.120.2.11', 'Estação dev — acesso total', 'Administradores', 1,
     1, 1, 1, 1, 1, 1, 1,
     1, 1, 1, 1, 1, 1, 1, 1, 1,
     1, 1, 1, 1, 1

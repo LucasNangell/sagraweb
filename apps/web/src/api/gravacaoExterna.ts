@@ -1,5 +1,7 @@
 import { apiFetch, apiUrl } from "@/lib/api";
 
+export type GravacaoComponente = "todos" | "capa" | "miolo";
+
 export interface GravacaoExternaOsMembro {
   nr_os: number;
   ano: number;
@@ -16,6 +18,7 @@ export interface GravacaoExternaOsItem {
   last_update?: string | null;
   gravacao_externa_id?: number | null;
   gravacao_status: string;
+  componente?: GravacaoComponente;
   lancado_por_ponto?: string | null;
   lancado_por_nome?: string | null;
   fornecedor_ponto?: string | null;
@@ -67,6 +70,7 @@ export interface GravacaoExternaDetail {
   os_ano: number;
   os_nro: number;
   cod_status: string;
+  componente?: GravacaoComponente;
   lancado_por_ponto: string;
   lancado_por_nome?: string | null;
   status: string;
@@ -106,6 +110,12 @@ function buildListQuery(filters: GravacaoExternaListFilters): string {
   return params.toString();
 }
 
+function withExternaId(path: string, gravacaoExternaId?: number | null): string {
+  if (gravacaoExternaId == null) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}gravacao_externa_id=${gravacaoExternaId}`;
+}
+
 export async function fetchGravacaoExternaOsList(
   filters: GravacaoExternaListFilters,
 ): Promise<GravacaoExternaOsListResponse> {
@@ -125,8 +135,9 @@ export async function fetchGravacaoExternaAguardandoEntrega(
 export async function fetchGravacaoExternaDetail(
   ano: number,
   nrOs: number,
+  gravacaoExternaId?: number | null,
 ): Promise<GravacaoExternaDetail> {
-  return apiFetch<GravacaoExternaDetail>(`/gravacao-externa/${ano}/${nrOs}`);
+  return apiFetch<GravacaoExternaDetail>(withExternaId(`/gravacao-externa/${ano}/${nrOs}`, gravacaoExternaId));
 }
 
 export async function removerOsGravacaoExterna(
@@ -141,8 +152,9 @@ export async function removerOsGravacaoExterna(
 export async function iniciarGravacaoExterna(
   ano: number,
   nrOs: number,
+  gravacaoExternaId?: number | null,
 ): Promise<GravacaoExternaDetail> {
-  return apiFetch<GravacaoExternaDetail>(`/gravacao-externa/${ano}/${nrOs}/iniciar`, {
+  return apiFetch<GravacaoExternaDetail>(withExternaId(`/gravacao-externa/${ano}/${nrOs}/iniciar`, gravacaoExternaId), {
     method: "POST",
   });
 }
@@ -150,8 +162,9 @@ export async function iniciarGravacaoExterna(
 export async function concluirGravacaoExterna(
   ano: number,
   nrOs: number,
+  gravacaoExternaId?: number | null,
 ): Promise<GravacaoExternaDetail> {
-  return apiFetch<GravacaoExternaDetail>(`/gravacao-externa/${ano}/${nrOs}/concluir`, {
+  return apiFetch<GravacaoExternaDetail>(withExternaId(`/gravacao-externa/${ano}/${nrOs}/concluir`, gravacaoExternaId), {
     method: "POST",
   });
 }
@@ -160,9 +173,10 @@ export async function lancarEntregaChapas(
   ano: number,
   nrOs: number,
   payload: { recebidoPorPonto: string; recebidoPorNome: string },
+  gravacaoExternaId?: number | null,
 ): Promise<GravacaoExternaDetail> {
   return apiFetch<GravacaoExternaDetail>(
-    `/gravacao-externa/${ano}/${nrOs}/entrega-chapas`,
+    withExternaId(`/gravacao-externa/${ano}/${nrOs}/entrega-chapas`, gravacaoExternaId),
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -178,8 +192,9 @@ export async function updateGravacaoExternaArquivos(
   ano: number,
   nrOs: number,
   arquivos: { absolute_path: string; nome: string; maquina?: string | null }[],
+  gravacaoExternaId?: number | null,
 ): Promise<GravacaoExternaDetail> {
-  return apiFetch<GravacaoExternaDetail>(`/gravacao-externa/${ano}/${nrOs}/arquivos`, {
+  return apiFetch<GravacaoExternaDetail>(withExternaId(`/gravacao-externa/${ano}/${nrOs}/arquivos`, gravacaoExternaId), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ arquivos }),
@@ -189,9 +204,10 @@ export async function updateGravacaoExternaArquivos(
 export async function fetchGravacaoExternaMensagens(
   ano: number,
   nrOs: number,
+  gravacaoExternaId?: number | null,
 ): Promise<GravacaoExternaMensagem[]> {
   return apiFetch<GravacaoExternaMensagem[]>(
-    `/gravacao-externa/${ano}/${nrOs}/mensagens`,
+    withExternaId(`/gravacao-externa/${ano}/${nrOs}/mensagens`, gravacaoExternaId),
   );
 }
 
@@ -199,9 +215,10 @@ export async function postGravacaoExternaMensagem(
   ano: number,
   nrOs: number,
   mensagem: string,
+  gravacaoExternaId?: number | null,
 ): Promise<GravacaoExternaMensagem> {
   return apiFetch<GravacaoExternaMensagem>(
-    `/gravacao-externa/${ano}/${nrOs}/mensagens`,
+    withExternaId(`/gravacao-externa/${ano}/${nrOs}/mensagens`, gravacaoExternaId),
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -214,8 +231,9 @@ export function gravacaoExternaDownloadUrl(
   ano: number,
   nrOs: number,
   arquivoId: number,
+  gravacaoExternaId?: number | null,
 ): string {
-  return apiUrl(`/gravacao-externa/${ano}/${nrOs}/arquivos/${arquivoId}/download`);
+  return apiUrl(withExternaId(`/gravacao-externa/${ano}/${nrOs}/arquivos/${arquivoId}/download`, gravacaoExternaId));
 }
 
 export type GravacaoExternaZipStatus = {
@@ -233,9 +251,10 @@ export type GravacaoExternaZipStatus = {
 export async function startGravacaoExternaZip(
   ano: number,
   nrOs: number,
+  gravacaoExternaId?: number | null,
 ): Promise<GravacaoExternaZipStatus> {
   return apiFetch<GravacaoExternaZipStatus>(
-    `/gravacao-externa/${ano}/${nrOs}/arquivos/zip`,
+    withExternaId(`/gravacao-externa/${ano}/${nrOs}/arquivos/zip`, gravacaoExternaId),
     { method: "POST" },
   );
 }
@@ -243,33 +262,37 @@ export async function startGravacaoExternaZip(
 export async function getGravacaoExternaZipStatus(
   ano: number,
   nrOs: number,
+  gravacaoExternaId?: number | null,
 ): Promise<GravacaoExternaZipStatus> {
   return apiFetch<GravacaoExternaZipStatus>(
-    `/gravacao-externa/${ano}/${nrOs}/arquivos/zip`,
+    withExternaId(`/gravacao-externa/${ano}/${nrOs}/arquivos/zip`, gravacaoExternaId),
   );
 }
 
-export function gravacaoExternaZipDownloadUrl(ano: number, nrOs: number): string {
-  return apiUrl(`/gravacao-externa/${ano}/${nrOs}/arquivos/zip/download`);
+export function gravacaoExternaZipDownloadUrl(ano: number, nrOs: number, gravacaoExternaId?: number | null): string {
+  return apiUrl(withExternaId(`/gravacao-externa/${ano}/${nrOs}/arquivos/zip/download`, gravacaoExternaId));
 }
 
-export function gravacaoExternaDownloadAllUrl(ano: number, nrOs: number): string {
-  return apiUrl(`/gravacao-externa/${ano}/${nrOs}/arquivos/download-all`);
+export function gravacaoExternaDownloadAllUrl(ano: number, nrOs: number, gravacaoExternaId?: number | null): string {
+  return apiUrl(withExternaId(`/gravacao-externa/${ano}/${nrOs}/arquivos/download-all`, gravacaoExternaId));
 }
 
 export function gravacaoExternaPreviewUrl(
   ano: number,
   nrOs: number,
   arquivoId: number,
+  gravacaoExternaId?: number | null,
 ): string {
-  return apiUrl(`/gravacao-externa/${ano}/${nrOs}/arquivos/${arquivoId}/preview`);
+  return apiUrl(withExternaId(`/gravacao-externa/${ano}/${nrOs}/arquivos/${arquivoId}/preview`, gravacaoExternaId));
 }
 
 export function gravacaoExternaCompositePreviewUrl(
   ano: number,
   nrOs: number,
   groupKey: string,
+  gravacaoExternaId?: number | null,
 ): string {
   const params = new URLSearchParams({ group_key: groupKey });
+  if (gravacaoExternaId != null) params.set("gravacao_externa_id", String(gravacaoExternaId));
   return apiUrl(`/gravacao-externa/${ano}/${nrOs}/preview-composite?${params.toString()}`);
 }

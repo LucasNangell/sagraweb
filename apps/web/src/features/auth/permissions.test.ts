@@ -89,6 +89,27 @@ describe("permissions / menu", () => {
     expect(resolveDefaultAppRoute(perms, "/analise")).toBe("/");
   });
 
+  it("preserva deep links autenticados conhecidos após o login", () => {
+    const perms = parsePermissionsFromApi({
+      sb_gerencia: true,
+      ctx_imprimir_ficha: true,
+    });
+
+    expect(resolveDefaultAppRoute(perms, "/mensagens")).toBe("/mensagens");
+    expect(resolveDefaultAppRoute(perms, "/os/2026/123/fluxo-producao")).toBe(
+      "/os/2026/123/fluxo-producao",
+    );
+    expect(resolveDefaultAppRoute(perms, "/impressao/requisicao/2026/123")).toBe(
+      "/impressao/requisicao/2026/123",
+    );
+    expect(
+      resolveDefaultAppRoute(
+        parsePermissionsFromApi({}),
+        "/os/2026/123/fluxo-producao",
+      ),
+    ).toBe("/");
+  });
+
   it("usuário só com sb_dashboard_tablet vai para /painel/tablet", () => {
     const perms = parsePermissionsFromApi({ sb_dashboard_tablet: true });
     expect(canAccessRoute(perms, "/painel/tablet")).toBe(true);

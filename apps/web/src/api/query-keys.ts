@@ -66,18 +66,18 @@ export const queryKeys = {
     list: (filters: unknown) => ["gravacaoExterna", "list", filters] as const,
     aguardandoEntrega: (filters: unknown) =>
       ["gravacaoExterna", "aguardandoEntrega", filters] as const,
-    detail: (ano: number, nrOs: number) =>
-      ["gravacaoExterna", "detail", ano, nrOs] as const,
-    mensagens: (ano: number, nrOs: number) =>
-      ["gravacaoExterna", "mensagens", ano, nrOs] as const,
+    detail: (ano: number, nrOs: number, gravacaoExternaId?: number | null) =>
+      ["gravacaoExterna", "detail", ano, nrOs, gravacaoExternaId ?? null] as const,
+    mensagens: (ano: number, nrOs: number, gravacaoExternaId?: number | null) =>
+      ["gravacaoExterna", "mensagens", ano, nrOs, gravacaoExternaId ?? null] as const,
     launcher: (ano: number, nrOs: number) =>
       ["gravacaoExterna", "launcher", ano, nrOs] as const,
   },
   gravacaoPendente: {
     prefix: ["gravacaoPendente"] as const,
     list: (filters: unknown) => ["gravacaoPendente", "list", filters] as const,
-    detail: (ano: number, nrOs: number) =>
-      ["gravacaoPendente", "detail", ano, nrOs] as const,
+    detail: (ano: number, nrOs: number, gravacaoPendenteId?: number | null) =>
+      ["gravacaoPendente", "detail", ano, nrOs, gravacaoPendenteId ?? null] as const,
     historico: (limit?: number) =>
       ["gravacaoPendente", "historico", limit ?? 100] as const,
     fornecedores: ["gravacaoPendente", "fornecedores"] as const,

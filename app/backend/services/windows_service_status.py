@@ -22,6 +22,17 @@ DIVERGENCIA_STATUS_STALE_SECONDS = int(
     os.getenv("MONITOR_SYNC_STATUS_STALE_SECONDS", "300")
 )
 HEARTBEAT_STALE_SECONDS = int(os.getenv("SYNC_HEARTBEAT_STALE_SECONDS", "180"))
+SYSTEM_WATCHDOG_STATUS_FILENAME = "system_watchdog_status.json"
+SYSTEM_WATCHDOG_STATUS_STALE_SECONDS = int(
+    os.getenv("SYSTEM_WATCHDOG_STATUS_STALE_SECONDS", "300")
+)
+SYNC_DOWN_ALERT_SECONDS = int(os.getenv("SYNC_DOWN_ALERT_SECONDS", "300"))
+
+ALERT_SCM_NOT_RUNNING = "SCM_NOT_RUNNING"
+ALERT_DATA_DIVERGENCE = "DATA_DIVERGENCE"
+ALERT_SYNC_DOWN = "SYNC_DOWN"
+ALERT_CIRCUIT_OPEN = "CIRCUIT_OPEN"
+ALERT_RECOVERY_FAILED = "RECOVERY_FAILED"
 
 
 _STATE_RE = re.compile(
@@ -263,13 +274,134 @@ def read_sync_heartbeat(
     }
 
 
+def resolve_system_watchdog_status_path() -> Optional[Path]:
+    """
+    `shared\\run\\system_watchdog_status.json` da raiz do sistema. A API roda em
+    `current\\` (junction) ou em `releases\\<nome>\\` resolvido; ambos têm a raiz
+    entre os ancestrais.
+    """
+    env = (os.getenv("SYSTEM_WATCHDOG_STATUS_FILE") or "").strip()
+    if env:
+        return Path(env)
+    starts = (Path.cwd(), Path(os.path.abspath(__file__)).parent)
+    for start in starts:
+        for ancestor in (start, *list(start.parents)[:5]):
+            candidate = ancestor / "shared" / "run" / SYSTEM_WATCHDOG_STATUS_FILENAME
+            try:
+                if candidate.is_file():
+                    return candidate
+            except OSError:
+                continue
+    return None
+
+
+_WATCHDOG_READ_WARNED: set = set()
+_WATCHDOG_PUBLIC_FIELDS = (
+    "available",
+    "fresh",
+    "maintenance",
+    "unhealthy_since",
+    "circuit_open_until",
+    "last_action_ok",
+    "alert_reasons",
+)
+
+
+def _epoch_or_zero(value: Any) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return number if number > 0 else 0.0
+
+
+def read_system_watchdog_sync_status(
+    *,
+    path: Optional[Path] = None,
+    now: Optional[datetime] = None,
+    stale_seconds: int = SYSTEM_WATCHDOG_STATUS_STALE_SECONDS,
+    down_alert_seconds: int = SYNC_DOWN_ALERT_SECONDS,
+) -> dict:
+    """
+    Visão do Sync segundo o SAGRA-SystemWatchdog. Arquivo ausente, ilegível
+    (ACL de shared\\run) ou velho não gera alerta: o SCM e o monitor seguem valendo.
+    """
+    empty = {
+        "available": False,
+        "fresh": False,
+        "checked_at": None,
+        "overall": None,
+        "maintenance": False,
+        "unhealthy_since": None,
+        "circuit_open_until": None,
+        "last_action_ok": None,
+        "last_action_detail": None,
+        "alert_reasons": [],
+    }
+    status_path = path or resolve_system_watchdog_status_path()
+    if status_path is None:
+        return empty
+    try:
+        data = json.loads(status_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return empty
+    except Exception as exc:
+        # Endpoint consultado a cada 10 s por cliente: avisar uma vez por caminho.
+        if str(status_path) not in _WATCHDOG_READ_WARNED:
+            _WATCHDOG_READ_WARNED.add(str(status_path))
+            logger.warning("Falha ao ler %s: %s", status_path, exc)
+        return empty
+    if not isinstance(data, dict):
+        return empty
+
+    now_utc = now or datetime.now(timezone.utc)
+    now_epoch = now_utc.timestamp()
+    checked = _parse_iso_utc(data.get("checked_at"))
+    fresh = checked is not None and (now_utc - checked).total_seconds() <= stale_seconds
+    maintenance = bool((data.get("maintenance") or {}).get("active"))
+    sync = data.get("sync") if isinstance(data.get("sync"), dict) else {}
+    state = sync.get("state") if isinstance(sync.get("state"), dict) else {}
+    healthy = bool(sync.get("healthy"))
+    unhealthy_since = _epoch_or_zero(state.get("unhealthy_since"))
+    circuit_open_until = _epoch_or_zero(state.get("circuit_open_until"))
+    last_action_ok = state.get("last_action_ok")
+    if not isinstance(last_action_ok, bool):
+        last_action_ok = None
+
+    reasons = []
+    if fresh and not maintenance:
+        if not healthy and unhealthy_since and now_epoch - unhealthy_since >= down_alert_seconds:
+            reasons.append(ALERT_SYNC_DOWN)
+        if circuit_open_until > now_epoch:
+            reasons.append(ALERT_CIRCUIT_OPEN)
+        if not healthy and last_action_ok is False:
+            reasons.append(ALERT_RECOVERY_FAILED)
+
+    def _iso(epoch: float) -> Optional[str]:
+        return datetime.fromtimestamp(epoch, timezone.utc).isoformat() if epoch else None
+
+    return {
+        "available": True,
+        "fresh": fresh,
+        "checked_at": data.get("checked_at"),
+        "overall": data.get("overall"),
+        "maintenance": maintenance,
+        "unhealthy_since": _iso(unhealthy_since),
+        "circuit_open_until": _iso(circuit_open_until),
+        "last_action_ok": last_action_ok,
+        "last_action_detail": (str(state.get("last_action_detail") or "")[:500] or None),
+        "alert_reasons": reasons,
+    }
+
+
 def build_sync_andamentos_service_status(
     *,
     is_development: bool,
     query_result: Optional[dict] = None,
     divergencia: Optional[dict] = None,
+    watchdog: Optional[dict] = None,
 ) -> dict:
-    """Monta payload da API a partir do SCM + status do monitor de divergência."""
+    """Monta payload da API a partir do SCM, do monitor de divergência e do SystemWatchdog."""
     result = query_result or query_windows_service(SYNC_ANDAMENTOS_SERVICE_NAME)
     exists = bool(result.get("exists"))
     status = result.get("status")
@@ -281,8 +413,16 @@ def build_sync_andamentos_service_status(
 
     div = divergencia if divergencia is not None else read_divergencia_monitor_status()
     data_stale = bool(div.get("data_stale"))
+
+    wd = watchdog if watchdog is not None else read_system_watchdog_sync_status()
+    reasons = []
+    if scm_alert:
+        reasons.append(ALERT_SCM_NOT_RUNNING)
     # Divergência de dados alerta também em development (é sinal do monitor, não do SCM).
-    alert = scm_alert or data_stale
+    if data_stale:
+        reasons.append(ALERT_DATA_DIVERGENCE)
+    if not is_development:
+        reasons.extend(r for r in wd.get("alert_reasons") or [] if r not in reasons)
 
     return {
         "service_name": result.get("service_name") or SYNC_ANDAMENTOS_SERVICE_NAME,
@@ -290,20 +430,26 @@ def build_sync_andamentos_service_status(
         "status": status,
         "query_ok": query_ok,
         "healthy": healthy,
-        "alert": alert,
+        "alert": bool(reasons),
+        "alert_reasons": reasons,
         "data_stale": data_stale,
         "mdb_count": div.get("mdb_count"),
         "mysql_count": div.get("mysql_count"),
+        "watchdog": {key: wd.get(key) for key in _WATCHDOG_PUBLIC_FIELDS},
     }
 
 
 def build_admin_sync_status(*, is_development: bool) -> dict:
     """Payload enriquecido para a aba Sincronização."""
-    sync_svc = build_sync_andamentos_service_status(is_development=is_development)
+    wd = read_system_watchdog_sync_status()
+    sync_svc = build_sync_andamentos_service_status(
+        is_development=is_development, watchdog=wd
+    )
     monitor = query_windows_service(MONITOR_SYNC_SERVICE_NAME)
     hb = read_sync_heartbeat()
     div = read_divergencia_monitor_status()
     return {
+        "system_watchdog": wd,
         "services": {
             "sync_andamentos": {
                 **sync_svc,

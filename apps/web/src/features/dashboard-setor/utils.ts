@@ -65,7 +65,22 @@ function getSortWeight(os: DashboardOsItem): number {
   return 3;
 }
 
+/** OS reprográfica (< 5000) sempre acima de SP (>= 5000). */
+function dashboardProtocolGroup(os: DashboardOsItem): number {
+  const nr = parseInt(String(os.nr_os), 10);
+  if (!Number.isNaN(nr) && nr < 5000) {
+    return 0;
+  }
+  return 1;
+}
+
 function sortByPcp(a: DashboardOsItem, b: DashboardOsItem): number {
+  const groupA = dashboardProtocolGroup(a);
+  const groupB = dashboardProtocolGroup(b);
+  if (groupA !== groupB) {
+    return groupA - groupB;
+  }
+
   const hasPcpA = Number.isInteger(a.pcp_ordem);
   const hasPcpB = Number.isInteger(b.pcp_ordem);
 
@@ -330,6 +345,9 @@ function patchDashboardOsItem(
   item.componente_nome = os.componente_nome;
   item.parent_nr_os = os.parent_nr_os;
   item.parent_ano = os.parent_ano;
+  item.fornecedor_ponto = os.fornecedor_ponto ?? null;
+  item.fornecedor_nome = os.fornecedor_nome ?? null;
+  item.fornecedores = os.fornecedores ?? null;
 }
 
 export function hashDashboardItems(items: Iterable<PcpQueueItem>): string {

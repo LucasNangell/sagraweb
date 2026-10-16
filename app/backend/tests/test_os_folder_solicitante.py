@@ -96,3 +96,21 @@ def test_fetch_os_meta_outra_categoria_ignora_sigla(monkeypatch):
 
 def test_compute_os_folder_name_com_sigla():
     assert compute_os_folder_name(123, "SECOM", "Cartão de Visita") == "00123-Secom-Cartaodevisita"
+
+
+def test_compute_os_folder_name_com_titulo():
+    assert (
+        compute_os_folder_name(123, "SECOM", "Cartão de Visita", "Título X")
+        == "00123-Secom-Cartaodevisita_Titul"
+    )
+
+
+def test_compute_os_folder_name_titulo_vazio_sem_sufixo():
+    assert (
+        compute_os_folder_name(123, "SECOM", "Cartão de Visita", "")
+        == "00123-Secom-Cartaodevisita"
+    )
+    assert (
+        compute_os_folder_name(123, "SECOM", "Cartão de Visita", "   ")
+        == "00123-Secom-Cartaodevisita"
+    )

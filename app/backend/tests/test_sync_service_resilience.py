@@ -141,6 +141,26 @@ def test_protocol_allowlist_includes_cota_repro_from_mdb():
     assert "email_pt_html" not in allowed
 
 
+def test_protocol_allowlist_includes_dados_entrega_from_mdb():
+    columns = [
+        "NroProtocolo",
+        "AnoProtocolo",
+        "ResponsavelGrafLink",
+        "EntregaFormaLink",
+        "EntregPeriodo",
+    ]
+    allowed = svc.core.AndamentosSynchronizer._sync_allowed_columns(
+        None,
+        columns,
+        svc.core._PROTOCOL_SYNC_ALLOWLIST,
+        ["NroProtocolo", "AnoProtocolo"],
+    )
+
+    assert "ResponsavelGrafLink" in allowed
+    assert "EntregaFormaLink" in allowed
+    assert "EntregPeriodo" in allowed
+
+
 def test_mark_cycle_error_does_not_reset_stall(tmp_hb, monkeypatch):
     hb = tmp_hb
     mono = {"t": 1000.0}

@@ -8,6 +8,11 @@ export interface PcpPrevisao {
   trabalho_finalizado?: boolean;
 }
 
+export interface PcpQueueFornecedor {
+  ponto?: string | null;
+  nome?: string | null;
+}
+
 export interface PcpQueueItem {
   nr_os: number;
   ano: number;
@@ -33,6 +38,11 @@ export interface PcpQueueItem {
   componente_nome?: string | null;
   parent_nr_os?: number;
   parent_ano?: number;
+  /** Painel: sessão ativa de Grav. Externa (primeiro fornecedor). */
+  fornecedor_ponto?: string | null;
+  fornecedor_nome?: string | null;
+  /** Painel: todos os fornecedores distintos da OS em Grav. Externa. */
+  fornecedores?: PcpQueueFornecedor[] | null;
 }
 
 export interface PcpQueueResponse {

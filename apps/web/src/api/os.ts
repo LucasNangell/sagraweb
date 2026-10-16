@@ -278,6 +278,7 @@ export interface OsFolderPlanResponse {
   subfolders: string[];
   solicitante: string;
   produto: string;
+  titulo?: string;
 }
 
 export interface OsFolderCreateResponse {

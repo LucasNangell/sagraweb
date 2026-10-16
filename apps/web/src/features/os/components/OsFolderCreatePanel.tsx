@@ -105,8 +105,9 @@ export function OsFolderCreatePanel({
             </p>
             <p className="mt-1 text-xs text-slate-500">
               Padrão:{" "}
-              <span className="font-mono">NNNNN-Solicitante-Produto</span>{" "}
-              (solicitante: {plan.solicitante}; produto: {plan.produto})
+              <span className="font-mono">NNNNN-Solicitante-Produto_Titul</span>{" "}
+              (solicitante: {plan.solicitante}; produto: {plan.produto}
+              {plan.titulo ? `; título: ${plan.titulo}` : null})
             </p>
           </div>
 

@@ -12,9 +12,14 @@ from routers.mdb_writer import (
     _map_protocolo_cols_for_mdb,
     _resolve_mdb_column,
     _write_protocolo_extra_cols,
+    _record_mdb_access,
     classify_mdb_error,
+    format_mdb_failure_detail,
+    get_mdb_access_state,
     is_retriable_mdb_error,
     mdb_dest_label,
+    probe_mdb_access,
+    reset_mdb_access_state_for_tests,
     reset_mdb_circuit_for_tests,
     sync_andamento_delete_to_mdb,
     sync_andamento_from_mysql_to_mdb,
@@ -298,9 +303,11 @@ def _cfg_get_retry(key, default=None):
 class TestExecuteMdbTransactionRetry:
     def setup_method(self):
         reset_mdb_circuit_for_tests()
+        reset_mdb_access_state_for_tests()
 
     def teardown_method(self):
         reset_mdb_circuit_for_tests()
+        reset_mdb_access_state_for_tests()
     def test_retriable_exhausts_two_rounds_with_fixed_waits(self):
         sleeps: list[float] = []
         lock_err = RuntimeError(_LOCK_MSG)
@@ -369,6 +376,70 @@ class TestExecuteMdbTransactionRetry:
     def test_minus_1032_is_retriable(self):
         assert is_retriable_mdb_error(RuntimeError(_LOCK_MSG)) is True
         assert is_retriable_mdb_error(RuntimeError("syntax error")) is False
+
+    def test_minus_1032_classified_as_permission(self):
+        assert classify_mdb_error(RuntimeError(_LOCK_MSG)) == "permission"
+        prod_msg = (
+            _LOCK_MSG[:-2] + " (SQLDriverConnect); [HY000] [Microsoft][ODBC Driver Manager] "
+            "Driver's SQLSetConnectAttr failed (0)\")"
+        )
+        assert classify_mdb_error(RuntimeError(prod_msg)) == "permission"
+
+    def test_exhausted_permission_marks_access_denied(self):
+        with patch("routers.mdb_writer.config_manager") as mock_cfg, patch(
+            "routers.mdb_writer.time.sleep"
+        ), patch(
+            "routers.mdb_writer.get_mdb_path", return_value=r"I:\test.mdb"
+        ), patch(
+            "routers.mdb_writer.pyodbc.connect", side_effect=RuntimeError(_LOCK_MSG)
+        ):
+            mock_cfg.get.side_effect = _cfg_get_retry
+            mock_cfg.resolve_mdb_path.side_effect = lambda p: p
+            mock_cfg.get_mdb_connection_string.return_value = "DSN=test"
+            mock_cfg.is_mdb_write_enabled.return_value = True
+
+            with pytest.raises(MdbSyncError):
+                _execute_mdb_transaction(84, "test_stage", lambda c, cur: None)
+            state = get_mdb_access_state()
+
+        assert state["status"] == "error"
+        assert state["kind"] == "permission"
+
+    def test_permission_fails_fast_when_access_already_denied(self):
+        sleeps: list[float] = []
+        _record_mdb_access(r"I:\test.mdb", RuntimeError(_LOCK_MSG))
+
+        with patch("routers.mdb_writer.config_manager") as mock_cfg, patch(
+            "routers.mdb_writer.time.sleep", side_effect=lambda s: sleeps.append(s)
+        ), patch(
+            "routers.mdb_writer.get_mdb_path", return_value=r"I:\test.mdb"
+        ), patch(
+            "routers.mdb_writer.pyodbc.connect", side_effect=RuntimeError(_LOCK_MSG)
+        ):
+            mock_cfg.get.side_effect = _cfg_get_retry
+            mock_cfg.resolve_mdb_path.side_effect = lambda p: p
+            mock_cfg.get_mdb_connection_string.return_value = "DSN=test"
+
+            with pytest.raises(MdbSyncError) as ei:
+                _execute_mdb_transaction(84, "test_stage", lambda c, cur: None)
+
+        assert ei.value.attempts == 1
+        assert sleeps == []
+
+    def test_success_clears_access_denied(self):
+        _record_mdb_access(r"I:\test.mdb", RuntimeError(_LOCK_MSG))
+        conn = MagicMock()
+
+        with patch("routers.mdb_writer.config_manager") as mock_cfg, patch(
+            "routers.mdb_writer.get_mdb_path", return_value=r"I:\test.mdb"
+        ), patch("routers.mdb_writer.pyodbc.connect", return_value=conn):
+            mock_cfg.get.side_effect = _cfg_get_retry
+            mock_cfg.resolve_mdb_path.side_effect = lambda p: p
+            mock_cfg.get_mdb_connection_string.return_value = "DSN=test"
+            mock_cfg.is_mdb_write_enabled.return_value = True
+
+            _execute_mdb_transaction(84, "test_stage", lambda c, cur: None)
+            assert get_mdb_access_state()["status"] == "ok"
 
     def test_minus_1022_network_interrupt_is_retriable(self):
         err = RuntimeError(_NETWORK_INTERRUPT_MSG)
@@ -575,3 +646,74 @@ class TestMdbConnectionHardening:
         assert "Exclusive=0" in conn_str
         assert "Mode=" not in conn_str
         assert r"DBQ=\\server\share\os.mdb" in conn_str
+
+
+class TestMdbAccessProbe:
+    def setup_method(self):
+        reset_mdb_access_state_for_tests()
+
+    def teardown_method(self):
+        reset_mdb_access_state_for_tests()
+
+    def _patched(self, connect):
+        mock_cfg = patch("routers.mdb_writer.config_manager")
+        return mock_cfg, patch("routers.mdb_writer.pyodbc.connect", **connect)
+
+    def test_probe_records_permission_error(self):
+        cfg_patch, connect_patch = self._patched({"side_effect": RuntimeError(_LOCK_MSG)})
+        with cfg_patch as mock_cfg, connect_patch, patch(
+            "routers.mdb_writer.get_mdb_path", return_value=r"\\dfs\os.mdb"
+        ):
+            mock_cfg.is_mdb_write_enabled.return_value = True
+            mock_cfg.resolve_mdb_path.side_effect = lambda p: p
+            mock_cfg.get_mdb_connection_string.return_value = "DSN=test"
+            state = probe_mdb_access()
+
+        assert state["status"] == "error"
+        assert state["kind"] == "permission"
+        assert state["path"] == r"\\dfs\os.mdb"
+
+    def test_probe_ok_closes_connection(self):
+        conn = MagicMock()
+        cfg_patch, connect_patch = self._patched({"return_value": conn})
+        with cfg_patch as mock_cfg, connect_patch, patch(
+            "routers.mdb_writer.get_mdb_path", return_value=r"\\dfs\os.mdb"
+        ):
+            mock_cfg.is_mdb_write_enabled.return_value = True
+            mock_cfg.resolve_mdb_path.side_effect = lambda p: p
+            mock_cfg.get_mdb_connection_string.return_value = "DSN=test"
+            state = probe_mdb_access()
+
+        assert state["status"] == "ok"
+        conn.close.assert_called_once()
+
+    def test_probe_disabled_with_mysql_only(self):
+        with patch("routers.mdb_writer.config_manager") as mock_cfg, patch(
+            "routers.mdb_writer.pyodbc.connect"
+        ) as mock_connect:
+            mock_cfg.is_mdb_write_enabled.return_value = False
+            assert probe_mdb_access() == {"status": "disabled"}
+        mock_connect.assert_not_called()
+
+
+def test_failure_detail_names_process_account_and_hint():
+    exc = MdbSyncError(
+        "andamento_015912026-04",
+        1591,
+        r"\\dfs\os.mdb",
+        RuntimeError(_LOCK_MSG),
+        attempts=10,
+        cod_status="015912026-04",
+        ano=2026,
+    )
+    with patch("routers.mdb_writer.config_manager") as mock_cfg, patch(
+        "routers.mdb_writer.process_identity", return_value=r"REDECAMARA\P_918713"
+    ), patch("routers.mdb_writer.read_release_info", return_value={}):
+        mock_cfg.resolve_mdb_path.side_effect = lambda p: p
+        detail = format_mdb_failure_detail(
+            exc, task_name="history_add", andamento={"cod_status": "015912026-04"}
+        )
+
+    assert r"Conta do processo: REDECAMARA\P_918713" in detail
+    assert "Release: (fora de releases/" in detail
+    assert "SAGRA-Api" in detail

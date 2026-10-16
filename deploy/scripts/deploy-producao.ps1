@@ -33,7 +33,14 @@ $PreserveDirs = @(
     # PNGs de prévia (upload manual) e demais artefatos Corel/planilha no servidor
     "Modelos",
     # Cache de prévia rápida TIF (gravação pendente/externa)
-    "data"
+    "data",
+    # Layout versionado no servidor — NUNCA apagar com /MIR
+    # (NSSM AppDirectory aponta para current\; releases/shared/deploy sao persistentes)
+    "current",
+    "releases",
+    "shared",
+    "deploy",
+    ".deploy_backup"
 )
 
 function Write-Step([string]$Msg) {
@@ -76,7 +83,7 @@ function Invoke-RobocopyDeploy {
 
     $xd = @("__pycache__", ".git", "node_modules", ".vite", ".pytest_cache") + $PreserveDirs
 
-    $xf = @(".env")
+    $xf = @(".env", "vapid.json")
     if (-not $ForceConfig) {
         $xf += "config.json"
     }
@@ -258,6 +265,19 @@ if (-not (Test-ServerReachable $TargetPath)) {
     throw $msg
 }
 Write-Ok "Servidor acessivel"
+
+# Copia /MIR na raiz e incompativel com o layout versionado: em 15/10/2026 derrubou a API
+# de current\, esvaziou uma release e apagou config\vapid.json do servidor.
+$targetCurrent = Join-Path $TargetPath "current"
+if ((Test-Path -LiteralPath $targetCurrent) -or (Test-Path -LiteralPath (Join-Path $TargetPath "releases"))) {
+    throw (@(
+        "Destino usa o layout versionado (current\ + releases\ + shared\): deploy-producao.ps1 (robocopy /MIR na raiz) foi bloqueado.",
+        "",
+        "Use na estacao DEV:",
+        "  pnpm package:release",
+        "  powershell -File deploy\scripts\publicar-ultimo-release-remoto.ps1"
+    ) -join [Environment]::NewLine)
+}
 
 $backupDir = Join-Path $TargetPath ".deploy_backup"
 if (-not $DryRun -and (Test-Path -LiteralPath $TargetPath)) {

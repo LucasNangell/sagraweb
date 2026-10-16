@@ -619,6 +619,7 @@ def get_os_folder_plan(ano: int, id: int):
         ano=ano,
         solicitante=meta["folder_solicitante"],
         produto=meta["produto"],
+        titulo=meta["titulo"],
     )
     return OsFolderPlanResponse(**plan)
 
@@ -647,6 +648,7 @@ def create_os_folder(ano: int, id: int):
             ano=ano,
             solicitante=meta["folder_solicitante"],
             produto=meta["produto"],
+            titulo=meta["titulo"],
         )
     except Exception as exc:
         logger.error("Falha ao criar pasta da OS %s/%s: %s", id, ano, exc)

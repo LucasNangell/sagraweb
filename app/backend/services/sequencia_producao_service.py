@@ -135,6 +135,7 @@ def _resolve_sefoc_folder(ano: int, os_id: int) -> Path:
             ano=ano,
             solicitante=meta["folder_solicitante"],
             produto=meta["produto"],
+            titulo=meta["titulo"],
         )
         root = created_path
     sefoc = Path(root) / "Sefoc"

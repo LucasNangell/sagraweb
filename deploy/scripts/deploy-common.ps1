@@ -979,6 +979,12 @@ function Stop-SagraPortProcess {
     return -not (Test-SagraPortListening -Port $Port)
 }
 
+$SagraApiServiceName = "SAGRA-Api"
+
+function Get-SagraApiService {
+    return Get-Service -Name $SagraApiServiceName -ErrorAction SilentlyContinue
+}
+
 function Stop-SagraApiForDeploy {
     param(
         [string]$ProdPath,
@@ -986,6 +992,13 @@ function Stop-SagraApiForDeploy {
     )
     $port = Get-SagraApiPort -ProdPath $ProdPath
     Write-Host "Porta: $port"
+
+    $apiService = Get-SagraApiService
+    if ($apiService -and $apiService.Status -ne "Stopped") {
+        Write-Host "Parando servico $SagraApiServiceName..."
+        Stop-Service -Name $SagraApiServiceName -Force -ErrorAction Stop
+        try { $apiService.WaitForStatus("Stopped", [TimeSpan]::FromSeconds(30)) } catch { }
+    }
 
     $deadline = (Get-Date).AddSeconds($FreePortTimeoutSec)
     do {
@@ -1081,6 +1094,22 @@ function Start-SagraApiForDeploy {
 
     $detached = Join-Path $CurrentRoot "iniciar-api-detached.ps1"
     $interativo = Join-Path $CurrentRoot "iniciar-api.bat"
+
+    # Servico NSSM roda com a conta de rede configurada nele (acesso aos MDBs do DFS),
+    # independente de quem executa o deploy.
+    $apiService = Get-SagraApiService
+    if ($apiService) {
+        if ($apiService.Status -eq "Running") {
+            Restart-Service -Name $SagraApiServiceName -Force -ErrorAction Stop
+        } else {
+            Start-Service -Name $SagraApiServiceName -ErrorAction Stop
+        }
+        try { $apiService.WaitForStatus("Running", [TimeSpan]::FromSeconds(60)) } catch { }
+        Write-DeployOk "API iniciada pelo servico $SagraApiServiceName"
+        return
+    }
+    Write-DeployWarn ("Servico $SagraApiServiceName ausente: a API herda a conta de quem executa o deploy. " +
+        "Instale com instalar-servico-api.ps1 -ServiceCredential (Get-Credential 'REDECAMARA\usr_sefoc') -Start")
 
     if ($InteractiveApi -and (Test-Path -LiteralPath $interativo)) {
         Start-Process -FilePath "cmd.exe" -ArgumentList "/k", "`"$interativo`"" -WorkingDirectory $CurrentRoot

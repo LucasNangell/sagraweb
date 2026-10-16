@@ -9,6 +9,7 @@ import {
   iniciarGravacaoExterna,
   lancarEntregaChapas,
   postGravacaoExternaMensagem,
+  removerOsAguardandoEntrega,
   removerOsGravacaoExterna,
   updateGravacaoExternaArquivos,
   type GravacaoExternaDetail,
@@ -138,6 +139,19 @@ export function useRemoverOsGravacaoExternaMutation() {
   return useMutation({
     mutationFn: (gravacaoExternaId: number) =>
       removerOsGravacaoExterna(gravacaoExternaId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.gravacaoExterna.prefix,
+      });
+    },
+  });
+}
+
+export function useRemoverOsAguardandoEntregaMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (gravacaoExternaId: number) =>
+      removerOsAguardandoEntrega(gravacaoExternaId),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.gravacaoExterna.prefix,

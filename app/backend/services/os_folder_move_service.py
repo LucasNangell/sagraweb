@@ -343,6 +343,7 @@ def execute_folder_move(
             ano=dest_ano,
             solicitante=dest_meta["folder_solicitante"],
             produto=dest_meta["produto"],
+            titulo=dest_meta["titulo"],
         )
 
     moved: List[dict] = []

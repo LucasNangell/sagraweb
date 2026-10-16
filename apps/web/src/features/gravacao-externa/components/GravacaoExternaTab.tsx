@@ -15,6 +15,7 @@ import {
   useGravacaoExternaDetails,
   useGravacaoExternaOsList,
   useLancarEntregaChapasMutation,
+  useRemoverOsAguardandoEntregaMutation,
   useRemoverOsGravacaoExternaMutation,
 } from "@/api/hooks/useGravacaoExterna";
 import { useAuthStore } from "@/features/auth/authStore";
@@ -228,7 +229,9 @@ export function GravacaoExternaTab() {
 
   const concluirMutation = useConcluirGravacaoExternaMutation();
   const entregaMutation = useLancarEntregaChapasMutation();
-  const removerMutation = useRemoverOsGravacaoExternaMutation();
+  const removerPendenteMutation = useRemoverOsGravacaoExternaMutation();
+  const removerAguardandoMutation = useRemoverOsAguardandoEntregaMutation();
+  const removerMutation = isAguardando ? removerAguardandoMutation : removerPendenteMutation;
 
   const { toast, clearToast } = useGravacaoExternaRealtime(
     selected?.ano ?? null,
@@ -286,10 +289,17 @@ export function GravacaoExternaTab() {
     if (ids.length === 0) return;
     const isJuntada = (item.membros?.length ?? 0) > 1;
     const envios = ids.length > 1 ? ` (${ids.length} envios)` : "";
+    const alvo = isJuntada ? "a juntada" : "a OS";
+    const lista = isAguardando
+      ? "da lista Aguardando retirada"
+      : "da lista de OPs pendentes no Birô";
+    const detalhes = isAguardando
+      ? "Nenhum andamento será lançado. Arquivos e histórico serão preservados."
+      : "Arquivos, histórico e andamentos serão preservados.";
     const confirmed = window.confirm(
-      isJuntada
-        ? `Remover a juntada ${formatOsListLabel(item)}${envios} da lista de OPs pendentes no Birô?\n\nTodas as OSs desta juntada serão removidas. Arquivos, histórico e andamentos serão preservados.`
-        : `Remover a OS ${formatOsListLabel(item)}${envios} da lista de OPs pendentes no Birô?\n\nArquivos, histórico e andamentos serão preservados.`,
+      `Remover ${alvo} ${formatOsListLabel(item)}${envios} ${lista}?\n\n` +
+        (isJuntada ? "Todas as OSs desta juntada serão removidas. " : "") +
+        detalhes,
     );
     if (!confirmed) return;
     const errors: string[] = [];
@@ -395,7 +405,6 @@ export function GravacaoExternaTab() {
       <li key={group.key}>
         <GravacaoQueueItemContextMenu
           enabled={
-            !isAguardando &&
             canManagePendingQueue &&
             group.sessions.some((s) => s.gravacao_externa_id != null)
           }

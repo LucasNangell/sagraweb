@@ -89,6 +89,7 @@ _PROTOCOL_SYNC_ALLOWLIST = {
     "CodigoRequisic", "CategoriaLink", "NomeUsuario", "Titular", "OrgInteressado",
     "SiglaOrgao", "GabSalaUsuario", "Andar", "Localizacao", "RamalUsuario",
     "DataEntrada", "ProcessoSolicit", "CSnro", "EntregPrazoLink", "EntregData", "ContatoTrab",
+    "ResponsavelGrafLink", "EntregaFormaLink", "EntregPeriodo",
     "RetiradaNome", "RetiradaPonto", "DataRecebimento", "PontoEntrega", "SetorEntrega",
     "CancelamentoMotivo", "CancelamentoSetor",
 }

@@ -27,7 +27,11 @@ def record_admin_reload(*, overwrite_config: bool) -> dict[str, Any]:
         _epoch += 1
         _overwrite_config = bool(overwrite_config)
         _at = datetime.now(timezone.utc).isoformat()
-        return get_admin_reload_state()
+        return {
+            "epoch": _epoch,
+            "overwriteConfig": _overwrite_config,
+            "at": _at,
+        }
 
 
 def get_admin_reload_state() -> dict[str, Any]:

@@ -39,8 +39,21 @@ def normalize_text_custom(text: str, *, is_product: bool = False) -> str:
     return s.title()
 
 
-def compute_os_folder_name(nr_os: int, solicitante: str, produto: str) -> str:
-    return f"{int(nr_os):05d}-{normalize_text_custom(solicitante)}-{normalize_text_custom(produto, is_product=True)}"
+def compute_os_folder_name(
+    nr_os: int,
+    solicitante: str,
+    produto: str,
+    titulo: str = "",
+) -> str:
+    base = (
+        f"{int(nr_os):05d}-"
+        f"{normalize_text_custom(solicitante)}-"
+        f"{normalize_text_custom(produto, is_product=True)}"
+    )
+    titulo_snip = normalize_text_custom(titulo or "")[:5]
+    if titulo_snip:
+        return f"{base}_{titulo_snip}"
+    return base
 
 
 def get_deputados_base_path(ano: int, nr_os: int) -> str:
@@ -86,11 +99,12 @@ def ensure_os_folder_on_network(
     ano: int,
     solicitante: str,
     produto: str,
+    titulo: str = "",
 ) -> Tuple[str, str]:
     """
     Garante pasta da OS na rede. Retorna (caminho_absoluto_pasta_os, nome_pasta).
     """
-    folder_name = compute_os_folder_name(nr_os, solicitante, produto)
+    folder_name = compute_os_folder_name(nr_os, solicitante, produto, titulo)
     base_path = get_deputados_base_path(ano, nr_os)
 
     from routers.os_routes import _get_os_folder_path
@@ -139,9 +153,10 @@ def plan_os_folder(
     ano: int,
     solicitante: str,
     produto: str,
+    titulo: str = "",
 ) -> dict:
     """Plano de nomenclatura e subpastas (sem criar na rede)."""
-    folder_name = compute_os_folder_name(nr_os, solicitante, produto)
+    folder_name = compute_os_folder_name(nr_os, solicitante, produto, titulo)
     base_path = get_deputados_base_path(ano, nr_os)
 
     from routers.os_routes import _get_os_folder_path
@@ -158,4 +173,5 @@ def plan_os_folder(
         "subfolders": list(OS_FOLDER_SUBFOLDERS),
         "solicitante": solicitante,
         "produto": produto,
+        "titulo": titulo,
     }

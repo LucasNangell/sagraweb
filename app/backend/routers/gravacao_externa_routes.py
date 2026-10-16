@@ -18,6 +18,7 @@ from services.gravacao_externa_service import (
     add_mensagem,
     build_session_detail,
     concluir_gravacao,
+    dismiss_entrega_from_queue,
     get_active_session,
     get_arquivo_for_session,
     iniciar_gravacao,
@@ -367,6 +368,29 @@ def post_remover_gravacao_externa_fila(
     logger.info(
         "Fila do Birô removida por %s: sessão=%s, sessões_afetadas=%s",
         _session_ponto(request),
+        gravacao_externa_id,
+        result.get("removed_ids"),
+    )
+    return GravacaoExternaQueueRemovalResponse.model_validate(result)
+
+
+@router.post(
+    "/gravacao-externa/aguardando-entrega/{gravacao_externa_id}/remover",
+    response_model=GravacaoExternaQueueRemovalResponse,
+)
+def post_remover_gravacao_externa_aguardando_entrega(
+    request: Request,
+    gravacao_externa_id: int,
+):
+    _require_pending_queue_management_permission(request)
+    ponto = _session_ponto(request)
+    try:
+        result = dismiss_entrega_from_queue(gravacao_externa_id, ponto)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info(
+        "Aguardando retirada removida por %s: sessão=%s, sessões_afetadas=%s",
+        ponto,
         gravacao_externa_id,
         result.get("removed_ids"),
     )

@@ -247,6 +247,7 @@ def upload_files_to_original(
         ano=ano,
         solicitante=meta["folder_solicitante"],
         produto=meta["produto"],
+        titulo=meta["titulo"],
     )
     final_dir, folder_name = resolve_initial_original_dir(os_dir)
 
@@ -334,5 +335,6 @@ def prepare_original_dir(os_id: int, ano: int) -> Tuple[str, str]:
         ano=ano,
         solicitante=meta["folder_solicitante"],
         produto=meta["produto"],
+        titulo=meta["titulo"],
     )
     return resolve_initial_original_dir(os_dir)

@@ -261,6 +261,67 @@ describe("processDashboardData column sector override", () => {
   });
 });
 
+describe("processDashboardData ordem OS antes de SP", () => {
+  const config: DashboardConfig = {
+    sector: "SEFOC",
+    columnCount: 1,
+    columns: [
+      { id: "exec", title: "Execução", statuses: ["Em Execução"] },
+    ],
+  };
+
+  it("mantém OS acima de SP mesmo com PCP e prioridade da SP", () => {
+    const raw: PcpQueueItem[] = [
+      {
+        nr_os: 5100,
+        ano: 2026,
+        situacao: "Em Execução",
+        setor: "SEFOC",
+        pcp_ordem: 0,
+        prioridade: "Prometido p/ 10/10",
+      },
+      {
+        nr_os: 200,
+        ano: 2026,
+        situacao: "Em Execução",
+        setor: "SEFOC",
+        pcp_ordem: 2,
+      },
+      {
+        nr_os: 5300,
+        ano: 2026,
+        situacao: "Em Execução",
+        setor: "SEFOC",
+        prioridade: "Solicitado p/ 12/10",
+      },
+      {
+        nr_os: 100,
+        ano: 2026,
+        situacao: "Em Execução",
+        setor: "SEFOC",
+        pcp_ordem: 1,
+      },
+      {
+        nr_os: 5400,
+        ano: 2026,
+        situacao: "Em Execução",
+        setor: "SEFOC",
+        prioridade: "Prometido p/ 11/10",
+      },
+    ];
+    const processed = processDashboardData(raw, config, new Map(), {
+      isInitialLoad: true,
+    });
+    expect(processed.columns[0]!.items.map((item) => item.nr_os)).toEqual([
+      100,
+      200,
+      5100,
+      5400,
+      5300,
+    ]);
+  });
+});
+
 describe("getVisibleDashboardColumns", () => {
   const base = (patch: Partial<DashboardDisplayColumn>): DashboardDisplayColumn => ({
     id: patch.id ?? "col",

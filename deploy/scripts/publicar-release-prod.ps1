@@ -56,6 +56,16 @@ if (-not (Test-IsDeployAdmin)) {
     Write-Host ""
 }
 
+# Config persistente: falta aqui deixa a release com junctions pendentes. Falha antes
+# de tocar na API atual.
+$missingShared = @(".env", "config.json", "vapid.json") | Where-Object {
+    -not (Test-Path -LiteralPath (Join-Path $layout.Shared "config\$_") -PathType Leaf)
+}
+if ($missingShared) {
+    throw ("Ausente em $($layout.Shared)\config: $($missingShared -join ', '). API atual preservada. " +
+        "Restaure os arquivos (vapid.json: copia do DEV config\vapid.json ou backups\releases) e repita.")
+}
+
 # 1) Junctions + validacao da release
 Write-DeployStep "1/6 Junctions e validacao"
 & (Join-Path $PSScriptRoot "finish-release-junctions.ps1") -ProdLocalPath $ProdPath -ReleaseName $ReleaseName

@@ -338,6 +338,30 @@
   line-height: 1.2;
 }
 
+.dashboard-setor-fornecedor-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.25rem;
+  margin-top: 0.35rem;
+  width: 100%;
+}
+
+.dashboard-setor-fornecedor-badge {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1a1a1a;
+  font-size: clamp(0.55rem, 1.2vw, 0.85rem);
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .dashboard-setor-card.priority-high {
   background: linear-gradient(135deg, #d13333 0%, #d31111 100%);
   color: #fafafa;
@@ -364,6 +388,11 @@
 
 .dashboard-setor-card.priority-medium .dashboard-setor-os-situation {
   color: rgba(26, 26, 26, 0.9);
+}
+
+.dashboard-setor-card.priority-medium .dashboard-setor-fornecedor-badge {
+  background: rgba(26, 26, 26, 0.85);
+  color: #fff;
 }
 
 @keyframes dashboard-setor-flash-new {
@@ -805,6 +834,16 @@
     overflow: hidden;
     text-overflow: ellipsis;
     font-size: clamp(0.6rem, 10cqw, 1.1rem) !important;
+  }
+
+  .dashboard-setor-fornecedor-badges {
+    margin-top: 0.15rem;
+    gap: 0.15rem;
+  }
+
+  .dashboard-setor-fornecedor-badge {
+    font-size: clamp(0.45rem, 8cqw, 0.75rem) !important;
+    padding: 0.05rem 0.3rem;
   }
 
   .dashboard-setor-column-footer {

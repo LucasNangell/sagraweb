@@ -8,6 +8,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
@@ -665,3 +666,129 @@ def test_package_build_uses_installed_vite_without_implicit_pnpm_install():
     assert "& $viteCmd build" in script
     assert "& $nodeCommand.Source $resolvedViteCli build" in script
     assert "pnpm exec vite build" not in script
+
+
+class TestApiRuntimeIssues:
+    def test_no_issues_when_everything_matches(self):
+        payload = {
+            "status": "ok",
+            "mdb": "ok",
+            "release": "20261015_205753",
+            "process_user": "REDECAMARA\\usr_sefoc",
+        }
+        assert watchdog.evaluate_api_runtime(
+            payload,
+            expected_release="20261015_205753",
+            expected_user="redecamara\\USR_SEFOC",
+        ) == []
+
+    def test_reports_mdb_release_and_account(self):
+        payload = {
+            "status": "ok",
+            "mdb": "error",
+            "mdb_error_kind": "permission",
+            "release": None,
+            "process_user": "REDECAMARA\\P_918713",
+        }
+        issues = watchdog.evaluate_api_runtime(
+            payload,
+            expected_release="20261015_205753",
+            expected_user="REDECAMARA\\usr_sefoc",
+        )
+        assert issues == [
+            "mdb=error classe=permission",
+            "release=ausente esperado=20261015_205753",
+            "conta=REDECAMARA\\P_918713 esperado=REDECAMARA\\usr_sefoc",
+        ]
+
+    def test_ignores_unready_payload_and_missing_fields(self):
+        assert watchdog.evaluate_api_runtime(
+            None, expected_release="x", expected_user="y"
+        ) == []
+        assert watchdog.evaluate_api_runtime(
+            {"status": "ok"}, expected_release="", expected_user="y"
+        ) == []
+
+    def test_read_release_name_handles_powershell_bom(self, tmp_path: Path):
+        (tmp_path / "RELEASE.txt").write_text(
+            "release=20261015_205753\ndeployed_at=2026-10-15T20:58:31\n",
+            encoding="utf-8-sig",
+        )
+        assert watchdog.read_release_name(tmp_path) == "20261015_205753"
+        assert watchdog.read_release_name(tmp_path / "missing") == ""
+
+
+def _runtime_http(payload_extra):
+    def probe(url: str, _timeout: int):
+        if url.endswith("/health/live"):
+            return {"ok": True, "status_code": 200, "payload": {"status": "ok"}, "error": None}
+        return {
+            "ok": True,
+            "status_code": 200,
+            "payload": {"status": "ok", "db": "ok", **payload_extra},
+            "error": None,
+        }
+
+    return probe
+
+
+def _healthy_sync(monkeypatch):
+    monkeypatch.setattr(
+        watchdog,
+        "query_windows_service",
+        lambda _name: {"exists": True, "status": "Running", "query_ok": True, "error": None},
+    )
+    monkeypatch.setattr(
+        watchdog,
+        "probe_sync_heartbeat",
+        lambda *_a, **_k: {"healthy": True, "phase": "os_deletes", "age_seconds": 1, "error": None},
+    )
+
+
+def test_mdb_error_degrades_without_restarting_api(tmp_path: Path, monkeypatch):
+    config = make_config(tmp_path, failure_threshold=1)
+    monkeypatch.setattr(
+        watchdog, "probe_http_json", _runtime_http({"mdb": "error", "mdb_error_kind": "permission"})
+    )
+    _healthy_sync(monkeypatch)
+    monkeypatch.setattr(
+        watchdog, "restart_api", lambda _c: pytest.fail("API nao deve ser reiniciada por MDB")
+    )
+
+    result = watchdog.SystemWatchdog(config, make_logger()).run_once(now=time.time() + 1)
+
+    assert result["overall"] == "degraded"
+    assert result["api"]["runtime_issues"] == ["mdb=error classe=permission"]
+    assert result["api"]["readiness"]["payload"]["mdb"] == "error"
+
+
+def test_release_divergence_degrades(tmp_path: Path, monkeypatch):
+    config = make_config(tmp_path)
+    (config.current_root / "RELEASE.txt").write_text(
+        "release=20261015_205753\n", encoding="utf-8-sig"
+    )
+    monkeypatch.setattr(watchdog, "probe_http_json", _runtime_http({"mdb": "ok"}))
+    _healthy_sync(monkeypatch)
+
+    result = watchdog.SystemWatchdog(config, make_logger()).run_once(now=time.time() + 1)
+
+    assert result["overall"] == "degraded"
+    assert result["api"]["runtime_issues"] == [
+        "release=ausente esperado=20261015_205753"
+    ]
+
+
+def test_matching_runtime_is_ok(tmp_path: Path, monkeypatch):
+    config = make_config(tmp_path, api_expected_user="REDECAMARA\\usr_sefoc")
+    (config.current_root / "RELEASE.txt").write_text("release=r1\n", encoding="utf-8")
+    monkeypatch.setattr(
+        watchdog,
+        "probe_http_json",
+        _runtime_http({"mdb": "ok", "release": "r1", "process_user": "REDECAMARA\\usr_sefoc"}),
+    )
+    _healthy_sync(monkeypatch)
+
+    result = watchdog.SystemWatchdog(config, make_logger()).run_once(now=time.time() + 1)
+
+    assert result["overall"] == "ok"
+    assert result["api"]["runtime_issues"] == []

@@ -105,6 +105,8 @@ class WatchdogConfig:
     sync_stale_seconds: int
     maintenance_max_seconds: int
     sync_request_ttl_seconds: int = 600
+    # Conta esperada da API (DOMINIO\usuario); vazio = nao verificar.
+    api_expected_user: str = ""
 
     @classmethod
     def from_environment(cls, script_dir: Optional[Path] = None) -> "WatchdogConfig":
@@ -183,7 +185,56 @@ class WatchdogConfig:
             sync_request_ttl_seconds=_env_int(
                 "SYSTEM_WATCHDOG_SYNC_REQUEST_TTL_SECONDS", 600, 60, 3600
             ),
+            # Padrao: a propria conta do watchdog (instalado com a mesma do sync).
+            api_expected_user=(
+                os.getenv("SYSTEM_WATCHDOG_API_EXPECTED_USER", "").strip()
+                or _own_process_user()
+            ),
         )
+
+
+_SYSTEM_ACCOUNT_NAMES = frozenset(
+    {"system", "localsystem", "nt authority\\system", "local service", "network service"}
+)
+
+
+def _own_process_user() -> str:
+    """DOMINIO\\usuario do processo; vazio para contas de sistema (sem identidade de rede)."""
+    user = os.getenv("USERNAME", "").strip()
+    domain = os.getenv("USERDOMAIN", "").strip()
+    if not user or user.endswith("$") or user.casefold() in _SYSTEM_ACCOUNT_NAMES:
+        return ""
+    return f"{domain}\\{user}" if domain else user
+
+
+def read_release_name(root: Path) -> str:
+    try:
+        text = (root / "RELEASE.txt").read_text(encoding="utf-8-sig")
+    except OSError:
+        return ""
+    for line in text.splitlines():
+        key, sep, value = line.partition("=")
+        if sep and key.strip() == "release":
+            return value.strip()
+    return ""
+
+
+def evaluate_api_runtime(
+    payload: Any, *, expected_release: str, expected_user: str
+) -> List[str]:
+    """Problemas que nao derrubam a API, mas fazem o dual-write MDB falhar em silencio."""
+    if not isinstance(payload, dict) or payload.get("status") != "ok":
+        return []
+    issues: List[str] = []
+    if payload.get("mdb") == "error":
+        issues.append(f"mdb=error classe={payload.get('mdb_error_kind') or '?'}")
+    release = payload.get("release")
+    if expected_release and release != expected_release:
+        issues.append(f"release={release or 'ausente'} esperado={expected_release}")
+    user = payload.get("process_user")
+    if expected_user and user and str(user).casefold() != expected_user.casefold():
+        issues.append(f"conta={user} esperado={expected_user}")
+    return issues
 
 
 def _read_api_port(env_path: Path, default: int = 8050) -> int:
@@ -809,6 +860,7 @@ class SystemWatchdog:
         }
         self._maintenance_was_active = False
         self._last_summary = ""
+        self._last_runtime_issues: List[str] = []
         self._policy = RecoveryPolicy(
             failure_threshold=config.failure_threshold,
             cooldown_seconds=config.cooldown_seconds,
@@ -889,6 +941,17 @@ class SystemWatchdog:
             and ready["payload"].get("status") == "ok"
             and ready["payload"].get("db") == "ok"
         )
+        runtime_issues = evaluate_api_runtime(
+            ready["payload"] if ready["ok"] else None,
+            expected_release=read_release_name(self.config.current_root),
+            expected_user=self.config.api_expected_user,
+        )
+        if runtime_issues != self._last_runtime_issues:
+            if runtime_issues:
+                self.log.warning("API_RUNTIME issues=%s", "; ".join(runtime_issues))
+            elif self._last_runtime_issues:
+                self.log.info("API_RUNTIME ok")
+            self._last_runtime_issues = runtime_issues
         if live_ok:
             note_healthy(self._states["api"], now)
             api_recovery = {"phase": "healthy", "attempted": False, "ok": None}
@@ -995,6 +1058,7 @@ class SystemWatchdog:
             "liveness": {**live, "payload": _health_payload(live.get("payload"))},
             "readiness": {**ready, "payload": _health_payload(ready.get("payload"))},
             "dependency_degraded": live_ok and not ready_ok,
+            "runtime_issues": runtime_issues,
             "recovery": api_recovery,
             "state": asdict(self._states["api"]),
         }
@@ -1017,7 +1081,7 @@ class SystemWatchdog:
             overall = "maintenance"
         elif action_attempted:
             overall = "recovering"
-        elif live_ok and ready_ok and sync_view["healthy"]:
+        elif live_ok and ready_ok and sync_view["healthy"] and not runtime_issues:
             overall = "ok"
         elif live_ok and (
             api_view["dependency_degraded"] or heartbeat.get("external_dependency")
@@ -1072,7 +1136,16 @@ def _health_payload(payload: Any) -> Dict[str, Any]:
     """Mantem somente campos operacionais, sem refletir conteudo arbitrario."""
     if not isinstance(payload, dict):
         return {}
-    allowed = ("status", "db", "release", "deployed_at")
+    allowed = (
+        "status",
+        "db",
+        "release",
+        "deployed_at",
+        "mdb",
+        "mdb_error_kind",
+        "mdb_checked_at",
+        "process_user",
+    )
     return {key: payload[key] for key in allowed if key in payload}
 
 

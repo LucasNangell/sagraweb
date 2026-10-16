@@ -35,6 +35,7 @@ import {
   saveTabletDashboardConfig,
 } from "../configStorage";
 import { sortPtBr } from "../constants";
+import { resolveOsFornecedorBadges } from "../fornecedorBadge";
 import { resolveOsCardLabel } from "../osCardLabel";
 import { isRecebimentoChapasTabletCard } from "../recebimentoChapas";
 import { TabletDiagnosticsPanel, isDiagQueryEnabled } from "./TabletDiagnosticsPanel";
@@ -523,6 +524,7 @@ export function DashboardTabletPage({
               {col.items.map((os) => {
                 const { label: osLabel, style: osLabelStyle } =
                   resolveOsCardLabel(os);
+                const fornecedorBadges = resolveOsFornecedorBadges(os);
                 return (
                   <button
                     key={os.uniqueKey}
@@ -558,6 +560,19 @@ export function DashboardTabletPage({
                     >
                       {os.displaySituacao}
                     </div>
+                    {fornecedorBadges.length > 0 ? (
+                      <div className="dashboard-setor-fornecedor-badges">
+                        {fornecedorBadges.map((label) => (
+                          <span
+                            key={label}
+                            className="dashboard-setor-fornecedor-badge"
+                            title={label}
+                          >
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </button>
                 );
               })}

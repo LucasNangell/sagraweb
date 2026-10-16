@@ -953,6 +953,86 @@ def _enrich_rows_with_details(
     return rows
 
 
+def _enrich_painel_fornecedores_gravacao_externa(
+    rows: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Anexa fornecedor(es) no painel para Grav. Externa e Gravação Ext. Concluída.
+
+    - Setor ``Grav. Externa``: sessões ativas (``pendente`` / ``iniciada``).
+    - Situação ``Gravação Ext. Concluída``: sessões ``concluida``.
+    """
+    if not rows:
+        return rows
+    from services.gravacao_externa_service import (
+        ACTIVE_STATUSES,
+        SETOR_GRAV_EXTERNA,
+        SITUACAO_GRAV_CONCLUIDA,
+        map_fornecedores_por_os,
+    )
+
+    active_pairs: List[Tuple[int, int]] = []
+    concluida_pairs: List[Tuple[int, int]] = []
+    seen_active: set[Tuple[int, int]] = set()
+    seen_concluida: set[Tuple[int, int]] = set()
+
+    for row in rows:
+        try:
+            nr_os = int(row["nr_os"])
+            ano = int(row["ano"])
+        except (TypeError, ValueError, KeyError):
+            continue
+        key = (nr_os, ano)
+        setor = str(row.get("setor") or "").strip()
+        situacao = str(row.get("situacao") or "").strip()
+        if situacao == SITUACAO_GRAV_CONCLUIDA:
+            if key not in seen_concluida:
+                seen_concluida.add(key)
+                concluida_pairs.append(key)
+        elif setor == SETOR_GRAV_EXTERNA:
+            if key not in seen_active:
+                seen_active.add(key)
+                active_pairs.append(key)
+
+    if not active_pairs and not concluida_pairs:
+        return rows
+
+    mapping: Dict[str, List[Dict[str, Any]]] = {}
+    try:
+        if active_pairs:
+            mapping.update(
+                map_fornecedores_por_os(active_pairs, statuses=ACTIVE_STATUSES)
+            )
+        if concluida_pairs:
+            mapping.update(
+                map_fornecedores_por_os(
+                    concluida_pairs, statuses=frozenset({"concluida"})
+                )
+            )
+    except Exception:
+        logger.exception(
+            "[os_search] falha ao enriquecer fornecedores Grav. Externa (painel)"
+        )
+        return rows
+
+    for row in rows:
+        setor = str(row.get("setor") or "").strip()
+        situacao = str(row.get("situacao") or "").strip()
+        if situacao != SITUACAO_GRAV_CONCLUIDA and setor != SETOR_GRAV_EXTERNA:
+            continue
+        try:
+            map_key = f"{int(row['ano'])}-{int(row['nr_os'])}"
+        except (TypeError, ValueError, KeyError):
+            continue
+        fornecedores = mapping.get(map_key) or []
+        if not fornecedores:
+            continue
+        row["fornecedores"] = fornecedores
+        first = fornecedores[0]
+        row["fornecedor_ponto"] = first.get("ponto")
+        row["fornecedor_nome"] = first.get("nome")
+    return rows
+
+
 def _select_operacional_fields(*, uses_materialized: bool) -> str:
     if uses_materialized:
         return """
@@ -1942,6 +2022,8 @@ def execute_os_search(
             setores=annotate_setores,
             situacoes=annotate_situacoes,
         )
+    else:
+        data_results = _enrich_painel_fornecedores_gravacao_externa(data_results)
 
     total_records: Optional[int] = None
     total_pages: Optional[int] = None

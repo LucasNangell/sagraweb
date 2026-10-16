@@ -805,20 +805,35 @@ def app_version():
     return {"build_id": build_id}
 
 
-@app.get("/health")
-def health():
-    release_info = {}
+def _health_runtime_fields() -> dict:
+    """MDB/conta do processo: informativos — não mudam o status HTTP do health."""
     try:
-        from config_manager import PROJECT_ROOT
+        from routers.mdb_writer import get_mdb_access_state, process_identity
 
-        release_file = PROJECT_ROOT / "RELEASE.txt"
-        if release_file.is_file():
-            for line in release_file.read_text(encoding="utf-8").splitlines():
-                if "=" in line:
-                    key, val = line.split("=", 1)
-                    release_info[key.strip()] = val.strip()
-    except Exception:
-        pass
+        access = get_mdb_access_state()
+        fields = {"mdb": access.get("status"), "process_user": process_identity()}
+        if access.get("status") == "error":
+            fields["mdb_error_kind"] = access.get("kind")
+            fields["mdb_checked_at"] = access.get("checked_at")
+        return fields
+    except Exception as exc:
+        logger.warning("Health: estado MDB indisponível: %s", exc)
+        return {}
+
+
+def _is_direct_loopback_request(request: Request) -> bool:
+    """Chamada local sem proxy (watchdog/deploy em 127.0.0.1), não via Nginx."""
+    if request.headers.get("x-forwarded-for") or request.headers.get("x-real-ip"):
+        return False
+    host = request.client.host if request.client else ""
+    return host in ("127.0.0.1", "::1", "localhost")
+
+
+@app.get("/health")
+def health(request: Request):
+    from config_manager import read_release_info
+
+    release_info = read_release_info()
 
     try:
         from database import db
@@ -828,6 +843,8 @@ def health():
         if release_info:
             payload["release"] = release_info.get("release")
             payload["deployed_at"] = release_info.get("deployed_at")
+        if _is_direct_loopback_request(request):
+            payload.update(_health_runtime_fields())
         return payload
     except Exception as exc:
         logger.error("Health check DB falhou: %s", exc)
@@ -949,6 +966,9 @@ async def startup_bind_realtime_loop():
     )
 
     start_materialized_reconcile_scheduler()
+    from routers.mdb_writer import start_mdb_access_probe_scheduler
+
+    start_mdb_access_probe_scheduler()
     try:
         from services.andamento_table import ensure_andamento_table
 

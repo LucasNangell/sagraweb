@@ -28,6 +28,9 @@ function mapSearchRowToQueueItem(row: OsSearchRowWithPcp): PcpQueueItem {
     observacao: row.observacao,
     pcp_ordem: row.pcp_ordem ?? null,
     pcp_ultima_atualizacao: row.pcp_ultima_atualizacao ?? null,
+    fornecedor_ponto: row.fornecedor_ponto ?? null,
+    fornecedor_nome: row.fornecedor_nome ?? null,
+    fornecedores: row.fornecedores ?? null,
   };
 }
 

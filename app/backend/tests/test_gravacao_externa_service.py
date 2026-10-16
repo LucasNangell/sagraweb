@@ -23,6 +23,8 @@ from services.gravacao_externa_service import (
     iniciar_gravacao,
     is_em_gravacao_externa_operacional,
     is_gravacao_externa_situacao,
+    map_fornecedores_ativos_por_os,
+    map_fornecedores_por_os,
     session_allows_operacao_fornecedor,
     user_can_access_session,
     user_can_send_mensagem,
@@ -120,6 +122,89 @@ def test_remove_externa_from_queue_cancels_joined_group_without_deleting(mock_db
     assert len([sql for sql in executed if sql.startswith("UPDATE")]) == 2
     assert not any(sql.startswith("DELETE") for sql in executed)
     assert not any("tabAndamento" in sql for sql in executed)
+
+
+def _dismiss_cursor(selected_row, group_ids, update_rowcount=1):
+    executed: list[str] = []
+    cursor = MagicMock()
+    state = {"one": None, "all": []}
+
+    def execute(sql, _params=None):
+        normalized = " ".join(str(sql).split())
+        executed.append(normalized)
+        if normalized.startswith("SELECT Id, JuntadaGrupoId, Status"):
+            state["one"] = selected_row
+        elif normalized.startswith("SELECT Id FROM tab_os_gravacao_externa"):
+            state["all"] = [{"Id": i} for i in group_ids]
+        elif normalized.startswith("UPDATE tab_os_gravacao_externa"):
+            cursor.rowcount = update_rowcount
+
+    cursor.execute.side_effect = execute
+    cursor.fetchone.side_effect = lambda: state["one"]
+    cursor.fetchall.side_effect = lambda: state["all"]
+    return cursor, executed
+
+
+@patch("services.gravacao_externa_service.db")
+def test_dismiss_entrega_from_queue_marks_joined_group_without_andamento(mock_db):
+    from services.gravacao_externa_service import dismiss_entrega_from_queue
+
+    cursor, executed = _dismiss_cursor(
+        {
+            "Id": 84,
+            "JuntadaGrupoId": "grupo-1",
+            "Status": "concluida",
+            "EntregaLancadaEm": None,
+            "EntregaDispensadaEm": None,
+        },
+        [84, 85],
+    )
+    mock_db.execute_transaction.side_effect = lambda ops: [op(cursor) for op in ops]
+
+    result = dismiss_entrega_from_queue(84, "918713")
+
+    assert result["removed_ids"] == [84, 85]
+    assert result["juntada_grupo_id"] == "grupo-1"
+    updates = [sql for sql in executed if sql.startswith("UPDATE")]
+    assert len(updates) == 2
+    assert all("EntregaDispensadaEm = NOW()" in sql for sql in updates)
+    assert not any("SET Status" in sql for sql in updates)
+    assert not any(sql.startswith("DELETE") for sql in executed)
+    assert not any("tabAndamento" in sql for sql in executed)
+
+
+@patch("services.gravacao_externa_service.db")
+def test_dismiss_entrega_from_queue_rejects_entrega_ja_lancada(mock_db):
+    from services.gravacao_externa_service import dismiss_entrega_from_queue
+
+    cursor, executed = _dismiss_cursor(
+        {
+            "Id": 84,
+            "JuntadaGrupoId": None,
+            "Status": "concluida",
+            "EntregaLancadaEm": "2026-10-01 10:00:00",
+            "EntregaDispensadaEm": None,
+        },
+        [],
+    )
+    mock_db.execute_transaction.side_effect = lambda ops: [op(cursor) for op in ops]
+
+    with pytest.raises(HTTPException) as exc:
+        dismiss_entrega_from_queue(84, "918713")
+    assert exc.value.status_code == 409
+    assert not any(sql.startswith("UPDATE") for sql in executed)
+
+
+@patch("services.gravacao_externa_service.db")
+def test_list_aguardando_entrega_excludes_dismissed(mock_db):
+    from services.gravacao_externa_service import list_os_gravacao_aguardando_entrega
+
+    mock_db.execute_query.side_effect = [[{"cnt": 0}], []]
+
+    list_os_gravacao_aguardando_entrega()
+
+    for call in mock_db.execute_query.call_args_list:
+        assert "EntregaDispensadaEm IS NULL" in call.args[0]
 
 
 def test_remove_externa_queue_requires_pendente_page_permission():
@@ -284,6 +369,99 @@ def test_list_os_gravacao_externa_query(mock_db):
     assert "ge.FornecedorPonto = %(fornecedor_ponto)s" in list_sql
     assert "p.Titulo" not in list_sql
     assert "IdDetalhesServico" not in list_sql
+
+
+@patch("services.gravacao_externa_service.db")
+def test_map_fornecedores_ativos_por_os(mock_db):
+    mock_db.execute_query.return_value = [
+        {
+            "nr_os": 100,
+            "ano": 2026,
+            "fornecedor_ponto": "111.111",
+            "fornecedor_nome": "Alfa Birô",
+        },
+        {
+            "nr_os": 100,
+            "ano": 2026,
+            "fornecedor_ponto": "222.222",
+            "fornecedor_nome": "Zeta Gráfica",
+        },
+        {
+            "nr_os": 100,
+            "ano": 2026,
+            "fornecedor_ponto": "111.111",
+            "fornecedor_nome": "Alfa Birô",
+        },
+        {
+            "nr_os": 200,
+            "ano": 2026,
+            "fornecedor_ponto": "333.333",
+            "fornecedor_nome": None,
+        },
+        {
+            "nr_os": 300,
+            "ano": 2026,
+            "fornecedor_ponto": None,
+            "fornecedor_nome": None,
+        },
+    ]
+
+    mapping = map_fornecedores_ativos_por_os([(100, 2026), (200, 2026), (300, 2026)])
+
+    assert mapping["2026-100"] == [
+        {"ponto": "111.111", "nome": "Alfa Birô"},
+        {"ponto": "222.222", "nome": "Zeta Gráfica"},
+    ]
+    assert mapping["2026-200"] == [{"ponto": "333.333", "nome": None}]
+    assert "2026-300" not in mapping
+
+    sql = mock_db.execute_query.call_args.args[0]
+    assert "FROM tab_os_gravacao_externa ge" in sql
+    assert "ge.Status IN (%s, %s)" in sql
+    assert "(ge.OsNro, ge.OsAno) IN" in sql
+    assert mock_db.execute_query.call_args.args[1] == (
+        "iniciada",
+        "pendente",
+        100,
+        2026,
+        200,
+        2026,
+        300,
+        2026,
+    )
+
+
+@patch("services.gravacao_externa_service.db")
+def test_map_fornecedores_por_os_concluida(mock_db):
+    mock_db.execute_query.return_value = [
+        {
+            "nr_os": 50,
+            "ano": 2026,
+            "fornecedor_ponto": "111.111",
+            "fornecedor_nome": "Alfa Birô",
+        },
+        {
+            "nr_os": 50,
+            "ano": 2026,
+            "fornecedor_ponto": "222.222",
+            "fornecedor_nome": "Zeta Gráfica",
+        },
+    ]
+
+    mapping = map_fornecedores_por_os(
+        [(50, 2026)], statuses=frozenset({"concluida"})
+    )
+
+    assert mapping["2026-50"] == [
+        {"ponto": "111.111", "nome": "Alfa Birô"},
+        {"ponto": "222.222", "nome": "Zeta Gráfica"},
+    ]
+    assert mock_db.execute_query.call_args.args[1] == ("concluida", 50, 2026)
+
+
+def test_map_fornecedores_ativos_por_os_empty_pairs():
+    assert map_fornecedores_ativos_por_os([]) == {}
+    assert map_fornecedores_ativos_por_os(None) == {}  # type: ignore[arg-type]
 
 
 @patch("services.gravacao_externa_service.db")

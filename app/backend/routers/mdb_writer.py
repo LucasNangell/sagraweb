@@ -12,14 +12,17 @@ Retry: bloqueios temporários do Access (arquivo em uso, lock, queda de rede) �
 """
 from __future__ import annotations
 import atexit
+import getpass
 import logging
+import os
+import sys
 import threading
 import time
 from datetime import datetime
 from queue import Empty, Full, Queue
 from typing import Any, Callable, Dict, List, Optional, Tuple
 import pyodbc
-from config_manager import config_manager
+from config_manager import config_manager, read_release_info
 from database import db
 from mdb_helpers import (
     CALC_DETALHES_FIELDS,
@@ -400,6 +403,7 @@ def classify_mdb_error(exc: BaseException) -> str:
     Classifica falha ODBC/ACE:
     - invalid_conn_str: atributo inválido (ex. Mode=) sem saturação — não retentar
     - saturation: -1036 / too many clients / HY000 vazio em connect
+    - permission: -1032 (aberto em modo exclusivo OU conta sem permissão no DFS)
     - retriable: lock, -1022, arquivo em uso
     - fatal: demais
     """
@@ -426,6 +430,8 @@ def classify_mdb_error(exc: BaseException) -> str:
         )
         if not lock_or_net:
             return "saturation"
+    if "-1032" in text or "need permission" in text:
+        return "permission"
     if any(marker in text for marker in _RETRIABLE_MARKERS):
         return "retriable"
     return "fatal"
@@ -433,7 +439,7 @@ def classify_mdb_error(exc: BaseException) -> str:
 
 def is_retriable_mdb_error(exc: BaseException) -> bool:
     """Indica se vale a pena aguardar e tentar de novo (lock / arquivo ocupado)."""
-    return classify_mdb_error(exc) in ("retriable", "saturation")
+    return classify_mdb_error(exc) in ("retriable", "saturation", "permission")
 
 
 def _trip_mdb_circuit() -> None:
@@ -461,6 +467,129 @@ def reset_mdb_circuit_for_tests() -> None:
     global _MDB_CIRCUIT_OPEN_UNTIL
     with _MDB_CIRCUIT_LOCK:
         _MDB_CIRCUIT_OPEN_UNTIL = 0.0
+
+
+_MDB_ACCESS_PROBE_INTERVAL_SECONDS = 300.0
+_MDB_ACCESS_LOCK = threading.Lock()
+_MDB_ACCESS_STATE: dict[str, Any] = {
+    "status": "unknown",
+    "kind": None,
+    "checked_at": None,
+    "error": None,
+    "path": None,
+}
+_MDB_ACCESS_PROBE_STARTED = False
+
+
+def process_identity() -> str:
+    """Conta Windows do processo (DOMINIO\\usuario) — define o acesso ao DFS."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            name_sam_compatible = 2
+            size = ctypes.c_ulong(0)
+            secur32 = ctypes.windll.secur32
+            secur32.GetUserNameExW(name_sam_compatible, None, ctypes.byref(size))
+            buf = ctypes.create_unicode_buffer(size.value or 256)
+            if secur32.GetUserNameExW(name_sam_compatible, buf, ctypes.byref(size)):
+                return buf.value
+        except Exception:
+            pass
+    try:
+        user = getpass.getuser()
+    except Exception:
+        user = "?"
+    domain = os.getenv("USERDOMAIN")
+    return f"{domain}\\{user}" if domain else user
+
+
+def _record_mdb_access(path: str | None, exc: BaseException | None = None) -> None:
+    with _MDB_ACCESS_LOCK:
+        _MDB_ACCESS_STATE.update(
+            status="ok" if exc is None else "error",
+            kind=None if exc is None else classify_mdb_error(exc),
+            checked_at=datetime.now().isoformat(timespec="seconds"),
+            error=None if exc is None else str(exc)[:500],
+            path=path,
+        )
+
+
+def get_mdb_access_state() -> dict[str, Any]:
+    """Último resultado conhecido de acesso ao MDB (probe ou gravação real)."""
+    if not config_manager.is_mdb_write_enabled():
+        return {"status": "disabled"}
+    with _MDB_ACCESS_LOCK:
+        return dict(_MDB_ACCESS_STATE)
+
+
+def _mdb_access_denied() -> bool:
+    with _MDB_ACCESS_LOCK:
+        return (
+            _MDB_ACCESS_STATE["status"] == "error"
+            and _MDB_ACCESS_STATE["kind"] == "permission"
+        )
+
+
+def reset_mdb_access_state_for_tests() -> None:
+    with _MDB_ACCESS_LOCK:
+        _MDB_ACCESS_STATE.update(
+            status="unknown", kind=None, checked_at=None, error=None, path=None
+        )
+
+
+def probe_mdb_access() -> dict[str, Any]:
+    """Abre e fecha uma conexão ODBC ao MDB OS Atual para validar conta/rede/permissão."""
+    if not config_manager.is_mdb_write_enabled():
+        return get_mdb_access_state()
+    configured, path = _mdb_path_for_connection(1)
+    conn: Optional[pyodbc.Connection] = None
+    try:
+        conn = _mdb_connect(config_manager.get_mdb_connection_string(path))
+        _record_mdb_access(configured)
+    except Exception as exc:
+        _record_mdb_access(configured, exc)
+        logger.error(
+            "[MDB PROBE] sem acesso ao MDB %s (conta do processo=%s, classe=%s): %s",
+            configured,
+            process_identity(),
+            classify_mdb_error(exc),
+            exc,
+        )
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    return get_mdb_access_state()
+
+
+def start_mdb_access_probe_scheduler() -> None:
+    """Probe no startup e a cada 5 min (thread daemon; connect ODBC é bloqueante)."""
+    global _MDB_ACCESS_PROBE_STARTED
+    with _MDB_ACCESS_LOCK:
+        if _MDB_ACCESS_PROBE_STARTED:
+            return
+        _MDB_ACCESS_PROBE_STARTED = True
+    if not config_manager.is_mdb_write_enabled():
+        logger.info("[MDB PROBE] desligado (MYSQL_ONLY)")
+        return
+    logger.info(
+        "[MDB PROBE] iniciado intervalo=%.0fs conta do processo=%s",
+        _MDB_ACCESS_PROBE_INTERVAL_SECONDS,
+        process_identity(),
+    )
+
+    def _loop() -> None:
+        while not _MDB_SYNC_STOP_EVENT.is_set():
+            try:
+                probe_mdb_access()
+            except Exception as exc:
+                logger.warning("[MDB PROBE] ciclo falhou: %s", exc)
+            _MDB_SYNC_STOP_EVENT.wait(_MDB_ACCESS_PROBE_INTERVAL_SECONDS)
+
+    threading.Thread(target=_loop, name="mdb-access-probe", daemon=True).start()
 
 
 def _mdb_path_for_connection(nro: int) -> tuple[str, str]:
@@ -511,6 +640,7 @@ def _execute_mdb_transaction(
             cursor = conn.cursor()
             callback(conn, cursor)
             conn.commit()
+            _record_mdb_access(configured_path or path)
             if total_attempts > 1:
                 logger.info(
                     "MDB '%s' OK na tentativa %s (rodada %s/%s, %s/%s nesta rodada) (%s)",
@@ -584,7 +714,24 @@ def _execute_mdb_transaction(
                 time.sleep(_MDB_SATURATION_WAIT_SECONDS)
                 continue
 
-            if kind != "retriable":
+            if kind == "permission" and _mdb_access_denied():
+                # Conta sem acesso já confirmada: retentar só prende a fila; o
+                # catch-up do SAGRA-SyncAndamentos replica quando o acesso voltar.
+                logger.error(
+                    "MDB '%s' sem permissão (conta do processo=%s) — sem retentativa: %s",
+                    stage,
+                    process_identity(),
+                    e,
+                )
+                raise MdbSyncError(
+                    stage,
+                    nro,
+                    configured_path or path,
+                    e,
+                    attempts=total_attempts,
+                ) from e
+
+            if kind not in ("retriable", "permission"):
                 logger.error(
                     "MDB '%s' falhou (tentativa %s, rodada %s/%s, retentável=False): %s",
                     stage,
@@ -612,6 +759,8 @@ def _execute_mdb_transaction(
                     rounds,
                     e,
                 )
+                if kind == "permission":
+                    _record_mdb_access(configured_path or path, e)
                 raise MdbSyncError(
                     stage,
                     nro,
@@ -1503,11 +1652,19 @@ def format_mdb_failure_detail(
         if resolved and resolved != exc.mdb_path:
             lines.append(f"Arquivo MDB (resolvido): {resolved}")
         lines.append(f"Tentativas: {exc.attempts}")
+        lines.append(f"Conta do processo: {process_identity()}")
+        lines.append(f"Release: {read_release_info().get('release') or '(fora de releases/ — API iniciada pela raiz?)'}")
         kind = classify_mdb_error(root)
         if kind == "saturation":
             lines.append("Classe: MDB saturado / driver sem detalhe")
         elif kind == "invalid_conn_str":
             lines.append("Classe: connection string ODBC inválida")
+        elif kind == "permission":
+            lines.append(
+                "Classe: sem permissão ou MDB aberto em modo exclusivo (-1032). "
+                "Se persistir, confira se a API roda pelo serviço SAGRA-Api com a conta "
+                "REDECAMARA\\usr_sefoc (a mesma do SAGRA-SyncAndamentos)."
+            )
         lines.append(f"Detalhe: {root}")
     elif isinstance(exc, MdbWriteDisabledError):
         lines.append(f"OS: {exc.nro}/{exc.ano}")

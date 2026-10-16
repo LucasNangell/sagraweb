@@ -38,6 +38,7 @@ vi.mock("@/api/hooks/useGravacaoExterna", () => ({
   useConcluirGravacaoExternaMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useLancarEntregaChapasMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useRemoverOsGravacaoExternaMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRemoverOsAguardandoEntregaMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 let isFornecedor = false;

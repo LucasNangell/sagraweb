@@ -179,6 +179,22 @@ def _load_dotenv_manual() -> None:
 _load_dotenv_file()
 
 
+def read_release_info() -> dict[str, str]:
+    """Pares chave=valor de RELEASE.txt (vazio fora de uma release publicada)."""
+    info: dict[str, str] = {}
+    try:
+        release_file = PROJECT_ROOT / "RELEASE.txt"
+        if release_file.is_file():
+            # Set-Content -Encoding UTF8 (PowerShell 5.1) grava BOM.
+            for line in release_file.read_text(encoding="utf-8-sig").splitlines():
+                if "=" in line:
+                    key, val = line.split("=", 1)
+                    info[key.strip()] = val.strip()
+    except Exception:
+        pass
+    return info
+
+
 class ConfigManager:
     _instance = None
 

@@ -13,6 +13,22 @@ if errorlevel 1 (
     exit /b 1
 )
 set "ROOT=%CD%"
+
+sc.exe query SAGRA-Api >nul 2>&1
+if not errorlevel 1 (
+    echo [ERRO] Servico SAGRA-Api instalado: use "sc start SAGRA-Api" / Restart-Service SAGRA-Api.
+    echo        Um processo solto rodaria com a sua conta e pode nao gravar nos MDBs do DFS.
+    popd
+    pause
+    exit /b 1
+)
+if exist "%ROOT%\current\app\backend" (
+    echo [ERRO] Layout versionado: inicie a API por "%ROOT%\current\iniciar-api.bat", nao pela raiz.
+    popd
+    pause
+    exit /b 1
+)
+
 set "BACKEND=%ROOT%\app\backend"
 set "ENV_FILE=%ROOT%\config\.env"
 set "PYTHONPATH=%BACKEND%;%ROOT%\app\services"

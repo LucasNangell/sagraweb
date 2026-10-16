@@ -179,6 +179,16 @@ def _apply_externa_migrations() -> None:
         ),
         (
             "tab_os_gravacao_externa",
+            "EntregaDispensadaEm",
+            "ALTER TABLE tab_os_gravacao_externa ADD COLUMN EntregaDispensadaEm DATETIME DEFAULT NULL",
+        ),
+        (
+            "tab_os_gravacao_externa",
+            "EntregaDispensadaPorPonto",
+            "ALTER TABLE tab_os_gravacao_externa ADD COLUMN EntregaDispensadaPorPonto VARCHAR(32) DEFAULT NULL",
+        ),
+        (
+            "tab_os_gravacao_externa",
             "PagamentoNfEm",
             "ALTER TABLE tab_os_gravacao_externa ADD COLUMN PagamentoNfEm DATETIME DEFAULT NULL",
         ),

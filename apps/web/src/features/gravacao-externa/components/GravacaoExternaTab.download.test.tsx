@@ -2,6 +2,8 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const removerOs = vi.fn();
+const removerAguardando = vi.fn();
+let aguardandoItems: Array<Record<string, unknown>> = [];
 
 vi.mock("@/api/hooks/useGravacaoExterna", () => ({
   GRAVACAO_EXTERNA_SAFETY_POLL_MS: 60_000,
@@ -41,7 +43,7 @@ vi.mock("@/api/hooks/useGravacaoExterna", () => ({
     refetch: vi.fn(),
   }),
   useGravacaoExternaAguardandoEntrega: () => ({
-    data: { items: [], total: 0 },
+    data: { items: aguardandoItems, total: aguardandoItems.length },
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
@@ -51,6 +53,10 @@ vi.mock("@/api/hooks/useGravacaoExterna", () => ({
   useLancarEntregaChapasMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useRemoverOsGravacaoExternaMutation: () => ({
     mutateAsync: removerOs,
+    isPending: false,
+  }),
+  useRemoverOsAguardandoEntregaMutation: () => ({
+    mutateAsync: removerAguardando,
     isPending: false,
   }),
 }));
@@ -132,6 +138,9 @@ describe("GravacaoExternaTab download-all", () => {
     canPendingPerm = true;
     removerOs.mockReset();
     removerOs.mockResolvedValue({});
+    removerAguardando.mockReset();
+    removerAguardando.mockResolvedValue({});
+    aguardandoItems = [];
     downloadMock.mockReset();
     downloadMock.mockImplementation(
       async (opts: { onPhase?: (p: string) => void }) => {
@@ -179,5 +188,24 @@ describe("GravacaoExternaTab download-all", () => {
     expect(
       screen.queryByRole("button", { name: "Menu de contexto OS 01209/24" }),
     ).toBeNull();
+  });
+
+  it("remove da lista Aguardando retirada todos os envios da OS sem usar a fila do Birô", async () => {
+    aguardandoItems = [
+      { nr_os: 1300, ano: 2024, componente: "capa", gravacao_externa_id: 7, gravacao_status: "concluida" },
+      { nr_os: 1300, ano: 2024, componente: "miolo", gravacao_externa_id: 8, gravacao_status: "concluida" },
+    ];
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<GravacaoExternaTab />);
+    fireEvent.click(screen.getByRole("tab", { name: "Aguardando retirada" }));
+    fireEvent.click(screen.getByRole("button", { name: "Menu de contexto OS 01300/24" }));
+
+    await waitFor(() => expect(removerAguardando).toHaveBeenCalledTimes(2));
+    expect(removerAguardando).toHaveBeenNthCalledWith(1, 7);
+    expect(removerAguardando).toHaveBeenNthCalledWith(2, 8);
+    expect(removerOs).not.toHaveBeenCalled();
+    const message = String(confirmSpy.mock.calls.at(-1)?.[0]);
+    expect(message).toContain("da lista Aguardando retirada");
+    expect(message).toContain("Nenhum andamento será lançado");
   });
 });

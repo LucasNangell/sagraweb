@@ -29,6 +29,10 @@ export interface OsSearchRow {
   parent_nr_os?: number;
   parent_ano?: number;
   congelada?: boolean;
+  /** Preenchido por GET /api/os/search?painel=1 quando setor = Grav. Externa. */
+  fornecedor_ponto?: string | null;
+  fornecedor_nome?: string | null;
+  fornecedores?: { ponto?: string | null; nome?: string | null }[] | null;
 }
 
 export interface OsSearchMeta {

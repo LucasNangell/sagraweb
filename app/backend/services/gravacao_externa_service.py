@@ -185,6 +185,105 @@ def remove_externa_from_queue(gravacao_externa_id: int) -> dict[str, Any]:
     return results[0]
 
 
+def dismiss_entrega_from_queue(gravacao_externa_id: int, ponto: str) -> dict[str, Any]:
+    """Tira uma sessão concluída (ou sua juntada) da lista Aguardando retirada sem lançar andamento."""
+    try:
+        externa_id = int(gravacao_externa_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("gravacao_externa_id inválido") from exc
+    if externa_id <= 0:
+        raise ValueError("gravacao_externa_id inválido")
+    ponto_fmt = format_ponto(_clean_ponto(ponto)) or str(ponto or "").strip() or None
+
+    not_waiting = HTTPException(
+        status_code=409,
+        detail="A OS não está mais na lista Aguardando retirada.",
+    )
+
+    def tx(cursor):
+        cursor.execute(
+            """
+            SELECT Id, JuntadaGrupoId, Status, EntregaLancadaEm, EntregaDispensadaEm
+            FROM tab_os_gravacao_externa
+            WHERE Id = %s
+            LIMIT 1
+            FOR UPDATE
+            """,
+            (externa_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(
+                status_code=404,
+                detail="Sessão de Gravação Externa não encontrada.",
+            )
+
+        if isinstance(row, dict):
+            juntada_raw = row.get("JuntadaGrupoId")
+            status = str(row.get("Status") or "")
+            entrega_lancada = row.get("EntregaLancadaEm")
+            entrega_dispensada = row.get("EntregaDispensadaEm")
+        else:
+            juntada_raw = row[1] if len(row) > 1 else None
+            status = str(row[2] if len(row) > 2 else "")
+            entrega_lancada = row[3] if len(row) > 3 else None
+            entrega_dispensada = row[4] if len(row) > 4 else None
+        if status != "concluida" or entrega_lancada is not None or entrega_dispensada is not None:
+            raise not_waiting
+
+        juntada_id = str(juntada_raw).strip() if juntada_raw else None
+        target_ids = [externa_id]
+        if juntada_id:
+            cursor.execute(
+                """
+                SELECT Id
+                FROM tab_os_gravacao_externa
+                WHERE JuntadaGrupoId = %s
+                  AND Status = 'concluida'
+                  AND EntregaLancadaEm IS NULL
+                  AND EntregaDispensadaEm IS NULL
+                ORDER BY Id
+                FOR UPDATE
+                """,
+                (juntada_id,),
+            )
+            target_ids = [
+                int(group_row.get("Id") if isinstance(group_row, dict) else group_row[0])
+                for group_row in (cursor.fetchall() or [])
+            ]
+            if externa_id not in target_ids:
+                target_ids.append(externa_id)
+
+        updated_ids: list[int] = []
+        for target_id in target_ids:
+            cursor.execute(
+                """
+                UPDATE tab_os_gravacao_externa
+                SET EntregaDispensadaEm = NOW(),
+                    EntregaDispensadaPorPonto = %s
+                WHERE Id = %s
+                  AND Status = 'concluida'
+                  AND EntregaLancadaEm IS NULL
+                  AND EntregaDispensadaEm IS NULL
+                """,
+                (ponto_fmt, target_id),
+            )
+            if cursor.rowcount == 1:
+                updated_ids.append(target_id)
+
+        if externa_id not in updated_ids:
+            raise not_waiting
+        return {
+            "removed": True,
+            "gravacao_externa_id": externa_id,
+            "removed_ids": updated_ids,
+            "juntada_grupo_id": juntada_id,
+        }
+
+    results = db.execute_transaction([tx])
+    return results[0]
+
+
 def cleanup_stale_externa_sessions() -> list[dict[str, Any]]:
     """Legado sem efeito: a fila do Birô não depende mais do último andamento."""
     return []
@@ -478,6 +577,7 @@ def _map_session_row(row: dict[str, Any]) -> dict[str, Any]:
         "entrega_lancada_em": row.get("EntregaLancadaEm"),
         "recebido_por_ponto": row.get("RecebidoPorPonto"),
         "recebido_por_nome": row.get("RecebidoPorNome"),
+        "entrega_dispensada_em": row.get("EntregaDispensadaEm"),
         "pagamento_nf_em": row.get("PagamentoNfEm"),
     }
 
@@ -578,6 +678,7 @@ def list_concluida_aguardando_entrega_by_juntada(
         WHERE JuntadaGrupoId = %s
           AND Status = 'concluida'
           AND EntregaLancadaEm IS NULL
+          AND EntregaDispensadaEm IS NULL
         ORDER BY OsNro ASC, OsAno ASC, Id ASC
         """,
         (gid,),
@@ -779,6 +880,95 @@ def list_os_gravacao_externa(
         _aggregate_list_items_by_juntada(items)
     )
     return aggregated[offset : offset + limit], total
+
+
+def map_fornecedores_por_os(
+    pairs: list[tuple[int, int]],
+    *,
+    statuses: frozenset[str] | set[str] | tuple[str, ...] = ACTIVE_STATUSES,
+) -> dict[str, list[dict[str, Any]]]:
+    """Mapa ``\"{ano}-{nr}\"`` → fornecedores distintos de sessões nos ``statuses``.
+
+    Cada entrada: ``{\"ponto\": str|None, \"nome\": str|None}``.
+    Usado pelo painel (``/os/search?painel=1``) para badge no tablet.
+    """
+    status_list = sorted(
+        {str(s).strip() for s in (statuses or ()) if str(s).strip()}
+    )
+    if not status_list:
+        return {}
+
+    cleaned: list[tuple[int, int]] = []
+    seen: set[tuple[int, int]] = set()
+    for pair in pairs or []:
+        try:
+            nr_os = int(pair[0])
+            ano = int(pair[1])
+        except (TypeError, ValueError, IndexError):
+            continue
+        key = (nr_os, ano)
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(key)
+    if not cleaned:
+        return {}
+
+    status_placeholders = ", ".join(["%s"] * len(status_list))
+    result: dict[str, list[dict[str, Any]]] = {}
+    chunk_size = 500
+    for i in range(0, len(cleaned), chunk_size):
+        chunk = cleaned[i : i + chunk_size]
+        pair_placeholders = ", ".join(["(%s, %s)"] * len(chunk))
+        # pairs are (nr_os, ano); SQL uses (OsNro, OsAno)
+        flat: list[Any] = [*status_list, *[x for pair in chunk for x in pair]]
+        rows = db.execute_query(
+            f"""
+            SELECT
+                ge.OsNro AS nr_os,
+                ge.OsAno AS ano,
+                ge.FornecedorPonto AS fornecedor_ponto,
+                uf.Nome AS fornecedor_nome
+            FROM tab_os_gravacao_externa ge
+            LEFT JOIN tabUsuarios uf
+                ON uf.Ponto = NULLIF(
+                    CAST(
+                        REPLACE(REPLACE(IFNULL(ge.FornecedorPonto, ''), '.', ''), '-', '')
+                        AS UNSIGNED
+                    ),
+                    0
+                )
+            WHERE ge.Status IN ({status_placeholders})
+              AND (ge.OsNro, ge.OsAno) IN ({pair_placeholders})
+            ORDER BY ge.CriadoEm DESC, ge.Id DESC
+            """,
+            tuple(flat),
+        )
+        for row in rows or []:
+            try:
+                nr_os = int(row["nr_os"])
+                ano = int(row["ano"])
+            except (TypeError, ValueError, KeyError):
+                continue
+            ponto = (row.get("fornecedor_ponto") or "").strip() or None
+            nome = (row.get("fornecedor_nome") or "").strip() or None
+            if not ponto and not nome:
+                continue
+            map_key = f"{ano}-{nr_os}"
+            entry = {"ponto": ponto, "nome": nome}
+            existing = result.setdefault(map_key, [])
+            dedupe = ponto or nome or ""
+            if any((e.get("ponto") or e.get("nome") or "") == dedupe for e in existing):
+                continue
+            existing.append(entry)
+    return result
+
+
+def map_fornecedores_ativos_por_os(
+    pairs: list[tuple[int, int]],
+) -> dict[str, list[dict[str, Any]]]:
+    """Atalho: sessões ativas (``pendente`` / ``iniciada``)."""
+    return map_fornecedores_por_os(pairs, statuses=ACTIVE_STATUSES)
 
 
 def user_can_access_session(
@@ -2142,6 +2332,7 @@ def list_os_gravacao_aguardando_entrega(
     filters = """
         WHERE ge.Status = 'concluida'
           AND ge.EntregaLancadaEm IS NULL
+          AND ge.EntregaDispensadaEm IS NULL
     """
     if ano:
         filters += " AND ge.OsAno = %(ano)s"
@@ -2299,7 +2490,7 @@ def _entrega_uma_sessao_cursor(
         SET EntregaLancadaEm = NOW(),
             RecebidoPorPonto = %s,
             RecebidoPorNome = %s
-        WHERE Id = %s AND EntregaLancadaEm IS NULL
+        WHERE Id = %s AND EntregaLancadaEm IS NULL AND EntregaDispensadaEm IS NULL
         """,
         (recebido_fmt, recebido_nome, session_id),
     )
@@ -2365,6 +2556,11 @@ def lancar_entrega_chapas(
         raise HTTPException(
             status_code=400,
             detail="Recebimento de chapas já foi lançado para esta OS.",
+        )
+    if session.get("entrega_dispensada_em"):
+        raise HTTPException(
+            status_code=409,
+            detail="A OS foi removida da lista Aguardando retirada.",
         )
 
     recebido_fmt = format_ponto(_clean_ponto(recebido_por_ponto))

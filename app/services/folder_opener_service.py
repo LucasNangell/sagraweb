@@ -220,6 +220,7 @@ def open_folder():
         nr_os = data.get('nr_os')
         solicitante = data.get('solicitante')
         produto = data.get('produto')
+        titulo = data.get('titulo')
         ano_os = data.get('ano_os')
         
         if should_try_create:
@@ -252,8 +253,11 @@ def open_folder():
                 except:
                     ano_str = str(datetime.now().year)
 
-                # Montar nome da pasta: 00000-Solicitante-Produto
+                # Montar nome da pasta: 00000-Solicitante-Produto_Titul
                 folder_name = f"{nr_os_norm}-{solicitante_norm}-{produto_norm}"
+                titulo_snip = normalize_text_custom(titulo or "", is_product=False)[:5]
+                if titulo_snip:
+                    folder_name = f"{folder_name}_{titulo_snip}"
                 
                 # Definir caminho base (Normal vs Papelaria)
                 # Regra: >= 5000 é Papelaria

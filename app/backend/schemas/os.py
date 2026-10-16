@@ -38,6 +38,7 @@ class OsFolderPlanResponse(BaseModel):
     subfolders: List[str]
     solicitante: str
     produto: str
+    titulo: str = ""
 
 
 class OsFolderCreateResponse(BaseModel):

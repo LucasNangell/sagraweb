@@ -368,7 +368,10 @@ $systemWatchdogScripts = @(
     "status-watchdog-sistema.ps1",
     "suspender-watchdog-sistema.ps1",
     "retomar-watchdog-sistema.ps1",
-    "desinstalar-servico-watchdog-sistema.ps1"
+    "desinstalar-servico-watchdog-sistema.ps1",
+    # API como servico NSSM (conta de rede com acesso aos MDBs do DFS)
+    "instalar-servico-api.ps1",
+    "desinstalar-servico-api.ps1"
 )
 foreach ($name in $systemWatchdogScripts) {
     $src = Join-Path $PSScriptRoot "..\templates\$name"
@@ -425,6 +428,27 @@ if (Test-Path -LiteralPath $monitorService) {
     Write-Host "monitor_sync_andamentos_service.py incluido na raiz do pacote"
 } else {
     throw "monitor_sync_andamentos_service.py obrigatorio nao encontrado em $Root"
+}
+
+# Organizador da caixa sepim.deapa (move e-mails por assunto; nunca apaga).
+$emailOrganizerScripts = @(
+    "instalar-servico-organizador-email.ps1",
+    "desinstalar-servico-organizador-email.ps1"
+)
+foreach ($name in $emailOrganizerScripts) {
+    $src = Join-Path $PSScriptRoot "..\templates\$name"
+    if (Test-Path -LiteralPath $src) {
+        Copy-Item -LiteralPath $src (Join-Path $Release $name) -Force
+    } else {
+        Write-Warning "Template ausente: $src"
+    }
+}
+$emailOrganizer = Join-Path $Root "organizador_email_sepim_service.py"
+if (Test-Path -LiteralPath $emailOrganizer) {
+    Copy-Item -LiteralPath $emailOrganizer (Join-Path $Release "organizador_email_sepim_service.py") -Force
+    Write-Host "organizador_email_sepim_service.py incluido na raiz do pacote"
+} else {
+    Write-Warning "organizador_email_sepim_service.py nao encontrado em $Root"
 }
 
 Write-Step "Bibliotecas OCR embutidas (python_pkgs, sem pip no servidor)"

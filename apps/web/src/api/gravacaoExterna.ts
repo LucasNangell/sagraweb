@@ -149,6 +149,15 @@ export async function removerOsGravacaoExterna(
   );
 }
 
+export async function removerOsAguardandoEntrega(
+  gravacaoExternaId: number,
+): Promise<GravacaoExternaQueueRemovalResponse> {
+  return apiFetch<GravacaoExternaQueueRemovalResponse>(
+    `/gravacao-externa/aguardando-entrega/${gravacaoExternaId}/remover`,
+    { method: "POST" },
+  );
+}
+
 export async function iniciarGravacaoExterna(
   ano: number,
   nrOs: number,

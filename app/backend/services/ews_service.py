@@ -23,6 +23,16 @@ class EWSUnavailableError(RuntimeError):
     """Exchange indisponível ou timeout — mensagem segura para o cliente."""
 
 
+class EWSOperationError(RuntimeError):
+    """Operação EWS retornou ResponseClass diferente de Success."""
+
+    def __init__(self, operation: str, response_code: str, message: str = ""):
+        self.operation = operation
+        self.response_code = response_code
+        self.message_text = message
+        super().__init__(f"{operation}: {response_code} {message}".strip())
+
+
 def _ensure_dotenv_loaded() -> None:
     try:
         import config_manager  # noqa: F401
@@ -573,6 +583,7 @@ class EWSService:
         attachments: Optional[List[Tuple[str, bytes]]] = None,
         inline_images: Optional[List[Tuple[str, bytes, str, str]]] = None,
         save_to_folder_id: Optional[str] = None,
+        embed_images: bool = True,
     ) -> None:
         """
         Envia email via EWS.
@@ -582,7 +593,22 @@ class EWSService:
         - save_to_folder_id: ID da pasta onde salvar a cópia do item enviado.
           Se omitido e from_mailbox estiver definido, salva em Itens/Mensagens Enviados
           (sentitems) dessa mailbox.
+        - embed_images: converte <img> com data:image ou http(s) da intranet em anexos
+          inline (cid:), para o Outlook exibir sem bloqueio.
         """
+        if embed_images:
+            from services.email_inline_images_service import embed_images_for_email
+
+            try:
+                html_body, extra_inline = embed_images_for_email(
+                    html_body, verify_ssl=self.verify_ssl
+                )
+            except Exception as exc:
+                logger.warning("Falha ao embutir imagens no e-mail; enviando HTML original: %s", exc)
+                extra_inline = []
+            if extra_inline:
+                inline_images = [*(inline_images or []), *extra_inline]
+
         to_xml = "\n".join(
             f"<t:Mailbox><t:EmailAddress>{_xml_escape(addr)}</t:EmailAddress></t:Mailbox>"
             for addr in to
@@ -669,6 +695,144 @@ class EWSService:
         envelope = self._soap_envelope(body)
         self._post(envelope)
 
+
+    @classmethod
+    def _raise_for_response_class(cls, root: etree._Element, operation: str) -> etree._Element:
+        """Retorna o primeiro ResponseMessage ou lança EWSOperationError se não for Success."""
+        ns = cls._ns()
+        msg = None
+        for el in root.iter():
+            if isinstance(el.tag, str) and el.get("ResponseClass") is not None:
+                msg = el
+                break
+        if msg is None:
+            raise EWSOperationError(operation, "SemResposta", "ResponseMessage ausente")
+        if msg.get("ResponseClass") != "Success":
+            code = (msg.findtext("./m:ResponseCode", namespaces=ns) or "").strip()
+            text = (msg.findtext("./m:MessageText", namespaces=ns) or "").strip()
+            raise EWSOperationError(operation, code or msg.get("ResponseClass") or "Erro", text)
+        return msg
+
+    def find_items_by_subject_terms(
+        self,
+        target: MailboxFolderTarget,
+        terms: List[str],
+        *,
+        page_size: int = 200,
+        max_pages: int = 500,
+    ) -> List[Dict[str, Any]]:
+        """
+        Lista itens (lidos e não lidos) da pasta cujo assunto contém algum dos termos.
+        Busca rasa, paginada, do mais antigo para o mais novo. O filtro do Exchange
+        é apenas um pré-filtro; quem chama deve validar o assunto.
+        """
+        clean_terms = [t for t in (terms or []) if (t or "").strip()]
+        if not clean_terms:
+            return []
+        contains_xml = "".join(
+            f"""
+      <t:Contains ContainmentMode="Substring" ContainmentComparison="IgnoreCaseAndNonSpacingCharacters">
+        <t:FieldURI FieldURI="item:Subject"/>
+        <t:Constant Value="{_xml_escape(term)}"/>
+      </t:Contains>"""
+            for term in clean_terms
+        )
+        restriction_inner = (
+            f"<t:Or>{contains_xml}\n    </t:Or>" if len(clean_terms) > 1 else contains_xml
+        )
+        parent_xml = self._parent_folder_ids_xml(target)
+        ns = self._ns()
+        items: List[Dict[str, Any]] = []
+        offset = 0
+        for _ in range(max_pages):
+            body = f"""
+<m:FindItem Traversal="Shallow">
+  <m:ItemShape>
+    <t:BaseShape>IdOnly</t:BaseShape>
+    <t:AdditionalProperties>
+      <t:FieldURI FieldURI="item:Subject"/>
+      <t:FieldURI FieldURI="item:DateTimeReceived"/>
+      <t:FieldURI FieldURI="item:DateTimeSent"/>
+      <t:FieldURI FieldURI="item:DisplayTo"/>
+      <t:FieldURI FieldURI="message:From"/>
+      <t:FieldURI FieldURI="message:InternetMessageId"/>
+      <t:FieldURI FieldURI="message:IsRead"/>
+    </t:AdditionalProperties>
+  </m:ItemShape>
+  <m:IndexedPageItemView MaxEntriesReturned="{int(page_size)}" Offset="{offset}" BasePoint="Beginning"/>
+  <m:Restriction>
+    {restriction_inner}
+  </m:Restriction>
+  <m:SortOrder>
+    <t:FieldOrder Order="Ascending">
+      <t:FieldURI FieldURI="item:DateTimeReceived"/>
+    </t:FieldOrder>
+  </m:SortOrder>
+  {parent_xml}
+</m:FindItem>
+"""
+            root = self._post(self._soap_envelope(body))
+            self._raise_for_response_class(root, "FindItem")
+            root_folder = root.find(".//m:RootFolder", namespaces=ns)
+            items_el = root_folder.find("./t:Items", namespaces=ns) if root_folder is not None else None
+            page_count = 0
+            for item in (list(items_el) if items_el is not None else []):
+                item_id_el = item.find("./t:ItemId", namespaces=ns)
+                if item_id_el is None or not item_id_el.get("Id"):
+                    continue
+                page_count += 1
+                from_el = item.find("./t:From/t:Mailbox", namespaces=ns)
+                items.append(
+                    {
+                        "item_id": item_id_el.get("Id"),
+                        "change_key": item_id_el.get("ChangeKey"),
+                        "subject": (item.findtext("./t:Subject", namespaces=ns) or "").strip(),
+                        "date_received": (item.findtext("./t:DateTimeReceived", namespaces=ns) or "").strip(),
+                        "date_sent": (item.findtext("./t:DateTimeSent", namespaces=ns) or "").strip(),
+                        "from_name": (
+                            (from_el.findtext("./t:Name", namespaces=ns) or "").strip()
+                            if from_el is not None else ""
+                        ),
+                        "from_email": (
+                            (from_el.findtext("./t:EmailAddress", namespaces=ns) or "").strip()
+                            if from_el is not None else ""
+                        ),
+                        "display_to": (item.findtext("./t:DisplayTo", namespaces=ns) or "").strip(),
+                        "internet_message_id": (
+                            item.findtext("./t:InternetMessageId", namespaces=ns) or ""
+                        ).strip(),
+                        "is_read": (item.findtext("./t:IsRead", namespaces=ns) or "false").lower() == "true",
+                    }
+                )
+            includes_last = (
+                root_folder.get("IncludesLastItemInRange", "true").lower() == "true"
+                if root_folder is not None else True
+            )
+            if includes_last or page_count == 0:
+                break
+            next_offset = root_folder.get("IndexedPagingOffset")
+            offset = int(next_offset) if next_offset and next_offset.isdigit() else offset + page_count
+        return items
+
+    def move_item(self, item_id: str, to_folder_id: str) -> Optional[str]:
+        """Move um item para a pasta informada (nunca apaga). Retorna o novo ItemId."""
+        if not item_id or not to_folder_id:
+            raise ValueError("move_item: item_id e to_folder_id são obrigatórios")
+        body = f"""
+<m:MoveItem>
+  <m:ToFolderId>
+    <t:FolderId Id="{_xml_escape(to_folder_id)}"/>
+  </m:ToFolderId>
+  <m:ItemIds>
+    <t:ItemId Id="{_xml_escape(item_id)}"/>
+  </m:ItemIds>
+  <m:ReturnNewItemIds>true</m:ReturnNewItemIds>
+</m:MoveItem>
+"""
+        root = self._post(self._soap_envelope(body))
+        msg = self._raise_for_response_class(root, "MoveItem")
+        new_id_el = msg.find(".//t:ItemId", namespaces=self._ns())
+        return new_id_el.get("Id") if new_id_el is not None else None
 
     def find_folder_id(self, parent_target: MailboxFolderTarget, folder_name: str) -> Optional[str]:
         """

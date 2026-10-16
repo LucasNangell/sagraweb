@@ -12,6 +12,17 @@ if (-not $Root) {
 }
 
 $ErrorActionPreference = "Stop"
+
+# Com o servico instalado, um processo solto disputaria a porta e rodaria com a conta
+# de quem chamou o script (sem credencial de rede em sessao WinRM: MDB falha com -1032).
+if (Get-Service -Name "SAGRA-Api" -ErrorAction SilentlyContinue) {
+    throw "Servico SAGRA-Api instalado: use Start-Service/Restart-Service SAGRA-Api em vez deste script."
+}
+$nestedCurrent = Get-Item -LiteralPath (Join-Path $Root "current") -ErrorAction SilentlyContinue
+if ($nestedCurrent -and $nestedCurrent.LinkType -eq "Junction") {
+    throw "Layout versionado: inicie a API por $(Join-Path $Root 'current\iniciar-api-detached.ps1') (nao pela raiz $Root)."
+}
+
 $backend = Join-Path $Root "app\backend"
 $envFile = Join-Path $Root "config\.env"
 $port = "8050"

@@ -9,8 +9,9 @@ Access trata tipos de forma distinta do MySQL:
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 
 _DATE_PATTERNS = (
     "%Y-%m-%d",
@@ -89,6 +90,67 @@ CALC_DETALHES_FIELDS = (
     "CalcQtdCores3",
     "CalcCor3",
 )
+
+MAQUINA_LINK_ACTION_CANONICAL = "canonical"
+MAQUINA_LINK_ACTION_TOKEN = "token"
+MAQUINA_LINK_ACTION_OMIT = "omit"
+
+
+@dataclass(frozen=True)
+class MaquinaLinkMdbResolution:
+    """Resultado da sanitização de MaquinaLink para o Access."""
+
+    action: str
+    value: Optional[str] = None
+
+    @property
+    def omit(self) -> bool:
+        return self.value is None
+
+
+def _maquina_known_map(known_maquinas: Iterable[str]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for raw in known_maquinas:
+        label = str(raw or "").strip()
+        if not label:
+            continue
+        mapping.setdefault(label.casefold(), label)
+    return mapping
+
+
+def resolve_maquina_link_for_mdb(
+    mysql_value: Any,
+    known_maquinas: Iterable[str],
+    current_mdb_value: Any = None,
+) -> MaquinaLinkMdbResolution:
+    """Resolve MaquinaLink só para valores já existentes em tabMaquinas.
+
+    Não inventa compostos da Web. Sem match devolve omit (caller não grava o
+    campo; no UPDATE isso preserva current_mdb_value já válido no Access).
+    """
+    _ = current_mdb_value
+    known = _maquina_known_map(known_maquinas)
+    raw = to_mdb_null(mysql_value)
+    if raw is None:
+        return MaquinaLinkMdbResolution(MAQUINA_LINK_ACTION_OMIT)
+    text = str(raw).strip()
+    if not text:
+        return MaquinaLinkMdbResolution(MAQUINA_LINK_ACTION_OMIT)
+
+    exact = known.get(text.casefold())
+    if exact is not None:
+        return MaquinaLinkMdbResolution(MAQUINA_LINK_ACTION_CANONICAL, exact)
+
+    if "/" in text:
+        for token in text.split("/"):
+            token_label = token.strip()
+            if not token_label:
+                continue
+            hit = known.get(token_label.casefold())
+            if hit is not None:
+                return MaquinaLinkMdbResolution(MAQUINA_LINK_ACTION_TOKEN, hit)
+
+    return MaquinaLinkMdbResolution(MAQUINA_LINK_ACTION_OMIT)
 
 
 def to_mdb_null(value: Any) -> Any:

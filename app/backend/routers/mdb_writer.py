@@ -28,6 +28,7 @@ from mdb_helpers import (
     CALC_DETALHES_FIELDS,
     prepare_os_detalhes_params,
     prepare_os_protocol_params,
+    resolve_maquina_link_for_mdb,
     to_mdb_bool,
     to_mdb_datetime,
     to_mdb_memo,
@@ -920,12 +921,6 @@ def _protocolo_exists(cursor, nro: int, ano: int) -> bool:
         (nro, ano),
     )
     return cursor.fetchone()[0] > 0
-def _detalhes_exists(cursor, nro: int, ano: int) -> bool:
-    cursor.execute(
-        "SELECT COUNT(*) FROM tabDetalhesServico WHERE NroProtocoloLinkDet = ? AND AnoProtocoloLinkDet = ?",
-        (nro, ano),
-    )
-    return cursor.fetchone()[0] > 0
 def _mdb_row_get(row: Any, name: str, index: int) -> Any:
     if row is None:
         return None
@@ -1082,6 +1077,37 @@ _DETALHES_WRITE_FIELDS = (
 )
 
 
+def _fetch_tab_maquinas(cursor) -> list[str]:
+    """Nomes canônicos de tabMaquinas. Nunca insere linhas nessa lookup."""
+    try:
+        cursor.execute(
+            "SELECT Maquina FROM tabMaquinas WHERE Maquina IS NOT NULL"
+        )
+        rows = cursor.fetchall() or []
+    except Exception as exc:
+        logger.warning("Não foi possível ler tabMaquinas: %s", exc)
+        return []
+    names: list[str] = []
+    for row in rows:
+        raw = _mdb_row_get(row, "Maquina", 0)
+        label = str(raw).strip() if raw is not None else ""
+        if label:
+            names.append(label)
+    return names
+
+
+def _fetch_detalhes_maquina(cursor, nro: int, ano: int) -> tuple[bool, Any]:
+    cursor.execute(
+        "SELECT MaquinaLink FROM tabDetalhesServico "
+        "WHERE NroProtocoloLinkDet=? AND AnoProtocoloLinkDet=?",
+        (nro, ano),
+    )
+    row = cursor.fetchone()
+    if row is None:
+        return False, None
+    return True, _mdb_row_get(row, "MaquinaLink", 0)
+
+
 def _write_detalhes(
     cursor,
     nro: int,
@@ -1092,9 +1118,33 @@ def _write_detalhes(
 ) -> None:
     avail = _mdb_table_columns(cursor, "tabDetalhesServico", mdb_path)
     fields = [f for f in _DETALHES_WRITE_FIELDS if f in avail]
-    values = [det.get(f) for f in fields]
+    exists, current_maquina = _fetch_detalhes_maquina(cursor, nro, ano)
+    payload = dict(det)
+    if "MaquinaLink" in fields:
+        resolution = resolve_maquina_link_for_mdb(
+            payload.get("MaquinaLink"),
+            _fetch_tab_maquinas(cursor),
+            current_mdb_value=current_maquina,
+        )
+        log_fn = logger.info if resolution.action == "canonical" else logger.warning
+        log_fn(
+            "MDB MaquinaLink OS %s/%s mysql=%r acao=%s gravar=%r atual_mdb=%r",
+            nro,
+            ano,
+            payload.get("MaquinaLink"),
+            resolution.action,
+            resolution.value,
+            current_maquina,
+        )
+        if resolution.omit:
+            fields = [f for f in fields if f != "MaquinaLink"]
+        else:
+            payload["MaquinaLink"] = resolution.value
+    values = [payload.get(f) for f in fields]
 
-    if _detalhes_exists(cursor, nro, ano):
+    if exists:
+        if not fields:
+            return
         set_sql = ", ".join(f"{col}=?" for col in fields)
         cursor.execute(
             f"UPDATE tabDetalhesServico SET {set_sql} "

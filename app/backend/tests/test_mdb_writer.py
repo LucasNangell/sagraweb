@@ -5,12 +5,19 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from mdb_helpers import (
+    MAQUINA_LINK_ACTION_CANONICAL,
+    MAQUINA_LINK_ACTION_OMIT,
+    MAQUINA_LINK_ACTION_TOKEN,
+    resolve_maquina_link_for_mdb,
+)
 from routers.mdb_writer import (
     MdbSyncError,
     MdbWriteDisabledError,
     _execute_mdb_transaction,
     _map_protocolo_cols_for_mdb,
     _resolve_mdb_column,
+    _write_detalhes,
     _write_protocolo_extra_cols,
     _record_mdb_access,
     classify_mdb_error,
@@ -717,3 +724,188 @@ def test_failure_detail_names_process_account_and_hint():
     assert r"Conta do processo: REDECAMARA\P_918713" in detail
     assert "Release: (fora de releases/" in detail
     assert "SAGRA-Api" in detail
+
+
+_KNOWN_MAQUINAS = (
+    "Acabamento",
+    "Komori",
+    "Digital Cor/PB",
+    "PM52/SM74",
+    "SM74",
+)
+
+_DETALHES_AVAIL = frozenset(
+    {
+        "Titulo",
+        "TipoPublicacaoLink",
+        "FormatoLink",
+        "MaquinaLink",
+        "Tiragem",
+        "Pags",
+        "PapelLink",
+        "Cores",
+    }
+)
+
+
+class TestResolveMaquinaLinkForMdb:
+    def test_canonical_preserves_access_spelling(self):
+        result = resolve_maquina_link_for_mdb("digital cor/pb", _KNOWN_MAQUINAS)
+        assert result.action == MAQUINA_LINK_ACTION_CANONICAL
+        assert result.value == "Digital Cor/PB"
+        assert not result.omit
+
+    def test_compound_already_in_table(self):
+        result = resolve_maquina_link_for_mdb("PM52/SM74", _KNOWN_MAQUINAS)
+        assert result.action == MAQUINA_LINK_ACTION_CANONICAL
+        assert result.value == "PM52/SM74"
+
+    def test_first_existing_token_when_compound_missing(self):
+        result = resolve_maquina_link_for_mdb("Komori/SM74", _KNOWN_MAQUINAS)
+        assert result.action == MAQUINA_LINK_ACTION_TOKEN
+        assert result.value == "Komori"
+
+    def test_offset_digital_omits(self):
+        result = resolve_maquina_link_for_mdb("Offset/Digital", _KNOWN_MAQUINAS)
+        assert result.action == MAQUINA_LINK_ACTION_OMIT
+        assert result.omit
+        assert result.value is None
+
+    def test_web_labels_and_empty_do_not_become_blank(self):
+        for value in ("Offset", "Digital", "Ignorada", "", "   ", None):
+            result = resolve_maquina_link_for_mdb(value, _KNOWN_MAQUINAS)
+            assert result.omit
+            assert result.value is None
+
+
+def _detalhes_cursor(*, exists: bool, current_maquina=None, known=None):
+    known_rows = [(name,) for name in (known or _KNOWN_MAQUINAS)]
+    cursor = MagicMock()
+
+    def fake_execute(sql, params=None):
+        sql_l = str(sql).casefold()
+        if "from tabmaquinas" in sql_l:
+            cursor.fetchall.return_value = known_rows
+            cursor.fetchone.return_value = None
+        elif "select maquinalink from tabdetalhesservico" in sql_l:
+            cursor.fetchone.return_value = (current_maquina,) if exists else None
+            cursor.fetchall.return_value = []
+        else:
+            cursor.fetchone.return_value = None
+            cursor.fetchall.return_value = []
+
+    cursor.execute.side_effect = fake_execute
+    return cursor
+
+
+def _write_calls(cursor):
+    return [
+        (str(call.args[0]), call.args[1] if len(call.args) > 1 else None)
+        for call in cursor.execute.call_args_list
+    ]
+
+
+def _mutating_sql(cursor):
+    return [
+        (sql, params)
+        for sql, params in _write_calls(cursor)
+        if sql.lstrip().upper().startswith(("UPDATE", "INSERT"))
+    ]
+
+
+class TestWriteDetalhesMaquinaLink:
+    def test_update_omits_offset_digital_and_never_inserts_tabmaquinas(self):
+        cursor = _detalhes_cursor(exists=True, current_maquina="Komori")
+        with patch(
+            "routers.mdb_writer._mdb_table_columns", return_value=_DETALHES_AVAIL
+        ):
+            _write_detalhes(
+                cursor,
+                1593,
+                2026,
+                {"Titulo": "Oficio", "MaquinaLink": "Offset/Digital", "PapelLink": "Diversos"},
+                mdb_path=r"\\dfs\os.mdb",
+            )
+
+        mutating = _mutating_sql(cursor)
+        assert len(mutating) == 1
+        sql, params = mutating[0]
+        assert sql.lstrip().upper().startswith("UPDATE")
+        assert "MaquinaLink=?" not in sql.replace(" ", "")
+        assert "Oficio" in params
+        assert "Offset/Digital" not in params
+        assert all("tabMaquinas" not in sql for sql, _ in mutating)
+
+    def test_insert_without_match_omits_maquinalink_column(self):
+        cursor = _detalhes_cursor(exists=False)
+        with patch(
+            "routers.mdb_writer._mdb_table_columns", return_value=_DETALHES_AVAIL
+        ):
+            _write_detalhes(
+                cursor,
+                1593,
+                2026,
+                {"Titulo": "Cartaz", "MaquinaLink": "Offset", "PapelLink": "Couché"},
+                mdb_path=r"\\dfs\os.mdb",
+            )
+
+        mutating = _mutating_sql(cursor)
+        assert len(mutating) == 1
+        sql, params = mutating[0]
+        assert sql.lstrip().upper().startswith("INSERT")
+        assert "MaquinaLink" not in sql
+        assert "Offset" not in params
+        assert all("tabMaquinas" not in sql for sql, _ in mutating)
+
+    def test_canonical_compound_is_written(self):
+        cursor = _detalhes_cursor(exists=True, current_maquina="Komori")
+        with patch(
+            "routers.mdb_writer._mdb_table_columns", return_value=_DETALHES_AVAIL
+        ):
+            _write_detalhes(
+                cursor,
+                10,
+                2026,
+                {"Titulo": "Revista", "MaquinaLink": "digital cor/pb"},
+                mdb_path=r"\\dfs\os.mdb",
+            )
+
+        sql, params = _mutating_sql(cursor)[0]
+        assert "MaquinaLink=?" in sql.replace(" ", "")
+        assert "Digital Cor/PB" in params
+
+    def test_token_fallback_writes_first_existing_machine(self):
+        cursor = _detalhes_cursor(exists=False)
+        with patch(
+            "routers.mdb_writer._mdb_table_columns", return_value=_DETALHES_AVAIL
+        ):
+            _write_detalhes(
+                cursor,
+                11,
+                2026,
+                {"Titulo": "Livro", "MaquinaLink": "Komori/SM74"},
+                mdb_path=r"\\dfs\os.mdb",
+            )
+
+        sql, params = _mutating_sql(cursor)[0]
+        assert "MaquinaLink" in sql
+        assert "Komori" in params
+        assert "Komori/SM74" not in params
+
+    def test_empty_maquina_omits_column_not_empty_string(self):
+        cursor = _detalhes_cursor(exists=True, current_maquina="Catu")
+        with patch(
+            "routers.mdb_writer._mdb_table_columns", return_value=_DETALHES_AVAIL
+        ):
+            _write_detalhes(
+                cursor,
+                12,
+                2026,
+                {"Titulo": "Folder", "MaquinaLink": ""},
+                mdb_path=r"\\dfs\os.mdb",
+            )
+
+        sql, params = _mutating_sql(cursor)[0]
+        assert "MaquinaLink=?" not in sql.replace(" ", "")
+        assert "" not in params
+        assert "Folder" in params

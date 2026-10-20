@@ -2475,17 +2475,10 @@ def delete_os_history(ano: int, id: int, cod_status: str):
                 f"Andamento {cod_status} não encontrado para OS {id}/{ano}"
             )
         
-        # 2. Registrar hash em deleted_andamentos
-        content_fields = [
-            str(andamento.get("SituacaoLink") or ""),
-            str(andamento.get("SetorLink") or ""),
-            str(andamento.get("Data") or ""),
-            str(andamento.get("UltimoStatus") or ""),
-            str(andamento.get("Observaçao") or ""),
-            str(andamento.get("Ponto") or ""),
-        ]
-        content_str = "|".join(content_fields)
-        content_hash = hashlib.sha256(content_str.encode("utf-8")).hexdigest()
+        # 2. Registrar hash em deleted_andamentos (mesma normalização do sync)
+        from services.andamento_tombstone import calculate_andamento_content_hash
+
+        content_hash = calculate_andamento_content_hash(andamento)
 
         cursor.execute(
             """

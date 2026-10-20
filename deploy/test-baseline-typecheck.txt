@@ -1,0 +1,9 @@
+# Erros conhecidos do typecheck (apps/web). Uma fingerprint por linha.
+# Formato: <arquivo>(linha,col): error TSXXXX: <mensagem sem caminho absoluto>
+# Erro NOVO bloqueia o release. Use -UpdateBaseline apos corrigir.
+tsconfig.app.json(18,5): error TS6310: Referenced project 'packages/api-types' may not disable emit.
+tsconfig.app.json(19,5): error TS6310: Referenced project 'packages/ui' may not disable emit.
+vite.config.ts(90,13): error TS2722: Cannot invoke an object which is possibly 'undefined'.
+vite.config.ts(145,30): error TS4111: Property 'PORT' comes from an index signature, so it must be accessed with ['PORT'].
+vite.config.ts(145,42): error TS4111: Property 'VITE_API_PORT' comes from an index signature, so it must be accessed with ['VITE_API_PORT'].
+vite.config.ts(246,22): error TS4111: Property 'VITE_PWA_DEV' comes from an index signature, so it must be accessed with ['VITE_PWA_DEV'].

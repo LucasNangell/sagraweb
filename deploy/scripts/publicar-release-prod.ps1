@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Script unico PROD: junctions, parar API (se necessario), ativar release, corrigir config, subir API, health check,
@@ -19,6 +19,7 @@ param(
     [string]$ProdPath = "",
     [switch]$ConfirmProductionSwitch,
     [switch]$InteractiveApi,
+    [switch]$AllowNoApiService,
     [int]$HealthWaitSec = 60
 )
 
@@ -71,24 +72,47 @@ Write-DeployStep "1/6 Junctions e validacao"
 & (Join-Path $PSScriptRoot "finish-release-junctions.ps1") -ProdLocalPath $ProdPath -ReleaseName $ReleaseName
 if ($LASTEXITCODE -ne 0) { throw "Junctions falharam" }
 
-# Validacao funcional no MESMO python do PATH usado pelos launchers da API.
+# Conta da API: sem SAGRA-Api a publicacao herda a conta do publicador (risco -1032).
+Write-DeployStep "Gate conta da API (SAGRA-Api)"
+$apiServicePresent = Assert-SagraApiServiceForPublish -AllowNoApiService:$AllowNoApiService
+
+# Validacao funcional no MESMO python do servico / Python 3.10 de producao.
 # Deve falhar antes de parar a API atual ou alterar current.
-Write-DeployStep "Preflight TIFF no Python de producao"
+Write-DeployStep "Preflight TIFF + runtime no Python de producao"
 $tiffCheck = Join-Path $targetRelease "check_tiff_runtime.py"
 if (-not (Test-Path -LiteralPath $tiffCheck)) {
     throw "Release sem preflight TIFF. Gere novamente pelo deploy-release-dev.bat."
 }
+$runtimeCheck = Join-Path $targetRelease "check_release_runtime.py"
+if (-not (Test-Path -LiteralPath $runtimeCheck)) {
+    # Releases antigas: copie o script do DEV ou regenere o pacote.
+    $runtimeCheckFallback = Join-Path $PSScriptRoot "check_release_runtime.py"
+    if (Test-Path -LiteralPath $runtimeCheckFallback) {
+        Write-DeployWarn "Release sem check_release_runtime.py -- usando deploy\scripts da producao"
+        $runtimeCheck = $runtimeCheckFallback
+    } else {
+        throw "Release sem check_release_runtime.py. Gere novamente pelo deploy-release-dev.bat."
+    }
+}
+$prodPython = Resolve-SagraApiPythonExe
+Write-Host "Python de producao: $prodPython"
 $previousPythonPath = $env:PYTHONPATH
+$previousNoUserSite = $env:PYTHONNOUSERSITE
 try {
     $env:PYTHONPATH = @(
         (Join-Path $targetRelease "python_pkgs"),
         (Join-Path $targetRelease "app\backend"),
         (Join-Path $targetRelease "app\services")
     ) -join ";"
-    & python $tiffCheck --release-root $targetRelease
+    $env:PYTHONNOUSERSITE = "1"
+    & $prodPython $tiffCheck --release-root $targetRelease
     if ($LASTEXITCODE -ne 0) { throw "Preflight TIFF falhou; API atual preservada. Verifique o erro acima." }
+    & $prodPython $runtimeCheck --release-root $targetRelease
+    if ($LASTEXITCODE -ne 0) { throw "Preflight runtime falhou; API atual preservada. Verifique deps/sintaxe acima." }
 } finally {
     $env:PYTHONPATH = $previousPythonPath
+    if ($null -eq $previousNoUserSite) { Remove-Item Env:\PYTHONNOUSERSITE -ErrorAction SilentlyContinue }
+    else { $env:PYTHONNOUSERSITE = $previousNoUserSite }
 }
 
 $maintenanceEntered = $false
@@ -127,12 +151,15 @@ try {
     Write-DeployStep "5/6 Iniciar API em current\"
     Start-SagraApiForDeploy -CurrentRoot $currentRoot -InteractiveApi:$InteractiveApi
 
-    # 6) Health check
+    # 6) Health check (release + conta de rede quando SAGRA-Api existe)
     Write-DeployStep "6/6 Health check"
-    $health = Wait-SagraHealthCheck -ProdPath $ProdPath -TimeoutSec $HealthWaitSec
+    $health = Wait-SagraHealthCheck -ProdPath $ProdPath -TimeoutSec $HealthWaitSec `
+        -ExpectedRelease $ReleaseName `
+        -RequireNetworkProcessUser:$apiServicePresent
     if (-not $health.Ok) {
         Write-DeployErr "Health falhou: $($health.Body)"
         Write-Host "  Logs: $currentRoot\logs\api\uvicorn_stderr.log" -ForegroundColor Yellow
+        Write-Host "  (tambem shared\logs\api\uvicorn_stderr.log se a API for servico)" -ForegroundColor Yellow
         if ($activeNow -and $activeNow -ne $ReleaseName) {
             Write-DeployStep "Rollback automatico para $activeNow"
             try {
@@ -200,13 +227,14 @@ try {
         }
     }
 
-    # Sync e Monitor executam o codigo de current\; sem restart seguiriam com a
-    # release anterior ate um reinicio acidental. Falhas aqui so geram aviso: o
-    # SystemWatchdog recupera os servicos assim que o lock for removido.
-    Write-DeployStep "Atualizar Sync andamentos e Monitor"
+    # Sync, Monitor e Organizador executam codigo de current\; sem restart
+    # seguiriam com a release anterior. Falhas so geram aviso: o SystemWatchdog
+    # recupera os servicos assim que o lock for removido.
+    Write-DeployStep "Atualizar Sync, Monitor e Organizador de e-mail"
     $syncRestartedAfter = (Get-Date).ToUniversalTime()
     $syncRestarted = Restart-SagraBackgroundServiceForDeploy -Name "SAGRA-SyncAndamentos"
     $null = Restart-SagraBackgroundServiceForDeploy -Name "SAGRA-MonitorSyncAndamentos"
+    $null = Restart-SagraBackgroundServiceForDeploy -Name "SAGRA-OrganizadorEmailSepim"
     if ($syncRestarted) {
         $syncHeartbeat = Join-Path $currentRoot "logs\sync\sync_heartbeat.json"
         if (Wait-SyncHeartbeatRenewed -HeartbeatPath $syncHeartbeat -StartedAfterUtc $syncRestartedAfter) {
@@ -223,6 +251,23 @@ try {
 
 Write-DeployLog -ProdPath $ProdPath -Message "publicar-release-prod OK: $ReleaseName"
 Write-DeployStep "Concluido"
+$releaseMetaPath = Join-Path $targetRelease "RELEASE.txt"
+$commitMeta = ""
+if (Test-Path -LiteralPath $releaseMetaPath) {
+    $commitLine = Select-String -LiteralPath $releaseMetaPath -Pattern '^\s*commit\s*=' | Select-Object -First 1
+    if ($commitLine) { $commitMeta = (($commitLine.Line -split '=', 2)[1]).Trim() }
+}
+$apiAccount = ""
+$apiSvc = Get-SagraApiService
+if ($apiSvc) {
+    $apiAccount = [string](Get-CimInstance Win32_Service -Filter "Name='$SagraApiServiceName'").StartName
+}
 Write-Host "Release publicada: $currentRoot" -ForegroundColor Green
+Write-Host ("  release:       {0}" -f $ReleaseName)
+Write-Host ("  commit:        {0}" -f $(if ($commitMeta) { $commitMeta } else { '(n/d)' }))
+Write-Host ("  health.release:{0}" -f $(if ($health.Release) { $health.Release } else { '(n/d)' }))
+Write-Host ("  process_user:  {0}" -f $(if ($health.ProcessUser) { $health.ProcessUser } else { '(n/d)' }))
+Write-Host ("  mdb:           {0}" -f $(if ($health.Mdb) { $health.Mdb } else { '(n/d)' }))
+Write-Host ("  servico API:   {0}" -f $(if ($apiAccount) { "$SagraApiServiceName ($apiAccount)" } else { '(ausente)' }))
 Write-Host "Teste: home, login, /papelaria" -ForegroundColor Green
-Write-Host "Sync andamentos e Monitor (NSSM): reiniciados dentro do lock de manutencao." -ForegroundColor DarkGray
+Write-Host "Sync, Monitor e OrganizadorEmail (NSSM): reiniciados dentro do lock de manutencao." -ForegroundColor DarkGray

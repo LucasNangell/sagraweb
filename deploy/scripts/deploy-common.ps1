@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
   Funções compartilhadas para deploy por releases (SAGRA Web).
   Usado por deploy_release.ps1, rollback_release.ps1, prepare-shared.ps1, validate-release.ps1.
@@ -23,7 +23,7 @@ function Normalize-DeployPath {
     $p = $p -replace '^Microsoft\.PowerShell\.Core\\FileSystem::', ''
     $p = $p -replace '^FileSystem::', ''
 
-    # Resolve-Path em UNC as vezes retorna \server\share (1 barra) — robocopy exige \\
+    # Resolve-Path em UNC as vezes retorna \server\share (1 barra) -- robocopy exige \\
     if ($p -match '^\\[^\\]') {
         $p = '\\' + $p.TrimStart('\')
     }
@@ -79,7 +79,7 @@ function Resolve-DeployNginxConf {
     return $NginxConfPath
 }
 
-# Pastas mutáveis — NUNCA sobrescrever em deploy; ficam em shared/
+# Pastas mutáveis -- NUNCA sobrescrever em deploy; ficam em shared/
 $script:SharedDirNames = @(
     "logs",
     "storage",
@@ -747,25 +747,66 @@ function Set-ReleaseMetadata {
     param(
         [string]$ReleasePath,
         [string]$ReleaseName,
-        [string]$SourceDescription
+        [string]$SourceDescription,
+        [string]$Commit = "",
+        [string]$Branch = "",
+        [int]$DirtyFiles = -1,
+        [string]$Tests = "",
+        [string]$ChangesText = ""
     )
+    if (-not $Commit -and $env:SAGRA_RELEASE_COMMIT) { $Commit = [string]$env:SAGRA_RELEASE_COMMIT }
+    if (-not $Branch -and $env:SAGRA_RELEASE_BRANCH) { $Branch = [string]$env:SAGRA_RELEASE_BRANCH }
+    if ($DirtyFiles -lt 0 -and $env:SAGRA_RELEASE_DIRTY_FILES -match '^\d+$') {
+        $DirtyFiles = [int]$env:SAGRA_RELEASE_DIRTY_FILES
+    }
+    if ($DirtyFiles -lt 0) { $DirtyFiles = 0 }
+    if (-not $Tests -and $env:SAGRA_RELEASE_TESTS) { $Tests = [string]$env:SAGRA_RELEASE_TESTS }
+    if (-not $Tests) { $Tests = "unknown" }
+    if (-not $ChangesText -and $env:SAGRA_RELEASE_CHANGES) { $ChangesText = [string]$env:SAGRA_RELEASE_CHANGES }
+
     $deployedAt = Get-Date -Format "o"
-    $releaseText = @(
+    $releaseLines = @(
         "release=$ReleaseName",
         "deployed_at=$deployedAt",
-        "source=$SourceDescription"
-    ) -join [Environment]::NewLine
-    Set-Content -LiteralPath (Join-Path $ReleasePath "RELEASE.txt") -Value $releaseText -Encoding UTF8
+        "source=$SourceDescription",
+        "commit=$(if ($Commit) { $Commit } else { '(unknown)' })",
+        "branch=$(if ($Branch) { $Branch } else { '(unknown)' })",
+        "dirty_files=$DirtyFiles",
+        "tests=$Tests"
+    )
+    # UTF8 sem BOM: health/watchdog leem com utf-8-sig, mas BOM atrapalha parsers simples.
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText(
+        (Join-Path $ReleasePath "RELEASE.txt"),
+        (($releaseLines -join [Environment]::NewLine) + [Environment]::NewLine),
+        $utf8NoBom
+    )
 
-    $versionJson = @{
+    $changesPath = Join-Path $ReleasePath "CHANGES.txt"
+    if ($ChangesText) {
+        [System.IO.File]::WriteAllText($changesPath, ($ChangesText.TrimEnd() + [Environment]::NewLine), $utf8NoBom)
+    } elseif ($DirtyFiles -eq 0) {
+        [System.IO.File]::WriteAllText($changesPath, "(working tree limpa)" + [Environment]::NewLine, $utf8NoBom)
+    }
+
+    $versionObj = [ordered]@{
         release = $ReleaseName
         deployedAt = $deployedAt
         source = $SourceDescription
-    } | ConvertTo-Json -Compress
+        commit = $(if ($Commit) { $Commit } else { $null })
+        branch = $(if ($Branch) { $Branch } else { $null })
+        dirtyFiles = $DirtyFiles
+        tests = $Tests
+    }
+    $versionJson = $versionObj | ConvertTo-Json -Compress
     $frontendDist = Join-Path $ReleasePath "app\frontend"
     if (Test-Path -LiteralPath $frontendDist) {
-        $versionJson | Set-Content -LiteralPath (Join-Path $frontendDist "version.json") -Encoding UTF8
-        # Preservar build-id.txt do vite build — usado pelo client para detectar update.
+        [System.IO.File]::WriteAllText(
+            (Join-Path $frontendDist "version.json"),
+            $versionJson + [Environment]::NewLine,
+            $utf8NoBom
+        )
+        # Preservar build-id.txt do vite build -- usado pelo client para detectar update.
         # Nao sobrescrever (Join-Path $frontendDist "build-id.txt").
     }
 }
@@ -1132,34 +1173,104 @@ function Start-SagraApiForDeploy {
 function Wait-SagraHealthCheck {
     param(
         [string]$ProdPath,
-        [int]$TimeoutSec = 60
+        [int]$TimeoutSec = 60,
+        [string]$ExpectedRelease = "",
+        [switch]$RequireNetworkProcessUser
     )
     $port = Get-SagraApiPort -ProdPath $ProdPath
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    $last = @{ Ok = $false; Body = "timeout apos ${TimeoutSec}s"; Url = "http://127.0.0.1:${port}/health" }
     while ((Get-Date) -lt $deadline) {
-        $health = Invoke-ReleaseHealthCheck -Port $port
+        $health = Invoke-ReleaseHealthCheck -Port $port `
+            -ExpectedRelease $ExpectedRelease `
+            -RequireNetworkProcessUser:$RequireNetworkProcessUser
+        $last = $health
         if ($health.Ok) {
             return $health
         }
         Start-Sleep -Seconds 2
     }
-    return @{ Ok = $false; Body = "timeout apos ${TimeoutSec}s"; Url = "http://127.0.0.1:${port}/health" }
+    return $last
 }
 
 function Invoke-ReleaseHealthCheck {
     param(
         [int]$Port = 8050,
         [string]$HostName = "127.0.0.1",
-        [int]$TimeoutSec = 5
+        [int]$TimeoutSec = 5,
+        [string]$ExpectedRelease = "",
+        [switch]$RequireNetworkProcessUser
     )
     $url = "http://${HostName}:${Port}/health"
+    $systemAccounts = @(
+        "LocalSystem", "SYSTEM", "NT AUTHORITY\SYSTEM",
+        "NT AUTHORITY\LOCAL SERVICE", "NT AUTHORITY\NETWORK SERVICE",
+        "LOCAL SERVICE", "NETWORK SERVICE"
+    )
     try {
+        # Sem headers de proxy: /health so expoe process_user/mdb em loopback direto.
         $resp = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec $TimeoutSec
+        $body = [string]$resp.Content
+        $ok = ($resp.StatusCode -eq 200)
+        $parsed = $null
+        $release = $null
+        $processUser = $null
+        $mdb = $null
+        try {
+            $parsed = $body | ConvertFrom-Json -ErrorAction Stop
+            if ($parsed.PSObject.Properties.Name -contains "release") { $release = [string]$parsed.release }
+            if ($parsed.PSObject.Properties.Name -contains "process_user") { $processUser = [string]$parsed.process_user }
+            if ($parsed.PSObject.Properties.Name -contains "mdb") { $mdb = [string]$parsed.mdb }
+        } catch { }
+
+        $reasons = @()
+        if ($ok -and $ExpectedRelease) {
+            if (-not $release) {
+                $ok = $false
+                $reasons += "health sem campo release (API antiga ou nao-loopback?)"
+            } elseif ($release -ne $ExpectedRelease) {
+                $ok = $false
+                $reasons += "release=$release esperado=$ExpectedRelease"
+            }
+        }
+        if ($ok -and $RequireNetworkProcessUser) {
+            # Preferir process_user do /health (API nova). Releases empacotadas sem esse
+            # campo (pacote stale / SkipBuild) caem no StartName do servico SAGRA-Api.
+            if (-not $processUser) {
+                $apiSvc = Get-CimInstance Win32_Service -Filter "Name='$SagraApiServiceName'" -ErrorAction SilentlyContinue
+                if ($apiSvc -and $apiSvc.State -eq "Running" -and $apiSvc.StartName) {
+                    $processUser = [string]$apiSvc.StartName
+                }
+            }
+            if (-not $processUser) {
+                $ok = $false
+                $reasons += "health sem process_user e servico $SagraApiServiceName ausente/parado"
+            } else {
+                $userLeaf = ($processUser -split '\\')[-1]
+                $isSystem = $false
+                foreach ($sa in $systemAccounts) {
+                    if ($processUser -ieq $sa -or $userLeaf -ieq (($sa -split '\\')[-1])) {
+                        $isSystem = $true
+                        break
+                    }
+                }
+                if ($isSystem) {
+                    $ok = $false
+                    $reasons += "process_user=$processUser (conta de sistema sem credencial DFS)"
+                }
+            }
+        }
+        if (-not $ok -and $reasons.Count -gt 0) {
+            $body = ($reasons -join "; ") + " | " + $body
+        }
         return @{
-            Ok = ($resp.StatusCode -eq 200)
+            Ok = $ok
             StatusCode = $resp.StatusCode
-            Body = $resp.Content
+            Body = $body
             Url = $url
+            Release = $release
+            ProcessUser = $processUser
+            Mdb = $mdb
         }
     } catch {
         return @{
@@ -1167,8 +1278,70 @@ function Invoke-ReleaseHealthCheck {
             StatusCode = 0
             Body = $_.Exception.Message
             Url = $url
+            Release = $null
+            ProcessUser = $null
+            Mdb = $null
         }
     }
+}
+
+function Resolve-SagraApiPythonExe {
+    param([string]$Hint = "")
+    if ($Hint -and (Test-Path -LiteralPath $Hint -PathType Leaf)) {
+        return (Resolve-Path -LiteralPath $Hint).Path
+    }
+    $nssmCandidates = @(
+        "C:\nssm\nssm.exe",
+        (Join-Path $script:DeployCommonRoot "deploy\tools\nssm.exe")
+    )
+    $cmd = Get-Command nssm.exe -ErrorAction SilentlyContinue
+    if ($cmd) { $nssmCandidates = @($cmd.Source) + $nssmCandidates }
+    foreach ($nssm in $nssmCandidates) {
+        if (-not (Test-Path -LiteralPath $nssm -PathType Leaf)) { continue }
+        $ErrorActionPreference = "Continue"
+        $out = (& $nssm get $SagraApiServiceName Application 2>&1 | Out-String) -replace "\x00", ""
+        $ErrorActionPreference = "Stop"
+        $exe = ($out -split "`r?`n" | Where-Object { $_ -and $_ -notmatch 'Can.t open|OpenService|ERROR' } | Select-Object -First 1)
+        if ($exe) {
+            $exe = $exe.Trim().Trim('"')
+            if (Test-Path -LiteralPath $exe -PathType Leaf) { return $exe }
+        }
+    }
+    foreach ($fallback in @(
+            "${env:ProgramFiles}\Python310\python.exe",
+            "${env:ProgramFiles}\Python312\python.exe"
+        )) {
+        if ($fallback -and (Test-Path -LiteralPath $fallback -PathType Leaf)) { return $fallback }
+    }
+    $py = Get-Command python.exe -ErrorAction SilentlyContinue
+    if ($py -and $py.Source -notmatch 'WindowsApps\\python\.exe$') { return $py.Source }
+    throw "Python de producao nao encontrado (SAGRA-Api Application / Program Files\\Python310)."
+}
+
+function Assert-SagraApiServiceForPublish {
+    param(
+        [switch]$AllowNoApiService
+    )
+    $systemAccounts = @("LocalSystem", "NT AUTHORITY\SYSTEM", "NT AUTHORITY\LocalService", "NT AUTHORITY\NetworkService")
+    $svc = Get-SagraApiService
+    if (-not $svc) {
+        $msg = ("Servico $SagraApiServiceName ausente. Sem ele a publicacao sobe a API com a conta " +
+            "de quem publica (risco -1032 nos MDBs). Instale com current\instalar-servico-api.ps1 " +
+            "-ServiceCredential (Get-Credential 'REDECAMARA\usr_sefoc') -Start. Escape: -AllowNoApiService.")
+        if ($AllowNoApiService) {
+            Write-DeployWarn $msg
+            return $false
+        }
+        throw $msg
+    }
+    $cim = Get-CimInstance Win32_Service -Filter "Name='$SagraApiServiceName'"
+    $account = [string]$cim.StartName
+    if ($account -in $systemAccounts) {
+        throw ("$SagraApiServiceName roda como $account (sem credencial DFS). " +
+            "Reconfigure com -ServiceCredential REDECAMARA\usr_sefoc.")
+    }
+    Write-DeployOk ("$SagraApiServiceName presente (conta=$account)")
+    return $true
 }
 
 function Test-NginxConfigReadable {
@@ -1243,7 +1416,10 @@ function Copy-DeployScriptsToProd {
         "deploy-release-prod.ps1",
         "deploy-release-prod.bat",
         "fix-config-bom.ps1",
-        "publicar-release-prod.ps1"
+        "publicar-release-prod.ps1",
+        "check_release_runtime.py",
+        "check_tiff_runtime.py",
+        "run-release-tests.ps1"
     )
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
     foreach ($f in $files) {

@@ -69,5 +69,14 @@ def test_missing_imagecodecs_is_actionable_and_not_a_success(monkeypatch):
 def test_publication_preflight_precedes_api_stop():
     # A ordem e critica: uma dependencia faltando nao deve causar indisponibilidade.
     script = (ROOT / "deploy/scripts/publicar-release-prod.ps1").read_text(encoding="utf-8-sig")
-    assert script.index("& python $tiffCheck") < script.index("Stop-SagraApiForDeploy")
-    assert script.index("& python $tiffCheck") < script.index('"activate-release.ps1"')
+    # Preflight TIFF + runtime no Python de producao, antes de parar a API.
+    assert "$prodPython $tiffCheck" in script or "& $prodPython $tiffCheck" in script
+    tiff_idx = script.index("$tiffCheck --release-root")
+    runtime_idx = script.index("$runtimeCheck --release-root")
+    stop_idx = script.index("Stop-SagraApiForDeploy")
+    activate_idx = script.index('"activate-release.ps1"')
+    assert tiff_idx < stop_idx
+    assert runtime_idx < stop_idx
+    assert tiff_idx < activate_idx
+    assert "Assert-SagraApiServiceForPublish" in script
+    assert "check_release_runtime.py" in script

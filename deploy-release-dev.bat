@@ -2,10 +2,13 @@
 chcp 65001 >nul
 setlocal EnableExtensions
 
-rem Deploy por release — etapa DEV (build + copia para releases\)
+rem Deploy por release — etapa DEV (testes + build + copia para releases\)
 rem Uso:
 rem   deploy-release-dev.bat
 rem   deploy-release-dev.bat -SkipBuild
+rem   deploy-release-dev.bat -SkipTests
+rem   deploy-release-dev.bat -SkipFrontend
+rem   deploy-release-dev.bat -UpdateBaseline
 rem   deploy-release-dev.bat -ReleaseName 20260612_153000
 
 cd /d "%~dp0"

@@ -411,24 +411,25 @@ class AndamentosSynchronizer:
     # ===================================================================
     
     def _calculate_content_hash(self, andamento: Dict) -> str:
-        """
-        Calcula hash SHA256 do conteúdo do registro (exceto CodStatus, NroProtocoloLink, AnoProtocoloLink).
-        Isso permite distinguir ressurreição de novo registro legítimo.
-        """
-        content_fields = [
-            str(andamento.get('SituacaoLink', '')),
-            str(andamento.get('SetorLink', '')),
-            str(andamento.get('Data', '')),
-            str(andamento.get('UltimoStatus', '')),
-            str(andamento.get('Observaçao', '')),
-            str(andamento.get('Ponto', ''))
-        ]
-        
-        content_str = '|'.join(content_fields)
-        return hashlib.sha256(content_str.encode('utf-8')).hexdigest()
+        """Hash canônico do conteúdo (sem UltimoStatus). Ver andamento_tombstone."""
+        try:
+            from services.andamento_tombstone import calculate_andamento_content_hash
+
+            return calculate_andamento_content_hash(andamento)
+        except Exception:
+            # Fallback local se o helper do backend não estiver no path
+            content_fields = [
+                str(andamento.get("SituacaoLink", "") or ""),
+                str(andamento.get("SetorLink", "") or ""),
+                str(andamento.get("Data", "") or ""),
+                str(andamento.get("Observaçao", "") or ""),
+                str(andamento.get("Ponto", "") or ""),
+            ]
+            content_str = "|".join(content_fields)
+            return hashlib.sha256(content_str.encode("utf-8")).hexdigest()
     
     def is_deleted(self, codstatus: str) -> bool:
-        """Verifica se um CodStatus está na lista de exclusões definitivas"""
+        """True se CodStatus tem tombstone. Em erro de DB: fail-closed (True)."""
         try:
             conn = self.conn_mgr.get_mysql()
             cursor = conn.cursor()
@@ -443,7 +444,7 @@ class AndamentosSynchronizer:
             return count > 0
         except Exception as e:
             self.logger.logger.error(f"[ERRO] Erro ao verificar exclusão: {e}")
-            return False
+            return True
 
     def is_os_deleted(self, nro: int, ano: int, mysql_conn=None) -> bool:
         """Tombstone de OS inteira (deleted_os).
@@ -472,52 +473,35 @@ class AndamentosSynchronizer:
     
     def is_resurrection(self, codstatus: str, andamento: Dict) -> bool:
         """
-        Verifica se é uma RESSURREIÇÃO (mesmo conteúdo de registro excluído)
-        ou um NOVO REGISTRO legítimo (conteúdo diferente).
+        True = bloquear INSERT (CodStatus tem tombstone durável).
 
-        Tombstone sem content_hash bloqueia (não falha aberto). Só libera inserção
-        quando há hash armazenado e o payload atual diverge (reuso legítimo).
+        Presença em deleted_andamentos é autoridade: não limpa tombstone por
+        divergência de hash. Reuso de CodStatus só via remoção manual/admin.
+        Em erro de DB: fail-closed (bloqueia).
         """
         try:
             conn = self.conn_mgr.get_mysql()
             cursor = conn.cursor(dictionary=True)
-            
-            cursor.execute("""
-                SELECT content_hash FROM deleted_andamentos WHERE codstatus = %s
-            """, (codstatus,))
-            
+
+            cursor.execute(
+                "SELECT codstatus FROM deleted_andamentos WHERE codstatus = %s",
+                (codstatus,),
+            )
             result = cursor.fetchone()
             cursor.close()
-            
-            if not result:
-                return False  # Não está excluído, permitir
-            
-            stored_hash = result['content_hash']
-            if not stored_hash:
-                self.logger.logger.warning(
-                    f"[BLOQUEADO] CodStatus {codstatus} tem tombstone sem content_hash. "
-                    f"Tratando como ressurreição (bloqueio)."
-                )
-                return True
 
-            current_hash = self._calculate_content_hash(andamento)
-            
-            # Se hash é diferente, é um NOVO registro legítimo
-            if stored_hash != current_hash:
-                self.logger.logger.info(
-                    f"[NOVO REGISTRO] CodStatus {codstatus} estava excluído mas conteúdo é diferente. "
-                    f"Permitindo inserção de novo registro legítimo."
-                )
-                # Remover da lista de exclusões pois é um registro novo
-                self._remove_from_deleted(codstatus)
-                return False  # NãO é ressurreição, permitir
-            
-            # Hash igual = ressurreição do registro excluído
+            if not result:
+                return False
+
+            self.logger.logger.warning(
+                f"[BLOQUEADO] CodStatus {codstatus} tem tombstone em deleted_andamentos "
+                f"(ressurreição bloqueada)."
+            )
             return True
-            
+
         except Exception as e:
             self.logger.logger.error(f"[ERRO] Erro ao verificar ressurreição: {e}")
-            return False  # Em caso de erro, permitir (fail-safe)
+            return True
     
     def _remove_from_deleted(self, codstatus: str):
         """Remove CodStatus da lista de exclusões (quando é um novo registro legítimo)"""
@@ -1154,7 +1138,7 @@ class AndamentosSynchronizer:
                 )
                 return
 
-            if self.is_resurrection(codstatus, andamento):
+            if self.is_deleted(codstatus) or self.is_resurrection(codstatus, andamento):
                 current_time = time.time()
                 last_warning = self._blocked_warnings_cache.get(codstatus, 0)
 
@@ -1234,7 +1218,7 @@ class AndamentosSynchronizer:
                     f"[BLOQUEADO] CodStatus {codstatus} OS {nro}/{ano} em deleted_os (insert_mdb)"
                 )
                 return
-            if self.is_resurrection(codstatus, andamento):
+            if self.is_deleted(codstatus) or self.is_resurrection(codstatus, andamento):
                 current_time = time.time()
                 last_warning = self._blocked_warnings_cache.get(codstatus, 0)
                 if current_time - last_warning >= self._blocked_warning_interval:
@@ -1372,24 +1356,67 @@ class AndamentosSynchronizer:
                 sucesso=False, erro=str(e)
             )
     
+    def _mdb_delete_allowed(self) -> bool:
+        """Kill-switch SYNC_ALLOW_MDB_DELETE (default True)."""
+        raw = os.getenv("SYNC_ALLOW_MDB_DELETE")
+        if raw is None:
+            return True
+        return raw.strip().lower() in ("1", "true", "yes", "on")
+
     def delete_mdb(self, codstatus: str, andamento: Dict, mdb_conn, origem: str):
-        """
-        Remove andamento do MDB (Access).
-        ⚠️ PROTEÇÃO ATIVADA: Exclusão desabilitada para preservar dados legados.
-        """
+        """Remove andamento do MDB (Access) e mantém tombstone em deleted_andamentos."""
         try:
+            if not self._mdb_delete_allowed():
+                record_details = self._format_record_log(andamento)
+                self.logger.logger.info(
+                    f"--- DETALHES DO REGISTRO QUE SERIA EXCLUÍDO ({origem}) ---\\n"
+                    f"{record_details}\\n---------------------------------------------------------"
+                )
+                self.logger.log(
+                    'DELETE_SKIPPED', 'MySQL', origem, codstatus,
+                    andamento.get('NroProtocoloLink'), andamento.get('AnoProtocoloLink'),
+                    'Exclusão MDB ignorada (SYNC_ALLOW_MDB_DELETE=false)'
+                )
+                return
+
+            self.backup_mgr.backup(origem, andamento)
+
             record_details = self._format_record_log(andamento)
-            self.logger.logger.info(f"--- DETALHES DO REGISTRO QUE SERIA EXCLUÍDO ({origem}) ---\\n{record_details}\\n---------------------------------------------------------")
+            self.logger.logger.info(
+                f"--- DETALHES DO REGISTRO A SER EXCLUÍDO ({origem}) ---\\n"
+                f"{record_details}\\n-----------------------------------------------"
+            )
+
+            nro = andamento.get('NroProtocoloLink')
+            ano = andamento.get('AnoProtocoloLink')
+
+            self.mark_as_deleted(
+                codstatus,
+                nro,
+                ano,
+                origem,
+                andamento=andamento,
+                motivo='Exclusão MySQL propagada ao MDB pelo sync',
+            )
+
+            cursor = mdb_conn.cursor()
+            cursor.execute(
+                "DELETE FROM tabandamento WHERE CodStatus = ?",
+                (codstatus,),
+            )
+            mdb_conn.commit()
+            cursor.close()
 
             self.logger.log(
-                'DELETE_SKIPPED', 'MySQL', origem, codstatus,
-                andamento.get('NroProtocoloLink'), andamento.get('AnoProtocoloLink'),
-                'Exclusão MDB ignorada (Proteção de dados ativada)'
+                'DELETE', 'MySQL', origem, codstatus,
+                nro, ano,
+                'Exclusão propagada ao MDB; tombstone mantido em deleted_andamentos'
             )
-            return
-
         except Exception as e:
-            mdb_conn.rollback()
+            try:
+                mdb_conn.rollback()
+            except Exception:
+                pass
             self.logger.log(
                 'DELETE', 'MySQL', origem, codstatus,
                 andamento.get('NroProtocoloLink'), andamento.get('AnoProtocoloLink'),

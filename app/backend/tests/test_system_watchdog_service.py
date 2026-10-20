@@ -610,9 +610,11 @@ def test_package_requires_sync_and_monitor_services():
         encoding="utf-8-sig"
     )
     critical = script[script.index("$criticalFiles = @("):]
+    root_runtime = script[script.index("$rootRuntimePy = @("):script.index("$systemWatchdogRunbook")]
 
-    assert "sync_andamentos_service.py obrigatorio" in script
-    assert "monitor_sync_andamentos_service.py obrigatorio" in script
+    assert '"sync_andamentos_service.py"' in root_runtime
+    assert '"monitor_sync_andamentos_service.py"' in root_runtime
+    assert "Arquivo runtime obrigatorio ausente" in script
     assert '"sync_andamentos_service.py"' in critical
     assert '"monitor_sync_andamentos_service.py"' in critical
 
@@ -621,8 +623,11 @@ def test_package_requires_watchdog_and_integrity_manifest():
     script = (ROOT / "deploy" / "scripts" / "package-release.ps1").read_text(
         encoding="utf-8-sig"
     )
+    root_runtime = script[script.index("$rootRuntimePy = @("):script.index("$systemWatchdogRunbook")]
 
-    assert "system_watchdog_service.py obrigatorio" in script
+    assert '"system_watchdog_service.py"' in root_runtime
+    assert "Arquivo runtime obrigatorio ausente" in script
+    assert "check_release_runtime.py" in script
     assert "RELEASE-INTEGRITY.json" in script
     assert "OutDir recusado" in script
     assert "function Get-Sha256Hex" in script

@@ -66,7 +66,7 @@ function Resolve-BuildPython {
     #>
     $candidates = @()
 
-    # 1) py launcher — escolhe install real (nao Store)
+    # 1) py launcher -- escolhe install real (nao Store)
     $pyLauncher = Get-Command py -ErrorAction SilentlyContinue
     if ($pyLauncher) {
         try {
@@ -323,72 +323,70 @@ Copy-Item (Join-Path $Root "app\backend\requirements.txt") (Join-Path $Release "
 Copy-Item (Join-Path $PSScriptRoot "..\templates\requirements-ocr.txt") (Join-Path $Release "requirements-ocr.txt") -Force
 Copy-Item (Join-Path $PSScriptRoot "..\templates\requirements-tiff.txt") (Join-Path $Release "requirements-tiff.txt") -Force
 Copy-Item (Join-Path $PSScriptRoot "check_tiff_runtime.py") (Join-Path $Release "check_tiff_runtime.py") -Force
+Copy-Item (Join-Path $PSScriptRoot "check_release_runtime.py") (Join-Path $Release "check_release_runtime.py") -Force
 Copy-Item (Join-Path $PSScriptRoot "..\templates\LEIA-ME-DEPLOY.md") (Join-Path $Release "LEIA-ME.md") -Force
-Copy-Item (Join-Path $PSScriptRoot "..\templates\iniciar-api.bat") (Join-Path $Release "iniciar-api.bat") -Force
-Copy-Item (Join-Path $PSScriptRoot "..\templates\parar-api.bat") (Join-Path $Release "parar-api.bat") -Force
-Copy-Item (Join-Path $PSScriptRoot "..\templates\parar-api.ps1") (Join-Path $Release "parar-api.ps1") -Force
-Copy-Item (Join-Path $PSScriptRoot "..\templates\liberar-porta-api.ps1") (Join-Path $Release "liberar-porta-api.ps1") -Force
-Copy-Item (Join-Path $PSScriptRoot "..\templates\preparar-logs.ps1") (Join-Path $Release "preparar-logs.ps1") -Force
-Copy-Item (Join-Path $PSScriptRoot "..\templates\iniciar-api-detached.ps1") (Join-Path $Release "iniciar-api-detached.ps1") -Force
-Copy-Item (Join-Path $PSScriptRoot "..\templates\_iniciar-sync-andamentos.cmd") (Join-Path $Release "_iniciar-sync-andamentos.cmd") -Force
-Copy-Item (Join-Path $PSScriptRoot "..\templates\instalar-dependencias.bat") (Join-Path $Release "instalar-dependencias.bat") -Force
-Copy-Item (Join-Path $PSScriptRoot "..\templates\deploy-release-prod.ps1") (Join-Path $Release "deploy-release-prod.ps1") -Force
-Copy-Item (Join-Path $PSScriptRoot "..\templates\deploy-release-prod.bat") (Join-Path $Release "deploy-release-prod.bat") -Force
-Copy-Item (Join-Path $PSScriptRoot "..\templates\publicar-release.ps1") (Join-Path $Release "publicar-release.ps1") -Force
-Copy-Item (Join-Path $PSScriptRoot "..\templates\publicar-release.bat") (Join-Path $Release "publicar-release.bat") -Force
 
-# Sync 24/7 — NSSM service; recuperacao fica com o SAGRA-SystemWatchdog.
-# watchdog-sync.ps1/instalar-watchdog-sync.ps1 seguem so como legado (rollback):
-# o instalador do SystemWatchdog desativa a tarefa e o legado recusa coexistir.
-$syncServiceScripts = @(
-    "instalar-servico-sync.ps1",
-    "iniciar-servico-sync.ps1",
-    "parar-servico-sync.ps1",
-    "desinstalar-servico-sync.ps1",
-    "status-servico-sync.ps1",
-    "watchdog-sync.ps1",
-    "instalar-watchdog-sync.ps1",
-    "instalar-servico-monitor-sync.ps1",
-    "parar-servico-monitor-sync.ps1",
-    "desinstalar-servico-monitor-sync.ps1",
-    "status-servico-monitor-sync.ps1",
-    "conceder-controle-servico.ps1"
-)
-foreach ($name in $syncServiceScripts) {
-    $src = Join-Path $PSScriptRoot "..\templates\$name"
-    if (Test-Path -LiteralPath $src) {
-        Copy-Item -LiteralPath $src (Join-Path $Release $name) -Force
-    } else {
-        Write-Warning "Template ausente: $src"
-    }
+# Copia TODOS os templates operacionais (.ps1/.bat/.cmd) para a raiz do pacote.
+# Listas abaixo sao apenas "obrigatorios": ausencia = throw.
+$templatesDir = Join-Path $PSScriptRoot "..\templates"
+$templateFiles = @(Get-ChildItem -LiteralPath $templatesDir -File -ErrorAction Stop |
+    Where-Object { $_.Extension -in @(".ps1", ".bat", ".cmd") })
+if ($templateFiles.Count -lt 1) {
+    throw "Nenhum template .ps1/.bat/.cmd em $templatesDir"
 }
+foreach ($tf in $templateFiles) {
+    Copy-Item -LiteralPath $tf.FullName -Destination (Join-Path $Release $tf.Name) -Force
+}
+Write-Host ("Templates operacionais: {0} arquivo(s)" -f $templateFiles.Count)
 
-$systemWatchdogScripts = @(
+$requiredTemplates = @(
+    "iniciar-api.bat",
+    "iniciar-api-detached.ps1",
+    "parar-api.bat",
+    "parar-api.ps1",
+    "preparar-logs.ps1",
+    "publicar-release.bat",
+    "publicar-release.ps1",
+    "deploy-release-prod.bat",
+    "deploy-release-prod.ps1",
+    "instalar-servico-sync.ps1",
+    "instalar-servico-monitor-sync.ps1",
     "instalar-servico-watchdog-sistema.ps1",
+    "instalar-servico-api.ps1",
+    "desinstalar-servico-api.ps1",
+    "conceder-controle-servico.ps1",
+    "instalar-servico-organizador-email.ps1",
+    "desinstalar-servico-organizador-email.ps1",
     "status-watchdog-sistema.ps1",
     "suspender-watchdog-sistema.ps1",
     "retomar-watchdog-sistema.ps1",
-    "desinstalar-servico-watchdog-sistema.ps1",
-    # API como servico NSSM (conta de rede com acesso aos MDBs do DFS)
-    "instalar-servico-api.ps1",
-    "desinstalar-servico-api.ps1"
+    "desinstalar-servico-watchdog-sistema.ps1"
 )
-foreach ($name in $systemWatchdogScripts) {
-    $src = Join-Path $PSScriptRoot "..\templates\$name"
-    if (Test-Path -LiteralPath $src) {
-        Copy-Item -LiteralPath $src (Join-Path $Release $name) -Force
-    } else {
-        throw "Template obrigatorio do watchdog ausente: $src"
+foreach ($name in $requiredTemplates) {
+    if (-not (Test-Path -LiteralPath (Join-Path $Release $name) -PathType Leaf)) {
+        throw "Template obrigatorio ausente no pacote: $name"
     }
 }
 
-$systemWatchdog = Join-Path $Root "system_watchdog_service.py"
-if (Test-Path -LiteralPath $systemWatchdog) {
-    Copy-Item -LiteralPath $systemWatchdog (Join-Path $Release "system_watchdog_service.py") -Force
-    Write-Host "system_watchdog_service.py incluido na raiz do pacote"
-} else {
-    throw "system_watchdog_service.py obrigatorio nao encontrado em $Root"
+# Servicos / workers da raiz do repositorio (AppDirectory = current\).
+$rootRuntimePy = @(
+    "system_watchdog_service.py",
+    "sync_andamentos_service.py",
+    "sync_andamentos_v2_Old.py",
+    "sync_policy.py",
+    "sync_os_deletes.py",
+    "monitor_sync_andamentos_service.py",
+    "organizador_email_sepim_service.py"
+)
+foreach ($name in $rootRuntimePy) {
+    $src = Join-Path $Root $name
+    if (-not (Test-Path -LiteralPath $src -PathType Leaf)) {
+        throw "Arquivo runtime obrigatorio ausente na raiz do repo: $name"
+    }
+    Copy-Item -LiteralPath $src -Destination (Join-Path $Release $name) -Force
+    Write-Host "$name incluido na raiz do pacote"
 }
+
 $systemWatchdogRunbook = Join-Path $Root "docs\RUNBOOK_WATCHDOG_SISTEMA.md"
 if (Test-Path -LiteralPath $systemWatchdogRunbook) {
     Copy-Item -LiteralPath $systemWatchdogRunbook (Join-Path $Release "RUNBOOK_WATCHDOG_SISTEMA.md") -Force
@@ -396,65 +394,37 @@ if (Test-Path -LiteralPath $systemWatchdogRunbook) {
     throw "Runbook obrigatorio do watchdog ausente: $systemWatchdogRunbook"
 }
 
-$syncService = Join-Path $Root "sync_andamentos_service.py"
-if (Test-Path -LiteralPath $syncService) {
-    Copy-Item -LiteralPath $syncService (Join-Path $Release "sync_andamentos_service.py") -Force
-    Write-Host "sync_andamentos_service.py incluido na raiz do pacote"
-} else {
-    throw "sync_andamentos_service.py obrigatorio nao encontrado em $Root"
-}
-
-$syncOld = Join-Path $Root "sync_andamentos_v2_Old.py"
-if (Test-Path -LiteralPath $syncOld) {
-    Copy-Item -LiteralPath $syncOld (Join-Path $Release "sync_andamentos_v2_Old.py") -Force
-    Write-Host "sync_andamentos_v2_Old.py incluido na raiz do pacote (obrigatorio para o service)"
-} else {
-    Write-Warning "sync_andamentos_v2_Old.py nao encontrado em $Root - sync usara fallback app/services/sync_andamentos_v2.py"
-}
-
-foreach ($extraSync in @("sync_policy.py", "sync_os_deletes.py")) {
-    $extraPath = Join-Path $Root $extraSync
-    if (Test-Path -LiteralPath $extraPath) {
-        Copy-Item -LiteralPath $extraPath (Join-Path $Release $extraSync) -Force
-        Write-Host "$extraSync incluido na raiz do pacote (obrigatorio para exclusao segura de OS)"
-    } else {
-        Write-Warning "$extraSync nao encontrado em $Root"
+# Garante que todo script .py citado pelos instaladores NSSM exista no pacote.
+Write-Step "Validar AppParameters dos instaladores NSSM"
+$installerScripts = @(Get-ChildItem -LiteralPath $Release -Filter "instalar-servico-*.ps1" -File)
+$referencedPy = New-Object System.Collections.Generic.HashSet[string]
+foreach ($inst in $installerScripts) {
+    foreach ($line in (Get-Content -LiteralPath $inst.FullName -Encoding UTF8)) {
+        # $scriptName = "sync_andamentos_service.py"
+        if ($line -match '(?i)\$scriptName\s*=\s*[''"]([A-Za-z0-9_\-]+\.py)[''"]') {
+            [void]$referencedPy.Add($Matches[1])
+        }
+        # AppParameters ... something.py (literal)
+        if ($line -match '(?i)AppParameters' -and $line -match '(?i)([A-Za-z0-9_\-]+\.py)') {
+            [void]$referencedPy.Add($Matches[1])
+        }
     }
 }
-
-$monitorService = Join-Path $Root "monitor_sync_andamentos_service.py"
-if (Test-Path -LiteralPath $monitorService) {
-    Copy-Item -LiteralPath $monitorService (Join-Path $Release "monitor_sync_andamentos_service.py") -Force
-    Write-Host "monitor_sync_andamentos_service.py incluido na raiz do pacote"
-} else {
-    throw "monitor_sync_andamentos_service.py obrigatorio nao encontrado em $Root"
-}
-
-# Organizador da caixa sepim.deapa (move e-mails por assunto; nunca apaga).
-$emailOrganizerScripts = @(
-    "instalar-servico-organizador-email.ps1",
-    "desinstalar-servico-organizador-email.ps1"
-)
-foreach ($name in $emailOrganizerScripts) {
-    $src = Join-Path $PSScriptRoot "..\templates\$name"
-    if (Test-Path -LiteralPath $src) {
-        Copy-Item -LiteralPath $src (Join-Path $Release $name) -Force
-    } else {
-        Write-Warning "Template ausente: $src"
+$missingAppParams = @()
+foreach ($pyName in ($referencedPy | Sort-Object)) {
+    if (-not (Test-Path -LiteralPath (Join-Path $Release $pyName) -PathType Leaf)) {
+        $missingAppParams += $pyName
     }
 }
-$emailOrganizer = Join-Path $Root "organizador_email_sepim_service.py"
-if (Test-Path -LiteralPath $emailOrganizer) {
-    Copy-Item -LiteralPath $emailOrganizer (Join-Path $Release "organizador_email_sepim_service.py") -Force
-    Write-Host "organizador_email_sepim_service.py incluido na raiz do pacote"
-} else {
-    Write-Warning "organizador_email_sepim_service.py nao encontrado em $Root"
+if ($missingAppParams.Count -gt 0) {
+    throw ("Pacote incompleto -- scripts NSSM ausentes no release:`n  - " + ($missingAppParams -join "`n  - "))
 }
+Write-Host ("AppParameters/scripts NSSM OK ({0})" -f $referencedPy.Count)
 
 Write-Step "Bibliotecas OCR embutidas (python_pkgs, sem pip no servidor)"
 $vendorDir = Join-Path $Release "python_pkgs"
 $wheelsDir = Join-Path $Release "wheels"
-# Servidor de producao (cgrafsysvm) roda Python 3.10 — NAO usar a versao do DEV (ex.: 3.14).
+# Servidor de producao (cgrafsysvm) roda Python 3.10 -- NAO usar a versao do DEV (ex.: 3.14).
 $prodPyTag = if ($env:SAGRA_PROD_PYTHON_TAG) { $env:SAGRA_PROD_PYTHON_TAG.Trim() } else { "310" }
 $prodPyVersion = if ($env:SAGRA_PROD_PYTHON_VERSION) { $env:SAGRA_PROD_PYTHON_VERSION.Trim() } else { "3.10" }
 $prodAbi = "cp$prodPyTag"
@@ -512,7 +482,7 @@ if ($LASTEXITCODE -ne 0) {
 
 $imagingNative = Get-ChildItem -LiteralPath (Join-Path $vendorDir "PIL") -Filter "_imaging*" -ErrorAction SilentlyContinue
 if (-not $imagingNative) {
-    throw "python_pkgs/PIL sem _imaging* apos install — pacote invalido para o servidor."
+    throw "python_pkgs/PIL sem _imaging* apos install -- pacote invalido para o servidor."
 }
 Write-Host "python_pkgs OK (alvo $prodAbi; nativo: $($imagingNative.Name -join ', '))"
 
@@ -567,7 +537,11 @@ $criticalFiles = @(
     "system_watchdog_service.py",
     "sync_andamentos_service.py",
     "monitor_sync_andamentos_service.py",
+    "organizador_email_sepim_service.py",
+    "check_release_runtime.py",
+    "check_tiff_runtime.py",
     "instalar-servico-watchdog-sistema.ps1",
+    "instalar-servico-api.ps1",
     "status-watchdog-sistema.ps1",
     "suspender-watchdog-sistema.ps1",
     "retomar-watchdog-sistema.ps1",

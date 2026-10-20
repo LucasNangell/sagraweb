@@ -1133,8 +1133,6 @@ def delete_sub_os_history(
     ponto_usuario: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Exclui andamento de Sub OS (manual com espelho ou herdado)."""
-    import hashlib
-
     from routers.os_routes import _dispatch_mdb_sync
     from routers.os_audit_service import log_andamento_deleted
 
@@ -1182,17 +1180,11 @@ def delete_sub_os_history(
                 )
                 mirror_row = cursor.fetchone()
                 if mirror_row:
-                    content_fields = [
-                        str(mirror_row.get("SituacaoLink") or ""),
-                        str(mirror_row.get("SetorLink") or ""),
-                        str(mirror_row.get("Data") or ""),
-                        str(mirror_row.get("UltimoStatus") or ""),
-                        str(mirror_row.get("Observaçao") or ""),
-                        str(mirror_row.get("Ponto") or ""),
-                    ]
-                    content_hash = hashlib.sha256(
-                        "|".join(content_fields).encode("utf-8")
-                    ).hexdigest()
+                    from services.andamento_tombstone import (
+                        calculate_andamento_content_hash,
+                    )
+
+                    content_hash = calculate_andamento_content_hash(mirror_row)
                     cursor.execute(
                         """
                         INSERT INTO deleted_andamentos

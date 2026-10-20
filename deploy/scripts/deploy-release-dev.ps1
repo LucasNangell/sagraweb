@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Deploy DEV: build (opcional) + copia release para \\cgrafsysvm\...\releases\{nome}.
@@ -15,7 +15,10 @@ param(
     [switch]$WhatIf,
     [switch]$SkipBackup,
     [string]$ReleaseDescription = "",
-    [switch]$ForceFullBackup
+    [switch]$ForceFullBackup,
+    [switch]$SkipTests,
+    [switch]$SkipFrontend,
+    [switch]$UpdateBaseline
 )
 
 $ErrorActionPreference = "Stop"
@@ -37,6 +40,67 @@ Write-Host ""
 
 if (-not (Test-Path -LiteralPath $DevRoot)) {
     throw "Repo DEV nao encontrado: $DevRoot"
+}
+
+# Rastreabilidade: commit + working tree (nao bloqueia; grava no RELEASE.txt)
+$gitMeta = @{
+    commit = ""
+    branch = ""
+    dirty_files = 0
+    dirty_list = @()
+    tests = "unknown"
+}
+Push-Location $DevRoot
+try {
+    $ErrorActionPreference = "Continue"
+    $gitMeta.commit = (& git rev-parse HEAD 2>$null | Select-Object -First 1)
+    $gitMeta.branch = (& git rev-parse --abbrev-ref HEAD 2>$null | Select-Object -First 1)
+    $porcelain = @(& git status --porcelain 2>$null)
+    $ErrorActionPreference = "Stop"
+    if ($gitMeta.commit) { $gitMeta.commit = [string]$gitMeta.commit.Trim() }
+    if ($gitMeta.branch) { $gitMeta.branch = [string]$gitMeta.branch.Trim() }
+    $gitMeta.dirty_list = @($porcelain | ForEach-Object { "$_".TrimEnd() } | Where-Object { $_ })
+    $gitMeta.dirty_files = $gitMeta.dirty_list.Count
+} catch {
+    Write-DeployWarn "Git indisponivel para metadados da release: $_"
+} finally {
+    Pop-Location
+}
+Write-Host ("Commit:    {0}" -f $(if ($gitMeta.commit) { $gitMeta.commit } else { '(desconhecido)' }))
+Write-Host ("Branch:    {0}" -f $(if ($gitMeta.branch) { $gitMeta.branch } else { '(desconhecida)' }))
+if ($gitMeta.dirty_files -gt 0) {
+    Write-DeployWarn ("Working tree com {0} arquivo(s) nao commitado(s) -- serao incluidos no pacote:" -f $gitMeta.dirty_files)
+    foreach ($line in ($gitMeta.dirty_list | Select-Object -First 40)) {
+        Write-Host "  $line" -ForegroundColor DarkYellow
+    }
+    if ($gitMeta.dirty_files -gt 40) {
+        Write-Host ("  ... e mais {0}" -f ($gitMeta.dirty_files - 40)) -ForegroundColor DarkYellow
+    }
+} else {
+    Write-DeployOk "Working tree limpa"
+}
+
+# Exporta metadados para deploy_release.ps1 / Set-ReleaseMetadata
+$env:SAGRA_RELEASE_COMMIT = [string]$gitMeta.commit
+$env:SAGRA_RELEASE_BRANCH = [string]$gitMeta.branch
+$env:SAGRA_RELEASE_DIRTY_FILES = [string]$gitMeta.dirty_files
+$env:SAGRA_RELEASE_CHANGES = ($gitMeta.dirty_list -join "`n")
+
+if ($SkipTests) {
+    Write-DeployWarn "Gate de testes ignorado (-SkipTests) -- ficara tests=skipped no RELEASE.txt"
+    $gitMeta.tests = "skipped"
+    $env:SAGRA_RELEASE_TESTS = "skipped"
+} else {
+    Write-DeployStep "Gate de testes (baseline)"
+    $testArgs = @{ Root = $DevRoot }
+    if ($UpdateBaseline) { $testArgs.UpdateBaseline = $true }
+    if ($SkipFrontend) { $testArgs.SkipFrontend = $true }
+    & (Join-Path $ScriptDir "run-release-tests.ps1") @testArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Gate de testes falhou (codigo $LASTEXITCODE)"
+    }
+    $gitMeta.tests = if ($env:SAGRA_RELEASE_TESTS) { $env:SAGRA_RELEASE_TESTS } else { "ok" }
+    $env:SAGRA_RELEASE_TESTS = $gitMeta.tests
 }
 
 if (-not $SkipBuild) {

@@ -587,12 +587,15 @@ def _wire_perform_sync(sync, mysql_rows, mdb_os_rows, mdb_pap_rows=None):
     sync.read_mysql = MagicMock(return_value=mysql_rows)
     sync.read_mdb = MagicMock(side_effect=[mdb_os_rows, pap])
     sync.detect_and_register_deletions = MagicMock(return_value=set())
+    sync.detect_mysql_side_deletions = MagicMock(return_value=set())
     sync.update_cache = MagicMock()
     sync.update_mdb = MagicMock()
     sync.update_mysql = MagicMock()
     sync.insert_mdb = MagicMock()
     sync.insert_mysql = MagicMock()
     sync.delete_mysql = MagicMock()
+    sync.delete_mdb = MagicMock()
+    sync.mark_as_deleted = MagicMock()
     sync.sync_os_data_from_mdb = MagicMock()
     sync.ensure_mysql_ultimo_status_from_mdb = MagicMock()
     sync._heal_os_batch = MagicMock()
@@ -766,13 +769,106 @@ def test_is_resurrection_blocks_when_tombstone_has_null_hash(tmp_path, monkeypat
     sync = _make_sync_for_notify(tmp_path, monkeypatch)
     row = _sample_andamento()
     cursor = MagicMock()
-    cursor.fetchone.return_value = {"content_hash": None}
+    cursor.fetchone.return_value = {"codstatus": row["CodStatus"]}
     conn = MagicMock()
     conn.cursor.return_value = cursor
     sync.conn_mgr.get_mysql = MagicMock(return_value=conn)
     sync._remove_from_deleted = MagicMock()
     assert sync.is_resurrection(row["CodStatus"], row) is True
     sync._remove_from_deleted.assert_not_called()
+
+
+def test_is_resurrection_blocks_even_when_hash_would_differ(tmp_path, monkeypatch):
+    """Tombstone é autoridade: conteúdo diferente NÃO limpa deleted_andamentos."""
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    row = _sample_andamento(Observaçao="conteudo novo")
+    cursor = MagicMock()
+    cursor.fetchone.return_value = {
+        "codstatus": row["CodStatus"],
+        "content_hash": "deadbeef" * 8,
+    }
+    conn = MagicMock()
+    conn.cursor.return_value = cursor
+    sync.conn_mgr.get_mysql = MagicMock(return_value=conn)
+    sync._remove_from_deleted = MagicMock()
+    assert sync.is_resurrection(row["CodStatus"], row) is True
+    sync._remove_from_deleted.assert_not_called()
+
+
+def test_is_resurrection_fail_closed_on_db_error(tmp_path, monkeypatch):
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    row = _sample_andamento()
+    sync.conn_mgr.get_mysql = MagicMock(side_effect=RuntimeError("db down"))
+    sync._remove_from_deleted = MagicMock()
+    assert sync.is_resurrection(row["CodStatus"], row) is True
+    sync._remove_from_deleted.assert_not_called()
+
+
+def test_is_deleted_fail_closed_on_db_error(tmp_path, monkeypatch):
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    sync.conn_mgr.get_mysql = MagicMock(side_effect=RuntimeError("db down"))
+    assert sync.is_deleted("000882026-01") is True
+
+
+def test_perform_sync_tombstone_blocks_mdb_to_mysql_insert(tmp_path, monkeypatch):
+    """Linha só no MDB com tombstone não pode ressuscitar no MySQL."""
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    mdb_row = _sample_andamento(CodStatus="000882026-55", Observaçao="ainda no access")
+    monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
+    monkeypatch.setattr(svc, "SYNC_MYSQL_TO_MDB_CATCHUP", True)
+    _wire_perform_sync(sync, [], [mdb_row])
+    sync.is_deleted = MagicMock(return_value=True)
+    sync.perform_sync()
+    sync.insert_mysql.assert_not_called()
+    assert sync._hb.snapshot()["stats"]["ins_m2y"] == 0
+
+
+def test_perform_sync_mysql_delete_propagates_to_mdb(tmp_path, monkeypatch):
+    """Ausente no MySQL + baseline → delete_mdb; sem insert_mysql."""
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    mdb_row = _sample_andamento(CodStatus="000882026-66", Observaçao="orfao no access")
+    monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
+    monkeypatch.setattr(svc, "SYNC_MYSQL_TO_MDB_CATCHUP", True)
+    monkeypatch.setattr(svc, "SYNC_ALLOW_MDB_DELETE", True)
+    _wire_perform_sync(sync, [], [mdb_row])
+    sync._baseline[mdb_row["CodStatus"]] = sync._payload_hash(mdb_row)
+    sync.detect_mysql_side_deletions = MagicMock(return_value={mdb_row["CodStatus"]})
+    sync.is_deleted = MagicMock(return_value=True)
+    sync.perform_sync()
+    sync.delete_mdb.assert_called_once()
+    assert sync.delete_mdb.call_args.args[0] == mdb_row["CodStatus"]
+    sync.insert_mysql.assert_not_called()
+    assert sync._hb.snapshot()["stats"]["del_m"] == 1
+    assert sync._hb.snapshot()["stats"]["ins_m2y"] == 0
+    assert mdb_row["CodStatus"] not in sync._baseline
+
+
+def test_detect_mysql_side_deletions_safety_lock(tmp_path, monkeypatch):
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    monkeypatch.setattr(svc, "SYNC_ALLOW_MDB_DELETE", True)
+    rows = [
+        _sample_andamento(CodStatus=f"000882026-{i:02d}", NroProtocoloLink=880 + i)
+        for i in range(6)
+    ]
+    mysql_codes: set = set()
+    mdb_codes = {r["CodStatus"] for r in rows}
+    for r in rows:
+        sync._baseline[r["CodStatus"]] = "x"
+    sync.is_deleted = MagicMock(return_value=False)
+    sync.mark_as_deleted = MagicMock()
+    sync._cycle_stats = svc._empty_cycle_stats()
+    result = sync.detect_mysql_side_deletions(mysql_codes, mdb_codes, rows, [])
+    assert result == set()
+    assert sync._cycle_stats["safety_lock_aborts"] == 1
+    sync.mark_as_deleted.assert_not_called()
+
+
+def test_andamento_content_hash_ignores_ultimo_status():
+    from services.andamento_tombstone import calculate_andamento_content_hash
+
+    a = _sample_andamento(UltimoStatus=1)
+    b = _sample_andamento(UltimoStatus=0)
+    assert calculate_andamento_content_hash(a) == calculate_andamento_content_hash(b)
 
 
 def test_perform_sync_update_mysql_to_mdb_when_mysql_changed(tmp_path, monkeypatch):

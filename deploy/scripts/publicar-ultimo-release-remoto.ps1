@@ -135,6 +135,43 @@ $remoteScript = {
     Write-Host "  Release selecionada: $ReleaseName"
     Write-Host "  Release ativa:       $(if ($active) { $active } else { '(nenhuma)' })"
 
+    # Metadados da release (gravados pelo deploy-release-dev)
+    $meta = @{
+        commit = ""
+        branch = ""
+        dirty_files = ""
+        tests = ""
+    }
+    $releaseTxt = Join-Path $releasePath "RELEASE.txt"
+    if (Test-Path -LiteralPath $releaseTxt) {
+        foreach ($line in (Get-Content -LiteralPath $releaseTxt -Encoding UTF8)) {
+            $t = $line.Trim()
+            if (-not $t -or $t.StartsWith("#")) { continue }
+            $eq = $t.IndexOf("=")
+            if ($eq -lt 1) { continue }
+            $k = $t.Substring(0, $eq).Trim().ToLowerInvariant()
+            $v = $t.Substring($eq + 1).Trim()
+            if ($meta.ContainsKey($k)) { $meta[$k] = $v }
+        }
+    }
+    Write-Host ("  commit:              {0}" -f $(if ($meta.commit) { $meta.commit } else { '(n/d)' }))
+    Write-Host ("  branch:              {0}" -f $(if ($meta.branch) { $meta.branch } else { '(n/d)' }))
+    Write-Host ("  dirty_files:         {0}" -f $(if ($meta.dirty_files) { $meta.dirty_files } else { '(n/d)' }))
+    Write-Host ("  tests:               {0}" -f $(if ($meta.tests) { $meta.tests } else { '(n/d)' }))
+    $changesTxt = Join-Path $releasePath "CHANGES.txt"
+    if (Test-Path -LiteralPath $changesTxt) {
+        $changeLines = @(Get-Content -LiteralPath $changesTxt -Encoding UTF8 | Select-Object -First 15)
+        if ($changeLines.Count -gt 0 -and $changeLines[0] -notmatch 'working tree limpa') {
+            Write-Host "  Alteracoes nao commitadas (amostra):" -ForegroundColor DarkYellow
+            foreach ($cl in $changeLines) { Write-Host "    $cl" -ForegroundColor DarkYellow }
+        }
+    }
+
+    if ($meta.tests -eq "skipped" -and -not $Force) {
+        throw ("Release $ReleaseName foi gerada com -SkipTests (tests=skipped). " +
+            "Regenere com o gate de testes ou publique com -Force se tiver certeza.")
+    }
+
     if ($active -eq $ReleaseName -and -not $Force) {
         Write-Host "  A release $ReleaseName ja esta ativa - nada a fazer (use -Force para republicar)." -ForegroundColor Yellow
         return "ja-ativa"

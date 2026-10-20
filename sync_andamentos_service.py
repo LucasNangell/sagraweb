@@ -144,6 +144,8 @@ SYNC_NOTIFY_FAIL_LOG_INTERVAL = _env_float("SYNC_NOTIFY_FAIL_LOG_INTERVAL", 60.0
 SYNC_TABANDAMENTO_BIDI = _env_bool("SYNC_TABANDAMENTO_BIDI", True)
 # Alias legado do plano de catch-up (se False, desliga o sentido MySQL→MDB).
 SYNC_MYSQL_TO_MDB_CATCHUP = _env_bool("SYNC_MYSQL_TO_MDB_CATCHUP", True)
+# Kill-switch: exclusão real no Access (MySQL→MDB). Default ligado.
+SYNC_ALLOW_MDB_DELETE = _env_bool("SYNC_ALLOW_MDB_DELETE", True)
 # Desempate quando ambos os lados mudaram (ou não há baseline): mdb | mysql.
 _raw_conflict = (os.getenv("SYNC_CONFLICT_WINNER") or "mdb").strip().lower()
 SYNC_CONFLICT_WINNER = _raw_conflict if _raw_conflict in ("mdb", "mysql") else "mdb"
@@ -302,6 +304,7 @@ def _empty_cycle_stats() -> Dict[str, int]:
         "ins_y2m": 0,
         "upd_y2m": 0,
         "del_y": 0,
+        "del_m": 0,
         "ultimo_heals": 0,
         "safety_lock_aborts": 0,
         "mysql_only_remaining": 0,
@@ -1870,6 +1873,97 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             self.logger.logger.error(f"[ERRO] Erro ao detectar exclusoes: {e}")
             return set()
 
+    def _tombstone_present_strict(self, codstatus: str) -> Optional[bool]:
+        """True/False se leu deleted_andamentos; None se a consulta falhou."""
+        try:
+            conn = self.conn_mgr.get_mysql()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT COUNT(*) FROM deleted_andamentos WHERE codstatus = %s",
+                (codstatus,),
+            )
+            count = cursor.fetchone()[0]
+            cursor.close()
+            return count > 0
+        except Exception as e:
+            self.logger.logger.error(
+                f"[ERRO] Erro ao consultar tombstone {codstatus}: {e}"
+            )
+            return None
+
+    def detect_mysql_side_deletions(
+        self,
+        mysql_codes: Set[str],
+        mdb_all_codes: Set[str],
+        mdb_os_data: List[Dict],
+        mdb_pap_data: List[Dict],
+    ) -> Set[str]:
+        """
+        Detecta andamentos presentes no MDB e ausentes no MySQL que devem
+        ser removidos do Access (tombstone prévio ou já sincronizados no baseline).
+        """
+        if not SYNC_ALLOW_MDB_DELETE:
+            return set()
+
+        candidatos = mdb_all_codes - mysql_codes
+        if not candidatos:
+            return set()
+
+        mdb_by_code: Dict[str, Dict] = {}
+        for a in mdb_os_data:
+            code = a.get("CodStatus")
+            if code:
+                mdb_by_code[code] = a
+        for a in mdb_pap_data:
+            code = a.get("CodStatus")
+            if code and code not in mdb_by_code:
+                mdb_by_code[code] = a
+
+        confirmados: Set[str] = set()
+        for code in candidatos:
+            if code not in mdb_by_code:
+                continue
+            # Baseline (memória) basta. Tombstone via query estrita (None = erro → ignora).
+            # Não usar is_deleted() fail-closed aqui — evitaria deletes em massa em outage.
+            if code in self._baseline:
+                confirmados.add(code)
+                continue
+            if self._tombstone_present_strict(code) is True:
+                confirmados.add(code)
+
+        if len(confirmados) > 5:
+            msg = (
+                f"[SAFETY LOCK] Tentativa de excluir {len(confirmados)} "
+                "registros do MDB de uma vez. ABORTANDO para evitar perda de dados."
+            )
+            self.logger.logger.critical(msg)
+            self.logger.logger.critical(f"Registros abortados: {list(confirmados)}")
+            self._svc_log.error(msg)
+            self._cycle_stats["safety_lock_aborts"] = (
+                self._cycle_stats.get("safety_lock_aborts", 0) + 1
+            )
+            return set()
+
+        for code in confirmados:
+            and_ = mdb_by_code.get(code)
+            if not and_:
+                continue
+            nro = and_.get("NroProtocoloLink")
+            ano = and_.get("AnoProtocoloLink")
+            origem = "OS_Atual" if code in {a.get("CodStatus") for a in mdb_os_data} else "Papelaria"
+            self.mark_as_deleted(
+                code,
+                nro,
+                ano,
+                origem,
+                andamento=and_,
+                motivo="Exclusao confirmada no MySQL (ausente; tombstone/baseline)",
+            )
+            self.logger.logger.info(
+                f"[DETECCAO] CodStatus {code} ausente no MySQL; marcado para exclusao no MDB {origem}."
+            )
+        return confirmados
+
     def _load_effective_policies(self):
         from sync_policy import apply_env_kill_switches, load_policies
 
@@ -1957,12 +2051,27 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                 mysql_codes, mdb_all_codes, mysql_data=mysql_data
             )
 
+            self._hb.mark_progress("detect_mysql_deletions")
+            excluidos_mysql = self.detect_mysql_side_deletions(
+                mysql_codes, mdb_all_codes, mdb_os_data, mdb_pap_data
+            )
+
             self._hb.mark_progress("update_cache")
             self.update_cache(mdb_os_data, mdb_pap_data)
 
             self._hb.mark_progress("inserts_m2y")
             novos_no_mdb = mdb_all_codes - mysql_codes
             for code in novos_no_mdb:
+                if code in excluidos_mysql:
+                    self._svc_log.info(
+                        "[M2Y] skip CodStatus=%s motivo=excluido_mysql", code
+                    )
+                    continue
+                if self.is_deleted(code):
+                    self._svc_log.info(
+                        "[M2Y] skip CodStatus=%s motivo=tombstone", code
+                    )
+                    continue
                 and_ = None
                 origem = None
                 for a in mdb_os_data:
@@ -1989,6 +2098,53 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                     self.ensure_mysql_ultimo_status_from_mdb(
                         and_["NroProtocoloLink"], and_["AnoProtocoloLink"]
                     )
+
+            if bidi:
+                self._hb.mark_progress("inserts_y2m")
+                novos_no_mysql = mysql_codes - mdb_all_codes
+                for code in novos_no_mysql:
+                    if code in excluidos:
+                        self._svc_log.info(
+                            "[CATCHUP] skip CodStatus=%s motivo=excluido", code
+                        )
+                        continue
+                    if self.is_deleted(code):
+                        self._svc_log.info(
+                            "[CATCHUP] skip CodStatus=%s motivo=tombstone", code
+                        )
+                        continue
+                    and_ = next((a for a in mysql_data if a["CodStatus"] == code), None)
+                    if not and_:
+                        continue
+                    nro = and_["NroProtocoloLink"]
+                    ano = and_["AnoProtocoloLink"]
+                    if self.is_os_deleted(nro, ano):
+                        self._svc_log.info(
+                            "[CATCHUP] skip CodStatus=%s motivo=deleted_os", code
+                        )
+                        continue
+                    try:
+                        mdb_conn = self.conn_mgr.get_mdb_by_nro(nro)
+                        destino = self.conn_mgr.get_mdb_name_by_nro(nro)
+                        self.insert_mdb(and_, mdb_conn, destino)
+                        self._mark_baseline(code, self._payload_hash(and_))
+                        self._cycle_stats["ins_y2m"] += 1
+                        touched_os.add((nro, ano))
+                        self._svc_log.info(
+                            "[CATCHUP] MySQL->MDB INSERT CodStatus=%s OS=%s/%s destino=%s",
+                            code,
+                            nro,
+                            ano,
+                            destino,
+                        )
+                        self.ensure_mysql_ultimo_status_from_mdb(nro, ano)
+                    except Exception as e:
+                        self._svc_log.warning(
+                            "[CATCHUP] falha MySQL->MDB CodStatus=%s: %s", code, e
+                        )
+
+                remaining = len(mysql_codes - mdb_all_codes) - self._cycle_stats["ins_y2m"]
+                self._cycle_stats["mysql_only_remaining"] = max(0, remaining)
 
             self._hb.mark_progress("updates")
             comuns = mysql_codes & mdb_all_codes
@@ -2042,7 +2198,6 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
 
                 self.ensure_mysql_ultimo_status_from_mdb(nro, ano)
 
-            # Deletes antes do catch-up: exclusão MDB não pode ser desfeita por INSERT y2m
             self._hb.mark_progress("deletes")
             if excluidos:
                 for code in excluidos:
@@ -2056,6 +2211,46 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                         )
                         self.ensure_mysql_ultimo_status_from_mdb(
                             and_["NroProtocoloLink"], and_["AnoProtocoloLink"]
+                        )
+
+            if excluidos_mysql and SYNC_ALLOW_MDB_DELETE:
+                for code in excluidos_mysql:
+                    and_ = None
+                    origem = None
+                    for a in mdb_os_data:
+                        if a["CodStatus"] == code:
+                            and_ = a
+                            origem = "OS_Atual"
+                            break
+                    if not and_:
+                        for a in mdb_pap_data:
+                            if a["CodStatus"] == code:
+                                and_ = a
+                                origem = "Papelaria"
+                                break
+                    if not and_:
+                        continue
+                    try:
+                        nro = and_["NroProtocoloLink"]
+                        mdb_conn = self.conn_mgr.get_mdb_by_nro(nro)
+                        self.delete_mdb(code, and_, mdb_conn, origem or "OS_Atual")
+                        self._forget_baseline(code)
+                        self._cycle_stats["del_m"] += 1
+                        touched_os.add(
+                            (and_["NroProtocoloLink"], and_["AnoProtocoloLink"])
+                        )
+                        self.ensure_mysql_ultimo_status_from_mdb(
+                            and_["NroProtocoloLink"], and_["AnoProtocoloLink"]
+                        )
+                        self._svc_log.info(
+                            "[BI] DELETE MySQL->MDB CodStatus=%s OS=%s/%s",
+                            code,
+                            and_["NroProtocoloLink"],
+                            and_["AnoProtocoloLink"],
+                        )
+                    except Exception as e:
+                        self._svc_log.warning(
+                            "[BI] falha DELETE MDB CodStatus=%s: %s", code, e
                         )
 
             # Exclusão segura de OS (Protocolos/Detalhes + andamentos)
@@ -2076,53 +2271,6 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                     self.conn_mgr.invalidate_mysql()
                 except Exception:
                     pass
-
-            if bidi:
-                self._hb.mark_progress("inserts_y2m")
-                novos_no_mysql = mysql_codes - mdb_all_codes
-                for code in novos_no_mysql:
-                    if code in excluidos:
-                        self._svc_log.info(
-                            "[CATCHUP] skip CodStatus=%s motivo=excluido", code
-                        )
-                        continue
-                    if self.is_deleted(code):
-                        self._svc_log.info(
-                            "[CATCHUP] skip CodStatus=%s motivo=tombstone", code
-                        )
-                        continue
-                    and_ = next((a for a in mysql_data if a["CodStatus"] == code), None)
-                    if not and_:
-                        continue
-                    nro = and_["NroProtocoloLink"]
-                    ano = and_["AnoProtocoloLink"]
-                    if self.is_os_deleted(nro, ano):
-                        self._svc_log.info(
-                            "[CATCHUP] skip CodStatus=%s motivo=deleted_os", code
-                        )
-                        continue
-                    try:
-                        mdb_conn = self.conn_mgr.get_mdb_by_nro(nro)
-                        destino = self.conn_mgr.get_mdb_name_by_nro(nro)
-                        self.insert_mdb(and_, mdb_conn, destino)
-                        self._mark_baseline(code, self._payload_hash(and_))
-                        self._cycle_stats["ins_y2m"] += 1
-                        touched_os.add((nro, ano))
-                        self._svc_log.info(
-                            "[CATCHUP] MySQL->MDB INSERT CodStatus=%s OS=%s/%s destino=%s",
-                            code,
-                            nro,
-                            ano,
-                            destino,
-                        )
-                        self.ensure_mysql_ultimo_status_from_mdb(nro, ano)
-                    except Exception as e:
-                        self._svc_log.warning(
-                            "[CATCHUP] falha MySQL->MDB CodStatus=%s: %s", code, e
-                        )
-
-                remaining = len(mysql_codes - mdb_all_codes) - self._cycle_stats["ins_y2m"]
-                self._cycle_stats["mysql_only_remaining"] = max(0, remaining)
 
             self._hb.mark_progress("ultimo_heal")
             self._heal_os_batch(touched_os)

@@ -82,6 +82,8 @@ def check_painel_spa_path_access(app_path: str, perms: dict) -> bool:
         return has_painel_tablet_access(perms)
     if norm == "/painel/celular" or norm.startswith("/painel/celular/"):
         return has_painel_tablet_access(perms)
+    if norm == "/painel/gravacao" or norm.startswith("/painel/gravacao/"):
+        return has_painel_tablet_access(perms)
     return False
 
 
@@ -187,6 +189,7 @@ def resolve_permissions_for_session(
 _OS_NOTIFICACAO_WATCH_RE = re.compile(r"^/api/os/\d+/\d+/notificacao-watch$")
 _PUSH_API_PREFIX = "/api/push/"
 _PAINEL_TABLET_API_PREFIX = "/api/painel-tablet/"
+_PAINEL_GRAVACAO_API_PREFIX = "/api/painel/gravacao"
 _API_MUTATION_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 _API_ADMIN_PREFIXES = ("/api/admin/", "/api/sync/")
 
@@ -197,6 +200,10 @@ def is_mobile_session_friendly_api_route(path: str, method: str) -> bool:
     if norm.startswith(_PUSH_API_PREFIX):
         return True
     if norm.startswith(_PAINEL_TABLET_API_PREFIX):
+        return True
+    if norm == _PAINEL_GRAVACAO_API_PREFIX or norm.startswith(
+        f"{_PAINEL_GRAVACAO_API_PREFIX}/"
+    ):
         return True
     if _OS_NOTIFICACAO_WATCH_RE.match(norm):
         return True

@@ -159,6 +159,7 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionKey> = {
   "/painel/global": "sb_dashboard_global",
   "/painel/tablet": "sb_dashboard_tablet",
   "/painel/celular": "sb_dashboard_tablet",
+  "/painel/gravacao": "sb_dashboard_tablet",
   "/pcp": "sb_pcp",
   "/cotas-graf": "sb_cotas_graf",
   "/estoque": "sb_estoque",
@@ -204,6 +205,12 @@ export function canAccessRoute(permissions: Permissions, path: string): boolean 
   if (
     normalized === "/painel/celular" ||
     normalized.startsWith("/painel/celular/")
+  ) {
+    return hasPainelTabletAccess(permissions);
+  }
+  if (
+    normalized === "/painel/gravacao" ||
+    normalized.startsWith("/painel/gravacao/")
   ) {
     return hasPainelTabletAccess(permissions);
   }

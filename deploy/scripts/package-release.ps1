@@ -42,7 +42,11 @@ while ($guardPath -and $guardPath.StartsWith($AllowedOutputRoot, [System.StringC
 
 $ExcludeDirNames = @(
     "__pycache__", ".pytest_cache", "node_modules", ".git", ".vite",
-    "recovery_temp", "logs", "legacy_or_unused"
+    "recovery_temp", "logs", "legacy_or_unused",
+    # Mutáveis / runtime — ficam em shared\, não no pacote. Copiá-los faz o
+    # robocopy falhar (codigo 8/9) quando o arquivo está aberto no DEV.
+    "cache", "storage", "storage_client_uploads", "storage_test",
+    "data", "generated", "email_images", "temp", "Modelos"
 )
 $ExcludeFilePatterns = @("*.pyc", "*.pyo", "*.log", ".env", "Thumbs.db")
 
@@ -351,7 +355,6 @@ $requiredTemplates = @(
     "deploy-release-prod.ps1",
     "instalar-servico-sync.ps1",
     "instalar-servico-monitor-sync.ps1",
-    "instalar-servico-watchdog-sistema.ps1",
     "instalar-servico-api.ps1",
     "desinstalar-servico-api.ps1",
     "conceder-controle-servico.ps1",
@@ -540,7 +543,6 @@ $criticalFiles = @(
     "organizador_email_sepim_service.py",
     "check_release_runtime.py",
     "check_tiff_runtime.py",
-    "instalar-servico-watchdog-sistema.ps1",
     "instalar-servico-api.ps1",
     "status-watchdog-sistema.ps1",
     "suspender-watchdog-sistema.ps1",

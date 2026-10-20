@@ -106,12 +106,21 @@ export function hasPainelTabletAccess(permissions: Permissions): boolean {
 
 export function canAccessPainelRoute(
   permissions: Permissions,
-  route: "/painel/global" | "/painel/setor" | "/painel/tablet" | "/painel/celular",
+  route:
+    | "/painel/global"
+    | "/painel/setor"
+    | "/painel/tablet"
+    | "/painel/celular"
+    | "/painel/gravacao",
 ): boolean {
   if (route === "/painel/global") {
     return hasPainelGlobalAccess(permissions);
   }
-  if (route === "/painel/tablet" || route === "/painel/celular") {
+  if (
+    route === "/painel/tablet" ||
+    route === "/painel/celular" ||
+    route === "/painel/gravacao"
+  ) {
     return hasPainelTabletAccess(permissions);
   }
   return hasPainelSetorAccess(permissions);

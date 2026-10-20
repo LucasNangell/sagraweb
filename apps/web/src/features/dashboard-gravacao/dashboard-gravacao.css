@@ -1,0 +1,230 @@
+.dashboard-gravacao-page .dashboard-setor-header-center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+
+.dashboard-gravacao-page .dashboard-setor-card {
+  cursor: pointer;
+  appearance: none;
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  font: inherit;
+  text-align: inherit;
+  color: inherit;
+  user-select: none;
+}
+
+.dashboard-gravacao-page .dashboard-setor-card:active {
+  transform: scale(0.98);
+  opacity: 0.92;
+}
+
+.dashboard-gravacao-page .dashboard-gravacao-fornecedor-badge {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  text-align: center;
+  line-height: 1.3;
+}
+
+.gravacao-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 12, 18, 0.62);
+  padding: 0.6rem;
+}
+
+.gravacao-modal-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(42rem, 100%);
+  max-height: min(94dvh, 46rem);
+  overflow: hidden;
+  border-radius: 0.9rem;
+  background: #0f172a;
+  color: #e2e8f0;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+
+.gravacao-modal-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 0.5rem 0.75rem;
+}
+
+.gravacao-modal-header h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.gravacao-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0.55rem 0.75rem 0.65rem;
+}
+
+.gravacao-modal-footer {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 0.5rem 0.75rem;
+}
+
+.gravacao-andamento-block {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.gravacao-modal-panel .tablet-setor-grid {
+  max-height: none;
+  overflow: visible;
+}
+
+.gravacao-section-label {
+  margin: 0 0 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.gravacao-andamento-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.3rem;
+}
+
+.gravacao-option.is-primary {
+  min-height: 40px;
+  font-size: 0.82rem;
+  border-color: rgba(250, 204, 21, 0.45);
+}
+
+.gravacao-chapas-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.gravacao-chapa-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 5.5rem;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.gravacao-chapa-row input[type="checkbox"] {
+  width: 1.05rem;
+  height: 1.05rem;
+  accent-color: #facc15;
+  cursor: pointer;
+}
+
+.gravacao-chapa-row input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+}
+
+.gravacao-chapa-row input[type="number"] {
+  height: 1.9rem;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 0.45rem;
+  background: rgba(15, 23, 42, 0.8);
+  color: #f8fafc;
+  padding: 0 0.4rem;
+}
+
+.gravacao-obs,
+.gravacao-ponto {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 0.5rem;
+  background: rgba(15, 23, 42, 0.8);
+  color: #f8fafc;
+  padding: 0.3rem 0.45rem;
+  font: inherit;
+}
+
+.gravacao-obs {
+  min-height: 3.25rem;
+  max-height: 4.25rem;
+  resize: none;
+}
+
+.gravacao-ponto {
+  height: 2rem;
+}
+
+.gravacao-modal-panel .tablet-setor-grid .tablet-situacao-compact {
+  min-height: 36px;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.3rem;
+}
+
+.gravacao-error {
+  margin: 0;
+  color: #fca5a5;
+  font-size: 0.85rem;
+}
+
+.gravacao-ponto-hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
+.gravacao-outro-wrap {
+  margin-top: 0.45rem;
+}
+
+.gravacao-link-discreto {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #94a3b8;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+  cursor: pointer;
+}
+
+.gravacao-link-discreto:hover:not(:disabled) {
+  color: #cbd5e1;
+}
+
+.gravacao-link-discreto:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.gravacao-outro-select {
+  width: 100%;
+  height: 2.35rem;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 0.5rem;
+  background: rgba(15, 23, 42, 0.8);
+  color: #f8fafc;
+  padding: 0 0.5rem;
+  font: inherit;
+}

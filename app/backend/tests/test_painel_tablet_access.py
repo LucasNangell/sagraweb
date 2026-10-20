@@ -21,4 +21,6 @@ def test_painel_spa_path_tablet_requires_flag():
     assert check_painel_spa_path_access("/painel/tablet", allowed) is True
     assert check_painel_spa_path_access("/painel/celular", allowed) is True
     assert check_painel_spa_path_access("/painel/celular", denied) is False
+    assert check_painel_spa_path_access("/painel/gravacao", allowed) is True
+    assert check_painel_spa_path_access("/painel/gravacao", denied) is False
     assert check_painel_spa_path_access("/painel/setor", allowed) is False

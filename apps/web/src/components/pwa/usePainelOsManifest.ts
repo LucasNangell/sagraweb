@@ -85,27 +85,28 @@ export function usePainelOsManifest(enabled: boolean): void {
   }, [enabled]);
 }
 
-/** true quando a URL atual é o painel tablet/celular ou login com redirect para eles. */
+function isPainelOsPath(value: string): boolean {
+  return (
+    value === "/painel/tablet" ||
+    value.endsWith("/painel/tablet") ||
+    value === "/painel/celular" ||
+    value.endsWith("/painel/celular") ||
+    value === "/painel/gravacao" ||
+    value.endsWith("/painel/gravacao")
+  );
+}
+
+/** true quando a URL atual é o painel tablet/celular/gravação ou login com redirect para eles. */
 export function isPainelOsInstallContext(
   pathname: string,
   redirect?: string | null,
 ): boolean {
   const path = pathname.replace(/\/+$/, "") || "/";
-  if (
-    path === "/painel/tablet" ||
-    path.endsWith("/painel/tablet") ||
-    path === "/painel/celular" ||
-    path.endsWith("/painel/celular")
-  ) {
+  if (isPainelOsPath(path)) {
     return true;
   }
   if (path === "/login" || path.endsWith("/login")) {
-    if (
-      redirect === "/painel/tablet" ||
-      redirect?.endsWith("/painel/tablet") ||
-      redirect === "/painel/celular" ||
-      redirect?.endsWith("/painel/celular")
-    ) {
+    if (redirect && isPainelOsPath(redirect)) {
       return true;
     }
   }

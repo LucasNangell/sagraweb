@@ -874,7 +874,7 @@ export function UserAdminProvider({
                       checked={permPainelTablet}
                       onChange={(e) => setPermPainelTablet(e.target.checked)}
                     />
-                    Painel tablet/celular (URL /painel/tablet ou /painel/celular — sem menu)
+                    Painel tablet/celular/gravação (URL /painel/tablet, /painel/celular ou /painel/gravacao — sem menu)
                   </label>
                   <p className="mb-2 text-xs text-slate-600">
                     Painel de setor / tablet — marque cada setor permitido:

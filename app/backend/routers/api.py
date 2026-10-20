@@ -34,6 +34,7 @@ from routers import (
     gravacao_routes,
     gravacao_externa_routes,
     gravacao_pendente_routes,
+    painel_gravacao_routes,
     network_files_routes,
     cotas_graf_routes,
     estoque_routes,
@@ -1288,6 +1289,7 @@ app.include_router(credenciais_depol_routes.router, prefix="/api")
 app.include_router(manipular_imagem_routes.router, prefix="/api")
 app.include_router(gravacao_externa_routes.router, prefix="/api")
 app.include_router(gravacao_pendente_routes.router, prefix="/api")
+app.include_router(painel_gravacao_routes.router)
 app.include_router(network_files_routes.router, prefix="/api")
 app.include_router(prova_web_routes.router, prefix="/api")
 app.include_router(analise_lab_routes.router, prefix="/api")

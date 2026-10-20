@@ -114,6 +114,7 @@ describe("permissions / menu", () => {
     const perms = parsePermissionsFromApi({ sb_dashboard_tablet: true });
     expect(canAccessRoute(perms, "/painel/tablet")).toBe(true);
     expect(canAccessRoute(perms, "/painel/celular")).toBe(true);
+    expect(canAccessRoute(perms, "/painel/gravacao")).toBe(true);
     expect(resolveDefaultAppRoute(perms)).toBe("/painel/tablet");
     expect(getVisibleNavItems(perms, true).some((i) => i.to === "/painel/tablet")).toBe(
       false,
@@ -137,10 +138,11 @@ describe("permissions / menu", () => {
     expect(resolveDefaultAppRoute(perms)).toBe("/gravacao-externa");
   });
 
-  it("sb_dashboard_tablet false nega /painel/tablet e /painel/celular", () => {
+  it("sb_dashboard_tablet false nega /painel/tablet, /painel/celular e /painel/gravacao", () => {
     const perms = parsePermissionsFromApi({ sb_inicio: true, sb_dashboard_tablet: false });
     expect(canAccessRoute(perms, "/painel/tablet")).toBe(false);
     expect(canAccessRoute(perms, "/painel/celular")).toBe(false);
+    expect(canAccessRoute(perms, "/painel/gravacao")).toBe(false);
   });
 
   it("parseia sb_gravacao_externa_operador", () => {

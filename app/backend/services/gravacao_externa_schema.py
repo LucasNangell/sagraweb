@@ -81,6 +81,19 @@ CREATE TABLE IF NOT EXISTS tab_os_gravacao_externa_zip (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
 """
 
+_ENTREGA_CHAPA_SQL = """
+CREATE TABLE IF NOT EXISTS tab_os_gravacao_externa_entrega_chapa (
+  Id INT NOT NULL AUTO_INCREMENT,
+  GravacaoExternaId INT NOT NULL,
+  Maquina VARCHAR(128) NOT NULL,
+  Quantidade INT NOT NULL,
+  RecebidoPorPonto VARCHAR(32) NOT NULL,
+  RecebidoEm DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (Id),
+  KEY idx_ge_entrega_sessao (GravacaoExternaId)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+"""
+
 _CATALOG_SEEDED = False
 
 
@@ -231,6 +244,7 @@ def ensure_gravacao_externa_schema() -> None:
         db.execute_query(_ARQUIVO_SQL)
         db.execute_query(_MENSAGEM_SQL)
         db.execute_query(_ZIP_SQL)
+        db.execute_query(_ENTREGA_CHAPA_SQL)
         _apply_externa_migrations()
         if not _CATALOG_SEEDED:
             _seed_situacao_catalog()

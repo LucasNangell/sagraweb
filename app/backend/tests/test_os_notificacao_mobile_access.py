@@ -36,6 +36,13 @@ class TestMobileSessionFriendlyRoutes:
         )
         assert should_skip_session_ip_binding("/api/painel-tablet/push-pref", "POST")
 
+    def test_painel_gravacao_skip_ip_binding(self):
+        assert is_mobile_session_friendly_api_route("/api/painel/gravacao", "GET")
+        assert is_mobile_session_friendly_api_route(
+            "/api/painel/gravacao/2026/1001/lancar", "POST"
+        )
+        assert should_skip_session_ip_binding("/api/painel/gravacao", "GET")
+
     def test_notificacao_watch_skip_ip_binding(self):
         path = "/sagra/api/os/2026/42/notificacao-watch"
         assert is_mobile_session_friendly_api_route(path, "POST")

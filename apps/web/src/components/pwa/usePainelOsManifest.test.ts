@@ -28,6 +28,16 @@ describe("isPainelOsInstallContext", () => {
 
 
 
+  it("detecta /painel/gravacao", () => {
+
+    expect(isPainelOsInstallContext("/painel/gravacao")).toBe(true);
+
+    expect(isPainelOsInstallContext("/painel/gravacao/")).toBe(true);
+
+  });
+
+
+
   it("detecta login com redirect para o tablet", () => {
 
     expect(isPainelOsInstallContext("/login", "/painel/tablet")).toBe(true);
@@ -41,6 +51,14 @@ describe("isPainelOsInstallContext", () => {
   it("detecta login com redirect para o celular", () => {
 
     expect(isPainelOsInstallContext("/login", "/painel/celular")).toBe(true);
+
+  });
+
+
+
+  it("detecta login com redirect para o painel de gravação", () => {
+
+    expect(isPainelOsInstallContext("/login", "/painel/gravacao")).toBe(true);
 
   });
 

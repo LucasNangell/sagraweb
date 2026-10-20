@@ -1937,21 +1937,21 @@ def validate_client_token(ano: int, os_id: int, token: str = Query(...)):
 
 # --- HELPER DE ANDAMENTO ---
 def add_movement_internal(cursor, os_id, ano, situacao, setor, ponto, obs):
-    cursor.execute("UPDATE tabAndamento SET UltimoStatus = 0 WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s", (os_id, ano))
-    cursor.execute("SELECT COUNT(*) as count FROM tabAndamento WHERE NroProtocoloLink = %s AND AnoProtocoloLink = %s", (os_id, ano))
-    res = cursor.fetchone()
-    count = res['count'] if res else 0
-    new_cod = f"{os_id:05d}{ano}-{count + 1:02d}"
-    
-    # Formatar observação com hora e preservar quebras de linha
+    from services.andamento_operacional import insert_andamento_as_ultimo, next_cod_status_for_os
+
     obs_formatada = format_andamento_obs(obs or "")
-    # Formatar ponto no padrão #.#00
     ponto_formatado = format_ponto(ponto)
-    
-    cursor.execute("""
-        INSERT INTO tabAndamento (CodStatus, NroProtocoloLink, AnoProtocoloLink, SituacaoLink, SetorLink, Data, UltimoStatus, Observaçao, Ponto) 
-        VALUES (%s, %s, %s, %s, %s, NOW(), 1, %s, %s)
-    """, (new_cod, os_id, ano, situacao, setor, obs_formatada, ponto_formatado))
+    new_cod = next_cod_status_for_os(cursor, os_id, ano)
+    insert_andamento_as_ultimo(
+        cursor,
+        cod_status=new_cod,
+        nro=os_id,
+        ano=ano,
+        situacao=situacao,
+        setor=setor,
+        obs=obs_formatada,
+        ponto=ponto_formatado,
+    )
     log_andamento_added(
         cursor,
         nro=os_id,
@@ -1964,6 +1964,14 @@ def add_movement_internal(cursor, os_id, ano, situacao, setor, ponto, obs):
         origem="ANALISE",
     )
     return new_cod
+
+
+def _http_error_from_andamento_write(exc: Exception) -> HTTPException:
+    if "Duplicate entry" in str(exc):
+        return HTTPException(
+            status_code=409, detail="Erro de concorrência. Tente novamente."
+        )
+    return HTTPException(status_code=500, detail=str(exc))
 
 
 def _push_movement_to_mdb(cod_status: str, os_id: int, ano: int, *, task_name: str) -> None:
@@ -2436,7 +2444,7 @@ def register_link_movement(req: LinkMovementRequest):
         return result
     except Exception as e:
         logger.error(f"Link Register error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _http_error_from_andamento_write(e)
 
 class PtvDispatchRequest(BaseModel):
     os_id: int
@@ -2484,7 +2492,7 @@ def register_ptv_dispatch(req: PtvDispatchRequest):
         return result
     except Exception as e:
         logger.error(f"PTV Dispatch Register error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _http_error_from_andamento_write(e)
 
 @router.get("/os/{ano}/{id}/ultimo-andamento")
 def get_last_movement(ano: int, id: int):
@@ -2549,7 +2557,7 @@ def start_analysis_mark(req: StartAnalysisRequest):
         return result
     except Exception as e:
         logger.error(f"Start analysis error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _http_error_from_andamento_write(e)
 
 @router.get("/analise/legacy-pt/{sat_codigo}/pdf")
 def serve_legacy_sat_pt_pdf(
@@ -2612,4 +2620,4 @@ def register_execution_movement(req: ExecutionMovementRequest):
         return result
     except Exception as e:
         logger.error(f"Error registering execution movement: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _http_error_from_andamento_write(e)

@@ -4,6 +4,7 @@ export const PAINEL_STANDALONE_PATHS = [
   "/painel/global",
   "/painel/tablet",
   "/painel/celular",
+  "/painel/gravacao",
 ] as const;
 
 export type PainelStandalonePath = (typeof PAINEL_STANDALONE_PATHS)[number];

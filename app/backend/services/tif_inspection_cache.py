@@ -16,7 +16,9 @@ MAX_ENTRIES = 10_000
 MAX_PAYLOAD_BYTES = 64 * 1024
 MAX_AGE_SECONDS = 30 * 24 * 3600
 CACHE_VERSION = 1
+SQLITE_TIMEOUT_SECONDS = 5.0
 _connection_setup_lock = Lock()
+_write_lock = Lock()
 
 
 def cache_path() -> Path:
@@ -28,13 +30,14 @@ def cache_path() -> Path:
 def _connect():
     path = cache_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(path, timeout=0.25)
+    connection = sqlite3.connect(path, timeout=SQLITE_TIMEOUT_SECONDS)
     try:
         # Duas primeiras analises podiam disputar a mudanca para WAL e perder
         # uma escrita. Serializa apenas a preparacao, nao a analise dos TIFFs.
         with _connection_setup_lock:
             if connection.execute("PRAGMA journal_mode").fetchone()[0].lower() != "wal":
                 connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute(f"PRAGMA busy_timeout={int(SQLITE_TIMEOUT_SECONDS * 1000)}")
             connection.execute("""CREATE TABLE IF NOT EXISTS inspection_cache (
                 token TEXT PRIMARY KEY, version INTEGER NOT NULL,
                 created_at REAL NOT NULL, payload TEXT NOT NULL)""")
@@ -83,7 +86,9 @@ def write_inspection(token: str, result: dict, feature_version: str) -> None:
     if len(payload.encode("utf-8")) > MAX_PAYLOAD_BYTES:
         return
     try:
-        with closing(_connect()) as connection, connection:
+        # SQLite aceita um escritor por vez; sem este lock, timeout curto
+        # descartava escritas concorrentes (teste de 300 arquivos falhava).
+        with _write_lock, closing(_connect()) as connection, connection:
             connection.execute("INSERT OR REPLACE INTO inspection_cache VALUES (?,?,?,?)",
                                (token, CACHE_VERSION, time.time(), payload))
             connection.execute("DELETE FROM inspection_cache WHERE created_at<?", (time.time()-MAX_AGE_SECONDS,))

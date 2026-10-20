@@ -619,6 +619,29 @@ def test_package_requires_sync_and_monitor_services():
     assert '"monitor_sync_andamentos_service.py"' in critical
 
 
+def test_deploy_producao_delegates_to_versioned_release_flow():
+    script = (ROOT / "deploy" / "scripts" / "deploy-producao.ps1").read_text(
+        encoding="utf-8-sig"
+    )
+    bat = (ROOT / "deploy-producao.bat").read_text(encoding="utf-8")
+
+    assert "deploy-release-dev.ps1" in script
+    assert "NAO ativa" in script or "nao ativa" in script.lower()
+    assert "/MIR" not in script or "NAO usa mais robocopy /MIR" in script
+    assert "Invoke-RobocopyDeploy" not in script
+    assert "publicar-release.bat" in bat
+    assert "current\\ NAO e alterado" in bat or "current\\ NAO" in bat
+
+
+def test_package_excludes_mutable_runtime_dirs():
+    script = (ROOT / "deploy" / "scripts" / "package-release.ps1").read_text(
+        encoding="utf-8-sig"
+    )
+    block = script[script.index("$ExcludeDirNames = @("):script.index("$ExcludeFilePatterns")]
+    for name in ("cache", "storage", "storage_client_uploads", "data", "logs"):
+        assert f'"{name}"' in block
+
+
 def test_package_requires_watchdog_and_integrity_manifest():
     script = (ROOT / "deploy" / "scripts" / "package-release.ps1").read_text(
         encoding="utf-8-sig"
@@ -632,31 +655,6 @@ def test_package_requires_watchdog_and_integrity_manifest():
     assert "OutDir recusado" in script
     assert "function Get-Sha256Hex" in script
     assert "Get-FileHash" not in script
-
-
-def test_watchdog_installer_acl_check_uses_atomic_write_rights():
-    script = (ROOT / "deploy" / "templates" / "instalar-servico-watchdog-sistema.ps1").read_text(
-        encoding="utf-8-sig"
-    )
-
-    assert "::WriteData" in script
-    assert "::AppendData" in script
-    assert "::DeleteSubdirectoriesAndFiles" in script
-    assert "::FullControl" not in script
-    assert "::Modify" not in script
-
-
-def test_watchdog_installer_finds_server_nssm_and_sets_account_safely():
-    script = (ROOT / "deploy" / "templates" / "instalar-servico-watchdog-sistema.ps1").read_text(
-        encoding="utf-8-sig"
-    )
-
-    assert "Get-Command nssm.exe" in script
-    assert "-HostedServiceName $SyncServiceName" in script
-    assert "SYSTEM_WATCHDOG_NSSM_PATH=$nssm" in script
-    assert "[pscredential]$ServiceCredential" in script
-    assert "Invoke-Nssm -Exe $nssm -Arguments @(\"set\", $ServiceName, \"ObjectName\"" not in script
-    assert script.index("Set-ServiceLogon -Exe") < script.index("Protect-ControlDirectory -Path $runDir")
 
 
 def test_package_build_uses_installed_vite_without_implicit_pnpm_install():

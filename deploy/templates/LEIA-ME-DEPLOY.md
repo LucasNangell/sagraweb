@@ -131,14 +131,14 @@ Na máquina de build (com Node + pnpm):
 deploy-producao.bat
 ```
 
-Ou, passo a passo:
+Isso **prepara** `releases\{nome}` (testes + pacote + cópia). **Não ativa** `current\`.
+
+No servidor, publique:
 
 ```bat
-pnpm install
-pnpm package:release
+cd "C:\Sistemas CGraf\Sagra Web"
+publicar-release.bat -ReleaseName NOME -ConfirmProductionSwitch
 ```
-
-Substitua a pasta no servidor (mantenha `config/` e `storage/`).
 
 ### Deploy automatizado (`deploy-producao.bat`)
 
@@ -146,16 +146,14 @@ Na raiz do repositório (`C:\dev\SagraWeb`):
 
 | Comando | Efeito |
 |---------|--------|
-| `deploy-producao.bat` | Build SPA + pacote + cópia para `\\cgrafsysvm\Sistemas CGraf\Sagra Web` |
-| `deploy-producao.bat -SkipBuild` | Só copia `deploy\release` já gerado |
+| `deploy-producao.bat` | Gate de testes + pacote + cópia para `releases\{nome}` (`current\` intacto) |
+| `deploy-producao.bat -SkipBuild` | Usa `deploy\release` já gerado |
+| `deploy-producao.bat -SkipTests` | Pula o gate (fica `tests=skipped` no RELEASE.txt) |
 | `deploy-producao.bat -DryRun` | Simula (sem copiar) |
-| `deploy-producao.bat -ForceConfig` | Sobrescreve também `config\config.json` no servidor |
 
-**Preservado no servidor:** `config\.env`, `storage/`, `logs/` e demais dados.
+**Preservado no servidor:** `shared\config`, `shared\storage`, `shared\logs`, `shared\Modelos`.
 
 **Após alterar `nginx.conf`:** no servidor 10.1.1.73 execute `C:\nginx\recarregar-nginx.bat` (ou `nginx -t` + `nginx -s reload` em `C:\nginx`). **Salvar o arquivo na share não basta** — o processo só aplica com reload.
-
-**Após o deploy:** execute `iniciar-api.bat` e confirme `http://10.1.1.73/` (SPA) e `http://10.1.1.73/health`.
 
 ## E-mail / Exchange (problemas comuns)
 

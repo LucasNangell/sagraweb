@@ -496,16 +496,21 @@ function Invoke-SafeRobocopy {
         New-Item -ItemType Directory -Path $Dest -Force | Out-Null
     }
 
-    $xd = $script:RobocopyExcludeDirs + $ExtraExcludeDirs | Select-Object -Unique
-    $xf = $script:RobocopyExcludeFiles + $ExtraExcludeFiles | Select-Object -Unique
+    $xd = @($script:RobocopyExcludeDirs + $ExtraExcludeDirs | Select-Object -Unique)
+    $xf = @($script:RobocopyExcludeFiles + $ExtraExcludeFiles | Select-Object -Unique)
 
-    $args = @($Source, $Dest, "/E", "/Z", "/FFT", "/R:3", "/W:5", "/NP", "/NDL", "/NJS", "/NJH", "/XD") + $xd + @("/XF") + $xf
-    if ($Mirror) {
-        if ((Get-ChildItem -LiteralPath $Dest -Force -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0) {
-            throw "Mirror (/MIR) permitido apenas em pasta de release vazia/recém-criada: $Dest"
+    $useMirror = [bool]$Mirror
+    if ($useMirror) {
+        $destCount = @(Get-ChildItem -LiteralPath $Dest -Force -ErrorAction SilentlyContinue).Count
+        if ($destCount -gt 0) {
+            Write-DeployWarn "Destino nao vazio; retomando copia com /E (sem /MIR): $Dest"
+            $useMirror = $false
         }
-        $args = @($Source, $Dest, "/MIR", "/Z", "/FFT", "/R:3", "/W:5", "/NP", "/NDL", "/NJS", "/NJH", "/XD") + $xd + @("/XF") + $xf
     }
+
+    $copyMode = if ($useMirror) { "/MIR" } else { "/E" }
+    $log = Join-Path $env:TEMP ("sagra_robocopy_{0}.log" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
+    $args = @($Source, $Dest, $copyMode, "/Z", "/FFT", "/R:3", "/W:5", "/NP", "/NDL", "/NJS", "/NJH", "/XD") + $xd + @("/XF") + $xf + @("/UNILOG:$log")
 
     Write-Host ("robocopy " + ($args -join " ")) -ForegroundColor DarkGray
     if ($WhatIf) {
@@ -516,6 +521,13 @@ function Invoke-SafeRobocopy {
     & robocopy @args | Out-Host
     $code = $LASTEXITCODE
     if ($code -ge 8) {
+        Write-Host ("Robocopy log: {0}" -f $log) -ForegroundColor Yellow
+        if (Test-Path -LiteralPath $log) {
+            $errLines = @(Select-String -LiteralPath $log -Pattern 'ERROR|FALHA|denied|Access' -SimpleMatch:$false | Select-Object -First 40)
+            foreach ($line in $errLines) {
+                Write-Host ("  | {0}" -f $line.Line) -ForegroundColor Red
+            }
+        }
         throw ('Robocopy falhou com codigo {0}: {1} -> {2}' -f $code, $Source, $Dest)
     }
     return $code

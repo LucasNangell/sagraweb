@@ -6,8 +6,8 @@ import { hasPainelTabletAccess } from "@/features/auth/permissions";
 
 interface TabletAccessGuardProps {
   children: ReactNode;
-  /** Rota de retorno após login (tablet ou celular). */
-  loginRedirect?: "/painel/tablet" | "/painel/celular";
+  /** Rota de retorno após login (tablet, celular ou gravação). */
+  loginRedirect?: "/painel/tablet" | "/painel/celular" | "/painel/gravacao";
 }
 
 /** Exige sessão autenticada com `sb_dashboard_tablet` (sem acesso só por IP). */

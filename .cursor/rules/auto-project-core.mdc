@@ -16,7 +16,7 @@ Sistema corporativo de Ordens de Serviço (OS) para Câmara/SEFOC. Monorepo híb
 - **API:** `app/backend/` — FastAPI; entry `routers.api:app`.
 - **Serviços auxiliares:** `app/services/` (sync, monitor).
 - **Worker Windows:** `worker/papelaria_worker/` (CorelDRAW COM).
-- **Build estático:** `app/frontend/` — output de `vite build`; não editar manualmente.
+- **Build estático:** `apps/web/dist/`; empacotado em `deploy/release/app/frontend/`. Não editar builds manualmente.
 - **Config runtime:** `config/` — `.env`, `config.json` (gitignored; usar templates).
 
 ## Não editar sem tarefa explícita

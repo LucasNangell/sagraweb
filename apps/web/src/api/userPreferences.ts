@@ -3,6 +3,7 @@ import { apiFetch } from "@/api/client";
 export const USER_PREFERENCE_KEYS = [
   "painel_global",
   "painel_setor",
+  "painel_setor_moderno",
   "os_filter_toggles",
   "painel_theme",
 ] as const;

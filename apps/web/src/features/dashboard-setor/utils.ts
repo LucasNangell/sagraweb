@@ -333,6 +333,7 @@ function patchDashboardOsItem(
   item.produto = os.produto;
   item.prioridade = os.prioridade;
   item.last_update = os.last_update;
+  item.andamento_usuario = os.andamento_usuario ?? null;
   item.observacao = os.observacao;
   item.data_entrega = os.data_entrega;
   item.entreg_periodo = os.entreg_periodo;
@@ -360,6 +361,8 @@ export function hashDashboardItems(items: Iterable<PcpQueueItem>): string {
         item.setor ?? "",
         item.pcp_ordem ?? "",
         item.last_update ?? "",
+        item.prioridade ?? "",
+        item.andamento_usuario ?? "",
       ].join("|");
     })
     .sort()
@@ -374,7 +377,7 @@ export function hashDashboardBoard(columns: DashboardDisplayColumn[]): string {
         col.items
           .map(
             (item) =>
-              `${item.uniqueKey}:${item.displaySituacao}:${item.pcp_ordem ?? ""}:${item.isNew ? 1 : 0}`,
+              `${item.uniqueKey}:${item.displaySituacao}:${item.pcp_ordem ?? ""}:${item.isNew ? 1 : 0}:${item.last_update ?? ""}:${item.prioridade ?? ""}:${item.andamento_usuario ?? ""}`,
           )
           .join(","),
       ].join("="),
@@ -408,11 +411,30 @@ export function processDashboardData(
   unmappedItems: DashboardOsItem[];
   hiddenCount: number;
   hasNewItems: boolean;
+  hasSectorArrivals: boolean;
 } {
   const now = options?.now ?? Date.now();
   const isInitialLoad = options?.isInitialLoad === true;
   const incomingIds = new Set<string>();
   let hasNewItems = false;
+  const sectors = collectDashboardSectors(config);
+  const presenceKeys = (item: PcpQueueItem) =>
+    sectors
+      .filter((sector) => osBelongsToDashboardSector(item, sector))
+      .map(
+        (sector) =>
+          `${item.parent_nr_os ?? item.nr_os}-${item.parent_ano ?? item.ano}:${sector}`,
+      );
+  // Compara a presença da OS no setor antes de alterar os objetos do mapa.
+  // Outra coluna ou outro componente da mesma OS não representa uma chegada.
+  const previousPresence = new Set(
+    [...masterOpsMap.values()].flatMap(presenceKeys),
+  );
+  const hasSectorArrivals =
+    !isInitialLoad &&
+    rawData.some((item) =>
+      presenceKeys(item).some((key) => !previousPresence.has(key)),
+    );
 
   const tempColumns: DashboardDisplayColumn[] = config.columns.map((col) => ({
     ...col,
@@ -486,6 +508,7 @@ export function processDashboardData(
     unmappedItems: tempUnmapped,
     hiddenCount: hidden,
     hasNewItems,
+    hasSectorArrivals,
   };
 }
 

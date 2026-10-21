@@ -310,6 +310,7 @@ def fetch_sub_os_queue_rows(
         p.EntregPeriodo AS entreg_periodo,
         p.EntregPrazoLink AS prioridade,
         p.NomeUsuario AS nome_usuario,
+        u.Nome AS andamento_usuario,
         sa.data AS last_update,
         sa.observacao AS observacao,
         NULL AS pcp_ordem,
@@ -323,6 +324,8 @@ def fetch_sub_os_queue_rows(
     FROM tab_os_sub_os s
     INNER JOIN tab_os_sub_os_andamento sa
         ON sa.sub_os_id = s.id AND sa.ultimo_status = 1
+    LEFT JOIN tabUsuarios u
+        ON u.Ponto = CAST(REPLACE(REPLACE(COALESCE(sa.ponto, ''), '.', ''), '-', '') AS UNSIGNED)
     INNER JOIN tab_os_componentes c ON c.id = s.componente_id
     INNER JOIN tabProtocolos p
         ON p.NroProtocolo = s.nro_protocolo AND p.AnoProtocolo = s.ano_protocolo

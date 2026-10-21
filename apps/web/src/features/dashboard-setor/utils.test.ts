@@ -7,6 +7,8 @@ import {
   formatQueueDisplayLabel,
   formatQueueDisplaySituacao,
   getVisibleDashboardColumns,
+  hashDashboardBoard,
+  hashDashboardItems,
   matchesColumnStatus,
   mergeDashboardQueueSources,
   mergePcpOrderIntoItems,
@@ -27,6 +29,36 @@ const subOs: PcpQueueItem = {
   componente_nome: "Miolo",
   situacao: "Em Execução",
 };
+
+describe("autor do andamento no painel", () => {
+  it("atualiza o autor mesmo quando a situação e o horário continuam iguais", () => {
+    const config: DashboardConfig = {
+      sector: "SEFOC",
+      columnCount: 1,
+      columns: [{ id: "exec", title: "Execução", statuses: ["Em Execução"] }],
+    };
+    const raw: PcpQueueItem = {
+      nr_os: 1428,
+      ano: 2026,
+      setor: "SEFOC",
+      situacao: "Em Execução",
+      last_update: "2026-10-21 12:00:00",
+      andamento_usuario: "Ana Silva",
+    };
+    const master = new Map();
+    const first = processDashboardData([raw], config, master, {
+      isInitialLoad: true,
+    });
+    const signature = hashDashboardBoard(first.columns);
+    const changed = { ...raw, andamento_usuario: "Carlos Lima" };
+    expect(hashDashboardItems([raw])).not.toBe(hashDashboardItems([changed]));
+    const next = processDashboardData([changed], config, master, {
+      isInitialLoad: true,
+    });
+    expect(next.columns[0]?.items[0]?.andamento_usuario).toBe("Carlos Lima");
+    expect(hashDashboardBoard(next.columns)).not.toBe(signature);
+  });
+});
 
 describe("matchesColumnStatus", () => {
   it("Gravação não captura Gravação Pendente/Externa/Parcial", () => {

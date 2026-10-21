@@ -96,6 +96,7 @@ def fetch_operacional_rows_batch(
     pairs: List[Tuple[int, int]],
     *,
     cursor=None,
+    include_user: bool = False,
 ) -> Dict[Tuple[int, int], Dict[str, Any]]:
     """
     Último andamento operacional live para várias OSs — mesma regra do painel PCP.
@@ -124,6 +125,11 @@ def fetch_operacional_rows_batch(
     for nro, ano in unique:
         flat.extend([nro, ano])
 
+    user_select = ", u.Nome AS andamento_usuario" if include_user else ""
+    user_join = """
+    LEFT JOIN tabUsuarios u
+        ON u.Ponto = CAST(REPLACE(REPLACE(COALESCE(a.Ponto, ''), '.', ''), '-', '') AS UNSIGNED)
+    """ if include_user else ""
     sql = f"""
     SELECT
         a.NroProtocoloLink AS nro_protocolo,
@@ -134,7 +140,9 @@ def fetch_operacional_rows_batch(
         a.`Data` AS `data`,
         a.`Observaçao` AS observacao,
         a.Ponto AS ponto
+        {user_select}
     FROM {tbl} AS a
+    {user_join}
     WHERE (a.NroProtocoloLink, a.AnoProtocoloLink) IN ({placeholders})
       AND a.UltimoStatus = 1
       AND {MIRROR_EXCLUDE_CLAUSE.strip()}

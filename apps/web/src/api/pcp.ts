@@ -27,6 +27,8 @@ export interface PcpQueueItem {
   entreg_periodo?: string | null;
   prioridade?: string | null;
   nome_usuario?: string | null;
+  /** Nome de quem registrou o andamento atual; diferente do solicitante da OS. */
+  andamento_usuario?: string | null;
   last_update?: string | null;
   observacao?: string | null;
   pcp_ordem?: number | null;

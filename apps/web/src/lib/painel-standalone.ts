@@ -1,6 +1,7 @@
 /** Rotas dos painéis exibidas sem AppShell (header/sidebar). */
 export const PAINEL_STANDALONE_PATHS = [
   "/painel/setor",
+  "/painel/setor-moderno",
   "/painel/global",
   "/painel/tablet",
   "/painel/celular",
@@ -26,6 +27,7 @@ function buildPainelAbsoluteUrl(path: PainelStandalonePath): string {
 export function openPainelInNewWindow(path: PainelStandalonePath): boolean {
   const url = buildPainelAbsoluteUrl(path);
   const windowName =
+    path === "/painel/setor-moderno" ? "SagraPainelSetorModerno" :
     path === "/painel/setor" ? "SagraPainelSetor" : "SagraPainelGlobal";
 
   const width = window.screen.availWidth;

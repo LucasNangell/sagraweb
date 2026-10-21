@@ -25,6 +25,7 @@ function mapSearchRowToQueueItem(row: OsSearchRowWithPcp): PcpQueueItem {
     entreg_periodo: row.entreg_periodo,
     prioridade: row.prioridade,
     last_update: row.last_update,
+    andamento_usuario: row.andamento_usuario ?? null,
     observacao: row.observacao,
     pcp_ordem: row.pcp_ordem ?? null,
     pcp_ultima_atualizacao: row.pcp_ultima_atualizacao ?? null,

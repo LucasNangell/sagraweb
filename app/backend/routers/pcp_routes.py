@@ -127,6 +127,7 @@ def get_pcp_queue(
         p.EntregPeriodo AS entreg_periodo,
         p.EntregPrazoLink AS prioridade,
         p.NomeUsuario AS nome_usuario,
+        u.Nome AS andamento_usuario,
         a.Data AS last_update,
         a.`Observaçao` AS observacao,
         pcp.ordem AS pcp_ordem,
@@ -144,6 +145,8 @@ def get_pcp_queue(
             ORDER BY a2.`Data` DESC, a2.CodStatus DESC
             LIMIT 1
         )
+    LEFT JOIN tabUsuarios u
+        ON u.Ponto = CAST(REPLACE(REPLACE(COALESCE(a.Ponto, ''), '.', ''), '-', '') AS UNSIGNED)
     LEFT JOIN tab_pcp_fila AS pcp
                 ON (pcp.setor = %s AND pcp.nro_os = p.NroProtocolo AND pcp.ano = p.AnoProtocolo)
     WHERE a.CodStatus IS NOT NULL

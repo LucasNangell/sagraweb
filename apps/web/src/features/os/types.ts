@@ -13,6 +13,7 @@ export interface OsSearchRow {
   data_entrega?: string | null;
   entreg_periodo?: string | null;
   last_update?: string | null;
+  andamento_usuario?: string | null;
   observacao?: string | null;
   /** Preenchido por GET /api/os/search (opcional, retrocompatível). */
   has_sub_os?: boolean;

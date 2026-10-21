@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 VALID_PREFERENCE_KEYS = frozenset({
     "painel_global",
     "painel_setor",
+    "painel_setor_moderno",
     "os_filter_toggles",
     "painel_theme",
 })
@@ -155,7 +156,7 @@ def get_user_preference(
         """
         rows = db.execute_query(query, (_session_ponto_str(session), key))
         if not rows:
-            if key == "painel_setor":
+            if key in {"painel_setor", "painel_setor_moderno"}:
                 user_setor = fetch_user_setor(session.ponto)
                 if user_setor:
                     sector_default = fetch_setor_painel_default(user_setor)

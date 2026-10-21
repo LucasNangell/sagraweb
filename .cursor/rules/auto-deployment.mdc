@@ -17,7 +17,7 @@ Deploy **Windows + PowerShell**; sem Docker ou GitHub Actions no repositório.
 
 ## Fluxo confirmado
 
-1. Build SPA → `app/frontend/` (`deploy/bat/_build-spa.cmd`, `VITE_BASE_PATH=/sagra/`).
+1. Build SPA → `apps/web/dist/`; empacotamento copia para `deploy/release/app/frontend/` (`VITE_BASE_PATH=/sagra/`, `VITE_API_BASE_URL=/sagra/api`).
 2. Empacotar: `pnpm package:release` → `deploy/release/`.
 3. Deploy remoto: `deploy/scripts/deploy_release.ps1`, `deploy-producao.ps1`.
 4. Servidor: releases versionadas + `shared/` persistente (`config`, logs, `Modelos`).

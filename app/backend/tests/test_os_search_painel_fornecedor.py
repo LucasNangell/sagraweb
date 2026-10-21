@@ -94,7 +94,10 @@ def test_enrich_painel_fornecedores_skips_when_no_grav_externa():
 @patch(_MAT_POP, return_value=False)
 @patch("services.os_search_service.db")
 @patch("services.os_search_service._enrich_rows_with_details", side_effect=lambda r: r)
-@patch("services.os_search_service._enrich_operacional_from_live", side_effect=lambda r: r)
+@patch(
+    "services.os_search_service._enrich_operacional_from_live",
+    side_effect=lambda r, **_kwargs: r,
+)
 @patch(
     "services.os_search_service._enrich_painel_fornecedores_gravacao_externa",
     side_effect=lambda r: r,
@@ -112,7 +115,10 @@ def test_execute_os_search_painel_calls_fornecedor_enrich(
 @patch(_MAT_POP, return_value=False)
 @patch("services.os_search_service.db")
 @patch("services.os_search_service._enrich_rows_with_details", side_effect=lambda r: r)
-@patch("services.os_search_service._enrich_operacional_from_live", side_effect=lambda r: r)
+@patch(
+    "services.os_search_service._enrich_operacional_from_live",
+    side_effect=lambda r, **_kwargs: r,
+)
 @patch(
     "services.os_search_service._enrich_painel_fornecedores_gravacao_externa",
     side_effect=lambda r: r,

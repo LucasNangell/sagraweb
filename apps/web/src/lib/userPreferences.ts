@@ -4,6 +4,7 @@ import {
   type UserPreferenceKey,
 } from "@/api/userPreferences";
 import { PAINEL_CONFIG_STORAGE_KEY } from "@/features/painel-global/painelConfigStore";
+import { MODERN_CONFIG_KEY } from "@/features/dashboard-setor-modern/configStorage";
 
 const OS_TOGGLES_STORAGE_KEY = "sagra-os-filter-toggles";
 const THEME_STORAGE_KEY = "theme";
@@ -11,6 +12,7 @@ const THEME_STORAGE_KEY = "theme";
 const LOCAL_STORAGE_BY_KEY: Record<UserPreferenceKey, string> = {
   painel_global: PAINEL_CONFIG_STORAGE_KEY,
   painel_setor: PAINEL_CONFIG_STORAGE_KEY,
+  painel_setor_moderno: MODERN_CONFIG_KEY,
   os_filter_toggles: OS_TOGGLES_STORAGE_KEY,
   painel_theme: THEME_STORAGE_KEY,
 };

@@ -1201,7 +1201,7 @@ def _fulltext_details_driver_from_sql(
 
 
 def _enrich_operacional_from_live(
-    rows: List[Dict[str, Any]], *, slim: bool = False
+    rows: List[Dict[str, Any]], *, slim: bool = False, include_user: bool = False
 ) -> List[Dict[str, Any]]:
     """Sobrescreve situação/setor com tabAndamento live — mesma fonte do painel setor."""
     if not rows:
@@ -1211,7 +1211,10 @@ def _enrich_operacional_from_live(
     pairs = _protocol_pairs(rows)
     live_map: Dict[Tuple[int, int], Dict[str, Any]] = {}
     for chunk in _chunks(pairs, OS_SEARCH_IN_CHUNK):
-        live_map.update(fetch_operacional_rows_batch(chunk))
+        live_map.update(
+            fetch_operacional_rows_batch(chunk, include_user=True)
+            if include_user else fetch_operacional_rows_batch(chunk)
+        )
     for row in rows:
         nro, ano = row.get("nr_os"), row.get("ano")
         if nro is None or ano is None:
@@ -1222,6 +1225,8 @@ def _enrich_operacional_from_live(
         row["situacao"] = live.get("situacao")
         row["setor"] = live.get("setor")
         row["last_update"] = live.get("data")
+        if include_user:
+            row["andamento_usuario"] = live.get("andamento_usuario")
         if not slim:
             row["observacao"] = live.get("observacao")
     return rows
@@ -1968,7 +1973,10 @@ def execute_os_search(
     if not need_details_join:
         data_results = _enrich_rows_with_details(data_results)
 
-    data_results = _enrich_operacional_from_live(data_results)
+    data_results = (
+        _enrich_operacional_from_live(data_results, include_user=True)
+        if painel else _enrich_operacional_from_live(data_results)
+    )
 
     if not painel:
         data_results = _expand_split_os_search_rows(

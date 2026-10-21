@@ -28,6 +28,7 @@ import {
   emptyDisplayColumns,
   hashDashboardBoard,
   hashDashboardItems,
+  osBelongsToAnyDashboardSector,
   processDashboardData,
   refreshDashboardHighlights,
 } from "../utils";
@@ -44,6 +45,7 @@ export type DashboardConnectionStatus = "connected" | "disconnected";
 interface UseDashboardSetorDataOptions {
   config: DashboardConfig;
   onNewItems?: () => void;
+  onSectorArrival?: () => void;
 }
 
 function wsEventAffectsSectors(
@@ -90,9 +92,13 @@ function syncItemsMapFromList(
 export function useDashboardSetorData({
   config,
   onNewItems,
+  onSectorArrival,
 }: UseDashboardSetorDataOptions) {
   const [columns, setColumns] = useState<DashboardDisplayColumn[]>(() =>
     emptyDisplayColumns(config),
+  );
+  const [sectorItemKeys, setSectorItemKeys] = useState<ReadonlySet<string>>(
+    () => new Set(),
   );
   const [lastUpdated, setLastUpdated] = useState("Carregando dados");
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
@@ -113,6 +119,8 @@ export function useDashboardSetorData({
   const hasLoadedOnceRef = useRef(false);
   const onNewItemsRef = useRef(onNewItems);
   onNewItemsRef.current = onNewItems;
+  const onSectorArrivalRef = useRef(onSectorArrival);
+  onSectorArrivalRef.current = onSectorArrival;
   const configRef = useRef(config);
   configRef.current = config;
 
@@ -132,6 +140,24 @@ export function useDashboardSetorData({
       processed: ReturnType<typeof processDashboardData>,
       options?: { touchUpdatedAt?: boolean; partial?: boolean },
     ) => {
+      const sectors = collectDashboardSectors(configRef.current);
+      const nextSectorKeys = new Set(
+        [
+          ...processed.columns.flatMap((column) => column.items),
+          ...processed.unmappedItems,
+        ]
+          .filter((item) => osBelongsToAnyDashboardSector(item, sectors))
+          .map((item) => item.uniqueKey),
+      );
+      setSectorItemKeys((previous) =>
+        previous.size === nextSectorKeys.size &&
+        [...nextSectorKeys].every((key) => previous.has(key))
+          ? previous
+          : nextSectorKeys,
+      );
+      if (processed.hasSectorArrivals && hasLoadedOnceRef.current) {
+        onSectorArrivalRef.current?.();
+      }
       const nextSignature = hashDashboardBoard(processed.columns);
       if (nextSignature === boardSignatureRef.current) {
         return false;
@@ -272,6 +298,7 @@ export function useDashboardSetorData({
     boardSignatureRef.current = "";
     rawItemsSignatureRef.current = "";
     setColumns(emptyDisplayColumns(configRef.current));
+    setSectorItemKeys(new Set());
     setLastUpdated("Carregando dados");
     setLastSyncAt(null);
     setHasLoadedOnce(false);
@@ -513,6 +540,7 @@ export function useDashboardSetorData({
     boardSignatureRef.current = "";
     rawItemsSignatureRef.current = "";
     setColumns(emptyDisplayColumns(configRef.current));
+    setSectorItemKeys(new Set());
     setLastUpdated("Carregando dados");
     setLastSyncAt(null);
     setHasLoadedOnce(false);
@@ -535,6 +563,7 @@ export function useDashboardSetorData({
 
   return {
     columns,
+    sectorItemKeys,
     lastUpdated,
     lastSyncAt,
     connectionStatus,

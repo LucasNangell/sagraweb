@@ -79,6 +79,13 @@ export const NAV_ITEMS: NavItem[] = [
     opensInNewWindow: true,
   },
   {
+    label: "Painel setor moderno",
+    to: "/painel/setor-moderno",
+    icon: LayoutDashboard,
+    permission: "sb_dashboard_setor",
+    opensInNewWindow: true,
+  },
+  {
     label: "Painel global",
     to: "/painel/global",
     icon: BarChart3,
@@ -121,7 +128,7 @@ export function getVisibleNavItems(
     return [];
   }
   return NAV_ITEMS.filter((item) => {
-    if (item.to === "/painel/setor") {
+    if (item.to === "/painel/setor" || item.to === "/painel/setor-moderno") {
       return hasPainelSetorAccess(permissions);
     }
     if (item.to === "/painel/global") {
@@ -156,6 +163,7 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionKey> = {
   "/manipular-imagem": "sb_manipular_imagem",
   "/relatorios": "sb_relatorio",
   "/painel/setor": "sb_dashboard_setor",
+  "/painel/setor-moderno": "sb_dashboard_setor",
   "/painel/global": "sb_dashboard_global",
   "/painel/tablet": "sb_dashboard_tablet",
   "/painel/celular": "sb_dashboard_tablet",
@@ -193,7 +201,7 @@ export function canAccessRoute(permissions: Permissions, path: string): boolean 
     return hasPermission(permissions, "ctx_imprimir_ficha");
   }
 
-  if (normalized === "/painel/setor" || normalized.startsWith("/painel/setor/")) {
+  if (normalized === "/painel/setor-moderno" || normalized === "/painel/setor" || normalized.startsWith("/painel/setor/")) {
     return hasPainelSetorAccess(permissions);
   }
   if (normalized === "/painel/global" || normalized.startsWith("/painel/global/")) {

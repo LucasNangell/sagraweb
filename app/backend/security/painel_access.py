@@ -76,7 +76,7 @@ def check_painel_spa_path_access(app_path: str, perms: dict) -> bool:
     norm = (app_path or "").rstrip("/") or "/"
     if norm == "/painel/global":
         return has_painel_global_access(perms)
-    if norm == "/painel/setor" or norm.startswith("/painel/setor/"):
+    if norm in {"/painel/setor", "/painel/setor-moderno"} or norm.startswith("/painel/setor/"):
         return has_painel_setor_access(perms)
     if norm == "/painel/tablet" or norm.startswith("/painel/tablet/"):
         return has_painel_tablet_access(perms)

@@ -11,8 +11,9 @@ import html as html_lib
 import logging
 import os
 import re
+from pathlib import Path
 from typing import Callable, List, Optional, Tuple
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
 import requests
 
@@ -23,8 +24,28 @@ InlineImage = Tuple[str, bytes, str, str]
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
 MAX_IMAGES_PER_EMAIL = 20
 DOWNLOAD_TIMEOUT_SECONDS = 10
+MAX_REDIRECTS = 3
 
-DEFAULT_ALLOWED_HOST_PATTERNS = ("*.camara.leg.br", "*.camara.gov.br")
+DEFAULT_ALLOWED_HOST_PATTERNS = (
+    "*.camara.leg.br",
+    "*.camara.gov.br",
+    "cgraf.online",
+    "www.cgraf.online",
+)
+
+_REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
+_LOCAL_PATH_PREFIXES = ("/email_images/", "/imagensemail/")
+
+# IDs usados nos modelos de prova/PT (payload antigo no MySQL inclusive).
+DRIVE_ID_TO_LOCAL_FILE = {
+    "1VS_n8YA39TJR6XJBeH7UStcwjloXtZGC": "header.png",
+    "1862FeQwKpoYYijvaquofPG7278nAxDHS": "invite_portal.png",
+    "1U-x8Fxj-vKbFvLfahVx_KNAkI_Ny5L6W": "acessar_sagra.png",
+    "1qbGsxjtwomsSl4yWNJ8O4CcVs4njhCgd": "footer.png",
+    "1IidV2OowSeqX1w3mewGUxBEBzbq1atDE": "invite_portal.png",
+    "1Tkv0XSNBdYpyTMR8agHWPLNhEYMjG2a0": "invite_portal.png",
+    "1ADWADUPIaqTqGprsnJ_tcxmNCOyzRKiT": "invite_portal.png",
+}
 
 _IMG_SRC_RE = re.compile(
     r"""(<img\b[^>]*?\bsrc\s*=\s*)(["'])([^"']*)\2""",
@@ -44,6 +65,16 @@ _MIME_EXTENSIONS = {
     "image/webp": ".webp",
     "image/bmp": ".bmp",
     "image/svg+xml": ".svg",
+}
+
+_EXTENSION_MIME = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
+    ".svg": "image/svg+xml",
 }
 
 
@@ -98,6 +129,10 @@ def _extension_for(mime: str) -> str:
     return _MIME_EXTENSIONS.get(mime.lower(), ".img")
 
 
+def _mime_from_filename(name: str) -> str:
+    return _EXTENSION_MIME.get(Path(name).suffix.lower(), "image/png")
+
+
 def _filename_from_url(url: str, mime: str) -> str:
     try:
         name = os.path.basename(unquote(urlparse(url).path or ""))
@@ -107,6 +142,100 @@ def _filename_from_url(url: str, mime: str) -> str:
     if not name or "." not in name:
         return f"imagem{_extension_for(mime)}"
     return name
+
+
+def _safe_local_name(name: str) -> Optional[str]:
+    cleaned = Path(unquote(name or "")).name.strip()
+    if not cleaned or cleaned in {".", ".."}:
+        return None
+    if "/" in cleaned or "\\" in cleaned:
+        return None
+    return cleaned
+
+
+def email_images_dirs() -> List[Path]:
+    dirs: List[Path] = []
+    env_dir = os.getenv("EMAIL_IMAGES_DIR", "").strip()
+    if env_dir:
+        dirs.append(Path(env_dir))
+    try:
+        from config_manager import PROJECT_ROOT
+
+        root = Path(PROJECT_ROOT)
+        dirs.append(root / "email_images")
+        dirs.append(root / "shared" / "email_images")
+    except Exception:
+        pass
+    return dirs
+
+
+def _is_inside(directory: Path, candidate: Path) -> bool:
+    try:
+        candidate.resolve().relative_to(directory.resolve())
+        return True
+    except (ValueError, OSError):
+        return False
+
+
+def resolve_local_email_image(filename: str) -> Optional[Tuple[bytes, str]]:
+    """Lê um arquivo de shared/email_images; retorna (bytes, mime) ou None."""
+    name = _safe_local_name(filename)
+    if not name:
+        return None
+    for directory in email_images_dirs():
+        try:
+            path = (directory / name).resolve()
+        except OSError:
+            continue
+        if not _is_inside(directory, path) or not path.is_file():
+            continue
+        try:
+            size = path.stat().st_size
+            if size <= 0 or size > MAX_IMAGE_BYTES:
+                logger.warning(
+                    "Imagem local de e-mail vazia ou acima de %s bytes: %s",
+                    MAX_IMAGE_BYTES,
+                    path,
+                )
+                return None
+            raw = path.read_bytes()
+        except OSError as exc:
+            logger.warning("Falha ao ler imagem local de e-mail %s: %s", path, exc)
+            continue
+        if not raw or len(raw) > MAX_IMAGE_BYTES:
+            return None
+        return raw, _mime_from_filename(name)
+    return None
+
+
+def _drive_id_from_url(parsed) -> Optional[str]:
+    host = (parsed.hostname or "").lower()
+    if "drive.google.com" not in host and "googleusercontent.com" not in host:
+        return None
+    qs = parse_qs(parsed.query)
+    for key in ("id", "export"):
+        values = qs.get(key) or []
+        if values and values[0] not in ("view", "download", "open"):
+            return values[0]
+    match = re.search(r"/d/([A-Za-z0-9_-]{20,})", parsed.path or "")
+    return match.group(1) if match else None
+
+
+def local_filename_for_src(value: str, parsed) -> Optional[str]:
+    path = unquote(parsed.path or "")
+    if not path and value.startswith("/"):
+        path = unquote(value.split("?", 1)[0])
+    lower = path.lower()
+    for prefix in _LOCAL_PATH_PREFIXES:
+        idx = lower.find(prefix)
+        if idx >= 0:
+            rest = path[idx + len(prefix) :]
+            return _safe_local_name(rest.split("/")[0])
+    drive_id = _drive_id_from_url(parsed)
+    if drive_id:
+        mapped = DRIVE_ID_TO_LOCAL_FILE.get(drive_id)
+        return _safe_local_name(mapped) if mapped else None
+    return None
 
 
 def _read_limited(response: requests.Response) -> Optional[bytes]:
@@ -144,9 +273,9 @@ def download_image(
     sess.trust_env = False
     sess.proxies = {}
 
-    def _get(auth=None) -> requests.Response:
+    def _get(target: str, auth=None) -> requests.Response:
         return sess.get(
-            url,
+            target,
             timeout=DOWNLOAD_TIMEOUT_SECONDS,
             allow_redirects=False,
             verify=verify_ssl,
@@ -154,37 +283,86 @@ def download_image(
             auth=auth,
         )
 
+    current = url
+    auth = None
+    hops = 0
+    patterns = allowed_host_patterns()
     try:
-        response = _get()
-        if response.status_code == 401:
-            response.close()
-            auth = _negotiate_auth()
-            if auth is None:
-                logger.warning("Imagem de e-mail exige autenticação: %s", url)
-                return None
-            response = _get(auth)
-        try:
-            if response.status_code != 200:
-                logger.warning(
-                    "Imagem de e-mail não baixada (HTTP %s): %s",
-                    response.status_code,
-                    url,
-                )
-                return None
-            mime = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
-            if not mime.startswith("image/"):
-                logger.warning("URL de imagem de e-mail não retornou imagem (%s): %s", mime, url)
-                return None
-            raw = _read_limited(response)
-            if not raw:
-                logger.warning("Imagem de e-mail vazia ou acima de %s bytes: %s", MAX_IMAGE_BYTES, url)
-                return None
-            return raw, mime
-        finally:
-            response.close()
+        while True:
+            response = _get(current, auth)
+            if response.status_code == 401 and auth is None:
+                response.close()
+                auth = _negotiate_auth()
+                if auth is None:
+                    logger.warning("Imagem de e-mail exige autenticação: %s", current)
+                    return None
+                response = _get(current, auth)
+
+            if response.status_code in _REDIRECT_STATUSES:
+                location = (response.headers.get("Location") or "").strip()
+                response.close()
+                if not location or hops >= MAX_REDIRECTS:
+                    logger.warning(
+                        "Imagem de e-mail não baixada (HTTP %s): %s",
+                        response.status_code,
+                        current,
+                    )
+                    return None
+                next_url = urljoin(current, location)
+                parsed = urlparse(next_url)
+                if parsed.scheme.lower() not in ("http", "https"):
+                    logger.warning("Redirect de imagem com esquema inválido: %s", next_url)
+                    return None
+                if not is_allowed_image_host(parsed.hostname or "", patterns):
+                    logger.warning(
+                        "Redirect de imagem para host não permitido: %s -> %s",
+                        current,
+                        next_url,
+                    )
+                    return None
+                hops += 1
+                current = next_url
+                continue
+
+            try:
+                if response.status_code != 200:
+                    logger.warning(
+                        "Imagem de e-mail não baixada (HTTP %s): %s",
+                        response.status_code,
+                        current,
+                    )
+                    return None
+                mime = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+                if not mime.startswith("image/"):
+                    logger.warning(
+                        "URL de imagem de e-mail não retornou imagem (%s): %s",
+                        mime,
+                        current,
+                    )
+                    return None
+                raw = _read_limited(response)
+                if not raw:
+                    logger.warning(
+                        "Imagem de e-mail vazia ou acima de %s bytes: %s",
+                        MAX_IMAGE_BYTES,
+                        current,
+                    )
+                    return None
+                return raw, mime
+            finally:
+                response.close()
     except requests.RequestException as exc:
-        logger.warning("Falha ao baixar imagem de e-mail %s: %s", url, exc)
+        logger.warning("Falha ao baixar imagem de e-mail %s: %s", current, exc)
         return None
+
+
+def _remaining_remote_srcs(html: str) -> List[str]:
+    found: List[str] = []
+    for match in _IMG_SRC_RE.finditer(html or ""):
+        src = html_lib.unescape(match.group(3)).strip()
+        if src.lower().startswith("http://") or src.lower().startswith("https://"):
+            found.append(src)
+    return found
 
 
 def embed_images_for_email(
@@ -194,7 +372,8 @@ def embed_images_for_email(
     downloader: Optional[Callable[[str], Optional[Tuple[bytes, str]]]] = None,
 ) -> Tuple[str, List[InlineImage]]:
     """
-    Converte <img src> com data:image ou http(s) de host permitido em anexos inline.
+    Converte <img src> com data:image, arquivos locais de email_images ou http(s)
+    de host permitido em anexos inline.
 
     Retorna o HTML com src="cid:..." e a lista (filename, bytes, content_id, mime)
     no formato de EWSService.send_email(inline_images=...). Imagens que falham
@@ -245,6 +424,27 @@ def embed_images_for_email(
             parsed = urlparse(value)
         except ValueError:
             return None
+
+        local_name = local_filename_for_src(value, parsed)
+        if local_name:
+            key = f"local:{local_name}"
+            if key in cid_by_key:
+                return cid_by_key[key]
+            if len(inline_images) >= MAX_IMAGES_PER_EMAIL:
+                logger.warning(
+                    "Limite de %s imagens inline atingido; mantendo URL %s",
+                    MAX_IMAGES_PER_EMAIL,
+                    value,
+                )
+                return None
+            local = resolve_local_email_image(local_name)
+            if local:
+                raw, mime = local
+                cid = register(key, local_name, raw, mime)
+                cid_by_key[key] = cid
+                logger.info("Imagem local %s embutida no e-mail como cid:%s", local_name, cid)
+                return cid
+
         if parsed.scheme.lower() not in ("http", "https"):
             return None
         if not is_allowed_image_host(parsed.hostname or "", patterns):
@@ -272,4 +472,12 @@ def embed_images_for_email(
         quote = match.group(2)
         return f"{match.group(1)}{quote}cid:{cid}{quote}"
 
-    return _IMG_SRC_RE.sub(repl, html), inline_images
+    converted = _IMG_SRC_RE.sub(repl, html)
+    leftover = _remaining_remote_srcs(converted)
+    if leftover:
+        logger.warning(
+            "E-mail ainda contém %s imagem(ns) remota(s) não embutida(s): %s",
+            len(leftover),
+            ", ".join(leftover[:10]),
+        )
+    return converted, inline_images

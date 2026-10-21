@@ -7,6 +7,7 @@ import base64
 import datetime
 from decimal import Decimal
 import logging
+import math
 import os
 import re
 import unicodedata
@@ -65,6 +66,26 @@ def _format_milhar(value) -> str:
         except (TypeError, ValueError, OverflowError):
             return text
     return f"{number:,}".replace(",", ".")
+
+
+def _parse_qtd_int(value) -> int | None:
+    """Inteiro de quantidade (aceita milhar pt-BR); None se vazio/inválido."""
+    text = _format_milhar(value)
+    if not text:
+        return None
+    digits = text.replace(".", "")
+    if not digits.isdigit():
+        return None
+    return int(digits)
+
+
+def _cota_repro_para_tiragem_1(cota_repro, tiragem) -> str | None:
+    """Cota unitária: ceil(cota total / tiragem), sem casas decimais."""
+    cota = _parse_qtd_int(cota_repro)
+    qtd = _parse_qtd_int(tiragem)
+    if cota is None or qtd is None or qtd <= 0:
+        return None
+    return _format_milhar(math.ceil(cota / qtd))
 
 
 def _resolve_template_path() -> str:
@@ -238,7 +259,11 @@ def generate_requisicao(
 
         if mode in ("prova", "prova_ficha"):
             context["tiragem_qtd"] = "1"
-            context["cota_repro"] = "1"
+            cota_unitaria = _cota_repro_para_tiragem_1(
+                row.get("CotaRepro"), row.get("Tiragem")
+            )
+            if cota_unitaria is not None:
+                context["cota_repro"] = cota_unitaria
             context["maquina_sugerida"] = "Digital Cor/PB"
 
         if mode == "prova_ficha":

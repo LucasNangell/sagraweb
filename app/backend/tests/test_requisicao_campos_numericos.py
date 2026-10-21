@@ -7,7 +7,11 @@ from unittest.mock import patch
 
 import pytest
 
-from routers.requisicao_routes import _format_milhar, generate_requisicao
+from routers.requisicao_routes import (
+    _cota_repro_para_tiragem_1,
+    _format_milhar,
+    generate_requisicao,
+)
 
 DETALHES_FIELDS = (
     "ModelosArq",
@@ -152,14 +156,44 @@ def test_numero_pedido_sp():
     assert "SP 05123/26" in html
 
 
+@pytest.mark.parametrize(
+    "cota,tiragem,esperado",
+    [
+        (1500, 100, "15"),
+        (10, 3, "4"),
+        (1, 1, "1"),
+        (1500, 1, "1.500"),
+        ("1.500", "100", "15"),
+        (0, 100, "0"),
+        (1500, 0, None),
+        (1500, None, None),
+        (None, 100, None),
+        ("", 100, None),
+    ],
+)
+def test_cota_repro_para_tiragem_1(cota, tiragem, esperado):
+    assert _cota_repro_para_tiragem_1(cota, tiragem) == esperado
+
+
 @pytest.mark.parametrize("mode", ["prova", "prova_ficha"])
-def test_ficha_prova_forca_tiragem_e_cota_repro_1(mode):
+def test_ficha_prova_cota_repro_unitaria(mode):
     html = _render(
         _os_row(CotaRepro=1500, Tiragem=100),
         mode=mode,
     ).body.decode("utf-8")
 
-    assert _box_after_label(html, "Cota Repro") == "1"
+    assert _box_after_label(html, "Cota Repro") == "15"
+    assert _box_after_label(html, "Tiragem") == "1"
+
+
+@pytest.mark.parametrize("mode", ["prova", "prova_ficha"])
+def test_ficha_prova_cota_repro_arredonda_para_cima(mode):
+    html = _render(
+        _os_row(CotaRepro=10, Tiragem=3),
+        mode=mode,
+    ).body.decode("utf-8")
+
+    assert _box_after_label(html, "Cota Repro") == "4"
     assert _box_after_label(html, "Tiragem") == "1"
 
 

@@ -211,7 +211,7 @@ def sanitize_html_snapshot(raw: Optional[str]) -> Optional[str]:
 
             attributes=_BLEACH_ATTRS,
 
-            protocols=["http", "https", "mailto", "data"],
+            protocols=["http", "https", "mailto", "data", "cid"],
 
             css_sanitizer=css_sanitizer,
 

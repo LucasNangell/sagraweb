@@ -18,10 +18,25 @@ from services.email_inline_images_service import (
 PNG_BYTES = b"\x89PNG\r\n\x1a\nfake-png"
 
 
+PROOF_DRIVE_HTML = (
+    '<img src="https://drive.google.com/uc?export=view&id=1VS_n8YA39TJR6XJBeH7UStcwjloXtZGC">'
+    '<img src="https://drive.google.com/uc?export=view&id=1862FeQwKpoYYijvaquofPG7278nAxDHS">'
+    '<img src="https://drive.google.com/uc?export=view&id=1U-x8Fxj-vKbFvLfahVx_KNAkI_Ny5L6W">'
+    '<img src="https://drive.google.com/uc?export=view&id=1qbGsxjtwomsSl4yWNJ8O4CcVs4njhCgd">'
+)
+
+
 @pytest.fixture(autouse=True)
 def _isolated_env(monkeypatch):
     monkeypatch.delenv("EMAIL_INLINE_IMAGE_ALLOWED_HOSTS", raising=False)
+    monkeypatch.delenv("EMAIL_IMAGES_DIR", raising=False)
     monkeypatch.setenv("SAGRA_PUBLIC_WEB_BASE", "http://cgrafsysvm")
+
+
+def _write_email_images(tmp_path, names=("header.png",)):
+    for name in names:
+        (tmp_path / name).write_bytes(PNG_BYTES)
+    return tmp_path
 
 
 class FakeResponse:
@@ -57,7 +72,15 @@ class FakeSession:
 class TestAllowedHosts:
     @pytest.mark.parametrize(
         "host",
-        ["cgrafsysvm", "CGRAFSYSVM", "intranet.camara.leg.br", "camara.leg.br", "www2.camara.gov.br"],
+        [
+            "cgrafsysvm",
+            "CGRAFSYSVM",
+            "intranet.camara.leg.br",
+            "camara.leg.br",
+            "www2.camara.gov.br",
+            "cgraf.online",
+            "www.cgraf.online",
+        ],
     )
     def test_intranet_hosts_allowed(self, host):
         assert is_allowed_image_host(host)
@@ -144,6 +167,62 @@ class TestEmbedImagesForEmail:
         assert len(images) == 2
         assert 'src="http://cgrafsysvm/2.png"' in out
 
+    def test_email_images_path_reads_disk(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("EMAIL_IMAGES_DIR", str(_write_email_images(tmp_path)))
+        html = '<img src="https://cgrafsysvm.camara.leg.br/email_images/header.png">'
+
+        out, images = embed_images_for_email(html, downloader=lambda _u: pytest.fail("sem download"))
+
+        assert len(images) == 1
+        assert images[0][0] == "header.png"
+        assert images[0][1] == PNG_BYTES
+        assert f'src="cid:{images[0][2]}"' in out
+        assert "email_images/header.png" not in out
+
+    def test_imagensemail_path_reads_disk(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("EMAIL_IMAGES_DIR", str(_write_email_images(tmp_path)))
+        html = '<img src="https://cgraf.online/imagensemail/header.png">'
+
+        out, images = embed_images_for_email(html, downloader=lambda _u: pytest.fail("sem download"))
+
+        assert len(images) == 1
+        assert f'src="cid:{images[0][2]}"' in out
+
+    def test_drive_id_maps_to_local_file(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("EMAIL_IMAGES_DIR", str(_write_email_images(tmp_path)))
+        html = (
+            '<img src="https://drive.google.com/uc?export=view&id='
+            '1VS_n8YA39TJR6XJBeH7UStcwjloXtZGC">'
+        )
+
+        out, images = embed_images_for_email(html, downloader=lambda _u: pytest.fail("sem download"))
+
+        assert len(images) == 1
+        assert images[0][0] == "header.png"
+        assert "drive.google.com" not in out
+
+    def test_missing_local_email_image_falls_back_to_download(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("EMAIL_IMAGES_DIR", str(tmp_path))
+        html = '<img src="https://cgrafsysvm.camara.leg.br/email_images/missing.png">'
+        requested = []
+
+        def downloader(url):
+            requested.append(url)
+            return PNG_BYTES, "image/png"
+
+        out, images = embed_images_for_email(html, downloader=downloader)
+
+        assert requested == ["https://cgrafsysvm.camara.leg.br/email_images/missing.png"]
+        assert f'src="cid:{images[0][2]}"' in out
+
+    def test_cgraf_online_http_is_downloaded(self):
+        html = '<img src="https://cgraf.online/other/logo.png">'
+        out, images = embed_images_for_email(
+            html, downloader=lambda _u: (PNG_BYTES, "image/png")
+        )
+        assert len(images) == 1
+        assert "cgraf.online" not in out
+
 
 class TestDownloadImage:
     def test_success_uses_direct_connection_without_redirects(self):
@@ -166,6 +245,21 @@ class TestDownloadImage:
         session = FakeSession([FakeResponse(status=302, headers={"Location": "https://example.com"})])
         assert download_image("http://cgrafsysvm/a.png", verify_ssl=True, session=session) is None
         assert len(session.calls) == 1
+
+    def test_redirect_to_allowed_host_is_followed(self):
+        session = FakeSession(
+            [
+                FakeResponse(
+                    status=301,
+                    headers={"Location": "https://cgrafsysvm.camara.leg.br/email_images/a.png"},
+                ),
+                FakeResponse(),
+            ]
+        )
+        result = download_image("http://cgrafsysvm/a.png", verify_ssl=True, session=session)
+        assert result == (PNG_BYTES, "image/png")
+        assert len(session.calls) == 2
+        assert session.calls[1][0] == "https://cgrafsysvm.camara.leg.br/email_images/a.png"
 
     def test_too_large_declared(self):
         session = FakeSession([FakeResponse(headers={"Content-Length": str(MAX_IMAGE_BYTES + 1)})])
@@ -256,3 +350,38 @@ class TestSendEmailEmbedsImages:
         envelope = captured["envelope"]
         assert "http://cgrafsysvm/logo.png" in envelope
         assert "<t:Attachments>" not in envelope
+
+    def test_proof_drive_images_sent_as_inline(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(
+            "EMAIL_IMAGES_DIR",
+            str(
+                _write_email_images(
+                    tmp_path,
+                    ("header.png", "invite_portal.png", "acessar_sagra.png", "footer.png"),
+                )
+            ),
+        )
+        monkeypatch.setattr(svc, "download_image", lambda url, **_kw: pytest.fail("sem download"))
+        captured: dict = {}
+
+        self._service(captured).send_email(
+            to=["dest@test.local"],
+            subject="Prova",
+            html_body=PROOF_DRIVE_HTML,
+        )
+
+        envelope = captured["envelope"]
+        assert envelope.count("<t:IsInline>true</t:IsInline>") == 4
+        assert "drive.google.com" not in envelope
+        assert "https://cgrafsysvm.camara.leg.br/email_images/" not in envelope
+        assert envelope.count("cid:img-") == 4
+
+
+class TestSanitizePreservesCid:
+    def test_cid_src_survives_bleach(self):
+        from security.html_sanitize import sanitize_html_snapshot
+
+        html = '<p>x</p><img src="cid:ind-1@sagra" alt="a">'
+        out = sanitize_html_snapshot(html)
+        assert out is not None
+        assert "cid:ind-1@sagra" in out

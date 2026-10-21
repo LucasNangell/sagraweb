@@ -62,6 +62,20 @@ describe("permissions / menu", () => {
     expect(getVisibleNavItems(perms, true)).toEqual([]);
   });
 
+  it("separador é permissão de contexto, sem item de sidebar", () => {
+    const perms = parsePermissionsFromApi({
+      ctx_imprimir_separador: true,
+      sb_inicio: true,
+    });
+    expect(hasPermission(perms, "ctx_imprimir_separador")).toBe(true);
+    expect(hasPermission(parsePermissionsFromApi({ ctx_imprimir_ficha: true }), "ctx_imprimir_separador")).toBe(
+      false,
+    );
+    expect(
+      getVisibleNavItems(perms, true).some((i) => i.label.toLowerCase().includes("separador")),
+    ).toBe(false);
+  });
+
   it("orçamento só com ctx_orcamento, sem item de sidebar", () => {
     const perms = parsePermissionsFromApi({ ctx_orcamento: true, sb_inicio: true });
     expect(canAccessRoute(perms, "/orcamento")).toBe(true);

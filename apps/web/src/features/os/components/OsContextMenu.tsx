@@ -64,7 +64,7 @@ export function OsRowContextMenu({
         moveFolders: "ctx_mover_pastas",
         provaWeb: "ctx_prova_web",
         print: "ctx_imprimir_ficha",
-        separador: "ctx_imprimir_ficha",
+        separador: "ctx_imprimir_separador",
         orcamento: "ctx_orcamento",
         notify: "ctx_detalhes_os",
       };

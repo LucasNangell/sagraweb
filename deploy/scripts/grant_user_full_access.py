@@ -31,6 +31,7 @@ FULL_ACCESS = {
     "ctx_abrir_pasta": True,
     "ctx_mover_pastas": True,
     "ctx_imprimir_ficha": True,
+    "ctx_imprimir_separador": True,
     "ctx_detalhes_os": True,
     "sb_inicio": True,
     "sb_gerencia": True,

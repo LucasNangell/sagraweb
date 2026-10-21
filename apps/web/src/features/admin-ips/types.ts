@@ -13,6 +13,7 @@ export interface IpPermissionRecord {
   ctx_abrir_pasta: boolean | number;
   ctx_mover_pastas: boolean | number;
   ctx_imprimir_ficha: boolean | number;
+  ctx_imprimir_separador: boolean | number;
   ctx_detalhes_os: boolean | number;
   ctx_orcamento: boolean | number;
   sb_inicio: boolean | number;

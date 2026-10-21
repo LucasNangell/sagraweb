@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS user_permissions (
     ctx_abrir_pasta TINYINT(1) DEFAULT 0,
     ctx_mover_pastas TINYINT(1) DEFAULT 0,
     ctx_imprimir_ficha TINYINT(1) DEFAULT 0,
+    ctx_imprimir_separador TINYINT(1) DEFAULT 0,
     ctx_detalhes_os TINYINT(1) DEFAULT 0,
     sb_inicio TINYINT(1) DEFAULT 0,
     sb_gerencia TINYINT(1) DEFAULT 0,
@@ -81,6 +82,7 @@ _USER_PERMISSIONS_EXTRA_COLUMNS: tuple[tuple[str, str], ...] = (
     ("sb_manipular_imagem", "TINYINT(1) DEFAULT 0"),
     ("ctx_prova_web", "TINYINT(1) DEFAULT 0"),
     ("ctx_orcamento", "TINYINT(1) DEFAULT 0"),
+    ("ctx_imprimir_separador", "TINYINT(1) DEFAULT 0"),
 )
 
 

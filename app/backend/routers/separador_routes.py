@@ -38,8 +38,8 @@ def get_separador_cadernos(
     request: Request,
     _session: SessionData = Depends(require_session),
 ):
-    if not _perms(request).get("ctx_imprimir_ficha"):
-        raise HTTPException(status_code=403, detail="Permissao de impressao necessaria.")
+    if not _perms(request).get("ctx_imprimir_separador"):
+        raise HTTPException(status_code=403, detail="Permissao de impressao de separador necessaria.")
     if ano < 1 or nr_os < 1:
         raise HTTPException(status_code=400, detail="OS invalida.")
     try:
@@ -56,8 +56,8 @@ def create_separador_pdf(
     request: Request,
     _session: SessionData = Depends(require_session),
 ):
-    if not _perms(request).get("ctx_imprimir_ficha"):
-        raise HTTPException(status_code=403, detail="Permissao de impressao necessaria.")
+    if not _perms(request).get("ctx_imprimir_separador"):
+        raise HTTPException(status_code=403, detail="Permissao de impressao de separador necessaria.")
     os_label = body.os_label.strip()
     if not _OS_LABEL_RE.match(os_label):
         raise HTTPException(status_code=400, detail="OS invalida.")

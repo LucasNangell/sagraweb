@@ -15,6 +15,7 @@ export const CONTEXT_PERMISSION_COLUMNS: PermissionColumn[] = [
   { key: "ctx_abrir_pasta", label: "Pasta", title: "Pasta" },
   { key: "ctx_mover_pastas", label: "Mov", title: "Mover Pastas" },
   { key: "ctx_imprimir_ficha", label: "Ficha", title: "Ficha" },
+  { key: "ctx_imprimir_separador", label: "Sep", title: "Separador" },
   { key: "ctx_detalhes_os", label: "Det", title: "Detalhes" },
   { key: "ctx_orcamento", label: "Orç", title: "Orçamento" },
 ];
@@ -70,6 +71,7 @@ export function buildDefaultNewIpPayload(
     ctx_abrir_pasta: true,
     ctx_mover_pastas: true,
     ctx_imprimir_ficha: true,
+    ctx_imprimir_separador: false,
     ctx_detalhes_os: true,
     ctx_orcamento: false,
     sb_inicio: true,

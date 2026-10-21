@@ -58,6 +58,7 @@ const PERMISSION_LABELS: Partial<Record<PermissionKey, string>> = {
   ctx_abrir_pasta: "Abrir pasta",
   ctx_mover_pastas: "Mover pastas",
   ctx_imprimir_ficha: "Imprimir ficha",
+  ctx_imprimir_separador: "Imprimir separador",
   ctx_detalhes_os: "Detalhes da OS",
   ctx_prova_web: "Prova WEB",
   ctx_orcamento: "Orçamento",

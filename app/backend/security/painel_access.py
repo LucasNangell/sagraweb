@@ -97,6 +97,7 @@ def build_painel_only_permissions(client_ip: str) -> dict:
         "ctx_abrir_pasta": False,
         "ctx_mover_pastas": False,
         "ctx_imprimir_ficha": False,
+        "ctx_imprimir_separador": False,
         "ctx_detalhes_os": False,
         "sb_inicio": False,
         "sb_gerencia": False,

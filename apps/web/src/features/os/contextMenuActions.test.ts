@@ -71,11 +71,18 @@ describe("gerenciaSearchForModal", () => {
 describe("getVisibleContextMenuItems", () => {
   const osRow = { nr_os: 2532, ano: 2026 } as OsSearchRow;
 
-  it("mostra Separador com permissão de ficha e OS selecionada", () => {
-    const can = (key: PermissionKey) => key === "ctx_imprimir_ficha";
+  it("mostra Separador com permissão própria e OS selecionada", () => {
+    const can = (key: PermissionKey) => key === "ctx_imprimir_separador";
     const ids = getVisibleContextMenuItems(can, osRow).map((item) => item.id);
     expect(ids).toContain("separador");
+    expect(ids).not.toContain("print");
+  });
+
+  it("não mostra Separador só com permissão de ficha", () => {
+    const can = (key: PermissionKey) => key === "ctx_imprimir_ficha";
+    const ids = getVisibleContextMenuItems(can, osRow).map((item) => item.id);
     expect(ids).toContain("print");
+    expect(ids).not.toContain("separador");
   });
 
   it("esconde Separador sem linha ou sem permissão", () => {

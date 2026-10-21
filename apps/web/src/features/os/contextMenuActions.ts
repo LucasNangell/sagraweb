@@ -82,7 +82,7 @@ export const OS_CONTEXT_MENU_ITEMS: OsContextMenuItem[] = [
   {
     id: "separador",
     label: "Separador",
-    permission: "ctx_imprimir_ficha",
+    permission: "ctx_imprimir_separador",
     requiresRow: true,
   },
   {

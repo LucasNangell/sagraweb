@@ -7,6 +7,7 @@ export type PermissionKey =
   | "ctx_abrir_pasta"
   | "ctx_mover_pastas"
   | "ctx_imprimir_ficha"
+  | "ctx_imprimir_separador"
   | "ctx_detalhes_os"
   | "ctx_prova_web"
   | "ctx_orcamento"
@@ -53,6 +54,7 @@ export const PERMISSION_KEYS: PermissionKey[] = [
   "ctx_abrir_pasta",
   "ctx_mover_pastas",
   "ctx_imprimir_ficha",
+  "ctx_imprimir_separador",
   "ctx_detalhes_os",
   "ctx_prova_web",
   "ctx_orcamento",
@@ -105,6 +107,7 @@ export interface PermissionsResponse {
   ctx_abrir_pasta?: boolean;
   ctx_mover_pastas?: boolean;
   ctx_imprimir_ficha?: boolean;
+  ctx_imprimir_separador?: boolean;
   ctx_detalhes_os?: boolean;
   ctx_prova_web?: boolean;
   ctx_orcamento?: boolean;

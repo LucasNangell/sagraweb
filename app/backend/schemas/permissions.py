@@ -24,6 +24,7 @@ class ClientPermissionsResponse(BaseModel):
     ctx_abrir_pasta: bool = True
     ctx_mover_pastas: bool = True
     ctx_imprimir_ficha: bool = True
+    ctx_imprimir_separador: bool = False
     ctx_detalhes_os: bool = True
     ctx_prova_web: bool = False
     ctx_orcamento: bool = False

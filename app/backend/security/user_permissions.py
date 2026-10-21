@@ -31,6 +31,7 @@ _PERMISSION_BOOL_KEYS = (
     "ctx_abrir_pasta",
     "ctx_mover_pastas",
     "ctx_imprimir_ficha",
+    "ctx_imprimir_separador",
     "ctx_detalhes_os",
     "ctx_prova_web",
     "ctx_orcamento",

@@ -13,13 +13,19 @@ SEGURANÇA:
 
 PORTA: 5566 (127.0.0.1:5566)
 
+Impressão (v1.2): GET /printers e POST /print-pdf enviam PDF 102x297 mm
+para uma fila do Windows com DEVMODE (o Chrome não consegue forçar o papel).
+
 Para gerar executável (a partir de app/services):
-    pyinstaller --onefile --noconsole --name "SAGRA-FolderOpener" folder_opener_service.py
+    pyinstaller --onefile --noconsole --name "SAGRA-FolderOpener" ^
+      --hidden-import win32print --hidden-import win32ui --hidden-import win32con ^
+      --hidden-import win32gui --hidden-import fitz --hidden-import PIL ^
+      --hidden-import PIL.ImageWin folder_opener_service.py
     Copiar dist\\SAGRA-FolderOpener.exe para local_services\\dist e C:\\_SAGRA
 
 Autor: Sistema SAGRA
 Data: 22/01/2026
-Versão: 1.1.0
+Versão: 1.2.0
 """
  
 import os
@@ -27,6 +33,7 @@ import sys
 import subprocess
 import time
 import ctypes
+import base64
 from pathlib import Path
 from datetime import datetime
 from flask import Flask, request, jsonify
@@ -35,7 +42,10 @@ from flask_cors import CORS
 # Configuração
 PORT = 5566
 HOST = '127.0.0.1'
-VERSION = "1.1.0"
+VERSION = "1.2.0"
+PRINT_MAX_PDF_BYTES = 12 * 1024 * 1024
+PRINT_MAX_PAGES = 99
+SEPARADOR_FORM_NAME = "SAGRA_102x297"
 LOG_FILE = Path.home() / "sagra_folder_opener.log"
 _BLOCKED_FILE_EXTENSIONS = frozenset({
     ".exe", ".bat", ".cmd", ".com", ".msi", ".ps1", ".vbs", ".js",
@@ -56,6 +66,21 @@ CORS(app, resources={
     r"/open-file": {
         "origins": "*",
         "methods": ["POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    },
+    r"/printers": {
+        "origins": "*",
+        "methods": ["GET", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    },
+    r"/print-pdf": {
+        "origins": "*",
+        "methods": ["POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    },
+    r"/health": {
+        "origins": "*",
+        "methods": ["GET", "OPTIONS"],
         "allow_headers": ["Content-Type"]
     },
 })
@@ -165,6 +190,214 @@ def is_valid_folder_path(path):
             pass
     
     return True, "OK"
+
+def _print_capabilities():
+    win32print = None
+    fitz = None
+    Image = None
+    try:
+        import win32print as _win32print
+        win32print = _win32print
+    except Exception:
+        win32print = None
+    try:
+        import fitz as _fitz
+        fitz = _fitz
+    except Exception:
+        fitz = None
+    try:
+        from PIL import Image as _Image
+        Image = _Image
+    except Exception:
+        Image = None
+    return win32print, fitz, Image
+
+
+def list_windows_printers():
+    win32print, _, _ = _print_capabilities()
+    if not win32print:
+        return [], None, "pywin32 nao instalado no servico local"
+    flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
+    names = []
+    for item in win32print.EnumPrinters(flags, None, 1):
+        name = str(item[2] or "").strip()
+        if name:
+            names.append(name)
+    names = sorted(set(names), key=str.lower)
+    default_name = None
+    try:
+        default_name = win32print.GetDefaultPrinter()
+    except Exception:
+        default_name = names[0] if names else None
+    return names, default_name, None
+
+
+def _ensure_custom_form(win32print, handle, width_mm, height_mm):
+    size = (int(round(width_mm * 1000)), int(round(height_mm * 1000)))
+    form = {
+        "Flags": 0,
+        "Name": SEPARADOR_FORM_NAME,
+        "Size": size,
+        "ImageableArea": (0, 0, size[0], size[1]),
+    }
+    try:
+        win32print.AddForm(handle, 1, form)
+        log(f"Formulario de papel criado: {SEPARADOR_FORM_NAME}")
+    except Exception as exc:
+        log(f"Formulario {SEPARADOR_FORM_NAME} ja existe ou nao pode ser criado: {exc}")
+
+
+def _apply_page_devmode(devmode, width_mm, height_mm):
+    import win32con
+    width_tenths = int(round(width_mm * 10))
+    height_tenths = int(round(height_mm * 10))
+    try:
+        # DMPAPER_USER = 256: o driver deve usar PaperWidth/PaperLength (0,1 mm)
+        devmode.PaperSize = 256
+        devmode.PaperWidth = width_tenths
+        devmode.PaperLength = height_tenths
+        devmode.Orientation = 1
+        devmode.FormName = SEPARADOR_FORM_NAME
+        fields = int(getattr(devmode, "Fields", 0) or 0)
+        fields |= (
+            win32con.DM_PAPERSIZE
+            | win32con.DM_PAPERWIDTH
+            | win32con.DM_PAPERLENGTH
+            | win32con.DM_ORIENTATION
+        )
+        if hasattr(win32con, "DM_FORMNAME"):
+            fields |= win32con.DM_FORMNAME
+        devmode.Fields = fields
+    except Exception as exc:
+        log(f"Nao foi possivel ajustar DEVMODE: {exc}")
+    return devmode
+
+
+def decode_print_pdf_payload(data):
+    printer = str((data or {}).get("printer") or "").strip()
+    if not printer or len(printer) > 256:
+        return None, "Impressora invalida"
+    raw_b64 = (data or {}).get("pdf_base64")
+    if not isinstance(raw_b64, str) or not raw_b64.strip():
+        return None, "PDF ausente"
+    if len(raw_b64) > PRINT_MAX_PDF_BYTES * 2:
+        return None, "PDF muito grande"
+    try:
+        pdf_bytes = base64.b64decode(raw_b64, validate=True)
+    except Exception:
+        return None, "PDF invalido"
+    if len(pdf_bytes) > PRINT_MAX_PDF_BYTES:
+        return None, "PDF muito grande"
+    if not pdf_bytes.startswith(b"%PDF"):
+        return None, "Arquivo nao e PDF"
+    try:
+        width_mm = float((data or {}).get("width_mm", 102))
+        height_mm = float((data or {}).get("height_mm", 297))
+    except (TypeError, ValueError):
+        return None, "Tamanho de papel invalido"
+    if abs(width_mm - 102.0) > 0.51 or abs(height_mm - 297.0) > 0.51:
+        return None, "Somente papel 102 x 297 mm"
+    return {
+        "printer": printer,
+        "pdf_bytes": pdf_bytes,
+        "width_mm": 102.0,
+        "height_mm": 297.0,
+    }, None
+
+
+def _create_printer_dc(printer_name, devmode):
+    import win32gui
+    import win32ui
+    handle = win32gui.CreateDC("WINSPOOL", printer_name, devmode)
+    return win32ui.CreateDCFromHandle(handle)
+
+
+def print_pdf_bytes(printer_name, pdf_bytes, width_mm=102.0, height_mm=297.0):
+    win32print, fitz, Image = _print_capabilities()
+    if not win32print:
+        return False, "pywin32 nao instalado no servico local"
+    if not fitz:
+        return False, "pymupdf nao instalado no servico local"
+    if not Image:
+        return False, "Pillow nao instalado no servico local"
+
+    names, _, _ = list_windows_printers()
+    if printer_name not in names:
+        return False, "Impressora nao encontrada neste computador"
+
+    try:
+        import win32con
+        from PIL import ImageWin
+    except Exception as exc:
+        return False, f"Dependencia de impressao ausente: {exc}"
+
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    except Exception as exc:
+        return False, f"PDF ilegivel: {exc}"
+    hdc = None
+    handle = None
+    try:
+        if doc.page_count < 1:
+            return False, "PDF vazio"
+        if doc.page_count > PRINT_MAX_PAGES:
+            return False, f"PDF excede {PRINT_MAX_PAGES} paginas"
+        handle = win32print.OpenPrinter(printer_name)
+        _ensure_custom_form(win32print, handle, width_mm, height_mm)
+        info = win32print.GetPrinter(handle, 2)
+        devmode = info.get("pDevMode")
+        if devmode is None:
+            return False, "Nao foi possivel ler a configuracao da impressora"
+        devmode = _apply_page_devmode(devmode, width_mm, height_mm)
+        try:
+            win32print.DocumentProperties(
+                0,
+                handle,
+                printer_name,
+                devmode,
+                devmode,
+                win32con.DM_IN_BUFFER | win32con.DM_OUT_BUFFER,
+            )
+            devmode = _apply_page_devmode(devmode, width_mm, height_mm)
+        except Exception as exc:
+            log(f"DocumentProperties nao aplicou o papel customizado: {exc}")
+
+        hdc = _create_printer_dc(printer_name, devmode)
+        dpi_x = hdc.GetDeviceCaps(win32con.LOGPIXELSX) or 300
+        dpi_y = hdc.GetDeviceCaps(win32con.LOGPIXELSY) or 300
+        dest_w = max(1, int(round(width_mm / 25.4 * dpi_x)))
+        dest_h = max(1, int(round(height_mm / 25.4 * dpi_y)))
+        resample = getattr(getattr(Image, "Resampling", Image), "LANCZOS", Image.LANCZOS)
+
+        hdc.StartDoc("SAGRA Separador")
+        try:
+            for page in doc:
+                pix = page.get_pixmap(dpi=min(int(dpi_x), 300), alpha=False)
+                img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+                img = img.resize((dest_w, dest_h), resample)
+                hdc.StartPage()
+                dib = ImageWin.Dib(img)
+                dib.draw(hdc.GetHandleOutput(), (0, 0, dest_w, dest_h))
+                hdc.EndPage()
+        finally:
+            hdc.EndDoc()
+        return True, "OK"
+    except Exception as exc:
+        log(f"Erro ao imprimir PDF: {exc}")
+        return False, str(exc)
+    finally:
+        if hdc is not None:
+            try:
+                hdc.DeleteDC()
+            except Exception:
+                pass
+        if handle is not None:
+            try:
+                win32print.ClosePrinter(handle)
+            except Exception:
+                pass
+        doc.close()
+
 
 def is_valid_file_path(path):
     """
@@ -389,14 +622,55 @@ def open_file():
         log(f"Erro inesperado ao abrir arquivo: {e}")
         return jsonify({"success": False, "error": f"Erro inesperado: {str(e)}"}), 500
 
+@app.route('/printers', methods=['GET'])
+def printers():
+    names, default_name, err = list_windows_printers()
+    if err:
+        return jsonify({"success": False, "error": err, "printers": []}), 501
+    return jsonify({
+        "success": True,
+        "printers": names,
+        "default": default_name,
+    }), 200
+
+
+@app.route('/print-pdf', methods=['POST'])
+def print_pdf():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "JSON esperado"}), 400
+        payload, err = decode_print_pdf_payload(data)
+        if err:
+            return jsonify({"success": False, "error": err}), 400
+        log(
+            f"Imprimindo PDF na fila '{payload['printer']}' "
+            f"{payload['width_mm']}x{payload['height_mm']} mm"
+        )
+        ok, msg = print_pdf_bytes(
+            payload["printer"],
+            payload["pdf_bytes"],
+            payload["width_mm"],
+            payload["height_mm"],
+        )
+        if not ok:
+            return jsonify({"success": False, "error": msg}), 500
+        return jsonify({"success": True, "message": msg}), 200
+    except Exception as exc:
+        log(f"Erro inesperado em /print-pdf: {exc}")
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
 @app.route('/health', methods=['GET'])
 def health():
     """Endpoint de verificação de saúde do serviço"""
+    win32print, fitz, Image = _print_capabilities()
     return jsonify({
         "status": "running",
         "service": "SAGRA Folder Opener",
         "version": VERSION,
-        "port": PORT
+        "port": PORT,
+        "print": bool(win32print and fitz and Image),
     }), 200
 
 @app.route('/ping', methods=['GET'])

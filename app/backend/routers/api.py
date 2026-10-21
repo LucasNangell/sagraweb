@@ -39,6 +39,7 @@ from routers import (
     cotas_graf_routes,
     estoque_routes,
     requisicao_routes,
+    separador_routes,
     email_routes,
     report_custom_routes,
     notifications_routes,
@@ -1295,6 +1296,7 @@ app.include_router(prova_web_routes.router, prefix="/api")
 app.include_router(analise_lab_routes.router, prefix="/api")
 app.include_router(realtime.router)
 app.include_router(requisicao_routes.router, prefix="/api")
+app.include_router(separador_routes.router, prefix="/api")
 app.include_router(orcamento_routes.router, prefix="/api")
 app.include_router(email_routes.router, prefix="/api")
 app.include_router(report_custom_routes.router, prefix="/api")

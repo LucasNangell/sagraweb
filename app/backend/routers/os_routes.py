@@ -7,6 +7,7 @@ import time
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 from os_calc_fields import (
+    WEB_PROTECTED_FROM_CLEAR,
     cota_protocolo_column,
     cota_repro_from_calculos,
     compute_detalhes_calc_fields,
@@ -49,6 +50,7 @@ from schemas.os import (
     VinculoReplicacaoCheckResponse,
 )
 from .os_audit_service import (
+    diff_changed_fields,
     fetch_audit_log,
     log_andamento_added,
     log_andamento_deleted,
@@ -713,7 +715,7 @@ def move_os_folders(ano: int, id: int, body: OsFolderMoveExecuteRequest):
         def _sync_observ_to_mdb() -> None:
             from .mdb_writer import sync_os_from_mysql_to_mdb
 
-            sync_os_from_mysql_to_mdb(id, ano)
+            sync_os_from_mysql_to_mdb(id, ano, det_fields={"Observ"})
 
         _dispatch_mdb_sync("os_repeticao_observ", _sync_observ_to_mdb, nro=id, ano=ano)
 
@@ -794,6 +796,11 @@ def save_os(data: SaveOSRequest, request: Request):
     require_entreg_data_for_priority(data.EntregPrazoLink, data.EntregData)
 
     save_meta = {"was_insert": False}
+    mdb_sync_plan = {
+        "proto_fields": None,
+        "det_fields": None,
+        "explicit_clears": set(),
+    }
 
     def transaction_logic(cursor):
         is_update = False
@@ -941,7 +948,7 @@ def save_os(data: SaveOSRequest, request: Request):
                     TiragemSolicitada=%s, CotaTotal=%s,
                     MaterialFornecido=%s, Fotolito=%s, ModeloDobra=%s, ProvaImpressa=%s, InsumosFornecidos=%s,
                     ElemGrafBrasao=%s, ElemGrafTimbre=%s, ElemGrafArteGab=%s, ElemGrafAssinatura=%s,
-                    {", ".join(f"{c}=%s" for c in _CALC_DETALHES_SQL_COLS)}
+                    {", ".join(f"{c}=COALESCE(%s, {c})" for c in _CALC_DETALHES_SQL_COLS)}
                 WHERE NroProtocoloLinkDet=%s AND AnoProtocoloLinkDet=%s
             """
             cursor.execute(query_det, (
@@ -1052,6 +1059,68 @@ def save_os(data: SaveOSRequest, request: Request):
 
         save_meta["was_insert"] = not is_update
 
+        if is_update:
+            proto_written = {
+                "CodigoRequisic": data.CodigoRequisicao,
+                "CategoriaLink": data.CategoriaLink,
+                "NomeUsuario": data.NomeUsuario,
+                "Titular": data.Titular,
+                "OrgInteressado": data.OrgInteressado,
+                "SiglaOrgao": data.SiglaOrgao,
+                "GabSalaUsuario": data.GabSalaUsuario,
+                "Andar": data.Andar,
+                "Localizacao": data.Localizacao,
+                "RamalUsuario": data.RamalUsuario,
+                "DataEntrada": data.DataEntrada,
+                "ProcessoSolicit": data.ProcessoSolicit,
+                "CSnro": data.CSnro,
+                "EntregPrazoLink": data.EntregPrazoLink,
+                "EntregData": data.EntregData,
+                "ContatoTrab": data.ContatoTrab,
+                "ResponsavelGrafLink": data.ResponsavelGrafLink,
+                "EntregaFormaLink": data.EntregaFormaLink,
+                "EntregPeriodo": data.EntregPeriodo,
+                cota_col: cota_estimada,
+            }
+            det_written = {
+                "Titulo": data.Titulo,
+                "TipoPublicacaoLink": data.TipoPublicacaoLink,
+                "FormatoLink": data.FormatoLink,
+                "MaquinaLink": data.MaquinaLink,
+                "Tiragem": data.Tiragem,
+                "Pags": data.Pags,
+                "FrenteVerso": data.FrenteVerso,
+                "ModelosArq": data.ModelosArq,
+                "PapelLink": data.PapelLink,
+                "PapelDescricao": data.PapelDescricao,
+                "Cores": data.Cores,
+                "CoresDescricao": data.CoresDescricao,
+                "DescAcabamento": data.DescAcabamento,
+                "Observ": data.Observ,
+                "TiragemSolicitada": calc_fields.get("TiragemSolicitada", data.TiragemSolicitada),
+                "CotaTotal": cota_total,
+                "MaterialFornecido": data.MaterialFornecido,
+                "Fotolito": data.Fotolito,
+                "ModeloDobra": data.ModeloDobra,
+                "ProvaImpressa": data.ProvaImpressa,
+                "InsumosFornecidos": data.InsumosFornecidos,
+                "ElemGrafBrasao": data.ElemGrafBrasao,
+                "ElemGrafTimbre": data.ElemGrafTimbre,
+                "ElemGrafArteGab": data.ElemGrafArteGab,
+                "ElemGrafAssinatura": data.ElemGrafAssinatura,
+            }
+            for calc_col in _CALC_DETALHES_SQL_COLS:
+                calc_val = calc_fields.get(calc_col)
+                if calc_val is None:
+                    continue
+                det_written[calc_col] = calc_val
+            proto_changed, proto_clears = diff_changed_fields(old_proto, proto_written)
+            det_changed, det_clears = diff_changed_fields(old_det, det_written)
+            protected = set(WEB_PROTECTED_FROM_CLEAR)
+            mdb_sync_plan["proto_fields"] = proto_changed
+            mdb_sync_plan["det_fields"] = det_changed
+            mdb_sync_plan["explicit_clears"] = (proto_clears | det_clears) - protected
+
         return SaveOsResponse(
             status="ok",
             id=final_id,
@@ -1091,6 +1160,9 @@ def save_os(data: SaveOSRequest, request: Request):
                     res_ano,
                     sync_andamentos=save_meta["was_insert"],
                     cod_statuses=[initial_cod] if save_meta["was_insert"] else None,
+                    proto_fields=mdb_sync_plan["proto_fields"],
+                    det_fields=mdb_sync_plan["det_fields"],
+                    explicit_clears=mdb_sync_plan["explicit_clears"],
                 )
 
             _dispatch_mdb_sync("os_save", _sync_os_to_mdb, nro=res_id, ano=res_ano)

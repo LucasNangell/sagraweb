@@ -20,7 +20,7 @@ import threading
 import time
 from datetime import datetime
 from queue import Empty, Full, Queue
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Collection, Dict, List, Optional, Tuple
 import pyodbc
 from config_manager import config_manager, read_release_info
 from database import db
@@ -213,6 +213,38 @@ _PROTO_ANDAMENTO_EXTRA_COLS = (
 
 _PROTO_REQUISICAO_EXTRA_COLS = (
     "ReqEntregue",
+)
+
+_PROTO_CORE_WRITE_FIELDS = (
+    "CodigoRequisic",
+    "CategoriaLink",
+    "NomeUsuario",
+    "Titular",
+    "OrgInteressado",
+    "SiglaOrgao",
+    "GabSalaUsuario",
+    "Andar",
+    "Localizacao",
+    "RamalUsuario",
+    "DataEntrada",
+    "ProcessoSolicit",
+    "CSnro",
+    "EntregPrazoLink",
+    "EntregData",
+    "ContatoTrab",
+    "ResponsavelGrafLink",
+    "EntregaFormaLink",
+    "EntregPeriodo",
+    "CotaRepro",
+    "ReqLançada",
+)
+
+# Campos que o dual-write pode gravar no MDB (invariante x allowlist do sync).
+PROTOCOL_MDB_SYNC_FIELDS = frozenset(
+    _PROTO_CORE_WRITE_FIELDS
+    + _PROTO_INSERT_OPTIONAL_NULL_COLS
+    + _PROTO_ANDAMENTO_EXTRA_COLS
+    + _PROTO_REQUISICAO_EXTRA_COLS
 )
 
 # Nome lógico MySQL → possíveis nomes físicos no Access (1ª existente vence).
@@ -916,11 +948,7 @@ def _ensure_os_lookups(
         cursor, "tabRespGraf", "ResponsGraf", proto.get("ResponsavelGrafLink"), mdb_path=mdb_path
     )
 def _protocolo_exists(cursor, nro: int, ano: int) -> bool:
-    cursor.execute(
-        "SELECT COUNT(*) FROM tabProtocolos WHERE NroProtocolo = ? AND AnoProtocolo = ?",
-        (nro, ano),
-    )
-    return cursor.fetchone()[0] > 0
+    return _fetch_protocolo_row(cursor, nro, ano) is not None
 def _mdb_row_get(row: Any, name: str, index: int) -> Any:
     if row is None:
         return None
@@ -932,6 +960,91 @@ def _mdb_row_get(row: Any, name: str, index: int) -> Any:
         return row[index]
     except Exception:
         return None
+
+
+def _row_to_dict(cursor, row: Any) -> Dict[str, Any]:
+    if row is None:
+        return {}
+    if isinstance(row, dict):
+        return dict(row)
+    names = [d[0] for d in (cursor.description or []) if d and d[0]]
+    out: Dict[str, Any] = {}
+    for index, name in enumerate(names):
+        out[name] = _mdb_row_get(row, name, index)
+    return out
+
+
+def _mdb_value_is_blank(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str) and value.strip() == "":
+        return True
+    return False
+
+
+def _filter_null_guard_fields(
+    *,
+    table: str,
+    nro: int,
+    ano: int,
+    fields: List[str],
+    payload: Dict[str, Any],
+    current: Optional[Dict[str, Any]],
+    explicit_clears: Optional[Collection[str]] = None,
+) -> List[str]:
+    """R3: NULL do MySQL não apaga valor existente no MDB, salvo explicit_clears."""
+    from os_calc_fields import WEB_PROTECTED_FROM_CLEAR
+
+    current = current or {}
+    clears = {str(name) for name in (explicit_clears or ())}
+    protected = set(WEB_PROTECTED_FROM_CLEAR)
+    kept: List[str] = []
+    skipped: List[str] = []
+    for col in fields:
+        new_val = payload.get(col)
+        if not _mdb_value_is_blank(new_val):
+            kept.append(col)
+            continue
+        old_val = current.get(col)
+        if _mdb_value_is_blank(old_val):
+            kept.append(col)
+            continue
+        if col in clears and col not in protected:
+            kept.append(col)
+            continue
+        skipped.append(col)
+    if skipped:
+        logger.warning(
+            "MDB_NULL_GUARD %s OS %s/%s preservou %s",
+            table,
+            nro,
+            ano,
+            ", ".join(skipped),
+        )
+    return kept
+
+
+def _fetch_protocolo_row(cursor, nro: int, ano: int) -> Optional[Dict[str, Any]]:
+    cursor.execute(
+        "SELECT * FROM tabProtocolos WHERE NroProtocolo = ? AND AnoProtocolo = ?",
+        (nro, ano),
+    )
+    row = cursor.fetchone()
+    if row is None:
+        return None
+    return _row_to_dict(cursor, row)
+
+
+def _fetch_detalhes_row(cursor, nro: int, ano: int) -> Optional[Dict[str, Any]]:
+    cursor.execute(
+        "SELECT * FROM tabDetalhesServico "
+        "WHERE NroProtocoloLinkDet=? AND AnoProtocoloLinkDet=?",
+        (nro, ano),
+    )
+    row = cursor.fetchone()
+    if row is None:
+        return None
+    return _row_to_dict(cursor, row)
 
 
 def _norm_andamento_text(value: Any) -> str:
@@ -974,6 +1087,9 @@ def _write_protocolo(
     proto: Dict[str, Any],
     *,
     mdb_path: str,
+    fields: Optional[Collection[str]] = None,
+    explicit_clears: Optional[Collection[str]] = None,
+    update_fields_required: bool = False,
 ) -> None:
     avail = _mdb_table_columns(cursor, "tabProtocolos", mdb_path)
     proto_fields = (
@@ -991,13 +1107,32 @@ def _write_protocolo(
         proto_fields = (*proto_fields, cota_col)
     if "ReqLançada" in avail:
         proto_fields = (*proto_fields, "ReqLançada")
-    params = tuple(proto.get(f) for f in proto_fields)
-    if _protocolo_exists(cursor, nro, ano):
-        set_sql = ", ".join(f"{col}=?" for col in proto_fields)
+    current = _fetch_protocolo_row(cursor, nro, ano)
+    if current is not None:
+        selected = [col for col in proto_fields if col in avail]
+        if update_fields_required and fields is None:
+            selected = []
+        elif fields is not None:
+            wanted = {str(name) for name in fields}
+            selected = [col for col in selected if col in wanted]
+        selected = _filter_null_guard_fields(
+            table="tabProtocolos",
+            nro=nro,
+            ano=ano,
+            fields=selected,
+            payload=proto,
+            current=current,
+            explicit_clears=explicit_clears,
+        )
+        if not selected:
+            return
+        set_sql = ", ".join(f"{col}=?" for col in selected)
+        params = tuple(proto.get(f) for f in selected)
         cursor.execute(
             f"UPDATE tabProtocolos SET {set_sql} WHERE NroProtocolo=? AND AnoProtocolo=?",
             params + (nro, ano),
         )
+        return
     else:
         base_cols = [
             "NroProtocolo",
@@ -1075,6 +1210,7 @@ _DETALHES_WRITE_FIELDS = (
     "ElemGrafAssinatura",
     *CALC_DETALHES_FIELDS,
 )
+DETALHES_MDB_SYNC_FIELDS = frozenset(_DETALHES_WRITE_FIELDS)
 
 
 def _fetch_tab_maquinas(cursor) -> list[str]:
@@ -1097,15 +1233,10 @@ def _fetch_tab_maquinas(cursor) -> list[str]:
 
 
 def _fetch_detalhes_maquina(cursor, nro: int, ano: int) -> tuple[bool, Any]:
-    cursor.execute(
-        "SELECT MaquinaLink FROM tabDetalhesServico "
-        "WHERE NroProtocoloLinkDet=? AND AnoProtocoloLinkDet=?",
-        (nro, ano),
-    )
-    row = cursor.fetchone()
-    if row is None:
+    current = _fetch_detalhes_row(cursor, nro, ano)
+    if current is None:
         return False, None
-    return True, _mdb_row_get(row, "MaquinaLink", 0)
+    return True, current.get("MaquinaLink")
 
 
 def _write_detalhes(
@@ -1115,12 +1246,23 @@ def _write_detalhes(
     det: Dict[str, Any],
     *,
     mdb_path: str,
+    fields: Optional[Collection[str]] = None,
+    explicit_clears: Optional[Collection[str]] = None,
+    update_fields_required: bool = False,
 ) -> None:
     avail = _mdb_table_columns(cursor, "tabDetalhesServico", mdb_path)
-    fields = [f for f in _DETALHES_WRITE_FIELDS if f in avail]
-    exists, current_maquina = _fetch_detalhes_maquina(cursor, nro, ano)
+    write_fields = [f for f in _DETALHES_WRITE_FIELDS if f in avail]
+    current = _fetch_detalhes_row(cursor, nro, ano)
+    exists = current is not None
+    current_maquina = (current or {}).get("MaquinaLink")
     payload = dict(det)
-    if "MaquinaLink" in fields:
+    if exists:
+        if update_fields_required and fields is None:
+            write_fields = []
+        elif fields is not None:
+            wanted = {str(name) for name in fields}
+            write_fields = [f for f in write_fields if f in wanted]
+    if "MaquinaLink" in write_fields:
         resolution = resolve_maquina_link_for_mdb(
             payload.get("MaquinaLink"),
             _fetch_tab_maquinas(cursor),
@@ -1137,22 +1279,32 @@ def _write_detalhes(
             current_maquina,
         )
         if resolution.omit:
-            fields = [f for f in fields if f != "MaquinaLink"]
+            write_fields = [f for f in write_fields if f != "MaquinaLink"]
         else:
             payload["MaquinaLink"] = resolution.value
-    values = [payload.get(f) for f in fields]
+    if exists:
+        write_fields = _filter_null_guard_fields(
+            table="tabDetalhesServico",
+            nro=nro,
+            ano=ano,
+            fields=write_fields,
+            payload=payload,
+            current=current,
+            explicit_clears=explicit_clears,
+        )
+    values = [payload.get(f) for f in write_fields]
 
     if exists:
-        if not fields:
+        if not write_fields:
             return
-        set_sql = ", ".join(f"{col}=?" for col in fields)
+        set_sql = ", ".join(f"{col}=?" for col in write_fields)
         cursor.execute(
             f"UPDATE tabDetalhesServico SET {set_sql} "
             "WHERE NroProtocoloLinkDet=? AND AnoProtocoloLinkDet=?",
             tuple(values) + (nro, ano),
         )
     else:
-        cols = ["NroProtocoloLinkDet", "AnoProtocoloLinkDet", *fields]
+        cols = ["NroProtocoloLinkDet", "AnoProtocoloLinkDet", *write_fields]
         placeholders = ", ".join("?" * len(cols))
         col_sql = ", ".join(cols)
         cursor.execute(
@@ -1347,13 +1499,34 @@ def _write_os_to_mdb_cursor(
     *,
     sync_andamentos: bool,
     cod_statuses: Optional[List[str]],
+    proto_fields: Optional[Collection[str]] = None,
+    det_fields: Optional[Collection[str]] = None,
+    explicit_clears: Optional[Collection[str]] = None,
 ) -> None:
     mdb_path = get_mdb_path(nro)
     proto = prepare_os_protocol_params(proto_rows[0])
-    det = prepare_os_detalhes_params(det_raw)
+    det = prepare_os_detalhes_params(det_raw or {})
     _ensure_os_lookups(cursor, proto, det, mdb_path=mdb_path)
-    _write_protocolo(cursor, nro, ano, proto, mdb_path=mdb_path)
-    _write_detalhes(cursor, nro, ano, det, mdb_path=mdb_path)
+    _write_protocolo(
+        cursor,
+        nro,
+        ano,
+        proto,
+        mdb_path=mdb_path,
+        fields=proto_fields,
+        explicit_clears=explicit_clears,
+        update_fields_required=True,
+    )
+    _write_detalhes(
+        cursor,
+        nro,
+        ano,
+        det,
+        mdb_path=mdb_path,
+        fields=det_fields,
+        explicit_clears=explicit_clears,
+        update_fields_required=True,
+    )
     if not sync_andamentos:
         return
     codes = cod_statuses
@@ -1386,8 +1559,15 @@ def sync_os_from_mysql_to_mdb(
     *,
     sync_andamentos: bool = False,
     cod_statuses: Optional[list[str]] = None,
+    proto_fields: Optional[Collection[str]] = None,
+    det_fields: Optional[Collection[str]] = None,
+    explicit_clears: Optional[Collection[str]] = None,
 ) -> bool:
-    """Replica OS do MySQL para o MDB (após commit no MySQL), com retry em lock."""
+    """Replica OS do MySQL para o MDB (após commit no MySQL), com retry em lock.
+
+    Em UPDATE, `proto_fields`/`det_fields` None = não gravar colunas (fail-safe).
+    INSERT (linha ausente no MDB) grava o conjunto completo.
+    """
     if not config_manager.is_mdb_write_enabled():
         return False
     proto_rows = db.execute_query(
@@ -1407,6 +1587,9 @@ def sync_os_from_mysql_to_mdb(
             cursor, nro, ano, proto_rows, det_raw,
             sync_andamentos=sync_andamentos,
             cod_statuses=cod_statuses,
+            proto_fields=proto_fields,
+            det_fields=det_fields,
+            explicit_clears=explicit_clears,
         )
     _execute_mdb_transaction(nro, stage, _work)
     logger.info("Replicação MySQL→MDB concluída para OS %s/%s", nro, ano)
@@ -1848,7 +2031,8 @@ def _write_protocolo_extra_cols(
     Atualiza colunas extras de tabProtocolos no MDB.
     Retorna quantas colunas físicas foram gravadas (0 = nada escrito).
     """
-    if not _protocolo_exists(cursor, nro, ano):
+    current = _fetch_protocolo_row(cursor, nro, ano)
+    if current is None:
         logger.warning(
             "Protocolo %s/%s ausente no MDB %s — sync extra tabProtocolos ignorado",
             nro,
@@ -1870,8 +2054,17 @@ def _write_protocolo_extra_cols(
         )
         return 0
 
-    cols = list(mapped.keys())
-    values = list(mapped.values())
+    cols = _filter_null_guard_fields(
+        table="tabProtocolos",
+        nro=nro,
+        ano=ano,
+        fields=list(mapped.keys()),
+        payload=mapped,
+        current=current,
+    )
+    if not cols:
+        return 0
+    values = [mapped[col] for col in cols]
     # Colchetes: seguro para nomes acentuados (ex.: Funcionário) no Access.
     set_sql = ", ".join(f"[{col}]=?" for col in cols)
     cursor.execute(

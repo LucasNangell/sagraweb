@@ -39,7 +39,7 @@ import sys
 #=====================================================================
 
 # Allowlist: campos que o MDB pode gravar no MySQL (protege campos só-web).
-_PROTOCOL_SYNC_ALLOWLIST = {
+_PROTOCOL_SYNC_ALLOWLIST_BASE = {
     "NroProtocolo", "AnoProtocolo",
     "CodigoRequisic", "CategoriaLink", "NomeUsuario", "Titular", "OrgInteressado",
     "SiglaOrgao", "GabSalaUsuario", "Andar", "Localizacao", "RamalUsuario",
@@ -48,7 +48,17 @@ _PROTOCOL_SYNC_ALLOWLIST = {
     "RetiradaNome", "RetiradaPonto", "DataRecebimento", "PontoEntrega", "SetorEntrega",
     "CancelamentoMotivo", "CancelamentoSetor",
 }
-_DETAILS_SYNC_ALLOWLIST = {
+_PROTOCOL_SYNC_EXTENDED = {
+    "ReqLançada",
+    "ReqEntregue",
+    "DataConclusao",
+    "ArmazenadoEm",
+    "ContatoRecebim",
+    "RecebimData",
+    "CancelamentoPonto",
+}
+_PROTOCOL_SYNC_ALLOWLIST = _PROTOCOL_SYNC_ALLOWLIST_BASE | _PROTOCOL_SYNC_EXTENDED
+_DETAILS_SYNC_ALLOWLIST_BASE = {
     "NroProtocoloLinkDet", "AnoProtocoloLinkDet",
     "Titulo", "TipoPublicacaoLink", "FormatoLink", "MaquinaLink", "Tiragem", "Pags",
     "FrenteVerso", "ModelosArq", "PapelLink", "PapelDescricao", "Cores", "CoresDescricao",
@@ -56,6 +66,12 @@ _DETAILS_SYNC_ALLOWLIST = {
     "Fotolito", "ModeloDobra", "ProvaImpressa", "InsumosFornecidos",
     "ElemGrafBrasao", "ElemGrafTimbre", "ElemGrafArteGab", "ElemGrafAssinatura",
 }
+_DETAILS_SYNC_EXTENDED = {
+    "CalcPgs1", "CalcQtdCores1", "CalcCor1",
+    "CalcPgs2", "CalcQtdCores2", "CalcCor2",
+    "CalcPgs3", "CalcQtdCores3", "CalcCor3",
+}
+_DETAILS_SYNC_ALLOWLIST = _DETAILS_SYNC_ALLOWLIST_BASE | _DETAILS_SYNC_EXTENDED
 _MYSQL_ONLY_PROTECTED = {
     "email_pt_html", "email_pt_versao", "email_pt_data",
     "DataSincronizacao", "OrigemMDB", "HashRegistro", "ID", "id",

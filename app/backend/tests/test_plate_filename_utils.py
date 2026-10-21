@@ -7,6 +7,7 @@ import pytest
 from PIL import Image
 
 from services.plate_filename_utils import (
+    caderno_until_from_filenames,
     parse_chapa_label_from_filename,
     parse_plate_color_from_filename,
     parse_plate_filename,
@@ -41,6 +42,12 @@ def test_parse_plate_color_suffix():
 def test_parse_chapa_label():
     assert parse_chapa_label_from_filename(OS_1857_FILES[0]) == "Cad 1 A"
     assert parse_chapa_label_from_filename("simples.tif") is None
+
+
+def test_caderno_until_from_tiff_filenames():
+    assert caderno_until_from_filenames(OS_1857_FILES) == 2
+    assert caderno_until_from_filenames(["arte.pdf", "capa.tif"]) is None
+    assert caderno_until_from_filenames([]) is None
 
 
 def test_os_1857_grouping_keys():

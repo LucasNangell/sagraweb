@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 
+import type { PermissionKey } from "@/features/auth/types";
+
 import {
   duplicateOsGerenciaSearch,
   gerenciaModalTitle,
   gerenciaSearchForModal,
+  getVisibleContextMenuItems,
   isGerenciaModalExistingOnly,
   novaOsGerenciaSearch,
   type OsGerenciaModalMode,
 } from "./contextMenuActions";
+import type { OsSearchRow } from "./types";
 
 const row = { nr_os: 2532, ano: 2026 };
 
@@ -61,6 +65,31 @@ describe("gerenciaSearchForModal", () => {
       id: "2532",
     });
     expect(isGerenciaModalExistingOnly(mode)).toBe(false);
+  });
+});
+
+describe("getVisibleContextMenuItems", () => {
+  const osRow = { nr_os: 2532, ano: 2026 } as OsSearchRow;
+
+  it("mostra Separador com permissão de ficha e OS selecionada", () => {
+    const can = (key: PermissionKey) => key === "ctx_imprimir_ficha";
+    const ids = getVisibleContextMenuItems(can, osRow).map((item) => item.id);
+    expect(ids).toContain("separador");
+    expect(ids).toContain("print");
+  });
+
+  it("esconde Separador sem linha ou sem permissão", () => {
+    const canAll = () => true;
+    expect(
+      getVisibleContextMenuItems(canAll, null).some((item) => item.id === "separador"),
+    ).toBe(false);
+
+    const canNone = () => false;
+    expect(
+      getVisibleContextMenuItems(canNone, osRow).some(
+        (item) => item.id === "separador",
+      ),
+    ).toBe(false);
   });
 });
 

@@ -168,12 +168,17 @@ SYNC_RELATED_RECONCILE_STABLE_CYCLES = max(
 SYNC_RELATED_RECONCILE_MAX_WRITES = max(
     1, _env_int("SYNC_RELATED_RECONCILE_MAX_WRITES", 100)
 )
+# Guarda contra NULL sempre ligada (env não pode desligar; só documenta a intenção).
+SYNC_RELATED_NULL_GUARD = True
+SYNC_RELATED_EXTENDED_COLUMNS = _env_bool("SYNC_RELATED_EXTENDED_COLUMNS", True)
 _RELATED_TABLE_SPECS = (
     {
         "table": "tabProtocolos",
         "pk_fields": ("NroProtocolo", "AnoProtocolo"),
         "nro_field": "NroProtocolo",
         "year_field": "AnoProtocolo",
+        "allowlist_base": core._PROTOCOL_SYNC_ALLOWLIST_BASE,
+        "allowlist_extra": core._PROTOCOL_SYNC_EXTENDED,
         "allowlist": core._PROTOCOL_SYNC_ALLOWLIST,
     },
     {
@@ -181,9 +186,19 @@ _RELATED_TABLE_SPECS = (
         "pk_fields": ("NroProtocoloLinkDet", "AnoProtocoloLinkDet"),
         "nro_field": "NroProtocoloLinkDet",
         "year_field": "AnoProtocoloLinkDet",
+        "allowlist_base": core._DETAILS_SYNC_ALLOWLIST_BASE,
+        "allowlist_extra": core._DETAILS_SYNC_EXTENDED,
         "allowlist": core._DETAILS_SYNC_ALLOWLIST,
     },
 )
+
+RELATED_ACTION_SEED = "seed"
+RELATED_ACTION_WRITE = "write"
+RELATED_ACTION_WRITE_NULL = "write_null"
+RELATED_ACTION_NULL_GUARD = "null_guard"
+RELATED_ACTION_DEFER = "defer"
+
+_CALC_RELATED_COLUMNS = frozenset(core._DETAILS_SYNC_EXTENDED)
 
 # Sentinel para distinguir "MySQL retornou lista vazia" de "falha de leitura"
 _MYSQL_READ_FAILED = object()
@@ -244,6 +259,29 @@ class MdbFatalErrorTracker:
 
 def _exit_for_clean_restart(code: int) -> None:
     os._exit(code)
+
+
+def decide_related_column(
+    mdb_norm: str,
+    mysql_norm: str,
+    baseline_norm: Optional[str],
+    *,
+    recent_web: bool,
+) -> str:
+    """Decisão R4 por coluna (valores já normalizados; '' = vazio/NULL)."""
+    m_filled = bool(mdb_norm)
+    y_filled = bool(mysql_norm)
+    if mdb_norm == mysql_norm:
+        return RELATED_ACTION_SEED
+    if m_filled and not y_filled:
+        return RELATED_ACTION_WRITE
+    if m_filled and y_filled:
+        if recent_web:
+            return RELATED_ACTION_DEFER
+        return RELATED_ACTION_WRITE
+    if baseline_norm is not None and baseline_norm == mysql_norm:
+        return RELATED_ACTION_WRITE_NULL
+    return RELATED_ACTION_NULL_GUARD
 
 
 class StableRelatedMismatchGate:
@@ -485,6 +523,8 @@ class HeartbeatWriter:
         self.last_error: Optional[str] = None
         self.stall_seconds = 0.0
         self.stats: Dict[str, Any] = _empty_cycle_stats()
+        self.stats["null_guard_skips"] = 0
+        self.stats["calc_backfill"] = 0
 
     def mark_progress(self, phase: str) -> None:
         with self.lock:
@@ -765,6 +805,112 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             f"AND {spec['nro_field']} {comparator} {{placeholder_split}}"
         )
 
+    @staticmethod
+    def _effective_related_allowlist(spec: Dict[str, Any]) -> set:
+        if SYNC_RELATED_EXTENDED_COLUMNS:
+            return set(spec.get("allowlist") or ())
+        return set(spec.get("allowlist_base") or ())
+
+    def _bump_related_stat(self, name: str, amount: int = 1) -> None:
+        if amount <= 0:
+            return
+        hb = getattr(self, "_hb", None)
+        if hb is None:
+            return
+        with hb.lock:
+            hb.stats[name] = int(hb.stats.get(name, 0)) + amount
+
+    def _recent_web_os_keys(self, mysql_conn) -> Optional[Set[tuple]]:
+        from sync_policy import OS_DELETE_AUDIT_GRACE_SECONDS
+
+        try:
+            cursor = mysql_conn.cursor(dictionary=True)
+            try:
+                cursor.execute(
+                    """
+                    SELECT DISTINCT nro_protocolo, ano_protocolo
+                    FROM tab_os_audit_log
+                    WHERE evento_em >= (NOW() - INTERVAL %s SECOND)
+                    """,
+                    (OS_DELETE_AUDIT_GRACE_SECONDS,),
+                )
+                return {
+                    (int(row["nro_protocolo"]), int(row["ano_protocolo"]))
+                    for row in (cursor.fetchall() or [])
+                    if row.get("nro_protocolo") is not None and row.get("ano_protocolo") is not None
+                }
+            finally:
+                cursor.close()
+        except Exception as exc:
+            self._svc_log.warning(
+                "[RELATED_SYNC] audit_log indisponível; adiando MDB-vence: %s", exc
+            )
+            return None
+
+    def _load_related_baselines(self, mysql_conn, table: str) -> Dict[tuple, Dict[str, Any]]:
+        try:
+            cursor = mysql_conn.cursor(dictionary=True)
+            try:
+                cursor.execute(
+                    """
+                    SELECT nro, ano, values_json
+                    FROM sync_related_baseline
+                    WHERE table_name = %s
+                    """,
+                    (table,),
+                )
+                out: Dict[tuple, Dict[str, Any]] = {}
+                rows = cursor.fetchall() or []
+                if not isinstance(rows, (list, tuple)):
+                    return {}
+                for row in rows:
+                    try:
+                        values = json.loads(row.get("values_json") or "{}")
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        values = {}
+                    if not isinstance(values, dict):
+                        values = {}
+                    out[(row.get("nro"), row.get("ano"))] = values
+                return out
+            finally:
+                cursor.close()
+        except Exception as exc:
+            self._svc_log.warning(
+                "[RELATED_SYNC] baseline indisponível para %s (bootstrap vazio): %s",
+                table,
+                exc,
+            )
+            return {}
+
+    @staticmethod
+    def _upsert_related_baseline(cursor, table: str, nro: int, ano: int, values: Dict[str, Any]) -> None:
+        cursor.execute(
+            """
+            INSERT INTO sync_related_baseline (table_name, nro, ano, values_json)
+            VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                values_json = VALUES(values_json),
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (table, nro, ano, json.dumps(values, ensure_ascii=False, separators=(",", ":"))),
+        )
+
+    def _persist_related_baselines(
+        self, mysql_conn, table: str, seeds: Dict[tuple, Dict[str, Any]]
+    ) -> None:
+        if not seeds:
+            return
+        cursor = mysql_conn.cursor()
+        try:
+            for (nro, ano), values in seeds.items():
+                self._upsert_related_baseline(cursor, table, nro, ano, values)
+            mysql_conn.commit()
+        except Exception:
+            mysql_conn.rollback()
+            raise
+        finally:
+            cursor.close()
+
     def _load_related_policies(self, mysql_conn) -> Optional[Dict[str, Dict[str, Any]]]:
         """Lê as políticas usando a conexão dedicada do worker; em erro, falha fechado."""
         try:
@@ -836,7 +982,7 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             mdb_cursor.close()
 
         sync_columns = self._sync_allowed_columns(
-            mdb_columns, spec["allowlist"], list(spec["pk_fields"])
+            mdb_columns, self._effective_related_allowlist(spec), list(spec["pk_fields"])
         )
         missing_pk = [field for field in spec["pk_fields"] if field not in sync_columns]
         if missing_pk:
@@ -862,7 +1008,8 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
         """Revalida cada linha dentro da transação antes de INSERT/UPDATE no MySQL."""
         table = spec["table"]
         pk_fields = spec["pk_fields"]
-        mutable_columns = [column for column in sync_columns if column not in pk_fields]
+        nro_field = spec["nro_field"]
+        year_field = spec["year_field"]
         cursor = mysql_conn.cursor(dictionary=True)
         written: List[tuple] = []
         try:
@@ -870,6 +1017,10 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                 record = candidate["record"]
                 key = candidate["key"]
                 identity = candidate["identity"]
+                patch = candidate.get("patch") or {}
+                hash_columns = candidate.get("hash_columns") or (
+                    list(patch) if patch else sync_columns
+                )
                 where_clause = " AND ".join(f"`{field}` = %s" for field in pk_fields)
                 selected_columns = ", ".join(f"`{column}`" for column in sync_columns)
                 cursor.execute(
@@ -878,12 +1029,11 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                 )
                 live_record = cursor.fetchone()
                 live_hash = (
-                    self._related_row_hash(live_record, sync_columns)
+                    self._related_row_hash(live_record, hash_columns)
                     if live_record is not None
                     else None
                 )
                 if live_hash != candidate["current_hash"]:
-                    # Outra gravação ocorreu após a leitura. Não a sobrescrevemos.
                     self._related_gate().mark_write_failed(identity)
                     self._svc_log.warning(
                         "[RELATED_SYNC] %s %s/%s mudou durante a confirmação; aguardando novos ciclos",
@@ -893,6 +1043,7 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                     )
                     continue
 
+                baseline_after = dict(candidate.get("baseline_after") or {})
                 if live_record is None:
                     columns_clause = ", ".join(f"`{column}`" for column in sync_columns)
                     placeholders = ", ".join("%s" for _ in sync_columns)
@@ -901,25 +1052,34 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                         [record.get(column) for column in sync_columns],
                     )
                     operation = "INSERT"
-                elif mutable_columns:
-                    set_clause = ", ".join(f"`{column}` = %s" for column in mutable_columns)
+                    baseline_after = {
+                        column: self._related_normalize(record.get(column))
+                        for column in sync_columns
+                        if column not in pk_fields
+                    }
+                elif patch:
+                    set_clause = ", ".join(f"`{column}` = %s" for column in patch)
                     cursor.execute(
                         f"UPDATE `{table}` SET {set_clause} WHERE {where_clause}",
-                        [record.get(column) for column in mutable_columns] + list(key),
+                        [patch[column] for column in patch] + list(key),
                     )
                     operation = "UPDATE"
                 else:
                     continue
 
+                nro = record.get(nro_field, key[0])
+                ano = record.get(year_field, key[1])
+                self._upsert_related_baseline(cursor, table, nro, ano, baseline_after)
                 written.append(identity)
                 self._svc_log.info(
-                    "[RELATED_SYNC] %s confirmado após %s ciclos: %s %s/%s (%s)",
+                    "[RELATED_SYNC] %s confirmado após %s ciclos: %s %s/%s (%s) cols=%s",
                     table,
                     SYNC_RELATED_RECONCILE_STABLE_CYCLES,
                     operation,
                     key[0],
                     key[1],
                     source_name,
+                    ",".join(patch) if operation == "UPDATE" else "insert",
                 )
 
             mysql_conn.commit()
@@ -942,8 +1102,10 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
         is_os: bool,
         spec: Dict[str, Any],
         tombstones: Set[tuple],
+        recent_web_keys: Optional[Set[tuple]] = (),
     ) -> None:
         table = spec["table"]
+        pk_fields = spec["pk_fields"]
         scope = (source_name, table)
         policies = self._related_policies
         policy = policies.get(table) or {}
@@ -956,14 +1118,20 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             mdb_conn, mysql_conn, spec, is_os
         )
         mdb_by_key = self._unique_related_records(
-            mdb_records, spec["pk_fields"], f"MDB {source_name}/{table}"
+            mdb_records, pk_fields, f"MDB {source_name}/{table}"
         )
         mysql_by_key = self._unique_related_records(
-            mysql_records, spec["pk_fields"], f"MySQL/{table}"
+            mysql_records, pk_fields, f"MySQL/{table}"
         )
+        baselines = self._load_related_baselines(mysql_conn, table)
+        mutable_columns = [column for column in sync_columns if column not in pk_fields]
 
         candidates: List[Dict[str, Any]] = []
         seen_identities: Set[tuple] = set()
+        baseline_seeds: Dict[tuple, Dict[str, Any]] = {}
+        null_guard_skips = 0
+        calc_backfill = 0
+
         for key, mdb_record in mdb_by_key.items():
             identity = scope + key
             seen_identities.add(identity)
@@ -972,13 +1140,86 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                 self._related_gate().discard(identity)
                 continue
 
-            desired_hash = self._related_row_hash(mdb_record, sync_columns)
             mysql_record = mysql_by_key.get(key)
-            current_hash = (
-                self._related_row_hash(mysql_record, sync_columns)
-                if mysql_record is not None
-                else None
+            if mysql_record is None:
+                desired_hash = self._related_row_hash(mdb_record, sync_columns)
+                if not self._related_gate().observe(identity, desired_hash, None):
+                    continue
+                candidates.append(
+                    {
+                        "record": mdb_record,
+                        "key": key,
+                        "identity": identity,
+                        "current_hash": None,
+                        "patch": {},
+                        "hash_columns": sync_columns,
+                        "baseline_after": {
+                            column: self._related_normalize(mdb_record.get(column))
+                            for column in mutable_columns
+                        },
+                    }
+                )
+                continue
+
+            recent_web = recent_web_keys is None or os_key in recent_web_keys
+            baseline = dict(baselines.get(os_key) or {})
+            patch: Dict[str, Any] = {}
+            hash_columns: List[str] = []
+            baseline_changed = False
+            deferred = False
+            for column in mutable_columns:
+                mdb_norm = self._related_normalize(mdb_record.get(column))
+                mysql_norm = self._related_normalize(mysql_record.get(column))
+                baseline_norm = baseline.get(column)
+                if baseline_norm is not None:
+                    baseline_norm = str(baseline_norm)
+                action = decide_related_column(
+                    mdb_norm, mysql_norm, baseline_norm, recent_web=recent_web
+                )
+                if action == RELATED_ACTION_SEED:
+                    if baseline.get(column) != mdb_norm:
+                        baseline[column] = mdb_norm
+                        baseline_changed = True
+                    continue
+                if action == RELATED_ACTION_DEFER:
+                    deferred = True
+                    continue
+                if action == RELATED_ACTION_NULL_GUARD:
+                    null_guard_skips += 1
+                    self._svc_log.warning(
+                        "[NULL_GUARD] %s %s/%s col=%s mdb vazio mysql=%r sem baseline convergente",
+                        table,
+                        os_key[0],
+                        os_key[1],
+                        column,
+                        mysql_record.get(column),
+                    )
+                    continue
+                if action == RELATED_ACTION_WRITE:
+                    patch[column] = mdb_record.get(column)
+                    hash_columns.append(column)
+                    baseline[column] = mdb_norm
+                    baseline_changed = True
+                    if column in _CALC_RELATED_COLUMNS and not mysql_norm:
+                        calc_backfill += 1
+                    continue
+                if action == RELATED_ACTION_WRITE_NULL:
+                    patch[column] = None
+                    hash_columns.append(column)
+                    baseline[column] = ""
+                    baseline_changed = True
+
+            if baseline_changed and not patch and not deferred:
+                baseline_seeds[os_key] = baseline
+
+            if not patch:
+                self._related_gate().discard(identity)
+                continue
+
+            desired_hash = self._related_row_hash(
+                {column: patch[column] for column in hash_columns}, hash_columns
             )
+            current_hash = self._related_row_hash(mysql_record, hash_columns)
             if not self._related_gate().observe(identity, desired_hash, current_hash):
                 continue
             candidates.append(
@@ -987,10 +1228,17 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                     "key": key,
                     "identity": identity,
                     "current_hash": current_hash,
+                    "patch": patch,
+                    "hash_columns": hash_columns,
+                    "baseline_after": baseline,
                 }
             )
 
         self._related_gate().discard_not_seen(scope, seen_identities)
+        self._bump_related_stat("null_guard_skips", null_guard_skips)
+        self._bump_related_stat("calc_backfill", calc_backfill)
+        self._persist_related_baselines(mysql_conn, table, baseline_seeds)
+
         if not candidates:
             return
 
@@ -1033,6 +1281,7 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             tombstones = self._related_tombstones(mysql_conn)
             if tombstones is None:
                 return
+            recent_web_keys = self._recent_web_os_keys(mysql_conn)
 
             for source_name, is_os, path in (
                 ("OS_Atual", True, self.config.mdb_os_atual_path),
@@ -1051,7 +1300,13 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                     )
                     for spec in _RELATED_TABLE_SPECS:
                         self._reconcile_related_table(
-                            mdb_conn, mysql_conn, source_name, is_os, spec, tombstones
+                            mdb_conn,
+                            mysql_conn,
+                            source_name,
+                            is_os,
+                            spec,
+                            tombstones,
+                            recent_web_keys,
                         )
                 except Exception as exc:
                     mysql_conn.rollback()

@@ -12,6 +12,8 @@ PLATE_CHANNEL_SUFFIX = re.compile(r"\s*\(([^)]+)\)\.tiff?$", re.IGNORECASE)
 # Kept for callers that still import the CMYK-only pattern name.
 PLATE_COLOR_SUFFIX = re.compile(r"\s*\(([CMYK])\)\.tiff?$", re.IGNORECASE)
 CHAPA_LABEL_RE = re.compile(r"\((Cad\s+\d+\s+[A-Z])\)", re.IGNORECASE)
+CADERNO_PARTS_RE = re.compile(r"^Cad\s+(\d+)\s+([A-Z])$", re.IGNORECASE)
+CADERNO_UNTIL_MAX = 99
 
 PLATE_CHANNEL_RGB: dict[str, tuple[int, int, int]] = {
     "C": (0, 174, 239),
@@ -97,3 +99,36 @@ def parse_plate_filename(name: str) -> ParsedPlateFilename:
         group_key=group_key,
         channel_token=token,
     )
+
+
+def _is_tiff_filename(name: str) -> bool:
+    lower = name.strip().lower()
+    return lower.endswith(".tif") or lower.endswith(".tiff")
+
+
+def caderno_number_from_filename(name: str) -> int | None:
+    """Número do caderno em TIF `...(Cad N A|B)...`, ou None."""
+    if not _is_tiff_filename(name):
+        return None
+    label = parse_chapa_label_from_filename(name)
+    if not label:
+        return None
+    match = CADERNO_PARTS_RE.match(label.strip())
+    if not match:
+        return None
+    number = int(match.group(1))
+    if number < 1:
+        return None
+    return number
+
+
+def caderno_until_from_filenames(names: list[str] | tuple[str, ...]) -> int | None:
+    """Maior Cad N nos TIFFs; None se nenhum arquivo tiver caderno no nome."""
+    numbers = [
+        n
+        for n in (caderno_number_from_filename(name) for name in names)
+        if n is not None
+    ]
+    if not numbers:
+        return None
+    return min(max(numbers), CADERNO_UNTIL_MAX)

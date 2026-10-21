@@ -14,6 +14,18 @@ import re
 from typing import Any, Dict, Optional
 
 COMPONENT_SLOT_ORDER = ("CAPA", "MIOLO", "ENCARTE")
+# A Web nunca apaga Calc* no MDB: cálculo vazio = preservar o valor existente.
+WEB_PROTECTED_FROM_CLEAR = (
+    "CalcPgs1",
+    "CalcQtdCores1",
+    "CalcCor1",
+    "CalcPgs2",
+    "CalcQtdCores2",
+    "CalcCor2",
+    "CalcPgs3",
+    "CalcQtdCores3",
+    "CalcCor3",
+)
 _COMPONENT_LABELS = {
     "CAPA": ("Capa", "capa"),
     "MIOLO": ("Miolo", "miolo"),

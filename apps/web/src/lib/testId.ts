@@ -197,6 +197,16 @@ export const homeTestIds = {
   osPrintFichaRoot: "os-print-ficha-root",
   osPrintFichaClose: "os-print-ficha-close",
 
+  osSeparadorRoot: "os-separador-root",
+  osSeparadorClose: "os-separador-close",
+  osSeparadorCad: "os-separador-cad",
+  osSeparadorPrinter: "os-separador-printer",
+  osSeparadorPrint: "os-separador-print",
+  osSeparadorCancel: "os-separador-cancel",
+  osSeparadorPreview: "os-separador-preview",
+  osSeparadorOpenerStatus: "os-separador-opener-status",
+  osSeparadorPrintFrame: "os-separador-print-frame",
+
   osSaidaRoot: "os-saida-root",
   osSaidaClose: "os-saida-close",
   osSaidaConfirm: "os-saida-confirm",

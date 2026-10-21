@@ -64,6 +64,7 @@ export function OsRowContextMenu({
         moveFolders: "ctx_mover_pastas",
         provaWeb: "ctx_prova_web",
         print: "ctx_imprimir_ficha",
+        separador: "ctx_imprimir_ficha",
         orcamento: "ctx_orcamento",
         notify: "ctx_detalhes_os",
       };
@@ -114,6 +115,9 @@ export function OsRowContextMenu({
           break;
         case "print":
           window.dispatchEvent(new CustomEvent("sagra:os-print-ficha"));
+          break;
+        case "separador":
+          window.dispatchEvent(new CustomEvent("sagra:os-separador"));
           break;
         case "orcamento":
           void navigate({

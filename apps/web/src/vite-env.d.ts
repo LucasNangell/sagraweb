@@ -5,3 +5,8 @@
 interface ImportMetaEnv {
   readonly VITE_SAGRA_BUILD_ID?: string;
 }
+
+declare module "*.png?inline" {
+  const src: string;
+  export default src;
+}

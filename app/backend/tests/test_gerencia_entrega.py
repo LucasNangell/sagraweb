@@ -73,6 +73,17 @@ class TestEntregaPersistence:
         assert "data.EntregaFormaLink" in src
         assert "data.EntregPeriodo" in src
 
+    def test_save_os_preserva_calc_com_coalesce(self):
+        src = inspect.getsource(save_os)
+        assert "COALESCE(%s, {c})" in src
+        assert 'proto_fields=mdb_sync_plan["proto_fields"]' in src
+
+    def test_folder_move_syncs_only_observ(self):
+        from routers.os_routes import move_os_folders
+
+        src = inspect.getsource(move_os_folders)
+        assert 'det_fields={"Observ"}' in src
+
     def test_save_os_insert_marca_req_lancada(self):
         src = inspect.getsource(save_os)
         insert_src = src.split("INSERT INTO tabProtocolos", 1)[1].split(

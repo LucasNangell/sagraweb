@@ -18,6 +18,7 @@ from routers.mdb_writer import (
     _map_protocolo_cols_for_mdb,
     _resolve_mdb_column,
     _write_detalhes,
+    _write_protocolo,
     _write_protocolo_extra_cols,
     _record_mdb_access,
     classify_mdb_error,
@@ -91,19 +92,27 @@ class TestProtocoloColAliases:
 class TestWriteProtocoloExtraCols:
     def test_update_usa_colchetes_e_retorna_count(self):
         cursor = MagicMock()
-        cursor.fetchone.return_value = (1,)
         executed: list[tuple] = []
+        proto_cols = (
+            "RetiradaNome",
+            "RetiradaPonto",
+            "RecebimData",
+            "PontoEntrega",
+            "SetorEntrega",
+        )
 
         def fake_execute(sql, params=None):
             executed.append((str(sql), params))
+            sql_l = str(sql).casefold()
+            if sql_l.strip().startswith("select") and "tabprotocolos" in sql_l:
+                cursor.description = [(name,) for name in proto_cols]
+                cursor.fetchone.return_value = tuple(None for _ in proto_cols)
 
         cursor.execute.side_effect = fake_execute
 
         with patch(
             "routers.mdb_writer._mdb_table_columns",
-            return_value=frozenset(
-                {"RetiradaNome", "RetiradaPonto", "RecebimData", "PontoEntrega", "SetorEntrega"}
-            ),
+            return_value=frozenset(proto_cols),
         ):
             n = _write_protocolo_extra_cols(
                 cursor,
@@ -138,7 +147,14 @@ class TestWriteProtocoloExtraCols:
 
     def test_zero_cols_quando_schema_sem_campos(self):
         cursor = MagicMock()
-        cursor.fetchone.return_value = (1,)
+
+        def fake_execute(sql, params=None):
+            sql_l = str(sql).casefold()
+            if sql_l.strip().startswith("select") and "tabprotocolos" in sql_l:
+                cursor.description = [("NroProtocolo",), ("AnoProtocolo",), ("NomeUsuario",)]
+                cursor.fetchone.return_value = (84, 2026, "Ana")
+
+        cursor.execute.side_effect = fake_execute
         with patch(
             "routers.mdb_writer._mdb_table_columns",
             return_value=frozenset({"NroProtocolo", "AnoProtocolo", "NomeUsuario"}),
@@ -778,17 +794,28 @@ class TestResolveMaquinaLinkForMdb:
             assert result.value is None
 
 
-def _detalhes_cursor(*, exists: bool, current_maquina=None, known=None):
+def _detalhes_cursor(*, exists: bool, current_maquina=None, known=None, current=None):
     known_rows = [(name,) for name in (known or _KNOWN_MAQUINAS)]
     cursor = MagicMock()
+    current_row = dict(current or {})
+    if current_maquina is not None:
+        current_row.setdefault("MaquinaLink", current_maquina)
+    detalhes_cols = list(_DETALHES_AVAIL | set(current_row))
 
     def fake_execute(sql, params=None):
         sql_l = str(sql).casefold()
         if "from tabmaquinas" in sql_l:
             cursor.fetchall.return_value = known_rows
             cursor.fetchone.return_value = None
-        elif "select maquinalink from tabdetalhesservico" in sql_l:
-            cursor.fetchone.return_value = (current_maquina,) if exists else None
+            cursor.description = [("Maquina",)]
+        elif "from tabdetalhesservico" in sql_l and sql_l.strip().startswith("select"):
+            cursor.description = [(name,) for name in detalhes_cols]
+            if exists:
+                cursor.fetchone.return_value = tuple(
+                    current_row.get(name) for name in detalhes_cols
+                )
+            else:
+                cursor.fetchone.return_value = None
             cursor.fetchall.return_value = []
         else:
             cursor.fetchone.return_value = None
@@ -909,3 +936,165 @@ class TestWriteDetalhesMaquinaLink:
         assert "MaquinaLink=?" not in sql.replace(" ", "")
         assert "" not in params
         assert "Folder" in params
+
+
+class TestWriteNullGuard:
+    def test_detalhes_none_does_not_overwrite_existing_calc(self):
+        cursor = _detalhes_cursor(
+            exists=True,
+            current={
+                "Titulo": "Oficio",
+                "CalcPgs1": 12,
+                "CalcCor1": "4x4",
+                "MaquinaLink": "Komori",
+            },
+        )
+        avail = _DETALHES_AVAIL | {"CalcPgs1", "CalcCor1"}
+        with patch("routers.mdb_writer._mdb_table_columns", return_value=avail):
+            _write_detalhes(
+                cursor,
+                84,
+                2026,
+                {"Titulo": "Oficio novo", "CalcPgs1": None, "CalcCor1": None},
+                mdb_path=r"\\dfs\os.mdb",
+            )
+
+        sql, params = _mutating_sql(cursor)[0]
+        assert sql.lstrip().upper().startswith("UPDATE")
+        compact = sql.replace(" ", "")
+        assert "CalcPgs1=?" not in compact
+        assert "CalcCor1=?" not in compact
+        assert "Titulo=?" in compact
+        assert "Oficio novo" in params
+
+    def test_detalhes_insert_writes_all_including_none(self):
+        cursor = _detalhes_cursor(exists=False)
+        avail = _DETALHES_AVAIL | {"CalcPgs1"}
+        with patch("routers.mdb_writer._mdb_table_columns", return_value=avail):
+            _write_detalhes(
+                cursor,
+                84,
+                2026,
+                {"Titulo": "Novo", "CalcPgs1": None},
+                mdb_path=r"\\dfs\os.mdb",
+            )
+
+        sql, params = _mutating_sql(cursor)[0]
+        assert sql.lstrip().upper().startswith("INSERT")
+        assert "CalcPgs1" in sql
+        assert "Novo" in params
+
+    def test_detalhes_explicit_clear_writes_null_except_calc(self):
+        cursor = _detalhes_cursor(
+            exists=True,
+            current={"Observ": "old", "CalcPgs1": 8, "Titulo": "X"},
+        )
+        avail = _DETALHES_AVAIL | {"Observ", "CalcPgs1"}
+        with patch("routers.mdb_writer._mdb_table_columns", return_value=avail):
+            _write_detalhes(
+                cursor,
+                84,
+                2026,
+                {"Observ": None, "CalcPgs1": None, "Titulo": "X"},
+                mdb_path=r"\\dfs\os.mdb",
+                fields={"Observ", "CalcPgs1"},
+                explicit_clears={"Observ", "CalcPgs1"},
+            )
+
+        sql, params = _mutating_sql(cursor)[0]
+        compact = sql.replace(" ", "")
+        assert "Observ=?" in compact
+        assert "CalcPgs1=?" not in compact
+
+    def test_detalhes_fields_none_on_update_required_writes_nothing(self):
+        cursor = _detalhes_cursor(exists=True, current_maquina="Komori")
+        with patch(
+            "routers.mdb_writer._mdb_table_columns", return_value=_DETALHES_AVAIL
+        ):
+            _write_detalhes(
+                cursor,
+                84,
+                2026,
+                {"Titulo": "Nao deve gravar"},
+                mdb_path=r"\\dfs\os.mdb",
+                update_fields_required=True,
+            )
+        assert _mutating_sql(cursor) == []
+
+    def test_protocolo_none_does_not_overwrite_existing(self):
+        cursor = MagicMock()
+        cols = ("NomeUsuario", "Titular", "CotaRepro")
+
+        def fake_execute(sql, params=None):
+            sql_l = str(sql).casefold()
+            if sql_l.strip().startswith("select") and "tabprotocolos" in sql_l:
+                cursor.description = [(name,) for name in cols]
+                cursor.fetchone.return_value = ("Ana", "Deputado", 10)
+
+        cursor.execute.side_effect = fake_execute
+        with patch(
+            "routers.mdb_writer._mdb_table_columns",
+            return_value=frozenset(cols),
+        ):
+            _write_protocolo(
+                cursor,
+                84,
+                2026,
+                {"NomeUsuario": "Ana", "Titular": None, "CotaRepro": 10},
+                mdb_path=r"\\dfs\os.mdb",
+            )
+
+        mutating = [
+            (str(call.args[0]), call.args[1] if len(call.args) > 1 else None)
+            for call in cursor.execute.call_args_list
+            if str(call.args[0]).lstrip().upper().startswith("UPDATE")
+        ]
+        assert len(mutating) == 1
+        sql, params = mutating[0]
+        assert "Titular=?" not in sql.replace(" ", "")
+        assert "NomeUsuario=?" in sql.replace(" ", "")
+        assert "Ana" in params
+
+    def test_extra_cols_nao_apagao_valor_existente_com_null(self):
+        cursor = MagicMock()
+        cols = ("RetiradaNome", "PontoEntrega")
+
+        def fake_execute(sql, params=None):
+            sql_l = str(sql).casefold()
+            if sql_l.strip().startswith("select") and "tabprotocolos" in sql_l:
+                cursor.description = [(name,) for name in cols]
+                cursor.fetchone.return_value = ("Maria", "918.713")
+
+        cursor.execute.side_effect = fake_execute
+        with patch(
+            "routers.mdb_writer._mdb_table_columns",
+            return_value=frozenset(cols),
+        ):
+            n = _write_protocolo_extra_cols(
+                cursor,
+                84,
+                2026,
+                {"RetiradaNome": None, "PontoEntrega": "120.819"},
+                ("RetiradaNome", "PontoEntrega"),
+                mdb_path=r"I:\fake.mdb",
+            )
+        assert n == 1
+        update_sql = next(
+            str(call.args[0])
+            for call in cursor.execute.call_args_list
+            if "UPDATE tabProtocolos SET" in str(call.args[0])
+        )
+        assert "[PontoEntrega]=?" in update_sql
+        assert "[RetiradaNome]=?" not in update_sql
+
+
+class TestDiffChangedFields:
+    def test_detects_change_and_explicit_clear(self):
+        from routers.os_audit_service import diff_changed_fields
+
+        changed, clears = diff_changed_fields(
+            {"Observ": "old", "Titulo": "A", "CalcPgs1": 4},
+            {"Observ": "", "Titulo": "A", "Pags": 10},
+        )
+        assert changed == {"Observ", "Pags"}
+        assert clears == {"Observ"}

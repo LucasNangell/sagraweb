@@ -68,6 +68,7 @@ import { OsMoverPastasModal } from "./OsMoverPastasModal";
 import { OsOrdersTable } from "./OsOrdersTable";
 import { OsPrintFichaModal } from "./OsPrintFichaModal";
 import { OsPrintModeModal } from "./OsPrintModeModal";
+import { OsSeparadorModal } from "./OsSeparadorModal";
 import { SettingsModal } from "@/features/settings/components/SettingsModal";
 import { OsVincularModal } from "./OsVincularModal";
 import { OsNotificarModal } from "./OsNotificarModal";
@@ -112,6 +113,7 @@ export function OsHomePage() {
   const [folderBrowserOpen, setFolderBrowserOpen] = useState(false);
   const [moverPastasOpen, setMoverPastasOpen] = useState(false);
   const [notificarOpen, setNotificarOpen] = useState(false);
+  const [separadorOpen, setSeparadorOpen] = useState(false);
   const [mobileView, setMobileView] = useState<
     "list" | "details" | "history"
   >("list");
@@ -874,6 +876,12 @@ export function OsHomePage() {
         onClose={() => setNotificarOpen(false)}
       />
 
+      <OsSeparadorModal
+        row={selected}
+        open={separadorOpen}
+        onClose={() => setSeparadorOpen(false)}
+      />
+
       <SettingsModal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -899,6 +907,13 @@ export function OsHomePage() {
           setPrintModePickerOpen(true);
         }}
         onNotificar={() => setNotificarOpen(true)}
+        onSeparador={() => {
+          if (!selected) {
+            window.alert("Selecione uma OS.");
+            return;
+          }
+          setSeparadorOpen(true);
+        }}
       />
     </div>
   );
@@ -912,6 +927,7 @@ function OsHomeModalsBridge({
   onMoverPastas,
   onPrintPicker,
   onNotificar,
+  onSeparador,
 }: {
   onVincular: () => void;
   onAuditLog: () => void;
@@ -919,6 +935,7 @@ function OsHomeModalsBridge({
   onMoverPastas: () => void;
   onPrintPicker: () => void;
   onNotificar: () => void;
+  onSeparador: () => void;
 }) {
   useEffect(() => {
     const onVinc = () => onVincular();
@@ -927,12 +944,14 @@ function OsHomeModalsBridge({
     const onMove = () => onMoverPastas();
     const onPrintPickerEvent = () => onPrintPicker();
     const onNotificarEvent = () => onNotificar();
+    const onSeparadorEvent = () => onSeparador();
     window.addEventListener("sagra:os-vincular", onVinc);
     window.addEventListener("sagra:os-audit-log", onAudit);
     window.addEventListener("sagra:os-folder-browser", onFolder);
     window.addEventListener("sagra:os-mover-pastas", onMove);
     window.addEventListener("sagra:os-print-ficha", onPrintPickerEvent);
     window.addEventListener("sagra:os-notificar", onNotificarEvent);
+    window.addEventListener("sagra:os-separador", onSeparadorEvent);
     return () => {
       window.removeEventListener("sagra:os-vincular", onVinc);
       window.removeEventListener("sagra:os-audit-log", onAudit);
@@ -940,7 +959,16 @@ function OsHomeModalsBridge({
       window.removeEventListener("sagra:os-mover-pastas", onMove);
       window.removeEventListener("sagra:os-print-ficha", onPrintPickerEvent);
       window.removeEventListener("sagra:os-notificar", onNotificarEvent);
+      window.removeEventListener("sagra:os-separador", onSeparadorEvent);
     };
-  }, [onAuditLog, onFolderBrowser, onMoverPastas, onNotificar, onPrintPicker, onVincular]);
+  }, [
+    onAuditLog,
+    onFolderBrowser,
+    onMoverPastas,
+    onNotificar,
+    onPrintPicker,
+    onSeparador,
+    onVincular,
+  ]);
   return null;
 }

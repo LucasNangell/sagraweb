@@ -80,6 +80,12 @@ export const OS_CONTEXT_MENU_ITEMS: OsContextMenuItem[] = [
     requiresRow: true,
   },
   {
+    id: "separador",
+    label: "Separador",
+    permission: "ctx_imprimir_ficha",
+    requiresRow: true,
+  },
+  {
     id: "orcamento",
     label: "Orçamento",
     permission: "ctx_orcamento",

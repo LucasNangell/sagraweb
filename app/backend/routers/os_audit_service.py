@@ -369,7 +369,26 @@ def diff_entity_fields(
                 ref_cod=ref_cod,
             )
         )
-    return entries
+        return entries
+
+
+def diff_changed_fields(
+    old_row: Optional[Mapping[str, Any]],
+    new_values: Mapping[str, Any],
+) -> tuple[set[str], set[str]]:
+    """Campos alterados e explicitamente esvaziados (antes preenchido, depois vazio)."""
+    changed: set[str] = set()
+    explicit_clears: set[str] = set()
+    previous = old_row or {}
+    for field, new_val in new_values.items():
+        old_norm = normalize_value(previous.get(field))
+        new_norm = normalize_value(new_val)
+        if old_norm == new_norm:
+            continue
+        changed.add(field)
+        if old_norm and not new_norm:
+            explicit_clears.add(field)
+    return changed, explicit_clears
 
 
 def build_save_payload_maps(data: Any) -> tuple[dict[str, Any], dict[str, Any]]:

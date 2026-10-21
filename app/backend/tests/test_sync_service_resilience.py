@@ -126,6 +126,257 @@ def test_related_table_reconciliation_only_submits_stable_difference():
     submitted = sync._apply_related_candidates.call_args.args[3]
     assert len(submitted) == 1
     assert submitted[0]["record"] == mdb_record
+    assert submitted[0]["patch"] == {"NomeUsuario": "MDB"}
+
+
+def test_sync_related_baseline_table_is_created():
+    import inspect
+    from sync_policy import ensure_sync_control_tables
+
+    src = inspect.getsource(ensure_sync_control_tables)
+    assert "CREATE TABLE IF NOT EXISTS sync_related_baseline" in src
+    assert "values_json" in src
+
+
+def test_writer_fields_are_covered_by_sync_allowlist():
+    from routers.mdb_writer import (
+        DETALHES_MDB_SYNC_FIELDS,
+        PROTOCOL_MDB_SYNC_FIELDS,
+        _MDB_COLUMN_ALIASES,
+    )
+
+    def _covered(field: str, allowlist: set) -> bool:
+        candidates = _MDB_COLUMN_ALIASES.get(field, (field,))
+        return any(name in allowlist for name in candidates)
+
+    missing_proto = sorted(
+        field
+        for field in PROTOCOL_MDB_SYNC_FIELDS
+        if not _covered(field, svc.core._PROTOCOL_SYNC_ALLOWLIST)
+    )
+    missing_det = sorted(
+        field
+        for field in DETALHES_MDB_SYNC_FIELDS
+        if not _covered(field, svc.core._DETAILS_SYNC_ALLOWLIST)
+    )
+    assert missing_proto == [], missing_proto
+    assert missing_det == [], missing_det
+
+
+def test_details_allowlist_includes_calc_fields():
+    for col in (
+        "CalcPgs1",
+        "CalcQtdCores1",
+        "CalcCor1",
+        "CalcPgs2",
+        "CalcQtdCores2",
+        "CalcCor2",
+        "CalcPgs3",
+        "CalcQtdCores3",
+        "CalcCor3",
+    ):
+        assert col in svc.core._DETAILS_SYNC_ALLOWLIST
+
+
+def test_decide_related_column_matrix():
+    assert svc.decide_related_column("12", "12", "12", recent_web=False) == svc.RELATED_ACTION_SEED
+    assert svc.decide_related_column("12", "", None, recent_web=False) == svc.RELATED_ACTION_WRITE
+    assert svc.decide_related_column("a", "b", None, recent_web=False) == svc.RELATED_ACTION_WRITE
+    assert svc.decide_related_column("a", "b", None, recent_web=True) == svc.RELATED_ACTION_DEFER
+    assert svc.decide_related_column("", "12", "12", recent_web=False) == svc.RELATED_ACTION_WRITE_NULL
+    assert svc.decide_related_column("", "12", None, recent_web=False) == svc.RELATED_ACTION_NULL_GUARD
+    assert svc.decide_related_column("", "12", "old", recent_web=False) == svc.RELATED_ACTION_NULL_GUARD
+
+
+def _related_sync_stub():
+    sync = svc.ResilientSynchronizer.__new__(svc.ResilientSynchronizer)
+    sync._svc_log = MagicMock()
+    sync._related_mismatch_gate = svc.StableRelatedMismatchGate(1)
+    sync._related_policies = {
+        "tabProtocolos": {"enabled": True, "mode": "uni"},
+        "tabDetalhesServico": {"enabled": True, "mode": "uni"},
+    }
+    sync._hb = None
+    sync._load_related_baselines = MagicMock(return_value={})
+    sync._persist_related_baselines = MagicMock()
+    return sync
+
+
+def test_related_backfill_writes_mdb_value_when_mysql_null():
+    sync = _related_sync_stub()
+    spec = svc._RELATED_TABLE_SPECS[1]
+    mdb_record = {
+        "NroProtocoloLinkDet": 84,
+        "AnoProtocoloLinkDet": 2026,
+        "CalcPgs1": 12,
+        "Titulo": "Oficio",
+    }
+    mysql_record = {
+        "NroProtocoloLinkDet": 84,
+        "AnoProtocoloLinkDet": 2026,
+        "CalcPgs1": None,
+        "Titulo": "Oficio",
+    }
+    sync._read_related_table = MagicMock(
+        return_value=([mdb_record], [mysql_record], list(mdb_record))
+    )
+    sync._apply_related_candidates = MagicMock()
+    sync._reconcile_related_table(
+        MagicMock(), MagicMock(), "OS_Atual", True, spec, set()
+    )
+    submitted = sync._apply_related_candidates.call_args.args[3]
+    assert submitted[0]["patch"] == {"CalcPgs1": 12}
+
+
+def test_related_defers_mdb_wins_when_web_wrote_recently():
+    sync = _related_sync_stub()
+    spec = svc._RELATED_TABLE_SPECS[0]
+    mdb_record = {"NroProtocolo": 84, "AnoProtocolo": 2026, "NomeUsuario": "MDB"}
+    mysql_record = {"NroProtocolo": 84, "AnoProtocolo": 2026, "NomeUsuario": "Web"}
+    sync._read_related_table = MagicMock(
+        return_value=([mdb_record], [mysql_record], list(mdb_record))
+    )
+    sync._apply_related_candidates = MagicMock()
+    sync._reconcile_related_table(
+        MagicMock(),
+        MagicMock(),
+        "OS_Atual",
+        True,
+        spec,
+        set(),
+        recent_web_keys={(84, 2026)},
+    )
+    sync._apply_related_candidates.assert_not_called()
+
+
+def test_related_intentional_null_requires_converged_baseline():
+    sync = _related_sync_stub()
+    spec = svc._RELATED_TABLE_SPECS[1]
+    sync._load_related_baselines = MagicMock(
+        return_value={(84, 2026): {"CalcPgs1": "12"}}
+    )
+    mdb_record = {
+        "NroProtocoloLinkDet": 84,
+        "AnoProtocoloLinkDet": 2026,
+        "CalcPgs1": None,
+    }
+    mysql_record = {
+        "NroProtocoloLinkDet": 84,
+        "AnoProtocoloLinkDet": 2026,
+        "CalcPgs1": 12,
+    }
+    sync._read_related_table = MagicMock(
+        return_value=([mdb_record], [mysql_record], list(mdb_record))
+    )
+    sync._apply_related_candidates = MagicMock()
+    sync._reconcile_related_table(
+        MagicMock(), MagicMock(), "OS_Atual", True, spec, set()
+    )
+    submitted = sync._apply_related_candidates.call_args.args[3]
+    assert submitted[0]["patch"] == {"CalcPgs1": None}
+
+
+def test_related_null_guard_without_baseline_does_not_write():
+    sync = _related_sync_stub()
+    spec = svc._RELATED_TABLE_SPECS[1]
+    mdb_record = {
+        "NroProtocoloLinkDet": 84,
+        "AnoProtocoloLinkDet": 2026,
+        "CalcPgs1": None,
+    }
+    mysql_record = {
+        "NroProtocoloLinkDet": 84,
+        "AnoProtocoloLinkDet": 2026,
+        "CalcPgs1": 12,
+    }
+    sync._read_related_table = MagicMock(
+        return_value=([mdb_record], [mysql_record], list(mdb_record))
+    )
+    sync._apply_related_candidates = MagicMock()
+    sync._reconcile_related_table(
+        MagicMock(), MagicMock(), "OS_Atual", True, spec, set()
+    )
+    sync._apply_related_candidates.assert_not_called()
+
+
+def test_apply_related_skips_when_live_hash_changed():
+    sync = _related_sync_stub()
+    spec = svc._RELATED_TABLE_SPECS[1]
+    mysql_conn = MagicMock()
+    cursor = MagicMock()
+    mysql_conn.cursor.return_value = cursor
+    cursor.fetchone.return_value = {
+        "NroProtocoloLinkDet": 84,
+        "AnoProtocoloLinkDet": 2026,
+        "CalcPgs1": 99,
+    }
+    candidate = {
+        "record": {
+            "NroProtocoloLinkDet": 84,
+            "AnoProtocoloLinkDet": 2026,
+            "CalcPgs1": 12,
+        },
+        "key": (84, 2026),
+        "identity": ("OS_Atual", "tabDetalhesServico", 84, 2026),
+        "current_hash": "stale",
+        "patch": {"CalcPgs1": 12},
+        "hash_columns": ["CalcPgs1"],
+        "baseline_after": {"CalcPgs1": "12"},
+    }
+    sync._related_mismatch_gate.observe(
+        candidate["identity"], "desired", "stale"
+    )
+    sync._apply_related_candidates(
+        mysql_conn, spec, "OS_Atual", [candidate], ["NroProtocoloLinkDet", "AnoProtocoloLinkDet", "CalcPgs1"]
+    )
+    mysql_conn.rollback.assert_not_called()
+    mysql_conn.commit.assert_called_once()
+    assert not any(
+        str(call.args[0]).lstrip().upper().startswith("UPDATE `")
+        for call in cursor.execute.call_args_list
+        if call.args
+    )
+
+
+def test_apply_related_updates_baseline_only_after_commit_path():
+    sync = _related_sync_stub()
+    spec = svc._RELATED_TABLE_SPECS[1]
+    mysql_conn = MagicMock()
+    cursor = MagicMock()
+    mysql_conn.cursor.return_value = cursor
+    live = {
+        "NroProtocoloLinkDet": 84,
+        "AnoProtocoloLinkDet": 2026,
+        "CalcPgs1": None,
+    }
+    cursor.fetchone.return_value = live
+    patch = {"CalcPgs1": 12}
+    hash_columns = ["CalcPgs1"]
+    current_hash = svc.ResilientSynchronizer._related_row_hash(live, hash_columns)
+    candidate = {
+        "record": {
+            "NroProtocoloLinkDet": 84,
+            "AnoProtocoloLinkDet": 2026,
+            "CalcPgs1": 12,
+        },
+        "key": (84, 2026),
+        "identity": ("OS_Atual", "tabDetalhesServico", 84, 2026),
+        "current_hash": current_hash,
+        "patch": patch,
+        "hash_columns": hash_columns,
+        "baseline_after": {"CalcPgs1": "12"},
+    }
+    sync._apply_related_candidates(
+        mysql_conn,
+        spec,
+        "OS_Atual",
+        [candidate],
+        ["NroProtocoloLinkDet", "AnoProtocoloLinkDet", "CalcPgs1"],
+    )
+    mysql_conn.commit.assert_called_once()
+    sqls = [str(call.args[0]) for call in cursor.execute.call_args_list]
+    assert any("UPDATE `tabDetalhesServico`" in sql for sql in sqls)
+    assert any("INSERT INTO sync_related_baseline" in sql for sql in sqls)
 
 
 def test_protocol_allowlist_includes_cota_repro_from_mdb():

@@ -2130,19 +2130,15 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
 
     def _tombstone_present_strict(self, codstatus: str) -> Optional[bool]:
         """True/False se leu deleted_andamentos; None se a consulta falhou."""
+        return self._api_tombstone_present_strict(codstatus)
+
+    def _api_tombstone_present_strict(self, codstatus: str) -> Optional[bool]:
+        """True só para exclusão da Web/API. None se a consulta falhou."""
         try:
-            conn = self.conn_mgr.get_mysql()
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT COUNT(*) FROM deleted_andamentos WHERE codstatus = %s",
-                (codstatus,),
-            )
-            count = cursor.fetchone()[0]
-            cursor.close()
-            return count > 0
+            return self.is_api_tombstone(codstatus)
         except Exception as e:
             self.logger.logger.error(
-                f"[ERRO] Erro ao consultar tombstone {codstatus}: {e}"
+                f"[ERRO] Erro ao consultar tombstone API {codstatus}: {e}"
             )
             return None
 
@@ -2155,7 +2151,8 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
     ) -> Set[str]:
         """
         Detecta andamentos presentes no MDB e ausentes no MySQL que devem
-        ser removidos do Access (tombstone prévio ou já sincronizados no baseline).
+        ser removidos do Access — apenas exclusão real da Web/API.
+        Baseline ou tombstone gerado pelo sync NÃO autorizam apagar o Access.
         """
         if not SYNC_ALLOW_MDB_DELETE:
             return set()
@@ -2178,12 +2175,8 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
         for code in candidatos:
             if code not in mdb_by_code:
                 continue
-            # Baseline (memória) basta. Tombstone via query estrita (None = erro → ignora).
             # Não usar is_deleted() fail-closed aqui — evitaria deletes em massa em outage.
-            if code in self._baseline:
-                confirmados.add(code)
-                continue
-            if self._tombstone_present_strict(code) is True:
+            if self._api_tombstone_present_strict(code) is True:
                 confirmados.add(code)
 
         if len(confirmados) > 5:
@@ -2322,11 +2315,6 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                         "[M2Y] skip CodStatus=%s motivo=excluido_mysql", code
                     )
                     continue
-                if self.is_deleted(code):
-                    self._svc_log.info(
-                        "[M2Y] skip CodStatus=%s motivo=tombstone", code
-                    )
-                    continue
                 and_ = None
                 origem = None
                 for a in mdb_os_data:
@@ -2344,7 +2332,9 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
                     self.sync_os_data_from_mdb(
                         and_["NroProtocoloLink"], and_["AnoProtocoloLink"], origem
                     )
-                    self.insert_mysql(and_, origem)
+                    inserted = self.insert_mysql(and_, origem)
+                    if not inserted:
+                        continue
                     self._mark_baseline(code, self._payload_hash(and_))
                     self._cycle_stats["ins_m2y"] += 1
                     touched_os.add(

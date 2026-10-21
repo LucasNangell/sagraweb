@@ -43,10 +43,13 @@ _PROTOCOL_SYNC_ALLOWLIST_BASE = {
     "NroProtocolo", "AnoProtocolo",
     "CodigoRequisic", "CategoriaLink", "NomeUsuario", "Titular", "OrgInteressado",
     "SiglaOrgao", "GabSalaUsuario", "Andar", "Localizacao", "RamalUsuario",
-    "DataEntrada", "ProcessoSolicit", "CSnro", "CotaRepro", "EntregPrazoLink", "EntregData", "ContatoTrab",
+    "DataEntrada", "ProcessoSolicit", "CSnro", "CotaRepro", "CotaCartao",
+    "CodUsuarioLink", "Solicitante", "DebitarCGRAF", "ReimprimirOS",
+    "EntregPrazoLink", "EntregData", "ContatoTrab",
     "ResponsavelGrafLink", "EntregaFormaLink", "EntregPeriodo",
-    "RetiradaNome", "RetiradaPonto", "DataRecebimento", "PontoEntrega", "SetorEntrega",
-    "CancelamentoMotivo", "CancelamentoSetor",
+    "RetiradaNome", "RetiradaPonto", "Funcionário", "Funcionario",
+    "DataRecebimento", "PontoEntrega", "SetorEntrega",
+    "CancelamentoMotivo", "CancelamentoData", "CancelamentoSetor",
 }
 _PROTOCOL_SYNC_EXTENDED = {
     "ReqLançada",
@@ -65,6 +68,7 @@ _DETAILS_SYNC_ALLOWLIST_BASE = {
     "DescAcabamento", "Observ", "TiragemSolicitada", "CotaTotal", "MaterialFornecido",
     "Fotolito", "ModeloDobra", "ProvaImpressa", "InsumosFornecidos",
     "ElemGrafBrasao", "ElemGrafTimbre", "ElemGrafArteGab", "ElemGrafAssinatura",
+    "ElemGrafCarimbo", "Mult4", "CoeficienteA4",
 }
 _DETAILS_SYNC_EXTENDED = {
     "CalcPgs1", "CalcQtdCores1", "CalcCor1",
@@ -76,6 +80,20 @@ _MYSQL_ONLY_PROTECTED = {
     "email_pt_html", "email_pt_versao", "email_pt_data",
     "DataSincronizacao", "OrigemMDB", "HashRegistro", "ID", "id",
 }
+
+# Tombstone da Web/API: pode apagar o Access. Tombstone gerado pelo próprio sync não.
+_API_TOMBSTONE_ORIGINS = {"API"}
+_API_TOMBSTONE_MOTIVO_MARKERS = (
+    "exclusão via frontend",
+    "exclusao via frontend",
+)
+
+
+def tombstone_is_api_delete(origem: Optional[str], motivo: Optional[str]) -> bool:
+    if str(origem or "").strip().upper() in _API_TOMBSTONE_ORIGINS:
+        return True
+    motivo_n = str(motivo or "").strip().casefold()
+    return any(marker in motivo_n for marker in _API_TOMBSTONE_MOTIVO_MARKERS)
 
 @dataclass
 class Config:
@@ -487,30 +505,52 @@ class AndamentosSynchronizer:
                 allowed.append(col)
         return allowed
     
+    def _fetch_deleted_andamento(self, codstatus: str) -> Optional[Dict[str, Any]]:
+        conn = self.conn_mgr.get_mysql()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute(
+                """
+                SELECT codstatus, origem, motivo, content_hash
+                FROM deleted_andamentos
+                WHERE codstatus = %s
+                """,
+                (codstatus,),
+            )
+            return cursor.fetchone()
+        finally:
+            cursor.close()
+
+    def is_api_tombstone(self, codstatus: str) -> Optional[bool]:
+        """True se exclusão veio da Web/API. None se a consulta falhou."""
+        try:
+            row = self._fetch_deleted_andamento(codstatus)
+        except Exception as e:
+            self.logger.logger.error(
+                f"[ERRO] Erro ao consultar tombstone API {codstatus}: {e}"
+            )
+            return None
+        if not row:
+            return False
+        return tombstone_is_api_delete(row.get("origem"), row.get("motivo"))
+
     def is_resurrection(self, codstatus: str, andamento: Dict) -> bool:
         """
-        True = bloquear INSERT (CodStatus tem tombstone durável).
+        True = bloquear INSERT porque a Web/API excluiu este CodStatus.
 
-        Presença em deleted_andamentos é autoridade: não limpa tombstone por
-        divergência de hash. Reuso de CodStatus só via remoção manual/admin.
+        Tombstone gerado pelo próprio sync (MDB/MySQL ausente, baseline falso)
+        NÃO bloqueia: linha viva no Access é lançamento e deve ir para o MySQL.
         Em erro de DB: fail-closed (bloqueia).
         """
         try:
-            conn = self.conn_mgr.get_mysql()
-            cursor = conn.cursor(dictionary=True)
-
-            cursor.execute(
-                "SELECT codstatus FROM deleted_andamentos WHERE codstatus = %s",
-                (codstatus,),
-            )
-            result = cursor.fetchone()
-            cursor.close()
-
-            if not result:
+            row = self._fetch_deleted_andamento(codstatus)
+            if not row:
+                return False
+            if not tombstone_is_api_delete(row.get("origem"), row.get("motivo")):
                 return False
 
             self.logger.logger.warning(
-                f"[BLOQUEADO] CodStatus {codstatus} tem tombstone em deleted_andamentos "
+                f"[BLOQUEADO] CodStatus {codstatus} tem tombstone da API em deleted_andamentos "
                 f"(ressurreição bloqueada)."
             )
             return True
@@ -1136,8 +1176,9 @@ class AndamentosSynchronizer:
         finally:
             cur.close()
     
-    def insert_mysql(self, andamento: Dict, origem: str):
-        """Insere registro no MySQL, mas apenas se NÃO estiver na lista de exclusões."""
+    def insert_mysql(self, andamento: Dict, origem: str) -> bool:
+        """Insere no MySQL. True se a linha ficou (ou já estava) em tabandamento."""
+        conn = None
         try:
             codstatus = andamento['CodStatus']
             nro = andamento['NroProtocoloLink']
@@ -1152,9 +1193,9 @@ class AndamentosSynchronizer:
                     nro, ano,
                     'Bloqueado: OS tombstonada em deleted_os'
                 )
-                return
+                return False
 
-            if self.is_deleted(codstatus) or self.is_resurrection(codstatus, andamento):
+            if self.is_resurrection(codstatus, andamento):
                 current_time = time.time()
                 last_warning = self._blocked_warnings_cache.get(codstatus, 0)
 
@@ -1170,7 +1211,13 @@ class AndamentosSynchronizer:
                     nro, ano,
                     'Bloqueado: ressurreição de registro excluído'
                 )
-                return 
+                return False
+
+            tombstone = self._fetch_deleted_andamento(codstatus)
+            if tombstone and not tombstone_is_api_delete(
+                tombstone.get("origem"), tombstone.get("motivo")
+            ):
+                self._remove_from_deleted(codstatus)
 
             conn = self.conn_mgr.get_mysql()
             cursor = conn.cursor()
@@ -1180,7 +1227,7 @@ class AndamentosSynchronizer:
             if cursor.fetchone()[0] > 0:
                 cursor.close()
                 self.logger.logger.info(f"[SYNC] CodStatus {codstatus} já existente no MySQL (ignorado insert).")
-                return
+                return True
             
             # UltimoStatus NÃO vem do MDB — insert com 0; ensure_* redefine o canônico.
             cursor.execute("""
@@ -1203,25 +1250,28 @@ class AndamentosSynchronizer:
                 nro, ano,
                 'Novo andamento sincronizado'
             )
+            return True
         except MySQLError as e:
-            if 'conn' in locals() and conn:
+            if conn is not None:
                 conn.rollback()
             if e.errno == 1062:  # Duplicate entry
                 self.logger.logger.info(f"[SYNC] CodStatus {codstatus} já inserido por outra instância (ignorando duplicate entry).")
-            else:
-                self.logger.log(
-                    'INSERT', origem, 'MySQL', andamento.get('CodStatus'),
-                    andamento.get('NroProtocoloLink'), andamento.get('AnoProtocoloLink'),
-                    sucesso=False, erro=str(e)
-                )
+                return True
+            self.logger.log(
+                'INSERT', origem, 'MySQL', andamento.get('CodStatus'),
+                andamento.get('NroProtocoloLink'), andamento.get('AnoProtocoloLink'),
+                sucesso=False, erro=str(e)
+            )
+            return False
         except Exception as e:
-            if 'conn' in locals() and conn:
+            if conn is not None:
                 conn.rollback()
             self.logger.log(
                 'INSERT', origem, 'MySQL', andamento.get('CodStatus'),
                 andamento.get('NroProtocoloLink'), andamento.get('AnoProtocoloLink'),
                 sucesso=False, erro=str(e)
             )
+            return False
     
     def insert_mdb(self, andamento: Dict, conn: pyodbc.Connection, destino: str):
         """Insere registro no MDB, mas apenas se NÃO estiver na lista de exclusões."""

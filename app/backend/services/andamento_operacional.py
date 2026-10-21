@@ -138,6 +138,23 @@ def next_cod_status_for_os(cursor, nro: int, ano: int) -> str:
             # Tabela pode não existir em ambientes antigos de teste.
             pass
 
+    try:
+        cursor.execute(
+            """
+            SELECT codstatus
+            FROM deleted_andamentos
+            WHERE (nro = %s AND ano = %s) OR codstatus LIKE %s
+            """,
+            (nro, ano, like_pattern),
+        )
+        for drow in cursor.fetchall() or []:
+            if isinstance(drow, dict):
+                _bump_from_cod(drow.get("codstatus") or drow.get("CodStatus"))
+            else:
+                _bump_from_cod(drow[0] if drow else None)
+    except Exception:
+        pass
+
     return f"{base_prefix}{max_seq + 1:02d}"
 
 

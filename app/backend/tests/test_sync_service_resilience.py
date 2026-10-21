@@ -412,6 +412,163 @@ def test_protocol_allowlist_includes_dados_entrega_from_mdb():
     assert "EntregPeriodo" in allowed
 
 
+# Conjunto auditado via SELECT * nos MDBs OS Atual / Papelaria Atual.
+_MDB_PROTOCOL_COLUMNS = frozenset(
+    {
+        "NroProtocolo",
+        "AnoProtocolo",
+        "DataEntrada",
+        "ProcessoSolicit",
+        "CSnro",
+        "CategoriaLink",
+        "CodUsuarioLink",
+        "CodigoRequisic",
+        "NomeUsuario",
+        "Solicitante",
+        "OrgInteressado",
+        "SiglaOrgao",
+        "Titular",
+        "GabSalaUsuario",
+        "Localizacao",
+        "Andar",
+        "RamalUsuario",
+        "ContatoTrab",
+        "ResponsavelGrafLink",
+        "EntregaFormaLink",
+        "EntregPrazoLink",
+        "EntregData",
+        "EntregPeriodo",
+        "ReqLançada",
+        "ReqEntregue",
+        "DataConclusao",
+        "ArmazenadoEm",
+        "ContatoRecebim",
+        "RetiradaNome",
+        "RetiradaPonto",
+        "RecebimData",
+        "PontoEntrega",
+        "SetorEntrega",
+        "CancelamentoMotivo",
+        "CancelamentoPonto",
+        "CancelamentoData",
+        "CancelamentoSetor",
+        "CotaRepro",
+        "CotaCartao",
+        "ReimprimirOS",
+        "DebitarCGRAF",
+    }
+)
+_MDB_DETAILS_COLUMNS = frozenset(
+    {
+        "NroProtocoloLinkDet",
+        "AnoProtocoloLinkDet",
+        "ElemGrafBrasao",
+        "ElemGrafTimbre",
+        "ElemGrafArteGab",
+        "ElemGrafAssinatura",
+        "ElemGrafCarimbo",
+        "InsumosFornecidos",
+        "MaterialFornecido",
+        "ModeloDobra",
+        "Fotolito",
+        "ProvaImpressa",
+        "TipoPublicacaoLink",
+        "MaquinaLink",
+        "Pags",
+        "Mult4",
+        "Tiragem",
+        "CotaTotal",
+        "Titulo",
+        "FormatoLink",
+        "CoeficienteA4",
+        "PapelLink",
+        "PapelDescricao",
+        "FrenteVerso",
+        "Cores",
+        "CoresDescricao",
+        "DescAcabamento",
+        "Observ",
+        "CalcPgs1",
+        "CalcQtdCores1",
+        "CalcCor1",
+        "CalcPgs2",
+        "CalcQtdCores2",
+        "CalcCor2",
+        "CalcPgs3",
+        "CalcQtdCores3",
+        "CalcCor3",
+        "TiragemSolicitada",
+        "ModelosArq",
+    }
+)
+_PROTOCOL_BASE_GAP_FIELDS = (
+    "CodUsuarioLink",
+    "Solicitante",
+    "CotaCartao",
+    "ReimprimirOS",
+    "DebitarCGRAF",
+    "CancelamentoData",
+    "Funcionário",
+    "Funcionario",
+)
+_DETAILS_BASE_GAP_FIELDS = ("ElemGrafCarimbo", "Mult4", "CoeficienteA4")
+
+
+def test_allowlist_covers_audited_mdb_columns():
+    missing_proto = sorted(_MDB_PROTOCOL_COLUMNS - svc.core._PROTOCOL_SYNC_ALLOWLIST)
+    missing_det = sorted(_MDB_DETAILS_COLUMNS - svc.core._DETAILS_SYNC_ALLOWLIST)
+    assert missing_proto == [], missing_proto
+    assert missing_det == [], missing_det
+    assert len(_MDB_PROTOCOL_COLUMNS) == 41
+    assert len(_MDB_DETAILS_COLUMNS) == 39
+
+
+def test_new_mdb_fields_are_in_allowlist_base():
+    for col in _PROTOCOL_BASE_GAP_FIELDS:
+        assert col in svc.core._PROTOCOL_SYNC_ALLOWLIST_BASE
+    for col in _DETAILS_BASE_GAP_FIELDS:
+        assert col in svc.core._DETAILS_SYNC_ALLOWLIST_BASE
+        assert col not in svc.core._DETAILS_SYNC_EXTENDED
+
+
+def test_sync_allowed_columns_includes_new_mdb_fields():
+    proto_cols = [
+        "NroProtocolo",
+        "AnoProtocolo",
+        *_PROTOCOL_BASE_GAP_FIELDS,
+        "email_pt_html",
+        "email_pt_versao",
+        "email_pt_data",
+    ]
+    allowed_proto = svc.core.AndamentosSynchronizer._sync_allowed_columns(
+        None,
+        proto_cols,
+        svc.core._PROTOCOL_SYNC_ALLOWLIST,
+        ["NroProtocolo", "AnoProtocolo"],
+    )
+    for col in _PROTOCOL_BASE_GAP_FIELDS:
+        assert col in allowed_proto
+    assert "email_pt_html" not in allowed_proto
+    assert "email_pt_versao" not in allowed_proto
+    assert "email_pt_data" not in allowed_proto
+
+    det_cols = [
+        "NroProtocoloLinkDet",
+        "AnoProtocoloLinkDet",
+        *_DETAILS_BASE_GAP_FIELDS,
+        "email_pt_html",
+    ]
+    allowed_det = svc.core.AndamentosSynchronizer._sync_allowed_columns(
+        None,
+        det_cols,
+        svc.core._DETAILS_SYNC_ALLOWLIST,
+        ["NroProtocoloLinkDet", "AnoProtocoloLinkDet"],
+    )
+    for col in _DETAILS_BASE_GAP_FIELDS:
+        assert col in allowed_det
+    assert "email_pt_html" not in allowed_det
+
+
 def test_mark_cycle_error_does_not_reset_stall(tmp_hb, monkeypatch):
     hb = tmp_hb
     mono = {"t": 1000.0}
@@ -1020,7 +1177,12 @@ def test_is_resurrection_blocks_when_tombstone_has_null_hash(tmp_path, monkeypat
     sync = _make_sync_for_notify(tmp_path, monkeypatch)
     row = _sample_andamento()
     cursor = MagicMock()
-    cursor.fetchone.return_value = {"codstatus": row["CodStatus"]}
+    cursor.fetchone.return_value = {
+        "codstatus": row["CodStatus"],
+        "origem": "API",
+        "motivo": "Exclusão via Frontend",
+        "content_hash": None,
+    }
     conn = MagicMock()
     conn.cursor.return_value = cursor
     sync.conn_mgr.get_mysql = MagicMock(return_value=conn)
@@ -1029,13 +1191,17 @@ def test_is_resurrection_blocks_when_tombstone_has_null_hash(tmp_path, monkeypat
     sync._remove_from_deleted.assert_not_called()
 
 
-def test_is_resurrection_blocks_even_when_hash_would_differ(tmp_path, monkeypatch):
-    """Tombstone é autoridade: conteúdo diferente NÃO limpa deleted_andamentos."""
+def test_is_resurrection_blocks_api_tombstone_even_when_hash_would_differ(
+    tmp_path, monkeypatch
+):
+    """Tombstone da Web/API continua bloqueando ressurreição mesmo com conteúdo novo."""
     sync = _make_sync_for_notify(tmp_path, monkeypatch)
     row = _sample_andamento(Observaçao="conteudo novo")
     cursor = MagicMock()
     cursor.fetchone.return_value = {
         "codstatus": row["CodStatus"],
+        "origem": "API",
+        "motivo": "Exclusão via Frontend",
         "content_hash": "deadbeef" * 8,
     }
     conn = MagicMock()
@@ -1043,6 +1209,25 @@ def test_is_resurrection_blocks_even_when_hash_would_differ(tmp_path, monkeypatc
     sync.conn_mgr.get_mysql = MagicMock(return_value=conn)
     sync._remove_from_deleted = MagicMock()
     assert sync.is_resurrection(row["CodStatus"], row) is True
+    sync._remove_from_deleted.assert_not_called()
+
+
+def test_is_resurrection_allows_sync_tombstone_for_live_mdb(tmp_path, monkeypatch):
+    """Tombstone gerado pelo sync não bloqueia lançamento vivo no Access."""
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    row = _sample_andamento(Observaçao="conteudo novo")
+    cursor = MagicMock()
+    cursor.fetchone.return_value = {
+        "codstatus": row["CodStatus"],
+        "origem": "OS_Atual",
+        "motivo": "Exclusao confirmada no MySQL (ausente; tombstone/baseline)",
+        "content_hash": "deadbeef" * 8,
+    }
+    conn = MagicMock()
+    conn.cursor.return_value = cursor
+    sync.conn_mgr.get_mysql = MagicMock(return_value=conn)
+    sync._remove_from_deleted = MagicMock()
+    assert sync.is_resurrection(row["CodStatus"], row) is False
     sync._remove_from_deleted.assert_not_called()
 
 
@@ -1061,21 +1246,26 @@ def test_is_deleted_fail_closed_on_db_error(tmp_path, monkeypatch):
     assert sync.is_deleted("000882026-01") is True
 
 
-def test_perform_sync_tombstone_blocks_mdb_to_mysql_insert(tmp_path, monkeypatch):
-    """Linha só no MDB com tombstone não pode ressuscitar no MySQL."""
+def test_perform_sync_api_tombstone_propagates_delete_to_mdb(tmp_path, monkeypatch):
+    """Exclusão da Web/API + linha ainda no Access → delete_mdb; sem insert_mysql."""
     sync = _make_sync_for_notify(tmp_path, monkeypatch)
     mdb_row = _sample_andamento(CodStatus="000882026-55", Observaçao="ainda no access")
     monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
     monkeypatch.setattr(svc, "SYNC_MYSQL_TO_MDB_CATCHUP", True)
+    monkeypatch.setattr(svc, "SYNC_ALLOW_MDB_DELETE", True)
     _wire_perform_sync(sync, [], [mdb_row])
-    sync.is_deleted = MagicMock(return_value=True)
+    sync.detect_mysql_side_deletions = MagicMock(return_value={mdb_row["CodStatus"]})
     sync.perform_sync()
+    sync.delete_mdb.assert_called_once()
+    assert sync.delete_mdb.call_args.args[0] == mdb_row["CodStatus"]
     sync.insert_mysql.assert_not_called()
+    assert sync._hb.snapshot()["stats"]["del_m"] == 1
     assert sync._hb.snapshot()["stats"]["ins_m2y"] == 0
+    assert mdb_row["CodStatus"] not in sync._baseline
 
 
 def test_perform_sync_mysql_delete_propagates_to_mdb(tmp_path, monkeypatch):
-    """Ausente no MySQL + baseline → delete_mdb; sem insert_mysql."""
+    """Tombstone API + ausente no MySQL → delete_mdb; sem insert_mysql."""
     sync = _make_sync_for_notify(tmp_path, monkeypatch)
     mdb_row = _sample_andamento(CodStatus="000882026-66", Observaçao="orfao no access")
     monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
@@ -1084,7 +1274,6 @@ def test_perform_sync_mysql_delete_propagates_to_mdb(tmp_path, monkeypatch):
     _wire_perform_sync(sync, [], [mdb_row])
     sync._baseline[mdb_row["CodStatus"]] = sync._payload_hash(mdb_row)
     sync.detect_mysql_side_deletions = MagicMock(return_value={mdb_row["CodStatus"]})
-    sync.is_deleted = MagicMock(return_value=True)
     sync.perform_sync()
     sync.delete_mdb.assert_called_once()
     assert sync.delete_mdb.call_args.args[0] == mdb_row["CodStatus"]
@@ -1092,6 +1281,54 @@ def test_perform_sync_mysql_delete_propagates_to_mdb(tmp_path, monkeypatch):
     assert sync._hb.snapshot()["stats"]["del_m"] == 1
     assert sync._hb.snapshot()["stats"]["ins_m2y"] == 0
     assert mdb_row["CodStatus"] not in sync._baseline
+
+
+def test_perform_sync_failed_insert_does_not_mark_baseline(tmp_path, monkeypatch):
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    mdb_row = _sample_andamento(CodStatus="000882026-71", Observaçao="novo no access")
+    monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
+    monkeypatch.setattr(svc, "SYNC_MYSQL_TO_MDB_CATCHUP", True)
+    _wire_perform_sync(sync, [], [mdb_row])
+    sync.insert_mysql = MagicMock(return_value=False)
+    sync.perform_sync()
+    sync.insert_mysql.assert_called_once()
+    sync.delete_mdb.assert_not_called()
+    assert mdb_row["CodStatus"] not in sync._baseline
+    assert sync._hb.snapshot()["stats"]["ins_m2y"] == 0
+    assert sync._hb.snapshot()["stats"]["del_m"] == 0
+
+
+def test_perform_sync_mdb_only_baseline_inserts_mysql(tmp_path, monkeypatch):
+    """MDB vivo + baseline sem tombstone API → insert, não apaga Access."""
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    mdb_row = _sample_andamento(CodStatus="000882026-72", Observaçao="lancado no mdb")
+    monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
+    monkeypatch.setattr(svc, "SYNC_MYSQL_TO_MDB_CATCHUP", True)
+    _wire_perform_sync(sync, [], [mdb_row])
+    sync._baseline[mdb_row["CodStatus"]] = sync._payload_hash(mdb_row)
+    sync.insert_mysql = MagicMock(return_value=True)
+    sync.perform_sync()
+    sync.insert_mysql.assert_called_once()
+    sync.delete_mdb.assert_not_called()
+    assert sync._hb.snapshot()["stats"]["ins_m2y"] == 1
+    assert sync._hb.snapshot()["stats"]["del_m"] == 0
+    assert mdb_row["CodStatus"] in sync._baseline
+
+
+def test_perform_sync_sync_tombstone_live_mdb_inserts_mysql(tmp_path, monkeypatch):
+    """Tombstone de origem sync + linha viva no MDB → insert MySQL, sem delete_mdb."""
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    mdb_row = _sample_andamento(CodStatus="000882026-73", Observaçao="reuso no access")
+    monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
+    monkeypatch.setattr(svc, "SYNC_MYSQL_TO_MDB_CATCHUP", True)
+    _wire_perform_sync(sync, [], [mdb_row])
+    sync.is_deleted = MagicMock(return_value=True)
+    sync.insert_mysql = MagicMock(return_value=True)
+    sync.perform_sync()
+    sync.insert_mysql.assert_called_once()
+    sync.delete_mdb.assert_not_called()
+    assert sync._hb.snapshot()["stats"]["ins_m2y"] == 1
+    assert mdb_row["CodStatus"] in sync._baseline
 
 
 def test_detect_mysql_side_deletions_safety_lock(tmp_path, monkeypatch):
@@ -1103,15 +1340,56 @@ def test_detect_mysql_side_deletions_safety_lock(tmp_path, monkeypatch):
     ]
     mysql_codes: set = set()
     mdb_codes = {r["CodStatus"] for r in rows}
-    for r in rows:
-        sync._baseline[r["CodStatus"]] = "x"
-    sync.is_deleted = MagicMock(return_value=False)
+    sync._api_tombstone_present_strict = MagicMock(return_value=True)
     sync.mark_as_deleted = MagicMock()
     sync._cycle_stats = svc._empty_cycle_stats()
     result = sync.detect_mysql_side_deletions(mysql_codes, mdb_codes, rows, [])
     assert result == set()
     assert sync._cycle_stats["safety_lock_aborts"] == 1
     sync.mark_as_deleted.assert_not_called()
+
+
+def test_detect_mysql_side_deletions_ignores_baseline_without_api_tombstone(
+    tmp_path, monkeypatch
+):
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    monkeypatch.setattr(svc, "SYNC_ALLOW_MDB_DELETE", True)
+    row = _sample_andamento(CodStatus="000882026-80")
+    sync._baseline[row["CodStatus"]] = "x"
+    sync._api_tombstone_present_strict = MagicMock(return_value=False)
+    sync.mark_as_deleted = MagicMock()
+    sync._cycle_stats = svc._empty_cycle_stats()
+    result = sync.detect_mysql_side_deletions(
+        set(), {row["CodStatus"]}, [row], []
+    )
+    assert result == set()
+    sync.mark_as_deleted.assert_not_called()
+
+
+def test_detect_mysql_side_deletions_confirms_api_tombstone(tmp_path, monkeypatch):
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    monkeypatch.setattr(svc, "SYNC_ALLOW_MDB_DELETE", True)
+    row = _sample_andamento(CodStatus="000882026-81")
+    sync._api_tombstone_present_strict = MagicMock(return_value=True)
+    sync.mark_as_deleted = MagicMock()
+    sync._cycle_stats = svc._empty_cycle_stats()
+    result = sync.detect_mysql_side_deletions(
+        set(), {row["CodStatus"]}, [row], []
+    )
+    assert result == {row["CodStatus"]}
+    sync.mark_as_deleted.assert_called_once()
+
+
+def test_tombstone_is_api_delete_markers():
+    from sync_andamentos_v2_Old import tombstone_is_api_delete
+
+    assert tombstone_is_api_delete("API", None) is True
+    assert tombstone_is_api_delete("api", "qualquer") is True
+    assert tombstone_is_api_delete("OS_Atual", "Exclusão via Frontend") is True
+    assert tombstone_is_api_delete(
+        "OS_Atual", "Exclusao confirmada no MySQL (ausente; tombstone/baseline)"
+    ) is False
+    assert tombstone_is_api_delete("MySQL", "Exclusão MySQL propagada ao MDB pelo sync") is False
 
 
 def test_andamento_content_hash_ignores_ultimo_status():

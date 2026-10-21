@@ -146,13 +146,27 @@ def test_next_cod_status_avoids_session_reuse():
     from services.andamento_operacional import next_cod_status_for_os
 
     cursor = MagicMock()
-    # tabAndamento: -07; gravacao_pendente: -08; gravacao_externa: vazio
+    # tabAndamento: -07; gravacao_pendente: -08; gravacao_externa: vazio; deleted_andamentos: vazio
     cursor.fetchall.side_effect = [
         [{"CodStatus": "060592026-07"}],
         [{"CodStatus": "060592026-08"}],
         [],
+        [],
     ]
     assert next_cod_status_for_os(cursor, 6059, 2026) == "060592026-09"
+
+
+def test_next_cod_status_avoids_deleted_andamentos():
+    from services.andamento_operacional import next_cod_status_for_os
+
+    cursor = MagicMock()
+    cursor.fetchall.side_effect = [
+        [{"CodStatus": "060592026-07"}],
+        [],
+        [],
+        [{"codstatus": "060592026-09"}],
+    ]
+    assert next_cod_status_for_os(cursor, 6059, 2026) == "060592026-10"
 
 
 @patch("services.gravacao_pendente_service.get_active_pendente_session", return_value=None)

@@ -1,6 +1,7 @@
 """Campos numéricos vazios/irregulares não podem quebrar a ficha da OS."""
 from __future__ import annotations
 
+import re
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -74,9 +75,21 @@ def _os_row(**overrides):
     return row
 
 
-def _render(row, ano=2026, nro=123):
+def _render(row, ano=2026, nro=123, mode=None):
     with patch("routers.requisicao_routes.db.execute_query", return_value=[row]):
-        return generate_requisicao(ano, nro)
+        return generate_requisicao(
+            ano, nro, mode=mode, prova_capa=None, prova_miolo=None
+        )
+
+
+def _box_after_label(html: str, label: str) -> str:
+    pattern = (
+        rf'<span class="label">{re.escape(label)}</span>\s*'
+        r'<div class="value-box-menor"[^>]*>(.*?)</div>'
+    )
+    match = re.search(pattern, html, re.DOTALL)
+    assert match, f"campo {label} não encontrado"
+    return re.sub(r"\s+", "", match.group(1))
 
 
 @pytest.mark.parametrize(
@@ -137,3 +150,21 @@ def test_numero_pedido_os():
 def test_numero_pedido_sp():
     html = _render(_os_row(NroProtocolo=5123), nro=5123).body.decode("utf-8")
     assert "SP 05123/26" in html
+
+
+@pytest.mark.parametrize("mode", ["prova", "prova_ficha"])
+def test_ficha_prova_forca_tiragem_e_cota_repro_1(mode):
+    html = _render(
+        _os_row(CotaRepro=1500, Tiragem=100),
+        mode=mode,
+    ).body.decode("utf-8")
+
+    assert _box_after_label(html, "Cota Repro") == "1"
+    assert _box_after_label(html, "Tiragem") == "1"
+
+
+def test_ficha_normal_mantem_tiragem_e_cota_repro():
+    html = _render(_os_row(CotaRepro=1500, Tiragem=100)).body.decode("utf-8")
+
+    assert _box_after_label(html, "Cota Repro") == "1.500"
+    assert _box_after_label(html, "Tiragem") == "100"

@@ -238,6 +238,7 @@ def generate_requisicao(
 
         if mode in ("prova", "prova_ficha"):
             context["tiragem_qtd"] = "1"
+            context["cota_repro"] = "1"
             context["maquina_sugerida"] = "Digital Cor/PB"
 
         if mode == "prova_ficha":

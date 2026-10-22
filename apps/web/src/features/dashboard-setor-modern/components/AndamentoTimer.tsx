@@ -29,9 +29,15 @@ export function AndamentoClock({ children }: { children: ReactNode }) {
   return <ClockContext.Provider value={now}>{children}</ClockContext.Provider>;
 }
 
-export function AndamentoTimer({ since }: { since?: string | null }) {
+export function AndamentoTimer({
+  since,
+  observation,
+}: {
+  since?: string | null;
+  observation?: string | null;
+}) {
   const now = useContext(ClockContext);
-  const timestamp = parseAndamentoTime(since);
+  const timestamp = parseAndamentoTime(since, observation);
   const elapsed = elapsedParts(timestamp, now);
   const clockDelay = useMemo(
     () => -((Math.max(0, Date.now() - (timestamp ?? Date.now())) / 1000) % 60),

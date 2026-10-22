@@ -22,8 +22,8 @@ function compareItems(a: DashboardOsItem, b: DashboardOsItem): number {
   if (group) return group;
   const priority = priorityRank(a) - priorityRank(b);
   if (priority) return priority;
-  const timeA = parseAndamentoTime(a.last_update);
-  const timeB = parseAndamentoTime(b.last_update);
+  const timeA = parseAndamentoTime(a.last_update, a.observacao);
+  const timeB = parseAndamentoTime(b.last_update, b.observacao);
   if (timeA !== timeB) {
     if (timeA == null) return 1;
     if (timeB == null) return -1;

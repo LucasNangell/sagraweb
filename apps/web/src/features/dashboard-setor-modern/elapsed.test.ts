@@ -3,6 +3,55 @@ import { describe, expect, it } from "vitest";
 import { elapsedParts, parseAndamentoTime } from "./elapsed";
 
 describe("relógio de andamento", () => {
+  it.each([
+    "2026-10-22",
+    "2026-10-22 00:00:00",
+    "2026-10-22T00:00",
+    "2026-10-22T00:00:00.000000",
+    "2026-10-22T00:00:00Z",
+    "2026-10-22T00:00:00-03:00",
+  ])("combina %s com a hora registrada na observação", (date) => {
+    expect(parseAndamentoTime(date, "  09h30\nRecebido para execução")).toBe(
+      Date.parse("2026-10-22T12:30:00Z"),
+    );
+  });
+
+  it("aceita o horário legado com uma casa na hora e H maiúsculo", () => {
+    expect(parseAndamentoTime("2026-10-22", "9H05\nRecebido")).toBe(
+      Date.parse("2026-10-22T12:05:00Z"),
+    );
+  });
+
+  it.each([
+    "2026-10-22T08:15:00-03:00",
+    "2026-10-22T11:15:00Z",
+    "2026-10-22T00:00:01-03:00",
+    "2026-10-22T00:00:00.123-03:00",
+  ])("preserva o horário completo de %s", (date) => {
+    expect(parseAndamentoTime(date, "09h30\nRecebido")).toBe(Date.parse(date));
+  });
+
+  it.each([
+    null,
+    "",
+    "25h10",
+    "09h60",
+    "109h30",
+    "09h300",
+    "Entregar às 15h30",
+  ])("não usa uma observação sem carimbo válido (%s)", (observation) => {
+    expect(parseAndamentoTime("2026-10-22", observation)).toBeNull();
+    expect(parseAndamentoTime("2026-10-22 00:00:00", observation)).toBe(
+      Date.parse("2026-10-22T03:00:00Z"),
+    );
+  });
+
+  it("mantém meia-noite quando o horário da observação é 00h00", () => {
+    expect(parseAndamentoTime("2026-10-22", "00h00\nEntrada")).toBe(
+      Date.parse("2026-10-22T03:00:00Z"),
+    );
+  });
+
   it("interpreta timestamps do banco em Brasília sem depender do fuso do monitor", () => {
     expect(parseAndamentoTime("2026-10-21 09:30:00")).toBe(
       Date.parse("2026-10-21T12:30:00Z"),

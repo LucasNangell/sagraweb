@@ -46,7 +46,10 @@ export function ModernQueueCard({
             <span>{registeredBy}</span>
           </p>
         )}
-        <AndamentoTimer since={item.last_update} />
+        <AndamentoTimer
+          since={item.last_update}
+          observation={item.observacao}
+        />
       </div>
     </article>
   );

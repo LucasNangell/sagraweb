@@ -23,6 +23,7 @@ SPA_ROUTE_PERMISSIONS: dict[str, str] = {
     "/relatorios": "sb_relatorio",
     "/painel/global": "sb_dashboard_global",
     "/painel/setor": "sb_dashboard_setor",
+    "/painel/setor-moderno": "sb_dashboard_setor",
     "/painel/tablet": "sb_dashboard_tablet",
     "/painel/celular": "sb_dashboard_tablet",
     "/painel/gravacao": "sb_dashboard_tablet",

@@ -361,6 +361,7 @@ export function hashDashboardItems(items: Iterable<PcpQueueItem>): string {
         item.setor ?? "",
         item.pcp_ordem ?? "",
         item.last_update ?? "",
+        item.observacao ?? "",
         item.prioridade ?? "",
         item.andamento_usuario ?? "",
       ].join("|");
@@ -377,7 +378,7 @@ export function hashDashboardBoard(columns: DashboardDisplayColumn[]): string {
         col.items
           .map(
             (item) =>
-              `${item.uniqueKey}:${item.displaySituacao}:${item.pcp_ordem ?? ""}:${item.isNew ? 1 : 0}:${item.last_update ?? ""}:${item.prioridade ?? ""}:${item.andamento_usuario ?? ""}`,
+              `${item.uniqueKey}:${item.displaySituacao}:${item.pcp_ordem ?? ""}:${item.isNew ? 1 : 0}:${item.last_update ?? ""}:${item.observacao ?? ""}:${item.prioridade ?? ""}:${item.andamento_usuario ?? ""}`,
           )
           .join(","),
       ].join("="),

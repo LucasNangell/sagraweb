@@ -51,6 +51,32 @@ function numbers(items: PcpQueueItem[]) {
 }
 
 describe("ordenação do painel moderno", () => {
+  it("usa a hora da observação e publica alterações isoladas nesse horário", () => {
+    const master = new Map<string, DashboardOsItem>();
+    const initial = [
+      item(101, null, "2026-10-22 10:00:00", 1),
+      {
+        ...item(102, null, "2026-10-22 00:00:00", 0),
+        observacao: "11h00\nRecebido",
+      },
+    ];
+    const first = board(initial, master);
+    const signature = hashDashboardBoard(first);
+    expect(
+      sortModernDashboardColumns(first)[0]!.items.map((op) => op.nr_os),
+    ).toEqual([101, 102]);
+    const updated = [
+      initial[0]!,
+      { ...initial[1]!, observacao: "09h00\nRecebido" },
+    ];
+    expect(hashDashboardItems(updated)).not.toBe(hashDashboardItems(initial));
+    const next = board(updated, master);
+    expect(hashDashboardBoard(next)).not.toBe(signature);
+    expect(
+      sortModernDashboardColumns(next)[0]!.items.map((op) => op.nr_os),
+    ).toEqual([102, 101]);
+  });
+
   it("mantém OS antes de SP, com Prometido, Solicitado e normal em cada grupo", () => {
     expect(
       numbers([

@@ -1,6 +1,11 @@
 import type { PcpQueueItem } from "@/api/pcp";
+import type { InboxOsRef } from "@/features/email/types";
 
-import { DASHBOARD_NEW_HIGHLIGHT_MS } from "./constants";
+import {
+  DASHBOARD_NEW_HIGHLIGHT_MS,
+  INBOX_COLUMN_SOURCE,
+  INBOX_DISPLAY_SITUACAO,
+} from "./constants";
 import type {
   DashboardColumnConfig,
   DashboardConfig,
@@ -8,6 +13,25 @@ import type {
   DashboardOsItem,
   DashboardPriorityType,
 } from "./types";
+
+export function isInboxColumn(
+  col: Pick<DashboardColumnConfig, "source">,
+): boolean {
+  return col.source === INBOX_COLUMN_SOURCE;
+}
+
+export function dashboardConfigHasInboxColumn(config: DashboardConfig): boolean {
+  return config.columns.some(isInboxColumn);
+}
+
+export function hashInboxOsRefs(
+  refs: Iterable<{ os: number; ano: number; date?: string | null }>,
+): string {
+  return [...refs]
+    .map((ref) => `${ref.os}-${ref.ano}:${ref.date ?? ""}`)
+    .sort()
+    .join(";");
+}
 
 function resolvePriorityType(prioridade?: string | null): DashboardPriorityType {
   if (!prioridade) {
@@ -188,6 +212,9 @@ export function collectDashboardSectors(config: DashboardConfig): string[] {
   };
   push(config.sector);
   for (const col of config.columns) {
+    if (isInboxColumn(col)) {
+      continue;
+    }
     push(resolveColumnSector(col, config.sector));
   }
   return sectors;
@@ -303,6 +330,9 @@ function findColumnId(
 ): string | null {
   const situacao = item.situacao ?? "";
   const colIndex = config.columns.findIndex((col) => {
+    if (isInboxColumn(col)) {
+      return false;
+    }
     const columnSector = resolveColumnSector(col, config.sector);
     if (!osBelongsToDashboardSector(item, columnSector)) {
       return false;
@@ -402,11 +432,107 @@ export function refreshDashboardHighlights(
   return changed;
 }
 
+function inboxItemKey(os: number, ano: number): string {
+  return `inbox:${os}-${ano}`;
+}
+
+function emailTime(value?: string | null): number {
+  if (!value) {
+    return 0;
+  }
+  const t = new Date(value).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
+export function sortInboxItemsNewestFirst(
+  a: DashboardOsItem,
+  b: DashboardOsItem,
+): number {
+  const delta = emailTime(b.last_update) - emailTime(a.last_update);
+  if (delta !== 0) {
+    return delta;
+  }
+  return a.uniqueKey.localeCompare(b.uniqueKey, "pt-BR", { numeric: true });
+}
+
+function buildInboxDashboardItem(
+  ref: InboxOsRef,
+  sourceItem: DashboardOsItem | undefined,
+): DashboardOsItem {
+  const nr_os = ref.os;
+  const ano = ref.ano;
+  const last_update = ref.date || sourceItem?.last_update || null;
+  if (sourceItem) {
+    return {
+      ...sourceItem,
+      nr_os,
+      ano,
+      uniqueKey: inboxItemKey(nr_os, ano),
+      displaySituacao: INBOX_DISPLAY_SITUACAO,
+      last_update,
+      lastColumnId: null,
+      isNew: false,
+      highlightUntil: 0,
+      row_kind: "main_os",
+      sub_os_id: undefined,
+      componente_nome: null,
+    };
+  }
+  return {
+    nr_os,
+    ano,
+    uniqueKey: inboxItemKey(nr_os, ano),
+    priorityType: null,
+    isNew: false,
+    displaySituacao: INBOX_DISPLAY_SITUACAO,
+    pcp_ordem: null,
+    last_update,
+    situacao: INBOX_DISPLAY_SITUACAO,
+  };
+}
+
+function fillInboxColumns(
+  columns: DashboardDisplayColumn[],
+  config: DashboardConfig,
+  masterOpsMap: Map<string, DashboardOsItem>,
+  inboxOs: InboxOsRef[] | undefined,
+): void {
+  const refs = inboxOs ?? [];
+  for (let i = 0; i < config.columns.length; i += 1) {
+    const col = config.columns[i];
+    if (!col || !isInboxColumn(col)) {
+      continue;
+    }
+    const uniqueRefs = new Map<string, InboxOsRef>();
+    for (const ref of refs) {
+      const os = Number(ref.os);
+      const ano = Number(ref.ano);
+      if (!Number.isFinite(os) || !Number.isFinite(ano) || os <= 0 || ano <= 0) {
+        continue;
+      }
+      const pairKey = `${os}-${ano}`;
+      const previous = uniqueRefs.get(pairKey);
+      if (previous && emailTime(previous.date) >= emailTime(ref.date)) {
+        continue;
+      }
+      uniqueRefs.set(pairKey, { os, ano, date: ref.date });
+    }
+    const items = [...uniqueRefs.values()].map((ref) =>
+      buildInboxDashboardItem(
+        ref,
+        masterOpsMap.get(`${ref.os}-${ref.ano}`),
+      ),
+    );
+    items.sort(sortInboxItemsNewestFirst);
+    columns[i]!.items = items;
+  }
+}
+
 export function processDashboardData(
   rawData: PcpQueueItem[],
   config: DashboardConfig,
   masterOpsMap: Map<string, DashboardOsItem>,
-  options?: { now?: number; isInitialLoad?: boolean },
+  options?: { now?: number; isInitialLoad?: boolean; inboxOs?: InboxOsRef[] },
 ): {
   columns: DashboardDisplayColumn[];
   unmappedItems: DashboardOsItem[];
@@ -499,7 +625,12 @@ export function processDashboardData(
     }
   }
 
+  fillInboxColumns(tempColumns, config, masterOpsMap, options?.inboxOs);
+
   for (const col of tempColumns) {
+    if (isInboxColumn(col)) {
+      continue;
+    }
     col.items.sort(sortByPcp);
   }
   tempUnmapped.sort(sortByPcp);
@@ -538,6 +669,7 @@ export function buildDashboardConfigSignature(config: DashboardConfig): string {
       statuses: col.statuses,
       sector: (col.sector ?? "").trim() || undefined,
       hideWhenEmpty: col.hideWhenEmpty === true ? true : undefined,
+      source: isInboxColumn(col) ? INBOX_COLUMN_SOURCE : undefined,
     })),
   });
 }

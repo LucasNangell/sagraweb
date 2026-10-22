@@ -129,6 +129,26 @@ describe("ordenação do painel moderno", () => {
     ).toEqual([104, 101, 102, 103]);
   });
 
+  it("mantém e-mails da caixa de entrada do mais recente para o mais antigo", () => {
+    const inboxConfig: DashboardConfig = {
+      sector: "SEFOC",
+      columnCount: 1,
+      columns: [
+        { id: "inbox", title: "Novo e-mail", statuses: [], source: "inbox" },
+      ],
+    };
+    const columns = processDashboardData([], inboxConfig, new Map(), {
+      isInitialLoad: true,
+      inboxOs: [
+        { os: 10, ano: 2026, date: "2026-10-21T08:00:00Z" },
+        { os: 20, ano: 2026, date: "2026-10-22T12:00:00Z" },
+      ],
+    }).columns;
+    expect(
+      sortModernDashboardColumns(columns)[0]!.items.map((op) => op.nr_os),
+    ).toEqual([20, 10]);
+  });
+
   it("preserva a sequência original do PCP e os metadados das colunas", () => {
     const original = board([
       item(102, null, undefined, 0),

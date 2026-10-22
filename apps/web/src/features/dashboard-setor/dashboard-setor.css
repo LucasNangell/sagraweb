@@ -646,6 +646,12 @@
   font-size: 0.9rem;
 }
 
+.dashboard-setor-inbox-source-note {
+  margin: 0.35rem 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--ds-text-secondary);
+}
+
 .dashboard-setor-hide-empty-option {
   display: flex;
   align-items: center;

@@ -1,8 +1,13 @@
 import { Settings, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { INBOX_COLUMN_SOURCE, INBOX_DISPLAY_SITUACAO } from "../constants";
 import type { DashboardConfig, DashboardColumnConfig } from "../types";
 import "../dashboard-setor.css";
+
+function isGenericColumnTitle(title: string): boolean {
+  return !title.trim() || /^Coluna\s+\d+$/i.test(title.trim());
+}
 
 interface DashboardSetorSettingsModalProps {
   open: boolean;
@@ -133,6 +138,34 @@ export function DashboardSetorSettingsModal({
         if ("hideWhenEmpty" in patch && patch.hideWhenEmpty !== true) {
           delete next.hideWhenEmpty;
         }
+        if ("source" in patch && patch.source !== INBOX_COLUMN_SOURCE) {
+          delete next.source;
+        }
+        return next;
+      }),
+    }));
+  };
+
+  const toggleInboxSource = (idx: number, enabled: boolean) => {
+    setTempConfig((prev) => ({
+      ...prev,
+      columns: prev.columns.map((col, i) => {
+        if (i !== idx) {
+          return col;
+        }
+        if (!enabled) {
+          const next = { ...col };
+          delete next.source;
+          return next;
+        }
+        const next: DashboardColumnConfig = {
+          ...col,
+          source: INBOX_COLUMN_SOURCE,
+          title: isGenericColumnTitle(col.title)
+            ? INBOX_DISPLAY_SITUACAO
+            : col.title,
+        };
+        delete next.sector;
         return next;
       }),
     }));
@@ -242,33 +275,35 @@ export function DashboardSetorSettingsModal({
                     }
                   />
                 </div>
-                <div className="dashboard-setor-column-sector-field">
-                  <label htmlFor={`col-sector-${col.id}`}>
-                    Setor desta coluna
-                  </label>
-                  <select
-                    id={`col-sector-${col.id}`}
-                    className="dashboard-setor-form-control dashboard-setor-column-sector-input"
-                    value={(col.sector ?? "").trim()}
-                    onChange={(e) => {
-                      const next = e.target.value.trim();
-                      updateColumn(
-                        idx,
-                        next ? { sector: next } : { sector: undefined },
-                      );
-                    }}
-                  >
-                    <option value="">Mesmo do painel</option>
-                    {(setoresList.length === 0 && (col.sector ?? "").trim()
-                      ? [(col.sector ?? "").trim()]
-                      : setoresList
-                    ).map((setor) => (
-                      <option key={setor} value={setor}>
-                        {setor}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {col.source !== INBOX_COLUMN_SOURCE && (
+                  <div className="dashboard-setor-column-sector-field">
+                    <label htmlFor={`col-sector-${col.id}`}>
+                      Setor desta coluna
+                    </label>
+                    <select
+                      id={`col-sector-${col.id}`}
+                      className="dashboard-setor-form-control dashboard-setor-column-sector-input"
+                      value={(col.sector ?? "").trim()}
+                      onChange={(e) => {
+                        const next = e.target.value.trim();
+                        updateColumn(
+                          idx,
+                          next ? { sector: next } : { sector: undefined },
+                        );
+                      }}
+                    >
+                      <option value="">Mesmo do painel</option>
+                      {(setoresList.length === 0 && (col.sector ?? "").trim()
+                        ? [(col.sector ?? "").trim()]
+                        : setoresList
+                      ).map((setor) => (
+                        <option key={setor} value={setor}>
+                          {setor}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <button
                   type="button"
                   className="dashboard-setor-btn dashboard-setor-btn-danger"
@@ -281,21 +316,38 @@ export function DashboardSetorSettingsModal({
                 </button>
               </div>
 
-              <p className="dashboard-setor-andamentos-label">
-                Andamentos desta coluna:
-              </p>
-              <div className="dashboard-setor-andamentos-grid">
-                {andamentosList.map((andamento) => (
-                  <label key={`${col.id}-${andamento}`}>
-                    <input
-                      type="checkbox"
-                      checked={col.statuses.includes(andamento)}
-                      onChange={() => toggleAndamento(idx, andamento)}
-                    />
-                    {andamento}
-                  </label>
-                ))}
-              </div>
+              <label className="dashboard-setor-hide-empty-option">
+                <input
+                  type="checkbox"
+                  checked={col.source === INBOX_COLUMN_SOURCE}
+                  onChange={(e) => toggleInboxSource(idx, e.target.checked)}
+                />
+                Fonte: caixa de entrada
+              </label>
+              {col.source === INBOX_COLUMN_SOURCE ? (
+                <p className="dashboard-setor-inbox-source-note">
+                  Mostra OSs identificadas no assunto dos e-mails não lidos. O
+                  card exibe "Novo e-mail" no lugar da situação.
+                </p>
+              ) : (
+                <>
+                  <p className="dashboard-setor-andamentos-label">
+                    Andamentos desta coluna:
+                  </p>
+                  <div className="dashboard-setor-andamentos-grid">
+                    {andamentosList.map((andamento) => (
+                      <label key={`${col.id}-${andamento}`}>
+                        <input
+                          type="checkbox"
+                          checked={col.statuses.includes(andamento)}
+                          onChange={() => toggleAndamento(idx, andamento)}
+                        />
+                        {andamento}
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
 
               <label className="dashboard-setor-hide-empty-option">
                 <input

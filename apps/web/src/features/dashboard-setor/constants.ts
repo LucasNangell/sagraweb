@@ -2,6 +2,10 @@ import type { DashboardConfig } from "./types";
 
 export const DASHBOARD_CONFIG_STORAGE_KEY = "sagra_dashboard_config";
 
+/** Coluna alimentada pelos e-mails não lidos da caixa de entrada. */
+export const INBOX_COLUMN_SOURCE = "inbox";
+export const INBOX_DISPLAY_SITUACAO = "Novo e-mail";
+
 export const DEFAULT_DASHBOARD_CONFIG: DashboardConfig = {
   sector: "SEFOC",
   columnCount: 4,

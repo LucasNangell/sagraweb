@@ -940,6 +940,20 @@ def get_email_inbox(session: SessionData = Depends(require_session)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/inbox-os")
+def get_email_inbox_os(session: SessionData = Depends(require_session)):
+    """OS/Ano identificáveis nos e-mails não lidos da caixa de entrada (sem corpo)."""
+    try:
+        from services.email_inbox_os_service import fetch_inbox_os_refs
+
+        service, cfg = _resolve_ews_for_ponto(str(session.ponto))
+        return fetch_inbox_os_refs(service, cfg)
+    except Exception as exc:
+        logger.error("Error fetching inbox OS refs: %s", exc)
+        return []
+
+
+
 def _safe_filename(value: str, fallback: str = "email") -> str:
     cleaned = (value or "").strip()
     if not cleaned:

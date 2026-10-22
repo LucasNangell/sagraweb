@@ -1,5 +1,7 @@
 import type { PcpQueueItem } from "@/api/pcp";
 
+export type DashboardColumnSource = "inbox";
+
 export interface DashboardColumnConfig {
   id: string;
   title: string;
@@ -8,6 +10,8 @@ export interface DashboardColumnConfig {
   sector?: string;
   /** Se true, coluna não aparece no board quando items.length === 0 */
   hideWhenEmpty?: boolean;
+  /** `inbox` = e-mails não lidos; omitido = andamentos da OS */
+  source?: DashboardColumnSource;
 }
 
 export interface DashboardConfig {

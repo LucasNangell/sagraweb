@@ -1,4 +1,4 @@
-import { DEFAULT_DASHBOARD_CONFIG } from "./constants";
+import { DEFAULT_DASHBOARD_CONFIG, INBOX_COLUMN_SOURCE } from "./constants";
 import type { DashboardColumnConfig, DashboardConfig } from "./types";
 
 function normalizeColumn(
@@ -6,12 +6,14 @@ function normalizeColumn(
   index: number,
 ): DashboardColumnConfig {
   const sector = typeof col.sector === "string" ? col.sector.trim() : "";
+  const isInbox = col.source === INBOX_COLUMN_SOURCE;
   return {
     id: col.id || `col_${index + 1}`,
     title: col.title || `Coluna ${index + 1}`,
     statuses: Array.isArray(col.statuses) ? col.statuses : [],
-    ...(sector ? { sector } : {}),
+    ...(sector && !isInbox ? { sector } : {}),
     ...(col.hideWhenEmpty === true ? { hideWhenEmpty: true } : {}),
+    ...(isInbox ? { source: INBOX_COLUMN_SOURCE } : {}),
   };
 }
 

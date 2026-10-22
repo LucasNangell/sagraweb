@@ -46,6 +46,12 @@ export interface EmailNotificationStatus {
   last_check: string;
 }
 
+export interface InboxOsRef {
+  os: number;
+  ano: number;
+  date?: string | null;
+}
+
 export interface PtHtmlResponse {
   html: string;
   versao?: string | null;

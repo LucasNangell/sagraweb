@@ -10,6 +10,7 @@ import type {
   EmailSendPlanResponse,
   EmailProofFilesResponse,
   InboxEmail,
+  InboxOsRef,
   PendenciaOs,
   ProtocoloLookup,
   PtHtmlResponse,
@@ -46,6 +47,10 @@ async function apiPost<T>(path: string, body: unknown): Promise<T> {
 
 export async function fetchEmailInbox(): Promise<InboxEmail[]> {
   return apiFetch<InboxEmail[]>("/email/inbox");
+}
+
+export async function fetchEmailInboxOs(): Promise<InboxOsRef[]> {
+  return apiFetch<InboxOsRef[]>("/email/inbox-os");
 }
 
 export async function fetchEmailPendencias(

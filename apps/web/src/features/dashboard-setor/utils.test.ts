@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { PcpQueueItem } from "@/api/pcp";
 
+import { INBOX_COLUMN_SOURCE, INBOX_DISPLAY_SITUACAO } from "./constants";
 import {
   collectDashboardSectors,
   formatQueueDisplayLabel,
@@ -247,6 +248,24 @@ describe("resolveColumnSector / collectDashboardSectors", () => {
     };
     expect(collectDashboardSectors(config)).toEqual(["SEFOC", "Papelaria"]);
   });
+
+  it("ignora override de setor em coluna da caixa de entrada", () => {
+    const config: DashboardConfig = {
+      sector: "SEFOC",
+      columnCount: 2,
+      columns: [
+        { id: "exec", title: "Execução", statuses: ["Em Execução"] },
+        {
+          id: "inbox",
+          title: "Novo e-mail",
+          statuses: [],
+          source: INBOX_COLUMN_SOURCE,
+          sector: "Papelaria",
+        },
+      ],
+    };
+    expect(collectDashboardSectors(config)).toEqual(["SEFOC"]);
+  });
 });
 
 describe("processDashboardData column sector override", () => {
@@ -419,5 +438,77 @@ describe("getVisibleDashboardColumns", () => {
       "always",
       "shown",
     ]);
+  });
+});
+
+describe("processDashboardData coluna inbox", () => {
+  const config: DashboardConfig = {
+    sector: "SEFOC",
+    columnCount: 2,
+    columns: [
+      { id: "exec", title: "Execução", statuses: ["Em Execução"] },
+      {
+        id: "inbox",
+        title: "Novo e-mail",
+        statuses: ["Em Execução"],
+        source: INBOX_COLUMN_SOURCE,
+      },
+    ],
+  };
+
+  it("preenche a coluna inbox e mantém a OS na coluna da situação", () => {
+    const raw: PcpQueueItem[] = [
+      {
+        nr_os: 1396,
+        ano: 2026,
+        situacao: "Em Execução",
+        setor: "SEFOC",
+        prioridade: "Prometido p/ 10/10",
+      },
+    ];
+    const processed = processDashboardData(raw, config, new Map(), {
+      isInitialLoad: true,
+      inboxOs: [{ os: 1396, ano: 2026, date: "2026-10-22T12:00:00Z" }],
+    });
+    expect(processed.columns[0]!.items.map((item) => item.nr_os)).toEqual([1396]);
+    expect(processed.columns[0]!.items[0]!.displaySituacao).toBe("Em Execução");
+    expect(processed.columns[1]!.items.map((item) => item.nr_os)).toEqual([1396]);
+    expect(processed.columns[1]!.items[0]!.displaySituacao).toBe(
+      INBOX_DISPLAY_SITUACAO,
+    );
+    expect(processed.columns[1]!.items[0]!.uniqueKey).toBe("inbox:1396-2026");
+    expect(processed.columns[1]!.items[0]!.priorityType).toBe("priority-high");
+    expect(processed.columns[0]!.items[0]).not.toBe(processed.columns[1]!.items[0]);
+  });
+
+  it("não gera card para OS/Ano inválidos e deduplica a mesma OS", () => {
+    const processed = processDashboardData([], config, new Map(), {
+      isInitialLoad: true,
+      inboxOs: [
+        { os: 0, ano: 2026, date: "2026-10-22T12:00:00Z" },
+        { os: 100, ano: 2026, date: "2026-10-21T08:00:00Z" },
+        { os: 100, ano: 2026, date: "2026-10-22T09:00:00Z" },
+        { os: 200, ano: 2026, date: "2026-10-22T10:00:00Z" },
+      ],
+    });
+    expect(processed.columns[0]!.items).toHaveLength(0);
+    expect(processed.columns[1]!.items.map((item) => item.nr_os)).toEqual([
+      200, 100,
+    ]);
+    expect(processed.columns[1]!.items[1]!.last_update).toBe(
+      "2026-10-22T09:00:00Z",
+    );
+  });
+
+  it("mostra OS da caixa de entrada mesmo fora do setor do painel", () => {
+    const processed = processDashboardData([], config, new Map(), {
+      isInitialLoad: true,
+      inboxOs: [{ os: 88, ano: 2026, date: "2026-10-22T11:00:00Z" }],
+    });
+    expect(processed.columns[1]!.items).toHaveLength(1);
+    expect(processed.columns[1]!.items[0]!.displaySituacao).toBe(
+      INBOX_DISPLAY_SITUACAO,
+    );
+    expect(processed.columns[1]!.items[0]!.nr_os).toBe(88);
   });
 });

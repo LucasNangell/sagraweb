@@ -2,6 +2,10 @@ import type {
   DashboardDisplayColumn,
   DashboardOsItem,
 } from "@/features/dashboard-setor/types";
+import {
+  isInboxColumn,
+  sortInboxItemsNewestFirst,
+} from "@/features/dashboard-setor/utils";
 
 import { parseAndamentoTime } from "./elapsed";
 
@@ -38,6 +42,8 @@ export function sortModernDashboardColumns(
 ): DashboardDisplayColumn[] {
   return columns.map((column) => ({
     ...column,
-    items: [...column.items].sort(compareItems),
+    items: [...column.items].sort(
+      isInboxColumn(column) ? sortInboxItemsNewestFirst : compareItems,
+    ),
   }));
 }

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { fetchEmailInboxOs } from "@/api/email";
 import { fetchAndamentos } from "@/api/pcp";
 import { fetchSetores } from "@/api/auxLookups";
+import type { InboxOsRef } from "@/features/email/types";
 import { isAdminForceReload } from "@/features/realtime/adminForceRefresh";
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 
@@ -24,10 +26,12 @@ import {
 import {
   buildDashboardConfigSignature,
   collectDashboardSectors,
+  dashboardConfigHasInboxColumn,
   dashboardItemKey,
   emptyDisplayColumns,
   hashDashboardBoard,
   hashDashboardItems,
+  hashInboxOsRefs,
   osBelongsToAnyDashboardSector,
   processDashboardData,
   refreshDashboardHighlights,
@@ -110,8 +114,10 @@ export function useDashboardSetorData({
 
   const masterOpsMapRef = useRef<Map<string, DashboardOsItem>>(new Map());
   const itemsMapRef = useRef<Map<string, PcpQueueItem>>(new Map());
+  const inboxOsRef = useRef<InboxOsRef[]>([]);
   const boardSignatureRef = useRef("");
   const rawItemsSignatureRef = useRef("");
+  const inboxSignatureRef = useRef("");
   const fetchGenerationRef = useRef(0);
   const isFetchingRef = useRef(false);
   const isPatchingRef = useRef(false);
@@ -193,6 +199,7 @@ export function useDashboardSetorData({
         masterOpsMapRef.current,
         {
           isInitialLoad: options?.isInitialLoad === true,
+          inboxOs: inboxOsRef.current,
         },
       );
       return publishBoard(processed, options);
@@ -210,13 +217,16 @@ export function useDashboardSetorData({
       },
     ) => {
       const nextRawSignature = hashDashboardItems(raw);
+      const nextInboxSignature = hashInboxOsRefs(inboxOsRef.current);
       if (
         nextRawSignature === rawItemsSignatureRef.current &&
+        nextInboxSignature === inboxSignatureRef.current &&
         !options?.isInitialLoad
       ) {
         return false;
       }
       rawItemsSignatureRef.current = nextRawSignature;
+      inboxSignatureRef.current = nextInboxSignature;
       syncItemsMapFromList(itemsMapRef.current, raw);
       return reprocessFromItemsMap(options);
     },
@@ -242,6 +252,16 @@ export function useDashboardSetorData({
 
       try {
         const sectors = collectDashboardSectors(configRef.current);
+        const hasInboxColumn = dashboardConfigHasInboxColumn(configRef.current);
+        const inboxPromise = hasInboxColumn
+          ? fetchEmailInboxOs().catch((err) => {
+              console.warn(
+                "[DashboardSetor] Falha ao carregar e-mails da caixa de entrada:",
+                err,
+              );
+              return inboxOsRef.current;
+            })
+          : Promise.resolve<InboxOsRef[]>([]);
         const raw = await fetchDashboardSectorData(
           sectors,
           isInitialLoad
@@ -256,6 +276,10 @@ export function useDashboardSetorData({
               }
             : undefined,
         );
+        if (generation !== fetchGenerationRef.current) {
+          return;
+        }
+        inboxOsRef.current = hasInboxColumn ? await inboxPromise : [];
         if (generation !== fetchGenerationRef.current) {
           return;
         }
@@ -295,8 +319,10 @@ export function useDashboardSetorData({
   const resetDataState = useCallback(() => {
     masterOpsMapRef.current.clear();
     itemsMapRef.current.clear();
+    inboxOsRef.current = [];
     boardSignatureRef.current = "";
     rawItemsSignatureRef.current = "";
+    inboxSignatureRef.current = "";
     setColumns(emptyDisplayColumns(configRef.current));
     setSectorItemKeys(new Set());
     setLastUpdated("Carregando dados");
@@ -537,8 +563,10 @@ export function useDashboardSetorData({
   useEffect(() => {
     masterOpsMapRef.current.clear();
     itemsMapRef.current.clear();
+    inboxOsRef.current = [];
     boardSignatureRef.current = "";
     rawItemsSignatureRef.current = "";
+    inboxSignatureRef.current = "";
     setColumns(emptyDisplayColumns(configRef.current));
     setSectorItemKeys(new Set());
     setLastUpdated("Carregando dados");

@@ -180,6 +180,8 @@ export const homeTestIds = {
   osNotificarClose: "os-notificar-close",
   osNotificarSend: "os-notificar-send",
   osNotificarCancel: "os-notificar-cancel",
+  osNotificarTest: "os-notificar-test",
+  osNotificarStatus: "os-notificar-status",
 
   osMoverRoot: "os-mover-root",
   osMoverClose: "os-mover-close",

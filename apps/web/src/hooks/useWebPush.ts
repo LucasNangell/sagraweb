@@ -4,6 +4,7 @@ import {
   fetchVapidPublicKey,
   registerPushSubscription,
 } from "@/api/osNotificacao";
+import { appScope, getNotificationSupport } from "@/lib/nativeNotification";
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -16,15 +17,9 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   return output as Uint8Array<ArrayBuffer>;
 }
 
-function appScope(): string {
-  const base = import.meta.env.BASE_URL || "/";
-  return base.endsWith("/") ? base : `${base}/`;
-}
-
 /** URL absoluta de asset estático (SW precisa de origem, não path relativo). */
 function staticAssetUrl(filename: string): string {
-  const scope = appScope();
-  return new URL(filename, `${window.location.origin}${scope}`).href;
+  return new URL(filename, `${window.location.origin}${appScope()}`).href;
 }
 
 function workboxSwUrl(): string {
@@ -36,7 +31,7 @@ function standalonePushSwUrl(): string {
 }
 
 function useWorkboxServiceWorker(): boolean {
-  return import.meta.env.PROD || import.meta.env.VITE_PWA_DEV === "true";
+  return import.meta.env.PROD;
 }
 
 function scriptHandlesPush(scriptUrl: string, workbox: boolean): boolean {
@@ -47,9 +42,17 @@ function scriptHandlesPush(scriptUrl: string, workbox: boolean): boolean {
   return workbox && url.includes("sw.js");
 }
 
+export type PushSubscribeStatus = "ok" | "unavailable" | "failed";
+
+export interface BrowserPushResult {
+  permission: boolean;
+  push: PushSubscribeStatus;
+  reason?: string;
+}
+
 /**
  * Garante SW com handler de push (push-sw.js ou Workbox + importScripts).
- * Em DEV sem PWA: registra push-sw.js isolado (necessário para push com aba fechada).
+ * Em DEV: registra push-sw.js isolado (Vite não serve /sw.js).
  */
 async function ensurePushServiceWorker(): Promise<ServiceWorkerRegistration> {
   if (!("serviceWorker" in navigator)) {
@@ -90,8 +93,6 @@ async function ensurePushServiceWorker(): Promise<ServiceWorkerRegistration> {
     });
   }
 
-  await navigator.serviceWorker.ready;
-
   const active = await navigator.serviceWorker.getRegistration(scope);
   if (!active?.pushManager) {
     throw new Error("Service Worker push indisponível.");
@@ -99,61 +100,80 @@ async function ensurePushServiceWorker(): Promise<ServiceWorkerRegistration> {
   return active;
 }
 
+async function ensureNotificationPermission(): Promise<boolean> {
+  const support = getNotificationSupport();
+  if (support === "unsupported") {
+    window.alert("Este navegador não suporta notificações.");
+    return false;
+  }
+  if (support === "insecure-context") {
+    window.alert(
+      "Notificações exigem conexão segura (HTTPS) ou localhost. Use https://cgrafsysvm/sagra/ ou abra o SAGRA em http://localhost:5173.",
+    );
+    return false;
+  }
+
+  let permission = Notification.permission;
+  if (permission === "default") {
+    permission = await Notification.requestPermission();
+  }
+  if (permission !== "granted") {
+    window.alert(
+      "Permissão negada. No Windows, abra Configurações → Sistema → Notificações e permita o navegador (Edge/Chrome) exibir alertas.",
+    );
+    return false;
+  }
+  return true;
+}
+
+async function trySubscribePush(): Promise<{
+  status: PushSubscribeStatus;
+  reason?: string;
+}> {
+  if (!("PushManager" in window)) {
+    return { status: "unavailable", reason: "PushManager ausente" };
+  }
+
+  try {
+    const registration = await ensurePushServiceWorker();
+
+    const publicKey = await fetchVapidPublicKey();
+    const existing = await registration.pushManager.getSubscription();
+    const subscription =
+      existing ??
+      (await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      }));
+
+    const json = subscription.toJSON();
+    if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
+      throw new Error("Subscription push inválida.");
+    }
+
+    await registerPushSubscription({
+      endpoint: json.endpoint,
+      keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+      user_agent: navigator.userAgent,
+    });
+    return { status: "ok" };
+  } catch (error) {
+    console.warn("Falha ao registrar push:", error);
+    return {
+      status: "failed",
+      reason: error instanceof Error ? error.message : "erro desconhecido",
+    };
+  }
+}
+
 export function useWebPush() {
-  const requestBrowserPush = useCallback(async (): Promise<boolean> => {
-    if (!("Notification" in window)) {
-      window.alert("Este navegador não suporta notificações.");
-      return false;
+  const requestBrowserPush = useCallback(async (): Promise<BrowserPushResult> => {
+    const permission = await ensureNotificationPermission();
+    if (!permission) {
+      return { permission: false, push: "unavailable", reason: "permission-denied" };
     }
-
-    let permission = Notification.permission;
-    if (permission === "default") {
-      permission = await Notification.requestPermission();
-    }
-    if (permission !== "granted") {
-      window.alert(
-        "Permissão negada. No Windows, abra Configurações → Sistema → Notificações e permita o navegador (Edge/Chrome) exibir alertas.",
-      );
-      return false;
-    }
-
-    if (!("PushManager" in window)) {
-      window.alert("Push notifications não suportadas neste navegador.");
-      return false;
-    }
-
-    try {
-      const registration = await ensurePushServiceWorker();
-
-      const publicKey = await fetchVapidPublicKey();
-      const existing = await registration.pushManager.getSubscription();
-      const subscription =
-        existing ??
-        (await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(publicKey),
-        }));
-
-      const json = subscription.toJSON();
-      if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
-        throw new Error("Subscription push inválida.");
-      }
-
-      await registerPushSubscription({
-        endpoint: json.endpoint,
-        keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
-        user_agent: navigator.userAgent,
-      });
-      return true;
-    } catch (error) {
-      console.error("Falha ao registrar push:", error);
-      window.alert(
-        `Não foi possível ativar notificações push: ${
-          error instanceof Error ? error.message : "erro desconhecido"
-        }`,
-      );
-      return false;
-    }
+    const sub = await trySubscribePush();
+    return { permission: true, push: sub.status, reason: sub.reason };
   }, []);
 
   return { requestBrowserPush };

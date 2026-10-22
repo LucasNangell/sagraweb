@@ -7,6 +7,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from database import db
 
@@ -168,6 +169,17 @@ def _subscriptions_for_ponto(ponto: str) -> list[dict[str, Any]]:
     )
 
 
+def count_push_subscriptions_for_ponto(ponto: str) -> int:
+    return len(_subscriptions_for_ponto(ponto))
+
+
+def _endpoint_host(endpoint: str) -> str:
+    try:
+        return urlparse(endpoint).netloc or "(sem-host)"
+    except Exception:
+        return "(invalido)"
+
+
 def send_web_push_to_ponto(
     *,
     ponto: str,
@@ -177,6 +189,8 @@ def send_web_push_to_ponto(
     tag: str | None = None,
     nro: int | None = None,
     ano: int | None = None,
+    notification_id: int | None = None,
+    urgent: bool = False,
 ) -> int:
     _, private, subject = _load_vapid_keys()
     if not private:
@@ -188,27 +202,34 @@ def send_web_push_to_ponto(
         logger.warning("pywebpush não instalado — Web Push ignorado.")
         return 0
 
-    payload = json.dumps(
-        {
-            "title": title,
-            "body": body,
-            "url": url,
-            "tag": tag or "sagra-os",
-            "nro": nro,
-            "ano": ano,
-        },
-        ensure_ascii=False,
+    resolved_tag = tag or (
+        f"sagra-notif-{notification_id}" if notification_id else "sagra-os"
     )
+    payload_obj: dict[str, Any] = {
+        "title": title,
+        "body": body,
+        "url": url,
+        "tag": resolved_tag,
+        "nro": nro,
+        "ano": ano,
+    }
+    if notification_id:
+        payload_obj["notification_id"] = int(notification_id)
+    if urgent:
+        payload_obj["urgent"] = True
+    payload = json.dumps(payload_obj, ensure_ascii=False)
     sent = 0
     subs = _subscriptions_for_ponto(ponto)
     if not subs:
         logger.info("Web Push: nenhuma subscription para ponto=%s", ponto)
         return 0
     for sub in subs:
+        endpoint = str(sub.get("Endpoint") or "")
+        host = _endpoint_host(endpoint)
         try:
             webpush(
                 subscription_info={
-                    "endpoint": sub["Endpoint"],
+                    "endpoint": endpoint,
                     "keys": {"p256dh": sub["P256dh"], "auth": sub["AuthKey"]},
                 },
                 data=payload,
@@ -219,10 +240,16 @@ def send_web_push_to_ponto(
         except WebPushException as exc:
             status = getattr(getattr(exc, "response", None), "status_code", None)
             if status in (404, 410):
-                delete_push_subscription(endpoint=sub["Endpoint"])
-            logger.debug("Web Push falhou endpoint=%s status=%s", sub["Endpoint"][:48], status)
+                delete_push_subscription(endpoint=endpoint)
+            logger.warning(
+                "Web Push falhou ponto=%s host=%s status=%s: %s",
+                ponto,
+                host,
+                status,
+                exc,
+            )
         except Exception as exc:
-            logger.debug("Web Push erro: %s", exc)
+            logger.warning("Web Push erro ponto=%s host=%s: %s", ponto, host, exc)
     if sent == 0:
         logger.warning(
             "Web Push: 0 enviados para ponto=%s (%s subscription(s))",

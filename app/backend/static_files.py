@@ -28,9 +28,11 @@ def strip_spa_base_prefix(path: str) -> str:
 
 
 def is_service_worker_script_path(path: str) -> bool:
-    """sw.js e workbox-*.js devem sempre revalidar no browser."""
+    """sw.js, push-sw.js e workbox-*.js devem sempre revalidar no browser."""
     name = Path(path.replace("\\", "/")).name.lower()
-    return name == "sw.js" or (name.startswith("workbox-") and name.endswith(".js"))
+    return name in {"sw.js", "push-sw.js"} or (
+        name.startswith("workbox-") and name.endswith(".js")
+    )
 
 
 def apply_sw_cache_headers(path: str, response) -> None:

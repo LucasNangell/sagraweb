@@ -305,8 +305,8 @@ export function DashboardTabletPage({
         setPushEnabled(Boolean(pref.enabled));
         return;
       }
-      const ok = await requestBrowserPush();
-      if (!ok) {
+      const result = await requestBrowserPush();
+      if (!result.permission || result.push !== "ok") {
         setPushEnabled(false);
         return;
       }

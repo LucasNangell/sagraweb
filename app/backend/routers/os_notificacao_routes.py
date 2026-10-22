@@ -201,6 +201,51 @@ def put_painel_tablet_push_pref(body: PainelTabletPushPrefPayload, request: Requ
     return _save_painel_tablet_push_pref(ponto=ponto, body=body)
 
 
+@router.post("/push/test")
+def push_test(request: Request):
+    """Dispara um toast de teste (WS + Web Push best-effort) para o ponto da sessão."""
+    ponto = _require_session_ponto(request)
+    from services.notification_push_service import push_user_notification
+    from services.web_push_service import (
+        count_push_subscriptions_for_ponto,
+        send_web_push_to_ponto,
+    )
+
+    mensagem = "Notificação de teste do SAGRA. Se o aviso do Windows aparecer, está funcionando."
+    push_user_notification(
+        target_ponto=ponto,
+        mensagem=mensagem,
+        nro=0,
+        ano=0,
+        action="os_watch_andamento",
+        browser_notify=True,
+    )
+    try:
+        subs = count_push_subscriptions_for_ponto(ponto)
+    except Exception as exc:
+        logger.warning("Falha ao contar subscriptions de teste ponto=%s: %s", ponto, exc)
+        subs = 0
+    try:
+        from services.os_notificacao_dispatch_service import _spa_public_base
+
+        base = _spa_public_base()
+        url = f"{base}/" if base else "/"
+    except Exception:
+        url = "/"
+    try:
+        sent = send_web_push_to_ponto(
+            ponto=ponto,
+            title="SAGRA Web",
+            body=mensagem,
+            url=url,
+            tag="sagra-push-test",
+        )
+    except Exception as exc:
+        logger.warning("Falha Web Push no teste ponto=%s: %s", ponto, exc)
+        sent = 0
+    return {"ws": True, "web_push_sent": sent, "web_push_subs": subs}
+
+
 @router.post("/painel-tablet/push-pref")
 def post_painel_tablet_push_pref(body: PainelTabletPushPrefPayload, request: Request):
     """Alias POST — alguns proxies móveis bloqueiam PUT."""

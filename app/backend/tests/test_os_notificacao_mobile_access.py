@@ -25,6 +25,7 @@ class TestMobileSessionFriendlyRoutes:
     def test_push_routes_skip_ip_binding(self):
         assert is_mobile_session_friendly_api_route("/api/push/subscribe", "POST")
         assert is_mobile_session_friendly_api_route("/sagra/api/push/vapid-public-key", "GET")
+        assert is_mobile_session_friendly_api_route("/api/push/test", "POST")
         assert should_skip_session_ip_binding("/api/push/subscribe", "POST")
 
     def test_painel_tablet_push_pref_skip_ip_binding(self):

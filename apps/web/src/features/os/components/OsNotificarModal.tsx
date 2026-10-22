@@ -7,9 +7,11 @@ import {
   deleteOsNotificacaoWatch,
   fetchOsNotificacaoWatch,
   saveOsNotificacaoWatch,
+  testPushNotification,
 } from "@/api/osNotificacao";
 import { queryKeys } from "@/api/query-keys";
 import { useWebPush } from "@/hooks/useWebPush";
+import { getNotificationSupport } from "@/lib/nativeNotification";
 import { homeTestIds } from "@/lib/testId";
 import type { OsSearchRow } from "../types";
 
@@ -28,6 +30,11 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
   const [andamentoSituacao, setAndamentoSituacao] = useState("");
   const [andamentoSetor, setAndamentoSetor] = useState("");
   const [notifyOsChanges, setNotifyOsChanges] = useState(false);
+  const [testBusy, setTestBusy] = useState(false);
+  const [testHint, setTestHint] = useState<string | null>(null);
+  const [notificationSupport, setNotificationSupport] = useState(
+    getNotificationSupport,
+  );
 
   const ano = row?.ano ?? null;
   const id = row?.nr_os ?? null;
@@ -52,6 +59,7 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
         setAndamentoSituacao("");
         setAndamentoSetor("");
         setNotifyOsChanges(false);
+        setTestHint(null);
       }
       return;
     }
@@ -62,6 +70,12 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
     setAndamentoSetor(w.andamento_setor ?? "");
     setNotifyOsChanges(w.notify_os_changes);
   }, [open, watchQuery.data]);
+
+  useEffect(() => {
+    if (open) {
+      setNotificationSupport(getNotificationSupport());
+    }
+  }, [open]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -76,9 +90,13 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
         andamento_setor: notifyAllAndamentos ? null : andamentoSetor.trim() || null,
         notify_os_changes: notifyOsChanges,
       });
-      const pushOk = await requestBrowserPush();
-      if (!pushOk) {
+      const pushResult = await requestBrowserPush();
+      setNotificationSupport(getNotificationSupport());
+      if (!pushResult.permission) {
         throw new Error("push_permission_denied");
+      }
+      if (pushResult.push !== "ok") {
+        throw new Error("push_background_unavailable");
       }
       return saved;
     },
@@ -118,7 +136,19 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
           });
         }
         window.alert(
-          "Preferências salvas, mas o push no dispositivo não foi ativado. Verifique permissões de notificação do app.",
+          "Preferências salvas, mas o Windows não vai exibir o aviso. Permita notificações do navegador (Edge/Chrome) e tente de novo.",
+        );
+        onClose();
+        return;
+      }
+      if (e instanceof Error && e.message === "push_background_unavailable") {
+        if (ano != null && id != null) {
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.os.notificacaoWatch(ano, id),
+          });
+        }
+        window.alert(
+          "Preferências salvas. A notificação do Windows funciona com o SAGRA aberto neste navegador. Com o navegador fechado não está disponível nesta rede.",
         );
         onClose();
         return;
@@ -126,6 +156,38 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
       window.alert(
         `Erro ao salvar: ${e instanceof Error ? e.message : "falha"}`,
       );
+    }
+  };
+
+  const handleTest = async () => {
+    if (testBusy) {
+      return;
+    }
+    setTestBusy(true);
+    setTestHint(null);
+    try {
+      const pushResult = await requestBrowserPush();
+      setNotificationSupport(getNotificationSupport());
+      if (!pushResult.permission) {
+        return;
+      }
+      const result = await testPushNotification();
+      const parts = [
+        "Pedido de teste enviado.",
+        "Se o aviso do Windows não aparecer, verifique Configurações → Sistema → Notificações e o Assistente de Foco.",
+      ];
+      if (result.web_push_subs === 0 || result.web_push_sent === 0) {
+        parts.push(
+          "Push com navegador fechado não está disponível neste dispositivo/rede.",
+        );
+      }
+      setTestHint(parts.join(" "));
+    } catch (e) {
+      window.alert(
+        `Não foi possível testar: ${e instanceof Error ? e.message : "falha"}`,
+      );
+    } finally {
+      setTestBusy(false);
     }
   };
 
@@ -168,8 +230,9 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
           <h3 className="text-lg font-semibold text-primary-green">Notificar</h3>
         </div>
         <p className="mt-1 text-sm text-neutral-600">
-          OS {row.nr_os}/{row.ano} — escolha os eventos. As alertas aparecem como
-          notificação do Windows (canto inferior direito), mesmo com o navegador fechado.
+          OS {row.nr_os}/{row.ano} — escolha os eventos. Os avisos aparecem como
+          notificação do Windows (canto inferior direito) enquanto o SAGRA estiver
+          aberto em alguma aba.
         </p>
 
         <div className="mt-4 space-y-3 rounded border border-sagra-border bg-slate-50 p-3 text-sm">
@@ -276,9 +339,37 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
           </label>
         </div>
 
+        <div
+          className="mt-3 rounded border border-sagra-border bg-white px-3 py-2 text-xs text-neutral-600"
+          data-testid={homeTestIds.osNotificarStatus}
+        >
+          <p>
+            Permissão do navegador:{" "}
+            <span className="font-semibold">
+              {notificationSupport === "granted"
+                ? "concedida"
+                : notificationSupport === "denied"
+                  ? "negada"
+                  : notificationSupport === "insecure-context"
+                    ? "indisponível (HTTP sem localhost)"
+                    : notificationSupport === "default"
+                      ? "ainda não pedida"
+                      : "navegador sem suporte"}
+            </span>
+          </p>
+          {notificationSupport === "insecure-context" ? (
+            <p className="mt-1 text-amber-700">
+              Use https://cgrafsysvm/sagra/ ou http://localhost:5173 para ativar o
+              aviso do Windows.
+            </p>
+          ) : null}
+          {testHint ? <p className="mt-1">{testHint}</p> : null}
+        </div>
+
         <p className="mt-3 text-xs text-neutral-500">
-          Ao salvar, o Windows pedirá permissão (Edge/Chrome). Use o mesmo navegador em
-          que ativou; instalar como app (PWA) melhora a entrega com o site fechado.
+          Ao salvar, o Windows pode pedir permissão (Edge/Chrome). Com o SAGRA
+          minimizado o aviso continua; com o navegador totalmente fechado depende da
+          rede (FCM/WNS).
         </p>
 
         <div className="mt-4 flex flex-wrap justify-end gap-2">
@@ -291,6 +382,15 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
               Remover inscrição
             </button>
           ) : null}
+          <button
+            type="button"
+            onClick={() => void handleTest()}
+            disabled={testBusy || saveMutation.isPending}
+            className="rounded border border-sagra-border px-3 py-2 text-sm disabled:opacity-60"
+            data-testid={homeTestIds.osNotificarTest}
+          >
+            {testBusy ? "Testando…" : "Testar notificação"}
+          </button>
           <button
             type="button"
             onClick={onClose}

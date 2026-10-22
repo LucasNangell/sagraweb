@@ -18,8 +18,17 @@ import {
   supportNotificationDetailsFromWs,
 } from "@/features/support/utils/supportNotificationHandlers";
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
-import { showNativeNotification } from "@/lib/nativeNotification";
+import {
+  markNativeNotificationShown,
+  showNativeNotification,
+  wasNativeNotificationShown,
+} from "@/lib/nativeNotification";
 import type { AppNotification } from "../types";
+import {
+  isOsWatchNotification,
+  parseOsWatchDetalhes,
+  selectOsWatchCatchUp,
+} from "../osWatchNativeCatchUp";
 
 interface NotificationWsMessage extends GravacaoExternaWsPayload {
   target_ponto?: string;
@@ -29,6 +38,7 @@ interface NotificationWsMessage extends GravacaoExternaWsPayload {
   ticket_id?: number;
   support_message_id?: number;
   browser_notify?: boolean;
+  urgent?: boolean;
 }
 
 const OS_WATCH_ACTIONS = new Set(["os_watch_andamento", "os_watch_change"]);
@@ -37,44 +47,8 @@ function cleanPonto(value: string | number | null | undefined): string {
   return String(value ?? "").replace(/\D/g, "");
 }
 
-function parseDetalhes(
-  notification: AppNotification,
-): {
-  type?: string;
-  ticket_id?: number;
-  support_message_id?: number;
-  tipo?: string;
-  os_ano?: number;
-  os_nro?: number;
-} | null {
-  const raw = notification.DetalhesJson?.trim();
-  if (!raw) {
-    return null;
-  }
-  try {
-    return JSON.parse(raw) as {
-      type?: string;
-      ticket_id?: number;
-      support_message_id?: number;
-    };
-  } catch {
-    return null;
-  }
-}
-
-function isOsWatchNotification(
-  notification: AppNotification,
-  action?: string,
-): boolean {
-  if (action && OS_WATCH_ACTIONS.has(action)) {
-    return true;
-  }
-  const type = parseDetalhes(notification)?.type;
-  return type === "os_watch_andamento" || type === "os_watch_change";
-}
-
 function isSupportPopupSkipped(notification: AppNotification): boolean {
-  const detalhes = parseDetalhes(notification);
+  const detalhes = parseOsWatchDetalhes(notification);
   if (!detalhes?.type && !detalhes?.tipo) {
     return false;
   }
@@ -107,28 +81,83 @@ function isNotificationForUser(
   return Boolean(targetDigits && userDigits && targetDigits === userDigits);
 }
 
+function hasOsRef(nro: number | null | undefined, ano: number | null | undefined): boolean {
+  return nro != null && nro > 0 && ano != null && ano > 0;
+}
+
 async function showOsWatchNativeToast(
   data: NotificationWsMessage,
 ): Promise<void> {
   const mensagem = data.mensagem?.trim() || "Nova atualização na OS.";
   const nro = data.id ?? null;
   const ano = data.ano ?? null;
-  const title =
-    nro != null && ano != null ? `OS ${nro}/${ano}` : "SAGRA Web";
-  const url =
-    nro != null && ano != null
-      ? `${window.location.origin}/gerencia?ano=${ano}&id=${nro}`
-      : undefined;
+  const osKnown = hasOsRef(nro, ano);
+  const urgent = Boolean(data.urgent);
+  const title = urgent
+    ? osKnown
+      ? `OS ${nro}/${ano} - ERRO`
+      : "SAGRA Web - ERRO"
+    : osKnown
+      ? `OS ${nro}/${ano}`
+      : "SAGRA Web";
 
   await showNativeNotification({
     title,
     body: mensagem,
     tag:
-      nro != null && ano != null ? `os-${nro}-${ano}` : `os-watch-${Date.now()}`,
-    url,
-    nro,
-    ano,
+      data.notification_id && data.notification_id > 0
+        ? `sagra-notif-${data.notification_id}`
+        : osKnown
+          ? `os-${nro}-${ano}`
+          : `os-watch-${Date.now()}`,
+    nro: osKnown ? nro : null,
+    ano: osKnown ? ano : null,
+    notificationId: data.notification_id ?? null,
+    urgent,
   });
+}
+
+function showCatchUpToasts(items: AppNotification[]): void {
+  const plan = selectOsWatchCatchUp(items, wasNativeNotificationShown);
+  if (plan.kind === "none") {
+    return;
+  }
+  if (plan.kind === "summary") {
+    void showNativeNotification({
+      title: "SAGRA Web",
+      body: `${plan.items.length} atualizações em OS acompanhadas`,
+      tag: "sagra-os-watch-summary",
+      openNotificationCenter: true,
+    }).then((ok) => {
+      if (!ok) {
+        return;
+      }
+      for (const item of plan.items) {
+        markNativeNotificationShown(item.Id);
+      }
+    });
+    return;
+  }
+  for (const item of plan.items) {
+    const nro = item.NroProtocolo ?? null;
+    const ano = item.AnoProtocolo ?? null;
+    const osKnown = hasOsRef(nro, ano);
+    const urgent = Boolean(parseOsWatchDetalhes(item)?.urgent);
+    void showNativeNotification({
+      title: urgent
+        ? osKnown
+          ? `OS ${nro}/${ano} - ERRO`
+          : "SAGRA Web - ERRO"
+        : osKnown
+          ? `OS ${nro}/${ano}`
+          : "SAGRA Web",
+      body: item.Mensagem?.trim() || "Nova atualização na OS.",
+      nro: osKnown ? nro : null,
+      ano: osKnown ? ano : null,
+      notificationId: item.Id,
+      urgent,
+    });
+  }
 }
 
 export function OsNotificationHandler() {
@@ -137,6 +166,8 @@ export function OsNotificationHandler() {
   const queryClient = useQueryClient();
   const [active, setActive] = useState<AppNotification | null>(null);
   const activeRef = useRef<AppNotification | null>(null);
+  const [catchUpNonce, setCatchUpNonce] = useState(0);
+  const lastCatchUpNonceRef = useRef(-1);
 
   useEffect(() => {
     activeRef.current = active;
@@ -192,11 +223,30 @@ export function OsNotificationHandler() {
     }
   }, [notificationsQuery.data, showNotification]);
 
+  useEffect(() => {
+    if (!notificationsQuery.isSuccess) {
+      return;
+    }
+    if (lastCatchUpNonceRef.current === catchUpNonce) {
+      return;
+    }
+    lastCatchUpNonceRef.current = catchUpNonce;
+    showCatchUpToasts(notificationsQuery.data ?? []);
+  }, [catchUpNonce, notificationsQuery.data, notificationsQuery.isSuccess]);
+
   const wsPath = ponto ? `/ws?ponto=${encodeURIComponent(ponto)}` : "/ws";
 
   useSagraWebSocket<NotificationWsMessage>({
     path: wsPath,
     enabled: Boolean(ponto),
+    onOpen: () => {
+      setCatchUpNonce((value) => value + 1);
+      if (ponto) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.notifications(ponto),
+        });
+      }
+    },
     onMessage: (data) => {
       if (data.type !== "notification_new") {
         return;

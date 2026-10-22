@@ -77,3 +77,13 @@ export async function unregisterPushSubscription(endpoint: string): Promise<void
     body: JSON.stringify({ endpoint }),
   });
 }
+
+export interface PushTestResult {
+  ws: boolean;
+  web_push_sent: number;
+  web_push_subs: number;
+}
+
+export async function testPushNotification(): Promise<PushTestResult> {
+  return apiFetch<PushTestResult>("/push/test", { method: "POST" });
+}

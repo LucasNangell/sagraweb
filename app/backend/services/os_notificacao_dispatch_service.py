@@ -21,14 +21,30 @@ def is_error_situation(situacao: str | None) -> bool:
     return any(term in normalized for term in _ERROR_SITUATION_TERMS)
 
 
-def _os_url(nro: int, ano: int) -> str:
+def _spa_public_base() -> str:
+    """URL pública da SPA: em produção o app vive em /sagra/."""
     try:
         from config_manager import config_manager
 
         base = config_manager.get_public_web_base().rstrip("/")
-        return f"{base}/gerencia?ano={ano}&id={nro}"
+        if not config_manager.is_development() and not base.lower().endswith("/sagra"):
+            base = f"{base}/sagra"
+        return base
     except Exception:
-        return f"/gerencia?ano={ano}&id={nro}"
+        return ""
+
+
+def _os_url(nro: int, ano: int) -> str:
+    base = _spa_public_base()
+    if base:
+        return f"{base}/gerencia?ano={ano}&id={nro}"
+    return f"/gerencia?ano={ano}&id={nro}"
+
+
+def _os_title(nro: int, ano: int, *, urgent: bool = False) -> str:
+    if urgent:
+        return f"OS {nro}/{ano} - ERRO"
+    return f"OS {nro}/{ano}"
 
 
 def _notify_ponto(
@@ -40,8 +56,12 @@ def _notify_ponto(
     action: str,
     detalhes: dict[str, Any] | None = None,
     browser_notify: bool = False,
+    urgent: bool = False,
 ) -> None:
-    detalhes_json = json.dumps(detalhes or {"type": action}, ensure_ascii=False)
+    detalhes_payload: dict[str, Any] = dict(detalhes or {"type": action})
+    if urgent:
+        detalhes_payload["urgent"] = True
+    detalhes_json = json.dumps(detalhes_payload, ensure_ascii=False)
     notification_id = insert_user_notification(
         ponto=ponto,
         nro=nro,
@@ -57,16 +77,20 @@ def _notify_ponto(
         notification_id=notification_id,
         action=action,
         browser_notify=browser_notify,
+        urgent=urgent,
     )
     if browser_notify:
+        tag = f"sagra-notif-{notification_id}" if notification_id else f"os-{nro}-{ano}"
         send_web_push_to_ponto(
             ponto=ponto,
-            title=f"OS {nro}/{ano}",
+            title=_os_title(nro, ano, urgent=urgent),
             body=mensagem,
             url=_os_url(nro, ano),
-            tag=f"os-{nro}-{ano}",
+            tag=tag,
             nro=nro,
             ano=ano,
+            notification_id=notification_id if notification_id else None,
+            urgent=urgent,
         )
 
 
@@ -85,7 +109,7 @@ def dispatch_andamento_notifications(
         sit_label = (situacao or "").strip() or "—"
         sec_label = (setor or "").strip() or "—"
         mensagem = f"Andamento na OS {nro}/{ano}: {sit_label} ({sec_label})."
-        browser_notify = is_error_situation(situacao)
+        urgent = is_error_situation(situacao)
         for ponto in pontos:
             _notify_ponto(
                 ponto=ponto,
@@ -99,7 +123,8 @@ def dispatch_andamento_notifications(
                     "setor": setor,
                     "source_action": action,
                 },
-                browser_notify=browser_notify,
+                browser_notify=True,
+                urgent=urgent,
             )
     except Exception as exc:
         logger.warning("Falha ao disparar notificações de andamento OS %s/%s: %s", nro, ano, exc)
@@ -124,6 +149,7 @@ def dispatch_os_change_notifications(
                 mensagem=mensagem,
                 action="os_watch_change",
                 detalhes={"type": "os_watch_change", "changes": changes or {}},
+                browser_notify=True,
             )
     except Exception as exc:
         logger.warning("Falha ao disparar notificações de alteração OS %s/%s: %s", nro, ano, exc)

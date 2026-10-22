@@ -74,6 +74,7 @@ def push_user_notification(
     support_message_id: int | None = None,
     gravacao_message_id: int | None = None,
     browser_notify: bool | None = None,
+    urgent: bool | None = None,
 ) -> None:
     """Envia notification_new a clientes autenticados (filtro por ponto no cliente)."""
     target_digits = _clean_ponto(target_ponto) or str(target_ponto).strip()
@@ -96,6 +97,8 @@ def push_user_notification(
         payload["message_id"] = int(gravacao_message_id)
     if browser_notify is not None:
         payload["browser_notify"] = bool(browser_notify)
+    if urgent:
+        payload["urgent"] = True
 
     broadcast_ws_payload(payload)
 

@@ -25,6 +25,10 @@ import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 import { cn } from "@sagra/ui";
 
 import { homeTestIds } from "@/lib/testId";
+import {
+  OPEN_NOTIFICATION_CENTER_EVENT,
+  OPEN_NOTIFICATION_CENTER_HASH,
+} from "@/lib/nativeNotification";
 
 
 
@@ -378,6 +382,22 @@ export function NotificationCenter() {
     void syncNotifications();
 
   }, [ponto, viewingTickets, syncNotifications]);
+
+  useEffect(() => {
+    const openCenter = () => setPanelOpen(true);
+    const onHash = () => {
+      if (window.location.hash.replace(/^#/, "") === OPEN_NOTIFICATION_CENTER_HASH) {
+        setPanelOpen(true);
+      }
+    };
+    window.addEventListener(OPEN_NOTIFICATION_CENTER_EVENT, openCenter);
+    window.addEventListener("hashchange", onHash);
+    onHash();
+    return () => {
+      window.removeEventListener(OPEN_NOTIFICATION_CENTER_EVENT, openCenter);
+      window.removeEventListener("hashchange", onHash);
+    };
+  }, []);
 
   useEffect(() => {
 

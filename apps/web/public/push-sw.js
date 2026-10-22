@@ -18,6 +18,8 @@ function parsePushPayload(event) {
     tag: "sagra-os",
     nro: null,
     ano: null,
+    notification_id: null,
+    urgent: false,
   };
   if (!event.data) {
     return defaults;
@@ -35,11 +37,14 @@ function parsePushPayload(event) {
 
 self.addEventListener("push", (event) => {
   const payload = parsePushPayload(event);
+  const notificationId = payload.notification_id || payload.notificationId || null;
   const tag =
+    (notificationId ? `sagra-notif-${notificationId}` : null) ||
     payload.tag ||
     (payload.nro && payload.ano
       ? `sagra-os-${payload.nro}-${payload.ano}`
       : "sagra-os");
+  const targetUrl = payload.url || self.registration.scope;
 
   event.waitUntil(
     self.registration.showNotification(payload.title || "SAGRA Web", {
@@ -47,13 +52,15 @@ self.addEventListener("push", (event) => {
       icon: assetUrl("icons/icon-192.png"),
       badge: assetUrl("icons/favicon-32.png"),
       data: {
-        url: payload.url || self.registration.scope,
+        url: targetUrl,
         nro: payload.nro ?? null,
         ano: payload.ano ?? null,
+        notificationId,
+        openNotificationCenter: Boolean(payload.openNotificationCenter),
       },
       tag,
       renotify: true,
-      requireInteraction: false,
+      requireInteraction: Boolean(payload.urgent),
       silent: false,
       timestamp: Date.now(),
       lang: "pt-BR",
@@ -70,10 +77,12 @@ self.addEventListener("notificationclick", (event) => {
     clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then(async (clientList) => {
-        for (const client of clientList) {
-          if (!client.url.startsWith(self.registration.origin)) {
-            continue;
-          }
+        const scope = self.registration.scope;
+        const origin = self.location.origin;
+        const sameScope = clientList.filter((client) => client.url.startsWith(scope));
+        const sameOrigin = clientList.filter((client) => client.url.startsWith(origin));
+        const ordered = sameScope.length > 0 ? sameScope : sameOrigin;
+        for (const client of ordered) {
           if ("focus" in client) {
             await client.focus();
             if ("navigate" in client && typeof client.navigate === "function") {

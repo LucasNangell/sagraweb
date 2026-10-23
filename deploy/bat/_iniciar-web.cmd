@@ -74,7 +74,8 @@ set "RC=!ERRORLEVEL!"
 
 if not "!RC!"=="0" (
     echo.
-    echo [FRONT] Falha ao iniciar Vite - tentando reparar dependencias...
+    echo [FRONT] Falha ao iniciar Vite - limpando node_modules e reinstalando...
+    call :clean_node_modules
     call :pnpm_install_or_fail
     if errorlevel 1 exit /b 1
     call :start_vite
@@ -117,24 +118,39 @@ set "RC=!ERRORLEVEL!"
 cd /d "%ROOT%"
 exit /b !RC!
 
+:clean_node_modules
+if exist "node_modules" rmdir /s /q "node_modules"
+if exist "apps\web\node_modules" rmdir /s /q "apps\web\node_modules"
+if exist "packages\ui\node_modules" rmdir /s /q "packages\ui\node_modules"
+if exist "packages\api-types\node_modules" rmdir /s /q "packages\api-types\node_modules"
+exit /b 0
+
+:materialize_workspace
+node "%ROOT%\scripts\materialize-workspace-packages.mjs"
+exit /b 0
+
 :pnpm_install_or_fail
 if not defined SAGRA_PNPM set "SAGRA_PNPM=pnpm.cmd"
 call "%SAGRA_PNPM%" install
-if errorlevel 1 (
+set "PNPM_RC=!ERRORLEVEL!"
+call :materialize_workspace
+call :resolve_vite
+if not errorlevel 1 exit /b 0
+if not "!PNPM_RC!"=="0" (
     echo [AVISO] pnpm install falhou. Limpando node_modules e repetindo...
-    if exist "node_modules" rmdir /s /q "node_modules"
+    call :clean_node_modules
     call "%SAGRA_PNPM%" install
+    call :materialize_workspace
+    call :resolve_vite
     if errorlevel 1 (
         echo [ERRO] Nao foi possivel instalar dependencias do frontend.
         echo        Use Node.js 20 LTS se estiver em v22+ com erros de modulo.
+        echo        No Windows 11 25H2, node-linker=hoisted no .npmrc e obrigatorio.
         pause
         exit /b 1
     )
+    exit /b 0
 )
-call :resolve_vite
-if errorlevel 1 (
-    echo [ERRO] Vite nao encontrado apos pnpm install.
-    pause
-    exit /b 1
-)
-exit /b 0
+echo [ERRO] Vite nao encontrado apos pnpm install.
+pause
+exit /b 1

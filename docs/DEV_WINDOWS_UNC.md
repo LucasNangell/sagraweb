@@ -32,6 +32,24 @@ pnpm install
 pnpm --filter @sagra/web dev
 ```
 
+## Windows 11 25H2 — junctions do pnpm
+
+No Windows 11 25H2 (build 26200) o Node e o `cmd` não atravessam junctions do layout isolado do pnpm (`UNKNOWN: unknown error` ao abrir `package.json`, `Cannot find package 'picomatch'`). O Vite parece “ausente” mesmo instalado.
+
+O monorepo usa `node-linker=hoisted` no `.npmrc`. Pacotes workspace (`@sagra/ui`, `@sagra/api-types`) viram **cópia real** via `scripts/materialize-workspace-packages.mjs` (postinstall), porque o Windows também recusa a junction desses pacotes.
+
+Depois de mudar o linker:
+
+```bat
+rmdir /s /q node_modules
+rmdir /s /q apps\web\node_modules
+rmdir /s /q packages\ui\node_modules
+rmdir /s /q packages\api-types\node_modules
+pnpm install
+```
+
+Não use `npm install` para “consertar” isso.
+
 ## Node.js
 
 Preferir **Node 20 LTS**. Node 24 pode funcionar, mas não é o alvo do monorepo (`engines`: `>=20`).

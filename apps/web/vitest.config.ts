@@ -14,6 +14,12 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@sagra/ui/styles.css": path.resolve(__dirname, "../../packages/ui/src/styles.css"),
+      "@sagra/ui": path.resolve(__dirname, "../../packages/ui/src/index.ts"),
+      "@sagra/api-types": path.resolve(
+        __dirname,
+        "../../packages/api-types/src/index.ts",
+      ),
       "virtual:pwa-register/react": path.resolve(
         __dirname,
         "./src/test/mocks/virtual-pwa-register-react.ts",

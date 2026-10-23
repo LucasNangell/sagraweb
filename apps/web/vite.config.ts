@@ -250,6 +250,12 @@ export default defineConfig(({ mode }) => {
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@sagra/ui/styles.css": path.resolve(__dirname, "../../packages/ui/src/styles.css"),
+      "@sagra/ui": path.resolve(__dirname, "../../packages/ui/src/index.ts"),
+      "@sagra/api-types": path.resolve(
+        __dirname,
+        "../../packages/api-types/src/index.ts",
+      ),
     },
   },
   server: {

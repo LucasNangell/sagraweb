@@ -18,7 +18,8 @@
     "deploy:prod": "powershell -NoProfile -ExecutionPolicy Bypass -File deploy/scripts/deploy-producao.ps1",
     "lint": "pnpm -r run lint",
     "typecheck": "pnpm -r run typecheck",
-    "clean": "pnpm -r exec -- rimraf dist node_modules/.vite 2>nul || true"
+    "clean": "pnpm -r exec -- rimraf dist node_modules/.vite 2>nul || true",
+    "postinstall": "node scripts/materialize-workspace-packages.mjs"
   },
   "devDependencies": {
     "rimraf": "^6.0.1",

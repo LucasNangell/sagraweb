@@ -36,6 +36,7 @@ function Resolve-SagraViteCli {
     $candidates.Add((Join-Path $vitePackagePath "bin\vite.js")) | Out-Null
 
     $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $resolvedWebRoot "..\.."))
+    $candidates.Add((Join-Path $repoRoot "node_modules\vite\bin\vite.js")) | Out-Null
     $pnpmDir = Join-Path $repoRoot "node_modules\.pnpm"
     if (Test-Path -LiteralPath $pnpmDir -PathType Container) {
         Get-ChildItem -LiteralPath $pnpmDir -Directory -Filter "vite@*" -ErrorAction SilentlyContinue |

@@ -6,7 +6,7 @@ set "WEB_PORT=%~1"
 if "%WEB_PORT%"=="" set "WEB_PORT=5173"
 
 set "ROOT=%~dp0..\.."
-set "VITE_PKG=%ROOT%\apps\web\node_modules\vite\bin\vite.js"
+set "VITE_PKG="
 
 call "%~dp0_resolve-dev-tools.cmd"
 
@@ -45,7 +45,8 @@ if exist "%ROOT%\config\.env" (
 )
 if defined PORT set "API_PORT=%PORT%"
 
-if not exist "%VITE_PKG%" (
+call :resolve_vite
+if errorlevel 1 (
     echo [FRONT] Vite nao encontrado - executando pnpm install...
     call :pnpm_install_or_fail
     if errorlevel 1 exit /b 1
@@ -90,7 +91,21 @@ if not "!RC!"=="0" (
 pause
 exit /b 0
 
+:resolve_vite
+set "VITE_PKG="
+for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\scripts\resolve-vite-cli.ps1" -WebRoot "%ROOT%\apps\web"`) do set "VITE_PKG=%%I"
+if not defined VITE_PKG exit /b 1
+if not exist "!VITE_PKG!" (
+    set "VITE_PKG="
+    exit /b 1
+)
+exit /b 0
+
 :start_vite
+if not defined VITE_PKG (
+    echo [ERRO] Vite nao encontrado.
+    exit /b 1
+)
 if not exist "%VITE_PKG%" (
     echo [ERRO] Vite nao encontrado: %VITE_PKG%
     exit /b 1
@@ -116,8 +131,9 @@ if errorlevel 1 (
         exit /b 1
     )
 )
-if not exist "%VITE_PKG%" (
-    echo [ERRO] Vite nao encontrado apos pnpm install: %VITE_PKG%
+call :resolve_vite
+if errorlevel 1 (
+    echo [ERRO] Vite nao encontrado apos pnpm install.
     pause
     exit /b 1
 )

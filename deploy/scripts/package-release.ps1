@@ -185,34 +185,22 @@ if (-not $SkipBuild) {
     Write-Step "Build SPA (Vite)"
     $webRoot = Join-Path $Root "apps\web"
     $viteCmd = Join-Path $webRoot "node_modules\.bin\vite.cmd"
-    $vitePackagePath = Join-Path $webRoot "node_modules\vite"
-    $viteCli = Join-Path $vitePackagePath "bin\vite.js"
     $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
     if (-not $nodeCommand) {
         throw "Node.js nao encontrado no PATH; instale a versao declarada pelo projeto antes de gerar o pacote"
     }
     $hasViteCmd = Test-Path -LiteralPath $viteCmd -PathType Leaf
-    $viteCliCandidates = @()
-    $vitePackage = Get-Item -LiteralPath $vitePackagePath -Force -ErrorAction SilentlyContinue
-    if ($vitePackage -and $vitePackage.Target) {
-        foreach ($target in @($vitePackage.Target)) {
-            if ($target) {
-                # Para pnpm, use primeiro o alvo fisico da junction em vez do
-                # caminho relativo usado pelo shim .cmd.
-                $viteCliCandidates += Join-Path $target "bin\vite.js"
-            }
-        }
-    }
-    $viteCliCandidates += $viteCli
+    $viteResolver = Join-Path $PSScriptRoot "resolve-vite-cli.ps1"
     $resolvedViteCli = $null
-    foreach ($candidate in ($viteCliCandidates | Select-Object -Unique)) {
-        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-            $resolvedViteCli = $candidate
-            break
+    if (Test-Path -LiteralPath $viteResolver -PathType Leaf) {
+        $resolverOutput = & $viteResolver -WebRoot $webRoot 2>$null
+        if ($LASTEXITCODE -eq 0 -and $resolverOutput) {
+            $resolvedViteCli = [string]($resolverOutput | Where-Object { $_ } | Select-Object -Last 1)
+            if (-not $resolvedViteCli) { $resolvedViteCli = $null }
         }
     }
     if (-not $resolvedViteCli -and -not $hasViteCmd) {
-        throw "Vite local nao encontrado. Verificados: $viteCmd e $($viteCliCandidates -join '; '). Instale as dependencias com pnpm 9.15.0 antes de gerar o pacote"
+        throw "Vite local nao encontrado. Verificados: $viteCmd e $viteResolver. Instale as dependencias com pnpm 9.15.0 antes de gerar o pacote"
     }
 
     $previousNodeEnv = $env:NODE_ENV

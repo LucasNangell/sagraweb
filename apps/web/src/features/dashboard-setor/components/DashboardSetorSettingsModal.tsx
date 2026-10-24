@@ -2,6 +2,7 @@ import { Settings, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { INBOX_COLUMN_SOURCE, INBOX_DISPLAY_SITUACAO } from "../constants";
+import { showsAndamentoTime } from "../normalizeConfig";
 import type { DashboardConfig, DashboardColumnConfig } from "../types";
 import "../dashboard-setor.css";
 
@@ -17,6 +18,8 @@ interface DashboardSetorSettingsModalProps {
   onClose: () => void;
   onSave: (config: DashboardConfig) => void;
   onClearCache: () => void;
+  /** Só o painel moderno oferece o relógio nos cards. */
+  showTimeOption?: boolean;
 }
 
 function cloneConfig(config: DashboardConfig): DashboardConfig {
@@ -31,6 +34,7 @@ export function DashboardSetorSettingsModal({
   onClose,
   onSave,
   onClearCache,
+  showTimeOption = false,
 }: DashboardSetorSettingsModalProps) {
   const [tempConfig, setTempConfig] = useState(() => cloneConfig(config));
 
@@ -243,6 +247,24 @@ export function DashboardSetorSettingsModal({
             <span className="dashboard-setor-hint">Min: 1 | Max: 6</span>
           </div>
         </div>
+
+        {showTimeOption && (
+          <label className="dashboard-setor-hide-empty-option">
+            <input
+              type="checkbox"
+              checked={showsAndamentoTime(tempConfig)}
+              onChange={(event) =>
+                setTempConfig((prev) => {
+                  const next = { ...prev };
+                  if (event.target.checked) delete next.showAndamentoTime;
+                  else next.showAndamentoTime = false;
+                  return next;
+                })
+              }
+            />
+            Exibir o tempo da OS nos cards
+          </label>
+        )}
 
         <div className="dashboard-setor-columns-config">
           <div className="dashboard-setor-columns-config-header">

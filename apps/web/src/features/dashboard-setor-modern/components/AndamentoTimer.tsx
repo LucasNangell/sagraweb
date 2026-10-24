@@ -13,19 +13,28 @@ import { elapsedParts, parseAndamentoTime } from "../elapsed";
 const ClockContext = createContext(Date.now());
 
 /** Um único relógio para todos os cards; retoma o horário real ao voltar à aba. */
-export function AndamentoClock({ children }: { children: ReactNode }) {
+export function AndamentoClock({
+  children,
+  enabled = true,
+}: {
+  children: ReactNode;
+  enabled?: boolean;
+}) {
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
+    if (!enabled) return;
     const tick = () => {
       if (!document.hidden) setNow(Date.now());
     };
+    setNow(Date.now());
     const interval = window.setInterval(tick, 1000);
     document.addEventListener("visibilitychange", tick);
     return () => {
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", tick);
     };
-  }, []);
+  }, [enabled]);
+  if (!enabled) return children;
   return <ClockContext.Provider value={now}>{children}</ClockContext.Provider>;
 }
 

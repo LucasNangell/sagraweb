@@ -75,4 +75,10 @@ describe("prioridades no painel de TV", () => {
     expect(container.querySelector(".setor-modern-card-author")).toBeNull();
     expect(screen.queryByText("Solicitante da OS")).not.toBeInTheDocument();
   });
+
+  it("oculta o relógio quando a configuração desliga o tempo da OS", () => {
+    render(<ModernQueueCard item={item} index={0} showTime={false} />);
+    expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sem horário")).not.toBeInTheDocument();
+  });
 });

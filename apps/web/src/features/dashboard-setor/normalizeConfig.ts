@@ -27,6 +27,13 @@ export function normalizeDashboardColumns(
   return source.map((col, index) => normalizeColumn(col, index));
 }
 
+/** Omitido ou qualquer valor que não seja `false` mantém o relógio visível. */
+export function showsAndamentoTime(
+  config: Pick<DashboardConfig, "showAndamentoTime">,
+): boolean {
+  return config.showAndamentoTime !== false;
+}
+
 export function normalizeDashboardConfigFromRemote(
   remote: unknown,
   fallbackSector?: string | null,
@@ -40,5 +47,6 @@ export function normalizeDashboardConfigFromRemote(
       DEFAULT_DASHBOARD_CONFIG.sector,
     columnCount: columns.length,
     columns,
+    ...(parsed.showAndamentoTime === false ? { showAndamentoTime: false } : {}),
   };
 }

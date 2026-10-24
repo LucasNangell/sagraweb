@@ -22,7 +22,10 @@ import { DashboardSetorSettingsModal } from "@/features/dashboard-setor/componen
 import { useDashboardFreshness } from "@/features/dashboard-setor/hooks/useDashboardFreshness";
 import { useDashboardSetorData } from "@/features/dashboard-setor/hooks/useDashboardSetorData";
 import { useScreenWakeLock } from "@/features/dashboard-setor/hooks/useScreenWakeLock";
-import { normalizeDashboardConfigFromRemote } from "@/features/dashboard-setor/normalizeConfig";
+import {
+  normalizeDashboardConfigFromRemote,
+  showsAndamentoTime,
+} from "@/features/dashboard-setor/normalizeConfig";
 import type { DashboardConfig } from "@/features/dashboard-setor/types";
 import {
   buildDashboardConfigSignature,
@@ -65,9 +68,11 @@ export function DashboardSetorModernPage() {
     watchValue: config,
     onRemoteLoaded: (remote) => {
       const next = normalizeDashboardConfigFromRemote(remote, userSector);
+      const current = configRef.current;
       if (
         buildDashboardConfigSignature(next) !==
-        buildDashboardConfigSignature(configRef.current)
+          buildDashboardConfigSignature(current) ||
+        showsAndamentoTime(next) !== showsAndamentoTime(current)
       ) {
         saveModernDashboardConfig(next);
         setConfig(next);
@@ -83,6 +88,7 @@ export function DashboardSetorModernPage() {
   });
   const freshness = useDashboardFreshness(data);
   const syncAlert = useSyncAndamentosServiceAlert();
+  const showTime = showsAndamentoTime(config);
   const columns = useMemo(
     () => sortModernDashboardColumns(getVisibleDashboardColumns(data.columns)),
     [data.columns],
@@ -252,7 +258,7 @@ export function DashboardSetorModernPage() {
             </div>
           )}
 
-          <AndamentoClock>
+          <AndamentoClock enabled={showTime}>
             <div
               className="setor-modern-board"
               ref={boardRef}
@@ -322,6 +328,7 @@ export function DashboardSetorModernPage() {
                           key={item.uniqueKey}
                           item={item}
                           index={cardIndex}
+                          showTime={showTime}
                         />
                       ))
                     ) : null}
@@ -363,6 +370,7 @@ export function DashboardSetorModernPage() {
         andamentosList={data.andamentosList}
         onClose={() => setSettingsOpen(false)}
         onSave={applyConfig}
+        showTimeOption
         onClearCache={() =>
           applyConfig({
             ...DEFAULT_DASHBOARD_CONFIG,

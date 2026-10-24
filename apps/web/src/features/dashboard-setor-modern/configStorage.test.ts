@@ -41,6 +41,14 @@ describe("configuração independente do painel moderno", () => {
     );
   });
 
+  it("mantém oculta a escolha de não exibir o tempo da OS", () => {
+    saveModernDashboardConfig({
+      ...DEFAULT_DASHBOARD_CONFIG,
+      showAndamentoTime: false,
+    });
+    expect(loadModernDashboardConfig().showAndamentoTime).toBe(false);
+  });
+
   it("recupera um cache inválido e usa o setor do usuário no padrão", () => {
     localStorage.setItem(MODERN_CONFIG_KEY, "{inválido");
     expect(loadModernDashboardConfig("SEIMP").sector).toBe("SEIMP");

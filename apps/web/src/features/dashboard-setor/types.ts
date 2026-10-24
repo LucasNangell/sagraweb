@@ -18,6 +18,8 @@ export interface DashboardConfig {
   sector: string;
   columnCount: number;
   columns: DashboardColumnConfig[];
+  /** Painel moderno. `false` oculta o relógio nos cards; omitido continua exibindo. */
+  showAndamentoTime?: boolean;
 }
 
 export type DashboardPriorityType = "priority-high" | "priority-medium" | null;

@@ -9,9 +9,11 @@ import { AndamentoTimer } from "./AndamentoTimer";
 export function ModernQueueCard({
   item,
   index,
+  showTime = true,
 }: {
   item: DashboardOsItem;
   index: number;
+  showTime?: boolean;
 }) {
   const registeredBy = item.andamento_usuario?.trim();
   const priority =
@@ -36,21 +38,25 @@ export function ModernQueueCard({
         )}
         <span>{item.displaySituacao || "Sem situação informada"}</span>
       </div>
-      <div className="setor-modern-card-meta">
-        {registeredBy && (
-          <p
-            className="setor-modern-card-author"
-            title={`Andamento registrado por ${registeredBy}`}
-          >
-            <UserRound aria-hidden="true" />
-            <span>{registeredBy}</span>
-          </p>
-        )}
-        <AndamentoTimer
-          since={item.last_update}
-          observation={item.observacao}
-        />
-      </div>
+      {(registeredBy || showTime) && (
+        <div className="setor-modern-card-meta">
+          {registeredBy && (
+            <p
+              className="setor-modern-card-author"
+              title={`Andamento registrado por ${registeredBy}`}
+            >
+              <UserRound aria-hidden="true" />
+              <span>{registeredBy}</span>
+            </p>
+          )}
+          {showTime && (
+            <AndamentoTimer
+              since={item.last_update}
+              observation={item.observacao}
+            />
+          )}
+        </div>
+      )}
     </article>
   );
 }

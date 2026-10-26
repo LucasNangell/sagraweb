@@ -61,7 +61,12 @@ public partial class OverlayWindow : Window
     int _dragOriginX;
     int _dragWinX;
     int _dragWidth;
+    bool _didDrag;
+    TickerCard? _pressCard;
+    Point _pressCardScreen;
+    OsBalloonWindow? _balloon;
     SettingsWindow? _settings;
+    const int ClickSlopPx = 6;
 
     public OverlayWindow(AppConfig config)
     {
@@ -114,6 +119,7 @@ public partial class OverlayWindow : Window
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplayChanged;
         _dockTimer.Stop();
         _pollTimer.Stop();
+        CloseBalloon();
         _client.Dispose();
         AppLog.Info("Letreiro encerrado");
     }
@@ -123,6 +129,7 @@ public partial class OverlayWindow : Window
         _config = ConfigStore.Normalize(config);
         if (relogin)
         {
+            CloseBalloon();
             _client.Dispose();
             _client = NewClient(_config);
             _master.Clear();
@@ -191,12 +198,25 @@ public partial class OverlayWindow : Window
             if (e.LeftButton == MouseButtonState.Pressed)
             {
                 GetCursorPos(out var pt);
+                if (!_didDrag && Math.Abs(pt.X - _dragOriginX) < ClickSlopPx)
+                    return;
+                if (!_didDrag)
+                {
+                    _didDrag = true;
+                    CloseBalloon();
+                }
                 ApplyDrag(pt.X);
             }
             Cursor = _dragMode is "left" or "right" ? Cursors.SizeWE : Cursors.SizeAll;
             return;
         }
-        Cursor = HitZone(e) is "left" or "right" ? Cursors.SizeWE : Cursors.SizeAll;
+        var zone = HitZone(e);
+        if (zone is "left" or "right")
+            Cursor = Cursors.SizeWE;
+        else if (CardAt(e.GetPosition(Ticker)) is not null)
+            Cursor = Cursors.Hand;
+        else
+            Cursor = Cursors.SizeAll;
     }
 
     string HitZone(MouseEventArgs e)
@@ -210,7 +230,18 @@ public partial class OverlayWindow : Window
     void OnPress(object sender, MouseButtonEventArgs e)
     {
         GetCursorPos(out var pt);
-        _dragMode = HitZone(e);
+        var zone = HitZone(e);
+        _dragMode = zone;
+        _didDrag = false;
+        _pressCard = zone is "left" or "right" ? null : CardAt(e.GetPosition(Ticker));
+        if (_pressCard is not null)
+        {
+            var el = CardElement(_pressCard);
+            _pressCardScreen = el is not null
+                ? el.PointToScreen(new Point(0, 0))
+                : PointToScreen(e.GetPosition(this));
+        }
+        CloseBalloon();
         _dragOriginX = pt.X;
         _dragWinX = _physX;
         _dragWidth = _physWidth;
@@ -242,9 +273,19 @@ public partial class OverlayWindow : Window
     void OnRelease(object sender, MouseButtonEventArgs e)
     {
         if (_dragMode is null) return;
+        var card = _pressCard;
+        var dragged = _didDrag;
         _dragMode = null;
+        _pressCard = null;
+        _didDrag = false;
         ReleaseMouseCapture();
-        PersistWindow();
+        if (dragged)
+        {
+            PersistWindow();
+            return;
+        }
+        if (card is not null)
+            OpenBalloon(card, _pressCardScreen);
     }
 
     void OnContext(object sender, MouseButtonEventArgs e)
@@ -255,8 +296,53 @@ public partial class OverlayWindow : Window
         menu.Items.Add(Item("Verificar atualização", () => App.CheckUpdatesFromMenu()));
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Sair", () => Application.Current.Shutdown()));
+        CloseBalloon();
         menu.IsOpen = true;
         e.Handled = true;
+    }
+
+    TickerCard? CardAt(Point tickerPos)
+    {
+        foreach (UIElement child in Ticker.Children)
+        {
+            if (child is not FrameworkElement fe || fe.Tag is not TickerCard card) continue;
+            var x = Canvas.GetLeft(fe);
+            var y = Canvas.GetTop(fe);
+            if (double.IsNaN(x) || double.IsNaN(y)) continue;
+            if (tickerPos.X >= x && tickerPos.X <= x + fe.Width &&
+                tickerPos.Y >= y && tickerPos.Y <= y + fe.Height)
+                return card;
+        }
+        return null;
+    }
+
+    FrameworkElement? CardElement(TickerCard card)
+    {
+        foreach (UIElement child in Ticker.Children)
+        {
+            if (child is FrameworkElement fe && fe.Tag is TickerCard tagged &&
+                (ReferenceEquals(tagged, card) || tagged.UniqueKey == card.UniqueKey))
+                return fe;
+        }
+        return null;
+    }
+
+    void OpenBalloon(TickerCard card, Point screenTopLeft)
+    {
+        CloseBalloon();
+        _balloon = new OsBalloonWindow(card, _client);
+        _balloon.Closed += (_, _) => _balloon = null;
+        _balloon.Show();
+        _balloon.PlaceAbove(this, screenTopLeft);
+        _balloon.Activate();
+    }
+
+    void CloseBalloon()
+    {
+        if (_balloon is null) return;
+        try { _balloon.Close(); }
+        catch { }
+        _balloon = null;
     }
 
     static MenuItem Item(string header, Action action)
@@ -495,6 +581,8 @@ public partial class OverlayWindow : Window
             Width = w,
             Height = h,
             ClipToBounds = true,
+            Tag = card,
+            Cursor = Cursors.Hand,
         };
         root.Children.Add(new Border { Background = bg, CornerRadius = new CornerRadius(2) });
         root.Children.Add(new Border

@@ -448,6 +448,7 @@ public static class Board
         item.Setor = os.Setor;
         item.Titulo = os.Titulo;
         item.Produto = os.Produto;
+        item.Solicitante = os.Solicitante;
         item.Prioridade = os.Prioridade;
         item.LastUpdate = os.LastUpdate;
         item.AndamentoUsuario = os.AndamentoUsuario;
@@ -505,6 +506,13 @@ public static class Board
                     IsSubOs = item.RowKind == "sub_os",
                     ColumnIndex = origIdx,
                     ColumnTitle = col.Title ?? "",
+                    NrOs = item.NrOs,
+                    Ano = item.Ano,
+                    ParentNrOs = item.ParentNrOs,
+                    ParentAno = item.ParentAno,
+                    Titulo = item.Titulo,
+                    Produto = item.Produto,
+                    Solicitante = item.Solicitante,
                 });
             }
         }

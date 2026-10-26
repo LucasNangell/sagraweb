@@ -21,6 +21,7 @@ public sealed class OsItem
     public object? Ano { get; set; }
     public string? Titulo { get; set; }
     public string? Produto { get; set; }
+    public string? Solicitante { get; set; }
     public string? Situacao { get; set; }
     public string? Setor { get; set; }
     public string? DataEntrega { get; set; }
@@ -102,6 +103,36 @@ public sealed class TickerCard
     public bool IsSubOs { get; set; }
     public int ColumnIndex { get; set; }
     public string ColumnTitle { get; set; } = "";
+    public object? NrOs { get; set; }
+    public object? Ano { get; set; }
+    public object? ParentNrOs { get; set; }
+    public object? ParentAno { get; set; }
+    public string? Titulo { get; set; }
+    public string? Produto { get; set; }
+    public string? Solicitante { get; set; }
+
+    public int FolderNr => Board.ToInt(IsSubOs ? ParentNrOs ?? NrOs : NrOs);
+    public int FolderAno => Board.ToInt(IsSubOs ? ParentAno ?? Ano : Ano);
+}
+
+public sealed class OsDetails
+{
+    public string? MaquinaLink { get; set; }
+    public object? Tiragem { get; set; }
+    public object? Pags { get; set; }
+    public object? ModelosArq { get; set; }
+    public object? FrenteVerso { get; set; }
+    public string? FormatoLink { get; set; }
+    public string? EntregPrazoLink { get; set; }
+    public string? EntregData { get; set; }
+    public string? EntregPeriodo { get; set; }
+    public string? ContatoTrab { get; set; }
+    public string? PapelLink { get; set; }
+    public string? PapelDescricao { get; set; }
+    public string? Cores { get; set; }
+    public string? CoresDescricao { get; set; }
+    public string? DescAcabamento { get; set; }
+    public string? Observ { get; set; }
 }
 
 public sealed class InboxRef

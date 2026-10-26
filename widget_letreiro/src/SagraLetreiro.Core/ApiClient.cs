@@ -176,6 +176,22 @@ public sealed class LetreiroApiClient : IDisposable
         return Board.MergeDashboardSectorItemLists(lists);
     }
 
+    public async Task<OsDetails> FetchOsDetailsAsync(int ano, int id, CancellationToken ct = default)
+    {
+        var row = await RequestAsync(HttpMethod.Get, $"/os/{ano}/{id}/details", ct: ct).ConfigureAwait(false);
+        if (row.ValueKind != JsonValueKind.Object)
+            throw new LetreiroApiException("Resposta inválida da API.");
+        return MapDetails(row);
+    }
+
+    public async Task<string> FetchOsPathAsync(int ano, int id, CancellationToken ct = default)
+    {
+        var row = await RequestAsync(HttpMethod.Get, $"/os/{ano}/{id}/path", ct: ct).ConfigureAwait(false);
+        if (row.ValueKind == JsonValueKind.Object)
+            return GetString(row, "path") ?? "";
+        return row.ValueKind == JsonValueKind.String ? row.GetString() ?? "" : "";
+    }
+
     async Task<List<OsItem>> FetchSearchAsync(string sector, CancellationToken ct)
     {
         var isGravacao = sector == "Gravação";
@@ -224,6 +240,7 @@ public sealed class LetreiroApiClient : IDisposable
         Ano = GetObject(row, "ano"),
         Titulo = GetString(row, "titulo"),
         Produto = GetString(row, "produto"),
+        Solicitante = GetString(row, "solicitante"),
         Situacao = GetString(row, "situacao"),
         Setor = GetString(row, "setor"),
         DataEntrega = GetString(row, "data_entrega"),
@@ -241,6 +258,26 @@ public sealed class LetreiroApiClient : IDisposable
         ComponenteNome = GetString(row, "componente_nome"),
         ParentNrOs = GetObject(row, "parent_nr_os"),
         ParentAno = GetObject(row, "parent_ano"),
+    };
+
+    static OsDetails MapDetails(JsonElement row) => new()
+    {
+        MaquinaLink = GetString(row, "MaquinaLink") ?? GetString(row, "maquinaLink"),
+        Tiragem = GetObject(row, "Tiragem") ?? GetObject(row, "tiragem"),
+        Pags = GetObject(row, "Pags") ?? GetObject(row, "pags"),
+        ModelosArq = GetObject(row, "ModelosArq") ?? GetObject(row, "modelosArq"),
+        FrenteVerso = GetObject(row, "FrenteVerso") ?? GetObject(row, "frenteVerso"),
+        FormatoLink = GetString(row, "FormatoLink") ?? GetString(row, "formatoLink"),
+        EntregPrazoLink = GetString(row, "EntregPrazoLink") ?? GetString(row, "entregPrazoLink"),
+        EntregData = GetString(row, "EntregData") ?? GetString(row, "entregData"),
+        EntregPeriodo = GetString(row, "EntregPeriodo") ?? GetString(row, "entregPeriodo"),
+        ContatoTrab = GetString(row, "ContatoTrab") ?? GetString(row, "contatoTrab"),
+        PapelLink = GetString(row, "PapelLink") ?? GetString(row, "papelLink"),
+        PapelDescricao = GetString(row, "PapelDescricao") ?? GetString(row, "papelDescricao"),
+        Cores = GetString(row, "Cores") ?? GetString(row, "cores"),
+        CoresDescricao = GetString(row, "CoresDescricao") ?? GetString(row, "coresDescricao"),
+        DescAcabamento = GetString(row, "DescAcabamento") ?? GetString(row, "descAcabamento"),
+        Observ = GetString(row, "Observ") ?? GetString(row, "observ"),
     };
 
     static string Query(params (string, string)[] pairs) =>

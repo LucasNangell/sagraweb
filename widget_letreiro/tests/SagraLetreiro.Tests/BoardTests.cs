@@ -195,6 +195,69 @@ public class BoardTests
     }
 
     [Fact]
+    public void FlattenKeepsHeaderFieldsAndParentForSubOs()
+    {
+        var columns = new List<BoardColumn>
+        {
+            new()
+            {
+                Id = "exec",
+                Title = "Execução",
+                Items =
+                [
+                    new OsItem
+                    {
+                        NrOs = 12, Ano = 2026, Titulo = "Ofício", Produto = "Cartaz", Solicitante = "Gabinete 4",
+                        UniqueKey = "12-2026", DisplaySituacao = "Em Execução", RowKind = "main_os",
+                    },
+                ],
+            },
+        };
+        var main = Board.FlattenTickerCards(columns).Single();
+        Assert.Equal(12, main.FolderNr);
+        Assert.Equal(2026, main.FolderAno);
+        Assert.Equal("Ofício", main.Titulo);
+        Assert.Equal("Cartaz", main.Produto);
+        Assert.Equal("Gabinete 4", main.Solicitante);
+
+        columns[0].Items =
+        [
+            new OsItem
+            {
+                NrOs = 99, Ano = 2026, RowKind = "sub_os", ParentNrOs = 568, ParentAno = 2026,
+                Titulo = "Miolo", Produto = "Livro", Solicitante = "SECOM",
+                UniqueKey = "568-2026-sub-1", DisplaySituacao = "[Miolo] Em Execução",
+            },
+        ];
+        var sub = Board.FlattenTickerCards(columns).Single();
+        Assert.True(sub.IsSubOs);
+        Assert.Equal(568, sub.FolderNr);
+        Assert.Equal(2026, sub.FolderAno);
+        Assert.Equal("SECOM", sub.Solicitante);
+    }
+
+    [Fact]
+    public void FolderPathRejectsBackendErrorStrings()
+    {
+        Assert.True(OsFolderPath.IsUsable(@"\\redecamara\DfsData\CGraf\Sefoc\Deputados\2026\01234 - x"));
+        Assert.False(OsFolderPath.IsUsable(""));
+        Assert.False(OsFolderPath.IsUsable("Pasta não encontrada na rede."));
+        Assert.False(OsFolderPath.IsUsable("Erro: timeout"));
+    }
+
+    [Fact]
+    public void DateBrMatchesHomePanel()
+    {
+        Assert.Equal("02/09/2026", OsDisplay.DateBr("2026-09-02"));
+        Assert.Equal("02/09/2026", OsDisplay.DateBr("2026-09-02T00:00:00"));
+        Assert.Equal("", OsDisplay.DateBr(null));
+        Assert.True(OsDisplay.ToCheck(1));
+        Assert.True(OsDisplay.ToCheck("Sim"));
+        Assert.False(OsDisplay.ToCheck(0));
+        Assert.Equal("Couché\n90g", OsDisplay.JoinLines("Couché", "90g"));
+    }
+
+    [Fact]
     public void TickerContentOverflowsOnlyWhenCardsDoNotFit()
     {
         Assert.False(Board.TickerContentOverflows([80, 80], 8, 720));

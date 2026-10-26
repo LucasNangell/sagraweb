@@ -33,8 +33,9 @@ Ou `iniciar-letreiro.bat` (usa o `.exe` se existir).
 
 ## Comportamento
 
-- **Arrastar** pelo handle à esquerda; **largura** pelas bordas.
-- **Engrenagem** ou botão direito: ajustes (setor, grupos, velocidade, login).
+- **Arrastar** pela faixa; **largura** pelas bordas.
+- Botão direito: ajustes (setor, grupos, velocidade, login).
+- Ponto à direita indica conexão.
 - Hover **pausa** o deslize (quando a faixa está cheia).
 - Uma instância por usuário (lock em `%LOCALAPPDATA%\SagraLetreiro`).
 

@@ -33,8 +33,6 @@ logger = logging.getLogger("sagra.letreiro")
 
 BG = "#121214"
 CHROMA = "#ff00fe"
-HANDLE_BG = "#202024"
-RESIZE_BG = "#2a2a32"
 CARD_BG = "#333338"
 TEXT = "#e1e1e6"
 TEXT_DIM = "#a8a8b3"
@@ -47,9 +45,9 @@ PRIORITY_MEDIUM_TEXT = "#1a1a1a"
 SUB_OS_BORDER = "#f59e0b"
 COLUMN_BORDERS = ("#b46d03", "#04618d", "#a30d0d", "#02461e", "#ff6b6b", "#202024")
 
-HANDLE_W = 42
-RESIZE_W = 12
-EDGE = 14
+STATUS_W = 10
+STATUS_R = 2
+EDGE = 8
 MIN_WIDTH = 320
 GAP = 8
 CARD_MAX_W = 260
@@ -182,58 +180,22 @@ class LetreiroOverlay:
         apply_layered_attributes(hwnd, opacity, chroma)
 
     def _build_ui(self) -> None:
-        self.handle = tk.Frame(self.root, bg=HANDLE_BG, width=HANDLE_W, cursor="fleur")
-        self.handle.pack(side="left", fill="y")
-        self.handle.pack_propagate(False)
-
-        self.grip = tk.Canvas(self.handle, bg=HANDLE_BG, highlightthickness=0, width=HANDLE_W, height=10)
-        self.grip.pack(side="top", pady=(2, 0))
-        for gx in (14, 21, 28):
-            self.grip.create_oval(gx, 3, gx + 3, 6, fill=TEXT_DIM, outline="")
-
-        self.status_dot = tk.Canvas(self.handle, bg=HANDLE_BG, highlightthickness=0, width=HANDLE_W, height=12)
-        self.status_dot.pack(side="top", pady=(1, 0))
-        self._dot_id = self.status_dot.create_oval(16, 1, 26, 11, fill=TEXT_DIM, outline="")
-
-        self.gear = tk.Label(
-            self.handle,
-            text="⚙",
-            bg=HANDLE_BG,
-            fg=TEXT,
-            cursor="hand2",
-            font=("Segoe UI", 10),
-        )
-        self.gear.pack(side="bottom", pady=(0, 1))
-        self.gear.bind("<Button-1>", self._on_gear)
-        self.gear.bind("<Button-3>", self._on_context)
-
-        self.resize = tk.Frame(self.root, bg=RESIZE_BG, width=RESIZE_W, cursor="sb_h_double_arrow")
-        self.resize.pack(side="right", fill="y")
-        self.resize.pack_propagate(False)
-        self.resize_grip = tk.Canvas(
-            self.resize,
-            bg=RESIZE_BG,
+        self.status = tk.Canvas(
+            self.root,
+            bg=BG,
             highlightthickness=0,
-            width=RESIZE_W,
+            width=STATUS_W,
             cursor="sb_h_double_arrow",
         )
-        self.resize_grip.pack(fill="both", expand=True)
-        self.resize.bind("<Configure>", self._draw_resize_grip)
+        self.status.pack(side="right", fill="y")
+        self.status.bind("<Configure>", lambda _e: self._paint_status())
 
-        self.canvas = tk.Canvas(self.root, bg=BG, highlightthickness=0, cursor="arrow")
+        self.canvas = tk.Canvas(self.root, bg=BG, highlightthickness=0, cursor="fleur")
         self.canvas.pack(side="left", fill="both", expand=True)
         self.canvas.bind("<Enter>", lambda _e: self._set_paused(True))
         self.canvas.bind("<Leave>", lambda _e: self._set_paused(False))
         self.canvas.bind("<Configure>", self._on_canvas_configure)
-        for widget in (
-            self.root,
-            self.handle,
-            self.grip,
-            self.status_dot,
-            self.canvas,
-            self.resize,
-            self.resize_grip,
-        ):
+        for widget in (self.root, self.canvas, self.status):
             widget.bind("<Motion>", self._on_motion)
             widget.bind("<Button-1>", self._on_press)
             widget.bind("<B1-Motion>", self._on_drag)
@@ -296,25 +258,12 @@ class LetreiroOverlay:
     def _panel_bg(self) -> str:
         return CHROMA if self._transparent_bg() else BG
 
-    def _handle_bg(self) -> str:
-        return CHROMA if self._transparent_bg() else HANDLE_BG
-
-    def _resize_bg(self) -> str:
-        return CHROMA if self._transparent_bg() else RESIZE_BG
-
     def _apply_chrome(self) -> None:
         fill = self._panel_bg()
-        handle = self._handle_bg()
-        resize = self._resize_bg()
         try:
             self.root.configure(bg=fill)
             self.canvas.configure(bg=fill)
-            self.handle.configure(bg=handle)
-            self.grip.configure(bg=handle)
-            self.status_dot.configure(bg=handle)
-            self.resize.configure(bg=resize)
-            self.resize_grip.configure(bg=resize)
-            self.gear.configure(bg=handle)
+            self.status.configure(bg=fill)
         except tk.TclError:
             return
         try:
@@ -330,6 +279,7 @@ class LetreiroOverlay:
         # Não usar Tk -alpha: ele substitui o chroma-key. Alpha + key via Win32,
         # reaplicado depois de cada SetWindowPos.
         self._apply_layered()
+        self._paint_status()
 
     def _place(self, initial: bool = False) -> None:
         win = self.config["window"]
@@ -392,15 +342,6 @@ class LetreiroOverlay:
         except tk.TclError:
             pass
 
-    def _draw_resize_grip(self, _event=None) -> None:
-        c = self.resize_grip
-        c.delete("all")
-        h = max(1, c.winfo_height())
-        x = RESIZE_W // 2
-        cy = h // 2
-        for dy in (-6, 0, 6):
-            c.create_oval(x - 1, cy + dy - 1, x + 2, cy + dy + 2, fill=TEXT_DIM, outline="")
-
     def _on_motion(self, event) -> None:
         if self._drag:
             cursor = "sb_h_double_arrow" if self._drag.get("mode") in {"left", "right"} else "fleur"
@@ -409,40 +350,29 @@ class LetreiroOverlay:
         zone = self._hit_zone(event)
         if zone in {"left", "right"}:
             self._set_cursors("sb_h_double_arrow")
-        elif zone == "move":
-            self._set_cursors("fleur")
         else:
-            self._set_cursors("arrow")
+            self._set_cursors("fleur")
 
     def _set_cursors(self, cursor: str) -> None:
         self.root.configure(cursor=cursor)
         self.canvas.configure(cursor=cursor)
         if cursor != "sb_h_double_arrow":
-            self.resize.configure(cursor="sb_h_double_arrow")
-            self.resize_grip.configure(cursor="sb_h_double_arrow")
+            self.status.configure(cursor="sb_h_double_arrow")
 
     def _hit_zone(self, event) -> Optional[str]:
         widget = event.widget
-        if widget in (self.resize, self.resize_grip):
+        if widget is self.status:
             return "right"
         left = self.root.winfo_x()
         width = self.root.winfo_width()
         local = event.x_root - left
-        if local >= width - RESIZE_W - 2:
+        if local >= width - STATUS_W:
             return "right"
         if local <= EDGE:
             return "left"
-        if local <= HANDLE_W or widget in (self.handle, self.grip, self.status_dot):
-            return "move"
-        return None
-
-    def _on_gear(self, _event) -> None:
-        self._drag = None
-        self.on_open_settings()
+        return "move"
 
     def _on_press(self, event) -> None:
-        if event.widget is self.gear:
-            return
         zone = self._hit_zone(event)
         if not zone:
             return
@@ -510,7 +440,7 @@ class LetreiroOverlay:
             self._persist_window(self.root.winfo_x(), self.root.winfo_width())
         except tk.TclError:
             pass
-        self._set_cursors("arrow")
+        self._set_cursors("fleur")
 
     def _on_context(self, event) -> None:
         menu = tk.Menu(self.root, tearoff=0)
@@ -608,13 +538,21 @@ class LetreiroOverlay:
 
     def _paint_status(self) -> None:
         color = {"connected": SUCCESS, "degraded": WARNING}.get(self._status, DANGER)
-        self.status_dot.itemconfigure(self._dot_id, fill=color)
-        fill = self._handle_bg()
-        self.handle.configure(bg=fill)
-        self.status_dot.configure(bg=fill)
+        fill = self._panel_bg()
         try:
-            self.status_dot.tooltip = self._status_msg
-        except Exception:
+            c = self.status
+            c.configure(bg=fill)
+            c.delete("all")
+            h = max(1, c.winfo_height())
+            cx = STATUS_W / 2
+            cy = h / 2
+            r = STATUS_R
+            c.create_oval(cx - r, cy - r, cx + r, cy + r, fill=color, outline="")
+            try:
+                c.tooltip = self._status_msg
+            except Exception:
+                pass
+        except tk.TclError:
             pass
 
     def _rebuild_layout(self) -> None:

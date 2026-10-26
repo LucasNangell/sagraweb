@@ -34,7 +34,6 @@ public partial class OverlayWindow : Window
     ];
 
     const double Edge = 8;
-    const double CardMaxW = 260;
     const double StatusCol = 14;
 
     readonly Dictionary<string, OsItem> _master = new();
@@ -79,7 +78,7 @@ public partial class OverlayWindow : Window
         MouseLeave += (_, _) => _paused = false;
         Ticker.MouseEnter += (_, _) => _paused = true;
         Ticker.MouseLeave += (_, _) => _paused = false;
-        Ticker.SizeChanged += (_, _) => { _needsDraw = true; Redraw(); };
+        Ticker.SizeChanged += OnTickerSizeChanged;
         CompositionTarget.Rendering += OnRenderTick;
         SystemEventsDisplay();
         _dockTimer.Tick += (_, _) =>
@@ -364,11 +363,20 @@ public partial class OverlayWindow : Window
         StatusHost.ToolTip = _statusMsg;
     }
 
+    void OnTickerSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (_cards.Count > 0) RebuildLayout();
+        else
+        {
+            _needsDraw = true;
+            Redraw();
+        }
+    }
+
     void RebuildLayout()
     {
         var height = Math.Max(18, Ticker.ActualHeight);
-        var numSize = Math.Max(8, height * 0.22);
-        var sitSize = Math.Max(7, height * 0.17);
+        var (numSize, sitSize) = CardMetrics.FontSizes(height);
         var pixels = VisualTreeHelper.GetDpi(this).PixelsPerDip;
         _layout = [];
         foreach (var card in _cards)
@@ -376,10 +384,11 @@ public partial class OverlayWindow : Window
             var labelW = Measure(card.Label, numSize, true, pixels);
             var sit = card.Situacao ?? "";
             var sitW = Measure(sit, sitSize, false, pixels);
-            var inner = Math.Min(CardMaxW - 16, Math.Max(Math.Max(labelW, sitW), 64));
+            var width = CardMetrics.Width(labelW, sitW);
+            var inner = CardMetrics.TextInner(width);
             if (sitW > inner)
                 sit = Ellipsis(sit, sitSize, inner, pixels);
-            _layout.Add((card, inner + 16, sit));
+            _layout.Add((card, width, sit));
         }
         _offset = 0;
         _needsDraw = true;
@@ -480,39 +489,47 @@ public partial class OverlayWindow : Window
         else if (card.IsSubOs) border = ((SolidColorBrush)SubOsBorder).Color;
         else border = ColumnBorders[Math.Abs(card.ColumnIndex) % ColumnBorders.Length];
 
-        var numSize = Math.Max(8, h * 0.42);
-        var sitSize = Math.Max(7, h * 0.32);
-        var root = new Grid { Width = w, Height = h };
+        var (numSize, sitSize) = CardMetrics.FontSizes(canvasH);
+        var root = new Grid
+        {
+            Width = w,
+            Height = h,
+            ClipToBounds = true,
+        };
         root.Children.Add(new Border { Background = bg, CornerRadius = new CornerRadius(2) });
         root.Children.Add(new Border
         {
-            Width = 4,
+            Width = CardMetrics.Accent,
             HorizontalAlignment = HorizontalAlignment.Left,
             Background = Frozen(new SolidColorBrush(border)),
         });
-        var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 6, 0) };
-        stack.Children.Add(new TextBlock
+        var stack = new StackPanel
         {
-            Text = card.Label,
-            Foreground = fg,
-            FontFamily = new FontFamily("Segoe UI"),
-            FontWeight = FontWeights.Bold,
-            FontSize = numSize,
-            TextAlignment = TextAlignment.Center,
-        });
-        stack.Children.Add(new TextBlock
-        {
-            Text = situacao,
-            Foreground = sitFg,
-            FontFamily = new FontFamily("Segoe UI"),
-            FontSize = sitSize,
-            TextAlignment = TextAlignment.Center,
-        });
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(CardMetrics.TextLeft, 0, CardMetrics.TextRight, 0),
+        };
+        stack.Children.Add(TextLine(card.Label, fg, numSize, bold: true));
+        stack.Children.Add(TextLine(situacao, sitFg, sitSize, bold: false));
         root.Children.Add(stack);
         Canvas.SetLeft(root, x);
         Canvas.SetTop(root, y);
         return root;
     }
+
+    static TextBlock TextLine(string text, Brush fg, double size, bool bold) => new()
+    {
+        Text = text ?? "",
+        Foreground = fg,
+        FontFamily = new FontFamily("Segoe UI"),
+        FontWeight = bold ? FontWeights.Bold : FontWeights.Normal,
+        FontSize = size,
+        TextAlignment = TextAlignment.Center,
+        TextWrapping = TextWrapping.NoWrap,
+        TextTrimming = TextTrimming.CharacterEllipsis,
+        Padding = new Thickness(0),
+        Margin = new Thickness(0),
+        HorizontalAlignment = HorizontalAlignment.Stretch,
+    };
 
     static double Measure(string text, double size, bool bold, double pixelsPerDip)
     {
@@ -525,7 +542,7 @@ public partial class OverlayWindow : Window
             size,
             Brushes.White,
             pixelsPerDip);
-        return ft.WidthIncludingTrailingWhitespace;
+        return ft.WidthIncludingTrailingWhitespace + 2;
     }
 
     static string Ellipsis(string text, double size, double maxW, double pixelsPerDip)

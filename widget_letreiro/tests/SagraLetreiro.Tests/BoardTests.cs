@@ -261,6 +261,26 @@ public class BoardTests
     }
 
     [Fact]
+    public void CardWidthFitsTheWiderLineAndKeepsPadding()
+    {
+        var width = CardMetrics.Width(labelWidth: 90, situacaoWidth: 140);
+        Assert.Equal(140 + CardMetrics.PadX, width, 3);
+        Assert.Equal(140, CardMetrics.TextInner(width), 3);
+        var capped = CardMetrics.Width(40, 800);
+        Assert.Equal(CardMetrics.MaxWidth, capped, 3);
+        Assert.True(CardMetrics.TextInner(capped) >= CardMetrics.MinInner);
+    }
+
+    [Fact]
+    public void CardFontSizesStaySharedBetweenMeasureAndPaint()
+    {
+        var (label, sit) = CardMetrics.FontSizes(48);
+        Assert.True(label >= sit);
+        Assert.True(label < 48);
+        Assert.True(sit >= 8);
+    }
+
+    [Fact]
     public void RtlPlacesFirstCardOnTheRightWhenNotScrolling()
     {
         var cards = new[]

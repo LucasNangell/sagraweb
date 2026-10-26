@@ -13,7 +13,7 @@ cd widget_letreiro
 .\installer\build.ps1
 ```
 
-Gera `artifacts\SAGRA-Letreiro-Setup-2.0.0.exe` (self-contained win-x64 + Inno Setup).
+Gera `artifacts\SAGRA-Letreiro-Setup-{versão}.exe` (self-contained win-x64 + Inno Setup).
 
 2. Publique o setup na pasta compartilhada:
 

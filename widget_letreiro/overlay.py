@@ -454,7 +454,7 @@ class LetreiroOverlay:
             elif self._status != "connected":
                 self._draw_empty(self._status_msg)
             else:
-                self._draw_empty("Nenhuma OP")
+                self._draw_empty("")
         except tk.TclError:
             pass
 
@@ -633,7 +633,7 @@ class LetreiroOverlay:
             dt = max(0.0, min(0.1, now - self._last_tick))
             self._last_tick = now
             if not self._layout:
-                self._draw_empty(self._status_msg if self._status != "connected" else "Nenhuma OP")
+                self._draw_empty("" if self._status == "connected" else self._status_msg)
             elif self._needs_scroll() and not self._paused:
                 speed = float(self.config["window"].get("speed_px_per_sec") or 40)
                 self._offset += speed * dt
@@ -655,12 +655,16 @@ class LetreiroOverlay:
             self.canvas.delete("all")
         except tk.TclError:
             return
+        shown = (text or "").strip()
+        if not shown:
+            return
         h = max(1, self.canvas.winfo_height())
-        shown = text if len(text) < 80 else text[:77] + "…"
+        if len(shown) >= 80:
+            shown = shown[:77] + "…"
         self.canvas.create_text(
             12,
             h / 2,
-            text=shown or "Nenhuma OP",
+            text=shown,
             fill=TEXT_DIM,
             font=self._font_empty,
             anchor="w",
@@ -674,7 +678,7 @@ class LetreiroOverlay:
         height = max(1, self.canvas.winfo_height())
         width = max(1, self.canvas.winfo_width())
         if not self._layout:
-            self._draw_empty("Nenhuma OP")
+            self._draw_empty("" if self._status == "connected" else self._status_msg)
             return
         if not self._needs_scroll():
             x = 8

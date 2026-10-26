@@ -34,6 +34,7 @@ logger = logging.getLogger("sagra.letreiro")
 BG = "#121214"
 CHROMA = "#ff00fe"
 HANDLE_BG = "#202024"
+RESIZE_BG = "#2a2a32"
 CARD_BG = "#333338"
 TEXT = "#e1e1e6"
 TEXT_DIM = "#a8a8b3"
@@ -206,12 +207,12 @@ class LetreiroOverlay:
         self.gear.bind("<Button-1>", self._on_gear)
         self.gear.bind("<Button-3>", self._on_context)
 
-        self.resize = tk.Frame(self.root, bg="#2a2a32", width=RESIZE_W, cursor="sb_h_double_arrow")
+        self.resize = tk.Frame(self.root, bg=RESIZE_BG, width=RESIZE_W, cursor="sb_h_double_arrow")
         self.resize.pack(side="right", fill="y")
         self.resize.pack_propagate(False)
         self.resize_grip = tk.Canvas(
             self.resize,
-            bg="#2a2a32",
+            bg=RESIZE_BG,
             highlightthickness=0,
             width=RESIZE_W,
             cursor="sb_h_double_arrow",
@@ -295,11 +296,25 @@ class LetreiroOverlay:
     def _panel_bg(self) -> str:
         return CHROMA if self._transparent_bg() else BG
 
+    def _handle_bg(self) -> str:
+        return CHROMA if self._transparent_bg() else HANDLE_BG
+
+    def _resize_bg(self) -> str:
+        return CHROMA if self._transparent_bg() else RESIZE_BG
+
     def _apply_chrome(self) -> None:
         fill = self._panel_bg()
+        handle = self._handle_bg()
+        resize = self._resize_bg()
         try:
             self.root.configure(bg=fill)
             self.canvas.configure(bg=fill)
+            self.handle.configure(bg=handle)
+            self.grip.configure(bg=handle)
+            self.status_dot.configure(bg=handle)
+            self.resize.configure(bg=resize)
+            self.resize_grip.configure(bg=resize)
+            self.gear.configure(bg=handle)
         except tk.TclError:
             return
         try:
@@ -594,7 +609,9 @@ class LetreiroOverlay:
     def _paint_status(self) -> None:
         color = {"connected": SUCCESS, "degraded": WARNING}.get(self._status, DANGER)
         self.status_dot.itemconfigure(self._dot_id, fill=color)
-        self.handle.configure(bg=HANDLE_BG)
+        fill = self._handle_bg()
+        self.handle.configure(bg=fill)
+        self.status_dot.configure(bg=fill)
         try:
             self.status_dot.tooltip = self._status_msg
         except Exception:

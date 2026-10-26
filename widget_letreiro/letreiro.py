@@ -7,7 +7,7 @@ import sys
 import threading
 from pathlib import Path
 
-__version__ = "1.1.5"
+__version__ = "1.1.6"
 
 ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:

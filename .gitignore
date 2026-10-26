@@ -69,3 +69,7 @@ app/backend/cache/
 
 # TanStack Router generated (recreated on dev)
 apps/web/src/routeTree.gen.ts
+
+# Letreiro (widget desktop)
+widget_letreiro/config.yaml
+widget_letreiro/.venv/

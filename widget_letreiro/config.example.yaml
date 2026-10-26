@@ -1,0 +1,51 @@
+# Copie para config.yaml e ajuste. config.yaml não entra no git.
+
+# DEV local:
+api_base_url: "http://127.0.0.1:8001/api"
+# Produção (use o FQDN — alias curto pode redirecionar e quebrar POST):
+# api_base_url: "https://cgrafsysvm.redecamara.camara.gov.br/sagra/api"
+
+ssl_verify: false
+
+# Login LAN (POST /auth/session). Deixe ponto vazio para tentar o modo TV
+# (GET anônimo se o IP da máquina tiver permissão de painel setor).
+ponto: ""
+nome: ""
+password: ""
+
+poll_interval_sec: 10
+
+window:
+  width: 720
+  x: null
+  opacity: 0.95
+  speed_px_per_sec: 40
+
+board:
+  sector: SEFOC
+  columnCount: 4
+  columns:
+    - id: col_0
+      title: p/ Triagem
+      statuses:
+        - "Saída p/"
+        - "Saída parcial p/"
+        - "Entrada Inicial"
+        - "Tramit. de Prova p/"
+        - "Tramit. de Prévia p/"
+        - "Comentário"
+    - id: col_1
+      title: p/ Execução
+      statuses:
+        - "Em Execução"
+        - "Recebido"
+    - id: col_2
+      title: "Prob. Téc."
+      statuses:
+        - "Problemas Técnicos"
+        - "Problema Técnico"
+      hideWhenEmpty: true
+    - id: col_3
+      title: enviar E-mail
+      statuses:
+        - "Encam. de Docum."

@@ -479,16 +479,35 @@ def get_visible_dashboard_columns(columns: list[DashboardColumn]) -> list[Dashbo
     return [col for col in columns if not col.get("hideWhenEmpty") or col.get("items")]
 
 
+def ticker_op_key(item: QueueItem) -> str:
+    """Chave da OP exibida (Sub OS e inbox usam o número da OS principal)."""
+    if item.get("row_kind") == "sub_os":
+        nr = item.get("parent_nr_os")
+        if nr is None:
+            nr = item.get("nr_os")
+        ano = item.get("parent_ano")
+        if ano is None:
+            ano = item.get("ano")
+        return f"{nr}-{ano}"
+    return f"{item.get('nr_os')}-{item.get('ano')}"
+
+
 def flatten_ticker_cards(columns: list[DashboardColumn]) -> list[dict[str, Any]]:
     cards: list[dict[str, Any]] = []
+    seen: set[str] = set()
     for orig_idx, col in enumerate(columns):
         items = col.get("items") or []
         if col.get("hideWhenEmpty") and not items:
             continue
         for item in items:
+            op_key = ticker_op_key(item)
+            if op_key in seen:
+                continue
+            seen.add(op_key)
             cards.append(
                 {
                     "unique_key": item.get("uniqueKey") or dashboard_item_key(item),
+                    "op_key": op_key,
                     "label": format_queue_display_label(item),
                     "situacao": item.get("displaySituacao") or "",
                     "priority": item.get("priorityType"),
@@ -499,3 +518,11 @@ def flatten_ticker_cards(columns: list[DashboardColumn]) -> list[dict[str, Any]]
                 }
             )
     return cards
+
+
+def ticker_content_overflows(card_widths: list[int], gap: int, canvas_width: int) -> bool:
+    """True se os cards não cabem na faixa (aí o letreiro deve deslizar)."""
+    if not card_widths or canvas_width <= 0:
+        return False
+    total = sum(card_widths) + gap * (len(card_widths) - 1)
+    return total > canvas_width

@@ -14,6 +14,7 @@ from board import (
     dashboard_config_has_inbox_column,
     flatten_ticker_cards,
     process_dashboard_data,
+    ticker_content_overflows,
 )
 from config_store import save_config
 from taskbar import (
@@ -440,18 +441,31 @@ class LetreiroOverlay:
         self._offset = 0.0
         self._draw_cards()
 
+    def _card_widths(self) -> list[int]:
+        return [int(card["width"]) for card in self._layout]
+
+    def _needs_scroll(self) -> bool:
+        return ticker_content_overflows(
+            self._card_widths(),
+            GAP,
+            max(1, self.canvas.winfo_width()),
+        )
+
     def _tick_marquee(self) -> None:
         if self._stop.is_set():
             return
         now = time.monotonic()
         dt = max(0.0, min(0.1, now - self._last_tick))
         self._last_tick = now
-        speed = float(self.config["window"].get("speed_px_per_sec") or 40)
-        if not self._paused and self._layout:
+        if not self._layout:
+            self._draw_empty(self._status_msg if self._status != "connected" else "Nenhuma OP")
+        elif self._needs_scroll() and not self._paused:
+            speed = float(self.config["window"].get("speed_px_per_sec") or 40)
             self._offset += speed * dt
             self._draw_cards()
-        elif not self._layout:
-            self._draw_empty(self._status_msg if self._status != "connected" else "Nenhuma OP")
+        elif self._offset:
+            self._offset = 0.0
+            self._draw_cards()
         try:
             self.root.after(33, self._tick_marquee)
         except tk.TclError:
@@ -477,15 +491,21 @@ class LetreiroOverlay:
         if not self._layout:
             self._draw_empty("Nenhuma OP")
             return
+        if not self._needs_scroll():
+            x = 8
+            for card in self._layout:
+                self._paint_card(x, height, card)
+                x += card["width"] + GAP
+            return
         loop = sum(card["width"] + GAP for card in self._layout)
         if loop <= 0:
             return
         n = len(self._layout)
-        origin = - (self._offset % loop)
+        origin = -(self._offset % loop)
         x = origin
         idx = 0
         safety = 0
-        while x < width + 8 and safety < n * 12:
+        while x < width + 8 and safety < n * 4:
             card = self._layout[idx % n]
             self._paint_card(x, height, card)
             x += card["width"] + GAP

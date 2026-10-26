@@ -2,9 +2,19 @@
 setlocal
 cd /d "%~dp0"
 
+if exist "SAGRA-Letreiro.exe" (
+  start "" "SAGRA-Letreiro.exe"
+  exit /b 0
+)
+if exist "dist\SAGRA-Letreiro.exe" (
+  start "" "dist\SAGRA-Letreiro.exe"
+  exit /b 0
+)
+
 where python >nul 2>&1
 if errorlevel 1 (
-  echo Python nao encontrado no PATH.
+  echo Python nao encontrado e o executavel SAGRA-Letreiro.exe ainda nao foi gerado.
+  echo Rode build_exe.ps1 nesta pasta.
   pause
   exit /b 1
 )
@@ -28,7 +38,6 @@ if not exist ".venv\Scripts\python.exe" (
 
 if not exist "config.yaml" (
   copy /Y "config.example.yaml" "config.yaml" >nul
-  echo config.yaml criado a partir do exemplo. Ajuste ponto/API se necessario.
 )
 
 ".venv\Scripts\python.exe" letreiro.py

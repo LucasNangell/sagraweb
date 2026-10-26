@@ -4,3 +4,6 @@ __pycache__/
 *.pyc
 .pytest_cache/
 *.log
+build/
+dist/
+SAGRA-Letreiro.exe

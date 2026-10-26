@@ -1,19 +1,24 @@
 # SAGRA — Letreiro na barra de tarefas
 
-Faixa compacta, arrastável, com a **mesma altura da barra de tarefas do Windows**. Exibe as OS que apareceriam em `/painel/setor`, em letreiro horizontal (não em colunas).
+Faixa compacta, arrastável, com a **mesma altura da barra de tarefas do Windows**. Exibe as OS que apareceriam em `/painel/setor`, em letreiro horizontal (não em colunas). Cada OP aparece **uma vez**; o texto só desliza quando os cards não cabem na faixa.
 
-Configuração é **local** (`config.yaml` + janela de ajustes). Não usa a preferência salva no site.
+Configuração é **local** (`config.yaml` ao lado do executável + janela de ajustes). Não usa a preferência salva no site.
 
-## Requisitos
+## Uso portátil (sem instalar Python)
 
-- Windows 10/11
-- Python 3.10+
-- Acesso HTTP à API Sagra (`https://cgrafsysvm.redecamara.camara.gov.br/sagra/api`)
-- Login com `ponto`/`nome` **ou** IP da máquina cadastrado com permissão de painel setor (modo TV)
+1. Gere o exe (máquina de desenvolvimento):
 
-Coluna “Fonte: caixa de entrada” só funciona com sessão (`ponto` preenchido).
+```powershell
+cd widget_letreiro
+.\build_exe.ps1
+```
 
-## Instalação
+2. Copie só `SAGRA-Letreiro.exe` para o PC de destino e dê duplo clique.
+3. Na primeira execução é criado `config.yaml` na **mesma pasta** do exe (API de produção já preenchida).
+
+Não precisa de Python, venv nem `pip` na máquina de destino.
+
+## Desenvolvimento (scripts)
 
 ```powershell
 cd widget_letreiro
@@ -21,29 +26,17 @@ python -m venv .venv
 .\.venv\Scripts\activate
 pip install -r requirements.txt
 copy config.example.yaml config.yaml
-```
-
-O padrão já é a API de produção (`.../sagra/api`). Para DEV local, troque no `config.yaml` ou na engrenagem. Preencha `ponto` / `nome` se o IP não tiver permissão de painel.
-
-## Executar
-
-Duplo clique em `iniciar-letreiro.bat`, ou:
-
-```powershell
 .\.venv\Scripts\python.exe letreiro.py
 ```
 
-## Uso
+Ou `iniciar-letreiro.bat` (usa o `.exe` se existir).
 
-- **Arrastar** pelo handle à esquerda (ao longo da taskbar; troca de monitor se cruzar).
-- **Largura** pelas bordas esquerda/direita.
-- **Engrenagem** ou botão direito no handle: ajustes (setor, grupos/situações, velocidade, login).
-- Hover no letreiro **pausa** o deslize.
+## Comportamento
+
+- **Arrastar** pelo handle à esquerda; **largura** pelas bordas.
+- **Engrenagem** ou botão direito: ajustes (setor, grupos, velocidade, login).
+- Hover **pausa** o deslize (quando a faixa está cheia).
 - Uma instância por usuário (lock em `%LOCALAPPDATA%\SagraLetreiro`).
-
-## Cores
-
-Iguais ao painel clássico: Prometido vermelho, Solicitado laranja, Sub OS âmbar, OS nova borda verde, acento da coluna pelo índice.
 
 ## Testes
 

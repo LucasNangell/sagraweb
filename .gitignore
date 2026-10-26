@@ -73,3 +73,6 @@ apps/web/src/routeTree.gen.ts
 # Letreiro (widget desktop)
 widget_letreiro/config.yaml
 widget_letreiro/.venv/
+widget_letreiro/build/
+widget_letreiro/dist/
+widget_letreiro/SAGRA-Letreiro.exe

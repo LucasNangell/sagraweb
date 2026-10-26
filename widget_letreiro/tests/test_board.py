@@ -21,6 +21,8 @@ from board import (  # noqa: E402
     process_dashboard_data,
     resolve_column_sector,
     resolve_priority_type,
+    ticker_content_overflows,
+    ticker_op_key,
 )
 from config_store import PRODUCTION_API_BASE, normalize_api_base_url, normalize_config  # noqa: E402
 
@@ -227,6 +229,71 @@ def test_priority_type_and_hide_when_empty_flatten_order():
     assert cards[1]["priority"] == "priority-medium"
     assert cards[0]["column_index"] == 0
     assert "SEFOC" in cards[0]["situacao"]
+
+
+def test_flatten_dedupes_same_op_across_inbox_and_sub_os():
+    columns = [
+        {
+            "id": "exec",
+            "title": "Execução",
+            "statuses": ["Em Execução"],
+            "items": [
+                {
+                    "nr_os": 77,
+                    "ano": 2026,
+                    "uniqueKey": "77-2026",
+                    "displaySituacao": "Em Execução",
+                    "priorityType": None,
+                    "isNew": False,
+                    "row_kind": "main_os",
+                }
+            ],
+        },
+        {
+            "id": "inbox",
+            "title": "Novo e-mail",
+            "statuses": [],
+            "source": "inbox",
+            "items": [
+                {
+                    "nr_os": 77,
+                    "ano": 2026,
+                    "uniqueKey": "inbox:77-2026",
+                    "displaySituacao": "Novo e-mail",
+                    "priorityType": None,
+                    "isNew": False,
+                    "row_kind": "main_os",
+                }
+            ],
+        },
+        {
+            "id": "sub",
+            "title": "Sub",
+            "statuses": ["Em Execução"],
+            "items": [
+                {
+                    **SUB_OS,
+                    "uniqueKey": "568-2026-sub-1",
+                    "displaySituacao": "[Miolo] Em Execução",
+                    "priorityType": None,
+                    "isNew": False,
+                    "parent_nr_os": 77,
+                    "parent_ano": 2026,
+                    "nr_os": 77,
+                    "ano": 2026,
+                }
+            ],
+        },
+    ]
+    cards = flatten_ticker_cards(columns)
+    assert [c["label"] for c in cards] == ["OS 77/26"]
+    assert ticker_op_key(columns[0]["items"][0]) == "77-2026"
+
+
+def test_ticker_content_overflows_only_when_cards_do_not_fit():
+    assert ticker_content_overflows([80, 80], 8, 720) is False
+    assert ticker_content_overflows([400, 400], 8, 720) is True
+    assert ticker_content_overflows([], 8, 720) is False
 
 
 def test_flatten_keeps_original_column_index_when_first_hidden():

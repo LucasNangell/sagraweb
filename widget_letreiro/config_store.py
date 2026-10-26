@@ -2,14 +2,31 @@
 from __future__ import annotations
 
 import copy
+import sys
 from pathlib import Path
 from typing import Any, Optional
 
 import yaml
 
-ROOT = Path(__file__).resolve().parent
+
+def app_dir() -> Path:
+    """Pasta gravável: ao lado do .exe (portátil) ou dos scripts."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+def bundled_dir() -> Path:
+    """Recursos embutidos no onefile (_MEIPASS) ou pasta dos scripts."""
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        return Path(meipass)
+    return Path(__file__).resolve().parent
+
+
+ROOT = app_dir()
 CONFIG_PATH = ROOT / "config.yaml"
-EXAMPLE_PATH = ROOT / "config.example.yaml"
+EXAMPLE_PATH = bundled_dir() / "config.example.yaml"
 
 INBOX_COLUMN_SOURCE = "inbox"
 PRODUCTION_API_BASE = "https://cgrafsysvm.redecamara.camara.gov.br/sagra/api"
@@ -160,11 +177,19 @@ def normalize_config(raw: Any) -> dict[str, Any]:
     }
 
 
+def _example_path() -> Path:
+    bundled = bundled_dir() / "config.example.yaml"
+    if bundled.exists():
+        return bundled
+    return app_dir() / "config.example.yaml"
+
+
 def load_config(path: Optional[Path] = None) -> dict[str, Any]:
-    target = path or CONFIG_PATH
+    target = path or (app_dir() / "config.yaml")
     if not target.exists():
-        if EXAMPLE_PATH.exists():
-            data = yaml.safe_load(EXAMPLE_PATH.read_text(encoding="utf-8")) or {}
+        example = _example_path()
+        if example.exists():
+            data = yaml.safe_load(example.read_text(encoding="utf-8")) or {}
             cfg = normalize_config(data)
             save_config(cfg, target)
             return cfg
@@ -176,8 +201,9 @@ def load_config(path: Optional[Path] = None) -> dict[str, Any]:
 
 
 def save_config(config: dict[str, Any], path: Optional[Path] = None) -> None:
-    target = path or CONFIG_PATH
+    target = path or (app_dir() / "config.yaml")
     payload = normalize_config(config)
+    target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
         yaml.safe_dump(payload, allow_unicode=True, sort_keys=False, default_flow_style=False),
         encoding="utf-8",

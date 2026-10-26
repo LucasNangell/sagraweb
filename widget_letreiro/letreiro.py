@@ -4,9 +4,10 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import threading
 from pathlib import Path
 
-__version__ = "1.1.3"
+__version__ = "1.1.4"
 
 ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
@@ -15,23 +16,67 @@ if str(ROOT) not in sys.path:
 from config_store import load_config  # noqa: E402
 from overlay import LetreiroOverlay  # noqa: E402
 from settings_ui import SettingsWindow  # noqa: E402
-from taskbar import enable_dpi_awareness  # noqa: E402
+from taskbar import enable_dpi_awareness, notify_already_running  # noqa: E402
 
 LOG_DIR = Path(os.environ.get("LOCALAPPDATA") or ROOT) / "SagraLetreiro"
 LOCK_NAME = "letreiro.lock"
 _lock_fh = None
 
 
+class _LogWriter:
+    """Substitui stdout/stderr nulos do exe sem console — o Tk aborta se printar neles."""
+
+    def __init__(self, logger: logging.Logger) -> None:
+        self._logger = logger
+        self._busy = False
+
+    def write(self, message: str) -> int:
+        text = (message or "").rstrip()
+        if text and not self._busy:
+            self._busy = True
+            try:
+                self._logger.error(text)
+            finally:
+                self._busy = False
+        return len(message or "")
+
+    def flush(self) -> None:
+        pass
+
+    def isatty(self) -> bool:
+        return False
+
+
 def _setup_logging() -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     log_path = LOG_DIR / "letreiro.log"
+    handlers: list[logging.Handler] = [logging.FileHandler(log_path, encoding="utf-8")]
+    if sys.stdout is not None:
+        handlers.append(logging.StreamHandler(sys.stdout))
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_path, encoding="utf-8"),
-            logging.StreamHandler(sys.stdout),
-        ],
+        handlers=handlers,
+    )
+    log = logging.getLogger("sagra.letreiro")
+    sink = _LogWriter(log)
+    if sys.stdout is None:
+        sys.stdout = sink  # type: ignore[assignment]
+    if sys.stderr is None:
+        sys.stderr = sink  # type: ignore[assignment]
+    sys.excepthook = _excepthook
+    threading.excepthook = _thread_excepthook
+
+
+def _excepthook(exc_type, exc, tb) -> None:
+    logging.getLogger("sagra.letreiro").error("Exceção não tratada", exc_info=(exc_type, exc, tb))
+
+
+def _thread_excepthook(args) -> None:
+    logging.getLogger("sagra.letreiro").error(
+        "Exceção em thread %s",
+        args.thread.name if args.thread else "?",
+        exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
     )
 
 
@@ -98,10 +143,14 @@ def main() -> int:
     log = logging.getLogger("sagra.letreiro")
     if acquire_single_instance_lock() is None:
         log.error("Já existe um letreiro em execução.")
-        print("Já existe um letreiro em execução neste usuário.")
+        notify_already_running()
         return 1
     log.info("Iniciando SAGRA Letreiro %s", __version__)
-    LetreiroApp().run()
+    try:
+        LetreiroApp().run()
+    except Exception:
+        log.exception("Letreiro terminou com erro")
+        return 1
     return 0
 
 

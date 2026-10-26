@@ -4,22 +4,35 @@ from __future__ import annotations
 import ctypes
 import logging
 import sys
+from ctypes import wintypes
 from dataclasses import dataclass
 from typing import Optional
 
 logger = logging.getLogger("sagra.letreiro")
 
 GWL_EXSTYLE = -20
+GWL_WNDPROC = -4
 WS_EX_APPWINDOW = 0x00040000
 WS_EX_TOOLWINDOW = 0x00000080
 WS_EX_TOPMOST = 0x00000008
 WS_EX_LAYERED = 0x00080000
+WS_EX_NOACTIVATE = 0x08000000
 HWND_TOPMOST = -1
 SWP_NOMOVE = 0x0002
 SWP_NOSIZE = 0x0001
 SWP_NOACTIVATE = 0x0010
 SWP_SHOWWINDOW = 0x0040
+SW_SHOW = 5
 MONITOR_DEFAULTTONEAREST = 2
+LWA_COLORKEY = 0x00000001
+LWA_ALPHA = 0x00000002
+WM_CLOSE = 0x0010
+WM_SYSCOMMAND = 0x0112
+SC_CLOSE = 0xF060
+OVERLAY_TITLE = "SAGRA Letreiro"
+
+LRESULT = ctypes.c_ssize_t
+WNDPROC = ctypes.WINFUNCTYPE(LRESULT, wintypes.HWND, ctypes.c_uint, wintypes.WPARAM, wintypes.LPARAM)
 
 
 @dataclass
@@ -126,46 +139,191 @@ def clamp_overlay_rect(
     return x, y, width, height
 
 
+def hex_to_colorref(hex_color: str) -> int:
+    """RGB #rrggbb → COLORREF 0x00bbggrr."""
+    raw = (hex_color or "").strip().lstrip("#")
+    if len(raw) != 6:
+        raise ValueError(f"Cor inválida: {hex_color!r}")
+    red = int(raw[0:2], 16)
+    green = int(raw[2:4], 16)
+    blue = int(raw[4:6], 16)
+    return red | (green << 8) | (blue << 16)
+
+
+def layered_attribute_flags(*, color_key: bool) -> int:
+    flags = LWA_ALPHA
+    if color_key:
+        flags |= LWA_COLORKEY
+    return flags
+
+
+def is_close_message(msg: int, wparam: int = 0) -> bool:
+    if int(msg) == WM_CLOSE:
+        return True
+    return int(msg) == WM_SYSCOMMAND and (int(wparam) & 0xFFF0) == SC_CLOSE
+
+
+def window_alive(hwnd: int) -> bool:
+    if sys.platform != "win32" or not hwnd:
+        return False
+    try:
+        return bool(ctypes.windll.user32.IsWindow(hwnd))
+    except Exception:
+        return False
+
+
+def _window_long_fns():
+    user32 = ctypes.windll.user32
+    if ctypes.sizeof(ctypes.c_void_p) == 8:
+        get_long, set_long = user32.GetWindowLongPtrW, user32.SetWindowLongPtrW
+    else:
+        get_long, set_long = user32.GetWindowLongW, user32.SetWindowLongW
+    get_long.restype = ctypes.c_void_p
+    get_long.argtypes = [wintypes.HWND, ctypes.c_int]
+    set_long.restype = ctypes.c_void_p
+    set_long.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_void_p]
+    return get_long, set_long
+
+
 def apply_overlay_styles(hwnd: int) -> None:
     if sys.platform != "win32" or not hwnd:
         return
-    user32 = ctypes.windll.user32
-    if ctypes.sizeof(ctypes.c_void_p) == 8:
-        get_long = user32.GetWindowLongPtrW
-        set_long = user32.SetWindowLongPtrW
-    else:
-        get_long = user32.GetWindowLongW
-        set_long = user32.SetWindowLongW
+    get_long, set_long = _window_long_fns()
     try:
-        style = get_long(hwnd, GWL_EXSTYLE)
-        style = (style | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED) & ~WS_EX_APPWINDOW
-        set_long(hwnd, GWL_EXSTYLE, style)
+        style = int(get_long(hwnd, GWL_EXSTYLE) or 0)
+        wanted = (style | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_NOACTIVATE) & ~WS_EX_APPWINDOW
+        if style != wanted:
+            set_long(hwnd, GWL_EXSTYLE, wanted)
     except Exception as exc:
         logger.debug("Falha ao aplicar estilos da janela: %s", exc)
     reassert_topmost(hwnd)
 
 
-def reassert_topmost(hwnd: int) -> None:
+def apply_layered_attributes(
+    hwnd: int,
+    opacity: float,
+    color_key_hex: Optional[str] = None,
+) -> None:
+    """Aplica alpha e chroma-key numa única chamada (não perde o fundo após SetWindowPos)."""
     if sys.platform != "win32" or not hwnd:
         return
+    alpha = int(round(max(0.0, min(1.0, float(opacity))) * 255))
+    key = 0
+    if color_key_hex:
+        try:
+            key = hex_to_colorref(color_key_hex)
+        except ValueError:
+            color_key_hex = None
+    flags = layered_attribute_flags(color_key=bool(color_key_hex))
     try:
-        ctypes.windll.user32.SetWindowPos(
-            hwnd,
-            HWND_TOPMOST,
-            0,
-            0,
-            0,
-            0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
-        )
+        fn = ctypes.windll.user32.SetLayeredWindowAttributes
+        fn.restype = wintypes.BOOL
+        fn.argtypes = [wintypes.HWND, wintypes.DWORD, wintypes.BYTE, wintypes.DWORD]
+        fn(hwnd, key, alpha, flags)
+    except Exception as exc:
+        logger.debug("Falha ao aplicar atributos layered: %s", exc)
+
+
+def reassert_topmost(hwnd: int, *, show: bool = False) -> None:
+    if sys.platform != "win32" or not hwnd:
+        return
+    flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+    if show:
+        flags |= SWP_SHOWWINDOW
+    try:
+        ctypes.windll.user32.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags)
     except Exception:
         pass
 
 
-def resolve_hwnd(root) -> int:
+def restore_existing_overlay() -> bool:
+    """Reexibe uma instância já aberta. Retorna True se achou a janela."""
+    if sys.platform != "win32":
+        return False
+    try:
+        hwnd = ctypes.windll.user32.FindWindowW(None, OVERLAY_TITLE)
+    except Exception:
+        return False
+    if not hwnd:
+        return False
+    try:
+        ctypes.windll.user32.ShowWindow(hwnd, SW_SHOW)
+    except Exception:
+        pass
+    reassert_topmost(int(hwnd), show=True)
+    return True
+
+
+def notify_already_running() -> None:
+    if restore_existing_overlay():
+        text = "O letreiro já está em execução e foi trazido para frente."
+    else:
+        text = (
+            "O letreiro já está em execução neste usuário.\n"
+            "Se a faixa não aparecer, encerre SAGRA-Letreiro.exe no Gerenciador de Tarefas e abra de novo."
+        )
+    if sys.platform == "win32":
+        try:
+            ctypes.windll.user32.MessageBoxW(0, text, OVERLAY_TITLE, 0x40)
+            return
+        except Exception:
+            pass
+    print(text)
+
+
+class OverlayCloseGuard:
+    """Ignora WM_CLOSE/SC_CLOSE do Explorer, que derruba janelas overrideredirect na taskbar."""
+
+    def __init__(self) -> None:
+        self.allow_close = False
+        self._hwnd = 0
+        self._old_proc = 0
+        self._callback = None
+
+    def install(self, hwnd: int) -> None:
+        if sys.platform != "win32" or not hwnd or hwnd == self._hwnd:
+            return
+        get_long, set_long = _window_long_fns()
+
+        def _wndproc(hwnd_msg, msg, wparam, lparam):
+            if is_close_message(msg, wparam) and not self.allow_close:
+                logger.info("Pedido de fechamento do sistema ignorado (overlay).")
+                return 0
+            if not self._old_proc:
+                return ctypes.windll.user32.DefWindowProcW(hwnd_msg, msg, wparam, lparam)
+            return ctypes.windll.user32.CallWindowProcW(
+                ctypes.c_void_p(self._old_proc),
+                hwnd_msg,
+                msg,
+                wparam,
+                lparam,
+            )
+
+        try:
+            user32 = ctypes.windll.user32
+            user32.CallWindowProcW.restype = LRESULT
+            user32.CallWindowProcW.argtypes = [
+                ctypes.c_void_p,
+                wintypes.HWND,
+                ctypes.c_uint,
+                wintypes.WPARAM,
+                wintypes.LPARAM,
+            ]
+            callback = WNDPROC(_wndproc)
+            old = get_long(hwnd, GWL_WNDPROC)
+            set_long(hwnd, GWL_WNDPROC, ctypes.cast(callback, ctypes.c_void_p).value)
+            self._callback = callback
+            self._old_proc = int(old or 0)
+            self._hwnd = hwnd
+        except Exception as exc:
+            logger.warning("Não instalou proteção contra fechamento: %s", exc)
+
+
+def resolve_hwnd(root, *, idle: bool = True) -> int:
     """HWND top-level do Tk no Windows."""
     try:
-        root.update_idletasks()
+        if idle:
+            root.update_idletasks()
         frame = root.wm_frame()
         if frame:
             return int(frame, 16)

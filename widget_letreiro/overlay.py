@@ -18,11 +18,15 @@ from board import (
 )
 from config_store import save_config
 from taskbar import (
+    OVERLAY_TITLE,
+    OverlayCloseGuard,
+    apply_layered_attributes,
     apply_overlay_styles,
     clamp_overlay_rect,
     reassert_topmost,
     resolve_hwnd,
     taskbar_geom_at,
+    window_alive,
 )
 
 logger = logging.getLogger("sagra.letreiro")
@@ -79,33 +83,42 @@ class LetreiroOverlay:
         self._offset = 0.0
         self._last_tick = time.monotonic()
         self._hwnd = 0
+        self._styled_hwnd = 0
         self._drag: Optional[dict[str, Any]] = None
         self._poll_thread: Optional[threading.Thread] = None
+        self._quitting = False
+        self._restore_tries = 0
+        self._close_guard = OverlayCloseGuard()
 
         self.root = tk.Tk()
         self.root.withdraw()
+        self.root.title(OVERLAY_TITLE)
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
         self.root.configure(bg=BG)
+        self.root.report_callback_exception = self._report_callback_exception
         self._build_ui()
         self._apply_chrome()
         self.root.bind("<Map>", self._on_map)
+        self.root.bind("<Unmap>", self._on_unmap)
+        self.root.bind("<Destroy>", self._on_destroy)
         self.root.protocol("WM_DELETE_WINDOW", self.quit)
 
     def start(self) -> None:
         self._place(initial=True)
         self.root.deiconify()
         self.root.update_idletasks()
-        self._hwnd = resolve_hwnd(self.root)
-        apply_overlay_styles(self._hwnd)
-        self._apply_chrome()
+        self._ensure_styles()
         self._poll_thread = threading.Thread(target=self._poll_loop, name="letreiro-poll", daemon=True)
         self._poll_thread.start()
         self._tick_marquee()
         self._drain_queue()
         self._keep_topmost()
         self._sync_taskbar()
+        logger.info("Loop da janela iniciado")
         self.root.mainloop()
+        if not self._quitting:
+            logger.error("Loop da janela terminou sem pedido de saída")
 
     def apply_config(self, config: dict[str, Any], *, relogin: bool = False) -> None:
         with self._lock:
@@ -123,6 +136,8 @@ class LetreiroOverlay:
         self._wake.set()
 
     def quit(self) -> None:
+        self._quitting = True
+        self._close_guard.allow_close = True
         self._stop.set()
         self._wake.set()
         try:
@@ -130,6 +145,40 @@ class LetreiroOverlay:
         except tk.TclError:
             pass
         self.on_quit()
+
+    def _report_callback_exception(self, exc, val, tb) -> None:
+        logger.error("Erro no callback Tk", exc_info=(exc, val, tb))
+
+    def _live_hwnd(self) -> int:
+        if window_alive(self._hwnd):
+            return self._hwnd
+        hwnd = resolve_hwnd(self.root, idle=False)
+        if window_alive(hwnd):
+            self._hwnd = hwnd
+            return hwnd
+        hwnd = resolve_hwnd(self.root, idle=True)
+        self._hwnd = hwnd
+        return hwnd
+
+    def _ensure_styles(self) -> None:
+        hwnd = self._live_hwnd()
+        if not hwnd:
+            return
+        if hwnd != self._styled_hwnd:
+            apply_overlay_styles(hwnd)
+            self._close_guard.install(hwnd)
+            self._styled_hwnd = hwnd
+        self._apply_layered()
+
+    def _apply_layered(self) -> None:
+        hwnd = self._hwnd if window_alive(self._hwnd) else self._live_hwnd()
+        opacity = 0.95
+        try:
+            opacity = float(self.config["window"].get("opacity") or 0.95)
+        except (TypeError, ValueError):
+            pass
+        chroma = CHROMA if self._transparent_bg() else None
+        apply_layered_attributes(hwnd, opacity, chroma)
 
     def _build_ui(self) -> None:
         self.handle = tk.Frame(self.root, bg=HANDLE_BG, width=HANDLE_W, cursor="fleur")
@@ -197,10 +246,48 @@ class LetreiroOverlay:
     def _set_paused(self, paused: bool) -> None:
         self._paused = paused
 
-    def _on_map(self, _event=None) -> None:
-        self._hwnd = resolve_hwnd(self.root)
-        apply_overlay_styles(self._hwnd)
-        self._apply_chrome()
+    def _on_map(self, event=None) -> None:
+        if event is not None and event.widget is not self.root:
+            return
+        self._restore_tries = 0
+        self._ensure_styles()
+
+    def _on_unmap(self, event=None) -> None:
+        if event is not None and event.widget is not self.root:
+            return
+        if self._quitting or self._stop.is_set():
+            return
+        self._restore_tries += 1
+        if self._restore_tries > 20:
+            logger.error("Overlay sumiu e não foi possível restaurar")
+            return
+        logger.warning("Overlay desmapeado; restaurando (%s)", self._restore_tries)
+        try:
+            self.root.after(80, self._restore_visibility)
+        except tk.TclError:
+            pass
+
+    def _on_destroy(self, event=None) -> None:
+        if event is not None and event.widget is not self.root:
+            return
+        if not self._quitting:
+            logger.error("Janela do letreiro destruída inesperadamente")
+
+    def _restore_visibility(self) -> None:
+        if self._quitting or self._stop.is_set():
+            return
+        try:
+            self.root.deiconify()
+            self.root.lift()
+            self.root.attributes("-topmost", True)
+        except tk.TclError:
+            return
+        hwnd = resolve_hwnd(self.root, idle=True)
+        self._hwnd = hwnd
+        self._styled_hwnd = 0
+        self._ensure_styles()
+        reassert_topmost(hwnd, show=True)
+        self._apply_layered()
 
     def _transparent_bg(self) -> bool:
         return bool(self.config.get("window", {}).get("transparent_bg"))
@@ -216,20 +303,18 @@ class LetreiroOverlay:
         except tk.TclError:
             return
         try:
-            opacity = float(self.config["window"].get("opacity") or 0.95)
-            self.root.attributes("-alpha", opacity)
-        except tk.TclError:
-            pass
-        try:
             if self._transparent_bg():
                 self.root.attributes("-transparentcolor", CHROMA)
             else:
                 try:
                     self.root.attributes("-transparentcolor", "")
                 except tk.TclError:
-                    self.root.attributes("-transparentcolor", "#000001")
-        except tk.TclError as exc:
-            logger.warning("Fundo transparente indisponível: %s", exc)
+                    pass
+        except tk.TclError:
+            pass
+        # Não usar Tk -alpha: ele substitui o chroma-key. Alpha + key via Win32,
+        # reaplicado depois de cada SetWindowPos.
+        self._apply_layered()
 
     def _place(self, initial: bool = False) -> None:
         win = self.config["window"]
@@ -257,19 +342,24 @@ class LetreiroOverlay:
             logger.warning("Não gravou posição: %s", exc)
 
     def _keep_topmost(self) -> None:
-        if self._stop.is_set():
+        if self._stop.is_set() or self._quitting:
             return
-        reassert_topmost(self._hwnd or resolve_hwnd(self.root))
+        try:
+            hwnd = self._live_hwnd()
+            reassert_topmost(hwnd)
+            self._apply_layered()
+        except Exception:
+            logger.exception("Falha ao reafirmar topmost")
         try:
             self.root.after(700, self._keep_topmost)
         except tk.TclError:
             pass
 
     def _sync_taskbar(self) -> None:
-        if self._stop.is_set():
+        if self._stop.is_set() or self._quitting:
             return
-        if self._drag is None:
-            try:
+        try:
+            if self._drag is None:
                 x = self.root.winfo_x()
                 width = self.root.winfo_width()
                 geom = taskbar_geom_at(x + width // 2, self.root.winfo_y())
@@ -278,8 +368,10 @@ class LetreiroOverlay:
                 nxt = f"{nw}x{nh}+{nx}+{ny}"
                 if cur != nxt:
                     self.root.geometry(nxt)
-            except tk.TclError:
-                return
+        except tk.TclError:
+            pass
+        except Exception:
+            logger.exception("Falha ao sincronizar com a taskbar")
         try:
             self.root.after(2000, self._sync_taskbar)
         except tk.TclError:
@@ -356,12 +448,15 @@ class LetreiroOverlay:
         self._apply_drag(event.x_root)
 
     def _on_canvas_configure(self, _event=None) -> None:
-        if self._layout:
-            self._draw_cards()
-        elif self._status != "connected":
-            self._draw_empty(self._status_msg)
-        else:
-            self._draw_empty("Nenhuma OP")
+        try:
+            if self._layout:
+                self._draw_cards()
+            elif self._status != "connected":
+                self._draw_empty(self._status_msg)
+            else:
+                self._draw_empty("Nenhuma OP")
+        except tk.TclError:
+            pass
 
     def _apply_drag(self, x_root: int) -> None:
         if not self._drag:
@@ -469,7 +564,7 @@ class LetreiroOverlay:
         self._queue.put(("data", cards, inbox_note))
 
     def _drain_queue(self) -> None:
-        if self._stop.is_set():
+        if self._stop.is_set() or self._quitting:
             return
         try:
             while True:
@@ -489,6 +584,8 @@ class LetreiroOverlay:
                     self._draw_empty(self._status_msg)
         except queue.Empty:
             pass
+        except Exception:
+            logger.exception("Falha ao aplicar dados do letreiro")
         try:
             self.root.after(200, self._drain_queue)
         except tk.TclError:
@@ -529,27 +626,35 @@ class LetreiroOverlay:
         )
 
     def _tick_marquee(self) -> None:
-        if self._stop.is_set():
+        if self._stop.is_set() or self._quitting:
             return
-        now = time.monotonic()
-        dt = max(0.0, min(0.1, now - self._last_tick))
-        self._last_tick = now
-        if not self._layout:
-            self._draw_empty(self._status_msg if self._status != "connected" else "Nenhuma OP")
-        elif self._needs_scroll() and not self._paused:
-            speed = float(self.config["window"].get("speed_px_per_sec") or 40)
-            self._offset += speed * dt
-            self._draw_cards()
-        elif self._offset:
-            self._offset = 0.0
-            self._draw_cards()
+        try:
+            now = time.monotonic()
+            dt = max(0.0, min(0.1, now - self._last_tick))
+            self._last_tick = now
+            if not self._layout:
+                self._draw_empty(self._status_msg if self._status != "connected" else "Nenhuma OP")
+            elif self._needs_scroll() and not self._paused:
+                speed = float(self.config["window"].get("speed_px_per_sec") or 40)
+                self._offset += speed * dt
+                self._draw_cards()
+            elif self._offset:
+                self._offset = 0.0
+                self._draw_cards()
+        except tk.TclError:
+            pass
+        except Exception:
+            logger.exception("Falha no letreiro")
         try:
             self.root.after(33, self._tick_marquee)
         except tk.TclError:
             pass
 
     def _draw_empty(self, text: str) -> None:
-        self.canvas.delete("all")
+        try:
+            self.canvas.delete("all")
+        except tk.TclError:
+            return
         h = max(1, self.canvas.winfo_height())
         shown = text if len(text) < 80 else text[:77] + "…"
         self.canvas.create_text(
@@ -562,7 +667,10 @@ class LetreiroOverlay:
         )
 
     def _draw_cards(self) -> None:
-        self.canvas.delete("all")
+        try:
+            self.canvas.delete("all")
+        except tk.TclError:
+            return
         height = max(1, self.canvas.winfo_height())
         width = max(1, self.canvas.winfo_width())
         if not self._layout:

@@ -8,7 +8,12 @@ from typing import Any, Callable, Optional
 
 from api_client import LetreiroApiClient, LetreiroApiError
 from board import INBOX_COLUMN_SOURCE, INBOX_DISPLAY_SITUACAO
-from config_store import normalize_config, restore_default_board, save_config
+from config_store import (
+    PRODUCTION_API_BASE,
+    normalize_config,
+    restore_default_board,
+    save_config,
+)
 
 MAX_COLUMNS = 6
 
@@ -74,7 +79,7 @@ class SettingsWindow:
 
         conn = ttk.LabelFrame(outer, text="Conexão")
         conn.pack(fill="x", pady=(0, 8))
-        self.var_api = tk.StringVar(value=self._draft.get("api_base_url") or "")
+        self.var_api = tk.StringVar(value=self._draft.get("api_base_url") or PRODUCTION_API_BASE)
         self.var_ponto = tk.StringVar(value=str(self._draft.get("ponto") or ""))
         self.var_nome = tk.StringVar(value=str(self._draft.get("nome") or ""))
         self.var_password = tk.StringVar(value=str(self._draft.get("password") or ""))

@@ -22,7 +22,7 @@ from board import (  # noqa: E402
     resolve_column_sector,
     resolve_priority_type,
 )
-from config_store import normalize_config  # noqa: E402
+from config_store import PRODUCTION_API_BASE, normalize_api_base_url, normalize_config  # noqa: E402
 
 SUB_OS = {
     "nr_os": 568,
@@ -267,3 +267,21 @@ def test_normalize_config_defaults_and_inbox():
     assert cfg["board"]["columns"][0]["source"] == "inbox"
     assert "sector" not in cfg["board"]["columns"][0]
     assert cfg["window"]["width"] == 720
+    assert cfg["api_base_url"] == PRODUCTION_API_BASE
+
+
+def test_normalize_api_base_url_accepts_site_root():
+    assert normalize_api_base_url("") == PRODUCTION_API_BASE
+    assert (
+        normalize_api_base_url("https://cgrafsysvm.redecamara.camara.gov.br/sagra")
+        == PRODUCTION_API_BASE
+    )
+    assert (
+        normalize_api_base_url("https://cgrafsysvm.redecamara.camara.gov.br/sagra/")
+        == PRODUCTION_API_BASE
+    )
+    assert (
+        normalize_api_base_url("https://cgrafsysvm.redecamara.camara.gov.br/sagra/api/")
+        == PRODUCTION_API_BASE
+    )
+    assert normalize_api_base_url("http://127.0.0.1:8001/api") == "http://127.0.0.1:8001/api"

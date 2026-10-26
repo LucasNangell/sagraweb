@@ -1,9 +1,10 @@
 # Copie para config.yaml e ajuste. config.yaml não entra no git.
 
+# API de produção (FQDN — o alias curto cgrafsysvm pode redirecionar e quebrar POST).
+api_base_url: "https://cgrafsysvm.redecamara.camara.gov.br/sagra/api"
+
 # DEV local:
-api_base_url: "http://127.0.0.1:8001/api"
-# Produção (use o FQDN — alias curto pode redirecionar e quebrar POST):
-# api_base_url: "https://cgrafsysvm.redecamara.camara.gov.br/sagra/api"
+# api_base_url: "http://127.0.0.1:8001/api"
 
 ssl_verify: false
 

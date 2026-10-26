@@ -12,6 +12,7 @@ CONFIG_PATH = ROOT / "config.yaml"
 EXAMPLE_PATH = ROOT / "config.example.yaml"
 
 INBOX_COLUMN_SOURCE = "inbox"
+PRODUCTION_API_BASE = "https://cgrafsysvm.redecamara.camara.gov.br/sagra/api"
 
 DEFAULT_BOARD: dict[str, Any] = {
     "sector": "SEFOC",
@@ -56,7 +57,7 @@ DEFAULT_WINDOW: dict[str, Any] = {
 }
 
 DEFAULT_CONFIG: dict[str, Any] = {
-    "api_base_url": "http://127.0.0.1:8001/api",
+    "api_base_url": PRODUCTION_API_BASE,
     "ssl_verify": False,
     "ponto": "",
     "nome": "",
@@ -135,10 +136,20 @@ def normalize_window(raw: Any) -> dict[str, Any]:
     }
 
 
+def normalize_api_base_url(raw: Any) -> str:
+    """Aceita a raiz /sagra ou /sagra/api e devolve a base da API."""
+    url = str(raw or "").strip().rstrip("/")
+    if not url:
+        return PRODUCTION_API_BASE
+    if url.endswith("/sagra"):
+        return f"{url}/api"
+    return url
+
+
 def normalize_config(raw: Any) -> dict[str, Any]:
     parsed = raw if isinstance(raw, dict) else {}
     return {
-        "api_base_url": str(parsed.get("api_base_url") or DEFAULT_CONFIG["api_base_url"]).rstrip("/"),
+        "api_base_url": normalize_api_base_url(parsed.get("api_base_url")),
         "ssl_verify": bool(parsed.get("ssl_verify", False)),
         "ponto": str(parsed.get("ponto") or "").strip(),
         "nome": str(parsed.get("nome") or "").strip(),

@@ -8,7 +8,7 @@ Configuração é **local** (`config.yaml` + janela de ajustes). Não usa a pref
 
 - Windows 10/11
 - Python 3.10+
-- Acesso HTTP à API Sagra (DEV `:8001` ou produção `/sagra/api`)
+- Acesso HTTP à API Sagra (`https://cgrafsysvm.redecamara.camara.gov.br/sagra/api`)
 - Login com `ponto`/`nome` **ou** IP da máquina cadastrado com permissão de painel setor (modo TV)
 
 Coluna “Fonte: caixa de entrada” só funciona com sessão (`ponto` preenchido).
@@ -23,7 +23,7 @@ pip install -r requirements.txt
 copy config.example.yaml config.yaml
 ```
 
-Ajuste `api_base_url` e, se quiser login, `ponto` / `nome` / `password`.
+O padrão já é a API de produção (`.../sagra/api`). Para DEV local, troque no `config.yaml` ou na engrenagem. Preencha `ponto` / `nome` se o IP não tiver permissão de painel.
 
 ## Executar
 

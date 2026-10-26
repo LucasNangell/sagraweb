@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SagraLetreiro/SagraLetreiro.csproj" />
+    <Project Path="src/SagraLetreiro.Core/SagraLetreiro.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SagraLetreiro.Tests/SagraLetreiro.Tests.csproj" />
+  </Folder>
+</Solution>

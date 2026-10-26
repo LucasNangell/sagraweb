@@ -1,0 +1,164 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace SagraLetreiro;
+
+public static class ConfigStore
+{
+    public const string ProductionApiBase = "https://cgrafsysvm.redecamara.camara.gov.br/sagra/api";
+    public const string DefaultUpdateSourceDirectory =
+        @"G:\PC Reinstall\Lucas Santos - Modelo de Configs\Configs - Software\Custom Sys (na Unidade C)\SEFOC Tools";
+
+    static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
+        WriteIndented = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
+
+    public static string ConfigDirectory =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SagraLetreiro");
+
+    public static string ConfigPath => Path.Combine(ConfigDirectory, "config.json");
+
+    public static BoardConfig DefaultBoard() => new()
+    {
+        Sector = "SEFOC",
+        ColumnCount = 4,
+        Columns =
+        [
+            new BoardColumn
+            {
+                Id = "col_0",
+                Title = "p/ Triagem",
+                Statuses =
+                [
+                    "Saída p/", "Saída parcial p/", "Entrada Inicial",
+                    "Tramit. de Prova p/", "Tramit. de Prévia p/", "Comentário",
+                ],
+            },
+            new BoardColumn
+            {
+                Id = "col_1",
+                Title = "p/ Execução",
+                Statuses = ["Em Execução", "Recebido"],
+            },
+            new BoardColumn
+            {
+                Id = "col_2",
+                Title = "Prob. Téc.",
+                Statuses = ["Problemas Técnicos", "Problema Técnico"],
+                HideWhenEmpty = true,
+            },
+            new BoardColumn
+            {
+                Id = "col_3",
+                Title = "enviar E-mail",
+                Statuses = ["Encam. de Docum."],
+            },
+        ],
+    };
+
+    public static string NormalizeApiBaseUrl(string? raw)
+    {
+        var url = (raw ?? "").Trim().TrimEnd('/');
+        if (url.Length == 0) return ProductionApiBase;
+        if (url.EndsWith("/sagra", StringComparison.OrdinalIgnoreCase)) return url + "/api";
+        return url;
+    }
+
+    public static BoardColumn NormalizeColumn(BoardColumn? col, int index)
+    {
+        col ??= new BoardColumn();
+        var sector = (col.Sector ?? "").Trim();
+        var isInbox = col.Source == BoardConstants.InboxColumnSource;
+        var outCol = new BoardColumn
+        {
+            Id = string.IsNullOrWhiteSpace(col.Id) ? $"col_{index}" : col.Id,
+            Title = string.IsNullOrWhiteSpace(col.Title) ? $"Coluna {index + 1}" : col.Title,
+            Statuses = col.Statuses?.Where(s => s is not null).Select(s => s.Trim()).ToList() ?? new(),
+            HideWhenEmpty = col.HideWhenEmpty,
+        };
+        if (sector.Length > 0 && !isInbox) outCol.Sector = sector;
+        if (isInbox) outCol.Source = BoardConstants.InboxColumnSource;
+        return outCol;
+    }
+
+    public static BoardConfig NormalizeBoard(BoardConfig? raw)
+    {
+        raw ??= new BoardConfig();
+        var columnsRaw = raw.Columns is { Count: > 0 } ? raw.Columns : DefaultBoard().Columns;
+        var columns = columnsRaw.Take(6).Select(NormalizeColumn).ToList();
+        if (columns.Count == 0) columns = DefaultBoard().Columns.Select(NormalizeColumn).ToList();
+        return new BoardConfig
+        {
+            Sector = string.IsNullOrWhiteSpace(raw.Sector) ? "SEFOC" : raw.Sector.Trim(),
+            ColumnCount = columns.Count,
+            Columns = columns,
+        };
+    }
+
+    public static WindowConfig NormalizeWindow(WindowConfig? raw)
+    {
+        raw ??= new WindowConfig();
+        return new WindowConfig
+        {
+            Width = Math.Clamp(raw.Width <= 0 ? 720 : raw.Width, 320, 4000),
+            X = raw.X,
+            Opacity = Math.Clamp(raw.Opacity <= 0 ? 0.95 : raw.Opacity, 0.4, 1.0),
+            SpeedPxPerSec = Math.Clamp(raw.SpeedPxPerSec <= 0 ? 40 : raw.SpeedPxPerSec, 8, 160),
+            TransparentBg = raw.TransparentBg,
+        };
+    }
+
+    public static AppConfig Normalize(AppConfig? raw)
+    {
+        raw ??= new AppConfig();
+        return new AppConfig
+        {
+            ApiBaseUrl = NormalizeApiBaseUrl(raw.ApiBaseUrl),
+            SslVerify = raw.SslVerify,
+            Ponto = (raw.Ponto ?? "").Trim(),
+            Nome = (raw.Nome ?? "").Trim(),
+            Password = raw.Password ?? "",
+            PollIntervalSec = Math.Clamp(raw.PollIntervalSec <= 0 ? 10 : raw.PollIntervalSec, 5, 120),
+            Window = NormalizeWindow(raw.Window),
+            Board = NormalizeBoard(raw.Board),
+        };
+    }
+
+    public static AppConfig Load()
+    {
+        try
+        {
+            if (File.Exists(ConfigPath))
+            {
+                var json = File.ReadAllText(ConfigPath);
+                var parsed = JsonSerializer.Deserialize<AppConfig>(json, JsonOptions);
+                return Normalize(parsed);
+            }
+        }
+        catch
+        {
+            // primeira execução ou arquivo inválido: grava o padrão
+        }
+
+        var cfg = Normalize(new AppConfig { Board = DefaultBoard() });
+        Save(cfg);
+        return cfg;
+    }
+
+    public static void Save(AppConfig config)
+    {
+        Directory.CreateDirectory(ConfigDirectory);
+        var payload = Normalize(config);
+        File.WriteAllText(ConfigPath, JsonSerializer.Serialize(payload, JsonOptions));
+    }
+
+    public static AppConfig RestoreDefaultBoard(AppConfig config)
+    {
+        config.Board = DefaultBoard();
+        return Normalize(config);
+    }
+}

@@ -1,3 +1,4 @@
+# Obsoleto: o produto é o instalador WPF (installer\build.ps1).
 # Compila SAGRA-Letreiro.exe (onefile portátil) com PyInstaller.
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot

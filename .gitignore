@@ -75,4 +75,7 @@ widget_letreiro/config.yaml
 widget_letreiro/.venv/
 widget_letreiro/build/
 widget_letreiro/dist/
+widget_letreiro/artifacts/
+widget_letreiro/**/bin/
+widget_letreiro/**/obj/
 widget_letreiro/SAGRA-Letreiro.exe

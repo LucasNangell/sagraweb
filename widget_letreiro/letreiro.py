@@ -1,4 +1,4 @@
-"""SAGRA — letreiro compacto sobre a barra de tarefas do Windows."""
+"""Referência Tk do letreiro. O produto é o app WPF em src/SagraLetreiro."""
 from __future__ import annotations
 
 import logging

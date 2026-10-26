@@ -358,13 +358,17 @@ class SettingsWindow:
         card = self._card(parent, "Letreiro")
         self.var_speed = tk.DoubleVar(value=float(self._draft["window"].get("speed_px_per_sec") or 40))
         self.var_opacity = tk.DoubleVar(value=float(self._draft["window"].get("opacity") or 0.95))
+        self.var_transparent = tk.BooleanVar(value=bool(self._draft["window"].get("transparent_bg")))
         self.lbl_speed = tk.Label(card, text="", bg=CARD, fg=TEXT, font=(FONT, 9, "bold"))
         self.lbl_opacity = tk.Label(card, text="", bg=CARD, fg=TEXT, font=(FONT, 9, "bold"))
         self._slider_row(card, "Velocidade do deslize", self.var_speed, 8, 120, self.lbl_speed)
-        self._slider_row(card, "Opacidade da faixa", self.var_opacity, 0.5, 1.0, self.lbl_opacity)
+        self._slider_row(card, "Opacidade dos cards", self.var_opacity, 0.5, 1.0, self.lbl_opacity)
         self.var_speed.trace_add("write", lambda *_: self._refresh_scale_labels())
         self.var_opacity.trace_add("write", lambda *_: self._refresh_scale_labels())
         self._refresh_scale_labels()
+        _check(card, "Fundo transparente (mostra a barra de tarefas atrás)", self.var_transparent).pack(
+            anchor="w", pady=(10, 0)
+        )
         tk.Label(
             card,
             text="O deslize só ocorre quando os cards não cabem na barra.",
@@ -665,6 +669,7 @@ class SettingsWindow:
                 **self._draft.get("window", {}),
                 "speed_px_per_sec": float(self.var_speed.get()),
                 "opacity": float(self.var_opacity.get()),
+                "transparent_bg": bool(self.var_transparent.get()),
             },
             "board": {
                 "sector": self.var_sector.get().strip() or "SEFOC",

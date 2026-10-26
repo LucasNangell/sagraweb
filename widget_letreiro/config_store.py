@@ -71,6 +71,7 @@ DEFAULT_WINDOW: dict[str, Any] = {
     "x": None,
     "opacity": 0.95,
     "speed_px_per_sec": 40,
+    "transparent_bg": False,
 }
 
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -150,6 +151,7 @@ def normalize_window(raw: Any) -> dict[str, Any]:
         "speed_px_per_sec": _clamp_float(
             parsed.get("speed_px_per_sec"), 8.0, 160.0, DEFAULT_WINDOW["speed_px_per_sec"]
         ),
+        "transparent_bg": bool(parsed.get("transparent_bg")),
     }
 
 

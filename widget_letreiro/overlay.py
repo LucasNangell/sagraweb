@@ -28,6 +28,7 @@ from taskbar import (
 logger = logging.getLogger("sagra.letreiro")
 
 BG = "#121214"
+CHROMA = "#ff00fe"
 HANDLE_BG = "#202024"
 CARD_BG = "#333338"
 TEXT = "#e1e1e6"
@@ -42,7 +43,8 @@ SUB_OS_BORDER = "#f59e0b"
 COLUMN_BORDERS = ("#b46d03", "#04618d", "#a30d0d", "#02461e", "#ff6b6b", "#202024")
 
 HANDLE_W = 42
-EDGE = 7
+RESIZE_W = 12
+EDGE = 14
 MIN_WIDTH = 320
 GAP = 8
 CARD_MAX_W = 260
@@ -85,12 +87,8 @@ class LetreiroOverlay:
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
         self.root.configure(bg=BG)
-        try:
-            self.root.attributes("-alpha", float(self.config["window"]["opacity"]))
-        except tk.TclError:
-            pass
-
         self._build_ui()
+        self._apply_chrome()
         self.root.bind("<Map>", self._on_map)
         self.root.protocol("WM_DELETE_WINDOW", self.quit)
 
@@ -100,6 +98,7 @@ class LetreiroOverlay:
         self.root.update_idletasks()
         self._hwnd = resolve_hwnd(self.root)
         apply_overlay_styles(self._hwnd)
+        self._apply_chrome()
         self._poll_thread = threading.Thread(target=self._poll_loop, name="letreiro-poll", daemon=True)
         self._poll_thread.start()
         self._tick_marquee()
@@ -116,10 +115,7 @@ class LetreiroOverlay:
                 self.client.logged_in = False
                 self._master.clear()
                 self._initial = True
-        try:
-            self.root.attributes("-alpha", float(config["window"]["opacity"]))
-        except tk.TclError:
-            pass
+        self._apply_chrome()
         self._place()
         self.request_refresh()
 
@@ -161,12 +157,33 @@ class LetreiroOverlay:
         self.gear.bind("<Button-1>", self._on_gear)
         self.gear.bind("<Button-3>", self._on_context)
 
+        self.resize = tk.Frame(self.root, bg="#2a2a32", width=RESIZE_W, cursor="sb_h_double_arrow")
+        self.resize.pack(side="right", fill="y")
+        self.resize.pack_propagate(False)
+        self.resize_grip = tk.Canvas(
+            self.resize,
+            bg="#2a2a32",
+            highlightthickness=0,
+            width=RESIZE_W,
+            cursor="sb_h_double_arrow",
+        )
+        self.resize_grip.pack(fill="both", expand=True)
+        self.resize.bind("<Configure>", self._draw_resize_grip)
+
         self.canvas = tk.Canvas(self.root, bg=BG, highlightthickness=0, cursor="arrow")
         self.canvas.pack(side="left", fill="both", expand=True)
         self.canvas.bind("<Enter>", lambda _e: self._set_paused(True))
         self.canvas.bind("<Leave>", lambda _e: self._set_paused(False))
         self.canvas.bind("<Configure>", self._on_canvas_configure)
-        for widget in (self.root, self.handle, self.grip, self.status_dot, self.canvas):
+        for widget in (
+            self.root,
+            self.handle,
+            self.grip,
+            self.status_dot,
+            self.canvas,
+            self.resize,
+            self.resize_grip,
+        ):
             widget.bind("<Motion>", self._on_motion)
             widget.bind("<Button-1>", self._on_press)
             widget.bind("<B1-Motion>", self._on_drag)
@@ -183,6 +200,36 @@ class LetreiroOverlay:
     def _on_map(self, _event=None) -> None:
         self._hwnd = resolve_hwnd(self.root)
         apply_overlay_styles(self._hwnd)
+        self._apply_chrome()
+
+    def _transparent_bg(self) -> bool:
+        return bool(self.config.get("window", {}).get("transparent_bg"))
+
+    def _panel_bg(self) -> str:
+        return CHROMA if self._transparent_bg() else BG
+
+    def _apply_chrome(self) -> None:
+        fill = self._panel_bg()
+        try:
+            self.root.configure(bg=fill)
+            self.canvas.configure(bg=fill)
+        except tk.TclError:
+            return
+        try:
+            opacity = float(self.config["window"].get("opacity") or 0.95)
+            self.root.attributes("-alpha", opacity)
+        except tk.TclError:
+            pass
+        try:
+            if self._transparent_bg():
+                self.root.attributes("-transparentcolor", CHROMA)
+            else:
+                try:
+                    self.root.attributes("-transparentcolor", "")
+                except tk.TclError:
+                    self.root.attributes("-transparentcolor", "#000001")
+        except tk.TclError as exc:
+            logger.warning("Fundo transparente indisponível: %s", exc)
 
     def _place(self, initial: bool = False) -> None:
         win = self.config["window"]
@@ -238,23 +285,48 @@ class LetreiroOverlay:
         except tk.TclError:
             pass
 
+    def _draw_resize_grip(self, _event=None) -> None:
+        c = self.resize_grip
+        c.delete("all")
+        h = max(1, c.winfo_height())
+        x = RESIZE_W // 2
+        cy = h // 2
+        for dy in (-6, 0, 6):
+            c.create_oval(x - 1, cy + dy - 1, x + 2, cy + dy + 2, fill=TEXT_DIM, outline="")
+
     def _on_motion(self, event) -> None:
         if self._drag:
+            cursor = "sb_h_double_arrow" if self._drag.get("mode") in {"left", "right"} else "fleur"
+            self._set_cursors(cursor)
             return
-        zone = self._edge_zone(event.x_root)
-        if zone:
-            self.root.configure(cursor="sb_h_double_arrow")
+        zone = self._hit_zone(event)
+        if zone in {"left", "right"}:
+            self._set_cursors("sb_h_double_arrow")
+        elif zone == "move":
+            self._set_cursors("fleur")
         else:
-            self.root.configure(cursor="arrow")
+            self._set_cursors("arrow")
 
-    def _edge_zone(self, x_root: int) -> Optional[str]:
+    def _set_cursors(self, cursor: str) -> None:
+        self.root.configure(cursor=cursor)
+        self.canvas.configure(cursor=cursor)
+        if cursor != "sb_h_double_arrow":
+            self.resize.configure(cursor="sb_h_double_arrow")
+            self.resize_grip.configure(cursor="sb_h_double_arrow")
+
+    def _hit_zone(self, event) -> Optional[str]:
+        widget = event.widget
+        if widget in (self.resize, self.resize_grip):
+            return "right"
         left = self.root.winfo_x()
         width = self.root.winfo_width()
-        local = x_root - left
+        local = event.x_root - left
+        if local >= width - RESIZE_W - 2:
+            return "right"
         if local <= EDGE:
             return "left"
-        if local >= width - EDGE:
-            return "right"
+        if local <= HANDLE_W or widget in (self.handle, self.grip, self.status_dot):
+            return "move"
         return None
 
     def _on_gear(self, _event) -> None:
@@ -264,20 +336,21 @@ class LetreiroOverlay:
     def _on_press(self, event) -> None:
         if event.widget is self.gear:
             return
-        zone = self._edge_zone(event.x_root)
-        local_x = event.x_root - self.root.winfo_x()
-        if zone:
-            mode = zone
-        elif local_x <= HANDLE_W:
-            mode = "move"
-        else:
+        zone = self._hit_zone(event)
+        if not zone:
             return
         self._drag = {
-            "mode": mode,
+            "mode": zone,
             "origin_x": event.x_root,
             "win_x": self.root.winfo_x(),
             "width": self.root.winfo_width(),
         }
+        try:
+            self.root.grab_set()
+        except tk.TclError:
+            pass
+        if zone in {"left", "right"}:
+            self._set_cursors("sb_h_double_arrow")
 
     def _on_drag(self, event) -> None:
         self._apply_drag(event.x_root)
@@ -320,10 +393,14 @@ class LetreiroOverlay:
             return
         self._drag = None
         try:
+            self.root.grab_release()
+        except tk.TclError:
+            pass
+        try:
             self._persist_window(self.root.winfo_x(), self.root.winfo_width())
         except tk.TclError:
             pass
-        self.root.configure(cursor="arrow")
+        self._set_cursors("arrow")
 
     def _on_context(self, event) -> None:
         menu = tk.Menu(self.root, tearoff=0)

@@ -334,7 +334,9 @@ def test_normalize_config_defaults_and_inbox():
     assert cfg["board"]["columns"][0]["source"] == "inbox"
     assert "sector" not in cfg["board"]["columns"][0]
     assert cfg["window"]["width"] == 720
+    assert cfg["window"]["transparent_bg"] is False
     assert cfg["api_base_url"] == PRODUCTION_API_BASE
+    assert normalize_config({"window": {"transparent_bg": True}})["window"]["transparent_bg"] is True
 
 
 def test_normalize_api_base_url_accepts_site_root():

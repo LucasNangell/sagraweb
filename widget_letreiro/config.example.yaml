@@ -21,6 +21,7 @@ window:
   x: null
   opacity: 0.95
   speed_px_per_sec: 40
+  transparent_bg: false
 
 board:
   sector: SEFOC

@@ -114,6 +114,7 @@ $script:ReleaseIntegrityChecks = @(
     @{ Path = "app\frontend\index.html"; Label = "SPA index.html" },
     @{ Path = "app\frontend\manifest.webmanifest"; Label = "PWA manifest" },
     @{ Path = "app\frontend\manifest-painel-os.webmanifest"; Label = "PWA Painel OS manifest" },
+    @{ Path = "app\frontend\manifest-painel-setor-moderno.webmanifest"; Label = "PWA Painel setor moderno manifest" },
     @{ Path = "app\frontend\sw.js"; Label = "PWA service worker" },
     @{ Path = "app\frontend\icons\painel-os-192.png"; Label = "PWA Painel OS icon 192" },
     @{ Path = "app\frontend\assets"; Label = "SPA assets/" },

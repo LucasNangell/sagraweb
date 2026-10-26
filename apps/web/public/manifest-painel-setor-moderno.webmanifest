@@ -1,0 +1,35 @@
+{
+  "id": "/sagra/painel/setor-moderno/",
+  "name": "Painel Setor",
+  "short_name": "Painel Setor",
+  "description": "Painel de setor — SAGRA Web",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#0f172a",
+  "background_color": "#0f172a",
+  "scope": "/sagra/painel/setor-moderno/",
+  "start_url": "/sagra/painel/setor-moderno/",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/sagra/icons/painel-os-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/sagra/icons/painel-os-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/sagra/icons/painel-os-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

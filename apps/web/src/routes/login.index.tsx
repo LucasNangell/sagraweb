@@ -12,7 +12,7 @@ import {
 } from "@/features/auth/passwordLoginSchema";
 import { resolveDefaultAppRoute } from "@/components/layout/nav-config";
 import { PainelOsPwaHead } from "@/components/pwa/PainelOsPwaHead";
-import { isPainelOsInstallContext } from "@/components/pwa/usePainelOsManifest";
+import { getPainelOsInstallVariant } from "@/components/pwa/usePainelOsManifest";
 import { useAuthStore } from "@/features/auth/authStore";
 import { apiUrl } from "@/lib/api";
 import { sanitizePontoDigits } from "@/lib/format";
@@ -72,10 +72,7 @@ function LoginPage() {
   const navigate = Route.useNavigate();
   const { redirect: redirectTo } = Route.useSearch();
   const authMode = useAuthMode();
-  const showPainelOsManifest = isPainelOsInstallContext(
-    "/login",
-    redirectTo,
-  );
+  const painelPwaVariant = getPainelOsInstallVariant("/login", redirectTo);
 
   useEffect(() => {
     void hydrate().then(() => {
@@ -171,7 +168,7 @@ function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-secondary-blue/95 p-4">
-      {showPainelOsManifest ? <PainelOsPwaHead /> : null}
+      {painelPwaVariant ? <PainelOsPwaHead variant={painelPwaVariant} /> : null}
       <div className="w-full max-w-sm rounded-lg border-t-4 border-secondary-blue bg-white p-8 shadow-xl">
         <div className="mb-6 text-center">
           <h1 className="text-xl font-semibold text-secondary-blue">SAGRA Web</h1>

@@ -170,6 +170,7 @@ export default defineConfig(({ mode }) => {
         "icons/icon-512.png",
         "icons/icon-maskable-512.png",
         "manifest-painel-os.webmanifest",
+        "manifest-painel-setor-moderno.webmanifest",
         "icons/painel-os-192.png",
         "icons/painel-os-512.png",
         "icons/painel-os-maskable-512.png",

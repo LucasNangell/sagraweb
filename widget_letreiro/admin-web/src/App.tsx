@@ -40,6 +40,18 @@ function keyOf(row: Pick<Instance, "hostName" | "windowsUser">) {
   return `${row.hostName}\n${row.windowsUser}`;
 }
 
+function uniqueInstances(rows: Instance[]) {
+  const seen = new Set<string>();
+  const out: Instance[] = [];
+  for (const row of rows) {
+    const key = keyOf(row);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
+
 function foldText(value: string) {
   return value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
 }
@@ -558,7 +570,7 @@ export default function App() {
   );
   const filteringList = selected.size === 0;
   const visibleInstances = useMemo(() => {
-    const sorted = [...instances].sort(compareInstancesByNome);
+    const sorted = uniqueInstances(instances).sort(compareInstancesByNome);
     if (!filteringList) return sorted;
     return sorted.filter((row) =>
       textMatches(row.nome ?? "", profile.nome) && textMatches(row.setor ?? "", profile.setor),
@@ -728,7 +740,7 @@ export default function App() {
     const row = selectedRows[0];
     if (!row) return setError("Selecione um computador.");
     await api.saveProfile(row.hostName, row.windowsUser, profile.nome, profile.setor);
-    setStatus(`Dados de ${row.hostName} gravados.`);
+    setStatus(`Dados de ${row.hostName} (${row.windowsUser}) gravados.`);
     await loadAll();
   }
 
@@ -952,7 +964,7 @@ export default function App() {
                 <div className="min-w-0">
                   <h2 className="text-xl font-bold sm:text-2xl">Computadores</h2>
                   <p className="text-sm text-slate-400">
-                    Clique para selecionar. Duplo clique abre filtros e exibição só daquele usuário.
+                    Uma linha por usuário, mesmo no mesmo computador. Clique para selecionar. Duplo clique abre filtros e exibição só daquele usuário.
                     {filteringList ? " Sem seleção, Nome e Setor filtram a lista." : ""}
                   </p>
                 </div>
@@ -995,7 +1007,7 @@ export default function App() {
                     {visibleInstances.length === 0 ? (
                       <tr>
                         <td colSpan={8} className="px-3 py-8 text-center text-sm text-slate-400">
-                          {instances.length === 0 ? "Nenhum computador." : "Nenhum computador corresponde ao filtro."}
+                          {instances.length === 0 ? "Nenhum usuário." : "Nenhum usuário corresponde ao filtro."}
                         </td>
                       </tr>
                     ) : null}

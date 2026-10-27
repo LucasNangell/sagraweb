@@ -77,10 +77,10 @@ function localPreviewMock(): Connect.NextHandleFunction {
     if (url === "/api/letreiro/instances") {
       return sendJson(res, {
         instances: [
-          { hostName: "PC-DEV", windowsUser: "usr_sefoc", nome: "Dev", setor: "SEFOC", version: "2.14.0", ponto: "654321", online: true, hasConfig: true },
-          { hostName: "PC-ANA", windowsUser: "ana", nome: "Ana Souza", setor: "Papelaria", version: "2.14.0", ponto: "654321", online: true, hasConfig: true },
+          { hostName: "PC-DEV", windowsUser: "usr_sefoc", nome: "Dev", setor: "SEFOC", version: "2.18.0", ponto: "654321", online: true, hasConfig: true },
+          { hostName: "PC-SALA", windowsUser: "ana", nome: "Ana Souza", setor: "Papelaria", version: "2.18.0", ponto: "654321", online: true, hasConfig: true },
+          { hostName: "PC-SALA", windowsUser: "bruno", nome: "Bruno Alves", setor: "Gravação", version: "2.18.0", ponto: "654321", online: true, hasConfig: false },
           { hostName: "PC-CARLOS", windowsUser: "carlos", nome: "Carlos Lima", setor: "SEFOC", version: "2.13.2", ponto: "654321", online: false, hasConfig: true },
-          { hostName: "PC-BRUNO", windowsUser: "bruno", nome: "Bruno Alves", setor: "Gravação", version: "2.14.0", ponto: "654321", online: true, hasConfig: false },
         ],
       });
     }

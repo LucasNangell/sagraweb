@@ -10,6 +10,9 @@ from letreiro_schema import (
     CREATE_TAB_LETREIRO_COMANDO_JOB,
     CREATE_TAB_LETREIRO_CONFIG,
     CREATE_TAB_LETREIRO_INSTANCIA,
+    HOST_USER_PRIMARY_KEY,
+    hostname_only_unique_names,
+    needs_host_user_primary,
 )
 from routers import letreiro_routes
 from routers.letreiro_routes import extract_command_vars, is_letreiro_admin, render_command_content
@@ -34,6 +37,20 @@ def test_schema_sql_creates_letreiro_tables():
     assert "idx_letreiro_job_claim" in CREATE_TAB_LETREIRO_COMANDO_JOB
     assert "CREATE TABLE IF NOT EXISTS tabLetreiroAjuste" in CREATE_TAB_LETREIRO_AJUSTE
     assert "CommandPollIntervalSec" in CREATE_TAB_LETREIRO_AJUSTE
+
+
+def test_host_user_primary_needed_when_host_only():
+    assert HOST_USER_PRIMARY_KEY == ("HostName", "WindowsUser")
+    assert needs_host_user_primary([("PRIMARY", ("HostName",), 0)]) is True
+    assert needs_host_user_primary([("PRIMARY", HOST_USER_PRIMARY_KEY, 0)]) is False
+    assert needs_host_user_primary([]) is True
+    assert hostname_only_unique_names(
+        [
+            ("PRIMARY", HOST_USER_PRIMARY_KEY, 0),
+            ("uk_host", ("HostName",), 0),
+            ("idx_letreiro_instancia_seen", ("LastSeen",), 1),
+        ]
+    ) == ["uk_host"]
 
 
 def test_admin_sam_accepts_domain_prefix():
@@ -120,6 +137,72 @@ def test_instances_lists_online(monkeypatch):
     assert items[0]["hasConfig"] is True
     assert items[1]["online"] is False
     assert items[1]["hasConfig"] is False
+
+
+def test_instances_lists_two_users_on_same_host(monkeypatch):
+    monkeypatch.setattr(
+        letreiro_routes.db,
+        "execute_query",
+        lambda *a, **k: [
+            {
+                "HostName": "PC-SALA",
+                "WindowsUser": r"REDECAMARA\ana",
+                "Nome": "Ana Souza",
+                "Setor": "SEFOC",
+                "Version": "2.18.0",
+                "Ponto": "654321",
+                "LastSeen": datetime.now(),
+                "ConfigHost": "PC-SALA",
+            },
+            {
+                "HostName": "PC-SALA",
+                "WindowsUser": r"REDECAMARA\bruno",
+                "Nome": "Bruno Alves",
+                "Setor": "Papelaria",
+                "Version": "2.18.0",
+                "Ponto": "654321",
+                "LastSeen": datetime.now(),
+                "ConfigHost": None,
+            },
+        ],
+    )
+    response = _client().get(
+        "/api/letreiro/instances",
+        headers={"X-Letreiro-Windows-User": "P_918713"},
+    )
+    assert response.status_code == 200
+    items = response.json()["instances"]
+    assert len(items) == 2
+    assert items[0]["hostName"] == "PC-SALA"
+    assert items[1]["hostName"] == "PC-SALA"
+    assert items[0]["windowsUser"] == r"REDECAMARA\ana"
+    assert items[1]["windowsUser"] == r"REDECAMARA\bruno"
+    assert items[0]["nome"] == "Ana Souza"
+    assert items[1]["nome"] == "Bruno Alves"
+
+
+def test_heartbeat_keeps_same_host_different_users(monkeypatch):
+    calls = []
+
+    def fake_exec(sql, params=None):
+        calls.append((sql, params))
+        return []
+
+    monkeypatch.setattr(letreiro_routes.db, "execute_query", fake_exec)
+    client = _client()
+    first = client.post(
+        "/api/letreiro/heartbeat",
+        json={"hostName": "PC-SALA", "windowsUser": r"REDECAMARA\ana", "version": "2.18.0", "ponto": "654321"},
+    )
+    second = client.post(
+        "/api/letreiro/heartbeat",
+        json={"hostName": "PC-SALA", "windowsUser": r"REDECAMARA\bruno", "version": "2.18.0", "ponto": "654321"},
+    )
+    assert first.status_code == 200
+    assert second.status_code == 200
+    users = [c[1][1] for c in calls]
+    assert users == [r"REDECAMARA\ana", r"REDECAMARA\bruno"]
+    assert all(c[1][0] == "PC-SALA" for c in calls)
 
 
 def test_put_config_rejected_without_admin(monkeypatch):

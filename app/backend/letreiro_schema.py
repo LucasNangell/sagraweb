@@ -26,6 +26,9 @@ _TAB_LETREIRO_INSTANCIA_COLUMNS = (
     ("Setor", "VARCHAR(128) NOT NULL DEFAULT '' AFTER Nome"),
 )
 
+HOST_USER_PRIMARY_KEY = ("HostName", "WindowsUser")
+_HOST_USER_PK_TABLES = ("tabLetreiroInstancia", "tabLetreiroConfig")
+
 CREATE_TAB_LETREIRO_CONFIG = """
 CREATE TABLE IF NOT EXISTS tabLetreiroConfig (
     HostName VARCHAR(128) NOT NULL,
@@ -115,6 +118,73 @@ def _ensure_instancia_profile_columns(cursor) -> None:
         logger.info("tabLetreiroInstancia: coluna adicionada — %s", col_name)
 
 
+def fetch_index_specs(rows) -> list[tuple[str, tuple[str, ...], int]]:
+    grouped: dict[str, list[tuple[int, str]]] = {}
+    non_unique: dict[str, int] = {}
+    for row in rows or []:
+        name = str(row["INDEX_NAME"])
+        grouped.setdefault(name, []).append((int(row["SEQ_IN_INDEX"]), str(row["COLUMN_NAME"])))
+        non_unique[name] = int(row["NON_UNIQUE"])
+    return [
+        (name, tuple(col for _, col in sorted(parts)), non_unique[name])
+        for name, parts in grouped.items()
+    ]
+
+
+def needs_host_user_primary(indexes: list[tuple[str, tuple[str, ...], int]]) -> bool:
+    for name, cols, _non_unique in indexes:
+        if name == "PRIMARY":
+            return cols != HOST_USER_PRIMARY_KEY
+    return True
+
+
+def hostname_only_unique_names(indexes: list[tuple[str, tuple[str, ...], int]]) -> list[str]:
+    names: list[str] = []
+    for name, cols, non_unique in indexes:
+        if name == "PRIMARY" or non_unique != 0:
+            continue
+        if cols == ("HostName",):
+            names.append(name)
+    return names
+
+
+def _fetch_table_indexes(cursor, table: str) -> list[tuple[str, tuple[str, ...], int]]:
+    cursor.execute(
+        """
+        SELECT INDEX_NAME, COLUMN_NAME, SEQ_IN_INDEX, NON_UNIQUE
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = %s
+        ORDER BY INDEX_NAME, SEQ_IN_INDEX
+        """,
+        (table,),
+    )
+    return fetch_index_specs(cursor.fetchall())
+
+
+def _ensure_host_user_primary(cursor, table: str) -> None:
+    if table not in _HOST_USER_PK_TABLES:
+        raise ValueError(f"Tabela letreiro inesperada: {table}")
+    indexes = _fetch_table_indexes(cursor, table)
+    dropped = False
+    for name in hostname_only_unique_names(indexes):
+        cursor.execute(f"ALTER TABLE {table} DROP INDEX `{name}`")
+        logger.info("%s: índice único em HostName removido — %s", table, name)
+        dropped = True
+    if dropped:
+        indexes = _fetch_table_indexes(cursor, table)
+    if not needs_host_user_primary(indexes):
+        return
+    pk_exists = any(name == "PRIMARY" for name, _cols, _non_unique in indexes)
+    if pk_exists:
+        cursor.execute(
+            f"ALTER TABLE {table} DROP PRIMARY KEY, ADD PRIMARY KEY (HostName, WindowsUser)"
+        )
+    else:
+        cursor.execute(f"ALTER TABLE {table} ADD PRIMARY KEY (HostName, WindowsUser)")
+    logger.info("%s: chave primária ajustada para (HostName, WindowsUser)", table)
+
+
 def ensure_letreiro_schema() -> None:
     db = Database()
     try:
@@ -126,6 +196,8 @@ def ensure_letreiro_schema() -> None:
             cursor.execute(CREATE_TAB_LETREIRO_AJUSTE)
             cursor.execute(ENSURE_TAB_LETREIRO_AJUSTE_ROW)
             _ensure_instancia_profile_columns(cursor)
+            for table in _HOST_USER_PK_TABLES:
+                _ensure_host_user_primary(cursor, table)
         logger.info("Schema letreiro verificado")
     except Exception as exc:
         logger.error("Erro ao garantir schema letreiro: %s", exc)

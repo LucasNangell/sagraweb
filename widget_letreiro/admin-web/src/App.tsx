@@ -798,8 +798,8 @@ export default function App() {
                 <table className="w-full min-w-[52rem] text-sm">
                   <thead className="sticky top-0 bg-slate-900 text-left text-slate-400">
                     <tr>
-                      {["", "Computador", "Usuário", "Nome", "Setor", "Estado", "Ponto", "Versão"].map((h) => (
-                        <th key={h} className="px-3 py-3 font-medium">{h}</th>
+                      {["", "Nome", "Setor", "Computador", "Usuário", "Ponto", "Versão", "Estado"].map((h) => (
+                        <th key={h || "sel"} className="px-3 py-3 font-medium">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -815,17 +815,17 @@ export default function App() {
                           onDoubleClick={() => void openClientConfig(row)}
                         >
                           <td className="px-3 py-3"><input type="checkbox" checked={on} readOnly /></td>
-                          <td className="max-w-[10rem] truncate px-3 py-3 font-medium" title={row.hostName}>{row.hostName}</td>
+                          <td className="max-w-[12rem] truncate px-3 py-3 font-medium" title={row.nome || undefined}>{row.nome || "—"}</td>
+                          <td className="max-w-[10rem] truncate px-3 py-3" title={row.setor || undefined}>{row.setor || "—"}</td>
+                          <td className="max-w-[10rem] truncate px-3 py-3" title={row.hostName}>{row.hostName}</td>
                           <td className="max-w-[10rem] truncate px-3 py-3" title={row.windowsUser}>{row.windowsUser}</td>
-                          <td className="px-3 py-3">{row.nome || "—"}</td>
-                          <td className="px-3 py-3">{row.setor || "—"}</td>
+                          <td className="px-3 py-3">{row.ponto || "—"}</td>
+                          <td className="px-3 py-3">{row.version || "—"}</td>
                           <td className="px-3 py-3">
                             <span className={`rounded-full px-2 py-0.5 text-xs ${row.online ? "bg-emerald-400/20 text-emerald-300" : "bg-slate-700 text-slate-300"}`}>
                               {row.online ? "Online" : "Offline"}
                             </span>
                           </td>
-                          <td className="px-3 py-3">{row.ponto || "—"}</td>
-                          <td className="px-3 py-3">{row.version || "—"}</td>
                         </tr>
                       );
                     })}

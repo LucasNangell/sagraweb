@@ -81,7 +81,7 @@ function localPreviewMock(): Connect.NextHandleFunction {
           windowsUser: "usr_sefoc",
           nome: "Dev",
           setor: "SEFOC",
-          version: "2.13.1",
+          version: "2.13.2",
           ponto: "654321",
           online: true,
           hasConfig: true,

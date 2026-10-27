@@ -570,13 +570,21 @@ export default function App() {
 
   function toggle(row: Instance) {
     const id = keyOf(row);
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-    setProfile({ nome: row.nome ?? "", setor: row.setor ?? "" });
+    const next = new Set(selected);
+    const wasOn = next.has(id);
+    if (wasOn) next.delete(id);
+    else next.add(id);
+    setSelected(next);
+    if (!wasOn) {
+      setProfile({ nome: row.nome ?? "", setor: row.setor ?? "" });
+      return;
+    }
+    if (next.size === 0) {
+      setProfile({ nome: "", setor: "" });
+      return;
+    }
+    const leftover = instances.find((item) => next.has(keyOf(item)));
+    setProfile({ nome: leftover?.nome ?? "", setor: leftover?.setor ?? "" });
   }
 
   async function saveProfile() {

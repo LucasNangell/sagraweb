@@ -11,6 +11,7 @@ import {
   Send,
   Plus,
   Trash2,
+  ChevronDown,
 } from "lucide-react";
 import { api, ApiError, type AppConfig, type BoardColumn, type Command, type Instance, type Job } from "./api";
 import {
@@ -59,6 +60,142 @@ function compareInstancesByNome(a: Instance, b: Instance) {
   const byHost = a.hostName.localeCompare(b.hostName, "pt", { sensitivity: "base" });
   if (byHost) return byHost;
   return a.windowsUser.localeCompare(b.windowsUser, "pt", { sensitivity: "base" });
+}
+
+function LibraryCombobox({
+  commands,
+  value,
+  onChange,
+}: {
+  commands: Command[];
+  value: number;
+  onChange: (id: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const selected = commands.find((cmd) => cmd.id === value);
+  const sorted = useMemo(
+    () => [...commands].sort((a, b) => a.name.localeCompare(b.name, "pt")),
+    [commands],
+  );
+  const filtered = useMemo(() => {
+    const q = foldText(query);
+    if (!q) return sorted;
+    return sorted.filter((cmd) => foldText(`${cmd.name} ${cmd.kind === "ps1" ? "ps1 powershell" : "bat cmd"}`).includes(q));
+  }, [query, sorted]);
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  useEffect(() => {
+    setActive(0);
+  }, [query, open]);
+
+  useEffect(() => {
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-idx="${active}"]`);
+    el?.scrollIntoView({ block: "nearest" });
+  }, [active]);
+
+  function pick(id: number) {
+    onChange(id);
+    setQuery("");
+    setOpen(false);
+  }
+
+  return (
+    <div ref={boxRef} className="relative w-full min-w-0 sm:w-64">
+      <div className="relative">
+        <input
+          aria-label="Comando da biblioteca"
+          aria-expanded={open}
+          aria-autocomplete="list"
+          role="combobox"
+          className="w-full min-w-0 rounded-lg border border-slate-700 bg-slate-900 py-1.5 pl-3 pr-8 text-sm text-slate-100 outline-none focus:border-sky-400"
+          placeholder="Biblioteca…"
+          value={open ? query : (selected?.name ?? "")}
+          onFocus={() => {
+            setQuery("");
+            setOpen(true);
+          }}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setOpen(true);
+              setActive((i) => Math.min(filtered.length - 1, i + 1));
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setActive((i) => Math.max(0, i - 1));
+            } else if (e.key === "Enter") {
+              if (!open) return;
+              e.preventDefault();
+              e.stopPropagation();
+              const cmd = filtered[active];
+              pick(cmd ? cmd.id : 0);
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setOpen(false);
+              setQuery("");
+            }
+          }}
+        />
+        <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+      </div>
+      {open ? (
+        <div
+          ref={listRef}
+          role="listbox"
+          className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-slate-700 bg-slate-900 py-1 shadow-lg"
+        >
+          <button
+            type="button"
+            role="option"
+            data-idx={-1}
+            className="w-full px-3 py-1.5 text-left text-sm text-slate-400 hover:bg-slate-800"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => pick(0)}
+          >
+            Nenhum comando
+          </button>
+          {filtered.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-slate-500">Nenhum resultado.</p>
+          ) : (
+            filtered.map((cmd, index) => (
+              <button
+                key={cmd.id}
+                type="button"
+                role="option"
+                data-idx={index}
+                aria-selected={cmd.id === value}
+                className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm ${
+                  index === active ? "bg-slate-800 text-white" : "text-slate-200 hover:bg-slate-800"
+                }`}
+                onMouseDown={(e) => e.preventDefault()}
+                onMouseEnter={() => setActive(index)}
+                onClick={() => pick(cmd.id)}
+              >
+                <span className="min-w-0 truncate">{cmd.name}</span>
+                <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${cmd.kind === "ps1" ? "bg-sky-400 text-slate-950" : "bg-amber-400 text-slate-950"}`}>
+                  {cmd.kind === "ps1" ? "PS1" : "BAT"}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function errText(ex: unknown) {
@@ -892,8 +1029,8 @@ export default function App() {
               </div>
             </div>
 
-            <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 shadow-card">
-              <div className="flex shrink-0 flex-col gap-3 border-b border-slate-800 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-4">
+            <section className="flex min-h-0 min-w-0 flex-col overflow-visible rounded-2xl border border-slate-800 bg-slate-950 shadow-card">
+              <div className="relative z-20 flex shrink-0 flex-col gap-3 border-b border-slate-800 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-4">
                 <div className="flex min-w-0 items-center gap-2">
                   <TerminalSquare size={16} className="shrink-0 text-sky-400" />
                   <div className="min-w-0">
@@ -906,21 +1043,7 @@ export default function App() {
                     <button type="button" className={`rounded-md px-3 py-1 text-sm ${shell === "bat" ? "bg-slate-800 text-white" : "text-slate-400"}`} onClick={() => { setShell("bat"); chooseLibrary(0); }}>CMD</button>
                     <button type="button" className={`rounded-md px-3 py-1 text-sm ${shell === "ps1" ? "bg-slate-800 text-white" : "text-slate-400"}`} onClick={() => { setShell("ps1"); chooseLibrary(0); }}>PowerShell</button>
                   </div>
-                  <select
-                    aria-label="Comando da biblioteca"
-                    className="w-full min-w-0 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-100 sm:w-56"
-                    value={libraryId || ""}
-                    onChange={(e) => chooseLibrary(Number(e.target.value) || 0)}
-                  >
-                    <option value="">Biblioteca…</option>
-                    {[...commands]
-                      .sort((a, b) => a.name.localeCompare(b.name, "pt"))
-                      .map((cmd) => (
-                        <option key={cmd.id} value={cmd.id}>
-                          {cmd.name} ({cmd.kind === "ps1" ? "PS1" : "BAT"})
-                        </option>
-                      ))}
-                  </select>
+                  <LibraryCombobox commands={commands} value={libraryId} onChange={chooseLibrary} />
                 </div>
               </div>
               <pre ref={logEl} className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap p-4 font-mono text-sm text-emerald-300">{log}</pre>

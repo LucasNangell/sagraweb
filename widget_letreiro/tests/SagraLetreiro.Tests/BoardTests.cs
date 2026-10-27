@@ -697,6 +697,26 @@ public class OverlayBoundsTests
     }
 
     [Fact]
+    public void PinRightDocksAgainstSystray()
+    {
+        var right = OverlayBounds.RightBound(0, 1920, notifyLeft: 1700);
+        var (x, width) = OverlayBounds.PinRight(720, 0, right);
+        Assert.Equal(720, width);
+        Assert.Equal(right - 720, x);
+        Assert.Equal(right, x + width);
+    }
+
+    [Fact]
+    public void PinRightShrinksWhenBarIsShorterThanWidth()
+    {
+        var right = OverlayBounds.RightBound(0, 800, notifyLeft: 500);
+        var (x, width) = OverlayBounds.PinRight(720, 0, right);
+        Assert.Equal(0, x);
+        Assert.Equal(right, width);
+        Assert.Equal(right, x + width);
+    }
+
+    [Fact]
     public void NormalizeWindowClampsTypedWidth()
     {
         Assert.Equal(OverlayBounds.MinWidth, ConfigStore.NormalizeWindow(new WindowConfig { Width = 10 }).Width);

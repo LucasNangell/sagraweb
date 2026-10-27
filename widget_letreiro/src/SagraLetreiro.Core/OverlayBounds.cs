@@ -28,4 +28,10 @@ public static class OverlayBounds
         x = Math.Max(leftBound, Math.Min(x, rightBound - width));
         return (x, width);
     }
+
+    public static (int X, int Width) PinRight(int width, int leftBound, int rightBound)
+    {
+        var (_, clamped) = ClampX(rightBound, width, leftBound, rightBound);
+        return (rightBound - clamped, clamped);
+    }
 }

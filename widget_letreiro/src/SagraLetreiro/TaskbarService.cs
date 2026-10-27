@@ -87,6 +87,28 @@ internal static class TaskbarService
         return new RECT { Left = x, Top = y, Right = x + width, Bottom = y + height };
     }
 
+    public static RECT ClampPinnedRight(int width, TaskbarGeom geom)
+    {
+        int leftBound, rightBound, y, height;
+        if (geom.Edge is "bottom" or "top")
+        {
+            leftBound = geom.Left;
+            rightBound = OverlayBounds.RightBound(geom.Left, geom.Right, NotifyAreaLeft(geom));
+            y = geom.Top;
+            height = geom.Thickness;
+        }
+        else
+        {
+            leftBound = geom.MonitorLeft;
+            rightBound = geom.MonitorRight;
+            height = geom.Thickness;
+            y = geom.MonitorBottom - height;
+        }
+        int x;
+        (x, width) = OverlayBounds.PinRight(width, leftBound, rightBound);
+        return new RECT { Left = x, Top = y, Right = x + width, Bottom = y + height };
+    }
+
     static int? NotifyAreaLeft(TaskbarGeom geom)
     {
         try

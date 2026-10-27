@@ -58,7 +58,6 @@ public partial class OverlayWindow : Window
     int _physHeight = 48;
     string? _dragMode;
     int _dragOriginX;
-    int _dragWinX;
     int _dragWidth;
     bool _didDrag;
     TickerCard? _pressCard;
@@ -189,14 +188,12 @@ public partial class OverlayWindow : Window
     void Place(bool persist, bool initial = false)
     {
         var win = _config.Window;
-        var probeX = win.X ?? _physX;
-        var geom = TaskbarService.At(probeX, _physY);
-        int x;
-        if (initial && win.X is null)
-            x = geom.Right - win.Width - 8;
-        else
-            x = win.X ?? _physX;
-        var rect = TaskbarService.Clamp(x, win.Width, geom);
+        var probeX = initial && win.X is null
+            ? 8
+            : (win.X ?? _physX) + 8;
+        var probeY = _physY + Math.Max(_physHeight, 1) / 2;
+        var geom = TaskbarService.At(probeX, probeY);
+        var rect = TaskbarService.ClampPinnedRight(win.Width, geom);
         _physX = rect.Left;
         _physY = rect.Top;
         _physWidth = rect.Width;
@@ -254,7 +251,6 @@ public partial class OverlayWindow : Window
         }
         CloseBalloon();
         _dragOriginX = pt.X;
-        _dragWinX = _physX;
         _dragWidth = _physWidth;
         CaptureMouse();
         e.Handled = true;
@@ -263,9 +259,8 @@ public partial class OverlayWindow : Window
     void ApplyDrag(int xRoot)
     {
         if (_dragMode is null) return;
-        var dx = xRoot - _dragOriginX;
         var geom = TaskbarService.At(xRoot, _physY);
-        var rect = TaskbarService.Clamp(_dragWinX + dx, _dragWidth, geom);
+        var rect = TaskbarService.ClampPinnedRight(_dragWidth, geom);
         _physX = rect.Left;
         _physY = rect.Top;
         _physWidth = rect.Width;

@@ -15,6 +15,9 @@ internal sealed class UpdateService : IDisposable
     public bool IsUpdating => _updating;
 
     public string SourceDirectory { get; set; } = ConfigStore.DefaultUpdateSourceDirectory;
+    public string FallbackSourceDirectory { get; set; } = ConfigStore.FallbackUpdateSourceDirectory;
+
+    IEnumerable<string> SourceDirectories => [SourceDirectory, FallbackSourceDirectory];
 
     public static string CurrentVersion =>
         UpdateFinder.Normalize(Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0, 0))
@@ -41,7 +44,7 @@ internal sealed class UpdateService : IDisposable
         try
         {
             await Task.Run(() => { }).ConfigureAwait(true);
-            if (!UpdateFinder.TryFindNewerSetup(SourceDirectory, CurrentAssemblyVersion(), out var path))
+            if (!UpdateFinder.TryFindNewerSetup(SourceDirectories, CurrentAssemblyVersion(), out var path))
             {
                 if (!silent)
                     AppLog.Info("Nenhuma atualização na pasta compartilhada.");
@@ -74,7 +77,7 @@ internal sealed class UpdateService : IDisposable
     {
         try
         {
-            return UpdateFinder.TryFindNewerSetup(SourceDirectory, CurrentAssemblyVersion(), out var path)
+            return UpdateFinder.TryFindNewerSetup(SourceDirectories, CurrentAssemblyVersion(), out var path)
                 ? path
                 : null;
         }

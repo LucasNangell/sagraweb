@@ -736,4 +736,45 @@ public class UpdateFinderTests
             Directory.Delete(dir, recursive: true);
         }
     }
+
+    [Fact]
+    public void TryFindNewerSetupUsesFallbackWhenPrimaryMissing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "letreiro-update-fb-" + Guid.NewGuid().ToString("N"));
+        var primary = Path.Combine(root, "primary");
+        var fallback = Path.Combine(root, "fallback");
+        Directory.CreateDirectory(fallback);
+        try
+        {
+            File.WriteAllBytes(Path.Combine(fallback, "SAGRA-Letreiro-Setup-2.2.0.exe"), [0]);
+            Assert.True(UpdateFinder.TryFindNewerSetup([primary, fallback], new Version(2, 0, 0), out var path));
+            Assert.Equal("SAGRA-Letreiro-Setup-2.2.0.exe", Path.GetFileName(path));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TryFindNewerSetupKeepsPrimaryWhenItExists()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "letreiro-update-pri-" + Guid.NewGuid().ToString("N"));
+        var primary = Path.Combine(root, "primary");
+        var fallback = Path.Combine(root, "fallback");
+        Directory.CreateDirectory(primary);
+        Directory.CreateDirectory(fallback);
+        try
+        {
+            File.WriteAllBytes(Path.Combine(primary, "SAGRA-Letreiro-Setup-2.1.0.exe"), [0]);
+            File.WriteAllBytes(Path.Combine(fallback, "SAGRA-Letreiro-Setup-9.9.9.exe"), [0]);
+            Assert.True(UpdateFinder.TryFindNewerSetup([primary, fallback], new Version(2, 0, 0), out var path));
+            Assert.Equal("SAGRA-Letreiro-Setup-2.1.0.exe", Path.GetFileName(path));
+            Assert.False(UpdateFinder.TryFindNewerSetup([primary, fallback], new Version(2, 1, 0), out _));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
 }

@@ -1,13 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
 
-set "DESTINO=G:\PC Reinstall\Lucas Santos - Modelo de Configs\Configs - Software\Custom Sys (na Unidade C)\SEFOC Tools"
+set "DESTINO1=G:\PC Reinstall\Lucas Santos - Modelo de Configs\Configs - Software\Custom Sys (na Unidade C)\SEFOC Tools"
+set "DESTINO2=I:\Transferencia\_TempSys"
 set "ORIGEM=%~dp0artifacts"
-
-echo.
-echo ===== Apagando setups antigos (SAGRA-Letreiro-Setup-*.exe) =====
-del /f /q "%DESTINO%\SAGRA-Letreiro-Setup-*.exe" 2>nul
-echo [OK] Etapa de limpeza concluida.
 
 echo.
 echo ===== Procurando a ultima versao disponivel =====
@@ -52,18 +48,39 @@ echo [OK] Ultima versao: !ULTIMO!  ^(v!ULTIMA_VER!^)
 
 echo.
 echo ===== Copiando =====
-robocopy "%ORIGEM%" "%DESTINO%" "!ULTIMO!" /J /MT:8 /NFL /NDL /NJH /NJS /NP
+set "COPIADOS=0"
+call :copia "!ULTIMO!" "%DESTINO1%"
+if not errorlevel 1 set /a COPIADOS+=1
+call :copia "!ULTIMO!" "%DESTINO2%"
+if not errorlevel 1 set /a COPIADOS+=1
 
-if errorlevel 8 (
-    echo [ERRO] robocopy falhou com codigo %errorlevel%
+if !COPIADOS! EQU 0 (
+    echo [ERRO] Nao foi possivel copiar para nenhum destino.
     pause
     exit /b 1
 )
 
 echo.
-echo [OK] Copiado: %DESTINO%\!ULTIMO!
-echo.
+echo [OK] Publicado em !COPIADOS! destino^(s^).
 echo Os PCs com o letreiro WPF instalado pegam essa versao em ate 5 minutos.
 echo.
-
 exit /b 0
+
+:copia
+set "ARQ=%~1"
+set "DST=%~2"
+if not exist "%DST%" mkdir "%DST%" 2>nul
+if not exist "%DST%" (
+    echo [AVISO] Destino indisponivel: %DST%
+    exit /b 1
+)
+echo Apagando setups antigos em "%DST%"
+del /f /q "%DST%\SAGRA-Letreiro-Setup-*.exe" 2>nul
+robocopy "%ORIGEM%" "%DST%" "%ARQ%" /J /MT:8 /NFL /NDL /NJH /NJS /NP
+if errorlevel 8 (
+    echo [ERRO] robocopy falhou para %DST%
+    exit /b 1
+)
+echo [OK] Copiado: %DST%\%ARQ%
+exit /b 0
+

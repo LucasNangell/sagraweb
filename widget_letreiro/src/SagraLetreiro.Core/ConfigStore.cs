@@ -10,6 +10,7 @@ public static class ConfigStore
     public const string DefaultNome = "usr_sefoc";
     public const string DefaultUpdateSourceDirectory =
         @"G:\PC Reinstall\Lucas Santos - Modelo de Configs\Configs - Software\Custom Sys (na Unidade C)\SEFOC Tools";
+    public const string FallbackUpdateSourceDirectory = @"I:\Transferencia\_TempSys";
 
     static readonly JsonSerializerOptions JsonOptions = new()
     {

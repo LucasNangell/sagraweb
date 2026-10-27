@@ -16,6 +16,7 @@ import { api, ApiError, type AppConfig, type BoardColumn, type Command, type Ins
 import {
   applyCapturesFromJobs,
   applyCommandVars,
+  capturedGroups,
   extractCommandVars,
   loadCapturedVars,
   readCaptureVar,
@@ -432,7 +433,7 @@ export default function App() {
           const cmd = commandsRef.current.find((item) => item.name === job.name);
           return cmd ? readCaptureVar(cmd.content) : "";
         }).filter(Boolean))];
-        if (names.length) setStatus(`Atualizou ${names.map((name) => `{{${name}}}`).join(", ")}.`);
+        if (names.length) setStatus(`Gravou ${names.map((name) => `{{${name}}}`).join(", ")} (a lista permanece até você limpar).`);
       }
     }
   }, []);
@@ -702,6 +703,21 @@ export default function App() {
   const libraryVarNames = useMemo(() => extractCommandVars(libraryCmd?.content ?? ""), [libraryCmd?.content]);
   const draftVarNames = useMemo(() => extractCommandVars(draft.content), [draft.content]);
   const draftCapture = readCaptureVar(draft.content);
+  const savedGroups = useMemo(() => capturedGroups(capturedVars), [capturedVars]);
+
+  function clearCapturedVar(name: string) {
+    setCapturedVars((prev) => {
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+    setStatus(`Lista {{${name}}} limpa.`);
+  }
+
+  function clearAllCapturedVars() {
+    setCapturedVars({});
+    setStatus("Listas de variáveis limpas.");
+  }
 
   return (
     <div className="min-h-screen lg:grid lg:h-screen lg:grid-cols-[260px_1fr] lg:overflow-hidden">
@@ -863,29 +879,56 @@ export default function App() {
                   void sendTerminal(false).catch((ex) => setError(errText(ex)));
                 }}
               >
+                {savedGroups.length ? (
+                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/60 px-2 py-2">
+                    <span className="text-[11px] uppercase tracking-wide text-slate-500">Salvas</span>
+                    {savedGroups.map((group) => (
+                      <span key={group.name} className="inline-flex items-center gap-1 rounded-full bg-slate-800 pl-2 text-[11px] text-slate-200">
+                        <span className="font-mono">{`{{${group.name}}}`}</span>
+                        <span className="text-slate-400">{group.options.length}</span>
+                        <button
+                          type="button"
+                          className="rounded-full p-1 text-slate-400 hover:bg-slate-700 hover:text-rose-300"
+                          title={`Limpar {{${group.name}}}`}
+                          onClick={() => clearCapturedVar(group.name)}
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                    <button type="button" className="ml-auto text-[11px] text-slate-400 hover:text-rose-300" onClick={clearAllCapturedVars}>
+                      Limpar listas
+                    </button>
+                  </div>
+                ) : null}
                 {libraryVarNames.length ? (
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {libraryVarNames.map((name) => {
-                      const saved = capturedVars[name];
+                      const current = libraryVars[name] ?? "";
+                      const selectedInLists = savedGroups.some((group) => group.options.some((item) => item.value === current));
                       return (
                         <label key={name} className="text-xs text-slate-400">
                           {name}
-                          {saved?.options.length ? (
+                          {savedGroups.length ? (
                             <select
-                              aria-label={`Valores salvos de ${name}`}
+                              aria-label={`Valores salvos para ${name}`}
                               className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-slate-100"
-                              value={saved.options.some((item) => item.value === (libraryVars[name] ?? "")) ? libraryVars[name] : ""}
+                              value={selectedInLists ? current : ""}
                               onChange={(e) => setLibraryVars((prev) => ({ ...prev, [name]: e.target.value }))}
                             >
-                              <option value="">{`${saved.options.length} da última captura (${saved.sourceName})`}</option>
-                              {saved.options.map((item) => (
-                                <option key={`${item.value}:${item.label}`} value={item.value}>
-                                  {item.label}
-                                </option>
+                              <option value="">Escolher valor salvo…</option>
+                              {savedGroups.map((group) => (
+                                <optgroup key={group.name} label={`{{${group.name}}} · ${group.sourceName}`}>
+                                  {group.options.map((item) => (
+                                    <option key={`${group.name}:${item.value}:${item.label}`} value={item.value}>
+                                      {item.label}
+                                    </option>
+                                  ))}
+                                </optgroup>
                               ))}
                             </select>
                           ) : (
-                            <span className="mt-1 block text-[11px] text-slate-500">Sem captura ainda. Rode o comando que grava {`{{${name}}}`}.</span>
+                            <span className="mt-1 block text-[11px] text-slate-500">Sem listas ainda. Rode um comando que grava variáveis.</span>
                           )}
                           <input
                             className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 font-mono text-sm text-slate-100"
@@ -994,7 +1037,7 @@ export default function App() {
                   placeholder="janela_id"
                 />
                 <span className="mt-1 block text-xs text-slate-500">
-                  Se preencher, a saída deste comando vira opções de <span className="font-mono">{"{{variavel}}"}</span> até ele ser executado de novo.
+                  Se preencher, a saída deste comando entra na lista de <span className="font-mono">{"{{variavel}}"}</span> e permanece até você limpar.
                 </span>
               </label>
               <textarea

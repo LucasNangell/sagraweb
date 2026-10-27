@@ -141,10 +141,14 @@ export function parseCaptureOptions(stdout: string | null | undefined): Captured
 
 export function loadCapturedVars(): CapturedVars {
   try {
-    const raw = sessionStorage.getItem(CAPTURE_STORAGE_KEY);
+    const raw = localStorage.getItem(CAPTURE_STORAGE_KEY) ?? sessionStorage.getItem(CAPTURE_STORAGE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw) as CapturedVars;
-    return parsed && typeof parsed === "object" ? parsed : {};
+    if (!parsed || typeof parsed !== "object") return {};
+    if (!localStorage.getItem(CAPTURE_STORAGE_KEY)) {
+      localStorage.setItem(CAPTURE_STORAGE_KEY, raw);
+    }
+    return parsed;
   } catch {
     return {};
   }
@@ -152,10 +156,25 @@ export function loadCapturedVars(): CapturedVars {
 
 export function saveCapturedVars(vars: CapturedVars): void {
   try {
-    sessionStorage.setItem(CAPTURE_STORAGE_KEY, JSON.stringify(vars));
+    localStorage.setItem(CAPTURE_STORAGE_KEY, JSON.stringify(vars));
   } catch {
     /* quota / private mode */
   }
+}
+
+export function mergeCapturedOptions(
+  previous: CapturedOption[] | undefined,
+  incoming: CapturedOption[],
+): CapturedOption[] {
+  const byValue = new Map<string, CapturedOption>();
+  for (const item of previous ?? []) {
+    if (item.value) byValue.set(item.value, item);
+  }
+  for (const item of incoming) {
+    if (!item.value) continue;
+    byValue.set(item.value, item);
+  }
+  return [...byValue.values()];
 }
 
 export function applyCapturesFromJobs(
@@ -170,14 +189,23 @@ export function applyCapturesFromJobs(
     if (!cmd) continue;
     const varName = readCaptureVar(cmd.content);
     if (!varName) continue;
+    const incoming = parseCaptureOptions(job.stdout);
+    if (!incoming.length) continue;
+    const previous = next[varName];
     next = {
       ...next,
       [varName]: {
         sourceName: cmd.name,
         sourceCommandId: cmd.id,
-        options: parseCaptureOptions(job.stdout),
+        options: mergeCapturedOptions(previous?.options, incoming),
       },
     };
   }
   return next;
+}
+
+export function capturedGroups(vars: CapturedVars): { name: string; sourceName: string; options: CapturedOption[] }[] {
+  return Object.entries(vars)
+    .filter(([, set]) => set?.options?.length)
+    .map(([name, set]) => ({ name, sourceName: set.sourceName, options: set.options }));
 }

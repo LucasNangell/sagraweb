@@ -161,9 +161,11 @@ public static class ConfigStore
     public static void Save(AppConfig config)
     {
         Directory.CreateDirectory(ConfigDirectory);
-        var payload = Normalize(config);
-        File.WriteAllText(ConfigPath, JsonSerializer.Serialize(payload, JsonOptions));
+        File.WriteAllText(ConfigPath, Serialize(config));
     }
+
+    public static string Serialize(AppConfig config) =>
+        JsonSerializer.Serialize(Normalize(config), JsonOptions);
 
     public static AppConfig RestoreDefaultBoard(AppConfig config)
     {

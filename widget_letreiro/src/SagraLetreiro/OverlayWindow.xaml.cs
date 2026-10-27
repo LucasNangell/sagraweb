@@ -67,7 +67,6 @@ public partial class OverlayWindow : Window
     TickerCard? _pressCard;
     Point _pressCardScreen;
     OsBalloonWindow? _balloon;
-    SettingsWindow? _settings;
     AdminHost? _adminHost;
     string? _remoteFp;
     int _jobBusy;
@@ -407,14 +406,15 @@ public partial class OverlayWindow : Window
 
     void OpenSettings()
     {
-        if (_settings is { IsVisible: true })
+        try
         {
-            _settings.Activate();
-            return;
+            EnsureLocalHost();
+            _adminHost!.OpenBrowser("#ajustes");
         }
-        _settings = new SettingsWindow(_config, _client, (cfg, relogin) => ApplyConfig(cfg, relogin));
-        _settings.Closed += (_, _) => _settings = null;
-        _settings.Show();
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Ajustes", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     void OpenAdmin()
@@ -422,13 +422,28 @@ public partial class OverlayWindow : Window
         if (!LetreiroAdmin.IsAdmin()) return;
         try
         {
-            _adminHost ??= AdminHost.Start(() => _client);
-            _adminHost.OpenBrowser();
+            EnsureLocalHost();
+            _adminHost!.OpenBrowser();
         }
         catch (Exception ex)
         {
             MessageBox.Show(ex.Message, "Administração", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    void EnsureLocalHost()
+    {
+        _adminHost ??= AdminHost.Start(new AdminHostOptions
+        {
+            Client = () => _client,
+            IsAdmin = LetreiroAdmin.IsAdmin(),
+            GetLocalConfig = () => Dispatcher.Invoke(() => _config),
+            ApplyLocalConfig = (cfg, relogin) => Dispatcher.Invoke(() =>
+            {
+                ConfigStore.Save(cfg);
+                ApplyConfig(cfg, relogin);
+            }),
+        });
     }
 
     async Task SyncRemoteConfigAsync()

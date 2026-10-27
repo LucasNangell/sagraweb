@@ -10,13 +10,12 @@ import {
   RefreshCw,
   Send,
 } from "lucide-react";
-import { api, ApiError, type AppConfig, type Command, type Instance, type Job } from "./api";
+import { api, ApiError, type AppConfig, type BoardColumn, type Command, type Instance, type Job } from "./api";
 
-type View = "computers" | "terminal" | "library" | "history" | "settings";
+type View = "computers" | "library" | "history" | "settings";
 
 const NAV: { id: View; label: string; icon: typeof Monitor }[] = [
   { id: "computers", label: "Computadores", icon: Monitor },
-  { id: "terminal", label: "Terminal", icon: TerminalSquare },
   { id: "library", label: "Biblioteca", icon: BookMarked },
   { id: "history", label: "Histórico", icon: Clock3 },
   { id: "settings", label: "Ajustes", icon: Settings2 },
@@ -49,6 +48,9 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [profile, setProfile] = useState({ nome: "", setor: "" });
   const [cfg, setCfg] = useState<AppConfig>({});
+  const [localCfg, setLocalCfg] = useState<AppConfig>({});
+  const [setores, setSetores] = useState<string[]>(["SEFOC", "Papelaria", "Gravação"]);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [jobId, setJobId] = useState<number | null>(null);
 
   const selectedRows = useMemo(
@@ -77,16 +79,44 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    void loadAll();
+    void (async () => {
+      const hash = window.location.hash.replace(/^#/, "");
+      if (hash === "ajustes") setView("settings");
+      try {
+        const me = await api.me();
+        setIsAdmin(me.isAdmin);
+        if (hash === "ajustes" || !me.isAdmin) setView("settings");
+        const [local, setorList] = await Promise.all([api.localConfig(), api.setores()]);
+        setLocalCfg(local);
+        if (setorList.setores?.length) setSetores(setorList.setores);
+        if (me.isAdmin) await loadAll();
+        else {
+          setError("");
+          setStatus("Ajustes deste computador");
+        }
+      } catch (ex) {
+        setError(ex instanceof ApiError ? ex.message : "Falha ao carregar a administração.");
+        setStatus("Sem dados");
+      }
+    })();
   }, [loadAll]);
 
   useEffect(() => {
+    const onHash = () => {
+      if (window.location.hash.replace(/^#/, "") === "ajustes") setView("settings");
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  useEffect(() => {
+    if (!isAdmin) return;
     const timer = window.setInterval(() => {
       if (document.hidden) return;
       void api.jobs().then((row) => setJobs(row.jobs ?? [])).catch(() => undefined);
     }, 5000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [isAdmin]);
 
   function toggle(row: Instance) {
     const id = keyOf(row);
@@ -121,6 +151,42 @@ export default function App() {
     setStatus(applyToAll ? "Configuração aplicada a todos." : "Configuração gravada.");
   }
 
+  const columns = localCfg.board?.columns ?? [];
+
+  function patchLocal(next: AppConfig) {
+    setLocalCfg(next);
+  }
+
+  function patchColumn(index: number, patch: Partial<BoardColumn>) {
+    const nextCols = columns.map((col, i) => (i === index ? { ...col, ...patch } : col));
+    patchLocal({ ...localCfg, board: { ...localCfg.board, columns: nextCols, columnCount: nextCols.length } });
+  }
+
+  function addGroup() {
+    if (columns.length >= 6) return;
+    const nextCols = [...columns, { id: `col_${columns.length}`, title: `Grupo ${columns.length + 1}`, statuses: [] }];
+    patchLocal({ ...localCfg, board: { ...localCfg.board, columns: nextCols, columnCount: nextCols.length } });
+  }
+
+  function removeGroup(index: number) {
+    if (columns.length <= 1) return setError("É necessário pelo menos 1 grupo.");
+    const nextCols = columns.filter((_, i) => i !== index);
+    patchLocal({ ...localCfg, board: { ...localCfg.board, columns: nextCols, columnCount: nextCols.length } });
+  }
+
+  async function saveLocal() {
+    const saved = await api.saveLocalConfig(localCfg);
+    setLocalCfg(saved);
+    setStatus("Ajustes deste computador gravados.");
+  }
+
+  async function restoreGroups() {
+    if (!window.confirm("Restaurar grupos e setor padrão (SEFOC, 4 grupos)?")) return;
+    const restored = await api.restoreBoard();
+    setLocalCfg(restored);
+    setStatus("Grupos restaurados.");
+  }
+
   async function sendTerminal(allOnline: boolean) {
     const text = prompt.trimEnd();
     if (!text.trim()) return setError("Digite um comando.");
@@ -138,7 +204,6 @@ export default function App() {
     );
     setPrompt("");
     setStatus(queued.queued === 1 ? "1 comando enfileirado." : `${queued.queued} comandos enfileirados.`);
-    setView("history");
     const jobList = await api.jobs();
     setJobs(jobList.jobs ?? []);
   }
@@ -164,7 +229,7 @@ export default function App() {
   const activeJob = jobs.find((job) => job.id === jobId) ?? jobs[0];
 
   return (
-    <div className="min-h-screen lg:grid lg:grid-cols-[260px_1fr]">
+    <div className="min-h-screen lg:grid lg:h-screen lg:grid-cols-[260px_1fr] lg:overflow-hidden">
       <header className="flex items-center justify-between border-b border-slate-800 px-4 py-3 lg:hidden">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-sky-400">SAGRA</p>
@@ -176,7 +241,7 @@ export default function App() {
       </header>
 
       <aside
-        className={`${menuOpen ? "block" : "hidden"} border-b border-slate-800 bg-slate-950/80 p-4 lg:block lg:min-h-screen lg:border-b-0 lg:border-r`}
+        className={`${menuOpen ? "block" : "hidden"} border-b border-slate-800 bg-slate-950/80 p-4 lg:block lg:min-h-0 lg:overflow-auto lg:border-b-0 lg:border-r`}
       >
         <div className="mb-8 hidden lg:block">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-400">SAGRA Letreiro</p>
@@ -184,7 +249,7 @@ export default function App() {
           <p className="mt-2 text-sm text-slate-400">{status}</p>
         </div>
         <nav className="grid gap-2">
-          {NAV.map((item) => {
+          {(isAdmin ? NAV : NAV.filter((item) => item.id === "settings")).map((item) => {
             const Icon = item.icon;
             const active = view === item.id;
             return (
@@ -205,128 +270,134 @@ export default function App() {
           })}
         </nav>
         <button
-          onClick={() => void loadAll()}
+          onClick={() => {
+            if (isAdmin) void loadAll();
+            else void api.localConfig().then(setLocalCfg).catch((ex) => setError(errText(ex)));
+          }}
           className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-800 px-3 py-2 text-sm text-slate-200"
         >
           <RefreshCw size={16} /> Atualizar
         </button>
       </aside>
 
-      <main className="p-4 sm:p-6 lg:p-8">
+      <main className={`p-4 sm:p-6 ${view === "computers" || view === "settings" ? "flex min-h-0 flex-col lg:overflow-hidden" : "lg:overflow-auto"}`}>
         {error ? (
-          <div className="mb-4 rounded-xl border border-rose-500/30 bg-rose-950/40 px-4 py-3 text-sm text-rose-100">{error}</div>
+          <div className="mb-4 shrink-0 rounded-xl border border-rose-500/30 bg-rose-950/40 px-4 py-3 text-sm text-rose-100">{error}</div>
         ) : null}
 
         {view === "computers" ? (
-          <section className="space-y-4">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <h2 className="text-2xl font-bold">Computadores</h2>
-                <p className="text-sm text-slate-400">Selecione um ou vários para o terminal e a configuração remota.</p>
+          <section className="grid min-h-[calc(100dvh-8rem)] flex-1 grid-rows-[minmax(12rem,1fr)_minmax(16rem,1fr)] gap-4 lg:min-h-0">
+            <div className="flex min-h-0 flex-col gap-3 overflow-hidden">
+              <div className="flex shrink-0 flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h2 className="text-2xl font-bold">Computadores</h2>
+                  <p className="text-sm text-slate-400">Selecione um ou vários para o terminal e a configuração remota.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void loadConfig()}>
+                    Editar config
+                  </button>
+                  <button className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void saveProfile()}>
+                    Salvar nome/setor
+                  </button>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void loadConfig()}>
-                  Editar config
-                </button>
-                <button className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void saveProfile()}>
-                  Salvar nome/setor
-                </button>
+              <div className="grid shrink-0 gap-3 md:grid-cols-2">
+                <label className="text-sm text-slate-400">
+                  Nome
+                  <input className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={profile.nome} onChange={(e) => setProfile((p) => ({ ...p, nome: e.target.value }))} />
+                </label>
+                <label className="text-sm text-slate-400">
+                  Setor
+                  <input className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={profile.setor} onChange={(e) => setProfile((p) => ({ ...p, setor: e.target.value }))} />
+                </label>
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto rounded-2xl border border-slate-800 bg-slate-900/80 shadow-card">
+                <table className="min-w-full text-sm">
+                  <thead className="sticky top-0 bg-slate-900 text-left text-slate-400">
+                    <tr>
+                      {["", "Computador", "Usuário", "Nome", "Setor", "Estado", "Ponto", "Versão"].map((h) => (
+                        <th key={h} className="px-3 py-3 font-medium">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {instances.map((row) => {
+                      const on = selected.has(keyOf(row));
+                      return (
+                        <tr key={keyOf(row)} className={`border-t border-slate-800 ${on ? "bg-sky-400/10" : ""}`} onClick={() => toggle(row)}>
+                          <td className="px-3 py-3"><input type="checkbox" checked={on} readOnly /></td>
+                          <td className="px-3 py-3 font-medium">{row.hostName}</td>
+                          <td className="px-3 py-3">{row.windowsUser}</td>
+                          <td className="px-3 py-3">{row.nome || "—"}</td>
+                          <td className="px-3 py-3">{row.setor || "—"}</td>
+                          <td className="px-3 py-3">
+                            <span className={`rounded-full px-2 py-0.5 text-xs ${row.online ? "bg-emerald-400/20 text-emerald-300" : "bg-slate-700 text-slate-300"}`}>
+                              {row.online ? "Online" : "Offline"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3">{row.ponto || "—"}</td>
+                          <td className="px-3 py-3">{row.version || "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="text-sm text-slate-400">
-                Nome
-                <input className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={profile.nome} onChange={(e) => setProfile((p) => ({ ...p, nome: e.target.value }))} />
-              </label>
-              <label className="text-sm text-slate-400">
-                Setor
-                <input className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={profile.setor} onChange={(e) => setProfile((p) => ({ ...p, setor: e.target.value }))} />
-              </label>
-            </div>
-            <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/80 shadow-card">
-              <table className="min-w-full text-sm">
-                <thead className="text-left text-slate-400">
-                  <tr>
-                    {["", "Computador", "Usuário", "Nome", "Setor", "Estado", "Ponto", "Versão"].map((h) => (
-                      <th key={h} className="px-3 py-3 font-medium">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {instances.map((row) => {
-                    const on = selected.has(keyOf(row));
-                    return (
-                      <tr key={keyOf(row)} className={`border-t border-slate-800 ${on ? "bg-sky-400/10" : ""}`} onClick={() => toggle(row)}>
-                        <td className="px-3 py-3"><input type="checkbox" checked={on} readOnly /></td>
-                        <td className="px-3 py-3 font-medium">{row.hostName}</td>
-                        <td className="px-3 py-3">{row.windowsUser}</td>
-                        <td className="px-3 py-3">{row.nome || "—"}</td>
-                        <td className="px-3 py-3">{row.setor || "—"}</td>
-                        <td className="px-3 py-3">
-                          <span className={`rounded-full px-2 py-0.5 text-xs ${row.online ? "bg-emerald-400/20 text-emerald-300" : "bg-slate-700 text-slate-300"}`}>
-                            {row.online ? "Online" : "Offline"}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3">{row.ponto || "—"}</td>
-                        <td className="px-3 py-3">{row.version || "—"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        ) : null}
 
-        {view === "terminal" ? (
-          <section className="flex min-h-[70vh] flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 shadow-card">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
-              <div>
-                <h2 className="font-semibold">Terminal remoto</h2>
-                <p className="text-xs text-slate-400">{selectedRows.length} selecionado(s)</p>
+            <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 shadow-card">
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <TerminalSquare size={16} className="text-sky-400" />
+                  <div>
+                    <h2 className="font-semibold">Terminal remoto</h2>
+                    <p className="text-xs text-slate-400">{selectedRows.length} selecionado(s)</p>
+                  </div>
+                </div>
+                <div className="flex rounded-lg bg-slate-900 p-1">
+                  <button className={`rounded-md px-3 py-1 text-sm ${shell === "bat" ? "bg-slate-800 text-white" : "text-slate-400"}`} onClick={() => setShell("bat")}>CMD</button>
+                  <button className={`rounded-md px-3 py-1 text-sm ${shell === "ps1" ? "bg-slate-800 text-white" : "text-slate-400"}`} onClick={() => setShell("ps1")}>PowerShell</button>
+                </div>
               </div>
-              <div className="flex rounded-lg bg-slate-900 p-1">
-                <button className={`rounded-md px-3 py-1 text-sm ${shell === "bat" ? "bg-slate-800 text-white" : "text-slate-400"}`} onClick={() => setShell("bat")}>CMD</button>
-                <button className={`rounded-md px-3 py-1 text-sm ${shell === "ps1" ? "bg-slate-800 text-white" : "text-slate-400"}`} onClick={() => setShell("ps1")}>PowerShell</button>
-              </div>
-            </div>
-            <pre className="flex-1 overflow-auto whitespace-pre-wrap p-4 font-mono text-sm text-emerald-300">{log}</pre>
-            <form
-              className="flex flex-col gap-2 border-t border-slate-800 bg-slate-900 p-3 sm:flex-row sm:items-center"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void sendTerminal(false).catch((ex) => setError(errText(ex)));
-              }}
-            >
-              <span className="font-mono text-emerald-400">{shell === "ps1" ? "PS>" : "C:\\>"}</span>
-              <input
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "ArrowUp") {
-                    e.preventDefault();
-                    if (!typed.current.length) return;
-                    typedIndex.current = Math.max(0, typedIndex.current < 0 ? typed.current.length - 1 : typedIndex.current - 1);
-                    setPrompt(typed.current[typedIndex.current] ?? "");
-                  }
-                  if (e.key === "ArrowDown") {
-                    e.preventDefault();
-                    typedIndex.current = Math.min(typed.current.length, typedIndex.current + 1);
-                    setPrompt(typed.current[typedIndex.current] ?? "");
-                  }
+              <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap p-4 font-mono text-sm text-emerald-300">{log}</pre>
+              <form
+                className="flex shrink-0 flex-col gap-2 border-t border-slate-800 bg-slate-900 p-3 sm:flex-row sm:items-center"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void sendTerminal(false).catch((ex) => setError(errText(ex)));
                 }}
-                className="flex-1 bg-transparent font-mono text-sm outline-none"
-                placeholder="ipconfig /all"
-              />
-              <div className="flex gap-2">
-                <button type="button" className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void sendTerminal(true).catch((ex) => setError(errText(ex)))}>
-                  Todos online
-                </button>
-                <button type="submit" className="inline-flex items-center gap-2 rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950">
-                  <Send size={14} /> Enviar
-                </button>
-              </div>
-            </form>
+              >
+                <span className="font-mono text-emerald-400">{shell === "ps1" ? "PS>" : "C:\\>"}</span>
+                <input
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "ArrowUp") {
+                      e.preventDefault();
+                      if (!typed.current.length) return;
+                      typedIndex.current = Math.max(0, typedIndex.current < 0 ? typed.current.length - 1 : typedIndex.current - 1);
+                      setPrompt(typed.current[typedIndex.current] ?? "");
+                    }
+                    if (e.key === "ArrowDown") {
+                      e.preventDefault();
+                      typedIndex.current = Math.min(typed.current.length, typedIndex.current + 1);
+                      setPrompt(typed.current[typedIndex.current] ?? "");
+                    }
+                  }}
+                  className="flex-1 bg-transparent font-mono text-sm outline-none"
+                  placeholder="ipconfig /all"
+                />
+                <div className="flex gap-2">
+                  <button type="button" className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void sendTerminal(true).catch((ex) => setError(errText(ex)))}>
+                    Todos online
+                  </button>
+                  <button type="submit" className="inline-flex items-center gap-2 rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950">
+                    <Send size={14} /> Enviar
+                  </button>
+                </div>
+              </form>
+            </section>
           </section>
         ) : null}
 
@@ -377,7 +448,7 @@ export default function App() {
                   }} />
                 </label>
                 <button className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void saveCommand().catch((ex) => setError(errText(ex)))}>Salvar</button>
-                <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => { setPrompt(draft.content); setShell(draft.kind === "ps1" ? "ps1" : "bat"); setView("terminal"); }}>Usar no terminal</button>
+                <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => { setPrompt(draft.content); setShell(draft.kind === "ps1" ? "ps1" : "bat"); setView("computers"); }}>Usar no terminal</button>
                 {draft.id > 0 ? (
                   <button className="rounded-lg bg-rose-900 px-3 py-2 text-sm" onClick={() => void api.deleteCommand(draft.id).then(loadAll)}>Excluir</button>
                 ) : null}
@@ -406,33 +477,105 @@ export default function App() {
         ) : null}
 
         {view === "settings" ? (
-          <section className="max-w-3xl space-y-4">
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
-              <h2 className="text-xl font-bold">Intervalo de comandos</h2>
-              <p className="mt-1 text-sm text-slate-400">Todos os letreiros passam a consultar jobs neste intervalo.</p>
-              <div className="mt-4 flex gap-2">
-                <input type="number" min={1} max={120} className="w-24 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2" value={pollSec} onChange={(e) => setPollSec(Number(e.target.value))} />
-                <button className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void api.saveSettings(pollSec).then(() => setStatus(`Poll = ${pollSec}s`))}>Aplicar</button>
+          <section className="grid min-h-[calc(100dvh-8rem)] flex-1 grid-rows-[minmax(14rem,1fr)_minmax(16rem,1fr)] gap-4 lg:min-h-0">
+            <div className="grid min-h-0 gap-4 overflow-auto lg:grid-cols-2">
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+                <h2 className="text-xl font-bold">Conexão</h2>
+                <p className="mt-1 text-sm text-slate-400">Conta e API deste computador.</p>
+                <div className="mt-4 grid gap-3">
+                  <Field label="API" value={localCfg.apiBaseUrl ?? ""} onChange={(v) => patchLocal({ ...localCfg, apiBaseUrl: v })} />
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <Field label="Ponto" value={localCfg.ponto ?? ""} onChange={(v) => patchLocal({ ...localCfg, ponto: v })} />
+                    <Field label="Nome" value={localCfg.nome ?? ""} onChange={(v) => patchLocal({ ...localCfg, nome: v })} />
+                  </div>
+                  <Field label="Senha (se o IP exigir)" value={localCfg.password ?? ""} onChange={(v) => patchLocal({ ...localCfg, password: v })} password />
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={!!localCfg.sslVerify} onChange={(e) => patchLocal({ ...localCfg, sslVerify: e.target.checked })} />
+                    Verificar certificado SSL
+                  </label>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+                <h2 className="text-xl font-bold">Letreiro</h2>
+                <p className="mt-1 text-sm text-slate-400">Aparência e filtro OS/SP. A posição da janela permanece neste PC.</p>
+                <label className="mt-4 block text-sm text-slate-400">
+                  Setor monitorado
+                  <input list="setores-list" className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={localCfg.board?.sector ?? ""} onChange={(e) => patchLocal({ ...localCfg, board: { ...localCfg.board, sector: e.target.value } })} />
+                  <datalist id="setores-list">{setores.map((s) => <option key={s} value={s} />)}</datalist>
+                </label>
+                <label className="mt-4 block text-sm text-slate-400">
+                  Velocidade do deslize ({Math.round(localCfg.window?.speedPxPerSec ?? 40)} px/s)
+                  <input type="range" min={8} max={160} className="mt-2 w-full" value={localCfg.window?.speedPxPerSec ?? 40} onChange={(e) => patchLocal({ ...localCfg, window: { ...localCfg.window, speedPxPerSec: Number(e.target.value) } })} />
+                </label>
+                <label className="mt-3 block text-sm text-slate-400">
+                  Opacidade ({Math.round((localCfg.window?.opacity ?? 0.95) * 100)}%)
+                  <input type="range" min={0.4} max={1} step={0.01} className="mt-2 w-full" value={localCfg.window?.opacity ?? 0.95} onChange={(e) => patchLocal({ ...localCfg, window: { ...localCfg.window, opacity: Number(e.target.value) } })} />
+                </label>
+                <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={!!localCfg.window?.transparentBg} onChange={(e) => patchLocal({ ...localCfg, window: { ...localCfg.window, transparentBg: e.target.checked } })} /> Fundo transparente</label>
+                <div className="mt-3 flex flex-wrap gap-4 text-sm">
+                  <label className="flex items-center gap-2"><input type="checkbox" checked={localCfg.board?.showOs !== false} onChange={(e) => patchLocal({ ...localCfg, board: { ...localCfg.board, showOs: e.target.checked } })} /> OS (nº &lt; 5000)</label>
+                  <label className="flex items-center gap-2"><input type="checkbox" checked={localCfg.board?.showSp !== false} onChange={(e) => patchLocal({ ...localCfg, board: { ...localCfg.board, showSp: e.target.checked } })} /> SP (nº ≥ 5000)</label>
+                </div>
               </div>
             </div>
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
-              <h2 className="text-xl font-bold">Configuração remota</h2>
-              <p className="mt-1 text-sm text-slate-400">Carrega a config do computador selecionado. Posição da janela permanece no PC.</p>
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <Field label="API" value={cfg.apiBaseUrl ?? ""} onChange={(v) => setCfg((c) => ({ ...c, apiBaseUrl: v }))} />
-                <Field label="Ponto" value={cfg.ponto ?? ""} onChange={(v) => setCfg((c) => ({ ...c, ponto: v }))} />
-                <Field label="Nome" value={cfg.nome ?? ""} onChange={(v) => setCfg((c) => ({ ...c, nome: v }))} />
-                <Field label="Senha" value={cfg.password ?? ""} onChange={(v) => setCfg((c) => ({ ...c, password: v }))} />
-                <Field label="Setor" value={cfg.board?.sector ?? ""} onChange={(v) => setCfg((c) => ({ ...c, board: { ...c.board, sector: v } }))} />
+
+            <div className={`grid min-h-0 gap-4 overflow-auto ${isAdmin ? "xl:grid-cols-[1fr_320px]" : ""}`}>
+              <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+                <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-xl font-bold">Grupos</h2>
+                    <p className="text-sm text-slate-400">Colunas da faixa. Situações separadas por vírgula.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={addGroup}>+ grupo</button>
+                    <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void restoreGroups()}>Restaurar grupos</button>
+                    <button className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void saveLocal().catch((ex) => setError(errText(ex)))}>Salvar</button>
+                  </div>
+                </div>
+                <div className="grid min-h-0 flex-1 gap-3 overflow-auto md:grid-cols-2">
+                  {columns.map((col, index) => (
+                    <div key={col.id ?? index} className="rounded-xl border border-slate-800 bg-slate-950 p-3">
+                      <Field label="Título" value={col.title ?? ""} onChange={(v) => patchColumn(index, { title: v })} />
+                      <Field label="Situações" value={(col.statuses ?? []).join(", ")} onChange={(v) => patchColumn(index, { statuses: v.split(",").map((s) => s.trim()).filter(Boolean) })} />
+                      <label className="mt-2 block text-sm text-slate-400">
+                        Setor (vazio = do painel)
+                        <input list="setores-list" className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={col.sector ?? ""} onChange={(e) => patchColumn(index, { sector: e.target.value })} />
+                      </label>
+                      <label className="mt-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={col.source === "inbox"} onChange={(e) => patchColumn(index, { source: e.target.checked ? "inbox" : undefined })} /> Fonte: inbox de e-mail</label>
+                      <label className="mt-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={!!col.hideWhenEmpty} onChange={(e) => patchColumn(index, { hideWhenEmpty: e.target.checked })} /> Ocultar quando vazio</label>
+                      <button className="mt-3 rounded-lg bg-slate-800 px-3 py-1.5 text-sm" onClick={() => removeGroup(index)}>Remover</button>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={!!cfg.sslVerify} onChange={(e) => setCfg((c) => ({ ...c, sslVerify: e.target.checked }))} /> Verificar SSL</label>
-              <label className="mt-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={cfg.board?.showOs !== false} onChange={(e) => setCfg((c) => ({ ...c, board: { ...c.board, showOs: e.target.checked } }))} /> Exibir OS</label>
-              <label className="mt-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={cfg.board?.showSp !== false} onChange={(e) => setCfg((c) => ({ ...c, board: { ...c.board, showSp: e.target.checked } }))} /> Exibir SP</label>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void loadConfig()}>Carregar selecionado</button>
-                <button className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void saveConfig(false)}>Salvar no selecionado</button>
-                <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void saveConfig(true)}>Aplicar a todos</button>
-              </div>
+
+              {isAdmin ? (
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+                    <h2 className="text-lg font-bold">Intervalo de comandos</h2>
+                    <p className="mt-1 text-sm text-slate-400">Todos os letreiros consultam jobs neste intervalo.</p>
+                    <div className="mt-3 flex gap-2">
+                      <input type="number" min={1} max={120} className="w-24 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2" value={pollSec} onChange={(e) => setPollSec(Number(e.target.value))} />
+                      <button className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void api.saveSettings(pollSec).then(() => setStatus(`Poll = ${pollSec}s`))}>Aplicar</button>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+                    <h2 className="text-lg font-bold">Configuração remota</h2>
+                    <p className="mt-1 text-sm text-slate-400">Do computador selecionado em Computadores. Posição da janela permanece no PC.</p>
+                    <div className="mt-3 grid gap-3">
+                      <Field label="API" value={cfg.apiBaseUrl ?? ""} onChange={(v) => setCfg((c) => ({ ...c, apiBaseUrl: v }))} />
+                      <Field label="Ponto" value={cfg.ponto ?? ""} onChange={(v) => setCfg((c) => ({ ...c, ponto: v }))} />
+                      <Field label="Nome" value={cfg.nome ?? ""} onChange={(v) => setCfg((c) => ({ ...c, nome: v }))} />
+                      <Field label="Setor" value={cfg.board?.sector ?? ""} onChange={(v) => setCfg((c) => ({ ...c, board: { ...c.board, sector: v } }))} />
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void loadConfig()}>Carregar selecionado</button>
+                      <button className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void saveConfig(false)}>Salvar no selecionado</button>
+                      <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void saveConfig(true)}>Aplicar a todos</button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </section>
         ) : null}
@@ -441,11 +584,11 @@ export default function App() {
   );
 }
 
-function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function Field({ label, value, onChange, password }: { label: string; value: string; onChange: (v: string) => void; password?: boolean }) {
   return (
     <label className="text-sm text-slate-400">
       {label}
-      <input className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={value} onChange={(e) => onChange(e.target.value)} />
+      <input type={password ? "password" : "text"} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={value} onChange={(e) => onChange(e.target.value)} />
     </label>
   );
 }

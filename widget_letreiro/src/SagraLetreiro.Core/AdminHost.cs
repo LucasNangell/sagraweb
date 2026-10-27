@@ -3,8 +3,17 @@ using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 
 namespace SagraLetreiro;
+
+public sealed class AdminHostOptions
+{
+    public required Func<LetreiroApiClient> Client { get; init; }
+    public Func<AppConfig>? GetLocalConfig { get; init; }
+    public Action<AppConfig, bool>? ApplyLocalConfig { get; init; }
+    public bool IsAdmin { get; init; }
+}
 
 public sealed class AdminHost : IDisposable
 {
@@ -12,10 +21,14 @@ public sealed class AdminHost : IDisposable
     const int PortRange = 30;
     const int MaxProxyBody = 1024 * 1024;
     const string CookieName = "t";
+    static readonly JsonSerializerOptions JsonCamel = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
 
     readonly HttpListener _listener;
     readonly CancellationTokenSource _cts = new();
-    readonly Func<LetreiroApiClient> _client;
+    readonly AdminHostOptions _options;
     readonly string _webRoot;
     readonly Task _loop;
     bool _disposed;
@@ -25,19 +38,23 @@ public sealed class AdminHost : IDisposable
     public string Origin => $"http://127.0.0.1:{Port}";
     public string AdminUrl => $"{Origin}/?t={Uri.EscapeDataString(Token)}";
 
-    AdminHost(HttpListener listener, int port, string token, string webRoot, Func<LetreiroApiClient> client)
+    AdminHost(HttpListener listener, int port, string token, string webRoot, AdminHostOptions options)
     {
         _listener = listener;
         Port = port;
         Token = token;
         _webRoot = webRoot;
-        _client = client;
+        _options = options;
         _loop = Task.Run(() => ListenAsync(_cts.Token));
     }
 
-    public static AdminHost Start(Func<LetreiroApiClient> client, string? webRoot = null)
+    public static AdminHost Start(Func<LetreiroApiClient> client, string? webRoot = null) =>
+        Start(new AdminHostOptions { Client = client }, webRoot);
+
+    public static AdminHost Start(AdminHostOptions options, string? webRoot = null)
     {
-        ArgumentNullException.ThrowIfNull(client);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(options.Client);
         webRoot ??= ResolveWebRoot();
         if (!File.Exists(Path.Combine(webRoot, "index.html")))
             throw new InvalidOperationException($"Frontend de administração não encontrado em {webRoot}.");
@@ -51,7 +68,7 @@ public sealed class AdminHost : IDisposable
             {
                 listener.Start();
                 var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
-                return new AdminHost(listener, port, token, webRoot, client);
+                return new AdminHost(listener, port, token, webRoot, options);
             }
             catch (Exception ex)
             {
@@ -64,11 +81,14 @@ public sealed class AdminHost : IDisposable
             "Não foi possível abrir o servidor local de administração em 127.0.0.1.", last);
     }
 
-    public void OpenBrowser()
+    public void OpenBrowser(string? hash = null)
     {
+        var url = AdminUrl;
+        if (!string.IsNullOrWhiteSpace(hash))
+            url += hash.StartsWith('#') ? hash : "#" + hash;
         Process.Start(new ProcessStartInfo
         {
-            FileName = AdminUrl,
+            FileName = url,
             UseShellExecute = true,
         });
     }
@@ -104,6 +124,21 @@ public sealed class AdminHost : IDisposable
         return true;
     }
 
+    public static bool TryMapLocalPath(string? rawPathAndQuery, out string localPath)
+    {
+        localPath = "";
+        if (string.IsNullOrWhiteSpace(rawPathAndQuery)) return false;
+        var path = rawPathAndQuery.Trim();
+        var q = path.IndexOf('?', StringComparison.Ordinal);
+        var pathOnly = q >= 0 ? path[..q] : path;
+        if (!pathOnly.StartsWith('/')) pathOnly = "/" + pathOnly;
+        if (!pathOnly.Equals("/local", StringComparison.OrdinalIgnoreCase)
+            && !pathOnly.StartsWith("/local/", StringComparison.OrdinalIgnoreCase))
+            return false;
+        localPath = pathOnly;
+        return true;
+    }
+
     public static string? ResolveStaticPath(string webRoot, string? requestPath)
     {
         if (string.IsNullOrWhiteSpace(webRoot)) return null;
@@ -134,6 +169,94 @@ public sealed class AdminHost : IDisposable
             && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
             && !Path.IsPathRooted(relative);
     }
+
+    async Task HandleLocalAsync(HttpListenerContext ctx, HttpListenerRequest req, string localPath, CancellationToken ct)
+    {
+        if (localPath.Equals("/local/me", StringComparison.OrdinalIgnoreCase) && req.HttpMethod == "GET")
+        {
+            await WriteJsonAsync(ctx, 200, new { isAdmin = _options.IsAdmin }).ConfigureAwait(false);
+            return;
+        }
+
+        if (localPath.Equals("/local/config", StringComparison.OrdinalIgnoreCase) && req.HttpMethod == "GET")
+        {
+            if (_options.GetLocalConfig is null)
+            {
+                await WriteTextAsync(ctx, 501, """{"detail":"config local indisponível"}""").ConfigureAwait(false);
+                return;
+            }
+            await WriteTextAsync(ctx, 200, ConfigStore.Serialize(_options.GetLocalConfig())).ConfigureAwait(false);
+            return;
+        }
+
+        if (localPath.Equals("/local/config", StringComparison.OrdinalIgnoreCase) && req.HttpMethod == "PUT")
+        {
+            var body = await ReadBodyAsync(req, ctx, ct).ConfigureAwait(false);
+            if (body is null && req.HasEntityBody) return;
+            var parsed = ConfigStore.TryParse(body is null ? null : Encoding.UTF8.GetString(body));
+            if (parsed is null)
+            {
+                await WriteTextAsync(ctx, 400, """{"detail":"config inválida"}""").ConfigureAwait(false);
+                return;
+            }
+            var previous = _options.GetLocalConfig?.Invoke() ?? parsed;
+            var relogin = parsed.ApiBaseUrl != previous.ApiBaseUrl || parsed.Ponto != previous.Ponto
+                || parsed.Password != previous.Password || parsed.SslVerify != previous.SslVerify;
+            _options.ApplyLocalConfig?.Invoke(parsed, relogin);
+            await WriteTextAsync(ctx, 200, ConfigStore.Serialize(parsed)).ConfigureAwait(false);
+            return;
+        }
+
+        if (localPath.Equals("/local/restore-board", StringComparison.OrdinalIgnoreCase)
+            && req.HttpMethod == "POST")
+        {
+            var current = ConfigStore.TryParse(ConfigStore.Serialize(_options.GetLocalConfig?.Invoke() ?? new AppConfig()))
+                ?? new AppConfig();
+            var restored = ConfigStore.RestoreDefaultBoard(current);
+            _options.ApplyLocalConfig?.Invoke(restored, false);
+            await WriteTextAsync(ctx, 200, ConfigStore.Serialize(restored)).ConfigureAwait(false);
+            return;
+        }
+
+        if (localPath.Equals("/local/setores", StringComparison.OrdinalIgnoreCase) && req.HttpMethod == "GET")
+        {
+            var setores = new List<string> { "SEFOC", "Papelaria", "Gravação" };
+            try
+            {
+                var fetched = await _options.Client().FetchSetoresAsync(ct).ConfigureAwait(false);
+                if (fetched.Count > 0) setores = fetched;
+            }
+            catch
+            {
+                /* usa a lista padrão */
+            }
+            await WriteJsonAsync(ctx, 200, new { setores }).ConfigureAwait(false);
+            return;
+        }
+
+        await WriteTextAsync(ctx, 404, """{"detail":"não encontrado"}""").ConfigureAwait(false);
+    }
+
+    async Task<byte[]?> ReadBodyAsync(HttpListenerRequest req, HttpListenerContext ctx, CancellationToken ct)
+    {
+        if (!req.HasEntityBody) return [];
+        if (req.ContentLength64 > MaxProxyBody)
+        {
+            await WriteTextAsync(ctx, 413, """{"detail":"corpo grande demais"}""").ConfigureAwait(false);
+            return null;
+        }
+        await using var ms = new MemoryStream();
+        await req.InputStream.CopyToAsync(ms, ct).ConfigureAwait(false);
+        if (ms.Length > MaxProxyBody)
+        {
+            await WriteTextAsync(ctx, 413, """{"detail":"corpo grande demais"}""").ConfigureAwait(false);
+            return null;
+        }
+        return ms.ToArray();
+    }
+
+    static Task WriteJsonAsync<T>(HttpListenerContext ctx, int status, T value) =>
+        WriteTextAsync(ctx, status, JsonSerializer.Serialize(value, JsonCamel));
 
     async Task ListenAsync(CancellationToken ct)
     {
@@ -185,26 +308,9 @@ public sealed class AdminHost : IDisposable
             var raw = req.RawUrl ?? "/";
             if (TryMapProxyPath(raw, out var apiPath))
             {
-                if (req.ContentLength64 > MaxProxyBody)
-                {
-                    await WriteTextAsync(ctx, 413, """{"detail":"corpo grande demais"}""").ConfigureAwait(false);
-                    return;
-                }
-
-                byte[]? body = null;
-                if (req.HasEntityBody)
-                {
-                    await using var ms = new MemoryStream();
-                    await req.InputStream.CopyToAsync(ms, ct).ConfigureAwait(false);
-                    if (ms.Length > MaxProxyBody)
-                    {
-                        await WriteTextAsync(ctx, 413, """{"detail":"corpo grande demais"}""").ConfigureAwait(false);
-                        return;
-                    }
-                    body = ms.ToArray();
-                }
-
-                var forwarded = await _client().ForwardAsync(
+                var body = await ReadBodyAsync(req, ctx, ct).ConfigureAwait(false);
+                if (body is null && req.HasEntityBody) return;
+                var forwarded = await _options.Client().ForwardAsync(
                     new HttpMethod(req.HttpMethod),
                     apiPath,
                     body,
@@ -216,6 +322,19 @@ public sealed class AdminHost : IDisposable
                 if (forwarded.Body.Length > 0)
                     await ctx.Response.OutputStream.WriteAsync(forwarded.Body, ct).ConfigureAwait(false);
                 ctx.Response.Close();
+                return;
+            }
+
+            if (TryMapLocalPath(raw, out var localPath))
+            {
+                await HandleLocalAsync(ctx, req, localPath, ct).ConfigureAwait(false);
+                return;
+            }
+
+            var abs = (req.Url?.AbsolutePath ?? "/").ToLowerInvariant();
+            if (abs.StartsWith("/api", StringComparison.Ordinal) || abs.StartsWith("/local", StringComparison.Ordinal))
+            {
+                await WriteTextAsync(ctx, 404, """{"detail":"não encontrado"}""").ConfigureAwait(false);
                 return;
             }
 

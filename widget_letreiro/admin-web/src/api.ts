@@ -75,6 +75,15 @@ export type Job = {
   createdAt?: string | null;
 };
 
+export type BoardColumn = {
+  id?: string;
+  title?: string;
+  statuses?: string[];
+  sector?: string;
+  source?: string;
+  hideWhenEmpty?: boolean;
+};
+
 export type AppConfig = {
   apiBaseUrl?: string;
   sslVerify?: boolean;
@@ -83,12 +92,16 @@ export type AppConfig = {
   password?: string;
   pollIntervalSec?: number;
   window?: {
+    width?: number;
+    x?: number | null;
     opacity?: number;
     speedPxPerSec?: number;
     transparentBg?: boolean;
   };
   board?: {
     sector?: string;
+    columnCount?: number;
+    columns?: BoardColumn[];
     showOs?: boolean;
     showSp?: boolean;
   };
@@ -140,4 +153,10 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ windowsUser: "", commandPollIntervalSec }),
     }),
+  me: () => request<{ isAdmin: boolean }>("/local/me"),
+  localConfig: () => request<AppConfig>("/local/config"),
+  saveLocalConfig: (payload: AppConfig) =>
+    request<AppConfig>("/local/config", { method: "PUT", body: JSON.stringify(payload) }),
+  restoreBoard: () => request<AppConfig>("/local/restore-board", { method: "POST", body: "{}" }),
+  setores: () => request<{ setores: string[] }>("/local/setores"),
 };

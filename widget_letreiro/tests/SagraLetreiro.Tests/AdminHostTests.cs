@@ -15,6 +15,17 @@ public class AdminHostTests
     }
 
     [Fact]
+    public void TryMapLocalPath_OnlyLocalApi()
+    {
+        Assert.True(AdminHost.TryMapLocalPath("/local/config", out var mapped));
+        Assert.Equal("/local/config", mapped);
+        Assert.True(AdminHost.TryMapLocalPath("/local/me?x=1", out mapped));
+        Assert.Equal("/local/me", mapped);
+        Assert.False(AdminHost.TryMapLocalPath("/api/letreiro/settings", out _));
+        Assert.False(AdminHost.TryMapLocalPath("/index.html", out _));
+    }
+
+    [Fact]
     public void ResolveStaticPath_RejectsTraversalAndServesIndex()
     {
         var root = Path.Combine(Path.GetTempPath(), "letreiro-admin-web-" + Guid.NewGuid().ToString("N"));

@@ -66,6 +66,8 @@ public partial class OverlayWindow : Window
     Point _pressCardScreen;
     OsBalloonWindow? _balloon;
     SettingsWindow? _settings;
+    AdminWindow? _admin;
+    string? _remoteFp;
     const int ClickSlopPx = 6;
 
     public OverlayWindow(AppConfig config)
@@ -125,7 +127,7 @@ public partial class OverlayWindow : Window
         AppLog.Info("Letreiro encerrado");
     }
 
-    public void ApplyConfig(AppConfig config, bool relogin)
+    public void ApplyConfig(AppConfig config, bool relogin, bool poll = true)
     {
         _config = ConfigStore.Normalize(config);
         if (relogin)
@@ -144,7 +146,7 @@ public partial class OverlayWindow : Window
         ApplyChrome();
         Place(persist: true);
         SchedulePoll();
-        _ = PollOnceAsync();
+        if (poll) _ = PollOnceAsync();
     }
 
     void SchedulePoll()
@@ -293,6 +295,8 @@ public partial class OverlayWindow : Window
     {
         var menu = new ContextMenu();
         menu.Items.Add(Item("Ajustes…", OpenSettings));
+        if (LetreiroAdmin.IsAdmin())
+            menu.Items.Add(Item("Administrar…", OpenAdmin));
         menu.Items.Add(Item("Recarregar", () => _ = PollOnceAsync()));
         menu.Items.Add(Item("Verificar atualização", () => App.CheckUpdatesFromMenu()));
         menu.Items.Add(new Separator());
@@ -384,9 +388,36 @@ public partial class OverlayWindow : Window
             _settings.Activate();
             return;
         }
-        _settings = new SettingsWindow(_config, _client, ApplyConfig);
+        _settings = new SettingsWindow(_config, _client, (cfg, relogin) => ApplyConfig(cfg, relogin));
         _settings.Closed += (_, _) => _settings = null;
         _settings.Show();
+    }
+
+    void OpenAdmin()
+    {
+        if (_admin is { IsVisible: true })
+        {
+            _admin.Activate();
+            return;
+        }
+        _admin = new AdminWindow(_config, _client);
+        _admin.Closed += (_, _) => _admin = null;
+        _admin.Show();
+    }
+
+    async Task SyncRemoteConfigAsync()
+    {
+        var remote = await _client.FetchLetreiroConfigAsync(
+            LetreiroAdmin.CurrentHost(), LetreiroAdmin.CurrentWindowsUser()).ConfigureAwait(true);
+        if (remote is null) return;
+        var merged = ConfigStore.MergeRemote(_config, remote);
+        var fp = ConfigStore.RemoteFingerprint(merged);
+        if (fp == _remoteFp) return;
+        var relogin = merged.ApiBaseUrl != _config.ApiBaseUrl || merged.Ponto != _config.Ponto
+            || merged.Password != _config.Password || merged.SslVerify != _config.SslVerify;
+        _remoteFp = fp;
+        ConfigStore.Save(merged);
+        ApplyConfig(merged, relogin, poll: false);
     }
 
     async Task PollOnceAsync()
@@ -402,6 +433,20 @@ public partial class OverlayWindow : Window
         }
         try
         {
+            try { await SyncRemoteConfigAsync().ConfigureAwait(true); }
+            catch (LetreiroApiException ex) { AppLog.Warn("Config remota: " + ex.Message); }
+            lock (_gate) cfg = _config;
+
+            try
+            {
+                await _client.HeartbeatAsync(
+                    LetreiroAdmin.CurrentHost(),
+                    LetreiroAdmin.CurrentWindowsUser(),
+                    UpdateService.CurrentVersion,
+                    cfg.Ponto).ConfigureAwait(true);
+            }
+            catch (LetreiroApiException ex) { AppLog.Warn("Heartbeat: " + ex.Message); }
+
             var ponto = cfg.Ponto.Trim();
             if (ponto.Length > 0 && !_client.LoggedIn)
             {

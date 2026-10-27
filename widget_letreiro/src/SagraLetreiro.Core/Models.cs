@@ -94,6 +94,17 @@ public sealed class AppConfig
     public BoardConfig Board { get; set; } = new();
 }
 
+public sealed class LetreiroInstance
+{
+    public string HostName { get; set; } = "";
+    public string WindowsUser { get; set; } = "";
+    public string Version { get; set; } = "";
+    public string Ponto { get; set; } = "";
+    public DateTime? LastSeen { get; set; }
+    public bool Online { get; set; }
+    public bool HasConfig { get; set; }
+}
+
 public sealed class TickerCard
 {
     public string UniqueKey { get; set; } = "";

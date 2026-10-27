@@ -551,6 +551,47 @@ public class BoardTests
     }
 }
 
+public class LetreiroAdminTests
+{
+    [Fact]
+    public void MatchesAdminSamWithOrWithoutDomain()
+    {
+        Assert.True(LetreiroAdmin.Matches("P_918713"));
+        Assert.True(LetreiroAdmin.Matches(@"REDECAMARA\P_918713"));
+        Assert.True(LetreiroAdmin.Matches("redecamara/p_918713"));
+        Assert.False(LetreiroAdmin.Matches("outro"));
+        Assert.True(LetreiroAdmin.IsAdmin("P_918713", @"REDECAMARA\P_918713"));
+        Assert.False(LetreiroAdmin.IsAdmin("fulano", @"REDECAMARA\fulano"));
+    }
+
+    [Fact]
+    public void MergeRemoteKeepsLocalPositionAndWidth()
+    {
+        var local = ConfigStore.Normalize(new AppConfig
+        {
+            Ponto = "1",
+            Window = new WindowConfig { X = 40, Width = 900, Opacity = 0.5, SpeedPxPerSec = 20 },
+        });
+        var remote = ConfigStore.Normalize(new AppConfig
+        {
+            Ponto = "99",
+            Password = "segredo",
+            Board = new BoardConfig { Sector = "Papelaria", ShowOs = true, ShowSp = false },
+            Window = new WindowConfig { X = 8, Width = 400, Opacity = 0.8, SpeedPxPerSec = 60, TransparentBg = true },
+        });
+        var merged = ConfigStore.MergeRemote(local, remote);
+        Assert.Equal(40, merged.Window.X);
+        Assert.Equal(900, merged.Window.Width);
+        Assert.Equal(0.8, merged.Window.Opacity);
+        Assert.Equal(60, merged.Window.SpeedPxPerSec);
+        Assert.True(merged.Window.TransparentBg);
+        Assert.Equal("99", merged.Ponto);
+        Assert.Equal("segredo", merged.Password);
+        Assert.Equal("Papelaria", merged.Board.Sector);
+        Assert.False(merged.Board.ShowSp);
+    }
+}
+
 public class OverlayBoundsTests
 {
     [Fact]

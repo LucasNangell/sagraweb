@@ -8,6 +8,7 @@ public partial class SettingsWindow : Window
 {
     readonly LetreiroApiClient _client;
     readonly Action<AppConfig, bool> _onSave;
+    readonly bool _persistLocal;
     readonly string _oldApi;
     readonly string _oldPonto;
     readonly string _oldPassword;
@@ -16,11 +17,12 @@ public partial class SettingsWindow : Window
     List<string> _setores = ["SEFOC", "Papelaria", "Gravação"];
     readonly List<GroupEditor> _groups = [];
 
-    public SettingsWindow(AppConfig config, LetreiroApiClient client, Action<AppConfig, bool> onSave)
+    public SettingsWindow(AppConfig config, LetreiroApiClient client, Action<AppConfig, bool> onSave, bool persistLocal = true)
     {
         InitializeComponent();
         _client = client;
         _onSave = onSave;
+        _persistLocal = persistLocal;
         _draft = Clone(config);
         _oldApi = _draft.ApiBaseUrl;
         _oldPonto = _draft.Ponto;
@@ -126,7 +128,7 @@ public partial class SettingsWindow : Window
             },
         };
         var cfg = ConfigStore.Normalize(payload);
-        ConfigStore.Save(cfg);
+        if (_persistLocal) ConfigStore.Save(cfg);
         var relogin = cfg.ApiBaseUrl != _oldApi || cfg.Ponto != _oldPonto || cfg.Password != _oldPassword
             || cfg.SslVerify != _oldSsl;
         _onSave(cfg, relogin);

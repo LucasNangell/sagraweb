@@ -63,6 +63,7 @@ from routers import (
     analise_lab_routes,
     orcamento_routes,
     sync_andamentos_status_routes,
+    letreiro_routes,
 )
 from security.api_auth import APIAccessMiddleware, is_master_client, resolve_client_ip
 from logging_setup import configure_root_api_logging
@@ -929,6 +930,7 @@ app.include_router(config_routes.router)
 app.include_router(auth_routes.router)
 app.include_router(user_admin_routes.router)
 app.include_router(setor_painel_routes.router)
+app.include_router(letreiro_routes.router)
 app.include_router(tablet_face_routes.router)
 app.include_router(admin_system_routes.router)
 app.include_router(admin_sync_routes.router)
@@ -1029,6 +1031,12 @@ def startup_init():
         ensure_setor_painel_schema()
     except Exception as exc:
         logger.error("Erro ao migrar setor_painel no startup: %s", exc)
+
+    try:
+        from letreiro_schema import ensure_letreiro_schema
+        ensure_letreiro_schema()
+    except Exception as exc:
+        logger.error("Erro ao migrar letreiro no startup: %s", exc)
 
     try:
         from usuario_face_schema import ensure_usuario_face_schema

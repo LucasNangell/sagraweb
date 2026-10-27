@@ -48,6 +48,8 @@ public sealed class LetreiroApiClient : IDisposable
     async Task<JsonElement> RequestAsync(HttpMethod method, string path, object? body = null, CancellationToken ct = default)
     {
         using var req = new HttpRequestMessage(method, Url(path));
+        if (path.StartsWith("/letreiro/", StringComparison.OrdinalIgnoreCase))
+            req.Headers.TryAddWithoutValidation("X-Letreiro-Windows-User", LetreiroAdmin.CurrentWindowsUser());
         if (body is not null) req.Content = JsonContent.Create(body);
         HttpResponseMessage response;
         try
@@ -313,6 +315,72 @@ public sealed class LetreiroApiClient : IDisposable
             JsonValueKind.String => el.GetString(),
             _ => el.ToString(),
         };
+    }
+
+    public async Task HeartbeatAsync(string host, string windowsUser, string version, string ponto, CancellationToken ct = default)
+    {
+        await RequestAsync(HttpMethod.Post, "/letreiro/heartbeat", new
+        {
+            hostName = host,
+            windowsUser,
+            version,
+            ponto,
+        }, ct).ConfigureAwait(false);
+    }
+
+    public async Task<AppConfig?> FetchLetreiroConfigAsync(string host, string windowsUser, CancellationToken ct = default)
+    {
+        var qs = Query(("host", host), ("user", windowsUser));
+        var row = await RequestAsync(HttpMethod.Get, "/letreiro/config?" + qs, ct: ct).ConfigureAwait(false);
+        if (row.ValueKind != JsonValueKind.Object) return null;
+        if (!row.TryGetProperty("payload", out var payload) || payload.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return null;
+        return ConfigStore.TryParseElement(payload);
+    }
+
+    public async Task<List<LetreiroInstance>> FetchLetreiroInstancesAsync(CancellationToken ct = default)
+    {
+        var row = await RequestAsync(HttpMethod.Get, "/letreiro/instances", ct: ct).ConfigureAwait(false);
+        var list = new List<LetreiroInstance>();
+        if (row.ValueKind != JsonValueKind.Object || !row.TryGetProperty("instances", out var items)
+            || items.ValueKind != JsonValueKind.Array)
+            return list;
+        foreach (var item in items.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object) continue;
+            DateTime? seen = null;
+            if (item.TryGetProperty("lastSeen", out var last) && last.ValueKind == JsonValueKind.String
+                && DateTime.TryParse(last.GetString(), out var parsed))
+                seen = parsed;
+            list.Add(new LetreiroInstance
+            {
+                HostName = GetString(item, "hostName") ?? "",
+                WindowsUser = GetString(item, "windowsUser") ?? "",
+                Version = GetString(item, "version") ?? "",
+                Ponto = GetString(item, "ponto") ?? "",
+                LastSeen = seen,
+                Online = item.TryGetProperty("online", out var on) && on.ValueKind == JsonValueKind.True,
+                HasConfig = item.TryGetProperty("hasConfig", out var hc) && hc.ValueKind == JsonValueKind.True,
+            });
+        }
+        return list;
+    }
+
+    public async Task PutLetreiroConfigAsync(
+        AppConfig payload,
+        string? hostName,
+        string? targetUser,
+        bool applyToAll,
+        CancellationToken ct = default)
+    {
+        await RequestAsync(HttpMethod.Put, "/letreiro/config", new
+        {
+            windowsUser = LetreiroAdmin.CurrentWindowsUser(),
+            hostName,
+            targetUser,
+            applyToAll,
+            payload = ConfigStore.ForRemote(payload),
+        }, ct).ConfigureAwait(false);
     }
 
     public void Dispose() => _http.Dispose();

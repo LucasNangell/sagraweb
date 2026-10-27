@@ -56,6 +56,7 @@ _PUBLIC_GET_EXACT: Set[str] = {
     "/api/permissions/painel-scope",
 
     "/api/push/vapid-public-key",
+    "/api/letreiro/config",
 
     "/openapi.json",
 
@@ -88,6 +89,7 @@ _PUBLIC_POST_EXACT: Set[str] = {
     "/api/auth/cliente/activate",
 
     "/api/auth/cliente/logout",
+    "/api/letreiro/heartbeat",
 
 }
 

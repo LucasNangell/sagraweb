@@ -170,4 +170,52 @@ public static class ConfigStore
         config.Board = DefaultBoard();
         return Normalize(config);
     }
+
+    public static AppConfig ForRemote(AppConfig config)
+    {
+        var n = Normalize(config);
+        n.Window = new WindowConfig
+        {
+            Opacity = n.Window.Opacity,
+            SpeedPxPerSec = n.Window.SpeedPxPerSec,
+            TransparentBg = n.Window.TransparentBg,
+        };
+        return n;
+    }
+
+    public static AppConfig MergeRemote(AppConfig local, AppConfig remote)
+    {
+        var merged = Normalize(remote);
+        merged.Window.X = local.Window.X;
+        merged.Window.Width = local.Window.Width <= 0 ? 720 : local.Window.Width;
+        return Normalize(merged);
+    }
+
+    public static string RemoteFingerprint(AppConfig config) =>
+        JsonSerializer.Serialize(ForRemote(config), JsonOptions);
+
+    public static AppConfig? TryParse(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            return Normalize(JsonSerializer.Deserialize<AppConfig>(json, JsonOptions));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public static AppConfig? TryParseElement(JsonElement element)
+    {
+        try
+        {
+            return Normalize(JsonSerializer.Deserialize<AppConfig>(element.GetRawText(), JsonOptions));
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }

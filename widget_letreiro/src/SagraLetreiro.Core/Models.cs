@@ -98,11 +98,70 @@ public sealed class LetreiroInstance
 {
     public string HostName { get; set; } = "";
     public string WindowsUser { get; set; } = "";
+    public string Nome { get; set; } = "";
+    public string Setor { get; set; } = "";
     public string Version { get; set; } = "";
     public string Ponto { get; set; } = "";
     public DateTime? LastSeen { get; set; }
     public bool Online { get; set; }
     public bool HasConfig { get; set; }
+}
+
+public sealed class LetreiroCommand
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public string Kind { get; set; } = "bat";
+    public string Content { get; set; } = "";
+    public int TimeoutSec { get; set; } = 60;
+    public string KindBadge =>
+        string.Equals(Kind, "ps1", StringComparison.OrdinalIgnoreCase) ? "PS1" : "BAT";
+    public string TimeoutLabel => $"{Math.Max(5, TimeoutSec)}s";
+    public string Summary
+    {
+        get
+        {
+            var line = (Content ?? "").Replace('\r', ' ').Replace('\n', ' ').Trim();
+            if (string.IsNullOrEmpty(line)) return "Script vazio";
+            return line.Length <= 72 ? line : line[..72] + "…";
+        }
+    }
+    public override string ToString() => string.IsNullOrWhiteSpace(Name) ? $".{Kind}" : $"{Name} (.{Kind})";
+}
+
+public sealed class LetreiroJob
+{
+    public int Id { get; set; }
+    public int? CommandId { get; set; }
+    public string Name { get; set; } = "";
+    public string Kind { get; set; } = "";
+    public string Content { get; set; } = "";
+    public int TimeoutSec { get; set; } = 60;
+    public string HostName { get; set; } = "";
+    public string WindowsUser { get; set; } = "";
+    public string Status { get; set; } = "";
+    public int? ExitCode { get; set; }
+    public string Stdout { get; set; } = "";
+    public string Stderr { get; set; } = "";
+    public DateTime? CreatedAt { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public DateTime? FinishedAt { get; set; }
+}
+
+public sealed class LetreiroJobTarget
+{
+    public string HostName { get; set; } = "";
+    public string WindowsUser { get; set; } = "";
+}
+
+public static class LetreiroCommandPoll
+{
+    public const int DefaultSec = 10;
+    public const int MinSec = 1;
+    public const int MaxSec = 120;
+
+    public static int Clamp(int value) =>
+        Math.Clamp(value <= 0 ? DefaultSec : value, MinSec, MaxSec);
 }
 
 public sealed class TickerCard

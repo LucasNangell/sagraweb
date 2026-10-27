@@ -39,7 +39,9 @@ public partial class OverlayWindow : Window
     readonly Dictionary<string, OsItem> _master = new();
     readonly DispatcherTimer _dockTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     readonly DispatcherTimer _pollTimer = new();
+    readonly DispatcherTimer _commandTimer = new();
     readonly object _gate = new();
+    int _commandPollSec = LetreiroCommandPoll.DefaultSec;
 
     LetreiroApiClient _client;
     AppConfig _config;
@@ -66,8 +68,9 @@ public partial class OverlayWindow : Window
     Point _pressCardScreen;
     OsBalloonWindow? _balloon;
     SettingsWindow? _settings;
-    AdminWindow? _admin;
+    AdminHost? _adminHost;
     string? _remoteFp;
+    int _jobBusy;
     const int ClickSlopPx = 6;
 
     public OverlayWindow(AppConfig config)
@@ -94,6 +97,7 @@ public partial class OverlayWindow : Window
             if (_dragMode is null) Place(persist: false);
         };
         _pollTimer.Tick += async (_, _) => await PollOnceAsync();
+        _commandTimer.Tick += async (_, _) => await DrainRemoteJobAsync();
     }
 
     static LetreiroApiClient NewClient(AppConfig cfg) =>
@@ -111,7 +115,9 @@ public partial class OverlayWindow : Window
         ApplyChrome();
         Place(persist: false, initial: true);
         SchedulePoll();
+        ScheduleCommandPoll();
         _ = PollOnceAsync();
+        _ = DrainRemoteJobAsync();
         _dockTimer.Start();
         AppLog.Info("Loop da janela iniciado");
     }
@@ -122,7 +128,10 @@ public partial class OverlayWindow : Window
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplayChanged;
         _dockTimer.Stop();
         _pollTimer.Stop();
+        _commandTimer.Stop();
         CloseBalloon();
+        _adminHost?.Dispose();
+        _adminHost = null;
         _client.Dispose();
         AppLog.Info("Letreiro encerrado");
     }
@@ -154,6 +163,21 @@ public partial class OverlayWindow : Window
         _pollTimer.Stop();
         _pollTimer.Interval = TimeSpan.FromSeconds(Math.Clamp(_config.PollIntervalSec, 5, 120));
         _pollTimer.Start();
+    }
+
+    void ScheduleCommandPoll()
+    {
+        _commandTimer.Stop();
+        _commandTimer.Interval = TimeSpan.FromSeconds(LetreiroCommandPoll.Clamp(_commandPollSec));
+        _commandTimer.Start();
+    }
+
+    void ApplyCommandPollInterval(int seconds)
+    {
+        var next = LetreiroCommandPoll.Clamp(seconds);
+        if (next == _commandPollSec && _commandTimer.IsEnabled) return;
+        _commandPollSec = next;
+        ScheduleCommandPoll();
     }
 
     void ApplyChrome()
@@ -395,14 +419,16 @@ public partial class OverlayWindow : Window
 
     void OpenAdmin()
     {
-        if (_admin is { IsVisible: true })
+        if (!LetreiroAdmin.IsAdmin()) return;
+        try
         {
-            _admin.Activate();
-            return;
+            _adminHost ??= AdminHost.Start(() => _client);
+            _adminHost.OpenBrowser();
         }
-        _admin = new AdminWindow(_config, _client);
-        _admin.Closed += (_, _) => _admin = null;
-        _admin.Show();
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Administração", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     async Task SyncRemoteConfigAsync()
@@ -501,6 +527,56 @@ public partial class OverlayWindow : Window
         finally
         {
             _busyPoll = false;
+        }
+    }
+
+    async Task DrainRemoteJobAsync()
+    {
+        if (Interlocked.CompareExchange(ref _jobBusy, 1, 0) != 0) return;
+        try
+        {
+            LetreiroJob? job;
+            try
+            {
+                var pending = await _client.FetchPendingLetreiroJobAsync(
+                    LetreiroAdmin.CurrentHost(),
+                    LetreiroAdmin.CurrentWindowsUser()).ConfigureAwait(true);
+                job = pending.Job;
+                ApplyCommandPollInterval(pending.PollIntervalSec);
+            }
+            catch (LetreiroApiException ex)
+            {
+                AppLog.Warn("Job remoto: " + ex.Message);
+                return;
+            }
+            if (job is null) return;
+
+            var host = LetreiroAdmin.CurrentHost();
+            var user = LetreiroAdmin.CurrentWindowsUser();
+            RemoteScriptOutcome outcome;
+            try
+            {
+                outcome = await Task.Run(() =>
+                    RemoteScript.Execute(job.Kind, job.Content, job.Id, job.TimeoutSec)).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn("Execução remota: " + ex.Message);
+                outcome = new RemoteScriptOutcome { ExitCode = -1, Stderr = ex.Message };
+            }
+
+            try
+            {
+                await _client.PostLetreiroJobResultAsync(job.Id, host, user, outcome).ConfigureAwait(true);
+            }
+            catch (LetreiroApiException ex)
+            {
+                AppLog.Warn("Resultado job: " + ex.Message);
+            }
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _jobBusy, 0);
         }
     }
 

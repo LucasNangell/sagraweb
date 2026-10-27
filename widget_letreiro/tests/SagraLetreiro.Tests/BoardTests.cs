@@ -565,6 +565,33 @@ public class LetreiroAdminTests
     }
 
     [Fact]
+    public void RemoteScriptBatUsesCmd()
+    {
+        var launch = RemoteScript.BuildLaunch("bat");
+        Assert.Equal("cmd.exe", launch.FileName);
+        Assert.Equal(["/c"], launch.Arguments);
+        Assert.Equal(".bat", launch.Extension);
+    }
+
+    [Fact]
+    public void CommandPollClampUsesDefaultAndBounds()
+    {
+        Assert.Equal(10, LetreiroCommandPoll.Clamp(0));
+        Assert.Equal(1, LetreiroCommandPoll.Clamp(1));
+        Assert.Equal(120, LetreiroCommandPoll.Clamp(500));
+    }
+
+    [Fact]
+    public void RemoteScriptPs1UsesPowerShellFile()
+    {
+        var launch = RemoteScript.BuildLaunch("ps1");
+        Assert.Equal("powershell.exe", launch.FileName);
+        Assert.Contains("-File", launch.Arguments);
+        Assert.Contains("-NoProfile", launch.Arguments);
+        Assert.Equal(".ps1", launch.Extension);
+    }
+
+    [Fact]
     public void MergeRemoteKeepsLocalPositionAndWidth()
     {
         var local = ConfigStore.Normalize(new AppConfig

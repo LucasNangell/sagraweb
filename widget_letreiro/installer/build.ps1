@@ -25,6 +25,34 @@ dotnet publish $project -c Release -r win-x64 --self-contained true `
     -p:DebugType=none -p:DebugSymbols=false -o $publishDir
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish falhou.' }
 
+$adminWeb = Join-Path $root 'admin-web'
+$adminDist = Join-Path $adminWeb 'dist'
+Push-Location $adminWeb
+try {
+    $pnpm = Get-Command pnpm -ErrorAction SilentlyContinue
+    if ($pnpm) {
+        pnpm install
+        if ($LASTEXITCODE -ne 0) { throw 'pnpm install do admin-web falhou.' }
+        pnpm build
+        if ($LASTEXITCODE -ne 0) { throw 'pnpm build do admin-web falhou.' }
+    }
+    else {
+        npm install
+        if ($LASTEXITCODE -ne 0) { throw 'npm install do admin-web falhou.' }
+        npm run build
+        if ($LASTEXITCODE -ne 0) { throw 'npm run build do admin-web falhou.' }
+    }
+}
+finally {
+    Pop-Location
+}
+if (-not (Test-Path (Join-Path $adminDist 'index.html'))) {
+    throw "Build do admin-web não gerou $adminDist\index.html"
+}
+$adminDest = Join-Path $publishDir 'admin-web'
+if (Test-Path $adminDest) { Remove-Item $adminDest -Recurse -Force }
+Copy-Item $adminDist $adminDest -Recurse
+
 & $iscc "/DAppVersion=$version" "/DPublishDir=$publishDir" $iss
 if ($LASTEXITCODE -ne 0) { throw 'Inno Setup falhou.' }
 

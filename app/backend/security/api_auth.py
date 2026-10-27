@@ -57,6 +57,8 @@ _PUBLIC_GET_EXACT: Set[str] = {
 
     "/api/push/vapid-public-key",
     "/api/letreiro/config",
+    "/api/letreiro/jobs/pending",
+    "/api/letreiro/settings",
 
     "/openapi.json",
 
@@ -92,6 +94,8 @@ _PUBLIC_POST_EXACT: Set[str] = {
     "/api/letreiro/heartbeat",
 
 }
+
+_LETREIRO_JOB_RESULT_RE = re.compile(r"^/api/letreiro/jobs/\d+/result$")
 
 _PUBLIC_PREFIXES: Tuple[str, ...] = (
 
@@ -282,6 +286,10 @@ def _is_public_api(path: str, method: str) -> bool:
         return True
 
     if method == "GET" and _USER_NAME_LOOKUP_RE.match(path):
+
+        return True
+
+    if method == "POST" and _LETREIRO_JOB_RESULT_RE.match(path):
 
         return True
 

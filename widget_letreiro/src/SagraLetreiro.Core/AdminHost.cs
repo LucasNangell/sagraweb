@@ -1,0 +1,301 @@
+using System.Diagnostics;
+using System.Net;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
+
+namespace SagraLetreiro;
+
+public sealed class AdminHost : IDisposable
+{
+    public const int PreferredPort = 17890;
+    const int PortRange = 30;
+    const int MaxProxyBody = 1024 * 1024;
+    const string CookieName = "t";
+
+    readonly HttpListener _listener;
+    readonly CancellationTokenSource _cts = new();
+    readonly Func<LetreiroApiClient> _client;
+    readonly string _webRoot;
+    readonly Task _loop;
+    bool _disposed;
+
+    public string Token { get; }
+    public int Port { get; }
+    public string Origin => $"http://127.0.0.1:{Port}";
+    public string AdminUrl => $"{Origin}/?t={Uri.EscapeDataString(Token)}";
+
+    AdminHost(HttpListener listener, int port, string token, string webRoot, Func<LetreiroApiClient> client)
+    {
+        _listener = listener;
+        Port = port;
+        Token = token;
+        _webRoot = webRoot;
+        _client = client;
+        _loop = Task.Run(() => ListenAsync(_cts.Token));
+    }
+
+    public static AdminHost Start(Func<LetreiroApiClient> client, string? webRoot = null)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        webRoot ??= ResolveWebRoot();
+        if (!File.Exists(Path.Combine(webRoot, "index.html")))
+            throw new InvalidOperationException($"Frontend de administração não encontrado em {webRoot}.");
+
+        Exception? last = null;
+        for (var port = PreferredPort; port < PreferredPort + PortRange; port++)
+        {
+            var listener = new HttpListener { IgnoreWriteExceptions = true };
+            listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+            try
+            {
+                listener.Start();
+                var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+                return new AdminHost(listener, port, token, webRoot, client);
+            }
+            catch (Exception ex)
+            {
+                last = ex;
+                try { listener.Close(); } catch { /* ignore */ }
+            }
+        }
+
+        throw new InvalidOperationException(
+            "Não foi possível abrir o servidor local de administração em 127.0.0.1.", last);
+    }
+
+    public void OpenBrowser()
+    {
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = AdminUrl,
+            UseShellExecute = true,
+        });
+    }
+
+    public static string ResolveWebRoot()
+    {
+        var dirs = new List<string>();
+        var processDir = Path.GetDirectoryName(Environment.ProcessPath);
+        if (!string.IsNullOrWhiteSpace(processDir))
+            dirs.Add(Path.Combine(processDir, "admin-web"));
+        dirs.Add(Path.Combine(AppContext.BaseDirectory, "admin-web"));
+        foreach (var dir in dirs.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (File.Exists(Path.Combine(dir, "index.html")))
+                return Path.GetFullPath(dir);
+        }
+        return Path.GetFullPath(dirs[0]);
+    }
+
+    public static bool TryMapProxyPath(string? rawPathAndQuery, out string apiPath)
+    {
+        apiPath = "";
+        if (string.IsNullOrWhiteSpace(rawPathAndQuery)) return false;
+        var path = rawPathAndQuery.Trim();
+        var q = path.IndexOf('?', StringComparison.Ordinal);
+        var pathOnly = q >= 0 ? path[..q] : path;
+        if (!pathOnly.StartsWith('/')) pathOnly = "/" + pathOnly;
+        if (!pathOnly.Equals("/api/letreiro", StringComparison.OrdinalIgnoreCase)
+            && !pathOnly.StartsWith("/api/letreiro/", StringComparison.OrdinalIgnoreCase))
+            return false;
+        var mapped = pathOnly[4..] + (q >= 0 ? path[q..] : "");
+        apiPath = mapped;
+        return true;
+    }
+
+    public static string? ResolveStaticPath(string webRoot, string? requestPath)
+    {
+        if (string.IsNullOrWhiteSpace(webRoot)) return null;
+        var root = Path.GetFullPath(webRoot);
+        var relative = (requestPath ?? "/").Split('#', '?')[0];
+        relative = Uri.UnescapeDataString(relative).Replace('\\', '/');
+        if (string.IsNullOrWhiteSpace(relative) || relative == "/") relative = "/index.html";
+        if (!relative.StartsWith('/')) relative = "/" + relative;
+        if (relative.Contains("..", StringComparison.Ordinal) || relative.Contains(':', StringComparison.Ordinal))
+            return null;
+
+        var candidate = Path.GetFullPath(Path.Combine(root, relative.TrimStart('/').Replace('/', Path.DirectorySeparatorChar)));
+        if (!IsUnderRoot(root, candidate)) return null;
+        if (File.Exists(candidate)) return candidate;
+
+        var ext = Path.GetExtension(relative);
+        if (!string.IsNullOrEmpty(ext) && !ext.Equals(".html", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var index = Path.Combine(root, "index.html");
+        return File.Exists(index) ? index : null;
+    }
+
+    static bool IsUnderRoot(string root, string candidate)
+    {
+        var relative = Path.GetRelativePath(root, candidate);
+        return relative != ".."
+            && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            && !Path.IsPathRooted(relative);
+    }
+
+    async Task ListenAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested && _listener.IsListening)
+        {
+            HttpListenerContext ctx;
+            try
+            {
+                ctx = await _listener.GetContextAsync().WaitAsync(ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (ObjectDisposedException)
+            {
+                break;
+            }
+            catch (HttpListenerException)
+            {
+                break;
+            }
+
+            _ = Task.Run(() => HandleAsync(ctx, ct), ct);
+        }
+    }
+
+    async Task HandleAsync(HttpListenerContext ctx, CancellationToken ct)
+    {
+        try
+        {
+            var req = ctx.Request;
+            var host = (req.Headers["Host"] ?? "").Split(':')[0];
+            if (!host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase)
+                && !host.Equals("localhost", StringComparison.OrdinalIgnoreCase))
+            {
+                await WriteTextAsync(ctx, 403, """{"detail":"somente loopback"}""").ConfigureAwait(false);
+                return;
+            }
+
+            if (!IsAuthorized(req))
+            {
+                await WriteTextAsync(ctx, 401, """{"detail":"token ausente ou inválido"}""").ConfigureAwait(false);
+                return;
+            }
+
+            IssueCookie(ctx.Response);
+
+            var raw = req.RawUrl ?? "/";
+            if (TryMapProxyPath(raw, out var apiPath))
+            {
+                if (req.ContentLength64 > MaxProxyBody)
+                {
+                    await WriteTextAsync(ctx, 413, """{"detail":"corpo grande demais"}""").ConfigureAwait(false);
+                    return;
+                }
+
+                byte[]? body = null;
+                if (req.HasEntityBody)
+                {
+                    await using var ms = new MemoryStream();
+                    await req.InputStream.CopyToAsync(ms, ct).ConfigureAwait(false);
+                    if (ms.Length > MaxProxyBody)
+                    {
+                        await WriteTextAsync(ctx, 413, """{"detail":"corpo grande demais"}""").ConfigureAwait(false);
+                        return;
+                    }
+                    body = ms.ToArray();
+                }
+
+                var forwarded = await _client().ForwardAsync(
+                    new HttpMethod(req.HttpMethod),
+                    apiPath,
+                    body,
+                    req.ContentType,
+                    ct).ConfigureAwait(false);
+                ctx.Response.StatusCode = forwarded.StatusCode;
+                ctx.Response.ContentType = forwarded.ContentType;
+                ctx.Response.ContentLength64 = forwarded.Body.Length;
+                if (forwarded.Body.Length > 0)
+                    await ctx.Response.OutputStream.WriteAsync(forwarded.Body, ct).ConfigureAwait(false);
+                ctx.Response.Close();
+                return;
+            }
+
+            var file = ResolveStaticPath(_webRoot, req.Url?.AbsolutePath ?? "/");
+            if (file is null)
+            {
+                await WriteTextAsync(ctx, 404, """{"detail":"não encontrado"}""").ConfigureAwait(false);
+                return;
+            }
+
+            var bytes = await File.ReadAllBytesAsync(file, ct).ConfigureAwait(false);
+            ctx.Response.StatusCode = 200;
+            ctx.Response.ContentType = Mime(file);
+            ctx.Response.ContentLength64 = bytes.Length;
+            await ctx.Response.OutputStream.WriteAsync(bytes, ct).ConfigureAwait(false);
+            ctx.Response.Close();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            try
+            {
+                await WriteTextAsync(ctx, 500, """{"detail":"falha no servidor local"}""").ConfigureAwait(false);
+            }
+            catch
+            {
+                /* ignore */
+            }
+        }
+    }
+
+    bool IsAuthorized(HttpListenerRequest req)
+    {
+        if (TokenEquals(req.Headers["X-Letreiro-Admin-Token"])) return true;
+        var cookie = req.Cookies[CookieName]?.Value;
+        if (TokenEquals(cookie)) return true;
+        return TokenEquals(req.QueryString.Get(CookieName));
+    }
+
+    bool TokenEquals(string? value) =>
+        !string.IsNullOrEmpty(value)
+        && value.Length == Token.Length
+        && CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(value), Encoding.ASCII.GetBytes(Token));
+
+    void IssueCookie(HttpListenerResponse response)
+    {
+        response.Headers.Add("Set-Cookie", $"{CookieName}={Token}; Path=/; HttpOnly; SameSite=Strict");
+    }
+
+    static async Task WriteTextAsync(HttpListenerContext ctx, int status, string json)
+    {
+        var bytes = Encoding.UTF8.GetBytes(json);
+        ctx.Response.StatusCode = status;
+        ctx.Response.ContentType = "application/json; charset=utf-8";
+        ctx.Response.ContentLength64 = bytes.Length;
+        await ctx.Response.OutputStream.WriteAsync(bytes).ConfigureAwait(false);
+        ctx.Response.Close();
+    }
+
+    static string Mime(string path) => Path.GetExtension(path).ToLowerInvariant() switch
+    {
+        ".html" => "text/html; charset=utf-8",
+        ".js" => "text/javascript; charset=utf-8",
+        ".css" => "text/css; charset=utf-8",
+        ".json" => "application/json; charset=utf-8",
+        ".svg" => "image/svg+xml",
+        ".png" => "image/png",
+        ".ico" => "image/x-icon",
+        ".woff2" => "font/woff2",
+        ".map" => "application/json",
+        _ => "application/octet-stream",
+    };
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        try { _cts.Cancel(); } catch { /* ignore */ }
+        try { _listener.Stop(); } catch { /* ignore */ }
+        try { _listener.Close(); } catch { /* ignore */ }
+        try { _loop.Wait(TimeSpan.FromSeconds(2)); } catch { /* ignore */ }
+        _cts.Dispose();
+    }
+}

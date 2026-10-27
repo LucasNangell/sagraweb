@@ -4,7 +4,13 @@ from datetime import datetime, timedelta
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from letreiro_schema import CREATE_TAB_LETREIRO_CONFIG, CREATE_TAB_LETREIRO_INSTANCIA
+from letreiro_schema import (
+    CREATE_TAB_LETREIRO_AJUSTE,
+    CREATE_TAB_LETREIRO_COMANDO,
+    CREATE_TAB_LETREIRO_COMANDO_JOB,
+    CREATE_TAB_LETREIRO_CONFIG,
+    CREATE_TAB_LETREIRO_INSTANCIA,
+)
 from routers import letreiro_routes
 from routers.letreiro_routes import is_letreiro_admin
 
@@ -18,8 +24,16 @@ def _client():
 def test_schema_sql_creates_letreiro_tables():
     assert "CREATE TABLE IF NOT EXISTS tabLetreiroInstancia" in CREATE_TAB_LETREIRO_INSTANCIA
     assert "PRIMARY KEY (HostName, WindowsUser)" in CREATE_TAB_LETREIRO_INSTANCIA
+    assert "Nome VARCHAR(128) NOT NULL DEFAULT ''" in CREATE_TAB_LETREIRO_INSTANCIA
+    assert "Setor VARCHAR(128) NOT NULL DEFAULT ''" in CREATE_TAB_LETREIRO_INSTANCIA
     assert "CREATE TABLE IF NOT EXISTS tabLetreiroConfig" in CREATE_TAB_LETREIRO_CONFIG
     assert "Payload JSON NOT NULL" in CREATE_TAB_LETREIRO_CONFIG
+    assert "CREATE TABLE IF NOT EXISTS tabLetreiroComando" in CREATE_TAB_LETREIRO_COMANDO
+    assert "UNIQUE KEY uk_letreiro_comando_nome" in CREATE_TAB_LETREIRO_COMANDO
+    assert "CREATE TABLE IF NOT EXISTS tabLetreiroComandoJob" in CREATE_TAB_LETREIRO_COMANDO_JOB
+    assert "idx_letreiro_job_claim" in CREATE_TAB_LETREIRO_COMANDO_JOB
+    assert "CREATE TABLE IF NOT EXISTS tabLetreiroAjuste" in CREATE_TAB_LETREIRO_AJUSTE
+    assert "CommandPollIntervalSec" in CREATE_TAB_LETREIRO_AJUSTE
 
 
 def test_admin_sam_accepts_domain_prefix():
@@ -146,3 +160,263 @@ def test_put_config_apply_to_all(monkeypatch):
     assert len(inserts) == 2
     assert inserts[0][1][0] == "PC1"
     assert inserts[1][1][0] == "PC2"
+
+
+def test_put_instance_profile_forbidden():
+    response = _client().put(
+        "/api/letreiro/instances",
+        json={"windowsUser": "outro", "hostName": "PC1", "targetUser": "fulano", "nome": "Ana", "setor": "SEFOC"},
+    )
+    assert response.status_code == 403
+
+
+def test_put_instance_profile_updates_nome_setor(monkeypatch):
+    calls = []
+
+    def fake_exec(sql, params=None):
+        calls.append((sql, params))
+        if "SELECT HostName FROM tabLetreiroInstancia" in sql:
+            return [{"HostName": "PC1"}]
+        return []
+
+    monkeypatch.setattr(letreiro_routes.db, "execute_query", fake_exec)
+    response = _client().put(
+        "/api/letreiro/instances",
+        headers={"X-Letreiro-Windows-User": "P_918713"},
+        json={
+            "windowsUser": "P_918713",
+            "hostName": "PC1",
+            "targetUser": r"REDECAMARA\fulano",
+            "nome": "Ana Silva",
+            "setor": "SEFOC",
+        },
+    )
+    assert response.status_code == 200
+    updates = [c for c in calls if c[0].strip().startswith("UPDATE")]
+    assert updates
+    assert updates[0][1] == ("Ana Silva", "SEFOC", "PC1", r"REDECAMARA\fulano")
+
+
+def test_commands_forbidden_for_non_admin():
+    response = _client().get(
+        "/api/letreiro/commands",
+        headers={"X-Letreiro-Windows-User": "outro"},
+    )
+    assert response.status_code == 403
+
+
+def test_create_command_inserts_catalog(monkeypatch):
+    calls = []
+
+    def fake_tx(ops):
+        class Cursor:
+            lastrowid = 11
+
+            def execute(self, sql, params=None):
+                calls.append((sql, params))
+
+        return [ops[0](Cursor())]
+
+    monkeypatch.setattr(letreiro_routes.db, "execute_transaction", fake_tx)
+    response = _client().post(
+        "/api/letreiro/commands",
+        headers={"X-Letreiro-Windows-User": "P_918713"},
+        json={
+            "windowsUser": "P_918713",
+            "name": "ping",
+            "kind": "bat",
+            "content": "@echo hi",
+            "timeoutSec": 30,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["id"] == 11
+    assert calls[0][1][0] == "ping"
+    assert calls[0][1][1] == "bat"
+
+
+def test_run_command_queues_selected_and_online(monkeypatch):
+    calls = []
+    now = datetime.now()
+
+    def fake_exec(sql, params=None):
+        calls.append((sql, params))
+        if "FROM tabLetreiroComando" in sql and "INSERT" not in sql:
+            return [{"Id": 3, "Nome": "ping", "Tipo": "bat", "Conteudo": "@echo hi", "TimeoutSec": 60}]
+        if "FROM tabLetreiroInstancia" in sql:
+            return [
+                {"HostName": "PC1", "WindowsUser": "a", "LastSeen": now},
+                {"HostName": "PC2", "WindowsUser": "b", "LastSeen": now - timedelta(minutes=10)},
+            ]
+        return []
+
+    monkeypatch.setattr(letreiro_routes.db, "execute_query", fake_exec)
+    response = _client().post(
+        "/api/letreiro/commands/3/run",
+        headers={"X-Letreiro-Windows-User": "P_918713"},
+        json={
+            "windowsUser": "P_918713",
+            "allOnline": True,
+            "targets": [{"hostName": "PC9", "windowsUser": "c"}],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["queued"] == 2
+    inserts = [c for c in calls if "INSERT INTO tabLetreiroComandoJob" in c[0]]
+    hosts = {c[1][5] for c in inserts}
+    assert hosts == {"PC9", "PC1"}
+
+
+def test_adhoc_run_forbidden():
+    response = _client().post(
+        "/api/letreiro/jobs/run",
+        json={
+            "windowsUser": "outro",
+            "kind": "bat",
+            "content": "dir",
+            "targets": [{"hostName": "PC1", "windowsUser": "a"}],
+        },
+    )
+    assert response.status_code == 403
+
+
+def test_adhoc_run_queues_without_catalog(monkeypatch):
+    calls = []
+
+    def fake_exec(sql, params=None):
+        calls.append((sql, params))
+        return []
+
+    monkeypatch.setattr(letreiro_routes.db, "execute_query", fake_exec)
+    response = _client().post(
+        "/api/letreiro/jobs/run",
+        headers={"X-Letreiro-Windows-User": "P_918713"},
+        json={
+            "windowsUser": "P_918713",
+            "kind": "bat",
+            "content": "ipconfig /all",
+            "name": "terminal",
+            "targets": [{"hostName": "PC1", "windowsUser": "a"}],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["queued"] == 1
+    inserts = [c for c in calls if "INSERT INTO tabLetreiroComandoJob" in c[0]]
+    assert inserts[0][1][0] is None
+    assert inserts[0][1][1] == "terminal"
+    assert inserts[0][1][2] == "bat"
+    assert inserts[0][1][3] == "ipconfig /all"
+
+
+def test_pending_job_claims_running(monkeypatch):
+    def fake_tx(ops):
+        class Cursor:
+            rowcount = 1
+
+            def execute(self, sql, params=None):
+                return None
+
+            def fetchone(self):
+                return {
+                    "Id": 9,
+                    "ComandoId": 3,
+                    "Nome": "ping",
+                    "Tipo": "bat",
+                    "Conteudo": "@echo hi",
+                    "TimeoutSec": 60,
+                    "HostName": "PC1",
+                    "WindowsUser": "fulano",
+                }
+
+        return [ops[0](Cursor())]
+
+    monkeypatch.setattr(letreiro_routes.db, "execute_transaction", fake_tx)
+    monkeypatch.setattr(
+        letreiro_routes.db,
+        "execute_query",
+        lambda *a, **k: [{"CommandPollIntervalSec": 7}],
+    )
+    response = _client().get("/api/letreiro/jobs/pending", params={"host": "PC1", "user": "fulano"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["job"]["id"] == 9
+    assert body["job"]["content"] == "@echo hi"
+    assert body["pollIntervalSec"] == 7
+
+
+def test_settings_put_forbidden():
+    response = _client().put(
+        "/api/letreiro/settings",
+        json={"windowsUser": "outro", "commandPollIntervalSec": 5},
+    )
+    assert response.status_code == 403
+
+
+def test_settings_put_clamps_interval(monkeypatch):
+    calls = []
+
+    def fake_exec(sql, params=None):
+        calls.append((sql, params))
+        return []
+
+    monkeypatch.setattr(letreiro_routes.db, "execute_query", fake_exec)
+    response = _client().put(
+        "/api/letreiro/settings",
+        headers={"X-Letreiro-Windows-User": "P_918713"},
+        json={"windowsUser": "P_918713", "commandPollIntervalSec": 999},
+    )
+    assert response.status_code == 200
+    assert response.json()["commandPollIntervalSec"] == 120
+    assert calls[0][1][0] == 120
+
+
+def test_settings_get_returns_interval(monkeypatch):
+    monkeypatch.setattr(
+        letreiro_routes.db,
+        "execute_query",
+        lambda *a, **k: [{"CommandPollIntervalSec": 3}],
+    )
+    response = _client().get("/api/letreiro/settings")
+    assert response.status_code == 200
+    assert response.json()["commandPollIntervalSec"] == 3
+
+
+def test_job_result_rejects_wrong_host(monkeypatch):
+    monkeypatch.setattr(
+        letreiro_routes.db,
+        "execute_query",
+        lambda *a, **k: [{"Id": 9, "HostName": "PC1", "WindowsUser": "fulano", "Status": "running"}],
+    )
+    response = _client().post(
+        "/api/letreiro/jobs/9/result",
+        json={"hostName": "OUTRO", "windowsUser": "fulano", "exitCode": 0, "stdout": "ok"},
+    )
+    assert response.status_code == 403
+
+
+def test_job_result_snapshot_independent_of_catalog(monkeypatch):
+    calls = []
+
+    def fake_exec(sql, params=None):
+        calls.append((sql, params))
+        if sql.strip().startswith("SELECT"):
+            return [{"Id": 9, "HostName": "PC1", "WindowsUser": "fulano", "Status": "running"}]
+        return []
+
+    monkeypatch.setattr(letreiro_routes.db, "execute_query", fake_exec)
+    response = _client().post(
+        "/api/letreiro/jobs/9/result",
+        json={
+            "hostName": "PC1",
+            "windowsUser": "fulano",
+            "exitCode": 0,
+            "stdout": "ok",
+            "stderr": "",
+            "timedOut": False,
+        },
+    )
+    assert response.status_code == 200
+    updates = [c for c in calls if c[0].strip().startswith("UPDATE")]
+    assert updates
+    assert updates[0][1][0] == "ok"
+    assert updates[0][1][2] == "ok"

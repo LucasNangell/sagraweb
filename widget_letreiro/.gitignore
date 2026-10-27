@@ -6,4 +6,5 @@ __pycache__/
 *.log
 build/
 dist/
+node_modules/
 SAGRA-Letreiro.exe

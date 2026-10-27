@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 
 namespace SagraLetreiro;
@@ -79,6 +80,57 @@ public sealed class LetreiroApiClient : IDisposable
         catch (JsonException)
         {
             throw new LetreiroApiException("Resposta inválida da API.");
+        }
+    }
+
+    public readonly record struct ForwardedResponse(int StatusCode, string ContentType, byte[] Body);
+
+    public async Task<ForwardedResponse> ForwardAsync(
+        HttpMethod method,
+        string pathAndQuery,
+        byte[]? body = null,
+        string? contentType = null,
+        CancellationToken ct = default)
+    {
+        var path = pathAndQuery ?? "";
+        if (path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
+            path = path[4..];
+        if (!path.StartsWith("/letreiro", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ForwardedResponse(
+                404,
+                "application/json; charset=utf-8",
+                """{"detail":"not found"}"""u8.ToArray());
+        }
+
+        using var req = new HttpRequestMessage(method, Url(path));
+        req.Headers.TryAddWithoutValidation("X-Letreiro-Windows-User", LetreiroAdmin.CurrentWindowsUser());
+        if (body is { Length: > 0 })
+        {
+            req.Content = new ByteArrayContent(body);
+            req.Content.Headers.TryAddWithoutValidation(
+                "Content-Type",
+                string.IsNullOrWhiteSpace(contentType) ? "application/json" : contentType);
+        }
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await _http.SendAsync(req, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            var detail = JsonSerializer.Serialize(new { detail = $"Falha de rede: {ex.Message}" });
+            return new ForwardedResponse(502, "application/json; charset=utf-8", Encoding.UTF8.GetBytes(detail));
+        }
+
+        using (response)
+        {
+            var bytes = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+            var type = response.Content.Headers.ContentType?.ToString() ?? "application/json; charset=utf-8";
+            var code = (int)response.StatusCode;
+            if (code is 401 or 403) LoggedIn = false;
+            return new ForwardedResponse(code, type, bytes);
         }
     }
 
@@ -356,6 +408,8 @@ public sealed class LetreiroApiClient : IDisposable
             {
                 HostName = GetString(item, "hostName") ?? "",
                 WindowsUser = GetString(item, "windowsUser") ?? "",
+                Nome = GetString(item, "nome") ?? "",
+                Setor = GetString(item, "setor") ?? "",
                 Version = GetString(item, "version") ?? "",
                 Ponto = GetString(item, "ponto") ?? "",
                 LastSeen = seen,
@@ -381,6 +435,221 @@ public sealed class LetreiroApiClient : IDisposable
             applyToAll,
             payload = ConfigStore.ForRemote(payload),
         }, ct).ConfigureAwait(false);
+    }
+
+    public async Task PutLetreiroInstanceProfileAsync(
+        string hostName,
+        string targetUser,
+        string nome,
+        string setor,
+        CancellationToken ct = default)
+    {
+        await RequestAsync(HttpMethod.Put, "/letreiro/instances", new
+        {
+            windowsUser = LetreiroAdmin.CurrentWindowsUser(),
+            hostName,
+            targetUser,
+            nome,
+            setor,
+        }, ct).ConfigureAwait(false);
+    }
+
+    public async Task<List<LetreiroCommand>> FetchLetreiroCommandsAsync(CancellationToken ct = default)
+    {
+        var row = await RequestAsync(HttpMethod.Get, "/letreiro/commands", ct: ct).ConfigureAwait(false);
+        var list = new List<LetreiroCommand>();
+        if (row.ValueKind != JsonValueKind.Object || !row.TryGetProperty("commands", out var items)
+            || items.ValueKind != JsonValueKind.Array)
+            return list;
+        foreach (var item in items.EnumerateArray())
+        {
+            var cmd = MapCommand(item);
+            if (cmd is not null) list.Add(cmd);
+        }
+        return list;
+    }
+
+    public async Task<int> CreateLetreiroCommandAsync(LetreiroCommand command, CancellationToken ct = default)
+    {
+        var row = await RequestAsync(HttpMethod.Post, "/letreiro/commands", new
+        {
+            windowsUser = LetreiroAdmin.CurrentWindowsUser(),
+            name = command.Name,
+            kind = command.Kind,
+            content = command.Content,
+            timeoutSec = command.TimeoutSec,
+        }, ct).ConfigureAwait(false);
+        return GetInt(row, "id");
+    }
+
+    public async Task UpdateLetreiroCommandAsync(LetreiroCommand command, CancellationToken ct = default)
+    {
+        await RequestAsync(HttpMethod.Put, $"/letreiro/commands/{command.Id}", new
+        {
+            windowsUser = LetreiroAdmin.CurrentWindowsUser(),
+            name = command.Name,
+            kind = command.Kind,
+            content = command.Content,
+            timeoutSec = command.TimeoutSec,
+        }, ct).ConfigureAwait(false);
+    }
+
+    public async Task DeleteLetreiroCommandAsync(int commandId, CancellationToken ct = default)
+    {
+        var qs = Query(("windowsUser", LetreiroAdmin.CurrentWindowsUser()));
+        await RequestAsync(HttpMethod.Delete, $"/letreiro/commands/{commandId}?{qs}", ct: ct).ConfigureAwait(false);
+    }
+
+    public async Task<int> RunLetreiroCommandAsync(
+        int commandId,
+        IEnumerable<LetreiroJobTarget> targets,
+        bool allOnline,
+        CancellationToken ct = default)
+    {
+        var row = await RequestAsync(HttpMethod.Post, $"/letreiro/commands/{commandId}/run", new
+        {
+            windowsUser = LetreiroAdmin.CurrentWindowsUser(),
+            allOnline,
+            targets = targets.Select(t => new { hostName = t.HostName, windowsUser = t.WindowsUser }).ToList(),
+        }, ct).ConfigureAwait(false);
+        return GetInt(row, "queued");
+    }
+
+    public async Task<int> RunLetreiroAdhocAsync(
+        string kind,
+        string content,
+        string name,
+        IEnumerable<LetreiroJobTarget> targets,
+        bool allOnline,
+        int timeoutSec = 60,
+        CancellationToken ct = default)
+    {
+        var row = await RequestAsync(HttpMethod.Post, "/letreiro/jobs/run", new
+        {
+            windowsUser = LetreiroAdmin.CurrentWindowsUser(),
+            allOnline,
+            name,
+            kind,
+            content,
+            timeoutSec,
+            targets = targets.Select(t => new { hostName = t.HostName, windowsUser = t.WindowsUser }).ToList(),
+        }, ct).ConfigureAwait(false);
+        return GetInt(row, "queued");
+    }
+
+    public async Task<int> FetchLetreiroCommandPollIntervalAsync(CancellationToken ct = default)
+    {
+        var row = await RequestAsync(HttpMethod.Get, "/letreiro/settings", ct: ct).ConfigureAwait(false);
+        return LetreiroCommandPoll.Clamp(GetInt(row, "commandPollIntervalSec"));
+    }
+
+    public async Task PutLetreiroCommandPollIntervalAsync(int seconds, CancellationToken ct = default)
+    {
+        await RequestAsync(HttpMethod.Put, "/letreiro/settings", new
+        {
+            windowsUser = LetreiroAdmin.CurrentWindowsUser(),
+            commandPollIntervalSec = LetreiroCommandPoll.Clamp(seconds),
+        }, ct).ConfigureAwait(false);
+    }
+
+    public async Task<(LetreiroJob? Job, int PollIntervalSec)> FetchPendingLetreiroJobAsync(
+        string host, string windowsUser, CancellationToken ct = default)
+    {
+        var qs = Query(("host", host), ("user", windowsUser));
+        var row = await RequestAsync(HttpMethod.Get, "/letreiro/jobs/pending?" + qs, ct: ct).ConfigureAwait(false);
+        var interval = LetreiroCommandPoll.DefaultSec;
+        if (row.ValueKind == JsonValueKind.Object)
+            interval = LetreiroCommandPoll.Clamp(GetInt(row, "pollIntervalSec"));
+        if (row.ValueKind != JsonValueKind.Object || !row.TryGetProperty("job", out var job)
+            || job.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined or JsonValueKind.False)
+            return (null, interval);
+        return (MapJob(job, includeContent: true), interval);
+    }
+
+    public async Task PostLetreiroJobResultAsync(
+        int jobId,
+        string host,
+        string windowsUser,
+        RemoteScriptOutcome outcome,
+        CancellationToken ct = default)
+    {
+        await RequestAsync(HttpMethod.Post, $"/letreiro/jobs/{jobId}/result", new
+        {
+            hostName = host,
+            windowsUser,
+            exitCode = outcome.ExitCode,
+            stdout = outcome.Stdout,
+            stderr = outcome.Stderr,
+            timedOut = outcome.TimedOut,
+        }, ct).ConfigureAwait(false);
+    }
+
+    public async Task<List<LetreiroJob>> FetchLetreiroJobsAsync(CancellationToken ct = default)
+    {
+        var row = await RequestAsync(HttpMethod.Get, "/letreiro/jobs", ct: ct).ConfigureAwait(false);
+        var list = new List<LetreiroJob>();
+        if (row.ValueKind != JsonValueKind.Object || !row.TryGetProperty("jobs", out var items)
+            || items.ValueKind != JsonValueKind.Array)
+            return list;
+        foreach (var item in items.EnumerateArray())
+        {
+            var job = MapJob(item, includeContent: false);
+            if (job is not null) list.Add(job);
+        }
+        return list;
+    }
+
+    static LetreiroCommand? MapCommand(JsonElement item)
+    {
+        if (item.ValueKind != JsonValueKind.Object) return null;
+        return new LetreiroCommand
+        {
+            Id = GetInt(item, "id"),
+            Name = GetString(item, "name") ?? "",
+            Kind = GetString(item, "kind") ?? "bat",
+            Content = GetString(item, "content") ?? "",
+            TimeoutSec = GetInt(item, "timeoutSec") > 0 ? GetInt(item, "timeoutSec") : 60,
+        };
+    }
+
+    static LetreiroJob? MapJob(JsonElement item, bool includeContent)
+    {
+        if (item.ValueKind != JsonValueKind.Object) return null;
+        return new LetreiroJob
+        {
+            Id = GetInt(item, "id"),
+            CommandId = GetNullableInt(item, "commandId"),
+            Name = GetString(item, "name") ?? "",
+            Kind = GetString(item, "kind") ?? "",
+            Content = includeContent ? GetString(item, "content") ?? "" : "",
+            TimeoutSec = GetInt(item, "timeoutSec") > 0 ? GetInt(item, "timeoutSec") : 60,
+            HostName = GetString(item, "hostName") ?? "",
+            WindowsUser = GetString(item, "windowsUser") ?? "",
+            Status = GetString(item, "status") ?? "",
+            ExitCode = GetNullableInt(item, "exitCode"),
+            Stdout = GetString(item, "stdout") ?? "",
+            Stderr = GetString(item, "stderr") ?? "",
+            CreatedAt = GetDate(item, "createdAt"),
+            StartedAt = GetDate(item, "startedAt"),
+            FinishedAt = GetDate(item, "finishedAt"),
+        };
+    }
+
+    static int? GetNullableInt(JsonElement row, string name)
+    {
+        if (!row.TryGetProperty(name, out var el) || el.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return null;
+        if (el.TryGetInt32(out var n)) return n;
+        return int.TryParse(el.ToString(), out var parsed) ? parsed : null;
+    }
+
+    static DateTime? GetDate(JsonElement row, string name)
+    {
+        if (!row.TryGetProperty(name, out var el) || el.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return null;
+        if (el.ValueKind == JsonValueKind.String && DateTime.TryParse(el.GetString(), out var parsed))
+            return parsed;
+        return DateTime.TryParse(el.ToString(), out var fallback) ? fallback : null;
     }
 
     public void Dispose() => _http.Dispose();

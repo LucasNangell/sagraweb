@@ -39,6 +39,28 @@ function keyOf(row: Pick<Instance, "hostName" | "windowsUser">) {
   return `${row.hostName}\n${row.windowsUser}`;
 }
 
+function foldText(value: string) {
+  return value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
+}
+
+function textMatches(haystack: string, needle: string) {
+  const q = foldText(needle);
+  if (!q) return true;
+  return foldText(haystack).includes(q);
+}
+
+function compareInstancesByNome(a: Instance, b: Instance) {
+  const an = (a.nome ?? "").trim();
+  const bn = (b.nome ?? "").trim();
+  if (!an && bn) return 1;
+  if (an && !bn) return -1;
+  const byNome = an.localeCompare(bn, "pt", { sensitivity: "base" });
+  if (byNome) return byNome;
+  const byHost = a.hostName.localeCompare(b.hostName, "pt", { sensitivity: "base" });
+  if (byHost) return byHost;
+  return a.windowsUser.localeCompare(b.windowsUser, "pt", { sensitivity: "base" });
+}
+
 function errText(ex: unknown) {
   return ex instanceof Error ? ex.message : String(ex);
 }
@@ -397,6 +419,14 @@ export default function App() {
     () => instances.filter((row) => selected.has(keyOf(row))),
     [instances, selected],
   );
+  const filteringList = selected.size === 0;
+  const visibleInstances = useMemo(() => {
+    const sorted = [...instances].sort(compareInstancesByNome);
+    if (!filteringList) return sorted;
+    return sorted.filter((row) =>
+      textMatches(row.nome ?? "", profile.nome) && textMatches(row.setor ?? "", profile.setor),
+    );
+  }, [filteringList, instances, profile.nome, profile.setor]);
 
   const applyJobs = useCallback((next: Job[]) => {
     setJobs(next);
@@ -776,7 +806,10 @@ export default function App() {
               <div className="flex shrink-0 flex-wrap items-end justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="text-xl font-bold sm:text-2xl">Computadores</h2>
-                  <p className="text-sm text-slate-400">Clique para selecionar. Duplo clique abre filtros e exibição só daquele usuário.</p>
+                  <p className="text-sm text-slate-400">
+                    Clique para selecionar. Duplo clique abre filtros e exibição só daquele usuário.
+                    {filteringList ? " Sem seleção, Nome e Setor filtram a lista." : ""}
+                  </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void saveProfile()}>
@@ -787,11 +820,21 @@ export default function App() {
               <div className="grid shrink-0 gap-3 sm:grid-cols-2">
                 <label className="min-w-0 text-sm text-slate-400">
                   Nome
-                  <input className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={profile.nome} onChange={(e) => setProfile((p) => ({ ...p, nome: e.target.value }))} />
+                  <input
+                    className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+                    value={profile.nome}
+                    placeholder={filteringList ? "Filtrar por nome" : undefined}
+                    onChange={(e) => setProfile((p) => ({ ...p, nome: e.target.value }))}
+                  />
                 </label>
                 <label className="min-w-0 text-sm text-slate-400">
                   Setor
-                  <input className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={profile.setor} onChange={(e) => setProfile((p) => ({ ...p, setor: e.target.value }))} />
+                  <input
+                    className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+                    value={profile.setor}
+                    placeholder={filteringList ? "Filtrar por setor" : undefined}
+                    onChange={(e) => setProfile((p) => ({ ...p, setor: e.target.value }))}
+                  />
                 </label>
               </div>
               <div className="min-h-0 flex-1 overflow-auto rounded-2xl border border-slate-800 bg-slate-900/80 shadow-card">
@@ -804,7 +847,14 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {instances.map((row) => {
+                    {visibleInstances.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="px-3 py-8 text-center text-sm text-slate-400">
+                          {instances.length === 0 ? "Nenhum computador." : "Nenhum computador corresponde ao filtro."}
+                        </td>
+                      </tr>
+                    ) : null}
+                    {visibleInstances.map((row) => {
                       const on = selected.has(keyOf(row));
                       return (
                         <tr

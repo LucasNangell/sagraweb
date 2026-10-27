@@ -456,7 +456,7 @@ public class BoardTests
     }
 
     [Fact]
-    public void CarouselPinsPriorityLeftAndKeepsNormalsToTheRight()
+    public void CarouselPinsPriorityRightAndKeepsNormalsToTheLeft()
     {
         var cards = new[]
         {
@@ -468,9 +468,11 @@ public class BoardTests
         var placed = TickerLayout.PlaceCarousel(cards, widths, canvasWidth: 200, offset: 0, overflow: true);
         var p = placed.Single(c => c.Card.Label == "P");
         var s = placed.Single(c => c.Card.Label == "S");
-        Assert.Equal(TickerLayout.Pad, p.X, 3);
-        Assert.Equal(TickerLayout.Pad + 60 + TickerLayout.Gap, s.X, 3);
-        Assert.True(s.X + s.Width <= placed.Where(c => c.Card.Label == "N").Min(c => c.X) + 0.01);
+        var n = placed.Single(c => c.Card.Label == "N");
+        Assert.Equal(200 - TickerLayout.Pad - 60, p.X, 3);
+        Assert.Equal(p.X - TickerLayout.Gap - 50, s.X, 3);
+        Assert.True(n.X + n.Width <= s.X + 0.01);
+        Assert.True(s.X + s.Width <= p.X + 0.01);
     }
 
     [Fact]

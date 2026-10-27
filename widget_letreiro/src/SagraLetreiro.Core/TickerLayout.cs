@@ -91,15 +91,16 @@ public static class TickerLayout
             return PlaceRtl(cards, widths, canvasWidth, offset, scroll: true);
 
         var placed = new List<PlacedCard>(split.Pinned.Count);
-        var x = Pad;
+        var packX = canvasWidth - Pad;
         for (var i = 0; i < split.Pinned.Count; i++)
         {
-            placed.Add(new PlacedCard(split.Pinned[i], x, split.PinnedWidths[i]));
-            x += split.PinnedWidths[i] + Gap;
+            packX -= split.PinnedWidths[i];
+            placed.Add(new PlacedCard(split.Pinned[i], packX, split.PinnedWidths[i]));
+            packX -= Gap;
         }
 
         if (split.Rotating.Count == 0) return placed;
-        var remainingWidth = canvasWidth - x;
+        var remainingWidth = packX;
         if (remainingWidth <= 0) return placed;
 
         var rotatingScroll = Board.TickerContentOverflows(split.RotatingWidths, Gap, remainingWidth);
@@ -107,8 +108,8 @@ public static class TickerLayout
             split.Rotating, split.RotatingWidths, remainingWidth, offset, rotatingScroll);
         foreach (var item in rotatingPlaced)
         {
-            if (item.X < 0) continue;
-            placed.Add(new PlacedCard(item.Card, item.X + x, item.Width));
+            if (item.X + item.Width > remainingWidth) continue;
+            placed.Add(item);
         }
         return placed;
     }

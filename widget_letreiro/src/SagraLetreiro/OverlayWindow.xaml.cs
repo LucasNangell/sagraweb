@@ -302,25 +302,45 @@ public partial class OverlayWindow : Window
         e.Handled = true;
     }
 
-    TickerCard? CardAt(Point tickerPos)
+    TickerCard? CardAt(Point tickerPos) => HitCard(Ticker, tickerPos);
+
+    static TickerCard? HitCard(Panel host, Point pos)
     {
-        foreach (UIElement child in Ticker.Children)
+        TickerCard? found = null;
+        foreach (UIElement child in host.Children)
         {
+            if (child is Canvas nested && nested.Tag is not TickerCard)
+            {
+                var nx = Canvas.GetLeft(nested);
+                var ny = Canvas.GetTop(nested);
+                if (double.IsNaN(nx)) nx = 0;
+                if (double.IsNaN(ny)) ny = 0;
+                var inner = HitCard(nested, new Point(pos.X - nx, pos.Y - ny));
+                if (inner is not null) found = inner;
+                continue;
+            }
             if (child is not FrameworkElement fe || fe.Tag is not TickerCard card) continue;
             var x = Canvas.GetLeft(fe);
             var y = Canvas.GetTop(fe);
             if (double.IsNaN(x) || double.IsNaN(y)) continue;
-            if (tickerPos.X >= x && tickerPos.X <= x + fe.Width &&
-                tickerPos.Y >= y && tickerPos.Y <= y + fe.Height)
-                return card;
+            if (pos.X >= x && pos.X <= x + fe.Width && pos.Y >= y && pos.Y <= y + fe.Height)
+                found = card;
         }
-        return null;
+        return found;
     }
 
-    FrameworkElement? CardElement(TickerCard card)
+    FrameworkElement? CardElement(TickerCard card) => FindCard(Ticker, card);
+
+    static FrameworkElement? FindCard(Panel host, TickerCard card)
     {
-        foreach (UIElement child in Ticker.Children)
+        foreach (UIElement child in host.Children)
         {
+            if (child is Canvas nested && nested.Tag is not TickerCard)
+            {
+                var found = FindCard(nested, card);
+                if (found is not null) return found;
+                continue;
+            }
             if (child is FrameworkElement fe && fe.Tag is TickerCard tagged &&
                 (ReferenceEquals(tagged, card) || tagged.UniqueKey == card.UniqueKey))
                 return fe;
@@ -563,11 +583,41 @@ public partial class OverlayWindow : Window
         var cards = _layout.Select(c => c.Card).ToList();
         var widths = _layout.Select(c => c.Width).ToList();
         var placed = TickerLayout.PlaceCarousel(cards, widths, width, _offset, TotalOverflow());
+        var rotating = new List<PlacedCard>();
+        var pinned = new List<PlacedCard>();
         foreach (var item in placed)
         {
-            var meta = _layout.First(c => ReferenceEquals(c.Card, item.Card) || c.Card.UniqueKey == item.Card.UniqueKey);
-            Ticker.Children.Add(PaintCard(item.X, height, item.Width, meta.Card, meta.Situacao));
+            if (TickerLayout.IsPinnedPriority(item.Card)) pinned.Add(item);
+            else rotating.Add(item);
         }
+
+        var remaining = width - TickerLayout.PinnedReserve(pinned.Select(p => p.Width).ToList());
+        if (pinned.Count > 0 && rotating.Count > 0 && remaining > 0)
+        {
+            var host = new Canvas
+            {
+                Width = remaining,
+                Height = height,
+                ClipToBounds = true,
+            };
+            Canvas.SetLeft(host, 0);
+            Canvas.SetTop(host, 0);
+            foreach (var item in rotating)
+                host.Children.Add(Paint(item, height));
+            Ticker.Children.Add(host);
+            foreach (var item in pinned)
+                Ticker.Children.Add(Paint(item, height));
+            return;
+        }
+
+        foreach (var item in placed)
+            Ticker.Children.Add(Paint(item, height));
+    }
+
+    UIElement Paint(PlacedCard item, double height)
+    {
+        var meta = _layout.First(c => ReferenceEquals(c.Card, item.Card) || c.Card.UniqueKey == item.Card.UniqueKey);
+        return PaintCard(item.X, height, item.Width, meta.Card, meta.Situacao);
     }
 
     void DrawEmpty(string text, double height)

@@ -90,27 +90,26 @@ public static class TickerLayout
         if (split.Pinned.Count == 0)
             return PlaceRtl(cards, widths, canvasWidth, offset, scroll: true);
 
-        var placed = new List<PlacedCard>(split.Pinned.Count);
+        var pinned = new List<PlacedCard>(split.Pinned.Count);
         var packX = canvasWidth - Pad;
         for (var i = 0; i < split.Pinned.Count; i++)
         {
             packX -= split.PinnedWidths[i];
-            placed.Add(new PlacedCard(split.Pinned[i], packX, split.PinnedWidths[i]));
+            pinned.Add(new PlacedCard(split.Pinned[i], packX, split.PinnedWidths[i]));
             packX -= Gap;
         }
 
-        if (split.Rotating.Count == 0) return placed;
+        if (split.Rotating.Count == 0) return pinned;
         var remainingWidth = packX;
-        if (remainingWidth <= 0) return placed;
+        if (remainingWidth <= 0) return pinned;
 
         var rotatingScroll = Board.TickerContentOverflows(split.RotatingWidths, Gap, remainingWidth);
-        var rotatingPlaced = PlaceRtl(
-            split.Rotating, split.RotatingWidths, remainingWidth, offset, rotatingScroll);
-        foreach (var item in rotatingPlaced)
-        {
-            if (item.X + item.Width > remainingWidth) continue;
-            placed.Add(item);
-        }
+        var marqueeWidth = rotatingScroll ? canvasWidth : remainingWidth;
+        var rotating = PlaceRtl(
+            split.Rotating, split.RotatingWidths, marqueeWidth, offset, rotatingScroll);
+        var placed = new List<PlacedCard>(rotating.Count + pinned.Count);
+        placed.AddRange(rotating);
+        placed.AddRange(pinned);
         return placed;
     }
 

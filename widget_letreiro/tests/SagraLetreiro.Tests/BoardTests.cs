@@ -494,6 +494,24 @@ public class BoardTests
     }
 
     [Fact]
+    public void CarouselKeepsPartialRotatingCardsBehindPins()
+    {
+        var cards = new[]
+        {
+            new TickerCard { Label = "N1" },
+            new TickerCard { Label = "N2" },
+            new TickerCard { Label = "P", Priority = "priority-high" },
+        };
+        double[] widths = [80, 80, 50];
+        var placed = TickerLayout.PlaceCarousel(cards, widths, 200, offset: 0, overflow: true);
+        var remaining = 200 - TickerLayout.PinnedReserve([50]);
+        var n1 = placed.Where(c => c.Card.Label == "N1").ToList();
+        Assert.NotEmpty(n1);
+        Assert.Contains(n1, p => p.X + p.Width > remaining);
+        Assert.Contains(placed, c => c.Card.Label == "P" && TickerLayout.IsPinnedPriority(c.Card));
+    }
+
+    [Fact]
     public void CarouselWithoutOverflowKeepsRtlPack()
     {
         var cards = new[]

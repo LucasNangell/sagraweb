@@ -81,6 +81,7 @@ public partial class OverlayWindow : Window
         MouseLeftButtonUp += OnRelease;
         MouseRightButtonUp += OnContext;
         MouseLeave += (_, _) => _paused = false;
+        PreviewMouseWheel += OnPreviewMouseWheel;
         Ticker.MouseEnter += (_, _) => _paused = true;
         Ticker.MouseLeave += (_, _) => _paused = false;
         Ticker.SizeChanged += OnTickerSizeChanged;
@@ -331,7 +332,11 @@ public partial class OverlayWindow : Window
     {
         CloseBalloon();
         _balloon = new OsBalloonWindow(card, _client);
-        _balloon.Closed += (_, _) => _balloon = null;
+        _balloon.Closed += (_, _) =>
+        {
+            _balloon = null;
+            _needsDraw = true;
+        };
         _balloon.Show();
         _balloon.PlaceAbove(this, screenTopLeft);
         _balloon.Activate();
@@ -491,14 +496,23 @@ public partial class OverlayWindow : Window
             if (_needsDraw) { Redraw(); _needsDraw = false; }
             return;
         }
-        if (NeedsScroll() && !_paused)
+        if (!TotalOverflow())
+        {
+            if (_offset != 0)
+            {
+                _offset = 0;
+                Redraw();
+            }
+            else if (_needsDraw)
+            {
+                Redraw();
+                _needsDraw = false;
+            }
+            return;
+        }
+        if (NeedsScroll() && !IsPaused())
         {
             _offset += _config.Window.SpeedPxPerSec * dt;
-            Redraw();
-        }
-        else if (_offset != 0)
-        {
-            _offset = 0;
             Redraw();
         }
         else if (_needsDraw)
@@ -508,17 +522,38 @@ public partial class OverlayWindow : Window
         }
     }
 
-    bool NeedsScroll()
+    bool IsPaused() => _paused || _balloon is not null;
+
+    double TickerWidth() => Math.Max(1, Ticker.ActualWidth);
+
+    bool TotalOverflow()
     {
         var widths = _layout.Select(c => c.Width).ToList();
-        return Board.TickerContentOverflows(widths, TickerLayout.Gap, Math.Max(1, Ticker.ActualWidth));
+        return TickerLayout.TotalOverflow(widths, TickerWidth());
+    }
+
+    bool NeedsScroll()
+    {
+        var cards = _layout.Select(c => c.Card).ToList();
+        var widths = _layout.Select(c => c.Width).ToList();
+        return TickerLayout.RotatingNeedsMarquee(cards, widths, TickerWidth());
+    }
+
+    void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (!NeedsScroll()) return;
+        e.Handled = true;
+        var widths = _layout.Select(c => c.Width).ToList();
+        var split = TickerLayout.SplitByPriority(_layout.Select(c => c.Card).ToList(), widths);
+        _offset -= e.Delta / 120.0 * TickerLayout.MarqueeWheelStep(split.RotatingWidths);
+        Redraw();
     }
 
     void Redraw()
     {
         Ticker.Children.Clear();
         var height = Math.Max(1, Ticker.ActualHeight);
-        var width = Math.Max(1, Ticker.ActualWidth);
+        var width = TickerWidth();
         if (_layout.Count == 0)
         {
             if (_status != "connected") DrawEmpty(_statusMsg, height);
@@ -527,7 +562,7 @@ public partial class OverlayWindow : Window
 
         var cards = _layout.Select(c => c.Card).ToList();
         var widths = _layout.Select(c => c.Width).ToList();
-        var placed = TickerLayout.PlaceRtl(cards, widths, width, _offset, NeedsScroll());
+        var placed = TickerLayout.PlaceCarousel(cards, widths, width, _offset, TotalOverflow());
         foreach (var item in placed)
         {
             var meta = _layout.First(c => ReferenceEquals(c.Card, item.Card) || c.Card.UniqueKey == item.Card.UniqueKey);

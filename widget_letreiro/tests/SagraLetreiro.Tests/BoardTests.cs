@@ -435,6 +435,94 @@ public class BoardTests
         Assert.True(firstB.X < firstA.X);
     }
 
+    [Fact]
+    public void SplitByPriorityOrdersPrometidoThenSolicitadoThenNormal()
+    {
+        var cards = new[]
+        {
+            new TickerCard { Label = "N1", Priority = null },
+            new TickerCard { Label = "S1", Priority = "priority-medium" },
+            new TickerCard { Label = "P1", Priority = "priority-high" },
+            new TickerCard { Label = "N2" },
+            new TickerCard { Label = "S2", Priority = "priority-medium" },
+            new TickerCard { Label = "P2", Priority = "priority-high" },
+        };
+        double[] widths = [10, 11, 12, 13, 14, 15];
+        var split = TickerLayout.SplitByPriority(cards, widths);
+        Assert.Equal(new[] { "P1", "P2", "S1", "S2" }, split.Pinned.Select(c => c.Label).ToArray());
+        Assert.Equal(new[] { 12d, 15d, 11d, 14d }, split.PinnedWidths.ToArray());
+        Assert.Equal(new[] { "N1", "N2" }, split.Rotating.Select(c => c.Label).ToArray());
+        Assert.Equal(new[] { 10d, 13d }, split.RotatingWidths.ToArray());
+    }
+
+    [Fact]
+    public void CarouselPinsPriorityLeftAndKeepsNormalsToTheRight()
+    {
+        var cards = new[]
+        {
+            new TickerCard { Label = "N", Priority = null },
+            new TickerCard { Label = "S", Priority = "priority-medium" },
+            new TickerCard { Label = "P", Priority = "priority-high" },
+        };
+        double[] widths = [40, 50, 60];
+        var placed = TickerLayout.PlaceCarousel(cards, widths, canvasWidth: 200, offset: 0, overflow: true);
+        var p = placed.Single(c => c.Card.Label == "P");
+        var s = placed.Single(c => c.Card.Label == "S");
+        Assert.Equal(TickerLayout.Pad, p.X, 3);
+        Assert.Equal(TickerLayout.Pad + 60 + TickerLayout.Gap, s.X, 3);
+        Assert.True(s.X + s.Width <= placed.Where(c => c.Card.Label == "N").Min(c => c.X) + 0.01);
+    }
+
+    [Fact]
+    public void CarouselOffsetMovesOnlyNormalCards()
+    {
+        var cards = new[]
+        {
+            new TickerCard { Label = "N1" },
+            new TickerCard { Label = "N2" },
+            new TickerCard { Label = "P", Priority = "priority-high" },
+        };
+        double[] widths = [80, 80, 50];
+        var a = TickerLayout.PlaceCarousel(cards, widths, 200, offset: 0, overflow: true);
+        var b = TickerLayout.PlaceCarousel(cards, widths, 200, offset: 20, overflow: true);
+        Assert.Equal(a.Single(c => c.Card.Label == "P").X, b.Single(c => c.Card.Label == "P").X, 3);
+        var nA = a.Where(c => c.Card.Label == "N1").Min(c => c.X);
+        var nB = b.Where(c => c.Card.Label == "N1").Min(c => c.X);
+        Assert.True(nB < nA);
+    }
+
+    [Fact]
+    public void CarouselWithoutOverflowKeepsRtlPack()
+    {
+        var cards = new[]
+        {
+            new TickerCard { Label = "A" },
+            new TickerCard { Label = "B", Priority = "priority-high" },
+        };
+        var rtl = TickerLayout.PlaceRtl(cards, [40, 50], 200, 0, scroll: false);
+        var carousel = TickerLayout.PlaceCarousel(cards, [40, 50], 200, 0, overflow: false);
+        Assert.Equal(rtl.Select(c => (c.Card.Label, c.X)), carousel.Select(c => (c.Card.Label, c.X)));
+    }
+
+    [Fact]
+    public void RotatingNeedsMarqueeIgnoresPinnedWidth()
+    {
+        var cards = new[]
+        {
+            new TickerCard { Label = "P", Priority = "priority-high" },
+            new TickerCard { Label = "N" },
+        };
+        Assert.False(TickerLayout.RotatingNeedsMarquee(cards, [40, 40], 200));
+        Assert.True(TickerLayout.RotatingNeedsMarquee(
+            [
+                new TickerCard { Label = "P", Priority = "priority-high" },
+                new TickerCard { Label = "N1" },
+                new TickerCard { Label = "N2" },
+            ],
+            [40, 90, 90],
+            200));
+    }
+
     static OsItem CloneSub(int pcpOrdem)
     {
         var item = SubOs.Clone();

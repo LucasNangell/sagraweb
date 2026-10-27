@@ -13,6 +13,17 @@ import {
   Trash2,
 } from "lucide-react";
 import { api, ApiError, type AppConfig, type BoardColumn, type Command, type Instance, type Job } from "./api";
+import {
+  applyCapturesFromJobs,
+  applyCommandVars,
+  extractCommandVars,
+  loadCapturedVars,
+  readCaptureVar,
+  saveCapturedVars,
+  stripCaptureLine,
+  writeCaptureVar,
+  type CapturedVars,
+} from "./commandVars";
 
 type View = "computers" | "library" | "history" | "settings";
 
@@ -364,6 +375,8 @@ export default function App() {
   const [pollSec, setPollSec] = useState(10);
   const [shell, setShell] = useState<"bat" | "ps1">("bat");
   const [libraryId, setLibraryId] = useState(0);
+  const [libraryVars, setLibraryVars] = useState<Record<string, string>>({});
+  const [capturedVars, setCapturedVars] = useState<CapturedVars>(loadCapturedVars);
   const [prompt, setPrompt] = useState("");
   const [log, setLog] = useState("SAGRA Letreiro · terminal remoto\nSelecione computadores e digite um comando.\n");
   const typed = useRef<string[]>([]);
@@ -371,6 +384,7 @@ export default function App() {
   const printedJobs = useRef(new Set<number>());
   const jobsPrimed = useRef(false);
   const burstUntil = useRef(0);
+  const commandsRef = useRef<Command[]>([]);
   const logEl = useRef<HTMLPreElement | null>(null);
   const [draft, setDraft] = useState<Command>({ id: 0, name: "", kind: "bat", content: "", timeoutSec: 60 });
   const [search, setSearch] = useState("");
@@ -399,12 +413,28 @@ export default function App() {
       return;
     }
     const chunks: string[] = [];
+    const newly: Job[] = [];
     for (const job of [...next].sort((a, b) => a.id - b.id)) {
       if (printedJobs.current.has(job.id) || !jobDone(job)) continue;
       printedJobs.current.add(job.id);
+      newly.push(job);
       chunks.push(formatJobReply(job));
     }
     if (chunks.length) setLog((prev) => `${prev}${chunks.join("")}`);
+    if (newly.length) {
+      const capturing = newly.filter((job) => {
+        const cmd = commandsRef.current.find((item) => item.name === job.name);
+        return !!cmd && !!readCaptureVar(cmd.content);
+      });
+      if (capturing.length) {
+        setCapturedVars((prev) => applyCapturesFromJobs(prev, capturing, commandsRef.current));
+        const names = [...new Set(capturing.map((job) => {
+          const cmd = commandsRef.current.find((item) => item.name === job.name);
+          return cmd ? readCaptureVar(cmd.content) : "";
+        }).filter(Boolean))];
+        if (names.length) setStatus(`Atualizou ${names.map((name) => `{{${name}}}`).join(", ")}.`);
+      }
+    }
   }, []);
 
   const loadAll = useCallback(async () => {
@@ -417,6 +447,7 @@ export default function App() {
       ]);
       setInstances(inst.instances ?? []);
       setCommands(cmds.commands ?? []);
+      commandsRef.current = cmds.commands ?? [];
       applyJobs(jobList.jobs ?? []);
       setPollSec(settings.commandPollIntervalSec ?? 10);
       setError("");
@@ -496,6 +527,14 @@ export default function App() {
   useEffect(() => {
     logEl.current?.scrollTo({ top: logEl.current.scrollHeight });
   }, [log]);
+
+  useEffect(() => {
+    commandsRef.current = commands;
+  }, [commands]);
+
+  useEffect(() => {
+    saveCapturedVars(capturedVars);
+  }, [capturedVars]);
 
   useEffect(() => {
     if (!clientEdit) return;
@@ -602,14 +641,29 @@ export default function App() {
     applyJobs(jobList.jobs ?? []);
   }
 
+  function chooseLibrary(id: number) {
+    setLibraryId(id);
+    setLibraryVars({});
+    const cmd = commands.find((item) => item.id === id);
+    if (cmd) setShell(cmd.kind === "ps1" ? "ps1" : "bat");
+  }
+
   async function sendTerminal(allOnline: boolean) {
     if (!allOnline && selectedRows.length === 0) return setError("Selecione computadores ou envie a todos os online.");
     const targets = selectedRows.map((row) => ({ hostName: row.hostName, windowsUser: row.windowsUser }));
     const catalog = commands.find((cmd) => cmd.id === libraryId);
     if (catalog) {
+      const varNames = extractCommandVars(catalog.content);
+      const rendered = applyCommandVars(catalog.content, libraryVars);
+      if (!rendered.ok) return setError(`Preencha: ${rendered.missing.join(", ")}`);
       const marker = catalog.kind === "ps1" ? "PS>" : "C:\\>";
-      setLog((prev) => `${prev}${marker} ${catalog.name}\n`);
-      const queued = await api.runCommand(catalog.id, targets, allOnline);
+      const preview = varNames.length
+        ? `${catalog.name} ${varNames.map((name) => `${name}=${libraryVars[name] ?? ""}`).join(" ")}`
+        : catalog.name;
+      setLog((prev) => `${prev}${marker} ${preview}\n`);
+      const queued = varNames.length
+        ? await api.runAdhoc(catalog.kind === "ps1" ? "ps1" : "bat", rendered.content, catalog.name, targets, allOnline, catalog.timeoutSec)
+        : await api.runCommand(catalog.id, targets, allOnline);
       await watchQueued(queued.queued, "");
       return;
     }
@@ -626,7 +680,7 @@ export default function App() {
   }
 
   async function saveCommand() {
-    if (!draft.name.trim() || !draft.content.trim()) return setError("Nome e conteúdo são obrigatórios.");
+    if (!draft.name.trim() || !stripCaptureLine(draft.content).trim()) return setError("Nome e conteúdo são obrigatórios.");
     if (draft.id > 0) await api.updateCommand(draft);
     else {
       const created = await api.createCommand(draft);
@@ -645,6 +699,9 @@ export default function App() {
 
   const activeJob = jobs.find((job) => job.id === jobId) ?? jobs[0];
   const libraryCmd = commands.find((cmd) => cmd.id === libraryId);
+  const libraryVarNames = useMemo(() => extractCommandVars(libraryCmd?.content ?? ""), [libraryCmd?.content]);
+  const draftVarNames = useMemo(() => extractCommandVars(draft.content), [draft.content]);
+  const draftCapture = readCaptureVar(draft.content);
 
   return (
     <div className="min-h-screen lg:grid lg:h-screen lg:grid-cols-[260px_1fr] lg:overflow-hidden">
@@ -778,19 +835,14 @@ export default function App() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="flex rounded-lg bg-slate-900 p-1">
-                    <button type="button" className={`rounded-md px-3 py-1 text-sm ${shell === "bat" ? "bg-slate-800 text-white" : "text-slate-400"}`} onClick={() => { setShell("bat"); setLibraryId(0); }}>CMD</button>
-                    <button type="button" className={`rounded-md px-3 py-1 text-sm ${shell === "ps1" ? "bg-slate-800 text-white" : "text-slate-400"}`} onClick={() => { setShell("ps1"); setLibraryId(0); }}>PowerShell</button>
+                    <button type="button" className={`rounded-md px-3 py-1 text-sm ${shell === "bat" ? "bg-slate-800 text-white" : "text-slate-400"}`} onClick={() => { setShell("bat"); chooseLibrary(0); }}>CMD</button>
+                    <button type="button" className={`rounded-md px-3 py-1 text-sm ${shell === "ps1" ? "bg-slate-800 text-white" : "text-slate-400"}`} onClick={() => { setShell("ps1"); chooseLibrary(0); }}>PowerShell</button>
                   </div>
                   <select
                     aria-label="Comando da biblioteca"
                     className="max-w-64 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-100"
                     value={libraryId || ""}
-                    onChange={(e) => {
-                      const id = Number(e.target.value) || 0;
-                      setLibraryId(id);
-                      const cmd = commands.find((item) => item.id === id);
-                      if (cmd) setShell(cmd.kind === "ps1" ? "ps1" : "bat");
-                    }}
+                    onChange={(e) => chooseLibrary(Number(e.target.value) || 0)}
                   >
                     <option value="">Biblioteca…</option>
                     {[...commands]
@@ -805,42 +857,86 @@ export default function App() {
               </div>
               <pre ref={logEl} className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap p-4 font-mono text-sm text-emerald-300">{log}</pre>
               <form
-                className="flex shrink-0 flex-col gap-2 border-t border-slate-800 bg-slate-900 p-3 sm:flex-row sm:items-center"
+                className="flex shrink-0 flex-col gap-2 border-t border-slate-800 bg-slate-900 p-3"
                 onSubmit={(e) => {
                   e.preventDefault();
                   void sendTerminal(false).catch((ex) => setError(errText(ex)));
                 }}
               >
-                <span className="font-mono text-emerald-400">{shell === "ps1" ? "PS>" : "C:\\>"}</span>
-                <input
-                  value={prompt}
-                  onChange={(e) => {
-                    setPrompt(e.target.value);
-                    if (libraryId) setLibraryId(0);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "ArrowUp") {
-                      e.preventDefault();
-                      if (!typed.current.length) return;
-                      typedIndex.current = Math.max(0, typedIndex.current < 0 ? typed.current.length - 1 : typedIndex.current - 1);
-                      setPrompt(typed.current[typedIndex.current] ?? "");
-                    }
-                    if (e.key === "ArrowDown") {
-                      e.preventDefault();
-                      typedIndex.current = Math.min(typed.current.length, typedIndex.current + 1);
-                      setPrompt(typed.current[typedIndex.current] ?? "");
-                    }
-                  }}
-                  className="flex-1 bg-transparent font-mono text-sm outline-none"
-                  placeholder={libraryCmd ? `Enviar: ${libraryCmd.name}` : "ipconfig /all"}
-                />
-                <div className="flex gap-2">
-                  <button type="button" className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void sendTerminal(true).catch((ex) => setError(errText(ex)))}>
-                    Todos online
-                  </button>
-                  <button type="submit" className="inline-flex items-center gap-2 rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950">
-                    <Send size={14} /> Enviar
-                  </button>
+                {libraryVarNames.length ? (
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {libraryVarNames.map((name) => {
+                      const saved = capturedVars[name];
+                      return (
+                        <label key={name} className="text-xs text-slate-400">
+                          {name}
+                          {saved?.options.length ? (
+                            <select
+                              aria-label={`Valores salvos de ${name}`}
+                              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-slate-100"
+                              value={saved.options.some((item) => item.value === (libraryVars[name] ?? "")) ? libraryVars[name] : ""}
+                              onChange={(e) => setLibraryVars((prev) => ({ ...prev, [name]: e.target.value }))}
+                            >
+                              <option value="">{`${saved.options.length} da última captura (${saved.sourceName})`}</option>
+                              {saved.options.map((item) => (
+                                <option key={`${item.value}:${item.label}`} value={item.value}>
+                                  {item.label}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="mt-1 block text-[11px] text-slate-500">Sem captura ainda. Rode o comando que grava {`{{${name}}}`}.</span>
+                          )}
+                          <input
+                            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 font-mono text-sm text-slate-100"
+                            value={libraryVars[name] ?? ""}
+                            onChange={(e) => setLibraryVars((prev) => ({ ...prev, [name]: e.target.value }))}
+                            placeholder={`{{${name}}}`}
+                            autoComplete="off"
+                          />
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <span className="font-mono text-emerald-400">{shell === "ps1" ? "PS>" : "C:\\>"}</span>
+                  {libraryVarNames.length ? (
+                    <span className="min-w-0 flex-1 truncate font-mono text-sm text-slate-300" title={libraryCmd?.name}>
+                      {libraryCmd?.name}
+                    </span>
+                  ) : (
+                    <input
+                      value={prompt}
+                      onChange={(e) => {
+                        setPrompt(e.target.value);
+                        if (libraryId) chooseLibrary(0);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "ArrowUp") {
+                          e.preventDefault();
+                          if (!typed.current.length) return;
+                          typedIndex.current = Math.max(0, typedIndex.current < 0 ? typed.current.length - 1 : typedIndex.current - 1);
+                          setPrompt(typed.current[typedIndex.current] ?? "");
+                        }
+                        if (e.key === "ArrowDown") {
+                          e.preventDefault();
+                          typedIndex.current = Math.min(typed.current.length, typedIndex.current + 1);
+                          setPrompt(typed.current[typedIndex.current] ?? "");
+                        }
+                      }}
+                      className="flex-1 bg-transparent font-mono text-sm outline-none"
+                      placeholder={libraryCmd ? `Enviar: ${libraryCmd.name}` : "ipconfig /all"}
+                    />
+                  )}
+                  <div className="flex gap-2">
+                    <button type="button" className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void sendTerminal(true).catch((ex) => setError(errText(ex)))}>
+                      Todos online
+                    </button>
+                    <button type="submit" className="inline-flex items-center gap-2 rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950">
+                      <Send size={14} /> Enviar
+                    </button>
+                  </div>
                 </div>
               </form>
             </section>
@@ -859,11 +955,19 @@ export default function App() {
                   <button key={cmd.id} onClick={() => setDraft(cmd)} className={`rounded-xl border px-3 py-3 text-left ${draft.id === cmd.id ? "border-sky-400 bg-slate-950" : "border-slate-800 bg-slate-950/60"}`}>
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-semibold">{cmd.name}</span>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${cmd.kind === "ps1" ? "bg-sky-400 text-slate-950" : "bg-amber-400 text-slate-950"}`}>
-                        {cmd.kind === "ps1" ? "PS1" : "BAT"}
+                      <span className="flex items-center gap-1">
+                        {readCaptureVar(cmd.content) ? (
+                          <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-emerald-300">GRAVA</span>
+                        ) : null}
+                        {extractCommandVars(cmd.content).length ? (
+                          <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-sky-300">VARS</span>
+                        ) : null}
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${cmd.kind === "ps1" ? "bg-sky-400 text-slate-950" : "bg-amber-400 text-slate-950"}`}>
+                          {cmd.kind === "ps1" ? "PS1" : "BAT"}
+                        </span>
                       </span>
                     </div>
-                    <p className="mt-1 truncate text-xs text-slate-400">{cmd.content || "vazio"}</p>
+                    <p className="mt-1 truncate text-xs text-slate-400">{stripCaptureLine(cmd.content) || "vazio"}</p>
                   </button>
                 ))}
               </div>
@@ -878,10 +982,39 @@ export default function App() {
                 </label>
               </div>
               <div className="mt-3 flex gap-2">
-                <button className={`rounded-lg px-3 py-1.5 text-sm ${draft.kind === "bat" ? "bg-amber-400 text-slate-950" : "bg-slate-800"}`} onClick={() => setDraft((d) => ({ ...d, kind: "bat" }))}>CMD</button>
-                <button className={`rounded-lg px-3 py-1.5 text-sm ${draft.kind === "ps1" ? "bg-sky-400 text-slate-950" : "bg-slate-800"}`} onClick={() => setDraft((d) => ({ ...d, kind: "ps1" }))}>PowerShell</button>
+                <button className={`rounded-lg px-3 py-1.5 text-sm ${draft.kind === "bat" ? "bg-amber-400 text-slate-950" : "bg-slate-800"}`} onClick={() => setDraft((d) => ({ ...d, kind: "bat", content: writeCaptureVar(d.content, "bat", readCaptureVar(d.content)) }))}>CMD</button>
+                <button className={`rounded-lg px-3 py-1.5 text-sm ${draft.kind === "ps1" ? "bg-sky-400 text-slate-950" : "bg-slate-800"}`} onClick={() => setDraft((d) => ({ ...d, kind: "ps1", content: writeCaptureVar(d.content, "ps1", readCaptureVar(d.content)) }))}>PowerShell</button>
               </div>
-              <textarea className="mt-3 min-h-64 w-full rounded-xl border border-slate-700 bg-slate-950 p-3 font-mono text-sm" value={draft.content} onChange={(e) => setDraft((d) => ({ ...d, content: e.target.value }))} />
+              <label className="mt-3 block text-sm text-slate-400">
+                Gravar da resposta a variável
+                <input
+                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-slate-100"
+                  value={draftCapture}
+                  onChange={(e) => setDraft((d) => ({ ...d, content: writeCaptureVar(d.content, d.kind, e.target.value) }))}
+                  placeholder="janela_id"
+                />
+                <span className="mt-1 block text-xs text-slate-500">
+                  Se preencher, a saída deste comando vira opções de <span className="font-mono">{"{{variavel}}"}</span> até ele ser executado de novo.
+                </span>
+              </label>
+              <textarea
+                className="mt-3 min-h-64 w-full rounded-xl border border-slate-700 bg-slate-950 p-3 font-mono text-sm"
+                value={stripCaptureLine(draft.content)}
+                onChange={(e) => setDraft((d) => ({ ...d, content: writeCaptureVar(e.target.value, d.kind, readCaptureVar(d.content)) }))}
+                placeholder={'ping {{host}} -n {{count}}'}
+              />
+              <p className="mt-2 text-xs text-slate-500">
+                Use <span className="font-mono text-slate-300">{"{{variavel}}"}</span> no script. Ao executar, o terminal pede esses campos.
+              </p>
+              {draftVarNames.length ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {draftVarNames.map((name) => (
+                    <span key={name} className="rounded-full bg-slate-800 px-2 py-0.5 font-mono text-[11px] text-sky-300">
+                      {`{{${name}}}`}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
               <div className="mt-3 flex flex-wrap gap-2">
                 <label className="rounded-lg bg-slate-800 px-3 py-2 text-sm">
                   Importar arquivo
@@ -897,10 +1030,10 @@ export default function App() {
                 <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => {
                   setShell(draft.kind === "ps1" ? "ps1" : "bat");
                   if (draft.id > 0) {
-                    setLibraryId(draft.id);
+                    chooseLibrary(draft.id);
                     setPrompt("");
                   } else {
-                    setLibraryId(0);
+                    chooseLibrary(0);
                     setPrompt(draft.content);
                   }
                   setView("computers");
@@ -909,14 +1042,22 @@ export default function App() {
                   <button className="rounded-lg bg-rose-900 px-3 py-2 text-sm" onClick={() => void api.deleteCommand(draft.id).then(loadAll)}>Excluir</button>
                 ) : null}
                 {draft.id > 0 ? (
-                  <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void api.runCommand(draft.id, selectedRows.map((r) => ({ hostName: r.hostName, windowsUser: r.windowsUser })), false).then(async (r) => {
-                    setStatus(`${r.queued} job(s)`);
-                    burstUntil.current = Date.now() + 120_000;
-                    setLog((prev) => `${prev}${shell === "ps1" || draft.kind === "ps1" ? "PS>" : "C:\\>"} ${draft.content.trim()}\naguardando resposta (${r.queued})…\n`);
-                    setView("computers");
-                    const list = await api.jobs();
-                    applyJobs(list.jobs ?? []);
-                  })}>Enviar selecionados</button>
+                  <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => {
+                    if (draftVarNames.length) {
+                      chooseLibrary(draft.id);
+                      setView("computers");
+                      setStatus("Preencha as variáveis no terminal para enviar.");
+                      return;
+                    }
+                    void api.runCommand(draft.id, selectedRows.map((r) => ({ hostName: r.hostName, windowsUser: r.windowsUser })), false).then(async (r) => {
+                      setStatus(`${r.queued} job(s)`);
+                      burstUntil.current = Date.now() + 120_000;
+                      setLog((prev) => `${prev}${shell === "ps1" || draft.kind === "ps1" ? "PS>" : "C:\\>"} ${draft.content.trim()}\naguardando resposta (${r.queued})…\n`);
+                      setView("computers");
+                      const list = await api.jobs();
+                      applyJobs(list.jobs ?? []);
+                    });
+                  }}>Enviar selecionados</button>
                 ) : null}
               </div>
             </div>

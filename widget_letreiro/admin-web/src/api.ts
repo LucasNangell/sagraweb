@@ -136,15 +136,27 @@ export const api = {
     }),
   deleteCommand: (id: number) =>
     request(`/api/letreiro/commands/${id}?windowsUser=`, { method: "DELETE" }),
-  runCommand: (id: number, targets: { hostName: string; windowsUser: string }[], allOnline: boolean) =>
+  runCommand: (
+    id: number,
+    targets: { hostName: string; windowsUser: string }[],
+    allOnline: boolean,
+    variables: Record<string, string> = {},
+  ) =>
     request<{ queued: number }>(`/api/letreiro/commands/${id}/run`, {
       method: "POST",
-      body: JSON.stringify({ windowsUser: "", allOnline, targets }),
+      body: JSON.stringify({ windowsUser: "", allOnline, targets, variables }),
     }),
-  runAdhoc: (kind: string, content: string, name: string, targets: { hostName: string; windowsUser: string }[], allOnline: boolean) =>
+  runAdhoc: (
+    kind: string,
+    content: string,
+    name: string,
+    targets: { hostName: string; windowsUser: string }[],
+    allOnline: boolean,
+    timeoutSec = 60,
+  ) =>
     request<{ queued: number }>("/api/letreiro/jobs/run", {
       method: "POST",
-      body: JSON.stringify({ windowsUser: "", kind, content, name, allOnline, targets }),
+      body: JSON.stringify({ windowsUser: "", kind, content, name, allOnline, targets, timeoutSec }),
     }),
   jobs: () => request<{ jobs: Job[] }>("/api/letreiro/jobs"),
   settings: () => request<{ commandPollIntervalSec: number }>("/api/letreiro/settings"),

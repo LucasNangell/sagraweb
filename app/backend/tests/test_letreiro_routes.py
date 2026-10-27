@@ -12,7 +12,7 @@ from letreiro_schema import (
     CREATE_TAB_LETREIRO_INSTANCIA,
 )
 from routers import letreiro_routes
-from routers.letreiro_routes import is_letreiro_admin
+from routers.letreiro_routes import extract_command_vars, is_letreiro_admin, render_command_content
 
 
 def _client():
@@ -347,6 +347,74 @@ def test_adhoc_run_queues_without_catalog(monkeypatch):
     assert inserts[0][1][1] == "terminal"
     assert inserts[0][1][2] == "bat"
     assert inserts[0][1][3] == "ipconfig /all"
+
+
+def test_extract_command_vars_keeps_order_and_unique():
+    assert extract_command_vars("ping {{host}} -n {{count}} && ping {{host}}") == ["host", "count"]
+    assert extract_command_vars("echo ok") == []
+    assert extract_command_vars("{{ nome }}") == ["nome"]
+
+
+def test_render_command_content_fills_and_reports_missing():
+    rendered, missing = render_command_content("ping {{host}} -n {{count}}", {"host": "pc1", "count": "2"})
+    assert missing == []
+    assert rendered == "ping pc1 -n 2"
+    _, missing = render_command_content("ping {{host}}", {})
+    assert missing == ["host"]
+
+
+def test_run_command_substitutes_variables(monkeypatch):
+    calls = []
+
+    def fake_exec(sql, params=None):
+        calls.append((sql, params))
+        if "FROM tabLetreiroComando" in sql and "INSERT" not in sql:
+            return [{
+                "Id": 3,
+                "Nome": "ping",
+                "Tipo": "bat",
+                "Conteudo": "ping {{host}} -n {{count}}",
+                "TimeoutSec": 60,
+            }]
+        return []
+
+    monkeypatch.setattr(letreiro_routes.db, "execute_query", fake_exec)
+    response = _client().post(
+        "/api/letreiro/commands/3/run",
+        headers={"X-Letreiro-Windows-User": "P_918713"},
+        json={
+            "windowsUser": "P_918713",
+            "variables": {"host": "pc-alvo", "count": "4"},
+            "targets": [{"hostName": "PC1", "windowsUser": "a"}],
+        },
+    )
+    assert response.status_code == 200
+    inserts = [c for c in calls if "INSERT INTO tabLetreiroComandoJob" in c[0]]
+    assert inserts[0][1][3] == "ping pc-alvo -n 4"
+
+
+def test_run_command_requires_variables(monkeypatch):
+    monkeypatch.setattr(
+        letreiro_routes.db,
+        "execute_query",
+        lambda sql, params=None: [{
+            "Id": 3,
+            "Nome": "ping",
+            "Tipo": "bat",
+            "Conteudo": "ping {{host}}",
+            "TimeoutSec": 60,
+        }] if "FROM tabLetreiroComando" in sql else [],
+    )
+    response = _client().post(
+        "/api/letreiro/commands/3/run",
+        headers={"X-Letreiro-Windows-User": "P_918713"},
+        json={
+            "windowsUser": "P_918713",
+            "targets": [{"hostName": "PC1", "windowsUser": "a"}],
+        },
+    )
+    assert response.status_code == 400
+    assert "host" in response.json()["detail"]
 
 
 def test_pending_job_claims_running(monkeypatch):

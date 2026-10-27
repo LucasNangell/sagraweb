@@ -16,6 +16,21 @@ const MOCK_BOARD = {
   ],
 };
 
+const MOCK_WINDOW_TABLE = `   Id ProcessName           MainWindowTitle
+   -- -----------           ---------------
+32848 ApplicationFrameHost  Notas Autoadesivas
+ 5472 chrome                Administração do letreiro - Google Chrome
+52344 Cursor                Windows taskbar widget - SagraWeb (Workspace) - Cursor
+ 4592 SAGRA-Letreiro        SAGRA Letreiro
+24032 WINWORD               Manual-Desktop-Widgets-3.7.2.docx  -  Modo de Compatibilidade - Word`;
+
+const MOCK_COMMANDS = [
+  { id: 1, name: "Reiniciar spooler", kind: "bat", content: "net stop spooler", timeoutSec: 60 },
+  { id: 2, name: "Listar janelas", kind: "ps1", content: "# letreiro-capture: janela_id\nGet-Process | Where-Object { $_.MainWindowTitle } | Select-Object Id, ProcessName, MainWindowTitle | Format-Table -AutoSize", timeoutSec: 60 },
+  { id: 3, name: "Ping host", kind: "bat", content: "ping {{host}} -n {{count}}", timeoutSec: 60 },
+  { id: 4, name: "Ativar janela", kind: "ps1", content: "$wshell = New-Object -ComObject wscript.shell; if ($wshell.AppActivate({{janela_id}})) { Start-Sleep -Milliseconds 500; $wshell.SendKeys('{F5}') } else { Write-Warning \"Não foi possível ativar a janela do processo {{janela_id}}.\" }", timeoutSec: 60 },
+];
+
 function sendJson(res: ServerResponse, data: unknown) {
   res.statusCode = 200;
   res.setHeader("Content-Type", "application/json");
@@ -51,7 +66,7 @@ function localPreviewMock(): Connect.NextHandleFunction {
           windowsUser: "usr_sefoc",
           nome: "Dev",
           setor: "SEFOC",
-          version: "2.11.0",
+          version: "2.12.0",
           ponto: "654321",
           online: true,
           hasConfig: true,
@@ -59,44 +74,60 @@ function localPreviewMock(): Connect.NextHandleFunction {
       });
     }
     if (url === "/api/letreiro/commands") {
-      return sendJson(res, {
-        commands: [
-          { id: 1, name: "Reiniciar spooler", kind: "bat", content: "net stop spooler", timeoutSec: 60 },
-          { id: 2, name: "Listar processos", kind: "ps1", content: "Get-Process", timeoutSec: 60 },
-        ],
-      });
+      return sendJson(res, { commands: MOCK_COMMANDS });
     }
-    if (/^\/api\/letreiro\/commands\/\d+\/run$/.test(url)) {
+    const runMatch = url.match(/^\/api\/letreiro\/commands\/(\d+)\/run$/);
+    if (runMatch) {
       req.resume();
+      const command = MOCK_COMMANDS.find((item) => item.id === Number(runMatch[1]));
       jobs.unshift({
         id: jobId++,
-        name: "biblioteca",
-        kind: "bat",
+        name: command?.name ?? "biblioteca",
+        kind: command?.kind ?? "bat",
         hostName: "PC-DEV",
         windowsUser: "usr_sefoc",
         status: "ok",
         exitCode: 0,
-        stdout: "Script da biblioteca executado.",
+        stdout: command?.name === "Listar janelas" ? MOCK_WINDOW_TABLE : "Script da biblioteca executado.",
         stderr: "",
         createdAt: new Date().toISOString(),
       });
       return sendJson(res, { queued: 1 });
     }
     if (url === "/api/letreiro/jobs/run") {
-      req.resume();
-      jobs.unshift({
-        id: jobId++,
-        name: "terminal",
-        kind: "bat",
-        hostName: "PC-DEV",
-        windowsUser: "usr_sefoc",
-        status: "ok",
-        exitCode: 0,
-        stdout: "Resposta de teste do letreiro.",
-        stderr: "",
-        createdAt: new Date().toISOString(),
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+      req.on("end", () => {
+        let stdout = "Resposta de teste do letreiro.";
+        let name = "terminal";
+        let kind = "bat";
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as {
+            content?: string;
+            name?: string;
+            kind?: string;
+          };
+          if (body.content) stdout = `Executado: ${body.content}`;
+          if (body.name) name = body.name;
+          if (body.kind) kind = body.kind;
+        } catch {
+          /* keep defaults */
+        }
+        jobs.unshift({
+          id: jobId++,
+          name,
+          kind,
+          hostName: "PC-DEV",
+          windowsUser: "usr_sefoc",
+          status: "ok",
+          exitCode: 0,
+          stdout,
+          stderr: "",
+          createdAt: new Date().toISOString(),
+        });
+        sendJson(res, { queued: 1 });
       });
-      return sendJson(res, { queued: 1 });
+      return;
     }
     if (url === "/api/letreiro/jobs") return sendJson(res, { jobs });
     if (url === "/api/letreiro/settings") return sendJson(res, { commandPollIntervalSec: 10 });

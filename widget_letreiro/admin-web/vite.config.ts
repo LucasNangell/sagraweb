@@ -29,6 +29,21 @@ const MOCK_COMMANDS = [
   { id: 2, name: "Listar janelas", kind: "ps1", content: "# letreiro-capture: janela_id\nGet-Process | Where-Object { $_.MainWindowTitle } | Select-Object Id, ProcessName, MainWindowTitle | Format-Table -AutoSize", timeoutSec: 60 },
   { id: 3, name: "Ping host", kind: "bat", content: "ping {{host}} -n {{count}}", timeoutSec: 60 },
   { id: 4, name: "Ativar janela", kind: "ps1", content: "$wshell = New-Object -ComObject wscript.shell; if ($wshell.AppActivate({{janela_id}})) { Start-Sleep -Milliseconds 500; $wshell.SendKeys('{F5}') } else { Write-Warning \"Não foi possível ativar a janela do processo {{janela_id}}.\" }", timeoutSec: 60 },
+  { id: 5, name: "Alterar monitor", kind: "ps1", content: `Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class Win32Api {
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+}
+"@
+$proc = Get-Process -Id {{janela_id}} -ErrorAction Stop
+$hWnd = $proc.MainWindowHandle
+$telas = [System.Windows.Forms.Screen]::AllScreens
+$alvo = $telas[{{monitor_id}}]
+[Win32Api]::ShowWindow($hWnd, 1) | Out-Null
+[Win32Api]::SetWindowPos($hWnd, [IntPtr]::Zero, $alvo.Bounds.X, $alvo.Bounds.Y, $alvo.Bounds.Width, $alvo.Bounds.Height, 0x0040) | Out-Null
+"Janela {{janela_id}} movida para o monitor {{monitor_id}}."`, timeoutSec: 60 },
 ];
 
 function sendJson(res: ServerResponse, data: unknown) {
@@ -66,7 +81,7 @@ function localPreviewMock(): Connect.NextHandleFunction {
           windowsUser: "usr_sefoc",
           nome: "Dev",
           setor: "SEFOC",
-          version: "2.13.0",
+          version: "2.13.1",
           ponto: "654321",
           online: true,
           hasConfig: true,

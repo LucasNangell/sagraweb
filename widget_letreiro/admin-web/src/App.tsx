@@ -182,24 +182,24 @@ function LetreiroDisplayFields({
 }) {
   return (
     <>
-      <label className="mt-4 block text-sm text-slate-400">
+      <label className="mt-4 block min-w-0 text-sm text-slate-400">
         Setor padrão
         <input
           list={listId}
-          className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+          className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
           value={cfg.board?.sector ?? ""}
           onChange={(e) => onChange({ ...cfg, board: { ...cfg.board, sector: e.target.value } })}
         />
         <datalist id={listId}>{setores.map((s) => <option key={s} value={s} />)}</datalist>
       </label>
-      <label className="mt-4 block text-sm text-slate-400">
+      <label className="mt-4 block min-w-0 text-sm text-slate-400">
         Largura da barra (px)
         <input
           type="number"
           min={320}
           max={4000}
           step={1}
-          className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+          className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
           value={cfg.window?.width ?? 720}
           onChange={(e) => {
             const width = Number(e.target.value);
@@ -293,71 +293,63 @@ function FilterListFields({
           Nenhum filtro. Adicione um para exibir cards no letreiro.
         </p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[40rem] border-separate border-spacing-y-2 text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-                <th className="px-2 pb-1 font-medium">Setor</th>
-                <th className="px-2 pb-1 font-medium">Situação</th>
-                <th className="px-2 pb-1 font-medium">Fonte</th>
-                <th className="w-14 px-2 pb-1" />
-              </tr>
-            </thead>
-            <tbody>
-              {filters.map((row, index) => (
-                <tr key={row.key} className="align-middle">
-                  <td className="rounded-l-xl border border-r-0 border-slate-800 bg-slate-950 px-2 py-2">
-                    <input
-                      list={listId}
-                      aria-label="Setor"
-                      className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
-                      value={row.setor}
-                      placeholder={cfg.board?.sector || "Setor"}
-                      onChange={(e) => patchFilter(index, { setor: e.target.value })}
-                    />
-                  </td>
-                  <td className="border-y border-slate-800 bg-slate-950 px-2 py-2">
-                    <select
-                      aria-label="Situação"
-                      className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 disabled:text-slate-500"
-                      value={row.fonte === "inbox" ? "" : row.situacao}
-                      disabled={row.fonte === "inbox"}
-                      onChange={(e) => patchFilter(index, { situacao: e.target.value })}
-                    >
-                      <option value="">{row.fonte === "inbox" ? "—" : "Selecione…"}</option>
-                      {situacaoOptions.map((item) => (
-                        <option key={item} value={item}>{item}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="border-y border-slate-800 bg-slate-950 px-2 py-2">
-                    <select
-                      aria-label="Fonte"
-                      className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
-                      value={row.fonte}
-                      onChange={(e) => {
-                        const fonte = e.target.value as FilterFonte;
-                        patchFilter(index, { fonte, situacao: fonte === "inbox" ? "" : row.situacao });
-                      }}
-                    >
-                      <option value="situacao">Situação</option>
-                      <option value="inbox">Inbox</option>
-                    </select>
-                  </td>
-                  <td className="rounded-r-xl border border-l-0 border-slate-800 bg-slate-950 px-2 py-2 text-right">
-                    <button
-                      type="button"
-                      className="inline-flex rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-rose-300"
-                      title="Remover filtro"
-                      onClick={() => removeFilter(index)}
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid gap-2">
+          {filters.map((row, index) => (
+            <div
+              key={row.key}
+              className="grid min-w-0 gap-2 rounded-xl border border-slate-800 bg-slate-950 p-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(7rem,9rem)_auto] lg:items-end"
+            >
+              <label className="min-w-0 text-xs text-slate-500">
+                Setor
+                <input
+                  list={listId}
+                  aria-label="Setor"
+                  className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+                  value={row.setor}
+                  placeholder={cfg.board?.sector || "Setor"}
+                  onChange={(e) => patchFilter(index, { setor: e.target.value })}
+                />
+              </label>
+              <label className="min-w-0 text-xs text-slate-500">
+                Situação
+                <select
+                  aria-label="Situação"
+                  className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 disabled:text-slate-500"
+                  value={row.fonte === "inbox" ? "" : row.situacao}
+                  disabled={row.fonte === "inbox"}
+                  onChange={(e) => patchFilter(index, { situacao: e.target.value })}
+                >
+                  <option value="">{row.fonte === "inbox" ? "—" : "Selecione…"}</option>
+                  {situacaoOptions.map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="min-w-0 text-xs text-slate-500">
+                Fonte
+                <select
+                  aria-label="Fonte"
+                  className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+                  value={row.fonte}
+                  onChange={(e) => {
+                    const fonte = e.target.value as FilterFonte;
+                    patchFilter(index, { fonte, situacao: fonte === "inbox" ? "" : row.situacao });
+                  }}
+                >
+                  <option value="situacao">Situação</option>
+                  <option value="inbox">Inbox</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                className="inline-flex h-10 w-10 items-center justify-center justify-self-end rounded-lg text-slate-400 hover:bg-slate-800 hover:text-rose-300"
+                title="Remover filtro"
+                onClick={() => removeFilter(index)}
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </>
@@ -719,8 +711,10 @@ export default function App() {
     setStatus("Listas de variáveis limpas.");
   }
 
+  const fillView = view === "computers" || view === "library" || view === "history";
+
   return (
-    <div className="min-h-screen lg:grid lg:h-screen lg:grid-cols-[260px_1fr] lg:overflow-hidden">
+    <div className="flex min-h-dvh flex-col lg:grid lg:h-dvh lg:grid-cols-[minmax(13rem,16rem)_minmax(0,1fr)] lg:overflow-hidden">
       <header className="flex items-center justify-between border-b border-slate-800 px-4 py-3 lg:hidden">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-sky-400">SAGRA</p>
@@ -732,7 +726,7 @@ export default function App() {
       </header>
 
       <aside
-        className={`${menuOpen ? "block" : "hidden"} border-b border-slate-800 bg-slate-950/80 p-4 lg:block lg:min-h-0 lg:overflow-auto lg:border-b-0 lg:border-r`}
+        className={`${menuOpen ? "block" : "hidden"} min-w-0 border-b border-slate-800 bg-slate-950/80 p-4 lg:block lg:min-h-0 lg:overflow-auto lg:border-b-0 lg:border-r`}
       >
         <div className="mb-8 hidden lg:block">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-400">SAGRA Letreiro</p>
@@ -771,17 +765,17 @@ export default function App() {
         </button>
       </aside>
 
-      <main className={`p-4 sm:p-6 ${view === "computers" ? "flex min-h-0 flex-col lg:overflow-hidden" : "min-h-0 lg:overflow-auto"}`}>
+      <main className={`min-w-0 p-3 sm:p-4 lg:p-5 ${fillView ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "min-h-0 flex-1 overflow-auto"}`}>
         {error ? (
           <div className="mb-4 shrink-0 rounded-xl border border-rose-500/30 bg-rose-950/40 px-4 py-3 text-sm text-rose-100">{error}</div>
         ) : null}
 
         {view === "computers" ? (
-          <section className="grid min-h-[calc(100dvh-8rem)] flex-1 grid-rows-[minmax(12rem,1fr)_minmax(16rem,1fr)] gap-4 lg:min-h-0">
-            <div className="flex min-h-0 flex-col gap-3 overflow-hidden">
+          <section className="grid min-h-0 flex-1 grid-rows-[minmax(0,0.9fr)_minmax(0,1.15fr)] gap-3 sm:gap-4">
+            <div className="flex min-h-0 min-w-0 flex-col gap-3 overflow-hidden">
               <div className="flex shrink-0 flex-wrap items-end justify-between gap-3">
-                <div>
-                  <h2 className="text-2xl font-bold">Computadores</h2>
+                <div className="min-w-0">
+                  <h2 className="text-xl font-bold sm:text-2xl">Computadores</h2>
                   <p className="text-sm text-slate-400">Clique para selecionar. Duplo clique abre filtros e exibição só daquele usuário.</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -790,18 +784,18 @@ export default function App() {
                   </button>
                 </div>
               </div>
-              <div className="grid shrink-0 gap-3 md:grid-cols-2">
-                <label className="text-sm text-slate-400">
+              <div className="grid shrink-0 gap-3 sm:grid-cols-2">
+                <label className="min-w-0 text-sm text-slate-400">
                   Nome
-                  <input className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={profile.nome} onChange={(e) => setProfile((p) => ({ ...p, nome: e.target.value }))} />
+                  <input className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={profile.nome} onChange={(e) => setProfile((p) => ({ ...p, nome: e.target.value }))} />
                 </label>
-                <label className="text-sm text-slate-400">
+                <label className="min-w-0 text-sm text-slate-400">
                   Setor
-                  <input className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={profile.setor} onChange={(e) => setProfile((p) => ({ ...p, setor: e.target.value }))} />
+                  <input className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={profile.setor} onChange={(e) => setProfile((p) => ({ ...p, setor: e.target.value }))} />
                 </label>
               </div>
               <div className="min-h-0 flex-1 overflow-auto rounded-2xl border border-slate-800 bg-slate-900/80 shadow-card">
-                <table className="min-w-full text-sm">
+                <table className="w-full min-w-[52rem] text-sm">
                   <thead className="sticky top-0 bg-slate-900 text-left text-slate-400">
                     <tr>
                       {["", "Computador", "Usuário", "Nome", "Setor", "Estado", "Ponto", "Versão"].map((h) => (
@@ -821,8 +815,8 @@ export default function App() {
                           onDoubleClick={() => void openClientConfig(row)}
                         >
                           <td className="px-3 py-3"><input type="checkbox" checked={on} readOnly /></td>
-                          <td className="px-3 py-3 font-medium">{row.hostName}</td>
-                          <td className="px-3 py-3">{row.windowsUser}</td>
+                          <td className="max-w-[10rem] truncate px-3 py-3 font-medium" title={row.hostName}>{row.hostName}</td>
+                          <td className="max-w-[10rem] truncate px-3 py-3" title={row.windowsUser}>{row.windowsUser}</td>
                           <td className="px-3 py-3">{row.nome || "—"}</td>
                           <td className="px-3 py-3">{row.setor || "—"}</td>
                           <td className="px-3 py-3">
@@ -840,23 +834,23 @@ export default function App() {
               </div>
             </div>
 
-            <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 shadow-card">
-              <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <TerminalSquare size={16} className="text-sky-400" />
-                  <div>
+            <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 shadow-card">
+              <div className="flex shrink-0 flex-col gap-3 border-b border-slate-800 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-4">
+                <div className="flex min-w-0 items-center gap-2">
+                  <TerminalSquare size={16} className="shrink-0 text-sky-400" />
+                  <div className="min-w-0">
                     <h2 className="font-semibold">Terminal remoto</h2>
                     <p className="text-xs text-slate-400">{selectedRows.length} selecionado(s)</p>
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                   <div className="flex rounded-lg bg-slate-900 p-1">
                     <button type="button" className={`rounded-md px-3 py-1 text-sm ${shell === "bat" ? "bg-slate-800 text-white" : "text-slate-400"}`} onClick={() => { setShell("bat"); chooseLibrary(0); }}>CMD</button>
                     <button type="button" className={`rounded-md px-3 py-1 text-sm ${shell === "ps1" ? "bg-slate-800 text-white" : "text-slate-400"}`} onClick={() => { setShell("ps1"); chooseLibrary(0); }}>PowerShell</button>
                   </div>
                   <select
                     aria-label="Comando da biblioteca"
-                    className="max-w-64 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-100"
+                    className="w-full min-w-0 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-100 sm:w-56"
                     value={libraryId || ""}
                     onChange={(e) => chooseLibrary(Number(e.target.value) || 0)}
                   >
@@ -873,7 +867,7 @@ export default function App() {
               </div>
               <pre ref={logEl} className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap p-4 font-mono text-sm text-emerald-300">{log}</pre>
               <form
-                className="flex shrink-0 flex-col gap-2 border-t border-slate-800 bg-slate-900 p-3"
+                className="flex max-h-[48%] shrink-0 flex-col gap-2 overflow-y-auto border-t border-slate-800 bg-slate-900 p-3"
                 onSubmit={(e) => {
                   e.preventDefault();
                   void sendTerminal(false).catch((ex) => setError(errText(ex)));
@@ -942,8 +936,8 @@ export default function App() {
                     })}
                   </div>
                 ) : null}
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <span className="font-mono text-emerald-400">{shell === "ps1" ? "PS>" : "C:\\>"}</span>
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+                  <span className="shrink-0 font-mono text-emerald-400">{shell === "ps1" ? "PS>" : "C:\\>"}</span>
                   {libraryVarNames.length ? (
                     <span className="min-w-0 flex-1 truncate font-mono text-sm text-slate-300" title={libraryCmd?.name}>
                       {libraryCmd?.name}
@@ -972,7 +966,7 @@ export default function App() {
                       placeholder={libraryCmd ? `Enviar: ${libraryCmd.name}` : "ipconfig /all"}
                     />
                   )}
-                  <div className="flex gap-2">
+                  <div className="flex shrink-0 flex-wrap gap-2">
                     <button type="button" className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void sendTerminal(true).catch((ex) => setError(errText(ex)))}>
                       Todos online
                     </button>
@@ -987,152 +981,162 @@ export default function App() {
         ) : null}
 
         {view === "library" ? (
-          <section className="grid gap-4 xl:grid-cols-[320px_1fr]">
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
-              <input className="mb-3 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="Buscar scripts" value={search} onChange={(e) => setSearch(e.target.value)} />
-              <button className="mb-3 w-full rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => setDraft({ id: 0, name: "", kind: "bat", content: "", timeoutSec: 60 })}>
-                Novo script
-              </button>
-              <div className="grid gap-2">
-                {filteredCommands.map((cmd) => (
-                  <button key={cmd.id} onClick={() => setDraft(cmd)} className={`rounded-xl border px-3 py-3 text-left ${draft.id === cmd.id ? "border-sky-400 bg-slate-950" : "border-slate-800 bg-slate-950/60"}`}>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold">{cmd.name}</span>
-                      <span className="flex items-center gap-1">
-                        {readCaptureVar(cmd.content) ? (
-                          <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-emerald-300">GRAVA</span>
-                        ) : null}
-                        {extractCommandVars(cmd.content).length ? (
-                          <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-sky-300">VARS</span>
-                        ) : null}
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${cmd.kind === "ps1" ? "bg-sky-400 text-slate-950" : "bg-amber-400 text-slate-950"}`}>
-                          {cmd.kind === "ps1" ? "PS1" : "BAT"}
+          <section className="grid min-h-0 flex-1 grid-rows-[minmax(11rem,28vh)_minmax(0,1fr)] gap-3 sm:gap-4 xl:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)]">
+            <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
+              <div className="shrink-0 space-y-3 p-3 sm:p-4">
+                <input className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="Buscar scripts" value={search} onChange={(e) => setSearch(e.target.value)} />
+                <button className="w-full rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => setDraft({ id: 0, name: "", kind: "bat", content: "", timeoutSec: 60 })}>
+                  Novo script
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 pb-3 sm:px-4 sm:pb-4">
+                <div className="grid min-w-0 gap-2">
+                  {filteredCommands.map((cmd) => (
+                    <button key={cmd.id} onClick={() => setDraft(cmd)} className={`min-w-0 overflow-hidden rounded-xl border px-3 py-3 text-left ${draft.id === cmd.id ? "border-sky-400 bg-slate-950" : "border-slate-800 bg-slate-950/60"}`}>
+                      <div className="flex min-w-0 items-start justify-between gap-2">
+                        <span className="min-w-0 flex-1 break-words font-semibold">{cmd.name}</span>
+                        <span className="flex max-w-[46%] shrink-0 flex-wrap items-center justify-end gap-1">
+                          {readCaptureVar(cmd.content) ? (
+                            <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-emerald-300">GRAVA</span>
+                          ) : null}
+                          {extractCommandVars(cmd.content).length ? (
+                            <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-sky-300">VARS</span>
+                          ) : null}
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${cmd.kind === "ps1" ? "bg-sky-400 text-slate-950" : "bg-amber-400 text-slate-950"}`}>
+                            {cmd.kind === "ps1" ? "PS1" : "BAT"}
+                          </span>
                         </span>
-                      </span>
-                    </div>
-                    <p className="mt-1 truncate text-xs text-slate-400">{stripCaptureLine(cmd.content) || "vazio"}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="text-sm text-slate-400">Nome
-                  <input className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} />
-                </label>
-                <label className="text-sm text-slate-400">Timeout
-                  <input type="number" className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={draft.timeoutSec} onChange={(e) => setDraft((d) => ({ ...d, timeoutSec: Number(e.target.value) }))} />
-                </label>
-              </div>
-              <div className="mt-3 flex gap-2">
-                <button className={`rounded-lg px-3 py-1.5 text-sm ${draft.kind === "bat" ? "bg-amber-400 text-slate-950" : "bg-slate-800"}`} onClick={() => setDraft((d) => ({ ...d, kind: "bat", content: writeCaptureVar(d.content, "bat", readCaptureVar(d.content)) }))}>CMD</button>
-                <button className={`rounded-lg px-3 py-1.5 text-sm ${draft.kind === "ps1" ? "bg-sky-400 text-slate-950" : "bg-slate-800"}`} onClick={() => setDraft((d) => ({ ...d, kind: "ps1", content: writeCaptureVar(d.content, "ps1", readCaptureVar(d.content)) }))}>PowerShell</button>
-              </div>
-              <label className="mt-3 block text-sm text-slate-400">
-                Gravar da resposta a variável
-                <input
-                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-slate-100"
-                  value={draftCapture}
-                  onChange={(e) => setDraft((d) => ({ ...d, content: writeCaptureVar(d.content, d.kind, e.target.value) }))}
-                  placeholder="janela_id"
-                />
-                <span className="mt-1 block text-xs text-slate-500">
-                  Se preencher, a saída deste comando entra na lista de <span className="font-mono">{"{{variavel}}"}</span> e permanece até você limpar.
-                </span>
-              </label>
-              <textarea
-                className="mt-3 min-h-64 w-full rounded-xl border border-slate-700 bg-slate-950 p-3 font-mono text-sm"
-                value={stripCaptureLine(draft.content)}
-                onChange={(e) => setDraft((d) => ({ ...d, content: writeCaptureVar(e.target.value, d.kind, readCaptureVar(d.content)) }))}
-                placeholder={'ping {{host}} -n {{count}}'}
-              />
-              <p className="mt-2 text-xs text-slate-500">
-                Use <span className="font-mono text-slate-300">{"{{variavel}}"}</span> no script. Ao executar, o terminal pede esses campos.
-              </p>
-              {draftVarNames.length ? (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {draftVarNames.map((name) => (
-                    <span key={name} className="rounded-full bg-slate-800 px-2 py-0.5 font-mono text-[11px] text-sky-300">
-                      {`{{${name}}}`}
-                    </span>
+                      </div>
+                      <p className="mt-1 overflow-hidden text-ellipsis whitespace-nowrap text-xs text-slate-400">{stripCaptureLine(cmd.content) || "vazio"}</p>
+                    </button>
                   ))}
                 </div>
-              ) : null}
-              <div className="mt-3 flex flex-wrap gap-2">
-                <label className="rounded-lg bg-slate-800 px-3 py-2 text-sm">
-                  Importar arquivo
-                  <input type="file" accept=".bat,.ps1" className="hidden" onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const content = await file.text();
-                    const kind = file.name.toLowerCase().endsWith(".ps1") ? "ps1" : "bat";
-                    setDraft({ id: 0, name: file.name.replace(/\.(bat|ps1)$/i, ""), kind, content, timeoutSec: 60 });
-                  }} />
+              </div>
+            </div>
+            <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
+              <div className="max-h-[42%] shrink-0 space-y-3 overflow-y-auto p-3 sm:p-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="min-w-0 text-sm text-slate-400">Nome
+                    <input className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} />
+                  </label>
+                  <label className="min-w-0 text-sm text-slate-400">Timeout
+                    <input type="number" className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={draft.timeoutSec} onChange={(e) => setDraft((d) => ({ ...d, timeoutSec: Number(e.target.value) }))} />
+                  </label>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button className={`rounded-lg px-3 py-1.5 text-sm ${draft.kind === "bat" ? "bg-amber-400 text-slate-950" : "bg-slate-800"}`} onClick={() => setDraft((d) => ({ ...d, kind: "bat", content: writeCaptureVar(d.content, "bat", readCaptureVar(d.content)) }))}>CMD</button>
+                  <button className={`rounded-lg px-3 py-1.5 text-sm ${draft.kind === "ps1" ? "bg-sky-400 text-slate-950" : "bg-slate-800"}`} onClick={() => setDraft((d) => ({ ...d, kind: "ps1", content: writeCaptureVar(d.content, "ps1", readCaptureVar(d.content)) }))}>PowerShell</button>
+                </div>
+                <label className="block text-sm text-slate-400">
+                  Gravar da resposta a variável
+                  <input
+                    className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-slate-100"
+                    value={draftCapture}
+                    onChange={(e) => setDraft((d) => ({ ...d, content: writeCaptureVar(d.content, d.kind, e.target.value) }))}
+                    placeholder="janela_id"
+                  />
+                  <span className="mt-1 block text-xs text-slate-500">
+                    Se preencher, a saída deste comando entra na lista de <span className="font-mono">{"{{variavel}}"}</span> e permanece até você limpar.
+                  </span>
                 </label>
-                <button className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void saveCommand().catch((ex) => setError(errText(ex)))}>Salvar</button>
-                <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => {
-                  setShell(draft.kind === "ps1" ? "ps1" : "bat");
-                  if (draft.id > 0) {
-                    chooseLibrary(draft.id);
-                    setPrompt("");
-                  } else {
-                    chooseLibrary(0);
-                    setPrompt(draft.content);
-                  }
-                  setView("computers");
-                }}>Usar no terminal</button>
-                {draft.id > 0 ? (
-                  <button className="rounded-lg bg-rose-900 px-3 py-2 text-sm" onClick={() => void api.deleteCommand(draft.id).then(loadAll)}>Excluir</button>
+              </div>
+              <div className="min-h-0 min-w-0 flex-1">
+                <textarea
+                  className="block h-full min-h-0 w-full min-w-0 resize-none overflow-auto border-y border-slate-700 bg-slate-950 p-3 font-mono text-sm"
+                  value={stripCaptureLine(draft.content)}
+                  onChange={(e) => setDraft((d) => ({ ...d, content: writeCaptureVar(e.target.value, d.kind, readCaptureVar(d.content)) }))}
+                  placeholder={'ping {{host}} -n {{count}}'}
+                />
+              </div>
+              <div className="shrink-0 space-y-2 border-t border-slate-800 bg-slate-900/90 p-3 sm:p-4">
+                <p className="text-xs text-slate-500">
+                  Use <span className="font-mono text-slate-300">{"{{variavel}}"}</span> no script. Ao executar, o terminal pede esses campos.
+                </p>
+                {draftVarNames.length ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {draftVarNames.map((name) => (
+                      <span key={name} className="rounded-full bg-slate-800 px-2 py-0.5 font-mono text-[11px] text-sky-300">
+                        {`{{${name}}}`}
+                      </span>
+                    ))}
+                  </div>
                 ) : null}
-                {draft.id > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  <label className="rounded-lg bg-slate-800 px-3 py-2 text-sm">
+                    Importar arquivo
+                    <input type="file" accept=".bat,.ps1" className="hidden" onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const content = await file.text();
+                      const kind = file.name.toLowerCase().endsWith(".ps1") ? "ps1" : "bat";
+                      setDraft({ id: 0, name: file.name.replace(/\.(bat|ps1)$/i, ""), kind, content, timeoutSec: 60 });
+                    }} />
+                  </label>
+                  <button className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void saveCommand().catch((ex) => setError(errText(ex)))}>Salvar</button>
                   <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => {
-                    if (draftVarNames.length) {
+                    setShell(draft.kind === "ps1" ? "ps1" : "bat");
+                    if (draft.id > 0) {
                       chooseLibrary(draft.id);
-                      setView("computers");
-                      setStatus("Preencha as variáveis no terminal para enviar.");
-                      return;
+                      setPrompt("");
+                    } else {
+                      chooseLibrary(0);
+                      setPrompt(draft.content);
                     }
-                    void api.runCommand(draft.id, selectedRows.map((r) => ({ hostName: r.hostName, windowsUser: r.windowsUser })), false).then(async (r) => {
-                      setStatus(`${r.queued} job(s)`);
-                      burstUntil.current = Date.now() + 120_000;
-                      setLog((prev) => `${prev}${shell === "ps1" || draft.kind === "ps1" ? "PS>" : "C:\\>"} ${draft.content.trim()}\naguardando resposta (${r.queued})…\n`);
-                      setView("computers");
-                      const list = await api.jobs();
-                      applyJobs(list.jobs ?? []);
-                    });
-                  }}>Enviar selecionados</button>
-                ) : null}
+                    setView("computers");
+                  }}>Usar no terminal</button>
+                  {draft.id > 0 ? (
+                    <button className="rounded-lg bg-rose-900 px-3 py-2 text-sm" onClick={() => void api.deleteCommand(draft.id).then(loadAll)}>Excluir</button>
+                  ) : null}
+                  {draft.id > 0 ? (
+                    <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => {
+                      if (draftVarNames.length) {
+                        chooseLibrary(draft.id);
+                        setView("computers");
+                        setStatus("Preencha as variáveis no terminal para enviar.");
+                        return;
+                      }
+                      void api.runCommand(draft.id, selectedRows.map((r) => ({ hostName: r.hostName, windowsUser: r.windowsUser })), false).then(async (r) => {
+                        setStatus(`${r.queued} job(s)`);
+                        burstUntil.current = Date.now() + 120_000;
+                        setLog((prev) => `${prev}${shell === "ps1" || draft.kind === "ps1" ? "PS>" : "C:\\>"} ${draft.content.trim()}\naguardando resposta (${r.queued})…\n`);
+                        setView("computers");
+                        const list = await api.jobs();
+                        applyJobs(list.jobs ?? []);
+                      });
+                    }}>Enviar selecionados</button>
+                  ) : null}
+                </div>
               </div>
             </div>
           </section>
         ) : null}
 
         {view === "history" ? (
-          <section className="grid gap-4 lg:grid-cols-[280px_1fr]">
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-3">
+          <section className="grid min-h-0 flex-1 grid-rows-[minmax(10rem,28vh)_minmax(0,1fr)] gap-3 sm:gap-4 lg:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+            <div className="min-h-0 min-w-0 overflow-x-hidden overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900/80 p-3">
               {jobs.map((job) => (
-                <button key={job.id} onClick={() => setJobId(job.id)} className={`mb-2 w-full rounded-xl px-3 py-2 text-left ${activeJob?.id === job.id ? "bg-slate-800" : ""}`}>
-                  <div className="font-medium">{job.name}</div>
-                  <div className="text-xs text-slate-400">{job.hostName} · {job.status}</div>
+                <button key={job.id} onClick={() => setJobId(job.id)} className={`mb-2 w-full min-w-0 overflow-hidden rounded-xl px-3 py-2 text-left ${activeJob?.id === job.id ? "bg-slate-800" : ""}`}>
+                  <div className="break-words font-medium">{job.name}</div>
+                  <div className="truncate text-xs text-slate-400">{job.hostName} · {job.status}</div>
                 </button>
               ))}
             </div>
-            <pre className="min-h-80 overflow-auto rounded-2xl border border-slate-800 bg-slate-950 p-4 font-mono text-sm text-emerald-300">
+            <pre className="min-h-0 min-w-0 overflow-auto whitespace-pre-wrap break-words rounded-2xl border border-slate-800 bg-slate-950 p-4 font-mono text-sm text-emerald-300">
               {activeJob ? `${activeJob.stdout || ""}${activeJob.stderr ? `\nSTDERR:\n${activeJob.stderr}` : ""}` : "Sem saída."}
             </pre>
           </section>
         ) : null}
 
         {view === "settings" ? (
-          <section className="mx-auto flex w-full max-w-6xl flex-col gap-4 pb-8">
-            <div className={`grid gap-4 ${!userAjustes ? "lg:grid-cols-2" : ""}`}>
+          <section className="mx-auto flex w-full max-w-6xl min-w-0 flex-col gap-4 pb-8">
+            <div className={`grid min-w-0 gap-4 ${!userAjustes ? "xl:grid-cols-2" : ""}`}>
               {!userAjustes ? (
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+                <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:p-5">
                   <h2 className="text-xl font-bold">Conexão</h2>
                   <p className="mt-1 text-sm text-slate-400">Conta e API deste computador.</p>
                   <div className="mt-4 grid gap-3">
                     <Field label="API" value={localCfg.apiBaseUrl ?? ""} onChange={(v) => patchLocal({ ...localCfg, apiBaseUrl: v })} />
-                    <div className="grid gap-3 md:grid-cols-2">
+                    <div className="grid gap-3 sm:grid-cols-2">
                       <Field label="Ponto" value={localCfg.ponto ?? ""} onChange={(v) => patchLocal({ ...localCfg, ponto: v })} />
                       <Field label="Nome" value={localCfg.nome ?? ""} onChange={(v) => patchLocal({ ...localCfg, nome: v })} />
                     </div>
@@ -1144,15 +1148,15 @@ export default function App() {
                   </div>
                 </div>
               ) : null}
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+              <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:p-5">
                 <h2 className="text-xl font-bold">Letreiro</h2>
                 <p className="mt-1 text-sm text-slate-400">Aparência, tamanho da barra e filtro OS/SP.</p>
                 <LetreiroDisplayFields cfg={localCfg} onChange={patchLocal} setores={setores} listId="setores-list" />
               </div>
             </div>
 
-            <div className={`grid gap-4 ${!userAjustes ? "xl:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)]" : ""}`}>
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+            <div className={`grid min-w-0 gap-4 ${!userAjustes ? "2xl:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)]" : ""}`}>
+              <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:p-5">
                 <FilterListFields
                   cfg={localCfg}
                   onChange={patchLocal}
@@ -1170,16 +1174,16 @@ export default function App() {
               </div>
 
               {!userAjustes ? (
-                <div className="space-y-4">
-                  <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+                <div className="min-w-0 space-y-4">
+                  <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:p-5">
                     <h2 className="text-lg font-bold">Intervalo de comandos</h2>
                     <p className="mt-1 text-sm text-slate-400">Todos os letreiros consultam jobs neste intervalo.</p>
-                    <div className="mt-3 flex gap-2">
+                    <div className="mt-3 flex min-w-0 flex-wrap gap-2">
                       <input type="number" min={1} max={120} className="w-24 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2" value={pollSec} onChange={(e) => setPollSec(Number(e.target.value))} />
                       <button className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void api.saveSettings(pollSec).then(() => setStatus(`Poll = ${pollSec}s`))}>Aplicar</button>
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+                  <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:p-5">
                     <h2 className="text-lg font-bold">Configuração remota</h2>
                     <p className="mt-1 text-sm text-slate-400">
                       Filtros e exibição de cada letreiro são editados com duplo clique na lista de computadores. A posição da faixa permanece no PC de destino.
@@ -1204,10 +1208,10 @@ export default function App() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="client-config-title"
-            className="my-auto flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
+            className="my-auto flex max-h-[min(90vh,100dvh-2rem)] w-full max-w-5xl min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-800 px-5 py-4">
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-800 px-4 py-4 sm:px-5">
               <div>
                 <h2 id="client-config-title" className="text-xl font-bold">Filtros e exibição</h2>
                 <p className="mt-1 text-sm text-slate-400">
@@ -1225,7 +1229,7 @@ export default function App() {
                 <X size={18} />
               </button>
             </div>
-            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-5">
               <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
                 <h3 className="text-lg font-bold">Letreiro</h3>
                 <p className="mt-1 text-sm text-slate-400">Aparência, tamanho da barra e filtro OS/SP.</p>
@@ -1247,7 +1251,7 @@ export default function App() {
                 />
               </div>
             </div>
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-slate-800 bg-slate-900 px-5 py-4">
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-slate-800 bg-slate-900 px-4 py-4 sm:px-5">
               <button
                 type="button"
                 className="rounded-lg bg-slate-800 px-3 py-2 text-sm"
@@ -1274,9 +1278,9 @@ export default function App() {
 
 function Field({ label, value, onChange, password }: { label: string; value: string; onChange: (v: string) => void; password?: boolean }) {
   return (
-    <label className="text-sm text-slate-400">
+    <label className="min-w-0 text-sm text-slate-400">
       {label}
-      <input type={password ? "password" : "text"} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={value} onChange={(e) => onChange(e.target.value)} />
+      <input type={password ? "password" : "text"} className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={value} onChange={(e) => onChange(e.target.value)} />
     </label>
   );
 }

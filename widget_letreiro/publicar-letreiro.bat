@@ -49,9 +49,9 @@ echo [OK] Ultima versao: !ULTIMO!  ^(v!ULTIMA_VER!^)
 echo.
 echo ===== Copiando =====
 set "COPIADOS=0"
-call :copia "!ULTIMO!" "%DESTINO1%"
+call :copia "!ULTIMO!" "!DESTINO1!"
 if not errorlevel 1 set /a COPIADOS+=1
-call :copia "!ULTIMO!" "%DESTINO2%"
+call :copia "!ULTIMO!" "!DESTINO2!"
 if not errorlevel 1 set /a COPIADOS+=1
 
 if !COPIADOS! EQU 0 (
@@ -69,18 +69,18 @@ exit /b 0
 :copia
 set "ARQ=%~1"
 set "DST=%~2"
-if not exist "%DST%" mkdir "%DST%" 2>nul
-if not exist "%DST%" (
-    echo [AVISO] Destino indisponivel: %DST%
+if not exist "!DST!" mkdir "!DST!" 2>nul
+if not exist "!DST!" (
+    echo [AVISO] Destino indisponivel: "!DST!"
     exit /b 1
 )
-echo Apagando setups antigos em "%DST%"
-del /f /q "%DST%\SAGRA-Letreiro-Setup-*.exe" 2>nul
-robocopy "%ORIGEM%" "%DST%" "%ARQ%" /J /MT:8 /NFL /NDL /NJH /NJS /NP
+echo Apagando setups antigos em "!DST!"
+del /f /q "!DST!\SAGRA-Letreiro-Setup-*.exe" 2>nul
+robocopy "!ORIGEM!" "!DST!" "!ARQ!" /J /MT:8 /NFL /NDL /NJH /NJS /NP
 if errorlevel 8 (
-    echo [ERRO] robocopy falhou para %DST%
+    echo [ERRO] robocopy falhou para "!DST!"
     exit /b 1
 )
-echo [OK] Copiado: %DST%\%ARQ%
+echo [OK] Copiado: "!DST!\!ARQ!"
 exit /b 0
 

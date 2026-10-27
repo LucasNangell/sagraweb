@@ -32,6 +32,9 @@ function localPreviewMock(): Connect.NextHandleFunction {
     window: { width: 720, speedPxPerSec: 40, opacity: 0.95, transparentBg: false },
   };
   const jobs: Record<string, unknown>[] = [];
+  const remoteByTarget: Record<string, unknown> = {
+    "PC-DEV\nusr_sefoc": { ...config },
+  };
   let jobId = 1;
   return (req: IncomingMessage, res: ServerResponse, next: Connect.NextFunction) => {
     const url = (req.url ?? "").split("?")[0];
@@ -48,7 +51,7 @@ function localPreviewMock(): Connect.NextHandleFunction {
           windowsUser: "usr_sefoc",
           nome: "Dev",
           setor: "SEFOC",
-          version: "2.10.0",
+          version: "2.11.0",
           ponto: "654321",
           online: true,
           hasConfig: true,
@@ -97,6 +100,33 @@ function localPreviewMock(): Connect.NextHandleFunction {
     }
     if (url === "/api/letreiro/jobs") return sendJson(res, { jobs });
     if (url === "/api/letreiro/settings") return sendJson(res, { commandPollIntervalSec: 10 });
+    if (url === "/api/letreiro/config") {
+      if (req.method === "PUT") {
+        const chunks: Buffer[] = [];
+        req.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+        req.on("end", () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as {
+              payload?: unknown;
+              hostName?: string;
+              targetUser?: string;
+              applyToAll?: boolean;
+            };
+            if (!body.applyToAll && body.hostName && body.targetUser) {
+              remoteByTarget[`${body.hostName}\n${body.targetUser}`] = body.payload ?? {};
+            }
+            sendJson(res, { ok: true });
+          } catch {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ detail: "payload inválido" }));
+          }
+        });
+        return;
+      }
+      const query = new URL(req.url ?? "/", "http://letreiro.local").searchParams;
+      const key = `${query.get("host") ?? ""}\n${query.get("user") ?? ""}`;
+      return sendJson(res, { payload: remoteByTarget[key] ?? { ...config } });
+    }
     next();
   };
 }

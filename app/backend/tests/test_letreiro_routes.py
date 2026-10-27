@@ -162,6 +162,47 @@ def test_put_config_apply_to_all(monkeypatch):
     assert inserts[1][1][0] == "PC2"
 
 
+def test_put_config_one_user_does_not_touch_others(monkeypatch):
+    calls = []
+
+    def fake_exec(sql, params=None):
+        calls.append((sql, params))
+        return []
+
+    monkeypatch.setattr(letreiro_routes.db, "execute_query", fake_exec)
+    payload = {
+        "board": {
+            "sector": "Papelaria",
+            "showOs": True,
+            "showSp": False,
+            "columns": [{"id": "col_0", "title": "Em Execução", "statuses": ["Em Execução"]}],
+        },
+        "window": {"width": 900, "opacity": 0.8, "speedPxPerSec": 60},
+    }
+    response = _client().put(
+        "/api/letreiro/config",
+        headers={"X-Letreiro-Windows-User": "P_918713"},
+        json={
+            "windowsUser": "P_918713",
+            "applyToAll": False,
+            "hostName": "PC-ALVO",
+            "targetUser": "usr_sefoc",
+            "payload": payload,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["updated"] == 1
+    assert not any("FROM tabLetreiroInstancia" in (c[0] or "") for c in calls)
+    inserts = [c for c in calls if c[1] and len(c[1]) == 4]
+    assert len(inserts) == 1
+    assert inserts[0][1][0] == "PC-ALVO"
+    assert inserts[0][1][1] == "usr_sefoc"
+    stored = inserts[0][1][2]
+    assert "Papelaria" in stored
+    assert "col_0" in stored
+    assert "900" in stored
+
+
 def test_put_instance_profile_forbidden():
     response = _client().put(
         "/api/letreiro/instances",

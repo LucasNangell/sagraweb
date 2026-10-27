@@ -626,7 +626,7 @@ public class LetreiroAdminTests
     }
 
     [Fact]
-    public void MergeRemoteKeepsLocalPositionAndWidth()
+    public void MergeRemoteKeepsLocalPositionAndAppliesRemoteDisplay()
     {
         var local = ConfigStore.Normalize(new AppConfig
         {
@@ -637,12 +637,21 @@ public class LetreiroAdminTests
         {
             Ponto = "99",
             Password = "segredo",
-            Board = new BoardConfig { Sector = "Papelaria", ShowOs = true, ShowSp = false },
+            Board = new BoardConfig
+            {
+                Sector = "Papelaria",
+                ShowOs = true,
+                ShowSp = false,
+                Columns =
+                [
+                    new BoardColumn { Id = "col_0", Title = "Em Execução", Statuses = ["Em Execução"], Sector = "Papelaria" },
+                ],
+            },
             Window = new WindowConfig { X = 8, Width = 400, Opacity = 0.8, SpeedPxPerSec = 60, TransparentBg = true },
         });
         var merged = ConfigStore.MergeRemote(local, remote);
         Assert.Equal(40, merged.Window.X);
-        Assert.Equal(900, merged.Window.Width);
+        Assert.Equal(400, merged.Window.Width);
         Assert.Equal(0.8, merged.Window.Opacity);
         Assert.Equal(60, merged.Window.SpeedPxPerSec);
         Assert.True(merged.Window.TransparentBg);
@@ -650,6 +659,11 @@ public class LetreiroAdminTests
         Assert.Equal("segredo", merged.Password);
         Assert.Equal("Papelaria", merged.Board.Sector);
         Assert.False(merged.Board.ShowSp);
+        Assert.Single(merged.Board.Columns);
+        Assert.Equal("Em Execução", merged.Board.Columns[0].Title);
+        var remoteOnly = ConfigStore.ForRemote(merged);
+        Assert.Null(remoteOnly.Window.X);
+        Assert.Equal(400, remoteOnly.Window.Width);
     }
 }
 

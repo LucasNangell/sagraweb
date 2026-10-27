@@ -193,6 +193,7 @@ public static class ConfigStore
         var n = Normalize(config);
         n.Window = new WindowConfig
         {
+            Width = n.Window.Width,
             Opacity = n.Window.Opacity,
             SpeedPxPerSec = n.Window.SpeedPxPerSec,
             TransparentBg = n.Window.TransparentBg,
@@ -204,7 +205,6 @@ public static class ConfigStore
     {
         var merged = Normalize(remote);
         merged.Window.X = local.Window.X;
-        merged.Window.Width = local.Window.Width <= 0 ? 720 : local.Window.Width;
         return Normalize(merged);
     }
 

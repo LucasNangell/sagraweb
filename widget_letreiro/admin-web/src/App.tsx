@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   BookMarked,
   Clock3,
@@ -122,6 +122,236 @@ function columnsFromFilters(filters: DisplayFilter[]): BoardColumn[] {
   });
 }
 
+const DEFAULT_COLUMNS: BoardColumn[] = [
+  { id: "col_0", title: "p/ Triagem", statuses: ["Saída p/", "Saída parcial p/", "Entrada Inicial", "Tramit. de Prova p/", "Tramit. de Prévia p/", "Comentário"] },
+  { id: "col_1", title: "p/ Execução", statuses: ["Em Execução", "Recebido"] },
+  { id: "col_2", title: "Prob. Téc.", statuses: ["Problemas Técnicos", "Problema Técnico"] },
+  { id: "col_3", title: "enviar E-mail", statuses: ["Encam. de Docum."] },
+];
+
+function seedClientConfig(row: Instance, payload: AppConfig | null): AppConfig {
+  const base = payload ?? {};
+  const columns = base.board?.columns?.length ? base.board.columns : DEFAULT_COLUMNS;
+  return {
+    ...base,
+    ponto: base.ponto || "654321",
+    nome: base.nome || "usr_sefoc",
+    board: {
+      sector: base.board?.sector || row.setor || "SEFOC",
+      showOs: base.board?.showOs !== false,
+      showSp: base.board?.showSp !== false,
+      columns,
+      columnCount: columns.length,
+    },
+    window: {
+      width: base.window?.width ?? 720,
+      opacity: base.window?.opacity ?? 0.95,
+      speedPxPerSec: base.window?.speedPxPerSec ?? 40,
+      transparentBg: !!base.window?.transparentBg,
+    },
+  };
+}
+
+function withFilters(cfg: AppConfig, next: DisplayFilter[]): AppConfig {
+  const cols = columnsFromFilters(next);
+  return { ...cfg, board: { ...cfg.board, columns: cols, columnCount: cols.length } };
+}
+
+function LetreiroDisplayFields({
+  cfg,
+  onChange,
+  setores,
+  listId,
+}: {
+  cfg: AppConfig;
+  onChange: (next: AppConfig) => void;
+  setores: string[];
+  listId: string;
+}) {
+  return (
+    <>
+      <label className="mt-4 block text-sm text-slate-400">
+        Setor padrão
+        <input
+          list={listId}
+          className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+          value={cfg.board?.sector ?? ""}
+          onChange={(e) => onChange({ ...cfg, board: { ...cfg.board, sector: e.target.value } })}
+        />
+        <datalist id={listId}>{setores.map((s) => <option key={s} value={s} />)}</datalist>
+      </label>
+      <label className="mt-4 block text-sm text-slate-400">
+        Largura da barra (px)
+        <input
+          type="number"
+          min={320}
+          max={4000}
+          step={1}
+          className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+          value={cfg.window?.width ?? 720}
+          onChange={(e) => {
+            const width = Number(e.target.value);
+            if (!Number.isFinite(width)) return;
+            onChange({ ...cfg, window: { ...cfg.window, width } });
+          }}
+        />
+        <span className="mt-1 block text-xs text-slate-500">Entre 320 e 4000. Arrastar a faixa só move a posição.</span>
+      </label>
+      <label className="mt-4 block text-sm text-slate-400">
+        Velocidade do deslize ({Math.round(cfg.window?.speedPxPerSec ?? 40)} px/s)
+        <input type="range" min={8} max={160} className="mt-2 w-full" value={cfg.window?.speedPxPerSec ?? 40} onChange={(e) => onChange({ ...cfg, window: { ...cfg.window, speedPxPerSec: Number(e.target.value) } })} />
+      </label>
+      <label className="mt-3 block text-sm text-slate-400">
+        Opacidade ({Math.round((cfg.window?.opacity ?? 0.95) * 100)}%)
+        <input type="range" min={0.4} max={1} step={0.01} className="mt-2 w-full" value={cfg.window?.opacity ?? 0.95} onChange={(e) => onChange({ ...cfg, window: { ...cfg.window, opacity: Number(e.target.value) } })} />
+      </label>
+      <label className="mt-3 flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={!!cfg.window?.transparentBg} onChange={(e) => onChange({ ...cfg, window: { ...cfg.window, transparentBg: e.target.checked } })} />
+        Fundo transparente
+      </label>
+      <div className="mt-3 flex flex-wrap gap-4 text-sm">
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={cfg.board?.showOs !== false} onChange={(e) => onChange({ ...cfg, board: { ...cfg.board, showOs: e.target.checked } })} />
+          OS (nº &lt; 5000)
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={cfg.board?.showSp !== false} onChange={(e) => onChange({ ...cfg, board: { ...cfg.board, showSp: e.target.checked } })} />
+          SP (nº ≥ 5000)
+        </label>
+      </div>
+    </>
+  );
+}
+
+function FilterListFields({
+  cfg,
+  onChange,
+  onError,
+  setores,
+  situacoes,
+  listId,
+  actions,
+}: {
+  cfg: AppConfig;
+  onChange: (next: AppConfig) => void;
+  onError?: (msg: string) => void;
+  setores: string[];
+  situacoes: string[];
+  listId: string;
+  actions?: ReactNode;
+}) {
+  const filters = filtersFromColumns(cfg.board?.columns ?? []);
+  const situacaoOptions = [...new Set([...situacoes, ...filters.map((row) => row.situacao).filter(Boolean)])];
+
+  function patchFilter(index: number, patch: Partial<DisplayFilter>) {
+    onChange(withFilters(cfg, filters.map((row, i) => (i === index ? { ...row, ...patch } : row))));
+  }
+
+  function addFilter() {
+    onChange(withFilters(cfg, [
+      ...filters,
+      { key: `new-${Date.now()}`, setor: cfg.board?.sector ?? "", situacao: "", fonte: "situacao" },
+    ]));
+  }
+
+  function removeFilter(index: number) {
+    if (filters.length <= 1) return onError?.("É necessário pelo menos um filtro.");
+    onChange(withFilters(cfg, filters.filter((_, i) => i !== index)));
+  }
+
+  return (
+    <>
+      <datalist id={listId}>{setores.map((s) => <option key={s} value={s} />)}</datalist>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold">Filtros</h2>
+          <p className="mt-1 max-w-xl text-sm text-slate-400">
+            Cada linha vira um card na faixa. Escolha setor, situação e a fonte dos dados.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={addFilter}>
+            <Plus size={16} /> Adicionar
+          </button>
+          {actions}
+        </div>
+      </div>
+      {filters.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-slate-700 px-4 py-8 text-center text-sm text-slate-400">
+          Nenhum filtro. Adicione um para exibir cards no letreiro.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[40rem] border-separate border-spacing-y-2 text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                <th className="px-2 pb-1 font-medium">Setor</th>
+                <th className="px-2 pb-1 font-medium">Situação</th>
+                <th className="px-2 pb-1 font-medium">Fonte</th>
+                <th className="w-14 px-2 pb-1" />
+              </tr>
+            </thead>
+            <tbody>
+              {filters.map((row, index) => (
+                <tr key={row.key} className="align-middle">
+                  <td className="rounded-l-xl border border-r-0 border-slate-800 bg-slate-950 px-2 py-2">
+                    <input
+                      list={listId}
+                      aria-label="Setor"
+                      className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+                      value={row.setor}
+                      placeholder={cfg.board?.sector || "Setor"}
+                      onChange={(e) => patchFilter(index, { setor: e.target.value })}
+                    />
+                  </td>
+                  <td className="border-y border-slate-800 bg-slate-950 px-2 py-2">
+                    <select
+                      aria-label="Situação"
+                      className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 disabled:text-slate-500"
+                      value={row.fonte === "inbox" ? "" : row.situacao}
+                      disabled={row.fonte === "inbox"}
+                      onChange={(e) => patchFilter(index, { situacao: e.target.value })}
+                    >
+                      <option value="">{row.fonte === "inbox" ? "—" : "Selecione…"}</option>
+                      {situacaoOptions.map((item) => (
+                        <option key={item} value={item}>{item}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="border-y border-slate-800 bg-slate-950 px-2 py-2">
+                    <select
+                      aria-label="Fonte"
+                      className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+                      value={row.fonte}
+                      onChange={(e) => {
+                        const fonte = e.target.value as FilterFonte;
+                        patchFilter(index, { fonte, situacao: fonte === "inbox" ? "" : row.situacao });
+                      }}
+                    >
+                      <option value="situacao">Situação</option>
+                      <option value="inbox">Inbox</option>
+                    </select>
+                  </td>
+                  <td className="rounded-r-xl border border-l-0 border-slate-800 bg-slate-950 px-2 py-2 text-right">
+                    <button
+                      type="button"
+                      className="inline-flex rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-rose-300"
+                      title="Remover filtro"
+                      onClick={() => removeFilter(index)}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState<View>("computers");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -145,8 +375,10 @@ export default function App() {
   const [draft, setDraft] = useState<Command>({ id: 0, name: "", kind: "bat", content: "", timeoutSec: 60 });
   const [search, setSearch] = useState("");
   const [profile, setProfile] = useState({ nome: "", setor: "" });
-  const [cfg, setCfg] = useState<AppConfig>({});
   const [localCfg, setLocalCfg] = useState<AppConfig>({});
+  const [clientEdit, setClientEdit] = useState<{ row: Instance; cfg: AppConfig } | null>(null);
+  const [clientBusy, setClientBusy] = useState(false);
+  const clickTimer = useRef(0);
   const [setores, setSetores] = useState<string[]>(["SEFOC", "Papelaria", "Gravação"]);
   const [situacoes, setSituacoes] = useState<string[]>(DEFAULT_SITUACOES);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -265,6 +497,15 @@ export default function App() {
     logEl.current?.scrollTo({ top: logEl.current.scrollHeight });
   }, [log]);
 
+  useEffect(() => {
+    if (!clientEdit) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !clientBusy) setClientEdit(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [clientEdit, clientBusy]);
+
   function toggle(row: Instance) {
     const id = keyOf(row);
     setSelected((prev) => {
@@ -284,54 +525,60 @@ export default function App() {
     await loadAll();
   }
 
-  async function loadConfig() {
-    const row = selectedRows[0];
-    if (!row) return setError("Selecione um computador.");
-    const data = await api.getConfig(row.hostName, row.windowsUser);
-    setCfg(data.payload ?? {});
-    setView("settings");
-  }
-
-  async function saveConfig(applyToAll = false) {
-    const row = selectedRows[0];
-    await api.putConfig(cfg, row?.hostName, row?.windowsUser, applyToAll);
-    setStatus(applyToAll ? "Configuração aplicada a todos." : "Configuração gravada.");
-  }
-
-  const filters = useMemo(() => filtersFromColumns(localCfg.board?.columns ?? []), [localCfg.board?.columns]);
-  const situacaoOptions = useMemo(() => {
-    const extra = filters.map((row) => row.situacao).filter(Boolean);
-    return [...new Set([...situacoes, ...extra])];
-  }, [situacoes, filters]);
-
   function patchLocal(next: AppConfig) {
     setLocalCfg(next);
   }
 
-  function setFilters(next: DisplayFilter[]) {
-    const cols = columnsFromFilters(next);
-    patchLocal({ ...localCfg, board: { ...localCfg.board, columns: cols, columnCount: cols.length } });
+  function onRowClick(row: Instance) {
+    if (clickTimer.current) window.clearTimeout(clickTimer.current);
+    clickTimer.current = window.setTimeout(() => {
+      clickTimer.current = 0;
+      toggle(row);
+    }, 280);
   }
 
-  function patchFilter(index: number, patch: Partial<DisplayFilter>) {
-    setFilters(filters.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  async function openClientConfig(row: Instance) {
+    if (clickTimer.current) {
+      window.clearTimeout(clickTimer.current);
+      clickTimer.current = 0;
+    }
+    setError("");
+    setSelected(new Set([keyOf(row)]));
+    setProfile({ nome: row.nome ?? "", setor: row.setor ?? "" });
+    try {
+      const data = await api.getConfig(row.hostName, row.windowsUser);
+      setClientEdit({ row, cfg: seedClientConfig(row, data.payload) });
+    } catch (ex) {
+      setError(errText(ex));
+    }
   }
 
-  function addFilter() {
-    setFilters([
-      ...filters,
-      {
-        key: `new-${Date.now()}`,
-        setor: localCfg.board?.sector ?? "",
-        situacao: "",
-        fonte: "situacao",
-      },
-    ]);
-  }
-
-  function removeFilter(index: number) {
-    if (filters.length <= 1) return setError("É necessário pelo menos um filtro.");
-    setFilters(filters.filter((_, i) => i !== index));
+  async function applyClientConfig() {
+    if (!clientEdit) return;
+    const { row, cfg } = clientEdit;
+    const cols = cfg.board?.columns ?? [];
+    if (cols.length === 0) return setError("É necessário pelo menos um filtro.");
+    setClientBusy(true);
+    setError("");
+    try {
+      const payload: AppConfig = {
+        ...cfg,
+        board: { ...cfg.board, columns: cols, columnCount: cols.length },
+        window: {
+          width: cfg.window?.width ?? 720,
+          opacity: cfg.window?.opacity ?? 0.95,
+          speedPxPerSec: cfg.window?.speedPxPerSec ?? 40,
+          transparentBg: !!cfg.window?.transparentBg,
+        },
+      };
+      await api.putConfig(payload, row.hostName, row.windowsUser, false);
+      setStatus(`Filtros e exibição aplicados em ${row.hostName} (${row.windowsUser}).`);
+      setClientEdit(null);
+    } catch (ex) {
+      setError(errText(ex));
+    } finally {
+      setClientBusy(false);
+    }
   }
 
   async function saveLocal() {
@@ -462,12 +709,9 @@ export default function App() {
               <div className="flex shrink-0 flex-wrap items-end justify-between gap-3">
                 <div>
                   <h2 className="text-2xl font-bold">Computadores</h2>
-                  <p className="text-sm text-slate-400">Selecione um ou vários para o terminal e a configuração remota.</p>
+                  <p className="text-sm text-slate-400">Clique para selecionar. Duplo clique abre filtros e exibição só daquele usuário.</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void loadConfig()}>
-                    Editar config
-                  </button>
                   <button className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void saveProfile()}>
                     Salvar nome/setor
                   </button>
@@ -496,7 +740,13 @@ export default function App() {
                     {instances.map((row) => {
                       const on = selected.has(keyOf(row));
                       return (
-                        <tr key={keyOf(row)} className={`border-t border-slate-800 ${on ? "bg-sky-400/10" : ""}`} onClick={() => toggle(row)}>
+                        <tr
+                          key={keyOf(row)}
+                          className={`cursor-pointer border-t border-slate-800 ${on ? "bg-sky-400/10" : ""}`}
+                          title="Duplo clique para editar filtros e exibição deste usuário"
+                          onClick={() => onRowClick(row)}
+                          onDoubleClick={() => void openClientConfig(row)}
+                        >
                           <td className="px-3 py-3"><input type="checkbox" checked={on} readOnly /></td>
                           <td className="px-3 py-3 font-medium">{row.hostName}</td>
                           <td className="px-3 py-3">{row.windowsUser}</td>
@@ -713,134 +963,26 @@ export default function App() {
               <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
                 <h2 className="text-xl font-bold">Letreiro</h2>
                 <p className="mt-1 text-sm text-slate-400">Aparência, tamanho da barra e filtro OS/SP.</p>
-                <label className="mt-4 block text-sm text-slate-400">
-                  Setor padrão
-                  <input list="setores-list" className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={localCfg.board?.sector ?? ""} onChange={(e) => patchLocal({ ...localCfg, board: { ...localCfg.board, sector: e.target.value } })} />
-                  <datalist id="setores-list">{setores.map((s) => <option key={s} value={s} />)}</datalist>
-                </label>
-                <label className="mt-4 block text-sm text-slate-400">
-                  Largura da barra (px)
-                  <input
-                    type="number"
-                    min={320}
-                    max={4000}
-                    step={1}
-                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
-                    value={localCfg.window?.width ?? 720}
-                    onChange={(e) => {
-                      const width = Number(e.target.value);
-                      if (!Number.isFinite(width)) return;
-                      patchLocal({ ...localCfg, window: { ...localCfg.window, width } });
-                    }}
-                  />
-                  <span className="mt-1 block text-xs text-slate-500">Entre 320 e 4000. Arrastar a faixa só move a posição.</span>
-                </label>
-                <label className="mt-4 block text-sm text-slate-400">
-                  Velocidade do deslize ({Math.round(localCfg.window?.speedPxPerSec ?? 40)} px/s)
-                  <input type="range" min={8} max={160} className="mt-2 w-full" value={localCfg.window?.speedPxPerSec ?? 40} onChange={(e) => patchLocal({ ...localCfg, window: { ...localCfg.window, speedPxPerSec: Number(e.target.value) } })} />
-                </label>
-                <label className="mt-3 block text-sm text-slate-400">
-                  Opacidade ({Math.round((localCfg.window?.opacity ?? 0.95) * 100)}%)
-                  <input type="range" min={0.4} max={1} step={0.01} className="mt-2 w-full" value={localCfg.window?.opacity ?? 0.95} onChange={(e) => patchLocal({ ...localCfg, window: { ...localCfg.window, opacity: Number(e.target.value) } })} />
-                </label>
-                <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={!!localCfg.window?.transparentBg} onChange={(e) => patchLocal({ ...localCfg, window: { ...localCfg.window, transparentBg: e.target.checked } })} /> Fundo transparente</label>
-                <div className="mt-3 flex flex-wrap gap-4 text-sm">
-                  <label className="flex items-center gap-2"><input type="checkbox" checked={localCfg.board?.showOs !== false} onChange={(e) => patchLocal({ ...localCfg, board: { ...localCfg.board, showOs: e.target.checked } })} /> OS (nº &lt; 5000)</label>
-                  <label className="flex items-center gap-2"><input type="checkbox" checked={localCfg.board?.showSp !== false} onChange={(e) => patchLocal({ ...localCfg, board: { ...localCfg.board, showSp: e.target.checked } })} /> SP (nº ≥ 5000)</label>
-                </div>
+                <LetreiroDisplayFields cfg={localCfg} onChange={patchLocal} setores={setores} listId="setores-list" />
               </div>
             </div>
 
             <div className={`grid gap-4 ${!userAjustes ? "xl:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)]" : ""}`}>
               <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
-                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-xl font-bold">Filtros</h2>
-                    <p className="mt-1 max-w-xl text-sm text-slate-400">
-                      Cada linha vira um card na faixa. Escolha setor, situação e a fonte dos dados.
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button type="button" className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={addFilter}>
-                      <Plus size={16} /> Adicionar
-                    </button>
-                    <button type="button" className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void restoreGroups()}>Restaurar padrão</button>
-                    <button type="button" className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void saveLocal().catch((ex) => setError(errText(ex)))}>Salvar</button>
-                  </div>
-                </div>
-
-                {filters.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-slate-700 px-4 py-8 text-center text-sm text-slate-400">
-                    Nenhum filtro. Adicione um para exibir cards no letreiro.
-                  </p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[40rem] border-separate border-spacing-y-2 text-sm">
-                      <thead>
-                        <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-                          <th className="px-2 pb-1 font-medium">Setor</th>
-                          <th className="px-2 pb-1 font-medium">Situação</th>
-                          <th className="px-2 pb-1 font-medium">Fonte</th>
-                          <th className="w-14 px-2 pb-1" />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filters.map((row, index) => (
-                          <tr key={row.key} className="align-middle">
-                            <td className="rounded-l-xl border border-r-0 border-slate-800 bg-slate-950 px-2 py-2">
-                              <input
-                                list="setores-list"
-                                aria-label="Setor"
-                                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
-                                value={row.setor}
-                                placeholder={localCfg.board?.sector || "Setor"}
-                                onChange={(e) => patchFilter(index, { setor: e.target.value })}
-                              />
-                            </td>
-                            <td className="border-y border-slate-800 bg-slate-950 px-2 py-2">
-                              <select
-                                aria-label="Situação"
-                                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 disabled:text-slate-500"
-                                value={row.fonte === "inbox" ? "" : row.situacao}
-                                disabled={row.fonte === "inbox"}
-                                onChange={(e) => patchFilter(index, { situacao: e.target.value })}
-                              >
-                                <option value="">{row.fonte === "inbox" ? "—" : "Selecione…"}</option>
-                                {situacaoOptions.map((item) => (
-                                  <option key={item} value={item}>{item}</option>
-                                ))}
-                              </select>
-                            </td>
-                            <td className="border-y border-slate-800 bg-slate-950 px-2 py-2">
-                              <select
-                                aria-label="Fonte"
-                                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
-                                value={row.fonte}
-                                onChange={(e) => {
-                                  const fonte = e.target.value as FilterFonte;
-                                  patchFilter(index, { fonte, situacao: fonte === "inbox" ? "" : row.situacao });
-                                }}
-                              >
-                                <option value="situacao">Situação</option>
-                                <option value="inbox">Inbox</option>
-                              </select>
-                            </td>
-                            <td className="rounded-r-xl border border-l-0 border-slate-800 bg-slate-950 px-2 py-2 text-right">
-                              <button
-                                type="button"
-                                className="inline-flex rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-rose-300"
-                                title="Remover filtro"
-                                onClick={() => removeFilter(index)}
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                <FilterListFields
+                  cfg={localCfg}
+                  onChange={patchLocal}
+                  onError={setError}
+                  setores={setores}
+                  situacoes={situacoes}
+                  listId="setores-list-filtros"
+                  actions={
+                    <>
+                      <button type="button" className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void restoreGroups()}>Restaurar padrão</button>
+                      <button type="button" className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void saveLocal().catch((ex) => setError(errText(ex)))}>Salvar</button>
+                    </>
+                  }
+                />
               </div>
 
               {!userAjustes ? (
@@ -855,18 +997,9 @@ export default function App() {
                   </div>
                   <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
                     <h2 className="text-lg font-bold">Configuração remota</h2>
-                    <p className="mt-1 text-sm text-slate-400">Do computador selecionado em Computadores. Posição da janela permanece no PC.</p>
-                    <div className="mt-3 grid gap-3">
-                      <Field label="API" value={cfg.apiBaseUrl ?? ""} onChange={(v) => setCfg((c) => ({ ...c, apiBaseUrl: v }))} />
-                      <Field label="Ponto" value={cfg.ponto ?? ""} onChange={(v) => setCfg((c) => ({ ...c, ponto: v }))} />
-                      <Field label="Nome" value={cfg.nome ?? ""} onChange={(v) => setCfg((c) => ({ ...c, nome: v }))} />
-                      <Field label="Setor" value={cfg.board?.sector ?? ""} onChange={(v) => setCfg((c) => ({ ...c, board: { ...c.board, sector: v } }))} />
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void loadConfig()}>Carregar selecionado</button>
-                      <button className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void saveConfig(false)}>Salvar no selecionado</button>
-                      <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void saveConfig(true)}>Aplicar a todos</button>
-                    </div>
+                    <p className="mt-1 text-sm text-slate-400">
+                      Filtros e exibição de cada letreiro são editados com duplo clique na lista de computadores. A posição da faixa permanece no PC de destino.
+                    </p>
                   </div>
                 </div>
               ) : null}
@@ -874,6 +1007,83 @@ export default function App() {
           </section>
         ) : null}
       </main>
+
+      {clientEdit ? (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/70 p-4 sm:p-8"
+          role="presentation"
+          onClick={() => {
+            if (!clientBusy) setClientEdit(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="client-config-title"
+            className="my-auto flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-800 px-5 py-4">
+              <div>
+                <h2 id="client-config-title" className="text-xl font-bold">Filtros e exibição</h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  Aplica somente em {clientEdit.row.hostName} ({clientEdit.row.windowsUser}).
+                  {clientEdit.row.nome ? ` ${clientEdit.row.nome}` : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                aria-label="Fechar"
+                disabled={clientBusy}
+                onClick={() => setClientEdit(null)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                <h3 className="text-lg font-bold">Letreiro</h3>
+                <p className="mt-1 text-sm text-slate-400">Aparência, tamanho da barra e filtro OS/SP.</p>
+                <LetreiroDisplayFields
+                  cfg={clientEdit.cfg}
+                  onChange={(next) => setClientEdit((cur) => (cur ? { ...cur, cfg: next } : cur))}
+                  setores={setores}
+                  listId="client-setores-list"
+                />
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                <FilterListFields
+                  cfg={clientEdit.cfg}
+                  onChange={(next) => setClientEdit((cur) => (cur ? { ...cur, cfg: next } : cur))}
+                  onError={setError}
+                  setores={setores}
+                  situacoes={situacoes}
+                  listId="client-setores-filtros"
+                />
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-slate-800 bg-slate-900 px-5 py-4">
+              <button
+                type="button"
+                className="rounded-lg bg-slate-800 px-3 py-2 text-sm"
+                disabled={clientBusy}
+                onClick={() => setClientEdit(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-sky-400 px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-60"
+                disabled={clientBusy}
+                onClick={() => void applyClientConfig()}
+              >
+                {clientBusy ? "Aplicando…" : "Aplicar configurações"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

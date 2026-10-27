@@ -138,6 +138,11 @@
                         <Slider x:Name="OpacitySlider" Minimum="0.4" Maximum="1" TickFrequency="0.01"
                                 ValueChanged="OnOpacityChanged" Margin="0,4,0,10" />
                         <CheckBox x:Name="TransparentBox" Content="Fundo transparente (mostra a barra de tarefas atrás)" />
+                        <TextBlock Text="Exibir na faixa" Margin="0,12,0,0" />
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <CheckBox x:Name="ShowOsBox" Content="OS (nº &lt; 5000)" Margin="0,6,16,0" />
+                            <CheckBox x:Name="ShowSpBox" Content="SP (nº ≥ 5000)" />
+                        </StackPanel>
                         <TextBlock Text="O deslize só ocorre quando os cards não cabem. As OSs entram pela direita."
                                    Margin="0,8,0,0" FontSize="10" />
                     </StackPanel>

@@ -415,7 +415,7 @@ public partial class OverlayWindow : Window
             }
 
             var processed = Board.ProcessDashboardData(items, cfg.Board, _master, isInitialLoad: initial, inboxOs: inbox);
-            var cards = Board.FlattenTickerCards(processed.Columns);
+            var cards = Board.FlattenTickerCards(processed.Columns, cfg.Board);
             lock (_gate) _initial = false;
             _cards = cards;
             _status = "connected";

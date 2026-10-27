@@ -69,6 +69,8 @@ public sealed class BoardConfig
     public string Sector { get; set; } = "SEFOC";
     public int ColumnCount { get; set; }
     public List<BoardColumn> Columns { get; set; } = new();
+    public bool ShowOs { get; set; } = true;
+    public bool ShowSp { get; set; } = true;
 }
 
 public sealed class WindowConfig

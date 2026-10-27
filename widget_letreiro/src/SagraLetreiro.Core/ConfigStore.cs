@@ -91,11 +91,20 @@ public static class ConfigStore
         var columnsRaw = raw.Columns is { Count: > 0 } ? raw.Columns : DefaultBoard().Columns;
         var columns = columnsRaw.Take(6).Select(NormalizeColumn).ToList();
         if (columns.Count == 0) columns = DefaultBoard().Columns.Select(NormalizeColumn).ToList();
+        var showOs = raw.ShowOs;
+        var showSp = raw.ShowSp;
+        if (!showOs && !showSp)
+        {
+            showOs = true;
+            showSp = true;
+        }
         return new BoardConfig
         {
             Sector = string.IsNullOrWhiteSpace(raw.Sector) ? "SEFOC" : raw.Sector.Trim(),
             ColumnCount = columns.Count,
             Columns = columns,
+            ShowOs = showOs,
+            ShowSp = showSp,
         };
     }
 

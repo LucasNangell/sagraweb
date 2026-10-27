@@ -237,6 +237,70 @@ public class BoardTests
     }
 
     [Fact]
+    public void FlattenFiltersOsAndSpByNumber()
+    {
+        var columns = new List<BoardColumn>
+        {
+            new()
+            {
+                Id = "inbox",
+                Title = "Inbox",
+                Source = "inbox",
+                Items =
+                [
+                    new OsItem { NrOs = 200, Ano = 2026, UniqueKey = "200-2026", DisplaySituacao = "Inbox OS" },
+                    new OsItem { NrOs = 5000, Ano = 2026, UniqueKey = "5000-2026", DisplaySituacao = "Inbox SP" },
+                ],
+            },
+            new()
+            {
+                Id = "exec",
+                Title = "Execução",
+                Items =
+                [
+                    new OsItem { NrOs = 100, Ano = 2026, UniqueKey = "100-2026", DisplaySituacao = "OS" },
+                    new OsItem { NrOs = 5100, Ano = 2026, UniqueKey = "5100-2026", DisplaySituacao = "SP" },
+                    new OsItem
+                    {
+                        NrOs = 1, Ano = 2026, RowKind = "sub_os", ParentNrOs = 5200, ParentAno = 2026,
+                        UniqueKey = "5200-2026-sub-1", DisplaySituacao = "sub SP",
+                    },
+                ],
+            },
+        };
+        var both = Board.FlattenTickerCards(columns, new BoardConfig { ShowOs = true, ShowSp = true });
+        Assert.Equal(
+            new[] { "OS 200/26", "SP 5000/26", "OS 100/26", "SP 5100/26", "SP 5200/26" },
+            both.Select(c => c.Label).ToArray());
+
+        var osOnly = Board.FlattenTickerCards(columns, new BoardConfig { ShowOs = true, ShowSp = false });
+        Assert.Equal(new[] { "OS 200/26", "OS 100/26" }, osOnly.Select(c => c.Label).ToArray());
+
+        var spOnly = Board.FlattenTickerCards(columns, new BoardConfig { ShowOs = false, ShowSp = true });
+        Assert.Equal(
+            new[] { "SP 5000/26", "SP 5100/26", "SP 5200/26" },
+            spOnly.Select(c => c.Label).ToArray());
+    }
+
+    [Fact]
+    public void NormalizeTreatsBothProtocolFiltersOffAsBothOn()
+    {
+        var cfg = ConfigStore.Normalize(new AppConfig
+        {
+            Board = new BoardConfig { ShowOs = false, ShowSp = false, Columns = ConfigStore.DefaultBoard().Columns },
+        });
+        Assert.True(cfg.Board.ShowOs);
+        Assert.True(cfg.Board.ShowSp);
+
+        var osOnly = ConfigStore.Normalize(new AppConfig
+        {
+            Board = new BoardConfig { ShowOs = true, ShowSp = false, Columns = ConfigStore.DefaultBoard().Columns },
+        });
+        Assert.True(osOnly.Board.ShowOs);
+        Assert.False(osOnly.Board.ShowSp);
+    }
+
+    [Fact]
     public void FolderPathRejectsBackendErrorStrings()
     {
         Assert.True(OsFolderPath.IsUsable(@"\\redecamara\DfsData\CGraf\Sefoc\Deputados\2026\01234 - x"));
@@ -310,6 +374,8 @@ public class BoardTests
         Assert.Equal(720, cfg.Window.Width);
         Assert.False(cfg.Window.TransparentBg);
         Assert.Equal(ConfigStore.ProductionApiBase, cfg.ApiBaseUrl);
+        Assert.True(cfg.Board.ShowOs);
+        Assert.True(cfg.Board.ShowSp);
         Assert.True(ConfigStore.Normalize(new AppConfig { Window = new WindowConfig { TransparentBg = true } }).Window.TransparentBg);
     }
 

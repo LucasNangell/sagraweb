@@ -42,6 +42,8 @@ public partial class SettingsWindow : Window
         SpeedSlider.Value = _draft.Window.SpeedPxPerSec;
         OpacitySlider.Value = _draft.Window.Opacity;
         TransparentBox.IsChecked = _draft.Window.TransparentBg;
+        ShowOsBox.IsChecked = _draft.Board.ShowOs;
+        ShowSpBox.IsChecked = _draft.Board.ShowSp;
         RebuildGroups(_draft.Board.Columns);
         RefreshLabels();
     }
@@ -119,6 +121,8 @@ public partial class SettingsWindow : Window
                 Sector = string.IsNullOrWhiteSpace(SectorBox.Text) ? "SEFOC" : SectorBox.Text.Trim(),
                 ColumnCount = columns.Count,
                 Columns = columns,
+                ShowOs = ShowOsBox.IsChecked == true,
+                ShowSp = ShowSpBox.IsChecked == true,
             },
         };
         var cfg = ConfigStore.Normalize(payload);

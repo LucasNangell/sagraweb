@@ -472,6 +472,15 @@ public static class Board
     public static List<BoardColumn> GetVisibleDashboardColumns(List<BoardColumn> columns) =>
         columns.Where(col => !col.HideWhenEmpty || col.Items.Count > 0).ToList();
 
+    public static bool IsOsNumber(object? nrOs) => ToInt(nrOs) < 5000;
+
+    public static bool MatchesProtocolFilter(OsItem item, bool showOs, bool showSp)
+    {
+        if (showOs && showSp) return true;
+        var nr = item.RowKind == "sub_os" ? item.ParentNrOs ?? item.NrOs : item.NrOs;
+        return IsOsNumber(nr) ? showOs : showSp;
+    }
+
     public static string TickerOpKey(OsItem item)
     {
         if (item.RowKind == "sub_os")
@@ -483,8 +492,15 @@ public static class Board
         return $"{item.NrOs}-{item.Ano}";
     }
 
-    public static List<TickerCard> FlattenTickerCards(List<BoardColumn> columns)
+    public static List<TickerCard> FlattenTickerCards(List<BoardColumn> columns, BoardConfig? board = null)
     {
+        var showOs = board?.ShowOs ?? true;
+        var showSp = board?.ShowSp ?? true;
+        if (!showOs && !showSp)
+        {
+            showOs = true;
+            showSp = true;
+        }
         var cards = new List<TickerCard>();
         var seen = new HashSet<string>();
         for (var origIdx = 0; origIdx < columns.Count; origIdx++)
@@ -493,6 +509,7 @@ public static class Board
             if (col.HideWhenEmpty && col.Items.Count == 0) continue;
             foreach (var item in col.Items)
             {
+                if (!MatchesProtocolFilter(item, showOs, showSp)) continue;
                 var opKey = TickerOpKey(item);
                 if (!seen.Add(opKey)) continue;
                 cards.Add(new TickerCard

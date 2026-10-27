@@ -133,6 +133,7 @@ export default function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [pollSec, setPollSec] = useState(10);
   const [shell, setShell] = useState<"bat" | "ps1">("bat");
+  const [libraryId, setLibraryId] = useState(0);
   const [prompt, setPrompt] = useState("");
   const [log, setLog] = useState("SAGRA Letreiro · terminal remoto\nSelecione computadores e digite um comando.\n");
   const typed = useRef<string[]>([]);
@@ -346,27 +347,35 @@ export default function App() {
     setStatus("Filtros restaurados.");
   }
 
+  async function watchQueued(queued: number, echo: string) {
+    setStatus(queued === 1 ? "1 comando enfileirado." : `${queued} comandos enfileirados.`);
+    burstUntil.current = Date.now() + 120_000;
+    setLog((prev) => `${prev}${echo}aguardando resposta (${queued})…\n`);
+    const jobList = await api.jobs();
+    applyJobs(jobList.jobs ?? []);
+  }
+
   async function sendTerminal(allOnline: boolean) {
-    const text = prompt.trimEnd();
-    if (!text.trim()) return setError("Digite um comando.");
     if (!allOnline && selectedRows.length === 0) return setError("Selecione computadores ou envie a todos os online.");
+    const targets = selectedRows.map((row) => ({ hostName: row.hostName, windowsUser: row.windowsUser }));
+    const catalog = commands.find((cmd) => cmd.id === libraryId);
+    if (catalog) {
+      const marker = catalog.kind === "ps1" ? "PS>" : "C:\\>";
+      setLog((prev) => `${prev}${marker} ${catalog.name}\n`);
+      const queued = await api.runCommand(catalog.id, targets, allOnline);
+      await watchQueued(queued.queued, "");
+      return;
+    }
+    const text = prompt.trimEnd();
+    if (!text.trim()) return setError("Digite um comando ou escolha um da biblioteca.");
     if (typed.current.at(-1) !== text) typed.current.push(text);
     typedIndex.current = typed.current.length;
     const name = text.replace(/\s+/g, " ").slice(0, 40);
-    setLog((prev) => `${prev}${shell === "ps1" ? "PS>" : "C:\\>"} ${text.trim()}\n`);
-    const queued = await api.runAdhoc(
-      shell,
-      text,
-      name,
-      selectedRows.map((row) => ({ hostName: row.hostName, windowsUser: row.windowsUser })),
-      allOnline,
-    );
+    const marker = shell === "ps1" ? "PS>" : "C:\\>";
+    setLog((prev) => `${prev}${marker} ${text.trim()}\n`);
+    const queued = await api.runAdhoc(shell, text, name, targets, allOnline);
     setPrompt("");
-    setStatus(queued.queued === 1 ? "1 comando enfileirado." : `${queued.queued} comandos enfileirados.`);
-    burstUntil.current = Date.now() + 120_000;
-    setLog((prev) => `${prev}aguardando resposta (${queued.queued})…\n`);
-    const jobList = await api.jobs();
-    applyJobs(jobList.jobs ?? []);
+    await watchQueued(queued.queued, "");
   }
 
   async function saveCommand() {
@@ -388,6 +397,7 @@ export default function App() {
   });
 
   const activeJob = jobs.find((job) => job.id === jobId) ?? jobs[0];
+  const libraryCmd = commands.find((cmd) => cmd.id === libraryId);
 
   return (
     <div className="min-h-screen lg:grid lg:h-screen lg:grid-cols-[260px_1fr] lg:overflow-hidden">
@@ -516,9 +526,31 @@ export default function App() {
                     <p className="text-xs text-slate-400">{selectedRows.length} selecionado(s)</p>
                   </div>
                 </div>
-                <div className="flex rounded-lg bg-slate-900 p-1">
-                  <button className={`rounded-md px-3 py-1 text-sm ${shell === "bat" ? "bg-slate-800 text-white" : "text-slate-400"}`} onClick={() => setShell("bat")}>CMD</button>
-                  <button className={`rounded-md px-3 py-1 text-sm ${shell === "ps1" ? "bg-slate-800 text-white" : "text-slate-400"}`} onClick={() => setShell("ps1")}>PowerShell</button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex rounded-lg bg-slate-900 p-1">
+                    <button type="button" className={`rounded-md px-3 py-1 text-sm ${shell === "bat" ? "bg-slate-800 text-white" : "text-slate-400"}`} onClick={() => { setShell("bat"); setLibraryId(0); }}>CMD</button>
+                    <button type="button" className={`rounded-md px-3 py-1 text-sm ${shell === "ps1" ? "bg-slate-800 text-white" : "text-slate-400"}`} onClick={() => { setShell("ps1"); setLibraryId(0); }}>PowerShell</button>
+                  </div>
+                  <select
+                    aria-label="Comando da biblioteca"
+                    className="max-w-64 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-100"
+                    value={libraryId || ""}
+                    onChange={(e) => {
+                      const id = Number(e.target.value) || 0;
+                      setLibraryId(id);
+                      const cmd = commands.find((item) => item.id === id);
+                      if (cmd) setShell(cmd.kind === "ps1" ? "ps1" : "bat");
+                    }}
+                  >
+                    <option value="">Biblioteca…</option>
+                    {[...commands]
+                      .sort((a, b) => a.name.localeCompare(b.name, "pt"))
+                      .map((cmd) => (
+                        <option key={cmd.id} value={cmd.id}>
+                          {cmd.name} ({cmd.kind === "ps1" ? "PS1" : "BAT"})
+                        </option>
+                      ))}
+                  </select>
                 </div>
               </div>
               <pre ref={logEl} className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap p-4 font-mono text-sm text-emerald-300">{log}</pre>
@@ -532,7 +564,10 @@ export default function App() {
                 <span className="font-mono text-emerald-400">{shell === "ps1" ? "PS>" : "C:\\>"}</span>
                 <input
                   value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
+                  onChange={(e) => {
+                    setPrompt(e.target.value);
+                    if (libraryId) setLibraryId(0);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "ArrowUp") {
                       e.preventDefault();
@@ -547,7 +582,7 @@ export default function App() {
                     }
                   }}
                   className="flex-1 bg-transparent font-mono text-sm outline-none"
-                  placeholder="ipconfig /all"
+                  placeholder={libraryCmd ? `Enviar: ${libraryCmd.name}` : "ipconfig /all"}
                 />
                 <div className="flex gap-2">
                   <button type="button" className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void sendTerminal(true).catch((ex) => setError(errText(ex)))}>
@@ -609,7 +644,17 @@ export default function App() {
                   }} />
                 </label>
                 <button className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void saveCommand().catch((ex) => setError(errText(ex)))}>Salvar</button>
-                <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => { setPrompt(draft.content); setShell(draft.kind === "ps1" ? "ps1" : "bat"); setView("computers"); }}>Usar no terminal</button>
+                <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => {
+                  setShell(draft.kind === "ps1" ? "ps1" : "bat");
+                  if (draft.id > 0) {
+                    setLibraryId(draft.id);
+                    setPrompt("");
+                  } else {
+                    setLibraryId(0);
+                    setPrompt(draft.content);
+                  }
+                  setView("computers");
+                }}>Usar no terminal</button>
                 {draft.id > 0 ? (
                   <button className="rounded-lg bg-rose-900 px-3 py-2 text-sm" onClick={() => void api.deleteCommand(draft.id).then(loadAll)}>Excluir</button>
                 ) : null}

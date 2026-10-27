@@ -48,14 +48,37 @@ function localPreviewMock(): Connect.NextHandleFunction {
           windowsUser: "usr_sefoc",
           nome: "Dev",
           setor: "SEFOC",
-          version: "2.9.0",
+          version: "2.10.0",
           ponto: "654321",
           online: true,
           hasConfig: true,
         }],
       });
     }
-    if (url === "/api/letreiro/commands") return sendJson(res, { commands: [] });
+    if (url === "/api/letreiro/commands") {
+      return sendJson(res, {
+        commands: [
+          { id: 1, name: "Reiniciar spooler", kind: "bat", content: "net stop spooler", timeoutSec: 60 },
+          { id: 2, name: "Listar processos", kind: "ps1", content: "Get-Process", timeoutSec: 60 },
+        ],
+      });
+    }
+    if (/^\/api\/letreiro\/commands\/\d+\/run$/.test(url)) {
+      req.resume();
+      jobs.unshift({
+        id: jobId++,
+        name: "biblioteca",
+        kind: "bat",
+        hostName: "PC-DEV",
+        windowsUser: "usr_sefoc",
+        status: "ok",
+        exitCode: 0,
+        stdout: "Script da biblioteca executado.",
+        stderr: "",
+        createdAt: new Date().toISOString(),
+      });
+      return sendJson(res, { queued: 1 });
+    }
     if (url === "/api/letreiro/jobs/run") {
       req.resume();
       jobs.unshift({

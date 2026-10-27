@@ -15,7 +15,15 @@ internal readonly record struct TaskbarGeom(
 
 internal static class TaskbarService
 {
-    public const int MinWidth = 320;
+    public const int MinWidth = OverlayBounds.MinWidth;
+
+    static readonly string[] NotifyClasses =
+    [
+        "TrayNotifyWnd",
+        "TrayClockWClass",
+        "TrayShowDesktopButtonWClass",
+        "TrayButton",
+    ];
 
     public static TaskbarGeom At(int x, int y)
     {
@@ -60,15 +68,11 @@ internal static class TaskbarService
 
     public static RECT Clamp(int x, int width, TaskbarGeom geom)
     {
-        var maxWidth = Math.Max(MinWidth, geom.Edge is "bottom" or "top"
-            ? geom.Width
-            : geom.MonitorRight - geom.MonitorLeft);
-        width = Math.Max(MinWidth, Math.Min(width, maxWidth));
         int leftBound, rightBound, y, height;
         if (geom.Edge is "bottom" or "top")
         {
             leftBound = geom.Left;
-            rightBound = geom.Right;
+            rightBound = OverlayBounds.RightBound(geom.Left, geom.Right, NotifyAreaLeft(geom));
             y = geom.Top;
             height = geom.Thickness;
         }
@@ -79,8 +83,84 @@ internal static class TaskbarService
             height = geom.Thickness;
             y = geom.MonitorBottom - height;
         }
-        x = Math.Max(leftBound, Math.Min(x, rightBound - width));
+        (x, width) = OverlayBounds.ClampX(x, width, leftBound, rightBound);
         return new RECT { Left = x, Top = y, Right = x + width, Bottom = y + height };
+    }
+
+    static int? NotifyAreaLeft(TaskbarGeom geom)
+    {
+        try
+        {
+            var tray = FindTrayWindow(geom);
+            if (tray == IntPtr.Zero) return null;
+
+            var notify = FindWindowEx(tray, IntPtr.Zero, "TrayNotifyWnd", null);
+            var left = int.MaxValue;
+            var found = false;
+            void Consider(IntPtr hwnd)
+            {
+                if (hwnd == IntPtr.Zero) return;
+                if (!GetWindowRect(hwnd, out var rect) || rect.Width <= 0 || rect.Height <= 0) return;
+                if (rect.Left <= geom.Left + geom.Width / 2) return;
+                if (rect.Right < geom.Left || rect.Left > geom.Right) return;
+                left = Math.Min(left, rect.Left);
+                found = true;
+            }
+
+            Consider(notify);
+            EnumWindowsProc callback = (hwnd, _) =>
+            {
+                var name = ClassName(hwnd);
+                foreach (var cls in NotifyClasses)
+                {
+                    if (name == cls)
+                    {
+                        Consider(hwnd);
+                        break;
+                    }
+                }
+                return true;
+            };
+            EnumChildWindows(tray, callback, IntPtr.Zero);
+            GC.KeepAlive(callback);
+            return found ? left : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    static IntPtr FindTrayWindow(TaskbarGeom geom)
+    {
+        var primary = FindWindow("Shell_TrayWnd", null);
+        if (primary != IntPtr.Zero && OverlapsTaskbar(primary, geom))
+            return primary;
+
+        IntPtr found = IntPtr.Zero;
+        EnumWindowsProc callback = (hwnd, _) =>
+        {
+            if (ClassName(hwnd) != "Shell_SecondaryTrayWnd") return true;
+            if (!OverlapsTaskbar(hwnd, geom)) return true;
+            found = hwnd;
+            return false;
+        };
+        EnumWindows(callback, IntPtr.Zero);
+        GC.KeepAlive(callback);
+        return found;
+    }
+
+    static bool OverlapsTaskbar(IntPtr hwnd, TaskbarGeom geom)
+    {
+        if (!GetWindowRect(hwnd, out var rect)) return false;
+        return rect.Left < geom.Right && rect.Right > geom.Left
+            && rect.Top < geom.Bottom && rect.Bottom > geom.Top;
+    }
+
+    static string ClassName(IntPtr hwnd)
+    {
+        var sb = new System.Text.StringBuilder(256);
+        return GetClassName(hwnd, sb, sb.Capacity) > 0 ? sb.ToString() : "";
     }
 
     public static void ApplyPhysical(Window window, RECT rect)

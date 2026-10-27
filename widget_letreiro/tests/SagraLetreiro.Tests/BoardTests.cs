@@ -551,6 +551,36 @@ public class BoardTests
     }
 }
 
+public class OverlayBoundsTests
+{
+    [Fact]
+    public void RightBoundStopsBeforeSystray()
+    {
+        var right = OverlayBounds.RightBound(0, 1920, notifyLeft: 1700);
+        Assert.Equal(1700 - OverlayBounds.TrayGap, right);
+        var (x, width) = OverlayBounds.ClampX(1600, 720, 0, right);
+        Assert.True(x + width <= right);
+        Assert.Equal(right - 720, x);
+    }
+
+    [Fact]
+    public void RightBoundIgnoresNotifyOnTheLeftHalf()
+    {
+        Assert.Equal(1920, OverlayBounds.RightBound(0, 1920, notifyLeft: 200));
+        Assert.Equal(1920, OverlayBounds.RightBound(0, 1920, notifyLeft: null));
+    }
+
+    [Fact]
+    public void ClampXShrinksToFitLeftOfTray()
+    {
+        var right = OverlayBounds.RightBound(0, 800, notifyLeft: 500);
+        var (x, width) = OverlayBounds.ClampX(0, 720, 0, right);
+        Assert.Equal(0, x);
+        Assert.Equal(500 - OverlayBounds.TrayGap, width);
+        Assert.True(x + width <= right);
+    }
+}
+
 public class UpdateFinderTests
 {
     [Fact]

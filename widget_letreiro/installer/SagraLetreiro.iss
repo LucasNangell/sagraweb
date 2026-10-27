@@ -2,7 +2,7 @@
 ; Gerado por installer/build.ps1, que publica o app e passa AppVersion/PublishDir.
 
 #ifndef AppVersion
-  #define AppVersion "2.3.2"
+  #define AppVersion "2.3.3"
 #endif
 #ifndef PublishDir
   #define PublishDir "..\artifacts\publish"

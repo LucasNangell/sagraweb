@@ -29,8 +29,10 @@ function localPreviewMock(): Connect.NextHandleFunction {
     nome: "usr_sefoc",
     sslVerify: false,
     board: MOCK_BOARD,
-    window: { speedPxPerSec: 40, opacity: 0.95, transparentBg: false },
+    window: { width: 720, speedPxPerSec: 40, opacity: 0.95, transparentBg: false },
   };
+  const jobs: Record<string, unknown>[] = [];
+  let jobId = 1;
   return (req: IncomingMessage, res: ServerResponse, next: Connect.NextFunction) => {
     const url = (req.url ?? "").split("?")[0];
     if (url === "/local/me") return sendJson(res, { isAdmin: process.env.LETREIRO_MOCK_ADMIN === "1" });
@@ -39,9 +41,38 @@ function localPreviewMock(): Connect.NextHandleFunction {
     if (url === "/local/situacoes") {
       return sendJson(res, { situacoes: ["Saída p/", "Em Execução", "Recebido", "Encam. de Docum."] });
     }
-    if (url === "/api/letreiro/instances") return sendJson(res, { instances: [] });
+    if (url === "/api/letreiro/instances") {
+      return sendJson(res, {
+        instances: [{
+          hostName: "PC-DEV",
+          windowsUser: "usr_sefoc",
+          nome: "Dev",
+          setor: "SEFOC",
+          version: "2.9.0",
+          ponto: "654321",
+          online: true,
+          hasConfig: true,
+        }],
+      });
+    }
     if (url === "/api/letreiro/commands") return sendJson(res, { commands: [] });
-    if (url === "/api/letreiro/jobs") return sendJson(res, { jobs: [] });
+    if (url === "/api/letreiro/jobs/run") {
+      req.resume();
+      jobs.unshift({
+        id: jobId++,
+        name: "terminal",
+        kind: "bat",
+        hostName: "PC-DEV",
+        windowsUser: "usr_sefoc",
+        status: "ok",
+        exitCode: 0,
+        stdout: "Resposta de teste do letreiro.",
+        stderr: "",
+        createdAt: new Date().toISOString(),
+      });
+      return sendJson(res, { queued: 1 });
+    }
+    if (url === "/api/letreiro/jobs") return sendJson(res, { jobs });
     if (url === "/api/letreiro/settings") return sendJson(res, { commandPollIntervalSec: 10 });
     next();
   };

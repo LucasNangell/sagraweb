@@ -33,9 +33,6 @@ public partial class OverlayWindow : Window
         Color.FromRgb(0x20, 0x20, 0x24),
     ];
 
-    const double Edge = 8;
-    const double StatusCol = 14;
-
     readonly Dictionary<string, OsItem> _master = new();
     readonly DispatcherTimer _dockTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     readonly DispatcherTimer _pollTimer = new();
@@ -233,33 +230,21 @@ public partial class OverlayWindow : Window
                 }
                 ApplyDrag(pt.X);
             }
-            Cursor = _dragMode is "left" or "right" ? Cursors.SizeWE : Cursors.SizeAll;
+            Cursor = Cursors.SizeAll;
             return;
         }
-        var zone = HitZone(e);
-        if (zone is "left" or "right")
-            Cursor = Cursors.SizeWE;
-        else if (CardAt(e.GetPosition(Ticker)) is not null)
+        if (CardAt(e.GetPosition(Ticker)) is not null)
             Cursor = Cursors.Hand;
         else
             Cursor = Cursors.SizeAll;
     }
 
-    string HitZone(MouseEventArgs e)
-    {
-        var local = e.GetPosition(this);
-        if (local.X >= ActualWidth - StatusCol) return "right";
-        if (local.X <= Edge) return "left";
-        return "move";
-    }
-
     void OnPress(object sender, MouseButtonEventArgs e)
     {
         GetCursorPos(out var pt);
-        var zone = HitZone(e);
-        _dragMode = zone;
+        _dragMode = "move";
         _didDrag = false;
-        _pressCard = zone is "left" or "right" ? null : CardAt(e.GetPosition(Ticker));
+        _pressCard = CardAt(e.GetPosition(Ticker));
         if (_pressCard is not null)
         {
             var el = CardElement(_pressCard);
@@ -280,13 +265,7 @@ public partial class OverlayWindow : Window
         if (_dragMode is null) return;
         var dx = xRoot - _dragOriginX;
         var geom = TaskbarService.At(xRoot, _physY);
-        RECT rect;
-        if (_dragMode == "move")
-            rect = TaskbarService.Clamp(_dragWinX + dx, _dragWidth, geom);
-        else if (_dragMode == "left")
-            rect = TaskbarService.Clamp(_dragWinX + dx, _dragWidth - dx, TaskbarService.At(_dragWinX + dx, _physY));
-        else
-            rect = TaskbarService.Clamp(_dragWinX, _dragWidth + dx, TaskbarService.At(_dragWinX + _dragWidth / 2, _physY));
+        var rect = TaskbarService.Clamp(_dragWinX + dx, _dragWidth, geom);
         _physX = rect.Left;
         _physY = rect.Top;
         _physWidth = rect.Width;

@@ -3,6 +3,7 @@ namespace SagraLetreiro;
 public static class OverlayBounds
 {
     public const int MinWidth = 320;
+    public const int MaxWidth = 4000;
     public const int TrayGap = 8;
 
     public static int RightBound(int taskbarLeft, int taskbarRight, int? notifyLeft)

@@ -115,7 +115,7 @@ public static class ConfigStore
         raw ??= new WindowConfig();
         return new WindowConfig
         {
-            Width = Math.Clamp(raw.Width <= 0 ? 720 : raw.Width, 320, 4000),
+            Width = Math.Clamp(raw.Width <= 0 ? 720 : raw.Width, OverlayBounds.MinWidth, OverlayBounds.MaxWidth),
             X = raw.X,
             Opacity = Math.Clamp(raw.Opacity <= 0 ? 0.95 : raw.Opacity, 0.4, 1.0),
             SpeedPxPerSec = Math.Clamp(raw.SpeedPxPerSec <= 0 ? 40 : raw.SpeedPxPerSec, 8, 160),

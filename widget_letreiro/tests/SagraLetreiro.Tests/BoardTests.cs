@@ -681,6 +681,14 @@ public class OverlayBoundsTests
         Assert.Equal(500 - OverlayBounds.TrayGap, width);
         Assert.True(x + width <= right);
     }
+
+    [Fact]
+    public void NormalizeWindowClampsTypedWidth()
+    {
+        Assert.Equal(OverlayBounds.MinWidth, ConfigStore.NormalizeWindow(new WindowConfig { Width = 10 }).Width);
+        Assert.Equal(OverlayBounds.MaxWidth, ConfigStore.NormalizeWindow(new WindowConfig { Width = 99_999 }).Width);
+        Assert.Equal(900, ConfigStore.NormalizeWindow(new WindowConfig { Width = 900 }).Width);
+    }
 }
 
 public class UpdateFinderTests

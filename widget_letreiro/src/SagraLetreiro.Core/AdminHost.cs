@@ -204,7 +204,8 @@ public sealed class AdminHost : IDisposable
             var relogin = parsed.ApiBaseUrl != previous.ApiBaseUrl || parsed.Ponto != previous.Ponto
                 || parsed.Password != previous.Password || parsed.SslVerify != previous.SslVerify;
             _options.ApplyLocalConfig?.Invoke(parsed, relogin);
-            await WriteTextAsync(ctx, 200, ConfigStore.Serialize(parsed)).ConfigureAwait(false);
+            var saved = _options.GetLocalConfig?.Invoke() ?? parsed;
+            await WriteTextAsync(ctx, 200, ConfigStore.Serialize(saved)).ConfigureAwait(false);
             return;
         }
 

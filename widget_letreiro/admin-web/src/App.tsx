@@ -31,6 +31,28 @@ function errText(ex: unknown) {
   return ex instanceof Error ? ex.message : String(ex);
 }
 
+function currentHash() {
+  return window.location.hash.replace(/^#/, "");
+}
+
+const JOB_DONE = new Set(["ok", "fail", "timeout"]);
+
+function jobDone(job: Job) {
+  return JOB_DONE.has((job.status ?? "").toLowerCase());
+}
+
+function formatJobReply(job: Job) {
+  const who = [job.hostName, job.windowsUser].filter(Boolean).join("\\") || "destino";
+  const stdout = (job.stdout ?? "").replace(/\s+$/g, "");
+  const stderr = (job.stderr ?? "").replace(/\s+$/g, "");
+  const lines = [`[${who}]`];
+  if (stdout) lines.push(stdout);
+  if (stderr) lines.push(stderr);
+  const code = job.exitCode == null ? "" : ` exit ${job.exitCode}`;
+  lines.push(`${job.status}${code}`);
+  return `${lines.join("\n")}\n`;
+}
+
 type FilterFonte = "situacao" | "inbox";
 
 type DisplayFilter = {
@@ -115,6 +137,10 @@ export default function App() {
   const [log, setLog] = useState("SAGRA Letreiro · terminal remoto\nSelecione computadores e digite um comando.\n");
   const typed = useRef<string[]>([]);
   const typedIndex = useRef(-1);
+  const printedJobs = useRef(new Set<number>());
+  const jobsPrimed = useRef(false);
+  const burstUntil = useRef(0);
+  const logEl = useRef<HTMLPreElement | null>(null);
   const [draft, setDraft] = useState<Command>({ id: 0, name: "", kind: "bat", content: "", timeoutSec: 60 });
   const [search, setSearch] = useState("");
   const [profile, setProfile] = useState({ nome: "", setor: "" });
@@ -123,12 +149,30 @@ export default function App() {
   const [setores, setSetores] = useState<string[]>(["SEFOC", "Papelaria", "Gravação"]);
   const [situacoes, setSituacoes] = useState<string[]>(DEFAULT_SITUACOES);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [hash, setHash] = useState(currentHash);
   const [jobId, setJobId] = useState<number | null>(null);
+  const userAjustes = !isAdmin || hash === "ajustes";
 
   const selectedRows = useMemo(
     () => instances.filter((row) => selected.has(keyOf(row))),
     [instances, selected],
   );
+
+  const applyJobs = useCallback((next: Job[]) => {
+    setJobs(next);
+    if (!jobsPrimed.current) {
+      for (const job of next) printedJobs.current.add(job.id);
+      jobsPrimed.current = true;
+      return;
+    }
+    const chunks: string[] = [];
+    for (const job of [...next].sort((a, b) => a.id - b.id)) {
+      if (printedJobs.current.has(job.id) || !jobDone(job)) continue;
+      printedJobs.current.add(job.id);
+      chunks.push(formatJobReply(job));
+    }
+    if (chunks.length) setLog((prev) => `${prev}${chunks.join("")}`);
+  }, []);
 
   const loadAll = useCallback(async () => {
     try {
@@ -140,7 +184,7 @@ export default function App() {
       ]);
       setInstances(inst.instances ?? []);
       setCommands(cmds.commands ?? []);
-      setJobs(jobList.jobs ?? []);
+      applyJobs(jobList.jobs ?? []);
       setPollSec(settings.commandPollIntervalSec ?? 10);
       setError("");
       setStatus(`${inst.instances?.length ?? 0} computador(es)`);
@@ -148,16 +192,18 @@ export default function App() {
       setError(ex instanceof ApiError ? ex.message : "Falha ao carregar a administração.");
       setStatus("Sem dados");
     }
-  }, []);
+  }, [applyJobs]);
 
   useEffect(() => {
     void (async () => {
-      const hash = window.location.hash.replace(/^#/, "");
-      if (hash === "ajustes") setView("settings");
+      const pageHash = currentHash();
+      setHash(pageHash);
+      if (pageHash === "ajustes") setView("settings");
       try {
         const me = await api.me();
         setIsAdmin(me.isAdmin);
-        if (hash === "ajustes" || !me.isAdmin) setView("settings");
+        const onlyAjustes = pageHash === "ajustes" || !me.isAdmin;
+        if (onlyAjustes) setView("settings");
         const [local, setorList, situacaoList] = await Promise.all([
           api.localConfig(),
           api.setores(),
@@ -168,7 +214,7 @@ export default function App() {
         if (situacaoList.situacoes?.length) {
           setSituacoes([...new Set([...situacaoList.situacoes, ...DEFAULT_SITUACOES])]);
         }
-        if (me.isAdmin) await loadAll();
+        if (me.isAdmin && !onlyAjustes) await loadAll();
         else {
           setError("");
           setStatus("Ajustes deste computador");
@@ -182,20 +228,41 @@ export default function App() {
 
   useEffect(() => {
     const onHash = () => {
-      if (window.location.hash.replace(/^#/, "") === "ajustes") setView("settings");
+      const pageHash = currentHash();
+      setHash(pageHash);
+      if (pageHash === "ajustes") setView("settings");
     };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
   useEffect(() => {
-    if (!isAdmin) return;
-    const timer = window.setInterval(() => {
-      if (document.hidden) return;
-      void api.jobs().then((row) => setJobs(row.jobs ?? [])).catch(() => undefined);
-    }, 5000);
-    return () => window.clearInterval(timer);
-  }, [isAdmin]);
+    if (!isAdmin || userAjustes) return;
+    let timer = 0;
+    let stopped = false;
+    const loop = async () => {
+      if (stopped) return;
+      if (!document.hidden) {
+        try {
+          const row = await api.jobs();
+          applyJobs(row.jobs ?? []);
+        } catch {
+          /* mantém a lista anterior */
+        }
+      }
+      const wait = Date.now() < burstUntil.current ? 1000 : 5000;
+      timer = window.setTimeout(() => void loop(), wait);
+    };
+    void loop();
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
+  }, [applyJobs, isAdmin, userAjustes]);
+
+  useEffect(() => {
+    logEl.current?.scrollTo({ top: logEl.current.scrollHeight });
+  }, [log]);
 
   function toggle(row: Instance) {
     const id = keyOf(row);
@@ -296,8 +363,10 @@ export default function App() {
     );
     setPrompt("");
     setStatus(queued.queued === 1 ? "1 comando enfileirado." : `${queued.queued} comandos enfileirados.`);
+    burstUntil.current = Date.now() + 120_000;
+    setLog((prev) => `${prev}aguardando resposta (${queued.queued})…\n`);
     const jobList = await api.jobs();
-    setJobs(jobList.jobs ?? []);
+    applyJobs(jobList.jobs ?? []);
   }
 
   async function saveCommand() {
@@ -325,7 +394,7 @@ export default function App() {
       <header className="flex items-center justify-between border-b border-slate-800 px-4 py-3 lg:hidden">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-sky-400">SAGRA</p>
-          <h1 className="text-lg font-bold">Admin letreiro</h1>
+          <h1 className="text-lg font-bold">{userAjustes ? "Ajustes" : "Admin letreiro"}</h1>
         </div>
         <button className="rounded-lg bg-slate-800 p-2" onClick={() => setMenuOpen((v) => !v)} aria-label="Menu">
           {menuOpen ? <X size={18} /> : <Menu size={18} />}
@@ -337,11 +406,11 @@ export default function App() {
       >
         <div className="mb-8 hidden lg:block">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-400">SAGRA Letreiro</p>
-          <h1 className="mt-2 text-2xl font-extrabold tracking-tight">Administração</h1>
+          <h1 className="mt-2 text-2xl font-extrabold tracking-tight">{userAjustes ? "Ajustes" : "Administração"}</h1>
           <p className="mt-2 text-sm text-slate-400">{status}</p>
         </div>
         <nav className="grid gap-2">
-          {(isAdmin ? NAV : NAV.filter((item) => item.id === "settings")).map((item) => {
+          {(userAjustes ? NAV.filter((item) => item.id === "settings") : NAV).map((item) => {
             const Icon = item.icon;
             const active = view === item.id;
             return (
@@ -363,8 +432,8 @@ export default function App() {
         </nav>
         <button
           onClick={() => {
-            if (isAdmin) void loadAll();
-            else void api.localConfig().then(setLocalCfg).catch((ex) => setError(errText(ex)));
+            if (userAjustes) void api.localConfig().then(setLocalCfg).catch((ex) => setError(errText(ex)));
+            else void loadAll();
           }}
           className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-800 px-3 py-2 text-sm text-slate-200"
         >
@@ -452,7 +521,7 @@ export default function App() {
                   <button className={`rounded-md px-3 py-1 text-sm ${shell === "ps1" ? "bg-slate-800 text-white" : "text-slate-400"}`} onClick={() => setShell("ps1")}>PowerShell</button>
                 </div>
               </div>
-              <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap p-4 font-mono text-sm text-emerald-300">{log}</pre>
+              <pre ref={logEl} className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap p-4 font-mono text-sm text-emerald-300">{log}</pre>
               <form
                 className="flex shrink-0 flex-col gap-2 border-t border-slate-800 bg-slate-900 p-3 sm:flex-row sm:items-center"
                 onSubmit={(e) => {
@@ -545,7 +614,14 @@ export default function App() {
                   <button className="rounded-lg bg-rose-900 px-3 py-2 text-sm" onClick={() => void api.deleteCommand(draft.id).then(loadAll)}>Excluir</button>
                 ) : null}
                 {draft.id > 0 ? (
-                  <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void api.runCommand(draft.id, selectedRows.map((r) => ({ hostName: r.hostName, windowsUser: r.windowsUser })), false).then((r) => setStatus(`${r.queued} job(s)`))}>Enviar selecionados</button>
+                  <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void api.runCommand(draft.id, selectedRows.map((r) => ({ hostName: r.hostName, windowsUser: r.windowsUser })), false).then(async (r) => {
+                    setStatus(`${r.queued} job(s)`);
+                    burstUntil.current = Date.now() + 120_000;
+                    setLog((prev) => `${prev}${shell === "ps1" || draft.kind === "ps1" ? "PS>" : "C:\\>"} ${draft.content.trim()}\naguardando resposta (${r.queued})…\n`);
+                    setView("computers");
+                    const list = await api.jobs();
+                    applyJobs(list.jobs ?? []);
+                  })}>Enviar selecionados</button>
                 ) : null}
               </div>
             </div>
@@ -570,8 +646,8 @@ export default function App() {
 
         {view === "settings" ? (
           <section className="mx-auto flex w-full max-w-6xl flex-col gap-4 pb-8">
-            <div className={`grid gap-4 ${isAdmin ? "lg:grid-cols-2" : ""}`}>
-              {isAdmin ? (
+            <div className={`grid gap-4 ${!userAjustes ? "lg:grid-cols-2" : ""}`}>
+              {!userAjustes ? (
                 <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
                   <h2 className="text-xl font-bold">Conexão</h2>
                   <p className="mt-1 text-sm text-slate-400">Conta e API deste computador.</p>
@@ -591,11 +667,28 @@ export default function App() {
               ) : null}
               <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
                 <h2 className="text-xl font-bold">Letreiro</h2>
-                <p className="mt-1 text-sm text-slate-400">Aparência e filtro OS/SP. A posição da janela permanece neste PC.</p>
+                <p className="mt-1 text-sm text-slate-400">Aparência, tamanho da barra e filtro OS/SP.</p>
                 <label className="mt-4 block text-sm text-slate-400">
                   Setor padrão
                   <input list="setores-list" className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={localCfg.board?.sector ?? ""} onChange={(e) => patchLocal({ ...localCfg, board: { ...localCfg.board, sector: e.target.value } })} />
                   <datalist id="setores-list">{setores.map((s) => <option key={s} value={s} />)}</datalist>
+                </label>
+                <label className="mt-4 block text-sm text-slate-400">
+                  Largura da barra (px)
+                  <input
+                    type="number"
+                    min={320}
+                    max={4000}
+                    step={1}
+                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+                    value={localCfg.window?.width ?? 720}
+                    onChange={(e) => {
+                      const width = Number(e.target.value);
+                      if (!Number.isFinite(width)) return;
+                      patchLocal({ ...localCfg, window: { ...localCfg.window, width } });
+                    }}
+                  />
+                  <span className="mt-1 block text-xs text-slate-500">Entre 320 e 4000. Arrastar a faixa só move a posição.</span>
                 </label>
                 <label className="mt-4 block text-sm text-slate-400">
                   Velocidade do deslize ({Math.round(localCfg.window?.speedPxPerSec ?? 40)} px/s)
@@ -613,7 +706,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className={`grid gap-4 ${isAdmin ? "xl:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)]" : ""}`}>
+            <div className={`grid gap-4 ${!userAjustes ? "xl:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)]" : ""}`}>
               <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -705,7 +798,7 @@ export default function App() {
                 )}
               </div>
 
-              {isAdmin ? (
+              {!userAjustes ? (
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
                     <h2 className="text-lg font-bold">Intervalo de comandos</h2>

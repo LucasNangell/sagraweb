@@ -159,4 +159,5 @@ export const api = {
     request<AppConfig>("/local/config", { method: "PUT", body: JSON.stringify(payload) }),
   restoreBoard: () => request<AppConfig>("/local/restore-board", { method: "POST", body: "{}" }),
   setores: () => request<{ setores: string[] }>("/local/setores"),
+  situacoes: () => request<{ situacoes: string[] }>("/local/situacoes"),
 };

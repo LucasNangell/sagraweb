@@ -6,6 +6,8 @@ namespace SagraLetreiro;
 public static class ConfigStore
 {
     public const string ProductionApiBase = "https://cgrafsysvm.redecamara.camara.gov.br/sagra/api";
+    public const string DefaultPonto = "654321";
+    public const string DefaultNome = "usr_sefoc";
     public const string DefaultUpdateSourceDirectory =
         @"G:\PC Reinstall\Lucas Santos - Modelo de Configs\Configs - Software\Custom Sys (na Unidade C)\SEFOC Tools";
 
@@ -80,7 +82,7 @@ public static class ConfigStore
             Statuses = col.Statuses?.Where(s => s is not null).Select(s => s.Trim()).ToList() ?? new(),
             HideWhenEmpty = col.HideWhenEmpty,
         };
-        if (sector.Length > 0 && !isInbox) outCol.Sector = sector;
+        if (sector.Length > 0) outCol.Sector = sector;
         if (isInbox) outCol.Source = BoardConstants.InboxColumnSource;
         return outCol;
     }
@@ -89,7 +91,7 @@ public static class ConfigStore
     {
         raw ??= new BoardConfig();
         var columnsRaw = raw.Columns is { Count: > 0 } ? raw.Columns : DefaultBoard().Columns;
-        var columns = columnsRaw.Take(6).Select(NormalizeColumn).ToList();
+        var columns = columnsRaw.Take(40).Select(NormalizeColumn).ToList();
         if (columns.Count == 0) columns = DefaultBoard().Columns.Select(NormalizeColumn).ToList();
         var showOs = raw.ShowOs;
         var showSp = raw.ShowSp;
@@ -128,8 +130,8 @@ public static class ConfigStore
         {
             ApiBaseUrl = NormalizeApiBaseUrl(raw.ApiBaseUrl),
             SslVerify = raw.SslVerify,
-            Ponto = (raw.Ponto ?? "").Trim(),
-            Nome = (raw.Nome ?? "").Trim(),
+            Ponto = string.IsNullOrWhiteSpace(raw.Ponto) ? DefaultPonto : raw.Ponto.Trim(),
+            Nome = string.IsNullOrWhiteSpace(raw.Nome) ? DefaultNome : raw.Nome.Trim(),
             Password = raw.Password ?? "",
             PollIntervalSec = Math.Clamp(raw.PollIntervalSec <= 0 ? 10 : raw.PollIntervalSec, 5, 120),
             Window = NormalizeWindow(raw.Window),
@@ -171,6 +173,19 @@ public static class ConfigStore
     {
         config.Board = DefaultBoard();
         return Normalize(config);
+    }
+
+    public static AppConfig RestrictConnectionToPrevious(AppConfig incoming, AppConfig previous, bool allowConnectionEdit)
+    {
+        var next = Normalize(incoming);
+        if (allowConnectionEdit) return next;
+        var kept = Normalize(previous);
+        next.ApiBaseUrl = kept.ApiBaseUrl;
+        next.Ponto = kept.Ponto;
+        next.Nome = kept.Nome;
+        next.Password = kept.Password;
+        next.SslVerify = kept.SslVerify;
+        return next;
     }
 
     public static AppConfig ForRemote(AppConfig config)

@@ -370,10 +370,12 @@ public class BoardTests
         Assert.Equal("Papelaria", cfg.Board.Sector);
         Assert.Equal(1, cfg.Board.ColumnCount);
         Assert.Equal("inbox", cfg.Board.Columns[0].Source);
-        Assert.Null(cfg.Board.Columns[0].Sector);
+        Assert.Equal("SEFOC", cfg.Board.Columns[0].Sector);
         Assert.Equal(720, cfg.Window.Width);
         Assert.False(cfg.Window.TransparentBg);
         Assert.Equal(ConfigStore.ProductionApiBase, cfg.ApiBaseUrl);
+        Assert.Equal(ConfigStore.DefaultPonto, cfg.Ponto);
+        Assert.Equal(ConfigStore.DefaultNome, cfg.Nome);
         Assert.True(cfg.Board.ShowOs);
         Assert.True(cfg.Board.ShowSp);
         Assert.True(ConfigStore.Normalize(new AppConfig { Window = new WindowConfig { TransparentBg = true } }).Window.TransparentBg);
@@ -387,6 +389,38 @@ public class BoardTests
         Assert.Equal(ConfigStore.ProductionApiBase, ConfigStore.NormalizeApiBaseUrl("https://cgrafsysvm.redecamara.camara.gov.br/sagra/"));
         Assert.Equal(ConfigStore.ProductionApiBase, ConfigStore.NormalizeApiBaseUrl("https://cgrafsysvm.redecamara.camara.gov.br/sagra/api/"));
         Assert.Equal("http://127.0.0.1:8001/api", ConfigStore.NormalizeApiBaseUrl("http://127.0.0.1:8001/api"));
+    }
+
+    [Fact]
+    public void NormalizeBoardKeepsManyFilters()
+    {
+        var columns = Enumerable.Range(0, 12)
+            .Select(i => new BoardColumn { Id = $"col_{i}", Title = $"F{i}", Statuses = [$"S{i}"] })
+            .ToList();
+        var board = ConfigStore.NormalizeBoard(new BoardConfig { Columns = columns });
+        Assert.Equal(12, board.Columns.Count);
+    }
+
+    [Fact]
+    public void RestrictConnectionKeepsPreviousWhenUserCannotEdit()
+    {
+        var previous = ConfigStore.Normalize(new AppConfig { Ponto = "654321", Nome = "usr_sefoc" });
+        var incoming = ConfigStore.Normalize(new AppConfig
+        {
+            Ponto = "999",
+            Nome = "outro",
+            ApiBaseUrl = "http://127.0.0.1:8001/api",
+            Board = new BoardConfig { Sector = "Papelaria" },
+        });
+        var userSave = ConfigStore.RestrictConnectionToPrevious(incoming, previous, allowConnectionEdit: false);
+        Assert.Equal(previous.Ponto, userSave.Ponto);
+        Assert.Equal(previous.Nome, userSave.Nome);
+        Assert.Equal(previous.ApiBaseUrl, userSave.ApiBaseUrl);
+        Assert.Equal("Papelaria", userSave.Board.Sector);
+
+        var adminSave = ConfigStore.RestrictConnectionToPrevious(incoming, previous, allowConnectionEdit: true);
+        Assert.Equal("999", adminSave.Ponto);
+        Assert.Equal("outro", adminSave.Nome);
     }
 
     [Fact]

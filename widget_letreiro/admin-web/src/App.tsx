@@ -9,6 +9,8 @@ import {
   X,
   RefreshCw,
   Send,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { api, ApiError, type AppConfig, type BoardColumn, type Command, type Instance, type Job } from "./api";
 
@@ -27,6 +29,75 @@ function keyOf(row: Pick<Instance, "hostName" | "windowsUser">) {
 
 function errText(ex: unknown) {
   return ex instanceof Error ? ex.message : String(ex);
+}
+
+type FilterFonte = "situacao" | "inbox";
+
+type DisplayFilter = {
+  key: string;
+  setor: string;
+  situacao: string;
+  fonte: FilterFonte;
+};
+
+const DEFAULT_SITUACOES = [
+  "Saída p/",
+  "Saída parcial p/",
+  "Entrada Inicial",
+  "Tramit. de Prova p/",
+  "Tramit. de Prévia p/",
+  "Comentário",
+  "Em Execução",
+  "Recebido",
+  "Problemas Técnicos",
+  "Problema Técnico",
+  "Encam. de Docum.",
+];
+
+function filtersFromColumns(columns: BoardColumn[]): DisplayFilter[] {
+  const rows: DisplayFilter[] = [];
+  columns.forEach((col, colIndex) => {
+    if (col.source === "inbox") {
+      rows.push({
+        key: col.id ?? `inbox-${colIndex}`,
+        setor: col.sector ?? "",
+        situacao: "",
+        fonte: "inbox",
+      });
+      return;
+    }
+    const statuses = col.statuses?.length ? col.statuses : [""];
+    statuses.forEach((situacao, i) => {
+      rows.push({
+        key: `${col.id ?? colIndex}:${i}:${situacao}`,
+        setor: col.sector ?? "",
+        situacao,
+        fonte: "situacao",
+      });
+    });
+  });
+  return rows;
+}
+
+function columnsFromFilters(filters: DisplayFilter[]): BoardColumn[] {
+  return filters.map((item, i) => {
+    if (item.fonte === "inbox") {
+      return {
+        id: `col_${i}`,
+        title: "Inbox",
+        source: "inbox",
+        statuses: [],
+        sector: item.setor || undefined,
+      };
+    }
+    const situacao = item.situacao.trim();
+    return {
+      id: `col_${i}`,
+      title: situacao || `Filtro ${i + 1}`,
+      statuses: situacao ? [situacao] : [],
+      sector: item.setor || undefined,
+    };
+  });
 }
 
 export default function App() {
@@ -50,6 +121,7 @@ export default function App() {
   const [cfg, setCfg] = useState<AppConfig>({});
   const [localCfg, setLocalCfg] = useState<AppConfig>({});
   const [setores, setSetores] = useState<string[]>(["SEFOC", "Papelaria", "Gravação"]);
+  const [situacoes, setSituacoes] = useState<string[]>(DEFAULT_SITUACOES);
   const [isAdmin, setIsAdmin] = useState(false);
   const [jobId, setJobId] = useState<number | null>(null);
 
@@ -86,9 +158,16 @@ export default function App() {
         const me = await api.me();
         setIsAdmin(me.isAdmin);
         if (hash === "ajustes" || !me.isAdmin) setView("settings");
-        const [local, setorList] = await Promise.all([api.localConfig(), api.setores()]);
+        const [local, setorList, situacaoList] = await Promise.all([
+          api.localConfig(),
+          api.setores(),
+          api.situacoes().catch(() => ({ situacoes: [] as string[] })),
+        ]);
         setLocalCfg(local);
         if (setorList.setores?.length) setSetores(setorList.setores);
+        if (situacaoList.situacoes?.length) {
+          setSituacoes([...new Set([...situacaoList.situacoes, ...DEFAULT_SITUACOES])]);
+        }
         if (me.isAdmin) await loadAll();
         else {
           setError("");
@@ -151,27 +230,40 @@ export default function App() {
     setStatus(applyToAll ? "Configuração aplicada a todos." : "Configuração gravada.");
   }
 
-  const columns = localCfg.board?.columns ?? [];
+  const filters = useMemo(() => filtersFromColumns(localCfg.board?.columns ?? []), [localCfg.board?.columns]);
+  const situacaoOptions = useMemo(() => {
+    const extra = filters.map((row) => row.situacao).filter(Boolean);
+    return [...new Set([...situacoes, ...extra])];
+  }, [situacoes, filters]);
 
   function patchLocal(next: AppConfig) {
     setLocalCfg(next);
   }
 
-  function patchColumn(index: number, patch: Partial<BoardColumn>) {
-    const nextCols = columns.map((col, i) => (i === index ? { ...col, ...patch } : col));
-    patchLocal({ ...localCfg, board: { ...localCfg.board, columns: nextCols, columnCount: nextCols.length } });
+  function setFilters(next: DisplayFilter[]) {
+    const cols = columnsFromFilters(next);
+    patchLocal({ ...localCfg, board: { ...localCfg.board, columns: cols, columnCount: cols.length } });
   }
 
-  function addGroup() {
-    if (columns.length >= 6) return;
-    const nextCols = [...columns, { id: `col_${columns.length}`, title: `Grupo ${columns.length + 1}`, statuses: [] }];
-    patchLocal({ ...localCfg, board: { ...localCfg.board, columns: nextCols, columnCount: nextCols.length } });
+  function patchFilter(index: number, patch: Partial<DisplayFilter>) {
+    setFilters(filters.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   }
 
-  function removeGroup(index: number) {
-    if (columns.length <= 1) return setError("É necessário pelo menos 1 grupo.");
-    const nextCols = columns.filter((_, i) => i !== index);
-    patchLocal({ ...localCfg, board: { ...localCfg.board, columns: nextCols, columnCount: nextCols.length } });
+  function addFilter() {
+    setFilters([
+      ...filters,
+      {
+        key: `new-${Date.now()}`,
+        setor: localCfg.board?.sector ?? "",
+        situacao: "",
+        fonte: "situacao",
+      },
+    ]);
+  }
+
+  function removeFilter(index: number) {
+    if (filters.length <= 1) return setError("É necessário pelo menos um filtro.");
+    setFilters(filters.filter((_, i) => i !== index));
   }
 
   async function saveLocal() {
@@ -181,10 +273,10 @@ export default function App() {
   }
 
   async function restoreGroups() {
-    if (!window.confirm("Restaurar grupos e setor padrão (SEFOC, 4 grupos)?")) return;
+    if (!window.confirm("Restaurar a lista padrão de filtros (SEFOC)?")) return;
     const restored = await api.restoreBoard();
     setLocalCfg(restored);
-    setStatus("Grupos restaurados.");
+    setStatus("Filtros restaurados.");
   }
 
   async function sendTerminal(allOnline: boolean) {
@@ -280,7 +372,7 @@ export default function App() {
         </button>
       </aside>
 
-      <main className={`p-4 sm:p-6 ${view === "computers" || view === "settings" ? "flex min-h-0 flex-col lg:overflow-hidden" : "lg:overflow-auto"}`}>
+      <main className={`p-4 sm:p-6 ${view === "computers" ? "flex min-h-0 flex-col lg:overflow-hidden" : "min-h-0 lg:overflow-auto"}`}>
         {error ? (
           <div className="mb-4 shrink-0 rounded-xl border border-rose-500/30 bg-rose-950/40 px-4 py-3 text-sm text-rose-100">{error}</div>
         ) : null}
@@ -477,29 +569,31 @@ export default function App() {
         ) : null}
 
         {view === "settings" ? (
-          <section className="grid min-h-[calc(100dvh-8rem)] flex-1 grid-rows-[minmax(14rem,1fr)_minmax(16rem,1fr)] gap-4 lg:min-h-0">
-            <div className="grid min-h-0 gap-4 overflow-auto lg:grid-cols-2">
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
-                <h2 className="text-xl font-bold">Conexão</h2>
-                <p className="mt-1 text-sm text-slate-400">Conta e API deste computador.</p>
-                <div className="mt-4 grid gap-3">
-                  <Field label="API" value={localCfg.apiBaseUrl ?? ""} onChange={(v) => patchLocal({ ...localCfg, apiBaseUrl: v })} />
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <Field label="Ponto" value={localCfg.ponto ?? ""} onChange={(v) => patchLocal({ ...localCfg, ponto: v })} />
-                    <Field label="Nome" value={localCfg.nome ?? ""} onChange={(v) => patchLocal({ ...localCfg, nome: v })} />
+          <section className="mx-auto flex w-full max-w-6xl flex-col gap-4 pb-8">
+            <div className={`grid gap-4 ${isAdmin ? "lg:grid-cols-2" : ""}`}>
+              {isAdmin ? (
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+                  <h2 className="text-xl font-bold">Conexão</h2>
+                  <p className="mt-1 text-sm text-slate-400">Conta e API deste computador.</p>
+                  <div className="mt-4 grid gap-3">
+                    <Field label="API" value={localCfg.apiBaseUrl ?? ""} onChange={(v) => patchLocal({ ...localCfg, apiBaseUrl: v })} />
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <Field label="Ponto" value={localCfg.ponto ?? ""} onChange={(v) => patchLocal({ ...localCfg, ponto: v })} />
+                      <Field label="Nome" value={localCfg.nome ?? ""} onChange={(v) => patchLocal({ ...localCfg, nome: v })} />
+                    </div>
+                    <Field label="Senha (se o IP exigir)" value={localCfg.password ?? ""} onChange={(v) => patchLocal({ ...localCfg, password: v })} password />
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={!!localCfg.sslVerify} onChange={(e) => patchLocal({ ...localCfg, sslVerify: e.target.checked })} />
+                      Verificar certificado SSL
+                    </label>
                   </div>
-                  <Field label="Senha (se o IP exigir)" value={localCfg.password ?? ""} onChange={(v) => patchLocal({ ...localCfg, password: v })} password />
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={!!localCfg.sslVerify} onChange={(e) => patchLocal({ ...localCfg, sslVerify: e.target.checked })} />
-                    Verificar certificado SSL
-                  </label>
                 </div>
-              </div>
+              ) : null}
               <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
                 <h2 className="text-xl font-bold">Letreiro</h2>
                 <p className="mt-1 text-sm text-slate-400">Aparência e filtro OS/SP. A posição da janela permanece neste PC.</p>
                 <label className="mt-4 block text-sm text-slate-400">
-                  Setor monitorado
+                  Setor padrão
                   <input list="setores-list" className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={localCfg.board?.sector ?? ""} onChange={(e) => patchLocal({ ...localCfg, board: { ...localCfg.board, sector: e.target.value } })} />
                   <datalist id="setores-list">{setores.map((s) => <option key={s} value={s} />)}</datalist>
                 </label>
@@ -519,34 +613,96 @@ export default function App() {
               </div>
             </div>
 
-            <div className={`grid min-h-0 gap-4 overflow-auto ${isAdmin ? "xl:grid-cols-[1fr_320px]" : ""}`}>
-              <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
-                <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2">
+            <div className={`grid gap-4 ${isAdmin ? "xl:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)]" : ""}`}>
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-xl font-bold">Grupos</h2>
-                    <p className="text-sm text-slate-400">Colunas da faixa. Situações separadas por vírgula.</p>
+                    <h2 className="text-xl font-bold">Filtros</h2>
+                    <p className="mt-1 max-w-xl text-sm text-slate-400">
+                      Cada linha vira um card na faixa. Escolha setor, situação e a fonte dos dados.
+                    </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={addGroup}>+ grupo</button>
-                    <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void restoreGroups()}>Restaurar grupos</button>
-                    <button className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void saveLocal().catch((ex) => setError(errText(ex)))}>Salvar</button>
+                    <button type="button" className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={addFilter}>
+                      <Plus size={16} /> Adicionar
+                    </button>
+                    <button type="button" className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void restoreGroups()}>Restaurar padrão</button>
+                    <button type="button" className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void saveLocal().catch((ex) => setError(errText(ex)))}>Salvar</button>
                   </div>
                 </div>
-                <div className="grid min-h-0 flex-1 gap-3 overflow-auto md:grid-cols-2">
-                  {columns.map((col, index) => (
-                    <div key={col.id ?? index} className="rounded-xl border border-slate-800 bg-slate-950 p-3">
-                      <Field label="Título" value={col.title ?? ""} onChange={(v) => patchColumn(index, { title: v })} />
-                      <Field label="Situações" value={(col.statuses ?? []).join(", ")} onChange={(v) => patchColumn(index, { statuses: v.split(",").map((s) => s.trim()).filter(Boolean) })} />
-                      <label className="mt-2 block text-sm text-slate-400">
-                        Setor (vazio = do painel)
-                        <input list="setores-list" className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" value={col.sector ?? ""} onChange={(e) => patchColumn(index, { sector: e.target.value })} />
-                      </label>
-                      <label className="mt-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={col.source === "inbox"} onChange={(e) => patchColumn(index, { source: e.target.checked ? "inbox" : undefined })} /> Fonte: inbox de e-mail</label>
-                      <label className="mt-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={!!col.hideWhenEmpty} onChange={(e) => patchColumn(index, { hideWhenEmpty: e.target.checked })} /> Ocultar quando vazio</label>
-                      <button className="mt-3 rounded-lg bg-slate-800 px-3 py-1.5 text-sm" onClick={() => removeGroup(index)}>Remover</button>
-                    </div>
-                  ))}
-                </div>
+
+                {filters.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-slate-700 px-4 py-8 text-center text-sm text-slate-400">
+                    Nenhum filtro. Adicione um para exibir cards no letreiro.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[40rem] border-separate border-spacing-y-2 text-sm">
+                      <thead>
+                        <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                          <th className="px-2 pb-1 font-medium">Setor</th>
+                          <th className="px-2 pb-1 font-medium">Situação</th>
+                          <th className="px-2 pb-1 font-medium">Fonte</th>
+                          <th className="w-14 px-2 pb-1" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filters.map((row, index) => (
+                          <tr key={row.key} className="align-middle">
+                            <td className="rounded-l-xl border border-r-0 border-slate-800 bg-slate-950 px-2 py-2">
+                              <input
+                                list="setores-list"
+                                aria-label="Setor"
+                                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+                                value={row.setor}
+                                placeholder={localCfg.board?.sector || "Setor"}
+                                onChange={(e) => patchFilter(index, { setor: e.target.value })}
+                              />
+                            </td>
+                            <td className="border-y border-slate-800 bg-slate-950 px-2 py-2">
+                              <select
+                                aria-label="Situação"
+                                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 disabled:text-slate-500"
+                                value={row.fonte === "inbox" ? "" : row.situacao}
+                                disabled={row.fonte === "inbox"}
+                                onChange={(e) => patchFilter(index, { situacao: e.target.value })}
+                              >
+                                <option value="">{row.fonte === "inbox" ? "—" : "Selecione…"}</option>
+                                {situacaoOptions.map((item) => (
+                                  <option key={item} value={item}>{item}</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="border-y border-slate-800 bg-slate-950 px-2 py-2">
+                              <select
+                                aria-label="Fonte"
+                                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+                                value={row.fonte}
+                                onChange={(e) => {
+                                  const fonte = e.target.value as FilterFonte;
+                                  patchFilter(index, { fonte, situacao: fonte === "inbox" ? "" : row.situacao });
+                                }}
+                              >
+                                <option value="situacao">Situação</option>
+                                <option value="inbox">Inbox</option>
+                              </select>
+                            </td>
+                            <td className="rounded-r-xl border border-l-0 border-slate-800 bg-slate-950 px-2 py-2 text-right">
+                              <button
+                                type="button"
+                                className="inline-flex rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-rose-300"
+                                title="Remover filtro"
+                                onClick={() => removeFilter(index)}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
               {isAdmin ? (

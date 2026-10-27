@@ -200,6 +200,7 @@ public sealed class AdminHost : IDisposable
                 return;
             }
             var previous = _options.GetLocalConfig?.Invoke() ?? parsed;
+            parsed = ConfigStore.RestrictConnectionToPrevious(parsed, previous, _options.IsAdmin);
             var relogin = parsed.ApiBaseUrl != previous.ApiBaseUrl || parsed.Ponto != previous.Ponto
                 || parsed.Password != previous.Password || parsed.SslVerify != previous.SslVerify;
             _options.ApplyLocalConfig?.Invoke(parsed, relogin);
@@ -231,6 +232,21 @@ public sealed class AdminHost : IDisposable
                 /* usa a lista padrão */
             }
             await WriteJsonAsync(ctx, 200, new { setores }).ConfigureAwait(false);
+            return;
+        }
+
+        if (localPath.Equals("/local/situacoes", StringComparison.OrdinalIgnoreCase) && req.HttpMethod == "GET")
+        {
+            var situacoes = new List<string>();
+            try
+            {
+                situacoes = await _options.Client().FetchAndamentosAsync(ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                /* lista fica vazia; o SPA usa o conjunto padrão */
+            }
+            await WriteJsonAsync(ctx, 200, new { situacoes }).ConfigureAwait(false);
             return;
         }
 

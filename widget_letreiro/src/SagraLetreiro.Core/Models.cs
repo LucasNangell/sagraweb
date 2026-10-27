@@ -86,8 +86,8 @@ public sealed class AppConfig
 {
     public string ApiBaseUrl { get; set; } = ConfigStore.ProductionApiBase;
     public bool SslVerify { get; set; }
-    public string Ponto { get; set; } = "";
-    public string Nome { get; set; } = "";
+    public string Ponto { get; set; } = ConfigStore.DefaultPonto;
+    public string Nome { get; set; } = ConfigStore.DefaultNome;
     public string Password { get; set; } = "";
     public int PollIntervalSec { get; set; } = 10;
     public WindowConfig Window { get; set; } = new();

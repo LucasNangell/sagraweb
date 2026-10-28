@@ -80,6 +80,7 @@ public sealed class WindowConfig
     public double Opacity { get; set; } = 0.95;
     public double SpeedPxPerSec { get; set; } = 40;
     public bool TransparentBg { get; set; }
+    public bool NotificationsEnabled { get; set; }
 }
 
 public sealed class AppConfig
@@ -220,6 +221,7 @@ public sealed class ProcessedBoard
     public List<OsItem> UnmappedItems { get; set; } = new();
     public int HiddenCount { get; set; }
     public bool HasNewItems { get; set; }
+    public List<string> NewArrivalKeys { get; set; } = new();
 }
 
 public readonly record struct PlacedCard(TickerCard Card, double X, double Width);

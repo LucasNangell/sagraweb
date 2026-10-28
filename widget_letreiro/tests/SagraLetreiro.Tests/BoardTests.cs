@@ -373,6 +373,7 @@ public class BoardTests
         Assert.Equal("SEFOC", cfg.Board.Columns[0].Sector);
         Assert.Equal(720, cfg.Window.Width);
         Assert.False(cfg.Window.TransparentBg);
+        Assert.False(cfg.Window.NotificationsEnabled);
         Assert.Equal(ConfigStore.ProductionApiBase, cfg.ApiBaseUrl);
         Assert.Equal(ConfigStore.DefaultPonto, cfg.Ponto);
         Assert.Equal(ConfigStore.DefaultNome, cfg.Nome);
@@ -647,7 +648,7 @@ public class LetreiroAdminTests
                     new BoardColumn { Id = "col_0", Title = "Em Execução", Statuses = ["Em Execução"], Sector = "Papelaria" },
                 ],
             },
-            Window = new WindowConfig { X = 8, Width = 400, Opacity = 0.8, SpeedPxPerSec = 60, TransparentBg = true },
+            Window = new WindowConfig { X = 8, Width = 400, Opacity = 0.8, SpeedPxPerSec = 60, TransparentBg = true, NotificationsEnabled = true },
         });
         var merged = ConfigStore.MergeRemote(local, remote);
         Assert.Equal(40, merged.Window.X);
@@ -655,6 +656,7 @@ public class LetreiroAdminTests
         Assert.Equal(0.8, merged.Window.Opacity);
         Assert.Equal(60, merged.Window.SpeedPxPerSec);
         Assert.True(merged.Window.TransparentBg);
+        Assert.True(merged.Window.NotificationsEnabled);
         Assert.Equal("99", merged.Ponto);
         Assert.Equal("segredo", merged.Password);
         Assert.Equal("Papelaria", merged.Board.Sector);
@@ -664,6 +666,54 @@ public class LetreiroAdminTests
         var remoteOnly = ConfigStore.ForRemote(merged);
         Assert.Null(remoteOnly.Window.X);
         Assert.Equal(400, remoteOnly.Window.Width);
+        Assert.True(remoteOnly.Window.NotificationsEnabled);
+    }
+
+    [Fact]
+    public void ProcessDashboardDataTracksFirstSeenArrivalsOnly()
+    {
+        var config = new BoardConfig
+        {
+            Sector = "SEFOC",
+            Columns =
+            [
+                new() { Id = "rec", Title = "Recebido", Statuses = ["Recebido"] },
+                new() { Id = "exec", Title = "Execução", Statuses = ["Em Execução"] },
+            ],
+        };
+        var master = new Dictionary<string, OsItem>();
+        var first = new OsItem { NrOs = 10, Ano = 2026, Situacao = "Recebido", Setor = "SEFOC" };
+        var initial = Board.ProcessDashboardData([first], config, master, isInitialLoad: true);
+        Assert.Empty(initial.NewArrivalKeys);
+        Assert.False(initial.HasNewItems);
+
+        var same = Board.ProcessDashboardData([first], config, master, isInitialLoad: false);
+        Assert.Empty(same.NewArrivalKeys);
+
+        var extra = new OsItem { NrOs = 11, Ano = 2026, Situacao = "Em Execução", Setor = "SEFOC" };
+        var arrived = Board.ProcessDashboardData([first, extra], config, master, isInitialLoad: false);
+        Assert.Equal(new[] { "11-2026" }, arrived.NewArrivalKeys);
+        Assert.True(arrived.HasNewItems);
+
+        var moved = new OsItem { NrOs = 10, Ano = 2026, Situacao = "Em Execução", Setor = "SEFOC" };
+        var columnChange = Board.ProcessDashboardData([moved, extra], config, master, isInitialLoad: false);
+        Assert.Empty(columnChange.NewArrivalKeys);
+        Assert.True(columnChange.HasNewItems);
+    }
+
+    [Fact]
+    public void ArrivalNotifyHidesHeldKeysFromTicker()
+    {
+        var cards = new List<TickerCard>
+        {
+            new() { UniqueKey = "a-2026", Label = "A" },
+            new() { UniqueKey = "b-2026", Label = "B" },
+        };
+        var visible = ArrivalNotify.VisibleOnTicker(cards, new HashSet<string> { "a-2026" });
+        Assert.Single(visible);
+        Assert.Equal("b-2026", visible[0].UniqueKey);
+        Assert.Equal(ArrivalNotify.PreviewKey, ArrivalNotify.PreviewCard().UniqueKey);
+        Assert.Equal(196, ArrivalNotify.ToastWindowHeight, 3);
     }
 }
 

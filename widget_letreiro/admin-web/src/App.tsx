@@ -331,6 +331,7 @@ function seedClientConfig(row: Instance, payload: AppConfig | null): AppConfig {
       opacity: base.window?.opacity ?? 0.95,
       speedPxPerSec: base.window?.speedPxPerSec ?? 40,
       transparentBg: !!base.window?.transparentBg,
+      notificationsEnabled: !!base.window?.notificationsEnabled,
     },
   };
 }
@@ -345,11 +346,13 @@ function LetreiroDisplayFields({
   onChange,
   setores,
   listId,
+  onPreview,
 }: {
   cfg: AppConfig;
   onChange: (next: AppConfig) => void;
   setores: string[];
   listId: string;
+  onPreview?: () => void;
 }) {
   return (
     <>
@@ -402,6 +405,28 @@ function LetreiroDisplayFields({
           SP (nº ≥ 5000)
         </label>
       </div>
+      <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={!!cfg.window?.notificationsEnabled}
+            onChange={(e) => onChange({ ...cfg, window: { ...cfg.window, notificationsEnabled: e.target.checked } })}
+          />
+          Ativar notificações
+        </label>
+        {onPreview ? (
+          <button
+            type="button"
+            className="rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-100"
+            onClick={onPreview}
+          >
+            Testar notificação
+          </button>
+        ) : null}
+      </div>
+      <p className="mt-1 text-xs text-slate-500">
+        Com o aviso ligado, uma OS nova no setor aparece maior sobre a barra por 2 segundos e depois entra no letreiro.
+      </p>
     </>
   );
 }
@@ -788,6 +813,7 @@ export default function App() {
           opacity: cfg.window?.opacity ?? 0.95,
           speedPxPerSec: cfg.window?.speedPxPerSec ?? 40,
           transparentBg: !!cfg.window?.transparentBg,
+          notificationsEnabled: !!cfg.window?.notificationsEnabled,
         },
       };
       await api.putConfig(payload, row.hostName, row.windowsUser, false);
@@ -1344,7 +1370,13 @@ export default function App() {
               <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:p-5">
                 <h2 className="text-xl font-bold">Letreiro</h2>
                 <p className="mt-1 text-sm text-slate-400">Aparência, tamanho da barra e filtro OS/SP.</p>
-                <LetreiroDisplayFields cfg={localCfg} onChange={patchLocal} setores={setores} listId="setores-list" />
+                <LetreiroDisplayFields
+                  cfg={localCfg}
+                  onChange={patchLocal}
+                  setores={setores}
+                  listId="setores-list"
+                  onPreview={() => void api.previewNotification().then(() => setStatus("Notificação de teste disparada.")).catch((ex) => setError(errText(ex)))}
+                />
               </div>
             </div>
 

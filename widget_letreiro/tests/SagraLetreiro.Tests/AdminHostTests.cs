@@ -23,6 +23,8 @@ public class AdminHostTests
         Assert.Equal("/local/me", mapped);
         Assert.True(AdminHost.TryMapLocalPath("/local/situacoes", out mapped));
         Assert.Equal("/local/situacoes", mapped);
+        Assert.True(AdminHost.TryMapLocalPath("/local/preview-notification", out mapped));
+        Assert.Equal("/local/preview-notification", mapped);
         Assert.False(AdminHost.TryMapLocalPath("/api/letreiro/settings", out _));
         Assert.False(AdminHost.TryMapLocalPath("/index.html", out _));
     }

@@ -63,6 +63,10 @@ public partial class OverlayWindow : Window
     TickerCard? _pressCard;
     Point _pressCardScreen;
     OsBalloonWindow? _balloon;
+    readonly Queue<TickerCard> _arrivalQueue = new();
+    readonly HashSet<string> _heldArrivalKeys = new();
+    ArrivalToastWindow? _arrivalToast;
+    TickerCard? _showingArrival;
     AdminHost? _adminHost;
     string? _remoteFp;
     int _jobBusy;
@@ -125,6 +129,7 @@ public partial class OverlayWindow : Window
         _pollTimer.Stop();
         _commandTimer.Stop();
         CloseBalloon();
+        CloseArrivalToast();
         _adminHost?.Dispose();
         _adminHost = null;
         _client.Dispose();
@@ -137,6 +142,9 @@ public partial class OverlayWindow : Window
         if (relogin)
         {
             CloseBalloon();
+            CloseArrivalToast();
+            _arrivalQueue.Clear();
+            _heldArrivalKeys.Clear();
             _client.Dispose();
             _client = NewClient(_config);
             _master.Clear();
@@ -371,6 +379,73 @@ public partial class OverlayWindow : Window
         _balloon = null;
     }
 
+    void PreviewArrivalNotification()
+    {
+        var card = ArrivalNotify.PreviewCard();
+        if (_cards.All(item => item.UniqueKey != card.UniqueKey))
+            _cards.Add(card);
+        EnqueueArrivals([card], [card.UniqueKey]);
+        RebuildLayout();
+        PumpArrivalQueue();
+    }
+
+    void EnqueueArrivals(IEnumerable<TickerCard> cards, IReadOnlyCollection<string> arrivalKeys)
+    {
+        if (arrivalKeys.Count == 0) return;
+        foreach (var card in cards)
+        {
+            if (!arrivalKeys.Contains(card.UniqueKey)) continue;
+            if (!_heldArrivalKeys.Add(card.UniqueKey)) continue;
+            _arrivalQueue.Enqueue(card);
+        }
+    }
+
+    void PreserveHeldPreview()
+    {
+        var pending = _arrivalQueue
+            .Concat(_showingArrival is null ? Array.Empty<TickerCard>() : [_showingArrival])
+            .Where(card => card.UniqueKey == ArrivalNotify.PreviewKey);
+        foreach (var card in pending)
+        {
+            if (_cards.All(item => item.UniqueKey != card.UniqueKey))
+                _cards.Add(card);
+        }
+    }
+
+    void PumpArrivalQueue()
+    {
+        if (_arrivalToast is not null) return;
+        if (!_arrivalQueue.TryDequeue(out var card)) return;
+        _showingArrival = card;
+        _arrivalToast = new ArrivalToastWindow(card);
+        _arrivalToast.Closed += OnArrivalToastClosed;
+        _arrivalToast.ShowAbove(this);
+    }
+
+    void OnArrivalToastClosed(object? sender, EventArgs e)
+    {
+        if (_showingArrival is not null)
+            _heldArrivalKeys.Remove(_showingArrival.UniqueKey);
+        _showingArrival = null;
+        _arrivalToast = null;
+        RebuildLayout();
+        PumpArrivalQueue();
+    }
+
+    void CloseArrivalToast()
+    {
+        if (_arrivalToast is null)
+        {
+            _showingArrival = null;
+            return;
+        }
+        _arrivalToast.Closed -= OnArrivalToastClosed;
+        try { _arrivalToast.Close(); }
+        catch { }
+        _arrivalToast = null;
+        _showingArrival = null;
+    }
+
     static MenuItem Item(string header, Action action)
     {
         var item = new MenuItem { Header = header };
@@ -417,6 +492,7 @@ public partial class OverlayWindow : Window
                 ConfigStore.Save(cfg);
                 ApplyConfig(cfg, relogin);
             }),
+            PreviewNotification = () => Dispatcher.Invoke(PreviewArrivalNotification),
         });
     }
 
@@ -503,10 +579,14 @@ public partial class OverlayWindow : Window
             var cards = Board.FlattenTickerCards(processed.Columns, cfg.Board);
             lock (_gate) _initial = false;
             _cards = cards;
+            PreserveHeldPreview();
+            if (cfg.Window.NotificationsEnabled)
+                EnqueueArrivals(cards, processed.NewArrivalKeys);
             _status = "connected";
             _statusMsg = string.IsNullOrEmpty(inboxNote) ? $"{cards.Count} OP(s)" : inboxNote;
             RebuildLayout();
             PaintStatus();
+            PumpArrivalQueue();
         }
         catch (Exception ex)
         {
@@ -600,7 +680,7 @@ public partial class OverlayWindow : Window
         var (numSize, sitSize) = CardMetrics.FontSizes(height);
         var pixels = VisualTreeHelper.GetDpi(this).PixelsPerDip;
         _layout = [];
-        foreach (var card in _cards)
+        foreach (var card in ArrivalNotify.VisibleOnTicker(_cards, _heldArrivalKeys))
         {
             var labelW = Measure(card.Label, numSize, true, pixels);
             var sit = card.Situacao ?? "";

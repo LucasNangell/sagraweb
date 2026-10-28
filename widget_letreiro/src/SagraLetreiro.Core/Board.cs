@@ -356,6 +356,7 @@ public static class Board
         var now = nowMs ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var incoming = new HashSet<string>();
         var hasNew = false;
+        var newArrivalKeys = new List<string>();
         var tempColumns = config.Columns.Select(col => new BoardColumn
         {
             Id = col.Id,
@@ -396,6 +397,7 @@ public static class Board
                     item.IsNew = true;
                     item.HighlightUntil = now + BoardConstants.DashboardNewHighlightMs;
                     hasNew = true;
+                    newArrivalKeys.Add(uniqueKey);
                 }
                 masterOpsMap[uniqueKey] = item;
             }
@@ -439,6 +441,7 @@ public static class Board
             UnmappedItems = unmapped,
             HiddenCount = hidden,
             HasNewItems = hasNew,
+            NewArrivalKeys = newArrivalKeys,
         };
     }
 

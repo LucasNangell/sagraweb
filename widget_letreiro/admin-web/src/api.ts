@@ -97,6 +97,7 @@ export type AppConfig = {
     opacity?: number;
     speedPxPerSec?: number;
     transparentBg?: boolean;
+    notificationsEnabled?: boolean;
   };
   board?: {
     sector?: string;
@@ -170,6 +171,8 @@ export const api = {
   saveLocalConfig: (payload: AppConfig) =>
     request<AppConfig>("/local/config", { method: "PUT", body: JSON.stringify(payload) }),
   restoreBoard: () => request<AppConfig>("/local/restore-board", { method: "POST", body: "{}" }),
+  previewNotification: () =>
+    request<{ status: string }>("/local/preview-notification", { method: "POST", body: "{}" }),
   setores: () => request<{ setores: string[] }>("/local/setores"),
   situacoes: () => request<{ situacoes: string[] }>("/local/situacoes"),
 };

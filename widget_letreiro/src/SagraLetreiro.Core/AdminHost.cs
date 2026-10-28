@@ -12,6 +12,7 @@ public sealed class AdminHostOptions
     public required Func<LetreiroApiClient> Client { get; init; }
     public Func<AppConfig>? GetLocalConfig { get; init; }
     public Action<AppConfig, bool>? ApplyLocalConfig { get; init; }
+    public Action? PreviewNotification { get; init; }
     public bool IsAdmin { get; init; }
 }
 
@@ -248,6 +249,14 @@ public sealed class AdminHost : IDisposable
                 /* lista fica vazia; o SPA usa o conjunto padrão */
             }
             await WriteJsonAsync(ctx, 200, new { situacoes }).ConfigureAwait(false);
+            return;
+        }
+
+        if (localPath.Equals("/local/preview-notification", StringComparison.OrdinalIgnoreCase)
+            && req.HttpMethod == "POST")
+        {
+            _options.PreviewNotification?.Invoke();
+            await WriteJsonAsync(ctx, 200, new { status = "ok" }).ConfigureAwait(false);
             return;
         }
 

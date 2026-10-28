@@ -121,6 +121,7 @@ public static class ConfigStore
             Opacity = Math.Clamp(raw.Opacity <= 0 ? 0.95 : raw.Opacity, 0.4, 1.0),
             SpeedPxPerSec = Math.Clamp(raw.SpeedPxPerSec <= 0 ? 40 : raw.SpeedPxPerSec, 8, 160),
             TransparentBg = raw.TransparentBg,
+            NotificationsEnabled = raw.NotificationsEnabled,
         };
     }
 
@@ -198,6 +199,7 @@ public static class ConfigStore
             Opacity = n.Window.Opacity,
             SpeedPxPerSec = n.Window.SpeedPxPerSec,
             TransparentBg = n.Window.TransparentBg,
+            NotificationsEnabled = n.Window.NotificationsEnabled,
         };
         return n;
     }

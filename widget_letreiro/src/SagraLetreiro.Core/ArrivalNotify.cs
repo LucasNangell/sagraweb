@@ -77,6 +77,7 @@ public static class ArrivalNotify
         new("fx-stagger", "34. Cascata interna"),
         new("fx-shutter", "35. Obturador"),
         new("fx-warp", "36. Dobra espacial"),
+        new("fx-ufo", "12. Disco voador"),
     ];
 
     public static int ClampCardWidth(int value) =>
@@ -187,6 +188,7 @@ public static class ArrivalNotify
             "fx-stagger" => (40, 12, 12, 0),
             "fx-isometric" => (28, 20, 20, 0.12),
             "fx-crt" => (12, 8, 8, 0),
+            "fx-ufo" => (Math.Max(88, width * 0.42), Math.Max(130, height * 1.25), 16, 0.12),
             _ => (12, 8, 8, 0),
         };
     }

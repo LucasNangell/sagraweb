@@ -823,10 +823,15 @@ public class LetreiroAdminTests
         Assert.Equal(900, huge.CardWidth);
         Assert.Equal(280, huge.CardHeight);
         Assert.True(huge.WindowWidth < huge.CardWidth * 1.2);
-        Assert.Equal(12, ArrivalNotify.ClassicEntries.Length);
+        Assert.Equal(13, ArrivalNotify.ClassicEntries.Length);
         Assert.Equal("fx-iris", ArrivalNotify.ClampAnimation(null));
         Assert.Equal("fx-warp", ArrivalNotify.ClampAnimation("fx-warp"));
+        Assert.Equal("fx-ufo", ArrivalNotify.ClampAnimation("fx-ufo"));
         Assert.Equal("fx-iris", ArrivalNotify.ClampAnimation("fx-mercury"));
+        var ufo = ArrivalNotify.Layout(320, 96, "fx-ufo");
+        Assert.True(ufo.EnterTravel >= 130);
+        Assert.True(ufo.SidePad >= 88);
+        Assert.True(ufo.WindowHeight > layout.WindowHeight);
         Assert.Equal(180, ArrivalNotify.ClampCardWidth(10));
         Assert.Equal(900, ArrivalNotify.ClampCardWidth(9_999));
         Assert.Equal(56, ArrivalNotify.ClampCardHeight(1));

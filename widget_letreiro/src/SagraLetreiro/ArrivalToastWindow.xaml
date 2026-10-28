@@ -15,9 +15,46 @@
         FontFamily="Segoe UI"
         UseLayoutRounding="True">
     <Canvas x:Name="Stage" ClipToBounds="False">
+        <Ellipse x:Name="UfoLanding"
+                 Height="18"
+                 Opacity="0"
+                 Visibility="Collapsed"
+                 IsHitTestVisible="False"
+                 Canvas.ZIndex="0"
+                 RenderTransformOrigin="0.5,0.5">
+            <Ellipse.Fill>
+                <RadialGradientBrush>
+                    <GradientStop Color="#8C00FFCC" Offset="0" />
+                    <GradientStop Color="#3310B981" Offset="0.5" />
+                    <GradientStop Color="#00000000" Offset="0.75" />
+                </RadialGradientBrush>
+            </Ellipse.Fill>
+            <Ellipse.RenderTransform>
+                <ScaleTransform x:Name="UfoLandingScale" ScaleX="0.2" ScaleY="0.2" />
+            </Ellipse.RenderTransform>
+        </Ellipse>
+        <Polygon x:Name="UfoBeam"
+                 Opacity="0"
+                 Visibility="Collapsed"
+                 IsHitTestVisible="False"
+                 Canvas.ZIndex="1"
+                 RenderTransformOrigin="0.5,0">
+            <Polygon.Fill>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Color="#BF00FFCC" Offset="0" />
+                    <GradientStop Color="#5210B981" Offset="0.45" />
+                    <GradientStop Color="#1E38BDF8" Offset="0.85" />
+                    <GradientStop Color="#00000000" Offset="1" />
+                </LinearGradientBrush>
+            </Polygon.Fill>
+            <Polygon.RenderTransform>
+                <ScaleTransform x:Name="UfoBeamScale" ScaleX="0.2" ScaleY="0" />
+            </Polygon.RenderTransform>
+        </Polygon>
         <Border x:Name="CardBorder"
                 CornerRadius="16"
                 ClipToBounds="True"
+                Canvas.ZIndex="2"
                 RenderTransformOrigin="0.5,0.5">
             <Border.Clip>
                 <RectangleGeometry x:Name="CardClip" po:Freeze="False" />
@@ -71,5 +108,54 @@
                         CornerRadius="16" />
             </Grid>
         </Border>
+        <Canvas x:Name="UfoRig"
+                Width="120"
+                Height="48"
+                Opacity="0"
+                Visibility="Collapsed"
+                IsHitTestVisible="False"
+                Canvas.ZIndex="5"
+                RenderTransformOrigin="0.5,0.5">
+            <Canvas.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform x:Name="UfoScale" ScaleX="1" ScaleY="1" />
+                    <RotateTransform x:Name="UfoRotate" />
+                    <TranslateTransform x:Name="UfoMove" />
+                </TransformGroup>
+            </Canvas.RenderTransform>
+            <Ellipse Width="54" Height="24" Canvas.Left="33" Canvas.Top="1">
+                <Ellipse.Fill>
+                    <RadialGradientBrush GradientOrigin="0.35,0.3">
+                        <GradientStop Color="#A7F3D0" Offset="0" />
+                        <GradientStop Color="#10B981" Offset="0.45" />
+                        <GradientStop Color="#064E3B" Offset="1" />
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+            <Ellipse Width="42" Height="12" Canvas.Left="39" Canvas.Top="32">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#FFFFFF" Offset="0" />
+                        <GradientStop Color="#00FFCC" Offset="0.6" />
+                        <GradientStop Color="#0284C7" Offset="1" />
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+            <Ellipse Width="120" Height="22" Canvas.Left="0" Canvas.Top="16">
+                <Ellipse.Fill>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#E2E8F0" Offset="0" />
+                        <GradientStop Color="#64748B" Offset="0.45" />
+                        <GradientStop Color="#1E293B" Offset="0.85" />
+                        <GradientStop Color="#0F172A" Offset="1" />
+                    </LinearGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+            <Ellipse Width="7" Height="7" Canvas.Left="16" Canvas.Top="23" Fill="#00FFCC" />
+            <Ellipse Width="7" Height="7" Canvas.Left="36" Canvas.Top="23" Fill="#38BDF8" />
+            <Ellipse Width="7" Height="7" Canvas.Left="56" Canvas.Top="23" Fill="#F43F5E" />
+            <Ellipse Width="7" Height="7" Canvas.Left="76" Canvas.Top="23" Fill="#EAB308" />
+            <Ellipse Width="7" Height="7" Canvas.Left="96" Canvas.Top="23" Fill="#A855F7" />
+        </Canvas>
     </Canvas>
 </Window>

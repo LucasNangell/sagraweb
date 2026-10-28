@@ -23,6 +23,7 @@ static class ArrivalToastMotion
             case "fx-stagger": Stagger(sb); break;
             case "fx-shutter": Shutter(sb, layout); break;
             case "fx-warp": Warp(sb, layout); break;
+            case "fx-ufo": Ufo(sb, layout); break;
             default: Iris(sb, layout); break;
         }
         return sb;
@@ -169,6 +170,50 @@ static class ArrivalToastMotion
         Opacity(sb, 0, 1, 1, 0);
     }
 
+    static void Ufo(Storyboard sb, ArrivalToastLayout layout)
+    {
+        var flight = Math.Max(layout.SidePad + 24, layout.CardWidth * 0.9);
+        var drop = Math.Min(layout.EnterTravel, Math.Max(56, layout.CardHeight * 1.15));
+        D(sb, "UfoMove", "X",
+            Discrete(-flight, 0), Eased(0, 0.45, EaseInOut()), Discrete(0, 1.5), Eased(flight, 2.2, EaseIn()));
+        D(sb, "UfoMove", "Y",
+            Discrete(-40, 0), Eased(4, 0.45, EaseInOut()), Eased(0, 0.6, EaseOut()), Discrete(0, 1.5), Eased(-50, 2.2, EaseIn()));
+        D(sb, "UfoRotate", "Angle",
+            Discrete(-22, 0), Eased(8, 0.45, EaseInOut()), Eased(0, 0.6, EaseOut()), Discrete(0, 1.5), Eased(25, 2.2, EaseIn()));
+        D(sb, "UfoScale", "ScaleX",
+            Discrete(0.45, 0), Eased(1.04, 0.45, EaseOut()), Eased(1, 0.6, EaseOut()), Discrete(1, 1.5), Eased(0.35, 2.2, EaseIn()));
+        D(sb, "UfoScale", "ScaleY",
+            Discrete(0.45, 0), Eased(1.04, 0.45, EaseOut()), Eased(1, 0.6, EaseOut()), Discrete(1, 1.5), Eased(0.35, 2.2, EaseIn()));
+        D(sb, "UfoRig", "Opacity",
+            Discrete(0, 0), Eased(1, 0.45, EaseOut()), Discrete(1, 1.5), Eased(0, 2.2, EaseIn()));
+        D(sb, "UfoBeamScale", "ScaleY",
+            Discrete(0, 0), Discrete(0, 0.48), Eased(1, 0.64, EaseOut()), Discrete(1, 1.32), Eased(0, 1.52, EaseIn()));
+        D(sb, "UfoBeamScale", "ScaleX",
+            Discrete(0.2, 0), Discrete(0.2, 0.48), Eased(1, 0.64, EaseOut()), Discrete(1, 1.32), Eased(0.1, 1.52, EaseIn()));
+        D(sb, "UfoBeam", "Opacity",
+            Discrete(0, 0), Discrete(0, 0.48), Eased(1, 0.64, EaseOut()), Discrete(1, 1.32), Eased(0, 1.52, EaseIn()));
+        D(sb, "UfoLandingScale", "ScaleX",
+            Discrete(0.2, 0), Discrete(0.2, 0.55), Eased(1.1, 0.72, EaseOut()), Discrete(1.1, 1.32), Eased(0.4, 1.52, EaseIn()));
+        D(sb, "UfoLandingScale", "ScaleY",
+            Discrete(0.2, 0), Discrete(0.2, 0.55), Eased(1.1, 0.72, EaseOut()), Discrete(1.1, 1.32), Eased(0.4, 1.52, EaseIn()));
+        D(sb, "UfoLanding", "Opacity",
+            Discrete(0, 0), Discrete(0, 0.55), Eased(1, 0.72, EaseOut()), Discrete(1, 1.32), Eased(0, 1.52, EaseIn()));
+        D(sb, "CardMove", "Y",
+            Discrete(-drop, 0), Discrete(-drop, 0.56), Eased(8, 1.08, EaseOut()), Eased(0, 1.32, EaseOut()), Discrete(0, 3.2), Eased(-8, 4, EaseIn()));
+        D(sb, "CardScale", "ScaleX",
+            Discrete(0.12, 0), Discrete(0.12, 0.56), Eased(1.02, 1.08, EaseOut()), Eased(1, 1.32, EaseOut()), Discrete(1, 3.2), Eased(0.92, 4, EaseIn()));
+        D(sb, "CardScale", "ScaleY",
+            Discrete(0.12, 0), Discrete(0.12, 0.56), Eased(1.02, 1.08, EaseOut()), Eased(1, 1.32, EaseOut()), Discrete(1, 3.2), Eased(0.92, 4, EaseIn()));
+        D(sb, "CardRotate", "Angle",
+            Discrete(-8, 0), Discrete(-8, 0.56), Eased(0, 1.08, EaseOut()), Discrete(0, 3.2), Eased(4, 4, EaseIn()));
+        D(sb, "CardGlow", "Opacity",
+            Discrete(1, 0), Discrete(1, 0.56), Eased(0.85, 1.08, EaseOut()), Eased(0.2, 1.32, EaseOut()), Discrete(0.2, 3.2), Eased(0, 4, EaseIn()));
+        D(sb, "CardGlow", "BlurRadius",
+            Discrete(28, 0), Discrete(28, 0.56), Eased(22, 1.08, EaseOut()), Eased(8, 1.32, EaseOut()), Discrete(8, 3.2), Eased(0, 4, EaseIn()));
+        D(sb, "CardBorder", "Opacity",
+            Discrete(0, 0), Discrete(0, 0.56), Eased(1, 1.08, EaseOut()), Discrete(1, 3.2), Eased(0, 4, EaseIn()));
+    }
+
     static void Opacity(Storyboard sb, double a, double b, double c, double d) =>
         D(sb, "CardBorder", "Opacity", Discrete(a, 0), Eased(b, 1, EaseOut()), Discrete(c, 3), Eased(d, 4, EaseIn()));
 
@@ -243,13 +288,30 @@ static class ArrivalToastMotion
         {
             "fx-rubber" => new Point(0.5, 1),
             "fx-stage-build" => new Point(0, 0),
+            "fx-ufo" => new Point(0.5, 0),
             _ => new Point(0.5, 0.5),
         };
-        window.CardBorder.Effect = id is "fx-laser" or "fx-supernova" or "fx-warp"
-            ? new BlurEffect { Radius = 0, RenderingBias = RenderingBias.Performance }
-            : null;
+        window.CardBorder.Effect = id switch
+        {
+            "fx-ufo" => new DropShadowEffect
+            {
+                Color = Color.FromRgb(0x00, 0xff, 0xcc),
+                BlurRadius = 28,
+                ShadowDepth = 0,
+                Opacity = 1,
+                RenderingBias = RenderingBias.Performance,
+            },
+            "fx-laser" or "fx-supernova" or "fx-warp" => new BlurEffect
+            {
+                Radius = 0,
+                RenderingBias = RenderingBias.Performance,
+            },
+            _ => null,
+        };
         if (window.CardBorder.Effect is BlurEffect blur)
             window.RegisterName("CardBlur", blur);
+        if (window.CardBorder.Effect is DropShadowEffect glow)
+            window.RegisterName("CardGlow", glow);
 
         switch (id)
         {
@@ -336,6 +398,28 @@ static class ArrivalToastMotion
                 window.CardScale.ScaleY = 0.35;
                 if (window.CardBorder.Effect is BlurEffect warp) warp.Radius = 12;
                 window.CardBorder.Opacity = 0;
+                return;
+            case "fx-ufo":
+                var drop = Math.Min(layout.EnterTravel, Math.Max(56, layout.CardHeight * 1.15));
+                var flight = Math.Max(layout.SidePad + 24, layout.CardWidth * 0.9);
+                window.CardBorder.Clip = null;
+                window.CardMove.Y = -drop;
+                window.CardScale.ScaleX = 0.12;
+                window.CardScale.ScaleY = 0.12;
+                window.CardRotate.Angle = -8;
+                window.CardBorder.Opacity = 0;
+                window.UfoMove.X = -flight;
+                window.UfoMove.Y = -40;
+                window.UfoRotate.Angle = -22;
+                window.UfoScale.ScaleX = 0.45;
+                window.UfoScale.ScaleY = 0.45;
+                window.UfoRig.Opacity = 0;
+                window.UfoBeam.Opacity = 0;
+                window.UfoBeamScale.ScaleX = 0.2;
+                window.UfoBeamScale.ScaleY = 0;
+                window.UfoLanding.Opacity = 0;
+                window.UfoLandingScale.ScaleX = 0.2;
+                window.UfoLandingScale.ScaleY = 0.2;
                 return;
             default:
                 window.CardBorder.Clip = null;

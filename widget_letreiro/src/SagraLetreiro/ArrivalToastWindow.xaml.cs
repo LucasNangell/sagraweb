@@ -18,6 +18,7 @@ public partial class ArrivalToastWindow : Window
     readonly ArrivalToastLayout _layout;
     readonly Storyboard _motion;
     readonly NotificationVisual _visual;
+    readonly string _animation;
     readonly int _titleFontSize;
     readonly int _situationFontSize;
     readonly int _padX;
@@ -41,6 +42,7 @@ public partial class ArrivalToastWindow : Window
         InitializeComponent();
         Opacity = 0;
         var id = ArrivalNotify.ClampAnimation(animation);
+        _animation = id;
         _visual = ArrivalNotify.NormalizeVisual(visual);
         _layout = ArrivalNotify.Layout(cardWidth, cardHeight, id);
         _titleFontSize = ArrivalNotify.ClampTitleFontSize(titleFontSize);
@@ -100,6 +102,45 @@ public partial class ArrivalToastWindow : Window
         SituacaoText.FontSize = _situationFontSize;
         TextStack.Margin = new Thickness(_padX + ArrivalNotify.AccentWidth, 0, _padX, 0);
         SituacaoText.Margin = new Thickness(0, _textGap, 0, 0);
+        PositionUfo();
+    }
+
+    void PositionUfo()
+    {
+        var ufo = _animation == "fx-ufo";
+        var show = ufo ? Visibility.Visible : Visibility.Collapsed;
+        UfoRig.Visibility = show;
+        UfoBeam.Visibility = show;
+        UfoLanding.Visibility = show;
+        if (!ufo) return;
+
+        const double ufoW = 120;
+        const double ufoH = 48;
+        var cardLeft = _layout.SidePad;
+        var cardTop = _layout.EnterSlack;
+        var cardW = _layout.CardWidth;
+        var cardH = _layout.CardHeight;
+        Canvas.SetLeft(UfoRig, cardLeft + cardW / 2.0 - ufoW / 2.0);
+        Canvas.SetTop(UfoRig, Math.Max(0, cardTop - ufoH - 8));
+
+        var beamW = cardW * 1.12;
+        var beamLeft = cardLeft - (beamW - cardW) / 2.0;
+        var beamTop = Canvas.GetTop(UfoRig) + ufoH * 0.72;
+        var beamH = Math.Max(40, cardTop + cardH - beamTop + 6);
+        UfoBeam.Points = new PointCollection
+        {
+            new(beamW * 0.43, 0),
+            new(beamW * 0.57, 0),
+            new(beamW, beamH),
+            new(0, beamH),
+        };
+        Canvas.SetLeft(UfoBeam, beamLeft);
+        Canvas.SetTop(UfoBeam, beamTop);
+
+        var ringW = cardW * 0.92;
+        Canvas.SetLeft(UfoLanding, cardLeft + (cardW - ringW) / 2.0);
+        Canvas.SetTop(UfoLanding, cardTop + cardH - 10);
+        UfoLanding.Width = ringW;
     }
 
     void Bind(TickerCard card)

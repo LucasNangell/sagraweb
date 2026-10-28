@@ -11,6 +11,7 @@ export const CLASSIC_ENTRY_ANIMATIONS = [
   { id: "fx-stagger", label: "34. Cascata interna" },
   { id: "fx-shutter", label: "35. Obturador" },
   { id: "fx-warp", label: "36. Dobra espacial" },
+  { id: "fx-ufo", label: "12. Disco voador" },
 ] as const;
 
 export const DEFAULT_ENTRY_ANIMATION = "fx-iris";

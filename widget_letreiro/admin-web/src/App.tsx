@@ -1033,23 +1033,29 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [clientEdit, clientBusy]);
 
-  function toggle(row: Instance) {
-    const id = keyOf(row);
-    const next = new Set(selected);
-    const wasOn = next.has(id);
-    if (wasOn) next.delete(id);
-    else next.add(id);
-    setSelected(next);
-    if (!wasOn) {
-      setProfile({ nome: row.nome ?? "", setor: row.setor ?? "" });
-      return;
-    }
+  function syncProfileFromSelection(next: Set<string>, fallback?: Instance) {
     if (next.size === 0) {
       setProfile({ nome: "", setor: "" });
       return;
     }
-    const leftover = instances.find((item) => next.has(keyOf(item)));
-    setProfile({ nome: leftover?.nome ?? "", setor: leftover?.setor ?? "" });
+    const current = fallback && next.has(keyOf(fallback))
+      ? fallback
+      : instances.find((item) => next.has(keyOf(item)));
+    setProfile({ nome: current?.nome ?? "", setor: current?.setor ?? "" });
+  }
+
+  function selectRow(row: Instance, additive: boolean) {
+    const id = keyOf(row);
+    if (!additive) {
+      setSelected(new Set([id]));
+      setProfile({ nome: row.nome ?? "", setor: row.setor ?? "" });
+      return;
+    }
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelected(next);
+    syncProfileFromSelection(next, row);
   }
 
   async function saveProfile() {
@@ -1064,11 +1070,12 @@ export default function App() {
     setLocalCfg(next);
   }
 
-  function onRowClick(row: Instance) {
+  function onRowClick(row: Instance, e: { ctrlKey: boolean; metaKey: boolean }) {
     if (clickTimer.current) window.clearTimeout(clickTimer.current);
+    const additive = e.ctrlKey || e.metaKey;
     clickTimer.current = window.setTimeout(() => {
       clickTimer.current = 0;
-      toggle(row);
+      selectRow(row, additive);
     }, 280);
   }
 
@@ -1343,7 +1350,7 @@ export default function App() {
                 <div className="min-w-0">
                   <h2 className="text-xl font-bold sm:text-2xl">Computadores</h2>
                   <p className="text-sm text-slate-400">
-                    Uma linha por usuário, mesmo no mesmo computador. Clique para selecionar. Duplo clique abre filtros e exibição só daquele usuário.
+                    Uma linha por usuário, mesmo no mesmo computador. Clique seleciona um. Ctrl+clique marca vários. Duplo clique abre filtros e exibição só daquele usuário.
                     {filteringList ? " Sem seleção, Nome e Setor filtram a lista." : ""}
                   </p>
                 </div>
@@ -1353,7 +1360,7 @@ export default function App() {
                   </button>
                 </div>
               </div>
-              <div className="grid shrink-0 gap-3 sm:grid-cols-2">
+              <div className="grid shrink-0 items-end gap-3 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(12rem,1.15fr)_auto]">
                 <label className="min-w-0 text-sm text-slate-400">
                   Nome
                   <input
@@ -1372,12 +1379,10 @@ export default function App() {
                     onChange={(e) => setProfile((p) => ({ ...p, setor: e.target.value }))}
                   />
                 </label>
-              </div>
-              <div className="flex shrink-0 flex-wrap items-end gap-2">
-                <label className="min-w-[14rem] flex-1 text-sm text-slate-400">
+                <label className="min-w-0 text-sm text-slate-400">
                   Perfil de configuração
                   <select
-                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+                    className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
                     value={applyProfileId}
                     onChange={(e) => setApplyProfileId(Number(e.target.value))}
                   >
@@ -1389,7 +1394,7 @@ export default function App() {
                 </label>
                 <button
                   type="button"
-                  className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-60"
+                  className="whitespace-nowrap rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-60"
                   disabled={clientBusy}
                   onClick={() => void applyConfigProfileToSelected().catch((ex) => setError(errText(ex)))}
                 >
@@ -1419,8 +1424,8 @@ export default function App() {
                         <tr
                           key={keyOf(row)}
                           className={`cursor-pointer border-t border-slate-800 ${on ? "bg-sky-400/10" : ""}`}
-                          title="Duplo clique para editar filtros e exibição deste usuário"
-                          onClick={() => onRowClick(row)}
+                          title="Clique seleciona um. Ctrl+clique marca vários. Duplo clique edita filtros e exibição."
+                          onClick={(e) => onRowClick(row, e)}
                           onDoubleClick={() => void openClientConfig(row)}
                         >
                           <td className="px-3 py-3"><input type="checkbox" checked={on} readOnly /></td>

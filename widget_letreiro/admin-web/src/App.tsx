@@ -16,6 +16,7 @@ import {
 import { api, ApiError, type AppConfig, type BoardColumn, type Command, type ConfigProfile, type Instance, type Job } from "./api";
 import {
   CLASSIC_ENTRY_ANIMATIONS,
+  clampColumnAnimation,
   clampEntryAnimation,
   visualFromPreset,
 } from "./notificationStyle";
@@ -281,6 +282,9 @@ type DisplayFilter = {
   situacao: string;
   fonte: FilterFonte;
   notify: boolean;
+  ponto: string;
+  observacao: string;
+  animation: string;
 };
 
 const DEFAULT_SITUACOES = [
@@ -307,6 +311,9 @@ function filtersFromColumns(columns: BoardColumn[]): DisplayFilter[] {
         situacao: "",
         fonte: "inbox",
         notify: !!col.notify,
+        ponto: col.ponto ?? "",
+        observacao: col.observacao ?? "",
+        animation: clampColumnAnimation(col.animation),
       });
       return;
     }
@@ -318,6 +325,9 @@ function filtersFromColumns(columns: BoardColumn[]): DisplayFilter[] {
         situacao,
         fonte: "situacao",
         notify: !!col.notify,
+        ponto: col.ponto ?? "",
+        observacao: col.observacao ?? "",
+        animation: clampColumnAnimation(col.animation),
       });
     });
   });
@@ -326,6 +336,14 @@ function filtersFromColumns(columns: BoardColumn[]): DisplayFilter[] {
 
 function columnsFromFilters(filters: DisplayFilter[]): BoardColumn[] {
   return filters.map((item, i) => {
+    const ponto = item.ponto.trim();
+    const observacao = item.observacao.trim();
+    const animation = clampColumnAnimation(item.animation);
+    const extras = {
+      ...(ponto ? { ponto } : {}),
+      ...(observacao ? { observacao } : {}),
+      ...(animation ? { animation } : {}),
+    };
     if (item.fonte === "inbox") {
       return {
         id: `col_${i}`,
@@ -334,6 +352,7 @@ function columnsFromFilters(filters: DisplayFilter[]): BoardColumn[] {
         statuses: [],
         sector: item.setor || undefined,
         notify: !!item.notify,
+        ...extras,
       };
     }
     const situacao = item.situacao.trim();
@@ -343,6 +362,7 @@ function columnsFromFilters(filters: DisplayFilter[]): BoardColumn[] {
       statuses: situacao ? [situacao] : [],
       sector: item.setor || undefined,
       notify: !!item.notify,
+      ...extras,
     };
   });
 }
@@ -757,7 +777,7 @@ function FilterListFields({
   function addFilter() {
     onChange(withFilters(cfg, [
       ...filters,
-      { key: `new-${Date.now()}`, setor: cfg.board?.sector ?? "", situacao: "", fonte: "situacao", notify: false },
+      { key: `new-${Date.now()}`, setor: cfg.board?.sector ?? "", situacao: "", fonte: "situacao", notify: false, ponto: "", observacao: "", animation: "" },
     ]));
   }
 
@@ -774,6 +794,7 @@ function FilterListFields({
           <h2 className="text-xl font-bold">Filtros</h2>
           <p className="mt-1 max-w-xl text-sm text-slate-400">
             Cada linha vira um card na faixa. Marque Notificar para avisar quando uma OS entrar nessa situação.
+            Ponto e Observação são opcionais. Animação por filtro vale só com Notificar marcado.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -792,67 +813,106 @@ function FilterListFields({
           {filters.map((row, index) => (
             <div
               key={row.key}
-              className="grid min-w-0 gap-2 rounded-xl border border-slate-800 bg-slate-950 p-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(7rem,9rem)_auto_auto] lg:items-end"
+              className="grid min-w-0 gap-2 rounded-xl border border-slate-800 bg-slate-950 p-3"
             >
-              <label className="min-w-0 text-xs text-slate-500">
-                Setor
-                <input
-                  list={listId}
-                  aria-label="Setor"
-                  className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-                  value={row.setor}
-                  placeholder={cfg.board?.sector || "Setor"}
-                  onChange={(e) => patchFilter(index, { setor: e.target.value })}
-                />
-              </label>
-              <label className="min-w-0 text-xs text-slate-500">
-                Situação
-                <select
-                  aria-label="Situação"
-                  className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 disabled:text-slate-500"
-                  value={row.fonte === "inbox" ? "" : row.situacao}
-                  disabled={row.fonte === "inbox"}
-                  onChange={(e) => patchFilter(index, { situacao: e.target.value })}
+              <div className="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(7rem,9rem)_auto_auto] lg:items-end">
+                <label className="min-w-0 text-xs text-slate-500">
+                  Setor
+                  <input
+                    list={listId}
+                    aria-label="Setor"
+                    className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+                    value={row.setor}
+                    placeholder={cfg.board?.sector || "Setor"}
+                    onChange={(e) => patchFilter(index, { setor: e.target.value })}
+                  />
+                </label>
+                <label className="min-w-0 text-xs text-slate-500">
+                  Situação
+                  <select
+                    aria-label="Situação"
+                    className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 disabled:text-slate-500"
+                    value={row.fonte === "inbox" ? "" : row.situacao}
+                    disabled={row.fonte === "inbox"}
+                    onChange={(e) => patchFilter(index, { situacao: e.target.value })}
+                  >
+                    <option value="">{row.fonte === "inbox" ? "—" : "Selecione…"}</option>
+                    {situacaoOptions.map((item) => (
+                      <option key={item} value={item}>{item}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="min-w-0 text-xs text-slate-500">
+                  Fonte
+                  <select
+                    aria-label="Fonte"
+                    className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+                    value={row.fonte}
+                    onChange={(e) => {
+                      const fonte = e.target.value as FilterFonte;
+                      patchFilter(index, { fonte, situacao: fonte === "inbox" ? "" : row.situacao });
+                    }}
+                  >
+                    <option value="situacao">Situação</option>
+                    <option value="inbox">Inbox</option>
+                  </select>
+                </label>
+                <label className="flex min-w-0 flex-col text-xs text-slate-500 lg:items-center">
+                  Notificar
+                  <input
+                    type="checkbox"
+                    className="mt-2 h-4 w-4 accent-sky-400"
+                    checked={!!row.notify}
+                    aria-label="Notificar nesta situação"
+                    onChange={(e) => patchFilter(index, { notify: e.target.checked })}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="inline-flex h-10 w-10 items-center justify-center justify-self-end rounded-lg text-slate-400 hover:bg-slate-800 hover:text-rose-300"
+                  title="Remover filtro"
+                  onClick={() => removeFilter(index)}
                 >
-                  <option value="">{row.fonte === "inbox" ? "—" : "Selecione…"}</option>
-                  {situacaoOptions.map((item) => (
-                    <option key={item} value={item}>{item}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="min-w-0 text-xs text-slate-500">
-                Fonte
-                <select
-                  aria-label="Fonte"
-                  className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-                  value={row.fonte}
-                  onChange={(e) => {
-                    const fonte = e.target.value as FilterFonte;
-                    patchFilter(index, { fonte, situacao: fonte === "inbox" ? "" : row.situacao });
-                  }}
-                >
-                  <option value="situacao">Situação</option>
-                  <option value="inbox">Inbox</option>
-                </select>
-              </label>
-              <label className="flex min-w-0 flex-col text-xs text-slate-500 lg:items-center">
-                Notificar
-                <input
-                  type="checkbox"
-                  className="mt-2 h-4 w-4 accent-sky-400"
-                  checked={!!row.notify}
-                  aria-label="Notificar nesta situação"
-                  onChange={(e) => patchFilter(index, { notify: e.target.checked })}
-                />
-              </label>
-              <button
-                type="button"
-                className="inline-flex h-10 w-10 items-center justify-center justify-self-end rounded-lg text-slate-400 hover:bg-slate-800 hover:text-rose-300"
-                title="Remover filtro"
-                onClick={() => removeFilter(index)}
-              >
-                <Trash2 size={16} />
-              </button>
+                  <Trash2 size={16} />
+                </button>
+              </div>
+              <div className="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(6rem,8rem)_minmax(0,1fr)_minmax(10rem,14rem)] lg:items-end">
+                <label className="min-w-0 text-xs text-slate-500">
+                  Ponto
+                  <input
+                    aria-label="Ponto de quem registrou"
+                    className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+                    value={row.ponto}
+                    placeholder="Qualquer"
+                    onChange={(e) => patchFilter(index, { ponto: e.target.value })}
+                  />
+                </label>
+                <label className="min-w-0 text-xs text-slate-500">
+                  Observação
+                  <input
+                    aria-label="Texto na observação da OS"
+                    className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+                    value={row.observacao}
+                    placeholder="Trecho em qualquer lugar"
+                    onChange={(e) => patchFilter(index, { observacao: e.target.value })}
+                  />
+                </label>
+                <label className="min-w-0 text-xs text-slate-500">
+                  Animação
+                  <select
+                    aria-label="Animação deste filtro"
+                    className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 disabled:text-slate-500"
+                    value={clampColumnAnimation(row.animation)}
+                    disabled={!row.notify}
+                    onChange={(e) => patchFilter(index, { animation: e.target.value })}
+                  >
+                    <option value="">Padrão</option>
+                    {CLASSIC_ENTRY_ANIMATIONS.map((item) => (
+                      <option key={item.id} value={item.id}>{item.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
             </div>
           ))}
         </div>

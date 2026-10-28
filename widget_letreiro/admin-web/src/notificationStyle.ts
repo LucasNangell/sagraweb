@@ -140,3 +140,8 @@ export function clampEntryAnimation(value: unknown): string {
   const id = String(value ?? "").trim();
   return CLASSIC_ENTRY_ANIMATIONS.some((item) => item.id === id) ? id : DEFAULT_ENTRY_ANIMATION;
 }
+
+export function clampColumnAnimation(value: unknown): string {
+  const id = String(value ?? "").trim();
+  return CLASSIC_ENTRY_ANIMATIONS.some((item) => item.id === id) ? id : "";
+}

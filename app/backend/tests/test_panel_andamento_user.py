@@ -42,3 +42,29 @@ def test_missing_andamento_author_remains_optional():
     }):
         result = _enrich_operacional_from_live([{"nr_os": 1428, "ano": 2026}], include_user=True)
     assert result[0]["andamento_usuario"] is None
+
+
+def test_search_copies_andamento_ponto_from_live():
+    rows = [{"nr_os": 1428, "ano": 2026}]
+    with patch("services.os_ultimo_andamento_service.fetch_operacional_rows_batch", return_value={
+        (1428, 2026): {
+            "situacao": "Em Execução",
+            "setor": "SEFOC",
+            "data": "2026-10-21 12:00:00",
+            "ponto": "12.345",
+            "observacao": "urgente na gráfica",
+        }
+    }):
+        result = _enrich_operacional_from_live(rows, include_user=True)
+    assert result[0]["andamento_ponto"] == "12.345"
+    assert result[0]["observacao"] == "urgente na gráfica"
+
+
+def test_slim_enrich_skips_andamento_ponto():
+    rows = [{"nr_os": 1428, "ano": 2026}]
+    with patch("services.os_ultimo_andamento_service.fetch_operacional_rows_batch", return_value={
+        (1428, 2026): {"situacao": "Em Execução", "ponto": "12345", "observacao": "x"}
+    }):
+        result = _enrich_operacional_from_live(rows, slim=True)
+    assert "andamento_ponto" not in result[0]
+    assert "observacao" not in result[0]

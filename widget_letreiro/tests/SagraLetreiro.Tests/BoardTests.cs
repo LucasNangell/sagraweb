@@ -62,6 +62,66 @@ public class BoardTests
     }
 
     [Fact]
+    public void MatchesColumnPontoAndObservacao()
+    {
+        Assert.True(Board.MatchesColumnPonto("12345", ""));
+        Assert.True(Board.MatchesColumnPonto("12.345", "12345"));
+        Assert.True(Board.MatchesColumnPonto("12-345", "12345"));
+        Assert.False(Board.MatchesColumnPonto("999", "12345"));
+        Assert.False(Board.MatchesColumnPonto("", "12345"));
+        Assert.True(Board.MatchesColumnObservacao("Analisar PDF enviado", "pdf"));
+        Assert.True(Board.MatchesColumnObservacao("URGENTE na gráfica", "urgente"));
+        Assert.False(Board.MatchesColumnObservacao("sem nota", "urgente"));
+        Assert.True(Board.MatchesColumnObservacao("qualquer", ""));
+    }
+
+    [Fact]
+    public void FindColumnIdRequiresPontoAndObservacaoWhenSet()
+    {
+        var config = new BoardConfig
+        {
+            Sector = "SEFOC",
+            Columns =
+            [
+                new() { Id = "ana", Title = "Ana", Statuses = ["Em Execução"], Ponto = "111" },
+                new() { Id = "bruno", Title = "Bruno", Statuses = ["Em Execução"], Ponto = "222" },
+                new() { Id = "obs", Title = "Obs", Statuses = ["Recebido"], Observacao = "urgente" },
+                new() { Id = "any", Title = "Any", Statuses = ["Recebido"] },
+            ],
+        };
+        Assert.Equal("ana", Board.FindColumnId(config, new OsItem { Situacao = "Em Execução", Setor = "SEFOC", AndamentoPonto = "111" }));
+        Assert.Equal("bruno", Board.FindColumnId(config, new OsItem { Situacao = "Em Execução", Setor = "SEFOC", AndamentoPonto = "222" }));
+        Assert.Null(Board.FindColumnId(config, new OsItem { Situacao = "Em Execução", Setor = "SEFOC", AndamentoPonto = "333" }));
+        Assert.Equal("obs", Board.FindColumnId(config, new OsItem { Situacao = "Recebido", Setor = "SEFOC", Observacao = "Pedido URGENTE do gabinete" }));
+        Assert.Equal("any", Board.FindColumnId(config, new OsItem { Situacao = "Recebido", Setor = "SEFOC", Observacao = "sem marca" }));
+    }
+
+    [Fact]
+    public void InboxFilterAppliesPontoAndObservacao()
+    {
+        var config = new BoardConfig
+        {
+            Sector = "SEFOC",
+            Columns = [new() { Id = "in", Title = "Inbox", Source = "inbox", Ponto = "111", Observacao = "pdf" }],
+        };
+        var processed = Board.ProcessDashboardData(
+            [
+                new OsItem { NrOs = 1, Ano = 2026, Situacao = "Recebido", Setor = "SEFOC", AndamentoPonto = "111", Observacao = "Analisar PDF" },
+                new OsItem { NrOs = 2, Ano = 2026, Situacao = "Recebido", Setor = "SEFOC", AndamentoPonto = "111", Observacao = "sem arquivo" },
+                new OsItem { NrOs = 3, Ano = 2026, Situacao = "Recebido", Setor = "SEFOC", AndamentoPonto = "222", Observacao = "PDF enviado" },
+            ],
+            config, new Dictionary<string, OsItem>(), isInitialLoad: true,
+            inboxOs:
+            [
+                new InboxRef { Os = 1, Ano = 2026 },
+                new InboxRef { Os = 2, Ano = 2026 },
+                new InboxRef { Os = 3, Ano = 2026 },
+                new InboxRef { Os = 4, Ano = 2026 },
+            ]);
+        Assert.Equal(["inbox:1-2026"], processed.Columns[0].Items.Select(i => i.UniqueKey ?? "").ToArray());
+    }
+
+    [Fact]
     public void OsBelongsToDashboardSector()
     {
         Assert.False(Board.OsBelongsToDashboardSector(new OsItem { NrOs = 1, Ano = 2026, Situacao = "Entregue", Setor = "SEFOC" }, "SEFOC"));
@@ -215,6 +275,10 @@ public class BoardTests
             },
         };
         var main = Board.FlattenTickerCards(columns).Single();
+        Assert.Null(main.Animation);
+        columns[0].Animation = "fx-ufo";
+        main = Board.FlattenTickerCards(columns).Single();
+        Assert.Equal("fx-ufo", main.Animation);
         Assert.Equal(12, main.FolderNr);
         Assert.Equal(2026, main.FolderAno);
         Assert.Equal("Ofício", main.Titulo);
@@ -376,6 +440,9 @@ public class BoardTests
         Assert.False(cfg.Window.TransparentBg);
         Assert.False(cfg.Window.NotificationsEnabled);
         Assert.False(cfg.Board.Columns[0].Notify);
+        Assert.True(string.IsNullOrEmpty(cfg.Board.Columns[0].Ponto));
+        Assert.True(string.IsNullOrEmpty(cfg.Board.Columns[0].Observacao));
+        Assert.True(string.IsNullOrEmpty(cfg.Board.Columns[0].Animation));
         Assert.Equal(ArrivalNotify.DefaultCardWidth, cfg.Window.NotificationWidth);
         Assert.Equal(ArrivalNotify.DefaultCardHeight, cfg.Window.NotificationHeight);
         Assert.Equal(ArrivalNotify.DefaultTitleFontSize, cfg.Window.NotificationTitleFontSize);
@@ -391,6 +458,34 @@ public class BoardTests
         Assert.True(cfg.Board.ShowOs);
         Assert.True(cfg.Board.ShowSp);
         Assert.True(ConfigStore.Normalize(new AppConfig { Window = new WindowConfig { TransparentBg = true } }).Window.TransparentBg);
+    }
+
+    [Fact]
+    public void NormalizeColumnKeepsPontoObservacaoAndKnownAnimation()
+    {
+        var cfg = ConfigStore.Normalize(new AppConfig
+        {
+            Board = new BoardConfig
+            {
+                Columns =
+                [
+                    new BoardColumn
+                    {
+                        Title = "Execução",
+                        Statuses = ["Em Execução"],
+                        Notify = true,
+                        Ponto = " 12.345 ",
+                        Observacao = " urgente ",
+                        Animation = "fx-ufo",
+                    },
+                    new BoardColumn { Title = "Outro", Statuses = ["Recebido"], Animation = "fx-mercury" },
+                ],
+            },
+        });
+        Assert.Equal("12.345", cfg.Board.Columns[0].Ponto);
+        Assert.Equal("urgente", cfg.Board.Columns[0].Observacao);
+        Assert.Equal("fx-ufo", cfg.Board.Columns[0].Animation);
+        Assert.True(string.IsNullOrEmpty(cfg.Board.Columns[1].Animation));
     }
 
     [Fact]
@@ -828,6 +923,9 @@ public class LetreiroAdminTests
         Assert.Equal("fx-warp", ArrivalNotify.ClampAnimation("fx-warp"));
         Assert.Equal("fx-ufo", ArrivalNotify.ClampAnimation("fx-ufo"));
         Assert.Equal("fx-iris", ArrivalNotify.ClampAnimation("fx-mercury"));
+        Assert.Equal("", ArrivalNotify.ClampColumnAnimation(null));
+        Assert.Equal("", ArrivalNotify.ClampColumnAnimation("fx-mercury"));
+        Assert.Equal("fx-ufo", ArrivalNotify.ClampColumnAnimation("fx-ufo"));
         var ufo = ArrivalNotify.Layout(320, 96, "fx-ufo");
         Assert.True(ufo.EnterTravel >= 130);
         Assert.True(ufo.SidePad >= 88);

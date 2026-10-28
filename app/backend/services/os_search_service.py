@@ -1229,6 +1229,7 @@ def _enrich_operacional_from_live(
             row["andamento_usuario"] = live.get("andamento_usuario")
         if not slim:
             row["observacao"] = live.get("observacao")
+            row["andamento_ponto"] = live.get("ponto")
     return rows
 
 

@@ -29,6 +29,7 @@ public sealed class OsItem
     public string? Prioridade { get; set; }
     public string? LastUpdate { get; set; }
     public string? AndamentoUsuario { get; set; }
+    public string? AndamentoPonto { get; set; }
     public string? Observacao { get; set; }
     public object? PcpOrdem { get; set; }
     public string? PcpUltimaAtualizacao { get; set; }
@@ -62,6 +63,9 @@ public sealed class BoardColumn
     public string? Source { get; set; }
     public bool HideWhenEmpty { get; set; }
     public bool Notify { get; set; }
+    public string? Ponto { get; set; }
+    public string? Observacao { get; set; }
+    public string? Animation { get; set; }
     public List<OsItem> Items { get; set; } = new();
 }
 
@@ -206,6 +210,7 @@ public sealed class TickerCard
     public bool IsSubOs { get; set; }
     public int ColumnIndex { get; set; }
     public string ColumnTitle { get; set; } = "";
+    public string? Animation { get; set; }
     public object? NrOs { get; set; }
     public object? Ano { get; set; }
     public object? ParentNrOs { get; set; }

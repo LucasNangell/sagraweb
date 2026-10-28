@@ -75,6 +75,9 @@ public static class ConfigStore
     {
         col ??= new BoardColumn();
         var sector = (col.Sector ?? "").Trim();
+        var ponto = (col.Ponto ?? "").Trim();
+        var observacao = (col.Observacao ?? "").Trim();
+        var animation = ArrivalNotify.ClampColumnAnimation(col.Animation);
         var isInbox = col.Source == BoardConstants.InboxColumnSource;
         var outCol = new BoardColumn
         {
@@ -85,6 +88,9 @@ public static class ConfigStore
             Notify = col.Notify,
         };
         if (sector.Length > 0) outCol.Sector = sector;
+        if (ponto.Length > 0) outCol.Ponto = ponto;
+        if (observacao.Length > 0) outCol.Observacao = observacao;
+        if (animation.Length > 0) outCol.Animation = animation;
         if (isInbox) outCol.Source = BoardConstants.InboxColumnSource;
         return outCol;
     }

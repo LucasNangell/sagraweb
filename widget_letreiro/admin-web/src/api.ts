@@ -83,6 +83,9 @@ export type BoardColumn = {
   source?: string;
   hideWhenEmpty?: boolean;
   notify?: boolean;
+  ponto?: string;
+  observacao?: string;
+  animation?: string;
 };
 
 export type AppConfig = {

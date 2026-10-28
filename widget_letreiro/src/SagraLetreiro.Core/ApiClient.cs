@@ -302,6 +302,7 @@ public sealed class LetreiroApiClient : IDisposable
         Prioridade = GetString(row, "prioridade"),
         LastUpdate = GetString(row, "last_update"),
         AndamentoUsuario = GetString(row, "andamento_usuario"),
+        AndamentoPonto = GetString(row, "andamento_ponto"),
         Observacao = GetString(row, "observacao"),
         PcpOrdem = GetObject(row, "pcp_ordem"),
         PcpUltimaAtualizacao = GetString(row, "pcp_ultima_atualizacao"),

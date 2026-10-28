@@ -436,7 +436,9 @@ public partial class OverlayWindow : Window
         _showingArrival = card;
         var width = _config.Window.NotificationWidth;
         var height = _config.Window.NotificationHeight;
-        var animation = _config.Window.NotificationAnimation;
+        var animation = string.IsNullOrWhiteSpace(card.Animation)
+            ? _config.Window.NotificationAnimation
+            : card.Animation;
         var visual = _config.Window.NotificationVisual;
         var titleFont = _config.Window.NotificationTitleFontSize;
         var situationFont = _config.Window.NotificationSituationFontSize;

@@ -124,6 +124,18 @@ public static class ArrivalNotify
         return DefaultAnimation;
     }
 
+    public static string ClampColumnAnimation(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "";
+        var id = value.Trim();
+        foreach (var item in ClassicEntries)
+        {
+            if (string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase))
+                return item.Id;
+        }
+        return "";
+    }
+
     public static ArrivalToastLayout Layout(int cardWidth, int cardHeight, string? animation = null)
     {
         var width = ClampCardWidth(cardWidth);

@@ -35,6 +35,31 @@ public static class Board
         return false;
     }
 
+    public static string NormalizeAndamentoPonto(string? value)
+    {
+        var raw = (value ?? "").Trim();
+        if (raw.Length == 0) return "";
+        return raw.Replace(".", "", StringComparison.Ordinal).Replace("-", "", StringComparison.Ordinal);
+    }
+
+    public static bool MatchesColumnPonto(string? andamentoPonto, string? filter)
+    {
+        var filt = NormalizeAndamentoPonto(filter);
+        if (filt.Length == 0) return true;
+        return string.Equals(NormalizeAndamentoPonto(andamentoPonto), filt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool MatchesColumnObservacao(string? observacao, string? filter)
+    {
+        var filt = (filter ?? "").Trim();
+        if (filt.Length == 0) return true;
+        return (observacao ?? "").Contains(filt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool MatchesColumnExtras(BoardColumn col, OsItem item) =>
+        MatchesColumnPonto(item.AndamentoPonto, col.Ponto)
+        && MatchesColumnObservacao(item.Observacao, col.Observacao);
+
     public static int ToInt(object? value, int fallback = 0)
     {
         if (value is null) return fallback;
@@ -274,8 +299,9 @@ public static class Board
             if (IsInboxColumn(col)) continue;
             var columnSector = ResolveColumnSector(col, boardSector);
             if (!OsBelongsToDashboardSector(item, columnSector)) continue;
-            if (col.Statuses.Any(status => MatchesColumnStatus(situacao, status)))
-                return col.Id;
+            if (!col.Statuses.Any(status => MatchesColumnStatus(situacao, status))) continue;
+            if (!MatchesColumnExtras(col, item)) continue;
+            return col.Id;
         }
         return null;
     }
@@ -340,8 +366,10 @@ public static class Board
                     continue;
                 unique[pair] = refer;
             }
+            var column = config.Columns[i];
             var items = unique.Values
                 .Select(r => BuildInboxItem(r, master.GetValueOrDefault($"{r.Os}-{r.Ano}")))
+                .Where(item => MatchesColumnExtras(column, item))
                 .ToList();
             items.Sort((a, b) =>
             {
@@ -398,6 +426,9 @@ public static class Board
             Source = col.Source,
             HideWhenEmpty = col.HideWhenEmpty,
             Notify = col.Notify,
+            Ponto = col.Ponto,
+            Observacao = col.Observacao,
+            Animation = col.Animation,
             Items = new List<OsItem>(),
         }).ToList();
         var unmapped = new List<OsItem>();
@@ -492,6 +523,7 @@ public static class Board
         item.Prioridade = os.Prioridade;
         item.LastUpdate = os.LastUpdate;
         item.AndamentoUsuario = os.AndamentoUsuario;
+        item.AndamentoPonto = os.AndamentoPonto;
         item.Observacao = os.Observacao;
         item.DataEntrega = os.DataEntrega;
         item.EntregPeriodo = os.EntregPeriodo;
@@ -563,6 +595,7 @@ public static class Board
                     IsSubOs = item.RowKind == "sub_os",
                     ColumnIndex = origIdx,
                     ColumnTitle = col.Title ?? "",
+                    Animation = col.Animation,
                     NrOs = item.NrOs,
                     Ano = item.Ano,
                     ParentNrOs = item.ParentNrOs,

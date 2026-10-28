@@ -37,6 +37,7 @@ def test_schema_sql_creates_letreiro_tables():
     assert "idx_letreiro_job_claim" in CREATE_TAB_LETREIRO_COMANDO_JOB
     assert "CREATE TABLE IF NOT EXISTS tabLetreiroAjuste" in CREATE_TAB_LETREIRO_AJUSTE
     assert "CommandPollIntervalSec" in CREATE_TAB_LETREIRO_AJUSTE
+    assert "ON UPDATE CURRENT_TIMESTAMP" not in CREATE_TAB_LETREIRO_INSTANCIA
 
 
 def test_host_user_primary_needed_when_host_only():
@@ -74,8 +75,9 @@ def test_heartbeat_upserts_instance(monkeypatch):
         json={"hostName": "PC1", "windowsUser": r"REDECAMARA\fulano", "version": "2.4.0", "ponto": "123"},
     )
     assert response.status_code == 200
-    assert calls
-    assert calls[0][1] == ("PC1", r"REDECAMARA\fulano", "2.4.0", "123")
+    inserts = [c for c in calls if "INSERT INTO tabLetreiroInstancia" in c[0]]
+    assert inserts
+    assert inserts[0][1] == ("PC1", r"REDECAMARA\fulano", "2.4.0", "123")
 
 
 def test_list_painel_presets(monkeypatch):
@@ -192,6 +194,89 @@ def test_instances_lists_two_users_on_same_host(monkeypatch):
     assert items[1]["nome"] == "Bruno Alves"
 
 
+def test_instances_online_is_per_user_not_host(monkeypatch):
+    now = datetime.now()
+    monkeypatch.setattr(
+        letreiro_routes.db,
+        "execute_query",
+        lambda *a, **k: [
+            {
+                "HostName": "PC-SALA",
+                "WindowsUser": r"REDECAMARA\ana",
+                "Nome": "Ana Souza",
+                "Setor": "SEFOC",
+                "Version": "2.25.0",
+                "Ponto": "654321",
+                "LastSeen": now,
+                "ConfigHost": "PC-SALA",
+            },
+            {
+                "HostName": "PC-SALA",
+                "WindowsUser": r"REDECAMARA\bruno",
+                "Nome": "Bruno Alves",
+                "Setor": "Papelaria",
+                "Version": "2.25.0",
+                "Ponto": "654321",
+                "LastSeen": now - timedelta(minutes=10),
+                "ConfigHost": "PC-SALA",
+            },
+        ],
+    )
+    response = _client().get(
+        "/api/letreiro/instances",
+        headers={"X-Letreiro-Windows-User": "P_918713"},
+    )
+    assert response.status_code == 200
+    items = {row["windowsUser"]: row["online"] for row in response.json()["instances"]}
+    assert items[r"REDECAMARA\ana"] is True
+    assert items[r"REDECAMARA\bruno"] is False
+
+
+def test_heartbeat_updates_only_matching_user(monkeypatch):
+    calls = []
+
+    def fake_exec(sql, params=None):
+        calls.append((sql, params))
+        if "SELECT WindowsUser FROM tabLetreiroInstancia" in sql:
+            return [{"WindowsUser": "ana"}, {"WindowsUser": "bruno"}]
+        return []
+
+    monkeypatch.setattr(letreiro_routes.db, "execute_query", fake_exec)
+    response = _client().post(
+        "/api/letreiro/heartbeat",
+        json={"hostName": "PC-SALA", "windowsUser": r"REDECAMARA\ana", "version": "2.25.1", "ponto": "654321"},
+    )
+    assert response.status_code == 200
+    updates = [c for c in calls if c[0].strip().startswith("UPDATE tabLetreiroInstancia")]
+    inserts = [c for c in calls if "INSERT INTO tabLetreiroInstancia" in c[0]]
+    assert updates
+    assert not inserts
+    assert updates[0][1][2] == "PC-SALA"
+    assert updates[0][1][3] == "ana"
+
+
+def test_heartbeat_inserts_sibling_user_on_same_host(monkeypatch):
+    calls = []
+
+    def fake_exec(sql, params=None):
+        calls.append((sql, params))
+        if "SELECT WindowsUser FROM tabLetreiroInstancia" in sql:
+            return [{"WindowsUser": "ana"}]
+        return []
+
+    monkeypatch.setattr(letreiro_routes.db, "execute_query", fake_exec)
+    response = _client().post(
+        "/api/letreiro/heartbeat",
+        json={"hostName": "PC-SALA", "windowsUser": r"REDECAMARA\bruno", "version": "2.25.1", "ponto": "654321"},
+    )
+    assert response.status_code == 200
+    updates = [c for c in calls if c[0].strip().startswith("UPDATE tabLetreiroInstancia")]
+    inserts = [c for c in calls if "INSERT INTO tabLetreiroInstancia" in c[0]]
+    assert not updates
+    assert inserts
+    assert inserts[0][1][1] == r"REDECAMARA\bruno"
+
+
 def test_heartbeat_keeps_same_host_different_users(monkeypatch):
     calls = []
 
@@ -211,9 +296,10 @@ def test_heartbeat_keeps_same_host_different_users(monkeypatch):
     )
     assert first.status_code == 200
     assert second.status_code == 200
-    users = [c[1][1] for c in calls]
+    inserts = [c for c in calls if "INSERT INTO tabLetreiroInstancia" in c[0]]
+    users = [c[1][1] for c in inserts]
     assert users == [r"REDECAMARA\ana", r"REDECAMARA\bruno"]
-    assert all(c[1][0] == "PC-SALA" for c in calls)
+    assert all(c[1][0] == "PC-SALA" for c in inserts)
 
 
 def test_put_config_rejected_without_admin(monkeypatch):

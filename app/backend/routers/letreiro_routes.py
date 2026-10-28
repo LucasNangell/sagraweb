@@ -47,6 +47,21 @@ def is_letreiro_admin(windows_user: str | None) -> bool:
     return normalize_windows_sam(windows_user) == ADMIN_SAM
 
 
+def _stored_windows_user(host: str, user: str) -> Optional[str]:
+    sam = normalize_windows_sam(user)
+    if not host or not sam:
+        return None
+    rows = db.execute_query(
+        "SELECT WindowsUser FROM tabLetreiroInstancia WHERE HostName = %s",
+        (host,),
+    )
+    for row in rows or []:
+        stored = (row.get("WindowsUser") or "").strip()
+        if normalize_windows_sam(stored) == sam:
+            return stored
+    return None
+
+
 def _require_admin(windows_user: str | None) -> str:
     if not is_letreiro_admin(windows_user):
         raise HTTPException(status_code=403, detail="Acesso restrito ao administrador do letreiro.")
@@ -322,6 +337,8 @@ def _insert_returning_id(sql: str, params: tuple[Any, ...]) -> int:
 
 
 def _claim_pending_job(host: str, user: str) -> Optional[dict[str, Any]]:
+    stored = _stored_windows_user(host, user) or user
+
     def op(cursor):
         cursor.execute(
             """
@@ -332,7 +349,7 @@ def _claim_pending_job(host: str, user: str) -> Optional[dict[str, Any]]:
             LIMIT 1
             FOR UPDATE
             """,
-            (host, user, JOB_STATUS_PENDING),
+            (host, stored, JOB_STATUS_PENDING),
         )
         row = cursor.fetchone()
         if not row:
@@ -446,16 +463,25 @@ async def post_heartbeat(body: HeartbeatBody):
     user = _clip(body.windows_user, 128)
     if not host or not user:
         raise HTTPException(status_code=400, detail="hostName e windowsUser são obrigatórios.")
+    version = _clip(body.version, 32)
+    ponto = _clip(body.ponto, 32)
+    stored = _stored_windows_user(host, user)
+    if stored:
+        db.execute_query(
+            """
+            UPDATE tabLetreiroInstancia
+            SET Version = %s, Ponto = %s, LastSeen = NOW()
+            WHERE HostName = %s AND WindowsUser = %s
+            """,
+            (version, ponto, host, stored),
+        )
+        return {"status": "ok"}
     db.execute_query(
         """
         INSERT INTO tabLetreiroInstancia (HostName, WindowsUser, Version, Ponto, LastSeen)
         VALUES (%s, %s, %s, %s, NOW())
-        ON DUPLICATE KEY UPDATE
-            Version = VALUES(Version),
-            Ponto = VALUES(Ponto),
-            LastSeen = NOW()
         """,
-        (host, user, _clip(body.version, 32), _clip(body.ponto, 32)),
+        (host, user, version, ponto),
     )
     return {"status": "ok"}
 

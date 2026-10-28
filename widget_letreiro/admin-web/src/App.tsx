@@ -41,20 +41,38 @@ const NAV: { id: View; label: string; icon: typeof Monitor }[] = [
   { id: "settings", label: "Ajustes", icon: Settings2 },
 ];
 
+function normalizeSam(value: string) {
+  const raw = (value ?? "").trim();
+  const slash = Math.max(raw.lastIndexOf("\\"), raw.lastIndexOf("/"));
+  return (slash >= 0 ? raw.slice(slash + 1) : raw).toLowerCase();
+}
+
 function keyOf(row: Pick<Instance, "hostName" | "windowsUser">) {
-  return `${row.hostName}\n${row.windowsUser}`;
+  return `${row.hostName.trim().toLowerCase()}\n${normalizeSam(row.windowsUser)}`;
 }
 
 function uniqueInstances(rows: Instance[]) {
-  const seen = new Set<string>();
-  const out: Instance[] = [];
+  const seen = new Map<string, Instance>();
   for (const row of rows) {
     const key = keyOf(row);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(row);
+    const prev = seen.get(key);
+    if (!prev) {
+      seen.set(key, row);
+      continue;
+    }
+    const prevSeen = Date.parse(String(prev.lastSeen ?? "")) || 0;
+    const nextSeen = Date.parse(String(row.lastSeen ?? "")) || 0;
+    const newer = nextSeen >= prevSeen ? row : prev;
+    const older = newer === row ? prev : row;
+    seen.set(key, {
+      ...newer,
+      nome: newer.nome || older.nome,
+      setor: newer.setor || older.setor,
+      hasConfig: newer.hasConfig || older.hasConfig,
+      online: newer.online,
+    });
   }
-  return out;
+  return [...seen.values()];
 }
 
 function foldText(value: string) {

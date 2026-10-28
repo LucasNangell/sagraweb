@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS tabLetreiroInstancia (
     Setor VARCHAR(128) NOT NULL DEFAULT '',
     Version VARCHAR(32) NOT NULL DEFAULT '',
     Ponto VARCHAR(32) NOT NULL DEFAULT '',
-    LastSeen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    LastSeen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (HostName, WindowsUser),
     KEY idx_letreiro_instancia_seen (LastSeen)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
@@ -185,6 +185,26 @@ def _ensure_host_user_primary(cursor, table: str) -> None:
     logger.info("%s: chave primária ajustada para (HostName, WindowsUser)", table)
 
 
+def _ensure_last_seen_not_auto_update(cursor) -> None:
+    cursor.execute(
+        """
+        SELECT EXTRA
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'tabLetreiroInstancia'
+          AND COLUMN_NAME = 'LastSeen'
+        """
+    )
+    row = cursor.fetchone()
+    extra = str((row or {}).get("EXTRA") or "").lower()
+    if "on update" not in extra:
+        return
+    cursor.execute(
+        "ALTER TABLE tabLetreiroInstancia MODIFY LastSeen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"
+    )
+    logger.info("tabLetreiroInstancia: LastSeen sem ON UPDATE CURRENT_TIMESTAMP")
+
+
 def ensure_letreiro_schema() -> None:
     db = Database()
     try:
@@ -196,6 +216,7 @@ def ensure_letreiro_schema() -> None:
             cursor.execute(CREATE_TAB_LETREIRO_AJUSTE)
             cursor.execute(ENSURE_TAB_LETREIRO_AJUSTE_ROW)
             _ensure_instancia_profile_columns(cursor)
+            _ensure_last_seen_not_auto_update(cursor)
             for table in _HOST_USER_PK_TABLES:
                 _ensure_host_user_primary(cursor, table)
         logger.info("Schema letreiro verificado")

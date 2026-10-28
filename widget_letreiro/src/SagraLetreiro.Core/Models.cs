@@ -81,6 +81,8 @@ public sealed class WindowConfig
     public double SpeedPxPerSec { get; set; } = 40;
     public bool TransparentBg { get; set; }
     public bool NotificationsEnabled { get; set; }
+    public int NotificationWidth { get; set; } = ArrivalNotify.DefaultCardWidth;
+    public int NotificationHeight { get; set; } = ArrivalNotify.DefaultCardHeight;
 }
 
 public sealed class AppConfig

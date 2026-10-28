@@ -374,6 +374,8 @@ public class BoardTests
         Assert.Equal(720, cfg.Window.Width);
         Assert.False(cfg.Window.TransparentBg);
         Assert.False(cfg.Window.NotificationsEnabled);
+        Assert.Equal(ArrivalNotify.DefaultCardWidth, cfg.Window.NotificationWidth);
+        Assert.Equal(ArrivalNotify.DefaultCardHeight, cfg.Window.NotificationHeight);
         Assert.Equal(ConfigStore.ProductionApiBase, cfg.ApiBaseUrl);
         Assert.Equal(ConfigStore.DefaultPonto, cfg.Ponto);
         Assert.Equal(ConfigStore.DefaultNome, cfg.Nome);
@@ -648,7 +650,7 @@ public class LetreiroAdminTests
                     new BoardColumn { Id = "col_0", Title = "Em Execução", Statuses = ["Em Execução"], Sector = "Papelaria" },
                 ],
             },
-            Window = new WindowConfig { X = 8, Width = 400, Opacity = 0.8, SpeedPxPerSec = 60, TransparentBg = true, NotificationsEnabled = true },
+            Window = new WindowConfig { X = 8, Width = 400, Opacity = 0.8, SpeedPxPerSec = 60, TransparentBg = true, NotificationsEnabled = true, NotificationWidth = 480, NotificationHeight = 120 },
         });
         var merged = ConfigStore.MergeRemote(local, remote);
         Assert.Equal(40, merged.Window.X);
@@ -657,6 +659,8 @@ public class LetreiroAdminTests
         Assert.Equal(60, merged.Window.SpeedPxPerSec);
         Assert.True(merged.Window.TransparentBg);
         Assert.True(merged.Window.NotificationsEnabled);
+        Assert.Equal(480, merged.Window.NotificationWidth);
+        Assert.Equal(120, merged.Window.NotificationHeight);
         Assert.Equal("99", merged.Ponto);
         Assert.Equal("segredo", merged.Password);
         Assert.Equal("Papelaria", merged.Board.Sector);
@@ -667,6 +671,8 @@ public class LetreiroAdminTests
         Assert.Null(remoteOnly.Window.X);
         Assert.Equal(400, remoteOnly.Window.Width);
         Assert.True(remoteOnly.Window.NotificationsEnabled);
+        Assert.Equal(480, remoteOnly.Window.NotificationWidth);
+        Assert.Equal(120, remoteOnly.Window.NotificationHeight);
     }
 
     [Fact]
@@ -713,7 +719,18 @@ public class LetreiroAdminTests
         Assert.Single(visible);
         Assert.Equal("b-2026", visible[0].UniqueKey);
         Assert.Equal(ArrivalNotify.PreviewKey, ArrivalNotify.PreviewCard().UniqueKey);
-        Assert.Equal(196, ArrivalNotify.ToastWindowHeight, 3);
+        var layout = ArrivalNotify.Layout(320, 96);
+        Assert.Equal(320, layout.CardWidth);
+        Assert.Equal(96, layout.CardHeight);
+        Assert.True(layout.WindowWidth > layout.CardWidth);
+        Assert.True(layout.WindowHeight > layout.CardHeight);
+        Assert.True(layout.SidePad >= layout.CardWidth * (ArrivalNotify.ScaleOvershoot - 1) / 2);
+        Assert.Equal(180, ArrivalNotify.ClampCardWidth(10));
+        Assert.Equal(900, ArrivalNotify.ClampCardWidth(9_999));
+        Assert.Equal(56, ArrivalNotify.ClampCardHeight(1));
+        Assert.Equal(280, ArrivalNotify.ClampCardHeight(9_999));
+        Assert.Equal(320, ArrivalNotify.ClampCardWidth(0));
+        Assert.Equal(96, ArrivalNotify.ClampCardHeight(0));
     }
 }
 

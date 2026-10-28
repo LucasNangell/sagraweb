@@ -122,6 +122,8 @@ public static class ConfigStore
             SpeedPxPerSec = Math.Clamp(raw.SpeedPxPerSec <= 0 ? 40 : raw.SpeedPxPerSec, 8, 160),
             TransparentBg = raw.TransparentBg,
             NotificationsEnabled = raw.NotificationsEnabled,
+            NotificationWidth = ArrivalNotify.ClampCardWidth(raw.NotificationWidth),
+            NotificationHeight = ArrivalNotify.ClampCardHeight(raw.NotificationHeight),
         };
     }
 
@@ -200,6 +202,8 @@ public static class ConfigStore
             SpeedPxPerSec = n.Window.SpeedPxPerSec,
             TransparentBg = n.Window.TransparentBg,
             NotificationsEnabled = n.Window.NotificationsEnabled,
+            NotificationWidth = n.Window.NotificationWidth,
+            NotificationHeight = n.Window.NotificationHeight,
         };
         return n;
     }

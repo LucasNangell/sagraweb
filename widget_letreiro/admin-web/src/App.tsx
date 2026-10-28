@@ -332,6 +332,8 @@ function seedClientConfig(row: Instance, payload: AppConfig | null): AppConfig {
       speedPxPerSec: base.window?.speedPxPerSec ?? 40,
       transparentBg: !!base.window?.transparentBg,
       notificationsEnabled: !!base.window?.notificationsEnabled,
+      notificationWidth: base.window?.notificationWidth ?? 320,
+      notificationHeight: base.window?.notificationHeight ?? 96,
     },
   };
 }
@@ -424,8 +426,42 @@ function LetreiroDisplayFields({
           </button>
         ) : null}
       </div>
+      <div className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2">
+        <label className="min-w-0 text-sm text-slate-400">
+          Largura do card (px)
+          <input
+            type="number"
+            min={180}
+            max={900}
+            step={1}
+            className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+            value={cfg.window?.notificationWidth ?? 320}
+            onChange={(e) => {
+              const notificationWidth = Number(e.target.value);
+              if (!Number.isFinite(notificationWidth)) return;
+              onChange({ ...cfg, window: { ...cfg.window, notificationWidth } });
+            }}
+          />
+        </label>
+        <label className="min-w-0 text-sm text-slate-400">
+          Altura do card (px)
+          <input
+            type="number"
+            min={56}
+            max={280}
+            step={1}
+            className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+            value={cfg.window?.notificationHeight ?? 96}
+            onChange={(e) => {
+              const notificationHeight = Number(e.target.value);
+              if (!Number.isFinite(notificationHeight)) return;
+              onChange({ ...cfg, window: { ...cfg.window, notificationHeight } });
+            }}
+          />
+        </label>
+      </div>
       <p className="mt-1 text-xs text-slate-500">
-        Com o aviso ligado, uma OS nova no setor aparece maior sobre a barra por 2 segundos e depois entra no letreiro.
+        Com o aviso ligado, uma OS nova no setor aparece maior sobre a barra (Mercúrio) e depois entra no letreiro. Largura 180–900, altura 56–280.
       </p>
     </>
   );
@@ -814,6 +850,8 @@ export default function App() {
           speedPxPerSec: cfg.window?.speedPxPerSec ?? 40,
           transparentBg: !!cfg.window?.transparentBg,
           notificationsEnabled: !!cfg.window?.notificationsEnabled,
+          notificationWidth: cfg.window?.notificationWidth ?? 320,
+          notificationHeight: cfg.window?.notificationHeight ?? 96,
         },
       };
       await api.putConfig(payload, row.hostName, row.windowsUser, false);
@@ -1375,7 +1413,10 @@ export default function App() {
                   onChange={patchLocal}
                   setores={setores}
                   listId="setores-list"
-                  onPreview={() => void api.previewNotification().then(() => setStatus("Notificação de teste disparada.")).catch((ex) => setError(errText(ex)))}
+                  onPreview={() => void api.previewNotification({
+                    width: localCfg.window?.notificationWidth ?? 320,
+                    height: localCfg.window?.notificationHeight ?? 96,
+                  }).then(() => setStatus("Notificação de teste disparada.")).catch((ex) => setError(errText(ex)))}
                 />
               </div>
             </div>

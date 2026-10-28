@@ -1,14 +1,59 @@
 namespace SagraLetreiro;
 
+public readonly record struct ArrivalToastLayout(
+    int CardWidth,
+    int CardHeight,
+    double SidePad,
+    double EnterSlack,
+    double ExitSlack,
+    double EnterTravel,
+    double ExitTravel,
+    double BlobRadius,
+    double HoldRadius,
+    double WindowWidth,
+    double WindowHeight);
+
 public static class ArrivalNotify
 {
     public const string PreviewKey = "preview:0-0";
-    public const double ToastWidth = 320;
-    public const double ToastHeight = 96;
-    public const double ToastEnterSlack = 60;
-    public const double ToastExitSlack = 40;
-    public const double ToastWindowHeight = ToastEnterSlack + ToastHeight + ToastExitSlack;
+    public const int DefaultCardWidth = 320;
+    public const int DefaultCardHeight = 96;
+    public const int MinCardWidth = 180;
+    public const int MaxCardWidth = 900;
+    public const int MinCardHeight = 56;
+    public const int MaxCardHeight = 280;
+    public const double ScaleOvershoot = 1.4;
     public static readonly TimeSpan Duration = TimeSpan.FromSeconds(4);
+
+    public static int ClampCardWidth(int value) =>
+        Math.Clamp(value <= 0 ? DefaultCardWidth : value, MinCardWidth, MaxCardWidth);
+
+    public static int ClampCardHeight(int value) =>
+        Math.Clamp(value <= 0 ? DefaultCardHeight : value, MinCardHeight, MaxCardHeight);
+
+    public static ArrivalToastLayout Layout(int cardWidth, int cardHeight)
+    {
+        var width = ClampCardWidth(cardWidth);
+        var height = ClampCardHeight(cardHeight);
+        var sidePad = Math.Max(36, width * (ScaleOvershoot - 1) / 2);
+        var vertOvershoot = Math.Max(16, height * (ScaleOvershoot - 1) / 2);
+        var enterTravel = Math.Max(60, height * 0.65);
+        var exitTravel = Math.Max(40, height * 0.45);
+        var enterSlack = enterTravel + vertOvershoot;
+        var exitSlack = exitTravel + vertOvershoot;
+        return new ArrivalToastLayout(
+            width,
+            height,
+            sidePad,
+            enterSlack,
+            exitSlack,
+            enterTravel,
+            exitTravel,
+            height / 2.0,
+            Math.Min(16, Math.Max(8, height * 0.17)),
+            width + sidePad * 2,
+            enterSlack + height + exitSlack);
+    }
 
     public static TickerCard PreviewCard() => new()
     {

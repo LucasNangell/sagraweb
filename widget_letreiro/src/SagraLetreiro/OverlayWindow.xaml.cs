@@ -67,6 +67,7 @@ public partial class OverlayWindow : Window
     readonly HashSet<string> _heldArrivalKeys = new();
     ArrivalToastWindow? _arrivalToast;
     TickerCard? _showingArrival;
+    (int Width, int Height)? _previewToastSize;
     AdminHost? _adminHost;
     string? _remoteFp;
     int _jobBusy;
@@ -379,8 +380,11 @@ public partial class OverlayWindow : Window
         _balloon = null;
     }
 
-    void PreviewArrivalNotification()
+    void PreviewArrivalNotification(int width, int height)
     {
+        _previewToastSize = (
+            width > 0 ? ArrivalNotify.ClampCardWidth(width) : _config.Window.NotificationWidth,
+            height > 0 ? ArrivalNotify.ClampCardHeight(height) : _config.Window.NotificationHeight);
         var card = ArrivalNotify.PreviewCard();
         if (_cards.All(item => item.UniqueKey != card.UniqueKey))
             _cards.Add(card);
@@ -417,7 +421,14 @@ public partial class OverlayWindow : Window
         if (_arrivalToast is not null) return;
         if (!_arrivalQueue.TryDequeue(out var card)) return;
         _showingArrival = card;
-        _arrivalToast = new ArrivalToastWindow(card);
+        var width = _config.Window.NotificationWidth;
+        var height = _config.Window.NotificationHeight;
+        if (card.UniqueKey == ArrivalNotify.PreviewKey && _previewToastSize is { } preview)
+        {
+            width = preview.Width;
+            height = preview.Height;
+        }
+        _arrivalToast = new ArrivalToastWindow(card, width, height);
         _arrivalToast.Closed += OnArrivalToastClosed;
         _arrivalToast.ShowAbove(this);
     }
@@ -492,7 +503,7 @@ public partial class OverlayWindow : Window
                 ConfigStore.Save(cfg);
                 ApplyConfig(cfg, relogin);
             }),
-            PreviewNotification = () => Dispatcher.Invoke(PreviewArrivalNotification),
+            PreviewNotification = (width, height) => Dispatcher.Invoke(() => PreviewArrivalNotification(width, height)),
         });
     }
 

@@ -12,7 +12,7 @@ public sealed class AdminHostOptions
     public required Func<LetreiroApiClient> Client { get; init; }
     public Func<AppConfig>? GetLocalConfig { get; init; }
     public Action<AppConfig, bool>? ApplyLocalConfig { get; init; }
-    public Action? PreviewNotification { get; init; }
+    public Action<int, int>? PreviewNotification { get; init; }
     public bool IsAdmin { get; init; }
 }
 
@@ -255,7 +255,26 @@ public sealed class AdminHost : IDisposable
         if (localPath.Equals("/local/preview-notification", StringComparison.OrdinalIgnoreCase)
             && req.HttpMethod == "POST")
         {
-            _options.PreviewNotification?.Invoke();
+            var body = await ReadBodyAsync(req, ctx, ct).ConfigureAwait(false);
+            if (body is null && req.HasEntityBody) return;
+            var width = 0;
+            var height = 0;
+            if (body is { Length: > 0 })
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(body);
+                    if (doc.RootElement.TryGetProperty("width", out var widthEl) && widthEl.TryGetInt32(out var parsedWidth))
+                        width = parsedWidth;
+                    if (doc.RootElement.TryGetProperty("height", out var heightEl) && heightEl.TryGetInt32(out var parsedHeight))
+                        height = parsedHeight;
+                }
+                catch
+                {
+                    /* usa o tamanho salvo no letreiro */
+                }
+            }
+            _options.PreviewNotification?.Invoke(width, height);
             await WriteJsonAsync(ctx, 200, new { status = "ok" }).ConfigureAwait(false);
             return;
         }

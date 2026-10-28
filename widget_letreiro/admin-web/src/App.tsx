@@ -1344,23 +1344,64 @@ export default function App() {
         ) : null}
 
         {view === "computers" ? (
-          <section className="grid min-h-0 flex-1 grid-rows-[minmax(0,0.9fr)_minmax(0,1.15fr)] gap-3 sm:gap-4">
-            <div className="flex min-h-0 min-w-0 flex-col gap-3 overflow-hidden">
-              <div className="flex shrink-0 flex-wrap items-end justify-between gap-3">
-                <div className="min-w-0">
-                  <h2 className="text-xl font-bold sm:text-2xl">Computadores</h2>
-                  <p className="text-sm text-slate-400">
-                    Uma linha por usuário, mesmo no mesmo computador. Clique seleciona um. Ctrl+clique marca vários. Duplo clique abre filtros e exibição só daquele usuário.
-                    {filteringList ? " Sem seleção, Nome e Setor filtram a lista." : ""}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void saveProfile()}>
-                    Salvar nome/setor
-                  </button>
-                </div>
+          <section className="grid min-h-0 flex-1 grid-rows-[minmax(14rem,38%)_minmax(0,1fr)] gap-3 sm:gap-4 lg:grid-rows-none lg:grid-cols-[minmax(18rem,26rem)_minmax(0,1fr)]">
+            <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 shadow-card">
+              <div className="shrink-0 border-b border-slate-800 px-3 py-3 sm:px-4">
+                <h2 className="text-xl font-bold">Computadores</h2>
+                <p className="mt-1 text-xs text-slate-400">
+                  Clique seleciona um. Ctrl+clique marca vários. Duplo clique edita filtros.
+                  {filteringList ? " Sem seleção, Nome e Setor filtram a lista." : ""}
+                </p>
               </div>
-              <div className="grid shrink-0 items-end gap-3 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(12rem,1.15fr)_auto]">
+              <div className="min-h-0 flex-1 overflow-auto">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-slate-900 text-left text-slate-400">
+                    <tr>
+                      <th className="w-6 px-2 py-3 font-medium" aria-label="Estado" />
+                      {["Nome", "Setor", "Computador", "Usuário"].map((h) => (
+                        <th key={h} className="px-2 py-3 font-medium">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleInstances.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-3 py-8 text-center text-sm text-slate-400">
+                          {instances.length === 0 ? "Nenhum usuário." : "Nenhum usuário corresponde ao filtro."}
+                        </td>
+                      </tr>
+                    ) : null}
+                    {visibleInstances.map((row) => {
+                      const on = selected.has(keyOf(row));
+                      return (
+                        <tr
+                          key={keyOf(row)}
+                          className={`cursor-pointer border-t border-slate-800 ${on ? "bg-sky-400/20" : "hover:bg-slate-800/60"}`}
+                          title={row.online ? "Online" : "Offline"}
+                          aria-selected={on}
+                          onClick={(e) => onRowClick(row, e)}
+                          onDoubleClick={() => void openClientConfig(row)}
+                        >
+                          <td className="px-2 py-3">
+                            <span
+                              className={`mx-auto block h-2 w-2 rounded-full ${row.online ? "bg-emerald-400" : "bg-rose-500"}`}
+                              aria-label={row.online ? "Online" : "Offline"}
+                            />
+                          </td>
+                          <td className="max-w-[8rem] truncate px-2 py-3 font-medium" title={row.nome || undefined}>{row.nome || "—"}</td>
+                          <td className="max-w-[7rem] truncate px-2 py-3" title={row.setor || undefined}>{row.setor || "—"}</td>
+                          <td className="max-w-[8rem] truncate px-2 py-3" title={row.hostName}>{row.hostName}</td>
+                          <td className="max-w-[8rem] truncate px-2 py-3" title={row.windowsUser}>{row.windowsUser}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex min-h-0 min-w-0 flex-col gap-3">
+              <div className="grid shrink-0 gap-2 sm:grid-cols-2">
                 <label className="min-w-0 text-sm text-slate-400">
                   Nome
                   <input
@@ -1379,7 +1420,9 @@ export default function App() {
                     onChange={(e) => setProfile((p) => ({ ...p, setor: e.target.value }))}
                   />
                 </label>
-                <label className="min-w-0 text-sm text-slate-400">
+              </div>
+              <div className="flex shrink-0 flex-wrap items-end gap-2">
+                <label className="min-w-[12rem] flex-1 text-sm text-slate-400">
                   Perfil de configuração
                   <select
                     className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
@@ -1400,55 +1443,15 @@ export default function App() {
                 >
                   {clientBusy ? "Aplicando…" : "Aplicar aos selecionados"}
                 </button>
+                <button
+                  type="button"
+                  className="whitespace-nowrap rounded-lg bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-100"
+                  onClick={() => void saveProfile()}
+                >
+                  Salvar nome/setor
+                </button>
               </div>
-              <div className="min-h-0 flex-1 overflow-auto rounded-2xl border border-slate-800 bg-slate-900/80 shadow-card">
-                <table className="w-full min-w-[52rem] text-sm">
-                  <thead className="sticky top-0 bg-slate-900 text-left text-slate-400">
-                    <tr>
-                      {["", "Nome", "Setor", "Computador", "Usuário", "Ponto", "Versão", "Estado"].map((h) => (
-                        <th key={h || "sel"} className="px-3 py-3 font-medium">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visibleInstances.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="px-3 py-8 text-center text-sm text-slate-400">
-                          {instances.length === 0 ? "Nenhum usuário." : "Nenhum usuário corresponde ao filtro."}
-                        </td>
-                      </tr>
-                    ) : null}
-                    {visibleInstances.map((row) => {
-                      const on = selected.has(keyOf(row));
-                      return (
-                        <tr
-                          key={keyOf(row)}
-                          className={`cursor-pointer border-t border-slate-800 ${on ? "bg-sky-400/10" : ""}`}
-                          title="Clique seleciona um. Ctrl+clique marca vários. Duplo clique edita filtros e exibição."
-                          onClick={(e) => onRowClick(row, e)}
-                          onDoubleClick={() => void openClientConfig(row)}
-                        >
-                          <td className="px-3 py-3"><input type="checkbox" checked={on} readOnly /></td>
-                          <td className="max-w-[12rem] truncate px-3 py-3 font-medium" title={row.nome || undefined}>{row.nome || "—"}</td>
-                          <td className="max-w-[10rem] truncate px-3 py-3" title={row.setor || undefined}>{row.setor || "—"}</td>
-                          <td className="max-w-[10rem] truncate px-3 py-3" title={row.hostName}>{row.hostName}</td>
-                          <td className="max-w-[10rem] truncate px-3 py-3" title={row.windowsUser}>{row.windowsUser}</td>
-                          <td className="px-3 py-3">{row.ponto || "—"}</td>
-                          <td className="px-3 py-3">{row.version || "—"}</td>
-                          <td className="px-3 py-3">
-                            <span className={`rounded-full px-2 py-0.5 text-xs ${row.online ? "bg-emerald-400/20 text-emerald-300" : "bg-slate-700 text-slate-300"}`}>
-                              {row.online ? "Online" : "Offline"}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <section className="flex min-h-0 min-w-0 flex-col overflow-visible rounded-2xl border border-slate-800 bg-slate-950 shadow-card">
+            <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-visible rounded-2xl border border-slate-800 bg-slate-950 shadow-card">
               <div className="relative z-20 flex shrink-0 flex-col gap-3 border-b border-slate-800 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-4">
                 <div className="flex min-w-0 items-center gap-2">
                   <TerminalSquare size={16} className="shrink-0 text-sky-400" />
@@ -1577,6 +1580,7 @@ export default function App() {
                 </div>
               </form>
             </section>
+            </div>
           </section>
         ) : null}
 

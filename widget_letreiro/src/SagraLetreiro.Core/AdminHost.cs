@@ -12,7 +12,7 @@ public sealed class AdminHostOptions
     public required Func<LetreiroApiClient> Client { get; init; }
     public Func<AppConfig>? GetLocalConfig { get; init; }
     public Action<AppConfig, bool>? ApplyLocalConfig { get; init; }
-    public Action<int, int, string, NotificationVisual?>? PreviewNotification { get; init; }
+    public Action<ArrivalPreview>? PreviewNotification { get; init; }
     public bool IsAdmin { get; init; }
 }
 
@@ -261,6 +261,8 @@ public sealed class AdminHost : IDisposable
             var width = 0;
             var height = 0;
             var animation = "";
+            var titleFont = 0;
+            var situationFont = 0;
             NotificationVisual? visual = null;
             if (body is { Length: > 0 })
             {
@@ -271,6 +273,10 @@ public sealed class AdminHost : IDisposable
                         width = parsedWidth;
                     if (doc.RootElement.TryGetProperty("height", out var heightEl) && heightEl.TryGetInt32(out var parsedHeight))
                         height = parsedHeight;
+                    if (doc.RootElement.TryGetProperty("titleFontSize", out var titleEl) && titleEl.TryGetInt32(out var parsedTitle))
+                        titleFont = parsedTitle;
+                    if (doc.RootElement.TryGetProperty("situationFontSize", out var sitEl) && sitEl.TryGetInt32(out var parsedSit))
+                        situationFont = parsedSit;
                     if (doc.RootElement.TryGetProperty("animation", out var animEl) && animEl.ValueKind == JsonValueKind.String)
                         animation = animEl.GetString() ?? "";
                     if (doc.RootElement.TryGetProperty("visual", out var visEl) && visEl.ValueKind == JsonValueKind.Object)
@@ -281,7 +287,7 @@ public sealed class AdminHost : IDisposable
                     /* usa o tamanho salvo no letreiro */
                 }
             }
-            _options.PreviewNotification?.Invoke(width, height, animation, visual);
+            _options.PreviewNotification?.Invoke(new ArrivalPreview(width, height, animation, visual, titleFont, situationFont));
             await WriteJsonAsync(ctx, 200, new { status = "ok" }).ConfigureAwait(false);
             return;
         }

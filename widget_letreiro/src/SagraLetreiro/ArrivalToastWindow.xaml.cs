@@ -18,13 +18,24 @@ public partial class ArrivalToastWindow : Window
     readonly ArrivalToastLayout _layout;
     readonly Storyboard _motion;
     readonly NotificationVisual _visual;
+    readonly int _titleFontSize;
+    readonly int _situationFontSize;
 
-    public ArrivalToastWindow(TickerCard card, int cardWidth, int cardHeight, string? animation = null, NotificationVisual? visual = null)
+    public ArrivalToastWindow(
+        TickerCard card,
+        int cardWidth,
+        int cardHeight,
+        string? animation = null,
+        NotificationVisual? visual = null,
+        int titleFontSize = 0,
+        int situationFontSize = 0)
     {
         InitializeComponent();
         var id = ArrivalNotify.ClampAnimation(animation);
         _visual = ArrivalNotify.NormalizeVisual(visual);
         _layout = ArrivalNotify.Layout(cardWidth, cardHeight, id);
+        _titleFontSize = ArrivalNotify.ClampTitleFontSize(titleFontSize);
+        _situationFontSize = ArrivalNotify.ClampSituationFontSize(situationFontSize);
         OverlayChrome.ApplyFloatingStyle(this);
         ApplyLayout();
         Bind(card);
@@ -72,9 +83,8 @@ public partial class ArrivalToastWindow : Window
         CardBorder.Height = _layout.CardHeight;
         Canvas.SetLeft(CardBorder, _layout.SidePad);
         Canvas.SetTop(CardBorder, _layout.EnterSlack);
-        var scale = _visual.FontScale <= 0 ? 1 : _visual.FontScale;
-        LabelText.FontSize = Math.Max(14, _layout.CardHeight * 0.23 * scale);
-        SituacaoText.FontSize = Math.Max(11, _layout.CardHeight * 0.15 * scale);
+        LabelText.FontSize = _titleFontSize;
+        SituacaoText.FontSize = _situationFontSize;
     }
 
     void Bind(TickerCard card)

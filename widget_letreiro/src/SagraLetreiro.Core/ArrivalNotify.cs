@@ -17,6 +17,14 @@ public readonly record struct ArrivalToastLayout(
 
 public readonly record struct ArrivalAnimation(string Id, string Label);
 
+public readonly record struct ArrivalPreview(
+    int Width,
+    int Height,
+    string Animation,
+    NotificationVisual? Visual,
+    int TitleFontSize,
+    int SituationFontSize);
+
 public static class ArrivalNotify
 {
     public const string PreviewKey = "preview:0-0";
@@ -27,6 +35,12 @@ public static class ArrivalNotify
     public const int MaxCardWidth = 900;
     public const int MinCardHeight = 56;
     public const int MaxCardHeight = 280;
+    public const int DefaultTitleFontSize = 22;
+    public const int DefaultSituationFontSize = 14;
+    public const int MinTitleFontSize = 10;
+    public const int MaxTitleFontSize = 72;
+    public const int MinSituationFontSize = 8;
+    public const int MaxSituationFontSize = 56;
     public static readonly TimeSpan Duration = TimeSpan.FromSeconds(4);
 
     public static readonly ArrivalAnimation[] ClassicEntries =
@@ -50,6 +64,12 @@ public static class ArrivalNotify
 
     public static int ClampCardHeight(int value) =>
         Math.Clamp(value <= 0 ? DefaultCardHeight : value, MinCardHeight, MaxCardHeight);
+
+    public static int ClampTitleFontSize(int value) =>
+        Math.Clamp(value <= 0 ? DefaultTitleFontSize : value, MinTitleFontSize, MaxTitleFontSize);
+
+    public static int ClampSituationFontSize(int value) =>
+        Math.Clamp(value <= 0 ? DefaultSituationFontSize : value, MinSituationFontSize, MaxSituationFontSize);
 
     public static string ClampAnimation(string? value)
     {

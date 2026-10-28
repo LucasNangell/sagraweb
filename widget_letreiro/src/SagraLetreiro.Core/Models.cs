@@ -84,6 +84,8 @@ public sealed class WindowConfig
     public bool NotificationsEnabled { get; set; }
     public int NotificationWidth { get; set; } = ArrivalNotify.DefaultCardWidth;
     public int NotificationHeight { get; set; } = ArrivalNotify.DefaultCardHeight;
+    public int NotificationTitleFontSize { get; set; } = ArrivalNotify.DefaultTitleFontSize;
+    public int NotificationSituationFontSize { get; set; } = ArrivalNotify.DefaultSituationFontSize;
     public string NotificationAnimation { get; set; } = ArrivalNotify.DefaultAnimation;
     public NotificationVisual NotificationVisual { get; set; } = new();
 }

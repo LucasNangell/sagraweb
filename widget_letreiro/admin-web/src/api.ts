@@ -101,6 +101,8 @@ export type AppConfig = {
     notificationsEnabled?: boolean;
     notificationWidth?: number;
     notificationHeight?: number;
+    notificationTitleFontSize?: number;
+    notificationSituationFontSize?: number;
     notificationAnimation?: string;
     notificationVisual?: import("./notificationStyle").NotificationVisual;
   };
@@ -179,6 +181,8 @@ export const api = {
   previewNotification: (size?: {
     width?: number;
     height?: number;
+    titleFontSize?: number;
+    situationFontSize?: number;
     animation?: string;
     visual?: import("./notificationStyle").NotificationVisual;
   }) =>

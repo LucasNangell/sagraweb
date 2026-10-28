@@ -362,6 +362,8 @@ function seedClientConfig(row: Instance, payload: AppConfig | null): AppConfig {
       notificationsEnabled: !!base.window?.notificationsEnabled,
       notificationWidth: base.window?.notificationWidth ?? 320,
       notificationHeight: base.window?.notificationHeight ?? 96,
+      notificationTitleFontSize: base.window?.notificationTitleFontSize ?? 22,
+      notificationSituationFontSize: base.window?.notificationSituationFontSize ?? 14,
       notificationAnimation: clampEntryAnimation(base.window?.notificationAnimation),
       notificationVisual: base.window?.notificationVisual,
     },
@@ -488,6 +490,40 @@ function LetreiroDisplayFields({
           />
         </label>
       </div>
+      <div className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2">
+        <label className="min-w-0 text-sm text-slate-400">
+          Fonte do nº da OS (px)
+          <input
+            type="number"
+            min={10}
+            max={72}
+            step={1}
+            className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+            value={cfg.window?.notificationTitleFontSize ?? 22}
+            onChange={(e) => {
+              const notificationTitleFontSize = Number(e.target.value);
+              if (!Number.isFinite(notificationTitleFontSize)) return;
+              onChange({ ...cfg, window: { ...cfg.window, notificationTitleFontSize } });
+            }}
+          />
+        </label>
+        <label className="min-w-0 text-sm text-slate-400">
+          Fonte da situação (px)
+          <input
+            type="number"
+            min={8}
+            max={56}
+            step={1}
+            className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+            value={cfg.window?.notificationSituationFontSize ?? 14}
+            onChange={(e) => {
+              const notificationSituationFontSize = Number(e.target.value);
+              if (!Number.isFinite(notificationSituationFontSize)) return;
+              onChange({ ...cfg, window: { ...cfg.window, notificationSituationFontSize } });
+            }}
+          />
+        </label>
+      </div>
       <label className="mt-3 block min-w-0 text-sm text-slate-400">
         Animação de entrada
         <select
@@ -529,7 +565,7 @@ function LetreiroDisplayFields({
         </select>
       </label>
       <p className="mt-1 text-xs text-slate-500">
-        O tamanho 180–900 × 56–280 é o do card. A animação de entrada é a escolhida acima, mesmo se o preset tiver outra. Cores vêm da paleta do modelo quando o preset não grava hex.
+        O tamanho 180–900 × 56–280 é o do card. Fontes: nº da OS 10–72 px e situação 8–56 px, independentes. A animação de entrada é a escolhida acima, mesmo se o preset tiver outra. Cores vêm da paleta do modelo quando o preset não grava hex.
       </p>
     </>
   );
@@ -933,6 +969,8 @@ export default function App() {
           notificationsEnabled: (cols ?? []).some((col) => !!col.notify),
           notificationWidth: cfg.window?.notificationWidth ?? 320,
           notificationHeight: cfg.window?.notificationHeight ?? 96,
+          notificationTitleFontSize: cfg.window?.notificationTitleFontSize ?? 22,
+          notificationSituationFontSize: cfg.window?.notificationSituationFontSize ?? 14,
           notificationAnimation: clampEntryAnimation(cfg.window?.notificationAnimation),
           notificationVisual: cfg.window?.notificationVisual,
         },
@@ -1500,6 +1538,8 @@ export default function App() {
                   onPreview={() => void api.previewNotification({
                     width: localCfg.window?.notificationWidth ?? 320,
                     height: localCfg.window?.notificationHeight ?? 96,
+                    titleFontSize: localCfg.window?.notificationTitleFontSize ?? 22,
+                    situationFontSize: localCfg.window?.notificationSituationFontSize ?? 14,
                     animation: clampEntryAnimation(localCfg.window?.notificationAnimation),
                     visual: localCfg.window?.notificationVisual,
                   }).then(() => setStatus("Notificação de teste disparada.")).catch((ex) => setError(errText(ex)))}

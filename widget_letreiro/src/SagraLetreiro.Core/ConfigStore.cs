@@ -125,6 +125,8 @@ public static class ConfigStore
             NotificationsEnabled = raw.NotificationsEnabled,
             NotificationWidth = ArrivalNotify.ClampCardWidth(raw.NotificationWidth),
             NotificationHeight = ArrivalNotify.ClampCardHeight(raw.NotificationHeight),
+            NotificationTitleFontSize = ArrivalNotify.ClampTitleFontSize(raw.NotificationTitleFontSize),
+            NotificationSituationFontSize = ArrivalNotify.ClampSituationFontSize(raw.NotificationSituationFontSize),
             NotificationAnimation = ArrivalNotify.ClampAnimation(raw.NotificationAnimation),
             NotificationVisual = ArrivalNotify.NormalizeVisual(raw.NotificationVisual),
         };
@@ -214,6 +216,8 @@ public static class ConfigStore
             NotificationsEnabled = n.Window.NotificationsEnabled,
             NotificationWidth = n.Window.NotificationWidth,
             NotificationHeight = n.Window.NotificationHeight,
+            NotificationTitleFontSize = n.Window.NotificationTitleFontSize,
+            NotificationSituationFontSize = n.Window.NotificationSituationFontSize,
             NotificationAnimation = n.Window.NotificationAnimation,
             NotificationVisual = n.Window.NotificationVisual,
         };

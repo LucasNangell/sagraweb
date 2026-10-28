@@ -22,7 +22,9 @@ public static class ArrivalNotify
     public const int MaxCardWidth = 900;
     public const int MinCardHeight = 56;
     public const int MaxCardHeight = 280;
-    public const double ScaleOvershoot = 1.4;
+    public const double ScaleOvershoot = 1.12;
+    public const double EnterTravel = 60;
+    public const double ExitTravel = 40;
     public static readonly TimeSpan Duration = TimeSpan.FromSeconds(4);
 
     public static int ClampCardWidth(int value) =>
@@ -35,20 +37,18 @@ public static class ArrivalNotify
     {
         var width = ClampCardWidth(cardWidth);
         var height = ClampCardHeight(cardHeight);
-        var sidePad = Math.Max(36, width * (ScaleOvershoot - 1) / 2);
-        var vertOvershoot = Math.Max(16, height * (ScaleOvershoot - 1) / 2);
-        var enterTravel = Math.Max(60, height * 0.65);
-        var exitTravel = Math.Max(40, height * 0.45);
-        var enterSlack = enterTravel + vertOvershoot;
-        var exitSlack = exitTravel + vertOvershoot;
+        var sidePad = Math.Max(12, width * (ScaleOvershoot - 1) / 2);
+        var vertOvershoot = Math.Max(8, height * (ScaleOvershoot - 1) / 2);
+        var enterSlack = EnterTravel + vertOvershoot;
+        var exitSlack = ExitTravel + vertOvershoot;
         return new ArrivalToastLayout(
             width,
             height,
             sidePad,
             enterSlack,
             exitSlack,
-            enterTravel,
-            exitTravel,
+            EnterTravel,
+            ExitTravel,
             height / 2.0,
             Math.Min(16, Math.Max(8, height * 0.17)),
             width + sidePad * 2,

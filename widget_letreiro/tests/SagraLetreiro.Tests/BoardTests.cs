@@ -722,9 +722,15 @@ public class LetreiroAdminTests
         var layout = ArrivalNotify.Layout(320, 96);
         Assert.Equal(320, layout.CardWidth);
         Assert.Equal(96, layout.CardHeight);
-        Assert.True(layout.WindowWidth > layout.CardWidth);
-        Assert.True(layout.WindowHeight > layout.CardHeight);
-        Assert.True(layout.SidePad >= layout.CardWidth * (ArrivalNotify.ScaleOvershoot - 1) / 2);
+        Assert.Equal(ArrivalNotify.EnterTravel, layout.EnterTravel);
+        Assert.Equal(ArrivalNotify.ExitTravel, layout.ExitTravel);
+        Assert.True(layout.SidePad <= 24);
+        Assert.InRange(layout.WindowWidth - layout.CardWidth, 24, 48);
+        Assert.True(layout.WindowHeight - layout.CardHeight < 130);
+        var huge = ArrivalNotify.Layout(3200, 960);
+        Assert.Equal(900, huge.CardWidth);
+        Assert.Equal(280, huge.CardHeight);
+        Assert.True(huge.WindowWidth < huge.CardWidth * 1.2);
         Assert.Equal(180, ArrivalNotify.ClampCardWidth(10));
         Assert.Equal(900, ArrivalNotify.ClampCardWidth(9_999));
         Assert.Equal(56, ArrivalNotify.ClampCardHeight(1));

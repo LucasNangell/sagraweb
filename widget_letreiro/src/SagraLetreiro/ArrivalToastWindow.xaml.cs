@@ -80,43 +80,43 @@ public partial class ArrivalToastWindow : Window
     {
         var bounceOut = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.56 };
         var bounceIn = new BackEase { EasingMode = EasingMode.EaseIn, Amplitude = 0.56 };
-        ScaleFrames(CardScale, ScaleTransform.ScaleXProperty, bounceOut, bounceIn, 0.15, 1);
-        ScaleFrames(CardScale, ScaleTransform.ScaleYProperty, bounceOut, bounceIn, 0.15, 1);
-        _mercury.Children.Add(KeyFrames(CardMove, TranslateTransform.YProperty,
+        ScaleFrames("CardScale", "ScaleX", bounceOut, bounceIn, 0.15, 1);
+        ScaleFrames("CardScale", "ScaleY", bounceOut, bounceIn, 0.15, 1);
+        _mercury.Children.Add(KeyFrames("CardMove", "Y",
             Discrete(-_layout.EnterTravel, 0),
             Eased(0, TimeSpan.FromSeconds(1), bounceOut),
             Discrete(0, 3),
             Eased(_layout.ExitTravel, TimeSpan.FromSeconds(4), bounceIn)));
-        _mercury.Children.Add(KeyFrames(CardBorder, UIElement.OpacityProperty,
+        _mercury.Children.Add(KeyFrames("CardBorder", "Opacity",
             Discrete(0, 0),
             Eased(1, TimeSpan.FromSeconds(1), bounceOut),
             Discrete(1, 3),
             Eased(0, TimeSpan.FromSeconds(4), bounceIn)));
-        _mercury.Children.Add(KeyFrames(CardClip, RectangleGeometry.RadiusXProperty,
+        _mercury.Children.Add(KeyFrames("CardClip", "RadiusX",
             Discrete(_layout.BlobRadius, 0),
             Linear(_layout.HoldRadius, 1),
             Discrete(_layout.HoldRadius, 3),
             Linear(_layout.BlobRadius, 4)));
-        _mercury.Children.Add(KeyFrames(CardClip, RectangleGeometry.RadiusYProperty,
+        _mercury.Children.Add(KeyFrames("CardClip", "RadiusY",
             Discrete(_layout.BlobRadius, 0),
             Linear(_layout.HoldRadius, 1),
             Discrete(_layout.HoldRadius, 3),
             Linear(_layout.BlobRadius, 4)));
     }
 
-    void ScaleFrames(DependencyObject target, DependencyProperty property, IEasingFunction enter, IEasingFunction exit, double from, double to)
+    void ScaleFrames(string targetName, string property, IEasingFunction enter, IEasingFunction exit, double from, double to)
     {
-        _mercury.Children.Add(KeyFrames(target, property,
+        _mercury.Children.Add(KeyFrames(targetName, property,
             Discrete(from, 0),
             Eased(to, TimeSpan.FromSeconds(1), enter),
             Discrete(to, 3),
             Eased(from, TimeSpan.FromSeconds(4), exit)));
     }
 
-    static DoubleAnimationUsingKeyFrames KeyFrames(DependencyObject target, DependencyProperty property, params DoubleKeyFrame[] frames)
+    static DoubleAnimationUsingKeyFrames KeyFrames(string targetName, string property, params DoubleKeyFrame[] frames)
     {
         var anim = new DoubleAnimationUsingKeyFrames();
-        Storyboard.SetTarget(anim, target);
+        Storyboard.SetTargetName(anim, targetName);
         Storyboard.SetTargetProperty(anim, new PropertyPath(property));
         foreach (var frame in frames) anim.KeyFrames.Add(frame);
         return anim;

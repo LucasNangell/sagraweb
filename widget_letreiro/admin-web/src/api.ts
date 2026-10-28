@@ -103,6 +103,10 @@ export type AppConfig = {
     notificationHeight?: number;
     notificationTitleFontSize?: number;
     notificationSituationFontSize?: number;
+    notificationPadX?: number;
+    notificationTextGap?: number;
+    notificationOffsetRight?: number;
+    notificationOffsetBottom?: number;
     notificationAnimation?: string;
     notificationVisual?: import("./notificationStyle").NotificationVisual;
   };
@@ -113,6 +117,12 @@ export type AppConfig = {
     showOs?: boolean;
     showSp?: boolean;
   };
+};
+
+export type ConfigProfile = {
+  id: number;
+  name: string;
+  payload: AppConfig;
 };
 
 export const api = {
@@ -178,11 +188,29 @@ export const api = {
   saveLocalConfig: (payload: AppConfig) =>
     request<AppConfig>("/local/config", { method: "PUT", body: JSON.stringify(payload) }),
   restoreBoard: () => request<AppConfig>("/local/restore-board", { method: "POST", body: "{}" }),
+  configProfiles: () => request<{ profiles: ConfigProfile[] }>("/local/config-profiles"),
+  saveConfigProfile: (name: string, payload?: AppConfig) =>
+    request<ConfigProfile>("/local/config-profiles", {
+      method: "POST",
+      body: JSON.stringify({ name, payload }),
+    }),
+  updateConfigProfile: (id: number, name: string, payload?: AppConfig) =>
+    request<ConfigProfile>(`/local/config-profiles/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ name, payload }),
+    }),
+  deleteConfigProfile: (id: number) =>
+    request("/local/config-profiles/" + id, { method: "DELETE" }),
   previewNotification: (size?: {
     width?: number;
     height?: number;
     titleFontSize?: number;
     situationFontSize?: number;
+    padX?: number;
+    textGap?: number;
+    priority?: string;
+    offsetRight?: number;
+    offsetBottom?: number;
     animation?: string;
     visual?: import("./notificationStyle").NotificationVisual;
   }) =>

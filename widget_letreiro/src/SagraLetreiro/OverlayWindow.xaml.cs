@@ -392,8 +392,13 @@ public partial class OverlayWindow : Window
             Visual = ArrivalNotify.NormalizeVisual(preview.Visual ?? _config.Window.NotificationVisual),
             TitleFontSize = preview.TitleFontSize > 0 ? ArrivalNotify.ClampTitleFontSize(preview.TitleFontSize) : _config.Window.NotificationTitleFontSize,
             SituationFontSize = preview.SituationFontSize > 0 ? ArrivalNotify.ClampSituationFontSize(preview.SituationFontSize) : _config.Window.NotificationSituationFontSize,
+            PadX = preview.PadX > 0 ? ArrivalNotify.ClampPadX(preview.PadX) : _config.Window.NotificationPadX,
+            TextGap = preview.TextGap is int gap ? ArrivalNotify.ClampTextGap(gap) : ArrivalNotify.ClampTextGap(_config.Window.NotificationTextGap),
+            Priority = ArrivalNotify.ClampPriority(preview.Priority),
+            OffsetRight = ArrivalNotify.ClampOffsetRight(preview.OffsetRight ?? _config.Window.NotificationOffsetRight),
+            OffsetBottom = ArrivalNotify.ClampOffsetBottom(preview.OffsetBottom ?? _config.Window.NotificationOffsetBottom),
         };
-        var card = ArrivalNotify.PreviewCard();
+        var card = ArrivalNotify.PreviewCard(_previewToast?.Priority);
         if (_cards.All(item => item.UniqueKey != card.UniqueKey))
             _cards.Add(card);
         EnqueueArrivals([card], [card.UniqueKey]);
@@ -435,6 +440,10 @@ public partial class OverlayWindow : Window
         var visual = _config.Window.NotificationVisual;
         var titleFont = _config.Window.NotificationTitleFontSize;
         var situationFont = _config.Window.NotificationSituationFontSize;
+        var padX = _config.Window.NotificationPadX;
+        var textGap = ArrivalNotify.ClampTextGap(_config.Window.NotificationTextGap);
+        var offsetRight = ArrivalNotify.ClampOffsetRight(_config.Window.NotificationOffsetRight);
+        var offsetBottom = ArrivalNotify.ClampOffsetBottom(_config.Window.NotificationOffsetBottom);
         if (card.UniqueKey == ArrivalNotify.PreviewKey && _previewToast is { } preview)
         {
             width = preview.Width;
@@ -443,8 +452,12 @@ public partial class OverlayWindow : Window
             visual = preview.Visual ?? visual;
             titleFont = preview.TitleFontSize;
             situationFont = preview.SituationFontSize;
+            padX = preview.PadX;
+            textGap = ArrivalNotify.ClampTextGap(preview.TextGap);
+            offsetRight = ArrivalNotify.ClampOffsetRight(preview.OffsetRight);
+            offsetBottom = ArrivalNotify.ClampOffsetBottom(preview.OffsetBottom);
         }
-        _arrivalToast = new ArrivalToastWindow(card, width, height, animation, visual, titleFont, situationFont);
+        _arrivalToast = new ArrivalToastWindow(card, width, height, animation, visual, titleFont, situationFont, padX, textGap, offsetRight, offsetBottom);
         _arrivalToast.Closed += OnArrivalToastClosed;
         _arrivalToast.ShowAbove(this);
     }

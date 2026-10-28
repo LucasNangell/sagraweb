@@ -380,6 +380,10 @@ public class BoardTests
         Assert.Equal(ArrivalNotify.DefaultCardHeight, cfg.Window.NotificationHeight);
         Assert.Equal(ArrivalNotify.DefaultTitleFontSize, cfg.Window.NotificationTitleFontSize);
         Assert.Equal(ArrivalNotify.DefaultSituationFontSize, cfg.Window.NotificationSituationFontSize);
+        Assert.Equal(ArrivalNotify.DefaultPadX, cfg.Window.NotificationPadX);
+        Assert.Equal(ArrivalNotify.DefaultTextGap, cfg.Window.NotificationTextGap);
+        Assert.Equal(ArrivalNotify.DefaultOffsetRight, cfg.Window.NotificationOffsetRight);
+        Assert.Equal(ArrivalNotify.DefaultOffsetBottom, cfg.Window.NotificationOffsetBottom);
         Assert.Equal(ArrivalNotify.DefaultAnimation, cfg.Window.NotificationAnimation);
         Assert.Equal(ConfigStore.ProductionApiBase, cfg.ApiBaseUrl);
         Assert.Equal(ConfigStore.DefaultPonto, cfg.Ponto);
@@ -655,7 +659,7 @@ public class LetreiroAdminTests
                     new BoardColumn { Id = "col_0", Title = "Em Execução", Statuses = ["Em Execução"], Sector = "Papelaria" },
                 ],
             },
-            Window = new WindowConfig { X = 8, Width = 400, Opacity = 0.8, SpeedPxPerSec = 60, TransparentBg = true, NotificationsEnabled = true, NotificationWidth = 480, NotificationHeight = 120, NotificationTitleFontSize = 28, NotificationSituationFontSize = 16 },
+            Window = new WindowConfig { X = 8, Width = 400, Opacity = 0.8, SpeedPxPerSec = 60, TransparentBg = true, NotificationsEnabled = true, NotificationWidth = 480, NotificationHeight = 120, NotificationTitleFontSize = 28, NotificationSituationFontSize = 16, NotificationPadX = 20, NotificationTextGap = 8, NotificationOffsetRight = 40, NotificationOffsetBottom = 64 },
         });
         var merged = ConfigStore.MergeRemote(local, remote);
         Assert.Equal(40, merged.Window.X);
@@ -669,6 +673,10 @@ public class LetreiroAdminTests
         Assert.Equal(120, merged.Window.NotificationHeight);
         Assert.Equal(28, merged.Window.NotificationTitleFontSize);
         Assert.Equal(16, merged.Window.NotificationSituationFontSize);
+        Assert.Equal(20, merged.Window.NotificationPadX);
+        Assert.Equal(8, merged.Window.NotificationTextGap);
+        Assert.Equal(40, merged.Window.NotificationOffsetRight);
+        Assert.Equal(64, merged.Window.NotificationOffsetBottom);
         Assert.Equal("99", merged.Ponto);
         Assert.Equal("segredo", merged.Password);
         Assert.Equal("Papelaria", merged.Board.Sector);
@@ -683,6 +691,10 @@ public class LetreiroAdminTests
         Assert.Equal(120, remoteOnly.Window.NotificationHeight);
         Assert.Equal(28, remoteOnly.Window.NotificationTitleFontSize);
         Assert.Equal(16, remoteOnly.Window.NotificationSituationFontSize);
+        Assert.Equal(20, remoteOnly.Window.NotificationPadX);
+        Assert.Equal(8, remoteOnly.Window.NotificationTextGap);
+        Assert.Equal(40, remoteOnly.Window.NotificationOffsetRight);
+        Assert.Equal(64, remoteOnly.Window.NotificationOffsetBottom);
     }
 
     [Fact]
@@ -829,6 +841,18 @@ public class LetreiroAdminTests
         Assert.Equal(56, ArrivalNotify.ClampSituationFontSize(9_999));
         Assert.Equal(28, ArrivalNotify.ClampTitleFontSize(28));
         Assert.Equal(16, ArrivalNotify.ClampSituationFontSize(16));
+        Assert.Equal(16, ArrivalNotify.ClampPadX(0));
+        Assert.Equal(4, ArrivalNotify.ClampPadX(1));
+        Assert.Equal(48, ArrivalNotify.ClampPadX(9_999));
+        Assert.Equal(4, ArrivalNotify.ClampTextGap(null));
+        Assert.Equal(0, ArrivalNotify.ClampTextGap(0));
+        Assert.Equal(40, ArrivalNotify.ClampTextGap(9_999));
+        Assert.Equal(24, ArrivalNotify.ClampOffsetRight(null));
+        Assert.Equal(0, ArrivalNotify.ClampOffsetRight(0));
+        Assert.Equal(1200, ArrivalNotify.ClampOffsetBottom(9_999));
+        Assert.Equal("", ArrivalNotify.ClampPriority(null));
+        Assert.Equal("priority-high", ArrivalNotify.ClampPriority("priority-high"));
+        Assert.Equal("priority-medium", ArrivalNotify.ClampPriority("priority-medium"));
         using var preset = JsonDocument.Parse("""
             {"cardStyle":{"entryAnimation":"fx-mercury","models":{"high":{"colors":{"bg":"#b91c1c","accent":"#fde047"}}},"typography":{"titleColor":"#fff7ed"}}}
             """);
@@ -846,7 +870,112 @@ public class LetreiroAdminTests
         Assert.Equal("#ffffff", fromEffect.High.Border);
         Assert.Equal("#10b981", fromEffect.High.Accent);
         Assert.Equal("#05100a", fromEffect.Normal.Bg);
-        Assert.Equal("priority-high", ArrivalNotify.PreviewCard().Priority);
+        Assert.Null(ArrivalNotify.PreviewCard().Priority);
+        Assert.Equal("Teste · normal", ArrivalNotify.PreviewCard().Situacao);
+        Assert.Equal("priority-high", ArrivalNotify.PreviewCard("priority-high").Priority);
+        Assert.Equal("Teste · alta", ArrivalNotify.PreviewCard("priority-high").Situacao);
+        Assert.Equal("priority-medium", ArrivalNotify.PreviewCard("priority-medium").Priority);
+        var placed = ArrivalNotify.WindowOrigin(layout, 24, 48, 0, 0, 1920, 1080);
+        Assert.Equal(1920 - 24 - layout.CardWidth - layout.SidePad, placed.Left);
+        Assert.Equal(1080 - 48 - layout.CardHeight - layout.EnterSlack, placed.Top);
+        var flush = ArrivalNotify.WindowOrigin(layout, 0, 0, 0, 0, 1920, 1080);
+        Assert.Equal(1920 - layout.CardWidth - layout.SidePad, flush.Left);
+        Assert.Equal(1080 - layout.CardHeight - layout.EnterSlack, flush.Top);
+        var clamped = ArrivalNotify.WindowOrigin(layout, 9_999, 9_999, 0, 0, 1280, 720);
+        Assert.Equal(-layout.SidePad, clamped.Left);
+        Assert.Equal(-layout.EnterSlack, clamped.Top);
+    }
+}
+
+public class ConfigProfilesTests
+{
+    [Fact]
+    public void SnapshotDropsConnectionAndKeepsBoardWindow()
+    {
+        var snap = ConfigProfiles.Snapshot(new AppConfig
+        {
+            Ponto = "segredo",
+            Nome = "usr",
+            Password = "pwd",
+            ApiBaseUrl = "http://127.0.0.1:8001/api",
+            Board = new BoardConfig
+            {
+                Sector = "Papelaria",
+                Columns = [new BoardColumn { Title = "Recebido", Statuses = ["Recebido"], Notify = true }],
+            },
+            Window = new WindowConfig { Width = 900, X = 40, NotificationPadX = 20, NotificationOffsetRight = 48 },
+        });
+        Assert.Equal("", snap.Password);
+        Assert.NotEqual("segredo", snap.Ponto);
+        Assert.Equal(900, snap.Window.Width);
+        Assert.Null(snap.Window.X);
+        Assert.Equal(20, snap.Window.NotificationPadX);
+        Assert.Equal(48, snap.Window.NotificationOffsetRight);
+        Assert.Equal("Papelaria", snap.Board.Sector);
+        Assert.True(snap.Board.Columns[0].Notify);
+    }
+
+    [Fact]
+    public void ApplyKeepsTargetConnectionAndBarPosition()
+    {
+        var target = ConfigStore.Normalize(new AppConfig
+        {
+            Ponto = "99",
+            Nome = "destino",
+            Password = "local",
+            Window = new WindowConfig { X = 40, Width = 720 },
+        });
+        var profile = ConfigProfiles.Snapshot(new AppConfig
+        {
+            Ponto = "1",
+            Window = new WindowConfig { Width = 400, Opacity = 0.8, NotificationOffsetBottom = 80 },
+            Board = new BoardConfig
+            {
+                Sector = "Gravação",
+                Columns = [new BoardColumn { Title = "Inbox", Source = "inbox", Notify = true }],
+            },
+        });
+        var merged = ConfigProfiles.Apply(target, profile);
+        Assert.Equal("99", merged.Ponto);
+        Assert.Equal("destino", merged.Nome);
+        Assert.Equal("local", merged.Password);
+        Assert.Equal(40, merged.Window.X);
+        Assert.Equal(400, merged.Window.Width);
+        Assert.Equal(0.8, merged.Window.Opacity);
+        Assert.Equal(80, merged.Window.NotificationOffsetBottom);
+        Assert.Equal("Gravação", merged.Board.Sector);
+        Assert.True(merged.Window.NotificationsEnabled);
+    }
+
+    [Fact]
+    public void UpsertReplacesSameNameAndPersists()
+    {
+        var list = new List<ConfigProfile>();
+        var first = ConfigProfiles.Upsert(list, " TV SEFOC ", new AppConfig { Window = new WindowConfig { Width = 500 } });
+        Assert.Equal(1, first.Id);
+        Assert.Equal("TV SEFOC", first.Name);
+        var again = ConfigProfiles.Upsert(list, "tv sefoc", new AppConfig { Window = new WindowConfig { Width = 800 } });
+        Assert.Equal(first.Id, again.Id);
+        Assert.Equal("tv sefoc", again.Name);
+        Assert.Single(list);
+        Assert.Equal(800, list[0].Payload.Window.Width);
+        Assert.Throws<ArgumentException>(() => ConfigProfiles.Upsert(list, "  ", new AppConfig()));
+        var dir = Path.Combine(Path.GetTempPath(), "letreiro-profiles-" + Guid.NewGuid().ToString("N"));
+        var path = Path.Combine(dir, "profiles.json");
+        try
+        {
+            ConfigProfiles.SaveTo(path, list);
+            var loaded = ConfigProfiles.LoadFrom(path);
+            Assert.Single(loaded);
+            Assert.Equal("tv sefoc", loaded[0].Name);
+            Assert.Equal(800, loaded[0].Payload.Window.Width);
+            Assert.True(ConfigProfiles.Remove(loaded, loaded[0].Id));
+            Assert.Empty(loaded);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 }
 

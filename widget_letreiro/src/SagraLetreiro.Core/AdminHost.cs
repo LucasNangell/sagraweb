@@ -263,6 +263,11 @@ public sealed class AdminHost : IDisposable
             var animation = "";
             var titleFont = 0;
             var situationFont = 0;
+            var padX = 0;
+            int? textGap = null;
+            var priority = "";
+            int? offsetRight = null;
+            int? offsetBottom = null;
             NotificationVisual? visual = null;
             if (body is { Length: > 0 })
             {
@@ -277,6 +282,16 @@ public sealed class AdminHost : IDisposable
                         titleFont = parsedTitle;
                     if (doc.RootElement.TryGetProperty("situationFontSize", out var sitEl) && sitEl.TryGetInt32(out var parsedSit))
                         situationFont = parsedSit;
+                    if (doc.RootElement.TryGetProperty("padX", out var padEl) && padEl.TryGetInt32(out var parsedPad))
+                        padX = parsedPad;
+                    if (doc.RootElement.TryGetProperty("textGap", out var gapEl) && gapEl.TryGetInt32(out var parsedGap))
+                        textGap = parsedGap;
+                    if (doc.RootElement.TryGetProperty("priority", out var priEl) && priEl.ValueKind == JsonValueKind.String)
+                        priority = priEl.GetString() ?? "";
+                    if (doc.RootElement.TryGetProperty("offsetRight", out var offREl) && offREl.TryGetInt32(out var parsedOffR))
+                        offsetRight = parsedOffR;
+                    if (doc.RootElement.TryGetProperty("offsetBottom", out var offBEl) && offBEl.TryGetInt32(out var parsedOffB))
+                        offsetBottom = parsedOffB;
                     if (doc.RootElement.TryGetProperty("animation", out var animEl) && animEl.ValueKind == JsonValueKind.String)
                         animation = animEl.GetString() ?? "";
                     if (doc.RootElement.TryGetProperty("visual", out var visEl) && visEl.ValueKind == JsonValueKind.Object)
@@ -287,12 +302,111 @@ public sealed class AdminHost : IDisposable
                     /* usa o tamanho salvo no letreiro */
                 }
             }
-            _options.PreviewNotification?.Invoke(new ArrivalPreview(width, height, animation, visual, titleFont, situationFont));
+            _options.PreviewNotification?.Invoke(new ArrivalPreview(width, height, animation, visual, titleFont, situationFont, padX, textGap, priority, offsetRight, offsetBottom));
             await WriteJsonAsync(ctx, 200, new { status = "ok" }).ConfigureAwait(false);
             return;
         }
 
+        if (localPath.Equals("/local/config-profiles", StringComparison.OrdinalIgnoreCase))
+        {
+            if (req.HttpMethod == "GET")
+            {
+                await WriteJsonAsync(ctx, 200, new { profiles = ConfigProfiles.Load() }).ConfigureAwait(false);
+                return;
+            }
+            if (req.HttpMethod == "POST")
+            {
+                var parsed = await ReadProfileBodyAsync(req, ctx, ct).ConfigureAwait(false);
+                if (parsed is null) return;
+                var (name, payload) = parsed.Value;
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    await WriteTextAsync(ctx, 400, """{"detail":"Nome do perfil é obrigatório"}""").ConfigureAwait(false);
+                    return;
+                }
+                try
+                {
+                    var list = ConfigProfiles.Load();
+                    var row = ConfigProfiles.Upsert(list, name, payload ?? _options.GetLocalConfig?.Invoke());
+                    ConfigProfiles.Save(list);
+                    await WriteJsonAsync(ctx, 200, row).ConfigureAwait(false);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    await WriteTextAsync(ctx, 400, JsonSerializer.Serialize(new { detail = ex.Message }, JsonCamel)).ConfigureAwait(false);
+                }
+                return;
+            }
+        }
+
+        if (localPath.StartsWith("/local/config-profiles/", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(localPath["/local/config-profiles/".Length..], out var profileId)
+            && profileId > 0)
+        {
+            var list = ConfigProfiles.Load();
+            var existing = list.FirstOrDefault(item => item.Id == profileId);
+            if (existing is null)
+            {
+                await WriteTextAsync(ctx, 404, """{"detail":"perfil não encontrado"}""").ConfigureAwait(false);
+                return;
+            }
+            if (req.HttpMethod == "PUT")
+            {
+                var parsed = await ReadProfileBodyAsync(req, ctx, ct).ConfigureAwait(false);
+                if (parsed is null) return;
+                var (name, payload) = parsed.Value;
+                try
+                {
+                    var row = ConfigProfiles.Upsert(
+                        list,
+                        string.IsNullOrWhiteSpace(name) ? existing.Name : name,
+                        payload ?? existing.Payload,
+                        profileId);
+                    ConfigProfiles.Save(list);
+                    await WriteJsonAsync(ctx, 200, row).ConfigureAwait(false);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    await WriteTextAsync(ctx, 400, JsonSerializer.Serialize(new { detail = ex.Message }, JsonCamel)).ConfigureAwait(false);
+                }
+                return;
+            }
+            if (req.HttpMethod == "DELETE")
+            {
+                ConfigProfiles.Remove(list, profileId);
+                ConfigProfiles.Save(list);
+                await WriteJsonAsync(ctx, 200, new { status = "ok" }).ConfigureAwait(false);
+                return;
+            }
+        }
+
         await WriteTextAsync(ctx, 404, """{"detail":"não encontrado"}""").ConfigureAwait(false);
+    }
+
+    async Task<(string Name, AppConfig? Payload)?> ReadProfileBodyAsync(
+        HttpListenerRequest req, HttpListenerContext ctx, CancellationToken ct)
+    {
+        var body = await ReadBodyAsync(req, ctx, ct).ConfigureAwait(false);
+        if (body is null && req.HasEntityBody) return null;
+        var name = "";
+        AppConfig? payload = null;
+        if (body is { Length: > 0 })
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(body);
+                if (doc.RootElement.TryGetProperty("name", out var nameEl) && nameEl.ValueKind == JsonValueKind.String)
+                    name = nameEl.GetString() ?? "";
+                if (doc.RootElement.TryGetProperty("payload", out var payloadEl) && payloadEl.ValueKind == JsonValueKind.Object)
+                    payload = ConfigStore.TryParseElement(payloadEl);
+            }
+            catch
+            {
+                await WriteTextAsync(ctx, 400, """{"detail":"perfil inválido"}""").ConfigureAwait(false);
+                return null;
+            }
+        }
+        return (name, payload);
     }
 
     async Task<byte[]?> ReadBodyAsync(HttpListenerRequest req, HttpListenerContext ctx, CancellationToken ct)

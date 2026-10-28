@@ -25,6 +25,10 @@ public class AdminHostTests
         Assert.Equal("/local/situacoes", mapped);
         Assert.True(AdminHost.TryMapLocalPath("/local/preview-notification", out mapped));
         Assert.Equal("/local/preview-notification", mapped);
+        Assert.True(AdminHost.TryMapLocalPath("/local/config-profiles", out mapped));
+        Assert.Equal("/local/config-profiles", mapped);
+        Assert.True(AdminHost.TryMapLocalPath("/local/config-profiles/3", out mapped));
+        Assert.Equal("/local/config-profiles/3", mapped);
         Assert.False(AdminHost.TryMapLocalPath("/api/letreiro/settings", out _));
         Assert.False(AdminHost.TryMapLocalPath("/index.html", out _));
     }

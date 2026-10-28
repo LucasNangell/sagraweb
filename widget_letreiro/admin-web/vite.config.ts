@@ -65,12 +65,77 @@ function localPreviewMock(): Connect.NextHandleFunction {
   const remoteByTarget: Record<string, unknown> = {
     "PC-DEV\nusr_sefoc": { ...config },
   };
+  const configProfiles: { id: number; name: string; payload: unknown }[] = [];
+  let nextProfileId = 1;
   let jobId = 1;
   return (req: IncomingMessage, res: ServerResponse, next: Connect.NextFunction) => {
     const url = (req.url ?? "").split("?")[0];
     if (url === "/local/me") return sendJson(res, { isAdmin: process.env.LETREIRO_MOCK_ADMIN === "1" });
     if (url === "/local/config" || url === "/local/restore-board") return sendJson(res, config);
     if (url === "/local/preview-notification") return sendJson(res, { status: "ok" });
+    if (url === "/local/config-profiles") {
+      if (req.method === "POST") {
+        const chunks: Buffer[] = [];
+        req.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+        req.on("end", () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { name?: string; payload?: unknown };
+            const name = (body.name ?? "").trim();
+            if (!name) {
+              res.statusCode = 400;
+              res.end(JSON.stringify({ detail: "Nome do perfil é obrigatório" }));
+              return;
+            }
+            const existing = configProfiles.find((item) => item.name.toLowerCase() === name.toLowerCase());
+            if (existing) {
+              existing.name = name;
+              existing.payload = body.payload ?? existing.payload;
+              sendJson(res, existing);
+              return;
+            }
+            const row = { id: nextProfileId++, name, payload: body.payload ?? { ...config } };
+            configProfiles.push(row);
+            sendJson(res, row);
+          } catch {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ detail: "perfil inválido" }));
+          }
+        });
+        return;
+      }
+      return sendJson(res, { profiles: configProfiles });
+    }
+    const profileMatch = url.match(/^\/local\/config-profiles\/(\d+)$/);
+    if (profileMatch) {
+      const id = Number(profileMatch[1]);
+      const idx = configProfiles.findIndex((item) => item.id === id);
+      if (idx < 0) {
+        res.statusCode = 404;
+        res.end(JSON.stringify({ detail: "perfil não encontrado" }));
+        return;
+      }
+      if (req.method === "DELETE") {
+        configProfiles.splice(idx, 1);
+        return sendJson(res, { status: "ok" });
+      }
+      if (req.method === "PUT") {
+        const chunks: Buffer[] = [];
+        req.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+        req.on("end", () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { name?: string; payload?: unknown };
+            const row = configProfiles[idx];
+            if (body.name?.trim()) row.name = body.name.trim();
+            if (body.payload) row.payload = body.payload;
+            sendJson(res, row);
+          } catch {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ detail: "perfil inválido" }));
+          }
+        });
+        return;
+      }
+    }
     if (url === "/api/letreiro/painel-presets") {
       return sendJson(res, {
         presets: [

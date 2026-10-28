@@ -17,13 +17,20 @@ public readonly record struct ArrivalToastLayout(
 
 public readonly record struct ArrivalAnimation(string Id, string Label);
 
+public readonly record struct ArrivalToastOrigin(double Left, double Top);
+
 public readonly record struct ArrivalPreview(
     int Width,
     int Height,
     string Animation,
     NotificationVisual? Visual,
     int TitleFontSize,
-    int SituationFontSize);
+    int SituationFontSize,
+    int PadX,
+    int? TextGap,
+    string Priority,
+    int? OffsetRight,
+    int? OffsetBottom);
 
 public static class ArrivalNotify
 {
@@ -41,6 +48,19 @@ public static class ArrivalNotify
     public const int MaxTitleFontSize = 72;
     public const int MinSituationFontSize = 8;
     public const int MaxSituationFontSize = 56;
+    public const int DefaultPadX = 16;
+    public const int MinPadX = 4;
+    public const int MaxPadX = 48;
+    public const int DefaultTextGap = 4;
+    public const int MinTextGap = 0;
+    public const int MaxTextGap = 40;
+    public const int AccentWidth = 6;
+    public const int DefaultOffsetRight = 24;
+    public const int DefaultOffsetBottom = 24;
+    public const int MinOffset = 0;
+    public const int MaxOffset = 1200;
+    public const string PriorityHigh = "priority-high";
+    public const string PriorityMedium = "priority-medium";
     public static readonly TimeSpan Duration = TimeSpan.FromSeconds(4);
 
     public static readonly ArrivalAnimation[] ClassicEntries =
@@ -70,6 +90,26 @@ public static class ArrivalNotify
 
     public static int ClampSituationFontSize(int value) =>
         Math.Clamp(value <= 0 ? DefaultSituationFontSize : value, MinSituationFontSize, MaxSituationFontSize);
+
+    public static int ClampPadX(int value) =>
+        Math.Clamp(value <= 0 ? DefaultPadX : value, MinPadX, MaxPadX);
+
+    public static int ClampTextGap(int? value) =>
+        value is null ? DefaultTextGap : Math.Clamp(value.Value, MinTextGap, MaxTextGap);
+
+    public static int ClampOffsetRight(int? value) =>
+        value is null ? DefaultOffsetRight : Math.Clamp(value.Value, MinOffset, MaxOffset);
+
+    public static int ClampOffsetBottom(int? value) =>
+        value is null ? DefaultOffsetBottom : Math.Clamp(value.Value, MinOffset, MaxOffset);
+
+    public static string ClampPriority(string? value)
+    {
+        var id = (value ?? "").Trim();
+        if (string.Equals(id, PriorityHigh, StringComparison.OrdinalIgnoreCase)) return PriorityHigh;
+        if (string.Equals(id, PriorityMedium, StringComparison.OrdinalIgnoreCase)) return PriorityMedium;
+        return "";
+    }
 
     public static string ClampAnimation(string? value)
     {
@@ -104,6 +144,34 @@ public static class ArrivalNotify
             Math.Min(16, Math.Max(8, height * 0.17)),
             width + sidePad * 2,
             enterSlack + height + exitSlack);
+    }
+
+    public static ArrivalToastOrigin WindowOrigin(
+        ArrivalToastLayout layout,
+        int offsetRight,
+        int offsetBottom,
+        double monitorLeft,
+        double monitorTop,
+        double monitorRight,
+        double monitorBottom,
+        double dpiX = 1,
+        double dpiY = 1)
+    {
+        dpiX = dpiX > 0 ? dpiX : 1;
+        dpiY = dpiY > 0 ? dpiY : 1;
+        var cardW = layout.CardWidth * dpiX;
+        var cardH = layout.CardHeight * dpiY;
+        var cardLeft = Anchor(monitorRight - ClampOffsetRight(offsetRight) - cardW, cardW, monitorLeft, monitorRight);
+        var cardTop = Anchor(monitorBottom - ClampOffsetBottom(offsetBottom) - cardH, cardH, monitorTop, monitorBottom);
+        return new ArrivalToastOrigin(
+            cardLeft - layout.SidePad * dpiX,
+            cardTop - layout.EnterSlack * dpiY);
+    }
+
+    static double Anchor(double desired, double size, double min, double max)
+    {
+        var limit = max - size;
+        return limit < min ? min : Math.Clamp(desired, min, limit);
     }
 
     static (double SidePad, double EnterTravel, double ExitTravel, double ScaleExtra) Slack(
@@ -262,19 +330,28 @@ public static class ArrivalNotify
         return text.Length is 4 or 7 or 9 && text.StartsWith('#') ? text : "";
     }
 
-    public static TickerCard PreviewCard() => new()
+    public static TickerCard PreviewCard(string? priority = null)
     {
-        UniqueKey = PreviewKey,
-        OpKey = "0-0",
-        Label = "OS 0000/00",
-        Situacao = "Teste de notificação",
-        Priority = "priority-high",
-        IsNew = true,
-        ColumnIndex = 0,
-        ColumnTitle = "Teste",
-        NrOs = 0,
-        Ano = 0,
-    };
+        var slot = ClampPriority(priority);
+        return new TickerCard
+        {
+            UniqueKey = PreviewKey,
+            OpKey = "0-0",
+            Label = "OS 0000/00",
+            Situacao = slot switch
+            {
+                PriorityHigh => "Teste · alta",
+                PriorityMedium => "Teste · média",
+                _ => "Teste · normal",
+            },
+            Priority = slot.Length == 0 ? null : slot,
+            IsNew = true,
+            ColumnIndex = 0,
+            ColumnTitle = "Teste",
+            NrOs = 0,
+            Ano = 0,
+        };
+    }
 
     public static List<TickerCard> VisibleOnTicker(
         IEnumerable<TickerCard> cards,

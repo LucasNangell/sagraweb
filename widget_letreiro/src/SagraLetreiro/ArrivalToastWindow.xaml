@@ -36,7 +36,7 @@
                         Width="6"
                         HorizontalAlignment="Left"
                         CornerRadius="16,0,0,16" />
-                <StackPanel VerticalAlignment="Center" Margin="18,0,14,0">
+                <StackPanel x:Name="TextStack" VerticalAlignment="Center" Margin="18,0,14,0">
                     <TextBlock x:Name="LabelText"
                                FontWeight="Bold"
                                TextAlignment="Center"

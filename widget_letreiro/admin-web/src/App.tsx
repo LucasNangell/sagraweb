@@ -13,7 +13,7 @@ import {
   Trash2,
   ChevronDown,
 } from "lucide-react";
-import { api, ApiError, type AppConfig, type BoardColumn, type Command, type Instance, type Job } from "./api";
+import { api, ApiError, type AppConfig, type BoardColumn, type Command, type ConfigProfile, type Instance, type Job } from "./api";
 import {
   CLASSIC_ENTRY_ANIMATIONS,
   clampEntryAnimation,
@@ -77,6 +77,11 @@ function compareInstancesByNome(a: Instance, b: Instance) {
   const byHost = a.hostName.localeCompare(b.hostName, "pt", { sensitivity: "base" });
   if (byHost) return byHost;
   return a.windowsUser.localeCompare(b.windowsUser, "pt", { sensitivity: "base" });
+}
+
+function compareInstances(a: Instance, b: Instance) {
+  if (a.online !== b.online) return a.online ? -1 : 1;
+  return compareInstancesByNome(a, b);
 }
 
 function LibraryCombobox({
@@ -340,6 +345,47 @@ function withNotifyMigration(cfg: AppConfig): AppConfig {
   };
 }
 
+function mergeProfile(base: AppConfig, profile: AppConfig): AppConfig {
+  return withNotifyMigration({
+    ...base,
+    board: profile.board ?? base.board,
+    window: {
+      ...base.window,
+      ...profile.window,
+      x: base.window?.x,
+    },
+  });
+}
+
+function remoteWindow(cfg: AppConfig, columns: BoardColumn[]) {
+  return {
+    width: cfg.window?.width ?? 720,
+    opacity: cfg.window?.opacity ?? 0.95,
+    speedPxPerSec: cfg.window?.speedPxPerSec ?? 40,
+    transparentBg: !!cfg.window?.transparentBg,
+    notificationsEnabled: columns.some((col) => !!col.notify),
+    notificationWidth: cfg.window?.notificationWidth ?? 320,
+    notificationHeight: cfg.window?.notificationHeight ?? 96,
+    notificationTitleFontSize: cfg.window?.notificationTitleFontSize ?? 22,
+    notificationSituationFontSize: cfg.window?.notificationSituationFontSize ?? 14,
+    notificationPadX: cfg.window?.notificationPadX ?? 16,
+    notificationTextGap: cfg.window?.notificationTextGap ?? 4,
+    notificationOffsetRight: cfg.window?.notificationOffsetRight ?? 24,
+    notificationOffsetBottom: cfg.window?.notificationOffsetBottom ?? 24,
+    notificationAnimation: clampEntryAnimation(cfg.window?.notificationAnimation),
+    notificationVisual: cfg.window?.notificationVisual,
+  };
+}
+
+function remotePayload(cfg: AppConfig): AppConfig {
+  const cols = cfg.board?.columns ?? [];
+  return {
+    ...cfg,
+    board: { ...cfg.board, columns: cols, columnCount: cols.length },
+    window: remoteWindow(cfg, cols),
+  };
+}
+
 function seedClientConfig(row: Instance, payload: AppConfig | null): AppConfig {
   const base = payload ?? {};
   const columns = base.board?.columns?.length ? base.board.columns : DEFAULT_COLUMNS;
@@ -364,6 +410,10 @@ function seedClientConfig(row: Instance, payload: AppConfig | null): AppConfig {
       notificationHeight: base.window?.notificationHeight ?? 96,
       notificationTitleFontSize: base.window?.notificationTitleFontSize ?? 22,
       notificationSituationFontSize: base.window?.notificationSituationFontSize ?? 14,
+      notificationPadX: base.window?.notificationPadX ?? 16,
+      notificationTextGap: base.window?.notificationTextGap ?? 4,
+      notificationOffsetRight: base.window?.notificationOffsetRight ?? 24,
+      notificationOffsetBottom: base.window?.notificationOffsetBottom ?? 24,
       notificationAnimation: clampEntryAnimation(base.window?.notificationAnimation),
       notificationVisual: base.window?.notificationVisual,
     },
@@ -391,9 +441,10 @@ function LetreiroDisplayFields({
   onChange: (next: AppConfig) => void;
   setores: string[];
   listId: string;
-  onPreview?: () => void;
+  onPreview?: (priority: string) => void;
   presets?: { id: number; nome: string; payload: unknown }[];
 }) {
+  const [previewPriority, setPreviewPriority] = useState("");
   return (
     <>
       <label className="mt-4 block min-w-0 text-sm text-slate-400">
@@ -446,11 +497,23 @@ function LetreiroDisplayFields({
         </label>
       </div>
       {onPreview ? (
-        <div className="mt-3">
+        <div className="mt-3 flex flex-wrap items-end gap-2">
+          <label className="min-w-[10rem] text-sm text-slate-400">
+            Prioridade do teste
+            <select
+              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+              value={previewPriority}
+              onChange={(e) => setPreviewPriority(e.target.value)}
+            >
+              <option value="">Normal</option>
+              <option value="priority-medium">Média</option>
+              <option value="priority-high">Alta</option>
+            </select>
+          </label>
           <button
             type="button"
             className="rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-100"
-            onClick={onPreview}
+            onClick={() => onPreview(previewPriority)}
           >
             Testar notificação
           </button>
@@ -524,6 +587,75 @@ function LetreiroDisplayFields({
           />
         </label>
       </div>
+      <div className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2">
+        <label className="min-w-0 text-sm text-slate-400">
+          Espaço interno lateral (px)
+          <input
+            type="number"
+            min={4}
+            max={48}
+            step={1}
+            className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+            value={cfg.window?.notificationPadX ?? 16}
+            onChange={(e) => {
+              const notificationPadX = Number(e.target.value);
+              if (!Number.isFinite(notificationPadX)) return;
+              onChange({ ...cfg, window: { ...cfg.window, notificationPadX } });
+            }}
+          />
+        </label>
+        <label className="min-w-0 text-sm text-slate-400">
+          Espaço entre textos (px)
+          <input
+            type="number"
+            min={0}
+            max={40}
+            step={1}
+            className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+            value={cfg.window?.notificationTextGap ?? 4}
+            onChange={(e) => {
+              const notificationTextGap = Number(e.target.value);
+              if (!Number.isFinite(notificationTextGap)) return;
+              onChange({ ...cfg, window: { ...cfg.window, notificationTextGap } });
+            }}
+          />
+        </label>
+      </div>
+      <div className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2">
+        <label className="min-w-0 text-sm text-slate-400">
+          Distância da direita do monitor (px)
+          <input
+            type="number"
+            min={0}
+            max={1200}
+            step={1}
+            className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+            value={cfg.window?.notificationOffsetRight ?? 24}
+            onChange={(e) => {
+              const notificationOffsetRight = Number(e.target.value);
+              if (!Number.isFinite(notificationOffsetRight)) return;
+              onChange({ ...cfg, window: { ...cfg.window, notificationOffsetRight } });
+            }}
+          />
+        </label>
+        <label className="min-w-0 text-sm text-slate-400">
+          Distância da inferior do monitor (px)
+          <input
+            type="number"
+            min={0}
+            max={1200}
+            step={1}
+            className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+            value={cfg.window?.notificationOffsetBottom ?? 24}
+            onChange={(e) => {
+              const notificationOffsetBottom = Number(e.target.value);
+              if (!Number.isFinite(notificationOffsetBottom)) return;
+              onChange({ ...cfg, window: { ...cfg.window, notificationOffsetBottom } });
+            }}
+          />
+        </label>
+      </div>
+      <p className="mt-1 text-xs text-slate-500">Do card até as bordas direita e inferior do monitor em que o letreiro está.</p>
       <label className="mt-3 block min-w-0 text-sm text-slate-400">
         Animação de entrada
         <select
@@ -733,6 +865,10 @@ export default function App() {
   const [clientBusy, setClientBusy] = useState(false);
   const clickTimer = useRef(0);
   const [painelPresets, setPainelPresets] = useState<{ id: number; nome: string; payload: unknown }[]>([]);
+  const [configProfiles, setConfigProfiles] = useState<ConfigProfile[]>([]);
+  const [profileDraftName, setProfileDraftName] = useState("");
+  const [settingsProfileId, setSettingsProfileId] = useState(0);
+  const [applyProfileId, setApplyProfileId] = useState(0);
   const [setores, setSetores] = useState<string[]>(["SEFOC", "Papelaria", "Gravação"]);
   const [situacoes, setSituacoes] = useState<string[]>(DEFAULT_SITUACOES);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -746,7 +882,7 @@ export default function App() {
   );
   const filteringList = selected.size === 0;
   const visibleInstances = useMemo(() => {
-    const sorted = uniqueInstances(instances).sort(compareInstancesByNome);
+    const sorted = uniqueInstances(instances).sort(compareInstances);
     if (!filteringList) return sorted;
     return sorted.filter((row) =>
       textMatches(row.nome ?? "", profile.nome) && textMatches(row.setor ?? "", profile.setor),
@@ -816,14 +952,16 @@ export default function App() {
         setIsAdmin(me.isAdmin);
         const onlyAjustes = pageHash === "ajustes" || !me.isAdmin;
         if (onlyAjustes) setView("settings");
-        const [local, setorList, situacaoList, presetList] = await Promise.all([
+        const [local, setorList, situacaoList, presetList, profileList] = await Promise.all([
           api.localConfig(),
           api.setores(),
           api.situacoes().catch(() => ({ situacoes: [] as string[] })),
           api.painelPresets().catch(() => ({ presets: [] as { id: number; nome: string; payload: unknown }[] })),
+          api.configProfiles().catch(() => ({ profiles: [] as ConfigProfile[] })),
         ]);
         setLocalCfg(withNotifyMigration(local));
         setPainelPresets(presetList.presets ?? []);
+        setConfigProfiles(profileList.profiles ?? []);
         if (setorList.setores?.length) setSetores(setorList.setores);
         if (situacaoList.situacoes?.length) {
           setSituacoes([...new Set([...situacaoList.situacoes, ...DEFAULT_SITUACOES])]);
@@ -958,24 +1096,7 @@ export default function App() {
     setClientBusy(true);
     setError("");
     try {
-      const payload: AppConfig = {
-        ...cfg,
-        board: { ...cfg.board, columns: cols, columnCount: cols.length },
-        window: {
-          width: cfg.window?.width ?? 720,
-          opacity: cfg.window?.opacity ?? 0.95,
-          speedPxPerSec: cfg.window?.speedPxPerSec ?? 40,
-          transparentBg: !!cfg.window?.transparentBg,
-          notificationsEnabled: (cols ?? []).some((col) => !!col.notify),
-          notificationWidth: cfg.window?.notificationWidth ?? 320,
-          notificationHeight: cfg.window?.notificationHeight ?? 96,
-          notificationTitleFontSize: cfg.window?.notificationTitleFontSize ?? 22,
-          notificationSituationFontSize: cfg.window?.notificationSituationFontSize ?? 14,
-          notificationAnimation: clampEntryAnimation(cfg.window?.notificationAnimation),
-          notificationVisual: cfg.window?.notificationVisual,
-        },
-      };
-      await api.putConfig(payload, row.hostName, row.windowsUser, false);
+      await api.putConfig(remotePayload(cfg), row.hostName, row.windowsUser, false);
       setStatus(`Filtros e exibição aplicados em ${row.hostName} (${row.windowsUser}).`);
       setClientEdit(null);
     } catch (ex) {
@@ -996,6 +1117,79 @@ export default function App() {
     const restored = await api.restoreBoard();
     setLocalCfg(restored);
     setStatus("Filtros restaurados.");
+  }
+
+  async function refreshConfigProfiles() {
+    const list = await api.configProfiles();
+    setConfigProfiles(list.profiles ?? []);
+  }
+
+  function selectSettingsProfile(id: number) {
+    setSettingsProfileId(id);
+    const row = configProfiles.find((item) => item.id === id);
+    setProfileDraftName(row?.name ?? "");
+  }
+
+  async function saveConfigProfile() {
+    const name = profileDraftName.trim();
+    if (!name) return setError("Informe o nome do perfil.");
+    const saved = settingsProfileId
+      ? await api.updateConfigProfile(settingsProfileId, name, localCfg)
+      : await api.saveConfigProfile(name, localCfg);
+    await refreshConfigProfiles();
+    setSettingsProfileId(saved.id);
+    setProfileDraftName(saved.name);
+    setApplyProfileId(saved.id);
+    setStatus(`Perfil “${saved.name}” gravado.`);
+  }
+
+  function loadConfigProfile() {
+    const row = configProfiles.find((item) => item.id === settingsProfileId);
+    if (!row) return setError("Selecione um perfil para carregar.");
+    setLocalCfg(mergeProfile(localCfg, row.payload ?? {}));
+    setProfileDraftName(row.name);
+    setStatus(`Perfil “${row.name}” carregado neste formulário. Clique em Salvar para aplicar neste computador.`);
+  }
+
+  async function deleteConfigProfile() {
+    const row = configProfiles.find((item) => item.id === settingsProfileId);
+    if (!row) return setError("Selecione um perfil para excluir.");
+    if (!window.confirm(`Excluir o perfil “${row.name}”?`)) return;
+    await api.deleteConfigProfile(row.id);
+    await refreshConfigProfiles();
+    setSettingsProfileId(0);
+    setProfileDraftName("");
+    if (applyProfileId === row.id) setApplyProfileId(0);
+    setStatus(`Perfil “${row.name}” excluído.`);
+  }
+
+  async function applyConfigProfileToSelected() {
+    const row = configProfiles.find((item) => item.id === applyProfileId);
+    if (!row) return setError("Selecione um perfil de configuração.");
+    if (selectedRows.length === 0) return setError("Selecione pelo menos um usuário.");
+    setClientBusy(true);
+    setError("");
+    try {
+      for (const target of selectedRows) {
+        const data = await api.getConfig(target.hostName, target.windowsUser);
+        const merged = mergeProfile(seedClientConfig(target, data.payload), row.payload ?? {});
+        const cols = merged.board?.columns ?? [];
+        if (cols.length === 0) throw new Error(`O perfil “${row.name}” não tem filtros.`);
+        await api.putConfig(remotePayload(merged), target.hostName, target.windowsUser, false);
+      }
+      setStatus(`Perfil “${row.name}” aplicado em ${selectedRows.length} usuário(s). A posição da faixa permanece em cada PC.`);
+    } catch (ex) {
+      setError(errText(ex));
+    } finally {
+      setClientBusy(false);
+    }
+  }
+
+  function fillClientEditFromProfile(id: number) {
+    const row = configProfiles.find((item) => item.id === id);
+    if (!row || !clientEdit) return;
+    setClientEdit({ ...clientEdit, cfg: mergeProfile(clientEdit.cfg, row.payload ?? {}) });
+    setStatus(`Perfil “${row.name}” carregado. Clique em Aplicar configurações para gravar neste usuário.`);
   }
 
   async function watchQueued(queued: number, echo: string) {
@@ -1178,6 +1372,29 @@ export default function App() {
                     onChange={(e) => setProfile((p) => ({ ...p, setor: e.target.value }))}
                   />
                 </label>
+              </div>
+              <div className="flex shrink-0 flex-wrap items-end gap-2">
+                <label className="min-w-[14rem] flex-1 text-sm text-slate-400">
+                  Perfil de configuração
+                  <select
+                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+                    value={applyProfileId}
+                    onChange={(e) => setApplyProfileId(Number(e.target.value))}
+                  >
+                    <option value={0}>Escolher perfil…</option>
+                    {configProfiles.map((item) => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-60"
+                  disabled={clientBusy}
+                  onClick={() => void applyConfigProfileToSelected().catch((ex) => setError(errText(ex)))}
+                >
+                  {clientBusy ? "Aplicando…" : "Aplicar aos selecionados"}
+                </button>
               </div>
               <div className="min-h-0 flex-1 overflow-auto rounded-2xl border border-slate-800 bg-slate-900/80 shadow-card">
                 <table className="w-full min-w-[52rem] text-sm">
@@ -1535,11 +1752,16 @@ export default function App() {
                   setores={setores}
                   listId="setores-list"
                   presets={painelPresets}
-                  onPreview={() => void api.previewNotification({
+                  onPreview={(priority) => void api.previewNotification({
                     width: localCfg.window?.notificationWidth ?? 320,
                     height: localCfg.window?.notificationHeight ?? 96,
                     titleFontSize: localCfg.window?.notificationTitleFontSize ?? 22,
                     situationFontSize: localCfg.window?.notificationSituationFontSize ?? 14,
+                    padX: localCfg.window?.notificationPadX ?? 16,
+                    textGap: localCfg.window?.notificationTextGap ?? 4,
+                    priority,
+                    offsetRight: localCfg.window?.notificationOffsetRight ?? 24,
+                    offsetBottom: localCfg.window?.notificationOffsetBottom ?? 24,
                     animation: clampEntryAnimation(localCfg.window?.notificationAnimation),
                     visual: localCfg.window?.notificationVisual,
                   }).then(() => setStatus("Notificação de teste disparada.")).catch((ex) => setError(errText(ex)))}
@@ -1578,11 +1800,67 @@ export default function App() {
                   <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:p-5">
                     <h2 className="text-lg font-bold">Configuração remota</h2>
                     <p className="mt-1 text-sm text-slate-400">
-                      Filtros e exibição de cada letreiro são editados com duplo clique na lista de computadores. A posição da faixa permanece no PC de destino.
+                      Grave um perfil abaixo e aplique-o aos usuários selecionados em Computadores. Duplo clique ainda edita um usuário. A posição da faixa permanece no PC de destino.
                     </p>
                   </div>
                 </div>
               ) : null}
+            </div>
+
+            <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:p-5">
+              <h2 className="text-xl font-bold">Perfis de configuração</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Salva letreiro e filtros desta página (sem conta ou API). Na administração, o perfil pode ser aplicado aos usuários selecionados.
+              </p>
+              <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,16rem)]">
+                <label className="min-w-0 text-sm text-slate-400">
+                  Perfil
+                  <select
+                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+                    value={settingsProfileId}
+                    onChange={(e) => selectSettingsProfile(Number(e.target.value))}
+                  >
+                    <option value={0}>Novo perfil…</option>
+                    {configProfiles.map((item) => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="min-w-0 text-sm text-slate-400">
+                  Nome
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+                    value={profileDraftName}
+                    placeholder="Ex.: TV SEFOC"
+                    onChange={(e) => setProfileDraftName(e.target.value)}
+                  />
+                </label>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950"
+                  onClick={() => void saveConfigProfile().catch((ex) => setError(errText(ex)))}
+                >
+                  Salvar perfil
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg bg-slate-800 px-3 py-2 text-sm disabled:opacity-50"
+                  disabled={!settingsProfileId}
+                  onClick={() => loadConfigProfile()}
+                >
+                  Carregar no formulário
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg bg-slate-800 px-3 py-2 text-sm text-rose-200 disabled:opacity-50"
+                  disabled={!settingsProfileId}
+                  onClick={() => void deleteConfigProfile().catch((ex) => setError(errText(ex)))}
+                >
+                  Excluir
+                </button>
+              </div>
             </div>
           </section>
         ) : null}
@@ -1622,6 +1900,25 @@ export default function App() {
               </button>
             </div>
             <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-5">
+              {configProfiles.length ? (
+                <label className="text-sm text-slate-400">
+                  Preencher com perfil
+                  <select
+                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+                    defaultValue={0}
+                    onChange={(e) => {
+                      const id = Number(e.target.value);
+                      e.currentTarget.value = "0";
+                      if (id) fillClientEditFromProfile(id);
+                    }}
+                  >
+                    <option value={0}>Escolher perfil…</option>
+                    {configProfiles.map((item) => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
                 <h3 className="text-lg font-bold">Letreiro</h3>
                 <p className="mt-1 text-sm text-slate-400">Aparência, tamanho da barra e filtro OS/SP.</p>

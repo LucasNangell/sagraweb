@@ -20,6 +20,10 @@ public partial class ArrivalToastWindow : Window
     readonly NotificationVisual _visual;
     readonly int _titleFontSize;
     readonly int _situationFontSize;
+    readonly int _padX;
+    readonly int _textGap;
+    readonly int _offsetRight;
+    readonly int _offsetBottom;
 
     public ArrivalToastWindow(
         TickerCard card,
@@ -28,7 +32,11 @@ public partial class ArrivalToastWindow : Window
         string? animation = null,
         NotificationVisual? visual = null,
         int titleFontSize = 0,
-        int situationFontSize = 0)
+        int situationFontSize = 0,
+        int padX = 0,
+        int? textGap = null,
+        int? offsetRight = null,
+        int? offsetBottom = null)
     {
         InitializeComponent();
         Opacity = 0;
@@ -37,6 +45,10 @@ public partial class ArrivalToastWindow : Window
         _layout = ArrivalNotify.Layout(cardWidth, cardHeight, id);
         _titleFontSize = ArrivalNotify.ClampTitleFontSize(titleFontSize);
         _situationFontSize = ArrivalNotify.ClampSituationFontSize(situationFontSize);
+        _padX = ArrivalNotify.ClampPadX(padX);
+        _textGap = ArrivalNotify.ClampTextGap(textGap);
+        _offsetRight = ArrivalNotify.ClampOffsetRight(offsetRight);
+        _offsetBottom = ArrivalNotify.ClampOffsetBottom(offsetBottom);
         OverlayChrome.ApplyFloatingStyle(this);
         ApplyLayout();
         Bind(card);
@@ -59,21 +71,19 @@ public partial class ArrivalToastWindow : Window
         UpdateLayout();
         var dpi = VisualTreeHelper.GetDpi(this);
         var overlayTop = overlay.PointToScreen(new Point(0, 0));
-        var overlayW = overlay.ActualWidth * dpi.DpiScaleX;
-        var overlayH = overlay.ActualHeight * dpi.DpiScaleY;
-        var widthPx = _layout.WindowWidth * dpi.DpiScaleX;
-        var heightPx = _layout.WindowHeight * dpi.DpiScaleY;
         var geom = TaskbarService.At((int)overlayTop.X, (int)overlayTop.Y);
-        var left = overlayTop.X + overlayW - widthPx;
-        var holdBottom = overlayTop.Y - 8;
-        var top = holdBottom - (_layout.EnterSlack + _layout.CardHeight) * dpi.DpiScaleY;
-        if (top < geom.MonitorTop)
-            top = overlayTop.Y + overlayH + 8 - _layout.EnterSlack * dpi.DpiScaleY;
-        if (left + widthPx > geom.MonitorRight) left = geom.MonitorRight - widthPx - 8;
-        if (left < geom.MonitorLeft) left = geom.MonitorLeft + 8;
-        if (top + heightPx > geom.MonitorBottom) top = geom.MonitorBottom - heightPx - 8;
-        Left = left / dpi.DpiScaleX;
-        Top = top / dpi.DpiScaleY;
+        var origin = ArrivalNotify.WindowOrigin(
+            _layout,
+            _offsetRight,
+            _offsetBottom,
+            geom.MonitorLeft,
+            geom.MonitorTop,
+            geom.MonitorRight,
+            geom.MonitorBottom,
+            dpi.DpiScaleX,
+            dpi.DpiScaleY);
+        Left = origin.Left / dpi.DpiScaleX;
+        Top = origin.Top / dpi.DpiScaleY;
     }
 
     void ApplyLayout()
@@ -88,6 +98,8 @@ public partial class ArrivalToastWindow : Window
         Canvas.SetTop(CardBorder, _layout.EnterSlack);
         LabelText.FontSize = _titleFontSize;
         SituacaoText.FontSize = _situationFontSize;
+        TextStack.Margin = new Thickness(_padX + ArrivalNotify.AccentWidth, 0, _padX, 0);
+        SituacaoText.Margin = new Thickness(0, _textGap, 0, 0);
     }
 
     void Bind(TickerCard card)

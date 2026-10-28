@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>SagraLetreiro</RootNamespace>
     <AssemblyName>SagraLetreiro.Core</AssemblyName>
-    <Version>2.23.1</Version>
+    <Version>2.24.0</Version>
   </PropertyGroup>
 
 </Project>

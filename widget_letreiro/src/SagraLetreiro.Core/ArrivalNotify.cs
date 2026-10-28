@@ -212,7 +212,11 @@ public static class ArrivalNotify
         {
             PresetId = raw.PresetId < 0 ? 0 : raw.PresetId,
             PresetName = (raw.PresetName ?? "").Trim(),
-            FontScale = raw.FontScale is > 0.7 and <= 1.8 ? Math.Round(raw.FontScale, 2) : 1,
+            FontScale = ClampScale(raw.FontScale),
+            TitleScale = ClampScale(raw.TitleScale),
+            SituationScale = ClampScale(raw.SituationScale),
+            LetterSpacing = raw.LetterSpacing is >= -0.2 and <= 0.2 ? raw.LetterSpacing : null,
+            FontFamily = Clip(raw.FontFamily, 160),
             High = NormalizeSlot(raw.High),
             Medium = NormalizeSlot(raw.Medium),
             Normal = NormalizeSlot(raw.Normal),
@@ -228,6 +232,10 @@ public static class ArrivalNotify
             PresetId = id,
             PresetName = name ?? "",
             FontScale = Number(typography, "fontScale", 1),
+            TitleScale = Number(typography, "titleScale", Number(typography, "fontScale", 1)),
+            SituationScale = Number(typography, "situationScale", Number(typography, "fontScale", 1)),
+            LetterSpacing = OptionalNumber(typography, "letterSpacing"),
+            FontFamily = GetStr(typography, "fontFamily"),
             High = SlotFrom(models, typography, "high"),
             Medium = SlotFrom(models, typography, "medium"),
             Normal = SlotFrom(models, typography, "normal"),
@@ -248,8 +256,17 @@ public static class ArrivalNotify
         Bg = Hex(raw?.Bg),
         Border = Hex(raw?.Border),
         Accent = Hex(raw?.Accent),
+        Extra = Hex(raw?.Extra),
+        Extra2 = Hex(raw?.Extra2),
+        Text = Hex(raw?.Text),
         Title = Hex(raw?.Title),
         Situation = Hex(raw?.Situation),
+        Author = Hex(raw?.Author),
+        Timer = Hex(raw?.Timer),
+        Effect = Clip(raw?.Effect, 64),
+        Highlight = Clip(raw?.Highlight, 64),
+        HighlightAccent = Hex(raw?.HighlightAccent),
+        HighlightExtra = Hex(raw?.HighlightExtra),
     };
 
     static NotificationSlotStyle SlotFrom(JsonElement models, JsonElement typography, string key)
@@ -257,6 +274,7 @@ public static class ArrivalNotify
         var slot = new NotificationSlotStyle();
         var effect = "";
         JsonElement colors = default;
+        JsonElement highlightColors = default;
         if (models.ValueKind == JsonValueKind.Object && models.TryGetProperty(key, out var raw))
         {
             if (raw.ValueKind == JsonValueKind.String)
@@ -264,14 +282,23 @@ public static class ArrivalNotify
             else if (raw.ValueKind == JsonValueKind.Object)
             {
                 effect = GetStr(raw, "effect");
+                slot.Highlight = GetStr(raw, "highlight");
                 if (raw.TryGetProperty("colors", out var nested) && nested.ValueKind == JsonValueKind.Object)
                     colors = nested;
+                if (raw.TryGetProperty("highlightColors", out var fx) && fx.ValueKind == JsonValueKind.Object)
+                    highlightColors = fx;
             }
         }
         var palette = CardModelPalettes.ForEffect(effect);
+        slot.Effect = effect;
         slot.Bg = Hex(GetStr(colors, "bg"));
         slot.Border = Hex(GetStr(colors, "border"));
         slot.Accent = Hex(GetStr(colors, "accent"));
+        slot.Extra = Hex(GetStr(colors, "extra"));
+        slot.Extra2 = Hex(GetStr(colors, "extra2"));
+        slot.Text = Hex(GetStr(colors, "text"));
+        slot.HighlightAccent = Hex(GetStr(highlightColors, "accent"));
+        slot.HighlightExtra = Hex(GetStr(highlightColors, "extra"));
         if (slot.Bg.Length == 0) slot.Bg = palette?.Bg ?? "";
         if (slot.Border.Length == 0) slot.Border = palette?.Border ?? "";
         if (slot.Accent.Length == 0) slot.Accent = palette?.Accent ?? "";
@@ -291,8 +318,12 @@ public static class ArrivalNotify
             {
                 var title = Hex(GetStr(pcolors, "titleColor"));
                 var sit = Hex(GetStr(pcolors, "situationColor"));
+                var author = Hex(GetStr(pcolors, "authorColor"));
+                var timer = Hex(GetStr(pcolors, "timerColor"));
                 if (title.Length > 0) slot.Title = title;
                 if (sit.Length > 0) slot.Situation = sit;
+                if (author.Length > 0) slot.Author = author;
+                if (timer.Length > 0) slot.Timer = timer;
             }
         }
         return slot;
@@ -337,6 +368,34 @@ public static class ArrivalNotify
             return n;
         return fallback;
     }
+
+    static double ClampScale(double value) =>
+        value is > 0.7 and <= 1.8 ? Math.Round(value, 2) : 1;
+
+    static string Clip(string? value, int max)
+    {
+        var text = (value ?? "").Trim();
+        return text.Length <= max ? text : text[..max];
+    }
+
+    static double? OptionalNumber(JsonElement obj, string name)
+    {
+        if (obj.ValueKind != JsonValueKind.Object || !obj.TryGetProperty(name, out var el))
+            return null;
+        if (el.ValueKind == JsonValueKind.Number && el.TryGetDouble(out var n))
+            return n;
+        return null;
+    }
+
+    public static bool UsesCatalog(NotificationVisual? visual) =>
+        visual is not null
+        && (visual.PresetId > 0
+            || HasCatalog(visual.High)
+            || HasCatalog(visual.Medium)
+            || HasCatalog(visual.Normal));
+
+    static bool HasCatalog(NotificationSlotStyle slot) =>
+        slot.Effect.Length > 0 || slot.Highlight.Length > 0;
 
     public static string Hex(string? value)
     {

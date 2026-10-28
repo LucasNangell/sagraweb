@@ -174,6 +174,42 @@ public partial class ArrivalToastWindow : Window
         LabelText.Foreground = fg;
         SituacaoText.Text = card.Situacao ?? "";
         SituacaoText.Foreground = sitFg;
+        if (ArrivalNotify.UsesCatalog(_visual))
+            _ = BindCatalogAsync(card);
+    }
+
+    async Task BindCatalogAsync(TickerCard card)
+    {
+        try
+        {
+            var html = ArrivalToastHtml.Build(card, _visual, _titleFontSize, _situationFontSize);
+            var env = await ArrivalToastBrowser.EnvironmentAsync().ConfigureAwait(true);
+            CardWeb.DefaultBackgroundColor = System.Drawing.Color.Transparent;
+            await CardWeb.EnsureCoreWebView2Async(env).ConfigureAwait(true);
+            var core = CardWeb.CoreWebView2;
+            core.Settings.AreDefaultContextMenusEnabled = false;
+            core.Settings.AreDevToolsEnabled = false;
+            core.Settings.IsStatusBarEnabled = false;
+            ArrivalToastBrowser.MapHost(core);
+            core.NavigationCompleted += (_, args) =>
+            {
+                if (!args.IsSuccess) return;
+                CardWeb.Visibility = Visibility.Visible;
+                Fill.Visibility = Visibility.Collapsed;
+                Accent.Visibility = Visibility.Collapsed;
+                TextStack.Visibility = Visibility.Collapsed;
+                CardBorder.Background = Brushes.Transparent;
+                CardBorder.BorderBrush = Brushes.Transparent;
+                CardBorder.BorderThickness = new Thickness(0);
+                CardBorder.CornerRadius = new CornerRadius(10);
+                CardBorder.ClipToBounds = false;
+            };
+            CardWeb.Source = ArrivalToastBrowser.WritePage(html);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Toast do catálogo indisponível: {ex.Message}");
+        }
     }
 
     static bool TryBrush(string hex, out Brush brush)

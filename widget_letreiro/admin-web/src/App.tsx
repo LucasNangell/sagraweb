@@ -374,6 +374,23 @@ const DEFAULT_COLUMNS: BoardColumn[] = [
   { id: "col_3", title: "enviar E-mail", statuses: ["Encam. de Docum."] },
 ];
 
+function withFreshPresetVisual(
+  cfg: AppConfig,
+  presets: { id: number; nome: string; payload: unknown }[],
+): AppConfig {
+  const id = cfg.window?.notificationVisual?.presetId;
+  if (!id) return cfg;
+  const preset = presets.find((item) => item.id === id);
+  if (!preset) return cfg;
+  return {
+    ...cfg,
+    window: {
+      ...cfg.window,
+      notificationVisual: visualFromPreset(preset.payload, preset.id, preset.nome),
+    },
+  };
+}
+
 function anyNotify(columns: BoardColumn[] | undefined): boolean {
   return (columns ?? []).some((col) => !!col.notify);
 }
@@ -716,7 +733,7 @@ function LetreiroDisplayFields({
         </select>
       </label>
       <label className="mt-3 block min-w-0 text-sm text-slate-400">
-        Visual do card (presets de admin/paineis)
+        Visual do card (layout, cores, fontes e efeitos do preset de admin/paineis)
         <select
           className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
           value={cfg.window?.notificationVisual?.presetId ?? ""}
@@ -744,7 +761,7 @@ function LetreiroDisplayFields({
         </select>
       </label>
       <p className="mt-1 text-xs text-slate-500">
-        O tamanho 180–900 × 56–280 é o do card. Fontes: nº da OS 10–72 px e situação 8–56 px, independentes. A animação de entrada é a escolhida acima, mesmo se o preset tiver outra. Cores vêm da paleta do modelo quando o preset não grava hex.
+        O tamanho 180–900 × 56–280 é o do toast. Com um preset, o card usa o mesmo layout, cores, fontes, efeitos e realces de admin/paineis. Só a animação de entrada fica a escolhida acima.
       </p>
     </>
   );
@@ -1046,8 +1063,8 @@ export default function App() {
           api.painelPresets().catch(() => ({ presets: [] as { id: number; nome: string; payload: unknown }[] })),
           api.configProfiles().catch(() => ({ profiles: [] as ConfigProfile[] })),
         ]);
-        setLocalCfg(withNotifyMigration(local));
         setPainelPresets(presetList.presets ?? []);
+        setLocalCfg(withNotifyMigration(withFreshPresetVisual(local, presetList.presets ?? [])));
         setConfigProfiles(profileList.profiles ?? []);
         if (setorList.setores?.length) setSetores(setorList.setores);
         if (situacaoList.situacoes?.length) {

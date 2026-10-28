@@ -103,8 +103,17 @@ public sealed class NotificationSlotStyle
     public string Bg { get; set; } = "";
     public string Border { get; set; } = "";
     public string Accent { get; set; } = "";
+    public string Extra { get; set; } = "";
+    public string Extra2 { get; set; } = "";
+    public string Text { get; set; } = "";
     public string Title { get; set; } = "";
     public string Situation { get; set; } = "";
+    public string Author { get; set; } = "";
+    public string Timer { get; set; } = "";
+    public string Effect { get; set; } = "";
+    public string Highlight { get; set; } = "";
+    public string HighlightAccent { get; set; } = "";
+    public string HighlightExtra { get; set; } = "";
 }
 
 public sealed class NotificationVisual
@@ -112,6 +121,10 @@ public sealed class NotificationVisual
     public int PresetId { get; set; }
     public string PresetName { get; set; } = "";
     public double FontScale { get; set; } = 1;
+    public double TitleScale { get; set; } = 1;
+    public double SituationScale { get; set; } = 1;
+    public double? LetterSpacing { get; set; }
+    public string FontFamily { get; set; } = "";
     public NotificationSlotStyle High { get; set; } = new();
     public NotificationSlotStyle Medium { get; set; } = new();
     public NotificationSlotStyle Normal { get; set; } = new();

@@ -391,6 +391,27 @@ public sealed class LetreiroApiClient : IDisposable
         return ConfigStore.TryParseElement(payload);
     }
 
+    public async Task<NotificationVisual?> FetchPainelPresetVisualAsync(int presetId, CancellationToken ct = default)
+    {
+        if (presetId <= 0) return null;
+        var row = await RequestAsync(HttpMethod.Get, "/letreiro/painel-presets", ct: ct).ConfigureAwait(false);
+        if (row.ValueKind != JsonValueKind.Object || !row.TryGetProperty("presets", out var items)
+            || items.ValueKind != JsonValueKind.Array)
+            return null;
+        foreach (var item in items.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object) continue;
+            var id = 0;
+            if (item.TryGetProperty("id", out var idEl) && idEl.TryGetInt32(out var parsed))
+                id = parsed;
+            if (id != presetId) continue;
+            var nome = GetString(item, "nome") ?? "";
+            if (!item.TryGetProperty("payload", out var payload)) return null;
+            return ArrivalNotify.VisualFromPreset(payload, id, nome);
+        }
+        return null;
+    }
+
     public async Task<List<LetreiroInstance>> FetchLetreiroInstancesAsync(CancellationToken ct = default)
     {
         var row = await RequestAsync(HttpMethod.Get, "/letreiro/instances", ct: ct).ConfigureAwait(false);

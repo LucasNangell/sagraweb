@@ -1,0 +1,50 @@
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent !important;
+}
+.setor-modern {
+  background: transparent !important;
+  overflow: visible !important;
+  width: 100%;
+  height: 100%;
+}
+.setor-modern-board {
+  width: 100%;
+  height: 100%;
+}
+/* A entrada na tela é do WPF; o wrapper CSS não anima. */
+.setor-modern-card-motion {
+  width: 100%;
+  height: 100%;
+  animation: none !important;
+}
+.setor-modern-card {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  container-type: size;
+  /* catalog-loop-ok: sem !important para data-model / data-highlight vencerem */
+  animation: none;
+  animation-delay: 0s;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.setor-modern-card[data-entry],
+.setor-modern-card-motion[data-entry] {
+  animation: none !important;
+}
+.setor-modern-board .setor-modern-card-top h3 {
+  font-size: calc(
+    var(--toast-title-px, 22px) * var(--sm-title-scale, var(--sm-font-scale, 1))
+  );
+}
+.setor-modern-board .setor-modern-situation {
+  font-size: calc(
+    var(--toast-situation-px, 14px) * var(--sm-situation-scale, var(--sm-font-scale, 1))
+  );
+}

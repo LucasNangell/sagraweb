@@ -10,11 +10,15 @@
     <AssemblyName>SAGRA-Letreiro</AssemblyName>
     <RootNamespace>SagraLetreiro</RootNamespace>
     <Product>SAGRA Letreiro</Product>
-    <Version>2.26.0</Version>
+    <Version>2.27.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\SagraLetreiro.Core\SagraLetreiro.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
   </ItemGroup>
 
 </Project>

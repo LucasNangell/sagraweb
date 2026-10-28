@@ -120,6 +120,8 @@ public partial class OverlayWindow : Window
         _ = PollOnceAsync();
         _ = DrainRemoteJobAsync();
         _dockTimer.Start();
+        _ = ArrivalToastBrowser.Prewarm();
+        _ = RefreshPresetVisualAsync();
         AppLog.Info("Loop da janela iniciado");
     }
 
@@ -522,6 +524,31 @@ public partial class OverlayWindow : Window
         }
     }
 
+    async Task RefreshPresetVisualAsync()
+    {
+        var before = _config.Window.NotificationVisual;
+        await WithPresetVisualAsync(_config).ConfigureAwait(true);
+        if (ReferenceEquals(before, _config.Window.NotificationVisual)) return;
+        ConfigStore.Save(_config);
+    }
+
+    async Task<AppConfig> WithPresetVisualAsync(AppConfig cfg)
+    {
+        var presetId = cfg.Window.NotificationVisual.PresetId;
+        if (presetId <= 0) return cfg;
+        try
+        {
+            var fresh = await _client.FetchPainelPresetVisualAsync(presetId).ConfigureAwait(true);
+            if (fresh is null) return cfg;
+            cfg.Window.NotificationVisual = fresh;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Visual do preset: {ex.Message}");
+        }
+        return cfg;
+    }
+
     void EnsureLocalHost()
     {
         _adminHost ??= AdminHost.Start(new AdminHostOptions
@@ -545,6 +572,8 @@ public partial class OverlayWindow : Window
         if (remote is null) return;
         var merged = ConfigStore.MergeRemote(_config, remote);
         var fp = ConfigStore.RemoteFingerprint(merged);
+        merged = await WithPresetVisualAsync(merged).ConfigureAwait(true);
+        _config.Window.NotificationVisual = merged.Window.NotificationVisual;
         if (fp == _remoteFp) return;
         var relogin = merged.ApiBaseUrl != _config.ApiBaseUrl || merged.Ponto != _config.Ponto
             || merged.Password != _config.Password || merged.SslVerify != _config.SslVerify;

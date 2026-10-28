@@ -18,6 +18,20 @@ $iscc = @(
 ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 if (-not $iscc) { throw 'Inno Setup 6 não encontrado (https://jrsoftware.org/isdl.php).' }
 
+$webCss = Join-Path (Split-Path $root -Parent) 'apps\web\src\features\dashboard-setor-modern'
+$cssDest = Join-Path $root 'src\SagraLetreiro.Core\Assets\toast'
+if (Test-Path $webCss) {
+    New-Item -ItemType Directory -Force -Path $cssDest | Out-Null
+    foreach ($name in @(
+        'dashboard-setor-modern.css',
+        'dashboard-setor-modern-catalog.css',
+        'dashboard-setor-modern-cards.css'
+    )) {
+        $from = Join-Path $webCss $name
+        if (Test-Path $from) { Copy-Item $from (Join-Path $cssDest $name) -Force }
+    }
+}
+
 if (Test-Path $publishDir) { Remove-Item $publishDir -Recurse -Force }
 
 dotnet publish $project -c Release -r win-x64 --self-contained true `

@@ -969,10 +969,40 @@ public class LetreiroAdminTests
             {"cardStyle":{"models":{"high":{"effect":"v80"},"normal":{"effect":"mod-terminal"}}}}
             """);
         var fromEffect = ArrivalNotify.VisualFromPreset(effectOnly.RootElement, 2, "Giroflex");
+        Assert.Equal("v80", fromEffect.High.Effect);
         Assert.Equal("#18181b", fromEffect.High.Bg);
         Assert.Equal("#ffffff", fromEffect.High.Border);
         Assert.Equal("#10b981", fromEffect.High.Accent);
         Assert.Equal("#05100a", fromEffect.Normal.Bg);
+        Assert.True(ArrivalNotify.UsesCatalog(fromEffect));
+        using var full = JsonDocument.Parse("""
+            {"cardStyle":{"entryAnimation":"fx-mercury","models":{"high":{"effect":"v80","highlight":"fx-tesla","colors":{"bg":"#111111","extra":"#23d5ab"},"highlightColors":{"accent":"#00ffff"}}},"typography":{"fontFamily":"Orbitron, sans-serif","fontScale":1.2,"letterSpacing":-0.04}}}
+            """);
+        var catalog = ArrivalNotify.VisualFromPreset(full.RootElement, 9, "TV");
+        Assert.Equal("v80", catalog.High.Effect);
+        Assert.Equal("fx-tesla", catalog.High.Highlight);
+        Assert.Equal("#23d5ab", catalog.High.Extra);
+        Assert.Equal("#00ffff", catalog.High.HighlightAccent);
+        Assert.Equal("Orbitron, sans-serif", catalog.FontFamily);
+        Assert.Equal(1.2, catalog.FontScale);
+        Assert.DoesNotContain("fx-mercury", catalog.High.Effect);
+        var html = ArrivalToastHtml.Build(
+            new TickerCard { Label = "OS 10/26", Situacao = "Em Execução", Priority = "priority-high" },
+            catalog, 22, 14);
+        Assert.Contains("data-model=\"v80\"", html);
+        Assert.Contains("data-highlight=\"fx-tesla\"", html);
+        Assert.Contains("--cm-extra:#23d5ab", html);
+        Assert.Contains("Orbitron", html);
+        Assert.Contains("fonts.googleapis.com", html);
+        Assert.Contains("catalog-loop-ok", ArrivalToastHtml.Css());
+        Assert.DoesNotContain(
+            "container-type: size;\n  animation: none !important",
+            ArrivalToastHtml.Css().Replace("\r\n", "\n"));
+        var articleAt = html.IndexOf("<article", StringComparison.Ordinal);
+        var articleEnd = html.IndexOf('>', articleAt);
+        Assert.DoesNotContain("data-entry", html[articleAt..(articleEnd + 1)]);
+        Assert.Contains("smc-strobe", ArrivalToastHtml.Css());
+        Assert.Contains("fx-tesla", ArrivalToastHtml.Css());
         Assert.Null(ArrivalNotify.PreviewCard().Priority);
         Assert.Equal("Teste · normal", ArrivalNotify.PreviewCard().Situacao);
         Assert.Equal("priority-high", ArrivalNotify.PreviewCard("priority-high").Priority);

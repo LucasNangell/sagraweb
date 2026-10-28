@@ -20,20 +20,44 @@ export type NotificationSlotStyle = {
   bg?: string;
   border?: string;
   accent?: string;
+  extra?: string;
+  extra2?: string;
+  text?: string;
   title?: string;
   situation?: string;
+  author?: string;
+  timer?: string;
+  effect?: string;
+  highlight?: string;
+  highlightAccent?: string;
+  highlightExtra?: string;
 };
 
 export type NotificationVisual = {
   presetId?: number;
   presetName?: string;
   fontScale?: number;
+  titleScale?: number;
+  situationScale?: number;
+  letterSpacing?: number;
+  fontFamily?: string;
   high?: NotificationSlotStyle;
   medium?: NotificationSlotStyle;
   normal?: NotificationSlotStyle;
 };
 
-type ColorMap = { bg?: string; border?: string; accent?: string; titleColor?: string; situationColor?: string };
+type ColorMap = {
+  bg?: string;
+  border?: string;
+  accent?: string;
+  extra?: string;
+  extra2?: string;
+  text?: string;
+  titleColor?: string;
+  situationColor?: string;
+  authorColor?: string;
+  timerColor?: string;
+};
 
 const MODEL_PALETTES: Record<string, { bg: string; border: string; accent: string }> = {
   v79: { bg: "#ff9d00", border: "#ffd166", accent: "#fff0b3" },
@@ -106,7 +130,9 @@ function slotOf(
   const rawValue = models?.[key];
   const raw = typeof rawValue === "string" ? { effect: rawValue } : asRecord(rawValue);
   const colors = asRecord(raw?.colors) as ColorMap | null;
-  const pal = paletteFor(raw?.effect ?? (typeof rawValue === "string" ? rawValue : ""));
+  const highlightColors = asRecord(raw?.highlightColors) as ColorMap | null;
+  const effect = String(raw?.effect ?? (typeof rawValue === "string" ? rawValue : "")).trim();
+  const pal = paletteFor(effect);
   const priorities = asRecord(typography?.priorities);
   const pri = asRecord(priorities?.[key]) as ColorMap | null;
   const heading = asRecord(typography?.heading);
@@ -114,8 +140,17 @@ function slotOf(
     bg: hex(colors?.bg) || pal?.bg || "",
     border: hex(colors?.border) || pal?.border || "",
     accent: hex(colors?.accent) || pal?.accent || "",
+    extra: hex(colors?.extra),
+    extra2: hex(colors?.extra2),
+    text: hex(colors?.text),
     title: hex(pri?.titleColor) || hex(typography?.titleColor) || hex(heading?.color),
     situation: hex(pri?.situationColor) || hex(typography?.situationColor),
+    author: hex(pri?.authorColor),
+    timer: hex(pri?.timerColor),
+    effect,
+    highlight: String(raw?.highlight ?? "").trim(),
+    highlightAccent: hex(highlightColors?.accent),
+    highlightExtra: hex(highlightColors?.extra),
   };
 }
 
@@ -126,10 +161,17 @@ export function visualFromPreset(payload: unknown, id: number, name: string): No
   const models = asRecord(style.models);
   const typography = asRecord(style.typography);
   const scale = Number(typography?.fontScale);
+  const titleScale = Number(typography?.titleScale ?? typography?.fontScale);
+  const situationScale = Number(typography?.situationScale ?? typography?.fontScale);
+  const letterSpacing = Number(typography?.letterSpacing);
   return {
     presetId: id,
     presetName: name,
     fontScale: Number.isFinite(scale) && scale > 0 ? scale : 1,
+    titleScale: Number.isFinite(titleScale) && titleScale > 0 ? titleScale : 1,
+    situationScale: Number.isFinite(situationScale) && situationScale > 0 ? situationScale : 1,
+    letterSpacing: Number.isFinite(letterSpacing) ? letterSpacing : undefined,
+    fontFamily: String(typography?.fontFamily ?? "").trim(),
     high: slotOf(models, typography, "high"),
     medium: slotOf(models, typography, "medium"),
     normal: slotOf(models, typography, "normal"),

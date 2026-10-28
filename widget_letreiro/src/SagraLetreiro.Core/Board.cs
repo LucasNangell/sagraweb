@@ -280,6 +280,13 @@ public static class Board
         return null;
     }
 
+    public static bool ColumnNotifies(BoardConfig config, string? columnId)
+    {
+        if (string.IsNullOrEmpty(columnId)) return false;
+        var col = config.Columns.Find(c => c.Id == columnId);
+        return col is { Notify: true };
+    }
+
     static string InboxItemKey(int os, int ano) => $"inbox:{os}-{ano}";
 
     static OsItem BuildInboxItem(InboxRef refer, OsItem? source)
@@ -345,13 +352,38 @@ public static class Board
         }
     }
 
+    static void CollectInboxArrivals(
+        List<BoardColumn> columns,
+        bool isInitialLoad,
+        HashSet<string>? inboxSeen,
+        List<string> keys)
+    {
+        if (inboxSeen is null) return;
+        var current = new HashSet<string>();
+        foreach (var col in columns)
+        {
+            if (!IsInboxColumn(col)) continue;
+            foreach (var item in col.Items)
+            {
+                var key = item.UniqueKey;
+                if (string.IsNullOrEmpty(key)) continue;
+                current.Add(key);
+                var added = inboxSeen.Add(key);
+                if (!isInitialLoad && col.Notify && added)
+                    keys.Add(key);
+            }
+        }
+        inboxSeen.RemoveWhere(key => !current.Contains(key));
+    }
+
     public static ProcessedBoard ProcessDashboardData(
         List<OsItem> rawData,
         BoardConfig config,
         Dictionary<string, OsItem> masterOpsMap,
         long? nowMs = null,
         bool isInitialLoad = false,
-        IReadOnlyList<InboxRef>? inboxOs = null)
+        IReadOnlyList<InboxRef>? inboxOs = null,
+        HashSet<string>? inboxSeen = null)
     {
         var now = nowMs ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var incoming = new HashSet<string>();
@@ -365,6 +397,7 @@ public static class Board
             Sector = col.Sector,
             Source = col.Source,
             HideWhenEmpty = col.HideWhenEmpty,
+            Notify = col.Notify,
             Items = new List<OsItem>(),
         }).ToList();
         var unmapped = new List<OsItem>();
@@ -397,7 +430,8 @@ public static class Board
                     item.IsNew = true;
                     item.HighlightUntil = now + BoardConstants.DashboardNewHighlightMs;
                     hasNew = true;
-                    newArrivalKeys.Add(uniqueKey);
+                    if (ColumnNotifies(config, currentColumnId))
+                        newArrivalKeys.Add(uniqueKey);
                 }
                 masterOpsMap[uniqueKey] = item;
             }
@@ -410,6 +444,8 @@ public static class Board
                 item.IsNew = true;
                 item.HighlightUntil = now + BoardConstants.DashboardNewHighlightMs;
                 hasNew = true;
+                if (ColumnNotifies(config, currentColumnId) && !newArrivalKeys.Contains(uniqueKey))
+                    newArrivalKeys.Add(uniqueKey);
             }
 
             item.LastColumnId = currentColumnId;
@@ -428,6 +464,7 @@ public static class Board
         }
 
         FillInboxColumns(tempColumns, config, masterOpsMap, inboxOs);
+        CollectInboxArrivals(tempColumns, isInitialLoad, inboxSeen, newArrivalKeys);
         foreach (var col in tempColumns)
         {
             if (IsInboxColumn(col)) continue;

@@ -82,6 +82,7 @@ export type BoardColumn = {
   sector?: string;
   source?: string;
   hideWhenEmpty?: boolean;
+  notify?: boolean;
 };
 
 export type AppConfig = {

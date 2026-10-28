@@ -248,6 +248,7 @@ type DisplayFilter = {
   setor: string;
   situacao: string;
   fonte: FilterFonte;
+  notify: boolean;
 };
 
 const DEFAULT_SITUACOES = [
@@ -273,6 +274,7 @@ function filtersFromColumns(columns: BoardColumn[]): DisplayFilter[] {
         setor: col.sector ?? "",
         situacao: "",
         fonte: "inbox",
+        notify: !!col.notify,
       });
       return;
     }
@@ -283,6 +285,7 @@ function filtersFromColumns(columns: BoardColumn[]): DisplayFilter[] {
         setor: col.sector ?? "",
         situacao,
         fonte: "situacao",
+        notify: !!col.notify,
       });
     });
   });
@@ -298,6 +301,7 @@ function columnsFromFilters(filters: DisplayFilter[]): BoardColumn[] {
         source: "inbox",
         statuses: [],
         sector: item.setor || undefined,
+        notify: !!item.notify,
       };
     }
     const situacao = item.situacao.trim();
@@ -306,6 +310,7 @@ function columnsFromFilters(filters: DisplayFilter[]): BoardColumn[] {
       title: situacao || `Filtro ${i + 1}`,
       statuses: situacao ? [situacao] : [],
       sector: item.setor || undefined,
+      notify: !!item.notify,
     };
   });
 }
@@ -317,10 +322,28 @@ const DEFAULT_COLUMNS: BoardColumn[] = [
   { id: "col_3", title: "enviar E-mail", statuses: ["Encam. de Docum."] },
 ];
 
+function anyNotify(columns: BoardColumn[] | undefined): boolean {
+  return (columns ?? []).some((col) => !!col.notify);
+}
+
+function withNotifyMigration(cfg: AppConfig): AppConfig {
+  const columns = cfg.board?.columns ?? [];
+  const migrated = anyNotify(columns)
+    ? columns
+    : cfg.window?.notificationsEnabled
+      ? columns.map((col) => ({ ...col, notify: true }))
+      : columns;
+  return {
+    ...cfg,
+    board: { ...cfg.board, columns: migrated, columnCount: migrated.length },
+    window: { ...cfg.window, notificationsEnabled: anyNotify(migrated) },
+  };
+}
+
 function seedClientConfig(row: Instance, payload: AppConfig | null): AppConfig {
   const base = payload ?? {};
   const columns = base.board?.columns?.length ? base.board.columns : DEFAULT_COLUMNS;
-  return {
+  return withNotifyMigration({
     ...base,
     ponto: base.ponto || "654321",
     nome: base.nome || "usr_sefoc",
@@ -342,12 +365,16 @@ function seedClientConfig(row: Instance, payload: AppConfig | null): AppConfig {
       notificationAnimation: clampEntryAnimation(base.window?.notificationAnimation),
       notificationVisual: base.window?.notificationVisual,
     },
-  };
+  });
 }
 
 function withFilters(cfg: AppConfig, next: DisplayFilter[]): AppConfig {
   const cols = columnsFromFilters(next);
-  return { ...cfg, board: { ...cfg.board, columns: cols, columnCount: cols.length } };
+  return {
+    ...cfg,
+    board: { ...cfg.board, columns: cols, columnCount: cols.length },
+    window: { ...cfg.window, notificationsEnabled: cols.some((col) => !!col.notify) },
+  };
 }
 
 function LetreiroDisplayFields({
@@ -416,16 +443,8 @@ function LetreiroDisplayFields({
           SP (nº ≥ 5000)
         </label>
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={!!cfg.window?.notificationsEnabled}
-            onChange={(e) => onChange({ ...cfg, window: { ...cfg.window, notificationsEnabled: e.target.checked } })}
-          />
-          Ativar notificações
-        </label>
-        {onPreview ? (
+      {onPreview ? (
+        <div className="mt-3">
           <button
             type="button"
             className="rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-100"
@@ -433,8 +452,8 @@ function LetreiroDisplayFields({
           >
             Testar notificação
           </button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
       <div className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2">
         <label className="min-w-0 text-sm text-slate-400">
           Largura do card (px)
@@ -510,7 +529,7 @@ function LetreiroDisplayFields({
         </select>
       </label>
       <p className="mt-1 text-xs text-slate-500">
-        O tamanho 180–900 × 56–280 é o do card. A animação de entrada é a escolhida acima, mesmo se o preset tiver outra. Cores e tipografia vêm do preset.
+        O tamanho 180–900 × 56–280 é o do card. A animação de entrada é a escolhida acima, mesmo se o preset tiver outra. Cores vêm da paleta do modelo quando o preset não grava hex.
       </p>
     </>
   );
@@ -543,7 +562,7 @@ function FilterListFields({
   function addFilter() {
     onChange(withFilters(cfg, [
       ...filters,
-      { key: `new-${Date.now()}`, setor: cfg.board?.sector ?? "", situacao: "", fonte: "situacao" },
+      { key: `new-${Date.now()}`, setor: cfg.board?.sector ?? "", situacao: "", fonte: "situacao", notify: false },
     ]));
   }
 
@@ -559,7 +578,7 @@ function FilterListFields({
         <div>
           <h2 className="text-xl font-bold">Filtros</h2>
           <p className="mt-1 max-w-xl text-sm text-slate-400">
-            Cada linha vira um card na faixa. Escolha setor, situação e a fonte dos dados.
+            Cada linha vira um card na faixa. Marque Notificar para avisar quando uma OS entrar nessa situação.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -578,7 +597,7 @@ function FilterListFields({
           {filters.map((row, index) => (
             <div
               key={row.key}
-              className="grid min-w-0 gap-2 rounded-xl border border-slate-800 bg-slate-950 p-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(7rem,9rem)_auto] lg:items-end"
+              className="grid min-w-0 gap-2 rounded-xl border border-slate-800 bg-slate-950 p-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(7rem,9rem)_auto_auto] lg:items-end"
             >
               <label className="min-w-0 text-xs text-slate-500">
                 Setor
@@ -620,6 +639,16 @@ function FilterListFields({
                   <option value="situacao">Situação</option>
                   <option value="inbox">Inbox</option>
                 </select>
+              </label>
+              <label className="flex min-w-0 flex-col text-xs text-slate-500 lg:items-center">
+                Notificar
+                <input
+                  type="checkbox"
+                  className="mt-2 h-4 w-4 accent-sky-400"
+                  checked={!!row.notify}
+                  aria-label="Notificar nesta situação"
+                  onChange={(e) => patchFilter(index, { notify: e.target.checked })}
+                />
               </label>
               <button
                 type="button"
@@ -757,7 +786,7 @@ export default function App() {
           api.situacoes().catch(() => ({ situacoes: [] as string[] })),
           api.painelPresets().catch(() => ({ presets: [] as { id: number; nome: string; payload: unknown }[] })),
         ]);
-        setLocalCfg(local);
+        setLocalCfg(withNotifyMigration(local));
         setPainelPresets(presetList.presets ?? []);
         if (setorList.setores?.length) setSetores(setorList.setores);
         if (situacaoList.situacoes?.length) {
@@ -901,7 +930,7 @@ export default function App() {
           opacity: cfg.window?.opacity ?? 0.95,
           speedPxPerSec: cfg.window?.speedPxPerSec ?? 40,
           transparentBg: !!cfg.window?.transparentBg,
-          notificationsEnabled: !!cfg.window?.notificationsEnabled,
+          notificationsEnabled: (cols ?? []).some((col) => !!col.notify),
           notificationWidth: cfg.window?.notificationWidth ?? 320,
           notificationHeight: cfg.window?.notificationHeight ?? 96,
           notificationAnimation: clampEntryAnimation(cfg.window?.notificationAnimation),

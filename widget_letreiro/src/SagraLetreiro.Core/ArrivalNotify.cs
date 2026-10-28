@@ -153,19 +153,35 @@ public static class ArrivalNotify
     static NotificationSlotStyle SlotFrom(JsonElement models, JsonElement typography, string key)
     {
         var slot = new NotificationSlotStyle();
-        if (models.ValueKind == JsonValueKind.Object && models.TryGetProperty(key, out var raw)
-            && raw.ValueKind == JsonValueKind.Object
-            && raw.TryGetProperty("colors", out var colors)
-            && colors.ValueKind == JsonValueKind.Object)
+        var effect = "";
+        JsonElement colors = default;
+        if (models.ValueKind == JsonValueKind.Object && models.TryGetProperty(key, out var raw))
         {
-            slot.Bg = Hex(GetStr(colors, "bg"));
-            slot.Border = Hex(GetStr(colors, "border"));
-            slot.Accent = Hex(GetStr(colors, "accent"));
+            if (raw.ValueKind == JsonValueKind.String)
+                effect = raw.GetString() ?? "";
+            else if (raw.ValueKind == JsonValueKind.Object)
+            {
+                effect = GetStr(raw, "effect");
+                if (raw.TryGetProperty("colors", out var nested) && nested.ValueKind == JsonValueKind.Object)
+                    colors = nested;
+            }
         }
+        var palette = CardModelPalettes.ForEffect(effect);
+        slot.Bg = Hex(GetStr(colors, "bg"));
+        slot.Border = Hex(GetStr(colors, "border"));
+        slot.Accent = Hex(GetStr(colors, "accent"));
+        if (slot.Bg.Length == 0) slot.Bg = palette?.Bg ?? "";
+        if (slot.Border.Length == 0) slot.Border = palette?.Border ?? "";
+        if (slot.Accent.Length == 0) slot.Accent = palette?.Accent ?? "";
         if (typography.ValueKind == JsonValueKind.Object)
         {
             slot.Title = Hex(GetStr(typography, "titleColor"));
             slot.Situation = Hex(GetStr(typography, "situationColor"));
+            if (typography.TryGetProperty("heading", out var heading) && heading.ValueKind == JsonValueKind.Object)
+            {
+                var headingColor = Hex(GetStr(heading, "color"));
+                if (headingColor.Length > 0 && slot.Title.Length == 0) slot.Title = headingColor;
+            }
             if (typography.TryGetProperty("priorities", out var pri)
                 && pri.ValueKind == JsonValueKind.Object
                 && pri.TryGetProperty(key, out var pcolors)
@@ -232,6 +248,7 @@ public static class ArrivalNotify
         OpKey = "0-0",
         Label = "OS 0000/00",
         Situacao = "Teste de notificação",
+        Priority = "priority-high",
         IsNew = true,
         ColumnIndex = 0,
         ColumnTitle = "Teste",

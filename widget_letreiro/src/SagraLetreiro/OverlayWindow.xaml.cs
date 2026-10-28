@@ -34,6 +34,7 @@ public partial class OverlayWindow : Window
     ];
 
     readonly Dictionary<string, OsItem> _master = new();
+    readonly HashSet<string> _inboxSeen = new();
     readonly DispatcherTimer _dockTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     readonly DispatcherTimer _pollTimer = new();
     readonly DispatcherTimer _commandTimer = new();
@@ -149,6 +150,7 @@ public partial class OverlayWindow : Window
             _client.Dispose();
             _client = NewClient(_config);
             _master.Clear();
+            _inboxSeen.Clear();
             _initial = true;
         }
         else
@@ -592,13 +594,12 @@ public partial class OverlayWindow : Window
                 else inboxNote = "Inbox exige login (ponto).";
             }
 
-            var processed = Board.ProcessDashboardData(items, cfg.Board, _master, isInitialLoad: initial, inboxOs: inbox);
+            var processed = Board.ProcessDashboardData(items, cfg.Board, _master, isInitialLoad: initial, inboxOs: inbox, inboxSeen: _inboxSeen);
             var cards = Board.FlattenTickerCards(processed.Columns, cfg.Board);
             lock (_gate) _initial = false;
             _cards = cards;
             PreserveHeldPreview();
-            if (cfg.Window.NotificationsEnabled)
-                EnqueueArrivals(cards, processed.NewArrivalKeys);
+            EnqueueArrivals(cards, processed.NewArrivalKeys);
             _status = "connected";
             _statusMsg = string.IsNullOrEmpty(inboxNote) ? $"{cards.Count} OP(s)" : inboxNote;
             RebuildLayout();

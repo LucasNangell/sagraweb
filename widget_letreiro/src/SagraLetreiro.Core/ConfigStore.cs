@@ -82,6 +82,7 @@ public static class ConfigStore
             Title = string.IsNullOrWhiteSpace(col.Title) ? $"Coluna {index + 1}" : col.Title,
             Statuses = col.Statuses?.Where(s => s is not null).Select(s => s.Trim()).ToList() ?? new(),
             HideWhenEmpty = col.HideWhenEmpty,
+            Notify = col.Notify,
         };
         if (sector.Length > 0) outCol.Sector = sector;
         if (isInbox) outCol.Source = BoardConstants.InboxColumnSource;
@@ -132,6 +133,13 @@ public static class ConfigStore
     public static AppConfig Normalize(AppConfig? raw)
     {
         raw ??= new AppConfig();
+        var window = NormalizeWindow(raw.Window);
+        var board = NormalizeBoard(raw.Board);
+        if (!board.Columns.Any(col => col.Notify) && window.NotificationsEnabled)
+        {
+            foreach (var col in board.Columns) col.Notify = true;
+        }
+        window.NotificationsEnabled = board.Columns.Any(col => col.Notify);
         return new AppConfig
         {
             ApiBaseUrl = NormalizeApiBaseUrl(raw.ApiBaseUrl),
@@ -140,8 +148,8 @@ public static class ConfigStore
             Nome = string.IsNullOrWhiteSpace(raw.Nome) ? DefaultNome : raw.Nome.Trim(),
             Password = raw.Password ?? "",
             PollIntervalSec = Math.Clamp(raw.PollIntervalSec <= 0 ? 10 : raw.PollIntervalSec, 5, 120),
-            Window = NormalizeWindow(raw.Window),
-            Board = NormalizeBoard(raw.Board),
+            Window = window,
+            Board = board,
         };
     }
 

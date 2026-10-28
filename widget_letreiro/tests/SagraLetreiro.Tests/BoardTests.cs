@@ -375,6 +375,7 @@ public class BoardTests
         Assert.Equal(720, cfg.Window.Width);
         Assert.False(cfg.Window.TransparentBg);
         Assert.False(cfg.Window.NotificationsEnabled);
+        Assert.False(cfg.Board.Columns[0].Notify);
         Assert.Equal(ArrivalNotify.DefaultCardWidth, cfg.Window.NotificationWidth);
         Assert.Equal(ArrivalNotify.DefaultCardHeight, cfg.Window.NotificationHeight);
         Assert.Equal(ArrivalNotify.DefaultAnimation, cfg.Window.NotificationAnimation);
@@ -661,6 +662,7 @@ public class LetreiroAdminTests
         Assert.Equal(60, merged.Window.SpeedPxPerSec);
         Assert.True(merged.Window.TransparentBg);
         Assert.True(merged.Window.NotificationsEnabled);
+        Assert.True(merged.Board.Columns[0].Notify);
         Assert.Equal(480, merged.Window.NotificationWidth);
         Assert.Equal(120, merged.Window.NotificationHeight);
         Assert.Equal("99", merged.Ponto);
@@ -685,8 +687,8 @@ public class LetreiroAdminTests
             Sector = "SEFOC",
             Columns =
             [
-                new() { Id = "rec", Title = "Recebido", Statuses = ["Recebido"] },
-                new() { Id = "exec", Title = "Execução", Statuses = ["Em Execução"] },
+                new() { Id = "rec", Title = "Recebido", Statuses = ["Recebido"], Notify = true },
+                new() { Id = "exec", Title = "Execução", Statuses = ["Em Execução"], Notify = true },
             ],
         };
         var master = new Dictionary<string, OsItem>();
@@ -705,8 +707,79 @@ public class LetreiroAdminTests
 
         var moved = new OsItem { NrOs = 10, Ano = 2026, Situacao = "Em Execução", Setor = "SEFOC" };
         var columnChange = Board.ProcessDashboardData([moved, extra], config, master, isInitialLoad: false);
-        Assert.Empty(columnChange.NewArrivalKeys);
+        Assert.Equal(new[] { "10-2026" }, columnChange.NewArrivalKeys);
         Assert.True(columnChange.HasNewItems);
+    }
+
+    [Fact]
+    public void ProcessDashboardDataNotifiesOnlyMarkedFilters()
+    {
+        var config = new BoardConfig
+        {
+            Sector = "SEFOC",
+            Columns =
+            [
+                new() { Id = "rec", Title = "Recebido", Statuses = ["Recebido"], Notify = false },
+                new() { Id = "exec", Title = "Execução", Statuses = ["Em Execução"], Notify = true },
+            ],
+        };
+        var master = new Dictionary<string, OsItem>();
+        Board.ProcessDashboardData(
+            [new OsItem { NrOs = 10, Ano = 2026, Situacao = "Recebido", Setor = "SEFOC" }],
+            config, master, isInitialLoad: true);
+        var quiet = Board.ProcessDashboardData(
+            [
+                new() { NrOs = 10, Ano = 2026, Situacao = "Recebido", Setor = "SEFOC" },
+                new() { NrOs = 11, Ano = 2026, Situacao = "Recebido", Setor = "SEFOC" },
+            ],
+            config, master, isInitialLoad: false);
+        Assert.Empty(quiet.NewArrivalKeys);
+
+        var loud = Board.ProcessDashboardData(
+            [
+                new() { NrOs = 10, Ano = 2026, Situacao = "Recebido", Setor = "SEFOC" },
+                new() { NrOs = 11, Ano = 2026, Situacao = "Recebido", Setor = "SEFOC" },
+                new() { NrOs = 12, Ano = 2026, Situacao = "Em Execução", Setor = "SEFOC" },
+            ],
+            config, master, isInitialLoad: false);
+        Assert.Equal(new[] { "12-2026" }, loud.NewArrivalKeys);
+    }
+
+    [Fact]
+    public void ProcessDashboardDataNotifiesNewInboxWhenMarked()
+    {
+        var config = new BoardConfig
+        {
+            Sector = "SEFOC",
+            Columns = [new() { Id = "in", Title = "Inbox", Source = "inbox", Notify = true }],
+        };
+        var seen = new HashSet<string>();
+        var master = new Dictionary<string, OsItem>();
+        var initial = Board.ProcessDashboardData(
+            [], config, master, isInitialLoad: true,
+            inboxOs: [new InboxRef { Os = 1, Ano = 2026 }], inboxSeen: seen);
+        Assert.Empty(initial.NewArrivalKeys);
+
+        var next = Board.ProcessDashboardData(
+            [], config, master, isInitialLoad: false,
+            inboxOs: [new InboxRef { Os = 1, Ano = 2026 }, new InboxRef { Os = 2, Ano = 2026 }],
+            inboxSeen: seen);
+        Assert.Equal(new[] { "inbox:2-2026" }, next.NewArrivalKeys);
+    }
+
+    [Fact]
+    public void NormalizeMigratesLegacyNotificationsEnabledToColumnNotify()
+    {
+        var cfg = ConfigStore.Normalize(new AppConfig
+        {
+            Window = new WindowConfig { NotificationsEnabled = true },
+            Board = new BoardConfig
+            {
+                Columns = [new BoardColumn { Title = "Recebido", Statuses = ["Recebido"] }],
+            },
+        });
+        Assert.True(cfg.Board.Columns[0].Notify);
+        Assert.True(cfg.Window.NotificationsEnabled);
     }
 
     [Fact]
@@ -751,6 +824,15 @@ public class LetreiroAdminTests
         Assert.Equal("#b91c1c", visual.High.Bg);
         Assert.Equal("#fff7ed", visual.High.Title);
         Assert.Equal("", visual.Normal.Bg);
+        using var effectOnly = JsonDocument.Parse("""
+            {"cardStyle":{"models":{"high":{"effect":"v80"},"normal":{"effect":"mod-terminal"}}}}
+            """);
+        var fromEffect = ArrivalNotify.VisualFromPreset(effectOnly.RootElement, 2, "Giroflex");
+        Assert.Equal("#18181b", fromEffect.High.Bg);
+        Assert.Equal("#ffffff", fromEffect.High.Border);
+        Assert.Equal("#10b981", fromEffect.High.Accent);
+        Assert.Equal("#05100a", fromEffect.Normal.Bg);
+        Assert.Equal("priority-high", ArrivalNotify.PreviewCard().Priority);
     }
 }
 

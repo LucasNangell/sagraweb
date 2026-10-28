@@ -61,6 +61,7 @@ public sealed class BoardColumn
     public string? Sector { get; set; }
     public string? Source { get; set; }
     public bool HideWhenEmpty { get; set; }
+    public bool Notify { get; set; }
     public List<OsItem> Items { get; set; } = new();
 }
 

@@ -584,6 +584,28 @@ def test_settings_get_returns_interval(monkeypatch):
     assert response.json()["commandPollIntervalSec"] == 3
 
 
+def test_clear_jobs_forbidden():
+    response = _client().delete("/api/letreiro/jobs", params={"windowsUser": "outro"})
+    assert response.status_code == 403
+
+
+def test_clear_jobs_deletes_history(monkeypatch):
+    calls = []
+
+    def fake_exec(sql, params=None):
+        calls.append((sql, params))
+        return []
+
+    monkeypatch.setattr(letreiro_routes.db, "execute_query", fake_exec)
+    response = _client().delete(
+        "/api/letreiro/jobs",
+        headers={"X-Letreiro-Windows-User": "P_918713"},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert any("DELETE FROM tabLetreiroComandoJob" in sql for sql, _ in calls)
+
+
 def test_job_result_rejects_wrong_host(monkeypatch):
     monkeypatch.setattr(
         letreiro_routes.db,

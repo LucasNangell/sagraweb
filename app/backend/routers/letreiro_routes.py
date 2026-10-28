@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
@@ -31,6 +32,7 @@ JOB_STATUS_TIMEOUT = "timeout"
 COMMAND_POLL_MIN = 1
 COMMAND_POLL_MAX = 120
 COMMAND_POLL_DEFAULT = 10
+COMMAND_VAR_RE = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 
 
 def normalize_windows_sam(windows_user: str | None) -> str:
@@ -116,6 +118,7 @@ class CommandRunBody(BaseModel):
     windows_user: str = Field(alias="windowsUser")
     targets: list[JobTarget] = Field(default_factory=list)
     all_online: bool = Field(default=False, alias="allOnline")
+    variables: dict[str, str] = Field(default_factory=dict)
 
 
 class AdhocRunBody(CommandRunBody):
@@ -172,6 +175,35 @@ def _validate_name(name: str | None) -> str:
     if not cleaned:
         raise HTTPException(status_code=400, detail="Nome do comando é obrigatório.")
     return cleaned
+
+
+def extract_command_vars(content: str | None) -> list[str]:
+    seen: list[str] = []
+    for match in COMMAND_VAR_RE.finditer(content or ""):
+        name = match.group(1)
+        if name not in seen:
+            seen.append(name)
+    return seen
+
+
+def _sanitize_var_value(raw: str | None) -> str:
+    return (raw or "").replace("\0", "").replace("\r\n", " ").replace("\r", " ").replace("\n", " ")
+
+
+def render_command_content(
+    content: str | None,
+    values: dict[str, str] | None = None,
+) -> tuple[str, list[str]]:
+    names = extract_command_vars(content)
+    clean = {
+        (key or "").strip(): _sanitize_var_value(value).strip()
+        for key, value in (values or {}).items()
+    }
+    missing = [name for name in names if not clean.get(name)]
+    if missing:
+        return content or "", missing
+    rendered = COMMAND_VAR_RE.sub(lambda match: clean.get(match.group(1), ""), content or "")
+    return rendered, []
 
 
 def _validate_content(content: str | None) -> str:
@@ -655,11 +687,17 @@ async def run_command(
 ):
     actor = _require_admin(x_letreiro_windows_user or body.windows_user)
     command = _load_command(command_id)
+    content, missing = render_command_content(command.get("Conteudo"), body.variables)
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail="Preencha as variáveis: " + ", ".join(missing),
+        )
     queued = _enqueue_jobs(
         command_id=command_id,
         name=command.get("Nome") or "",
         kind=command.get("Tipo") or "",
-        content=command.get("Conteudo") or "",
+        content=content,
         timeout=_row_int(command, "TimeoutSec") or TIMEOUT_DEFAULT,
         actor=actor,
         targets=_collect_run_targets(body),
@@ -757,6 +795,16 @@ async def list_jobs(
         tuple(params) if params else None,
     )
     return {"jobs": [_serialize_job(row) for row in rows or []]}
+
+
+@router.delete("/jobs")
+async def clear_jobs(
+    x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
+    windows_user: Optional[str] = Query(default=None, alias="windowsUser"),
+):
+    _require_admin(x_letreiro_windows_user or windows_user)
+    db.execute_query("DELETE FROM tabLetreiroComandoJob")
+    return {"status": "ok"}
 
 
 @router.post("/jobs/{job_id}/result")

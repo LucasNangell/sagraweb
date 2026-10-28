@@ -223,7 +223,13 @@ function localPreviewMock(): Connect.NextHandleFunction {
       });
       return;
     }
-    if (url === "/api/letreiro/jobs") return sendJson(res, { jobs });
+    if (url === "/api/letreiro/jobs") {
+      if (req.method === "DELETE") {
+        jobs.length = 0;
+        return sendJson(res, { status: "ok" });
+      }
+      return sendJson(res, { jobs });
+    }
     if (url === "/api/letreiro/settings") return sendJson(res, { commandPollIntervalSec: 10 });
     if (url === "/api/letreiro/config") {
       if (req.method === "PUT") {

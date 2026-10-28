@@ -1717,13 +1717,35 @@ export default function App() {
 
         {view === "history" ? (
           <section className="grid min-h-0 flex-1 grid-rows-[minmax(10rem,28vh)_minmax(0,1fr)] gap-3 sm:gap-4 lg:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
-            <div className="min-h-0 min-w-0 overflow-x-hidden overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900/80 p-3">
-              {jobs.map((job) => (
-                <button key={job.id} onClick={() => setJobId(job.id)} className={`mb-2 w-full min-w-0 overflow-hidden rounded-xl px-3 py-2 text-left ${activeJob?.id === job.id ? "bg-slate-800" : ""}`}>
-                  <div className="break-words font-medium">{job.name}</div>
-                  <div className="truncate text-xs text-slate-400">{job.hostName} · {job.status}</div>
+            <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
+              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-800 px-3 py-3">
+                <h2 className="font-semibold">Histórico</h2>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded-lg bg-rose-900 px-3 py-1.5 text-sm text-slate-100 disabled:opacity-50"
+                  disabled={!jobs.length}
+                  onClick={() => {
+                    if (!window.confirm("Limpar todo o histórico de comandos?")) return;
+                    void api.clearJobs().then(() => {
+                      applyJobs([]);
+                      setJobId(null);
+                      setStatus("Histórico limpo.");
+                    }).catch((ex) => setError(errText(ex)));
+                  }}
+                >
+                  <Trash2 size={14} /> Limpar
                 </button>
-              ))}
+              </div>
+              <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3">
+                {jobs.length === 0 ? (
+                  <p className="px-1 py-6 text-center text-sm text-slate-400">Nenhum comando.</p>
+                ) : jobs.map((job) => (
+                  <button key={job.id} onClick={() => setJobId(job.id)} className={`mb-2 w-full min-w-0 overflow-hidden rounded-xl px-3 py-2 text-left ${activeJob?.id === job.id ? "bg-slate-800" : ""}`}>
+                    <div className="break-words font-medium">{job.name}</div>
+                    <div className="truncate text-xs text-slate-400">{job.hostName} · {job.status}</div>
+                  </button>
+                ))}
+              </div>
             </div>
             <pre className="min-h-0 min-w-0 overflow-auto whitespace-pre-wrap break-words rounded-2xl border border-slate-800 bg-slate-950 p-4 font-mono text-sm text-emerald-300">
               {activeJob ? `${activeJob.stdout || ""}${activeJob.stderr ? `\nSTDERR:\n${activeJob.stderr}` : ""}` : "Sem saída."}

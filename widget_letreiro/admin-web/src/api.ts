@@ -177,6 +177,7 @@ export const api = {
       body: JSON.stringify({ windowsUser: "", kind, content, name, allOnline, targets, timeoutSec }),
     }),
   jobs: () => request<{ jobs: Job[] }>("/api/letreiro/jobs"),
+  clearJobs: () => request("/api/letreiro/jobs?windowsUser=", { method: "DELETE" }),
   settings: () => request<{ commandPollIntervalSec: number }>("/api/letreiro/settings"),
   saveSettings: (commandPollIntervalSec: number) =>
     request("/api/letreiro/settings", {

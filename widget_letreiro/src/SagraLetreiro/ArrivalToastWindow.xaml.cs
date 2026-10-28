@@ -16,24 +16,28 @@ public partial class ArrivalToastWindow : Window
     static readonly Brush NewAccent = Frozen(new SolidColorBrush(Color.FromRgb(0x04, 0xd3, 0x61)));
 
     readonly ArrivalToastLayout _layout;
-    readonly Storyboard _mercury = new();
+    readonly Storyboard _motion;
+    readonly NotificationVisual _visual;
 
-    public ArrivalToastWindow(TickerCard card, int cardWidth, int cardHeight)
+    public ArrivalToastWindow(TickerCard card, int cardWidth, int cardHeight, string? animation = null, NotificationVisual? visual = null)
     {
         InitializeComponent();
-        _layout = ArrivalNotify.Layout(cardWidth, cardHeight);
+        var id = ArrivalNotify.ClampAnimation(animation);
+        _visual = ArrivalNotify.NormalizeVisual(visual);
+        _layout = ArrivalNotify.Layout(cardWidth, cardHeight, id);
         OverlayChrome.ApplyFloatingStyle(this);
         ApplyLayout();
         Bind(card);
-        BuildMercury();
-        _mercury.Completed += (_, _) => Close();
+        ArrivalToastMotion.Prepare(this, _layout, id);
+        _motion = ArrivalToastMotion.Build(_layout, id);
+        _motion.Completed += (_, _) => Close();
     }
 
     public void ShowAbove(Window overlay)
     {
         Show();
         PlaceAbove(overlay);
-        _mercury.Begin(this, true);
+        _motion.Begin(this, true);
     }
 
     public void PlaceAbove(Window overlay)
@@ -68,68 +72,10 @@ public partial class ArrivalToastWindow : Window
         CardBorder.Height = _layout.CardHeight;
         Canvas.SetLeft(CardBorder, _layout.SidePad);
         Canvas.SetTop(CardBorder, _layout.EnterSlack);
-        CardClip.Rect = new Rect(0, 0, _layout.CardWidth, _layout.CardHeight);
-        CardClip.RadiusX = _layout.BlobRadius;
-        CardClip.RadiusY = _layout.BlobRadius;
-        CardMove.Y = -_layout.EnterTravel;
-        LabelText.FontSize = Math.Max(14, _layout.CardHeight * 0.23);
-        SituacaoText.FontSize = Math.Max(11, _layout.CardHeight * 0.15);
+        var scale = _visual.FontScale <= 0 ? 1 : _visual.FontScale;
+        LabelText.FontSize = Math.Max(14, _layout.CardHeight * 0.23 * scale);
+        SituacaoText.FontSize = Math.Max(11, _layout.CardHeight * 0.15 * scale);
     }
-
-    void BuildMercury()
-    {
-        var bounceOut = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.56 };
-        var bounceIn = new BackEase { EasingMode = EasingMode.EaseIn, Amplitude = 0.56 };
-        ScaleFrames("CardScale", "ScaleX", bounceOut, bounceIn, 0.15, 1);
-        ScaleFrames("CardScale", "ScaleY", bounceOut, bounceIn, 0.15, 1);
-        _mercury.Children.Add(KeyFrames("CardMove", "Y",
-            Discrete(-_layout.EnterTravel, 0),
-            Eased(0, TimeSpan.FromSeconds(1), bounceOut),
-            Discrete(0, 3),
-            Eased(_layout.ExitTravel, TimeSpan.FromSeconds(4), bounceIn)));
-        _mercury.Children.Add(KeyFrames("CardBorder", "Opacity",
-            Discrete(0, 0),
-            Eased(1, TimeSpan.FromSeconds(1), bounceOut),
-            Discrete(1, 3),
-            Eased(0, TimeSpan.FromSeconds(4), bounceIn)));
-        _mercury.Children.Add(KeyFrames("CardClip", "RadiusX",
-            Discrete(_layout.BlobRadius, 0),
-            Linear(_layout.HoldRadius, 1),
-            Discrete(_layout.HoldRadius, 3),
-            Linear(_layout.BlobRadius, 4)));
-        _mercury.Children.Add(KeyFrames("CardClip", "RadiusY",
-            Discrete(_layout.BlobRadius, 0),
-            Linear(_layout.HoldRadius, 1),
-            Discrete(_layout.HoldRadius, 3),
-            Linear(_layout.BlobRadius, 4)));
-    }
-
-    void ScaleFrames(string targetName, string property, IEasingFunction enter, IEasingFunction exit, double from, double to)
-    {
-        _mercury.Children.Add(KeyFrames(targetName, property,
-            Discrete(from, 0),
-            Eased(to, TimeSpan.FromSeconds(1), enter),
-            Discrete(to, 3),
-            Eased(from, TimeSpan.FromSeconds(4), exit)));
-    }
-
-    static DoubleAnimationUsingKeyFrames KeyFrames(string targetName, string property, params DoubleKeyFrame[] frames)
-    {
-        var anim = new DoubleAnimationUsingKeyFrames();
-        Storyboard.SetTargetName(anim, targetName);
-        Storyboard.SetTargetProperty(anim, new PropertyPath(property));
-        foreach (var frame in frames) anim.KeyFrames.Add(frame);
-        return anim;
-    }
-
-    static DiscreteDoubleKeyFrame Discrete(double value, double seconds) =>
-        new(value, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(seconds)));
-
-    static LinearDoubleKeyFrame Linear(double value, double seconds) =>
-        new(value, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(seconds)));
-
-    static EasingDoubleKeyFrame Eased(double value, TimeSpan at, IEasingFunction easing) =>
-        new(value, KeyTime.FromTimeSpan(at)) { EasingFunction = easing };
 
     void Bind(TickerCard card)
     {
@@ -147,12 +93,40 @@ public partial class ArrivalToastWindow : Window
             bg = CardBg; fg = TextBrush; sitFg = White;
         }
 
+        var slot = ArrivalNotify.SlotFor(_visual, card.Priority);
+        if (TryBrush(slot.Bg, out var customBg)) bg = customBg;
+        if (TryBrush(slot.Title, out var customFg)) fg = customFg;
+        if (TryBrush(slot.Situation, out var customSit)) sitFg = customSit;
         Fill.Background = bg;
-        Accent.Background = NewAccent;
+        Accent.Background = TryBrush(slot.Accent, out var customAccent) ? customAccent : NewAccent;
+        if (TryBrush(slot.Border, out var customBorder))
+        {
+            CardBorder.BorderBrush = customBorder;
+            CardBorder.BorderThickness = new Thickness(1);
+        }
         LabelText.Text = card.Label ?? "";
         LabelText.Foreground = fg;
         SituacaoText.Text = card.Situacao ?? "";
         SituacaoText.Foreground = sitFg;
+    }
+
+    static bool TryBrush(string hex, out Brush brush)
+    {
+        brush = Brushes.Transparent;
+        if (string.IsNullOrWhiteSpace(hex)) return false;
+        try
+        {
+            if (ColorConverter.ConvertFromString(hex) is Color color)
+            {
+                brush = Frozen(new SolidColorBrush(color));
+                return true;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+        return false;
     }
 
     static T Frozen<T>(T value) where T : Freezable

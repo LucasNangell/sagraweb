@@ -12,7 +12,7 @@ public sealed class AdminHostOptions
     public required Func<LetreiroApiClient> Client { get; init; }
     public Func<AppConfig>? GetLocalConfig { get; init; }
     public Action<AppConfig, bool>? ApplyLocalConfig { get; init; }
-    public Action<int, int>? PreviewNotification { get; init; }
+    public Action<int, int, string, NotificationVisual?>? PreviewNotification { get; init; }
     public bool IsAdmin { get; init; }
 }
 
@@ -25,6 +25,7 @@ public sealed class AdminHost : IDisposable
     static readonly JsonSerializerOptions JsonCamel = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
     };
 
     readonly HttpListener _listener;
@@ -259,6 +260,8 @@ public sealed class AdminHost : IDisposable
             if (body is null && req.HasEntityBody) return;
             var width = 0;
             var height = 0;
+            var animation = "";
+            NotificationVisual? visual = null;
             if (body is { Length: > 0 })
             {
                 try
@@ -268,13 +271,17 @@ public sealed class AdminHost : IDisposable
                         width = parsedWidth;
                     if (doc.RootElement.TryGetProperty("height", out var heightEl) && heightEl.TryGetInt32(out var parsedHeight))
                         height = parsedHeight;
+                    if (doc.RootElement.TryGetProperty("animation", out var animEl) && animEl.ValueKind == JsonValueKind.String)
+                        animation = animEl.GetString() ?? "";
+                    if (doc.RootElement.TryGetProperty("visual", out var visEl) && visEl.ValueKind == JsonValueKind.Object)
+                        visual = visEl.Deserialize<NotificationVisual>(JsonCamel);
                 }
                 catch
                 {
                     /* usa o tamanho salvo no letreiro */
                 }
             }
-            _options.PreviewNotification?.Invoke(width, height);
+            _options.PreviewNotification?.Invoke(width, height, animation, visual);
             await WriteJsonAsync(ctx, 200, new { status = "ok" }).ConfigureAwait(false);
             return;
         }

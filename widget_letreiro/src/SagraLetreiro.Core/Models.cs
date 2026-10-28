@@ -83,6 +83,27 @@ public sealed class WindowConfig
     public bool NotificationsEnabled { get; set; }
     public int NotificationWidth { get; set; } = ArrivalNotify.DefaultCardWidth;
     public int NotificationHeight { get; set; } = ArrivalNotify.DefaultCardHeight;
+    public string NotificationAnimation { get; set; } = ArrivalNotify.DefaultAnimation;
+    public NotificationVisual NotificationVisual { get; set; } = new();
+}
+
+public sealed class NotificationSlotStyle
+{
+    public string Bg { get; set; } = "";
+    public string Border { get; set; } = "";
+    public string Accent { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string Situation { get; set; } = "";
+}
+
+public sealed class NotificationVisual
+{
+    public int PresetId { get; set; }
+    public string PresetName { get; set; } = "";
+    public double FontScale { get; set; } = 1;
+    public NotificationSlotStyle High { get; set; } = new();
+    public NotificationSlotStyle Medium { get; set; } = new();
+    public NotificationSlotStyle Normal { get; set; } = new();
 }
 
 public sealed class AppConfig

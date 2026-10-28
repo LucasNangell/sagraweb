@@ -15,6 +15,11 @@ import {
 } from "lucide-react";
 import { api, ApiError, type AppConfig, type BoardColumn, type Command, type Instance, type Job } from "./api";
 import {
+  CLASSIC_ENTRY_ANIMATIONS,
+  clampEntryAnimation,
+  visualFromPreset,
+} from "./notificationStyle";
+import {
   applyCapturesFromJobs,
   applyCommandVars,
   capturedGroups,
@@ -334,6 +339,8 @@ function seedClientConfig(row: Instance, payload: AppConfig | null): AppConfig {
       notificationsEnabled: !!base.window?.notificationsEnabled,
       notificationWidth: base.window?.notificationWidth ?? 320,
       notificationHeight: base.window?.notificationHeight ?? 96,
+      notificationAnimation: clampEntryAnimation(base.window?.notificationAnimation),
+      notificationVisual: base.window?.notificationVisual,
     },
   };
 }
@@ -349,12 +356,14 @@ function LetreiroDisplayFields({
   setores,
   listId,
   onPreview,
+  presets = [],
 }: {
   cfg: AppConfig;
   onChange: (next: AppConfig) => void;
   setores: string[];
   listId: string;
   onPreview?: () => void;
+  presets?: { id: number; nome: string; payload: unknown }[];
 }) {
   return (
     <>
@@ -460,8 +469,48 @@ function LetreiroDisplayFields({
           />
         </label>
       </div>
+      <label className="mt-3 block min-w-0 text-sm text-slate-400">
+        Animação de entrada
+        <select
+          className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+          value={clampEntryAnimation(cfg.window?.notificationAnimation)}
+          onChange={(e) => onChange({ ...cfg, window: { ...cfg.window, notificationAnimation: e.target.value } })}
+        >
+          {CLASSIC_ENTRY_ANIMATIONS.map((item) => (
+            <option key={item.id} value={item.id}>{item.label}</option>
+          ))}
+        </select>
+      </label>
+      <label className="mt-3 block min-w-0 text-sm text-slate-400">
+        Visual do card (presets de admin/paineis)
+        <select
+          className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+          value={cfg.window?.notificationVisual?.presetId ?? ""}
+          onChange={(e) => {
+            const id = Number(e.target.value);
+            if (!id) {
+              onChange({ ...cfg, window: { ...cfg.window, notificationVisual: {} } });
+              return;
+            }
+            const preset = presets.find((item) => item.id === id);
+            if (!preset) return;
+            onChange({
+              ...cfg,
+              window: {
+                ...cfg.window,
+                notificationVisual: visualFromPreset(preset.payload, preset.id, preset.nome),
+              },
+            });
+          }}
+        >
+          <option value="">Padrão do letreiro</option>
+          {presets.map((item) => (
+            <option key={item.id} value={item.id}>{item.nome}</option>
+          ))}
+        </select>
+      </label>
       <p className="mt-1 text-xs text-slate-500">
-        Com o aviso ligado, uma OS nova no setor aparece maior sobre a barra (Mercúrio) e depois entra no letreiro. Largura 180–900, altura 56–280.
+        O tamanho 180–900 × 56–280 é o do card. A animação de entrada é a escolhida acima, mesmo se o preset tiver outra. Cores e tipografia vêm do preset.
       </p>
     </>
   );
@@ -618,6 +667,7 @@ export default function App() {
   const [clientEdit, setClientEdit] = useState<{ row: Instance; cfg: AppConfig } | null>(null);
   const [clientBusy, setClientBusy] = useState(false);
   const clickTimer = useRef(0);
+  const [painelPresets, setPainelPresets] = useState<{ id: number; nome: string; payload: unknown }[]>([]);
   const [setores, setSetores] = useState<string[]>(["SEFOC", "Papelaria", "Gravação"]);
   const [situacoes, setSituacoes] = useState<string[]>(DEFAULT_SITUACOES);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -701,12 +751,14 @@ export default function App() {
         setIsAdmin(me.isAdmin);
         const onlyAjustes = pageHash === "ajustes" || !me.isAdmin;
         if (onlyAjustes) setView("settings");
-        const [local, setorList, situacaoList] = await Promise.all([
+        const [local, setorList, situacaoList, presetList] = await Promise.all([
           api.localConfig(),
           api.setores(),
           api.situacoes().catch(() => ({ situacoes: [] as string[] })),
+          api.painelPresets().catch(() => ({ presets: [] as { id: number; nome: string; payload: unknown }[] })),
         ]);
         setLocalCfg(local);
+        setPainelPresets(presetList.presets ?? []);
         if (setorList.setores?.length) setSetores(setorList.setores);
         if (situacaoList.situacoes?.length) {
           setSituacoes([...new Set([...situacaoList.situacoes, ...DEFAULT_SITUACOES])]);
@@ -852,6 +904,8 @@ export default function App() {
           notificationsEnabled: !!cfg.window?.notificationsEnabled,
           notificationWidth: cfg.window?.notificationWidth ?? 320,
           notificationHeight: cfg.window?.notificationHeight ?? 96,
+          notificationAnimation: clampEntryAnimation(cfg.window?.notificationAnimation),
+          notificationVisual: cfg.window?.notificationVisual,
         },
       };
       await api.putConfig(payload, row.hostName, row.windowsUser, false);
@@ -1413,9 +1467,12 @@ export default function App() {
                   onChange={patchLocal}
                   setores={setores}
                   listId="setores-list"
+                  presets={painelPresets}
                   onPreview={() => void api.previewNotification({
                     width: localCfg.window?.notificationWidth ?? 320,
                     height: localCfg.window?.notificationHeight ?? 96,
+                    animation: clampEntryAnimation(localCfg.window?.notificationAnimation),
+                    visual: localCfg.window?.notificationVisual,
                   }).then(() => setStatus("Notificação de teste disparada.")).catch((ex) => setError(errText(ex)))}
                 />
               </div>
@@ -1504,6 +1561,7 @@ export default function App() {
                   onChange={(next) => setClientEdit((cur) => (cur ? { ...cur, cfg: next } : cur))}
                   setores={setores}
                   listId="client-setores-list"
+                  presets={painelPresets}
                 />
               </div>
               <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">

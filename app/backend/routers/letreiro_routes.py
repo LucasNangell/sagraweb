@@ -406,6 +406,21 @@ async def post_heartbeat(body: HeartbeatBody):
     return {"status": "ok"}
 
 
+def _list_painel_presets() -> list[dict[str, Any]]:
+    from services import painel_remote_config_service as painel_svc
+
+    return painel_svc.list_presets()
+
+
+@router.get("/painel-presets")
+def list_painel_presets():
+    try:
+        return {"presets": _list_painel_presets()}
+    except Exception as exc:
+        logger.warning("Presets do painel indisponíveis: %s", exc)
+        return {"presets": []}
+
+
 @router.get("/config")
 async def get_config(
     host: str = Query(..., min_length=1),

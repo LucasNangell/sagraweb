@@ -59,6 +59,7 @@ _PUBLIC_GET_EXACT: Set[str] = {
     "/api/letreiro/config",
     "/api/letreiro/jobs/pending",
     "/api/letreiro/settings",
+    "/api/letreiro/painel-presets",
 
     "/openapi.json",
 

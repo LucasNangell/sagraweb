@@ -100,6 +100,8 @@ export type AppConfig = {
     notificationsEnabled?: boolean;
     notificationWidth?: number;
     notificationHeight?: number;
+    notificationAnimation?: string;
+    notificationVisual?: import("./notificationStyle").NotificationVisual;
   };
   board?: {
     sector?: string;
@@ -173,11 +175,18 @@ export const api = {
   saveLocalConfig: (payload: AppConfig) =>
     request<AppConfig>("/local/config", { method: "PUT", body: JSON.stringify(payload) }),
   restoreBoard: () => request<AppConfig>("/local/restore-board", { method: "POST", body: "{}" }),
-  previewNotification: (size?: { width?: number; height?: number }) =>
+  previewNotification: (size?: {
+    width?: number;
+    height?: number;
+    animation?: string;
+    visual?: import("./notificationStyle").NotificationVisual;
+  }) =>
     request<{ status: string }>("/local/preview-notification", {
       method: "POST",
       body: JSON.stringify(size ?? {}),
     }),
+  painelPresets: () =>
+    request<{ presets: { id: number; nome: string; payload: unknown }[] }>("/api/letreiro/painel-presets"),
   setores: () => request<{ setores: string[] }>("/local/setores"),
   situacoes: () => request<{ situacoes: string[] }>("/local/situacoes"),
 };

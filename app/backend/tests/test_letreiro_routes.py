@@ -78,6 +78,17 @@ def test_heartbeat_upserts_instance(monkeypatch):
     assert calls[0][1] == ("PC1", r"REDECAMARA\fulano", "2.4.0", "123")
 
 
+def test_list_painel_presets(monkeypatch):
+    monkeypatch.setattr(
+        letreiro_routes,
+        "_list_painel_presets",
+        lambda: [{"id": 3, "nome": "TV SEFOC", "payload": {"cardStyle": {"entryAnimation": "fx-mercury"}}}],
+    )
+    response = _client().get("/api/letreiro/painel-presets")
+    assert response.status_code == 200
+    assert response.json()["presets"][0]["nome"] == "TV SEFOC"
+
+
 def test_get_config_returns_payload(monkeypatch):
     monkeypatch.setattr(
         letreiro_routes.db,

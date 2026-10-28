@@ -59,7 +59,7 @@ function localPreviewMock(): Connect.NextHandleFunction {
     nome: "usr_sefoc",
     sslVerify: false,
     board: MOCK_BOARD,
-    window: { width: 720, speedPxPerSec: 40, opacity: 0.95, transparentBg: false, notificationsEnabled: false, notificationWidth: 320, notificationHeight: 96 },
+    window: { width: 720, speedPxPerSec: 40, opacity: 0.95, transparentBg: false, notificationsEnabled: false, notificationWidth: 320, notificationHeight: 96, notificationAnimation: "fx-iris" },
   };
   const jobs: Record<string, unknown>[] = [];
   const remoteByTarget: Record<string, unknown> = {
@@ -71,6 +71,23 @@ function localPreviewMock(): Connect.NextHandleFunction {
     if (url === "/local/me") return sendJson(res, { isAdmin: process.env.LETREIRO_MOCK_ADMIN === "1" });
     if (url === "/local/config" || url === "/local/restore-board") return sendJson(res, config);
     if (url === "/local/preview-notification") return sendJson(res, { status: "ok" });
+    if (url === "/api/letreiro/painel-presets") {
+      return sendJson(res, {
+        presets: [
+          {
+            id: 1,
+            nome: "TV SEFOC vermelho",
+            payload: {
+              cardStyle: {
+                entryAnimation: "fx-mercury",
+                models: { high: { effect: "v80", colors: { bg: "#b91c1c", border: "#fecaca", accent: "#fde047" } } },
+                typography: { titleColor: "#fff7ed", situationColor: "#fecaca" },
+              },
+            },
+          },
+        ],
+      });
+    }
     if (url === "/local/setores") return sendJson(res, { setores: ["SEFOC", "Papelaria", "Gravação"] });
     if (url === "/local/situacoes") {
       return sendJson(res, { situacoes: ["Saída p/", "Em Execução", "Recebido", "Encam. de Docum."] });

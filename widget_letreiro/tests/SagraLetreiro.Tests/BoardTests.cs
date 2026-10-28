@@ -1,3 +1,4 @@
+using System.Text.Json;
 using SagraLetreiro;
 
 namespace SagraLetreiro.Tests;
@@ -376,6 +377,7 @@ public class BoardTests
         Assert.False(cfg.Window.NotificationsEnabled);
         Assert.Equal(ArrivalNotify.DefaultCardWidth, cfg.Window.NotificationWidth);
         Assert.Equal(ArrivalNotify.DefaultCardHeight, cfg.Window.NotificationHeight);
+        Assert.Equal(ArrivalNotify.DefaultAnimation, cfg.Window.NotificationAnimation);
         Assert.Equal(ConfigStore.ProductionApiBase, cfg.ApiBaseUrl);
         Assert.Equal(ConfigStore.DefaultPonto, cfg.Ponto);
         Assert.Equal(ConfigStore.DefaultNome, cfg.Nome);
@@ -722,8 +724,7 @@ public class LetreiroAdminTests
         var layout = ArrivalNotify.Layout(320, 96);
         Assert.Equal(320, layout.CardWidth);
         Assert.Equal(96, layout.CardHeight);
-        Assert.Equal(ArrivalNotify.EnterTravel, layout.EnterTravel);
-        Assert.Equal(ArrivalNotify.ExitTravel, layout.ExitTravel);
+        Assert.Equal(8, layout.EnterTravel);
         Assert.True(layout.SidePad <= 24);
         Assert.InRange(layout.WindowWidth - layout.CardWidth, 24, 48);
         Assert.True(layout.WindowHeight - layout.CardHeight < 130);
@@ -731,12 +732,25 @@ public class LetreiroAdminTests
         Assert.Equal(900, huge.CardWidth);
         Assert.Equal(280, huge.CardHeight);
         Assert.True(huge.WindowWidth < huge.CardWidth * 1.2);
+        Assert.Equal(12, ArrivalNotify.ClassicEntries.Length);
+        Assert.Equal("fx-iris", ArrivalNotify.ClampAnimation(null));
+        Assert.Equal("fx-warp", ArrivalNotify.ClampAnimation("fx-warp"));
+        Assert.Equal("fx-iris", ArrivalNotify.ClampAnimation("fx-mercury"));
         Assert.Equal(180, ArrivalNotify.ClampCardWidth(10));
         Assert.Equal(900, ArrivalNotify.ClampCardWidth(9_999));
         Assert.Equal(56, ArrivalNotify.ClampCardHeight(1));
         Assert.Equal(280, ArrivalNotify.ClampCardHeight(9_999));
         Assert.Equal(320, ArrivalNotify.ClampCardWidth(0));
         Assert.Equal(96, ArrivalNotify.ClampCardHeight(0));
+        using var preset = JsonDocument.Parse("""
+            {"cardStyle":{"entryAnimation":"fx-mercury","models":{"high":{"colors":{"bg":"#b91c1c","accent":"#fde047"}}},"typography":{"titleColor":"#fff7ed"}}}
+            """);
+        var visual = ArrivalNotify.VisualFromPreset(preset.RootElement, 7, "TV SEFOC");
+        Assert.Equal(7, visual.PresetId);
+        Assert.Equal("TV SEFOC", visual.PresetName);
+        Assert.Equal("#b91c1c", visual.High.Bg);
+        Assert.Equal("#fff7ed", visual.High.Title);
+        Assert.Equal("", visual.Normal.Bg);
     }
 }
 

@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace SagraLetreiro;
 
 public readonly record struct ArrivalToastLayout(
@@ -13,19 +15,35 @@ public readonly record struct ArrivalToastLayout(
     double WindowWidth,
     double WindowHeight);
 
+public readonly record struct ArrivalAnimation(string Id, string Label);
+
 public static class ArrivalNotify
 {
     public const string PreviewKey = "preview:0-0";
+    public const string DefaultAnimation = "fx-iris";
     public const int DefaultCardWidth = 320;
     public const int DefaultCardHeight = 96;
     public const int MinCardWidth = 180;
     public const int MaxCardWidth = 900;
     public const int MinCardHeight = 56;
     public const int MaxCardHeight = 280;
-    public const double ScaleOvershoot = 1.12;
-    public const double EnterTravel = 60;
-    public const double ExitTravel = 40;
     public static readonly TimeSpan Duration = TimeSpan.FromSeconds(4);
+
+    public static readonly ArrivalAnimation[] ClassicEntries =
+    [
+        new("fx-iris", "25. Íris Portal"),
+        new("fx-stage-build", "26. Construção 2 estágios"),
+        new("fx-glitch", "27. Glitch RGB"),
+        new("fx-rubber", "28. Impacto elástico"),
+        new("fx-origami", "29. Corte diagonal"),
+        new("fx-laser", "30. Laser reconstrutor"),
+        new("fx-isometric", "31. Pouso isométrico"),
+        new("fx-crt", "32. Ignição CRT"),
+        new("fx-supernova", "33. Supernova"),
+        new("fx-stagger", "34. Cascata interna"),
+        new("fx-shutter", "35. Obturador"),
+        new("fx-warp", "36. Dobra espacial"),
+    ];
 
     public static int ClampCardWidth(int value) =>
         Math.Clamp(value <= 0 ? DefaultCardWidth : value, MinCardWidth, MaxCardWidth);
@@ -33,26 +51,179 @@ public static class ArrivalNotify
     public static int ClampCardHeight(int value) =>
         Math.Clamp(value <= 0 ? DefaultCardHeight : value, MinCardHeight, MaxCardHeight);
 
-    public static ArrivalToastLayout Layout(int cardWidth, int cardHeight)
+    public static string ClampAnimation(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return DefaultAnimation;
+        var id = value.Trim();
+        foreach (var item in ClassicEntries)
+        {
+            if (string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase))
+                return item.Id;
+        }
+        return DefaultAnimation;
+    }
+
+    public static ArrivalToastLayout Layout(int cardWidth, int cardHeight, string? animation = null)
     {
         var width = ClampCardWidth(cardWidth);
         var height = ClampCardHeight(cardHeight);
-        var sidePad = Math.Max(12, width * (ScaleOvershoot - 1) / 2);
-        var vertOvershoot = Math.Max(8, height * (ScaleOvershoot - 1) / 2);
-        var enterSlack = EnterTravel + vertOvershoot;
-        var exitSlack = ExitTravel + vertOvershoot;
+        var id = ClampAnimation(animation);
+        var (sidePad, enterTravel, exitTravel, scaleExtra) = Slack(id, width, height);
+        var vertOvershoot = Math.Max(8, height * scaleExtra / 2);
+        var enterSlack = enterTravel + vertOvershoot;
+        var exitSlack = exitTravel + vertOvershoot;
         return new ArrivalToastLayout(
             width,
             height,
             sidePad,
             enterSlack,
             exitSlack,
-            EnterTravel,
-            ExitTravel,
+            enterTravel,
+            exitTravel,
             height / 2.0,
             Math.Min(16, Math.Max(8, height * 0.17)),
             width + sidePad * 2,
             enterSlack + height + exitSlack);
+    }
+
+    static (double SidePad, double EnterTravel, double ExitTravel, double ScaleExtra) Slack(
+        string id, int width, int height)
+    {
+        return id switch
+        {
+            "fx-rubber" => (Math.Max(16, width * 0.16), 70, 50, 0.4),
+            "fx-warp" => (Math.Min(64, Math.Max(28, width * 0.18)), 12, 12, 0.6),
+            "fx-supernova" => (Math.Max(16, width * 0.18), 12, 12, 0.35),
+            "fx-shutter" => (Math.Max(14, width * 0.08), 10, 10, 0.15),
+            "fx-glitch" => (24, 12, 12, 0.1),
+            "fx-stagger" => (40, 12, 12, 0),
+            "fx-isometric" => (28, 20, 20, 0.12),
+            "fx-crt" => (12, 8, 8, 0),
+            _ => (12, 8, 8, 0),
+        };
+    }
+
+    public static NotificationVisual NormalizeVisual(NotificationVisual? raw)
+    {
+        raw ??= new NotificationVisual();
+        return new NotificationVisual
+        {
+            PresetId = raw.PresetId < 0 ? 0 : raw.PresetId,
+            PresetName = (raw.PresetName ?? "").Trim(),
+            FontScale = raw.FontScale is > 0.7 and <= 1.8 ? Math.Round(raw.FontScale, 2) : 1,
+            High = NormalizeSlot(raw.High),
+            Medium = NormalizeSlot(raw.Medium),
+            Normal = NormalizeSlot(raw.Normal),
+        };
+    }
+
+    public static NotificationVisual VisualFromPreset(JsonElement payload, int id = 0, string? name = null)
+    {
+        var models = ModelsRoot(payload);
+        var typography = TypographyRoot(payload);
+        return NormalizeVisual(new NotificationVisual
+        {
+            PresetId = id,
+            PresetName = name ?? "",
+            FontScale = Number(typography, "fontScale", 1),
+            High = SlotFrom(models, typography, "high"),
+            Medium = SlotFrom(models, typography, "medium"),
+            Normal = SlotFrom(models, typography, "normal"),
+        });
+    }
+
+    public static NotificationSlotStyle SlotFor(NotificationVisual? visual, string? priority) =>
+        (priority, visual) switch
+        {
+            ("priority-high", { } v) => v.High,
+            ("priority-medium", { } v) => v.Medium,
+            (_, { } v) => v.Normal,
+            _ => new NotificationSlotStyle(),
+        };
+
+    static NotificationSlotStyle NormalizeSlot(NotificationSlotStyle? raw) => new()
+    {
+        Bg = Hex(raw?.Bg),
+        Border = Hex(raw?.Border),
+        Accent = Hex(raw?.Accent),
+        Title = Hex(raw?.Title),
+        Situation = Hex(raw?.Situation),
+    };
+
+    static NotificationSlotStyle SlotFrom(JsonElement models, JsonElement typography, string key)
+    {
+        var slot = new NotificationSlotStyle();
+        if (models.ValueKind == JsonValueKind.Object && models.TryGetProperty(key, out var raw)
+            && raw.ValueKind == JsonValueKind.Object
+            && raw.TryGetProperty("colors", out var colors)
+            && colors.ValueKind == JsonValueKind.Object)
+        {
+            slot.Bg = Hex(GetStr(colors, "bg"));
+            slot.Border = Hex(GetStr(colors, "border"));
+            slot.Accent = Hex(GetStr(colors, "accent"));
+        }
+        if (typography.ValueKind == JsonValueKind.Object)
+        {
+            slot.Title = Hex(GetStr(typography, "titleColor"));
+            slot.Situation = Hex(GetStr(typography, "situationColor"));
+            if (typography.TryGetProperty("priorities", out var pri)
+                && pri.ValueKind == JsonValueKind.Object
+                && pri.TryGetProperty(key, out var pcolors)
+                && pcolors.ValueKind == JsonValueKind.Object)
+            {
+                var title = Hex(GetStr(pcolors, "titleColor"));
+                var sit = Hex(GetStr(pcolors, "situationColor"));
+                if (title.Length > 0) slot.Title = title;
+                if (sit.Length > 0) slot.Situation = sit;
+            }
+        }
+        return slot;
+    }
+
+    static JsonElement ModelsRoot(JsonElement payload)
+    {
+        if (payload.ValueKind != JsonValueKind.Object) return default;
+        if (payload.TryGetProperty("cardStyle", out var style)
+            && style.ValueKind == JsonValueKind.Object
+            && style.TryGetProperty("models", out var nested))
+            return nested;
+        if (payload.TryGetProperty("models", out var models))
+            return models;
+        return default;
+    }
+
+    static JsonElement TypographyRoot(JsonElement payload)
+    {
+        if (payload.ValueKind != JsonValueKind.Object) return default;
+        if (payload.TryGetProperty("cardStyle", out var style)
+            && style.ValueKind == JsonValueKind.Object
+            && style.TryGetProperty("typography", out var nested))
+            return nested;
+        if (payload.TryGetProperty("typography", out var direct))
+            return direct;
+        return default;
+    }
+
+    static string GetStr(JsonElement obj, string name) =>
+        obj.ValueKind == JsonValueKind.Object
+        && obj.TryGetProperty(name, out var el)
+        && el.ValueKind == JsonValueKind.String
+            ? el.GetString() ?? ""
+            : "";
+
+    static double Number(JsonElement obj, string name, double fallback)
+    {
+        if (obj.ValueKind != JsonValueKind.Object || !obj.TryGetProperty(name, out var el))
+            return fallback;
+        if (el.ValueKind == JsonValueKind.Number && el.TryGetDouble(out var n))
+            return n;
+        return fallback;
+    }
+
+    public static string Hex(string? value)
+    {
+        var text = (value ?? "").Trim();
+        return text.Length is 4 or 7 or 9 && text.StartsWith('#') ? text : "";
     }
 
     public static TickerCard PreviewCard() => new()

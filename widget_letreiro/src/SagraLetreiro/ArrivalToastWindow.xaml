@@ -16,7 +16,6 @@
         UseLayoutRounding="True">
     <Canvas x:Name="Stage" ClipToBounds="False">
         <Border x:Name="CardBorder"
-                Opacity="0"
                 CornerRadius="16"
                 ClipToBounds="True"
                 RenderTransformOrigin="0.5,0.5">
@@ -25,8 +24,10 @@
             </Border.Clip>
             <Border.RenderTransform>
                 <TransformGroup>
-                    <ScaleTransform x:Name="CardScale" ScaleX="0.15" ScaleY="0.15" />
-                    <TranslateTransform x:Name="CardMove" Y="-60" />
+                    <ScaleTransform x:Name="CardScale" ScaleX="1" ScaleY="1" />
+                    <SkewTransform x:Name="CardSkew" />
+                    <RotateTransform x:Name="CardRotate" />
+                    <TranslateTransform x:Name="CardMove" />
                 </TransformGroup>
             </Border.RenderTransform>
             <Grid>
@@ -39,12 +40,35 @@
                     <TextBlock x:Name="LabelText"
                                FontWeight="Bold"
                                TextAlignment="Center"
-                               TextTrimming="CharacterEllipsis" />
+                               TextTrimming="CharacterEllipsis">
+                        <TextBlock.RenderTransform>
+                            <TranslateTransform x:Name="TitleMove" />
+                        </TextBlock.RenderTransform>
+                    </TextBlock>
                     <TextBlock x:Name="SituacaoText"
                                Margin="0,4,0,0"
                                TextAlignment="Center"
-                               TextTrimming="CharacterEllipsis" />
+                               TextTrimming="CharacterEllipsis">
+                        <TextBlock.RenderTransform>
+                            <TranslateTransform x:Name="SubMove" />
+                        </TextBlock.RenderTransform>
+                    </TextBlock>
                 </StackPanel>
+                <Rectangle x:Name="LaserBeam"
+                           Width="4"
+                           HorizontalAlignment="Left"
+                           Opacity="0"
+                           Fill="#FFFFFFFF"
+                           IsHitTestVisible="False">
+                    <Rectangle.RenderTransform>
+                        <TranslateTransform x:Name="LaserMove" />
+                    </Rectangle.RenderTransform>
+                </Rectangle>
+                <Border x:Name="WhiteFlash"
+                        Background="White"
+                        Opacity="0"
+                        IsHitTestVisible="False"
+                        CornerRadius="16" />
             </Grid>
         </Border>
     </Canvas>

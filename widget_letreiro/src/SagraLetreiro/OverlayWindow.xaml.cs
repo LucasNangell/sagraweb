@@ -67,7 +67,7 @@ public partial class OverlayWindow : Window
     readonly HashSet<string> _heldArrivalKeys = new();
     ArrivalToastWindow? _arrivalToast;
     TickerCard? _showingArrival;
-    (int Width, int Height)? _previewToastSize;
+    (int Width, int Height, string Animation, NotificationVisual? Visual)? _previewToast;
     AdminHost? _adminHost;
     string? _remoteFp;
     int _jobBusy;
@@ -380,11 +380,13 @@ public partial class OverlayWindow : Window
         _balloon = null;
     }
 
-    void PreviewArrivalNotification(int width, int height)
+    void PreviewArrivalNotification(int width, int height, string animation, NotificationVisual? visual)
     {
-        _previewToastSize = (
+        _previewToast = (
             width > 0 ? ArrivalNotify.ClampCardWidth(width) : _config.Window.NotificationWidth,
-            height > 0 ? ArrivalNotify.ClampCardHeight(height) : _config.Window.NotificationHeight);
+            height > 0 ? ArrivalNotify.ClampCardHeight(height) : _config.Window.NotificationHeight,
+            ArrivalNotify.ClampAnimation(string.IsNullOrWhiteSpace(animation) ? _config.Window.NotificationAnimation : animation),
+            ArrivalNotify.NormalizeVisual(visual ?? _config.Window.NotificationVisual));
         var card = ArrivalNotify.PreviewCard();
         if (_cards.All(item => item.UniqueKey != card.UniqueKey))
             _cards.Add(card);
@@ -423,12 +425,16 @@ public partial class OverlayWindow : Window
         _showingArrival = card;
         var width = _config.Window.NotificationWidth;
         var height = _config.Window.NotificationHeight;
-        if (card.UniqueKey == ArrivalNotify.PreviewKey && _previewToastSize is { } preview)
+        var animation = _config.Window.NotificationAnimation;
+        var visual = _config.Window.NotificationVisual;
+        if (card.UniqueKey == ArrivalNotify.PreviewKey && _previewToast is { } preview)
         {
             width = preview.Width;
             height = preview.Height;
+            animation = preview.Animation;
+            visual = preview.Visual ?? visual;
         }
-        _arrivalToast = new ArrivalToastWindow(card, width, height);
+        _arrivalToast = new ArrivalToastWindow(card, width, height, animation, visual);
         _arrivalToast.Closed += OnArrivalToastClosed;
         _arrivalToast.ShowAbove(this);
     }
@@ -503,7 +509,7 @@ public partial class OverlayWindow : Window
                 ConfigStore.Save(cfg);
                 ApplyConfig(cfg, relogin);
             }),
-            PreviewNotification = (width, height) => Dispatcher.Invoke(() => PreviewArrivalNotification(width, height)),
+            PreviewNotification = (width, height, animation, visual) => Dispatcher.Invoke(() => PreviewArrivalNotification(width, height, animation, visual)),
         });
     }
 

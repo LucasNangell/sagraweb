@@ -78,6 +78,8 @@ public static class ArrivalNotify
         new("fx-shutter", "35. Obturador"),
         new("fx-warp", "36. Dobra espacial"),
         new("fx-ufo", "12. Disco voador"),
+        new("fx-analisar", "13. Analisar (lupa)"),
+        new("fx-prosseguir", "13. Dar prosseguimento"),
     ];
 
     public static int ClampCardWidth(int value) =>
@@ -201,6 +203,8 @@ public static class ArrivalNotify
             "fx-isometric" => (28, 20, 20, 0.12),
             "fx-crt" => (12, 8, 8, 0),
             "fx-ufo" => (Math.Max(88, width * 0.42), Math.Max(130, height * 1.25), 16, 0.12),
+            "fx-analisar" => (Math.Max(96, width * 0.35), Math.Max(48, height * 0.28), 40, 0.22),
+            "fx-prosseguir" => (Math.Max(72, width * 0.4), 110, 120, 0.12),
             _ => (12, 8, 8, 0),
         };
     }

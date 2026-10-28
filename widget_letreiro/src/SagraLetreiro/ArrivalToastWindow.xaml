@@ -162,5 +162,148 @@
             <Ellipse Width="7" Height="7" Canvas.Left="76" Canvas.Top="23" Fill="#EAB308" />
             <Ellipse Width="7" Height="7" Canvas.Left="96" Canvas.Top="23" Fill="#A855F7" />
         </Canvas>
+        <Border x:Name="ProsseguirStreamHost"
+                Opacity="0"
+                Visibility="Collapsed"
+                ClipToBounds="True"
+                CornerRadius="10"
+                IsHitTestVisible="False"
+                Canvas.ZIndex="3">
+            <Rectangle x:Name="ProsseguirStream" Width="960" Height="280" HorizontalAlignment="Left">
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0.55">
+                        <GradientStop Color="#00000000" Offset="0" />
+                        <GradientStop Color="#2210B981" Offset="0.08" />
+                        <GradientStop Color="#2838BDF8" Offset="0.14" />
+                        <GradientStop Color="#00000000" Offset="0.22" />
+                        <GradientStop Color="#2210B981" Offset="0.36" />
+                        <GradientStop Color="#2838BDF8" Offset="0.42" />
+                        <GradientStop Color="#00000000" Offset="0.5" />
+                        <GradientStop Color="#2210B981" Offset="0.64" />
+                        <GradientStop Color="#2838BDF8" Offset="0.7" />
+                        <GradientStop Color="#00000000" Offset="0.78" />
+                        <GradientStop Color="#2210B981" Offset="0.9" />
+                        <GradientStop Color="#00000000" Offset="1" />
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+                <Rectangle.RenderTransform>
+                    <TranslateTransform x:Name="ProsseguirStreamMove" />
+                </Rectangle.RenderTransform>
+            </Rectangle>
+        </Border>
+        <Canvas x:Name="MagnifierRig"
+                Width="80"
+                Height="80"
+                Opacity="0"
+                Visibility="Collapsed"
+                IsHitTestVisible="False"
+                Canvas.ZIndex="6"
+                RenderTransformOrigin="0.5,0.5">
+            <Canvas.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform x:Name="MagnifierScale" ScaleX="1.4" ScaleY="1.4" />
+                    <RotateTransform x:Name="MagnifierRotate" Angle="-35" />
+                    <TranslateTransform x:Name="MagnifierMove" />
+                </TransformGroup>
+            </Canvas.RenderTransform>
+            <Ellipse Width="72" Height="72" Canvas.Left="4" Canvas.Top="0" Stroke="#E2E8F0" StrokeThickness="4">
+                <Ellipse.Fill>
+                    <RadialGradientBrush GradientOrigin="0.3,0.3" Center="0.35,0.35">
+                        <GradientStop Color="#52FFFFFF" Offset="0" />
+                        <GradientStop Color="#2438BDF8" Offset="0.45" />
+                        <GradientStop Color="#1000FFCC" Offset="1" />
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+                <Ellipse.Effect>
+                    <DropShadowEffect Color="#38BDF8" BlurRadius="18" ShadowDepth="0" Opacity="0.7"
+                                      RenderingBias="Performance" />
+                </Ellipse.Effect>
+            </Ellipse>
+            <Ellipse Width="28" Height="12" Canvas.Left="14" Canvas.Top="10" Fill="#C0FFFFFF"
+                     RenderTransformOrigin="0.5,0.5">
+                <Ellipse.RenderTransform>
+                    <RotateTransform Angle="-28" />
+                </Ellipse.RenderTransform>
+            </Ellipse>
+            <TextBlock Canvas.Left="34" Canvas.Top="24" FontFamily="Consolas" FontSize="16"
+                       Foreground="#A600FFCC" Text="+" />
+            <Border Width="12" Height="36" Canvas.Left="58" Canvas.Top="58" CornerRadius="4,4,8,8"
+                    BorderBrush="#334155" BorderThickness="1" RenderTransformOrigin="0.5,0">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                        <GradientStop Color="#94A3B8" Offset="0" />
+                        <GradientStop Color="#F8FAFC" Offset="0.45" />
+                        <GradientStop Color="#475569" Offset="1" />
+                    </LinearGradientBrush>
+                </Border.Background>
+                <Border.RenderTransform>
+                    <RotateTransform Angle="-42" />
+                </Border.RenderTransform>
+            </Border>
+        </Canvas>
+        <Border x:Name="ActionBadgeHost"
+                Opacity="0"
+                Visibility="Collapsed"
+                IsHitTestVisible="False"
+                Canvas.ZIndex="7">
+            <Border x:Name="ActionBadge"
+                    HorizontalAlignment="Center"
+                    CornerRadius="999"
+                    BorderThickness="1.5"
+                    Padding="16,5"
+                    RenderTransformOrigin="0.5,0.5">
+                <Border.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform x:Name="ActionBadgeScale" ScaleX="0.4" ScaleY="0.4" />
+                        <TranslateTransform x:Name="ActionBadgeMove" />
+                    </TransformGroup>
+                </Border.RenderTransform>
+                <Border.Effect>
+                    <DropShadowEffect x:Name="ActionBadgeGlow" Color="#38BDF8" BlurRadius="16" ShadowDepth="0"
+                                      Opacity="0.75" RenderingBias="Performance" />
+                </Border.Effect>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Ellipse x:Name="ActionBadgeDot"
+                             Width="8"
+                             Height="8"
+                             Margin="0,0,7,0"
+                             Fill="#05101F"
+                             RenderTransformOrigin="0.5,0.5"
+                             VerticalAlignment="Center">
+                        <Ellipse.RenderTransform>
+                            <ScaleTransform x:Name="ActionBadgeDotScale" ScaleX="0.8" ScaleY="0.8" />
+                        </Ellipse.RenderTransform>
+                    </Ellipse>
+                    <TextBlock x:Name="ActionBadgeText"
+                               FontFamily="Segoe UI"
+                               FontWeight="ExtraBold"
+                               FontSize="12"
+                               VerticalAlignment="Center" />
+                    <StackPanel x:Name="ActionChevrons"
+                                Margin="8,0,0,0"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                Visibility="Collapsed">
+                        <TextBlock x:Name="Chevron1" FontWeight="Black" FontSize="16" Margin="0,0,-4,0" Text="›"
+                                   Opacity="0.3">
+                            <TextBlock.RenderTransform>
+                                <TranslateTransform x:Name="Chevron1Move" />
+                            </TextBlock.RenderTransform>
+                        </TextBlock>
+                        <TextBlock x:Name="Chevron2" FontWeight="Black" FontSize="16" Margin="0,0,-4,0" Text="›"
+                                   Opacity="0.3">
+                            <TextBlock.RenderTransform>
+                                <TranslateTransform x:Name="Chevron2Move" />
+                            </TextBlock.RenderTransform>
+                        </TextBlock>
+                        <TextBlock x:Name="Chevron3" FontWeight="Black" FontSize="16" Text="›" Opacity="0.3">
+                            <TextBlock.RenderTransform>
+                                <TranslateTransform x:Name="Chevron3Move" />
+                            </TextBlock.RenderTransform>
+                        </TextBlock>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Border>
     </Canvas>
 </Window>

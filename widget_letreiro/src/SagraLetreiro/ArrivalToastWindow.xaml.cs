@@ -103,6 +103,52 @@ public partial class ArrivalToastWindow : Window
         TextStack.Margin = new Thickness(_padX + ArrivalNotify.AccentWidth, 0, _padX, 0);
         SituacaoText.Margin = new Thickness(0, _textGap, 0, 0);
         PositionUfo();
+        PositionActionOverlays();
+    }
+
+    void PositionActionOverlays()
+    {
+        var analisar = _animation == "fx-analisar";
+        var follow = _animation == "fx-prosseguir";
+        MagnifierRig.Visibility = analisar ? Visibility.Visible : Visibility.Collapsed;
+        ProsseguirStreamHost.Visibility = follow ? Visibility.Visible : Visibility.Collapsed;
+        ActionBadgeHost.Visibility = analisar || follow ? Visibility.Visible : Visibility.Collapsed;
+        if (!analisar && !follow) return;
+
+        var cardLeft = _layout.SidePad;
+        var cardTop = _layout.EnterSlack;
+        var cardW = _layout.CardWidth;
+        var cardH = _layout.CardHeight;
+        ActionBadgeHost.Width = cardW;
+        Canvas.SetLeft(ActionBadgeHost, cardLeft);
+        Canvas.SetTop(ActionBadgeHost, Math.Max(0, cardTop - 22));
+        ActionBadgeText.Text = analisar ? "ANALISAR" : "DAR PROSSEGUIMENTO";
+        ActionBadgeText.Foreground = Frozen(new SolidColorBrush(
+            analisar ? Color.FromRgb(0x05, 0x10, 0x1f) : Color.FromRgb(0x02, 0x2c, 0x22)));
+        ActionBadge.BorderBrush = Frozen(new SolidColorBrush(
+            analisar ? Color.FromRgb(0xe0, 0xf2, 0xfe) : Color.FromRgb(0xd1, 0xfa, 0xe5)));
+        ActionBadge.Background = analisar
+            ? Frozen(new LinearGradientBrush(
+                Color.FromRgb(0x02, 0x84, 0xc7), Color.FromRgb(0x00, 0xff, 0xcc), 0))
+            : Frozen(new LinearGradientBrush(
+                Color.FromRgb(0x05, 0x96, 0x69), Color.FromRgb(0xa7, 0xf3, 0xd0), 0));
+        ActionBadgeGlow.Color = analisar ? Color.FromRgb(0x38, 0xbd, 0xf8) : Color.FromRgb(0x10, 0xb9, 0x81);
+        ActionBadgeDot.Visibility = analisar ? Visibility.Visible : Visibility.Collapsed;
+        ActionChevrons.Visibility = follow ? Visibility.Visible : Visibility.Collapsed;
+        if (analisar)
+        {
+            Canvas.SetLeft(MagnifierRig, cardLeft);
+            Canvas.SetTop(MagnifierRig, cardTop);
+        }
+        if (follow)
+        {
+            ProsseguirStreamHost.Width = cardW;
+            ProsseguirStreamHost.Height = cardH;
+            ProsseguirStream.Height = cardH;
+            ProsseguirStream.Width = Math.Max(960, cardW * 3);
+            Canvas.SetLeft(ProsseguirStreamHost, cardLeft);
+            Canvas.SetTop(ProsseguirStreamHost, cardTop);
+        }
     }
 
     void PositionUfo()

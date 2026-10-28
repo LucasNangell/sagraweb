@@ -24,6 +24,8 @@ static class ArrivalToastMotion
             case "fx-shutter": Shutter(sb, layout); break;
             case "fx-warp": Warp(sb, layout); break;
             case "fx-ufo": Ufo(sb, layout); break;
+            case "fx-analisar": Analisar(sb, layout); break;
+            case "fx-prosseguir": Prosseguir(sb, layout); break;
             default: Iris(sb, layout); break;
         }
         return sb;
@@ -214,6 +216,120 @@ static class ArrivalToastMotion
             Discrete(0, 0), Discrete(0, 0.56), Eased(1, 1.08, EaseOut()), Discrete(1, 3.2), Eased(0, 4, EaseIn()));
     }
 
+    static void Analisar(Storyboard sb, ArrivalToastLayout layout)
+    {
+        var w = layout.CardWidth;
+        var h = layout.CardHeight;
+        var rise = layout.EnterTravel;
+        D(sb, "CardMove", "Y",
+            Discrete(rise, 0), Eased(-4, 0.4, EaseOut()), Eased(0, 0.64, EaseOut()), Discrete(0, 3.36),
+            Eased(-8, 3.68, EaseIn()), Eased(layout.ExitTravel, 4, EaseIn()));
+        D(sb, "CardScale", "ScaleX",
+            Discrete(0.82, 0), Eased(1.02, 0.4, EaseOut()), Eased(1, 0.64, EaseOut()), Discrete(1, 3.36),
+            Eased(0.96, 3.68, EaseIn()), Eased(0.82, 4, EaseIn()));
+        D(sb, "CardScale", "ScaleY",
+            Discrete(0.82, 0), Eased(1.02, 0.4, EaseOut()), Eased(1, 0.64, EaseOut()), Discrete(1, 3.36),
+            Eased(0.96, 3.68, EaseIn()), Eased(0.82, 4, EaseIn()));
+        D(sb, "CardBlur", "Radius",
+            Discrete(12, 0), Eased(0, 0.4, EaseOut()), Discrete(0, 3.36), Eased(4, 3.68, EaseIn()), Eased(12, 4, EaseIn()));
+        D(sb, "CardBorder", "Opacity",
+            Discrete(0, 0), Eased(1, 0.4, EaseOut()), Discrete(1, 3.36), Eased(0.6, 3.68, EaseIn()), Eased(0, 4, EaseIn()));
+        D(sb, "ActionBadgeHost", "Opacity",
+            Discrete(0, 0), Discrete(0, 0.4), Eased(1, 0.72, EaseBackOut()), Discrete(1, 3.28), Eased(0, 3.6, EaseIn()));
+        D(sb, "ActionBadgeScale", "ScaleX",
+            Discrete(0.4, 0), Discrete(0.4, 0.4), Eased(1.1, 0.72, EaseBackOut()), Eased(1, 0.96, EaseOut()),
+            Linear(1.05, 1.4), Linear(1, 1.8), Linear(1.05, 2.2), Linear(1, 2.6), Linear(1.05, 2.96), Linear(1, 3.28),
+            Eased(0.5, 3.6, EaseIn()));
+        D(sb, "ActionBadgeScale", "ScaleY",
+            Discrete(0.4, 0), Discrete(0.4, 0.4), Eased(1.1, 0.72, EaseBackOut()), Eased(1, 0.96, EaseOut()),
+            Linear(1.05, 1.4), Linear(1, 1.8), Linear(1.05, 2.2), Linear(1, 2.6), Linear(1.05, 2.96), Linear(1, 3.28),
+            Eased(0.5, 3.6, EaseIn()));
+        D(sb, "ActionBadgeMove", "Y",
+            Discrete(-22, 0), Discrete(-22, 0.4), Eased(2, 0.72, EaseBackOut()), Eased(0, 0.96, EaseOut()),
+            Linear(-3, 1.4), Linear(0, 1.8), Linear(-3, 2.2), Linear(0, 2.6), Linear(-3, 2.96), Linear(0, 3.28),
+            Eased(-18, 3.6, EaseIn()));
+        D(sb, "ActionBadgeDotScale", "ScaleX",
+            Discrete(0.8, 0.72), Linear(1.25, 1.32), Linear(0.8, 1.92), Linear(1.25, 2.52), Linear(0.8, 3.12), Linear(1.1, 3.5));
+        D(sb, "ActionBadgeDotScale", "ScaleY",
+            Discrete(0.8, 0.72), Linear(1.25, 1.32), Linear(0.8, 1.92), Linear(1.25, 2.52), Linear(0.8, 3.12), Linear(1.1, 3.5));
+        D(sb, "MagnifierRig", "Opacity",
+            Discrete(0, 0), Discrete(0, 0.48), Eased(1, 0.88, EaseOut()), Discrete(1, 3.12), Eased(0, 3.52, EaseIn()));
+        D(sb, "MagnifierMove", "X",
+            Discrete(-0.22 * w, 0), Discrete(-0.22 * w, 0.48), Eased(0.06 * w, 0.88, EaseOut()),
+            Linear(0.65 * w, 1.68), Linear(0.55 * w, 2.48), Linear(0.14 * w, 3.12), Eased(0.95 * w, 3.52, EaseIn()));
+        D(sb, "MagnifierMove", "Y",
+            Discrete(-0.2 * h, 0), Discrete(-0.2 * h, 0.48), Eased(0.08 * h, 0.88, EaseOut()),
+            Linear(0.06 * h, 1.68), Linear(0.42 * h, 2.48), Linear(0.38 * h, 3.12), Eased(-0.2 * h, 3.52, EaseIn()));
+        D(sb, "MagnifierRotate", "Angle",
+            Discrete(-35, 0), Discrete(-35, 0.48), Eased(-8, 0.88, EaseOut()),
+            Linear(10, 1.68), Linear(-5, 2.48), Linear(12, 3.12), Eased(30, 3.52, EaseIn()));
+        D(sb, "MagnifierScale", "ScaleX",
+            Discrete(1.4, 0), Discrete(1.4, 0.48), Eased(1, 0.88, EaseOut()),
+            Linear(1.08, 1.68), Linear(1, 2.48), Linear(1.05, 3.12), Eased(0.5, 3.52, EaseIn()));
+        D(sb, "MagnifierScale", "ScaleY",
+            Discrete(1.4, 0), Discrete(1.4, 0.48), Eased(1, 0.88, EaseOut()),
+            Linear(1.08, 1.68), Linear(1, 2.48), Linear(1.05, 3.12), Eased(0.5, 3.52, EaseIn()));
+    }
+
+    static void Prosseguir(Storyboard sb, ArrivalToastLayout layout)
+    {
+        var slideIn = layout.EnterTravel;
+        var slideOut = layout.ExitTravel;
+        D(sb, "CardMove", "X",
+            Discrete(-slideIn, 0), Eased(8, 0.48, EaseOut()), Eased(0, 0.72, EaseOut()), Discrete(0, 3.28),
+            Eased(-10, 3.52, EaseIn()), Eased(slideOut, 4, EaseIn()));
+        D(sb, "CardSkew", "AngleX",
+            Discrete(-14, 0), Eased(3, 0.48, EaseOut()), Eased(0, 0.72, EaseOut()), Discrete(0, 3.52), Eased(-16, 4, EaseIn()));
+        D(sb, "CardScale", "ScaleX",
+            Discrete(0.9, 0), Eased(1.02, 0.48, EaseOut()), Eased(1, 0.72, EaseOut()), Discrete(1, 3.28),
+            Eased(0.98, 3.52, EaseIn()), Eased(0.92, 4, EaseIn()));
+        D(sb, "CardScale", "ScaleY",
+            Discrete(0.9, 0), Eased(1.02, 0.48, EaseOut()), Eased(1, 0.72, EaseOut()), Discrete(1, 3.28),
+            Eased(0.98, 3.52, EaseIn()), Eased(0.92, 4, EaseIn()));
+        D(sb, "CardBlur", "Radius",
+            Discrete(10, 0), Eased(0, 0.48, EaseOut()), Discrete(0, 3.52), Eased(10, 4, EaseIn()));
+        D(sb, "CardBorder", "Opacity",
+            Discrete(0, 0), Eased(1, 0.48, EaseOut()), Discrete(1, 3.52), Eased(0, 4, EaseIn()));
+        D(sb, "ProsseguirStreamHost", "Opacity",
+            Discrete(0, 0), Discrete(0, 0.48), Eased(0.9, 0.8, EaseOut()), Discrete(0.9, 3.4), Eased(0, 4, EaseIn()));
+        D(sb, "ProsseguirStreamMove", "X",
+            Discrete(0, 0), Linear(-layout.CardWidth, 4));
+        D(sb, "ActionBadgeHost", "Opacity",
+            Discrete(0, 0), Discrete(0, 0.48), Eased(1, 0.8, EaseBackOut()), Discrete(1, 3.2), Eased(0, 3.6, EaseIn()));
+        D(sb, "ActionBadgeScale", "ScaleX",
+            Discrete(0.5, 0), Discrete(0.5, 0.48), Eased(1.08, 0.8, EaseBackOut()), Eased(1, 1.04, EaseOut()),
+            Linear(1.04, 1.44), Linear(1, 1.84), Linear(1.04, 2.24), Linear(1, 2.64), Linear(1.04, 2.96), Linear(1, 3.2),
+            Eased(0.6, 3.6, EaseIn()));
+        D(sb, "ActionBadgeScale", "ScaleY",
+            Discrete(0.5, 0), Discrete(0.5, 0.48), Eased(1.08, 0.8, EaseBackOut()), Eased(1, 1.04, EaseOut()),
+            Linear(1.04, 1.44), Linear(1, 1.84), Linear(1.04, 2.24), Linear(1, 2.64), Linear(1.04, 2.96), Linear(1, 3.2),
+            Eased(0.6, 3.6, EaseIn()));
+        D(sb, "ActionBadgeMove", "X",
+            Discrete(-90, 0), Discrete(-90, 0.48), Eased(8, 0.8, EaseBackOut()), Eased(0, 1.04, EaseOut()),
+            Linear(6, 1.44), Linear(0, 1.84), Linear(6, 2.24), Linear(0, 2.64), Linear(6, 2.96), Linear(0, 3.2),
+            Eased(80, 3.6, EaseIn()));
+        ChevronPulse(sb, "Chevron1", 0.8);
+        ChevronPulse(sb, "Chevron2", 0.98);
+        ChevronPulse(sb, "Chevron3", 1.16);
+        ChevronMove(sb, "Chevron1Move", 0.8);
+        ChevronMove(sb, "Chevron2Move", 0.98);
+        ChevronMove(sb, "Chevron3Move", 1.16);
+    }
+
+    static void ChevronPulse(Storyboard sb, string target, double start)
+    {
+        D(sb, target, "Opacity",
+            Discrete(0.3, start), Linear(1, start + 0.6), Linear(0.3, start + 1.2),
+            Linear(1, start + 1.8), Linear(0.3, start + 2.4), Linear(1, start + 2.8));
+    }
+
+    static void ChevronMove(Storyboard sb, string target, double start)
+    {
+        D(sb, target, "X",
+            Discrete(-2, start), Linear(3, start + 0.6), Linear(-2, start + 1.2),
+            Linear(3, start + 1.8), Linear(-2, start + 2.4), Linear(3, start + 2.8));
+    }
+
     static void Opacity(Storyboard sb, double a, double b, double c, double d) =>
         D(sb, "CardBorder", "Opacity", Discrete(a, 0), Eased(b, 1, EaseOut()), Discrete(c, 3), Eased(d, 4, EaseIn()));
 
@@ -267,6 +383,7 @@ static class ArrivalToastMotion
     static IEasingFunction EaseOut() => new CubicEase { EasingMode = EasingMode.EaseOut };
     static IEasingFunction EaseIn() => new CubicEase { EasingMode = EasingMode.EaseIn };
     static IEasingFunction EaseInOut() => new CubicEase { EasingMode = EasingMode.EaseInOut };
+    static IEasingFunction EaseBackOut() => new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.75 };
 
     public static void Prepare(ArrivalToastWindow window, ArrivalToastLayout layout, string animation)
     {
@@ -289,6 +406,7 @@ static class ArrivalToastMotion
             "fx-rubber" => new Point(0.5, 1),
             "fx-stage-build" => new Point(0, 0),
             "fx-ufo" => new Point(0.5, 0),
+            "fx-analisar" => new Point(0.5, 1),
             _ => new Point(0.5, 0.5),
         };
         window.CardBorder.Effect = id switch
@@ -301,7 +419,7 @@ static class ArrivalToastMotion
                 Opacity = 1,
                 RenderingBias = RenderingBias.Performance,
             },
-            "fx-laser" or "fx-supernova" or "fx-warp" => new BlurEffect
+            "fx-laser" or "fx-supernova" or "fx-warp" or "fx-analisar" or "fx-prosseguir" => new BlurEffect
             {
                 Radius = 0,
                 RenderingBias = RenderingBias.Performance,
@@ -420,6 +538,41 @@ static class ArrivalToastMotion
                 window.UfoLanding.Opacity = 0;
                 window.UfoLandingScale.ScaleX = 0.2;
                 window.UfoLandingScale.ScaleY = 0.2;
+                return;
+            case "fx-analisar":
+                window.CardBorder.Clip = null;
+                window.CardMove.Y = layout.EnterTravel;
+                window.CardScale.ScaleX = 0.82;
+                window.CardScale.ScaleY = 0.82;
+                if (window.CardBorder.Effect is BlurEffect analisarBlur) analisarBlur.Radius = 12;
+                window.CardBorder.Opacity = 0;
+                window.ActionBadgeHost.Opacity = 0;
+                window.ActionBadgeScale.ScaleX = 0.4;
+                window.ActionBadgeScale.ScaleY = 0.4;
+                window.ActionBadgeMove.X = 0;
+                window.ActionBadgeMove.Y = -22;
+                window.MagnifierRig.Opacity = 0;
+                window.MagnifierMove.X = -0.22 * layout.CardWidth;
+                window.MagnifierMove.Y = -0.2 * layout.CardHeight;
+                window.MagnifierRotate.Angle = -35;
+                window.MagnifierScale.ScaleX = 1.4;
+                window.MagnifierScale.ScaleY = 1.4;
+                return;
+            case "fx-prosseguir":
+                window.CardBorder.Clip = null;
+                window.CardMove.X = -layout.EnterTravel;
+                window.CardSkew.AngleX = -14;
+                window.CardScale.ScaleX = 0.9;
+                window.CardScale.ScaleY = 0.9;
+                if (window.CardBorder.Effect is BlurEffect followBlur) followBlur.Radius = 10;
+                window.CardBorder.Opacity = 0;
+                window.ActionBadgeHost.Opacity = 0;
+                window.ActionBadgeScale.ScaleX = 0.5;
+                window.ActionBadgeScale.ScaleY = 0.5;
+                window.ActionBadgeMove.X = -90;
+                window.ActionBadgeMove.Y = 0;
+                window.ProsseguirStreamHost.Opacity = 0;
+                window.ProsseguirStreamMove.X = 0;
                 return;
             default:
                 window.CardBorder.Clip = null;

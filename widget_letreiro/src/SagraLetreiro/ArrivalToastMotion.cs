@@ -232,7 +232,9 @@ static class ArrivalToastMotion
         window.CardMove.Y = 0;
         window.CardSkew.AngleX = 0;
         window.CardRotate.Angle = 0;
-        window.CardBorder.Opacity = 1;
+        window.TitleMove.Y = 0;
+        window.SubMove.X = 0;
+        window.LaserMove.X = 0;
         window.LaserBeam.Opacity = 0;
         window.WhiteFlash.Opacity = 0;
         window.LabelText.Opacity = 1;
@@ -249,30 +251,104 @@ static class ArrivalToastMotion
         if (window.CardBorder.Effect is BlurEffect blur)
             window.RegisterName("CardBlur", blur);
 
-        if (id == "fx-iris")
+        switch (id)
         {
-            var iris = new EllipseGeometry
-            {
-                Center = new Point(0, layout.CardHeight / 2.0),
-                RadiusX = 0,
-                RadiusY = 0,
-            };
-            window.CardBorder.Clip = iris;
-            window.RegisterName("CardIris", iris);
-            return;
+            case "fx-iris":
+                var iris = new EllipseGeometry
+                {
+                    Center = new Point(0, layout.CardHeight / 2.0),
+                    RadiusX = 0,
+                    RadiusY = 0,
+                };
+                window.CardBorder.Clip = iris;
+                window.RegisterName("CardIris", iris);
+                window.CardBorder.Opacity = 0;
+                return;
+            case "fx-stage-build":
+                ClipRect(window, new Rect(0, 0, 0, 0));
+                window.CardBorder.Opacity = 1;
+                return;
+            case "fx-origami":
+                ClipRect(window, new Rect(0, 0, 0, layout.CardHeight));
+                window.CardScale.ScaleX = 0.92;
+                window.CardScale.ScaleY = 0.92;
+                window.CardBorder.Opacity = 1;
+                return;
+            case "fx-laser":
+                ClipRect(window, new Rect(0, 0, 0, layout.CardHeight));
+                window.LaserBeam.Opacity = 1;
+                window.CardBorder.Opacity = 1;
+                return;
+            case "fx-shutter":
+                ClipRect(window, new Rect(0, layout.CardHeight / 2.0, layout.CardWidth, 0));
+                window.CardScale.ScaleX = 1.15;
+                window.CardScale.ScaleY = 1.15;
+                window.CardBorder.Opacity = 1;
+                return;
+            case "fx-glitch":
+                window.CardBorder.Clip = null;
+                window.CardMove.X = -20;
+                window.CardSkew.AngleX = 20;
+                window.CardBorder.Opacity = 0;
+                return;
+            case "fx-rubber":
+                window.CardBorder.Clip = null;
+                window.CardMove.Y = -layout.EnterTravel;
+                window.CardScale.ScaleX = 0.7;
+                window.CardScale.ScaleY = 1.4;
+                window.CardBorder.Opacity = 0;
+                return;
+            case "fx-isometric":
+                window.CardBorder.Clip = null;
+                window.CardRotate.Angle = -28;
+                window.CardScale.ScaleX = 0.82;
+                window.CardScale.ScaleY = 0.62;
+                window.CardBorder.Opacity = 0;
+                return;
+            case "fx-crt":
+                window.CardBorder.Clip = null;
+                window.CardScale.ScaleX = 0.01;
+                window.CardScale.ScaleY = 0.02;
+                window.WhiteFlash.Opacity = 0.85;
+                window.CardBorder.Opacity = 0;
+                return;
+            case "fx-supernova":
+                window.CardBorder.Clip = null;
+                window.CardScale.ScaleX = 1.35;
+                window.CardScale.ScaleY = 1.35;
+                if (window.CardBorder.Effect is BlurEffect nova) nova.Radius = 15;
+                window.CardBorder.Opacity = 0;
+                return;
+            case "fx-stagger":
+                window.CardBorder.Clip = null;
+                window.CardMove.X = -40;
+                window.TitleMove.Y = 20;
+                window.SubMove.X = -25;
+                window.LabelText.Opacity = 0;
+                window.SituacaoText.Opacity = 0;
+                window.CardBorder.Opacity = 0;
+                return;
+            case "fx-warp":
+                var travel = Math.Min(layout.SidePad * 2, layout.CardWidth * 0.4);
+                window.CardBorder.Clip = null;
+                window.CardMove.X = -travel;
+                window.CardScale.ScaleX = 1.8;
+                window.CardScale.ScaleY = 0.35;
+                if (window.CardBorder.Effect is BlurEffect warp) warp.Radius = 12;
+                window.CardBorder.Opacity = 0;
+                return;
+            default:
+                window.CardBorder.Clip = null;
+                window.CardBorder.Opacity = 0;
+                return;
         }
+    }
 
-        if (id is "fx-stage-build" or "fx-origami" or "fx-laser" or "fx-shutter")
-        {
-            window.CardClip.Rect = id == "fx-shutter"
-                ? new Rect(0, layout.CardHeight / 2.0, layout.CardWidth, 0)
-                : new Rect(0, 0, 0, layout.CardHeight);
-            window.CardClip.RadiusX = 0;
-            window.CardClip.RadiusY = 0;
-            window.CardBorder.Clip = window.CardClip;
-            return;
-        }
-
-        window.CardBorder.Clip = null;
+    static void ClipRect(ArrivalToastWindow window, Rect rect)
+    {
+        window.CardClip.Rect = rect;
+        window.CardClip.RadiusX = 0;
+        window.CardClip.RadiusY = 0;
+        window.CardBorder.Clip = window.CardClip;
     }
 }

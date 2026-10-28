@@ -31,6 +31,7 @@ public partial class ArrivalToastWindow : Window
         int situationFontSize = 0)
     {
         InitializeComponent();
+        Opacity = 0;
         var id = ArrivalNotify.ClampAnimation(animation);
         _visual = ArrivalNotify.NormalizeVisual(visual);
         _layout = ArrivalNotify.Layout(cardWidth, cardHeight, id);
@@ -46,9 +47,11 @@ public partial class ArrivalToastWindow : Window
 
     public void ShowAbove(Window overlay)
     {
+        Opacity = 0;
         Show();
         PlaceAbove(overlay);
-        _motion.Begin(this, true);
+        _motion.Begin(this, HandoffBehavior.SnapshotAndReplace, true);
+        Opacity = 1;
     }
 
     public void PlaceAbove(Window overlay)

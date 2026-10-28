@@ -10,7 +10,7 @@
     <AssemblyName>SAGRA-Letreiro</AssemblyName>
     <RootNamespace>SagraLetreiro</RootNamespace>
     <Product>SAGRA Letreiro</Product>
-    <Version>2.24.3</Version>
+    <Version>2.24.4</Version>
   </PropertyGroup>
 
   <ItemGroup>

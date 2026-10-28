@@ -652,7 +652,7 @@ public partial class OverlayWindow : Window
                 job = pending.Job;
                 ApplyCommandPollInterval(pending.PollIntervalSec);
             }
-            catch (LetreiroApiException ex)
+            catch (Exception ex)
             {
                 AppLog.Warn("Job remoto: " + ex.Message);
                 return;
@@ -661,26 +661,44 @@ public partial class OverlayWindow : Window
 
             var host = LetreiroAdmin.CurrentHost();
             var user = LetreiroAdmin.CurrentWindowsUser();
+            var limit = TimeSpan.FromSeconds(
+                Math.Clamp(job.TimeoutSec, RemoteScript.TimeoutMinSec, RemoteScript.TimeoutMaxSec) + 10);
             RemoteScriptOutcome outcome;
             try
             {
                 outcome = await Task.Run(() =>
-                    RemoteScript.Execute(job.Kind, job.Content, job.Id, job.TimeoutSec)).ConfigureAwait(true);
+                        RemoteScript.Execute(job.Kind, job.Content, job.Id, job.TimeoutSec))
+                    .WaitAsync(limit)
+                    .ConfigureAwait(true);
+            }
+            catch (TimeoutException)
+            {
+                AppLog.Warn($"Execução remota excedeu {limit.TotalSeconds:0}s (job {job.Id})");
+                outcome = new RemoteScriptOutcome
+                {
+                    TimedOut = true,
+                    ExitCode = -1,
+                    Stderr = RemoteScript.TimeoutMessage,
+                };
             }
             catch (Exception ex)
             {
                 AppLog.Warn("Execução remota: " + ex.Message);
-                outcome = new RemoteScriptOutcome { ExitCode = -1, Stderr = ex.Message };
+                outcome = new RemoteScriptOutcome { ExitCode = -1, Stderr = "Erro ao executar: " + ex.Message };
             }
 
             try
             {
                 await _client.PostLetreiroJobResultAsync(job.Id, host, user, outcome).ConfigureAwait(true);
             }
-            catch (LetreiroApiException ex)
+            catch (Exception ex)
             {
                 AppLog.Warn("Resultado job: " + ex.Message);
             }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("Job remoto: " + ex.Message);
         }
         finally
         {

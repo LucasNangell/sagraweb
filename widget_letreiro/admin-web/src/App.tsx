@@ -238,11 +238,20 @@ function formatJobReply(job: Job) {
   const who = [job.hostName, job.windowsUser].filter(Boolean).join("\\") || "destino";
   const stdout = (job.stdout ?? "").replace(/\s+$/g, "");
   const stderr = (job.stderr ?? "").replace(/\s+$/g, "");
+  const status = (job.status ?? "").toLowerCase();
+  const code = job.exitCode == null ? "" : ` exit ${job.exitCode}`;
   const lines = [`[${who}]`];
   if (stdout) lines.push(stdout);
   if (stderr) lines.push(stderr);
-  const code = job.exitCode == null ? "" : ` exit ${job.exitCode}`;
-  lines.push(`${job.status}${code}`);
+  if (status === "timeout") {
+    if (!stderr) lines.push("Tempo esgotado. Processo encerrado.");
+    lines.push(`timeout${code}`);
+  } else if (status === "fail") {
+    if (!stderr) lines.push("Comando falhou.");
+    lines.push(`fail${code}`);
+  } else {
+    lines.push(`${job.status}${code}`);
+  }
   return `${lines.join("\n")}\n`;
 }
 

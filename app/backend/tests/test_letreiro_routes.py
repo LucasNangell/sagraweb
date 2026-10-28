@@ -511,6 +511,27 @@ def test_run_command_requires_variables(monkeypatch):
     assert "host" in response.json()["detail"]
 
 
+def test_pending_job_expires_stale_running(monkeypatch):
+    calls = []
+
+    def fake_exec(sql, params=None):
+        calls.append((sql, params))
+        if "CommandPollIntervalSec" in sql:
+            return [{"CommandPollIntervalSec": 7}]
+        return []
+
+    def fake_tx(ops):
+        return [None]
+
+    monkeypatch.setattr(letreiro_routes.db, "execute_query", fake_exec)
+    monkeypatch.setattr(letreiro_routes.db, "execute_transaction", fake_tx)
+    response = _client().get("/api/letreiro/jobs/pending", params={"host": "PC1", "user": "fulano"})
+    assert response.status_code == 200
+    expire = [c for c in calls if "UPDATE tabLetreiroComandoJob" in c[0] and "TIMESTAMPDIFF" in c[0]]
+    assert expire
+    assert expire[0][1][0] == "timeout"
+
+
 def test_pending_job_claims_running(monkeypatch):
     def fake_tx(ops):
         class Cursor:

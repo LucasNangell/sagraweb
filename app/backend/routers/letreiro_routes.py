@@ -352,6 +352,28 @@ def _claim_pending_job(host: str, user: str) -> Optional[dict[str, Any]]:
     return db.execute_transaction([op])[0]
 
 
+STALE_JOB_GRACE_SEC = 30
+STALE_JOB_MESSAGE = "Tempo esgotado: o cliente não enviou o resultado."
+
+
+def _expire_stale_running_jobs() -> None:
+    db.execute_query(
+        """
+        UPDATE tabLetreiroComandoJob
+        SET Status = %s,
+            Stderr = CASE
+                WHEN Stderr IS NULL OR Stderr = '' THEN %s
+                ELSE Stderr
+            END,
+            FinishedAt = NOW()
+        WHERE Status = %s
+          AND StartedAt IS NOT NULL
+          AND TIMESTAMPDIFF(SECOND, StartedAt, NOW()) > (IFNULL(TimeoutSec, 60) + %s)
+        """,
+        (JOB_STATUS_TIMEOUT, STALE_JOB_MESSAGE, JOB_STATUS_RUNNING, STALE_JOB_GRACE_SEC),
+    )
+
+
 def _collect_run_targets(body: CommandRunBody) -> list[tuple[str, str]]:
     seen: set[tuple[str, str]] = set()
     targets: list[tuple[str, str]] = []
@@ -759,6 +781,7 @@ async def pending_job(
     user: str = Query(..., min_length=1),
 ):
     interval = _command_poll_interval()
+    _expire_stale_running_jobs()
     job = _claim_pending_job(_clip(host, 128), _clip(user, 128))
     return {
         "job": _serialize_job(job, include_content=True) if job else None,
@@ -774,6 +797,7 @@ async def list_jobs(
     status: Optional[str] = Query(default=None),
 ):
     _require_admin(x_letreiro_windows_user or windows_user)
+    _expire_stale_running_jobs()
     clauses = []
     params: list[Any] = []
     if host:

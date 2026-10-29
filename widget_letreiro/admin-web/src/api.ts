@@ -112,6 +112,8 @@ export type AppConfig = {
     notificationOffsetBottom?: number;
     notificationAnimation?: string;
     notificationVisual?: import("./notificationStyle").NotificationVisual;
+    tickerHtml?: boolean;
+    tickerCardModel?: string;
   };
   board?: {
     sector?: string;

@@ -96,6 +96,8 @@ public sealed class WindowConfig
     public int? NotificationOffsetBottom { get; set; }
     public string NotificationAnimation { get; set; } = ArrivalNotify.DefaultAnimation;
     public NotificationVisual NotificationVisual { get; set; } = new();
+    public bool TickerHtml { get; set; } = true;
+    public string TickerCardModel { get; set; } = TickerModels.DefaultId;
 }
 
 public sealed class NotificationSlotStyle

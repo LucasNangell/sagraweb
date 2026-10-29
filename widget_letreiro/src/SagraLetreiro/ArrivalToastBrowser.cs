@@ -31,4 +31,12 @@ static class ArrivalToastBrowser
         File.WriteAllText(path, html);
         return new Uri($"https://{Host}/index.html?t={DateTime.UtcNow.Ticks}");
     }
+
+    public static Uri WriteTickerPage(string html)
+    {
+        Directory.CreateDirectory(UserData);
+        var path = Path.Combine(UserData, "ticker.html");
+        File.WriteAllText(path, html);
+        return new Uri($"https://{Host}/ticker.html?t={DateTime.UtcNow.Ticks}");
+    }
 }

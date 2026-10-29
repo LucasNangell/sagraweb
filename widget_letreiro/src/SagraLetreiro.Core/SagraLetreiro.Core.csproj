@@ -6,10 +6,11 @@
     <Nullable>enable</Nullable>
     <RootNamespace>SagraLetreiro</RootNamespace>
     <AssemblyName>SagraLetreiro.Core</AssemblyName>
-    <Version>2.29.1</Version>
+    <Version>2.30.0</Version>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="Assets\toast\*.css" />
+    <EmbeddedResource Include="Assets\ticker\*.css" />
   </ItemGroup>
 
 </Project>

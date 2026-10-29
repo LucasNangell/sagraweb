@@ -1,0 +1,711 @@
+/* Modelos clip-safe 01-42 */
+
+/* Modelo 01: PaintCard Nativo Sólido (Baseline Sem Animação) */
+.fx-01-solid { }
+
+/* Modelo 02: Shimmer Pass Interno (LinearGradientBrush translúcido em X) */
+.fx-02-shimmer::after {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0;
+    left: -120%;
+    width: 65%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+    transform: skewX(-20deg);
+    animation: wpfShimmer calc(2.8s * var(--speed-multiplier)) infinite;
+    z-index: 2;
+    pointer-events: none;
+}
+.prio-med.fx-02-shimmer::after {
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+}
+@keyframes wpfShimmer {
+    0% { left: -120%; }
+    100% { left: 180%; }
+}
+
+/* Modelo 03: Scanner na Faixa de Acento 4px (Animação vertical na faixa esquerda) */
+.fx-03-accent-scan::before {
+    background: rgba(0, 0, 0, 0.35);
+}
+.fx-03-accent-scan .accent-runner {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 4px;
+    height: 45%;
+    background: #ffffff;
+    z-index: 5;
+    animation: wpfAccentScan calc(1.4s * var(--speed-multiplier)) ease-in-out infinite alternate;
+}
+.prio-med.fx-03-accent-scan .accent-runner {
+    background: #1a1a1a;
+}
+@keyframes wpfAccentScan {
+    0% { top: 0%; }
+    100% { top: 55%; }
+}
+
+/* Modelo 04: Faixa de Acento Pulsante (Opacity / Color Pulse nos 4px) */
+.fx-04-accent-pulse::before {
+    animation: wpfAccentPulse calc(1.2s * var(--speed-multiplier)) ease-in-out infinite alternate;
+}
+@keyframes wpfAccentPulse {
+    0% { opacity: 0.25; }
+    100% { opacity: 1; filter: brightness(1.5); }
+}
+
+/* Modelo 05: Borda Interna de Alerta (Inset Border Pulse - Sem vazar do ClipToBounds) */
+.fx-05-inset-pulse {
+    animation: wpfInsetPulse calc(1.6s * var(--speed-multiplier)) ease-in-out infinite;
+}
+.prio-high.fx-05-inset-pulse { --inset-col: rgba(255, 255, 255, 0.85); }
+.prio-med.fx-05-inset-pulse { --inset-col: rgba(26, 26, 26, 0.75); }
+.prio-norm.fx-05-inset-pulse { --inset-col: rgba(56, 189, 248, 0.85); }
+@keyframes wpfInsetPulse {
+    0%, 100% { box-shadow: inset 0 0 0 0px transparent; }
+    50% { box-shadow: inset 0 0 0 2px var(--inset-col), inset 0 0 10px var(--inset-col); }
+}
+
+/* Modelo 06: Feixe Laser Interno de Varredura Horizontal */
+.fx-06-laser-line::after {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 2px;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 0 8px 2px rgba(255, 255, 255, 0.6);
+    animation: wpfLaserSweep calc(2.6s * var(--speed-multiplier)) ease-in-out infinite alternate;
+    z-index: 2;
+    pointer-events: none;
+}
+.prio-med.fx-06-laser-line::after {
+    background: rgba(26, 26, 26, 0.85);
+    box-shadow: 0 0 6px 1px rgba(255, 255, 255, 0.8);
+}
+@keyframes wpfLaserSweep {
+    0% { left: 4px; opacity: 0.3; }
+    50% { opacity: 1; }
+    100% { left: calc(100% - 3px); opacity: 0.3; }
+}
+
+/* Modelo 07: Fluxo diagonal sutil, sem terceira linha */
+.fx-07-diagonal-stream::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+        -55deg,
+        transparent 0px,
+        transparent 14px,
+        rgba(255, 255, 255, 0.08) 14px,
+        rgba(255, 255, 255, 0.15) 22px,
+        transparent 22px
+    );
+    background-size: 200% 100%;
+    animation: wpfStreamMove calc(6s * var(--speed-multiplier)) linear infinite;
+    z-index: 1;
+    pointer-events: none;
+}
+.prio-med.fx-07-diagonal-stream::after {
+    background: repeating-linear-gradient(
+        -55deg,
+        transparent 0px,
+        transparent 14px,
+        rgba(26, 26, 26, 0.06) 14px,
+        rgba(26, 26, 26, 0.12) 22px,
+        transparent 22px
+    );
+    background-size: 200% 100%;
+}
+@keyframes wpfStreamMove {
+    0% { background-position: 200% 0; }
+    100% { background-position: 0% 0; }
+}
+
+/* Modelo 08: Giroflex / Strobe Interno Bicolor (Estilo 80 Adaptado para ClipToBounds) */
+.fx-08-strobe {
+    animation: wpfStrobeInset calc(1.1s * var(--speed-multiplier)) steps(2, start) infinite;
+}
+.prio-high.fx-08-strobe {
+    --st-a: rgba(255, 255, 255, 0.9);
+    --st-b: rgba(255, 230, 0, 0.9);
+}
+.prio-med.fx-08-strobe {
+    --st-a: rgba(26, 26, 26, 0.9);
+    --st-b: rgba(255, 255, 255, 0.95);
+}
+.prio-norm.fx-08-strobe {
+    --st-a: rgba(16, 185, 129, 0.9);
+    --st-b: rgba(56, 189, 248, 0.9);
+}
+@keyframes wpfStrobeInset {
+    0% { box-shadow: inset 0 2px 0 0 var(--st-a), inset 0 -2px 0 0 transparent; }
+    50% { box-shadow: inset 0 2px 0 0 transparent, inset 0 -2px 0 0 var(--st-b); }
+}
+
+/* Modelo 09: Radar / Sonar Interno Partindo da Faixa de 4px */
+.fx-09-sonar::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 50%;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.65);
+    transform: translate(-50%, -50%) scale(0.2);
+    animation: wpfSonarWave calc(2.2s * var(--speed-multiplier)) ease-out infinite;
+    z-index: 2;
+    pointer-events: none;
+}
+.prio-med.fx-09-sonar::after {
+    border-color: rgba(26, 26, 26, 0.55);
+}
+@keyframes wpfSonarWave {
+    0% { transform: translate(-50%, -50%) scale(0.2); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(14); opacity: 0; }
+}
+
+/* Modelo 10: Varredura Metálica Semântica (Estilo 79 contido no retângulo) */
+.prio-high.fx-10-metallic {
+    background: linear-gradient(110deg, #b80d0d 0%, #d31111 38%, #ff6b6b 50%, #d31111 62%, #b80d0d 100%);
+    background-size: 250% 100%;
+    animation: wpfMetallicSweep calc(2.8s * var(--speed-multiplier)) linear infinite;
+}
+.prio-med.fx-10-metallic {
+    background: linear-gradient(110deg, #e68900 0%, #ff9800 38%, #ffe082 50%, #ff9800 62%, #e68900 100%);
+    background-size: 250% 100%;
+    animation: wpfMetallicSweep calc(2.8s * var(--speed-multiplier)) linear infinite;
+}
+.prio-norm.fx-10-metallic {
+    background: linear-gradient(110deg, #27272c 0%, #333338 38%, #4d4d56 50%, #333338 62%, #27272c 100%);
+    background-size: 250% 100%;
+    animation: wpfMetallicSweep calc(2.8s * var(--speed-multiplier)) linear infinite;
+}
+@keyframes wpfMetallicSweep {
+    0% { background-position: 200% 0; }
+    100% { background-position: -50% 0; }
+}
+
+/* Modelo 11: Foco de Inspeção Interno ("Analisar" sem lupa vazando) */
+.fx-11-inspect-spot::after {
+    content: '';
+    position: absolute;
+    top: -20%;
+    width: 48px;
+    height: 140%;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.28) 0%, transparent 70%);
+    animation: wpfSpotScan calc(3s * var(--speed-multiplier)) ease-in-out infinite alternate;
+    z-index: 2;
+    pointer-events: none;
+}
+.prio-med.fx-11-inspect-spot::after {
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.55) 0%, transparent 70%);
+}
+@keyframes wpfSpotScan {
+    0% { left: 4px; }
+    100% { left: calc(100% - 44px); }
+}
+
+/* Modelo 12: Entrada Slide Right + Flash na Faixa 4px (Transição de Chegada na Barra) */
+.fx-12-enter-slide {
+    animation: wpfEnterSlide calc(3.8s * var(--speed-multiplier)) cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+@keyframes wpfEnterSlide {
+    0% { opacity: 0; transform: translateX(35px); }
+    12%, 82% { opacity: 1; transform: translateX(0); }
+    95%, 100% { opacity: 0; transform: translateX(-20px); }
+}
+
+/* Modelo 13: Entrada Cortina Horizontal (ClipRect Reveal da Faixa 4px para Direita) */
+.fx-13-enter-wipe {
+    animation: wpfEnterWipe calc(4s * var(--speed-multiplier)) cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+@keyframes wpfEnterWipe {
+    0% { clip-path: inset(0 100% 0 0); }
+    8% { clip-path: inset(0 calc(100% - 4px) 0 0); }
+    24%, 80% { clip-path: inset(0 0% 0 0); opacity: 1; }
+    95%, 100% { clip-path: inset(0 0% 0 100%); opacity: 0; }
+}
+
+/* Modelo 14: Entrada Ignição Vertical Interna (ScaleY contido na altura útil) */
+.fx-14-enter-crt {
+    animation: wpfEnterCRT calc(4s * var(--speed-multiplier)) ease-out infinite;
+    transform-origin: center center;
+}
+@keyframes wpfEnterCRT {
+    0% { opacity: 0; transform: scaleY(0.08); filter: brightness(2.2); }
+    15%, 80% { opacity: 1; transform: scaleY(1); filter: brightness(1); }
+    95%, 100% { opacity: 0; transform: scaleY(0.05); }
+}
+
+/* Modelo 15: Barra de Progresso/Tempo Embutida na Base (2px inferiores internos) */
+.fx-15-bottom-progress::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    bottom: 0;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.85);
+    animation: wpfBottomProgress calc(3.5s * var(--speed-multiplier)) linear infinite;
+    z-index: 5;
+}
+.prio-med.fx-15-bottom-progress::after {
+    background: #1a1a1a;
+}
+@keyframes wpfBottomProgress {
+    0% { width: 0%; }
+    100% { width: calc(100% - 4px); }
+}
+
+/* Modelo 16: Pulso Duplo Taquicardia Interno (Estilo 81 sem extravasar altura) */
+.fx-16-heartbeat-in .os-line {
+    animation: wpfTextHeartbeat calc(1.8s * var(--speed-multiplier)) infinite;
+    transform-origin: left center;
+}
+@keyframes wpfTextHeartbeat {
+    0%, 100% { transform: scale(1); }
+    14% { transform: scale(1.06); }
+    28% { transform: scale(1); }
+    42% { transform: scale(1.03); }
+    70% { transform: scale(1); }
+}
+
+/* Modelo 17: Borda Conic Laser Interna (Estilo 37 restrito a 1.5px dentro do ClipToBounds) */
+.fx-17-conic-border::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 1.5px solid transparent;
+    border-radius: 4px;
+    animation: wpfBorderCycle calc(2s * var(--speed-multiplier)) linear infinite;
+    pointer-events: none;
+    z-index: 4;
+}
+.prio-high.fx-17-conic-border { --b-c1: #ffffff; --b-c2: #ff8a8a; }
+.prio-med.fx-17-conic-border { --b-c1: #1a1a1a; --b-c2: #ffffff; }
+.prio-norm.fx-17-conic-border { --b-c1: #10b981; --b-c2: #38bdf8; }
+@keyframes wpfBorderCycle {
+    0%, 100% { border-color: var(--b-c1) transparent transparent var(--b-c1); }
+    50% { border-color: transparent var(--b-c2) var(--b-c2) transparent; }
+}
+
+/* Modelo 18: Cascata Dupla (Linha 1 OS + Linha 2 Situação em Stagger) */
+.fx-18-stagger .os-line {
+    animation: wpfStaggerL1 calc(3.8s * var(--speed-multiplier)) cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+.fx-18-stagger .sit-line {
+    animation: wpfStaggerL2 calc(3.8s * var(--speed-multiplier)) cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+@keyframes wpfStaggerL1 {
+    0%, 5% { opacity: 0; transform: translateX(-14px); }
+    18%, 82% { opacity: 1; transform: translateX(0); }
+    95%, 100% { opacity: 0; transform: translateX(10px); }
+}
+@keyframes wpfStaggerL2 {
+    0%, 12% { opacity: 0; transform: translateX(-14px); }
+    26%, 82% { opacity: 1; transform: translateX(0); }
+    95%, 100% { opacity: 0; transform: translateX(10px); }
+}
+
+/* =========================================================================
+   SEÇÃO 5: ADAPTAÇÕES CLIP-SAFE DE admin/paineis
+   Efeito/realce por cima da cor de prioridade. Sem 3ª linha, sem vazar.
+   ========================================================================= */
+.fx-19-tesla::before {
+    animation: wpfTeslaFlicker calc(0.12s * var(--speed-multiplier)) steps(2) infinite;
+}
+@keyframes wpfTeslaFlicker {
+    0% { opacity: 0.2; filter: brightness(0.7); }
+    50% { opacity: 1; filter: brightness(2.2); }
+    100% { opacity: 0.45; filter: brightness(1.1); }
+}
+
+.fx-20-siren {
+    animation: wpfSirenFlash calc(0.9s * var(--speed-multiplier)) steps(2, start) infinite;
+}
+.prio-high.fx-20-siren { --sir-a: rgba(255,255,255,0.35); --sir-b: rgba(255,220,0,0.4); }
+.prio-med.fx-20-siren { --sir-a: rgba(26,26,26,0.28); --sir-b: rgba(255,255,255,0.4); }
+.prio-norm.fx-20-siren { --sir-a: rgba(239,68,68,0.4); --sir-b: rgba(56,189,248,0.4); }
+@keyframes wpfSirenFlash {
+    0% { box-shadow: inset 8px 0 12px var(--sir-a), inset -8px 0 0 transparent; }
+    50% { box-shadow: inset 8px 0 0 transparent, inset -8px 0 12px var(--sir-b); }
+}
+
+.fx-21-gold-vip::after {
+    content: '';
+    position: absolute;
+    inset: 1px 1px 1px 5px;
+    border: 1px solid rgba(253, 224, 71, 0.55);
+    border-radius: 3px;
+    box-shadow: inset 0 0 8px rgba(253, 224, 71, 0.25);
+    animation: wpfGoldVip calc(2.4s * var(--speed-multiplier)) ease-in-out infinite;
+    pointer-events: none;
+    z-index: 2;
+}
+.prio-med.fx-21-gold-vip::after { border-color: rgba(26,26,26,0.45); }
+@keyframes wpfGoldVip {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 1; }
+}
+
+.fx-22-nuclear::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,255,255,0.55), transparent 70%);
+    transform: translate(-50%, -50%) scale(0.4);
+    animation: wpfNuclear calc(2s * var(--speed-multiplier)) ease-out infinite;
+    pointer-events: none;
+    z-index: 2;
+}
+@keyframes wpfNuclear {
+    0% { transform: translate(-50%, -50%) scale(0.3); opacity: 0.9; }
+    100% { transform: translate(-50%, -50%) scale(18); opacity: 0; }
+}
+
+.fx-23-twin-laser::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    right: 0;
+    top: 0;
+    height: 100%;
+    background:
+        linear-gradient(rgba(255,255,255,0.85), rgba(255,255,255,0.85)) 0 18% / 100% 1px no-repeat,
+        linear-gradient(rgba(255,255,255,0.85), rgba(255,255,255,0.85)) 0 78% / 100% 1px no-repeat;
+    animation: wpfTwinLaser calc(1.6s * var(--speed-multiplier)) ease-in-out infinite alternate;
+    pointer-events: none;
+    z-index: 2;
+}
+.prio-med.fx-23-twin-laser::after {
+    background:
+        linear-gradient(#1a1a1a, #1a1a1a) 0 18% / 100% 1px no-repeat,
+        linear-gradient(#1a1a1a, #1a1a1a) 0 78% / 100% 1px no-repeat;
+}
+@keyframes wpfTwinLaser {
+    0% { opacity: 0.25; transform: scaleY(0.7); }
+    100% { opacity: 1; transform: scaleY(1); }
+}
+
+.fx-24-forcefield {
+    animation: wpfForcefield calc(2.2s * var(--speed-multiplier)) ease-in-out infinite;
+}
+.prio-high.fx-24-forcefield { --ff: rgba(255,255,255,0.7); }
+.prio-med.fx-24-forcefield { --ff: rgba(26,26,26,0.55); }
+.prio-norm.fx-24-forcefield { --ff: rgba(34,211,238,0.7); }
+@keyframes wpfForcefield {
+    0%, 100% { box-shadow: inset 0 0 0 1px transparent; }
+    50% { box-shadow: inset 0 0 0 2px var(--ff), inset 0 0 12px var(--ff); }
+}
+
+.fx-25-crystal::after {
+    content: '';
+    position: absolute;
+    inset: 0 0 0 4px;
+    background: linear-gradient(115deg, transparent 20%, rgba(255,255,255,0.22) 42%, transparent 48%, rgba(255,255,255,0.12) 62%, transparent 70%);
+    background-size: 180% 100%;
+    animation: wpfCrystal calc(3.2s * var(--speed-multiplier)) ease-in-out infinite;
+    pointer-events: none;
+    z-index: 2;
+}
+@keyframes wpfCrystal {
+    0% { background-position: 120% 0; opacity: 0.4; }
+    50% { opacity: 1; }
+    100% { background-position: -20% 0; opacity: 0.4; }
+}
+
+.fx-26-solar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 20% 50%, rgba(255,255,255,0.45), transparent 55%);
+    animation: wpfSolar calc(2.8s * var(--speed-multiplier)) ease-in-out infinite;
+    pointer-events: none;
+    z-index: 2;
+}
+@keyframes wpfSolar {
+    0%, 100% { opacity: 0; transform: scale(0.8); }
+    40% { opacity: 0.85; transform: scale(1.15); }
+    70% { opacity: 0.15; }
+}
+
+.fx-27-terminal::after {
+    content: '';
+    position: absolute;
+    inset: 0 0 0 4px;
+    background: repeating-linear-gradient(
+        180deg,
+        transparent 0 2px,
+        rgba(0, 0, 0, 0.18) 2px 3px
+    );
+    animation: wpfScanline calc(4s * var(--speed-multiplier)) linear infinite;
+    pointer-events: none;
+    z-index: 2;
+}
+@keyframes wpfScanline {
+    0% { background-position: 0 0; }
+    100% { background-position: 0 12px; }
+}
+
+.fx-28-hud::after {
+    content: '';
+    position: absolute;
+    inset: 3px 3px 3px 7px;
+    border: 1px solid rgba(255,255,255,0.35);
+    border-radius: 2px;
+    clip-path: polygon(0 0, 10px 0, 10px 1px, 1px 1px, 1px 10px, 0 10px, 0 100%, 10px 100%, 10px calc(100% - 1px), 1px calc(100% - 1px), 1px calc(100% - 10px), 0 calc(100% - 10px), 0 100%, 100% 100%, 100% calc(100% - 10px), calc(100% - 1px) calc(100% - 10px), calc(100% - 1px) calc(100% - 1px), calc(100% - 10px) calc(100% - 1px), calc(100% - 10px) 100%, 100% 100%, 100% 0, calc(100% - 10px) 0, calc(100% - 10px) 1px, calc(100% - 1px) 1px, calc(100% - 1px) 10px, 100% 10px);
+    animation: wpfHudPulse calc(2s * var(--speed-multiplier)) ease-in-out infinite;
+    pointer-events: none;
+    z-index: 2;
+}
+.prio-med.fx-28-hud::after { border-color: rgba(26,26,26,0.5); }
+@keyframes wpfHudPulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+}
+
+.fx-29-kinetic::after {
+    content: '';
+    position: absolute;
+    inset: 0 0 0 4px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+    background-size: 40% 100%;
+    animation: wpfKinetic calc(2.2s * var(--speed-multiplier)) linear infinite;
+    pointer-events: none;
+    z-index: 2;
+}
+@keyframes wpfKinetic {
+    0% { background-position: -40% 0; }
+    100% { background-position: 140% 0; }
+}
+
+.fx-30-stroke-wave {
+    animation: wpfStrokeWave calc(1.8s * var(--speed-multiplier)) ease-in-out infinite;
+}
+.prio-high.fx-30-stroke-wave { --sw: rgba(255,255,255,0.8); }
+.prio-med.fx-30-stroke-wave { --sw: rgba(26,26,26,0.7); }
+.prio-norm.fx-30-stroke-wave { --sw: rgba(168,85,247,0.85); }
+@keyframes wpfStrokeWave {
+    0%, 100% { box-shadow: inset 0 0 0 1px var(--sw); }
+    50% { box-shadow: inset 0 0 0 2px var(--sw); }
+}
+
+.fx-31-cyber .os-line {
+    text-shadow: 1px 0 0 rgba(0,255,255,0.55), -1px 0 0 rgba(255,0,80,0.45);
+    animation: wpfCyberSlice calc(2.4s * var(--speed-multiplier)) steps(3) infinite;
+}
+.prio-med.fx-31-cyber .os-line {
+    text-shadow: 1px 0 0 rgba(255,255,255,0.7), -1px 0 0 rgba(26,26,26,0.5);
+}
+@keyframes wpfCyberSlice {
+    0%, 80%, 100% { transform: translateX(0); }
+    84% { transform: translateX(1px); }
+    88% { transform: translateX(-1px); }
+}
+
+.fx-32-inferno::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    right: 0;
+    bottom: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #7c2d12, #ea580c, #fbbf24, #ea580c, #7c2d12);
+    background-size: 200% 100%;
+    animation: wpfInferno calc(1.4s * var(--speed-multiplier)) linear infinite;
+    z-index: 5;
+}
+@keyframes wpfInferno {
+    0% { background-position: 0 0; opacity: 0.7; }
+    50% { opacity: 1; }
+    100% { background-position: 100% 0; opacity: 0.7; }
+}
+
+.fx-33-neon .os-line {
+    animation: wpfNeonText calc(1.6s * var(--speed-multiplier)) ease-in-out infinite;
+}
+.prio-high.fx-33-neon .os-line { --neon: #ffffff; }
+.prio-med.fx-33-neon .os-line { --neon: #1a1a1a; }
+.prio-norm.fx-33-neon .os-line { --neon: #e879f9; }
+@keyframes wpfNeonText {
+    0%, 100% { text-shadow: 0 0 0 transparent; }
+    50% { text-shadow: 0 0 6px var(--neon), 0 0 12px var(--neon); }
+}
+
+.fx-34-matrix::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 4px;
+    height: 100%;
+    background: repeating-linear-gradient(
+        180deg,
+        rgba(255,255,255,0.9) 0 3px,
+        transparent 3px 7px
+    );
+    animation: wpfMatrixRain calc(1.1s * var(--speed-multiplier)) linear infinite;
+    z-index: 5;
+    pointer-events: none;
+}
+.prio-med.fx-34-matrix::after {
+    background: repeating-linear-gradient(180deg, #1a1a1a 0 3px, transparent 3px 7px);
+}
+@keyframes wpfMatrixRain {
+    0% { background-position: 0 -12px; }
+    100% { background-position: 0 12px; }
+}
+
+.fx-35-xray .os-line {
+    background: linear-gradient(90deg, currentColor 40%, rgba(255,255,255,0.95) 50%, currentColor 60%);
+    background-size: 220% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    animation: wpfXray calc(2.6s * var(--speed-multiplier)) linear infinite;
+}
+.prio-high.fx-35-xray .os-line,
+.prio-norm.fx-35-xray .os-line { color: transparent; -webkit-text-fill-color: transparent; }
+.prio-med.fx-35-xray .os-line {
+    background: linear-gradient(90deg, #1a1a1a 40%, #ffffff 50%, #1a1a1a 60%);
+    background-size: 220% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+}
+@keyframes wpfXray {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+}
+
+.fx-36-glitch .os-line {
+    animation: wpfGlitchRgb calc(2.8s * var(--speed-multiplier)) infinite;
+}
+@keyframes wpfGlitchRgb {
+    0%, 86%, 100% { text-shadow: none; transform: translateX(0); }
+    88% { text-shadow: 2px 0 #22d3ee, -2px 0 #f43f5e; transform: translateX(1px); }
+    90% { text-shadow: -2px 0 #22d3ee, 2px 0 #f43f5e; transform: translateX(-1px); }
+    92% { text-shadow: none; transform: translateX(0); }
+}
+
+.fx-37-iris {
+    animation: wpfIris calc(4s * var(--speed-multiplier)) ease-in-out infinite;
+}
+@keyframes wpfIris {
+    0% { clip-path: circle(0% at 0% 50%); opacity: 0; }
+    18%, 78% { clip-path: circle(140% at 50% 50%); opacity: 1; }
+    95%, 100% { clip-path: circle(0% at 100% 50%); opacity: 0; }
+}
+
+.fx-38-shutter {
+    animation: wpfShutter calc(4s * var(--speed-multiplier)) ease-in-out infinite;
+}
+@keyframes wpfShutter {
+    0% { clip-path: inset(50% 0 50% 0); }
+    16%, 78% { clip-path: inset(0 0 0 0); opacity: 1; }
+    95%, 100% { clip-path: inset(50% 0 50% 0); opacity: 0; }
+}
+
+.fx-39-warp {
+    animation: wpfWarp calc(4s * var(--speed-multiplier)) ease-in-out infinite;
+    transform-origin: center center;
+}
+@keyframes wpfWarp {
+    0% { opacity: 0; transform: scaleX(2.2) scaleY(0.35); }
+    16%, 78% { opacity: 1; transform: scaleX(1) scaleY(1); }
+    95%, 100% { opacity: 0; transform: scaleX(2.2) scaleY(0.25); }
+}
+
+.fx-40-rubber {
+    animation: wpfRubber calc(4s * var(--speed-multiplier)) cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+    transform-origin: center bottom;
+}
+@keyframes wpfRubber {
+    0% { opacity: 0; transform: translateY(10px) scaleY(0.7) scaleX(1.15); }
+    18%, 78% { opacity: 1; transform: translateY(0) scale(1); }
+    95%, 100% { opacity: 0; transform: translateY(8px) scaleY(0.75); }
+}
+
+.fx-41-carimbo .os-line {
+    animation: wpfStamp calc(3.2s * var(--speed-multiplier)) cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+    transform-origin: center center;
+}
+@keyframes wpfStamp {
+    0%, 12% { opacity: 0; transform: scale(1.4); }
+    22%, 80% { opacity: 1; transform: scale(1); }
+    92%, 100% { opacity: 0; transform: scale(0.92); }
+}
+
+.fx-42-aurora::after {
+    content: '';
+    position: absolute;
+    inset: 0 0 0 4px;
+    background: linear-gradient(90deg, rgba(238,119,82,0.28), rgba(231,60,126,0.22), rgba(35,166,213,0.28), rgba(238,119,82,0.28));
+    background-size: 220% 100%;
+    animation: wpfAurora calc(5s * var(--speed-multiplier)) linear infinite;
+    pointer-events: none;
+    z-index: 1;
+}
+@keyframes wpfAurora {
+    0% { background-position: 0 0; }
+    100% { background-position: 220% 0; }
+}
+
+
+.fx-12-enter-slide.fx-enter-once { animation-name: wpfEnterSlideOnce; animation-iteration-count: 1; animation-fill-mode: forwards; }
+@keyframes wpfEnterSlideOnce {
+    0% { opacity: 0; transform: translateX(35px); }
+    100% { opacity: 1; transform: translateX(0); }
+}
+.fx-13-enter-wipe.fx-enter-once { animation-name: wpfEnterWipeOnce; animation-iteration-count: 1; animation-fill-mode: forwards; }
+@keyframes wpfEnterWipeOnce {
+    0% { clip-path: inset(0 100% 0 0); }
+    100% { clip-path: inset(0 0% 0 0); opacity: 1; }
+}
+.fx-14-enter-crt.fx-enter-once { animation-name: wpfEnterCRTOnce; animation-iteration-count: 1; animation-fill-mode: forwards; }
+@keyframes wpfEnterCRTOnce {
+    0% { opacity: 0; transform: scaleY(0.08); filter: brightness(2.2); }
+    100% { opacity: 1; transform: scaleY(1); filter: brightness(1); }
+}
+.fx-18-stagger.fx-enter-once .os-line { animation-name: wpfStaggerL1Once; animation-iteration-count: 1; animation-fill-mode: forwards; }
+.fx-18-stagger.fx-enter-once .sit-line { animation-name: wpfStaggerL2Once; animation-iteration-count: 1; animation-fill-mode: forwards; }
+@keyframes wpfStaggerL1Once {
+    0% { opacity: 0; transform: translateX(-14px); }
+    100% { opacity: 1; transform: translateX(0); }
+}
+@keyframes wpfStaggerL2Once {
+    0% { opacity: 0; transform: translateX(-14px); }
+    100% { opacity: 1; transform: translateX(0); }
+}
+.fx-37-iris.fx-enter-once { animation-name: wpfIrisOnce; animation-iteration-count: 1; animation-fill-mode: forwards; }
+@keyframes wpfIrisOnce {
+    0% { clip-path: circle(0% at 0% 50%); opacity: 0; }
+    100% { clip-path: circle(140% at 50% 50%); opacity: 1; }
+}
+.fx-38-shutter.fx-enter-once { animation-name: wpfShutterOnce; animation-iteration-count: 1; animation-fill-mode: forwards; }
+@keyframes wpfShutterOnce {
+    0% { clip-path: inset(50% 0 50% 0); }
+    100% { clip-path: inset(0 0 0 0); opacity: 1; }
+}
+.fx-39-warp.fx-enter-once { animation-name: wpfWarpOnce; animation-iteration-count: 1; animation-fill-mode: forwards; }
+@keyframes wpfWarpOnce {
+    0% { opacity: 0; transform: scaleX(2.2) scaleY(0.35); }
+    100% { opacity: 1; transform: scaleX(1) scaleY(1); }
+}
+.fx-40-rubber.fx-enter-once { animation-name: wpfRubberOnce; animation-iteration-count: 1; animation-fill-mode: forwards; }
+@keyframes wpfRubberOnce {
+    0% { opacity: 0; transform: translateY(10px) scaleY(0.7) scaleX(1.15); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.fx-41-carimbo.fx-enter-once .os-line { animation-name: wpfStampOnce; animation-iteration-count: 1; animation-fill-mode: forwards; }
+@keyframes wpfStampOnce {
+    0% { opacity: 0; transform: scale(1.4); }
+    100% { opacity: 1; transform: scale(1); }
+}

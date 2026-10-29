@@ -452,6 +452,8 @@ public class BoardTests
         Assert.Equal(ArrivalNotify.DefaultOffsetRight, cfg.Window.NotificationOffsetRight);
         Assert.Equal(ArrivalNotify.DefaultOffsetBottom, cfg.Window.NotificationOffsetBottom);
         Assert.Equal(ArrivalNotify.DefaultAnimation, cfg.Window.NotificationAnimation);
+        Assert.True(cfg.Window.TickerHtml);
+        Assert.Equal(TickerModels.DefaultId, cfg.Window.TickerCardModel);
         Assert.Equal(ConfigStore.ProductionApiBase, cfg.ApiBaseUrl);
         Assert.Equal(ConfigStore.DefaultPonto, cfg.Ponto);
         Assert.Equal(ConfigStore.DefaultNome, cfg.Nome);
@@ -790,6 +792,8 @@ public class LetreiroAdminTests
         Assert.Equal(8, remoteOnly.Window.NotificationTextGap);
         Assert.Equal(40, remoteOnly.Window.NotificationOffsetRight);
         Assert.Equal(64, remoteOnly.Window.NotificationOffsetBottom);
+        Assert.True(remoteOnly.Window.TickerHtml);
+        Assert.Equal(TickerModels.DefaultId, remoteOnly.Window.TickerCardModel);
     }
 
     [Fact]
@@ -1251,5 +1255,85 @@ public class UpdateFinderTests
         {
             Directory.Delete(root, recursive: true);
         }
+    }
+
+    [Fact]
+    public void ClampTickerModelDefaultsAndRejectsUnknown()
+    {
+        Assert.Equal(TickerModels.DefaultId, TickerModels.Clamp(null));
+        Assert.Equal(TickerModels.DefaultId, TickerModels.Clamp(""));
+        Assert.Equal("fx-27-terminal", TickerModels.Clamp("fx-27-terminal"));
+        Assert.Equal(TickerModels.SolidId, TickerModels.Clamp("fx-ufo"));
+        Assert.True(TickerModels.IsEntry("fx-37-iris"));
+        Assert.False(TickerModels.IsEntry("fx-02-shimmer"));
+    }
+
+    [Fact]
+    public void NormalizeWindowKeepsTickerHtmlOffAndClampsModel()
+    {
+        var cfg = ConfigStore.Normalize(new AppConfig
+        {
+            Window = new WindowConfig { TickerHtml = false, TickerCardModel = "mod-3d-orbit" },
+        });
+        Assert.False(cfg.Window.TickerHtml);
+        Assert.Equal(TickerModels.SolidId, cfg.Window.TickerCardModel);
+    }
+
+    [Fact]
+    public void TickerHtmlPageIsClipSafeTwoLineCatalog()
+    {
+        var html = TickerHtml.Page();
+        var css = TickerHtml.Css();
+        Assert.Contains("os-line", html);
+        Assert.Contains("sit-line", html);
+        Assert.DoesNotContain("toast-action-pill", html);
+        Assert.DoesNotContain("DAR PROSSEGUIMENTO", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("data-entry", html);
+        Assert.DoesNotContain("fx-ufo", html);
+        Assert.DoesNotContain("fx-analisar", html);
+        Assert.Contains("#d31111", css);
+        Assert.Contains("#ff9800", css);
+        Assert.Contains("#333338", css);
+        Assert.Contains("overflow: hidden", css);
+        Assert.Contains("fx-02-shimmer", css);
+        Assert.Contains("fx-42-aurora", css);
+        Assert.DoesNotContain("setor-modern-card", css);
+    }
+
+    [Fact]
+    public void TickerHtmlFrameKeepsPriorityAndForcedWidth()
+    {
+        var card = new TickerCard
+        {
+            UniqueKey = "1-26",
+            Label = "OS 1/26",
+            Situacao = "Offset",
+            Priority = "priority-high",
+            ColumnIndex = 2,
+        };
+        var item = TickerHtml.Item(new PlacedCard(card, 12, 140), "Offset", "fx-02-shimmer", enter: false, pinned: true);
+        var json = TickerHtml.Frame([item], 48, 42, 16, 12, 200, paused: false, empty: "");
+        Assert.Contains("\"prio\":\"prio-high\"", json);
+        Assert.Contains("\"w\":140", json);
+        Assert.Contains("\"fx\":\"fx-02-shimmer\"", json);
+        Assert.Contains("\"pin\":true", json);
+        Assert.Contains("#a30d0d", json);
+        Assert.DoesNotContain("toast-action-pill", json);
+    }
+
+    [Fact]
+    public void TickerHitUsesPlacedGeometry()
+    {
+        var pin = new TickerCard { UniqueKey = "p", Label = "P", Priority = "priority-high" };
+        var rot = new TickerCard { UniqueKey = "r", Label = "R", Priority = "priority-normal" };
+        var placed = new PlacedCard[]
+        {
+            new(rot, 10, 80),
+            new(pin, 140, 60),
+        };
+        Assert.Equal("r", TickerHit.At(placed, 20, 10, 48)?.UniqueKey);
+        Assert.Equal("p", TickerHit.At(placed, 150, 12, 48)?.UniqueKey);
+        Assert.Null(TickerHit.At(placed, 100, 10, 48));
+        Assert.Null(TickerHit.At(placed, 20, 0, 48));
     }
 }

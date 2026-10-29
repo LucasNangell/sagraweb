@@ -1,0 +1,73 @@
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: transparent;
+    font-family: "Segoe UI", sans-serif;
+}
+:root {
+    --speed-multiplier: 1;
+    --taskbar-h: 48px;
+    --card-h: 42px;
+    --font-os: 16px;
+    --font-sit: 12px;
+    --prio-high-bg: #d31111;
+    --prio-high-title: #ffffff;
+    --prio-high-sit: #ffffff;
+    --prio-high-accent: #ff7b7b;
+    --prio-med-bg: #ff9800;
+    --prio-med-title: #1a1a1a;
+    --prio-med-sit: #1a1a1a;
+    --prio-med-accent: #1a1a1a;
+    --prio-norm-bg: #333338;
+    --prio-norm-title: #e1e1e6;
+    --prio-norm-sit: #ffffff;
+    --prio-norm-accent: #10b981;
+}
+#shell {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+#rotating, #pinned {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    overflow: hidden;
+}
+#rotating { z-index: 1; }
+#pinned { z-index: 2; width: 100%; }
+#empty {
+    display: none;
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #a8a8b3;
+    font-family: "Segoe UI", sans-serif;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: calc(100% - 24px);
+    pointer-events: none;
+}
+.wpf-bar-card {
+    position: absolute;
+    top: 3px;
+    box-sizing: border-box;
+}
+.wpf-bar-card::before {
+    background-color: var(--card-accent, var(--prio-norm-accent));
+}
+.paused *,
+.paused::before,
+.paused::after,
+.paused *::before,
+.paused *::after {
+    animation-play-state: paused !important;
+}

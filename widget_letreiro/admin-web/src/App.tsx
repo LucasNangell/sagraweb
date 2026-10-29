@@ -20,6 +20,7 @@ import {
   clampEntryAnimation,
   visualFromPreset,
 } from "./notificationStyle";
+import { TICKER_CARD_MODELS, clampTickerModel } from "./tickerModels";
 import {
   applyCapturesFromJobs,
   applyCommandVars,
@@ -438,6 +439,8 @@ function remoteWindow(cfg: AppConfig, columns: BoardColumn[]) {
     notificationOffsetBottom: cfg.window?.notificationOffsetBottom ?? 24,
     notificationAnimation: clampEntryAnimation(cfg.window?.notificationAnimation),
     notificationVisual: cfg.window?.notificationVisual,
+    tickerHtml: cfg.window?.tickerHtml !== false,
+    tickerCardModel: clampTickerModel(cfg.window?.tickerCardModel),
   };
 }
 
@@ -480,6 +483,8 @@ function seedClientConfig(row: Instance, payload: AppConfig | null): AppConfig {
       notificationOffsetBottom: base.window?.notificationOffsetBottom ?? 24,
       notificationAnimation: clampEntryAnimation(base.window?.notificationAnimation),
       notificationVisual: base.window?.notificationVisual,
+      tickerHtml: base.window?.tickerHtml !== false,
+      tickerCardModel: clampTickerModel(base.window?.tickerCardModel),
     },
   });
 }
@@ -541,6 +546,28 @@ function LetreiroDisplayFields({
       <label className="mt-4 block text-sm text-slate-400">
         Velocidade do deslize ({Math.round(cfg.window?.speedPxPerSec ?? 40)} px/s)
         <input type="range" min={8} max={160} className="mt-2 w-full" value={cfg.window?.speedPxPerSec ?? 40} onChange={(e) => onChange({ ...cfg, window: { ...cfg.window, speedPxPerSec: Number(e.target.value) } })} />
+      </label>
+      <label className="mt-3 flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={cfg.window?.tickerHtml !== false}
+          onChange={(e) => onChange({ ...cfg, window: { ...cfg.window, tickerHtml: e.target.checked } })}
+        />
+        Cards HTML na barra
+      </label>
+      <label className="mt-3 block min-w-0 text-sm text-slate-400">
+        Modelo do card da barra
+        <select
+          className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+          value={clampTickerModel(cfg.window?.tickerCardModel)}
+          disabled={cfg.window?.tickerHtml === false}
+          onChange={(e) => onChange({ ...cfg, window: { ...cfg.window, tickerCardModel: e.target.value } })}
+        >
+          {TICKER_CARD_MODELS.map((item) => (
+            <option key={item.id} value={item.id}>{item.label}</option>
+          ))}
+        </select>
+        <span className="mt-1 block text-xs text-slate-500">Animação clip-safe do catálogo da barra. Não usa o visual do preset de paineis.</span>
       </label>
       <label className="mt-3 block text-sm text-slate-400">
         Opacidade ({Math.round((cfg.window?.opacity ?? 0.95) * 100)}%)

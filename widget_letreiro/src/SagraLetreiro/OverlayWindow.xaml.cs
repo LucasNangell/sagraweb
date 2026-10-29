@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Microsoft.Web.WebView2.Core;
 using static SagraLetreiro.NativeMethods;
 
 namespace SagraLetreiro;
@@ -69,6 +70,13 @@ public partial class OverlayWindow : Window
     ArrivalToastWindow? _arrivalToast;
     TickerCard? _showingArrival;
     ArrivalPreview? _previewToast;
+    readonly TickerBridge _tickerBridge = new();
+    readonly HashSet<string> _htmlEnterSeen = new();
+    readonly DispatcherTimer _tickerHtmlWatch = new() { Interval = TimeSpan.FromSeconds(3) };
+    IReadOnlyList<PlacedCard> _placed = [];
+    bool _tickerHtmlReady;
+    bool _tickerHtmlFailed;
+    bool _tickerHtmlBusy;
     AdminHost? _adminHost;
     string? _remoteFp;
     int _jobBusy;
@@ -122,12 +130,18 @@ public partial class OverlayWindow : Window
         _dockTimer.Start();
         _ = ArrivalToastBrowser.Prewarm();
         _ = RefreshPresetVisualAsync();
+        _tickerHtmlWatch.Tick += (_, _) =>
+        {
+            if (!_tickerHtmlReady) FallbackTickerHtml();
+        };
+        _ = EnsureTickerWebAsync();
         AppLog.Info("Loop da janela iniciado");
     }
 
     void OnClosed(object? sender, EventArgs e)
     {
         CompositionTarget.Rendering -= OnRenderTick;
+        _tickerHtmlWatch.Stop();
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplayChanged;
         _dockTimer.Stop();
         _pollTimer.Stop();
@@ -162,6 +176,7 @@ public partial class OverlayWindow : Window
         App.CurrentConfig = _config;
         ApplyChrome();
         Place(persist: true);
+        _ = EnsureTickerWebAsync();
         SchedulePoll();
         if (poll) _ = PollOnceAsync();
     }
@@ -193,7 +208,8 @@ public partial class OverlayWindow : Window
         Opacity = _config.Window.Opacity;
         var fill = _config.Window.TransparentBg ? HitBackground : PanelBackground;
         Root.Background = fill;
-        Ticker.Background = fill;
+        TickerHost.Background = fill;
+        Ticker.Background = UseHtmlTicker ? HitBackground : fill;
         StatusHost.Background = fill;
         PaintStatus();
     }
@@ -260,7 +276,7 @@ public partial class OverlayWindow : Window
             var el = CardElement(_pressCard);
             _pressCardScreen = el is not null
                 ? el.PointToScreen(new Point(0, 0))
-                : PointToScreen(e.GetPosition(this));
+                : HtmlCardScreen(_pressCard) ?? PointToScreen(e.GetPosition(this));
         }
         CloseBalloon();
         _dragOriginX = pt.X;
@@ -316,7 +332,12 @@ public partial class OverlayWindow : Window
         e.Handled = true;
     }
 
-    TickerCard? CardAt(Point tickerPos) => HitCard(Ticker, tickerPos);
+    bool UseHtmlTicker => _config.Window.TickerHtml && _tickerHtmlReady && !_tickerHtmlFailed;
+
+    TickerCard? CardAt(Point tickerPos) =>
+        UseHtmlTicker
+            ? TickerHit.At(_placed, tickerPos.X, tickerPos.Y, Ticker.ActualHeight)
+            : HitCard(Ticker, tickerPos);
 
     static TickerCard? HitCard(Panel host, Point pos)
     {
@@ -343,7 +364,18 @@ public partial class OverlayWindow : Window
         return found;
     }
 
-    FrameworkElement? CardElement(TickerCard card) => FindCard(Ticker, card);
+    FrameworkElement? CardElement(TickerCard card) =>
+        UseHtmlTicker ? null : FindCard(Ticker, card);
+
+    Point? HtmlCardScreen(TickerCard card)
+    {
+        foreach (var item in _placed)
+        {
+            if (item.Card.UniqueKey != card.UniqueKey) continue;
+            return Ticker.PointToScreen(new Point(item.X, 3));
+        }
+        return null;
+    }
 
     static FrameworkElement? FindCard(Panel host, TickerCard card)
     {
@@ -849,18 +881,31 @@ public partial class OverlayWindow : Window
 
     void Redraw()
     {
-        Ticker.Children.Clear();
         var height = Math.Max(1, Ticker.ActualHeight);
         var width = TickerWidth();
+        IReadOnlyList<PlacedCard> placed = [];
+        if (_layout.Count > 0)
+        {
+            var cards = _layout.Select(c => c.Card).ToList();
+            var widths = _layout.Select(c => c.Width).ToList();
+            placed = TickerLayout.PlaceCarousel(cards, widths, width, _offset, TotalOverflow());
+        }
+        _placed = placed;
+
+        if (UseHtmlTicker)
+        {
+            if (Ticker.Children.Count > 0) Ticker.Children.Clear();
+            PublishHtmlFrame(placed, height, width);
+            return;
+        }
+
+        Ticker.Children.Clear();
         if (_layout.Count == 0)
         {
             if (_status != "connected") DrawEmpty(_statusMsg, height);
             return;
         }
 
-        var cards = _layout.Select(c => c.Card).ToList();
-        var widths = _layout.Select(c => c.Width).ToList();
-        var placed = TickerLayout.PlaceCarousel(cards, widths, width, _offset, TotalOverflow());
         var rotating = new List<PlacedCard>();
         var pinned = new List<PlacedCard>();
         foreach (var item in placed)
@@ -890,6 +935,135 @@ public partial class OverlayWindow : Window
 
         foreach (var item in placed)
             Ticker.Children.Add(Paint(item, height));
+    }
+
+    void PublishHtmlFrame(IReadOnlyList<PlacedCard> placed, double height, double width)
+    {
+        var (numSize, sitSize) = CardMetrics.FontSizes(height);
+        var cardH = Math.Max(18, height - 6);
+        var model = TickerModels.Clamp(_config.Window.TickerCardModel);
+        var live = new HashSet<string>(StringComparer.Ordinal);
+        var items = new List<TickerFrameItem>(placed.Count);
+        foreach (var item in placed)
+        {
+            live.Add(item.Card.UniqueKey);
+            var sit = _layout.First(c =>
+                ReferenceEquals(c.Card, item.Card) || c.Card.UniqueKey == item.Card.UniqueKey).Situacao;
+            var enter = TickerModels.IsEntry(model) && _htmlEnterSeen.Add(item.Card.UniqueKey);
+            items.Add(TickerHtml.Item(item, sit, model, enter, TickerLayout.IsPinnedPriority(item.Card)));
+        }
+        _htmlEnterSeen.RemoveWhere(key => !live.Contains(key));
+        var pinWidths = placed.Where(p => TickerLayout.IsPinnedPriority(p.Card)).Select(p => p.Width).ToList();
+        var remaining = width - TickerLayout.PinnedReserve(pinWidths);
+        var clipW = pinWidths.Count > 0 && placed.Any(p => !TickerLayout.IsPinnedPriority(p.Card)) && remaining > 0
+            ? remaining
+            : width;
+        var empty = _layout.Count == 0 && _status != "connected" ? _statusMsg : "";
+        var json = TickerHtml.Frame(items, height, cardH, numSize, sitSize, clipW, IsPaused(), empty);
+        _tickerBridge.FrameJson = json;
+        try { TickerWeb.CoreWebView2?.PostWebMessageAsJson(json); }
+        catch { /* o rAF do host object aplica no próximo quadro */ }
+    }
+
+    async Task EnsureTickerWebAsync()
+    {
+        if (!_config.Window.TickerHtml)
+        {
+            HideTickerWeb();
+            ApplyChrome();
+            _needsDraw = true;
+            Redraw();
+            return;
+        }
+
+        _tickerHtmlFailed = false;
+        if (_tickerHtmlReady)
+        {
+            ShowTickerWeb();
+            ApplyChrome();
+            _needsDraw = true;
+            Redraw();
+            return;
+        }
+
+        if (_tickerHtmlBusy) return;
+        _tickerHtmlBusy = true;
+        _tickerHtmlWatch.Stop();
+        _tickerHtmlWatch.Start();
+        try
+        {
+            var env = await ArrivalToastBrowser.EnvironmentAsync().ConfigureAwait(true);
+            TickerWeb.DefaultBackgroundColor = System.Drawing.Color.Transparent;
+            await TickerWeb.EnsureCoreWebView2Async(env).ConfigureAwait(true);
+            var core = TickerWeb.CoreWebView2;
+            core.Settings.AreDefaultContextMenusEnabled = false;
+            core.Settings.AreDevToolsEnabled = false;
+            core.Settings.IsStatusBarEnabled = false;
+            core.Settings.IsZoomControlEnabled = false;
+            ArrivalToastBrowser.MapHost(core);
+            try { core.AddHostObjectToScript("ticker", _tickerBridge); }
+            catch (ArgumentException)
+            {
+                // host object já registrado nesta instância
+            }
+            core.ProcessFailed -= OnTickerProcessFailed;
+            core.ProcessFailed += OnTickerProcessFailed;
+            core.NavigationCompleted -= OnTickerNavigated;
+            core.NavigationCompleted += OnTickerNavigated;
+            TickerWeb.Source = ArrivalToastBrowser.WriteTickerPage(TickerHtml.Page());
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn("Ticker HTML indisponível: " + ex.Message);
+            FallbackTickerHtml();
+        }
+        finally
+        {
+            _tickerHtmlBusy = false;
+        }
+    }
+
+    void OnTickerNavigated(object? sender, CoreWebView2NavigationCompletedEventArgs args)
+    {
+        if (!args.IsSuccess)
+        {
+            FallbackTickerHtml();
+            return;
+        }
+        _tickerHtmlReady = true;
+        _tickerHtmlWatch.Stop();
+        ShowTickerWeb();
+        ApplyChrome();
+        _needsDraw = true;
+        Redraw();
+    }
+
+    void OnTickerProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
+    {
+        _tickerHtmlReady = false;
+        Dispatcher.BeginInvoke(FallbackTickerHtml);
+    }
+
+    void FallbackTickerHtml()
+    {
+        _tickerHtmlWatch.Stop();
+        if (_tickerHtmlReady) return;
+        _tickerHtmlFailed = true;
+        HideTickerWeb();
+        ApplyChrome();
+        _needsDraw = true;
+        Redraw();
+        AppLog.Warn("Ticker HTML caiu para PaintCard nesta sessão");
+    }
+
+    void ShowTickerWeb()
+    {
+        TickerWeb.Visibility = Visibility.Visible;
+    }
+
+    void HideTickerWeb()
+    {
+        TickerWeb.Visibility = Visibility.Collapsed;
     }
 
     UIElement Paint(PlacedCard item, double height)

@@ -59,7 +59,7 @@ function localPreviewMock(): Connect.NextHandleFunction {
     nome: "usr_sefoc",
     sslVerify: false,
     board: MOCK_BOARD,
-    window: { width: 720, speedPxPerSec: 40, opacity: 0.95, transparentBg: false, notificationsEnabled: false, notificationWidth: 320, notificationHeight: 96, notificationAnimation: "fx-iris" },
+    window: { width: 720, speedPxPerSec: 40, opacity: 0.95, transparentBg: false, notificationsEnabled: false, notificationWidth: 320, notificationHeight: 96, notificationAnimation: "fx-iris", tickerHtml: true, tickerCardModel: "fx-02-shimmer" },
   };
   const jobs: Record<string, unknown>[] = [];
   const remoteByTarget: Record<string, unknown> = {

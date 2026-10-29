@@ -139,6 +139,8 @@ public static class ConfigStore
             NotificationOffsetBottom = ArrivalNotify.ClampOffsetBottom(raw.NotificationOffsetBottom),
             NotificationAnimation = ArrivalNotify.ClampAnimation(raw.NotificationAnimation),
             NotificationVisual = ArrivalNotify.NormalizeVisual(raw.NotificationVisual),
+            TickerHtml = raw.TickerHtml,
+            TickerCardModel = TickerModels.Clamp(raw.TickerCardModel),
         };
     }
 
@@ -234,6 +236,8 @@ public static class ConfigStore
             NotificationOffsetBottom = n.Window.NotificationOffsetBottom,
             NotificationAnimation = n.Window.NotificationAnimation,
             NotificationVisual = n.Window.NotificationVisual,
+            TickerHtml = n.Window.TickerHtml,
+            TickerCardModel = n.Window.TickerCardModel,
         };
         return n;
     }

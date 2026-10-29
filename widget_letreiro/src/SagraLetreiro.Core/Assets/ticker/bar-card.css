@@ -1,0 +1,107 @@
+/* Card da barra (PaintCard / CardMetrics) */
+.wpf-bar-card {
+    /* Geometria exata do CardMetrics */
+    height: var(--card-h);
+    min-width: 102px; /* 80 texto + 22 padding */
+    max-width: 360px; /* Teto de 360px */
+    width: max-content;
+    padding: 0 10px 0 12px; /* 22px total: 12px esq + 10px dir */
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden; /* ClipToBounds estrito no card */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    flex-shrink: 0;
+    cursor: pointer;
+    user-select: none;
+    font-family: "Segoe UI", sans-serif;
+    box-sizing: border-box;
+    transition: filter 0.15s ease;
+}
+
+/* Faixa de acento lateral: 4px na esquerda */
+.wpf-bar-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    z-index: 3;
+}
+
+/* Duas linhas estritas de conteúdo (Área de texto = largura - 22px) */
+.wpf-bar-card .os-line {
+    font-family: "Segoe UI", sans-serif;
+    font-size: var(--font-os);
+    font-weight: 700; /* Negrito obrigatório */
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    position: relative;
+    z-index: 4;
+    margin: 0;
+    padding: 0;
+}
+
+.wpf-bar-card .sit-line {
+    font-family: "Segoe UI", sans-serif;
+    font-size: var(--font-sit);
+    font-weight: 400;
+    line-height: 1.15;
+    white-space: nowrap; /* Sem wrap */
+    overflow: hidden;
+    text-overflow: ellipsis; /* Cortada com reticências se passar da largura */
+    position: relative;
+    z-index: 4;
+    margin: 0;
+    padding: 0;
+}
+
+/* =========================================================================
+   CORES SEMÂNTICAS DE PRIORIDADE (OBRIGATÓRIAS)
+   ========================================================================= */
+/* 1. Alta (Prometido): fundo #d31111, texto branco */
+.wpf-bar-card.prio-high {
+    background-color: var(--prio-high-bg);
+    color: #ffffff;
+}
+.wpf-bar-card.prio-high .os-line,
+.wpf-bar-card.prio-high .sit-line {
+    color: #ffffff;
+}
+.wpf-bar-card.prio-high::before {
+    background-color: var(--prio-high-accent);
+}
+
+/* 2. Média (Solicitado): fundo #ff9800, texto #1a1a1a */
+.wpf-bar-card.prio-med {
+    background-color: var(--prio-med-bg);
+    color: #1a1a1a;
+}
+.wpf-bar-card.prio-med .os-line,
+.wpf-bar-card.prio-med .sit-line {
+    color: #1a1a1a;
+}
+.wpf-bar-card.prio-med .sit-line {
+    font-weight: 600;
+}
+.wpf-bar-card.prio-med::before {
+    background-color: var(--prio-med-accent);
+}
+
+/* 3. Normal: fundo #333338, título #e1e1e6, situação branca */
+.wpf-bar-card.prio-norm {
+    background-color: var(--prio-norm-bg);
+}
+.wpf-bar-card.prio-norm .os-line {
+    color: var(--prio-norm-title);
+}
+.wpf-bar-card.prio-norm .sit-line {
+    color: var(--prio-norm-sit);
+}
+.wpf-bar-card.prio-norm::before {
+    background-color: var(--prio-norm-accent);
+}

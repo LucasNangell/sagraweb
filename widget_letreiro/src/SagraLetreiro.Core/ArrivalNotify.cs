@@ -138,6 +138,12 @@ public static class ArrivalNotify
         return "";
     }
 
+    public static bool IsActionOverlay(string? animation)
+    {
+        var id = ClampColumnAnimation(animation);
+        return id is "fx-analisar" or "fx-prosseguir";
+    }
+
     public static ArrivalToastLayout Layout(int cardWidth, int cardHeight, string? animation = null)
     {
         var width = ClampCardWidth(cardWidth);

@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>SagraLetreiro</RootNamespace>
     <AssemblyName>SagraLetreiro.Core</AssemblyName>
-    <Version>2.28.0</Version>
+    <Version>2.29.0</Version>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="Assets\toast\*.css" />

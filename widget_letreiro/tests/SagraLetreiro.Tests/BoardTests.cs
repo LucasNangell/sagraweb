@@ -533,6 +533,7 @@ public class BoardTests
     [Fact]
     public void CardWidthFitsTheWiderLineAndKeepsPadding()
     {
+        Assert.Equal(176, CardMetrics.MinActionWidth);
         var width = CardMetrics.Width(labelWidth: 90, situacaoWidth: 140);
         Assert.Equal(140 + CardMetrics.PadX, width, 3);
         Assert.Equal(140, CardMetrics.TextInner(width), 3);
@@ -594,6 +595,36 @@ public class BoardTests
         Assert.Equal(new[] { 12d, 15d, 11d, 14d }, split.PinnedWidths.ToArray());
         Assert.Equal(new[] { "N1", "N2" }, split.Rotating.Select(c => c.Label).ToArray());
         Assert.Equal(new[] { 10d, 13d }, split.RotatingWidths.ToArray());
+    }
+
+    [Fact]
+    public void ActionOverlayCardsPinOnTheRightLikePriority()
+    {
+        Assert.True(ArrivalNotify.IsActionOverlay("fx-analisar"));
+        Assert.True(ArrivalNotify.IsActionOverlay("fx-prosseguir"));
+        Assert.False(ArrivalNotify.IsActionOverlay("fx-ufo"));
+        Assert.False(ArrivalNotify.IsActionOverlay(null));
+        var cards = new[]
+        {
+            new TickerCard { Label = "N" },
+            new TickerCard { Label = "A", Animation = "fx-analisar" },
+            new TickerCard { Label = "P", Priority = "priority-high" },
+            new TickerCard { Label = "F", Animation = "fx-prosseguir" },
+        };
+        double[] widths = [40, 80, 50, 90];
+        var split = TickerLayout.SplitByPriority(cards, widths);
+        Assert.Equal(new[] { "P", "A", "F" }, split.Pinned.Select(c => c.Label).ToArray());
+        Assert.Equal(new[] { "N" }, split.Rotating.Select(c => c.Label).ToArray());
+        Assert.True(TickerLayout.IsPinnedPriority(cards[1]));
+        Assert.True(TickerLayout.IsPinnedPriority(cards[3]));
+        var placed = TickerLayout.PlaceCarousel(cards, widths, canvasWidth: 320, offset: 0, overflow: true);
+        var p = placed.Single(c => c.Card.Label == "P");
+        var a = placed.Single(c => c.Card.Label == "A");
+        var f = placed.Single(c => c.Card.Label == "F");
+        Assert.Equal(320 - TickerLayout.Pad - 50, p.X, 3);
+        Assert.Equal(p.X - TickerLayout.Gap - 80, a.X, 3);
+        Assert.Equal(a.X - TickerLayout.Gap - 90, f.X, 3);
+        Assert.True(placed.Single(c => c.Card.Label == "N").X + 40 <= f.X + 0.01);
     }
 
     [Fact]

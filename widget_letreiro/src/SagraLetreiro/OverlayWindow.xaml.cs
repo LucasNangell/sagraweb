@@ -68,7 +68,6 @@ public partial class OverlayWindow : Window
     readonly HashSet<string> _heldArrivalKeys = new();
     ArrivalToastWindow? _arrivalToast;
     TickerCard? _showingArrival;
-    readonly Dictionary<string, ActionTickerVisual> _actionVisuals = new();
     ArrivalPreview? _previewToast;
     AdminHost? _adminHost;
     string? _remoteFp;
@@ -135,8 +134,6 @@ public partial class OverlayWindow : Window
         _commandTimer.Stop();
         CloseBalloon();
         CloseArrivalToast();
-        foreach (var visual in _actionVisuals.Values) visual.Stop();
-        _actionVisuals.Clear();
         _adminHost?.Dispose();
         _adminHost = null;
         _client.Dispose();
@@ -777,8 +774,6 @@ public partial class OverlayWindow : Window
             var sit = card.Situacao ?? "";
             var sitW = Measure(sit, sitSize, false, pixels);
             var width = CardMetrics.Width(labelW, sitW);
-            if (ArrivalNotify.IsActionOverlay(card.Animation))
-                width = Math.Max(width, CardMetrics.MinActionWidth);
             var inner = CardMetrics.TextInner(width);
             if (sitW > inner)
                 sit = Ellipsis(sit, sitSize, inner, pixels);
@@ -859,14 +854,12 @@ public partial class OverlayWindow : Window
         var width = TickerWidth();
         if (_layout.Count == 0)
         {
-            PruneActionVisuals([]);
             if (_status != "connected") DrawEmpty(_statusMsg, height);
             return;
         }
 
         var cards = _layout.Select(c => c.Card).ToList();
         var widths = _layout.Select(c => c.Width).ToList();
-        PruneActionVisuals(cards);
         var placed = TickerLayout.PlaceCarousel(cards, widths, width, _offset, TotalOverflow());
         var rotating = new List<PlacedCard>();
         var pinned = new List<PlacedCard>();
@@ -902,50 +895,7 @@ public partial class OverlayWindow : Window
     UIElement Paint(PlacedCard item, double height)
     {
         var meta = _layout.First(c => ReferenceEquals(c.Card, item.Card) || c.Card.UniqueKey == item.Card.UniqueKey);
-        if (ArrivalNotify.IsActionOverlay(meta.Card.Animation))
-            return PaintActionCard(item.X, height, item.Width, meta.Card, meta.Situacao);
         return PaintCard(item.X, height, item.Width, meta.Card, meta.Situacao);
-    }
-
-    UIElement PaintActionCard(double x, double canvasH, double w, TickerCard card, string situacao)
-    {
-        var y = 3.0;
-        var h = Math.Max(18, canvasH - 6);
-        var key = string.IsNullOrWhiteSpace(card.UniqueKey) ? card.OpKey : card.UniqueKey;
-        var kind = ArrivalNotify.ClampColumnAnimation(card.Animation);
-        if (_actionVisuals.TryGetValue(key, out var visual)
-            && visual.Kind == kind
-            && Math.Abs(visual.Width - w) < 1
-            && Math.Abs(visual.Height - h) < 1)
-        {
-            visual.Bind(card, situacao);
-        }
-        else
-        {
-            visual?.Stop();
-            visual = ActionTickerVisual.Create(card, situacao, w, h);
-            if (key.Length > 0) _actionVisuals[key] = visual;
-        }
-        Canvas.SetLeft(visual.Root, x);
-        Canvas.SetTop(visual.Root, y);
-        return visual.Root;
-    }
-
-    void PruneActionVisuals(IReadOnlyList<TickerCard> cards)
-    {
-        var keep = new HashSet<string>();
-        foreach (var card in cards)
-        {
-            if (!ArrivalNotify.IsActionOverlay(card.Animation)) continue;
-            var key = string.IsNullOrWhiteSpace(card.UniqueKey) ? card.OpKey : card.UniqueKey;
-            if (key.Length > 0) keep.Add(key);
-        }
-        foreach (var key in _actionVisuals.Keys.ToList())
-        {
-            if (keep.Contains(key)) continue;
-            _actionVisuals[key].Stop();
-            _actionVisuals.Remove(key);
-        }
     }
 
     void DrawEmpty(string text, double height)

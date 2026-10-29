@@ -12,7 +12,6 @@ public static class CardMetrics
     public const double Accent = 4;
     public const double TextLeft = 12;
     public const double TextRight = 10;
-    public const double MinActionWidth = 176;
 
     public static (double Label, double Situacao) FontSizes(double tickerHeight)
     {

@@ -12,8 +12,7 @@ public static class TickerLayout
     public const double Gap = 8;
 
     public static bool IsPinnedPriority(TickerCard card) =>
-        card.Priority is "priority-high" or "priority-medium"
-        || ArrivalNotify.IsActionOverlay(card.Animation);
+        card.Priority is "priority-high" or "priority-medium";
 
     public static PrioritySplit SplitByPriority(
         IReadOnlyList<TickerCard> cards,
@@ -23,8 +22,6 @@ public static class TickerLayout
         var highW = new List<double>();
         var medium = new List<TickerCard>();
         var mediumW = new List<double>();
-        var action = new List<TickerCard>();
-        var actionW = new List<double>();
         var rotating = new List<TickerCard>();
         var rotatingW = new List<double>();
         if (cards.Count != widths.Count) return new(high, highW, rotating, rotatingW);
@@ -42,11 +39,6 @@ public static class TickerLayout
                 medium.Add(card);
                 mediumW.Add(widths[i]);
             }
-            else if (ArrivalNotify.IsActionOverlay(card.Animation))
-            {
-                action.Add(card);
-                actionW.Add(widths[i]);
-            }
             else
             {
                 rotating.Add(card);
@@ -55,8 +47,6 @@ public static class TickerLayout
         }
         high.AddRange(medium);
         highW.AddRange(mediumW);
-        high.AddRange(action);
-        highW.AddRange(actionW);
         return new(high, highW, rotating, rotatingW);
     }
 

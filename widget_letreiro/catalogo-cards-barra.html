@@ -1,0 +1,2272 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catálogo WPF Taskbar & Toast Cards - CardMetrics & PaintCard Spec</title>
+    <style>
+        /* =========================================================================
+           VARIÁVEIS DINÂMICAS - ESPECIFICAÇÃO WPF (CardMetrics & PaintCard)
+           ========================================================================= */
+        :root {
+            --bg-page: #07090e;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --speed-multiplier: 1;
+
+            /* Métricas da Barra / Taskbar (Configuráveis no Simulador) */
+            --taskbar-h: 48px; /* Mínimo 40px, fallback 48px */
+            --card-h: calc(var(--taskbar-h) - 6px); /* 3px em cima e embaixo -> 34px a 42px */
+            
+            /* Fontes proporcionais à altura interna com piso mínimo */
+            --font-os: max(9px, round(calc(var(--card-h) * 0.38), 1px));       /* ~16px em barra de 48px */
+            --font-sit: max(8px, round(calc(var(--card-h) * 0.28), 1px));      /* ~12px em barra de 48px */
+
+            /* Cores Semânticas Obrigatórias */
+            --prio-high-bg: #d31111;
+            --prio-high-title: #ffffff;
+            --prio-high-sit: #ffffff;
+            --prio-high-accent: #ff7b7b;
+
+            --prio-med-bg: #ff9800;
+            --prio-med-title: #1a1a1a;
+            --prio-med-sit: #1a1a1a;
+            --prio-med-accent: #1a1a1a;
+
+            --prio-norm-bg: #333338;
+            --prio-norm-title: #e1e1e6;
+            --prio-norm-sit: #ffffff;
+            --prio-norm-accent: #10b981;
+
+            /* Superfície Toast Notification (Padrão 320x96, Limites 180-900 x 56-280) */
+            --toast-w: 320px;
+            --toast-h: 96px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--bg-page);
+            background-image: 
+                radial-gradient(circle at 15% 10%, rgba(56, 189, 248, 0.06), transparent 35%),
+                radial-gradient(circle at 85% 30%, rgba(255, 152, 0, 0.05), transparent 35%),
+                radial-gradient(circle at 50% 80%, rgba(211, 17, 17, 0.05), transparent 45%);
+            font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+            color: var(--text-main);
+            margin: 0;
+            padding: 30px 20px 120px;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* =========================================================================
+           CABEÇALHO E PAINEL DE ESPECIFICAÇÕES TÉCNICAS
+           ========================================================================= */
+        .catalog-header {
+            text-align: center;
+            max-width: 1100px;
+            margin: 0 auto 30px;
+        }
+        .catalog-header h1 {
+            font-size: 2.3rem;
+            font-weight: 800;
+            margin: 0 0 8px;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #ffffff, #38bdf8, #ff9800, #d31111);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .catalog-header p {
+            color: var(--text-muted);
+            font-size: 0.98rem;
+            margin: 0;
+            line-height: 1.5;
+        }
+
+        /* Painel de Resumo de Métricas */
+        .metrics-dashboard {
+            max-width: 1200px;
+            margin: 0 auto 30px;
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 18px 22px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 14px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        .metric-box {
+            background: rgba(255, 255, 255, 0.03);
+            border-left: 3px solid #38bdf8;
+            padding: 10px 14px;
+            border-radius: 6px;
+        }
+        .metric-box.warn { border-left-color: #ff9800; }
+        .metric-box.danger { border-left-color: #d31111; }
+        .metric-box.ok { border-left-color: #10b981; }
+        .metric-box .m-label {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: #94a3b8;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        .metric-box .m-val {
+            font-size: 0.92rem;
+            font-weight: 700;
+            color: #f1f5f9;
+        }
+        .metric-box .m-sub {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-top: 2px;
+        }
+
+        /* =========================================================================
+           BARRA FLUTUANTE DE CONTROLES INTERATIVOS (SIMULADOR WPF)
+           ========================================================================= */
+        .sticky-controls {
+            position: sticky;
+            top: 12px;
+            z-index: 999;
+            background: rgba(15, 23, 42, 0.92);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 14px;
+            padding: 12px 20px;
+            max-width: 1200px;
+            margin: 0 auto 35px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 14px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.7);
+        }
+        .control-block {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .control-block label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #cbd5e1;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+        .btn-control {
+            background: #1e293b;
+            color: #cbd5e1;
+            border: 1px solid #334155;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.78rem;
+            font-family: "Segoe UI", sans-serif;
+            transition: all 0.15s;
+        }
+        .btn-control:hover, .btn-control.active {
+            background: #3b82f6;
+            color: #ffffff;
+            border-color: #60a5fa;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
+        }
+        .btn-prio-all.active { background: #6366f1; border-color: #818cf8; }
+        .btn-prio-high.active { background: #d31111; border-color: #f87171; color: #fff; }
+        .btn-prio-med.active { background: #ff9800; border-color: #fde047; color: #1a1a1a; font-weight: 800; }
+        .btn-prio-norm.active { background: #333338; border-color: #94a3b8; color: #e1e1e6; }
+
+        .paused * { animation-play-state: paused !important; }
+        .paused::before, .paused::after,
+        .paused *::before, .paused *::after { animation-play-state: paused !important; }
+
+        /* =========================================================================
+           SIMULADOR AO VIVO DA BARRA DE TAREFAS DO WINDOWS (TASKBAR TICKER)
+           ========================================================================= */
+        .taskbar-simulator-wrap {
+            max-width: 1200px;
+            margin: 0 auto 50px;
+            background: #0d131f;
+            border: 1px solid #1e293b;
+            border-radius: 12px;
+            padding: 18px;
+        }
+        .taskbar-sim-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .taskbar-sim-title {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .live-readout {
+            font-family: Consolas, monospace;
+            font-size: 0.78rem;
+            color: #38bdf8;
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            padding: 4px 10px;
+            border-radius: 6px;
+        }
+
+        /* A Barra de Tarefas simulada (Superfície com ClipToBounds estrito) */
+        .windows-taskbar-surface {
+            width: 100%;
+            height: var(--taskbar-h);
+            background: #141417;
+            border: 1px solid #27272a;
+            display: flex;
+            align-items: center;
+            padding: 3px 8px 3px 12px; /* 3px top/bottom, 8px folga direita */
+            gap: 8px; /* 8px espaço entre cards */
+            overflow-x: auto;
+            overflow-y: hidden; /* ClipToBounds vertical da Taskbar */
+            position: relative;
+            scrollbar-width: thin;
+        }
+        .windows-start-mock {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding-right: 10px;
+            border-right: 1px solid #2d2d35;
+            height: 100%;
+            flex-shrink: 0;
+            user-select: none;
+        }
+        .win-logo {
+            width: 18px;
+            height: 18px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2px;
+        }
+        .win-logo span { background: #38bdf8; border-radius: 1px; }
+
+        /* =========================================================================
+           COMPONENTE OFICIAL: CARD DA BARRA (OverlayWindow.xaml.cs / PaintCard)
+           ========================================================================= */
+        .wpf-bar-card {
+            /* Geometria exata do CardMetrics */
+            height: var(--card-h);
+            min-width: 102px; /* 80 texto + 22 padding */
+            max-width: 360px; /* Teto de 360px */
+            width: max-content;
+            padding: 0 10px 0 12px; /* 22px total: 12px esq + 10px dir */
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden; /* ClipToBounds estrito no card */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            flex-shrink: 0;
+            cursor: pointer;
+            user-select: none;
+            font-family: "Segoe UI", sans-serif;
+            box-sizing: border-box;
+            transition: filter 0.15s ease;
+        }
+
+        /* Faixa de acento lateral: 4px na esquerda */
+        .wpf-bar-card::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            z-index: 3;
+        }
+
+        /* Duas linhas estritas de conteúdo (Área de texto = largura - 22px) */
+        .wpf-bar-card .os-line {
+            font-family: "Segoe UI", sans-serif;
+            font-size: var(--font-os);
+            font-weight: 700; /* Negrito obrigatório */
+            line-height: 1.1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            position: relative;
+            z-index: 4;
+            margin: 0;
+            padding: 0;
+        }
+
+        .wpf-bar-card .sit-line {
+            font-family: "Segoe UI", sans-serif;
+            font-size: var(--font-sit);
+            font-weight: 400;
+            line-height: 1.15;
+            white-space: nowrap; /* Sem wrap */
+            overflow: hidden;
+            text-overflow: ellipsis; /* Cortada com reticências se passar da largura */
+            position: relative;
+            z-index: 4;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* =========================================================================
+           CORES SEMÂNTICAS DE PRIORIDADE (OBRIGATÓRIAS)
+           ========================================================================= */
+        /* 1. Alta (Prometido): fundo #d31111, texto branco */
+        .wpf-bar-card.prio-high {
+            background-color: var(--prio-high-bg);
+            color: #ffffff;
+        }
+        .wpf-bar-card.prio-high .os-line,
+        .wpf-bar-card.prio-high .sit-line {
+            color: #ffffff;
+        }
+        .wpf-bar-card.prio-high::before {
+            background-color: var(--prio-high-accent);
+        }
+
+        /* 2. Média (Solicitado): fundo #ff9800, texto #1a1a1a */
+        .wpf-bar-card.prio-med {
+            background-color: var(--prio-med-bg);
+            color: #1a1a1a;
+        }
+        .wpf-bar-card.prio-med .os-line,
+        .wpf-bar-card.prio-med .sit-line {
+            color: #1a1a1a;
+        }
+        .wpf-bar-card.prio-med .sit-line {
+            font-weight: 600;
+        }
+        .wpf-bar-card.prio-med::before {
+            background-color: var(--prio-med-accent);
+        }
+
+        /* 3. Normal: fundo #333338, título #e1e1e6, situação branca */
+        .wpf-bar-card.prio-norm {
+            background-color: var(--prio-norm-bg);
+        }
+        .wpf-bar-card.prio-norm .os-line {
+            color: var(--prio-norm-title);
+        }
+        .wpf-bar-card.prio-norm .sit-line {
+            color: var(--prio-norm-sit);
+        }
+        .wpf-bar-card.prio-norm::before {
+            background-color: var(--prio-norm-accent);
+        }
+
+        /* =========================================================================
+           LAYOUT DAS SEÇÕES DO CATÁLOGO
+           ========================================================================= */
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin: 50px auto 20px;
+            max-width: 1200px;
+            border-bottom: 1px solid #1e293b;
+            padding-bottom: 10px;
+        }
+        .section-title {
+            font-size: 1.25rem;
+            color: #e2e8f0;
+            margin: 0;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .badge-spec {
+            background: rgba(56, 189, 248, 0.15);
+            color: #38bdf8;
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 99px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+        .badge-toast {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.35);
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 99px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+
+        .cards-showcase-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+            gap: 18px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Slot que simula um recorte da Taskbar para cada modelo do catálogo */
+        .taskbar-slot-card {
+            background: #111622;
+            border: 1px solid #1e293b;
+            border-radius: 10px;
+            padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .slot-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.76rem;
+            color: #94a3b8;
+        }
+        .slot-meta strong {
+            color: #e2e8f0;
+            font-weight: 600;
+        }
+        .slot-meta .wpf-hint {
+            font-family: Consolas, monospace;
+            font-size: 0.7rem;
+            color: #64748b;
+            background: rgba(255,255,255,0.04);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        .slot-taskbar-strip {
+            height: var(--taskbar-h);
+            background: #141417;
+            border: 1px solid #27272a;
+            border-radius: 4px;
+            padding: 3px 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            overflow: hidden; /* Simula ClipToBounds da barra */
+        }
+
+        /* =========================================================================
+           MODELOS DE ESTILO E ANIMAÇÃO (100% CLIP-SAFE PARA RETÂNGULO WPF)
+           Nada vaza para fora; todos preservam as cores de prioridade e 2 linhas.
+           ========================================================================= */
+
+        /* Modelo 01: PaintCard Nativo Sólido (Baseline Sem Animação) */
+        .fx-01-solid { }
+
+        /* Modelo 02: Shimmer Pass Interno (LinearGradientBrush translúcido em X) */
+        .fx-02-shimmer::after {
+            content: '';
+            position: absolute;
+            top: 0; bottom: 0;
+            left: -120%;
+            width: 65%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+            transform: skewX(-20deg);
+            animation: wpfShimmer calc(2.8s * var(--speed-multiplier)) infinite;
+            z-index: 2;
+            pointer-events: none;
+        }
+        .prio-med.fx-02-shimmer::after {
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+        }
+        @keyframes wpfShimmer {
+            0% { left: -120%; }
+            100% { left: 180%; }
+        }
+
+        /* Modelo 03: Scanner na Faixa de Acento 4px (Animação vertical na faixa esquerda) */
+        .fx-03-accent-scan::before {
+            background: rgba(0, 0, 0, 0.35);
+        }
+        .fx-03-accent-scan .accent-runner {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 4px;
+            height: 45%;
+            background: #ffffff;
+            z-index: 5;
+            animation: wpfAccentScan calc(1.4s * var(--speed-multiplier)) ease-in-out infinite alternate;
+        }
+        .prio-med.fx-03-accent-scan .accent-runner {
+            background: #1a1a1a;
+        }
+        @keyframes wpfAccentScan {
+            0% { top: 0%; }
+            100% { top: 55%; }
+        }
+
+        /* Modelo 04: Faixa de Acento Pulsante (Opacity / Color Pulse nos 4px) */
+        .fx-04-accent-pulse::before {
+            animation: wpfAccentPulse calc(1.2s * var(--speed-multiplier)) ease-in-out infinite alternate;
+        }
+        @keyframes wpfAccentPulse {
+            0% { opacity: 0.25; }
+            100% { opacity: 1; filter: brightness(1.5); }
+        }
+
+        /* Modelo 05: Borda Interna de Alerta (Inset Border Pulse - Sem vazar do ClipToBounds) */
+        .fx-05-inset-pulse {
+            animation: wpfInsetPulse calc(1.6s * var(--speed-multiplier)) ease-in-out infinite;
+        }
+        .prio-high.fx-05-inset-pulse { --inset-col: rgba(255, 255, 255, 0.85); }
+        .prio-med.fx-05-inset-pulse { --inset-col: rgba(26, 26, 26, 0.75); }
+        .prio-norm.fx-05-inset-pulse { --inset-col: rgba(56, 189, 248, 0.85); }
+        @keyframes wpfInsetPulse {
+            0%, 100% { box-shadow: inset 0 0 0 0px transparent; }
+            50% { box-shadow: inset 0 0 0 2px var(--inset-col), inset 0 0 10px var(--inset-col); }
+        }
+
+        /* Modelo 06: Feixe Laser Interno de Varredura Horizontal */
+        .fx-06-laser-line::after {
+            content: '';
+            position: absolute;
+            top: 0; bottom: 0;
+            width: 2px;
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 0 8px 2px rgba(255, 255, 255, 0.6);
+            animation: wpfLaserSweep calc(2.6s * var(--speed-multiplier)) ease-in-out infinite alternate;
+            z-index: 2;
+            pointer-events: none;
+        }
+        .prio-med.fx-06-laser-line::after {
+            background: rgba(26, 26, 26, 0.85);
+            box-shadow: 0 0 6px 1px rgba(255, 255, 255, 0.8);
+        }
+        @keyframes wpfLaserSweep {
+            0% { left: 4px; opacity: 0.3; }
+            50% { opacity: 1; }
+            100% { left: calc(100% - 3px); opacity: 0.3; }
+        }
+
+        /* Modelo 07: Fluxo Diagonal Sutil ("Dar Prosseguimento" seguro sem 3ª linha) */
+        .fx-07-diagonal-stream::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                -55deg,
+                transparent 0px,
+                transparent 14px,
+                rgba(255, 255, 255, 0.08) 14px,
+                rgba(255, 255, 255, 0.15) 22px,
+                transparent 22px
+            );
+            background-size: 200% 100%;
+            animation: wpfStreamMove calc(6s * var(--speed-multiplier)) linear infinite;
+            z-index: 1;
+            pointer-events: none;
+        }
+        .prio-med.fx-07-diagonal-stream::after {
+            background: repeating-linear-gradient(
+                -55deg,
+                transparent 0px,
+                transparent 14px,
+                rgba(26, 26, 26, 0.06) 14px,
+                rgba(26, 26, 26, 0.12) 22px,
+                transparent 22px
+            );
+            background-size: 200% 100%;
+        }
+        @keyframes wpfStreamMove {
+            0% { background-position: 200% 0; }
+            100% { background-position: 0% 0; }
+        }
+
+        /* Modelo 08: Giroflex / Strobe Interno Bicolor (Estilo 80 Adaptado para ClipToBounds) */
+        .fx-08-strobe {
+            animation: wpfStrobeInset calc(1.1s * var(--speed-multiplier)) steps(2, start) infinite;
+        }
+        .prio-high.fx-08-strobe {
+            --st-a: rgba(255, 255, 255, 0.9);
+            --st-b: rgba(255, 230, 0, 0.9);
+        }
+        .prio-med.fx-08-strobe {
+            --st-a: rgba(26, 26, 26, 0.9);
+            --st-b: rgba(255, 255, 255, 0.95);
+        }
+        .prio-norm.fx-08-strobe {
+            --st-a: rgba(16, 185, 129, 0.9);
+            --st-b: rgba(56, 189, 248, 0.9);
+        }
+        @keyframes wpfStrobeInset {
+            0% { box-shadow: inset 0 2px 0 0 var(--st-a), inset 0 -2px 0 0 transparent; }
+            50% { box-shadow: inset 0 2px 0 0 transparent, inset 0 -2px 0 0 var(--st-b); }
+        }
+
+        /* Modelo 09: Radar / Sonar Interno Partindo da Faixa de 4px */
+        .fx-09-sonar::after {
+            content: '';
+            position: absolute;
+            left: 4px;
+            top: 50%;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.65);
+            transform: translate(-50%, -50%) scale(0.2);
+            animation: wpfSonarWave calc(2.2s * var(--speed-multiplier)) ease-out infinite;
+            z-index: 2;
+            pointer-events: none;
+        }
+        .prio-med.fx-09-sonar::after {
+            border-color: rgba(26, 26, 26, 0.55);
+        }
+        @keyframes wpfSonarWave {
+            0% { transform: translate(-50%, -50%) scale(0.2); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(14); opacity: 0; }
+        }
+
+        /* Modelo 10: Varredura Metálica Semântica (Estilo 79 contido no retângulo) */
+        .prio-high.fx-10-metallic {
+            background: linear-gradient(110deg, #b80d0d 0%, #d31111 38%, #ff6b6b 50%, #d31111 62%, #b80d0d 100%);
+            background-size: 250% 100%;
+            animation: wpfMetallicSweep calc(2.8s * var(--speed-multiplier)) linear infinite;
+        }
+        .prio-med.fx-10-metallic {
+            background: linear-gradient(110deg, #e68900 0%, #ff9800 38%, #ffe082 50%, #ff9800 62%, #e68900 100%);
+            background-size: 250% 100%;
+            animation: wpfMetallicSweep calc(2.8s * var(--speed-multiplier)) linear infinite;
+        }
+        .prio-norm.fx-10-metallic {
+            background: linear-gradient(110deg, #27272c 0%, #333338 38%, #4d4d56 50%, #333338 62%, #27272c 100%);
+            background-size: 250% 100%;
+            animation: wpfMetallicSweep calc(2.8s * var(--speed-multiplier)) linear infinite;
+        }
+        @keyframes wpfMetallicSweep {
+            0% { background-position: 200% 0; }
+            100% { background-position: -50% 0; }
+        }
+
+        /* Modelo 11: Foco de Inspeção Interno ("Analisar" sem lupa vazando) */
+        .fx-11-inspect-spot::after {
+            content: '';
+            position: absolute;
+            top: -20%;
+            width: 48px;
+            height: 140%;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.28) 0%, transparent 70%);
+            animation: wpfSpotScan calc(3s * var(--speed-multiplier)) ease-in-out infinite alternate;
+            z-index: 2;
+            pointer-events: none;
+        }
+        .prio-med.fx-11-inspect-spot::after {
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.55) 0%, transparent 70%);
+        }
+        @keyframes wpfSpotScan {
+            0% { left: 4px; }
+            100% { left: calc(100% - 44px); }
+        }
+
+        /* Modelo 12: Entrada Slide Right + Flash na Faixa 4px (Transição de Chegada na Barra) */
+        .fx-12-enter-slide {
+            animation: wpfEnterSlide calc(3.8s * var(--speed-multiplier)) cubic-bezier(0.16, 1, 0.3, 1) infinite;
+        }
+        @keyframes wpfEnterSlide {
+            0% { opacity: 0; transform: translateX(35px); }
+            12%, 82% { opacity: 1; transform: translateX(0); }
+            95%, 100% { opacity: 0; transform: translateX(-20px); }
+        }
+
+        /* Modelo 13: Entrada Cortina Horizontal (ClipRect Reveal da Faixa 4px para Direita) */
+        .fx-13-enter-wipe {
+            animation: wpfEnterWipe calc(4s * var(--speed-multiplier)) cubic-bezier(0.22, 1, 0.36, 1) infinite;
+        }
+        @keyframes wpfEnterWipe {
+            0% { clip-path: inset(0 100% 0 0); }
+            8% { clip-path: inset(0 calc(100% - 4px) 0 0); }
+            24%, 80% { clip-path: inset(0 0% 0 0); opacity: 1; }
+            95%, 100% { clip-path: inset(0 0% 0 100%); opacity: 0; }
+        }
+
+        /* Modelo 14: Entrada Ignição Vertical Interna (ScaleY contido na altura útil) */
+        .fx-14-enter-crt {
+            animation: wpfEnterCRT calc(4s * var(--speed-multiplier)) ease-out infinite;
+            transform-origin: center center;
+        }
+        @keyframes wpfEnterCRT {
+            0% { opacity: 0; transform: scaleY(0.08); filter: brightness(2.2); }
+            15%, 80% { opacity: 1; transform: scaleY(1); filter: brightness(1); }
+            95%, 100% { opacity: 0; transform: scaleY(0.05); }
+        }
+
+        /* Modelo 15: Barra de Progresso/Tempo Embutida na Base (2px inferiores internos) */
+        .fx-15-bottom-progress::after {
+            content: '';
+            position: absolute;
+            left: 4px;
+            bottom: 0;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.85);
+            animation: wpfBottomProgress calc(3.5s * var(--speed-multiplier)) linear infinite;
+            z-index: 5;
+        }
+        .prio-med.fx-15-bottom-progress::after {
+            background: #1a1a1a;
+        }
+        @keyframes wpfBottomProgress {
+            0% { width: 0%; }
+            100% { width: calc(100% - 4px); }
+        }
+
+        /* Modelo 16: Pulso Duplo Taquicardia Interno (Estilo 81 sem extravasar altura) */
+        .fx-16-heartbeat-in .os-line {
+            animation: wpfTextHeartbeat calc(1.8s * var(--speed-multiplier)) infinite;
+            transform-origin: left center;
+        }
+        @keyframes wpfTextHeartbeat {
+            0%, 100% { transform: scale(1); }
+            14% { transform: scale(1.06); }
+            28% { transform: scale(1); }
+            42% { transform: scale(1.03); }
+            70% { transform: scale(1); }
+        }
+
+        /* Modelo 17: Borda Conic Laser Interna (Estilo 37 restrito a 1.5px dentro do ClipToBounds) */
+        .fx-17-conic-border::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border: 1.5px solid transparent;
+            border-radius: 4px;
+            animation: wpfBorderCycle calc(2s * var(--speed-multiplier)) linear infinite;
+            pointer-events: none;
+            z-index: 4;
+        }
+        .prio-high.fx-17-conic-border { --b-c1: #ffffff; --b-c2: #ff8a8a; }
+        .prio-med.fx-17-conic-border { --b-c1: #1a1a1a; --b-c2: #ffffff; }
+        .prio-norm.fx-17-conic-border { --b-c1: #10b981; --b-c2: #38bdf8; }
+        @keyframes wpfBorderCycle {
+            0%, 100% { border-color: var(--b-c1) transparent transparent var(--b-c1); }
+            50% { border-color: transparent var(--b-c2) var(--b-c2) transparent; }
+        }
+
+        /* Modelo 18: Cascata Dupla (Linha 1 OS + Linha 2 Situação em Stagger) */
+        .fx-18-stagger .os-line {
+            animation: wpfStaggerL1 calc(3.8s * var(--speed-multiplier)) cubic-bezier(0.16, 1, 0.3, 1) infinite;
+        }
+        .fx-18-stagger .sit-line {
+            animation: wpfStaggerL2 calc(3.8s * var(--speed-multiplier)) cubic-bezier(0.16, 1, 0.3, 1) infinite;
+        }
+        @keyframes wpfStaggerL1 {
+            0%, 5% { opacity: 0; transform: translateX(-14px); }
+            18%, 82% { opacity: 1; transform: translateX(0); }
+            95%, 100% { opacity: 0; transform: translateX(10px); }
+        }
+        @keyframes wpfStaggerL2 {
+            0%, 12% { opacity: 0; transform: translateX(-14px); }
+            26%, 82% { opacity: 1; transform: translateX(0); }
+            95%, 100% { opacity: 0; transform: translateX(10px); }
+        }
+
+        /* =========================================================================
+           SEÇÃO 5: ADAPTAÇÕES CLIP-SAFE DE admin/paineis
+           Efeito/realce por cima da cor de prioridade. Sem 3ª linha, sem vazar.
+           ========================================================================= */
+        .fx-19-tesla::before {
+            animation: wpfTeslaFlicker calc(0.12s * var(--speed-multiplier)) steps(2) infinite;
+        }
+        @keyframes wpfTeslaFlicker {
+            0% { opacity: 0.2; filter: brightness(0.7); }
+            50% { opacity: 1; filter: brightness(2.2); }
+            100% { opacity: 0.45; filter: brightness(1.1); }
+        }
+
+        .fx-20-siren {
+            animation: wpfSirenFlash calc(0.9s * var(--speed-multiplier)) steps(2, start) infinite;
+        }
+        .prio-high.fx-20-siren { --sir-a: rgba(255,255,255,0.35); --sir-b: rgba(255,220,0,0.4); }
+        .prio-med.fx-20-siren { --sir-a: rgba(26,26,26,0.28); --sir-b: rgba(255,255,255,0.4); }
+        .prio-norm.fx-20-siren { --sir-a: rgba(239,68,68,0.4); --sir-b: rgba(56,189,248,0.4); }
+        @keyframes wpfSirenFlash {
+            0% { box-shadow: inset 8px 0 12px var(--sir-a), inset -8px 0 0 transparent; }
+            50% { box-shadow: inset 8px 0 0 transparent, inset -8px 0 12px var(--sir-b); }
+        }
+
+        .fx-21-gold-vip::after {
+            content: '';
+            position: absolute;
+            inset: 1px 1px 1px 5px;
+            border: 1px solid rgba(253, 224, 71, 0.55);
+            border-radius: 3px;
+            box-shadow: inset 0 0 8px rgba(253, 224, 71, 0.25);
+            animation: wpfGoldVip calc(2.4s * var(--speed-multiplier)) ease-in-out infinite;
+            pointer-events: none;
+            z-index: 2;
+        }
+        .prio-med.fx-21-gold-vip::after { border-color: rgba(26,26,26,0.45); }
+        @keyframes wpfGoldVip {
+            0%, 100% { opacity: 0.35; }
+            50% { opacity: 1; }
+        }
+
+        .fx-22-nuclear::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255,255,255,0.55), transparent 70%);
+            transform: translate(-50%, -50%) scale(0.4);
+            animation: wpfNuclear calc(2s * var(--speed-multiplier)) ease-out infinite;
+            pointer-events: none;
+            z-index: 2;
+        }
+        @keyframes wpfNuclear {
+            0% { transform: translate(-50%, -50%) scale(0.3); opacity: 0.9; }
+            100% { transform: translate(-50%, -50%) scale(18); opacity: 0; }
+        }
+
+        .fx-23-twin-laser::after {
+            content: '';
+            position: absolute;
+            left: 4px;
+            right: 0;
+            top: 0;
+            height: 100%;
+            background:
+                linear-gradient(rgba(255,255,255,0.85), rgba(255,255,255,0.85)) 0 18% / 100% 1px no-repeat,
+                linear-gradient(rgba(255,255,255,0.85), rgba(255,255,255,0.85)) 0 78% / 100% 1px no-repeat;
+            animation: wpfTwinLaser calc(1.6s * var(--speed-multiplier)) ease-in-out infinite alternate;
+            pointer-events: none;
+            z-index: 2;
+        }
+        .prio-med.fx-23-twin-laser::after {
+            background:
+                linear-gradient(#1a1a1a, #1a1a1a) 0 18% / 100% 1px no-repeat,
+                linear-gradient(#1a1a1a, #1a1a1a) 0 78% / 100% 1px no-repeat;
+        }
+        @keyframes wpfTwinLaser {
+            0% { opacity: 0.25; transform: scaleY(0.7); }
+            100% { opacity: 1; transform: scaleY(1); }
+        }
+
+        .fx-24-forcefield {
+            animation: wpfForcefield calc(2.2s * var(--speed-multiplier)) ease-in-out infinite;
+        }
+        .prio-high.fx-24-forcefield { --ff: rgba(255,255,255,0.7); }
+        .prio-med.fx-24-forcefield { --ff: rgba(26,26,26,0.55); }
+        .prio-norm.fx-24-forcefield { --ff: rgba(34,211,238,0.7); }
+        @keyframes wpfForcefield {
+            0%, 100% { box-shadow: inset 0 0 0 1px transparent; }
+            50% { box-shadow: inset 0 0 0 2px var(--ff), inset 0 0 12px var(--ff); }
+        }
+
+        .fx-25-crystal::after {
+            content: '';
+            position: absolute;
+            inset: 0 0 0 4px;
+            background: linear-gradient(115deg, transparent 20%, rgba(255,255,255,0.22) 42%, transparent 48%, rgba(255,255,255,0.12) 62%, transparent 70%);
+            background-size: 180% 100%;
+            animation: wpfCrystal calc(3.2s * var(--speed-multiplier)) ease-in-out infinite;
+            pointer-events: none;
+            z-index: 2;
+        }
+        @keyframes wpfCrystal {
+            0% { background-position: 120% 0; opacity: 0.4; }
+            50% { opacity: 1; }
+            100% { background-position: -20% 0; opacity: 0.4; }
+        }
+
+        .fx-26-solar::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at 20% 50%, rgba(255,255,255,0.45), transparent 55%);
+            animation: wpfSolar calc(2.8s * var(--speed-multiplier)) ease-in-out infinite;
+            pointer-events: none;
+            z-index: 2;
+        }
+        @keyframes wpfSolar {
+            0%, 100% { opacity: 0; transform: scale(0.8); }
+            40% { opacity: 0.85; transform: scale(1.15); }
+            70% { opacity: 0.15; }
+        }
+
+        .fx-27-terminal::after {
+            content: '';
+            position: absolute;
+            inset: 0 0 0 4px;
+            background: repeating-linear-gradient(
+                180deg,
+                transparent 0 2px,
+                rgba(0, 0, 0, 0.18) 2px 3px
+            );
+            animation: wpfScanline calc(4s * var(--speed-multiplier)) linear infinite;
+            pointer-events: none;
+            z-index: 2;
+        }
+        @keyframes wpfScanline {
+            0% { background-position: 0 0; }
+            100% { background-position: 0 12px; }
+        }
+
+        .fx-28-hud::after {
+            content: '';
+            position: absolute;
+            inset: 3px 3px 3px 7px;
+            border: 1px solid rgba(255,255,255,0.35);
+            border-radius: 2px;
+            clip-path: polygon(0 0, 10px 0, 10px 1px, 1px 1px, 1px 10px, 0 10px, 0 100%, 10px 100%, 10px calc(100% - 1px), 1px calc(100% - 1px), 1px calc(100% - 10px), 0 calc(100% - 10px), 0 100%, 100% 100%, 100% calc(100% - 10px), calc(100% - 1px) calc(100% - 10px), calc(100% - 1px) calc(100% - 1px), calc(100% - 10px) calc(100% - 1px), calc(100% - 10px) 100%, 100% 100%, 100% 0, calc(100% - 10px) 0, calc(100% - 10px) 1px, calc(100% - 1px) 1px, calc(100% - 1px) 10px, 100% 10px);
+            animation: wpfHudPulse calc(2s * var(--speed-multiplier)) ease-in-out infinite;
+            pointer-events: none;
+            z-index: 2;
+        }
+        .prio-med.fx-28-hud::after { border-color: rgba(26,26,26,0.5); }
+        @keyframes wpfHudPulse {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 1; }
+        }
+
+        .fx-29-kinetic::after {
+            content: '';
+            position: absolute;
+            inset: 0 0 0 4px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+            background-size: 40% 100%;
+            animation: wpfKinetic calc(2.2s * var(--speed-multiplier)) linear infinite;
+            pointer-events: none;
+            z-index: 2;
+        }
+        @keyframes wpfKinetic {
+            0% { background-position: -40% 0; }
+            100% { background-position: 140% 0; }
+        }
+
+        .fx-30-stroke-wave {
+            animation: wpfStrokeWave calc(1.8s * var(--speed-multiplier)) ease-in-out infinite;
+        }
+        .prio-high.fx-30-stroke-wave { --sw: rgba(255,255,255,0.8); }
+        .prio-med.fx-30-stroke-wave { --sw: rgba(26,26,26,0.7); }
+        .prio-norm.fx-30-stroke-wave { --sw: rgba(168,85,247,0.85); }
+        @keyframes wpfStrokeWave {
+            0%, 100% { box-shadow: inset 0 0 0 1px var(--sw); }
+            50% { box-shadow: inset 0 0 0 2px var(--sw); }
+        }
+
+        .fx-31-cyber .os-line {
+            text-shadow: 1px 0 0 rgba(0,255,255,0.55), -1px 0 0 rgba(255,0,80,0.45);
+            animation: wpfCyberSlice calc(2.4s * var(--speed-multiplier)) steps(3) infinite;
+        }
+        .prio-med.fx-31-cyber .os-line {
+            text-shadow: 1px 0 0 rgba(255,255,255,0.7), -1px 0 0 rgba(26,26,26,0.5);
+        }
+        @keyframes wpfCyberSlice {
+            0%, 80%, 100% { transform: translateX(0); }
+            84% { transform: translateX(1px); }
+            88% { transform: translateX(-1px); }
+        }
+
+        .fx-32-inferno::after {
+            content: '';
+            position: absolute;
+            left: 4px;
+            right: 0;
+            bottom: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #7c2d12, #ea580c, #fbbf24, #ea580c, #7c2d12);
+            background-size: 200% 100%;
+            animation: wpfInferno calc(1.4s * var(--speed-multiplier)) linear infinite;
+            z-index: 5;
+        }
+        @keyframes wpfInferno {
+            0% { background-position: 0 0; opacity: 0.7; }
+            50% { opacity: 1; }
+            100% { background-position: 100% 0; opacity: 0.7; }
+        }
+
+        .fx-33-neon .os-line {
+            animation: wpfNeonText calc(1.6s * var(--speed-multiplier)) ease-in-out infinite;
+        }
+        .prio-high.fx-33-neon .os-line { --neon: #ffffff; }
+        .prio-med.fx-33-neon .os-line { --neon: #1a1a1a; }
+        .prio-norm.fx-33-neon .os-line { --neon: #e879f9; }
+        @keyframes wpfNeonText {
+            0%, 100% { text-shadow: 0 0 0 transparent; }
+            50% { text-shadow: 0 0 6px var(--neon), 0 0 12px var(--neon); }
+        }
+
+        .fx-34-matrix::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 4px;
+            height: 100%;
+            background: repeating-linear-gradient(
+                180deg,
+                rgba(255,255,255,0.9) 0 3px,
+                transparent 3px 7px
+            );
+            animation: wpfMatrixRain calc(1.1s * var(--speed-multiplier)) linear infinite;
+            z-index: 5;
+            pointer-events: none;
+        }
+        .prio-med.fx-34-matrix::after {
+            background: repeating-linear-gradient(180deg, #1a1a1a 0 3px, transparent 3px 7px);
+        }
+        @keyframes wpfMatrixRain {
+            0% { background-position: 0 -12px; }
+            100% { background-position: 0 12px; }
+        }
+
+        .fx-35-xray .os-line {
+            background: linear-gradient(90deg, currentColor 40%, rgba(255,255,255,0.95) 50%, currentColor 60%);
+            background-size: 220% 100%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            animation: wpfXray calc(2.6s * var(--speed-multiplier)) linear infinite;
+        }
+        .prio-high.fx-35-xray .os-line,
+        .prio-norm.fx-35-xray .os-line { color: transparent; -webkit-text-fill-color: transparent; }
+        .prio-med.fx-35-xray .os-line {
+            background: linear-gradient(90deg, #1a1a1a 40%, #ffffff 50%, #1a1a1a 60%);
+            background-size: 220% 100%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            -webkit-text-fill-color: transparent;
+        }
+        @keyframes wpfXray {
+            0% { background-position: 100% 0; }
+            100% { background-position: -100% 0; }
+        }
+
+        .fx-36-glitch .os-line {
+            animation: wpfGlitchRgb calc(2.8s * var(--speed-multiplier)) infinite;
+        }
+        @keyframes wpfGlitchRgb {
+            0%, 86%, 100% { text-shadow: none; transform: translateX(0); }
+            88% { text-shadow: 2px 0 #22d3ee, -2px 0 #f43f5e; transform: translateX(1px); }
+            90% { text-shadow: -2px 0 #22d3ee, 2px 0 #f43f5e; transform: translateX(-1px); }
+            92% { text-shadow: none; transform: translateX(0); }
+        }
+
+        .fx-37-iris {
+            animation: wpfIris calc(4s * var(--speed-multiplier)) ease-in-out infinite;
+        }
+        @keyframes wpfIris {
+            0% { clip-path: circle(0% at 0% 50%); opacity: 0; }
+            18%, 78% { clip-path: circle(140% at 50% 50%); opacity: 1; }
+            95%, 100% { clip-path: circle(0% at 100% 50%); opacity: 0; }
+        }
+
+        .fx-38-shutter {
+            animation: wpfShutter calc(4s * var(--speed-multiplier)) ease-in-out infinite;
+        }
+        @keyframes wpfShutter {
+            0% { clip-path: inset(50% 0 50% 0); }
+            16%, 78% { clip-path: inset(0 0 0 0); opacity: 1; }
+            95%, 100% { clip-path: inset(50% 0 50% 0); opacity: 0; }
+        }
+
+        .fx-39-warp {
+            animation: wpfWarp calc(4s * var(--speed-multiplier)) ease-in-out infinite;
+            transform-origin: center center;
+        }
+        @keyframes wpfWarp {
+            0% { opacity: 0; transform: scaleX(2.2) scaleY(0.35); }
+            16%, 78% { opacity: 1; transform: scaleX(1) scaleY(1); }
+            95%, 100% { opacity: 0; transform: scaleX(2.2) scaleY(0.25); }
+        }
+
+        .fx-40-rubber {
+            animation: wpfRubber calc(4s * var(--speed-multiplier)) cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+            transform-origin: center bottom;
+        }
+        @keyframes wpfRubber {
+            0% { opacity: 0; transform: translateY(10px) scaleY(0.7) scaleX(1.15); }
+            18%, 78% { opacity: 1; transform: translateY(0) scale(1); }
+            95%, 100% { opacity: 0; transform: translateY(8px) scaleY(0.75); }
+        }
+
+        .fx-41-carimbo .os-line {
+            animation: wpfStamp calc(3.2s * var(--speed-multiplier)) cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+            transform-origin: center center;
+        }
+        @keyframes wpfStamp {
+            0%, 12% { opacity: 0; transform: scale(1.4); }
+            22%, 80% { opacity: 1; transform: scale(1); }
+            92%, 100% { opacity: 0; transform: scale(0.92); }
+        }
+
+        .fx-42-aurora::after {
+            content: '';
+            position: absolute;
+            inset: 0 0 0 4px;
+            background: linear-gradient(90deg, rgba(238,119,82,0.28), rgba(231,60,126,0.22), rgba(35,166,213,0.28), rgba(238,119,82,0.28));
+            background-size: 220% 100%;
+            animation: wpfAurora calc(5s * var(--speed-multiplier)) linear infinite;
+            pointer-events: none;
+            z-index: 1;
+        }
+        @keyframes wpfAurora {
+            0% { background-position: 0 0; }
+            100% { background-position: 220% 0; }
+        }
+
+        .slot-meta .ok-bar { color: #34d399; }
+        .slot-meta .src-painel {
+            font-size: 0.68rem;
+            color: #67e8f9;
+            background: rgba(6, 182, 212, 0.12);
+            border: 1px solid rgba(6, 182, 212, 0.28);
+            padding: 1px 6px;
+            border-radius: 99px;
+        }
+
+        /* =========================================================================
+           DEMONSTRAÇÃO DE LARGURA AUTOMÁTICA (102px a 360px) E RETICÊNCIAS
+           ========================================================================= */
+        .width-ruler-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #111622;
+            border: 1px solid #1e293b;
+            border-radius: 10px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .ruler-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .ruler-info {
+            width: 260px;
+            font-size: 0.8rem;
+            color: #94a3b8;
+            flex-shrink: 0;
+        }
+        .ruler-info strong {
+            color: #f8fafc;
+            display: block;
+            margin-bottom: 2px;
+        }
+        .ruler-track {
+            flex: 1;
+            background: #141417;
+            border: 1px dashed #334155;
+            height: var(--taskbar-h);
+            padding: 3px 8px;
+            display: flex;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* =========================================================================
+           SUPERFÍCIE 2: TOAST DE NOTIFICAÇÃO (180–900 × 56–280, Padrão 320 × 96)
+           Aqui selos internos, ícones, lupas, OVNI e a ação "DAR PROSSEGUIMENTO"
+           podem existir pois a janela do Toast tem de 56px a 280px de altura!
+           ========================================================================= */
+        .toast-config-bar {
+            max-width: 1200px;
+            margin: 0 auto 20px;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid #1e293b;
+            border-radius: 10px;
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .toast-grid {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 24px;
+            justify-content: flex-start;
+        }
+        .wpf-toast-surface {
+            width: var(--toast-w);
+            height: var(--toast-h);
+            min-width: 180px;
+            max-width: 900px;
+            min-height: 56px;
+            max-height: 280px;
+            border-radius: 8px;
+            padding: 10px 14px 10px 16px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-shadow: 0 14px 32px rgba(0, 0, 0, 0.65);
+            font-family: "Segoe UI", sans-serif;
+            flex-shrink: 0;
+        }
+        .wpf-toast-surface::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 5px;
+            z-index: 3;
+        }
+        .wpf-toast-surface.prio-high { background: #d31111; color: #ffffff; }
+        .wpf-toast-surface.prio-high::before { background: #ff7b7b; }
+
+        .wpf-toast-surface.prio-med { background: #ff9800; color: #1a1a1a; }
+        .wpf-toast-surface.prio-med::before { background: #1a1a1a; }
+
+        .wpf-toast-surface.prio-norm { background: #333338; color: #ffffff; }
+        .wpf-toast-surface.prio-norm::before { background: #10b981; }
+
+        .toast-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            position: relative;
+            z-index: 4;
+        }
+        .toast-os-num {
+            font-size: 1.25rem;
+            font-weight: 800;
+            line-height: 1.1;
+            white-space: nowrap;
+        }
+        .prio-norm .toast-os-num { color: #e1e1e6; }
+
+        .toast-action-pill {
+            font-size: 0.68rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            padding: 2px 8px;
+            border-radius: 99px;
+            white-space: nowrap;
+        }
+        .prio-high .toast-action-pill { background: rgba(0,0,0,0.35); color: #fff; border: 1px solid rgba(255,255,255,0.4); }
+        .prio-med .toast-action-pill { background: #1a1a1a; color: #ff9800; }
+        .prio-norm .toast-action-pill { background: rgba(16,185,129,0.2); color: #34d399; border: 1px solid rgba(16,185,129,0.4); }
+
+        .toast-sit-row {
+            font-size: 0.9rem;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            position: relative;
+            z-index: 4;
+        }
+        .toast-meta-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.74rem;
+            opacity: 0.88;
+            border-top: 1px solid rgba(255,255,255,0.18);
+            padding-top: 4px;
+            position: relative;
+            z-index: 4;
+        }
+        .prio-med .toast-meta-row {
+            border-top-color: rgba(26,26,26,0.2);
+            font-weight: 600;
+        }
+
+        /* Comparativo do Bug da v2.29.0 vs Correção Atual */
+        .bug-comparison-box {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 20px;
+        }
+        .bug-panel {
+            background: #111622;
+            border: 1px solid #1e293b;
+            border-radius: 10px;
+            padding: 16px;
+        }
+        .bug-panel.bad { border-color: rgba(239, 68, 68, 0.4); }
+        .bug-panel.good { border-color: rgba(16, 185, 129, 0.4); }
+        .bug-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .bug-panel.bad .bug-title { color: #f87171; }
+        .bug-panel.good .bug-title { color: #34d399; }
+    </style>
+</head>
+<body>
+
+    <div class="catalog-header">
+        <h1>Catálogo WPF Taskbar Cards & Toast Surface</h1>
+        <p>Modelos desenhados sob as restrições estritas de <code>CardMetrics</code> e <code>PaintCard</code> (<code>OverlayWindow.xaml.cs</code>): <strong>ClipToBounds</strong> total, <strong>2 linhas sem wrap</strong>, <strong>Segoe UI</strong> e <strong>cores semânticas obrigatórias</strong>.</p>
+    </div>
+
+    <!-- RESUMO EXECUTIVO DAS MÉTRICAS DA ESPECIFICAÇÃO -->
+    <div class="metrics-dashboard">
+        <div class="metric-box">
+            <div class="m-label">Altura da Barra & Card</div>
+            <div class="m-val">Barra ≥ 40px (Fallback 48px)</div>
+            <div class="m-sub">Card = Barra − 6px (34–42px úteis)</div>
+        </div>
+        <div class="metric-box">
+            <div class="m-label">Largura & Paddings</div>
+            <div class="m-val">102px a 360px (Texto = L − 22)</div>
+            <div class="m-sub">12px Esq (c/ faixa 4px) + 10px Dir | Gap 8px</div>
+        </div>
+        <div class="metric-box ok">
+            <div class="m-label">Tipografia (Segoe UI)</div>
+            <div class="m-val">OS ~38% (≥9px) | Sit ~28% (≥8px)</div>
+            <div class="m-sub">2 linhas estritas, sem wrap, reticências (...)</div>
+        </div>
+        <div class="metric-box warn">
+            <div class="m-label">Cores de Prioridade</div>
+            <div class="m-val">#d31111 | #ff9800 | #333338</div>
+            <div class="m-sub">Alta (Branco) • Média (#1a1a1a) • Normal (#e1e1e6)</div>
+        </div>
+    </div>
+
+    <!-- BARRA DE CONTROLES INTERATIVOS -->
+    <div class="sticky-controls">
+        <div class="control-block">
+            <label>📏 Espessura Taskbar:</label>
+            <button class="btn-control" onclick="setTaskbarHeight(40, this)">40 px (Mín)</button>
+            <button class="btn-control" onclick="setTaskbarHeight(44, this)">44 px</button>
+            <button class="btn-control active" onclick="setTaskbarHeight(48, this)">48 px (Fallback)</button>
+            <button class="btn-control" onclick="setTaskbarHeight(56, this)">56 px (Alta)</button>
+        </div>
+
+        <div class="control-block">
+            <label>🎨 Prioridade no Catálogo:</label>
+            <button class="btn-control btn-prio-all active" onclick="setCatalogPriority('all', this)">Alternar 3 Cores</button>
+            <button class="btn-control btn-prio-high" onclick="setCatalogPriority('prio-high', this)">Alta (#d31111)</button>
+            <button class="btn-control btn-prio-med" onclick="setCatalogPriority('prio-med', this)">Média (#ff9800)</button>
+            <button class="btn-control btn-prio-norm" onclick="setCatalogPriority('prio-norm', this)">Normal (#333338)</button>
+        </div>
+
+        <div class="control-block">
+            <label>⚡ Velocidade:</label>
+            <button class="btn-control active" onclick="setSpeed(1, this)">1x</button>
+            <button class="btn-control" onclick="setSpeed(2.2, this)">0.45x</button>
+            <button class="btn-control" id="btnPause" onclick="togglePause(this)">⏸ Pausar</button>
+        </div>
+    </div>
+
+    <div id="mainWrapper">
+
+        <!-- =====================================================================
+             SIMULADOR REALISTA DA TASKBAR DO WINDOWS (TICKER COM ESPAÇO DE 8PX)
+             ===================================================================== -->
+        <div class="taskbar-simulator-wrap">
+            <div class="taskbar-sim-header">
+                <div class="taskbar-sim-title">
+                    🪟 Simulador em Escala Real: Taskbar do Windows + OverlayWindow Ticker (Espaço 8px entre cards | Folga direita 8px)
+                </div>
+                <div class="live-readout" id="metricsReadout">
+                    Barra: 48px | Card: 42px | Fonte OS: 16px (38%) | Fonte Situação: 12px (28%)
+                </div>
+            </div>
+
+            <div class="windows-taskbar-surface">
+                <div class="windows-start-mock" title="Ícones da Taskbar do Windows">
+                    <div class="win-logo"><span></span><span></span><span></span><span></span></div>
+                </div>
+
+                <!-- Card 1: Prioridade Alta -->
+                <div class="wpf-bar-card prio-high fx-02-shimmer">
+                    <div class="os-line">OS 1490/26</div>
+                    <div class="sit-line">Gravando Chapas CTP</div>
+                </div>
+
+                <!-- Card 2: Prioridade Média -->
+                <div class="wpf-bar-card prio-med fx-07-diagonal-stream">
+                    <div class="os-line">OS 1428/26</div>
+                    <div class="sit-line">Saída p/ Prova</div>
+                </div>
+
+                <!-- Card 3: Prioridade Normal (Curto - Mínimo 102px) -->
+                <div class="wpf-bar-card prio-norm fx-04-accent-pulse">
+                    <div class="os-line">OS 98/2</div>
+                    <div class="sit-line">Offset</div>
+                </div>
+
+                <!-- Card 4: Prioridade Alta (Texto longo cortado em 360px com reticências) -->
+                <div class="wpf-bar-card prio-high fx-05-inset-pulse">
+                    <div class="os-line">SP 5310/26</div>
+                    <div class="sit-line">Aguardando Papel Especial Couchê Fosco 170g na Impressão</div>
+                </div>
+
+                <!-- Card 5: Prioridade Normal -->
+                <div class="wpf-bar-card prio-norm fx-03-accent-scan">
+                    <span class="accent-runner"></span>
+                    <div class="os-line">OS 1481/26</div>
+                    <div class="sit-line">[Capa] Conferência PDF</div>
+                </div>
+
+                <!-- Card 6: Prioridade Média -->
+                <div class="wpf-bar-card prio-med fx-15-bottom-progress">
+                    <div class="os-line">OS 1466/26</div>
+                    <div class="sit-line">[Sobrecapa] Prova Plotter</div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- =====================================================================
+             SEÇÃO 1: COMPARATIVO DO BUG DA 2.29.0 VS PADRÃO 2 LINHAS (CLIP-SAFE)
+             ===================================================================== -->
+        <div class="section-header">
+            <h2 class="section-title">
+                1. Regra de Ouro da Barra: Por que apenas 2 linhas e ClipToBounds?
+                <span class="badge-spec">Prevenção do Bug v2.29.0</span>
+            </h2>
+        </div>
+
+        <div class="bug-comparison-box">
+            <!-- Exemplo Proibido (O que aconteceu na 2.29.0) -->
+            <div class="bug-panel bad">
+                <div class="bug-title">❌ PROIBIDO NA BARRA (Erro da v2.29.0 - 3º elemento come altura)</div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-norm" style="justify-content: flex-start; padding-top: 1px;">
+                        <div style="font-size: 9px; background: #10b981; color: #000; font-weight: 800; padding: 0 4px; border-radius: 2px; width: fit-content; margin-bottom: 1px;">DAR PROSSEGUIMENTO</div>
+                        <div class="os-line">OS 1485/26</div>
+                        <div class="sit-line">Aprovado p/ Impressão (Cortado!)</div>
+                    </div>
+                </div>
+                <p style="font-size: 0.76rem; color: #94a3b8; margin: 8px 0 0;">
+                    Numa barra de 40–48px (34–42px úteis), adicionar uma faixa de ação ou selo empurra a <strong>Situação</strong> para fora do retângulo do <code>ClipToBounds</code>.
+                </p>
+            </div>
+
+            <!-- Exemplo Correto -->
+            <div class="bug-panel good">
+                <div class="bug-title">✅ CORRETO NA BARRA (Duas linhas puras + Fluxo interno na cor semântica)</div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-high fx-07-diagonal-stream">
+                        <div class="os-line">OS 1485/26</div>
+                        <div class="sit-line">Aprovado p/ Impressão</div>
+                    </div>
+                    <div class="wpf-bar-card prio-med fx-07-diagonal-stream">
+                        <div class="os-line">OS 1485/26</div>
+                        <div class="sit-line">Aprovado p/ Impressão</div>
+                    </div>
+                </div>
+                <p style="font-size: 0.76rem; color: #94a3b8; margin: 8px 0 0;">
+                    Apenas <strong>OS em negrito</strong> (~38%) + <strong>Situação</strong> (~28%) cabem com folga e legibilidade imediata em qualquer resolução.
+                </p>
+            </div>
+        </div>
+
+
+        <!-- =====================================================================
+             SEÇÃO 2: DEMONSTRAÇÃO DE LARGURA AUTOMÁTICA (102px ATÉ 360px)
+             ===================================================================== -->
+        <div class="section-header">
+            <h2 class="section-title">
+                2. Escala Horizontal Automática: Piso 102px até Teto 360px com Reticências
+                <span class="badge-spec">CardMetrics Width Rules</span>
+            </h2>
+        </div>
+
+        <div class="width-ruler-container">
+            <div class="ruler-row">
+                <div class="ruler-info">
+                    <strong>Largura Mínima: 102 px</strong>
+                    80 px área mínima de texto + 22 px padding (12 esq + 10 dir)
+                </div>
+                <div class="ruler-track">
+                    <div class="wpf-bar-card prio-norm">
+                        <div class="os-line">OS 12/2</div>
+                        <div class="sit-line">Fila</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ruler-row">
+                <div class="ruler-info">
+                    <strong>Largura Automática Intermediária</strong>
+                    Cresce conforme o texto entre 102 px e 360 px
+                </div>
+                <div class="ruler-track">
+                    <div class="wpf-bar-card prio-med">
+                        <div class="os-line">OS 1428/26</div>
+                        <div class="sit-line">[Capa] Saída para Prova Plotter</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ruler-row">
+                <div class="ruler-info">
+                    <strong>Largura Teto: 360 px (Reticências)</strong>
+                    Área de texto máxima = 338 px (360 − 22). Corta sem quebrar linha.
+                </div>
+                <div class="ruler-track">
+                    <div class="wpf-bar-card prio-high">
+                        <div class="os-line">OS 1499/26</div>
+                        <div class="sit-line">Aguardando Liberação de Papel Couchê Brilho 150g e Chapa CTP no Setor Offset</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- =====================================================================
+             SEÇÃO 3: CATÁLOGO DE 18 MODELOS PARA O CARD DA BARRA (WPF NATIVO)
+             ===================================================================== -->
+        <div class="section-header">
+            <h2 class="section-title">
+                3. Catálogo de 18 Modelos para o Card da Barra (Compatíveis com PaintCard / WPF)
+                <span class="badge-spec">ClipToBounds • 2 Linhas • Sem Vazamento</span>
+            </h2>
+        </div>
+
+        <div class="cards-showcase-grid" id="barCatalogGrid">
+
+            <!-- Modelo 01 -->
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>01. Sólido Clássico (PaintCard Base)</strong>
+                    <span class="wpf-hint">SolidColorBrush</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-high fx-01-solid" data-default-prio="prio-high">
+                        <div class="os-line">OS 1480/26</div>
+                        <div class="sit-line">Gravando Chapas CTP</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modelo 02 -->
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>02. Shimmer Pass Contido</strong>
+                    <span class="wpf-hint">LinearGradient TranslateX</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-med fx-02-shimmer" data-default-prio="prio-med">
+                        <div class="os-line">OS 1481/26</div>
+                        <div class="sit-line">Saída p/ Prova</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modelo 03 -->
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>03. Scanner na Faixa de Acento (4px)</strong>
+                    <span class="wpf-hint">Accent Rect TranslateY</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-norm fx-03-accent-scan" data-default-prio="prio-norm">
+                        <span class="accent-runner"></span>
+                        <div class="os-line">OS 1482/26</div>
+                        <div class="sit-line">[Capa] Conferência PDF</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modelo 04 -->
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>04. Pulso Semântico na Faixa 4px</strong>
+                    <span class="wpf-hint">Accent Opacity Pulse</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-high fx-04-accent-pulse" data-default-prio="prio-high">
+                        <div class="os-line">OS 1483/26</div>
+                        <div class="sit-line">Urgência Plenário</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modelo 05 -->
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>05. Borda Interna Pulsante (Inset Glow)</strong>
+                    <span class="wpf-hint">Inner Pen Stroke</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-med fx-05-inset-pulse" data-default-prio="prio-med">
+                        <div class="os-line">SP 5120/26</div>
+                        <div class="sit-line">Aguardando Aprovação</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modelo 06 -->
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>06. Feixe Laser Reconstrutor Interno</strong>
+                    <span class="wpf-hint">Vertical Line Sweep</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-norm fx-06-laser-line" data-default-prio="prio-norm">
+                        <div class="os-line">OS 1484/26</div>
+                        <div class="sit-line">Preflight Concluído</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modelo 07 -->
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>07. Fluxo Contínuo (Prosseguimento 2 Linhas)</strong>
+                    <span class="wpf-hint">TileBrush OffsetX</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-high fx-07-diagonal-stream" data-default-prio="prio-high">
+                        <div class="os-line">OS 1485/26</div>
+                        <div class="sit-line">Aprovado p/ Impressão</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modelo 08 -->
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>08. Giroflex / Strobe Interno (Estilo 80)</strong>
+                    <span class="wpf-hint">Top/Bottom Pen Strobe</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-med fx-08-strobe" data-default-prio="prio-med">
+                        <div class="os-line">OS 1486/26</div>
+                        <div class="sit-line">Recebido no Setor</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modelo 09 -->
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>09. Pulso de Radar na Faixa 4px</strong>
+                    <span class="wpf-hint">Ellipse Geometry Scale</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-norm fx-09-sonar" data-default-prio="prio-norm">
+                        <div class="os-line">OS 1487/26</div>
+                        <div class="sit-line">[Miolo] Imposição Digital</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modelo 10 -->
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>10. Brilho Metálico Semântico (Estilo 79)</strong>
+                    <span class="wpf-hint">GradientStop Offset</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-high fx-10-metallic" data-default-prio="prio-high">
+                        <div class="os-line">OS 1488/26</div>
+                        <div class="sit-line">Pronto p/ Expedição</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modelo 11 -->
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>11. Foco de Inspeção Interno ("Analisar")</strong>
+                    <span class="wpf-hint">RadialGradient CenterX</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-med fx-11-inspect-spot" data-default-prio="prio-med">
+                        <div class="os-line">OS 1489/26</div>
+                        <div class="sit-line">Triagem Técnica PDF</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modelo 12 -->
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>12. Entrada Deslizante (Ticker Arrival)</strong>
+                    <span class="wpf-hint">TranslateTransform X</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-norm fx-12-enter-slide" data-default-prio="prio-norm">
+                        <div class="os-line">OS 1491/26</div>
+                        <div class="sit-line">Liberado p/ Offset</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modelo 13 -->
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>13. Entrada Revelação da Faixa 4px</strong>
+                    <span class="wpf-hint">RectangleGeometry Clip</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-high fx-13-enter-wipe" data-default-prio="prio-high">
+                        <div class="os-line">OS 1492/26</div>
+                        <div class="sit-line">Ajuste Perfil CMYK</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modelo 14 -->
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>14. Entrada Ignição CRT Contida</strong>
+                    <span class="wpf-hint">ScaleTransform Y</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-med fx-14-enter-crt" data-default-prio="prio-med">
+                        <div class="os-line">OS 1493/26</div>
+                        <div class="sit-line">Dobra e Alceamento</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modelo 15 -->
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>15. Barra de Tempo Inferior (2px Internos)</strong>
+                    <span class="wpf-hint">Bottom Rect Width</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-norm fx-15-bottom-progress" data-default-prio="prio-norm">
+                        <div class="os-line">SP 5042/26</div>
+                        <div class="sit-line">[Encarte] Corte Trilateral</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modelo 16 -->
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>16. Taquicardia na OS (Estilo 81 Contido)</strong>
+                    <span class="wpf-hint">Text ScaleTransform</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-high fx-16-heartbeat-in" data-default-prio="prio-high">
+                        <div class="os-line">OS 1494/26</div>
+                        <div class="sit-line">Máquina Parada - Urgente</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modelo 17 -->
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>17. Borda Orbital Interna (Estilo 37)</strong>
+                    <span class="wpf-hint">LinearGradient Pen</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-med fx-17-conic-border" data-default-prio="prio-med">
+                        <div class="os-line">OS 1495/26</div>
+                        <div class="sit-line">Prova Contratual</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modelo 18 -->
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>18. Cascata Dupla (OS -> Situação)</strong>
+                    <span class="wpf-hint">Staggered Text X</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-norm fx-18-stagger" data-default-prio="prio-norm">
+                        <div class="os-line">OS 1496/26</div>
+                        <div class="sit-line">Impressão Digital</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+
+        <!-- =====================================================================
+             SEÇÃO 4: SUPERFÍCIE SEPARADA - TOAST DE NOTIFICAÇÃO (320 × 96 PADRÃO)
+             ===================================================================== -->
+        <div class="section-header">
+            <h2 class="section-title">
+                4. Outra Superfície: Toast de Notificação (180–900 × 56–280 | Padrão 320 × 96)
+                <span class="badge-toast">Superfície Independente dos Ajustes</span>
+            </h2>
+        </div>
+
+        <div class="toast-config-bar">
+            <div class="control-block">
+                <label>📐 Dimensão do Toast (Ajustes):</label>
+                <button class="btn-control" onclick="setToastSize(240, 68, this)">Compacto (240 × 68)</button>
+                <button class="btn-control active" onclick="setToastSize(320, 96, this)">Padrão (320 × 96)</button>
+                <button class="btn-control" onclick="setToastSize(420, 128, this)">Expandido (420 × 128)</button>
+            </div>
+            <div class="live-readout" id="toastReadout">
+                Superfície Toast: 320 × 96 px (Suporta tag de ação, autor e cronômetro sem cortar OS/Situação)
+            </div>
+        </div>
+
+        <div class="toast-grid">
+            <!-- Toast 1: Alta Prioridade (Prometido) -->
+            <div class="wpf-toast-surface prio-high fx-02-shimmer">
+                <div class="toast-header-row">
+                    <span class="toast-os-num">OS 1490/26</span>
+                    <span class="toast-action-pill">Dar Prosseguimento ››</span>
+                </div>
+                <div class="toast-sit-row">Gravando Chapas CTP</div>
+                <div class="toast-meta-row">
+                    <span>👤 Marcos Vinícius</span>
+                    <span>⏱ 02:15:12</span>
+                </div>
+            </div>
+
+            <!-- Toast 2: Média Prioridade (Solicitado) -->
+            <div class="wpf-toast-surface prio-med fx-07-diagonal-stream">
+                <div class="toast-header-row">
+                    <span class="toast-os-num">OS 1428/26</span>
+                    <span class="toast-action-pill">🔍 Analisar</span>
+                </div>
+                <div class="toast-sit-row">[Capa] Saída p/ Prova Plotter</div>
+                <div class="toast-meta-row">
+                    <span>👤 João Lucas</span>
+                    <span>⏱ 01:26:30</span>
+                </div>
+            </div>
+
+            <!-- Toast 3: Prioridade Normal -->
+            <div class="wpf-toast-surface prio-norm fx-05-inset-pulse">
+                <div class="toast-header-row">
+                    <span class="toast-os-num">OS 1481/26</span>
+                    <span class="toast-action-pill">Nova Entrada</span>
+                </div>
+                <div class="toast-sit-row">Conferência de Arquivo PDF</div>
+                <div class="toast-meta-row">
+                    <span>👤 Carlos Eduardo</span>
+                    <span>⏱ 00:19:05</span>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- =====================================================================
+             SEÇÃO 5: ADAPTAÇÕES DOS VISUAIS E ANIMAÇÕES DE admin/paineis
+             ===================================================================== -->
+        <div class="section-header">
+            <h2 class="section-title">
+                5. Modelos da Barra derivados de admin/paineis (efeito, realce e entrada)
+                <span class="badge-spec">Prioridade intacta • 2 linhas • ClipToBounds</span>
+            </h2>
+        </div>
+        <p style="max-width:1200px;margin:-8px auto 16px;color:#94a3b8;font-size:0.86rem;line-height:1.5;">
+            Cada card abaixo é uma <strong>redução WPF</strong> de um efeito/realce/entrada do painel:
+            overlay interno, faixa de 4&nbsp;px ou texto — nunca troca o fundo semântico
+            (#d31111 / #ff9800 / #333338) nem adiciona terceira linha.
+            Originais 3D, lupa externa, disco voador e paleta própria do catálogo ficam no toast, não na barra.
+        </p>
+
+        <div class="cards-showcase-grid" id="barPainelGrid">
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>19. Tesla <span class="src-painel">v77 / fx-tesla</span></strong>
+                    <span class="wpf-hint">Accent flicker</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-high fx-19-tesla" data-default-prio="prio-high">
+                        <div class="os-line">OS 1501/26</div>
+                        <div class="sit-line">Bobina CTP</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>20. Sirene <span class="src-painel">v80 / fx-siren</span></strong>
+                    <span class="wpf-hint">Inset L/R strobe</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-med fx-20-siren" data-default-prio="prio-med">
+                        <div class="os-line">OS 1502/26</div>
+                        <div class="sit-line">Recebido no Setor</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>21. Ouro VIP <span class="src-painel">v79 / fx-gold-vip</span></strong>
+                    <span class="wpf-hint">Inset gold stroke</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-norm fx-21-gold-vip" data-default-prio="prio-norm">
+                        <div class="os-line">OS 1503/26</div>
+                        <div class="sit-line">Pronto p/ Expedição</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>22. Núcleo nuclear <span class="src-painel">fx-nuclear</span></strong>
+                    <span class="wpf-hint">Radial scale clip</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-high fx-22-nuclear" data-default-prio="prio-high">
+                        <div class="os-line">OS 1504/26</div>
+                        <div class="sit-line">Urgência Plenário</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>23. Laser duplo <span class="src-painel">fx-twin-laser</span></strong>
+                    <span class="wpf-hint">2× 1px H-lines</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-med fx-23-twin-laser" data-default-prio="prio-med">
+                        <div class="os-line">OS 1505/26</div>
+                        <div class="sit-line">Preflight PDF</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>24. Campo de força <span class="src-painel">fx-forcefield</span></strong>
+                    <span class="wpf-hint">Inset dual stroke</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-norm fx-24-forcefield" data-default-prio="prio-norm">
+                        <div class="os-line">OS 1506/26</div>
+                        <div class="sit-line">Conferência PDF</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>25. Cristal <span class="src-painel">fx-crystal</span></strong>
+                    <span class="wpf-hint">Diagonal sheen</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-high fx-25-crystal" data-default-prio="prio-high">
+                        <div class="os-line">OS 1507/26</div>
+                        <div class="sit-line">Prova Contratual</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>26. Explosão solar <span class="src-painel">fx-solar-flare</span></strong>
+                    <span class="wpf-hint">Radial flash</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-med fx-26-solar" data-default-prio="prio-med">
+                        <div class="os-line">OS 1508/26</div>
+                        <div class="sit-line">Ajuste Perfil CMYK</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>27. Terminal <span class="src-painel">mod-terminal</span></strong>
+                    <span class="wpf-hint">Scanlines 2px</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-norm fx-27-terminal" data-default-prio="prio-norm">
+                        <div class="os-line">OS 1509/26</div>
+                        <div class="sit-line">Imposição Digital</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>28. HUD <span class="src-painel">mod-hud</span></strong>
+                    <span class="wpf-hint">Corner brackets</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-high fx-28-hud" data-default-prio="prio-high">
+                        <div class="os-line">OS 1510/26</div>
+                        <div class="sit-line">Fila Offset</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>29. Gradiente cinético <span class="src-painel">mod-kinetic-grad</span></strong>
+                    <span class="wpf-hint">Overlay slide</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-med fx-29-kinetic" data-default-prio="prio-med">
+                        <div class="os-line">OS 1511/26</div>
+                        <div class="sit-line">Saída p/ Prova</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>30. Contorno pulsante <span class="src-painel">mod-stroke-wave</span></strong>
+                    <span class="wpf-hint">Inset 1→2px</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-norm fx-30-stroke-wave" data-default-prio="prio-norm">
+                        <div class="os-line">OS 1512/26</div>
+                        <div class="sit-line">Dobra e Alceamento</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>31. Fatiamento cyber <span class="src-painel">txt-cyber-slice</span></strong>
+                    <span class="wpf-hint">RGB text-shadow</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-high fx-31-cyber" data-default-prio="prio-high">
+                        <div class="os-line">OS 1513/26</div>
+                        <div class="sit-line">[Capa] Plotter</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>32. Inferno <span class="src-painel">txt-inferno / fx-inferno</span></strong>
+                    <span class="wpf-hint">Bottom 3px heat</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-med fx-32-inferno" data-default-prio="prio-med">
+                        <div class="os-line">OS 1514/26</div>
+                        <div class="sit-line">Máquina Parada</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>33. Neon Vegas <span class="src-painel">txt-vegas-neon</span></strong>
+                    <span class="wpf-hint">OS glow pulse</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-norm fx-33-neon" data-default-prio="prio-norm">
+                        <div class="os-line">OS 1515/26</div>
+                        <div class="sit-line">Impressão Digital</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>34. Matrix <span class="src-painel">txt-matrix</span></strong>
+                    <span class="wpf-hint">Accent rain 4px</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-high fx-34-matrix" data-default-prio="prio-high">
+                        <div class="os-line">OS 1516/26</div>
+                        <div class="sit-line">Gravando Chapas</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>35. Raio-X <span class="src-painel">txt-xray / fx-xray</span></strong>
+                    <span class="wpf-hint">OS fill wipe</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-med fx-35-xray" data-default-prio="prio-med">
+                        <div class="os-line">OS 1517/26</div>
+                        <div class="sit-line">Triagem Técnica</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>36. Glitch RGB <span class="src-painel">fx-glitch</span></strong>
+                    <span class="wpf-hint">Text RGB jitter</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-norm fx-36-glitch" data-default-prio="prio-norm">
+                        <div class="os-line">OS 1518/26</div>
+                        <div class="sit-line">Liberado p/ Offset</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>37. Íris portal <span class="src-painel">fx-iris</span></strong>
+                    <span class="wpf-hint">Circle clip 1×</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-high fx-37-iris" data-default-prio="prio-high">
+                        <div class="os-line">OS 1519/26</div>
+                        <div class="sit-line">Entrada na Fila</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>38. Obturador <span class="src-painel">fx-shutter</span></strong>
+                    <span class="wpf-hint">Inset Y clip</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-med fx-38-shutter" data-default-prio="prio-med">
+                        <div class="os-line">OS 1520/26</div>
+                        <div class="sit-line">Aguardando Aprovação</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>39. Dobra espacial <span class="src-painel">fx-warp</span></strong>
+                    <span class="wpf-hint">ScaleX contido</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-norm fx-39-warp" data-default-prio="prio-norm">
+                        <div class="os-line">OS 1521/26</div>
+                        <div class="sit-line">[Miolo] Imposição</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>40. Impacto elástico <span class="src-painel">fx-rubber</span></strong>
+                    <span class="wpf-hint">ScaleY bottom</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-high fx-40-rubber" data-default-prio="prio-high">
+                        <div class="os-line">OS 1522/26</div>
+                        <div class="sit-line">Chegada no Setor</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>41. Carimbo <span class="src-painel">fx-stamp</span></strong>
+                    <span class="wpf-hint">OS scale pop</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-med fx-41-carimbo" data-default-prio="prio-med">
+                        <div class="os-line">OS 1523/26</div>
+                        <div class="sit-line">Aprovado p/ Impressão</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="taskbar-slot-card">
+                <div class="slot-meta">
+                    <strong>42. Aurora <span class="src-painel">mod-aurora</span></strong>
+                    <span class="wpf-hint">Hue overlay 28%</span>
+                </div>
+                <div class="slot-taskbar-strip">
+                    <div class="wpf-bar-card prio-norm fx-42-aurora" data-default-prio="prio-norm">
+                        <div class="os-line">OS 1524/26</div>
+                        <div class="sit-line">[Encarte] Corte</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <script>
+        // Atualiza a altura da Taskbar e recalcula os valores exibidos conforme CardMetrics
+        function setTaskbarHeight(px, btn) {
+            const safeH = Math.max(40, px);
+            const cardH = safeH - 6;
+            const fontOs = Math.max(9, Math.round(cardH * 0.38));
+            const fontSit = Math.max(8, Math.round(cardH * 0.28));
+
+            document.documentElement.style.setProperty('--taskbar-h', safeH + 'px');
+            document.getElementById('metricsReadout').textContent =
+                `Barra: ${safeH}px | Card: ${cardH}px | Fonte OS: ${fontOs}px (38%) | Fonte Situação: ${fontSit}px (28%)`;
+
+            btn.parentElement.querySelectorAll('.btn-control').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+
+        // Alterna as prioridades dos cards do catálogo para testar as 3 cores semânticas obrigatórias
+        function setCatalogPriority(prioClass, btn) {
+            const cards = document.querySelectorAll('#barCatalogGrid .wpf-bar-card, #barPainelGrid .wpf-bar-card');
+            cards.forEach(card => {
+                card.classList.remove('prio-high', 'prio-med', 'prio-norm');
+                if (prioClass === 'all') {
+                    card.classList.add(card.getAttribute('data-default-prio'));
+                } else {
+                    card.classList.add(prioClass);
+                }
+            });
+            btn.parentElement.querySelectorAll('.btn-control').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+
+        // Altera o tamanho da superfície separada de Toast Notification
+        function setToastSize(w, h, btn) {
+            document.documentElement.style.setProperty('--toast-w', w + 'px');
+            document.documentElement.style.setProperty('--toast-h', h + 'px');
+            document.getElementById('toastReadout').textContent =
+                `Superfície Toast: ${w} × ${h} px (Limites: 180–900 × 56–280 px)`;
+            btn.parentElement.querySelectorAll('.btn-control').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+
+        // Controle de velocidade de animação
+        function setSpeed(mult, btn) {
+            document.documentElement.style.setProperty('--speed-multiplier', mult);
+            btn.parentElement.querySelectorAll('.btn-control').forEach(b => {
+                if (b.id !== 'btnPause') b.classList.remove('active');
+            });
+            btn.classList.add('active');
+        }
+
+        // Pausar todas as animações para inspeção de pixels
+        let isPaused = false;
+        function togglePause(btn) {
+            const wrapper = document.getElementById('mainWrapper');
+            isPaused = !isPaused;
+            if (isPaused) {
+                wrapper.classList.add('paused');
+                btn.textContent = '▶ Continuar';
+                btn.classList.add('active');
+            } else {
+                wrapper.classList.remove('paused');
+                btn.textContent = '⏸ Pausar';
+                btn.classList.remove('active');
+            }
+        }
+    </script>
+</body>
+</html>

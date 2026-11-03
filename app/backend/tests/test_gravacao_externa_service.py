@@ -15,16 +15,23 @@ from services.gravacao_externa_service import (
     SETOR_ENTREGA_CHAPAS,
     SETOR_GRAV_EXTERNA,
     SETOR_GRAVACAO_CONCLUIDA,
+    SETOR_SEIMP,
     SITUACAO_GRAV_CONCLUIDA,
     SITUACAO_GRAVACAO_EXTERNA,
     SITUACAO_RECEBIDO,
     SITUACAO_SAIDA_P,
+    _map_arquivo_row,
     concluir_gravacao,
+    dequeue_biro_sessions_on_saida_seimp_cursor,
     iniciar_gravacao,
     is_em_gravacao_externa_operacional,
     is_gravacao_externa_situacao,
+    is_saida_para_seimp,
+    list_maquinas_download_pendentes,
     map_fornecedores_ativos_por_os,
     map_fornecedores_por_os,
+    mark_arquivos_baixados,
+    mark_arquivos_baixados_for_zip,
     session_allows_operacao_fornecedor,
     user_can_access_session,
     user_can_send_mensagem,
@@ -84,6 +91,54 @@ def test_is_em_gravacao_externa_operacional():
     assert is_em_gravacao_externa_operacional(SITUACAO_GRAVACAO_EXTERNA, "SEFOC")
     assert not is_em_gravacao_externa_operacional(SITUACAO_SAIDA_P, "Gravação")
     assert not is_em_gravacao_externa_operacional(SITUACAO_GRAV_CONCLUIDA, "SEGEP")
+
+
+def test_is_saida_para_seimp():
+    assert is_saida_para_seimp(SITUACAO_SAIDA_P, SETOR_SEIMP)
+    assert is_saida_para_seimp(" Saída p/ ", " SEIMP ")
+    assert not is_saida_para_seimp(SITUACAO_SAIDA_P, SETOR_GRAV_EXTERNA)
+    assert not is_saida_para_seimp(SITUACAO_SAIDA_P, "SEFOC")
+    assert not is_saida_para_seimp("Em Execução", SETOR_SEIMP)
+    assert not is_saida_para_seimp(None, SETOR_SEIMP)
+    assert not is_saida_para_seimp(SITUACAO_SAIDA_P, None)
+
+
+def test_dequeue_biro_sessions_on_saida_seimp_cancels_and_dismisses_without_andamento():
+    cursor = MagicMock()
+    rowcounts = iter([2, 1])
+    executed: list[tuple[str, tuple]] = []
+
+    def execute(sql, params=None):
+        executed.append((" ".join(str(sql).split()), tuple(params or ())))
+        cursor.rowcount = next(rowcounts)
+
+    cursor.execute.side_effect = execute
+
+    result = dequeue_biro_sessions_on_saida_seimp_cursor(cursor, 2026, 100, "918713")
+
+    assert result == {"cancelled": 2, "dismissed": 1}
+    assert len(executed) == 2
+    cancel_sql, cancel_params = executed[0]
+    dismiss_sql, dismiss_params = executed[1]
+    assert "SET Status = 'cancelada'" in cancel_sql
+    assert "Status IN ('pendente', 'iniciada')" in cancel_sql
+    assert cancel_params == (2026, 100)
+    assert "EntregaDispensadaEm = NOW()" in dismiss_sql
+    assert "Status = 'concluida'" in dismiss_sql
+    assert dismiss_params[1:] == (2026, 100)
+    assert all("JuntadaGrupoId" not in sql for sql, _ in executed)
+    assert all("tabAndamento" not in sql for sql, _ in executed)
+    assert all(not sql.startswith("DELETE") for sql, _ in executed)
+
+
+def test_dequeue_biro_sessions_on_saida_seimp_is_idempotent_when_queue_empty():
+    cursor = MagicMock()
+    cursor.rowcount = 0
+
+    result = dequeue_biro_sessions_on_saida_seimp_cursor(cursor, 2026, 100, "918713")
+
+    assert result == {"cancelled": 0, "dismissed": 0}
+    assert cursor.execute.call_count == 2
 
 
 @patch("services.gravacao_externa_service.db")
@@ -511,6 +566,164 @@ def test_add_history_allows_regular_progress_while_external_session_is_active(
     get_ultimo.assert_not_called()
 
 
+def _history_tx_cursor():
+    cursor = MagicMock()
+    cursor.fetchall.return_value = []
+    cursor.fetchone.return_value = {"cnt": 0, "max_cod": None}
+    cursor.rowcount = 0
+    return cursor
+
+
+def _run_history_transaction(mock_db, cursor):
+    mock_db.execute_transaction.side_effect = lambda ops: [op(cursor) for op in ops]
+
+
+@patch("routers.os_routes._dispatch_mdb_sync")
+@patch("routers.os_routes._broadcast_os_system_update")
+@patch("services.os_edit_lock_service.release_lock_for_request")
+@patch("services.os_componentes_service.sync_sub_os_congelada_flags")
+@patch("services.gravacao_externa_service.dequeue_biro_sessions_on_saida_seimp_cursor")
+@patch("services.os_edit_lock_service.enforce_interactive_lock")
+@patch("services.os_componentes_service.count_sub_os", return_value=0)
+@patch("services.os_componentes_service.os_has_active_componentes", return_value=False)
+@patch("services.os_protocolo_guard.require_protocolo_mysql", return_value=2026)
+@patch("routers.os_routes.db")
+def test_add_history_saida_seimp_dequeues_biro(
+    mock_db,
+    _require_protocolo,
+    _has_components,
+    _count_sub_os,
+    _lock,
+    mock_dequeue,
+    _sync_flags,
+    _release_lock,
+    _broadcast,
+    _mdb_sync,
+):
+    from routers.os_routes import HistoryItem, add_os_history
+
+    cursor = _history_tx_cursor()
+    _run_history_transaction(mock_db, cursor)
+
+    add_os_history(
+        2026,
+        100,
+        HistoryItem(
+            situacao="Saída p/",
+            setor="SEIMP",
+            obs="",
+            usuario="918713",
+        ),
+        MagicMock(),
+    )
+
+    mock_dequeue.assert_called_once()
+    args, kwargs = mock_dequeue.call_args
+    assert args[0] is cursor
+    assert args[1] == 2026
+    assert args[2] == 100
+    assert not kwargs
+
+
+@patch("routers.os_routes._dispatch_mdb_sync")
+@patch("routers.os_routes._broadcast_os_system_update")
+@patch("services.os_edit_lock_service.release_lock_for_request")
+@patch("services.os_componentes_service.sync_sub_os_congelada_flags")
+@patch("services.gravacao_externa_service.dequeue_biro_sessions_on_saida_seimp_cursor")
+@patch("services.os_edit_lock_service.enforce_interactive_lock")
+@patch("services.os_componentes_service.count_sub_os", return_value=0)
+@patch("services.os_componentes_service.os_has_active_componentes", return_value=False)
+@patch("services.os_protocolo_guard.require_protocolo_mysql", return_value=2026)
+@patch("routers.os_routes.db")
+def test_add_history_other_andamentos_do_not_dequeue_biro(
+    mock_db,
+    _require_protocolo,
+    _has_components,
+    _count_sub_os,
+    _lock,
+    mock_dequeue,
+    _sync_flags,
+    _release_lock,
+    _broadcast,
+    _mdb_sync,
+):
+    from routers.os_routes import HistoryItem, add_os_history
+
+    cursor = _history_tx_cursor()
+    _run_history_transaction(mock_db, cursor)
+    request = MagicMock()
+
+    add_os_history(
+        2026,
+        100,
+        HistoryItem(
+            situacao="Em Execução",
+            setor="SEFOC",
+            obs="Andamento normal",
+            usuario="918713",
+        ),
+        request,
+    )
+    add_os_history(
+        2026,
+        100,
+        HistoryItem(
+            situacao="Saída p/",
+            setor="Grav. Externa",
+            obs="",
+            usuario="918713",
+        ),
+        request,
+    )
+
+    mock_dequeue.assert_not_called()
+
+
+@patch("routers.os_routes._dispatch_mdb_sync")
+@patch("routers.os_routes._broadcast_os_system_update")
+@patch("services.os_edit_lock_service.release_lock_for_request")
+@patch("services.os_componentes_service.sync_sub_os_congelada_flags")
+@patch("services.gravacao_externa_service.dequeue_biro_sessions_on_saida_seimp_cursor")
+@patch("services.os_vinculo_grupo_service.get_connected_os_members")
+@patch("services.os_edit_lock_service.enforce_interactive_lock")
+@patch("routers.os_routes.db")
+def test_replicate_history_saida_seimp_dequeues_each_target(
+    mock_db,
+    _lock,
+    mock_members,
+    mock_dequeue,
+    _sync_flags,
+    _release_lock,
+    _broadcast,
+    _mdb_sync,
+):
+    from routers.os_routes import HistoryItem, replicate_history
+
+    mock_members.return_value = [
+        {"numero": 100, "ano": 2026},
+        {"numero": 101, "ano": 2026},
+    ]
+    cursor = _history_tx_cursor()
+    _run_history_transaction(mock_db, cursor)
+
+    replicate_history(
+        2026,
+        100,
+        HistoryItem(
+            situacao="Saída p/",
+            setor="SEIMP",
+            obs="",
+            usuario="918713",
+            replicar_alvo="vinculo",
+        ),
+        MagicMock(),
+    )
+
+    dequeued = {(call.args[1], call.args[2]) for call in mock_dequeue.call_args_list}
+    assert dequeued == {(2026, 100), (2026, 101)}
+    assert mock_dequeue.call_count == 2
+
+
 @patch("services.gravacao_externa_service.validate_arquivos_input")
 @patch("services.gravacao_externa_service.db")
 def test_create_session_with_arquivos(mock_db, mock_validate):
@@ -694,6 +907,9 @@ def test_concluir_gravacao_inserts_andamento_with_operador_ponto(
     with patch(
         "services.gravacao_externa_service.get_active_session",
         return_value=session,
+    ), patch(
+        "services.gravacao_externa_service._fetch_arquivos",
+        return_value=[],
     ):
         concluir_gravacao(ano=2026, os_id=100, operador_ponto="999.999")
 
@@ -1054,3 +1270,157 @@ def test_add_mensagem_fornecedor_fans_out_to_internals(
         str(c.kwargs["target_ponto"]).replace(".", "") for c in mock_push.call_args_list
     }
     assert pushed == {"222222", "918713"}
+
+
+def test_map_arquivo_row_includes_baixado_em():
+    mapped = _map_arquivo_row(
+        {
+            "Id": 7,
+            "RelativePath": "a.pdf",
+            "AbsolutePath": "/tmp/a.pdf",
+            "NomeArquivo": "a.pdf",
+            "TamanhoBytes": 10,
+            "Ordem": 1,
+            "Maquina": "PM52",
+            "BaixadoEm": "2026-03-20 12:00:00",
+        }
+    )
+    assert mapped["id"] == 7
+    assert mapped["maquina"] == "PM52"
+    assert mapped["baixado_em"] == "2026-03-20 12:00:00"
+
+
+def test_mark_arquivos_baixados_updates_null_only():
+    captured: dict = {}
+
+    def _tx(ops):
+        captured["ops"] = ops
+        return [2]
+
+    with patch("services.gravacao_externa_service.db") as mock_db:
+        mock_db.execute_transaction.side_effect = _tx
+        updated = mark_arquivos_baixados([3, 1, 3, 0, -2])
+
+    assert updated == 2
+    assert "ops" in captured
+    op = captured["ops"][0]
+    assert callable(op)
+
+
+def test_mark_arquivos_baixados_for_zip_uses_signature_subset():
+    with patch(
+        "services.gravacao_externa_service.resolve_arquivos_for_zip_signature",
+        return_value=[{"id": 11}, {"id": 12}],
+    ), patch(
+        "services.gravacao_externa_service.mark_arquivos_baixados",
+        return_value=2,
+    ) as mock_mark:
+        assert mark_arquivos_baixados_for_zip(5, "sig") == 2
+        mock_mark.assert_called_once_with([11, 12])
+
+
+def test_list_maquinas_download_pendentes_requires_pdf_or_all_files():
+    assert list_maquinas_download_pendentes(
+        [
+            {"id": 1, "nome": "a.pdf", "maquina": "PM52", "baixado_em": None},
+            {"id": 2, "nome": "a.tif", "maquina": "PM52", "baixado_em": None},
+        ]
+    ) == ["PM52"]
+    assert list_maquinas_download_pendentes(
+        [
+            {
+                "id": 1,
+                "nome": "a.pdf",
+                "maquina": "PM52",
+                "baixado_em": "2026-03-20 12:00:00",
+            },
+            {"id": 2, "nome": "a.tif", "maquina": "PM52", "baixado_em": None},
+        ]
+    ) == []
+    assert list_maquinas_download_pendentes(
+        [
+            {"id": 1, "nome": "a.tif", "maquina": "PM52", "baixado_em": None},
+            {"id": 2, "nome": "b.tif", "maquina": "PM52", "baixado_em": None},
+        ]
+    ) == ["PM52"]
+    assert list_maquinas_download_pendentes(
+        [{"id": 1, "nome": "espelho.pdf", "maquina": None, "baixado_em": None}]
+    ) == ["Espelhos"]
+
+
+@patch("services.gravacao_externa_service.build_session_detail")
+@patch("services.gravacao_externa_service.get_session_by_id")
+@patch("services.gravacao_externa_service._run_concluir_targets")
+@patch("services.gravacao_externa_service._fetch_arquivos")
+@patch("services.gravacao_externa_service.get_active_session")
+def test_concluir_gravacao_blocks_when_pdf_not_downloaded(
+    mock_get,
+    mock_fetch,
+    mock_run,
+    mock_get_session,
+    mock_build,
+):
+    session = {
+        "id": 7,
+        "os_ano": 2026,
+        "os_nro": 100,
+        "status": "iniciada",
+        "juntada_grupo_id": None,
+        "lancado_por_ponto": "111.111",
+    }
+    mock_get.return_value = session
+    mock_fetch.return_value = [
+        {"id": 1, "nome": "a.pdf", "maquina": "PM52", "baixado_em": None},
+    ]
+
+    with pytest.raises(HTTPException) as exc:
+        concluir_gravacao(ano=2026, os_id=100, operador_ponto="999.999")
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "downloads_pendentes"
+    assert exc.value.detail["maquinas"] == ["PM52"]
+    mock_run.assert_not_called()
+    mock_get_session.assert_not_called()
+    mock_build.assert_not_called()
+
+
+@patch("services.gravacao_externa_service.build_session_detail")
+@patch("services.gravacao_externa_service.get_session_by_id")
+@patch("services.gravacao_externa_service._run_concluir_targets")
+@patch("services.gravacao_externa_service._fetch_arquivos")
+@patch("services.gravacao_externa_service.get_active_session")
+def test_concluir_gravacao_allows_when_pdf_downloaded(
+    mock_get,
+    mock_fetch,
+    mock_run,
+    mock_get_session,
+    mock_build,
+):
+    session = {
+        "id": 7,
+        "os_ano": 2026,
+        "os_nro": 100,
+        "status": "iniciada",
+        "juntada_grupo_id": None,
+        "lancado_por_ponto": "111.111",
+        "lancado_por_nome": "Lan",
+    }
+    mock_get.return_value = session
+    mock_fetch.return_value = [
+        {
+            "id": 1,
+            "nome": "a.pdf",
+            "maquina": "PM52",
+            "baixado_em": "2026-03-20 12:00:00",
+        },
+        {"id": 2, "nome": "a.tif", "maquina": "PM52", "baixado_em": None},
+    ]
+    mock_get_session.return_value = {**session, "status": "concluida"}
+    mock_build.return_value = {"status": "concluida"}
+
+    result = concluir_gravacao(ano=2026, os_id=100, operador_ponto="999.999")
+
+    assert result["status"] == "concluida"
+    mock_run.assert_called_once()
+
+

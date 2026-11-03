@@ -105,7 +105,7 @@ describe("downloadGravacaoExternaZipAll", () => {
       onPhase: (p) => phases.push(p),
     });
 
-    expect(startZip).toHaveBeenCalledWith(2024, 77);
+    expect(startZip).toHaveBeenCalledWith(2024, 77, undefined, undefined);
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(phases).toContain("preparing");
     expect(phases.at(-1)).toBe("started");

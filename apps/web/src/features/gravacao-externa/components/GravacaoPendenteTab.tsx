@@ -11,7 +11,7 @@ import {
   Send,
   Trash2,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type {
   GravacaoPendenteControleUpdateBody,
@@ -24,7 +24,6 @@ import type {
 import {
   fetchGravacaoPendenteFornecedores,
   gravacaoPendenteCompositePreviewUrl,
-  gravacaoPendenteDownloadUrl,
   gravacaoPendentePreviewUrl,
 } from "@/api/gravacaoPendente";
 import {
@@ -80,6 +79,15 @@ function pendenteSessionId(item: GravacaoPendenteOsItem): number | null {
 
 function machineKey(maquina: string | null | undefined): string {
   return String(maquina ?? "").trim().toLowerCase();
+}
+
+function filterArquivosByMaquinaKeys<T extends { maquina?: string | null }>(
+  arquivos: T[],
+  selectedKeys: string[],
+): T[] {
+  if (selectedKeys.length === 0) return arquivos;
+  const selected = new Set(selectedKeys);
+  return arquivos.filter((arq) => selected.has(machineKey(arq.maquina)));
 }
 
 function envioFornecedorLabel(envio: GravacaoPendenteEnvioParcial): string {
@@ -274,7 +282,6 @@ export function GravacaoPendenteTab() {
   const detailsReady = selectedHasSession && details.length === sessionIds.length;
   const firstDetail = details[0] ?? null;
   const multiSession = details.length > 1;
-  const totalArquivos = details.reduce((sum, d) => sum + d.arquivos.length, 0);
   const pendingChips = useMemo(() => aggregatePendingChapas(details), [details]);
   const sentChips = useMemo(() => aggregateSentChapas(details), [details]);
   const canEnviar = canLancarExterna && details.some((d) => d.status === "ativa");
@@ -284,6 +291,18 @@ export function GravacaoPendenteTab() {
     details.some((d) =>
       d.arquivos.some((arq) => !selectedMaquinaKeys.includes(machineKey(arq.maquina))),
     );
+  const totalArquivos = details.reduce(
+    (sum, d) => sum + filterArquivosByMaquinaKeys(d.arquivos, selectedMaquinaKeys).length,
+    0,
+  );
+
+  useEffect(() => {
+    if (selectedMaquinaKeys.length === 0 || previewSelection?.kind !== "file") return;
+    const key = machineKey(previewSelection.arquivo.maquina);
+    if (!selectedMaquinaKeys.includes(key)) {
+      setPreviewSelection(null);
+    }
+  }, [selectedMaquinaKeys, previewSelection]);
 
   const clearSelection = () => {
     setSelectedKey(null);
@@ -312,12 +331,6 @@ export function GravacaoPendenteTab() {
       ),
     [previewSelection?.sessionId, sessionIds],
   );
-  const getPendenteDownloadUrl = useCallback(
-    (a: number, n: number, arquivoId: number) =>
-      gravacaoPendenteDownloadUrl(a, n, arquivoId, previewSelection?.sessionId ?? sessionIds[0]),
-    [previewSelection?.sessionId, sessionIds],
-  );
-
   const years = useMemo(() => {
     const ys: number[] = [];
     for (let y = currentYear; y >= currentYear - 5; y -= 1) {
@@ -511,7 +524,7 @@ export function GravacaoPendenteTab() {
                       )}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-semibold text-neutral-900">
+                        <span className="text-xs-button font-semibold text-neutral-900">
                           {formatOsListLabel(item)}
                         </span>
                         <PendenteStatusBadge status={item.gravacao_pendente_status} />
@@ -580,7 +593,7 @@ export function GravacaoPendenteTab() {
                 Voltar
               </button>
             )}
-            <h2 className="text-lg font-semibold text-neutral-900">
+            <h2 className="text-xs-button font-semibold text-neutral-900">
               OS {formatOsListLabel(selected)}
             </h2>
             <PendenteStatusBadge status={firstDetail.status} />
@@ -711,12 +724,15 @@ export function GravacaoPendenteTab() {
                   <GravacaoExternaArquivosPanel
                     ano={selected.ano}
                     nrOs={selected.nr_os}
-                    arquivos={sessionDetail.arquivos}
+                    arquivos={filterArquivosByMaquinaKeys(
+                      sessionDetail.arquivos,
+                      selectedMaquinaKeys,
+                    )}
                     selection={
                       previewSelection?.sessionId === sessionDetail.id ? previewSelection : null
                     }
-                    groupByMachine
                     chapasPorMaquina={sessionDetail.chapas}
+                    canDownload={false}
                     onSelect={(arq) =>
                       setPreviewSelection({
                         kind: "file",
@@ -732,9 +748,6 @@ export function GravacaoPendenteTab() {
                         displayLabel: chapa.displayLabel,
                         sessionId: sessionDetail.id,
                       })
-                    }
-                    getDownloadUrl={(a, n, arquivoId) =>
-                      gravacaoPendenteDownloadUrl(a, n, arquivoId, sessionDetail.id)
                     }
                   />
                   {(sessionDetail.envios ?? []).map((envio) => (
@@ -757,8 +770,8 @@ export function GravacaoPendenteTab() {
                               ? previewSelection
                               : null
                           }
-                          groupByMachine
                           chapasPorMaquina={envio.chapas}
+                          canDownload={false}
                           onSelect={(arq) =>
                             setPreviewSelection({
                               kind: "file",
@@ -775,14 +788,6 @@ export function GravacaoPendenteTab() {
                               sessionId: envio.gravacao_pendente_id,
                             })
                           }
-                          getDownloadUrl={(a, n, arquivoId) =>
-                            gravacaoPendenteDownloadUrl(
-                              a,
-                              n,
-                              arquivoId,
-                              envio.gravacao_pendente_id,
-                            )
-                          }
                         />
                       </div>
                     </div>
@@ -797,9 +802,9 @@ export function GravacaoPendenteTab() {
             ano={selected.ano}
             nrOs={selected.nr_os}
             selection={previewSelection}
+            canDownload={false}
             getPreviewUrl={getPendentePreviewUrl}
             getCompositePreviewUrl={getPendenteCompositeUrl}
-            getDownloadUrl={getPendenteDownloadUrl}
           />
         </div>
       </div>
@@ -1044,7 +1049,7 @@ export function GravacaoPendenteTab() {
         </div>
       ) : (
         <div className="relative flex h-full min-h-0">
-          <aside className="z-10 w-full max-w-sm shrink-0 border-r border-neutral-200 bg-white">
+          <aside className="z-10 w-full max-w-[20.25rem] shrink-0 border-r border-neutral-200 bg-white">
             {listPanel}
           </aside>
           <main className="min-w-0 flex-1">{detailPanel}</main>
@@ -1052,7 +1057,7 @@ export function GravacaoPendenteTab() {
             className={cn(
               "flex flex-col border-l border-neutral-200 bg-white transition-[box-shadow] duration-200",
               controleExpanded
-                ? "absolute inset-y-0 right-0 left-96 z-20 shadow-2xl"
+                ? "absolute inset-y-0 right-0 left-[20.25rem] z-20 shadow-2xl"
                 : "relative w-full max-w-sm shrink-0",
             )}
           >

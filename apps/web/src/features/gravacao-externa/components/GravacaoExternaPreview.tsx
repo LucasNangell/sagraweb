@@ -1,5 +1,14 @@
 import { cn } from "@sagra/ui";
-import { ChevronDown, ChevronRight, FileDown, FileImage, FileText, Layers, Loader2 } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  FileDown,
+  FileImage,
+  FileText,
+  Layers,
+  Loader2,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -22,7 +31,7 @@ import {
   type PlateColor,
 } from "@/features/gravacao-externa/utils/plateFilenameUtils";
 
-const SEM_MAQUINA_KEY = "__sem_maquina__";
+export const SEM_MAQUINA_KEY = "__sem_maquina__";
 
 function maquinaGroupKey(maquina: string | null | undefined): string {
   const trimmed = String(maquina || "").trim();
@@ -33,18 +42,31 @@ function isTifFilename(name: string): boolean {
   return /\.tiff?$/i.test(name.trim());
 }
 
-function countArquivosByKind(arquivos: { nome?: string | null }[]): {
-  pdfCount: number;
-  tifCount: number;
+function countArquivosByKind(
+  arquivos: { id: number; nome?: string | null }[],
+  downloadedIds?: ReadonlySet<number>,
+): {
+  pdfTotal: number;
+  tifTotal: number;
+  pdfDownloaded: number;
+  tifDownloaded: number;
 } {
-  let pdfCount = 0;
-  let tifCount = 0;
+  let pdfTotal = 0;
+  let tifTotal = 0;
+  let pdfDownloaded = 0;
+  let tifDownloaded = 0;
   for (const arq of arquivos) {
     const nome = String(arq.nome ?? "");
-    if (isPdfFilename(nome)) pdfCount += 1;
-    else if (isTifFilename(nome)) tifCount += 1;
+    const downloaded = downloadedIds?.has(arq.id) ?? false;
+    if (isPdfFilename(nome)) {
+      pdfTotal += 1;
+      if (downloaded) pdfDownloaded += 1;
+    } else if (isTifFilename(nome)) {
+      tifTotal += 1;
+      if (downloaded) tifDownloaded += 1;
+    }
   }
-  return { pdfCount, tifCount };
+  return { pdfTotal, tifTotal, pdfDownloaded, tifDownloaded };
 }
 
 export interface GravacaoPreviewArquivo {
@@ -76,6 +98,7 @@ interface GravacaoExternaPreviewProps {
   getPreviewUrl?: (ano: number, nrOs: number, arquivoId: number) => string;
   getCompositePreviewUrl?: (ano: number, nrOs: number, groupKey: string) => string;
   getDownloadUrl?: (ano: number, nrOs: number, arquivoId: number) => string;
+  onArquivoDownloaded?: (arquivoId: number) => void;
 }
 
 function isPdf(name: string): boolean {
@@ -104,6 +127,7 @@ export function GravacaoExternaPreview({
   getPreviewUrl = gravacaoExternaPreviewUrl,
   getCompositePreviewUrl = gravacaoExternaCompositePreviewUrl,
   getDownloadUrl = gravacaoExternaDownloadUrl,
+  onArquivoDownloaded,
 }: GravacaoExternaPreviewProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -256,6 +280,9 @@ export function GravacaoExternaPreview({
         {downloadHref ? (
           <a
             href={downloadHref}
+            onClick={() => {
+              if (arquivo) onArquivoDownloaded?.(arquivo.id);
+            }}
             className="inline-flex shrink-0 items-center gap-1 rounded border border-neutral-300 px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
           >
             <FileDown className="size-3.5" />
@@ -333,12 +360,14 @@ function PlateColorRow({
   selected,
   onSelect,
   downloadUrl,
+  onDownloaded,
 }: {
   color: PlateColor;
   file: GravacaoPreviewArquivo | undefined;
   selected: boolean;
   onSelect: () => void;
   downloadUrl?: string;
+  onDownloaded?: () => void;
 }) {
   const available = Boolean(file);
   return (
@@ -363,7 +392,10 @@ function PlateColorRow({
       {available && downloadUrl ? (
         <a
           href={downloadUrl}
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDownloaded?.();
+          }}
           className="shrink-0 rounded p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
           title="Download"
         >
@@ -379,11 +411,13 @@ function PantoneRow({
   selected,
   onSelect,
   downloadUrl,
+  onDownloaded,
 }: {
   file: GravacaoPreviewArquivo;
   selected: boolean;
   onSelect: () => void;
   downloadUrl?: string;
+  onDownloaded?: () => void;
 }) {
   return (
     <button
@@ -411,7 +445,10 @@ function PantoneRow({
       {downloadUrl ? (
         <a
           href={downloadUrl}
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDownloaded?.();
+          }}
           className="shrink-0 rounded p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
           title="Download"
         >
@@ -467,11 +504,13 @@ function OtherFileRow({
   selected,
   onSelect,
   downloadUrl,
+  onDownloaded,
 }: {
   arq: GravacaoPreviewArquivo;
   selected: boolean;
   onSelect: () => void;
   downloadUrl?: string;
+  onDownloaded?: () => void;
 }) {
   const pdf = isPdf(arq.nome);
   const Icon = pdf ? FileText : FileImage;
@@ -491,7 +530,10 @@ function OtherFileRow({
       {downloadUrl ? (
         <a
           href={downloadUrl}
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDownloaded?.();
+          }}
           className="shrink-0 rounded p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
           title="Download"
         >
@@ -509,6 +551,7 @@ function FaceSeparationsBlock({
   onSelect,
   onSelectComposite,
   getDownloadUrl,
+  onArquivoDownloaded,
   ano,
   nrOs,
 }: {
@@ -518,6 +561,7 @@ function FaceSeparationsBlock({
   onSelect: (arq: GravacaoPreviewArquivo) => void;
   onSelectComposite: (chapa: PlateChapaGroup<GravacaoPreviewArquivo>) => void;
   getDownloadUrl?: (ano: number, nrOs: number, arquivoId: number) => string;
+  onArquivoDownloaded?: (arquivoId: number) => void;
   ano: number;
   nrOs: number;
 }) {
@@ -536,6 +580,7 @@ function FaceSeparationsBlock({
             selected={file.id === selectedId}
             onSelect={() => onSelect(file)}
             downloadUrl={getDownloadUrl?.(ano, nrOs, file.id)}
+            onDownloaded={() => onArquivoDownloaded?.(file.id)}
           />
         );
       })}
@@ -546,6 +591,7 @@ function FaceSeparationsBlock({
           selected={file.id === selectedId}
           onSelect={() => onSelect(file)}
           downloadUrl={getDownloadUrl?.(ano, nrOs, file.id)}
+          onDownloaded={() => onArquivoDownloaded?.(file.id)}
         />
       ))}
       {compositeAvailable ? (
@@ -573,6 +619,7 @@ function ArquivosChapaList({
   onSelect,
   onSelectComposite,
   getDownloadUrl,
+  onArquivoDownloaded,
 }: {
   ano: number;
   nrOs: number;
@@ -586,6 +633,7 @@ function ArquivosChapaList({
   onSelect: (arq: GravacaoPreviewArquivo) => void;
   onSelectComposite: (chapa: PlateChapaGroup<GravacaoPreviewArquivo>) => void;
   getDownloadUrl?: (ano: number, nrOs: number, arquivoId: number) => string;
+  onArquivoDownloaded?: (arquivoId: number) => void;
 }) {
   const { cadernos, orphanChapas, espelhos, others } = useMemo(
     () => groupArquivosByCaderno(arquivos),
@@ -627,6 +675,7 @@ function ArquivosChapaList({
                   selected={selectedId === arq.id}
                   onSelect={() => onSelect(arq)}
                   downloadUrl={getDownloadUrl?.(ano, nrOs, arq.id)}
+                  onDownloaded={() => onArquivoDownloaded?.(arq.id)}
                 />
               ))}
             </div>
@@ -684,6 +733,7 @@ function ArquivosChapaList({
                       onSelect={onSelect}
                       onSelectComposite={onSelectComposite}
                       getDownloadUrl={getDownloadUrl}
+                      onArquivoDownloaded={onArquivoDownloaded}
                       ano={ano}
                       nrOs={nrOs}
                     />
@@ -738,6 +788,7 @@ function ArquivosChapaList({
                   onSelect={onSelect}
                   onSelectComposite={onSelectComposite}
                   getDownloadUrl={getDownloadUrl}
+                  onArquivoDownloaded={onArquivoDownloaded}
                   ano={ano}
                   nrOs={nrOs}
                 />
@@ -761,6 +812,7 @@ function ArquivosChapaList({
               selected={selectedId === arq.id}
               onSelect={() => onSelect(arq)}
               downloadUrl={getDownloadUrl?.(ano, nrOs, arq.id)}
+              onDownloaded={() => onArquivoDownloaded?.(arq.id)}
             />
           ))}
         </div>
@@ -777,9 +829,13 @@ export function GravacaoExternaArquivosPanel({
   onSelect,
   onSelectComposite,
   groupByMachine = false,
-  chapasPorMaquina,
+  chapasPorMaquina: _chapasPorMaquina,
   canDownload = true,
   getDownloadUrl = gravacaoExternaDownloadUrl,
+  downloadedArquivoIds,
+  onArquivoDownloaded,
+  onDownloadMachine,
+  machineDownloadBusy = false,
 }: {
   ano: number;
   nrOs: number;
@@ -793,18 +849,12 @@ export function GravacaoExternaArquivosPanel({
   chapasPorMaquina?: { maquina: string; quantidade: number }[];
   canDownload?: boolean;
   getDownloadUrl?: (ano: number, nrOs: number, arquivoId: number) => string;
+  downloadedArquivoIds?: ReadonlySet<number>;
+  onArquivoDownloaded?: (arquivoId: number) => void;
+  /** ZIP download for one machine (same flow as "Baixar todos"). */
+  onDownloadMachine?: (machineKey: string, arquivoIds: number[]) => void;
+  machineDownloadBusy?: boolean;
 }) {
-  const chapasQtyByMachine = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const c of chapasPorMaquina ?? []) {
-      const key = String(c.maquina || "").trim().toLowerCase();
-      if (key) {
-        map.set(key, c.quantidade);
-      }
-    }
-    return map;
-  }, [chapasPorMaquina]);
-
   const machineGroups = useMemo(() => {
     if (!groupByMachine) {
       return null;
@@ -815,30 +865,25 @@ export function GravacaoExternaArquivosPanel({
       return null;
     }
     return [...groups].sort((a, b) => {
-      if (!a.maquina && b.maquina) return -1;
-      if (a.maquina && !b.maquina) return 1;
-      if (!a.maquina && !b.maquina) return 0;
-      const qtyA = chapasQtyByMachine.get(a.maquina.toLowerCase()) ?? 0;
-      const qtyB = chapasQtyByMachine.get(b.maquina.toLowerCase()) ?? 0;
-      if (qtyA !== qtyB) return qtyA - qtyB;
-      const labelCmp = compareNaturalName(a.label, b.label);
+      const labelA = a.maquina ? a.label : "Espelhos";
+      const labelB = b.maquina ? b.label : "Espelhos";
+      const labelCmp = compareNaturalName(labelA, labelB);
       if (labelCmp !== 0) return labelCmp;
       return a.order - b.order;
     });
-  }, [arquivos, groupByMachine, chapasQtyByMachine]);
+  }, [arquivos, groupByMachine]);
 
   const machineFilterOptions = useMemo(() => {
     if (!machineGroups) return [];
     return machineGroups.map((group) => {
-      const { pdfCount, tifCount } = countArquivosByKind(group.arquivos);
+      const counts = countArquivosByKind(group.arquivos, downloadedArquivoIds);
       return {
         value: maquinaGroupKey(group.maquina),
         label: group.maquina ? group.label : "Espelhos",
-        pdfCount,
-        tifCount,
+        ...counts,
       };
     });
-  }, [machineGroups]);
+  }, [machineGroups, downloadedArquivoIds]);
 
   const selectedId = selection?.kind === "file" ? selection.arquivo.id : null;
   const selectedCompositeGroupKey =
@@ -969,6 +1014,7 @@ export function GravacaoExternaArquivosPanel({
     onSelect,
     onSelectComposite,
     getDownloadUrl: canDownload ? getDownloadUrl : undefined,
+    onArquivoDownloaded,
   };
 
   if (!machineGroups || !activeMachineGroup) {
@@ -979,48 +1025,127 @@ export function GravacaoExternaArquivosPanel({
     );
   }
 
-  const showMachineFilter = machineFilterOptions.length > 1;
+  const showMachineFilter = machineFilterOptions.length > 0;
   const activeKey = selectedMaquinaKey ?? maquinaGroupKey(activeMachineGroup.maquina);
 
+  const handleDownloadMachine = (machineKey: string) => {
+    if (!canDownload || machineDownloadBusy || !onDownloadMachine || !machineGroups) return;
+    const group = machineGroups.find((g) => maquinaGroupKey(g.maquina) === machineKey);
+    if (!group) return;
+    const arquivoIds = group.arquivos
+      .filter((arq) => {
+        const nome = String(arq.nome ?? "");
+        return isPdfFilename(nome) || isTifFilename(nome);
+      })
+      .map((arq) => arq.id);
+    if (arquivoIds.length === 0) return;
+    setSelectedMaquinaKey(machineKey);
+    onDownloadMachine(machineKey, arquivoIds);
+  };
+
+  const selectMachine = (machineKey: string) => {
+    setSelectedMaquinaKey(machineKey);
+  };
+
+  const arquivosList = (
+    <ArquivosChapaList {...listProps} arquivos={activeMachineGroup.arquivos} />
+  );
+
+  if (!showMachineFilter) {
+    return <div className="flex flex-col gap-2 overflow-y-auto">{arquivosList}</div>;
+  }
+
   return (
-    <div className="flex flex-col gap-2 overflow-y-auto">
-      {showMachineFilter ? (
-        <div
-          role="group"
-          aria-label="Filtrar arquivos por máquina"
-          className="flex w-full gap-1 rounded border border-sagra-border bg-slate-50 p-0.5"
-        >
-          {machineFilterOptions.map((opt) => {
-            const active = opt.value === activeKey;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                aria-label={opt.label}
-                aria-pressed={active}
-                onClick={() => setSelectedMaquinaKey(opt.value)}
-                className={cn(
-                  "flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded px-2 py-1.5 text-left transition-colors",
-                  active
-                    ? "bg-white text-secondary-blue shadow-sm"
-                    : "text-neutral-500 hover:text-neutral-700",
-                )}
-              >
-                <span className="w-full truncate text-xs font-semibold leading-tight">
+    <div className="flex min-h-0 flex-col overflow-y-auto">
+      <div
+        role="group"
+        aria-label="Filtrar arquivos por máquina"
+        className="flex w-full items-end gap-0.5 border-b border-sagra-border bg-sagra-bg px-1 pt-1"
+      >
+        {machineFilterOptions.map((opt) => {
+          const active = opt.value === activeKey;
+          const downloadableTotal = opt.pdfTotal + opt.tifTotal;
+          const allDownloaded =
+            downloadableTotal > 0 &&
+            opt.pdfDownloaded === opt.pdfTotal &&
+            opt.tifDownloaded === opt.tifTotal;
+          const badgeClass = cn(
+            "inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+            allDownloaded
+              ? "bg-emerald-100 text-emerald-800"
+              : "bg-amber-100 text-amber-800",
+          );
+          const badgeTitle = allDownloaded
+            ? "Baixar arquivos novamente"
+            : "Baixar arquivos dessa máquina";
+          const badgeIcon = allDownloaded ? (
+            <Check className="size-3" aria-hidden />
+          ) : (
+            <FileDown className="size-3" aria-hidden />
+          );
+          return (
+            <div
+              key={opt.value}
+              className={cn(
+                "relative flex min-w-0 flex-col gap-0.5 rounded-t-md px-2 py-1.5 transition-colors",
+                machineFilterOptions.length === 1 ? "w-1/2 shrink-0" : "flex-1",
+                active
+                  ? "z-10 -mb-px border-x border-t border-sagra-border border-b border-b-white bg-white text-secondary-blue"
+                  : "mb-px border border-transparent bg-sagra-bg text-neutral-500 hover:text-neutral-700",
+              )}
+            >
+              <div className="flex w-full min-w-0 items-center gap-1">
+                <button
+                  type="button"
+                  aria-label={opt.label}
+                  aria-pressed={active}
+                  onClick={() => selectMachine(opt.value)}
+                  className="min-w-0 flex-1 truncate text-left text-xs-button font-semibold leading-tight"
+                >
                   {opt.label}
+                </button>
+                {downloadableTotal > 0 && canDownload && onDownloadMachine ? (
+                  <button
+                    type="button"
+                    aria-label={
+                      allDownloaded
+                        ? `Arquivos baixados ${opt.label}`
+                        : `Download arquivos ${opt.label}`
+                    }
+                    title={badgeTitle}
+                    disabled={machineDownloadBusy}
+                    onClick={() => handleDownloadMachine(opt.value)}
+                    className={cn(
+                      badgeClass,
+                      "cursor-pointer hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
+                    )}
+                  >
+                    {badgeIcon}
+                    {allDownloaded ? "Baixado" : "Download"}
+                  </button>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-hidden
+                onClick={() => selectMachine(opt.value)}
+                className="flex w-full flex-col items-start gap-0.5 text-left"
+              >
+                <span className="w-full truncate text-xs-button-meta font-normal leading-tight opacity-80">
+                  PDFs baixados: {opt.pdfDownloaded} de {opt.pdfTotal}
                 </span>
-                <span className="w-full truncate text-[10px] font-normal leading-tight opacity-80">
-                  PDFs baixados: {opt.pdfCount}
-                </span>
-                <span className="w-full truncate text-[10px] font-normal leading-tight opacity-80">
-                  TIFs baixados: {opt.tifCount}
+                <span className="w-full truncate text-xs-button-meta font-normal leading-tight opacity-80">
+                  TIFs baixados: {opt.tifDownloaded} de {opt.tifTotal}
                 </span>
               </button>
-            );
-          })}
-        </div>
-      ) : null}
-      <ArquivosChapaList {...listProps} arquivos={activeMachineGroup.arquivos} />
+            </div>
+          );
+        })}
+      </div>
+      <div className="rounded-b-md border border-t-0 border-sagra-border bg-white p-2">
+        {arquivosList}
+      </div>
     </div>
   );
 }

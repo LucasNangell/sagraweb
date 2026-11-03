@@ -54,6 +54,7 @@ export interface GravacaoExternaArquivo {
   tamanho_bytes?: number | null;
   ordem: number;
   maquina?: string | null;
+  baixado_em?: string | null;
 }
 
 export interface GravacaoExternaMensagem {
@@ -86,6 +87,8 @@ export interface GravacaoExternaDetail {
   recebido_por_nome?: string | null;
   pagamento_nf_em?: string | null;
   observacao?: string | null;
+  chapas_por_maquina?: { maquina: string; quantidade: number }[] | null;
+  total_chapas?: number | null;
   arquivos: GravacaoExternaArquivo[];
   mensagens: GravacaoExternaMensagem[];
 }
@@ -110,10 +113,19 @@ function buildListQuery(filters: GravacaoExternaListFilters): string {
   return params.toString();
 }
 
+function withQuery(path: string, params: Record<string, string | number | null | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value == null || value === "") continue;
+    search.set(key, String(value));
+  }
+  const qs = search.toString();
+  if (!qs) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}${qs}`;
+}
+
 function withExternaId(path: string, gravacaoExternaId?: number | null): string {
-  if (gravacaoExternaId == null) return path;
-  const separator = path.includes("?") ? "&" : "?";
-  return `${path}${separator}gravacao_externa_id=${gravacaoExternaId}`;
+  return withQuery(path, { gravacao_externa_id: gravacaoExternaId ?? undefined });
 }
 
 export async function fetchGravacaoExternaOsList(
@@ -261,9 +273,13 @@ export async function startGravacaoExternaZip(
   ano: number,
   nrOs: number,
   gravacaoExternaId?: number | null,
+  maquina?: string | null,
 ): Promise<GravacaoExternaZipStatus> {
   return apiFetch<GravacaoExternaZipStatus>(
-    withExternaId(`/gravacao-externa/${ano}/${nrOs}/arquivos/zip`, gravacaoExternaId),
+    withQuery(`/gravacao-externa/${ano}/${nrOs}/arquivos/zip`, {
+      gravacao_externa_id: gravacaoExternaId ?? undefined,
+      maquina: maquina ?? undefined,
+    }),
     { method: "POST" },
   );
 }

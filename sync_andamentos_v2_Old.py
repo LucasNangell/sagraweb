@@ -95,6 +95,21 @@ def tombstone_is_api_delete(origem: Optional[str], motivo: Optional[str]) -> boo
     motivo_n = str(motivo or "").strip().casefold()
     return any(marker in motivo_n for marker in _API_TOMBSTONE_MOTIVO_MARKERS)
 
+
+def tombstone_is_new_launch(tombstone: Optional[Dict], live_hash: str) -> bool:
+    """API tombstone com hash diferente do MDB vivo: CodStatus reutilizado, não a mesma exclusão.
+
+    Hash ausente não prova lançamento novo (exclusão da Web sem conteúdo gravado).
+    """
+    if not tombstone or not tombstone_is_api_delete(
+        tombstone.get("origem"), tombstone.get("motivo")
+    ):
+        return False
+    stored = str(tombstone.get("content_hash") or "").strip()
+    if not stored:
+        return False
+    return stored != live_hash
+
 @dataclass
 class Config:
     mysql_host: str
@@ -536,17 +551,19 @@ class AndamentosSynchronizer:
 
     def is_resurrection(self, codstatus: str, andamento: Dict) -> bool:
         """
-        True = bloquear INSERT porque a Web/API excluiu este CodStatus.
+        True = bloquear INSERT porque a Web/API excluiu este mesmo conteúdo.
 
-        Tombstone gerado pelo próprio sync (MDB/MySQL ausente, baseline falso)
-        NÃO bloqueia: linha viva no Access é lançamento e deve ir para o MySQL.
-        Em erro de DB: fail-closed (bloqueia).
+        Tombstone do sync não bloqueia. Tombstone da API com hash diferente
+        também não: o Access reutilizou o CodStatus num lançamento novo.
+        Hash ausente ou igual continua bloqueando. Erro de DB: fail-closed.
         """
         try:
             row = self._fetch_deleted_andamento(codstatus)
             if not row:
                 return False
             if not tombstone_is_api_delete(row.get("origem"), row.get("motivo")):
+                return False
+            if tombstone_is_new_launch(row, self._calculate_content_hash(andamento)):
                 return False
 
             self.logger.logger.warning(
@@ -558,6 +575,24 @@ class AndamentosSynchronizer:
         except Exception as e:
             self.logger.logger.error(f"[ERRO] Erro ao verificar ressurreição: {e}")
             return True
+
+    def _is_new_launch_reusing_api_code(self, codstatus: str, andamento: Dict) -> bool:
+        """True só quando o tombstone da API tem hash diferente da linha viva no MDB.
+
+        Falha de leitura não conta como lançamento novo: a exclusão da Web segue.
+        """
+        try:
+            tombstone = self._fetch_deleted_andamento(codstatus)
+        except Exception as e:
+            self.logger.logger.error(
+                f"[ERRO] Erro ao comparar hash do tombstone {codstatus}: {e}"
+            )
+            return False
+        if not tombstone:
+            return False
+        return tombstone_is_new_launch(
+            tombstone, self._calculate_content_hash(andamento)
+        )
     
     def _remove_from_deleted(self, codstatus: str):
         """Remove CodStatus da lista de exclusões (quando é um novo registro legítimo)"""
@@ -1214,8 +1249,13 @@ class AndamentosSynchronizer:
                 return False
 
             tombstone = self._fetch_deleted_andamento(codstatus)
-            if tombstone and not tombstone_is_api_delete(
-                tombstone.get("origem"), tombstone.get("motivo")
+            if tombstone and (
+                not tombstone_is_api_delete(
+                    tombstone.get("origem"), tombstone.get("motivo")
+                )
+                or tombstone_is_new_launch(
+                    tombstone, self._calculate_content_hash(andamento)
+                )
             ):
                 self._remove_from_deleted(codstatus)
 

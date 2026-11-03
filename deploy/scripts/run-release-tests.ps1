@@ -125,8 +125,22 @@ try {
     $env:CI = "true"
     try {
         & $pnpm install --frozen-lockfile --prefer-offline
-        if ($LASTEXITCODE -ne 0) {
-            throw "pnpm install --frozen-lockfile falhou (codigo $LASTEXITCODE)"
+        $installCode = $LASTEXITCODE
+        $materialize = Join-Path $Root "scripts\materialize-workspace-packages.mjs"
+        if (Test-Path -LiteralPath $materialize -PathType Leaf) {
+            & node $materialize
+            if ($LASTEXITCODE -ne 0) {
+                throw "materialize-workspace-packages.mjs falhou (codigo $LASTEXITCODE)"
+            }
+        }
+        if ($installCode -ne 0) {
+            $apiTypes = Join-Path $Root "apps\web\node_modules\@sagra\api-types\package.json"
+            $uiPkg = Join-Path $Root "apps\web\node_modules\@sagra\ui\package.json"
+            if ((Test-Path -LiteralPath $apiTypes -PathType Leaf) -and (Test-Path -LiteralPath $uiPkg -PathType Leaf)) {
+                Write-Host ("  pnpm install retornou {0}; workspace @sagra materializado (junction Windows)." -f $installCode) -ForegroundColor DarkYellow
+            } else {
+                throw "pnpm install --frozen-lockfile falhou (codigo $installCode)"
+            }
         }
     } finally {
         if ($null -eq $prevCi) { Remove-Item Env:\CI -ErrorAction SilentlyContinue }

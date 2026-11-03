@@ -81,4 +81,34 @@ describe("prioridades no painel de TV", () => {
     expect(screen.queryByRole("timer")).not.toBeInTheDocument();
     expect(screen.queryByText("Sem horário")).not.toBeInTheDocument();
   });
+
+  it("renderiza a composição HTML do laboratório com OS, situação e carimbo", () => {
+    const { container } = render(
+      <ModernQueueCard
+        item={{ ...item, andamento_usuario: "Ana Silva" }}
+        index={0}
+        cardStyle={{
+          models: {
+            high: { effect: "lab-vidro-fosco" },
+            medium: { effect: "" },
+            normal: { effect: "" },
+          },
+          entryAnimation: "none",
+        }}
+      />,
+    );
+    const card = container.querySelector(".setor-modern-card");
+    expect(card).toHaveAttribute("data-model", "lab-vidro-fosco");
+    expect(container.querySelector(".mx-shell")).not.toBeNull();
+    expect(container.querySelector(".mx-mat-1")).not.toBeNull();
+    expect(screen.getByText("OS 1428/26")).toBeVisible();
+    expect(screen.getByText("Em Execução")).toBeVisible();
+    expect(screen.getByText("Ana Silva")).toBeVisible();
+    expect(screen.getByText("PRIORIDADE")).toBeVisible();
+    expect(container.querySelector("[data-cm-motion='pulse']")).not.toBeNull();
+    expect(container.querySelector("[data-cm-motion='fill']")).not.toBeNull();
+    expect(container.querySelector(".setor-modern-card-motion")).not.toHaveAttribute(
+      "data-entry",
+    );
+  });
 });

@@ -187,6 +187,109 @@ export function isPdfFilename(name: string): boolean {
   return name.trim().toLowerCase().endsWith(".pdf");
 }
 
+export function isTifFilename(name: string): boolean {
+  return /\.tiff?$/i.test(name.trim());
+}
+
+export const SEM_MAQUINA_DOWNLOAD_KEY = "__sem_maquina__";
+
+export interface MaquinaDownloadPendente {
+  key: string;
+  label: string;
+  quantidadeChapas?: number | null;
+}
+
+function isArquivoDownloaded(
+  arquivo: { id: number; baixado_em?: string | null },
+  downloadedIds?: ReadonlySet<number>,
+): boolean {
+  if (arquivo.baixado_em) return true;
+  return downloadedIds?.has(arquivo.id) ?? false;
+}
+
+function chapasPorMaquinaMap(
+  chapasPorMaquina?: { maquina: string; quantidade: number }[] | null,
+): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const chapa of chapasPorMaquina ?? []) {
+    const key = String(chapa.maquina || "").trim().toLowerCase();
+    if (!key) continue;
+    map.set(key, (map.get(key) ?? 0) + Number(chapa.quantidade || 0));
+  }
+  return map;
+}
+
+/** Máquinas sem download mínimo: todos PDF/TIF baixados, ou ao menos um PDF. */
+export function listMaquinasDownloadPendentes(
+  arquivos: {
+    id: number;
+    nome?: string | null;
+    maquina?: string | null;
+    baixado_em?: string | null;
+  }[],
+  downloadedIds?: ReadonlySet<number>,
+  chapasPorMaquina?: { maquina: string; quantidade: number }[] | null,
+): MaquinaDownloadPendente[] {
+  const chapasMap = chapasPorMaquinaMap(chapasPorMaquina);
+  const pendentes: MaquinaDownloadPendente[] = [];
+  for (const group of groupArquivosByMaquina(arquivos)) {
+    const relevant = group.arquivos.filter((arquivo) => {
+      const nome = String(arquivo.nome ?? "");
+      return isPdfFilename(nome) || isTifFilename(nome);
+    });
+    if (relevant.length === 0) continue;
+    if (relevant.every((arquivo) => isArquivoDownloaded(arquivo, downloadedIds))) {
+      continue;
+    }
+    const pdfs = relevant.filter((arquivo) => isPdfFilename(String(arquivo.nome ?? "")));
+    if (
+      pdfs.length > 0 &&
+      pdfs.some((arquivo) => isArquivoDownloaded(arquivo, downloadedIds))
+    ) {
+      continue;
+    }
+    const trimmed = group.maquina.trim();
+    const quantidade = trimmed
+      ? (chapasMap.get(trimmed.toLowerCase()) ?? null)
+      : null;
+    pendentes.push({
+      key: trimmed || SEM_MAQUINA_DOWNLOAD_KEY,
+      label: trimmed || "Espelhos",
+      quantidadeChapas: quantidade,
+    });
+  }
+  return pendentes;
+}
+
+/** Enriquece rótulos vindos da API com a cota de chapas da sessão. */
+export function enrichMaquinasDownloadPendentes(
+  maquinas: Array<string | MaquinaDownloadPendente>,
+  chapasPorMaquina?: { maquina: string; quantidade: number }[] | null,
+): MaquinaDownloadPendente[] {
+  const chapasMap = chapasPorMaquinaMap(chapasPorMaquina);
+  return maquinas.map((item) => {
+    if (typeof item !== "string") {
+      if (item.quantidadeChapas != null) return item;
+      const key = item.key === SEM_MAQUINA_DOWNLOAD_KEY ? "" : item.key;
+      const quantidade = key ? (chapasMap.get(key.toLowerCase()) ?? null) : null;
+      return { ...item, quantidadeChapas: quantidade };
+    }
+    const trimmed = item.trim();
+    if (!trimmed || trimmed.toLowerCase() === "espelhos") {
+      return {
+        key: SEM_MAQUINA_DOWNLOAD_KEY,
+        label: "Espelhos",
+        quantidadeChapas: null,
+      };
+    }
+    return {
+      key: trimmed,
+      label: trimmed,
+      quantidadeChapas: chapasMap.get(trimmed.toLowerCase()) ?? null,
+    };
+  });
+}
+
 function ensureChapaGroup<T extends { id: number; nome: string }>(
   chapaMap: Map<string, PlateChapaGroup<T>>,
   groupKey: string,

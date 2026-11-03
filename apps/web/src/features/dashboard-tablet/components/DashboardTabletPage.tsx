@@ -2,7 +2,7 @@ import { ChevronDown, Bell, BellOff, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { PainelOsInstallButton } from "@/components/pwa/PainelOsInstallButton";
-import { useUserPreferenceSync } from "@/hooks/useUserPreferenceSync";
+import { usePainelOsRemoteConfig } from "@/features/dashboard-setor/hooks/usePainelOsRemoteConfig";
 import { useWebPush } from "@/hooks/useWebPush";
 import { useAuthStore } from "@/features/auth/authStore";
 import {
@@ -17,12 +17,10 @@ import { useDashboardFreshness } from "@/features/dashboard-setor/hooks/useDashb
 import { useDashboardSetorData } from "@/features/dashboard-setor/hooks/useDashboardSetorData";
 import { usePriorityAlert } from "@/features/dashboard-setor/hooks/usePriorityAlert";
 import { useScreenWakeLock } from "@/features/dashboard-setor/hooks/useScreenWakeLock";
-import { normalizeDashboardConfigFromRemote } from "@/features/dashboard-setor/normalizeConfig";
 import type {
   DashboardConfig,
   DashboardOsItem,
 } from "@/features/dashboard-setor/types";
-import { buildDashboardConfigSignature } from "@/features/dashboard-setor/utils";
 import "@/features/dashboard-setor/dashboard-setor.css";
 
 import {
@@ -154,32 +152,17 @@ export function DashboardTabletPage({
     return [];
   }, [permissions, userSetor]);
 
-  useUserPreferenceSync({
-    key: "painel_tablet",
-    enabled: isAuthenticated,
-    watchValue: config,
-    onRemoteLoaded: (remote) => {
-      const normalized = normalizeDashboardConfigFromRemote(remote, userSetor);
-      if (
-        normalized.sector &&
-        !canUseTabletSector(permissions, normalized.sector, userSetor)
-      ) {
-        if (userSetor && canUseTabletSector(permissions, userSetor, userSetor)) {
-          normalized.sector = userSetor;
-        }
-      }
-      if (
-        buildDashboardConfigSignature(normalized) ===
-        buildDashboardConfigSignature(configRef.current)
-      ) {
-        return;
-      }
-      saveTabletDashboardConfig(normalized);
-      setConfig(normalized);
-    },
+  usePainelOsRemoteConfig({
+    route: identityMode === "session" ? "celular" : "tablet",
+    config,
+    setConfig,
+    fallbackSector: userSetor,
   });
 
-  const { triggerPriorityAlert } = usePriorityAlert();
+  const { triggerPriorityAlert } = usePriorityAlert(
+    config.notificationSounds,
+    config.notificationSound,
+  );
   useScreenWakeLock();
 
   const {
@@ -197,8 +180,8 @@ export function DashboardTabletPage({
     hasLoadedOnce,
   } = useDashboardSetorData({
     config,
-    onNewItems: () => {
-      void triggerPriorityAlert();
+    onNewItems: (priority) => {
+      void triggerPriorityAlert(priority);
     },
   });
 

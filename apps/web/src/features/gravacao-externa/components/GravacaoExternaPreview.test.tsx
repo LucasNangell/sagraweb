@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { gravacaoExternaCompositePreviewUrl } from "@/api/gravacaoExterna";
 import { gravacaoPendenteCompositePreviewUrl } from "@/api/gravacaoPendente";
@@ -181,7 +181,7 @@ describe("composite preview", () => {
     expect(screen.queryByText("Outros")).not.toBeInTheDocument();
   });
 
-  it("shows full-width machine filter with PDF/TIF counts ordered by chapas qty", () => {
+  it("shows full-width machine filter with PDF/TIF counts in alphabetical order", () => {
     const arquivos = [
       { id: 1, nome: `${GROUP_KEY} (C).tif`, maquina: "M1" },
       { id: 2, nome: `${GROUP_KEY} (M).tif`, maquina: "M1" },
@@ -209,18 +209,22 @@ describe("composite preview", () => {
     );
     const filter = screen.getByRole("group", { name: /Filtrar arquivos por máquina/i });
     expect(filter).toHaveClass("w-full");
-    const buttons = within(filter).getAllByRole("button");
-    expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual([
+    const machineButtons = within(filter)
+      .getAllByRole("button")
+      .filter((b) => b.getAttribute("aria-label") && !b.getAttribute("aria-label")?.startsWith("Download arquivos"));
+    expect(machineButtons.map((b) => b.getAttribute("aria-label"))).toEqual([
       "Espelhos",
-      "M2",
       "M1",
+      "M2",
     ]);
-    expect(within(buttons[0]!).getByText("PDFs baixados: 1")).toBeInTheDocument();
-    expect(within(buttons[0]!).getByText("TIFs baixados: 0")).toBeInTheDocument();
-    expect(within(buttons[1]!).getByText("PDFs baixados: 0")).toBeInTheDocument();
-    expect(within(buttons[1]!).getByText("TIFs baixados: 1")).toBeInTheDocument();
-    expect(within(buttons[2]!).getByText("PDFs baixados: 0")).toBeInTheDocument();
-    expect(within(buttons[2]!).getByText("TIFs baixados: 2")).toBeInTheDocument();
+    const cardOf = (label: string) =>
+      within(filter).getByRole("button", { name: label }).parentElement!.parentElement!;
+    expect(within(cardOf("Espelhos")).getByText("PDFs baixados: 0 de 1")).toBeInTheDocument();
+    expect(within(cardOf("Espelhos")).getByText("TIFs baixados: 0 de 0")).toBeInTheDocument();
+    expect(within(cardOf("M2")).getByText("PDFs baixados: 0 de 0")).toBeInTheDocument();
+    expect(within(cardOf("M2")).getByText("TIFs baixados: 0 de 1")).toBeInTheDocument();
+    expect(within(cardOf("M1")).getByText("PDFs baixados: 0 de 0")).toBeInTheDocument();
+    expect(within(cardOf("M1")).getByText("TIFs baixados: 0 de 2")).toBeInTheDocument();
   });
 
   it("filters the file list when a machine segment is selected", () => {
@@ -257,7 +261,7 @@ describe("composite preview", () => {
     expect(screen.queryByRole("button", { name: /Cad 1/i })).not.toBeInTheDocument();
   });
 
-  it("hides machine filter when only one machine has files", () => {
+  it("shows a half-width machine tab when only one machine has files", () => {
     const arquivos = [
       { id: 1, nome: `${GROUP_KEY} (C).tif`, maquina: "PM52" },
       { id: 2, nome: `${GROUP_KEY} (M).tif`, maquina: "PM52" },
@@ -273,9 +277,10 @@ describe("composite preview", () => {
         onSelectComposite={() => undefined}
       />,
     );
-    expect(
-      screen.queryByRole("group", { name: /Filtrar arquivos por máquina/i }),
-    ).not.toBeInTheDocument();
+    const filter = screen.getByRole("group", { name: /Filtrar arquivos por máquina/i });
+    const tab = within(filter).getByRole("button", { name: "PM52" }).parentElement!
+      .parentElement!;
+    expect(tab).toHaveClass("w-1/2");
     expect(screen.getByRole("button", { name: /Cad 1/i })).toBeInTheDocument();
   });
 
@@ -303,11 +308,115 @@ describe("composite preview", () => {
       />,
     );
     const filter = screen.getByRole("group", { name: /Filtrar arquivos por máquina/i });
-    const pm52 = within(filter).getByRole("button", { name: "PM52" });
-    const sm74 = within(filter).getByRole("button", { name: "SM74" });
-    expect(within(pm52).getByText("PDFs baixados: 1")).toBeInTheDocument();
-    expect(within(pm52).getByText("TIFs baixados: 2")).toBeInTheDocument();
-    expect(within(sm74).getByText("PDFs baixados: 0")).toBeInTheDocument();
-    expect(within(sm74).getByText("TIFs baixados: 1")).toBeInTheDocument();
+    const cardOf = (label: string) =>
+      within(filter).getByRole("button", { name: label }).parentElement!.parentElement!;
+    expect(within(cardOf("PM52")).getByText("PDFs baixados: 0 de 1")).toBeInTheDocument();
+    expect(within(cardOf("PM52")).getByText("TIFs baixados: 0 de 2")).toBeInTheDocument();
+    expect(within(cardOf("SM74")).getByText("PDFs baixados: 0 de 0")).toBeInTheDocument();
+    expect(within(cardOf("SM74")).getByText("TIFs baixados: 0 de 1")).toBeInTheDocument();
+  });
+
+  it("updates PDF/TIF downloaded counts when files are marked downloaded", () => {
+    const arquivos = [
+      { id: 1, nome: `${GROUP_KEY} (C).tif`, maquina: "PM52" },
+      { id: 2, nome: `${GROUP_KEY} (M).tif`, maquina: "PM52" },
+      { id: 3, nome: "espelho-pm52.pdf", maquina: "PM52" },
+      {
+        id: 4,
+        nome: "2026_OS 00612-Gr-Outro (Cad 2 A) (C).tif",
+        maquina: "SM74",
+      },
+    ];
+    const downloaded = new Set<number>([1, 3]);
+    render(
+      <GravacaoExternaArquivosPanel
+        ano={2024}
+        nrOs={1857}
+        arquivos={arquivos}
+        selection={null}
+        groupByMachine
+        downloadedArquivoIds={downloaded}
+        onDownloadMachine={() => undefined}
+        onSelect={() => undefined}
+        onSelectComposite={() => undefined}
+      />,
+    );
+    const filter = screen.getByRole("group", { name: /Filtrar arquivos por máquina/i });
+    const cardOf = (label: string) =>
+      within(filter).getByRole("button", { name: label }).parentElement!.parentElement!;
+    expect(within(cardOf("PM52")).getByText("PDFs baixados: 1 de 1")).toBeInTheDocument();
+    expect(within(cardOf("PM52")).getByText("TIFs baixados: 1 de 2")).toBeInTheDocument();
+    expect(within(cardOf("SM74")).getByText("PDFs baixados: 0 de 0")).toBeInTheDocument();
+    expect(within(cardOf("SM74")).getByText("TIFs baixados: 0 de 1")).toBeInTheDocument();
+    const pendingBadges = within(filter).getAllByTitle(
+      "Baixar arquivos dessa máquina",
+    );
+    expect(pendingBadges).toHaveLength(2);
+    expect(pendingBadges[0]).toHaveClass("bg-amber-100");
+  });
+
+  it("requests ZIP download for machine files when Download badge is clicked", () => {
+    const onDownloadMachine = vi.fn();
+    const arquivos = [
+      { id: 1, nome: `${GROUP_KEY} (C).tif`, maquina: "PM52" },
+      { id: 2, nome: `${GROUP_KEY} (M).tif`, maquina: "PM52" },
+      { id: 3, nome: "espelho-pm52.pdf", maquina: "PM52" },
+      {
+        id: 4,
+        nome: "2026_OS 00612-Gr-Outro (Cad 2 A) (C).tif",
+        maquina: "SM74",
+      },
+    ];
+    render(
+      <GravacaoExternaArquivosPanel
+        ano={2024}
+        nrOs={1857}
+        arquivos={arquivos}
+        selection={null}
+        groupByMachine
+        onDownloadMachine={onDownloadMachine}
+        onSelect={() => undefined}
+        onSelectComposite={() => undefined}
+      />,
+    );
+    const filter = screen.getByRole("group", { name: /Filtrar arquivos por máquina/i });
+    fireEvent.click(within(filter).getByRole("button", { name: "Download arquivos PM52" }));
+    expect(onDownloadMachine).toHaveBeenCalledTimes(1);
+    expect(onDownloadMachine).toHaveBeenCalledWith("PM52", [1, 2, 3]);
+  });
+
+  it("turns the machine Download badge green when all files are downloaded", () => {
+    const arquivos = [
+      { id: 1, nome: `${GROUP_KEY} (C).tif`, maquina: "PM52" },
+      { id: 2, nome: `${GROUP_KEY} (M).tif`, maquina: "PM52" },
+      { id: 3, nome: "espelho-pm52.pdf", maquina: "PM52" },
+      {
+        id: 4,
+        nome: "2026_OS 00612-Gr-Outro (Cad 2 A) (C).tif",
+        maquina: "SM74",
+      },
+    ];
+    render(
+      <GravacaoExternaArquivosPanel
+        ano={2024}
+        nrOs={1857}
+        arquivos={arquivos}
+        selection={null}
+        groupByMachine
+        downloadedArquivoIds={new Set([1, 2, 3, 4])}
+        onDownloadMachine={() => undefined}
+        onSelect={() => undefined}
+        onSelectComposite={() => undefined}
+      />,
+    );
+    const filter = screen.getByRole("group", { name: /Filtrar arquivos por máquina/i });
+    expect(
+      within(filter).getAllByTitle("Baixar arquivos novamente"),
+    ).toHaveLength(2);
+    expect(
+      within(filter).getAllByTitle("Baixar arquivos novamente")[0],
+    ).toHaveClass("bg-emerald-100");
+    expect(within(filter).getAllByText("Baixado")).toHaveLength(2);
+    expect(within(filter).queryByText("Download")).toBeNull();
   });
 });

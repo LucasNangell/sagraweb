@@ -58,8 +58,21 @@ describe("chegadas ao setor", () => {
       { ...op, nr_os: 101 },
       { ...op, nr_os: 102, situacao: "Comentário" },
     ];
-    expect(process(batch).hasSectorArrivals).toBe(true);
+    const firstAlert = process(batch);
+    expect(firstAlert.hasSectorArrivals).toBe(true);
+    expect(firstAlert.arrivalPriority).toBe("normal");
     expect(process(batch).hasSectorArrivals).toBe(false);
+  });
+
+  it("usa a maior prioridade entre as OS que chegaram", () => {
+    const { process } = setup();
+    const next = process([
+      op,
+      { ...op, nr_os: 101, prioridade: "Solicitado" },
+      { ...op, nr_os: 102, prioridade: "Prometido p/" },
+    ]);
+    expect(next.hasSectorArrivals).toBe(true);
+    expect(next.arrivalPriority).toBe("high");
   });
 
   it("ignora prioridade, horário, autor e reorganização dos cards", () => {

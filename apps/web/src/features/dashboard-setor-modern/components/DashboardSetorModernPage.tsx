@@ -13,7 +13,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
 } from "react";
 
 import { useAuthStore } from "@/features/auth/authStore";
@@ -32,7 +31,7 @@ import {
   getVisibleDashboardColumns,
 } from "@/features/dashboard-setor/utils";
 import { useSyncAndamentosServiceAlert } from "@/features/sync-andamentos/useSyncAndamentosServiceAlert";
-import { useUserPreferenceSync } from "@/hooks/useUserPreferenceSync";
+import { usePainelOsRemoteConfig } from "@/features/dashboard-setor/hooks/usePainelOsRemoteConfig";
 
 import {
   loadModernDashboardConfig,
@@ -41,54 +40,49 @@ import {
 import { useBoardMotion } from "../hooks/useBoardMotion";
 import { useSectorArrivalSound } from "../hooks/useSectorArrivalSound";
 import { sortModernDashboardColumns } from "../sortColumns";
+import { boardRootStyle, laneBoardStyle } from "../cardStyle";
 import { AndamentoClock } from "./AndamentoTimer";
 import { ModernQueueCard } from "./ModernQueueCard";
 import "../dashboard-setor-modern.css";
+import "../dashboard-setor-modern-cards.css";
 
 export function DashboardSetorModernPage() {
-  const authenticated = useAuthStore((s) => s.isAuthenticated);
   const userSector = useAuthStore((s) => s.user?.setor);
   const [config, setConfig] = useState(() =>
     loadModernDashboardConfig(userSector),
   );
-  const configRef = useRef(config);
-  configRef.current = config;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenError, setFullscreenError] = useState<string | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const settingsButton = useRef<HTMLButtonElement>(null);
-  const { playArrivalSound } = useSectorArrivalSound();
+  const { playArrivalSound } = useSectorArrivalSound(
+    config.notificationSounds,
+    config.notificationSound,
+  );
   useScreenWakeLock();
 
-  useUserPreferenceSync({
-    key: "painel_setor_moderno",
-    enabled: authenticated,
-    watchValue: config,
-    onRemoteLoaded: (remote) => {
-      const next = normalizeDashboardConfigFromRemote(remote, userSector);
-      const current = configRef.current;
-      if (
-        buildDashboardConfigSignature(next) !==
-          buildDashboardConfigSignature(current) ||
-        showsAndamentoTime(next) !== showsAndamentoTime(current)
-      ) {
-        saveModernDashboardConfig(next);
-        setConfig(next);
-      }
-    },
+  usePainelOsRemoteConfig({
+    route: "setor-moderno",
+    config,
+    setConfig,
+    fallbackSector: userSector,
   });
 
   const data = useDashboardSetorData({
     config,
-    onSectorArrival: () => {
-      void playArrivalSound();
+    onSectorArrival: (priority) => {
+      void playArrivalSound(priority);
     },
   });
   const freshness = useDashboardFreshness(data);
   const syncAlert = useSyncAndamentosServiceAlert();
   const showTime = showsAndamentoTime(config);
+  const cardSkinKey = useMemo(
+    () => JSON.stringify(config.cardStyle ?? null),
+    [config.cardStyle],
+  );
   const columns = useMemo(
     () => sortModernDashboardColumns(getVisibleDashboardColumns(data.columns)),
     [data.columns],
@@ -174,7 +168,18 @@ export function DashboardSetorModernPage() {
             : "Aguardando sincronização";
 
   return (
-    <div className="setor-modern" ref={rootRef}>
+    <div
+      className="setor-modern"
+      ref={rootRef}
+      data-heading-color={
+        config.cardStyle?.typography?.heading?.color ? "1" : undefined
+      }
+      data-column-color={
+        config.cardStyle?.typography?.column?.color ? "1" : undefined
+      }
+      data-custom-header={config.theme?.headerBg ? "1" : undefined}
+      style={boardRootStyle(config)}
+    >
       <div className="setor-modern-workspace" inert={settingsOpen || undefined}>
         <header className="setor-modern-header">
           <div className="setor-modern-identity">
@@ -262,11 +267,8 @@ export function DashboardSetorModernPage() {
             <div
               className="setor-modern-board"
               ref={boardRef}
-              style={
-                {
-                  "--column-count": Math.max(columns.length, 1),
-                } as CSSProperties
-              }
+              data-columns={String(Math.max(columns.length, 1))}
+              style={boardRootStyle(config)}
               aria-label="Fila de produção por etapa"
               aria-busy={!data.hasLoadedOnce && data.isFetching}
             >
@@ -274,12 +276,7 @@ export function DashboardSetorModernPage() {
                 <section
                   className="setor-modern-lane"
                   key={col.id}
-                  style={
-                    {
-                      "--lane": index % 6,
-                      "--column-index": index,
-                    } as CSSProperties
-                  }
+                  style={laneBoardStyle(index, col, config.theme)}
                   aria-label={col.title}
                 >
                   <header className="setor-modern-lane-header">
@@ -325,10 +322,11 @@ export function DashboardSetorModernPage() {
                     ) : col.items.length ? (
                       col.items.map((item, cardIndex) => (
                         <ModernQueueCard
-                          key={item.uniqueKey}
+                          key={`${item.uniqueKey}:${cardSkinKey}`}
                           item={item}
                           index={cardIndex}
                           showTime={showTime}
+                          cardStyle={config.cardStyle}
                         />
                       ))
                     ) : null}

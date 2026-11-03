@@ -97,7 +97,17 @@ vi.mock("./GravacaoPendenteHistoricoCota", () => ({
   GravacaoPendenteHistoricoCota: () => <div />,
 }));
 vi.mock("./GravacaoExternaPreview", () => ({
-  GravacaoExternaArquivosPanel: () => <div />,
+  GravacaoExternaArquivosPanel: ({
+    arquivos,
+  }: {
+    arquivos: Array<{ id: number; nome: string; maquina?: string | null }>;
+  }) => (
+    <ul aria-label="Lista de arquivos">
+      {arquivos.map((arq) => (
+        <li key={arq.id}>{arq.nome}</li>
+      ))}
+    </ul>
+  ),
   GravacaoExternaPreview: () => <div />,
 }));
 vi.mock("./GravacaoFornecedorSelectModal", () => ({
@@ -375,10 +385,16 @@ describe("GravacaoPendenteTab controle", () => {
       render(<GravacaoPendenteTab />);
       fireEvent.click(screen.getByText("00101/26"));
 
+      expect(screen.getByText("Komori.pdf")).toBeTruthy();
+      expect(screen.getByText("Heidelberg.pdf")).toBeTruthy();
+
       const heidelberg = screen.getByRole("button", { name: /Heidelberg: 4/ });
       fireEvent.click(heidelberg);
       expect(heidelberg).toHaveAttribute("aria-pressed", "true");
       expect(screen.getByText("Somente: Heidelberg")).toBeTruthy();
+      expect(screen.queryByText("Komori.pdf")).toBeNull();
+      expect(screen.getByText("Heidelberg.pdf")).toBeTruthy();
+      expect(screen.getByText("Arquivos (1)")).toBeTruthy();
 
       fireEvent.click(screen.getByRole("button", { name: "Enviar para gravação externa" }));
       await waitFor(() => expect(enviarOs).toHaveBeenCalledTimes(1));

@@ -36,6 +36,9 @@ CREATE TABLE IF NOT EXISTS tab_os_gravacao_externa_arquivo (
   NomeArquivo VARCHAR(255) NOT NULL,
   TamanhoBytes BIGINT DEFAULT NULL,
   Ordem INT NOT NULL DEFAULT 0,
+  AbsolutePath VARCHAR(1024) DEFAULT NULL,
+  Maquina VARCHAR(128) DEFAULT NULL,
+  BaixadoEm DATETIME DEFAULT NULL,
   PRIMARY KEY (Id),
   KEY idx_ge_arq_sessao (GravacaoExternaId)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
@@ -219,6 +222,11 @@ def _apply_externa_migrations() -> None:
             "tab_os_gravacao_externa_arquivo",
             "Maquina",
             "ALTER TABLE tab_os_gravacao_externa_arquivo ADD COLUMN Maquina VARCHAR(128) DEFAULT NULL",
+        ),
+        (
+            "tab_os_gravacao_externa_arquivo",
+            "BaixadoEm",
+            "ALTER TABLE tab_os_gravacao_externa_arquivo ADD COLUMN BaixadoEm DATETIME DEFAULT NULL",
         ),
     )
     for table, column, ddl in migrations:

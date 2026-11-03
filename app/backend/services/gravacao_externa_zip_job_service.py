@@ -19,10 +19,14 @@ from fastapi import HTTPException
 from config_manager import PROJECT_ROOT
 from database import db
 from services.gravacao_externa_service import (
+    SEM_MAQUINA_ZIP_KEY,
     ZipBuildCancelled,
     _fetch_arquivos,
     compute_arquivos_signature,
+    filter_arquivos_by_maquina_key,
     get_session_by_id,
+    normalize_maquina_zip_key,
+    resolve_arquivos_for_zip_signature,
     session_zip_filename,
     write_session_arquivos_zip,
 )
@@ -513,9 +517,27 @@ class _ZipJobRuntime:
                 _finalize_error(session_id, signature, "Sessão não encontrada.")
                 return
 
+            selected = resolve_arquivos_for_zip_signature(session_id, signature)
+            if not selected:
+                _finalize_error(
+                    session_id,
+                    signature,
+                    "Conjunto de arquivos do ZIP não encontrado.",
+                )
+                return
+            maquina_key = None
+            all_arquivos = _fetch_arquivos(session_id)
+            if compute_arquivos_signature(all_arquivos) != signature:
+                keys = {str(a.get("maquina") or "").strip() for a in selected}
+                if not keys or keys == {""}:
+                    maquina_key = SEM_MAQUINA_ZIP_KEY
+                elif len(keys) == 1:
+                    maquina_key = next(iter(keys)) or SEM_MAQUINA_ZIP_KEY
             result = write_session_arquivos_zip(
                 session,
                 str(part),
+                arquivos=selected,
+                maquina_key=maquina_key,
                 on_progress=_on_progress,
                 should_abort=_abort,
             )
@@ -561,15 +583,20 @@ class _ZipJobRuntime:
 _runtime = _ZipJobRuntime()
 
 
-def enqueue_zip_job(session: dict[str, Any]) -> dict[str, Any]:
-    """Garante um job para a assinatura atual. Reusa ZIP pronto quando válido."""
+def enqueue_zip_job(
+    session: dict[str, Any],
+    *,
+    maquina: str | None = None,
+) -> dict[str, Any]:
+    """Garante um job para a assinatura atual (todos ou filtrado por máquina)."""
     session_id = int(session["id"])
-    arquivos = _fetch_arquivos(session_id)
+    maquina_key = normalize_maquina_zip_key(maquina)
+    arquivos = filter_arquivos_by_maquina_key(_fetch_arquivos(session_id), maquina_key)
     if not arquivos:
         raise HTTPException(status_code=404, detail="Nenhum arquivo para download.")
 
     signature = compute_arquivos_signature(arquivos)
-    filename = session_zip_filename(session)
+    filename = session_zip_filename(session, maquina_key=maquina_key)
     existing = get_zip_row(session_id)
 
     if existing and existing.get("assinatura") == signature:

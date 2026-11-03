@@ -6,6 +6,7 @@ export const PAINEL_STANDALONE_PATHS = [
   "/painel/tablet",
   "/painel/celular",
   "/painel/gravacao",
+  "/painel/preview-admin",
 ] as const;
 
 export type PainelStandalonePath = (typeof PAINEL_STANDALONE_PATHS)[number];
@@ -27,6 +28,7 @@ function buildPainelAbsoluteUrl(path: PainelStandalonePath): string {
 export function openPainelInNewWindow(path: PainelStandalonePath): boolean {
   const url = buildPainelAbsoluteUrl(path);
   const windowName =
+    path === "/painel/preview-admin" ? "SagraPainelPreview" :
     path === "/painel/setor-moderno" ? "SagraPainelSetorModerno" :
     path === "/painel/setor" ? "SagraPainelSetor" : "SagraPainelGlobal";
 
@@ -59,4 +61,9 @@ export function openPainelInNewWindow(path: PainelStandalonePath): boolean {
 
   win.focus();
   return true;
+}
+
+/** Preview do admin em janela própria, simulando o painel moderno. */
+export function openPainelPreviewWindow(): boolean {
+  return openPainelInNewWindow("/painel/preview-admin");
 }

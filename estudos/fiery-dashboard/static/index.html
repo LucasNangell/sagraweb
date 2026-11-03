@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Painel Fiery · Xerox SEFOC</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topo">
+      <div class="identidade">
+        <span class="marca">SEFOC</span>
+        <div>
+          <h1>Painel Fiery</h1>
+          <p>Xerox PB e Cor · consulta JMF em tempo real</p>
+        </div>
+      </div>
+      <div class="kpis" id="kpis"></div>
+      <div class="relogio">
+        <span class="ponto" id="live-dot"></span>
+        <div>
+          <strong id="hora">--:--:--</strong>
+          <small id="atualizado">aguardando Fiery…</small>
+        </div>
+      </div>
+    </header>
+
+    <main class="grade" id="grade"></main>
+  </div>
+
+  <aside class="painel" id="painel" hidden>
+    <div class="painel-cab">
+      <div>
+        <p class="painel-kicker" id="painel-kicker"></p>
+        <h2 id="painel-titulo"></h2>
+      </div>
+      <button type="button" class="fechar" id="fechar" aria-label="Fechar">×</button>
+    </div>
+    <div class="painel-corpo" id="painel-corpo"></div>
+  </aside>
+  <div class="sombra" id="sombra" hidden></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -37,6 +37,16 @@
   min-height: 100dvh;
 }
 
+.painel-admin-settings-embed.dashboard-setor-page {
+  margin: 0;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+  border-radius: 0.5rem;
+  padding: 0.25rem 0.5rem 0.75rem;
+}
+
 .dashboard-setor-header {
   height: 120px;
   flex-shrink: 0;
@@ -660,6 +670,19 @@
   color: var(--ds-text-secondary);
   cursor: pointer;
   font-size: 0.9rem;
+}
+
+.dashboard-setor-column-options {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--ds-border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.dashboard-setor-column-options .dashboard-setor-hide-empty-option {
+  margin-top: 0;
 }
 
 .dashboard-setor-btn {

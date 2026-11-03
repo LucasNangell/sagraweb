@@ -63,6 +63,85 @@ def test_enqueue_empty_raises(monkeypatch: pytest.MonkeyPatch):
     assert exc.value.status_code == 404
 
 
+def test_enqueue_filters_by_maquina(monkeypatch: pytest.MonkeyPatch):
+    arquivos = [
+        {
+            "id": 1,
+            "relative": "a.tif",
+            "absolute_path": "",
+            "nome": "a.tif",
+            "tamanho_bytes": 2,
+            "ordem": 0,
+            "maquina": "PM52",
+        },
+        {
+            "id": 2,
+            "relative": "b.tif",
+            "absolute_path": "",
+            "nome": "b.tif",
+            "tamanho_bytes": 3,
+            "ordem": 1,
+            "maquina": "SM74",
+        },
+    ]
+    monkeypatch.setattr(jobs, "_fetch_arquivos", lambda _sid: arquivos)
+    captured: dict = {}
+
+    def fake_upsert(session_id, signature, filename, total_arquivos):
+        captured["session_id"] = session_id
+        captured["signature"] = signature
+        captured["filename"] = filename
+        captured["total"] = total_arquivos
+
+    def fake_get_row(_sid):
+        if "signature" not in captured:
+            return None
+        return {
+            "id": 1,
+            "gravacao_externa_id": 4,
+            "assinatura": captured["signature"],
+            "status": jobs.ZIP_PENDING,
+            "erro": None,
+            "arquivo_path": None,
+            "nome_arquivo": captured["filename"],
+            "tamanho_bytes": None,
+            "total_arquivos": captured["total"],
+            "arquivos_prontos": 0,
+            "bytes_prontos": 0,
+            "etag": None,
+        }
+
+    monkeypatch.setattr(jobs, "get_zip_row", fake_get_row)
+    monkeypatch.setattr(jobs, "_upsert_pending", fake_upsert)
+    monkeypatch.setattr(jobs._runtime, "enqueue", lambda *a, **k: True)
+
+    out = jobs.enqueue_zip_job({"id": 4, "os_ano": 2024, "os_nro": 12}, maquina="PM52")
+    assert captured["total"] == 1
+    assert captured["signature"] == compute_arquivos_signature([arquivos[0]])
+    assert "PM52" in str(captured["filename"])
+    assert out["status"] == "pendente"
+
+
+def test_filter_arquivos_by_maquina_key():
+    from services.gravacao_externa_service import (
+        SEM_MAQUINA_ZIP_KEY,
+        filter_arquivos_by_maquina_key,
+    )
+
+    arquivos = [
+        {"id": 1, "maquina": "PM52"},
+        {"id": 2, "maquina": None},
+        {"id": 3, "maquina": "  "},
+        {"id": 4, "maquina": "sm74"},
+    ]
+    assert [a["id"] for a in filter_arquivos_by_maquina_key(arquivos, None)] == [1, 2, 3, 4]
+    assert [a["id"] for a in filter_arquivos_by_maquina_key(arquivos, "PM52")] == [1]
+    assert [a["id"] for a in filter_arquivos_by_maquina_key(arquivos, "pm52")] == [1]
+    assert [
+        a["id"] for a in filter_arquivos_by_maquina_key(arquivos, SEM_MAQUINA_ZIP_KEY)
+    ] == [2, 3]
+
+
 def test_worker_success_writes_atomic_zip(monkeypatch: pytest.MonkeyPatch, tmp_path):
     dest_dir = tmp_path / "zips"
     dest_dir.mkdir()
@@ -79,7 +158,7 @@ def test_worker_success_writes_atomic_zip(monkeypatch: pytest.MonkeyPatch, tmp_p
         lambda _sid: {"id": 4, "os_ano": 2024, "os_nro": 77},
     )
 
-    def fake_write(session, dest_path, on_progress=None, should_abort=None):
+    def fake_write(session, dest_path, on_progress=None, should_abort=None, **_kwargs):
         with open(dest_path, "wb") as fh:
             fh.write(b"ZIPDATA")
         if on_progress:
@@ -92,6 +171,13 @@ def test_worker_success_writes_atomic_zip(monkeypatch: pytest.MonkeyPatch, tmp_p
         }
 
     monkeypatch.setattr(jobs, "write_session_arquivos_zip", fake_write)
+    monkeypatch.setattr(
+        jobs,
+        "resolve_arquivos_for_zip_signature",
+        lambda _sid, _sig: [{"id": 1, "nome": "a.tif", "maquina": None}],
+    )
+    monkeypatch.setattr(jobs, "_fetch_arquivos", lambda _sid: [{"id": 1, "nome": "a.tif", "maquina": None}])
+    monkeypatch.setattr(jobs, "compute_arquivos_signature", lambda _arquivos: "sig")
     finalized = {}
 
     def fake_ready(*args):

@@ -34,6 +34,20 @@ describe("normalizeDashboardColumns", () => {
     ]);
     expect(columns[0]?.source).toBeUndefined();
   });
+
+  it("preserva a cor do head por coluna", () => {
+    const columns = normalizeDashboardColumns([
+      {
+        id: "exec",
+        title: "Execução",
+        statuses: ["Em Execução"],
+        headerBg: "#112233",
+        headerBg2: "#445566",
+      },
+    ]);
+    expect(columns[0]?.headerBg).toBe("#112233");
+    expect(columns[0]?.headerBg2).toBe("#445566");
+  });
 });
 
 describe("tempo da OS no painel moderno", () => {
@@ -56,5 +70,59 @@ describe("tempo da OS no painel moderno", () => {
         showAndamentoTime: true,
       }).showAndamentoTime,
     ).toBeUndefined();
+  });
+});
+
+describe("tema do board", () => {
+  it("preserva espaçamento, fundos e gradiente do head", () => {
+    const config = normalizeDashboardConfigFromRemote({
+      ...DEFAULT_DASHBOARD_CONFIG,
+      theme: {
+        cardGap: 16,
+        pageBg: "#112233",
+        columnBg: "#445566",
+        headerBg: "#aabbcc",
+        headerBg2: "#ddeeff",
+      },
+    });
+    expect(config.theme).toEqual({
+      cardGap: 16,
+      pageBg: "#112233",
+      columnBg: "#445566",
+      headerBg: "#aabbcc",
+      headerBg2: "#ddeeff",
+    });
+  });
+
+  it("preserva o som de notificação customizado", () => {
+    const config = normalizeDashboardConfigFromRemote({
+      ...DEFAULT_DASHBOARD_CONFIG,
+      notificationSound: { preset: "chime" },
+    });
+    expect(config.notificationSound).toEqual({ preset: "chime" });
+  });
+
+  it("preserva toques por prioridade", () => {
+    const config = normalizeDashboardConfigFromRemote({
+      ...DEFAULT_DASHBOARD_CONFIG,
+      notificationSounds: {
+        high: { preset: "bell" },
+        medium: { preset: "suave" },
+        normal: { preset: "none" },
+      },
+    });
+    expect(config.notificationSounds).toEqual({
+      high: { preset: "bell" },
+      medium: { preset: "suave" },
+      normal: { preset: "none" },
+    });
+  });
+
+  it("omite o espaçamento padrão e cores inválidas", () => {
+    const config = normalizeDashboardConfigFromRemote({
+      ...DEFAULT_DASHBOARD_CONFIG,
+      theme: { cardGap: 8, pageBg: "red", headerBg: "#fff" },
+    });
+    expect(config.theme).toEqual({ headerBg: "#fff" });
   });
 });

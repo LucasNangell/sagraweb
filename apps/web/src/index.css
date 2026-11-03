@@ -26,6 +26,11 @@
   --color-sagra-danger: var(--danger-red);
   --color-sagra-accent: #0095d4;
   --font-sans: var(--font-main);
+  /* Botões de filtro por máquina (Gravação Externa) */
+  --text-xs-button: 1.0rem;
+  --text-xs-button--line-height: 1.25;
+  --text-xs-button-meta: 0.7rem; /* PDFs/TIFs baixados */
+  --text-xs-button-meta--line-height: 1.25;
 }
 
 html,

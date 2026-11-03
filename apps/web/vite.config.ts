@@ -213,7 +213,7 @@ export default defineConfig(({ mode }) => {
       workbox: {
         importScripts: ["push-sw.js"],
         clientsClaim: false,
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,wav,mp3}"],
         globIgnores: ["**/pdf.worker*.mjs", "**/sw-root-unregister.js"],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         navigateFallback: "index.html",

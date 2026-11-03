@@ -119,7 +119,9 @@ def test_download_all_arquivos_returns_zip(gravacao_client):
         return_value=ready,
     ), patch(
         "routers.gravacao_externa_routes.mark_zip_downloaded",
-    ):
+    ), patch(
+        "routers.gravacao_externa_routes.mark_arquivos_baixados_for_zip",
+    ) as mock_mark_baixados:
         response = gravacao_client.get(
             "/api/gravacao-externa/2024/1209/arquivos/download-all",
             cookies=_auth_cookies(),
@@ -130,6 +132,7 @@ def test_download_all_arquivos_returns_zip(gravacao_client):
     assert "attachment" in response.headers.get("content-disposition", "")
     assert b"PK\x03\x04fake-zip-content" in response.content
     mock_iniciar.assert_called_once()
+    mock_mark_baixados.assert_called_once_with(2, "abc123")
 
 
 def test_download_all_returns_409_when_zip_not_ready(gravacao_client):
@@ -228,7 +231,9 @@ def test_zip_download_returns_206_for_range(gravacao_client):
             return_value=ready,
         ), patch(
             "routers.gravacao_externa_routes.mark_zip_downloaded",
-        ):
+        ), patch(
+            "routers.gravacao_externa_routes.mark_arquivos_baixados_for_zip",
+        ) as mock_mark_baixados:
             response = gravacao_client.get(
                 "/api/gravacao-externa/2024/1209/arquivos/zip/download",
                 cookies=_auth_cookies(),
@@ -239,6 +244,7 @@ def test_zip_download_returns_206_for_range(gravacao_client):
         assert response.content == b"0123"
         assert "bytes 0-3/" in response.headers.get("content-range", "")
         assert response.headers.get("etag") == '"deadbeef"'
+        mock_mark_baixados.assert_called_once_with(2, "deadbeef")
     finally:
         try:
             os.unlink(tmp_path)
@@ -616,3 +622,43 @@ def test_post_mensagem_rejects_unassigned_fornecedor(gravacao_client):
 
     assert response.status_code == 403
     mock_add.assert_not_called()
+
+
+def test_download_arquivo_marks_baixado(gravacao_client):
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp.write(b"%PDF-1.4")
+        tmp_path = tmp.name
+
+    try:
+        with patch(
+            "routers.gravacao_externa_routes.get_active_session",
+            return_value={
+                "id": 2,
+                "os_ano": 2024,
+                "os_nro": 1209,
+                "status": "iniciada",
+            },
+        ), patch(
+            "routers.gravacao_externa_routes._has_operator_permission",
+            return_value=True,
+        ), patch(
+            "routers.gravacao_externa_routes.get_arquivo_for_session",
+            return_value={"id": 9, "nome": "placa.pdf"},
+        ), patch(
+            "routers.gravacao_externa_routes.resolve_arquivo_absolute_path",
+            return_value=tmp_path,
+        ), patch(
+            "routers.gravacao_externa_routes.mark_arquivos_baixados",
+        ) as mock_mark:
+            response = gravacao_client.get(
+                "/api/gravacao-externa/2024/1209/arquivos/9/download",
+                cookies=_auth_cookies(),
+            )
+
+        assert response.status_code == 200, response.text
+        mock_mark.assert_called_once_with([9])
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass

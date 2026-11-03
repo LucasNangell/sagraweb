@@ -661,14 +661,19 @@ def test_package_build_uses_installed_vite_without_implicit_pnpm_install():
     script = (ROOT / "deploy" / "scripts" / "package-release.ps1").read_text(
         encoding="utf-8-sig"
     )
+    resolver = (ROOT / "deploy" / "scripts" / "resolve-vite-cli.ps1").read_text(
+        encoding="utf-8-sig"
+    )
 
     assert 'node_modules\\.bin\\vite.cmd' in script
-    assert 'node_modules\\vite' in script
-    assert "Get-Item -LiteralPath $vitePackagePath" in script
-    assert "$vitePackage.Target" in script
+    assert "resolve-vite-cli.ps1" in script
+    assert 'node_modules\\vite' in resolver
+    assert "Get-Item -LiteralPath $vitePackagePath" in resolver
+    assert "$vitePackage.Target" in resolver
     assert "& $viteCmd build" in script
     assert "& $nodeCommand.Source $resolvedViteCli build" in script
     assert "pnpm exec vite build" not in script
+    assert "pnpm exec vite build" not in resolver
 
 
 class TestApiRuntimeIssues:

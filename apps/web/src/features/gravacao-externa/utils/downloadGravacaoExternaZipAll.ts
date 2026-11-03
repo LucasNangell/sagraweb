@@ -149,13 +149,17 @@ async function waitForZipReady(opts: {
   ano: number;
   nrOs: number;
   gravacaoExternaId?: number | null;
+  maquina?: string | null;
   pollIntervalMs: number;
   signal?: AbortSignal;
   onProgress?: (progress: DownloadAllProgress) => void;
 }): Promise<GravacaoExternaZipStatus> {
-  let job = opts.gravacaoExternaId == null
-    ? await startGravacaoExternaZip(opts.ano, opts.nrOs)
-    : await startGravacaoExternaZip(opts.ano, opts.nrOs, opts.gravacaoExternaId);
+  let job = await startGravacaoExternaZip(
+    opts.ano,
+    opts.nrOs,
+    opts.gravacaoExternaId,
+    opts.maquina,
+  );
   const emit = (current: GravacaoExternaZipStatus) => {
     opts.onProgress?.({
       phase: "preparing",
@@ -317,6 +321,8 @@ export async function downloadGravacaoExternaZipAll(opts: {
   ano: number;
   nrOs: number;
   gravacaoExternaId?: number | null;
+  /** When set, ZIP includes only files of that machine (`__sem_maquina__` for unlabeled). */
+  maquina?: string | null;
   fallbackFilename: string;
   onPhase?: (phase: DownloadAllPhase) => void;
   onProgress?: (progress: DownloadAllProgress) => void;
@@ -330,6 +336,7 @@ export async function downloadGravacaoExternaZipAll(opts: {
     ano,
     nrOs,
     gravacaoExternaId,
+    maquina,
     fallbackFilename,
     onPhase,
     onProgress,
@@ -379,6 +386,7 @@ export async function downloadGravacaoExternaZipAll(opts: {
       ano,
       nrOs,
       gravacaoExternaId,
+      maquina,
       pollIntervalMs,
       signal,
       onProgress,

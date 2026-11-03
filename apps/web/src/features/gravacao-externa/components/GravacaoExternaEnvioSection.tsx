@@ -1,6 +1,6 @@
 import { cn } from "@sagra/ui";
-import { Loader2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Check, FileDown, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   gravacaoExternaDownloadUrl,
@@ -14,8 +14,16 @@ import {
 } from "@/features/gravacao-externa/utils/downloadGravacaoExternaZipAll";
 
 import { gravacaoComponenteLabel } from "../utils/groupGravacaoItemsByOs";
+import {
+  isPdfFilename,
+  isTifFilename,
+} from "../utils/plateFilenameUtils";
 import { GravacaoObservacaoBox } from "./GravacaoObservacaoBox";
-import { GravacaoExternaArquivosPanel, type PreviewSelection } from "./GravacaoExternaPreview";
+import {
+  GravacaoExternaArquivosPanel,
+  SEM_MAQUINA_KEY,
+  type PreviewSelection,
+} from "./GravacaoExternaPreview";
 
 export const SEM_FORNECEDOR_LABEL = "Sem fornecedor";
 
@@ -46,6 +54,9 @@ interface GravacaoExternaEnvioSectionProps {
   previewSelection: PreviewSelection | null;
   onSelectPreview: (selection: PreviewSelection) => void;
   onDownloaded: () => void;
+  downloadedArquivoIds?: ReadonlySet<number>;
+  onArquivoDownloaded?: (arquivoId: number) => void;
+  onArquivosDownloaded?: (arquivoIds: number[]) => void;
 }
 
 export function GravacaoExternaEnvioSection({
@@ -59,6 +70,9 @@ export function GravacaoExternaEnvioSection({
   previewSelection,
   onSelectPreview,
   onDownloaded,
+  downloadedArquivoIds,
+  onArquivoDownloaded,
+  onArquivosDownloaded,
 }: GravacaoExternaEnvioSectionProps) {
   const sessionId = item.gravacao_externa_id ?? null;
   const [downloadPhase, setDownloadPhase] = useState<DownloadAllPhase>("idle");
@@ -82,7 +96,11 @@ export function GravacaoExternaEnvioSection({
     setDownloadError(null);
   };
 
-  const handleDownloadAll = async () => {
+  const runZipDownload = async (opts?: {
+    maquina?: string | null;
+    arquivoIds?: number[];
+    filenameSuffix?: string;
+  }) => {
     if (downloadBusy) return;
     setDownloadError(null);
     setDownloadProgress(null);
@@ -90,14 +108,18 @@ export function GravacaoExternaEnvioSection({
     const controller = new AbortController();
     downloadAbortRef.current = controller;
     const componente = gravacaoComponenteLabel(item.componente);
-    const fallbackFilename = `gravacao_externa_OS_${String(item.nr_os).padStart(5, "0")}_${item.ano}${
-      componente ? `_${componente.toLowerCase()}` : ""
-    }.zip`;
+    const suffix = opts?.filenameSuffix
+      ? `_${opts.filenameSuffix}`
+      : componente
+        ? `_${componente.toLowerCase()}`
+        : "";
+    const fallbackFilename = `gravacao_externa_OS_${String(item.nr_os).padStart(5, "0")}_${item.ano}${suffix}.zip`;
     try {
       await downloadGravacaoExternaZipAll({
         ano: item.ano,
         nrOs: item.nr_os,
         gravacaoExternaId: sessionId,
+        maquina: opts?.maquina,
         fallbackFilename,
         signal: controller.signal,
         onProgress: (progress) => {
@@ -116,6 +138,17 @@ export function GravacaoExternaEnvioSection({
         },
       });
       if (controller.signal.aborted) return;
+      const allArquivos = detail?.arquivos ?? [];
+      const ids =
+        opts?.arquivoIds ??
+        allArquivos
+          .filter((a) => {
+            const nome = String(a.nome ?? "");
+            return isPdfFilename(nome) || isTifFilename(nome);
+          })
+          .map((a) => a.id);
+      // Marca PDF/TIF baixados para atualizar badges "Baixado" na hora.
+      onArquivosDownloaded?.(ids.length > 0 ? ids : allArquivos.map((a) => a.id));
       onDownloaded();
     } catch (e) {
       if (controller.signal.aborted) return;
@@ -124,9 +157,52 @@ export function GravacaoExternaEnvioSection({
     }
   };
 
+  const handleDownloadAll = () => {
+    void runZipDownload();
+  };
+
+  const handleDownloadMachine = (machineKey: string, arquivoIds: number[]) => {
+    const filenameSuffix =
+      machineKey === SEM_MAQUINA_KEY
+        ? "espelhos"
+        : machineKey.replace(/[^\w\-]+/g, "_").replace(/^_+|_+$/g, "") || "maquina";
+    void runZipDownload({
+      maquina: machineKey,
+      arquivoIds,
+      filenameSuffix,
+    });
+  };
+
   const componente = gravacaoComponenteLabel(item.componente);
   const arquivos = detail?.arquivos ?? [];
   const sectionLabel = [gravacaoFornecedorLabel(item), componente].filter(Boolean).join(" · ");
+  const arquivosTitle =
+    arquivos.length === 1
+      ? "1 Arquivo para download"
+      : `${arquivos.length} Arquivos para download`;
+
+  const allDownloadableDownloaded = useMemo(() => {
+    const downloadable = arquivos.filter((arquivo) => {
+      const nome = String(arquivo.nome ?? "");
+      return isPdfFilename(nome) || isTifFilename(nome);
+    });
+    if (downloadable.length === 0) return false;
+    return downloadable.every(
+      (arquivo) =>
+        Boolean(arquivo.baixado_em) || (downloadedArquivoIds?.has(arquivo.id) ?? false),
+    );
+  }, [arquivos, downloadedArquivoIds]);
+
+  const downloadAllLabel =
+    downloadPhase === "error"
+      ? "Tentar novamente"
+      : downloadPhase === "saving"
+        ? "Salvando…"
+        : downloadBusy
+          ? "Preparando…"
+          : allDownloadableDownloaded
+            ? "Arquivos baixados"
+            : "Baixar todos";
 
   return (
     <section
@@ -138,60 +214,70 @@ export function GravacaoExternaEnvioSection({
         focused && showOrigem ? "border-primary-green/60" : "border-neutral-200",
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        {showOrigem ? (
-          <div className="min-w-0">
-            <span className="truncate text-sm font-semibold text-neutral-800" title={sectionLabel}>
-              {sectionLabel}
-            </span>
-          </div>
-        ) : null}
-      </div>
-
-      {!detail && failed ? (
-        <p className="py-2 text-center text-xs text-neutral-500">
-          Não foi possível carregar os arquivos deste envio.
-        </p>
-      ) : !detail ? (
-        <div className="flex justify-center py-4">
-          <Loader2 className="size-5 animate-spin text-primary-green" />
-        </div>
-      ) : (
-        <>
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-              Arquivos ({arquivos.length})
-            </h3>
-            {arquivos.length > 0 && canDownload ? (
-              <div className="flex items-center gap-1">
-                {downloadBusy ? (
-                  <button
-                    type="button"
-                    onClick={handleCancelDownload}
-                    className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
-                  >
-                    Cancelar
-                  </button>
-                ) : null}
+      {detail ? (
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-neutral-800">{arquivosTitle}</h3>
+          {arquivos.length > 0 && canDownload ? (
+            <div className="flex items-center gap-1">
+              {downloadBusy ? (
                 <button
                   type="button"
-                  disabled={downloadBusy}
-                  onClick={() => void handleDownloadAll()}
-                  className="inline-flex items-center gap-1 rounded border border-neutral-300 bg-white px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-60"
-                  title="Baixar todos os arquivos em ZIP"
+                  onClick={handleCancelDownload}
+                  className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
                 >
-                  {downloadBusy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : null}
-                  {downloadPhase === "error"
-                    ? "Tentar novamente"
-                    : downloadPhase === "saving"
-                      ? "Salvando…"
-                      : downloadBusy
-                        ? "Preparando…"
-                        : "Baixar todos"}
+                  Cancelar
                 </button>
-              </div>
-            ) : null}
+              ) : null}
+              <button
+                type="button"
+                disabled={downloadBusy}
+                onClick={() => void handleDownloadAll()}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold leading-none",
+                  allDownloadableDownloaded && downloadPhase !== "error" && !downloadBusy
+                    ? "bg-emerald-100 text-emerald-800"
+                    : "bg-amber-100 text-amber-800",
+                  "cursor-pointer hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
+                )}
+                title={
+                  allDownloadableDownloaded
+                    ? "Baixar arquivos novamente"
+                    : "Baixar todos os arquivos em ZIP"
+                }
+                aria-label={downloadAllLabel}
+              >
+                {downloadBusy ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                ) : allDownloadableDownloaded && downloadPhase !== "error" ? (
+                  <Check className="size-3.5" aria-hidden />
+                ) : (
+                  <FileDown className="size-3.5" aria-hidden />
+                )}
+                {downloadAllLabel}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {showOrigem ? (
+        <div className="min-w-0">
+          <span className="truncate text-sm font-semibold text-neutral-800" title={sectionLabel}>
+            {sectionLabel}
+          </span>
+        </div>
+      ) : null}
+
+        {!detail && failed ? (
+          <p className="py-2 text-center text-xs text-neutral-500">
+            Não foi possível carregar os arquivos deste envio.
+          </p>
+        ) : !detail ? (
+          <div className="flex justify-center py-4">
+            <Loader2 className="size-5 animate-spin text-primary-green" />
           </div>
+        ) : (
+          <>
           {downloadPhase === "preparing" ? (
             <div
               className="space-y-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
@@ -285,11 +371,19 @@ export function GravacaoExternaEnvioSection({
             arquivos={arquivos}
             selection={previewSelection?.sessionId === sessionId ? previewSelection : null}
             groupByMachine
-            chapasPorMaquina={item.chapas_por_maquina ?? []}
+            chapasPorMaquina={
+              item.chapas_por_maquina?.length
+                ? item.chapas_por_maquina
+                : detail?.chapas_por_maquina ?? []
+            }
             canDownload={canDownload}
             getDownloadUrl={(a, n, arquivoId) =>
               gravacaoExternaDownloadUrl(a, n, arquivoId, sessionId)
             }
+            downloadedArquivoIds={downloadedArquivoIds}
+            onArquivoDownloaded={onArquivoDownloaded}
+            onDownloadMachine={canDownload ? handleDownloadMachine : undefined}
+            machineDownloadBusy={downloadBusy}
             onSelect={(arq) => onSelectPreview({ kind: "file", arquivo: arq, sessionId })}
             onSelectComposite={(chapa) =>
               onSelectPreview({

@@ -1191,18 +1191,48 @@ def test_is_resurrection_blocks_when_tombstone_has_null_hash(tmp_path, monkeypat
     sync._remove_from_deleted.assert_not_called()
 
 
-def test_is_resurrection_blocks_api_tombstone_even_when_hash_would_differ(
+def test_is_resurrection_allows_api_tombstone_when_live_hash_differs(
     tmp_path, monkeypatch
 ):
-    """Tombstone da Web/API continua bloqueando ressurreição mesmo com conteúdo novo."""
+    """CodStatus reutilizado no Access com conteúdo novo não é ressurreição."""
     sync = _make_sync_for_notify(tmp_path, monkeypatch)
-    row = _sample_andamento(Observaçao="conteudo novo")
+    row = _sample_andamento(
+        CodStatus="025162025-13",
+        NroProtocoloLink=2516,
+        AnoProtocoloLink=2025,
+        SituacaoLink="Encam. de Docum.",
+        SetorLink="SEFOC",
+        Observaçao="18h38 Reenviar PTV2",
+    )
     cursor = MagicMock()
     cursor.fetchone.return_value = {
         "codstatus": row["CodStatus"],
         "origem": "API",
         "motivo": "Exclusão via Frontend",
         "content_hash": "deadbeef" * 8,
+    }
+    conn = MagicMock()
+    conn.cursor.return_value = cursor
+    sync.conn_mgr.get_mysql = MagicMock(return_value=conn)
+    sync._remove_from_deleted = MagicMock()
+    assert sync.is_resurrection(row["CodStatus"], row) is False
+    sync._remove_from_deleted.assert_not_called()
+
+
+def test_is_resurrection_blocks_api_tombstone_when_live_hash_matches(
+    tmp_path, monkeypatch
+):
+    """Mesmo conteúdo da exclusão da Web continua bloqueado."""
+    from services.andamento_tombstone import calculate_andamento_content_hash
+
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    row = _sample_andamento(Observaçao="ainda no access")
+    cursor = MagicMock()
+    cursor.fetchone.return_value = {
+        "codstatus": row["CodStatus"],
+        "origem": "API",
+        "motivo": "Exclusão via Frontend",
+        "content_hash": calculate_andamento_content_hash(row),
     }
     conn = MagicMock()
     conn.cursor.return_value = cursor
@@ -1364,6 +1394,104 @@ def test_detect_mysql_side_deletions_ignores_baseline_without_api_tombstone(
     )
     assert result == set()
     sync.mark_as_deleted.assert_not_called()
+
+
+def _restore_detect_mysql_side_deletions(sync):
+    sync.detect_mysql_side_deletions = (
+        svc.ResilientSynchronizer.detect_mysql_side_deletions.__get__(sync)
+    )
+
+
+def _api_tombstone(codstatus: str, content_hash: str) -> dict:
+    return {
+        "codstatus": codstatus,
+        "origem": "API",
+        "motivo": "Exclusão via Frontend",
+        "content_hash": content_hash,
+    }
+
+
+def test_perform_sync_reused_codstatus_different_hash_inserts_mysql(
+    tmp_path, monkeypatch
+):
+    """025162025-13 com observação nova: insert MySQL, sem apagar o Access."""
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    mdb_row = _sample_andamento(
+        CodStatus="025162025-13",
+        NroProtocoloLink=2516,
+        AnoProtocoloLink=2025,
+        SituacaoLink="Encam. de Docum.",
+        SetorLink="SEFOC",
+        Data="2026-10-22 00:00:00",
+        Ponto="6.231",
+        Observaçao="18h38 Reenviar PTV2",
+    )
+    monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
+    monkeypatch.setattr(svc, "SYNC_MYSQL_TO_MDB_CATCHUP", True)
+    monkeypatch.setattr(svc, "SYNC_ALLOW_MDB_DELETE", True)
+    _wire_perform_sync(sync, [], [mdb_row])
+    _restore_detect_mysql_side_deletions(sync)
+    sync._fetch_deleted_andamento = MagicMock(
+        return_value=_api_tombstone(mdb_row["CodStatus"], "deadbeef" * 8)
+    )
+    sync.insert_mysql = MagicMock(return_value=True)
+    sync.perform_sync()
+    sync.insert_mysql.assert_called_once()
+    sync.delete_mdb.assert_not_called()
+    sync.mark_as_deleted.assert_not_called()
+    assert sync._hb.snapshot()["stats"]["ins_m2y"] == 1
+    assert sync._hb.snapshot()["stats"]["del_m"] == 0
+
+
+def test_perform_sync_api_tombstone_same_hash_deletes_mdb(tmp_path, monkeypatch):
+    """Tombstone da Web com o mesmo conteúdo ainda propaga DELETE ao Access."""
+    from services.andamento_tombstone import calculate_andamento_content_hash
+
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    mdb_row = _sample_andamento(
+        CodStatus="025162025-13",
+        NroProtocoloLink=2516,
+        AnoProtocoloLink=2025,
+        Observaçao="21h45 Reenviar PTV2",
+    )
+    monkeypatch.setattr(svc, "SYNC_TABANDAMENTO_BIDI", True)
+    monkeypatch.setattr(svc, "SYNC_MYSQL_TO_MDB_CATCHUP", True)
+    monkeypatch.setattr(svc, "SYNC_ALLOW_MDB_DELETE", True)
+    _wire_perform_sync(sync, [], [mdb_row])
+    _restore_detect_mysql_side_deletions(sync)
+    sync._fetch_deleted_andamento = MagicMock(
+        return_value=_api_tombstone(
+            mdb_row["CodStatus"], calculate_andamento_content_hash(mdb_row)
+        )
+    )
+    sync.perform_sync()
+    sync.delete_mdb.assert_called_once()
+    assert sync.delete_mdb.call_args.args[0] == mdb_row["CodStatus"]
+    sync.insert_mysql.assert_not_called()
+    assert sync._hb.snapshot()["stats"]["del_m"] == 1
+    assert sync._hb.snapshot()["stats"]["ins_m2y"] == 0
+
+
+def test_insert_mysql_clears_api_tombstone_when_hash_differs(tmp_path, monkeypatch):
+    sync = _make_sync_for_notify(tmp_path, monkeypatch)
+    row = _sample_andamento(
+        CodStatus="025162025-13",
+        NroProtocoloLink=2516,
+        AnoProtocoloLink=2025,
+        Observaçao="18h40 Reenviar PTV2",
+    )
+    sync.is_os_deleted = MagicMock(return_value=False)
+    sync._fetch_deleted_andamento = MagicMock(
+        return_value=_api_tombstone(row["CodStatus"], "deadbeef" * 8)
+    )
+    sync._remove_from_deleted = MagicMock()
+    cursor = MagicMock()
+    cursor.fetchone.return_value = (0,)
+    conn = MagicMock()
+    conn.cursor.return_value = cursor
+    sync.conn_mgr.get_mysql = MagicMock(return_value=conn)
+    assert sync.insert_mysql(row, "OS_Atual") is True
+    sync._remove_from_deleted.assert_called_once_with(row["CodStatus"])
 
 
 def test_detect_mysql_side_deletions_confirms_api_tombstone(tmp_path, monkeypatch):

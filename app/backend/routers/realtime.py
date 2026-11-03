@@ -25,6 +25,7 @@ _PAINEL_WS_TYPES = frozenset({
     "system_update",
     "pcp_queue_update",
     "force_refresh",
+    "painel_config_update",
     "pong",
 })
 
@@ -143,6 +144,10 @@ class ConnectionManager:
             "scope": scope,
             "cliente_id": cliente_id,
             "support_tickets": set(),
+            "painel_client_id": None,
+            "painel_route": "",
+            "painel_setor": "",
+            "painel_ip": "",
         })
 
         if ponto and scope == "authenticated":
@@ -230,12 +235,41 @@ class ConnectionManager:
             if c.get("ponto") and c.get("scope") == "authenticated"
         ]
 
+    def get_painel_instances(self) -> List[Dict[str, Any]]:
+        """Computadores com painel OS aberto (hello recebido nesta conexão)."""
+        seen: Dict[str, Dict[str, Any]] = {}
+        for conn in self.active_connections:
+            client_id = str(conn.get("painel_client_id") or "").strip()
+            if not client_id:
+                continue
+            ip = str(conn.get("painel_ip") or "")
+            if not ip:
+                try:
+                    ws = conn.get("ws")
+                    if ws is not None and getattr(ws, "client", None):
+                        ip = ws.client.host or ""
+                except Exception:
+                    ip = ""
+            seen[client_id] = {
+                "clientId": client_id,
+                "route": str(conn.get("painel_route") or ""),
+                "sector": str(conn.get("painel_setor") or ""),
+                "ip": ip,
+            }
+        return list(seen.values())
+
     def _should_deliver(self, conn: Dict[str, Any], message: Dict[str, Any]) -> bool:
         scope = conn.get("scope") or "authenticated"
         msg_type = message.get("type")
 
         if scope == "painel":
             if msg_type not in _PAINEL_WS_TYPES:
+                return False
+
+        target_client_id = message.get("target_client_id")
+        if target_client_id is not None and str(target_client_id).strip():
+            conn_client = str(conn.get("painel_client_id") or "").strip()
+            if conn_client != str(target_client_id).strip():
                 return False
 
         # Notificações pessoais: entrega a qualquer sessão autenticada;
@@ -338,7 +372,11 @@ class ConnectionManager:
     def _dedupe_key(self, message: Dict[str, Any]) -> Optional[str]:
         msg_type = message.get("type")
         # Mensagens de chat são eventos distintos — nunca deduplicar por ticket/OS.
-        if msg_type in ("support_chat_message", "gravacao_externa_message"):
+        if msg_type in (
+            "support_chat_message",
+            "gravacao_externa_message",
+            "painel_config_update",
+        ):
             return None
         if msg_type in _SUPPORT_WS_TYPES:
             subset = {k: message[k] for k in sorted(message) if k in (
@@ -752,6 +790,42 @@ async def _handle_websocket(websocket: WebSocket) -> None:
             msg_type = payload.get("type")
             if msg_type == "ping":
                 await websocket.send_json({"type": "pong"})
+                continue
+            if msg_type == "painel_hello":
+                from services.painel_remote_config_service import (
+                    normalize_client_id,
+                    normalize_route,
+                    clip,
+                    upsert_instance,
+                )
+
+                client_id = normalize_client_id(payload.get("clientId"))
+                if not client_id:
+                    continue
+                route = normalize_route(payload.get("route"))
+                sector = clip(payload.get("sector"), 128)
+                ip = ""
+                try:
+                    if websocket.client:
+                        ip = websocket.client.host or ""
+                except Exception:
+                    ip = ""
+                conn = manager._find_conn(websocket)
+                if conn is not None:
+                    conn["painel_client_id"] = client_id
+                    conn["painel_route"] = route
+                    conn["painel_setor"] = sector
+                    conn["painel_ip"] = ip
+                try:
+                    await asyncio.to_thread(
+                        upsert_instance,
+                        client_id,
+                        ip=ip,
+                        route=route,
+                        setor=sector,
+                    )
+                except Exception as hello_exc:
+                    logger.warning("painel_hello persist falhou: %s", hello_exc)
                 continue
             if msg_type == "support_subscribe":
                 ticket_id = extract_support_ticket_id(payload)

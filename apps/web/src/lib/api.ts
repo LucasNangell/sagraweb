@@ -74,6 +74,36 @@ function isHtmlApiResponse(text: string): boolean {
   return head.startsWith("<!doctype html") || head.startsWith("<html");
 }
 
+export type ApiErrorDetail = {
+  message?: string;
+  code?: string;
+  maquinas?: string[];
+  renderStatus?: string;
+};
+
+export type ApiRequestError = Error & {
+  status?: number;
+  apiDetail?: ApiErrorDetail;
+};
+
+export function createApiError(
+  message: string,
+  status: number,
+  detail?: ApiErrorDetail,
+): ApiRequestError {
+  const error = new Error(message) as ApiRequestError;
+  error.status = status;
+  if (detail) error.apiDetail = detail;
+  return error;
+}
+
+export function getApiErrorDetail(error: unknown): ApiErrorDetail | null {
+  if (!error || typeof error !== "object") return null;
+  if (!("apiDetail" in error)) return null;
+  const detail = (error as ApiRequestError).apiDetail;
+  return detail && typeof detail === "object" ? detail : null;
+}
+
 export async function apiFetch<T>(
   path: string,
   init?: RequestInit,
@@ -93,7 +123,7 @@ export async function apiFetch<T>(
     const text = await res.text().catch(() => res.statusText);
     try {
       const data = JSON.parse(text) as {
-        detail?: string | { message?: string; renderStatus?: string };
+        detail?: string | ApiErrorDetail;
         message?: string;
       };
       if (typeof data.detail === "string" && data.detail.trim()) {
@@ -110,7 +140,7 @@ export async function apiFetch<T>(
         typeof data.detail.message === "string" &&
         data.detail.message.trim()
       ) {
-        throw new Error(data.detail.message);
+        throw createApiError(data.detail.message, res.status, data.detail);
       }
       if (typeof data.message === "string" && data.message.trim()) {
         throw new Error(data.message);

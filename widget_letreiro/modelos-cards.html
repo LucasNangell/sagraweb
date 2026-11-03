@@ -1,0 +1,2253 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catálogo Edição 119 Cards OS - Setor Moderno + Entradas Operacionais</title>
+    <!-- Importação de Fontes: Inter (400, 500, 600, 700, 800, 900) + Fontes das Seções 6 a 10 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Cinzel:wght@700;900&family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;800&family=Orbitron:wght@700;900&family=Righteous&family=Rubik+Glitch&family=Space+Grotesk:wght@500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        /* =========================================
+           CONFIGURAÇÕES GERAIS E VARIÁVEIS
+           ========================================= */
+        :root {
+            --bg-color: #07090e; 
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --speed-multiplier: 1;
+            --amber-img: #ff9d00;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(circle at 15% 10%, rgba(56, 189, 248, 0.07), transparent 35%),
+                radial-gradient(circle at 85% 30%, rgba(168, 85, 247, 0.07), transparent 35%),
+                radial-gradient(circle at 50% 80%, rgba(255, 157, 0, 0.05), transparent 45%);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: var(--text-main);
+            margin: 0;
+            padding: 40px 20px 120px;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .catalog-header { text-align: center; margin-bottom: 40px; }
+        .catalog-header h1 {
+            font-size: 3rem; font-weight: 900; margin-bottom: 10px; letter-spacing: -1px;
+            background: linear-gradient(135deg, #ff9d00, #ec4899, #38bdf8, #10b981);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .catalog-header p { color: var(--text-muted); font-size: 1.1rem; }
+
+        /* Barra Fixa Flutuante de Controle Global */
+        .sticky-controls {
+            position: sticky; top: 15px; z-index: 999;
+            background: rgba(15, 23, 42, 0.88); backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.12); border-radius: 50px;
+            padding: 10px 25px; max-width: 820px; margin: 0 auto 50px;
+            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.65);
+        }
+        .sticky-controls span { font-size: 0.85rem; font-weight: 700; color: #cbd5e1; text-transform: uppercase; letter-spacing: 1px; }
+        
+        .section-header {
+            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;
+            margin: 70px 0 25px; border-bottom: 1px solid #1e293b; padding-bottom: 12px;
+        }
+
+        .section-title { font-size: 1.45rem; color: #e2e8f0; margin: 0; font-weight: 800; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        
+        .badge-pro { background: linear-gradient(135deg, #f43f5e, #a855f7); color: white; font-size: 0.7rem; padding: 4px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: 1px; }
+        .badge-nextgen { background: linear-gradient(135deg, #06b6d4, #10b981); color: #052e16; font-weight: 900; font-size: 0.7rem; padding: 4px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: 1px; }
+        .badge-fire { background: linear-gradient(135deg, #f59e0b, #ef4444); color: white; font-weight: 900; font-size: 0.7rem; padding: 4px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 0 12px rgba(239,68,68,0.5); }
+        .badge-custom { background: linear-gradient(135deg, #ff9d00, #10b981, #ef4444); color: #000; font-weight: 900; font-size: 0.72rem; padding: 4px 12px; border-radius: 20px; text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 0 15px rgba(255,157,0,0.5); }
+        .badge-spec { background: linear-gradient(135deg, #38bdf8, #6366f1); color: #fff; font-weight: 800; font-size: 0.72rem; padding: 4px 12px; border-radius: 20px; text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 0 15px rgba(56,189,248,0.4); }
+        .badge-ufo { background: linear-gradient(135deg, #00ffcc, #10b981, #3b82f6); color: #022c22; font-weight: 900; font-size: 0.75rem; padding: 5px 14px; border-radius: 20px; text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 0 18px rgba(0,255,204,0.6); }
+        .badge-action { background: linear-gradient(135deg, #38bdf8, #10b981, #f59e0b); color: #090d16; font-weight: 900; font-size: 0.75rem; padding: 5px 14px; border-radius: 20px; text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 0 18px rgba(56,189,248,0.5); }
+
+        .sub-category-label {
+            grid-column: 1 / -1;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-top: 15px;
+            margin-bottom: -10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .sub-category-label::after {
+            content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.08);
+        }
+
+        .controls-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+        .btn-control {
+            background: #1e293b; color: #cbd5e1; border: 1px solid #334155; padding: 7px 14px;
+            border-radius: 20px; cursor: pointer; font-weight: 600; font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+        .btn-control:hover, .btn-control.active { background: #3b82f6; color: white; border-color: #3b82f6; box-shadow: 0 0 12px rgba(59,130,246,0.5); }
+
+        .grid-container {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px; max-width: 1200px; margin: 0 auto;
+        }
+
+        /* Estrutura base comum (Seções 1 a 10) */
+        .card-base {
+            border-radius: 8px; padding: 20px 25px; position: relative;
+            cursor: pointer; display: flex; flex-direction: column; justify-content: center;
+            box-sizing: border-box; min-height: 95px;
+        }
+        .card-base .title { font-size: 1.4rem; font-weight: 800; margin-bottom: 4px; letter-spacing: 0.3px; }
+        .card-base .subtitle { font-size: 0.85rem; font-weight: 500; }
+
+        /* Pausa global para inspeção */
+        .paused * { animation-play-state: paused !important; }
+        .paused::before, .paused::after { animation-play-state: paused !important; }
+
+        /* =========================================
+           PARTE 1: INTERAÇÕES AO PASSAR O MOUSE (1 a 6)
+           ========================================= */
+        .card-corporate { background: #ffffff; color: #1e293b; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); transition: transform 0.3s, box-shadow 0.3s; }
+        .card-corporate::before { content: ''; position: absolute; left: 8px; top: 15%; height: 70%; width: 6px; background: #f59e0b; border-radius: 10px; transition: height 0.3s ease; }
+        .card-corporate:hover { transform: translateY(-5px); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
+        .card-corporate:hover::before { height: 100%; top: 0; border-radius: 8px 0 0 8px; left: 0; }
+        .card-corporate .subtitle { color: #64748b; }
+
+        .card-glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.1); border-left: 6px solid #3b82f6; transition: all 0.3s ease; }
+        .card-glass:hover { background: rgba(255,255,255,0.08); border-left-width: 12px; transform: scale(1.02); }
+        .card-glass .title { color: #fff; } .card-glass .subtitle { color: #93c5fd; }
+
+        .card-neon { background: #18181b; border-left: 4px solid #10b981; transition: all 0.3s ease; }
+        .card-neon:hover { box-shadow: -10px 0px 20px -5px rgba(16,185,129,0.5); border-left-width: 8px; }
+        .card-neon .title { color: #fff; } .card-neon .subtitle { color: #10b981; text-transform: uppercase; }
+
+        .card-slide { background: #27272a; overflow: hidden; z-index: 1; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .card-slide::before { content: ''; position: absolute; top: 0; left: 0; width: 6px; height: 100%; background: #ef4444; z-index: -1; transition: width 0.4s cubic-bezier(0.25,1,0.5,1); }
+        .card-slide:hover::before { width: 100%; }
+        .card-slide .title, .card-slide .subtitle { transition: color 0.4s; }
+        .card-slide:hover .title, .card-slide:hover .subtitle { color: #ffffff; }
+        .card-slide .title { color: #f4f4f5; } .card-slide .subtitle { color: #a1a1aa; }
+
+        .card-pulse { background: #1f2937; padding-left: 45px; border: 1px solid #374151; transition: transform 0.2s; }
+        .card-pulse::before { content: ''; position: absolute; left: 18px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; background: #8b5cf6; border-radius: 50%; animation: pulse-anim 2s infinite; }
+        @keyframes pulse-anim { 0% { box-shadow: 0 0 0 0 rgba(139,92,246,0.7); } 70% { box-shadow: 0 0 0 10px rgba(139,92,246,0); } 100% { box-shadow: 0 0 0 0 rgba(139,92,246,0); } }
+        .card-pulse:hover { border-color: #8b5cf6; transform: translateY(-3px); }
+        .card-pulse .title { color: #f9fafb; } .card-pulse .subtitle { color: #d1d5db; }
+
+        .card-gradient { background: #111827; overflow: hidden; }
+        .card-gradient::before { content: ''; position: absolute; left: 0; top: 0; width: 6px; height: 200%; background: linear-gradient(180deg, #ec4899, #f43f5e, #eab308, #ec4899); background-size: 100% 200%; animation: grad-move 3s linear infinite; transition: width 0.3s; }
+        @keyframes grad-move { 0% { background-position: 0% 0%; } 100% { background-position: 0% 100%; } }
+        .card-gradient:hover::before { width: 10px; }
+        .card-gradient .title { color: #fff; } .card-gradient .subtitle { color: #9ca3af; }
+
+        /* =========================================
+           PARTE 2: ANIMAÇÕES CONTÍNUAS (7 a 12)
+           ========================================= */
+        .card-shimmer { background: #1e293b; border-left: 5px solid #cbd5e1; overflow: hidden; }
+        .card-shimmer::after { content: ""; position: absolute; top: 0; left: -150%; width: 50%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent); transform: skewX(-20deg); animation: shimmer-pass 3s infinite; }
+        @keyframes shimmer-pass { 0% { left: -100%; } 100% { left: 200%; } }
+        .card-shimmer .title { color: #fff; } .card-shimmer .subtitle { color: #94a3b8; }
+
+        .card-scanner { background: #0f172a; border: 1px solid #1e293b; }
+        .card-scanner::before { content: ''; position: absolute; left: 0; top: 0; width: 4px; height: 30%; background: #06b6d4; animation: scan-up-down 1.5s ease-in-out infinite alternate; }
+        @keyframes scan-up-down { 0% { top: 0; height: 20%; } 100% { top: 80%; height: 20%; } }
+        .card-scanner .title { color: #cffafe; } .card-scanner .subtitle { color: #06b6d4; }
+
+        .card-breathing { background: #27272a; border-left: 6px solid #f97316; animation: breathe-shadow 2.5s ease-in-out infinite; }
+        @keyframes breathe-shadow { 0%, 100% { box-shadow: 0 0 5px rgba(249, 115, 22, 0.1); } 50% { box-shadow: 0 0 25px rgba(249, 115, 22, 0.6); } }
+        .card-breathing .title { color: #fff; } .card-breathing .subtitle { color: #fdba74; }
+
+        .card-floating { background: #171717; border-left: 5px solid #a855f7; box-shadow: 0 15px 25px rgba(0,0,0,0.5); animation: float-card 4s ease-in-out infinite; }
+        @keyframes float-card { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-12px); box-shadow: 0 25px 30px rgba(0,0,0,0.6); } }
+        .card-floating .title { color: #fff; } .card-floating .subtitle { color: #d8b4fe; }
+
+        .card-rgb { background: #18181b; border-left: 6px solid; animation: rgb-shift 6s linear infinite; }
+        @keyframes rgb-shift { 0% { border-left-color: #ff0055; } 33% { border-left-color: #00ffaa; } 66% { border-left-color: #5500ff; } 100% { border-left-color: #ff0055; } }
+        .card-rgb .title { color: #fff; } 
+        .card-rgb .subtitle { animation: rgb-text-shift 6s linear infinite; font-weight: 700;}
+        @keyframes rgb-text-shift { 0% { color: #ff0055; } 33% { color: #00ffaa; } 66% { color: #5500ff; } 100% { color: #ff0055; } }
+
+        .card-alert { background: #451a1a; border-left: 6px solid #ef4444; border-right: 1px solid transparent; animation: alert-flash 1.5s infinite; }
+        @keyframes alert-flash { 0%, 100% { background: #321313; border-color: #991b1b; } 50% { background: #5c1818; border-color: #ef4444; border-right-color: #ef4444; } }
+        .card-alert .title { color: #fecaca; } .card-alert .subtitle { color: #f87171; font-weight: 700; text-transform: uppercase;}
+
+        /* =========================================
+           PARTE 3: ANIMAÇÕES DE ENTRADA ON LOAD (13 a 18)
+           ========================================= */
+        .card-entrance { background: #1e293b; color: #fff; opacity: 0; animation-fill-mode: forwards; }
+        .entrance-fade-up { border-left: 5px solid #38bdf8; animation: fadeInUp 0.6s ease-out forwards; }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
+
+        .entrance-zoom-in { border-left: 5px solid #a855f7; animation: zoomIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes zoomIn { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
+
+        .entrance-slide-right { border-left: 5px solid #f43f5e; animation: slideInRight 0.6s ease-out forwards; }
+        @keyframes slideInRight { from { opacity: 0; transform: translateX(80px); } to { opacity: 1; transform: translateX(0); } }
+
+        .entrance-flip { border-left: 5px solid #10b981; animation: flipIn 0.7s ease-out forwards; transform-style: preserve-3d; perspective: 1000px; }
+        @keyframes flipIn { from { opacity: 0; transform: perspective(400px) rotateX(90deg); } to { opacity: 1; transform: perspective(400px) rotateX(0deg); } }
+
+        .entrance-bounce { border-left: 5px solid #f59e0b; animation: bounceIn 0.8s cubic-bezier(0.215, 0.610, 0.355, 1.000) forwards; }
+        @keyframes bounceIn { 0% { opacity: 0; transform: scale3d(.3, .3, .3); } 20% { transform: scale3d(1.1, 1.1, 1.1); } 40% { transform: scale3d(.9, .9, .9); } 60% { opacity: 1; transform: scale3d(1.03, 1.03, 1.03); } 80% { transform: scale3d(.97, .97, .97); } 100% { opacity: 1; transform: scale3d(1, 1, 1); } }
+
+        .entrance-unfold { border-left: 5px solid #64748b; animation: unfold 0.6s cubic-bezier(0.165, 0.840, 0.440, 1.000) forwards; transform-origin: top; }
+        @keyframes unfold { from { opacity: 0; transform: scaleY(0); } to { opacity: 1; transform: scaleY(1); } }
+        .card-entrance .subtitle { color: #cbd5e1; }
+
+        /* =========================================
+           PARTE 4: ENTRADAS EM LOOP CLÁSSICAS (19 a 24)
+           ========================================= */
+        .card-loop { background: #1e293b; color: #fff; }
+        .card-loop .subtitle { color: #cbd5e1; }
+
+        .loop-zoom-out { border-left: 5px solid #ec4899; animation: loopZoomOut calc(3.5s * var(--speed-multiplier)) infinite; }
+        @keyframes loopZoomOut { 0% { opacity: 0; transform: scale(1.4); } 15%, 80% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(0.8); } }
+
+        .loop-dissolve { border-left: 5px solid #0ea5e9; animation: loopDissolve calc(3.5s * var(--speed-multiplier)) infinite; }
+        @keyframes loopDissolve { 0% { opacity: 0; filter: blur(12px); } 20%, 80% { opacity: 1; filter: blur(0); } 100% { opacity: 0; filter: blur(12px); } }
+
+        .loop-roll-in { border-left: 5px solid #84cc16; animation: loopRollIn calc(4s * var(--speed-multiplier)) infinite; }
+        @keyframes loopRollIn { 0% { opacity: 0; transform: translateX(-80%) rotate(-90deg); } 20%, 80% { opacity: 1; transform: translateX(0) rotate(0); } 100% { opacity: 0; transform: translateX(80%) rotate(90deg); } }
+
+        .loop-swing { border-left: 5px solid #f59e0b; animation: loopSwing calc(3.5s * var(--speed-multiplier)) infinite; transform-origin: top center; }
+        @keyframes loopSwing { 0% { opacity: 0; transform: perspective(600px) rotateX(-90deg); } 15% { opacity: 1; transform: perspective(600px) rotateX(25deg); } 25% { transform: perspective(600px) rotateX(-12deg); } 35%, 80% { opacity: 1; transform: perspective(600px) rotateX(0deg); } 100% { opacity: 0; transform: perspective(600px) rotateX(90deg); } }
+
+        .loop-lightspeed { border-left: 5px solid #8b5cf6; animation: loopLightSpeed calc(3.5s * var(--speed-multiplier)) infinite; }
+        @keyframes loopLightSpeed { 0% { opacity: 0; transform: translateX(100%) skewX(-35deg); } 15%, 80% { opacity: 1; transform: translateX(0) skewX(0); } 100% { opacity: 0; transform: translateX(-100%) skewX(35deg); } }
+
+        .loop-rotate-in { border-left: 5px solid #14b8a6; animation: loopRotateIn calc(4s * var(--speed-multiplier)) infinite; }
+        @keyframes loopRotateIn { 0% { opacity: 0; transform: rotate(-180deg) scale(0.4); } 20%, 80% { opacity: 1; transform: rotate(0) scale(1); } 100% { opacity: 0; transform: rotate(180deg) scale(0.4); } }
+
+        /* ==========================================================================
+           PARTE 5: ENTRADAS CINEMATOGRÁFICAS & FX EM LOOP (25 a 36)
+           ========================================================================== */
+        .card-fx { background: linear-gradient(145deg, #1e293b, #0f172a); border: 1px solid rgba(255,255,255,0.06); box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5); color: #fff; overflow: hidden; }
+        .card-fx .subtitle { color: #94a3b8; }
+
+        .fx-iris { border-left: 6px solid #06b6d4; animation: fxIris calc(4s * var(--speed-multiplier)) cubic-bezier(0.77, 0, 0.175, 1) infinite; }
+        @keyframes fxIris { 0% { clip-path: circle(0% at 0% 50%); opacity: 0; } 25%, 75% { clip-path: circle(150% at 0% 50%); opacity: 1; } 100% { clip-path: circle(0% at 100% 50%); opacity: 0; } }
+
+        .fx-stage-build { border-left: 6px solid #f43f5e; animation: fxStageBuild calc(4.2s * var(--speed-multiplier)) cubic-bezier(0.16, 1, 0.3, 1) infinite; transform-origin: left top; }
+        @keyframes fxStageBuild { 0% { clip-path: inset(0 100% 100% 0); } 12% { clip-path: inset(0 97% 0 0); } 30%, 75% { clip-path: inset(0 0% 0 0); } 90%, 100% { clip-path: inset(0 0% 0 100%); opacity: 0; } }
+
+        .fx-glitch { border-left: 6px solid #00ffaa; animation: fxGlitch calc(3.8s * var(--speed-multiplier)) infinite; }
+        @keyframes fxGlitch { 0% { opacity: 0; transform: translateX(-20px) skewX(20deg); filter: hue-rotate(90deg); } 4% { opacity: 1; transform: translateX(15px) skewX(-25deg); box-shadow: -8px 0 #ff0055, 8px 0 #00ffff; } 8% { transform: translateX(-10px) scaleY(1.1); filter: invert(0.8); } 12% { transform: translateX(5px) skewX(10deg); filter: none; } 16%, 78% { opacity: 1; transform: translateX(0) skewX(0) scaleY(1); box-shadow: 0 10px 30px -5px rgba(0,0,0,0.5); } 82% { opacity: 0.8; transform: translateX(-15px) skewX(30deg); box-shadow: 10px 0 #ff0055, -10px 0 #00ffff; } 86%, 100% { opacity: 0; transform: scaleX(1.5) scaleY(0.05); } }
+
+        .fx-rubber { border-left: 6px solid #f59e0b; animation: fxRubber calc(4s * var(--speed-multiplier)) infinite; transform-origin: bottom center; }
+        @keyframes fxRubber { 0% { opacity: 0; transform: translateY(-70px) scaleY(1.4) scaleX(0.7); } 12% { opacity: 1; transform: translateY(0) scaleY(0.65) scaleX(1.3); } 20% { transform: scaleY(1.18) scaleX(0.88); } 28% { transform: scaleY(0.92) scaleX(1.06); } 36%, 75% { opacity: 1; transform: scaleY(1) scaleX(1) translateY(0); } 85% { transform: scaleY(0.8) scaleX(1.15); } 100% { opacity: 0; transform: translateY(50px) scaleY(1.3) scaleX(0.5); } }
+
+        .fx-origami { border-left: 6px solid #a855f7; animation: fxOrigami calc(4s * var(--speed-multiplier)) cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+        @keyframes fxOrigami { 0% { clip-path: polygon(0 0, 0 0, 0 100%, 0% 100%); transform: scale(0.92); } 25%, 75% { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); transform: scale(1); } 100% { clip-path: polygon(100% 0, 100% 0, 100% 100%, 100% 100%); transform: scale(0.92); } }
+
+        .fx-laser { border-left: 6px solid #38bdf8; animation: fxLaserCard calc(4s * var(--speed-multiplier)) ease-in-out infinite; }
+        .fx-laser::after { content: ''; position: absolute; top: 0; bottom: 0; width: 4px; background: #fff; box-shadow: 0 0 15px 4px #38bdf8, 0 0 30px 8px #0284c7; animation: fxLaserBeam calc(4s * var(--speed-multiplier)) ease-in-out infinite; }
+        @keyframes fxLaserCard { 0% { clip-path: inset(0 100% 0 0); } 25%, 75% { clip-path: inset(0 0% 0 0); opacity: 1; } 90%, 100% { clip-path: inset(0 0% 0 0); opacity: 0; filter: blur(6px); } }
+        @keyframes fxLaserBeam { 0% { left: 0%; opacity: 1; } 25% { left: 100%; opacity: 1; } 26%, 100% { left: 100%; opacity: 0; } }
+
+        .fx-isometric { border-left: 6px solid #10b981; animation: fxIsometric calc(4.5s * var(--speed-multiplier)) cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+        @keyframes fxIsometric { 0% { opacity: 0; transform: perspective(800px) rotateX(55deg) rotateZ(-35deg) translateZ(120px); box-shadow: -35px 35px 40px rgba(0,0,0,0.85); } 25%, 75% { opacity: 1; transform: perspective(800px) rotateX(0deg) rotateZ(0deg) translateZ(0px); box-shadow: 0 10px 30px -5px rgba(0,0,0,0.5); } 100% { opacity: 0; transform: perspective(800px) rotateX(-45deg) rotateZ(25deg) translateZ(-80px); } }
+
+        .fx-crt { border-left: 6px solid #eab308; animation: fxCRT calc(4s * var(--speed-multiplier)) infinite; }
+        @keyframes fxCRT { 0% { opacity: 0; transform: scaleX(0.01) scaleY(0.02); filter: brightness(8); } 10% { opacity: 1; transform: scaleX(1) scaleY(0.03); filter: brightness(4); } 22%, 75% { opacity: 1; transform: scaleX(1) scaleY(1); filter: brightness(1); } 88% { opacity: 1; transform: scaleX(1) scaleY(0.02); filter: brightness(5); } 100% { opacity: 0; transform: scaleX(0) scaleY(0); filter: brightness(10); } }
+
+        .fx-supernova { border-left: 6px solid #ec4899; animation: fxSupernova calc(4s * var(--speed-multiplier)) ease-out infinite; }
+        @keyframes fxSupernova { 0% { opacity: 0; transform: scale(1.35); filter: brightness(6) contrast(3) blur(15px); } 20%, 75% { opacity: 1; transform: scale(1); filter: brightness(1) contrast(1) blur(0px); } 100% { opacity: 0; transform: scale(0.85); filter: brightness(0.2) blur(10px); } }
+
+        .fx-stagger { border-left: 6px solid #6366f1; animation: fxStaggerBox calc(4.2s * var(--speed-multiplier)) cubic-bezier(0.16, 1, 0.3, 1) infinite; }
+        .fx-stagger .title { animation: fxStaggerTitle calc(4.2s * var(--speed-multiplier)) cubic-bezier(0.16, 1, 0.3, 1) infinite; }
+        .fx-stagger .subtitle { animation: fxStaggerSub calc(4.2s * var(--speed-multiplier)) cubic-bezier(0.16, 1, 0.3, 1) infinite; }
+        @keyframes fxStaggerBox { 0% { opacity: 0; transform: translateX(-40px); } 12%, 80% { opacity: 1; transform: translateX(0); } 95%, 100% { opacity: 0; transform: translateX(40px); } }
+        @keyframes fxStaggerTitle { 0%, 10% { opacity: 0; transform: translateY(20px); } 24%, 78% { opacity: 1; transform: translateY(0); } 90%, 100% { opacity: 0; transform: translateY(-15px); } }
+        @keyframes fxStaggerSub { 0%, 20% { opacity: 0; transform: translateX(-25px); filter: blur(4px); } 34%, 75% { opacity: 1; transform: translateX(0); filter: blur(0); } 88%, 100% { opacity: 0; transform: translateX(20px); } }
+
+        .fx-shutter { border-left: 6px solid #14b8a6; animation: fxShutter calc(3.8s * var(--speed-multiplier)) cubic-bezier(0.85, 0, 0.15, 1) infinite; }
+        @keyframes fxShutter { 0% { clip-path: inset(50% 0 50% 0); transform: scale(1.15); } 22%, 75% { clip-path: inset(0% 0 0% 0); transform: scale(1); } 100% { clip-path: inset(0% 50% 0% 50%); transform: scale(0.9); } }
+
+        .fx-warp { border-left: 6px solid #f97316; animation: fxWarp calc(3.8s * var(--speed-multiplier)) infinite; }
+        @keyframes fxWarp { 0% { opacity: 0; transform: translateX(-150%) scaleX(3.5) scaleY(0.2); filter: blur(12px); } 14% { opacity: 1; transform: translateX(10%) scaleX(0.85) scaleY(1.1); filter: blur(0px); } 22%, 75% { opacity: 1; transform: translateX(0) scaleX(1) scaleY(1); filter: blur(0px); } 85% { transform: translateX(-8%) scaleX(0.9); } 100% { opacity: 0; transform: translateX(150%) scaleX(3.5) scaleY(0.2); filter: blur(12px); } }
+
+        /* ==========================================================================
+           PARTE 6: 20 MODELOS NEXT-GEN (37 a 56)
+           ========================================================================== */
+        .mod-conic-beam { background: #090d16; border-radius: 14px; overflow: hidden; z-index: 1; font-family: 'Space Grotesk', sans-serif; align-items: center; text-align: center; }
+        .mod-conic-beam::before { content: ''; position: absolute; width: 250%; height: 250%; background: conic-gradient(transparent, transparent, transparent, #00f2fe, #4facfe); animation: spinBeam calc(3s * var(--speed-multiplier)) linear infinite; z-index: -2; }
+        .mod-conic-beam::after { content: ''; position: absolute; inset: 3px; background: #0f172a; border-radius: 11px; z-index: -1; }
+        @keyframes spinBeam { 100% { transform: rotate(360deg); } }
+        .mod-conic-beam .title { color: #e0f2fe; font-size: 1.5rem; letter-spacing: 2px; }
+        .mod-conic-beam .subtitle { color: #38bdf8; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 3px; }
+
+        .mod-kinetic-grad { background: #0a0a0c; border: 1px solid #27272a; border-radius: 16px; font-family: 'Syne', sans-serif; align-items: center; text-align: center; }
+        .mod-kinetic-grad .title { font-size: 1.7rem; font-weight: 800; background: linear-gradient(90deg, #ff007f, #7928ca, #00d4ff, #ff007f); background-size: 300% 100%; -webkit-background-clip: text; -webkit-text-fill-color: transparent; animation: textFlow calc(3s * var(--speed-multiplier)) linear infinite; }
+        @keyframes textFlow { 0% { background-position: 0% 50%; } 100% { background-position: 300% 50%; } }
+        .mod-kinetic-grad .subtitle { color: #a1a1aa; font-family: 'Inter', sans-serif; font-size: 0.8rem; }
+
+        .mod-3d-orbit { background: linear-gradient(135deg, rgba(30,41,59,0.9), rgba(15,23,42,0.9)); border: 1px solid rgba(148,163,184,0.2); border-radius: 12px; font-family: 'Orbitron', sans-serif; transform-style: preserve-3d; animation: cardOrbit3D calc(5s * var(--speed-multiplier)) ease-in-out infinite; }
+        .mod-3d-orbit .title { color: #f8fafc; transform: translateZ(35px); text-shadow: 0 10px 20px rgba(0,0,0,0.8); }
+        .mod-3d-orbit .subtitle { color: #38bdf8; transform: translateZ(20px); font-size: 0.75rem; letter-spacing: 2px; }
+        @keyframes cardOrbit3D { 0%, 100% { transform: perspective(600px) rotateY(-18deg) rotateX(10deg); } 50% { transform: perspective(600px) rotateY(18deg) rotateX(-10deg); box-shadow: -15px 20px 35px rgba(0,0,0,0.7); } }
+
+        .mod-brutalist { background: #fde047; color: #09090b; border: 3px solid #09090b; border-radius: 4px; font-family: 'Space Grotesk', sans-serif; animation: brutalJump calc(2.5s * var(--speed-multiplier)) infinite; }
+        @keyframes brutalJump { 0%, 100% { transform: translate(0, 0); box-shadow: 6px 6px 0px #09090b, 12px 12px 0px #ec4899; } 50% { transform: translate(-4px, -4px); box-shadow: 10px 10px 0px #09090b, 18px 18px 0px #ec4899; background: #a3e635; } }
+        .mod-brutalist .title { font-weight: 900; font-size: 1.5rem; text-transform: uppercase; }
+        .mod-brutalist .subtitle { color: #18181b; font-weight: 700; background: #fff; padding: 2px 8px; border: 2px solid #000; align-self: flex-start; font-size: 0.75rem; }
+
+        .mod-terminal { background: #05100a; border: 1px solid #10b981; border-radius: 6px; font-family: 'JetBrains Mono', monospace; box-shadow: inset 0 0 20px rgba(16, 185, 129, 0.15); }
+        .mod-terminal .title { color: #10b981; font-size: 1.3rem; overflow: hidden; white-space: nowrap; border-right: 3px solid #10b981; width: 0; animation: typingText calc(3.5s * var(--speed-multiplier)) steps(12, end) infinite, blinkCaret 0.6s step-end infinite; }
+        @keyframes typingText { 0%, 10% { width: 0; } 45%, 85% { width: 145px; } 100% { width: 0; } }
+        @keyframes blinkCaret { 50% { border-color: transparent; } }
+        .mod-terminal .subtitle { color: #059669; font-size: 0.8rem; margin-top: 4px; }
+        .mod-terminal .subtitle::before { content: '> status: '; opacity: 0.7; }
+
+        .mod-stroke-wave { background: #13111c; border-radius: 16px; border: 1px solid #2e2640; font-family: 'Syne', sans-serif; align-items: center; }
+        .mod-stroke-wave .title { font-size: 1.65rem; font-weight: 800; color: transparent; -webkit-text-stroke: 1.5px #a855f7; animation: strokeFillPulse calc(3s * var(--speed-multiplier)) ease-in-out infinite; }
+        @keyframes strokeFillPulse { 0%, 100% { color: transparent; text-shadow: none; transform: scale(0.97); } 50% { color: #f3e8ff; -webkit-text-stroke: 1.5px #ec4899; text-shadow: 0 0 20px rgba(236,72,153,0.7); transform: scale(1.04); } }
+        .mod-stroke-wave .subtitle { color: #c084fc; font-size: 0.82rem; }
+
+        .mod-cinematic-serif { background: radial-gradient(circle, #1e1b18 0%, #0c0a09 100%); border-top: 1px solid #78716c; border-bottom: 1px solid #78716c; border-radius: 0; font-family: 'Cinzel', serif; align-items: center; text-align: center; }
+        .mod-cinematic-serif .title { color: #fef3c7; font-size: 1.45rem; animation: cinematicTrack calc(4s * var(--speed-multiplier)) ease-in-out infinite; }
+        @keyframes cinematicTrack { 0%, 100% { letter-spacing: 0px; opacity: 0.6; filter: blur(1px); } 50% { letter-spacing: 7px; opacity: 1; filter: blur(0px); text-shadow: 0 0 15px rgba(251, 191, 36, 0.6); } }
+        .mod-cinematic-serif .subtitle { color: #d97706; font-family: 'Inter', sans-serif; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 4px; }
+
+        .mod-3d-text-extrude { background: #31102f; border-radius: 14px; font-family: 'Space Grotesk', sans-serif; align-items: center; }
+        .mod-3d-text-extrude .title { color: #ffffff; font-size: 1.65rem; font-weight: 900; animation: text3DShadow calc(3s * var(--speed-multiplier)) ease-in-out infinite; }
+        @keyframes text3DShadow { 0%, 100% { transform: translate(0, 0); text-shadow: 1px 1px 0 #db2777, 2px 2px 0 #be185d, 3px 3px 0 #9d174d; } 50% { transform: translate(-6px, -6px); text-shadow: 1px 1px 0 #f472b6, 2px 2px 0 #ec4899, 3px 3px 0 #db2777, 4px 4px 0 #be185d, 5px 5px 0 #9d174d, 6px 6px 0 #831843, 12px 12px 20px rgba(0,0,0,0.6); } }
+        .mod-3d-text-extrude .subtitle { color: #fbcfe8; font-size: 0.85rem; }
+
+        .mod-aurora { background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab); background-size: 400% 400%; border-radius: 18px; animation: auroraBG calc(5s * var(--speed-multiplier)) ease infinite; box-shadow: 0 10px 25px rgba(231, 60, 126, 0.25); }
+        @keyframes auroraBG { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        .mod-aurora .title { color: #ffffff; text-shadow: 0 2px 10px rgba(0,0,0,0.3); font-size: 1.5rem; }
+        .mod-aurora .subtitle { color: rgba(255,255,255,0.9); font-weight: 600; }
+
+        .mod-holo-prism { background: linear-gradient(135deg, #1e293b 0%, #334155 50%, #0f172a 100%); border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,255,255,0.2); animation: holoTilt calc(4s * var(--speed-multiplier)) ease-in-out infinite; }
+        .mod-holo-prism::before { content: ''; position: absolute; inset: -50%; background: linear-gradient(45deg, transparent 30%, rgba(255,0,128,0.35) 45%, rgba(0,255,255,0.35) 50%, rgba(255,255,0,0.35) 55%, transparent 70%); animation: holoSweep calc(4s * var(--speed-multiplier)) ease-in-out infinite; }
+        @keyframes holoTilt { 0%, 100% { transform: perspective(500px) rotateX(0deg) scale(1); } 50% { transform: perspective(500px) rotateX(12deg) scale(1.03); } }
+        @keyframes holoSweep { 0%, 100% { transform: translateX(-60%) rotate(15deg); } 50% { transform: translateX(60%) rotate(15deg); } }
+        .mod-holo-prism .title { color: #fff; position: relative; z-index: 2; font-family: 'Space Grotesk', sans-serif; }
+        .mod-holo-prism .subtitle { color: #e2e8f0; position: relative; z-index: 2; }
+
+        .mod-neumorph { background: #1e293b; border-radius: 20px; align-items: center; animation: neuBreathe calc(4s * var(--speed-multiplier)) ease-in-out infinite; }
+        @keyframes neuBreathe { 0%, 100% { box-shadow: 9px 9px 18px #0f141d, -9px -9px 18px #2d3e59; transform: scale(1); } 50% { box-shadow: inset 7px 7px 14px #0f141d, inset -7px -7px 14px #2d3e59; transform: scale(0.98); } }
+        .mod-neumorph .title { color: #38bdf8; font-family: 'Space Grotesk', sans-serif; }
+        .mod-neumorph .subtitle { color: #94a3b8; }
+
+        .mod-hud { background: rgba(6, 182, 212, 0.05); border-radius: 0; font-family: 'Orbitron', sans-serif; border: 1px solid rgba(6, 182, 212, 0.2); }
+        .mod-hud::before, .mod-hud::after { content: ''; position: absolute; width: 14px; height: 14px; border-color: #06b6d4; border-style: solid; animation: hudCorners calc(2.5s * var(--speed-multiplier)) ease-in-out infinite; }
+        .mod-hud::before { top: 4px; left: 4px; border-width: 3px 0 0 3px; }
+        .mod-hud::after { bottom: 4px; right: 4px; border-width: 0 3px 3px 0; }
+        @keyframes hudCorners { 0%, 100% { width: 12px; height: 12px; opacity: 0.6; } 50% { width: calc(100% - 12px); height: calc(100% - 12px); opacity: 1; } }
+        .mod-hud .title { color: #22d3ee; font-size: 1.3rem; letter-spacing: 2px; }
+        .mod-hud .subtitle { color: #67e8f9; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; }
+
+        .mod-slot-text { background: #18181b; border: 1px solid #3f3f46; border-radius: 12px; overflow: hidden; }
+        .mod-slot-text .title { color: #fbbf24; font-family: 'JetBrains Mono', monospace; animation: slotTitleFlip calc(3s * var(--speed-multiplier)) cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite; }
+        @keyframes slotTitleFlip { 0% { transform: translateY(-40px); opacity: 0; } 20%, 80% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(40px); opacity: 0; } }
+        .mod-slot-text .subtitle { color: #a1a1aa; }
+
+        .mod-water-mirror { background: linear-gradient(180deg, #090d16 0%, #1e1b4b 100%); border-radius: 12px; border: 1px solid #312e81; align-items: center; }
+        .mod-water-mirror .title { color: #e0e7ff; font-family: 'Syne', sans-serif; font-size: 1.5rem; -webkit-box-reflect: below -8px linear-gradient(transparent 30%, rgba(255,255,255,0.25)); animation: waterRipple calc(3s * var(--speed-multiplier)) ease-in-out infinite; }
+        @keyframes waterRipple { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-5px); text-shadow: 0 0 12px #818cf8; } }
+        .mod-water-mirror .subtitle { color: #818cf8; margin-top: 14px; font-size: 0.78rem; }
+
+        .mod-cube-spin { background: linear-gradient(135deg, #4f46e5, #7c3aed); border-radius: 10px; align-items: center; font-family: 'Space Grotesk', sans-serif; animation: cubeFlipLoop calc(4.5s * var(--speed-multiplier)) cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+        @keyframes cubeFlipLoop { 0% { transform: perspective(600px) rotateX(0deg); } 30%, 70% { transform: perspective(600px) rotateX(360deg); background: linear-gradient(135deg, #db2777, #9333ea); } 100% { transform: perspective(600px) rotateX(720deg); } }
+        .mod-cube-spin .title { color: #fff; font-size: 1.5rem; }
+        .mod-cube-spin .subtitle { color: #e9d5ff; }
+
+        .mod-liquid-blob { background: linear-gradient(135deg, #10b981, #047857); align-items: center; text-align: center; animation: blobMorph calc(4s * var(--speed-multiplier)) ease-in-out infinite; box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3); }
+        @keyframes blobMorph { 0%, 100% { border-radius: 24px 8px 24px 8px; transform: scale(1); } 50% { border-radius: 8px 32px 8px 32px; transform: scale(1.03); background: linear-gradient(135deg, #06b6d4, #0f766e); } }
+        .mod-liquid-blob .title { color: #ecfdf5; font-family: 'Syne', sans-serif; }
+        .mod-liquid-blob .subtitle { color: #a7f3d0; }
+
+        .mod-anaglyph { background: #09090b; border: 1px solid #27272a; border-radius: 12px; font-family: 'Orbitron', sans-serif; align-items: center; }
+        .mod-anaglyph .title { color: #fff; font-size: 1.5rem; animation: anaglyphSplit calc(2.5s * var(--speed-multiplier)) ease-in-out infinite; }
+        @keyframes anaglyphSplit { 0%, 100% { text-shadow: -3px 0 0 #ff0055, 3px 0 0 #00ffff; transform: scale(1); } 50% { text-shadow: 5px 2px 0 #ff0055, -5px -2px 0 #00ffff; transform: scale(1.05); } }
+        .mod-anaglyph .subtitle { color: #71717a; font-family: 'Inter', sans-serif; }
+
+        .mod-sonar { background: #0c192c; border-radius: 14px; overflow: hidden; border: 1px solid #1e3a8a; align-items: center; z-index: 1; }
+        .mod-sonar::before { content: ''; position: absolute; width: 40px; height: 40px; border-radius: 50%; border: 2px solid #3b82f6; animation: sonarWave calc(2.8s * var(--speed-multiplier)) ease-out infinite; z-index: -1; }
+        @keyframes sonarWave { 0% { transform: scale(0.5); opacity: 1; } 100% { transform: scale(7); opacity: 0; } }
+        .mod-sonar .title { color: #dbeafe; font-family: 'Space Grotesk', sans-serif; }
+        .mod-sonar .subtitle { color: #60a5fa; }
+
+        .mod-spotlight { background: #050505; border: 1px solid #1f1f1f; border-radius: 14px; align-items: center; }
+        .mod-spotlight .title { font-family: 'Syne', sans-serif; font-size: 1.65rem; font-weight: 800; background: radial-gradient(circle 50px at 50% 50%, #ffffff 0%, #3b82f6 40%, #171717 100%); background-size: 200% 100%; -webkit-background-clip: text; -webkit-text-fill-color: transparent; animation: spotlightMove calc(3s * var(--speed-multiplier)) ease-in-out infinite alternate; }
+        @keyframes spotlightMove { 0% { background-position: 0% 50%; } 100% { background-position: 100% 50%; } }
+        .mod-spotlight .subtitle { color: #52525b; }
+
+        .mod-maglev { background: linear-gradient(180deg, #27272a 0%, #18181b 100%); border-top: 2px solid #f43f5e; border-radius: 16px; align-items: center; font-family: 'Space Grotesk', sans-serif; animation: maglevFloat calc(3.5s * var(--speed-multiplier)) ease-in-out infinite; }
+        @keyframes maglevFloat { 0%, 100% { transform: perspective(600px) translateY(0px) rotateX(0deg); box-shadow: 0 5px 15px rgba(244, 63, 94, 0.2); } 50% { transform: perspective(600px) translateY(-14px) rotateX(15deg); box-shadow: 0 28px 35px -5px rgba(244, 63, 94, 0.55); border-top-color: #38bdf8; } }
+        .mod-maglev .title { color: #fff; }
+        .mod-maglev .subtitle { color: #fda4af; }
+
+        /* =================================================================================
+           SEÇÃO 7: 10 ANIMAÇÕES EXTREMAS DE TEXTO (57 A 66)
+           ================================================================================= */
+        .txt-cyber-slice { background: #090a0f; border: 1px solid #1e293b; border-radius: 12px; font-family: 'Orbitron', sans-serif; align-items: center; }
+        .txt-cyber-slice .title { position: relative; color: transparent; font-size: 1.55rem; }
+        .txt-cyber-slice .title::before, .txt-cyber-slice .title::after { content: attr(data-text); position: absolute; left: 0; top: 0; width: 100%; color: #fff; }
+        .txt-cyber-slice .title::before { clip-path: inset(0 0 50% 0); color: #00f0ff; animation: sliceTop calc(2.5s * var(--speed-multiplier)) ease-in-out infinite alternate; }
+        .txt-cyber-slice .title::after { clip-path: inset(50% 0 0 0); color: #ff003c; animation: sliceBottom calc(2.5s * var(--speed-multiplier)) ease-in-out infinite alternate; }
+        @keyframes sliceTop { 0%, 30% { transform: translateX(0); } 70%, 100% { transform: translateX(-10px) skewX(-15deg); } }
+        @keyframes sliceBottom { 0%, 30% { transform: translateX(0); } 70%, 100% { transform: translateX(10px) skewX(-15deg); } }
+        .txt-cyber-slice .subtitle { color: #64748b; font-size: 0.78rem; margin-top: 4px; }
+
+        .txt-inferno { background: radial-gradient(circle at bottom, #2a0800 0%, #0a0200 100%); border: 1px solid #450a0a; border-radius: 14px; align-items: center; font-family: 'Black Ops One', cursive; }
+        .txt-inferno .title { color: #fffbeb; font-size: 1.65rem; font-weight: 400; animation: fireBurn calc(0.8s * var(--speed-multiplier)) ease-in-out infinite alternate; }
+        @keyframes fireBurn { 0% { text-shadow: 0 -2px 4px #fff, 0 -4px 10px #ff0, 0 -10px 20px #ff8000, 0 -18px 40px #f00; transform: scale(1); } 100% { text-shadow: 0 -1px 2px #fff, 2px -6px 14px #ff0, -2px -14px 28px #ff8000, 0 -26px 50px #f00; transform: scale(1.03); } }
+        .txt-inferno .subtitle { color: #fb923c; font-family: 'Inter', sans-serif; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 2px; }
+
+        .txt-char-wave { background: #111827; border: 1px solid #374151; border-radius: 14px; align-items: center; font-family: 'Righteous', cursive; }
+        .txt-char-wave .title { display: flex; gap: 2px; font-size: 1.6rem; color: #38bdf8; }
+        .txt-char-wave .title span { display: inline-block; animation: waveLetter calc(1.6s * var(--speed-multiplier)) ease-in-out infinite; animation-delay: calc(var(--i) * 0.1s); }
+        @keyframes waveLetter { 0%, 100% { transform: translateY(0) scale(1); color: #38bdf8; } 50% { transform: translateY(-10px) scale(1.2); color: #f472b6; text-shadow: 0 8px 15px rgba(244,114,182,0.6); } }
+        .txt-char-wave .subtitle { color: #9ca3af; font-family: 'Inter', sans-serif; }
+
+        .txt-marquee { background: #090d16; border-top: 2px solid #eab308; border-bottom: 2px solid #eab308; border-radius: 0; overflow: hidden; padding: 18px 0; }
+        .txt-marquee .marquee-track { display: flex; width: max-content; animation: marqueeScroll calc(4s * var(--speed-multiplier)) linear infinite; }
+        .txt-marquee .title { font-family: 'JetBrains Mono', monospace; color: #facc15; font-size: 1.35rem; white-space: nowrap; padding-right: 30px; }
+        @keyframes marqueeScroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .txt-marquee .subtitle { color: #fef08a; text-align: center; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 2px; }
+
+        .txt-vegas-neon { background: #0d0414; border: 2px solid #4a044e; border-radius: 14px; align-items: center; font-family: 'Syne', sans-serif; box-shadow: inset 0 0 25px rgba(217, 70, 239, 0.25); }
+        .txt-vegas-neon .title { color: #fae8ff; font-size: 1.6rem; text-shadow: 0 0 5px #fff, 0 0 10px #fff, 0 0 20px #d946ef, 0 0 40px #d946ef, 0 0 80px #d946ef; animation: neonFlicker calc(3s * var(--speed-multiplier)) infinite; }
+        @keyframes neonFlicker { 0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% { opacity: 1; text-shadow: 0 0 5px #fff, 0 0 10px #fff, 0 0 20px #d946ef, 0 0 40px #d946ef; } 20%, 24%, 55% { opacity: 0.2; text-shadow: none; } }
+        .txt-vegas-neon .subtitle { color: #e879f9; font-size: 0.8rem; }
+
+        .txt-matrix { background: #000a00; border: 1px solid #00ff41; border-radius: 8px; font-family: 'Rubik Glitch', system-ui; align-items: center; overflow: hidden; }
+        .txt-matrix::before { content: '01001111 01010011 00110001 01101'; position: absolute; inset: 0; color: rgba(0, 255, 65, 0.12); font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; line-height: 1.1; word-break: break-all; pointer-events: none; animation: matrixRain calc(2s * var(--speed-multiplier)) linear infinite; }
+        @keyframes matrixRain { 0% { transform: translateY(-30%); } 100% { transform: translateY(30%); } }
+        .txt-matrix .title { color: #00ff41; font-size: 1.65rem; font-weight: 400; position: relative; z-index: 2; text-shadow: 0 0 12px #00ff41; animation: matrixJitter calc(1.5s * var(--speed-multiplier)) steps(4) infinite; }
+        @keyframes matrixJitter { 0%, 100% { transform: skewX(0deg); } 25% { transform: skewX(12deg) scaleY(1.05); } 75% { transform: skewX(-12deg); filter: brightness(1.5); } }
+        .txt-matrix .subtitle { color: #4ade80; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; z-index: 2; }
+
+        .txt-ghost-smoke { background: #0f172a; border: 1px solid #1e293b; border-radius: 16px; align-items: center; font-family: 'Cinzel', serif; }
+        .txt-ghost-smoke .title { color: #f1f5f9; font-size: 1.55rem; animation: smokeVapor calc(3.8s * var(--speed-multiplier)) ease-in-out infinite; }
+        @keyframes smokeVapor { 0%, 20% { opacity: 1; filter: blur(0px); transform: translateY(0) scale(1); letter-spacing: 1px; } 60% { opacity: 0; filter: blur(18px); transform: translateY(-25px) scale(1.3); letter-spacing: 12px; } 61% { transform: translateY(20px) scale(0.8); letter-spacing: 1px; } 100% { opacity: 1; filter: blur(0px); transform: translateY(0) scale(1); letter-spacing: 1px; } }
+        .txt-ghost-smoke .subtitle { color: #94a3b8; font-family: 'Inter', sans-serif; }
+
+        .txt-slingshot { background: #1e1b4b; border: 1px solid #4338ca; border-radius: 14px; align-items: center; font-family: 'Space Grotesk', sans-serif; }
+        .txt-slingshot .title { color: #a5b4fc; font-size: 1.55rem; animation: slingshotText calc(2.8s * var(--speed-multiplier)) infinite; }
+        @keyframes slingshotText { 0%, 100% { transform: scale3d(1, 1, 1); color: #a5b4fc; } 30% { transform: scale3d(1.45, 0.65, 1); color: #f43f5e; } 40% { transform: scale3d(0.75, 1.25, 1); } 50% { transform: scale3d(1.15, 0.85, 1); } 65% { transform: scale3d(0.95, 1.05, 1); } 75% { transform: scale3d(1.05, 0.95, 1); } }
+        .txt-slingshot .subtitle { color: #818cf8; }
+
+        .txt-3d-roller { background: #18181b; border: 1px solid #3f3f46; border-radius: 12px; align-items: center; perspective: 500px; }
+        .txt-3d-roller .title { color: #38bdf8; font-family: 'Orbitron', sans-serif; transform-origin: 50% 50% -20px; animation: rollerSpin3D calc(3s * var(--speed-multiplier)) cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite; }
+        @keyframes rollerSpin3D { 0%, 25% { transform: rotateX(0deg); color: #38bdf8; } 50%, 75% { transform: rotateX(180deg); color: #a855f7; } 100% { transform: rotateX(360deg); color: #38bdf8; } }
+        .txt-3d-roller .subtitle { color: #a1a1aa; }
+
+        .txt-xray { background: #090d16; border: 1px solid #1e293b; border-radius: 14px; align-items: center; font-family: 'Space Grotesk', sans-serif; }
+        .txt-xray .title { position: relative; color: #334155; font-size: 1.65rem; }
+        .txt-xray .title::after { content: attr(data-text); position: absolute; left: 0; top: 0; color: #00ffcc; text-shadow: 0 0 12px #00ffcc; animation: xrayBar calc(2.5s * var(--speed-multiplier)) ease-in-out infinite alternate; }
+        @keyframes xrayBar { 0% { clip-path: inset(0 85% 0 0); } 100% { clip-path: inset(0 0% 0 85%); } }
+        .txt-xray .subtitle { color: #0d9488; }
+
+        /* =================================================================================
+           SEÇÃO 8: 10 ANIMAÇÕES SURREAIS DE ENTRADA EM LOOP (67 A 76)
+           ================================================================================= */
+        .ent-blackhole { background: radial-gradient(circle, #4c1d95 0%, #090d16 90%); border: 1px solid #8b5cf6; border-radius: 16px; align-items: center; animation: blackholeSuck calc(4.2s * var(--speed-multiplier)) cubic-bezier(0.55, 0.055, 0.675, 0.19) infinite; }
+        @keyframes blackholeSuck { 0% { opacity: 0; transform: scale(0) rotate(-720deg); filter: blur(15px) hue-rotate(180deg); border-radius: 50%; } 25%, 70% { opacity: 1; transform: scale(1) rotate(0deg); filter: blur(0px) hue-rotate(0deg); border-radius: 16px; } 100% { opacity: 0; transform: scale(0) rotate(720deg); filter: blur(15px) hue-rotate(-180deg); border-radius: 50%; } }
+        .ent-blackhole .title { color: #f3e8ff; font-family: 'Orbitron', sans-serif; }
+        .ent-blackhole .subtitle { color: #c4b5fd; }
+
+        .ent-teleport { background: #042f2e; border: 1px solid #2dd4bf; border-radius: 10px; align-items: center; animation: sciFiBeam calc(3.8s * var(--speed-multiplier)) infinite; }
+        @keyframes sciFiBeam { 0% { opacity: 0; transform: scaleX(0.03) scaleY(2.2); filter: brightness(10) drop-shadow(0 0 25px #00ffff); } 18%, 75% { opacity: 1; transform: scaleX(1) scaleY(1); filter: brightness(1) drop-shadow(0 0 0px transparent); } 90% { opacity: 1; transform: scaleX(0.03) scaleY(2.2); filter: brightness(10) drop-shadow(0 0 25px #00ffff); } 100% { opacity: 0; transform: scaleX(0) scaleY(3); } }
+        .ent-teleport .title { color: #ccfbf1; font-family: 'Space Grotesk', sans-serif; }
+        .ent-teleport .subtitle { color: #5eead4; }
+
+        .ent-meteor { background: linear-gradient(135deg, #451a03, #1c1917); border: 2px solid #f97316; border-radius: 10px; animation: meteorCrash calc(4s * var(--speed-multiplier)) infinite; }
+        @keyframes meteorCrash { 0% { opacity: 0; transform: translate(120px, -120px) scale(2) rotate(25deg); filter: brightness(4); } 12% { opacity: 1; transform: translate(0, 0) scale(1) rotate(0deg); filter: brightness(2); box-shadow: 0 0 50px #f97316; } 15% { transform: translate(-10px, 8px); } 18% { transform: translate(8px, -8px); } 21% { transform: translate(-6px, 4px); } 24% { transform: translate(4px, -4px); } 27%, 78% { opacity: 1; transform: translate(0, 0); filter: brightness(1); box-shadow: 0 10px 20px rgba(0,0,0,0.5); } 100% { opacity: 0; transform: translateY(60px) scale(0.8); } }
+        .ent-meteor .title { color: #ffedd5; font-family: 'Black Ops One', cursive; font-weight: 400; }
+        .ent-meteor .subtitle { color: #fb923c; }
+
+        .ent-origami-3d { background: #1e293b; border-top: 4px solid #38bdf8; border-radius: 8px; transform-origin: top center; animation: origami3DFold calc(4.2s * var(--speed-multiplier)) cubic-bezier(0.16, 1, 0.3, 1) infinite; }
+        @keyframes origami3DFold { 0% { opacity: 0; transform: perspective(500px) rotateX(-120deg) scaleY(0.2); } 20% { opacity: 1; transform: perspective(500px) rotateX(30deg) scaleY(1.05); } 35%, 75% { opacity: 1; transform: perspective(500px) rotateX(0deg) scaleY(1); } 100% { opacity: 0; transform: perspective(500px) rotateY(90deg) scaleX(0.2); } }
+        .ent-origami-3d .title { color: #fff; }
+        .ent-origami-3d .subtitle { color: #38bdf8; }
+
+        .ent-blinds { background: linear-gradient(135deg, #31102f, #1e1b4b); border: 1px solid #ec4899; border-radius: 12px; animation: blindsReveal calc(4s * var(--speed-multiplier)) ease-in-out infinite; }
+        @keyframes blindsReveal { 0% { clip-path: polygon(0 0, 100% 0, 100% 0, 0 0, 0 33%, 100% 33%, 100% 33%, 0 33%, 0 66%, 100% 66%, 100% 66%, 0 66%); opacity: 0; } 25%, 75% { clip-path: polygon(0 0, 100% 0, 100% 33%, 0 33%, 0 33%, 100% 33%, 100% 66%, 0 66%, 0 66%, 100% 66%, 100% 100%, 0 100%); opacity: 1; } 100% { clip-path: polygon(0 33%, 100% 33%, 100% 33%, 0 33%, 0 66%, 100% 66%, 100% 66%, 0 66%, 0 100%, 100% 100%, 100% 100%, 0 100%); opacity: 0; } }
+        .ent-blinds .title { color: #fce7f3; font-family: 'Syne', sans-serif; }
+        .ent-blinds .subtitle { color: #f472b6; }
+
+        .ent-pendulum { background: #18181b; border: 1px solid #eab308; border-radius: 12px; transform-origin: 50% -80px; animation: pendulumDrop calc(4.2s * var(--speed-multiplier)) ease-in-out infinite; }
+        @keyframes pendulumDrop { 0% { opacity: 0; transform: rotate(75deg); } 20% { opacity: 1; transform: rotate(-35deg); } 35% { transform: rotate(18deg); } 50% { transform: rotate(-8deg); } 62%, 80% { opacity: 1; transform: rotate(0deg); } 100% { opacity: 0; transform: rotate(-75deg); } }
+        .ent-pendulum .title { color: #fef08a; font-family: 'Cinzel', serif; }
+        .ent-pendulum .subtitle { color: #ca8a04; }
+
+        .ent-mercury { background: radial-gradient(circle at 30% 30%, #f8fafc, #64748b, #0f172a); color: #0f172a; align-items: center; box-shadow: inset -5px -5px 15px rgba(0,0,0,0.6), inset 5px 5px 15px rgba(255,255,255,0.8); animation: mercuryDrop calc(4s * var(--speed-multiplier)) cubic-bezier(0.34, 1.56, 0.64, 1) infinite; }
+        @keyframes mercuryDrop { 0% { opacity: 0; transform: translateY(-60px) scale(0.15); border-radius: 50%; } 25%, 75% { opacity: 1; transform: translateY(0) scale(1); border-radius: 16px; } 100% { opacity: 0; transform: translateY(40px) scale(0.15); border-radius: 50%; } }
+        .ent-mercury .title { color: #090d16; font-family: 'Space Grotesk', sans-serif; font-weight: 900; }
+        .ent-mercury .subtitle { color: #1e293b; font-weight: 700; }
+
+        .ent-rift { background: #090d16; border: 2px solid #a855f7; border-radius: 10px; box-shadow: inset 0 0 25px rgba(168, 85, 247, 0.3); animation: dimensionalRift calc(3.8s * var(--speed-multiplier)) cubic-bezier(0.77, 0, 0.175, 1) infinite; }
+        @keyframes dimensionalRift { 0% { clip-path: polygon(50% 0%, 50% 25%, 50% 50%, 50% 75%, 50% 100%, 50% 75%, 50% 50%, 50% 25%); filter: brightness(4); } 25%, 75% { clip-path: polygon(0% 0%, 0% 25%, 0% 50%, 0% 75%, 0% 100%, 100% 100%, 100% 50%, 100% 0%); filter: brightness(1); } 100% { clip-path: polygon(50% 0%, 50% 25%, 50% 50%, 50% 75%, 50% 100%, 50% 75%, 50% 50%, 50% 25%); filter: brightness(4); } }
+        .ent-rift .title { color: #e9d5ff; font-family: 'Orbitron', sans-serif; }
+        .ent-rift .subtitle { color: #a855f7; }
+
+        .ent-barrel-roll { background: linear-gradient(135deg, #065f46, #042f2e); border: 1px solid #10b981; border-radius: 14px; animation: barrelRoll3D calc(4.2s * var(--speed-multiplier)) cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+        @keyframes barrelRoll3D { 0% { opacity: 0; transform: perspective(700px) translate3d(-150px, -60px, -200px) rotate3d(1, 1, 1, -360deg); } 25%, 75% { opacity: 1; transform: perspective(700px) translate3d(0, 0, 0) rotate3d(1, 1, 1, 0deg); } 100% { opacity: 0; transform: perspective(700px) translate3d(150px, 60px, -200px) rotate3d(1, 1, 1, 360deg); } }
+        .ent-barrel-roll .title { color: #ecfdf5; font-family: 'Space Grotesk', sans-serif; }
+        .ent-barrel-roll .subtitle { color: #34d399; }
+
+        .ent-clone-merge { background: #111827; border: 1px solid #38bdf8; border-radius: 12px; animation: cloneMerge calc(4s * var(--speed-multiplier)) ease-out infinite; }
+        @keyframes cloneMerge { 0% { opacity: 0; transform: scale(1.2); box-shadow: -70px -30px 0 rgba(56,189,248,0.6), 70px 30px 0 rgba(244,63,94,0.6); } 25%, 75% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 transparent, 0 0 0 transparent; } 100% { opacity: 0; transform: scale(0.8); box-shadow: 70px -30px 0 rgba(56,189,248,0.6), -70px 30px 0 rgba(244,63,94,0.6); } }
+        .ent-clone-merge .title { color: #e0f2fe; font-family: 'Syne', sans-serif; }
+        .ent-clone-merge .subtitle { color: #38bdf8; }
+
+        /* =================================================================================
+           SEÇÃO 9: 10 ANIMAÇÕES DE REALCE / DESTAQUE EXTREMO (77 A 86)
+           ================================================================================= */
+        .hi-tesla { background: #060b19; border: 2px solid #38bdf8; border-radius: 12px; align-items: center; animation: teslaShock calc(1.5s * var(--speed-multiplier)) infinite; }
+        @keyframes teslaShock { 0%, 100% { box-shadow: 0 0 10px #0284c7, inset 0 0 10px #0284c7; border-color: #38bdf8; } 15% { box-shadow: -8px 4px 25px #00ffff, 8px -4px 25px #3b82f6, inset 0 0 25px #00ffff; border-color: #fff; transform: translate(2px, -1px); } 30% { box-shadow: 6px -6px 30px #38bdf8, -6px 6px 15px #fff; transform: translate(-2px, 1px); } 45% { box-shadow: 0 0 5px #0284c7; transform: translate(0, 0); } }
+        .hi-tesla .title { color: #e0f2fe; font-family: 'Orbitron', sans-serif; text-shadow: 0 0 10px #00ffff; }
+        .hi-tesla .subtitle { color: #7dd3fc; }
+
+        .hi-nuclear { background: repeating-linear-gradient(45deg, #1a1600, #1a1600 12px, #2e2600 12px, #2e2600 24px); border: 2px solid #eab308; border-radius: 10px; animation: nuclearCore calc(2s * var(--speed-multiplier)) ease-in-out infinite; }
+        @keyframes nuclearCore { 0%, 100% { box-shadow: 0 0 5px rgba(234, 179, 8, 0.2); transform: scale(1); } 50% { box-shadow: 0 0 35px rgba(234, 179, 8, 0.9), inset 0 0 25px rgba(239, 68, 68, 0.6); border-color: #ef4444; transform: scale(1.03); } }
+        .hi-nuclear .title { color: #fef08a; font-family: 'Black Ops One', cursive; font-weight: 400; text-shadow: 0 2px 8px #000; }
+        .hi-nuclear .subtitle { color: #facc15; background: rgba(0,0,0,0.7); padding: 2px 8px; border-radius: 4px; align-self: flex-start; font-weight: 700; }
+
+        .hi-gold-vip { background: linear-gradient(110deg, #422006 0%, #854d0e 35%, #fef08a 50%, #854d0e 65%, #422006 100%); background-size: 250% 100%; border: 1px solid #fde047; border-radius: 14px; align-items: center; box-shadow: 0 10px 25px rgba(202, 138, 4, 0.4); animation: goldSweep calc(3s * var(--speed-multiplier)) linear infinite; }
+        @keyframes goldSweep { 0% { background-position: 200% 0; } 100% { background-position: -50% 0; } }
+        .hi-gold-vip .title { color: #fffbeb; font-family: 'Cinzel', serif; text-shadow: 0 2px 5px rgba(0,0,0,0.8); }
+        .hi-gold-vip .subtitle { color: #fef08a; font-weight: 700; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+
+        .hi-siren { background: #0f172a; border-radius: 12px; border: 2px solid transparent; align-items: center; animation: policeStrobe calc(1.2s * var(--speed-multiplier)) steps(2, start) infinite; }
+        @keyframes policeStrobe { 0% { box-shadow: -15px 0 30px -5px rgba(239, 68, 68, 0.8), inset 15px 0 25px -10px rgba(239, 68, 68, 0.5); border-color: #ef4444 #3b82f6 #ef4444 #ef4444; } 50% { box-shadow: 15px 0 30px -5px rgba(59, 130, 246, 0.8), inset -15px 0 25px -10px rgba(59, 130, 246, 0.5); border-color: #3b82f6 #3b82f6 #3b82f6 #ef4444; } }
+        .hi-siren .title { color: #ffffff; font-family: 'Space Grotesk', sans-serif; }
+        .hi-siren .subtitle { color: #cbd5e1; text-transform: uppercase; font-weight: 800; font-size: 0.78rem; letter-spacing: 1.5px; }
+
+        .hi-heartbeat { background: #2a0a18; border: 1px solid #f43f5e; border-radius: 14px; align-items: center; animation: heartPump calc(1.8s * var(--speed-multiplier)) infinite; }
+        @keyframes heartPump { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.7); } 14% { transform: scale(1.08); box-shadow: 0 0 0 12px rgba(244, 63, 94, 0); } 28% { transform: scale(1); } 42% { transform: scale(1.05); box-shadow: 0 0 0 8px rgba(244, 63, 94, 0); } 70% { transform: scale(1); } }
+        .hi-heartbeat .title { color: #ffe4e6; font-family: 'Space Grotesk', sans-serif; }
+        .hi-heartbeat .subtitle { color: #fb7185; }
+
+        .hi-twin-laser { background: #090d16; border-radius: 14px; overflow: hidden; z-index: 1; align-items: center; }
+        .hi-twin-laser::before { content: ''; position: absolute; width: 250%; height: 250%; background: conic-gradient(#ff0055 0deg 60deg, transparent 60deg 180deg, #00ffcc 180deg 240deg, transparent 240deg 360deg); animation: spinBeam calc(2.2s * var(--speed-multiplier)) linear infinite; z-index: -2; }
+        .hi-twin-laser::after { content: ''; position: absolute; inset: 3px; background: #111827; border-radius: 11px; z-index: -1; }
+        .hi-twin-laser .title { color: #fff; font-family: 'Syne', sans-serif; }
+        .hi-twin-laser .subtitle { color: #00ffcc; }
+
+        .hi-forcefield { background-color: #042f2e; background-image: radial-gradient(#14b8a6 1.5px, transparent 1.5px), radial-gradient(#14b8a6 1.5px, #042f2e 1.5px); background-size: 20px 20px; background-position: 0 0, 10px 10px; border: 2px solid #2dd4bf; border-radius: 14px; align-items: center; animation: shieldPulse calc(3s * var(--speed-multiplier)) ease-in-out infinite; }
+        @keyframes shieldPulse { 0%, 100% { box-shadow: inset 0 0 20px #042f2e, 0 0 10px rgba(45,212,191,0.3); filter: hue-rotate(0deg); } 50% { box-shadow: inset 0 0 40px #14b8a6, 0 0 25px rgba(45,212,191,0.8); filter: hue-rotate(45deg); } }
+        .hi-forcefield .title { color: #fff; background: rgba(4,47,46,0.85); padding: 2px 12px; border-radius: 6px; font-family: 'Orbitron', sans-serif; }
+        .hi-forcefield .subtitle { color: #99f6e4; background: rgba(4,47,46,0.85); padding: 1px 8px; border-radius: 4px; margin-top: 2px; }
+
+        .hi-stamp { background: #1e293b; border: 1px solid #334155; border-radius: 12px; overflow: hidden; }
+        .hi-stamp::after { content: 'URGENTE'; position: absolute; right: 12px; top: 50%; color: #ef4444; border: 3px solid #ef4444; border-radius: 4px; padding: 2px 8px; font-family: 'Black Ops One', cursive; font-size: 0.85rem; letter-spacing: 2px; animation: stampSlam calc(3s * var(--speed-multiplier)) cubic-bezier(0.175, 0.885, 0.32, 1.275) infinite; }
+        @keyframes stampSlam { 0%, 15% { opacity: 0; transform: translateY(-50%) scale(3) rotate(-25deg); } 25%, 80% { opacity: 0.9; transform: translateY(-50%) scale(1) rotate(-12deg); } 100% { opacity: 0; transform: translateY(-50%) scale(0.8) rotate(-12deg); } }
+        .hi-stamp .title { color: #f8fafc; }
+        .hi-stamp .subtitle { color: #fca5a5; }
+
+        .hi-crystal { background: linear-gradient(135deg, #2e1065 0%, #701a75 50%, #0f172a 100%); border: 1px solid #e879f9; align-items: center; clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px), 0 12px); animation: crystalGlow calc(3.5s * var(--speed-multiplier)) ease-in-out infinite; }
+        @keyframes crystalGlow { 0%, 100% { transform: translateY(0) scale(1); filter: drop-shadow(0 0 8px rgba(232,121,249,0.4)); } 50% { transform: translateY(-8px) scale(1.03); filter: drop-shadow(0 0 22px rgba(232,121,249,0.95)) brightness(1.2); } }
+        .hi-crystal .title { color: #fae8ff; font-family: 'Cinzel', serif; }
+        .hi-crystal .subtitle { color: #f0abfc; }
+
+        .hi-solar-flare { background: radial-gradient(circle, #7c2d12 0%, #090d16 85%); border: 2px solid #f97316; border-radius: 16px; align-items: center; animation: solarCorona calc(2.5s * var(--speed-multiplier)) ease-in-out infinite; }
+        @keyframes solarCorona { 0%, 100% { box-shadow: 0 0 15px #ea580c, 0 0 30px #9a3412, inset 0 0 15px #ea580c; } 50% { box-shadow: 0 0 25px #fde047, 0 0 50px #f97316, 0 0 80px #dc2626, inset 0 0 30px #f97316; border-color: #fef08a; } }
+        .hi-solar-flare .title { color: #fef9c3; font-family: 'Space Grotesk', sans-serif; text-shadow: 0 0 10px #f97316; }
+        .hi-solar-flare .subtitle { color: #fdba74; }
+
+        /* ==========================================================================================
+           SEÇÃO 10: 15 VARIAÇÕES TEMÁTICAS (AMARELO DA IMAGEM, CINZA ESCURO E VERMELHO) - 87 A 101
+           ========================================================================================== */
+        .v79-amber { background: linear-gradient(110deg, #e08200 0%, #ff9d00 35%, #fff0b3 50%, #ff9d00 65%, #e08200 100%); background-size: 250% 100%; border: 1px solid #ffd166; border-radius: 14px; align-items: center; box-shadow: 0 10px 25px rgba(255, 157, 0, 0.35); animation: goldSweep calc(2.8s * var(--speed-multiplier)) linear infinite; }
+        .v79-amber .title { color: #0b0f19; font-weight: 900; letter-spacing: 0.5px; }
+        .v79-amber .subtitle { color: #1e293b; font-weight: 700; }
+
+        .v79-darkgray { background: linear-gradient(110deg, #18181b 0%, #27272a 35%, #10b981 48%, #ffffff 50%, #10b981 52%, #27272a 65%, #18181b 100%); background-size: 250% 100%; border: 1px solid #10b981; border-radius: 14px; align-items: center; box-shadow: 0 10px 25px rgba(16, 185, 129, 0.25); animation: goldSweep calc(3s * var(--speed-multiplier)) linear infinite; }
+        .v79-darkgray .title { color: #ffffff; text-shadow: 0 2px 6px rgba(0,0,0,0.9); }
+        .v79-darkgray .subtitle { color: #4ade80; font-weight: 700; text-shadow: 0 1px 4px rgba(0,0,0,0.9); }
+
+        .v79-red { background: linear-gradient(110deg, #7f1d1d 0%, #dc2626 35%, #fecaca 50%, #dc2626 65%, #7f1d1d 100%); background-size: 250% 100%; border: 1px solid #f87171; border-radius: 14px; align-items: center; box-shadow: 0 10px 25px rgba(220, 38, 38, 0.4); animation: goldSweep calc(2.8s * var(--speed-multiplier)) linear infinite; }
+        .v79-red .title { color: #ffffff; text-shadow: 0 2px 5px rgba(0,0,0,0.6); }
+        .v79-red .subtitle { color: #fee2e2; font-weight: 600; }
+
+        .v77-amber { background: #ff9d00; border: 2px solid #fffbeb; border-radius: 12px; align-items: center; animation: teslaAmber calc(1.5s * var(--speed-multiplier)) infinite; }
+        @keyframes teslaAmber { 0%, 100% { box-shadow: 0 0 12px #ff9d00, inset 0 0 10px #b45309; border-color: #fde047; } 15% { box-shadow: -8px 4px 28px #ffffff, 8px -4px 28px #ff9d00, inset 0 0 25px #ffffff; border-color: #ffffff; transform: translate(2px, -1px); } 30% { box-shadow: 6px -6px 32px #fbbf24, -6px 6px 15px #ffffff; transform: translate(-2px, 1px); } 45% { box-shadow: 0 0 6px #d97706; transform: translate(0, 0); } }
+        .v77-amber .title { color: #090d16; font-family: 'Orbitron', sans-serif; font-weight: 900; text-shadow: 0 0 8px rgba(255,255,255,0.8); }
+        .v77-amber .subtitle { color: #1e293b; font-weight: 800; }
+
+        .v77-darkgray { background: #18181b; border: 2px solid #10b981; border-radius: 12px; align-items: center; animation: teslaDarkGreen calc(1.5s * var(--speed-multiplier)) infinite; }
+        @keyframes teslaDarkGreen { 0%, 100% { box-shadow: 0 0 10px #059669, inset 0 0 10px #059669; border-color: #10b981; } 15% { box-shadow: -8px 4px 28px #4ade80, 8px -4px 28px #ffffff, inset 0 0 25px #10b981; border-color: #ffffff; transform: translate(2px, -1px); } 30% { box-shadow: 6px -6px 30px #10b981, -6px 6px 15px #ffffff; transform: translate(-2px, 1px); } 45% { box-shadow: 0 0 5px #059669; transform: translate(0, 0); } }
+        .v77-darkgray .title { color: #ffffff; font-family: 'Orbitron', sans-serif; text-shadow: 0 0 10px #10b981; }
+        .v77-darkgray .subtitle { color: #4ade80; font-weight: 600; }
+
+        .v77-red { background: #b91c1c; border: 2px solid #fecaca; border-radius: 12px; align-items: center; animation: teslaRed calc(1.5s * var(--speed-multiplier)) infinite; }
+        @keyframes teslaRed { 0%, 100% { box-shadow: 0 0 12px #dc2626, inset 0 0 12px #7f1d1d; border-color: #f87171; } 15% { box-shadow: -8px 4px 30px #ff0000, 8px -4px 25px #ffffff, inset 0 0 25px #fca5a5; border-color: #ffffff; transform: translate(2px, -1px); } 30% { box-shadow: 6px -6px 32px #ef4444, -6px 6px 15px #fde047; transform: translate(-2px, 1px); } 45% { box-shadow: 0 0 6px #991b1b; transform: translate(0, 0); } }
+        .v77-red .title { color: #ffffff; font-family: 'Orbitron', sans-serif; text-shadow: 0 0 10px #fecaca; }
+        .v77-red .subtitle { color: #fee2e2; font-weight: 700; }
+
+        .v80-amber { background: #ff9d00; border-radius: 12px; border: 2px solid transparent; align-items: center; animation: strobeAmber calc(1.2s * var(--speed-multiplier)) steps(2, start) infinite; }
+        @keyframes strobeAmber { 0% { box-shadow: -18px 0 32px -4px rgba(255, 255, 255, 0.95), inset 18px 0 25px -8px rgba(255, 255, 255, 0.8); border-color: #ffffff #090d16 #ffffff #ffffff; } 50% { box-shadow: 18px 0 32px -4px rgba(255, 115, 0, 0.95), inset -18px 0 25px -8px rgba(180, 83, 9, 0.8); border-color: #090d16 #ffffff #090d16 #090d16; } }
+        .v80-amber .title { color: #090d16; font-family: 'Space Grotesk', sans-serif; font-weight: 900; }
+        .v80-amber .subtitle { color: #1e293b; text-transform: uppercase; font-weight: 800; font-size: 0.78rem; letter-spacing: 1.5px; }
+
+        .v80-darkgray { background: #18181b; border-radius: 12px; border: 2px solid transparent; align-items: center; animation: strobeDarkGreen calc(1.2s * var(--speed-multiplier)) steps(2, start) infinite; }
+        @keyframes strobeDarkGreen { 0% { box-shadow: -15px 0 30px -5px rgba(16, 185, 129, 0.9), inset 15px 0 25px -10px rgba(16, 185, 129, 0.6); border-color: #10b981 #ffffff #10b981 #10b981; } 50% { box-shadow: 15px 0 30px -5px rgba(255, 255, 255, 0.85), inset -15px 0 25px -10px rgba(255, 255, 255, 0.5); border-color: #ffffff #ffffff #ffffff #10b981; } }
+        .v80-darkgray .title { color: #ffffff; font-family: 'Space Grotesk', sans-serif; }
+        .v80-darkgray .subtitle { color: #4ade80; text-transform: uppercase; font-weight: 800; font-size: 0.78rem; letter-spacing: 1.5px; }
+
+        .v80-red { background: #991b1b; border-radius: 12px; border: 2px solid transparent; align-items: center; animation: strobeRed calc(1.2s * var(--speed-multiplier)) steps(2, start) infinite; }
+        @keyframes strobeRed { 0% { box-shadow: -18px 0 35px -4px rgba(255, 0, 55, 0.95), inset 18px 0 25px -8px rgba(255, 255, 255, 0.6); border-color: #ffffff #ef4444 #ffffff #ffffff; } 50% { box-shadow: 18px 0 35px -4px rgba(255, 255, 255, 0.9), inset -18px 0 25px -8px rgba(255, 0, 55, 0.7); border-color: #ef4444 #ffffff #ef4444 #ef4444; } }
+        .v80-red .title { color: #ffffff; font-family: 'Space Grotesk', sans-serif; }
+        .v80-red .subtitle { color: #fecaca; text-transform: uppercase; font-weight: 800; font-size: 0.78rem; letter-spacing: 1.5px; }
+
+        .v81-amber { background: #ff9d00; border: 2px solid #fffbeb; border-radius: 14px; align-items: center; animation: heartAmber calc(1.8s * var(--speed-multiplier)) infinite; }
+        @keyframes heartAmber { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 157, 0, 0.85); } 14% { transform: scale(1.08); box-shadow: 0 0 0 14px rgba(255, 157, 0, 0); } 28% { transform: scale(1); } 42% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(255, 157, 0, 0); } 70% { transform: scale(1); } }
+        .v81-amber .title { color: #090d16; font-family: 'Space Grotesk', sans-serif; font-weight: 900; }
+        .v81-amber .subtitle { color: #1e293b; font-weight: 700; }
+
+        .v81-darkgray { background: #18181b; border: 1.5px solid #10b981; border-radius: 14px; align-items: center; animation: heartDarkGreen calc(1.8s * var(--speed-multiplier)) infinite; }
+        @keyframes heartDarkGreen { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.8); } 14% { transform: scale(1.08); box-shadow: 0 0 0 14px rgba(16, 185, 129, 0); border-color: #ffffff; } 28% { transform: scale(1); border-color: #10b981; } 42% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 70% { transform: scale(1); } }
+        .v81-darkgray .title { color: #ffffff; font-family: 'Space Grotesk', sans-serif; }
+        .v81-darkgray .subtitle { color: #4ade80; font-weight: 600; }
+
+        .v81-red { background: #dc2626; border: 1.5px solid #fecaca; border-radius: 14px; align-items: center; animation: heartRedVivid calc(1.8s * var(--speed-multiplier)) infinite; }
+        @keyframes heartRedVivid { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.9); } 14% { transform: scale(1.08); box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 28% { transform: scale(1); } 42% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 70% { transform: scale(1); } }
+        .v81-red .title { color: #ffffff; font-family: 'Space Grotesk', sans-serif; }
+        .v81-red .subtitle { color: #fee2e2; font-weight: 600; }
+
+        .v37-amber { background: #090d16; border-radius: 14px; overflow: hidden; z-index: 1; font-family: 'Space Grotesk', sans-serif; align-items: center; text-align: center; box-shadow: 0 8px 25px rgba(255, 157, 0, 0.3); }
+        .v37-amber::before { content: ''; position: absolute; width: 250%; height: 250%; background: conic-gradient(transparent, transparent, #090d16, #ffffff, #090d16); animation: spinBeam calc(2.6s * var(--speed-multiplier)) linear infinite; z-index: -2; }
+        .v37-amber::after { content: ''; position: absolute; inset: 4px; background: #ff9d00; border-radius: 10px; z-index: -1; }
+        .v37-amber .title { color: #090d16; font-size: 1.5rem; font-weight: 900; letter-spacing: 1px; }
+        .v37-amber .subtitle { color: #1e293b; font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; }
+
+        .v37-darkgray { background: #09090b; border-radius: 14px; overflow: hidden; z-index: 1; font-family: 'Space Grotesk', sans-serif; align-items: center; text-align: center; }
+        .v37-darkgray::before { content: ''; position: absolute; width: 250%; height: 250%; background: conic-gradient(transparent, transparent, transparent, #10b981, #ffffff); animation: spinBeam calc(2.6s * var(--speed-multiplier)) linear infinite; z-index: -2; }
+        .v37-darkgray::after { content: ''; position: absolute; inset: 3px; background: #1f242d; border-radius: 11px; z-index: -1; }
+        .v37-darkgray .title { color: #ffffff; font-size: 1.5rem; letter-spacing: 2px; }
+        .v37-darkgray .subtitle { color: #4ade80; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 3px; }
+
+        .v37-red { background: #450a0a; border-radius: 14px; overflow: hidden; z-index: 1; font-family: 'Space Grotesk', sans-serif; align-items: center; text-align: center; box-shadow: 0 8px 25px rgba(220, 38, 38, 0.35); }
+        .v37-red::before { content: ''; position: absolute; width: 250%; height: 250%; background: conic-gradient(transparent, transparent, transparent, #fde047, #ffffff); animation: spinBeam calc(2.6s * var(--speed-multiplier)) linear infinite; z-index: -2; }
+        .v37-red::after { content: ''; position: absolute; inset: 3px; background: #b91c1c; border-radius: 11px; z-index: -1; }
+        .v37-red .title { color: #ffffff; font-size: 1.5rem; letter-spacing: 2px; }
+        .v37-red .subtitle { color: #fecaca; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 3px; }
+
+
+        /* ==========================================================================================
+           SEÇÃO 11: ESPECIFICAÇÃO /painel/setor-moderno (ModernQueueCard.tsx) - MODELOS 102 A 116
+           Tamanhos Proporcionais + OS ocupando maior largura s/ quebrar linha + Amarelo c/ Fonte Escura
+           ========================================================================================== */
+
+        .setor-modern-root {
+            font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+            font-variant-numeric: tabular-nums;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .setor-modern-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+            gap: 28px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .setor-modern-col {
+            container-type: inline-size;
+            container-name: setor-col;
+            display: flex;
+        }
+
+        .setor-modern-card {
+            container-type: inline-size;
+            width: 100%;
+            border-radius: 14px;
+            padding: 18px 20px;
+            position: relative;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            box-sizing: border-box;
+            font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+            font-variant-numeric: tabular-nums;
+            -webkit-font-smoothing: antialiased;
+            text-align: center;
+        }
+
+        .setor-modern-card.is-new {
+            outline: 3px solid #22c55e;
+            outline-offset: 3px;
+        }
+
+        .setor-modern-card-top {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .setor-modern-card-top h3 {
+            margin: 0;
+            width: 100%;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            font-size: clamp(1rem, 15.6cqi, 5rem);
+            font-weight: 700;
+            letter-spacing: -0.045em;
+            line-height: 1.05;
+            color: #edf3fa;
+            font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .setor-modern-situation {
+            width: 100%;
+            font-size: clamp(18px, 5.4cqi, 50px);
+            font-weight: 500;
+            color: #e1eaf4;
+            line-height: 1.2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            text-align: center;
+        }
+        .setor-modern-situation .layers-icon {
+            width: 13px;
+            height: 13px;
+            flex-shrink: 0;
+            stroke: currentColor;
+        }
+        .setor-modern-situation .sub-os-prefix {
+            font-weight: 600;
+            opacity: 0.92;
+        }
+
+        .setor-modern-card-meta {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: nowrap;
+            margin-top: 4px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.14);
+        }
+
+        .setor-modern-card-author {
+            font-size: clamp(13px, 3.7cqi, 32px);
+            font-weight: 400;
+            color: #b5c6d7;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            line-height: 1.15;
+            white-space: nowrap;
+        }
+        .setor-modern-card-author svg {
+            width: 1em;
+            height: 1em;
+            max-width: 18px;
+            max-height: 18px;
+            flex-shrink: 0;
+            stroke: currentColor;
+        }
+
+        .setor-modern-timer-wrap {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-left: auto;
+            white-space: nowrap;
+        }
+
+        .setor-modern-css-clock {
+            width: clamp(13px, 3.8cqi, 22px);
+            height: clamp(13px, 3.8cqi, 22px);
+            border: 1.8px solid currentColor;
+            border-radius: 50%;
+            position: relative;
+            display: inline-block;
+            flex-shrink: 0;
+            color: #e1edf8;
+        }
+        .setor-modern-css-clock::before,
+        .setor-modern-css-clock::after {
+            content: '';
+            position: absolute;
+            background: currentColor;
+            left: 50%;
+            top: 50%;
+            transform-origin: bottom center;
+            border-radius: 2px;
+        }
+        .setor-modern-css-clock::before {
+            width: 1.5px;
+            height: 32%;
+            transform: translate(-50%, -100%) rotate(45deg);
+        }
+        .setor-modern-css-clock::after {
+            width: 1.5px;
+            height: 40%;
+            transform: translate(-50%, -100%) rotate(160deg);
+        }
+
+        .setor-modern-timer-value {
+            font-size: clamp(18px, 4.8cqi, 44px);
+            font-weight: 600;
+            color: #e1edf8;
+            line-height: 1.1;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .setor-modern-timer-label {
+            font-size: clamp(11px, 3.2cqi, 27px);
+            font-weight: 400;
+        }
+
+        .setor-modern-card-meta .setor-modern-timer-label {
+            display: none;
+        }
+
+        .setor-modern-timer-unavailable {
+            font-size: 10px;
+            font-weight: 400;
+            color: #b5c6d7;
+        }
+
+        .setor-modern-card.priority-high .setor-modern-card-top h3,
+        .setor-modern-card.priority-high .setor-modern-situation,
+        .setor-modern-card.priority-high .setor-modern-card-author,
+        .setor-modern-card.priority-high .setor-modern-timer-value,
+        .setor-modern-card.priority-high .setor-modern-css-clock,
+        .setor-modern-card.priority-high .setor-modern-timer-unavailable {
+            color: #fff5e9;
+        }
+
+        .setor-modern-card.priority-medium .setor-modern-card-top h3 {
+            color: #0b0f19;
+            text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+        }
+        .setor-modern-card.priority-medium .setor-modern-situation {
+            color: #111827;
+            font-weight: 600;
+        }
+        .setor-modern-card.priority-medium .setor-modern-card-author {
+            color: #1e293b;
+            font-weight: 500;
+        }
+        .setor-modern-card.priority-medium .setor-modern-timer-value,
+        .setor-modern-card.priority-medium .setor-modern-css-clock,
+        .setor-modern-card.priority-medium .setor-modern-timer-unavailable {
+            color: #0b0f19;
+        }
+        .setor-modern-card.priority-medium .setor-modern-card-meta {
+            border-top-color: rgba(11, 15, 25, 0.22);
+        }
+
+        .setor-modern-card.v37-amber,
+        .setor-modern-card.v37-darkgray,
+        .setor-modern-card.v37-red {
+            align-items: center;
+            text-align: center;
+        }
+        .setor-modern-card.v37-amber::before,
+        .setor-modern-card.v37-darkgray::before,
+        .setor-modern-card.v37-red::before {
+            left: -75%;
+            top: -75%;
+        }
+
+        @media (min-width: 2560px) {
+            .setor-modern-card-top h3 {
+                font-size: clamp(2rem, 15.6cqi, 8rem);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .setor-modern-card {
+                container-type: inline-size;
+            }
+            .setor-modern-card-top h3 {
+                font-size: clamp(0.7rem, 15.6cqw, 3.2rem);
+            }
+            .setor-modern-situation {
+                font-size: clamp(0.6rem, 10cqw, 1.1rem);
+            }
+            .setor-modern-card-author {
+                font-size: clamp(0.45rem, 8cqw, 0.75rem);
+            }
+            .setor-modern-timer-value {
+                font-size: clamp(0.5rem, 9cqw, 0.9rem);
+            }
+        }
+
+        /* ==========================================================================================
+           SEÇÃO 12: MODELO 117 - ENTRADA DE DISCO VOADOR (UFO TRACTOR BEAM DELIVERY)
+           ========================================================================================== */
+        .ufo-stage-wrapper {
+            max-width: 520px;
+            margin: 20px auto 40px;
+            padding-top: 135px;
+            padding-bottom: 20px;
+            position: relative;
+            container-type: inline-size;
+        }
+
+        .ufo-saucer-rig {
+            position: absolute;
+            top: 12px;
+            left: 50%;
+            width: 150px;
+            height: 60px;
+            transform: translateX(-50%);
+            z-index: 30;
+            pointer-events: none;
+            animation: ufoFlightPath calc(6.5s * var(--speed-multiplier)) cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+
+        .ufo-dome {
+            position: absolute;
+            top: 2px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 68px;
+            height: 30px;
+            background: radial-gradient(circle at 35% 30%, #a7f3d0 0%, #10b981 45%, #064e3b 100%);
+            border-radius: 50% 50% 15% 15%;
+            border: 1.5px solid #6ee7b7;
+            box-shadow: 0 -4px 18px rgba(16, 185, 129, 0.7), inset 0 4px 8px rgba(255, 255, 255, 0.6);
+            z-index: 2;
+        }
+
+        .ufo-body {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            width: 100%;
+            height: 28px;
+            background: linear-gradient(180deg, #e2e8f0 0%, #64748b 45%, #1e293b 85%, #0f172a 100%);
+            border-radius: 50%;
+            border: 1.5px solid #94a3b8;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.85), 0 0 25px rgba(56, 189, 248, 0.5);
+            z-index: 3;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 0 14px;
+            box-sizing: border-box;
+        }
+
+        .ufo-light {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #00ffcc;
+            box-shadow: 0 0 10px #00ffcc, 0 0 18px #00ffcc;
+            animation: ufoLightsBlink calc(0.4s * var(--speed-multiplier)) infinite alternate;
+        }
+        .ufo-light:nth-child(2) { background: #38bdf8; box-shadow: 0 0 10px #38bdf8; animation-delay: 0.1s; }
+        .ufo-light:nth-child(3) { background: #f43f5e; box-shadow: 0 0 10px #f43f5e; animation-delay: 0.2s; }
+        .ufo-light:nth-child(4) { background: #eab308; box-shadow: 0 0 10px #eab308; animation-delay: 0.3s; }
+        .ufo-light:nth-child(5) { background: #a855f7; box-shadow: 0 0 10px #a855f7; animation-delay: 0.4s; }
+
+        @keyframes ufoLightsBlink {
+            0% { transform: scale(0.7); opacity: 0.5; }
+            100% { transform: scale(1.25); opacity: 1; }
+        }
+
+        .ufo-core {
+            position: absolute;
+            bottom: 4px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 54px;
+            height: 14px;
+            background: radial-gradient(circle, #ffffff 0%, #00ffcc 60%, #0284c7 100%);
+            border-radius: 50%;
+            box-shadow: 0 0 20px #00ffcc, 0 0 40px #10b981;
+            z-index: 1;
+        }
+
+        .ufo-tractor-beam {
+            position: absolute;
+            top: 48px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 112%;
+            height: 290px;
+            background: linear-gradient(180deg, 
+                rgba(0, 255, 204, 0.75) 0%, 
+                rgba(16, 185, 129, 0.32) 45%, 
+                rgba(56, 189, 248, 0.12) 85%, 
+                transparent 100%);
+            clip-path: polygon(43% 0%, 57% 0%, 100% 100%, 0% 100%);
+            z-index: 15;
+            pointer-events: none;
+            mix-blend-mode: screen;
+            transform-origin: top center;
+            animation: ufoBeamRay calc(6.5s * var(--speed-multiplier)) ease-in-out infinite;
+        }
+
+        .ufo-tractor-beam::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                180deg,
+                transparent 0px,
+                transparent 18px,
+                rgba(167, 243, 208, 0.35) 20px,
+                transparent 24px
+            );
+            animation: beamWavesDown calc(0.6s * var(--speed-multiplier)) linear infinite;
+        }
+
+        @keyframes beamWavesDown {
+            0% { background-position: 0 0; }
+            100% { background-position: 0 48px; }
+        }
+
+        .ufo-landing-ring {
+            position: absolute;
+            bottom: 6px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 92%;
+            height: 22px;
+            border-radius: 50%;
+            background: radial-gradient(ellipse at center, rgba(0, 255, 204, 0.55) 0%, rgba(16, 185, 129, 0.2) 50%, transparent 75%);
+            z-index: 5;
+            pointer-events: none;
+            animation: ufoGroundGlow calc(6.5s * var(--speed-multiplier)) ease-in-out infinite;
+        }
+
+        .ufo-delivered-card {
+            position: relative;
+            z-index: 20;
+            background: linear-gradient(145deg, #18181b, #0f172a);
+            border: 1.5px solid #10b981;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
+            transform-origin: top center;
+            animation: ufoCardDrop calc(6.5s * var(--speed-multiplier)) cubic-bezier(0.22, 1, 0.36, 1) infinite;
+        }
+
+        @keyframes ufoFlightPath {
+            0% { transform: translate(-360px, -50px) rotate(-22deg) scale(0.45); opacity: 0; }
+            10% { transform: translate(-50%, 4px) rotate(8deg) scale(1.04); opacity: 1; }
+            15%, 36% { transform: translate(-50%, 0px) rotate(0deg) scale(1); opacity: 1; }
+            45% { transform: translate(360px, -60px) rotate(25deg) scale(0.35); opacity: 0; }
+            78% { transform: translate(-360px, -40px) rotate(-20deg) scale(0.4); opacity: 0; }
+            85%, 93% { transform: translate(-50%, 0px) rotate(0deg) scale(1); opacity: 1; }
+            100% { transform: translate(360px, -60px) rotate(25deg) scale(0.35); opacity: 0; }
+        }
+
+        @keyframes ufoBeamRay {
+            0%, 12% { opacity: 0; transform: translateX(-50%) scaleY(0) scaleX(0.2); }
+            16%, 33% { opacity: 1; transform: translateX(-50%) scaleY(1) scaleX(1); }
+            38%, 83% { opacity: 0; transform: translateX(-50%) scaleY(0) scaleX(0.1); }
+            86%, 94% { opacity: 1; transform: translateX(-50%) scaleY(1) scaleX(1); }
+            98%, 100% { opacity: 0; transform: translateX(-50%) scaleY(0) scaleX(0.1); }
+        }
+
+        @keyframes ufoCardDrop {
+            0%, 14% { opacity: 0; transform: translateY(-125px) scale(0.12) rotate(-8deg); filter: brightness(4) drop-shadow(0 0 30px #00ffcc); }
+            27% { opacity: 1; transform: translateY(8px) scale(1.02) rotate(0deg); filter: brightness(1.5) drop-shadow(0 0 25px #10b981); border-color: #00ffcc; }
+            33%, 84% { opacity: 1; transform: translateY(0px) scale(1) rotate(0deg); filter: brightness(1) drop-shadow(0 0 0px transparent); border-color: #10b981; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6), 0 0 15px rgba(16, 185, 129, 0.25); }
+            88% { opacity: 1; transform: translateY(-15px) scale(0.92) rotate(3deg); filter: brightness(2.5) drop-shadow(0 0 25px #00ffcc); }
+            95%, 100% { opacity: 0; transform: translateY(-125px) scale(0.1) rotate(12deg); filter: brightness(5) blur(4px); }
+        }
+
+        @keyframes ufoGroundGlow {
+            0%, 14% { opacity: 0; transform: translateX(-50%) scale(0.2); }
+            18%, 33% { opacity: 1; transform: translateX(-50%) scale(1.1); }
+            38%, 83% { opacity: 0; transform: translateX(-50%) scale(0.4); }
+            86%, 94% { opacity: 1; transform: translateX(-50%) scale(1.1); }
+            98%, 100% { opacity: 0; transform: translateX(-50%) scale(0.2); }
+        }
+
+
+        /* ==========================================================================================
+           SEÇÃO 13: MODELOS 118 E 119 - ANIMAÇÕES DE ENTRADA COM OVERLAY ("ANALISAR" & "DAR PROSSEGIMENTO")
+           ========================================================================================== */
+
+        /* Wrapper com espaço superior para a badge flutuante sobre o card */
+        .action-overlay-col {
+            container-type: inline-size;
+            display: flex;
+            padding-top: 24px;
+            position: relative;
+        }
+
+        /* -------------------------------------------------------------------------
+           MODELO 118: ENTRADA + INSPEÇÃO "ANALISAR" COM LUPA
+           ------------------------------------------------------------------------- */
+        .card-analisar-lupa {
+            background: linear-gradient(145deg, #162032, #0c1322);
+            border: 1.5px solid #38bdf8;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 20px rgba(56, 189, 248, 0.18);
+            position: relative;
+            overflow: visible;
+            transform-origin: center bottom;
+            animation: cardAnalisarEntrance calc(6s * var(--speed-multiplier)) cubic-bezier(0.22, 1, 0.36, 1) infinite;
+        }
+
+        /* Animação de Entrada e Saída do Card 118 */
+        @keyframes cardAnalisarEntrance {
+            0% {
+                opacity: 0;
+                transform: translateY(40px) scale(0.82);
+                filter: blur(12px) brightness(0.4);
+            }
+            10% {
+                opacity: 1;
+                transform: translateY(-4px) scale(1.02);
+                filter: blur(0px) brightness(1.35);
+                border-color: #00ffcc;
+                box-shadow: 0 18px 40px rgba(0, 255, 204, 0.35);
+            }
+            16%, 84% {
+                opacity: 1;
+                transform: translateY(0px) scale(1);
+                filter: blur(0px) brightness(1);
+                border-color: #38bdf8;
+                box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 20px rgba(56, 189, 248, 0.18);
+            }
+            92% {
+                opacity: 0.6;
+                transform: translateY(-8px) scale(0.96);
+                filter: blur(4px);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(35px) scale(0.82);
+                filter: blur(12px);
+            }
+        }
+
+        /* Badge Superior Animada "ANALISAR" (Surge com pop elástico logo após o card) */
+        .overlay-badge-analisar {
+            position: absolute;
+            top: -16px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(90deg, #0284c7, #38bdf8, #00ffcc, #38bdf8, #0284c7);
+            background-size: 250% 100%;
+            color: #05101f;
+            font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+            font-weight: 800;
+            font-size: clamp(11px, 3.6cqi, 15px);
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            padding: 5px 18px;
+            border-radius: 999px;
+            border: 1.5px solid #e0f2fe;
+            box-shadow: 0 6px 20px rgba(56, 189, 248, 0.65), 0 0 12px rgba(0, 255, 204, 0.5);
+            z-index: 40;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            animation: analisarBadgeEntrance calc(6s * var(--speed-multiplier)) cubic-bezier(0.34, 1.56, 0.64, 1) infinite,
+                       goldSweep calc(3s * var(--speed-multiplier)) linear infinite;
+        }
+
+        @keyframes analisarBadgeEntrance {
+            0%, 10% {
+                opacity: 0;
+                transform: translateX(-50%) translateY(-22px) scale(0.4);
+            }
+            18% {
+                opacity: 1;
+                transform: translateX(-50%) translateY(2px) scale(1.1);
+            }
+            24%, 45%, 65%, 82% {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0px) scale(1);
+            }
+            35%, 55%, 74% {
+                opacity: 1;
+                transform: translateX(-50%) translateY(-3px) scale(1.05);
+            }
+            90%, 100% {
+                opacity: 0;
+                transform: translateX(-50%) translateY(-18px) scale(0.5);
+            }
+        }
+
+        .overlay-badge-analisar .pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #05101f;
+            box-shadow: 0 0 0 2px rgba(5, 16, 31, 0.3);
+            animation: dotPing calc(1.2s * var(--speed-multiplier)) infinite alternate;
+        }
+        @keyframes dotPing {
+            0% { transform: scale(0.8); opacity: 0.6; }
+            100% { transform: scale(1.25); opacity: 1; }
+        }
+
+        /* Lupa Realista que Entra, Inspeciona o Card e Sai */
+        .magnifier-rig {
+            position: absolute;
+            top: 18%;
+            left: 10%;
+            width: clamp(68px, 22cqi, 96px);
+            height: clamp(68px, 22cqi, 96px);
+            z-index: 35;
+            pointer-events: none;
+            animation: magnifierEntranceAndScan calc(6s * var(--speed-multiplier)) ease-in-out infinite;
+        }
+
+        /* Lente com Efeito Óptico de Brilho e Zoom */
+        .magnifier-lens {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 4px solid #e2e8f0;
+            box-shadow: 
+                0 0 0 2px #0284c7,
+                0 12px 28px rgba(0, 0, 0, 0.85),
+                0 0 25px rgba(56, 189, 248, 0.65),
+                inset 0 0 18px rgba(56, 189, 248, 0.45);
+            background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.32) 0%, rgba(56, 189, 248, 0.14) 45%, rgba(0, 255, 204, 0.06) 100%);
+            backdrop-filter: brightness(1.35) contrast(1.15) saturate(1.3);
+            -webkit-backdrop-filter: brightness(1.35) contrast(1.15) saturate(1.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Reflexo Curvo da Lente */
+        .magnifier-lens::before {
+            content: '';
+            position: absolute;
+            top: 8%;
+            left: 12%;
+            width: 45%;
+            height: 22%;
+            border-radius: 50%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.75), transparent);
+            transform: rotate(-28deg);
+        }
+
+        /* Mira Reticular Interna da Lente */
+        .magnifier-lens::after {
+            content: '+';
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: rgba(0, 255, 204, 0.65);
+            font-weight: 400;
+            font-size: 16px;
+            font-family: monospace;
+        }
+
+        /* Cabo Metálico da Lupa */
+        .magnifier-handle {
+            position: absolute;
+            bottom: -24px;
+            right: -18px;
+            width: 12px;
+            height: 36px;
+            background: linear-gradient(90deg, #94a3b8, #f8fafc, #475569);
+            border: 1px solid #334155;
+            border-radius: 4px 4px 8px 8px;
+            transform: rotate(-42deg);
+            transform-origin: top center;
+            box-shadow: 4px 6px 14px rgba(0, 0, 0, 0.8);
+        }
+
+        /* Trajetória de Entrada, Varredura e Saída da Lupa */
+        @keyframes magnifierEntranceAndScan {
+            0%, 12% {
+                opacity: 0;
+                left: -22%;
+                top: -20%;
+                transform: rotate(-35deg) scale(1.4);
+            }
+            22% {
+                opacity: 1;
+                left: 6%;
+                top: 8%;
+                transform: rotate(-8deg) scale(1);
+            }
+            42% {
+                opacity: 1;
+                left: 65%;
+                top: 6%;
+                transform: rotate(10deg) scale(1.08);
+            }
+            62% {
+                opacity: 1;
+                left: 55%;
+                top: 42%;
+                transform: rotate(-5deg) scale(1);
+            }
+            78% {
+                opacity: 1;
+                left: 14%;
+                top: 38%;
+                transform: rotate(12deg) scale(1.05);
+            }
+            88%, 100% {
+                opacity: 0;
+                left: 95%;
+                top: -20%;
+                transform: rotate(30deg) scale(0.5);
+            }
+        }
+
+        /* -------------------------------------------------------------------------
+           MODELO 119: ENTRADA + AVANÇO "DAR PROSSEGIMENTO" (SEM CARIMBO & LINHAS LENTAS)
+           ------------------------------------------------------------------------- */
+        .card-prosseguimento {
+            background: linear-gradient(135deg, #062c21 0%, #091926 55%, #0c1322 100%);
+            border: 1.5px solid #10b981;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 22px rgba(16, 185, 129, 0.25);
+            position: relative;
+            overflow: visible;
+            animation: cardProsseguirEntrance calc(6s * var(--speed-multiplier)) cubic-bezier(0.22, 1, 0.36, 1) infinite;
+        }
+
+        /* Animação de Entrada Propulsora pela Esquerda e Disparo de Avanço pela Direita */
+        @keyframes cardProsseguirEntrance {
+            0% {
+                opacity: 0;
+                transform: translateX(-110px) skewX(-14deg) scale(0.9);
+                filter: blur(10px);
+            }
+            12% {
+                opacity: 1;
+                transform: translateX(8px) skewX(3deg) scale(1.02);
+                filter: blur(0px) brightness(1.3);
+                border-color: #6ee7b7;
+                box-shadow: -15px 0 35px rgba(16, 185, 129, 0.5);
+            }
+            18%, 82% {
+                opacity: 1;
+                transform: translateX(0px) skewX(0deg) scale(1);
+                filter: blur(0px) brightness(1);
+                border-color: #10b981;
+                box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 22px rgba(16, 185, 129, 0.25);
+            }
+            88% {
+                opacity: 1;
+                transform: translateX(-10px) scale(0.98);
+            }
+            98%, 100% {
+                opacity: 0;
+                transform: translateX(120px) skewX(-16deg) scale(0.92);
+                filter: blur(10px);
+            }
+        }
+
+        /* Varredura de Linhas Diagonais no Fundo Interno (Velocidade bastante reduzida: 12s) */
+        .prosseguimento-bg-stream {
+            position: absolute;
+            inset: 0;
+            border-radius: 13px;
+            overflow: hidden;
+            pointer-events: none;
+            z-index: 1;
+        }
+        .prosseguimento-bg-stream::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                -55deg,
+                transparent 0px,
+                transparent 28px,
+                rgba(16, 185, 129, 0.08) 28px,
+                rgba(56, 189, 248, 0.12) 42px,
+                transparent 42px
+            );
+            background-size: 200% 100%;
+            animation: streamForward calc(12s * var(--speed-multiplier)) linear infinite;
+        }
+        @keyframes streamForward {
+            0% { background-position: 200% 0; }
+            100% { background-position: 0% 0; }
+        }
+
+        /* Conteúdo do card acima do stream de fundo */
+        .card-prosseguimento .setor-modern-card-top,
+        .card-prosseguimento .setor-modern-situation,
+        .card-prosseguimento .setor-modern-card-meta {
+            position: relative;
+            z-index: 5;
+        }
+
+        /* Faixa/Pílula Animada Sobreposta "DAR PROSSEGIMENTO" (Entra deslizando após a chegada do card) */
+        .overlay-badge-prosseguir {
+            position: absolute;
+            top: -16px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(90deg, #059669, #10b981, #a7f3d0, #10b981, #059669);
+            background-size: 250% 100%;
+            color: #022c22;
+            font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+            font-weight: 800;
+            font-size: clamp(10.5px, 3.3cqi, 14px);
+            text-transform: uppercase;
+            letter-spacing: 0.09em;
+            padding: 5px 16px;
+            border-radius: 999px;
+            border: 1.5px solid #d1fae5;
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.7), 0 0 15px rgba(52, 211, 153, 0.5);
+            z-index: 40;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            animation: prosseguirBadgeEntrance calc(6s * var(--speed-multiplier)) cubic-bezier(0.34, 1.56, 0.64, 1) infinite,
+                       goldSweep calc(4s * var(--speed-multiplier)) linear infinite;
+        }
+
+        @keyframes prosseguirBadgeEntrance {
+            0%, 12% {
+                opacity: 0;
+                transform: translateX(-90%) scale(0.5);
+            }
+            20% {
+                opacity: 1;
+                transform: translateX(-46%) scale(1.08);
+            }
+            26%, 46%, 66%, 80% {
+                opacity: 1;
+                transform: translateX(-50%) scale(1);
+            }
+            36%, 56%, 74% {
+                opacity: 1;
+                transform: translateX(-47%) scale(1.04);
+                box-shadow: 0 8px 25px rgba(16, 185, 129, 0.95), 0 0 20px rgba(167, 243, 208, 0.8);
+            }
+            90%, 100% {
+                opacity: 0;
+                transform: translateX(10%) scale(0.6);
+            }
+        }
+
+        /* Chevrons Animados de Avanço (>>>) */
+        .chevron-arrows {
+            display: inline-flex;
+            align-items: center;
+            font-weight: 900;
+            letter-spacing: -2px;
+        }
+        .chevron-arrows span {
+            display: inline-block;
+            animation: chevronPush calc(1.2s * var(--speed-multiplier)) infinite;
+        }
+        .chevron-arrows span:nth-child(2) { animation-delay: 0.18s; }
+        .chevron-arrows span:nth-child(3) { animation-delay: 0.36s; }
+
+        @keyframes chevronPush {
+            0%, 100% { opacity: 0.3; transform: translateX(-2px); }
+            50% { opacity: 1; transform: translateX(3px); }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="catalog-header">
+        <h1>Catálogo Master 119 Cards OS</h1>
+        <p>Coleção completa de 119 modelos de UI, incluindo o <code>ModernQueueCard</code>, OVNI e as Entradas Operacionais <strong>Analisar (Lupa)</strong> e <strong>Dar Prosseguimento</strong>.</p>
+    </div>
+
+    <!-- Barra Flutuante de Controle Global -->
+    <div class="sticky-controls">
+        <span>⚡ Painel de Controle Master:</span>
+        <div class="controls-group">
+            <button class="btn-control active" id="btnSpeed1" onclick="setSpeed(1, this)">1x Normal</button>
+            <button class="btn-control" id="btnSpeed2" onclick="setSpeed(2.5, this)">0.4x Câmera Lenta</button>
+            <button class="btn-control" id="btnSpeedFast" onclick="setSpeed(0.5, this)">2x Turbo</button>
+            <button class="btn-control" id="btnPause" onclick="togglePause(this)">⏸ Pausar Tudo</button>
+        </div>
+    </div>
+
+    <div style="max-width: 1200px; margin: 0 auto;" id="mainWrapper">
+        
+        <!-- SEÇÃO 1: Hover (1 a 6) -->
+        <div class="section-header">
+            <h2 class="section-title">1. Interativos Clássicos (Hover)</h2>
+        </div>
+        <div class="grid-container">
+            <div class="card-base card-corporate"><div class="title">OS 1480/2</div><div class="subtitle">1. Corporate Minimal</div></div>
+            <div class="card-base card-glass"><div class="title">OS 1481/2</div><div class="subtitle">2. Glassmorphism</div></div>
+            <div class="card-base card-neon"><div class="title">OS 1482/2</div><div class="subtitle">3. Neon Glow</div></div>
+            <div class="card-base card-slide"><div class="title">OS 1483/2</div><div class="subtitle">4. Slide Fill</div></div>
+            <div class="card-base card-pulse"><div class="title">OS 1484/2</div><div class="subtitle">5. Status Pulse</div></div>
+            <div class="card-base card-gradient"><div class="title">OS 1485/2</div><div class="subtitle">6. Gradient Border</div></div>
+        </div>
+
+        <!-- SEÇÃO 2: Contínuas (7 a 12) -->
+        <div class="section-header">
+            <h2 class="section-title">2. Contínuas Clássicas (Autônomas)</h2>
+        </div>
+        <div class="grid-container">
+            <div class="card-base card-shimmer"><div class="title">OS 1486/2</div><div class="subtitle">7. Shimmer Pass</div></div>
+            <div class="card-base card-scanner"><div class="title">OS 1487/2</div><div class="subtitle">8. Cyber Scanner</div></div>
+            <div class="card-base card-breathing"><div class="title">OS 1488/2</div><div class="subtitle">9. Breathing Glow</div></div>
+            <div class="card-base card-floating"><div class="title">OS 1489/2</div><div class="subtitle">10. 3D Floating</div></div>
+            <div class="card-base card-rgb"><div class="title">OS 1490/2</div><div class="subtitle">11. RGB Chroma</div></div>
+            <div class="card-base card-alert"><div class="title">OS 1491/2</div><div class="subtitle">12. Critical Alert</div></div>
+        </div>
+
+        <!-- SEÇÃO 3: Entrada Simples (13 a 18) -->
+        <div class="section-header">
+            <h2 class="section-title">3. Animações de Entrada (Execução Única)</h2>
+            <button class="btn-control" onclick="replayAnimations()">Repetir Seção 3 ↻</button>
+        </div>
+        <div class="grid-container">
+            <div class="card-base card-entrance entrance-fade-up"><div class="title">OS 1492/2</div><div class="subtitle">13. Fade In Up</div></div>
+            <div class="card-base card-entrance entrance-zoom-in"><div class="title">OS 1493/2</div><div class="subtitle">14. Zoom In</div></div>
+            <div class="card-base card-entrance entrance-slide-right"><div class="title">OS 1494/2</div><div class="subtitle">15. Slide Right</div></div>
+            <div class="card-base card-entrance entrance-flip"><div class="title">OS 1495/2</div><div class="subtitle">16. Flip In X</div></div>
+            <div class="card-base card-entrance entrance-bounce"><div class="title">OS 1496/2</div><div class="subtitle">17. Bounce In</div></div>
+            <div class="card-base card-entrance entrance-unfold"><div class="title">OS 1497/2</div><div class="subtitle">18. Unfold Top</div></div>
+        </div>
+
+        <!-- SEÇÃO 4: Entradas em Loop Clássicas (19 a 24) -->
+        <div class="section-header">
+            <h2 class="section-title">4. Entradas em Loop (Clássicas)</h2>
+        </div>
+        <div class="grid-container">
+            <div class="card-base card-loop loop-zoom-out"><div class="title">OS 1498/2</div><div class="subtitle">19. Zoom Out (Grande -> Normal)</div></div>
+            <div class="card-base card-loop loop-dissolve"><div class="title">OS 1499/2</div><div class="subtitle">20. Dissolver (Blur Fade)</div></div>
+            <div class="card-base card-loop loop-roll-in"><div class="title">OS 1500/2</div><div class="subtitle">21. Roll In (Rolagem)</div></div>
+            <div class="card-base card-loop loop-swing"><div class="title">OS 1501/2</div><div class="subtitle">22. Swing Drop (Placa 3D)</div></div>
+            <div class="card-base card-loop loop-lightspeed"><div class="title">OS 1502/2</div><div class="subtitle">23. Light Speed (Inclinado)</div></div>
+            <div class="card-base card-loop loop-rotate-in"><div class="title">OS 1503/2</div><div class="subtitle">24. Rotate Spin</div></div>
+        </div>
+
+        <!-- SEÇÃO 5: 12 ENTRADAS CINEMATOGRÁFICAS EM LOOP (25 a 36) -->
+        <div class="section-header">
+            <h2 class="section-title">
+                5. Entradas Cinematográficas & Motion FX (Loop)
+                <span class="badge-pro">Pro FX</span>
+            </h2>
+        </div>
+        <div class="grid-container">
+            <div class="card-base card-fx fx-iris"><div class="title">OS 1504/2</div><div class="subtitle">25. Íris Portal (Clip Circle)</div></div>
+            <div class="card-base card-fx fx-stage-build"><div class="title">OS 1505/2</div><div class="subtitle">26. Construção 2 Estágios</div></div>
+            <div class="card-base card-fx fx-glitch"><div class="title">OS 1506/2</div><div class="subtitle">27. Glitch RGB Digital</div></div>
+            <div class="card-base card-fx fx-rubber"><div class="title">OS 1507/2</div><div class="subtitle">28. Impacto Elástico (Jelly)</div></div>
+            <div class="card-base card-fx fx-origami"><div class="title">OS 1508/2</div><div class="subtitle">29. Corte Diagonal (Polygon)</div></div>
+            <div class="card-base card-fx fx-laser"><div class="title">OS 1509/2</div><div class="subtitle">30. Laser Reconstrutor</div></div>
+            <div class="card-base card-fx fx-isometric"><div class="title">OS 1510/2</div><div class="subtitle">31. Pouso Isométrico 3D</div></div>
+            <div class="card-base card-fx fx-crt"><div class="title">OS 1511/2</div><div class="subtitle">32. Ignição CRT (TV Switch)</div></div>
+            <div class="card-base card-fx fx-supernova"><div class="title">OS 1512/2</div><div class="subtitle">33. Supernova (Estouro Óptico)</div></div>
+            <div class="card-base card-fx fx-stagger"><div class="title">OS 1513/2</div><div class="subtitle">34. Cascata Interna (3 Tempos)</div></div>
+            <div class="card-base card-fx fx-shutter"><div class="title">OS 1514/2</div><div class="subtitle">35. Obturador (Split Shutter)</div></div>
+            <div class="card-base card-fx fx-warp"><div class="title">OS 1515/2</div><div class="subtitle">36. Dobra Espacial (Warp Stretch)</div></div>
+        </div>
+
+        <!-- SEÇÃO 6: 20 MODELOS NEXT-GEN (37 a 56) -->
+        <div class="section-header">
+            <h2 class="section-title">
+                6. Next-Gen UI: 3D & Design Livre (Sem Borda Lateral)
+                <span class="badge-nextgen">Next-Gen</span>
+            </h2>
+        </div>
+        <div class="grid-container">
+            <div class="card-base mod-conic-beam"><div class="title">OS 1516/2</div><div class="subtitle">37. Laser Orbit 360º</div></div>
+            <div class="card-base mod-kinetic-grad"><div class="title">OS 1517/2</div><div class="subtitle">38. Fonte Líquida (Syne)</div></div>
+            <div class="card-base mod-3d-orbit"><div class="title">OS 1518/2</div><div class="subtitle">39. Camadas 3D (TranslateZ)</div></div>
+            <div class="card-base mod-brutalist"><div class="title">OS 1519/2</div><div class="subtitle">40. Neo-Brutalismo Pop</div></div>
+            <div class="card-base mod-terminal"><div class="title">OS 1520/2</div><div class="subtitle">41. Typewriter (Monospace)</div></div>
+            <div class="card-base mod-stroke-wave"><div class="title">OS 1521/2</div><div class="subtitle">42. Fonte Vazada Neon</div></div>
+            <div class="card-base mod-cinematic-serif"><div class="title">OS 1522/2</div><div class="subtitle">43. Kerning Cinematográfico</div></div>
+            <div class="card-base mod-3d-text-extrude"><div class="title">OS 1523/2</div><div class="subtitle">44. Fonte Extrudada 3D</div></div>
+            <div class="card-base mod-aurora"><div class="title">OS 1524/2</div><div class="subtitle">45. Mesh Gradient Fluido</div></div>
+            <div class="card-base mod-holo-prism"><div class="title">OS 1525/2</div><div class="subtitle">46. Foil Holográfico 3D</div></div>
+            <div class="card-base mod-neumorph"><div class="title">OS 1526/2</div><div class="subtitle">47. Soft UI Esculpido</div></div>
+            <div class="card-base mod-hud"><div class="title">OS 1527/2</div><div class="subtitle">48. Mira Tática Sci-Fi</div></div>
+            <div class="card-base mod-slot-text"><div class="title">OS 1528/2</div><div class="subtitle">49. Rolagem Vertical</div></div>
+            <div class="card-base mod-water-mirror"><div class="title">OS 1529/2</div><div class="subtitle">50. Reflexo Cristalino</div></div>
+            <div class="card-base mod-cube-spin"><div class="title">OS 1530/2</div><div class="subtitle">51. Rotação 720º Eixo X</div></div>
+            <div class="card-base mod-liquid-blob"><div class="title">OS 1531/2</div><div class="subtitle">52. Geometria Mutante</div></div>
+            <div class="card-base mod-anaglyph"><div class="title">OS 1532/2</div><div class="subtitle">53. Óptica 3D Anaglífica</div></div>
+            <div class="card-base mod-sonar"><div class="title">OS 1533/2</div><div class="subtitle">54. Pulso de Radar</div></div>
+            <div class="card-base mod-spotlight"><div class="title">OS 1534/2</div><div class="subtitle">55. Varredura de Holofote</div></div>
+            <div class="card-base mod-maglev"><div class="title">OS 1535/2</div><div class="subtitle">56. Propulsão Magnética</div></div>
+        </div>
+
+        <!-- SEÇÃO 7: 10 ANIMAÇÕES EXTREMAS NOS TEXTOS (57 a 66) -->
+        <div class="section-header">
+            <h2 class="section-title">
+                7. Animações Extremas nos Textos & Tipografia Viva (57 a 66)
+                <span class="badge-fire">Text FX</span>
+            </h2>
+        </div>
+        <div class="grid-container">
+            <div class="card-base txt-cyber-slice"><div class="title" data-text="OS 1536/2">OS 1536/2</div><div class="subtitle">57. Fatiamento Cyberpunk</div></div>
+            <div class="card-base txt-inferno"><div class="title">OS 1537/2</div><div class="subtitle">58. Combustão Térmica</div></div>
+            <div class="card-base txt-char-wave">
+                <div class="title">
+                    <span style="--i:1">O</span><span style="--i:2">S</span><span style="--i:3">&nbsp;</span><span style="--i:4">1</span><span style="--i:5">5</span><span style="--i:6">3</span><span style="--i:7">8</span><span style="--i:8">/</span><span style="--i:9">2</span>
+                </div>
+                <div class="subtitle">59. Onda Caracter a Caracter</div>
+            </div>
+            <div class="card-base txt-marquee">
+                <div class="marquee-track">
+                    <div class="title">⚡ OS 1539/2 • PRIORIDADE MÁXIMA •</div>
+                    <div class="title">⚡ OS 1539/2 • PRIORIDADE MÁXIMA •</div>
+                </div>
+                <div class="subtitle">60. Ticker Tape Infinito</div>
+            </div>
+            <div class="card-base txt-vegas-neon"><div class="title">OS 1540/2</div><div class="subtitle">61. Curto-Circuito Neon</div></div>
+            <div class="card-base txt-matrix"><div class="title">OS 1541/2</div><div class="subtitle">62. Decodificador Matrix</div></div>
+            <div class="card-base txt-ghost-smoke"><div class="title">OS 1542/2</div><div class="subtitle">63. Dispersão de Fumaça</div></div>
+            <div class="card-base txt-slingshot"><div class="title">OS 1543/2</div><div class="subtitle">64. Tensão de Estilingue</div></div>
+            <div class="card-base txt-3d-roller"><div class="title">OS 1544/2</div><div class="subtitle">65. Prisma Rotativo 3D</div></div>
+            <div class="card-base txt-xray"><div class="title" data-text="OS 1545/2">OS 1545/2</div><div class="subtitle">66. Scanner Raio-X</div></div>
+        </div>
+
+        <!-- SEÇÃO 8: 10 ANIMAÇÕES SURREAIS DE ENTRADA EM LOOP (67 a 76) -->
+        <div class="section-header">
+            <h2 class="section-title">
+                8. Animações Surreais de Entrada em Loop (67 a 76)
+                <span class="badge-fire">Surreal Entrances</span>
+            </h2>
+        </div>
+        <div class="grid-container">
+            <div class="card-base ent-blackhole"><div class="title">OS 1546/2</div><div class="subtitle">67. Vórtice Buraco Negro</div></div>
+            <div class="card-base ent-teleport"><div class="title">OS 1547/2</div><div class="subtitle">68. Teletransporte Quântico</div></div>
+            <div class="card-base ent-meteor"><div class="title">OS 1548/2</div><div class="subtitle">69. Impacto Meteórico</div></div>
+            <div class="card-base ent-origami-3d"><div class="title">OS 1549/2</div><div class="subtitle">70. Dobradura Espacial 3D</div></div>
+            <div class="card-base ent-blinds"><div class="title">OS 1550/2</div><div class="subtitle">71. Persiana Veneziana</div></div>
+            <div class="card-base ent-pendulum"><div class="title">OS 1551/2</div><div class="subtitle">72. Pêndulo Gravitacional</div></div>
+            <div class="card-base ent-mercury"><div class="title">OS 1552/2</div><div class="subtitle">73. Fusão de Mercúrio</div></div>
+            <div class="card-base ent-rift"><div class="title">OS 1553/2</div><div class="subtitle">74. Fenda Dimensional</div></div>
+            <div class="card-base ent-barrel-roll"><div class="title">OS 1554/2</div><div class="subtitle">75. Acrobacia Espiral 3D</div></div>
+            <div class="card-base ent-clone-merge"><div class="title">OS 1555/2</div><div class="subtitle">76. Convergência de Clones</div></div>
+        </div>
+
+        <!-- SEÇÃO 9: 10 ANIMAÇÕES DE REALCE / DESTAQUE EXTREMO (77 a 86) -->
+        <div class="section-header">
+            <h2 class="section-title">
+                9. Animações de Realce, Energia & Alerta Máximo (77 a 86)
+                <span class="badge-fire">Hyper Highlight</span>
+            </h2>
+        </div>
+        <div class="grid-container">
+            <div class="card-base hi-tesla"><div class="title">OS 1556/2</div><div class="subtitle">77. Descarga Bobina de Tesla</div></div>
+            <div class="card-base hi-nuclear"><div class="title">OS 1557/2</div><div class="subtitle">78. Fusão Nuclear Crítica</div></div>
+            <div class="card-base hi-gold-vip"><div class="title">OS 1558/2</div><div class="subtitle">79. Lingote de Ouro 24K</div></div>
+            <div class="card-base hi-siren"><div class="title">OS 1559/2</div><div class="subtitle">80. Giroflex de Emergência</div></div>
+            <div class="card-base hi-heartbeat"><div class="title">OS 1560/2</div><div class="subtitle">81. Taquicardia / Pulso Duplo</div></div>
+            <div class="card-base hi-twin-laser"><div class="title">OS 1561/2</div><div class="subtitle">82. Lasers Gêmeos Bicolores</div></div>
+            <div class="card-base hi-forcefield"><div class="title">OS 1562/2</div><div class="subtitle">83. Escudo Defletor Sci-Fi</div></div>
+            <div class="card-base hi-stamp"><div class="title">OS 1563/2</div><div class="subtitle">84. Impacto de Carimbo</div></div>
+            <div class="card-base hi-crystal"><div class="title">OS 1564/2</div><div class="subtitle">85. Relíquia Lapidada</div></div>
+            <div class="card-base hi-solar-flare"><div class="title">OS 1565/2</div><div class="subtitle">86. Erupção de Coroa Solar</div></div>
+        </div>
+
+        <!-- SEÇÃO 10: 15 VARIAÇÕES TEMÁTICAS (87 A 101) -->
+        <div class="section-header">
+            <h2 class="section-title">
+                10. Variações Temáticas Especiais: Âmbar OS, Dark Green & Vermelho (87 a 101)
+                <span class="badge-custom">15 Variações</span>
+            </h2>
+        </div>
+        <div class="grid-container">
+            <div class="sub-category-label">Baseados no Modelo 79 (Varredura de Brilho Metálico)</div>
+            <div class="card-base v79-amber"><div class="title">OS 1481/2</div><div class="subtitle">87. Brilho Âmbar (Estilo 79)</div></div>
+            <div class="card-base v79-darkgray"><div class="title">OS 1481/2</div><div class="subtitle">88. Brilho Dark Green (Estilo 79)</div></div>
+            <div class="card-base v79-red"><div class="title">OS 1481/2</div><div class="subtitle">89. Brilho Rubi (Estilo 79)</div></div>
+
+            <div class="sub-category-label">Baseados no Modelo 77 (Descarga Elétrica / Bobina de Tesla)</div>
+            <div class="card-base v77-amber"><div class="title">OS 1481/2</div><div class="subtitle">90. Tesla Âmbar (Estilo 77)</div></div>
+            <div class="card-base v77-darkgray"><div class="title">OS 1481/2</div><div class="subtitle">91. Tesla Dark Green (Estilo 77)</div></div>
+            <div class="card-base v77-red"><div class="title">OS 1481/2</div><div class="subtitle">92. Tesla Vermelho (Estilo 77)</div></div>
+
+            <div class="sub-category-label">Baseados no Modelo 80 (Strobe / Giroflex Alternado)</div>
+            <div class="card-base v80-amber"><div class="title">OS 1481/2</div><div class="subtitle">93. Giroflex Âmbar (Estilo 80)</div></div>
+            <div class="card-base v80-darkgray"><div class="title">OS 1481/2</div><div class="subtitle">94. Giroflex Dark Green (Estilo 80)</div></div>
+            <div class="card-base v80-red"><div class="title">OS 1481/2</div><div class="subtitle">95. Giroflex Vermelho (Estilo 80)</div></div>
+
+            <div class="sub-category-label">Baseados no Modelo 81 (Taquicardia / Pulso Duplo)</div>
+            <div class="card-base v81-amber"><div class="title">OS 1481/2</div><div class="subtitle">96. Pulso Âmbar (Estilo 81)</div></div>
+            <div class="card-base v81-darkgray"><div class="title">OS 1481/2</div><div class="subtitle">97. Pulso Dark Green (Estilo 81)</div></div>
+            <div class="card-base v81-red"><div class="title">OS 1481/2</div><div class="subtitle">98. Pulso Vermelho (Estilo 81)</div></div>
+
+            <div class="sub-category-label">Baseados no Modelo 37 (Feixe Laser Giratório 360º)</div>
+            <div class="card-base v37-amber"><div class="title">OS 1481/2</div><div class="subtitle">99. Orbit Âmbar (Estilo 37)</div></div>
+            <div class="card-base v37-darkgray"><div class="title">OS 1481/2</div><div class="subtitle">100. Orbit Dark Green (Estilo 37)</div></div>
+            <div class="card-base v37-red"><div class="title">OS 1481/2</div><div class="subtitle">101. Orbit Vermelho (Estilo 37)</div></div>
+        </div>
+
+
+        <!-- =========================================================================================
+             SEÇÃO 11: /painel/setor-moderno (ModernQueueCard.tsx) + TAMANHOS PROPORCIONAIS (102 A 116)
+             ========================================================================================= -->
+        <div class="section-header">
+            <h2 class="section-title">
+                11. Especificação Oficial <code>/painel/setor-moderno</code> (ModernQueueCard.tsx) + Escala Proporcional Full-Width (102 a 116)
+                <span class="badge-spec">OS Full-Width Centralizada + Âmbar Escuro</span>
+            </h2>
+        </div>
+
+        <div class="setor-modern-root setor-modern-grid" id="setorModernGrid">
+
+            <!-- GRUPO 11.A: Animação 79 (Liquid Shine) + Estrutura ModernQueueCard -->
+            <div class="sub-category-label">11.A • Animação Estilo 79 (Varredura Metálica) em ModernQueueCard.tsx</div>
+
+            <!-- 102. Estilo 79 Âmbar -->
+            <div class="setor-modern-col">
+                <article class="setor-modern-card v79-amber priority-medium" aria-label="OS 1428/26 - Prioridade Solicitado - Saída para Prova">
+                    <div class="setor-modern-card-top">
+                        <h3>OS 1428/26</h3>
+                    </div>
+                    <div class="setor-modern-situation">Saída p/ Prova</div>
+                    <div class="setor-modern-card-meta">
+                        <span class="setor-modern-card-author">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                            João Lucas
+                        </span>
+                        <div class="setor-modern-timer-wrap">
+                            <span class="setor-modern-css-clock"></span>
+                            <span class="setor-modern-timer-value" data-seconds="5190">01:26:30</span>
+                            <span class="setor-modern-timer-label">no andamento</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+
+            <!-- 103. Estilo 79 Cinza Escuro -->
+            <div class="setor-modern-col">
+                <article class="setor-modern-card v79-darkgray is-new" aria-label="OS 1481/26 - Nova OS - Em Pré-Impressão">
+                    <div class="setor-modern-card-top">
+                        <h3>OS 1481/26</h3>
+                    </div>
+                    <div class="setor-modern-situation">
+                        <svg class="layers-icon" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16.02 12 5.48 3.13a1 1 0 0 1 0 1.74L13 21.74a2 2 0 0 1-2 0l-8.5-4.87a1 1 0 0 1 0-1.74L7.98 12"/><path d="M13 13.74a2 2 0 0 1-2 0L2.5 8.87a1 1 0 0 1 0-1.74L11 2.26a2 2 0 0 1 2 0l8.5 4.87a1 1 0 0 1 0 1.74Z"/></svg>
+                        <span class="sub-os-prefix">[Capa]</span> Conferência PDF
+                    </div>
+                    <div class="setor-modern-card-meta">
+                        <span class="setor-modern-card-author">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                            Carlos Eduardo
+                        </span>
+                        <div class="setor-modern-timer-wrap">
+                            <span class="setor-modern-css-clock"></span>
+                            <span class="setor-modern-timer-value" data-seconds="1145">00:19:05</span>
+                            <span class="setor-modern-timer-label">no andamento</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+
+            <!-- 104. Estilo 79 Vermelho -->
+            <div class="setor-modern-col">
+                <article class="setor-modern-card v79-red priority-high" aria-label="OS 1490/26 - Prioridade Prometido - Gravando Chapas">
+                    <div class="setor-modern-card-top">
+                        <h3>OS 1490/26</h3>
+                    </div>
+                    <div class="setor-modern-situation">Gravando Chapas CTP</div>
+                    <div class="setor-modern-card-meta">
+                        <span class="setor-modern-card-author">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                            Marcos Vinícius
+                        </span>
+                        <div class="setor-modern-timer-wrap">
+                            <span class="setor-modern-css-clock"></span>
+                            <span class="setor-modern-timer-value" data-seconds="94512">1d 02:15:12</span>
+                            <span class="setor-modern-timer-label">no andamento</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+
+
+            <!-- GRUPO 11.B: Animação 77 (Bobina de Tesla) + Estrutura ModernQueueCard -->
+            <div class="sub-category-label">11.B • Animação Estilo 77 (Descarga Bobina de Tesla) em ModernQueueCard.tsx</div>
+
+            <!-- 105. Estilo 77 Âmbar -->
+            <div class="setor-modern-col">
+                <article class="setor-modern-card v77-amber priority-medium" aria-label="SP 5120/26 - Prioridade Solicitado - Aguardando Aprovação">
+                    <div class="setor-modern-card-top">
+                        <h3>SP 5120/26</h3>
+                    </div>
+                    <div class="setor-modern-situation">Aguardando Aprovação</div>
+                    <div class="setor-modern-card-meta">
+                        <span class="setor-modern-card-author">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                            Fernanda Lima
+                        </span>
+                        <div class="setor-modern-timer-wrap">
+                            <span class="setor-modern-css-clock"></span>
+                            <span class="setor-modern-timer-value" data-seconds="14890">04:08:10</span>
+                            <span class="setor-modern-timer-label">no andamento</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+
+            <!-- 106. Estilo 77 Cinza Escuro -->
+            <div class="setor-modern-col">
+                <article class="setor-modern-card v77-darkgray" aria-label="OS 1435/26 - Imposição Digital">
+                    <div class="setor-modern-card-top">
+                        <h3>OS 1435/26</h3>
+                    </div>
+                    <div class="setor-modern-situation">
+                        <svg class="layers-icon" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16.02 12 5.48 3.13a1 1 0 0 1 0 1.74L13 21.74a2 2 0 0 1-2 0l-8.5-4.87a1 1 0 0 1 0-1.74L7.98 12"/><path d="M13 13.74a2 2 0 0 1-2 0L2.5 8.87a1 1 0 0 1 0-1.74L11 2.26a2 2 0 0 1 2 0l8.5 4.87a1 1 0 0 1 0 1.74Z"/></svg>
+                        <span class="sub-os-prefix">[Miolo]</span> Imposição Digital
+                    </div>
+                    <div class="setor-modern-card-meta">
+                        <span class="setor-modern-card-author">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                            Rafael Souza
+                        </span>
+                        <div class="setor-modern-timer-wrap">
+                            <span class="setor-modern-css-clock"></span>
+                            <span class="setor-modern-timer-value" data-seconds="2830">00:47:10</span>
+                            <span class="setor-modern-timer-label">no andamento</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+
+            <!-- 107. Estilo 77 Vermelho -->
+            <div class="setor-modern-col">
+                <article class="setor-modern-card v77-red priority-high" aria-label="OS 1412/26 - Prioridade Prometido - Retrabalho de Cor">
+                    <div class="setor-modern-card-top">
+                        <h3>OS 1412/26</h3>
+                    </div>
+                    <div class="setor-modern-situation">Ajuste Perfil CMYK</div>
+                    <div class="setor-modern-card-meta">
+                        <span class="setor-modern-card-author">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                            André Martins
+                        </span>
+                        <div class="setor-modern-timer-wrap">
+                            <span class="setor-modern-css-clock"></span>
+                            <span class="setor-modern-timer-value" data-seconds="184200">2d 03:10:00</span>
+                            <span class="setor-modern-timer-label">no andamento</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+
+
+            <!-- GRUPO 11.C: Animação 80 (Giroflex / Strobe) + Estrutura ModernQueueCard -->
+            <div class="sub-category-label">11.C • Animação Estilo 80 (Giroflex / Strobe Alternado) em ModernQueueCard.tsx</div>
+
+            <!-- 108. Estilo 80 Âmbar -->
+            <div class="setor-modern-col">
+                <article class="setor-modern-card v80-amber priority-medium" aria-label="OS 1479/26 - Prioridade Solicitado - Recebido no Setor">
+                    <div class="setor-modern-card-top">
+                        <h3>OS 1479/26</h3>
+                    </div>
+                    <div class="setor-modern-situation">Recebido no Setor</div>
+                    <div class="setor-modern-card-meta">
+                        <span class="setor-modern-card-author">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                            Patrícia Alves
+                        </span>
+                        <div class="setor-modern-timer-wrap">
+                            <span class="setor-modern-css-clock"></span>
+                            <span class="setor-modern-timer-value" data-seconds="645">00:10:45</span>
+                            <span class="setor-modern-timer-label">no andamento</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+
+            <!-- 109. Estilo 80 Cinza Escuro -->
+            <div class="setor-modern-col">
+                <article class="setor-modern-card v80-darkgray" aria-label="OS 1484/26 - Preflight Concluído">
+                    <div class="setor-modern-card-top">
+                        <h3>OS 1484/26</h3>
+                    </div>
+                    <div class="setor-modern-situation">Preflight Concluído</div>
+                    <div class="setor-modern-card-meta">
+                        <span class="setor-modern-card-author">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                            Lucas Ferreira
+                        </span>
+                        <div class="setor-modern-timer-wrap">
+                            <span class="setor-modern-css-clock"></span>
+                            <span class="setor-modern-timer-value" data-seconds="3725">01:02:05</span>
+                            <span class="setor-modern-timer-label">no andamento</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+
+            <!-- 110. Estilo 80 Vermelho -->
+            <div class="setor-modern-col">
+                <article class="setor-modern-card v80-red priority-high" aria-label="SP 5310/26 - Prioridade Prometido - Máquina Parada">
+                    <div class="setor-modern-card-top">
+                        <h3>SP 5310/26</h3>
+                    </div>
+                    <div class="setor-modern-situation">Aguardando Papel</div>
+                    <div class="setor-modern-card-meta">
+                        <span class="setor-modern-card-author">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                            Roberto Dias
+                        </span>
+                        <div class="setor-modern-timer-wrap">
+                            <span class="setor-modern-css-clock"></span>
+                            <span class="setor-modern-timer-value" data-seconds="267100">3d 02:11:40</span>
+                            <span class="setor-modern-timer-label">no andamento</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+
+
+            <!-- GRUPO 11.D: Animação 81 (Taquicardia / Heartbeat) + Estrutura ModernQueueCard -->
+            <div class="sub-category-label">11.D • Animação Estilo 81 (Taquicardia / Pulso Duplo) em ModernQueueCard.tsx</div>
+
+            <!-- 111. Estilo 81 Âmbar -->
+            <div class="setor-modern-col">
+                <article class="setor-modern-card v81-amber priority-medium" aria-label="OS 1466/26 - Prioridade Solicitado - Prova Contratual">
+                    <div class="setor-modern-card-top">
+                        <h3>OS 1466/26</h3>
+                    </div>
+                    <div class="setor-modern-situation">
+                        <svg class="layers-icon" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16.02 12 5.48 3.13a1 1 0 0 1 0 1.74L13 21.74a2 2 0 0 1-2 0l-8.5-4.87a1 1 0 0 1 0-1.74L7.98 12"/><path d="M13 13.74a2 2 0 0 1-2 0L2.5 8.87a1 1 0 0 1 0-1.74L11 2.26a2 2 0 0 1 2 0l8.5 4.87a1 1 0 0 1 0 1.74Z"/></svg>
+                        <span class="sub-os-prefix">[Sobrecapa]</span> Prova Plotter
+                    </div>
+                    <div class="setor-modern-card-meta">
+                        <span class="setor-modern-card-author">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                            Juliana Costa
+                        </span>
+                        <div class="setor-modern-timer-wrap">
+                            <span class="setor-modern-css-clock"></span>
+                            <span class="setor-modern-timer-value" data-seconds="8120">02:15:20</span>
+                            <span class="setor-modern-timer-label">no andamento</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+
+            <!-- 112. Estilo 81 Cinza Escuro -->
+            <div class="setor-modern-col">
+                <article class="setor-modern-card v81-darkgray is-new" aria-label="OS 1495/26 - Nova OS - Liberado para Impressão">
+                    <div class="setor-modern-card-top">
+                        <h3>OS 1495/26</h3>
+                    </div>
+                    <div class="setor-modern-situation">Liberado p/ Offset</div>
+                    <div class="setor-modern-card-meta">
+                        <span class="setor-modern-card-author">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                            Henrique Silva
+                        </span>
+                        <div class="setor-modern-timer-wrap">
+                            <span class="setor-modern-css-clock"></span>
+                            <span class="setor-modern-timer-value" data-seconds="310">00:05:10</span>
+                            <span class="setor-modern-timer-label">no andamento</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+
+            <!-- 113. Estilo 81 Vermelho -->
+            <div class="setor-modern-col">
+                <article class="setor-modern-card v81-red priority-high" aria-label="OS 1405/26 - Prioridade Prometido - Urgência Plenário">
+                    <div class="setor-modern-card-top">
+                        <h3>OS 1405/26</h3>
+                    </div>
+                    <div class="setor-modern-situation">Impressão Digital</div>
+                    <div class="setor-modern-card-meta">
+                        <span class="setor-modern-card-author">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                            Gustavo Ramos
+                        </span>
+                        <div class="setor-modern-timer-wrap">
+                            <span class="setor-modern-css-clock"></span>
+                            <span class="setor-modern-timer-value" data-seconds="43920">12:12:00</span>
+                            <span class="setor-modern-timer-label">no andamento</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+
+
+            <!-- GRUPO 11.E: Animação 37 (Laser Orbit 360º) + Estrutura ModernQueueCard -->
+            <div class="sub-category-label">11.E • Animação Estilo 37 (Feixe Laser 360º Conic Beam) em ModernQueueCard.tsx</div>
+
+            <!-- 114. Estilo 37 Âmbar -->
+            <div class="setor-modern-col">
+                <article class="setor-modern-card v37-amber priority-medium" aria-label="OS 1488/26 - Prioridade Solicitado - Acabamento Editorial">
+                    <div class="setor-modern-card-top">
+                        <h3>OS 1488/26</h3>
+                    </div>
+                    <div class="setor-modern-situation">Dobra e Alceamento</div>
+                    <div class="setor-modern-card-meta">
+                        <span class="setor-modern-card-author">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                            Beatriz Rocha
+                        </span>
+                        <div class="setor-modern-timer-wrap">
+                            <span class="setor-modern-css-clock"></span>
+                            <span class="setor-modern-timer-value" data-seconds="6540">01:49:00</span>
+                            <span class="setor-modern-timer-label">no andamento</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+
+            <!-- 115. Estilo 37 Cinza Escuro -->
+            <div class="setor-modern-col">
+                <article class="setor-modern-card v37-darkgray" aria-label="SP 5042/26 - Corte e Vinco">
+                    <div class="setor-modern-card-top">
+                        <h3>SP 5042/26</h3>
+                    </div>
+                    <div class="setor-modern-situation">
+                        <svg class="layers-icon" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16.02 12 5.48 3.13a1 1 0 0 1 0 1.74L13 21.74a2 2 0 0 1-2 0l-8.5-4.87a1 1 0 0 1 0-1.74L7.98 12"/><path d="M13 13.74a2 2 0 0 1-2 0L2.5 8.87a1 1 0 0 1 0-1.74L11 2.26a2 2 0 0 1 2 0l8.5 4.87a1 1 0 0 1 0 1.74Z"/></svg>
+                        <span class="sub-os-prefix">[Encarte]</span> Corte Trilateral
+                    </div>
+                    <div class="setor-modern-card-meta">
+                        <span class="setor-modern-card-author">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                            Thiago Mendes
+                        </span>
+                        <div class="setor-modern-timer-wrap">
+                            <span class="setor-modern-css-clock"></span>
+                            <span class="setor-modern-timer-value" data-seconds="2295">00:38:15</span>
+                            <span class="setor-modern-timer-label">no andamento</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+
+            <!-- 116. Estilo 37 Vermelho -->
+            <div class="setor-modern-col">
+                <article class="setor-modern-card v37-red priority-high" aria-label="OS 1499/26 - Prioridade Prometido - Expedição Imediata">
+                    <div class="setor-modern-card-top">
+                        <h3>OS 1499/26</h3>
+                    </div>
+                    <div class="setor-modern-situation">Pronto p/ Expedição</div>
+                    <div class="setor-modern-card-meta">
+                        <span class="setor-modern-card-author">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                            Camila Nunes
+                        </span>
+                        <div class="setor-modern-timer-wrap">
+                            <span class="setor-modern-css-clock"></span>
+                            <span class="setor-modern-timer-value" data-seconds="112340">1d 07:12:20</span>
+                            <span class="setor-modern-timer-label">no andamento</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+
+        </div>
+
+
+        <!-- =========================================================================================
+             SEÇÃO 12: MODELO 117 - ANIMAÇÃO ESPECIAL DE DISCO VOADOR DEIXANDO O CARD
+             ========================================================================================= -->
+        <div class="section-header">
+            <h2 class="section-title">
+                12. Entrada Especial Coreografada: Disco Voador Deixando o Card (Modelo 117)
+                <span class="badge-ufo">UFO Tractor Beam</span>
+            </h2>
+        </div>
+
+        <div class="setor-modern-root ufo-stage-wrapper">
+            
+            <!-- Disco Voador (OVNI) -->
+            <div class="ufo-saucer-rig">
+                <div class="ufo-dome"></div>
+                <div class="ufo-body">
+                    <span class="ufo-light"></span>
+                    <span class="ufo-light"></span>
+                    <span class="ufo-light"></span>
+                    <span class="ufo-light"></span>
+                    <span class="ufo-light"></span>
+                </div>
+                <div class="ufo-core"></div>
+            </div>
+
+            <!-- Feixe de Luz / Raio Trator -->
+            <div class="ufo-tractor-beam"></div>
+
+            <!-- Anel de Energia no Chão -->
+            <div class="ufo-landing-ring"></div>
+
+            <!-- 117. Card OS Entregue pelo Disco Voador -->
+            <article class="setor-modern-card ufo-delivered-card is-new" aria-label="OS 1480/26 - Entregue por Disco Voador">
+                <div class="setor-modern-card-top">
+                    <h3>OS 1480/26</h3>
+                </div>
+                <div class="setor-modern-situation">
+                    <svg class="layers-icon" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16.02 12 5.48 3.13a1 1 0 0 1 0 1.74L13 21.74a2 2 0 0 1-2 0l-8.5-4.87a1 1 0 0 1 0-1.74L7.98 12"/><path d="M13 13.74a2 2 0 0 1-2 0L2.5 8.87a1 1 0 0 1 0-1.74L11 2.26a2 2 0 0 1 2 0l8.5 4.87a1 1 0 0 1 0 1.74Z"/></svg>
+                    <span class="sub-os-prefix">[117 • UFO]</span> Recebido via Raio Trator
+                </div>
+                <div class="setor-modern-card-meta">
+                    <span class="setor-modern-card-author">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                        João Lucas
+                    </span>
+                    <div class="setor-modern-timer-wrap">
+                        <span class="setor-modern-css-clock"></span>
+                        <span class="setor-modern-timer-value" data-seconds="42">00:00:42</span>
+                        <span class="setor-modern-timer-label">no andamento</span>
+                    </div>
+                </div>
+            </article>
+
+        </div>
+
+
+        <!-- =========================================================================================
+             SEÇÃO 13: MODELOS 118 E 119 - ANIMAÇÕES DE ENTRADA OPERACIONAIS ("ANALISAR" & "DAR PROSSEGIMENTO")
+             ========================================================================================= -->
+        <div class="section-header">
+            <h2 class="section-title">
+                13. Entradas Operacionais em Loop: "Analisar" com Lupa & "Dar Prosseguimento" (Modelos 118 e 119)
+                <span class="badge-action">Entradas em Loop + Ação</span>
+            </h2>
+        </div>
+
+        <div class="setor-modern-root setor-modern-grid">
+
+            <!-- 118. Entrada + Inspeção "Analisar" com Lupa Passando Sobre o Card -->
+            <div class="action-overlay-col">
+                <article class="setor-modern-card card-analisar-lupa" aria-label="OS 1482/26 - Entrada e Ação: Analisar">
+                    
+                    <!-- Texto Animado "Analisar" Sobre o Card -->
+                    <div class="overlay-badge-analisar">
+                        <span class="pulse-dot"></span>
+                        🔍 Analisar
+                    </div>
+
+                    <!-- Lupa que Entra, Passa Sobre o Card e Sai -->
+                    <div class="magnifier-rig">
+                        <div class="magnifier-lens"></div>
+                        <div class="magnifier-handle"></div>
+                    </div>
+
+                    <div class="setor-modern-card-top">
+                        <h3>OS 1482/26</h3>
+                    </div>
+                    <div class="setor-modern-situation">
+                        <svg class="layers-icon" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16.02 12 5.48 3.13a1 1 0 0 1 0 1.74L13 21.74a2 2 0 0 1-2 0l-8.5-4.87a1 1 0 0 1 0-1.74L7.98 12"/><path d="M13 13.74a2 2 0 0 1-2 0L2.5 8.87a1 1 0 0 1 0-1.74L11 2.26a2 2 0 0 1 2 0l8.5 4.87a1 1 0 0 1 0 1.74Z"/></svg>
+                        <span class="sub-os-prefix">[118 • Lupa]</span> Triagem Técnica PDF
+                    </div>
+                    <div class="setor-modern-card-meta">
+                        <span class="setor-modern-card-author">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                            João Lucas
+                        </span>
+                        <div class="setor-modern-timer-wrap">
+                            <span class="setor-modern-css-clock"></span>
+                            <span class="setor-modern-timer-value" data-seconds="925">00:15:25</span>
+                            <span class="setor-modern-timer-label">no andamento</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+
+            <!-- 119. Entrada Propulsora + "Dar Prosseguimento" Sobre o Card -->
+            <div class="action-overlay-col">
+                <article class="setor-modern-card card-prosseguimento" aria-label="OS 1485/26 - Entrada e Ação: Dar Prosseguimento">
+                    
+                    <!-- Feixes de Avanço Internos (Movimento Suave e Lento de 12s) -->
+                    <div class="prosseguimento-bg-stream"></div>
+
+                    <!-- Texto Animado "Dar Prosseguimento" que Surge no Topo do Card -->
+                    <div class="overlay-badge-prosseguir">
+                        Dar prosseguimento
+                        <span class="chevron-arrows"><span>›</span><span>›</span><span>›</span></span>
+                    </div>
+
+                    <div class="setor-modern-card-top">
+                        <h3>OS 1485/26</h3>
+                    </div>
+                    <div class="setor-modern-situation">
+                        <svg class="layers-icon" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16.02 12 5.48 3.13a1 1 0 0 1 0 1.74L13 21.74a2 2 0 0 1-2 0l-8.5-4.87a1 1 0 0 1 0-1.74L7.98 12"/><path d="M13 13.74a2 2 0 0 1-2 0L2.5 8.87a1 1 0 0 1 0-1.74L11 2.26a2 2 0 0 1 2 0l8.5 4.87a1 1 0 0 1 0 1.74Z"/></svg>
+                        <span class="sub-os-prefix">[119 • Fluxo]</span> Aprovado p/ Impressão
+                    </div>
+                    <div class="setor-modern-card-meta">
+                        <span class="setor-modern-card-author">
+                            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                            João Lucas
+                        </span>
+                        <div class="setor-modern-timer-wrap">
+                            <span class="setor-modern-css-clock"></span>
+                            <span class="setor-modern-timer-value" data-seconds="1840">00:30:40</span>
+                            <span class="setor-modern-timer-label">no andamento</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- SCRIPTS DE CONTROLE, INSPEÇÃO E CRONÔMETRO EM TEMPO REAL (TABULAR-NUMS) -->
+    <script>
+        function replayAnimations() {
+            const cards = document.querySelectorAll('.card-entrance');
+            cards.forEach(card => {
+                card.style.animation = 'none';
+                card.offsetHeight;
+                card.style.animation = '';
+            });
+        }
+
+        function setSpeed(multiplier, btnElement) {
+            document.documentElement.style.setProperty('--speed-multiplier', multiplier);
+            document.getElementById('btnSpeed1').classList.remove('active');
+            document.getElementById('btnSpeed2').classList.remove('active');
+            document.getElementById('btnSpeedFast').classList.remove('active');
+            btnElement.classList.add('active');
+        }
+
+        let isPaused = false;
+        function togglePause(btnElement) {
+            const wrapper = document.getElementById('mainWrapper');
+            isPaused = !isPaused;
+            if (isPaused) {
+                wrapper.classList.add('paused');
+                btnElement.innerHTML = '▶ Continuar';
+                btnElement.classList.add('active');
+            } else {
+                wrapper.classList.remove('paused');
+                btnElement.classList.remove('active');
+                btnElement.innerHTML = '⏸ Pausar Tudo';
+            }
+        }
+
+        // Cronômetro funcional em tempo real no formato oficial Xd HH:MM:SS (demonstrando tabular-nums sem trepidação)
+        function formatDuration(totalSeconds) {
+            const days = Math.floor(totalSeconds / 86400);
+            const hours = String(Math.floor((totalSeconds % 86400) / 3600)).padStart(2, '0');
+            const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+            const seconds = String(totalSeconds % 60).padStart(2, '0');
+            return days > 0 ? `${days}d ${hours}:${minutes}:${seconds}` : `${hours}:${minutes}:${seconds}`;
+        }
+
+        setInterval(() => {
+            if (isPaused) return;
+            document.querySelectorAll('.setor-modern-timer-value[data-seconds]').forEach(el => {
+                let sec = parseInt(el.getAttribute('data-seconds'), 10) + 1;
+                el.setAttribute('data-seconds', sec);
+                el.textContent = formatDuration(sec);
+            });
+        }, 1000);
+    </script>
+</body>
+</html>

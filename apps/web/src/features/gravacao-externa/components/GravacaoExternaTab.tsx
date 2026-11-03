@@ -1,6 +1,6 @@
 import { cn } from "@sagra/ui";
 import { ArrowLeft, CheckCircle2, Loader2, PackageCheck, Search } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   gravacaoExternaCompositePreviewUrl,
@@ -38,10 +38,17 @@ import {
   gravacaoFornecedorKey,
   gravacaoFornecedorLabel,
 } from "./GravacaoExternaEnvioSection";
+import { GravacaoExternaDownloadsPendentesModal } from "./GravacaoExternaDownloadsPendentesModal";
 import { GravacaoExternaEntregaModal } from "./GravacaoExternaEntregaModal";
 import { GravacaoQueueItemContextMenu } from "./GravacaoQueueItemContextMenu";
 import { GravacaoExternaPreview, type PreviewSelection } from "./GravacaoExternaPreview";
 import { useGravacaoExternaRealtime } from "../hooks/useGravacaoExternaRealtime";
+import {
+  enrichMaquinasDownloadPendentes,
+  listMaquinasDownloadPendentes,
+  type MaquinaDownloadPendente,
+} from "../utils/plateFilenameUtils";
+import { getApiErrorDetail } from "@/lib/api";
 
 type ExternaListSegment = "em_andamento" | "aguardando_entrega";
 type ExternaOsGroup = GravacaoOsGroup<GravacaoExternaOsItem>;
@@ -150,7 +157,38 @@ export function GravacaoExternaTab() {
   const [fornecedorFilter, setFornecedorFilter] = useState<string | null>(null);
   const [focusedSessionId, setFocusedSessionId] = useState<number | null>(null);
   const [previewSelection, setPreviewSelection] = useState<PreviewSelection | null>(null);
+  const [optimisticDownloadedIds, setOptimisticDownloadedIds] = useState(
+    () => new Set<number>(),
+  );
   const [entregaItem, setEntregaItem] = useState<GravacaoExternaOsItem | null>(null);
+  const [downloadsPendentes, setDownloadsPendentes] = useState<
+    MaquinaDownloadPendente[] | string[] | null
+  >(null);
+
+  useEffect(() => {
+    setOptimisticDownloadedIds(new Set());
+  }, [selectedKey]);
+
+  const markArquivosDownloaded = useCallback((ids: Iterable<number>) => {
+    setOptimisticDownloadedIds((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, []);
+
+  const markArquivoDownloaded = useCallback(
+    (arquivoId: number) => {
+      markArquivosDownloaded([arquivoId]);
+    },
+    [markArquivosDownloaded],
+  );
 
   const listFilters = {
     ano: ano ?? undefined,
@@ -218,6 +256,18 @@ export function GravacaoExternaTab() {
     sessionIds.length > 0 && !isAguardando,
     { refetchInterval: GRAVACAO_EXTERNA_SAFETY_POLL_MS },
   );
+
+  const downloadedArquivoIds = useMemo(() => {
+    const next = new Set<number>(optimisticDownloadedIds);
+    for (const detail of detailQuery.data) {
+      if (!detail?.arquivos) continue;
+      for (const arquivo of detail.arquivos) {
+        if (arquivo.baixado_em) next.add(arquivo.id);
+      }
+    }
+    return next;
+  }, [detailQuery.data, optimisticDownloadedIds]);
+
   const detailFor = (id: number | null | undefined) => {
     const idx = id == null ? -1 : sessionIds.indexOf(id);
     return {
@@ -327,6 +377,24 @@ export function GravacaoExternaTab() {
   };
 
   const handleConcluir = async (session: GravacaoExternaOsItem) => {
+    const sessionId = session.gravacao_externa_id;
+    const detail = sessionId != null ? detailFor(sessionId).detail : undefined;
+    const chapasPorMaquina =
+      session.chapas_por_maquina?.length
+        ? session.chapas_por_maquina
+        : detail?.chapas_por_maquina ?? null;
+    if (sessionId != null) {
+      const pendentes = listMaquinasDownloadPendentes(
+        detail?.arquivos ?? [],
+        downloadedArquivoIds,
+        chapasPorMaquina,
+      );
+      if (pendentes.length > 0) {
+        setDownloadsPendentes(pendentes);
+        return;
+      }
+    }
+
     const outros = multiEnvio ? ` (${envioLabel(session)})` : "";
     if (!window.confirm(`Confirmar conclusão da Gravação Externa desta OS${outros}?`)) {
       return;
@@ -344,6 +412,28 @@ export function GravacaoExternaTab() {
       }
       window.alert("Gravação Externa concluída.");
     } catch (e) {
+      const apiDetail = getApiErrorDetail(e);
+      if (
+        apiDetail?.code === "downloads_pendentes" &&
+        Array.isArray(apiDetail.maquinas) &&
+        apiDetail.maquinas.length > 0
+      ) {
+        setDownloadsPendentes(
+          enrichMaquinasDownloadPendentes(apiDetail.maquinas, chapasPorMaquina),
+        );
+        return;
+      }
+      if (sessionId != null) {
+        const fallback = listMaquinasDownloadPendentes(
+          detailFor(sessionId).detail?.arquivos ?? [],
+          downloadedArquivoIds,
+          chapasPorMaquina,
+        );
+        if (fallback.length > 0) {
+          setDownloadsPendentes(fallback);
+          return;
+        }
+      }
       window.alert(
         e instanceof Error ? e.message : "Não foi possível concluir a gravação.",
       );
@@ -430,7 +520,9 @@ export function GravacaoExternaTab() {
               className={cn("w-full px-3 pt-2.5 text-left", fornecedores.length ? "pb-1" : "pb-2.5")}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold text-neutral-900">{formatOsListLabel(item)}</span>
+                <span className="text-xs-button font-semibold text-neutral-900">
+                  {formatOsListLabel(item)}
+                </span>
                 <GravacaoExternaStatusBadge
                   status={isAguardando ? "concluida" : groupStatus(group)}
                 />
@@ -576,7 +668,7 @@ export function GravacaoExternaTab() {
       <div>
         <div className="flex flex-wrap items-center gap-2">
           {mobileBackButton}
-          <h2 className="text-lg font-semibold text-neutral-900">
+          <h2 className="text-xs-button font-semibold text-neutral-900">
             OS {formatOsListLabel(selected)}
           </h2>
           <GravacaoExternaStatusBadge status="concluida" />
@@ -702,17 +794,43 @@ export function GravacaoExternaTab() {
     </div>
   ) : (
     <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 overflow-hidden p-3 md:p-4">
-      <div>
-        <div className="flex flex-wrap items-center gap-2">
-          {mobileBackButton}
-          <h2 className="text-lg font-semibold text-neutral-900">
-            OS {formatOsListLabel(selected)}
-          </h2>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            {mobileBackButton}
+            <h2 className="text-xs-button font-semibold text-neutral-900">
+              OS {formatOsListLabel(selected)}
+            </h2>
+          </div>
+          <p className="mt-1 text-sm text-neutral-600">
+            {selected.solicitante}
+            {selected.produto ? ` · ${selected.produto}` : ""}
+          </p>
         </div>
-        <p className="mt-1 text-sm text-neutral-600">
-          {selected.solicitante}
-          {selected.produto ? ` · ${selected.produto}` : ""}
-        </p>
+        {isFornecedor &&
+        previewSession &&
+        previewDetail &&
+        (previewDetail.status === "pendente" || previewDetail.status === "iniciada") ? (
+          <button
+            type="button"
+            disabled={
+              concluirMutation.isPending &&
+              concluirMutation.variables?.gravacaoExternaId ===
+                previewSession.gravacao_externa_id
+            }
+            onClick={() => void handleConcluir(previewSession)}
+            className="inline-flex shrink-0 items-center gap-2 rounded border border-primary-green bg-white px-4 py-2 text-sm font-medium text-primary-green hover:bg-primary-green/5 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {concluirMutation.isPending &&
+            concluirMutation.variables?.gravacaoExternaId ===
+              previewSession.gravacao_externa_id ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <CheckCircle2 className="size-4" />
+            )}
+            Gravação concluída
+          </button>
+        ) : null}
       </div>
 
       <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-3 overflow-hidden lg:grid-cols-[minmax(240px,32%)_minmax(0,1fr)]">
@@ -736,37 +854,14 @@ export function GravacaoExternaTab() {
                   setPreviewSelection(selection);
                 }}
                 onDownloaded={handleDownloaded}
+                downloadedArquivoIds={downloadedArquivoIds}
+                onArquivoDownloaded={markArquivoDownloaded}
+                onArquivosDownloaded={markArquivosDownloaded}
               />
             );
           })}
         </div>
         <div className="flex min-h-[280px] min-w-0 flex-col overflow-hidden lg:min-h-0 lg:h-full">
-          {isFornecedor &&
-          previewSession &&
-          previewDetail &&
-          (previewDetail.status === "pendente" || previewDetail.status === "iniciada") ? (
-            <div className="flex shrink-0 justify-end pb-2">
-              <button
-                type="button"
-                disabled={
-                  concluirMutation.isPending &&
-                  concluirMutation.variables?.gravacaoExternaId ===
-                    previewSession.gravacao_externa_id
-                }
-                onClick={() => void handleConcluir(previewSession)}
-                className="inline-flex items-center gap-2 rounded border border-primary-green bg-white px-4 py-2 text-sm font-medium text-primary-green hover:bg-primary-green/5 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {concluirMutation.isPending &&
-                concluirMutation.variables?.gravacaoExternaId ===
-                  previewSession.gravacao_externa_id ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="size-4" />
-                )}
-                Gravação concluída
-              </button>
-            </div>
-          ) : null}
           <div className="min-h-0 flex-1">
             <GravacaoExternaPreview
               ano={selected.ano}
@@ -776,6 +871,7 @@ export function GravacaoExternaTab() {
               getPreviewUrl={getExternaPreviewUrl}
               getCompositePreviewUrl={getExternaCompositeUrl}
               getDownloadUrl={getExternaDownloadUrl}
+              onArquivoDownloaded={markArquivoDownloaded}
             />
           </div>
         </div>
@@ -833,7 +929,7 @@ export function GravacaoExternaTab() {
         </div>
       ) : (
         <div className="flex h-full min-h-0">
-          <aside className="w-full max-w-sm shrink-0 border-r border-neutral-200 bg-white">
+          <aside className="w-full max-w-[20.25rem] shrink-0 border-r border-neutral-200 bg-white">
             {listPanel}
           </aside>
           <main className="min-w-0 flex-1">{detailPanel}</main>
@@ -849,6 +945,12 @@ export function GravacaoExternaTab() {
         saving={entregaMutation.isPending}
         onClose={() => setEntregaItem(null)}
         onConfirm={(payload) => void handleEntrega(payload)}
+      />
+
+      <GravacaoExternaDownloadsPendentesModal
+        open={downloadsPendentes != null}
+        maquinas={downloadsPendentes ?? []}
+        onClose={() => setDownloadsPendentes(null)}
       />
 
       <GravacaoRealtimeToast message={toast} onClear={clearToast} />

@@ -216,6 +216,11 @@ _EXTERNA_MIGRATIONS = (
         "Maquina",
         "ALTER TABLE tab_os_gravacao_externa_arquivo ADD COLUMN Maquina VARCHAR(128) DEFAULT NULL",
     ),
+    (
+        "tab_os_gravacao_externa_arquivo",
+        "BaixadoEm",
+        "ALTER TABLE tab_os_gravacao_externa_arquivo ADD COLUMN BaixadoEm DATETIME DEFAULT NULL",
+    ),
 )
 
 

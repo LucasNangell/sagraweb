@@ -1,0 +1,352 @@
+/* Composição laboratório: vidro fosco + entrada + barra + pulso + carimbo. */
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] {
+  --tone: var(--cm-accent, #b4f48a);
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  box-shadow: none;
+  isolation: isolate;
+  overflow: visible;
+  animation: none;
+  gap: 0;
+  text-align: initial;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-shell {
+  width: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  z-index: 1;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-entry {
+  position: relative;
+  width: 100%;
+  transform-style: preserve-3d;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-glow {
+  position: absolute;
+  inset: -30%;
+  background: radial-gradient(
+    ellipse at center,
+    color-mix(in srgb, var(--tone) 32%, transparent),
+    transparent 65%
+  );
+  opacity: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-emphasis {
+  position: relative;
+  width: 100%;
+  border-radius: 14px;
+  transform-style: preserve-3d;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-card {
+  position: relative;
+  min-height: 154px;
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--tone) 40%, #263442);
+  border-radius: 14px;
+  background: var(--cm-bg, #141e2a);
+  color: #eef5fb;
+  padding: 18px;
+  box-shadow: 0 16px 28px #0005;
+  isolation: isolate;
+  overflow: hidden;
+  container-type: inline-size;
+  font-variant-numeric: tabular-nums;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-mat-1 {
+  background:
+    linear-gradient(130deg, #ffffff16, #ffffff02),
+    var(--cm-bg, #141e2a);
+  backdrop-filter: blur(14px);
+  border-color: var(--cm-border, #ffffff35);
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-orb {
+  position: absolute;
+  width: 130px;
+  height: 130px;
+  border: 1px solid var(--tone);
+  border-radius: 50%;
+  right: -50px;
+  top: -50px;
+  opacity: 0.25;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  border-radius: inherit;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-content {
+  position: relative;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-top {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 12px;
+  width: 100%;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-id {
+  width: 100%;
+  text-align: center;
+  white-space: nowrap;
+  font-size: calc(clamp(1rem, 15.6cqi, 5rem) * var(--sm-title-scale, var(--sm-font-scale, 1)));
+  font-weight: 700;
+  letter-spacing: var(--sm-letter-spacing, -0.045em);
+  line-height: 1.05;
+  color: inherit;
+  margin: 0;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-task {
+  font-size: calc(clamp(18px, 5.4cqi, 50px) * var(--sm-situation-scale, var(--sm-font-scale, 1)));
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: center;
+  opacity: 0.86;
+  margin-bottom: 15px;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  flex-wrap: nowrap;
+  opacity: 0.7;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-author {
+  font-size: calc(clamp(13px, 3.7cqi, 32px) * var(--sm-author-scale, var(--sm-font-scale, 1)));
+  font-weight: 400;
+  line-height: 1.15;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: 0;
+  flex-shrink: 0;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-timer .setor-modern-timer {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-meter {
+  height: 3px;
+  background: #ffffff18;
+  overflow: hidden;
+  margin-top: 12px;
+  border-radius: 2px;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-fill {
+  width: 68%;
+  height: 100%;
+  background: var(--tone);
+  transform-origin: left center;
+  border-radius: 2px;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-ring {
+  position: absolute;
+  inset: 5px;
+  border: 1px solid var(--tone);
+  border-radius: 15px;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 4;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-emphasis-fx {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  border-radius: inherit;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-addons {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  pointer-events: none;
+  overflow: visible;
+  container-type: inline-size;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .mx-addon {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .ax-pos-top-left {
+  inset: 8px auto auto 8px;
+  width: max-content;
+  max-width: calc(100% - 16px);
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .ax-art {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 3px 10px #0005);
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] .ax-stamp-label {
+  border: 3px double;
+  border-radius: 5px;
+  padding: 9px 14px;
+  font: 900 clamp(14px, 5cqi, 25px) / 1.1 system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  box-shadow: inset 0 0 0 1px currentcolor;
+  background: #0a1018e8;
+  transform: rotate(-10deg);
+  color: var(--cm-extra, #ff657a);
+}
+
+@keyframes lab-vidro-fosco-entry {
+  from {
+    transform: translateY(45px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+    filter: none;
+  }
+}
+
+@keyframes lab-vidro-fosco-fill {
+  0%,
+  100% {
+    transform: scaleX(0.35);
+  }
+  50% {
+    transform: scaleX(1.45);
+  }
+}
+
+@keyframes lab-vidro-fosco-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--tone) 50%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--tone) 0%, transparent);
+  }
+}
+
+@keyframes lab-vidro-fosco-stamp {
+  0%,
+  10% {
+    opacity: 0;
+    transform: scale(2.3) rotate(-22deg);
+  }
+  20% {
+    opacity: 1;
+    transform: scale(0.94) rotate(-10deg);
+  }
+  27%,
+  83% {
+    opacity: 1;
+    transform: scale(1) rotate(-10deg);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.05) rotate(-10deg);
+  }
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] [data-cm-motion="entry"] {
+  animation: lab-vidro-fosco-entry calc(1100ms / var(--sm-entry-speed, 1))
+    cubic-bezier(0.16, 0.75, 0.28, 1) both;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] [data-cm-motion="fill"] {
+  animation: lab-vidro-fosco-fill calc(6000ms / var(--sm-entry-speed, 1))
+    cubic-bezier(0.22, 0.75, 0.25, 1) infinite;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] [data-cm-motion="pulse"] {
+  animation: lab-vidro-fosco-pulse calc(2800ms / var(--sm-entry-speed, 1)) ease-in-out
+    infinite;
+}
+
+.setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] [data-cm-motion="stamp"] .ax-art {
+  animation: lab-vidro-fosco-stamp calc(5200ms / var(--sm-entry-speed, 1)) ease-in-out
+    infinite;
+}
+
+.painel-card-model-thumb .setor-modern-card[data-model="lab-vidro-fosco"] {
+  min-height: 95px;
+  overflow: hidden;
+}
+
+.painel-card-model-thumb .setor-modern-card[data-model="lab-vidro-fosco"] .mx-card {
+  min-height: 95px;
+  padding: 12px 14px;
+}
+
+.painel-card-model-thumb .setor-modern-card[data-model="lab-vidro-fosco"] .mx-footer,
+.painel-card-model-thumb .setor-modern-card[data-model="lab-vidro-fosco"] .mx-meter,
+.painel-card-model-thumb .setor-modern-card[data-model="lab-vidro-fosco"] .mx-addons {
+  display: none;
+}
+
+.painel-card-model-thumb .setor-modern-card[data-model="lab-vidro-fosco"] .mx-task {
+  display: none;
+}
+
+.painel-card-model-thumb
+  .setor-modern-card[data-model="lab-vidro-fosco"]
+  [data-cm-motion="entry"] {
+  animation-iteration-count: infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .setor-modern .setor-modern-card[data-model="lab-vidro-fosco"] [data-cm-motion] {
+    animation: none !important;
+  }
+}

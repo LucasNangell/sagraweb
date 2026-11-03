@@ -1,8 +1,6 @@
 import { Settings } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 
-import { useUserPreferenceSync } from "@/hooks/useUserPreferenceSync";
-
 import { useAuthStore } from "@/features/auth/authStore";
 
 import {
@@ -11,14 +9,14 @@ import {
   saveDashboardConfig,
 } from "../configStorage";
 import { DEFAULT_DASHBOARD_CONFIG } from "../constants";
-import { normalizeDashboardConfigFromRemote } from "../normalizeConfig";
 import { useSyncAndamentosServiceAlert } from "@/features/sync-andamentos/useSyncAndamentosServiceAlert";
 
 import { useDashboardFreshness } from "../hooks/useDashboardFreshness";
 import { useDashboardSetorData } from "../hooks/useDashboardSetorData";
+import { usePainelOsRemoteConfig } from "../hooks/usePainelOsRemoteConfig";
 import { usePriorityAlert } from "../hooks/usePriorityAlert";
 import { useScreenWakeLock } from "../hooks/useScreenWakeLock";
-import { buildDashboardConfigSignature, formatQueueDisplayLabel, getVisibleDashboardColumns } from "../utils";
+import { formatQueueDisplayLabel, getVisibleDashboardColumns } from "../utils";
 import type { DashboardConfig } from "../types";
 import { DashboardSetorSettingsModal } from "./DashboardSetorSettingsModal";
 import "../dashboard-setor.css";
@@ -39,37 +37,25 @@ function footerLabel(count: number): string {
 }
 
 export function DashboardSetorPage() {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const userSetor = useAuthStore((s) => s.user?.setor);
-  const [config, setConfig] = useState<DashboardConfig>(() => {
-    const local = loadDashboardConfig();
-    if (userSetor && local.sector === DEFAULT_DASHBOARD_CONFIG.sector) {
-      return { ...local, sector: userSetor };
-    }
-    return local;
-  });
+  const [config, setConfig] = useState<DashboardConfig>(() =>
+    loadDashboardConfig(userSetor),
+  );
   const [showSettings, setShowSettings] = useState(false);
   const configRef = useRef(config);
   configRef.current = config;
 
-  useUserPreferenceSync({
-    key: "painel_setor",
-    enabled: isAuthenticated,
-    watchValue: config,
-    onRemoteLoaded: (remote) => {
-      const normalized = normalizeDashboardConfigFromRemote(remote, userSetor);
-      if (
-        buildDashboardConfigSignature(normalized) ===
-        buildDashboardConfigSignature(configRef.current)
-      ) {
-        return;
-      }
-      saveDashboardConfig(normalized);
-      setConfig(normalized);
-    },
+  usePainelOsRemoteConfig({
+    route: "setor",
+    config,
+    setConfig,
+    fallbackSector: userSetor,
   });
 
-  const { triggerPriorityAlert } = usePriorityAlert();
+  const { triggerPriorityAlert } = usePriorityAlert(
+    config.notificationSounds,
+    config.notificationSound,
+  );
 
   useScreenWakeLock();
 
@@ -85,8 +71,8 @@ export function DashboardSetorPage() {
     hasLoadedOnce,
   } = useDashboardSetorData({
     config,
-    onNewItems: () => {
-      void triggerPriorityAlert();
+    onNewItems: (priority) => {
+      void triggerPriorityAlert(priority);
     },
   });
 

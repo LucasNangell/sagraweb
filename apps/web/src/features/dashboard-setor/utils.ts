@@ -6,12 +6,14 @@ import {
   INBOX_COLUMN_SOURCE,
   INBOX_DISPLAY_SITUACAO,
 } from "./constants";
+import { pickHighestSoundSlot } from "./notificationSounds";
 import type {
   DashboardColumnConfig,
   DashboardConfig,
   DashboardDisplayColumn,
   DashboardOsItem,
   DashboardPriorityType,
+  DashboardSoundSlot,
 } from "./types";
 
 export function isInboxColumn(
@@ -405,6 +407,13 @@ export function hashDashboardBoard(columns: DashboardDisplayColumn[]): string {
     .map((col) =>
       [
         col.id,
+        col.title,
+        (col.sector ?? "").trim(),
+        col.hideWhenEmpty === true ? "1" : "0",
+        isInboxColumn(col) ? INBOX_COLUMN_SOURCE : "",
+        col.headerBg ?? "",
+        col.headerBg2 ?? "",
+        col.statuses.join("\u001f"),
         col.items
           .map(
             (item) =>
@@ -539,11 +548,14 @@ export function processDashboardData(
   hiddenCount: number;
   hasNewItems: boolean;
   hasSectorArrivals: boolean;
+  arrivalPriority: DashboardSoundSlot | null;
+  newItemPriority: DashboardSoundSlot | null;
 } {
   const now = options?.now ?? Date.now();
   const isInitialLoad = options?.isInitialLoad === true;
   const incomingIds = new Set<string>();
   let hasNewItems = false;
+  const newItemPriorities: DashboardPriorityType[] = [];
   const sectors = collectDashboardSectors(config);
   const presenceKeys = (item: PcpQueueItem) =>
     sectors
@@ -557,11 +569,15 @@ export function processDashboardData(
   const previousPresence = new Set(
     [...masterOpsMap.values()].flatMap(presenceKeys),
   );
-  const hasSectorArrivals =
-    !isInitialLoad &&
-    rawData.some((item) =>
-      presenceKeys(item).some((key) => !previousPresence.has(key)),
-    );
+  const arrivalPriorities: DashboardPriorityType[] = [];
+  if (!isInitialLoad) {
+    for (const item of rawData) {
+      if (presenceKeys(item).some((key) => !previousPresence.has(key))) {
+        arrivalPriorities.push(resolvePriorityType(item.prioridade));
+      }
+    }
+  }
+  const hasSectorArrivals = arrivalPriorities.length > 0;
 
   const tempColumns: DashboardDisplayColumn[] = config.columns.map((col) => ({
     ...col,
@@ -594,6 +610,7 @@ export function processDashboardData(
       if (!isInitialLoad) {
         markItemHighlighted(item, now);
         hasNewItems = true;
+        newItemPriorities.push(item.priorityType);
       }
       masterOpsMap.set(uniqueKey, item);
     }
@@ -606,6 +623,7 @@ export function processDashboardData(
     ) {
       markItemHighlighted(item, now);
       hasNewItems = true;
+      newItemPriorities.push(item.priorityType);
     }
 
     item.lastColumnId = currentColumnId;
@@ -641,6 +659,12 @@ export function processDashboardData(
     hiddenCount: hidden,
     hasNewItems,
     hasSectorArrivals,
+    arrivalPriority: hasSectorArrivals
+      ? pickHighestSoundSlot(arrivalPriorities)
+      : null,
+    newItemPriority: hasNewItems
+      ? pickHighestSoundSlot(newItemPriorities)
+      : null,
   };
 }
 
@@ -663,6 +687,11 @@ export function buildDashboardConfigSignature(config: DashboardConfig): string {
   return JSON.stringify({
     sector: config.sector,
     columnCount: config.columnCount,
+    showAndamentoTime: config.showAndamentoTime !== false,
+    cardStyle: config.cardStyle ?? null,
+    theme: config.theme ?? null,
+    notificationSound: config.notificationSound ?? null,
+    notificationSounds: config.notificationSounds ?? null,
     columns: config.columns.map((col) => ({
       id: col.id,
       title: col.title,
@@ -670,6 +699,8 @@ export function buildDashboardConfigSignature(config: DashboardConfig): string {
       sector: (col.sector ?? "").trim() || undefined,
       hideWhenEmpty: col.hideWhenEmpty === true ? true : undefined,
       source: isInboxColumn(col) ? INBOX_COLUMN_SOURCE : undefined,
+      headerBg: col.headerBg || undefined,
+      headerBg2: col.headerBg2 || undefined,
     })),
   });
 }

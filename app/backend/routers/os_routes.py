@@ -1701,6 +1701,10 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
     clean_user = ''.join(filter(str.isdigit, item.usuario)) if item.usuario else ''
     ponto_formatado = format_ponto(clean_user)
 
+    from services.gravacao_externa_service import (
+        dequeue_biro_sessions_on_saida_seimp_cursor,
+        is_saida_para_seimp,
+    )
     from services.gravacao_pendente_service import (
         arquivos_are_pdf_only,
         build_pendente_obs_text,
@@ -1830,6 +1834,10 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
 
         # Principal
         new_cod = _insert_andamento_for(id, ano)
+        if is_saida_para_seimp(item.situacao, item.setor):
+            dequeue_biro_sessions_on_saida_seimp_cursor(
+                cursor, ano, id, ponto_formatado
+            )
 
         cursor.execute(
             """
@@ -2235,6 +2243,11 @@ def replicate_history(ano: int, id: int, item: HistoryItem, request: Request):
     )
 
     enforce_interactive_lock(request, id, ano, "andamento")
+    from services.gravacao_externa_service import (
+        dequeue_biro_sessions_on_saida_seimp_cursor,
+        is_saida_para_seimp,
+    )
+
     alvo = (item.replicar_alvo or "vinculo").strip().lower()
     pre_targets: set[tuple[int, int]] | None = None
     if alvo == "juntada":
@@ -2333,6 +2346,10 @@ def replicate_history(ano: int, id: int, item: HistoryItem, request: Request):
                 item,
                 ponto=ponto_formatado,
             )
+            if is_saida_para_seimp(item.situacao, item.setor):
+                dequeue_biro_sessions_on_saida_seimp_cursor(
+                    cursor, t_ano, t_num, ponto_formatado
+                )
 
         return {"status": "ok", "replicated_to": len(targets), "_inserted": inserted}
 

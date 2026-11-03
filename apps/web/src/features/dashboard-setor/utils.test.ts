@@ -4,6 +4,7 @@ import type { PcpQueueItem } from "@/api/pcp";
 
 import { INBOX_COLUMN_SOURCE, INBOX_DISPLAY_SITUACAO } from "./constants";
 import {
+  buildDashboardConfigSignature,
   collectDashboardSectors,
   formatQueueDisplayLabel,
   formatQueueDisplaySituacao,
@@ -510,5 +511,75 @@ describe("processDashboardData coluna inbox", () => {
       INBOX_DISPLAY_SITUACAO,
     );
     expect(processed.columns[1]!.items[0]!.nr_os).toBe(88);
+  });
+});
+
+describe("assinatura e hash do layout", () => {
+  it("muda a assinatura quando as situações da coluna mudam", () => {
+    const base: DashboardConfig = {
+      sector: "SEFOC",
+      columnCount: 1,
+      columns: [{ id: "a", title: "Fila", statuses: ["Recebido"] }],
+    };
+    const next: DashboardConfig = {
+      ...base,
+      columns: [{ id: "a", title: "Fila", statuses: ["Em Execução"] }],
+    };
+    expect(buildDashboardConfigSignature(next)).not.toBe(
+      buildDashboardConfigSignature(base),
+    );
+  });
+
+  it("muda a assinatura quando a cor do head de uma coluna muda", () => {
+    const base: DashboardConfig = {
+      sector: "SEFOC",
+      columnCount: 1,
+      columns: [{ id: "a", title: "Fila", statuses: ["Recebido"] }],
+    };
+    const next: DashboardConfig = {
+      ...base,
+      columns: [
+        { id: "a", title: "Fila", statuses: ["Recebido"], headerBg: "#aa0000" },
+      ],
+    };
+    expect(buildDashboardConfigSignature(next)).not.toBe(
+      buildDashboardConfigSignature(base),
+    );
+  });
+
+  it("muda a assinatura quando o tema do board muda", () => {
+    const base: DashboardConfig = {
+      sector: "SEFOC",
+      columnCount: 1,
+      columns: [{ id: "a", title: "Fila", statuses: ["Recebido"] }],
+    };
+    const next: DashboardConfig = {
+      ...base,
+      theme: { headerBg: "#112233" },
+    };
+    expect(buildDashboardConfigSignature(next)).not.toBe(
+      buildDashboardConfigSignature(base),
+    );
+  });
+
+  it("muda o hash do board quando o título da coluna muda", () => {
+    const items = [
+      {
+        nr_os: 1,
+        ano: 2026,
+        uniqueKey: "1-2026",
+        priorityType: null,
+        isNew: false,
+        displaySituacao: "Recebido",
+        pcp_ordem: null,
+      },
+    ];
+    const first: DashboardDisplayColumn[] = [
+      { id: "a", title: "Fila", statuses: ["Recebido"], items },
+    ];
+    const renamed: DashboardDisplayColumn[] = [
+      { id: "a", title: "Entrada", statuses: ["Recebido"], items },
+    ];
+    expect(hashDashboardBoard(renamed)).not.toBe(hashDashboardBoard(first));
   });
 });

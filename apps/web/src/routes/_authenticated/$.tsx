@@ -1,7 +1,16 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { Construction } from "lucide-react";
 
+import { normalizeAppRedirect } from "@/lib/normalizeRedirect";
+
 export const Route = createFileRoute("/_authenticated/$")({
+  beforeLoad: ({ params }) => {
+    const raw = `/${params._splat ?? ""}`;
+    const normalized = normalizeAppRedirect(raw);
+    if (normalized && normalized !== raw) {
+      throw redirect({ to: normalized, replace: true });
+    }
+  },
   component: ModulePlaceholderPage,
 });
 

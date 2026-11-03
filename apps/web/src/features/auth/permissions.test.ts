@@ -103,6 +103,20 @@ describe("permissions / menu", () => {
     expect(resolveDefaultAppRoute(perms, "/analise")).toBe("/");
   });
 
+  it("resolveDefaultAppRoute trata /sagra como a home", () => {
+    const perms = parsePermissionsFromApi({ sb_inicio: true });
+    expect(resolveDefaultAppRoute(perms, "/sagra")).toBe("/");
+    expect(resolveDefaultAppRoute(perms, "/sagra/")).toBe("/");
+  });
+
+  it("resolveDefaultAppRoute remove prefixo /sagra de redirect permitido", () => {
+    const perms = parsePermissionsFromApi({
+      sb_inicio: true,
+      sb_email: true,
+    });
+    expect(resolveDefaultAppRoute(perms, "/sagra/email")).toBe("/email");
+  });
+
   it("preserva deep links autenticados conhecidos após o login", () => {
     const perms = parsePermissionsFromApi({
       sb_gerencia: true,

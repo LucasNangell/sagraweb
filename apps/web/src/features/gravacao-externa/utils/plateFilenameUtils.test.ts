@@ -6,6 +6,7 @@ import {
   groupArquivosByCaderno,
   groupArquivosByChapa,
   groupArquivosByMaquina,
+  listMaquinasDownloadPendentes,
   parseCadernoParts,
   parsePlateFilename,
 } from "./plateFilenameUtils";
@@ -171,5 +172,55 @@ describe("plateFilenameUtils", () => {
     expect(cadernos[1]?.faces.map((f) => f.faceLabel)).toEqual(["Frente", "Verso"]);
     expect(cadernos[1]?.faces[0]?.filesByColor.C).toBeDefined();
     expect(cadernos[1]?.faces[1]?.filesByColor.C).toBeDefined();
+  });
+
+  it("lists machines pending when PDF was not downloaded", () => {
+    const pendentes = listMaquinasDownloadPendentes(
+      [
+        { id: 1, nome: "a.pdf", maquina: "PM52" },
+        { id: 2, nome: "a.tif", maquina: "PM52" },
+        { id: 3, nome: "b.pdf", maquina: "SM74", baixado_em: "2026-03-20T12:00:00" },
+      ],
+      undefined,
+      [{ maquina: "PM52", quantidade: 8 }],
+    );
+    expect(pendentes).toEqual([
+      { key: "PM52", label: "PM52", quantidadeChapas: 8 },
+    ]);
+  });
+
+  it("accepts machine when only PDF was downloaded", () => {
+    expect(
+      listMaquinasDownloadPendentes([
+        { id: 1, nome: "a.pdf", maquina: "PM52", baixado_em: "2026-03-20T12:00:00" },
+        { id: 2, nome: "a.tif", maquina: "PM52" },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("requires all files when machine has only TIFs", () => {
+    expect(
+      listMaquinasDownloadPendentes([
+        { id: 1, nome: "a.tif", maquina: "PM52", baixado_em: "2026-03-20T12:00:00" },
+        { id: 2, nome: "b.tif", maquina: "PM52" },
+      ]),
+    ).toEqual([{ key: "PM52", label: "PM52", quantidadeChapas: null }]);
+    expect(
+      listMaquinasDownloadPendentes(
+        [
+          { id: 1, nome: "a.tif", maquina: "PM52" },
+          { id: 2, nome: "b.tif", maquina: "PM52" },
+        ],
+        new Set([1, 2]),
+      ),
+    ).toEqual([]);
+  });
+
+  it("labels empty machine group as Espelhos", () => {
+    expect(
+      listMaquinasDownloadPendentes([{ id: 1, nome: "espelho.pdf", maquina: null }]),
+    ).toEqual([
+      { key: "__sem_maquina__", label: "Espelhos", quantidadeChapas: null },
+    ]);
   });
 });

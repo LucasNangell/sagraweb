@@ -26,6 +26,8 @@ from services.gravacao_externa_service import (
     list_mensagens,
     list_os_gravacao_aguardando_entrega,
     list_os_gravacao_externa,
+    mark_arquivos_baixados,
+    mark_arquivos_baixados_for_zip,
     render_session_composite_preview,
     remove_externa_from_queue,
     get_or_build_preview_png,
@@ -102,6 +104,7 @@ class GravacaoExternaArquivoItem(BaseModel):
     tamanho_bytes: Optional[int] = None
     ordem: int = 0
     maquina: Optional[str] = None
+    baixado_em: Optional[datetime] = None
 
 
 class GravacaoExternaMensagemItem(BaseModel):
@@ -134,6 +137,8 @@ class GravacaoExternaDetailResponse(BaseModel):
     recebido_por_nome: Optional[str] = None
     pagamento_nf_em: Optional[datetime] = None
     observacao: Optional[str] = None
+    chapas_por_maquina: Optional[List[dict]] = None
+    total_chapas: Optional[int] = None
     arquivos: List[GravacaoExternaArquivoItem]
     mensagens: List[GravacaoExternaMensagemItem]
 
@@ -582,7 +587,15 @@ def _require_zip_session(
 
 
 def _zip_file_response(row: dict) -> FileResponse:
-    mark_zip_downloaded(int(row["gravacao_externa_id"]))
+    session_id = int(row["gravacao_externa_id"])
+    mark_zip_downloaded(session_id)
+    try:
+        mark_arquivos_baixados_for_zip(session_id, str(row.get("assinatura") or ""))
+    except Exception:
+        logger.exception(
+            "Falha ao persistir BaixadoEm no ZIP da sessão %s",
+            session_id,
+        )
     return FileResponse(
         str(row["arquivo_path"]),
         media_type="application/zip",
@@ -604,10 +617,14 @@ def post_gravacao_externa_zip(
     ano: int,
     id: int,
     gravacao_externa_id: Optional[int] = Query(None, ge=1),
+    maquina: Optional[str] = Query(
+        None,
+        description="Filtra o ZIP por máquina; use __sem_maquina__ para arquivos sem máquina.",
+    ),
 ):
     session = _require_zip_session(request, ano, id, gravacao_externa_id)
     _maybe_iniciar_on_download(request, ano, id, session)
-    job = enqueue_zip_job(session)
+    job = enqueue_zip_job(session, maquina=maquina)
     payload = GravacaoExternaZipStatusResponse.model_validate(job)
     status_code = 200 if job.get("status") == ZIP_READY else 202
     return JSONResponse(status_code=status_code, content=payload.model_dump())
@@ -679,6 +696,14 @@ def download_gravacao_externa_arquivo(
     _maybe_iniciar_on_download(request, ano, id, session)
     arquivo = get_arquivo_for_session(session, arq_id)
     path = resolve_arquivo_absolute_path(session, arquivo)
+    try:
+        mark_arquivos_baixados([int(arquivo["id"])])
+    except Exception:
+        logger.exception(
+            "Falha ao persistir BaixadoEm do arquivo %s da sessão %s",
+            arq_id,
+            session.get("id"),
+        )
     ext = path.rsplit(".", 1)[-1].lower()
     media = "application/pdf" if ext == "pdf" else "image/tiff"
     return FileResponse(

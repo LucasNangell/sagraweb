@@ -2151,8 +2151,9 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
     ) -> Set[str]:
         """
         Detecta andamentos presentes no MDB e ausentes no MySQL que devem
-        ser removidos do Access — apenas exclusão real da Web/API.
-        Baseline ou tombstone gerado pelo sync NÃO autorizam apagar o Access.
+        ser removidos do Access — apenas exclusão real da Web/API do mesmo conteúdo.
+        Baseline, tombstone do sync, ou tombstone da API com hash diferente
+        (CodStatus reutilizado pelo Access) NÃO autorizam apagar o Access.
         """
         if not SYNC_ALLOW_MDB_DELETE:
             return set()
@@ -2176,8 +2177,15 @@ class ResilientSynchronizer(core.AndamentosSynchronizer):
             if code not in mdb_by_code:
                 continue
             # Não usar is_deleted() fail-closed aqui — evitaria deletes em massa em outage.
-            if self._api_tombstone_present_strict(code) is True:
-                confirmados.add(code)
+            if self._api_tombstone_present_strict(code) is not True:
+                continue
+            if self._is_new_launch_reusing_api_code(code, mdb_by_code[code]):
+                self.logger.logger.info(
+                    f"[M2Y] CodStatus {code} tombstone API com conteudo diferente; "
+                    "tratado como lancamento novo (nao apaga o Access)."
+                )
+                continue
+            confirmados.add(code)
 
         if len(confirmados) > 5:
             msg = (

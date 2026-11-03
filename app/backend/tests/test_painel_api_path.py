@@ -38,6 +38,26 @@ def test_admin_reload_poll_is_painel_anonymous_get():
     assert is_painel_api_route("/api/realtime/admin-reload", "POST") is False
 
 
+def test_painel_remote_hello_and_config_are_painel_anonymous():
+    assert is_painel_api_route("/api/painel/config", "GET") is True
+    assert is_painel_api_route("/sagra/api/painel/config", "GET") is True
+    assert is_painel_api_route("/api/painel/hello", "POST") is True
+    assert is_painel_api_route("/sagra/api/painel/hello", "POST") is True
+    assert is_painel_api_route("/api/painel/hello", "GET") is False
+    assert is_painel_api_route("/api/admin/painel/instances", "GET") is False
+
+
+def test_admin_paineis_spa_is_ponto_gated():
+    from security.spa_access import (
+        _PAINEL_CONFIG_ADMIN,
+        has_screen_access_for_spa_path,
+        required_permission_for_spa_path,
+    )
+
+    assert required_permission_for_spa_path("/admin/paineis") == _PAINEL_CONFIG_ADMIN
+    assert has_screen_access_for_spa_path("/admin/paineis", {"sb_admin_ips": True}) is False
+
+
 def test_sync_andamentos_service_status_is_painel_anonymous_get():
     assert is_painel_api_route("/api/sync-andamentos/service-status", "GET") is True
     assert is_painel_api_route(

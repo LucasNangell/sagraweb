@@ -46,6 +46,7 @@ SETOR_GRAV_EXTERNA = "Grav. Externa"
 SETOR_GRAVACAO_CONCLUIDA = "SEGEP"
 SETOR_ENTREGA_CHAPAS = "Gravação"
 SETOR_GRAVACAO = "Gravação"
+SETOR_SEIMP = "SEIMP"
 
 SITUACOES_OPERACIONAIS_EXTERNA = frozenset({SITUACAO_SAIDA_P, SITUACAO_RECEBIDO})
 ACTIVE_STATUSES = frozenset({"pendente", "iniciada"})
@@ -94,6 +95,55 @@ def cancel_active_externa_sessions_cursor(cursor, ano: int, os_id: int) -> None:
         """,
         (ano, os_id),
     )
+
+
+def is_saida_para_seimp(situacao: str | None, setor: str | None = None) -> bool:
+    """Andamento Saída p/ com destino SEIMP."""
+    sit = str(situacao or "").strip()
+    setr = str(setor or "").strip()
+    return sit == SITUACAO_SAIDA_P and setr == SETOR_SEIMP
+
+
+def dequeue_biro_sessions_on_saida_seimp_cursor(
+    cursor,
+    ano: int,
+    os_id: int,
+    ponto: str | None = None,
+) -> dict[str, int]:
+    """Tira a OS das listas do Birô sem lançar andamento extra.
+
+    Cancela sessões pendente/iniciada e dispensa sessões concluídas
+    aguardando retirada. Não propaga para OSs juntadas.
+    """
+    ponto_fmt = format_ponto(_clean_ponto(ponto)) or str(ponto or "").strip() or None
+
+    cancel_active_externa_sessions_cursor(cursor, ano, os_id)
+    cancelled = int(cursor.rowcount or 0)
+
+    cursor.execute(
+        """
+        UPDATE tab_os_gravacao_externa
+        SET EntregaDispensadaEm = NOW(),
+            EntregaDispensadaPorPonto = %s
+        WHERE OsAno = %s
+          AND OsNro = %s
+          AND Status = 'concluida'
+          AND EntregaLancadaEm IS NULL
+          AND EntregaDispensadaEm IS NULL
+        """,
+        (ponto_fmt, ano, os_id),
+    )
+    dismissed = int(cursor.rowcount or 0)
+
+    if cancelled or dismissed:
+        logger.info(
+            "OS %s/%s retirada do Birô após Saída p/ SEIMP (canceladas=%s, dispensadas=%s)",
+            os_id,
+            ano,
+            cancelled,
+            dismissed,
+        )
+    return {"cancelled": cancelled, "dismissed": dismissed}
 
 
 def remove_externa_from_queue(gravacao_externa_id: int) -> dict[str, Any]:
@@ -592,6 +642,7 @@ def _map_arquivo_row(row: dict[str, Any]) -> dict[str, Any]:
         "tamanho_bytes": row.get("TamanhoBytes"),
         "ordem": int(row.get("Ordem") or 0),
         "maquina": str(maquina).strip() if maquina else None,
+        "baixado_em": row.get("BaixadoEm"),
     }
 
 
@@ -724,10 +775,14 @@ def _fetch_mensagens(session_id: int) -> list[dict[str, Any]]:
 
 def build_session_detail(session: dict[str, Any]) -> dict[str, Any]:
     sid = int(session["id"])
+    origem = session.get("origem_pendente_id")
+    chapas = _fetch_chapas_origem_pendente(int(origem) if origem else None)
     return {
         **session,
         "arquivos": _fetch_arquivos(sid),
         "mensagens": _fetch_mensagens(sid),
+        "chapas_por_maquina": chapas,
+        "total_chapas": sum(int(c.get("quantidade") or 0) for c in chapas),
     }
 
 
@@ -808,6 +863,7 @@ def list_os_gravacao_externa(
             ge.FornecedorPonto AS fornecedor_ponto,
             uf.Nome AS fornecedor_nome,
             ge.CriadoEm AS gravacao_criado_em,
+            ge.OrigemPendenteId AS origem_pendente_id,
             ge.JuntadaGrupoId AS juntada_grupo_id,
             ge.Componente AS componente,
             (
@@ -850,6 +906,8 @@ def list_os_gravacao_externa(
     for row in rows or []:
         solicitante = row.get("solicitante") or row.get("nome_usuario")
         juntada = row.get("juntada_grupo_id")
+        origem = row.get("origem_pendente_id")
+        chapas = _fetch_chapas_origem_pendente(int(origem) if origem else None)
         items.append(
             {
                 "nr_os": int(row["nr_os"]),
@@ -869,6 +927,8 @@ def list_os_gravacao_externa(
                 "gravacao_criado_em": row.get("gravacao_criado_em"),
                 "juntada_grupo_id": str(juntada).strip() if juntada else None,
                 "componente": normalize_stored_gravacao_componente(row.get("componente")),
+                "chapas_por_maquina": chapas,
+                "total_chapas": sum(int(c.get("quantidade") or 0) for c in chapas),
             }
         )
     from services.gravacao_pendente_service import (
@@ -1066,10 +1126,133 @@ class ZipBuildCancelled(Exception):
     """Job de ZIP substituído ou cancelado no meio da montagem."""
 
 
-def session_zip_filename(session: dict[str, Any]) -> str:
+SEM_MAQUINA_ZIP_KEY = "__sem_maquina__"
+
+
+def session_zip_filename(
+    session: dict[str, Any],
+    *,
+    maquina_key: str | None = None,
+) -> str:
     os_nro = int(session["os_nro"])
     os_ano = int(session["os_ano"])
-    return f"gravacao_externa_OS_{os_nro:05d}_{os_ano}.zip"
+    base = f"gravacao_externa_OS_{os_nro:05d}_{os_ano}"
+    if maquina_key is None:
+        return f"{base}.zip"
+    key = str(maquina_key).strip()
+    if not key or key == SEM_MAQUINA_ZIP_KEY:
+        return f"{base}_espelhos.zip"
+    safe = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in key)
+    safe = safe.strip("_") or "maquina"
+    return f"{base}_{safe}.zip"
+
+
+def normalize_maquina_zip_key(maquina: str | None) -> str | None:
+    """None = todos os arquivos; '' / __sem_maquina__ = sem máquina; senão nome da máquina."""
+    if maquina is None:
+        return None
+    key = str(maquina).strip()
+    if not key or key == SEM_MAQUINA_ZIP_KEY:
+        return SEM_MAQUINA_ZIP_KEY
+    return key
+
+
+def filter_arquivos_by_maquina_key(
+    arquivos: list[dict[str, Any]],
+    maquina_key: str | None,
+) -> list[dict[str, Any]]:
+    """Filtra arquivos pelo mesmo critério do frontend (groupArquivosByMaquina)."""
+    normalized = normalize_maquina_zip_key(maquina_key)
+    if normalized is None:
+        return list(arquivos)
+    if normalized == SEM_MAQUINA_ZIP_KEY:
+        return [a for a in arquivos if not str(a.get("maquina") or "").strip()]
+    needle = normalized.casefold()
+    return [
+        a
+        for a in arquivos
+        if str(a.get("maquina") or "").strip().casefold() == needle
+    ]
+
+
+def _is_pdf_arquivo_nome(nome: str) -> bool:
+    return str(nome or "").strip().lower().endswith(".pdf")
+
+
+def _is_tif_arquivo_nome(nome: str) -> bool:
+    lower = str(nome or "").strip().lower()
+    return lower.endswith(".tif") or lower.endswith(".tiff")
+
+
+def _is_download_gate_arquivo(nome: str) -> bool:
+    return _is_pdf_arquivo_nome(nome) or _is_tif_arquivo_nome(nome)
+
+
+def maquina_label_for_download_gate(maquina: str | None) -> str:
+    key = str(maquina or "").strip()
+    return key if key else "Espelhos"
+
+
+def list_maquinas_download_pendentes(arquivos: list[dict[str, Any]]) -> list[str]:
+    """Máquinas sem download mínimo (todos PDF/TIF ou ao menos um PDF)."""
+    groups: dict[str, list[dict[str, Any]]] = {}
+    order: list[str] = []
+    for arquivo in arquivos:
+        key = str(arquivo.get("maquina") or "").strip()
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(arquivo)
+
+    pendentes: list[str] = []
+    for key in order:
+        relevant = [
+            arquivo
+            for arquivo in groups[key]
+            if _is_download_gate_arquivo(str(arquivo.get("nome") or ""))
+        ]
+        if not relevant:
+            continue
+        if all(arquivo.get("baixado_em") for arquivo in relevant):
+            continue
+        pdfs = [
+            arquivo
+            for arquivo in relevant
+            if _is_pdf_arquivo_nome(str(arquivo.get("nome") or ""))
+        ]
+        if pdfs and any(arquivo.get("baixado_em") for arquivo in pdfs):
+            continue
+        pendentes.append(maquina_label_for_download_gate(key))
+    return pendentes
+
+
+def raise_if_downloads_pendentes_for_sessions(sessions: list[dict[str, Any]]) -> None:
+    """Bloqueia conclusão se alguma sessão ativa ainda tiver máquina sem download mínimo."""
+    pendentes: list[str] = []
+    seen: set[str] = set()
+    for session in sessions:
+        if session.get("status") not in ("iniciada", "pendente"):
+            continue
+        for label in list_maquinas_download_pendentes(
+            _fetch_arquivos(int(session["id"]))
+        ):
+            if label in seen:
+                continue
+            seen.add(label)
+            pendentes.append(label)
+    if not pendentes:
+        return
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "code": "downloads_pendentes",
+            "message": (
+                "Há máquinas com download pendente. "
+                "Baixe ao menos o PDF de cada máquina antes de concluir."
+            ),
+            "maquinas": pendentes,
+        },
+    )
 
 
 def compute_arquivos_signature(arquivos: list[dict[str, Any]]) -> str:
@@ -1088,19 +1271,70 @@ def compute_arquivos_signature(arquivos: list[dict[str, Any]]) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def resolve_arquivos_for_zip_signature(
+    session_id: int,
+    signature: str,
+) -> list[dict[str, Any]]:
+    """Reconstrói o conjunto de arquivos de um ZIP pela assinatura (full ou por máquina)."""
+    arquivos = _fetch_arquivos(int(session_id))
+    if compute_arquivos_signature(arquivos) == signature:
+        return arquivos
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for arquivo in arquivos:
+        key = str(arquivo.get("maquina") or "").strip()
+        groups.setdefault(key, []).append(arquivo)
+    for subset in groups.values():
+        if compute_arquivos_signature(subset) == signature:
+            return subset
+    return []
+
+
+def mark_arquivos_baixados(arquivo_ids: list[int]) -> int:
+    """Marca BaixadoEm nos arquivos ainda não baixados. Retorna quantos foram atualizados."""
+    ids = sorted({int(arquivo_id) for arquivo_id in arquivo_ids if int(arquivo_id) > 0})
+    if not ids:
+        return 0
+    placeholders = ", ".join(["%s"] * len(ids))
+
+    def _tx(cursor):
+        cursor.execute(
+            f"""
+            UPDATE tab_os_gravacao_externa_arquivo
+            SET BaixadoEm = NOW()
+            WHERE Id IN ({placeholders})
+              AND BaixadoEm IS NULL
+            """,
+            tuple(ids),
+        )
+        return int(cursor.rowcount or 0)
+
+    return int(db.execute_transaction([_tx])[0])
+
+
+def mark_arquivos_baixados_for_zip(session_id: int, signature: str) -> int:
+    arquivos = resolve_arquivos_for_zip_signature(int(session_id), str(signature or ""))
+    return mark_arquivos_baixados([int(arquivo["id"]) for arquivo in arquivos])
+
+
 def write_session_arquivos_zip(
     session: dict[str, Any],
     dest_path: str,
     *,
+    arquivos: list[dict[str, Any]] | None = None,
+    maquina_key: str | None = None,
     on_progress: Callable[[int, int, int], None] | None = None,
     should_abort: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
     """Empacota os arquivos da sessão em dest_path (ZIP_STORED, Zip64)."""
-    arquivos = _fetch_arquivos(int(session["id"]))
-    if not arquivos:
+    selected = (
+        list(arquivos)
+        if arquivos is not None
+        else filter_arquivos_by_maquina_key(_fetch_arquivos(int(session["id"])), maquina_key)
+    )
+    if not selected:
         raise HTTPException(status_code=404, detail="Nenhum arquivo para download.")
 
-    total = len(arquivos)
+    total = len(selected)
     bytes_prontos = 0
     used_names: set[str] = set()
     with zipfile.ZipFile(
@@ -1109,7 +1343,7 @@ def write_session_arquivos_zip(
         compression=zipfile.ZIP_STORED,
         allowZip64=True,
     ) as archive:
-        for index, arquivo in enumerate(arquivos):
+        for index, arquivo in enumerate(selected):
             if should_abort is not None and should_abort():
                 raise ZipBuildCancelled()
             path = resolve_arquivo_absolute_path(session, arquivo)
@@ -1136,7 +1370,7 @@ def write_session_arquivos_zip(
 
     tamanho = int(os.path.getsize(dest_path)) if os.path.isfile(dest_path) else bytes_prontos
     return {
-        "filename": session_zip_filename(session),
+        "filename": session_zip_filename(session, maquina_key=maquina_key),
         "tamanho_bytes": tamanho,
         "total_arquivos": total,
         "bytes_prontos": bytes_prontos,
@@ -2248,6 +2482,8 @@ def concluir_gravacao(
         if not targets:
             return build_session_detail(session)
 
+        raise_if_downloads_pendentes_for_sessions(targets)
+
         launcher = str(session.get("lancado_por_ponto") or "")
         _run_concluir_targets(
             targets=targets,
@@ -2271,6 +2507,7 @@ def concluir_gravacao(
             str(concluded_anchor["juntada_grupo_id"])
         )
         if sisters:
+            raise_if_downloads_pendentes_for_sessions(sisters)
             launcher = str(concluded_anchor.get("lancado_por_ponto") or "")
             _run_concluir_targets(
                 targets=sisters,

@@ -1,4 +1,5 @@
 @import "./dashboard-setor-modern-catalog.css";
+@import "./html-cards/lab-vidro-fosco.css";
 
 .painel-card-preview.setor-modern {
   display: flex;

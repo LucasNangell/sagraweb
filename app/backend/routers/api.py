@@ -64,6 +64,7 @@ from routers import (
     orcamento_routes,
     sync_andamentos_status_routes,
     letreiro_routes,
+    painel_remote_routes,
 )
 from security.api_auth import APIAccessMiddleware, is_master_client, resolve_client_ip
 from logging_setup import configure_root_api_logging
@@ -179,6 +180,7 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         from security.spa_access import (
             _MASTER_ONLY,
+            _PAINEL_CONFIG_ADMIN,
             api_url_prefix,
             has_screen_access_for_spa_path,
             is_exempt_path,
@@ -398,6 +400,28 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
             return HTMLResponse(content=html_content, status_code=403)
 
         required_perm = required_permission_for_spa_path(app_path)
+
+        if required_perm == _PAINEL_CONFIG_ADMIN:
+            from security.painel_config_admin import is_painel_config_admin_ponto
+
+            if is_painel_config_admin_ponto(getattr(session_for_msg, "ponto", None)):
+                return await call_next(request)
+            logger.warning(
+                "⛔ Painéis OS: ponto=%s sem acesso a %s",
+                getattr(session_for_msg, "ponto", None),
+                app_path,
+            )
+            return HTMLResponse(
+                content=(
+                    "<div style='display:flex;justify-content:center;align-items:center;"
+                    "height:100vh;font-family:sans-serif;flex-direction:column;"
+                    "color:#333;background:#f8f9fa;text-align:center;padding:24px'>"
+                    "<h1 style='color:#856404'>⛔ Acesso Restrito</h1>"
+                    "<p>Esta tela é exclusiva do administrador dos painéis OS.</p>"
+                    "</div>"
+                ),
+                status_code=403,
+            )
 
         if required_perm == _MASTER_ONLY:
             if (
@@ -931,6 +955,7 @@ app.include_router(auth_routes.router)
 app.include_router(user_admin_routes.router)
 app.include_router(setor_painel_routes.router)
 app.include_router(letreiro_routes.router)
+app.include_router(painel_remote_routes.router)
 app.include_router(tablet_face_routes.router)
 app.include_router(admin_system_routes.router)
 app.include_router(admin_sync_routes.router)
@@ -1037,6 +1062,12 @@ def startup_init():
         ensure_letreiro_schema()
     except Exception as exc:
         logger.error("Erro ao migrar letreiro no startup: %s", exc)
+
+    try:
+        from painel_remote_schema import ensure_painel_remote_schema
+        ensure_painel_remote_schema()
+    except Exception as exc:
+        logger.error("Erro ao migrar painel remoto no startup: %s", exc)
 
     try:
         from usuario_face_schema import ensure_usuario_face_schema

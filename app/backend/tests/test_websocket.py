@@ -67,6 +67,88 @@ class TestWebSocket:
         painel_conn = {"ws": object(), "ponto": None, "scope": "painel"}
         assert mgr._should_deliver(painel_conn, {"type": "system_update"}) is True
         assert mgr._should_deliver(painel_conn, {"type": "notification_new"}) is False
+        assert mgr._should_deliver(
+            {**painel_conn, "painel_client_id": "client-a-1234"},
+            {"type": "painel_config_update", "target_client_id": "client-a-1234"},
+        ) is True
+        assert mgr._should_deliver(
+            {**painel_conn, "painel_client_id": "client-a-1234"},
+            {"type": "painel_config_update", "target_client_id": "client-b-1234"},
+        ) is False
+
+    def test_authenticated_scope_receives_painel_config_update(self):
+        from routers.realtime import ConnectionManager
+
+        mgr = ConnectionManager()
+        auth_conn = {
+            "ws": object(),
+            "ponto": "918713",
+            "scope": "authenticated",
+            "painel_client_id": "client-a-1234",
+        }
+        msg = {
+            "type": "painel_config_update",
+            "target_client_id": "client-a-1234",
+        }
+        assert mgr._should_deliver(auth_conn, msg) is True
+        assert mgr._should_deliver(
+            {**auth_conn, "painel_client_id": None},
+            msg,
+        ) is False
+
+    def test_painel_config_update_is_not_deduped(self):
+        from routers.realtime import ConnectionManager
+
+        mgr = ConnectionManager()
+        assert mgr._dedupe_key(
+            {
+                "type": "painel_config_update",
+                "target_client_id": "client-a-1234",
+            }
+        ) is None
+
+    def test_get_painel_instances_requires_hello(self):
+        from routers.realtime import ConnectionManager
+
+        mgr = ConnectionManager()
+        mgr.active_connections = [
+            {"ws": object(), "scope": "painel", "painel_client_id": None},
+            {
+                "ws": object(),
+                "scope": "painel",
+                "painel_client_id": "client-live-01",
+                "painel_route": "tablet",
+                "painel_setor": "SEIMP",
+                "painel_ip": "10.0.0.2",
+            },
+        ]
+        live = mgr.get_painel_instances()
+        assert len(live) == 1
+        assert live[0]["clientId"] == "client-live-01"
+        assert live[0]["route"] == "tablet"
+
+    def test_painel_hello_registers_live_instance(self, ws_client, monkeypatch):
+        from routers.realtime import manager
+
+        monkeypatch.setattr(
+            "services.painel_remote_config_service.upsert_instance",
+            lambda *a, **k: None,
+        )
+        with ws_client.websocket_connect("/ws") as ws:
+            ws.send_json(
+                {
+                    "type": "painel_hello",
+                    "clientId": "client-hello-99",
+                    "route": "setor",
+                    "sector": "SEFOC",
+                }
+            )
+            ws.send_json({"type": "ping"})
+            assert ws.receive_json()["type"] == "pong"
+            live = manager.get_painel_instances()
+            assert live[0]["clientId"] == "client-hello-99"
+            assert live[0]["route"] == "setor"
+            assert live[0]["sector"] == "SEFOC"
 
     def test_notification_new_reaches_authenticated_clients(self):
         from routers.realtime import ConnectionManager

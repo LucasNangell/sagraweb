@@ -13,6 +13,7 @@ import {
   Inbox,
   LayoutDashboard,
   Mail,
+  Monitor,
   Package,
   Printer,
   Settings,
@@ -20,6 +21,7 @@ import {
   Users,
 } from "lucide-react";
 
+import { isPainelConfigAdminPonto } from "@/features/auth/painelConfigAdmin";
 import {
   hasPainelGlobalAccess,
   hasPainelSetorAccess,
@@ -27,6 +29,7 @@ import {
   hasPermission,
 } from "@/features/auth/permissions";
 import type { PermissionKey, Permissions } from "@/features/auth/types";
+import { normalizeAppRedirect } from "@/lib/normalizeRedirect";
 
 export type NavAction = "lombada-calculator";
 
@@ -112,6 +115,12 @@ export const NAV_ITEMS: NavItem[] = [
     permission: "sb_admin_ips",
   },
   {
+    label: "Painéis OS",
+    to: "/admin/paineis",
+    icon: Monitor,
+    permission: "sb_admin_ips",
+  },
+  {
     label: "Lombada",
     action: "lombada-calculator",
     icon: Calculator,
@@ -123,11 +132,15 @@ export const NAV_ITEMS: NavItem[] = [
 export function getVisibleNavItems(
   permissions: Permissions,
   isAuthenticated: boolean,
+  ponto?: number | null,
 ): NavItem[] {
   if (!isAuthenticated) {
     return [];
   }
   return NAV_ITEMS.filter((item) => {
+    if (item.to === "/admin/paineis") {
+      return isPainelConfigAdminPonto(ponto);
+    }
     if (item.to === "/painel/setor" || item.to === "/painel/setor-moderno") {
       return hasPainelSetorAccess(permissions);
     }
@@ -188,9 +201,16 @@ function normalizeRoutePath(path: string): string {
 }
 
 /** Verifica se o usuário pode acessar a rota (espelha filtros do menu lateral). */
-export function canAccessRoute(permissions: Permissions, path: string): boolean {
+export function canAccessRoute(
+  permissions: Permissions,
+  path: string,
+  ponto?: number | null,
+): boolean {
   const normalized = normalizeRoutePath(path);
 
+  if (normalized === "/admin/paineis" || normalized.startsWith("/admin/paineis/")) {
+    return isPainelConfigAdminPonto(ponto);
+  }
   if (normalized === "/mensagens") {
     return true;
   }
@@ -263,7 +283,7 @@ export function resolveDefaultAppRoute(
   permissions: Permissions,
   redirect?: string | null,
 ): string {
-  const target = redirect?.trim();
+  const target = normalizeAppRedirect(redirect?.trim() || undefined);
   if (target && canAccessRoute(permissions, target)) {
     return normalizeRoutePath(target);
   }

@@ -29,8 +29,12 @@ _PAINEL_AUX_GET_PREFIXES = (
 _PAINEL_API_GET_EXACT = frozenset({
     "/api/realtime/admin-reload",
     "/api/sync-andamentos/service-status",
+    "/api/painel/config",
 })
 _PAINEL_API_GET_PREFIXES = _PAINEL_DATA_GET_PREFIXES
+_PAINEL_API_POST_EXACT = frozenset({
+    "/api/painel/hello",
+})
 
 
 def _normalize_painel_api_path(path: str) -> str:
@@ -143,9 +147,12 @@ def is_painel_data_api_route(path: str, method: str) -> bool:
 
 def is_painel_api_route(path: str, method: str) -> bool:
     """Rotas de API usadas pelos painéis (dados + auxiliares)."""
-    if method != "GET":
-        return False
     norm = _normalize_painel_api_path(path)
+    verb = (method or "GET").upper()
+    if verb == "POST" and norm in _PAINEL_API_POST_EXACT:
+        return True
+    if verb != "GET":
+        return False
     if norm in _PAINEL_API_GET_EXACT:
         return True
     return is_painel_data_api_route(path, method)

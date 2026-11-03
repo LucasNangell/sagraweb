@@ -302,6 +302,11 @@ def _is_public_api(path: str, method: str) -> bool:
 
 def _is_admin_api(path: str) -> bool:
 
+    # Config remota dos painéis OS: gate por ponto 918713 no handler, não MASTER_IP.
+    if path == "/api/admin/painel" or path.startswith("/api/admin/painel/"):
+
+        return False
+
     if path in _ADMIN_EXACT:
 
         return True

@@ -40,6 +40,7 @@ import type {
   DashboardConfig,
   DashboardDisplayColumn,
   DashboardOsItem,
+  DashboardSoundSlot,
   DashboardWsMessage,
 } from "../types";
 import type { PcpQueueItem } from "@/api/pcp";
@@ -48,8 +49,8 @@ export type DashboardConnectionStatus = "connected" | "disconnected";
 
 interface UseDashboardSetorDataOptions {
   config: DashboardConfig;
-  onNewItems?: () => void;
-  onSectorArrival?: () => void;
+  onNewItems?: (priority: DashboardSoundSlot) => void;
+  onSectorArrival?: (priority: DashboardSoundSlot) => void;
 }
 
 function wsEventAffectsSectors(
@@ -161,8 +162,12 @@ export function useDashboardSetorData({
           ? previous
           : nextSectorKeys,
       );
-      if (processed.hasSectorArrivals && hasLoadedOnceRef.current) {
-        onSectorArrivalRef.current?.();
+      if (
+        processed.hasSectorArrivals &&
+        processed.arrivalPriority &&
+        hasLoadedOnceRef.current
+      ) {
+        onSectorArrivalRef.current?.(processed.arrivalPriority);
       }
       const nextSignature = hashDashboardBoard(processed.columns);
       if (nextSignature === boardSignatureRef.current) {
@@ -171,8 +176,12 @@ export function useDashboardSetorData({
 
       boardSignatureRef.current = nextSignature;
 
-      if (processed.hasNewItems && hasLoadedOnceRef.current) {
-        onNewItemsRef.current?.();
+      if (
+        processed.hasNewItems &&
+        processed.newItemPriority &&
+        hasLoadedOnceRef.current
+      ) {
+        onNewItemsRef.current?.(processed.newItemPriority);
       }
 
       setColumns(processed.columns);
@@ -561,20 +570,16 @@ export function useDashboardSetorData({
   }, []);
 
   useEffect(() => {
-    masterOpsMapRef.current.clear();
-    itemsMapRef.current.clear();
-    inboxOsRef.current = [];
     boardSignatureRef.current = "";
-    rawItemsSignatureRef.current = "";
-    inboxSignatureRef.current = "";
-    setColumns(emptyDisplayColumns(configRef.current));
-    setSectorItemKeys(new Set());
-    setLastUpdated("Carregando dados");
-    setLastSyncAt(null);
-    setHasLoadedOnce(false);
-    hasLoadedOnceRef.current = false;
-    void fetchDataRef.current({ isInitialLoad: true });
-  }, [configSignature]);
+    if (itemsMapRef.current.size > 0) {
+      reprocessFromItemsMap({ isInitialLoad: true, touchUpdatedAt: false });
+    } else {
+      setColumns(emptyDisplayColumns(configRef.current));
+    }
+    void fetchDataRef.current({
+      isInitialLoad: itemsMapRef.current.size === 0,
+    });
+  }, [configSignature, reprocessFromItemsMap]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {

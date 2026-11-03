@@ -16,6 +16,7 @@ export function useAccessControl() {
   const permissions = useAuthStore((s) => s.permissions);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isHydrating = useAuthStore((s) => s.isHydrating);
+  const ponto = useAuthStore((s) => s.user?.ponto);
 
   const isReady = isAuthenticated && !isHydrating;
 
@@ -31,8 +32,8 @@ export function useAccessControl() {
   );
 
   const navItems = useMemo(
-    () => getVisibleNavItems(permissions, isReady),
-    [permissions, isReady],
+    () => getVisibleNavItems(permissions, isReady, ponto),
+    [permissions, isReady, ponto],
   );
 
   const contextMenuForRow = useMemo(

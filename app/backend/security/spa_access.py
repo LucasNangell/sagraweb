@@ -41,6 +41,7 @@ SPA_ROUTE_PERMISSIONS: dict[str, str] = {
     "/admin/ips": "sb_admin_ips",
     "/admin/mensagens": "sb_admin_ips",
     "/admin/configuracoes": "sb_admin_ips",
+    "/admin/paineis": "__PAINEL_CONFIG_ADMIN__",
     "/impressao/requisicao": "ctx_imprimir_ficha",
 }
 
@@ -64,6 +65,7 @@ LEGACY_HTML_PERMISSIONS: dict[str, str] = {
 
 _MASTER_ONLY = "__MASTER_ONLY__"
 _AUTHENTICATED_ONLY = "__AUTHENTICATED_ONLY__"
+_PAINEL_CONFIG_ADMIN = "__PAINEL_CONFIG_ADMIN__"
 
 _STATIC_SUFFIXES = (
     ".js",
@@ -236,6 +238,8 @@ def has_screen_access_for_spa_path(app_path: str, perms: dict) -> bool:
         return True
     if required == _MASTER_ONLY:
         return False
+    if required == _PAINEL_CONFIG_ADMIN:
+        return False
 
     if app_path.startswith("/painel"):
         from security.painel_access import check_painel_spa_path_access
@@ -259,7 +263,7 @@ def resolve_default_spa_route(perms: dict) -> Optional[str]:
     None se o usuário não tem nenhum módulo de tela.
     """
     for route, required in SPA_ROUTE_PERMISSIONS.items():
-        if required == _AUTHENTICATED_ONLY:
+        if required in (_AUTHENTICATED_ONLY, _PAINEL_CONFIG_ADMIN):
             continue
         if has_screen_access_for_spa_path(route, perms):
             return route

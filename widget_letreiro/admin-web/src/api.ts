@@ -245,23 +245,24 @@ export const api = {
     request<{ presets: { id: number; nome: string; payload: unknown }[] }>("/api/letreiro/painel-presets"),
   listSounds: () => request<{ sounds: import("./notificationSounds").LetreiroSound[] }>("/api/letreiro/sounds"),
   uploadSound: async (file: File) => {
-    const headers = new Headers();
-    if (token) headers.set("X-Letreiro-Admin-Token", token);
-    const body = new FormData();
-    body.append("file", file);
-    const res = await fetch("/api/letreiro/sounds", { method: "POST", headers, body });
-    const text = await res.text();
-    if (!res.ok) {
-      let detail = text;
-      try {
-        const parsed = JSON.parse(text) as { detail?: string };
-        if (parsed.detail) detail = parsed.detail;
-      } catch {
-        /* keep raw */
-      }
-      throw new ApiError(res.status, detail || `HTTP ${res.status}`);
-    }
-    return JSON.parse(text) as { status: string; sound: import("./notificationSounds").LetreiroSound };
+    const contentBase64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("Falha ao ler o arquivo."));
+      reader.onload = () => {
+        const raw = String(reader.result ?? "");
+        const comma = raw.indexOf(",");
+        resolve(comma >= 0 ? raw.slice(comma + 1) : raw);
+      };
+      reader.readAsDataURL(file);
+    });
+    return request<{ status: string; sound: import("./notificationSounds").LetreiroSound }>("/api/letreiro/sounds", {
+      method: "POST",
+      body: JSON.stringify({
+        filename: file.name || "som.mp3",
+        contentBase64,
+        windowsUser: "",
+      }),
+    });
   },
   deleteSound: (id: string) =>
     request(`/api/letreiro/sounds/${encodeURIComponent(id)}?windowsUser=`, { method: "DELETE" }),

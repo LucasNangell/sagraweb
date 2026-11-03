@@ -20,7 +20,8 @@ public sealed class AdminHost : IDisposable
 {
     public const int PreferredPort = 17890;
     const int PortRange = 30;
-    const int MaxProxyBody = 3 * 1024 * 1024;
+    // MP3 até 2 MB em base64 (~2.7 MB) + JSON; margem para nomes longos.
+    const int MaxProxyBody = 4 * 1024 * 1024;
     const string CookieName = "t";
     static readonly JsonSerializerOptions JsonCamel = new()
     {

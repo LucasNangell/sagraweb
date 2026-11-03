@@ -920,8 +920,43 @@ async def get_sound(sound_id: str):
     )
 
 
+class LetreiroSoundUploadJson(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    filename: str = Field(default="som.mp3")
+    content_base64: str = Field(alias="contentBase64")
+    windows_user: Optional[str] = Field(default=None, alias="windowsUser")
+
+
+def _decode_sound_base64(raw: str) -> bytes:
+    import base64
+    import binascii
+
+    text = (raw or "").strip()
+    if "," in text and text.lower().startswith("data:"):
+        text = text.split(",", 1)[1]
+    try:
+        return base64.b64decode(text, validate=False)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Base64 inválido.") from exc
+
+
 @router.post("/sounds")
-async def upload_sound(
+async def upload_sound_json(
+    body: LetreiroSoundUploadJson,
+    x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
+):
+    """Upload via JSON/base64 — funciona pelo proxy AdminHost (sem multipart)."""
+    _require_admin(x_letreiro_windows_user or body.windows_user)
+    content = _decode_sound_base64(body.content_base64)
+    try:
+        row = letreiro_sounds_service.save_upload(body.filename, content)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "ok", "sound": row}
+
+
+@router.post("/sounds/multipart")
+async def upload_sound_multipart(
     file: UploadFile = File(...),
     x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
     windows_user: Optional[str] = Query(default=None, alias="windowsUser"),

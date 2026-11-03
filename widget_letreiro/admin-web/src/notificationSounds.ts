@@ -28,3 +28,17 @@ export function soundLabel(sounds: LetreiroSound[], id: string): string {
   if (!id || id === MUTE_SOUND) return "Sem som";
   return sounds.find((item) => item.id === id)?.name ?? id;
 }
+
+/** Resolve som efetivo do filtro ("" herda global; "none" silencia). */
+export function resolveFilterSound(columnSound?: string | null, globalSound?: string | null): string {
+  const col = clampColumnSound(columnSound);
+  if (col === MUTE_SOUND) return MUTE_SOUND;
+  if (col) return col;
+  return clampNotificationSound(globalSound);
+}
+
+export function resolveFilterAnimation(columnAnimation?: string | null, globalAnimation?: string | null): string {
+  const col = (columnAnimation ?? "").trim();
+  if (col) return col;
+  return (globalAnimation ?? "").trim();
+}

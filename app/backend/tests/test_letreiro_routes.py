@@ -762,23 +762,27 @@ def test_list_sounds_empty(tmp_path, monkeypatch):
 
 
 def test_upload_sound_requires_admin(tmp_path, monkeypatch):
+    import base64
+
     monkeypatch.setattr(letreiro_routes.letreiro_sounds_service, "SOUNDS_DIR", tmp_path)
+    payload = b"ID3" + b"\x00" * 64
     response = _client().post(
         "/api/letreiro/sounds",
         headers={"X-Letreiro-Windows-User": "outro"},
-        files={"file": ("beep.mp3", b"ID3" + b"\x00" * 64, "audio/mpeg")},
+        json={"filename": "beep.mp3", "contentBase64": base64.b64encode(payload).decode("ascii")},
     )
     assert response.status_code == 403
 
 
 def test_upload_get_delete_sound(tmp_path, monkeypatch):
+    import base64
+
     monkeypatch.setattr(letreiro_routes.letreiro_sounds_service, "SOUNDS_DIR", tmp_path)
-    # Minimal ID3 header so the validator accepts the payload.
     payload = b"ID3" + b"\x00" * 200
     response = _client().post(
         "/api/letreiro/sounds",
         headers={"X-Letreiro-Windows-User": "P_918713"},
-        files={"file": ("alerta.mp3", payload, "audio/mpeg")},
+        json={"filename": "alerta.mp3", "contentBase64": base64.b64encode(payload).decode("ascii")},
     )
     assert response.status_code == 200
     sound = response.json()["sound"]
@@ -804,10 +808,15 @@ def test_upload_get_delete_sound(tmp_path, monkeypatch):
 
 
 def test_upload_rejects_non_mp3(tmp_path, monkeypatch):
+    import base64
+
     monkeypatch.setattr(letreiro_routes.letreiro_sounds_service, "SOUNDS_DIR", tmp_path)
     response = _client().post(
         "/api/letreiro/sounds",
         headers={"X-Letreiro-Windows-User": "P_918713"},
-        files={"file": ("nota.txt", b"hello world not audio", "text/plain")},
+        json={
+            "filename": "nota.txt",
+            "contentBase64": base64.b64encode(b"hello world not audio").decode("ascii"),
+        },
     )
     assert response.status_code == 400

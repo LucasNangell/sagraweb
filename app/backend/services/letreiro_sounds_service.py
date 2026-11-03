@@ -99,13 +99,17 @@ def _safe_display_name(filename: str | None) -> str:
     return raw[:120]
 
 
-def _looks_like_mp3(head: bytes) -> bool:
-    if len(head) < 3:
+def _looks_like_mp3(content: bytes) -> bool:
+    if len(content) < 3:
         return False
-    if head[:3] == b"ID3":
+    # ID3v2 no início, ou frame MPEG em qualquer offset inicial (alguns MP3 têm padding).
+    probe = content[: min(len(content), 64 * 1024)]
+    if probe[:3] == b"ID3":
         return True
-    # MPEG frame sync
-    return head[0] == 0xFF and (head[1] & 0xE0) == 0xE0
+    for i in range(0, max(0, len(probe) - 1)):
+        if probe[i] == 0xFF and (probe[i + 1] & 0xE0) == 0xE0:
+            return True
+    return False
 
 
 def save_upload(filename: str | None, content: bytes) -> dict[str, Any]:
@@ -116,7 +120,7 @@ def save_upload(filename: str | None, content: bytes) -> dict[str, Any]:
     name = _safe_display_name(filename)
     if not name.lower().endswith(".mp3"):
         raise ValueError("Apenas arquivos .mp3.")
-    if not _looks_like_mp3(content[:16]):
+    if not _looks_like_mp3(content):
         raise ValueError("Conteúdo não parece um MP3 válido.")
 
     sound_id = uuid.uuid4().hex[:12]

@@ -34,6 +34,8 @@ import {
   MUTE_SOUND,
   clampColumnSound,
   clampNotificationSound,
+  resolveFilterAnimation,
+  resolveFilterSound,
   type LetreiroSound,
 } from "./notificationSounds";
 import { TICKER_CARD_MODELS, clampTickerModel } from "./tickerModels";
@@ -531,11 +533,30 @@ function playCatalogSound(id: string) {
   }
 }
 
+function previewNotificationPayload(cfg: AppConfig, opts?: { animation?: string; sound?: string; priority?: string }) {
+  return {
+    width: cfg.window?.notificationWidth ?? 320,
+    height: cfg.window?.notificationHeight ?? 96,
+    titleFontSize: cfg.window?.notificationTitleFontSize ?? 22,
+    situationFontSize: cfg.window?.notificationSituationFontSize ?? 14,
+    padX: cfg.window?.notificationPadX ?? 16,
+    textGap: cfg.window?.notificationTextGap ?? 4,
+    priority: opts?.priority ?? "",
+    offsetRight: cfg.window?.notificationOffsetRight ?? 24,
+    offsetBottom: cfg.window?.notificationOffsetBottom ?? 24,
+    animation: clampEntryAnimation(
+      opts?.animation ?? cfg.window?.notificationAnimation,
+    ),
+    sound: opts?.sound ?? clampNotificationSound(cfg.window?.notificationSound),
+    visual: cfg.window?.notificationVisual,
+  };
+}
+
 function SoundUploadButton({
   onUploaded,
   onError,
 }: {
-  onUploaded: (sound: LetreiroSound) => void;
+  onUploaded: (sound: LetreiroSound, catalog: LetreiroSound[]) => void;
   onError?: (msg: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -553,7 +574,11 @@ function SoundUploadButton({
           if (!file) return;
           setBusy(true);
           void api.uploadSound(file)
-            .then((res) => onUploaded(res.sound))
+            .then(async (res) => {
+              const listed = await api.listSounds().catch(() => ({ sounds: [res.sound] }));
+              const catalog = listed.sounds?.length ? listed.sounds : [res.sound];
+              onUploaded(res.sound, catalog);
+            })
             .catch((ex) => onError?.(ex instanceof Error ? ex.message : String(ex)))
             .finally(() => setBusy(false));
         }}
@@ -862,8 +887,8 @@ function LetreiroDisplayFields({
         </button>
         <SoundUploadButton
           onError={onError}
-          onUploaded={(sound) => {
-            onSoundsChange?.([...sounds.filter((item) => item.id !== sound.id), sound]);
+          onUploaded={(sound, catalog) => {
+            onSoundsChange?.(catalog);
             onChange({ ...cfg, window: { ...cfg.window, notificationSound: sound.id } });
           }}
         />
@@ -915,6 +940,7 @@ function FilterListFields({
   listId,
   actions,
   sounds = [],
+  onPreviewFilter,
 }: {
   cfg: AppConfig;
   onChange: (next: AppConfig) => void;
@@ -924,6 +950,7 @@ function FilterListFields({
   listId: string;
   actions?: ReactNode;
   sounds?: LetreiroSound[];
+  onPreviewFilter?: (row: DisplayFilter) => void;
 }) {
   const filters = filtersFromColumns(cfg.board?.columns ?? []);
   const situacaoOptions = [...new Set([...situacoes, ...filters.map((row) => row.situacao).filter(Boolean)])];
@@ -1034,7 +1061,7 @@ function FilterListFields({
                   <Trash2 size={16} />
                 </button>
               </div>
-              <div className="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(6rem,8rem)_minmax(0,1fr)_minmax(9rem,12rem)_minmax(9rem,12rem)] lg:items-end">
+              <div className="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(6rem,8rem)_minmax(0,1fr)_minmax(9rem,12rem)_minmax(9rem,12rem)_auto] lg:items-end">
                 <label className="min-w-0 text-xs text-slate-500">
                   Ponto
                   <input
@@ -1086,6 +1113,15 @@ function FilterListFields({
                     ))}
                   </select>
                 </label>
+                <button
+                  type="button"
+                  className="rounded-lg bg-violet-500/90 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40"
+                  disabled={!row.notify || !onPreviewFilter}
+                  title={!row.notify ? "Marque Notificar para testar" : "Testar notificação deste filtro"}
+                  onClick={() => onPreviewFilter?.(row)}
+                >
+                  Testar
+                </button>
               </div>
             </div>
           ))}
@@ -2111,20 +2147,9 @@ export default function App() {
                   sounds={sounds}
                   onSoundsChange={setSounds}
                   onError={setError}
-                  onPreview={(priority) => void api.previewNotification({
-                    width: localCfg.window?.notificationWidth ?? 320,
-                    height: localCfg.window?.notificationHeight ?? 96,
-                    titleFontSize: localCfg.window?.notificationTitleFontSize ?? 22,
-                    situationFontSize: localCfg.window?.notificationSituationFontSize ?? 14,
-                    padX: localCfg.window?.notificationPadX ?? 16,
-                    textGap: localCfg.window?.notificationTextGap ?? 4,
-                    priority,
-                    offsetRight: localCfg.window?.notificationOffsetRight ?? 24,
-                    offsetBottom: localCfg.window?.notificationOffsetBottom ?? 24,
-                    animation: clampEntryAnimation(localCfg.window?.notificationAnimation),
-                    sound: clampNotificationSound(localCfg.window?.notificationSound),
-                    visual: localCfg.window?.notificationVisual,
-                  }).then(() => setStatus("Notificação de teste disparada.")).catch((ex) => setError(errText(ex)))}
+                  onPreview={(priority) => void api.previewNotification(previewNotificationPayload(localCfg, { priority }))
+                    .then(() => setStatus("Notificação de teste disparada."))
+                    .catch((ex) => setError(errText(ex)))}
                 />
               </div>
             </div>
@@ -2139,6 +2164,12 @@ export default function App() {
                   situacoes={situacoes}
                   sounds={sounds}
                   listId="setores-list-filtros"
+                  onPreviewFilter={(row) => void api.previewNotification(previewNotificationPayload(localCfg, {
+                    animation: resolveFilterAnimation(row.animation, localCfg.window?.notificationAnimation),
+                    sound: resolveFilterSound(row.sound, localCfg.window?.notificationSound),
+                  }))
+                    .then(() => setStatus(`Teste do filtro “${row.situacao || row.fonte}” disparado.`))
+                    .catch((ex) => setError(errText(ex)))}
                   actions={
                     <>
                       <button type="button" className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void restoreGroups()}>Restaurar padrão</button>
@@ -2362,6 +2393,12 @@ export default function App() {
                   situacoes={situacoes}
                   sounds={sounds}
                   listId="client-setores-filtros"
+                  onPreviewFilter={(row) => void api.previewNotification(previewNotificationPayload(clientEdit.cfg, {
+                    animation: resolveFilterAnimation(row.animation, clientEdit.cfg.window?.notificationAnimation),
+                    sound: resolveFilterSound(row.sound, clientEdit.cfg.window?.notificationSound),
+                  }))
+                    .then(() => setStatus(`Teste do filtro “${row.situacao || row.fonte}” disparado.`))
+                    .catch((ex) => setError(errText(ex)))}
                 />
               </div>
             </div>

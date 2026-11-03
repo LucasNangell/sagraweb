@@ -381,6 +381,10 @@ export function GravacaoExternaTab() {
   };
 
   const previewSessionId = previewSelection?.sessionId ?? focusedId;
+  const previewSession =
+    visibleSessionItems.find((session) => session.gravacao_externa_id === previewSessionId) ??
+    focusedSession;
+  const previewDetail = detailFor(previewSession?.gravacao_externa_id).detail;
   const getExternaPreviewUrl = useCallback(
     (a: number, n: number, arquivoId: number) =>
       gravacaoExternaPreviewUrl(a, n, arquivoId, previewSessionId),
@@ -725,13 +729,7 @@ export function GravacaoExternaTab() {
                 showOrigem={multiEnvio}
                 focused={focusedId === id}
                 onFocus={() => setFocusedSessionId(id)}
-                canConcluir={isFornecedor}
                 canDownload={canDownload}
-                concluindo={
-                  concluirMutation.isPending &&
-                  concluirMutation.variables?.gravacaoExternaId === id
-                }
-                onConcluir={() => void handleConcluir(session)}
                 previewSelection={previewSelection}
                 onSelectPreview={(selection) => {
                   setFocusedSessionId(id);
@@ -743,15 +741,43 @@ export function GravacaoExternaTab() {
           })}
         </div>
         <div className="flex min-h-[280px] min-w-0 flex-col overflow-hidden lg:min-h-0 lg:h-full">
-          <GravacaoExternaPreview
-            ano={selected.ano}
-            nrOs={selected.nr_os}
-            selection={previewSelection}
-            canDownload={canDownload}
-            getPreviewUrl={getExternaPreviewUrl}
-            getCompositePreviewUrl={getExternaCompositeUrl}
-            getDownloadUrl={getExternaDownloadUrl}
-          />
+          {isFornecedor &&
+          previewSession &&
+          previewDetail &&
+          (previewDetail.status === "pendente" || previewDetail.status === "iniciada") ? (
+            <div className="flex shrink-0 justify-end pb-2">
+              <button
+                type="button"
+                disabled={
+                  concluirMutation.isPending &&
+                  concluirMutation.variables?.gravacaoExternaId ===
+                    previewSession.gravacao_externa_id
+                }
+                onClick={() => void handleConcluir(previewSession)}
+                className="inline-flex items-center gap-2 rounded border border-primary-green bg-white px-4 py-2 text-sm font-medium text-primary-green hover:bg-primary-green/5 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {concluirMutation.isPending &&
+                concluirMutation.variables?.gravacaoExternaId ===
+                  previewSession.gravacao_externa_id ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="size-4" />
+                )}
+                Gravação concluída
+              </button>
+            </div>
+          ) : null}
+          <div className="min-h-0 flex-1">
+            <GravacaoExternaPreview
+              ano={selected.ano}
+              nrOs={selected.nr_os}
+              selection={previewSelection}
+              canDownload={canDownload}
+              getPreviewUrl={getExternaPreviewUrl}
+              getCompositePreviewUrl={getExternaCompositeUrl}
+              getDownloadUrl={getExternaDownloadUrl}
+            />
+          </div>
         </div>
       </div>
 

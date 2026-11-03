@@ -1,5 +1,5 @@
 import { cn } from "@sagra/ui";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -14,7 +14,6 @@ import {
 } from "@/features/gravacao-externa/utils/downloadGravacaoExternaZipAll";
 
 import { gravacaoComponenteLabel } from "../utils/groupGravacaoItemsByOs";
-import { GravacaoExternaStatusBadge } from "./GravacaoExternaActions";
 import { GravacaoObservacaoBox } from "./GravacaoObservacaoBox";
 import { GravacaoExternaArquivosPanel, type PreviewSelection } from "./GravacaoExternaPreview";
 
@@ -43,11 +42,7 @@ interface GravacaoExternaEnvioSectionProps {
   showOrigem: boolean;
   focused: boolean;
   onFocus: () => void;
-  /** Somente o fornecedor conclui a gravação. */
-  canConcluir: boolean;
   canDownload: boolean;
-  concluindo: boolean;
-  onConcluir: () => void;
   previewSelection: PreviewSelection | null;
   onSelectPreview: (selection: PreviewSelection) => void;
   onDownloaded: () => void;
@@ -60,10 +55,7 @@ export function GravacaoExternaEnvioSection({
   showOrigem,
   focused,
   onFocus,
-  canConcluir,
   canDownload,
-  concluindo,
-  onConcluir,
   previewSelection,
   onSelectPreview,
   onDownloaded,
@@ -147,35 +139,12 @@ export function GravacaoExternaEnvioSection({
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 space-y-0.5">
-          <div className="flex flex-wrap items-center gap-2">
-            {showOrigem ? (
-              <span className="truncate text-sm font-semibold text-neutral-800" title={sectionLabel}>
-                {sectionLabel}
-              </span>
-            ) : null}
-            <GravacaoExternaStatusBadge status={detail?.status ?? item.gravacao_status} />
+        {showOrigem ? (
+          <div className="min-w-0">
+            <span className="truncate text-sm font-semibold text-neutral-800" title={sectionLabel}>
+              {sectionLabel}
+            </span>
           </div>
-          {detail ? (
-            <p className="text-xs text-neutral-500">
-              Lançado por {detail.lancado_por_nome || detail.lancado_por_ponto}
-            </p>
-          ) : null}
-        </div>
-        {detail && canConcluir && (detail.status === "pendente" || detail.status === "iniciada") ? (
-          <button
-            type="button"
-            disabled={concluindo}
-            onClick={onConcluir}
-            className="inline-flex items-center gap-2 rounded border border-primary-green bg-white px-4 py-2 text-sm font-medium text-primary-green hover:bg-primary-green/5 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {concluindo ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <CheckCircle2 className="size-4" />
-            )}
-            Gravação concluída
-          </button>
         ) : null}
       </div>
 

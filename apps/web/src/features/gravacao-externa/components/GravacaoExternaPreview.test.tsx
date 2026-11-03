@@ -181,7 +181,7 @@ describe("composite preview", () => {
     expect(screen.queryByText("Outros")).not.toBeInTheDocument();
   });
 
-  it("shows machine filter options ordered by chapas qty ascending", () => {
+  it("shows full-width machine filter with PDF/TIF counts ordered by chapas qty", () => {
     const arquivos = [
       { id: 1, nome: `${GROUP_KEY} (C).tif`, maquina: "M1" },
       { id: 2, nome: `${GROUP_KEY} (M).tif`, maquina: "M1" },
@@ -208,12 +208,19 @@ describe("composite preview", () => {
       />,
     );
     const filter = screen.getByRole("group", { name: /Filtrar arquivos por máquina/i });
+    expect(filter).toHaveClass("w-full");
     const buttons = within(filter).getAllByRole("button");
-    expect(buttons.map((b) => b.textContent)).toEqual(["Espelhos", "M2", "M1"]);
-    fireEvent.click(within(filter).getByRole("button", { name: "M2" }));
-    expect(screen.getByTestId("machine-filter-chapas-count")).toHaveTextContent("1 chapa");
-    fireEvent.click(within(filter).getByRole("button", { name: "M1" }));
-    expect(screen.getByTestId("machine-filter-chapas-count")).toHaveTextContent("4 chapas");
+    expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual([
+      "Espelhos",
+      "M2",
+      "M1",
+    ]);
+    expect(within(buttons[0]!).getByText("PDFs baixados: 1")).toBeInTheDocument();
+    expect(within(buttons[0]!).getByText("TIFs baixados: 0")).toBeInTheDocument();
+    expect(within(buttons[1]!).getByText("PDFs baixados: 0")).toBeInTheDocument();
+    expect(within(buttons[1]!).getByText("TIFs baixados: 1")).toBeInTheDocument();
+    expect(within(buttons[2]!).getByText("PDFs baixados: 0")).toBeInTheDocument();
+    expect(within(buttons[2]!).getByText("TIFs baixados: 2")).toBeInTheDocument();
   });
 
   it("filters the file list when a machine segment is selected", () => {
@@ -272,12 +279,13 @@ describe("composite preview", () => {
     expect(screen.getByRole("button", { name: /Cad 1/i })).toBeInTheDocument();
   });
 
-  it("shows chapas count from files when chapasPorMaquina is empty", () => {
+  it("keeps PDF and TIF counts visible for each machine button", () => {
     const arquivos = [
       { id: 1, nome: `${GROUP_KEY} (C).tif`, maquina: "PM52" },
       { id: 2, nome: `${GROUP_KEY} (M).tif`, maquina: "PM52" },
+      { id: 3, nome: "espelho-pm52.pdf", maquina: "PM52" },
       {
-        id: 3,
+        id: 4,
         nome: "2026_OS 00612-Gr-Outro (Cad 2 A) (C).tif",
         maquina: "SM74",
       },
@@ -294,9 +302,12 @@ describe("composite preview", () => {
         onSelectComposite={() => undefined}
       />,
     );
-    // Natural name order with empty chapasPorMaquina: PM52 before SM74
-    expect(screen.getByTestId("machine-filter-chapas-count")).toHaveTextContent("2 chapas");
-    fireEvent.click(screen.getByRole("button", { name: "SM74" }));
-    expect(screen.getByTestId("machine-filter-chapas-count")).toHaveTextContent("1 chapa");
+    const filter = screen.getByRole("group", { name: /Filtrar arquivos por máquina/i });
+    const pm52 = within(filter).getByRole("button", { name: "PM52" });
+    const sm74 = within(filter).getByRole("button", { name: "SM74" });
+    expect(within(pm52).getByText("PDFs baixados: 1")).toBeInTheDocument();
+    expect(within(pm52).getByText("TIFs baixados: 2")).toBeInTheDocument();
+    expect(within(sm74).getByText("PDFs baixados: 0")).toBeInTheDocument();
+    expect(within(sm74).getByText("TIFs baixados: 1")).toBeInTheDocument();
   });
 });

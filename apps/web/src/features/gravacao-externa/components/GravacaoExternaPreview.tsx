@@ -8,7 +8,6 @@ import {
   gravacaoExternaPreviewUrl,
   type GravacaoExternaArquivo,
 } from "@/api/gravacaoExterna";
-import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   formatPlatePreviewBadge,
   groupArquivosByCaderno,
@@ -28,6 +27,24 @@ const SEM_MAQUINA_KEY = "__sem_maquina__";
 function maquinaGroupKey(maquina: string | null | undefined): string {
   const trimmed = String(maquina || "").trim();
   return trimmed || SEM_MAQUINA_KEY;
+}
+
+function isTifFilename(name: string): boolean {
+  return /\.tiff?$/i.test(name.trim());
+}
+
+function countArquivosByKind(arquivos: { nome?: string | null }[]): {
+  pdfCount: number;
+  tifCount: number;
+} {
+  let pdfCount = 0;
+  let tifCount = 0;
+  for (const arq of arquivos) {
+    const nome = String(arq.nome ?? "");
+    if (isPdfFilename(nome)) pdfCount += 1;
+    else if (isTifFilename(nome)) tifCount += 1;
+  }
+  return { pdfCount, tifCount };
 }
 
 export interface GravacaoPreviewArquivo {
@@ -812,10 +829,15 @@ export function GravacaoExternaArquivosPanel({
 
   const machineFilterOptions = useMemo(() => {
     if (!machineGroups) return [];
-    return machineGroups.map((group) => ({
-      value: maquinaGroupKey(group.maquina),
-      label: group.maquina ? group.label : "Espelhos",
-    }));
+    return machineGroups.map((group) => {
+      const { pdfCount, tifCount } = countArquivosByKind(group.arquivos);
+      return {
+        value: maquinaGroupKey(group.maquina),
+        label: group.maquina ? group.label : "Espelhos",
+        pdfCount,
+        tifCount,
+      };
+    });
   }, [machineGroups]);
 
   const selectedId = selection?.kind === "file" ? selection.arquivo.id : null;
@@ -959,32 +981,43 @@ export function GravacaoExternaArquivosPanel({
 
   const showMachineFilter = machineFilterOptions.length > 1;
   const activeKey = selectedMaquinaKey ?? maquinaGroupKey(activeMachineGroup.maquina);
-  const registeredQty = activeMachineGroup.maquina
-    ? chapasQtyByMachine.get(activeMachineGroup.maquina.toLowerCase())
-    : undefined;
-  const filesQty = activeMachineGroup.arquivos.filter((arq) => !isPdfFilename(arq.nome)).length;
-  const qty = registeredQty ?? (activeMachineGroup.maquina ? filesQty : undefined);
 
   return (
     <div className="flex flex-col gap-2 overflow-y-auto">
       {showMachineFilter ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <SegmentedControl
-            ariaLabel="Filtrar arquivos por máquina"
-            options={machineFilterOptions}
-            value={activeKey}
-            onChange={setSelectedMaquinaKey}
-            size="md"
-            className="max-w-full flex-wrap"
-          />
-          {qty != null && qty > 0 ? (
-            <span
-              data-testid="machine-filter-chapas-count"
-              className="shrink-0 text-[10px] font-medium text-neutral-500"
-            >
-              {qty} chapa{qty !== 1 ? "s" : ""}
-            </span>
-          ) : null}
+        <div
+          role="group"
+          aria-label="Filtrar arquivos por máquina"
+          className="flex w-full gap-1 rounded border border-sagra-border bg-slate-50 p-0.5"
+        >
+          {machineFilterOptions.map((opt) => {
+            const active = opt.value === activeKey;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                aria-label={opt.label}
+                aria-pressed={active}
+                onClick={() => setSelectedMaquinaKey(opt.value)}
+                className={cn(
+                  "flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded px-2 py-1.5 text-left transition-colors",
+                  active
+                    ? "bg-white text-secondary-blue shadow-sm"
+                    : "text-neutral-500 hover:text-neutral-700",
+                )}
+              >
+                <span className="w-full truncate text-xs font-semibold leading-tight">
+                  {opt.label}
+                </span>
+                <span className="w-full truncate text-[10px] font-normal leading-tight opacity-80">
+                  PDFs baixados: {opt.pdfCount}
+                </span>
+                <span className="w-full truncate text-[10px] font-normal leading-tight opacity-80">
+                  TIFs baixados: {opt.tifCount}
+                </span>
+              </button>
+            );
+          })}
         </div>
       ) : null}
       <ArquivosChapaList {...listProps} arquivos={activeMachineGroup.arquivos} />

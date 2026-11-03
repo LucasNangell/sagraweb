@@ -58,6 +58,14 @@ test("captura JPEG do mock cabe inteira no limite do canal e preserva as dimensÃ
   assert.equal(parseDesktopResult(raw).width, 1280);
 });
 
+test("aceita PNG sem perdas e rejeita dimensÃ£o divergente ou arquivo truncado", () => {
+  const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aAukAAAAASUVORK5CYII=";
+  const result = { ...shot, mime: "image/png", image: png, width: 1, height: 1 };
+  assert.equal(parseDesktopResult(JSON.stringify(result)).mime, "image/png");
+  assert.throws(() => parseDesktopResult(JSON.stringify({ ...result, width: 2 })));
+  assert.throws(() => parseDesktopResult(JSON.stringify({ ...result, image: png.slice(0, -12) })));
+});
+
 test("rejeita SVG, JPEG truncado, MIME adulterado e captura grande demais", () => {
   for (const patch of [{ mime: "image/svg+xml" }, { image: btoa("<svg onload=alert(1)>") }, { image: "/9j/" }, { image: image.slice(0, -4) }, { width: 100000 }, { width: 1281 }, { height: 721 }, { capturedAt: "ontem" }, { image: "A".repeat(60004) }]) assert.throws(() => parseDesktopResult(JSON.stringify({ ...shot, ...patch })));
 });

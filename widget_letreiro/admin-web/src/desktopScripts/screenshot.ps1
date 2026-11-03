@@ -18,10 +18,15 @@ try {
     $capturedAt = [DateTime]::UtcNow.ToString('o')
     $capture.Dispose(); $capture = $null
     $codec = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.MimeType -eq 'image/jpeg' } | Select-Object -First 1
-    $encoded = $null
-    # Mantém JSON + base64 dentro dos 64 KiB do canal de resultado existente.
-    foreach ($maxWidth in @(1600, 1280, 960, 720)) {
-        $ratio = [Math]::Min(1.0, [Math]::Min($maxWidth / [double]$bounds.Width, 1200.0 / $bounds.Height))
+    $encoded = $null; $mime = 'image/png'; $width = $bounds.Width; $height = $bounds.Height
+    # Prefere resolução original sem perdas, respeitando o limite do canal.
+    $stream = New-Object System.IO.MemoryStream
+    $original.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
+    if ($stream.Length -le 45000) { $encoded = [Convert]::ToBase64String($stream.ToArray()) }
+    $stream.Dispose(); $stream = $null
+    if (-not $encoded) { $mime = 'image/jpeg' }
+    foreach ($ratio in @(1.0, 0.8, 0.6, 0.4, 0.3)) {
+        if ($encoded) { break }
         $width = [Math]::Max(1, [int]($bounds.Width * $ratio))
         $height = [Math]::Max(1, [int]($bounds.Height * $ratio))
         $scaled = New-Object System.Drawing.Bitmap($width, $height)
@@ -29,7 +34,7 @@ try {
         $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
         $graphics.DrawImage($original, 0, 0, $width, $height)
         $graphics.Dispose(); $graphics = $null
-        foreach ($quality in @(75, 55, 35, 20)) {
+        foreach ($quality in @(100, 98, 95, 90, 85, 75, 60, 45, 30, 20, 10)) {
             $stream = New-Object System.IO.MemoryStream
             $encoderParams = New-Object System.Drawing.Imaging.EncoderParameters(1)
             $encoderParams.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter([System.Drawing.Imaging.Encoder]::Quality, [long]$quality)
@@ -43,7 +48,7 @@ try {
         if ($encoded) { break }
     }
     if (-not $encoded) { throw 'Não foi possível compactar a captura. Tente novamente.' }
-    @{ type = 'screenshot'; mime = 'image/jpeg'; image = $encoded; width = $width; height = $height;
+    @{ type = 'screenshot'; mime = $mime; image = $encoded; width = $width; height = $height;
         originalWidth = $bounds.Width; originalHeight = $bounds.Height; capturedAt = $capturedAt } | ConvertTo-Json -Compress
 } finally {
     if ($encoderParams) { $encoderParams.Dispose() }

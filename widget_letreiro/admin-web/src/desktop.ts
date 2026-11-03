@@ -5,7 +5,7 @@ export const QUICK_BUTTONS_KEY = "letreiro_quick_commands_v1";
 export type WindowAction = "maximize" | "minimize" | "fullscreen" | "foreground" | "close" | "restore";
 export type DesktopWindow = { handle: string; processId: number; processStart: string; title: string; processName: string; state: string; fullscreen: boolean };
 export type WindowResult = { type: "windows"; windows: DesktopWindow[]; capturedAt: string; truncated: boolean };
-export type ScreenshotResult = { type: "screenshot"; mime: "image/jpeg"; image: string; width: number; height: number; originalWidth: number; originalHeight: number; capturedAt: string };
+export type ScreenshotResult = { type: "screenshot"; mime: "image/jpeg" | "image/png"; image: string; width: number; height: number; originalWidth: number; originalHeight: number; capturedAt: string };
 export type ActionResult = { type: "action"; message: string };
 
 export function desktopTargetKey(row: Pick<Instance, "hostName" | "windowsUser">) {
@@ -59,6 +59,15 @@ function validJpeg(image: string, width: number, height: number) {
   } catch { return false; }
 }
 
+function validPng(image: string, width: number, height: number) {
+  try {
+    const bytes = atob(image);
+    if (bytes.length < 45 || bytes.length > 45000 || bytes.slice(0, 8) !== "\x89PNG\r\n\x1a\n" || bytes.slice(12, 16) !== "IHDR" || bytes.slice(-8, -4) !== "IEND") return false;
+    const num = (i: number) => (((bytes.charCodeAt(i) * 256 + bytes.charCodeAt(i + 1)) * 256 + bytes.charCodeAt(i + 2)) * 256 + bytes.charCodeAt(i + 3));
+    return num(8) === 13 && num(16) === width && num(20) === height;
+  } catch { return false; }
+}
+
 export function windowActionScript(template: string, row: DesktopWindow, action: WindowAction) {
   if (!validWindowIdentity(row) || !["maximize", "minimize", "fullscreen", "foreground", "close", "restore"].includes(action)) throw new Error("Janela ou ação inválida. Atualize a lista.");
   return `${template}\n$message = [SagraDesktop]::Act([long]${row.handle}, [int]${row.processId}, [long]${row.processStart}, '${action}')\n@{ type = 'action'; message = $message } | ConvertTo-Json -Compress`;
@@ -79,10 +88,10 @@ export function parseDesktopResult(raw: string): WindowResult | ScreenshotResult
     });
     return { type: "windows", windows, capturedAt: row.capturedAt, truncated: row.truncated === true };
   }
-  if (row.type === "screenshot" && row.mime === "image/jpeg" && typeof row.image === "string" && row.image.length <= 60000 && row.image.length % 4 === 0 && /^\/9j\/[A-Za-z0-9+/]*={0,2}$/.test(row.image)
-      && Number.isInteger(row.width) && Number(row.width) > 0 && Number(row.width) <= 1600 && Number.isInteger(row.height) && Number(row.height) > 0 && Number(row.height) <= 1200
+  if (row.type === "screenshot" && (row.mime === "image/jpeg" || row.mime === "image/png") && typeof row.image === "string" && row.image.length <= 60000 && row.image.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(row.image)
+      && Number.isInteger(row.width) && Number(row.width) > 0 && Number(row.width) <= 32767 && Number.isInteger(row.height) && Number(row.height) > 0 && Number(row.height) <= 32767 && Number(row.width) * Number(row.height) <= 64000000
       && Number.isInteger(row.originalWidth) && Number(row.originalWidth) > 0 && Number(row.originalWidth) <= 64000000 && Number.isInteger(row.originalHeight) && Number(row.originalHeight) > 0 && Number(row.originalHeight) <= 64000000
-      && typeof row.capturedAt === "string" && Number.isFinite(Date.parse(row.capturedAt)) && validJpeg(row.image, Number(row.width), Number(row.height))) return row as ScreenshotResult;
+      && typeof row.capturedAt === "string" && Number.isFinite(Date.parse(row.capturedAt)) && (row.mime === "image/jpeg" ? validJpeg(row.image, Number(row.width), Number(row.height)) : validPng(row.image, Number(row.width), Number(row.height)))) return row as ScreenshotResult;
   if (row.type === "action" && typeof row.message === "string" && row.message.length <= 500) return { type: "action", message: row.message };
   throw new Error("Resposta do client incompatível com esta ação.");
 }

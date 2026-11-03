@@ -12,7 +12,19 @@ import {
   Plus,
   Trash2,
   ChevronDown,
+  ArrowRight,
+  Bell,
+  Check,
+  CircleAlert,
+  Layers3,
+  LoaderCircle,
+  Radio,
+  Save,
+  Search,
+  SlidersHorizontal,
+  Unplug,
 } from "lucide-react";
+import { ConfigPreview, SettingsSummary } from "./ui";
 import {
   api,
   ApiError,
@@ -53,6 +65,22 @@ import {
 } from "./commandVars";
 
 type View = "computers" | "library" | "history" | "settings";
+type SettingsSection = "bar" | "notifications" | "filters" | "profiles" | "connection";
+
+const SETTINGS_NAV: { id: SettingsSection; label: string; icon: typeof Monitor }[] = [
+  { id: "bar", label: "Barra do letreiro", icon: SlidersHorizontal },
+  { id: "notifications", label: "Notificações", icon: Bell },
+  { id: "filters", label: "Filtros", icon: Layers3 },
+  { id: "profiles", label: "Perfis", icon: BookMarked },
+  { id: "connection", label: "Conexão", icon: Unplug },
+];
+
+const PAGE_INFO: Record<View, { title: string; description: string }> = {
+  computers: { title: "Computadores", description: "Gerencie as estações conectadas e execute comandos à distância." },
+  library: { title: "Biblioteca de scripts", description: "Organize seus comandos e reutilize rotinas de administração." },
+  history: { title: "Histórico de comandos", description: "Acompanhe as execuções e consulte o retorno de cada computador." },
+  settings: { title: "Ajustes do letreiro", description: "Personalize a exibição, os avisos e as informações que você acompanha." },
+};
 
 const NAV: { id: View; label: string; icon: typeof Monitor }[] = [
   { id: "computers", label: "Computadores", icon: Monitor },
@@ -605,6 +633,7 @@ function LetreiroDisplayFields({
   sounds = [],
   onSoundsChange,
   onError,
+  section = "all",
 }: {
   cfg: AppConfig;
   onChange: (next: AppConfig) => void;
@@ -615,11 +644,13 @@ function LetreiroDisplayFields({
   sounds?: LetreiroSound[];
   onSoundsChange?: (next: LetreiroSound[]) => void;
   onError?: (msg: string) => void;
+  section?: "bar" | "notifications" | "all";
 }) {
   const [previewPriority, setPreviewPriority] = useState("");
   const globalSound = clampNotificationSound(cfg.window?.notificationSound);
   return (
-    <>
+    <div className="display-fields">
+      {section !== "notifications" ? <div className="bar-fields form-grid">
       <label className="mt-4 block min-w-0 text-sm text-slate-400">
         Setor padrão
         <input
@@ -671,7 +702,7 @@ function LetreiroDisplayFields({
             <option key={item.id} value={item.id}>{item.label}</option>
           ))}
         </select>
-        <span className="mt-1 block text-xs text-slate-500">Animação clip-safe do catálogo da barra. Não usa o visual do preset de paineis.</span>
+        <span className="mt-1 block text-xs text-slate-500">Escolha o estilo dos cards exibidos na barra.</span>
       </label>
       <label className="mt-3 block text-sm text-slate-400">
         Opacidade ({Math.round((cfg.window?.opacity ?? 0.95) * 100)}%)
@@ -684,13 +715,16 @@ function LetreiroDisplayFields({
       <div className="mt-3 flex flex-wrap gap-4 text-sm">
         <label className="flex items-center gap-2">
           <input type="checkbox" checked={cfg.board?.showOs !== false} onChange={(e) => onChange({ ...cfg, board: { ...cfg.board, showOs: e.target.checked } })} />
-          OS (nº &lt; 5000)
+          Ordens de serviço · OS (nº &lt; 5000)
         </label>
         <label className="flex items-center gap-2">
           <input type="checkbox" checked={cfg.board?.showSp !== false} onChange={(e) => onChange({ ...cfg, board: { ...cfg.board, showSp: e.target.checked } })} />
-          SP (nº ≥ 5000)
+          Solicitações · SP (nº ≥ 5000)
         </label>
       </div>
+      </div> : null}
+      {section !== "bar" ? <div className="notification-fields">
+      {section === "all" ? <h4 className="form-group-title"><Bell size={17} /> Notificações</h4> : null}
       {onPreview ? (
         <div className="mt-3 flex flex-wrap items-end gap-2">
           <label className="min-w-[10rem] text-sm text-slate-400">
@@ -834,7 +868,7 @@ function LetreiroDisplayFields({
           />
         </label>
         <label className="min-w-0 text-sm text-slate-400">
-          Distância da inferior do monitor (px)
+          Distância da borda inferior (px)
           <input
             type="number"
             min={0}
@@ -894,10 +928,10 @@ function LetreiroDisplayFields({
         />
       </div>
       <p className="mt-1 text-xs text-slate-500">
-        Sem som global: o toast fica mudo, salvo quando um filtro define um MP3 próprio. Os clients baixam o arquivo automaticamente.
+        O som padrão é usado nos filtros com notificação. Você pode escolher um som específico em cada filtro.
       </p>
       <label className="mt-3 block min-w-0 text-sm text-slate-400">
-        Visual do card (layout, cores, fontes e efeitos do preset de admin/paineis)
+        Estilo visual da notificação
         <select
           className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
           value={cfg.window?.notificationVisual?.presetId ?? ""}
@@ -925,9 +959,10 @@ function LetreiroDisplayFields({
         </select>
       </label>
       <p className="mt-1 text-xs text-slate-500">
-        O tamanho 180–900 × 56–280 é o do toast. Com um preset, o card usa o mesmo layout, cores, fontes, efeitos e realces de admin/paineis. Só a animação de entrada fica a escolhida acima.
+        Os estilos salvos nos painéis definem cores, fontes e efeitos. O tamanho e a animação seguem os ajustes desta página.
       </p>
-    </>
+      </div> : null}
+    </div>
   );
 }
 
@@ -976,10 +1011,9 @@ function FilterListFields({
       <datalist id={listId}>{setores.map((s) => <option key={s} value={s} />)}</datalist>
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold">Filtros</h2>
+          <h2 className="text-xl font-bold">Filtros de exibição <span className="count-badge">{filters.length}</span></h2>
           <p className="mt-1 max-w-xl text-sm text-slate-400">
-            Cada linha vira um card na faixa. Marque Notificar para avisar quando uma OS entrar nessa situação.
-            Ponto e Observação são opcionais. Animação e som por filtro valem só com Notificar marcado.
+            Escolha quais informações aparecem na barra. Ative Notificar para receber um aviso quando uma OS entrar na situação escolhida.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -998,9 +1032,10 @@ function FilterListFields({
           {filters.map((row, index) => (
             <div
               key={row.key}
-              className="grid min-w-0 gap-2 rounded-xl border border-slate-800 bg-slate-950 p-3"
+              className="filter-card"
             >
-              <div className="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(7rem,9rem)_auto_auto] lg:items-end">
+              <div className="filter-card-heading"><span className="filter-number">{String(index + 1).padStart(2, "0")}</span><strong>{row.fonte === "inbox" ? "Caixa de entrada" : row.situacao || "Novo filtro"}</strong><span className={row.notify ? "filter-notify is-enabled" : "filter-notify"}><Bell size={12} />{row.notify ? "Com aviso" : "Só na barra"}</span></div>
+              <div className="filter-primary">
                 <label className="min-w-0 text-xs text-slate-500">
                   Setor
                   <input
@@ -1056,12 +1091,15 @@ function FilterListFields({
                   type="button"
                   className="inline-flex h-10 w-10 items-center justify-center justify-self-end rounded-lg text-slate-400 hover:bg-slate-800 hover:text-rose-300"
                   title="Remover filtro"
+                  aria-label={`Remover filtro ${index + 1}`}
                   onClick={() => removeFilter(index)}
                 >
                   <Trash2 size={16} />
                 </button>
               </div>
-              <div className="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(6rem,8rem)_minmax(0,1fr)_minmax(9rem,12rem)_minmax(9rem,12rem)_auto] lg:items-end">
+              <details className="filter-details" open={!!(row.notify || row.ponto || row.observacao || row.animation || row.sound)}>
+              <summary>Refinar filtro e personalizar aviso <ChevronDown size={14} /></summary>
+              <div className="filter-advanced">
                 <label className="min-w-0 text-xs text-slate-500">
                   Ponto
                   <input
@@ -1123,6 +1161,7 @@ function FilterListFields({
                   Testar
                 </button>
               </div>
+              </details>
             </div>
           ))}
         </div>
@@ -1133,6 +1172,12 @@ function FilterListFields({
 
 export default function App() {
   const [view, setView] = useState<View>("computers");
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("bar");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [savedConfig, setSavedConfig] = useState("");
+  const [instanceSearch, setInstanceSearch] = useState("");
+  const [instanceStatus, setInstanceStatus] = useState("all");
   const [menuOpen, setMenuOpen] = useState(false);
   const [status, setStatus] = useState("Carregando…");
   const [error, setError] = useState("");
@@ -1159,6 +1204,7 @@ export default function App() {
   const [profile, setProfile] = useState({ nome: "", setor: "" });
   const [localCfg, setLocalCfg] = useState<AppConfig>({});
   const [clientEdit, setClientEdit] = useState<{ row: Instance; cfg: AppConfig } | null>(null);
+  const clientDialogRef = useRef<HTMLDivElement>(null);
   const [clientBusy, setClientBusy] = useState(false);
   const clickTimer = useRef(0);
   const [painelPresets, setPainelPresets] = useState<{ id: number; nome: string; payload: unknown }[]>([]);
@@ -1180,14 +1226,13 @@ export default function App() {
     () => instances.filter((row) => selected.has(keyOf(row))),
     [instances, selected],
   );
-  const filteringList = selected.size === 0;
   const visibleInstances = useMemo(() => {
     const sorted = uniqueInstances(instances).sort(compareInstances);
-    if (!filteringList) return sorted;
     return sorted.filter((row) =>
-      textMatches(row.nome ?? "", profile.nome) && textMatches(row.setor ?? "", profile.setor),
+      textMatches(`${row.nome} ${row.setor} ${row.hostName} ${row.windowsUser}`, instanceSearch)
+      && (instanceStatus === "all" || (instanceStatus === "online" ? row.online : !row.online)),
     );
-  }, [filteringList, instances, profile.nome, profile.setor]);
+  }, [instances, instanceSearch, instanceStatus]);
   const settingsInstances = useMemo(
     () => uniqueInstances(instances).sort(compareInstances),
     [instances],
@@ -1272,7 +1317,9 @@ export default function App() {
         ]);
         setPainelPresets(presetList.presets ?? []);
         setSounds(soundList.sounds ?? []);
-        setLocalCfg(withNotifyMigration(withFreshPresetVisual(local, presetList.presets ?? [])));
+        const loadedConfig = withNotifyMigration(withFreshPresetVisual(local, presetList.presets ?? []));
+        setLocalCfg(loadedConfig);
+        setSavedConfig(JSON.stringify(loadedConfig));
         setConfigProfiles(profileList.profiles ?? []);
         setProfileAssignments(assignmentList.assignments ?? []);
         if (setorList.setores?.length) setSetores(setorList.setores);
@@ -1287,6 +1334,9 @@ export default function App() {
       } catch (ex) {
         setError(ex instanceof ApiError ? ex.message : "Falha ao carregar a administração.");
         setStatus("Sem dados");
+        setView("settings");
+      } finally {
+        setLoading(false);
       }
     })();
   }, [loadAll]);
@@ -1353,10 +1403,25 @@ export default function App() {
     if (!clientEdit) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !clientBusy) setClientEdit(null);
+      if (e.key === "Tab") {
+        const controls = [...(clientDialogRef.current?.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled):not([type=hidden]), select:not(:disabled), summary, textarea:not(:disabled), [tabindex='0']") ?? [])].filter(el => el.getClientRects().length);
+        const first = controls[0];
+        const last = controls[controls.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [clientEdit, clientBusy]);
+
+  const clientDialogOpen = clientEdit !== null;
+  useEffect(() => {
+    if (!clientDialogOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    clientDialogRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    return () => previous?.focus();
+  }, [clientDialogOpen]);
 
   function syncProfileFromSelection(next: Set<string>, fallback?: Instance) {
     if (next.size === 0) {
@@ -1439,15 +1504,23 @@ export default function App() {
   }
 
   async function saveLocal() {
-    const saved = await api.saveLocalConfig(localCfg);
-    setLocalCfg(saved);
-    setStatus("Ajustes deste computador gravados.");
+    setSaving(true);
+    setError("");
+    try {
+      const saved = await api.saveLocalConfig(localCfg);
+      setLocalCfg(saved);
+      setSavedConfig(JSON.stringify(saved));
+      setStatus("Ajustes deste computador gravados.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function restoreGroups() {
     if (!window.confirm("Restaurar a lista padrão de filtros (SEFOC)?")) return;
     const restored = await api.restoreBoard();
     setLocalCfg(restored);
+    setSavedConfig(JSON.stringify(restored));
     setStatus("Filtros restaurados.");
   }
 
@@ -1646,28 +1719,27 @@ export default function App() {
   }
 
   const fillView = view === "computers" || view === "library" || view === "history";
+  const dirty = !!savedConfig && savedConfig !== JSON.stringify(localCfg);
+  const onlineCount = settingsInstances.filter(row => row.online).length;
+  const pageInfo = PAGE_INFO[userAjustes ? "settings" : view];
 
   return (
-    <div className="flex min-h-dvh flex-col lg:grid lg:h-dvh lg:grid-cols-[minmax(13rem,16rem)_minmax(0,1fr)] lg:overflow-hidden">
-      <header className="flex items-center justify-between border-b border-slate-800 px-4 py-3 lg:hidden">
-        <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-sky-400">SAGRA</p>
-          <h1 className="text-lg font-bold">{userAjustes ? "Ajustes" : "Admin letreiro"}</h1>
-        </div>
-        <button className="rounded-lg bg-slate-800 p-2" onClick={() => setMenuOpen((v) => !v)} aria-label="Menu">
+    <div className="app-shell">
+      <a className="skip-link" href="#main-content" onClick={e => { e.preventDefault(); document.getElementById("main-content")?.focus(); }}>Ir para o conteúdo</a>
+      <header className="mobile-header">
+        <div className="brand"><span className="brand-mark"><Radio size={20} /></span><div><strong>SAGRA <span>Letreiro</span></strong><small>{userAjustes ? "Meu espaço" : "Administração"}</small></div></div>
+        <button className="icon-button" onClick={() => setMenuOpen((v) => !v)} aria-label={menuOpen ? "Fechar menu" : "Abrir menu"} aria-expanded={menuOpen} aria-controls="app-navigation">
           {menuOpen ? <X size={18} /> : <Menu size={18} />}
         </button>
       </header>
 
       <aside
-        className={`${menuOpen ? "block" : "hidden"} min-w-0 border-b border-slate-800 bg-slate-950/80 p-4 lg:block lg:min-h-0 lg:overflow-auto lg:border-b-0 lg:border-r`}
+        id="app-navigation"
+        className={`app-sidebar ${menuOpen ? "is-open" : ""}`}
       >
-        <div className="mb-8 hidden lg:block">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-400">SAGRA Letreiro</p>
-          <h1 className="mt-2 text-2xl font-extrabold tracking-tight">{userAjustes ? "Ajustes" : "Administração"}</h1>
-          <p className="mt-2 text-sm text-slate-400">{status}</p>
-        </div>
-        <nav className="grid gap-2">
+        <div className="brand sidebar-brand"><span className="brand-mark"><Radio size={22} /></span><div><strong>SAGRA <span>Letreiro</span></strong><small>Central de {userAjustes ? "ajustes" : "administração"}</small></div></div>
+        <p className="eyebrow sidebar-label">{userAjustes ? "Personalização" : "Gerenciamento"}</p>
+        <nav className="sidebar-nav" aria-label="Navegação principal">
           {(userAjustes ? NAV.filter((item) => item.id === "settings") : NAV).map((item) => {
             const Icon = item.icon;
             const active = view === item.id;
@@ -1678,97 +1750,93 @@ export default function App() {
                   setView(item.id);
                   setMenuOpen(false);
                 }}
-                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${
-                  active ? "bg-sky-400 text-slate-950" : "text-slate-300 hover:bg-slate-800"
-                }`}
+                aria-current={active ? "page" : undefined}
+                className={`sidebar-link ${active ? "is-active" : ""}`}
               >
                 <Icon size={18} />
                 {item.label}
+                {item.id === "computers" ? <span className="nav-count">{settingsInstances.length}</span> : null}
               </button>
             );
           })}
         </nav>
+        <div className="sidebar-bottom">
+        <div className="sidebar-context"><span className="context-icon"><Monitor size={18} /></span><div><strong>{userAjustes ? "Este computador" : "Gestão centralizada"}</strong><span>{userAjustes ? localCfg.board?.sector || "Ajustes locais" : `${onlineCount} ${onlineCount === 1 ? "estação" : "estações"} online`}</span></div></div>
         <button
           onClick={() => {
-            if (userAjustes) void api.localConfig().then(setLocalCfg).catch((ex) => setError(errText(ex)));
+            if (userAjustes) void api.localConfig().then(cfg => { const next = withNotifyMigration(withFreshPresetVisual(cfg, painelPresets)); setLocalCfg(next); setSavedConfig(JSON.stringify(next)); }).catch((ex) => setError(errText(ex)));
             else void loadAll();
           }}
-          className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-800 px-3 py-2 text-sm text-slate-200"
+          disabled={loading || saving}
+          className="refresh-button"
         >
           <RefreshCw size={16} /> Atualizar
         </button>
+        <p className="sidebar-version">SAGRA Letreiro <span>v{__APP_VERSION__}</span></p>
+        </div>
       </aside>
 
-      <main className={`min-w-0 p-3 sm:p-4 lg:p-5 ${fillView ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "min-h-0 flex-1 overflow-auto"}`}>
+      <main id="main-content" tabIndex={-1} className={`app-main ${fillView && !userAjustes ? "app-main--workspace" : ""}`}>
+        <div className="page-heading">
+          <div className="min-w-0"><p className="eyebrow">{userAjustes ? "Meu letreiro" : "Administração"}<span className="breadcrumb-separator">/</span>{view === "settings" ? "Preferências" : NAV.find(item => item.id === view)?.label}</p><h1>{pageInfo.title}</h1><p className="page-description">{pageInfo.description}</p></div>
+          {view === "settings" ? <span className="scope-badge"><Monitor size={14} /> Este computador</span> : <span className="scope-badge"><span className="status-dot online" />{onlineCount} online</span>}
+        </div>
+        <div role="status" aria-live="polite" className="feedback-status"><Check size={14} /><span>{status}</span></div>
         {error ? (
-          <div className="mb-4 shrink-0 rounded-xl border border-rose-500/30 bg-rose-950/40 px-4 py-3 text-sm text-rose-100">{error}</div>
+          <div role="alert" className="feedback-error"><CircleAlert size={18} /><span>{error}</span><button className="icon-button" aria-label="Fechar aviso" onClick={() => setError("")}><X size={16} /></button></div>
         ) : null}
+        {loading ? <div className="loading-state"><LoaderCircle className="animate-spin" size={24} /><strong>Carregando seu letreiro</strong><span>Preparando configurações e informações…</span></div> : <>
 
         {view === "computers" ? (
-          <section className="grid min-h-0 flex-1 grid-rows-[minmax(14rem,38%)_minmax(0,1fr)] gap-3 sm:gap-4 lg:grid-rows-none lg:grid-cols-[minmax(18rem,26rem)_minmax(0,1fr)]">
+          <>
+          <div className="overview-metrics">
+            <div><span className="metric-icon"><Monitor size={18} /></span><div><span>Estações registradas</span><strong>{settingsInstances.length}</strong></div></div>
+            <div><span className="metric-icon metric-icon--green"><Radio size={18} /></span><div><span>Online agora</span><strong>{onlineCount}<small>disponíveis</small></strong></div></div>
+            <div><span className="metric-icon"><Unplug size={18} /></span><div><span>Offline</span><strong>{settingsInstances.length - onlineCount}</strong></div></div>
+            <div><span className="metric-icon"><Check size={18} /></span><div><span>Selecionadas</span><strong>{selectedRows.length}<small>para ações</small></strong></div></div>
+          </div>
+          <section className="computers-workspace">
             <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 shadow-card">
               <div className="shrink-0 border-b border-slate-800 px-3 py-3 sm:px-4">
-                <h2 className="text-xl font-bold">Computadores</h2>
-                <p className="mt-1 text-xs text-slate-400">
-                  Clique seleciona um. Ctrl+clique marca vários. Duplo clique edita filtros.
-                  {filteringList ? " Sem seleção, Nome e Setor filtram a lista." : ""}
-                </p>
+                <div className="flex items-center justify-between gap-2"><h2 className="font-semibold">Estações de trabalho</h2><span className="count-badge">{visibleInstances.length}</span></div>
+                <div className="search-field"><Search size={16} /><input aria-label="Buscar computadores" placeholder="Buscar nome, setor ou computador…" value={instanceSearch} onChange={e => setInstanceSearch(e.target.value)} /></div>
+                <div className="instance-list-toolbar"><div className="status-filters">{[["all", "Todos"], ["online", "Online"], ["offline", "Offline"]].map(([value, label]) => <button type="button" key={value} aria-pressed={instanceStatus === value} className={instanceStatus === value ? "is-active" : ""} onClick={() => setInstanceStatus(value)}>{label}</button>)}</div>{selected.size ? <button type="button" className="text-xs text-sky-300" onClick={() => { setSelected(new Set()); syncProfileFromSelection(new Set()); }}>Limpar seleção</button> : null}</div>
               </div>
               <div className="min-h-0 flex-1 overflow-auto">
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-slate-900 text-left text-slate-400">
-                    <tr>
-                      <th className="w-6 px-2 py-3 font-medium" aria-label="Estado" />
-                      {["Nome", "Setor", "Computador", "Usuário"].map((h) => (
-                        <th key={h} className="px-2 py-3 font-medium">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
+                <div className="instance-list">
                     {visibleInstances.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="px-3 py-8 text-center text-sm text-slate-400">
-                          {instances.length === 0 ? "Nenhum usuário." : "Nenhum usuário corresponde ao filtro."}
-                        </td>
-                      </tr>
+                      <div className="empty-state"><Monitor size={28} /><strong>{instances.length === 0 ? "Nenhuma estação conectada" : "Nenhum resultado"}</strong><p>{instances.length === 0 ? "Os computadores aparecerão aqui quando o letreiro se conectar." : "Tente outro nome, setor ou estado de conexão."}</p></div>
                     ) : null}
                     {visibleInstances.map((row) => {
                       const on = selected.has(keyOf(row));
                       return (
-                        <tr
+                        <div
                           key={keyOf(row)}
-                          className={`cursor-pointer border-t border-slate-800 ${on ? "bg-sky-400/20" : "hover:bg-slate-800/60"}`}
-                          title={row.online ? "Online" : "Offline"}
-                          aria-selected={on}
+                          className={`instance-card ${on ? "is-selected" : ""}`}
                           onClick={(e) => onRowClick(row, e)}
                           onDoubleClick={() => void openClientConfig(row)}
                         >
-                          <td className="px-2 py-3">
-                            <span
-                              className={`mx-auto block h-2 w-2 rounded-full ${row.online ? "bg-emerald-400" : "bg-rose-500"}`}
-                              aria-label={row.online ? "Online" : "Offline"}
-                            />
-                          </td>
-                          <td className="max-w-[8rem] truncate px-2 py-3 font-medium" title={row.nome || undefined}>{row.nome || "—"}</td>
-                          <td className="max-w-[7rem] truncate px-2 py-3" title={row.setor || undefined}>{row.setor || "—"}</td>
-                          <td className="max-w-[8rem] truncate px-2 py-3" title={row.hostName}>{row.hostName}</td>
-                          <td className="max-w-[8rem] truncate px-2 py-3" title={row.windowsUser}>{row.windowsUser}</td>
-                        </tr>
+                          <input type="checkbox" checked={on} aria-label={`Selecionar ${row.nome || row.windowsUser} em ${row.hostName}`} onClick={e => e.stopPropagation()} onChange={() => selectRow(row, true)} />
+                          <div className="instance-card-content"><div className="instance-card-title"><strong>{row.nome || row.windowsUser}</strong><span className={`connection-badge ${row.online ? "is-online" : ""}`}><i />{row.online ? "Online" : "Offline"}</span></div><span className="instance-user">{row.windowsUser}</span><div className="instance-meta"><span><Monitor size={12} />{row.hostName}</span><span>{row.setor || "Sem setor"}</span></div></div>
+                          <button type="button" className="icon-button" aria-label={`Editar filtros de ${row.nome || row.windowsUser}`} onClick={e => { e.stopPropagation(); void openClientConfig(row); }}><Settings2 size={16} /></button>
+                        </div>
                       );
                     })}
-                  </tbody>
-                </table>
+                </div>
               </div>
             </div>
 
-            <div className="flex min-h-0 min-w-0 flex-col gap-3">
+            <div className="computer-detail">
+              <div className="selection-panel">
+              <div className="selection-heading"><div><h2>{selectedRows.length ? `${selectedRows.length} ${selectedRows.length === 1 ? "estação selecionada" : "estações selecionadas"}` : "Selecione uma estação"}</h2><p>{selectedRows.length ? "Aplique um perfil ou use o terminal para enviar comandos." : "Use as caixas de seleção da lista para escolher os destinos."}</p></div><ArrowRight size={18} /></div>
               <div className="grid shrink-0 gap-2 sm:grid-cols-2">
                 <label className="min-w-0 text-sm text-slate-400">
                   Nome
                   <input
                     className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
                     value={profile.nome}
-                    placeholder={filteringList ? "Filtrar por nome" : undefined}
+                    disabled={selectedRows.length !== 1}
+                    placeholder="Nome de exibição"
                     onChange={(e) => setProfile((p) => ({ ...p, nome: e.target.value }))}
                   />
                 </label>
@@ -1777,7 +1845,8 @@ export default function App() {
                   <input
                     className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
                     value={profile.setor}
-                    placeholder={filteringList ? "Filtrar por setor" : undefined}
+                    disabled={selectedRows.length !== 1}
+                    placeholder="Setor de trabalho"
                     onChange={(e) => setProfile((p) => ({ ...p, setor: e.target.value }))}
                   />
                 </label>
@@ -1799,7 +1868,7 @@ export default function App() {
                 <button
                   type="button"
                   className="whitespace-nowrap rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-60"
-                  disabled={clientBusy}
+                  disabled={clientBusy || !selectedRows.length || !applyProfileId}
                   onClick={() => void applyConfigProfileToSelected().catch((ex) => setError(errText(ex)))}
                 >
                   {clientBusy ? "Aplicando…" : "Aplicar aos selecionados"}
@@ -1807,10 +1876,12 @@ export default function App() {
                 <button
                   type="button"
                   className="whitespace-nowrap rounded-lg bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-100"
-                  onClick={() => void saveProfile()}
+                  disabled={selectedRows.length !== 1}
+                  onClick={() => void saveProfile().catch(ex => setError(errText(ex)))}
                 >
                   Salvar nome/setor
                 </button>
+              </div>
               </div>
             <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-visible rounded-2xl border border-slate-800 bg-slate-950 shadow-card">
               <div className="relative z-20 flex shrink-0 flex-col gap-3 border-b border-slate-800 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-4">
@@ -1818,7 +1889,7 @@ export default function App() {
                   <TerminalSquare size={16} className="shrink-0 text-sky-400" />
                   <div className="min-w-0">
                     <h2 className="font-semibold">Terminal remoto</h2>
-                    <p className="text-xs text-slate-400">{selectedRows.length} selecionado(s)</p>
+                    <p className="text-xs text-slate-400">{selectedRows.length} {selectedRows.length === 1 ? "destino selecionado" : "destinos selecionados"}</p>
                   </div>
                 </div>
                 <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -1926,7 +1997,8 @@ export default function App() {
                           setPrompt(typed.current[typedIndex.current] ?? "");
                         }
                       }}
-                      className="flex-1 bg-transparent font-mono text-sm outline-none"
+                            aria-label="Comando do terminal"
+                            className="flex-1 bg-transparent font-mono text-sm outline-none"
                       placeholder={libraryCmd ? `Enviar: ${libraryCmd.name}` : "ipconfig /all"}
                     />
                   )}
@@ -1943,10 +2015,11 @@ export default function App() {
             </section>
             </div>
           </section>
+          </>
         ) : null}
 
         {view === "library" ? (
-          <section className="grid min-h-0 flex-1 grid-rows-[minmax(11rem,28vh)_minmax(0,1fr)] gap-3 sm:gap-4 xl:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)]">
+          <section className="library-workspace">
             <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
               <div className="shrink-0 space-y-3 p-3 sm:p-4">
                 <input className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="Buscar scripts" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -2077,7 +2150,7 @@ export default function App() {
         ) : null}
 
         {view === "history" ? (
-          <section className="grid min-h-0 flex-1 grid-rows-[minmax(10rem,28vh)_minmax(0,1fr)] gap-3 sm:gap-4 lg:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+          <section className="history-workspace">
             <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
               <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-800 px-3 py-3">
                 <h2 className="font-semibold">Histórico</h2>
@@ -2115,12 +2188,21 @@ export default function App() {
         ) : null}
 
         {view === "settings" ? (
-          <section className="mx-auto flex w-full max-w-6xl min-w-0 flex-col gap-4 pb-8">
-            <div className={`grid min-w-0 gap-4 ${!userAjustes ? "xl:grid-cols-2" : ""}`}>
-              {!userAjustes ? (
-                <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:p-5">
-                  <h2 className="text-xl font-bold">Conexão</h2>
+          <section className="settings-page" aria-label="Configurações do letreiro">
+            <SettingsSummary cfg={localCfg} profiles={configProfiles.length} />
+            <nav className="settings-nav" aria-label="Categorias de ajustes">
+              {SETTINGS_NAV.filter(item => !userAjustes || item.id !== "connection").map(item => {
+                const Icon = item.icon;
+                return <button type="button" key={item.id} aria-pressed={settingsSection === item.id} className={settingsSection === item.id ? "is-active" : ""} onClick={() => setSettingsSection(item.id)}><Icon size={16} />{item.label}</button>;
+              })}
+            </nav>
+            <fieldset disabled={saving || !savedConfig} className="min-w-0 space-y-5">
+            <div className={settingsSection === "bar" || settingsSection === "notifications" ? "settings-layout" : "min-w-0"}>
+              {!userAjustes && settingsSection === "connection" ? (
+                <div className="settings-card">
+                  <div className="section-heading"><span className="section-icon"><Unplug size={20} /></span><div><h2>Conexão e acesso</h2>
                   <p className="mt-1 text-sm text-slate-400">Conta e API deste computador.</p>
+                  </div></div>
                   <div className="mt-4 grid gap-3">
                     <Field label="API" value={localCfg.apiBaseUrl ?? ""} onChange={(v) => patchLocal({ ...localCfg, apiBaseUrl: v })} />
                     <div className="grid gap-3 sm:grid-cols-2">
@@ -2135,10 +2217,12 @@ export default function App() {
                   </div>
                 </div>
               ) : null}
-              <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:p-5">
-                <h2 className="text-xl font-bold">Letreiro</h2>
-                <p className="mt-1 text-sm text-slate-400">Aparência, tamanho da barra e filtro OS/SP.</p>
+              {settingsSection === "bar" || settingsSection === "notifications" ? <>
+              <div className="settings-card">
+                <div className="section-heading"><span className="section-icon">{settingsSection === "bar" ? <SlidersHorizontal size={20} /> : <Bell size={20} />}</span><div><h2>{settingsSection === "bar" ? "Barra do letreiro" : "Notificações"}</h2>
+                <p>{settingsSection === "bar" ? "Defina como as informações aparecem na sua área de trabalho." : "Ajuste os cards de aviso, as animações e os sons."}</p></div></div>
                 <LetreiroDisplayFields
+                  section={settingsSection}
                   cfg={localCfg}
                   onChange={patchLocal}
                   setores={setores}
@@ -2152,10 +2236,11 @@ export default function App() {
                     .catch((ex) => setError(errText(ex)))}
                 />
               </div>
+              <ConfigPreview cfg={localCfg} notifications={settingsSection === "notifications"} />
+              </> : null}
             </div>
 
-            <div className={`grid min-w-0 gap-4 ${!userAjustes ? "2xl:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)]" : ""}`}>
-              <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:p-5">
+            {settingsSection === "filters" ? <div className="settings-card">
                 <FilterListFields
                   cfg={localCfg}
                   onChange={patchLocal}
@@ -2172,28 +2257,26 @@ export default function App() {
                     .catch((ex) => setError(errText(ex)))}
                   actions={
                     <>
-                      <button type="button" className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void restoreGroups()}>Restaurar padrão</button>
-                      <button type="button" className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void saveLocal().catch((ex) => setError(errText(ex)))}>Salvar</button>
+                      <button type="button" className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void restoreGroups().catch((ex) => setError(errText(ex)))}>Restaurar padrão</button>
                     </>
                   }
                 />
-              </div>
+              </div> : null}
 
-              {!userAjustes ? (
+              {!userAjustes && settingsSection === "connection" ? (
                 <div className="min-w-0 space-y-4">
-                  <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:p-5">
+                  <div className="settings-card">
                     <h2 className="text-lg font-bold">Intervalo de comandos</h2>
-                    <p className="mt-1 text-sm text-slate-400">Todos os letreiros consultam jobs neste intervalo.</p>
+                    <p className="mt-1 text-sm text-slate-400">Frequência de consulta de comandos em todos os computadores.</p>
                     <div className="mt-3 flex min-w-0 flex-wrap gap-2">
-                      <input type="number" min={1} max={120} className="w-24 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2" value={pollSec} onChange={(e) => setPollSec(Number(e.target.value))} />
-                      <button className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void api.saveSettings(pollSec).then(() => setStatus(`Poll = ${pollSec}s`))}>Aplicar</button>
+                      <label className="flex items-center gap-3 text-sm"><input aria-label="Intervalo de comandos em segundos" type="number" min={1} max={120} className="w-24 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2" value={pollSec} onChange={(e) => setPollSec(Number(e.target.value))} />segundos</label>
+                      <button disabled={!Number.isInteger(pollSec) || pollSec < 1 || pollSec > 120} className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50" onClick={() => void api.saveSettings(pollSec).then(() => setStatus(`Intervalo de comandos atualizado para ${pollSec} segundos.`)).catch((ex) => setError(errText(ex)))}>Aplicar intervalo</button>
                     </div>
                   </div>
                 </div>
               ) : null}
-            </div>
 
-            {!userAjustes ? (
+            {!userAjustes && settingsSection === "profiles" ? (
               <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 shadow-card">
                 <div className="border-b border-slate-800 px-4 py-4 sm:px-5">
                   <h2 className="text-xl font-bold">Computadores e perfis</h2>
@@ -2202,7 +2285,7 @@ export default function App() {
                   </p>
                 </div>
                 <div className="max-h-[min(28rem,55vh)] overflow-auto">
-                  <table className="w-full min-w-[42rem] text-sm">
+                  <table className="profiles-table w-full min-w-[42rem] text-sm">
                     <thead className="sticky top-0 bg-slate-900 text-left text-slate-400">
                       <tr>
                         <th className="w-6 px-3 py-3 font-medium" aria-label="Estado" />
@@ -2224,23 +2307,25 @@ export default function App() {
                         const assignedId = assignmentByKey.get(keyOf(row))?.profileId ?? 0;
                         return (
                           <tr key={keyOf(row)} className="border-t border-slate-800 hover:bg-slate-800/40">
-                            <td className="px-3 py-3">
+                            <td data-label="Conexão" className="px-3 py-3">
                               <span
                                 className={`mx-auto block h-2 w-2 rounded-full ${row.online ? "bg-emerald-400" : "bg-rose-500"}`}
                                 title={row.online ? "Online" : "Offline"}
                                 aria-label={row.online ? "Online" : "Offline"}
                               />
+                              <span className="table-status-label">{row.online ? "Online" : "Offline"}</span>
                             </td>
-                            <td className="max-w-[8rem] truncate px-3 py-3 font-medium" title={row.nome || undefined}>{row.nome || "—"}</td>
-                            <td className="max-w-[7rem] truncate px-3 py-3" title={row.setor || undefined}>{row.setor || "—"}</td>
-                            <td className="max-w-[8rem] truncate px-3 py-3" title={row.hostName}>{row.hostName}</td>
-                            <td className="max-w-[8rem] truncate px-3 py-3" title={row.windowsUser}>{row.windowsUser}</td>
-                            <td className="min-w-[12rem] px-3 py-2">
+                            <td data-label="Nome" className="max-w-[8rem] truncate px-3 py-3 font-medium" title={row.nome || undefined}>{row.nome || "—"}</td>
+                            <td data-label="Setor" className="max-w-[7rem] truncate px-3 py-3" title={row.setor || undefined}>{row.setor || "—"}</td>
+                            <td data-label="Computador" className="max-w-[8rem] truncate px-3 py-3" title={row.hostName}>{row.hostName}</td>
+                            <td data-label="Usuário" className="max-w-[8rem] truncate px-3 py-3" title={row.windowsUser}>{row.windowsUser}</td>
+                            <td data-label="Perfil" className="min-w-[12rem] px-3 py-2">
                               <select
                                 className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-slate-100 disabled:opacity-60"
                                 value={assignedId}
                                 disabled={busy || clientBusy || configProfiles.length === 0}
                                 title={configProfiles.length === 0 ? "Cadastre um perfil abaixo" : undefined}
+                                aria-label={`Perfil de ${row.nome || row.windowsUser} em ${row.hostName}`}
                                 onChange={(e) => void assignProfileFromSettings(row, Number(e.target.value))}
                               >
                                 <option value={0}>{configProfiles.length ? "Sem perfil" : "Sem perfis salvos"}</option>
@@ -2258,10 +2343,10 @@ export default function App() {
               </div>
             ) : null}
 
-            <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:p-5">
+            {settingsSection === "profiles" ? <div className="settings-card">
               <h2 className="text-xl font-bold">Perfis de configuração</h2>
               <p className="mt-1 text-sm text-slate-400">
-                Salva letreiro e filtros desta página (sem conta ou API). Na administração, o perfil pode ser aplicado na lista acima ou aos usuários selecionados em Computadores.
+                Salve a aparência e os filtros atuais para reutilizar depois.{!userAjustes ? " Aplique um perfil aos computadores da lista acima ou aos selecionados na administração." : " Carregue um perfil para preencher os ajustes deste computador."}
               </p>
               <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,16rem)]">
                 <label className="min-w-0 text-sm text-slate-400">
@@ -2312,9 +2397,15 @@ export default function App() {
                   Excluir
                 </button>
               </div>
+            </div> : null}
+            </fieldset>
+            <div className="settings-savebar">
+              <div><span className={`save-indicator ${dirty || !savedConfig ? "is-dirty" : ""}`}>{dirty || !savedConfig ? <CircleAlert size={17} /> : <Check size={17} />}</span><div><strong>{!savedConfig ? "Configuração não carregada" : dirty ? "Alterações pendentes" : "Configuração sincronizada"}</strong><p>{!savedConfig ? "Atualize a página para tentar novamente." : dirty ? "Salve para aplicar os ajustes neste computador." : "Personalize seu letreiro em cada categoria acima."}</p></div></div>
+              <button type="button" className="primary-button" disabled={saving || !savedConfig} onClick={() => void saveLocal().catch((ex) => setError(errText(ex)))}>{saving ? <LoaderCircle size={16} className="animate-spin" /> : <Save size={16} />}{saving ? "Salvando…" : "Salvar alterações"}</button>
             </div>
           </section>
         ) : null}
+        </>}
       </main>
 
       {clientEdit ? (
@@ -2327,6 +2418,7 @@ export default function App() {
         >
           <div
             role="dialog"
+            ref={clientDialogRef}
             aria-modal="true"
             aria-labelledby="client-config-title"
             className="my-auto flex max-h-[min(90vh,100dvh-2rem)] w-full max-w-5xl min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"

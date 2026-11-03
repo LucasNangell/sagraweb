@@ -16,6 +16,7 @@ Sistema corporativo de Ordens de Serviço (OS) para Câmara/SEFOC. Monorepo híb
 - **API:** `app/backend/` — FastAPI; entry `routers.api:app`.
 - **Serviços auxiliares:** `app/services/` (sync, monitor).
 - **Worker Windows:** `worker/papelaria_worker/` (CorelDRAW COM).
+- **Letreiro independente:** `widget_letreiro/` — WPF .NET 10 e painel React em `admin-web/`, fora do workspace pnpm; ver `auto-letreiro.mdc`.
 - **Build estático:** `apps/web/dist/`; empacotado em `deploy/release/app/frontend/`. Não editar builds manualmente.
 - **Config runtime:** `config/` — `.env`, `config.json` (gitignored; usar templates).
 
@@ -26,6 +27,7 @@ Sistema corporativo de Ordens de Serviço (OS) para Câmara/SEFOC. Monorepo híb
 ## Comandos confirmados (raiz)
 
 - `pnpm install` — deps Node do workspace.
+- `postinstall` materializa `@sagra/*` via `scripts/materialize-workspace-packages.mjs`; `.npmrc` usa linker hoisted no Windows.
 - `pnpm dev` — Vite em `apps/web` (:5173).
 - `iniciar-servidor.bat` — API (:8001) + Vite; modos `restart`, `api-only`, `unificado`.
 - `pnpm test` — pytest + vitest.

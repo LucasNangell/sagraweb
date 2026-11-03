@@ -2,6 +2,9 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Connect, PreviewServer, ViteDevServer } from "vite";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { readFileSync } from "node:fs";
+
+const appVersion = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).version as string;
 
 const MOCK_BOARD = {
   sector: "SEFOC",
@@ -66,12 +69,51 @@ function localPreviewMock(): Connect.NextHandleFunction {
     "PC-DEV\nusr_sefoc": { ...config },
   };
   const configProfiles: { id: number; name: string; payload: unknown }[] = [];
+  const profileAssignments: { hostName: string; windowsUser: string; profileId: number; profileName: string }[] = [];
   let nextProfileId = 1;
   let jobId = 1;
   return (req: IncomingMessage, res: ServerResponse, next: Connect.NextFunction) => {
     const url = (req.url ?? "").split("?")[0];
     if (url === "/local/me") return sendJson(res, { isAdmin: process.env.LETREIRO_MOCK_ADMIN === "1" });
-    if (url === "/local/config" || url === "/local/restore-board") return sendJson(res, config);
+    if (url === "/local/config" && req.method === "PUT") {
+      const chunks: Buffer[] = [];
+      req.on("data", chunk => chunks.push(Buffer.from(chunk)));
+      req.on("end", () => {
+        try {
+          Object.assign(config, JSON.parse(Buffer.concat(chunks).toString("utf8")));
+          sendJson(res, config);
+        } catch {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ detail: "Configuração inválida" }));
+        }
+      });
+      return;
+    }
+    if (url === "/local/restore-board") {
+      config.board = structuredClone(MOCK_BOARD);
+      return sendJson(res, config);
+    }
+    if (url === "/local/config") return sendJson(res, config);
+    if (url === "/api/letreiro/sounds") return sendJson(res, { sounds: [] });
+    if (url === "/local/config-profile-assignments") {
+      if (req.method !== "PUT") return sendJson(res, { assignments: profileAssignments });
+      const chunks: Buffer[] = [];
+      req.on("data", chunk => chunks.push(Buffer.from(chunk)));
+      req.on("end", () => {
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { hostName: string; windowsUser: string; profileId: number };
+          const index = profileAssignments.findIndex(row => row.hostName === body.hostName && row.windowsUser === body.windowsUser);
+          if (index >= 0) profileAssignments.splice(index, 1);
+          const assignment = { ...body, profileName: configProfiles.find(row => row.id === body.profileId)?.name ?? "" };
+          if (body.profileId) profileAssignments.push(assignment);
+          sendJson(res, assignment);
+        } catch {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ detail: "Atribuição de perfil inválida" }));
+        }
+      });
+      return;
+    }
     if (url === "/local/preview-notification") return sendJson(res, { status: "ok" });
     if (url === "/local/config-profiles") {
       if (req.method === "POST") {
@@ -267,6 +309,7 @@ function attachMock(server: ViteDevServer | PreviewServer) {
 }
 
 export default defineConfig({
+  define: { __APP_VERSION__: JSON.stringify(appVersion) },
   plugins: [
     react(),
     {

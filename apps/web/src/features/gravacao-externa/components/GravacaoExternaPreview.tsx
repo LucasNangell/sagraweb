@@ -8,6 +8,7 @@ import {
   gravacaoExternaPreviewUrl,
   type GravacaoExternaArquivo,
 } from "@/api/gravacaoExterna";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   formatPlatePreviewBadge,
   groupArquivosByCaderno,
@@ -21,6 +22,13 @@ import {
   type PlateChapaGroup,
   type PlateColor,
 } from "@/features/gravacao-externa/utils/plateFilenameUtils";
+
+const SEM_MAQUINA_KEY = "__sem_maquina__";
+
+function maquinaGroupKey(maquina: string | null | undefined): string {
+  const trimmed = String(maquina || "").trim();
+  return trimmed || SEM_MAQUINA_KEY;
+}
 
 export interface GravacaoPreviewArquivo {
   id: number;
@@ -762,9 +770,9 @@ export function GravacaoExternaArquivosPanel({
   selection: PreviewSelection | null;
   onSelect: (arq: GravacaoPreviewArquivo) => void;
   onSelectComposite: (chapa: PlateChapaGroup<GravacaoPreviewArquivo>) => void;
-  /** When true, files are listed under machine sections with visual separation. */
+  /** When true, files can be filtered by machine via segmented control. */
   groupByMachine?: boolean;
-  /** Optional chapa quantities keyed by machine name (shown in section headers). */
+  /** Optional chapa quantities keyed by machine name (shown next to the active filter). */
   chapasPorMaquina?: { maquina: string; quantidade: number }[];
   canDownload?: boolean;
   getDownloadUrl?: (ano: number, nrOs: number, arquivoId: number) => string;
@@ -802,18 +810,67 @@ export function GravacaoExternaArquivosPanel({
     });
   }, [arquivos, groupByMachine, chapasQtyByMachine]);
 
-  const allCadernos = useMemo(() => {
-    const source = machineGroups
-      ? machineGroups.flatMap((g) => g.arquivos)
-      : arquivos;
-    return groupArquivosByCaderno(source);
-  }, [arquivos, machineGroups]);
-
-  const allEspelhos = allCadernos.espelhos;
+  const machineFilterOptions = useMemo(() => {
+    if (!machineGroups) return [];
+    return machineGroups.map((group) => ({
+      value: maquinaGroupKey(group.maquina),
+      label: group.maquina ? group.label : "Espelhos",
+    }));
+  }, [machineGroups]);
 
   const selectedId = selection?.kind === "file" ? selection.arquivo.id : null;
   const selectedCompositeGroupKey =
     selection?.kind === "composite" ? selection.groupKey : null;
+
+  const selectionMachineKey = useMemo(() => {
+    if (!machineGroups || selection?.kind !== "file") return null;
+    const selectedArquivo = machineGroups
+      .flatMap((g) => g.arquivos)
+      .find((arq) => arq.id === selection.arquivo.id);
+    if (!selectedArquivo) return null;
+    return maquinaGroupKey(selectedArquivo.maquina);
+  }, [machineGroups, selection]);
+
+  const [selectedMaquinaKey, setSelectedMaquinaKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!machineGroups || machineGroups.length === 0) {
+      setSelectedMaquinaKey(null);
+      return;
+    }
+    const available = new Set(machineGroups.map((g) => maquinaGroupKey(g.maquina)));
+    setSelectedMaquinaKey((prev) => {
+      if (prev && available.has(prev)) {
+        return prev;
+      }
+      if (selectionMachineKey && available.has(selectionMachineKey)) {
+        return selectionMachineKey;
+      }
+      return maquinaGroupKey(machineGroups[0]?.maquina);
+    });
+  }, [machineGroups, selectionMachineKey]);
+
+  useEffect(() => {
+    if (selectedId == null || !selectionMachineKey) return;
+    setSelectedMaquinaKey(selectionMachineKey);
+  }, [selectedId, selectionMachineKey]);
+
+  const activeMachineGroup = useMemo(() => {
+    if (!machineGroups || machineGroups.length === 0) return null;
+    const key = selectedMaquinaKey ?? maquinaGroupKey(machineGroups[0]?.maquina);
+    return (
+      machineGroups.find((g) => maquinaGroupKey(g.maquina) === key) ?? machineGroups[0]
+    );
+  }, [machineGroups, selectedMaquinaKey]);
+
+  const filteredArquivos = activeMachineGroup?.arquivos ?? arquivos;
+
+  const allCadernos = useMemo(
+    () => groupArquivosByCaderno(filteredArquivos),
+    [filteredArquivos],
+  );
+
+  const allEspelhos = allCadernos.espelhos;
 
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set());
   const [espelhosExpanded, setEspelhosExpanded] = useState(true);
@@ -892,7 +949,7 @@ export function GravacaoExternaArquivosPanel({
     getDownloadUrl: canDownload ? getDownloadUrl : undefined,
   };
 
-  if (!machineGroups) {
+  if (!machineGroups || !activeMachineGroup) {
     return (
       <div className="flex flex-col gap-2 overflow-y-auto">
         <ArquivosChapaList {...listProps} arquivos={arquivos} />
@@ -900,35 +957,37 @@ export function GravacaoExternaArquivosPanel({
     );
   }
 
+  const showMachineFilter = machineFilterOptions.length > 1;
+  const activeKey = selectedMaquinaKey ?? maquinaGroupKey(activeMachineGroup.maquina);
+  const registeredQty = activeMachineGroup.maquina
+    ? chapasQtyByMachine.get(activeMachineGroup.maquina.toLowerCase())
+    : undefined;
+  const filesQty = activeMachineGroup.arquivos.filter((arq) => !isPdfFilename(arq.nome)).length;
+  const qty = registeredQty ?? (activeMachineGroup.maquina ? filesQty : undefined);
+
   return (
-    <div className="flex flex-col gap-4 overflow-y-auto">
-      {machineGroups.map((group) => {
-        const registeredQty = group.maquina
-          ? chapasQtyByMachine.get(group.maquina.toLowerCase())
-          : undefined;
-        const filesQty = group.arquivos.filter((arq) => !isPdfFilename(arq.nome)).length;
-        const qty = registeredQty ?? (group.maquina ? filesQty : undefined);
-        return (
-          <section
-            key={group.maquina || "__sem_maquina__"}
-            className="rounded-lg border border-neutral-300 bg-neutral-50/80"
-          >
-            <header className="flex items-center justify-between gap-2 border-b border-neutral-200 bg-neutral-100 px-3 py-2">
-              <h4 className="min-w-0 truncate text-sm font-semibold text-neutral-900">
-                {group.maquina ? group.label : "Espelhos de chapa"}
-              </h4>
-              {qty != null && qty > 0 ? (
-                <span className="shrink-0 text-[10px] font-medium text-neutral-500">
-                  {qty} chapa{qty !== 1 ? "s" : ""}
-                </span>
-              ) : null}
-            </header>
-            <div className="p-2">
-              <ArquivosChapaList {...listProps} arquivos={group.arquivos} />
-            </div>
-          </section>
-        );
-      })}
+    <div className="flex flex-col gap-2 overflow-y-auto">
+      {showMachineFilter ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <SegmentedControl
+            ariaLabel="Filtrar arquivos por máquina"
+            options={machineFilterOptions}
+            value={activeKey}
+            onChange={setSelectedMaquinaKey}
+            size="md"
+            className="max-w-full flex-wrap"
+          />
+          {qty != null && qty > 0 ? (
+            <span
+              data-testid="machine-filter-chapas-count"
+              className="shrink-0 text-[10px] font-medium text-neutral-500"
+            >
+              {qty} chapa{qty !== 1 ? "s" : ""}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      <ArquivosChapaList {...listProps} arquivos={activeMachineGroup.arquivos} />
     </div>
   );
 }

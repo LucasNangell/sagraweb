@@ -181,7 +181,7 @@ describe("composite preview", () => {
     expect(screen.queryByText("Outros")).not.toBeInTheDocument();
   });
 
-  it("groups machines by chapas qty ascending when enabled", () => {
+  it("shows machine filter options ordered by chapas qty ascending", () => {
     const arquivos = [
       { id: 1, nome: `${GROUP_KEY} (C).tif`, maquina: "M1" },
       { id: 2, nome: `${GROUP_KEY} (M).tif`, maquina: "M1" },
@@ -192,7 +192,7 @@ describe("composite preview", () => {
       },
       { id: 4, nome: "espelho.pdf", maquina: null },
     ];
-    const { container } = render(
+    render(
       <GravacaoExternaArquivosPanel
         ano={2024}
         nrOs={1857}
@@ -207,19 +207,72 @@ describe("composite preview", () => {
         onSelectComposite={() => undefined}
       />,
     );
-    const headings = within(container)
-      .getAllByRole("heading")
-      .map((h) => h.textContent);
-    expect(headings.indexOf("M2")).toBeLessThan(headings.indexOf("M1"));
-    expect(headings[0]).toMatch(/Espelhos de chapa/i);
-    const headers = container.querySelectorAll("section > header");
-    expect(headers[1]?.textContent).toMatch(/M2/);
-    expect(headers[1]?.textContent).toMatch(/1 chapa/);
-    expect(headers[2]?.textContent).toMatch(/M1/);
-    expect(headers[2]?.textContent).toMatch(/4 chapas/);
+    const filter = screen.getByRole("group", { name: /Filtrar arquivos por máquina/i });
+    const buttons = within(filter).getAllByRole("button");
+    expect(buttons.map((b) => b.textContent)).toEqual(["Espelhos", "M2", "M1"]);
+    fireEvent.click(within(filter).getByRole("button", { name: "M2" }));
+    expect(screen.getByTestId("machine-filter-chapas-count")).toHaveTextContent("1 chapa");
+    fireEvent.click(within(filter).getByRole("button", { name: "M1" }));
+    expect(screen.getByTestId("machine-filter-chapas-count")).toHaveTextContent("4 chapas");
   });
 
-  it("shows machine chapas count from files when chapasPorMaquina is empty", () => {
+  it("filters the file list when a machine segment is selected", () => {
+    const arquivos = [
+      { id: 1, nome: `${GROUP_KEY} (C).tif`, maquina: "Komori" },
+      { id: 2, nome: `${GROUP_KEY} (M).tif`, maquina: "Komori" },
+      {
+        id: 3,
+        nome: "2026_OS 00612-Gr-Outro (Cad 2 A) (C).tif",
+        maquina: "SM74",
+      },
+    ];
+    render(
+      <GravacaoExternaArquivosPanel
+        ano={2024}
+        nrOs={1857}
+        arquivos={arquivos}
+        selection={null}
+        groupByMachine
+        onSelect={() => undefined}
+        onSelectComposite={() => undefined}
+      />,
+    );
+    const filter = screen.getByRole("group", { name: /Filtrar arquivos por máquina/i });
+    expect(within(filter).getByRole("button", { name: "Komori" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: /Cad 1/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Cad 2/i })).not.toBeInTheDocument();
+
+    fireEvent.click(within(filter).getByRole("button", { name: "SM74" }));
+    expect(screen.getByRole("button", { name: /Cad 2/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Cad 1/i })).not.toBeInTheDocument();
+  });
+
+  it("hides machine filter when only one machine has files", () => {
+    const arquivos = [
+      { id: 1, nome: `${GROUP_KEY} (C).tif`, maquina: "PM52" },
+      { id: 2, nome: `${GROUP_KEY} (M).tif`, maquina: "PM52" },
+    ];
+    render(
+      <GravacaoExternaArquivosPanel
+        ano={2024}
+        nrOs={1857}
+        arquivos={arquivos}
+        selection={null}
+        groupByMachine
+        onSelect={() => undefined}
+        onSelectComposite={() => undefined}
+      />,
+    );
+    expect(
+      screen.queryByRole("group", { name: /Filtrar arquivos por máquina/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Cad 1/i })).toBeInTheDocument();
+  });
+
+  it("shows chapas count from files when chapasPorMaquina is empty", () => {
     const arquivos = [
       { id: 1, nome: `${GROUP_KEY} (C).tif`, maquina: "PM52" },
       { id: 2, nome: `${GROUP_KEY} (M).tif`, maquina: "PM52" },
@@ -229,7 +282,7 @@ describe("composite preview", () => {
         maquina: "SM74",
       },
     ];
-    const { container } = render(
+    render(
       <GravacaoExternaArquivosPanel
         ano={2024}
         nrOs={1857}
@@ -241,14 +294,9 @@ describe("composite preview", () => {
         onSelectComposite={() => undefined}
       />,
     );
-    const headers = [...container.querySelectorAll("section > header")].map(
-      (h) => h.textContent?.replace(/\s+/g, " ").trim(),
-    );
-    expect(headers.some((t) => t?.includes("PM52") && t.includes("2 chapas"))).toBe(
-      true,
-    );
-    expect(headers.some((t) => t?.includes("SM74") && t.includes("1 chapa"))).toBe(
-      true,
-    );
+    // Natural name order with empty chapasPorMaquina: PM52 before SM74
+    expect(screen.getByTestId("machine-filter-chapas-count")).toHaveTextContent("2 chapas");
+    fireEvent.click(screen.getByRole("button", { name: "SM74" }));
+    expect(screen.getByTestId("machine-filter-chapas-count")).toHaveTextContent("1 chapa");
   });
 });

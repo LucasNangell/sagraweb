@@ -241,6 +241,60 @@
                 </Border.RenderTransform>
             </Border>
         </Canvas>
+        <Canvas x:Name="EmailEnvelopeRig"
+                Width="62"
+                Height="44"
+                Opacity="0"
+                Visibility="Collapsed"
+                IsHitTestVisible="False"
+                Canvas.ZIndex="6"
+                RenderTransformOrigin="0.5,0.5">
+            <Canvas.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform x:Name="EmailEnvelopeScale" ScaleX="0.3" ScaleY="0.3" />
+                    <RotateTransform x:Name="EmailEnvelopeRotate" Angle="-35" />
+                    <TranslateTransform x:Name="EmailEnvelopeMove" />
+                </TransformGroup>
+            </Canvas.RenderTransform>
+            <Border Width="54" Height="38" Canvas.Left="0" Canvas.Top="4" CornerRadius="6"
+                    BorderBrush="#F59E0B" BorderThickness="2"
+                    ClipToBounds="True">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#FFFFFF" Offset="0" />
+                        <GradientStop Color="#FEF3C7" Offset="0.6" />
+                        <GradientStop Color="#FDE68A" Offset="1" />
+                    </LinearGradientBrush>
+                </Border.Background>
+                <Border.Effect>
+                    <DropShadowEffect Color="#F59E0B" BlurRadius="16" ShadowDepth="0" Opacity="0.65"
+                                      RenderingBias="Performance" />
+                </Border.Effect>
+                <Grid>
+                    <Path Fill="#FBBF24" Data="M0,0 L54,0 L27,22 Z" />
+                    <Path Fill="#38D97706" Data="M0,38 L27,10 L54,38 Z" />
+                </Grid>
+            </Border>
+            <Border Width="18" Height="18" Canvas.Left="40" Canvas.Top="0" CornerRadius="999"
+                    BorderBrush="#FFFFFF" BorderThickness="2"
+                    Background="#EF4444"
+                    RenderTransformOrigin="0.5,0.5">
+                <Border.RenderTransform>
+                    <ScaleTransform x:Name="EmailCountScale" ScaleX="0.9" ScaleY="0.9" />
+                </Border.RenderTransform>
+                <Border.Effect>
+                    <DropShadowEffect Color="#EF4444" BlurRadius="8" ShadowDepth="0" Opacity="0.8"
+                                      RenderingBias="Performance" />
+                </Border.Effect>
+                <TextBlock Text="1"
+                           FontFamily="Segoe UI"
+                           FontWeight="ExtraBold"
+                           FontSize="10"
+                           Foreground="White"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center" />
+            </Border>
+        </Canvas>
         <Border x:Name="ActionBadgeHost"
                 Opacity="0"
                 Visibility="Collapsed"

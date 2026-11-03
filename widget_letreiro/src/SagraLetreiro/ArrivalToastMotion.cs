@@ -26,6 +26,7 @@ static class ArrivalToastMotion
             case "fx-ufo": Ufo(sb, layout); break;
             case "fx-analisar": Analisar(sb, layout); break;
             case "fx-prosseguir": Prosseguir(sb, layout); break;
+            case "fx-novo-email": NovoEmail(sb, layout); break;
             default: Iris(sb, layout); break;
         }
         return sb;
@@ -316,6 +317,70 @@ static class ArrivalToastMotion
         ChevronMove(sb, "Chevron3Move", 1.16);
     }
 
+    static void NovoEmail(Storyboard sb, ArrivalToastLayout layout)
+    {
+        var rise = layout.EnterTravel;
+        var slideOut = layout.ExitTravel;
+        D(sb, "CardMove", "Y",
+            Discrete(rise, 0), Eased(-4, 0.4, EaseOut()), Eased(0, 0.64, EaseOut()), Discrete(0, 3.2),
+            Eased(2, 3.52, EaseIn()), Eased(8, 4, EaseIn()));
+        D(sb, "CardMove", "X",
+            Discrete(0, 0), Discrete(0, 3.2), Eased(-10, 3.52, EaseIn()), Eased(slideOut, 4, EaseIn()));
+        D(sb, "CardSkew", "AngleX",
+            Discrete(0, 0), Discrete(0, 3.2), Eased(-4, 3.52, EaseIn()), Eased(-12, 4, EaseIn()));
+        D(sb, "CardScale", "ScaleX",
+            Discrete(0.82, 0), Eased(1.02, 0.4, EaseOut()), Eased(1, 0.64, EaseOut()), Discrete(1, 3.2),
+            Eased(0.97, 3.52, EaseIn()), Eased(0.75, 4, EaseIn()));
+        D(sb, "CardScale", "ScaleY",
+            Discrete(0.82, 0), Eased(1.02, 0.4, EaseOut()), Eased(1, 0.64, EaseOut()), Discrete(1, 3.2),
+            Eased(0.97, 3.52, EaseIn()), Eased(0.75, 4, EaseIn()));
+        D(sb, "CardBlur", "Radius",
+            Discrete(10, 0), Eased(0, 0.4, EaseOut()), Discrete(0, 3.2), Eased(4, 3.52, EaseIn()), Eased(10, 4, EaseIn()));
+        D(sb, "CardBorder", "Opacity",
+            Discrete(0, 0), Eased(1, 0.4, EaseOut()), Discrete(1, 3.2), Eased(0.7, 3.52, EaseIn()), Eased(0, 4, EaseIn()));
+        D(sb, "ActionBadgeHost", "Opacity",
+            Discrete(0, 0), Discrete(0, 0.36), Eased(1, 0.72, EaseBackOut()), Discrete(1, 3.12), Eased(0, 3.52, EaseIn()));
+        D(sb, "ActionBadgeScale", "ScaleX",
+            Discrete(0.4, 0), Discrete(0.4, 0.36), Eased(1.1, 0.72, EaseBackOut()), Eased(1, 0.96, EaseOut()),
+            Linear(1.06, 1.4), Linear(1, 1.84), Linear(1.06, 2.28), Linear(1, 2.72), Linear(1.06, 3.12),
+            Eased(0.5, 3.52, EaseIn()));
+        D(sb, "ActionBadgeScale", "ScaleY",
+            Discrete(0.4, 0), Discrete(0.4, 0.36), Eased(1.1, 0.72, EaseBackOut()), Eased(1, 0.96, EaseOut()),
+            Linear(1.06, 1.4), Linear(1, 1.84), Linear(1.06, 2.28), Linear(1, 2.72), Linear(1.06, 3.12),
+            Eased(0.5, 3.52, EaseIn()));
+        D(sb, "ActionBadgeMove", "Y",
+            Discrete(-22, 0), Discrete(-22, 0.36), Eased(2, 0.72, EaseBackOut()), Eased(0, 0.96, EaseOut()),
+            Linear(-3, 1.4), Linear(0, 1.84), Linear(-3, 2.28), Linear(0, 2.72), Linear(-3, 3.12),
+            Eased(-18, 3.52, EaseIn()));
+        D(sb, "ActionBadgeDotScale", "ScaleX",
+            Discrete(0.8, 0.72), Linear(1.25, 1.32), Linear(0.8, 1.92), Linear(1.25, 2.52), Linear(0.8, 3.12), Linear(1.1, 3.4));
+        D(sb, "ActionBadgeDotScale", "ScaleY",
+            Discrete(0.8, 0.72), Linear(1.25, 1.32), Linear(0.8, 1.92), Linear(1.25, 2.52), Linear(0.8, 3.12), Linear(1.1, 3.4));
+        D(sb, "EmailEnvelopeRig", "Opacity",
+            Discrete(0, 0), Discrete(0, 0.4), Eased(1, 0.8, EaseOut()), Discrete(1, 3.04), Eased(0, 3.52, EaseIn()));
+        D(sb, "EmailEnvelopeMove", "X",
+            Discrete(-0.55 * layout.CardWidth, 0), Discrete(-0.55 * layout.CardWidth, 0.4),
+            Eased(-6, 0.8, EaseOut()), Linear(0, 1.4), Linear(-4, 2.2), Linear(0, 3.04),
+            Eased(0.45 * layout.CardWidth, 3.52, EaseIn()));
+        D(sb, "EmailEnvelopeMove", "Y",
+            Discrete(-0.35 * layout.CardHeight, 0), Discrete(-0.35 * layout.CardHeight, 0.4),
+            Eased(4, 0.8, EaseOut()), Linear(0, 1.4), Linear(-5, 2.2), Linear(0, 3.04),
+            Eased(-0.3 * layout.CardHeight, 3.52, EaseIn()));
+        D(sb, "EmailEnvelopeRotate", "Angle",
+            Discrete(-35, 0), Discrete(-35, 0.4), Eased(12, 0.8, EaseOut()),
+            Linear(-8, 1.4), Linear(6, 2.2), Linear(-8, 3.04), Eased(30, 3.52, EaseIn()));
+        D(sb, "EmailEnvelopeScale", "ScaleX",
+            Discrete(0.3, 0), Discrete(0.3, 0.4), Eased(1.12, 0.8, EaseOut()), Eased(1, 1.12, EaseOut()),
+            Linear(1.05, 2.2), Linear(1, 3.04), Eased(0.3, 3.52, EaseIn()));
+        D(sb, "EmailEnvelopeScale", "ScaleY",
+            Discrete(0.3, 0), Discrete(0.3, 0.4), Eased(1.12, 0.8, EaseOut()), Eased(1, 1.12, EaseOut()),
+            Linear(1.05, 2.2), Linear(1, 3.04), Eased(0.3, 3.52, EaseIn()));
+        D(sb, "EmailCountScale", "ScaleX",
+            Discrete(0.9, 0.8), Linear(1.18, 1.4), Linear(0.9, 2.0), Linear(1.18, 2.6), Linear(0.9, 3.2), Linear(1.1, 3.5));
+        D(sb, "EmailCountScale", "ScaleY",
+            Discrete(0.9, 0.8), Linear(1.18, 1.4), Linear(0.9, 2.0), Linear(1.18, 2.6), Linear(0.9, 3.2), Linear(1.1, 3.5));
+    }
+
     static void ChevronPulse(Storyboard sb, string target, double start)
     {
         D(sb, target, "Opacity",
@@ -406,7 +471,7 @@ static class ArrivalToastMotion
             "fx-rubber" => new Point(0.5, 1),
             "fx-stage-build" => new Point(0, 0),
             "fx-ufo" => new Point(0.5, 0),
-            "fx-analisar" => new Point(0.5, 1),
+            "fx-analisar" or "fx-novo-email" => new Point(0.5, 1),
             _ => new Point(0.5, 0.5),
         };
         window.CardBorder.Effect = id switch
@@ -419,7 +484,7 @@ static class ArrivalToastMotion
                 Opacity = 1,
                 RenderingBias = RenderingBias.Performance,
             },
-            "fx-laser" or "fx-supernova" or "fx-warp" or "fx-analisar" or "fx-prosseguir" => new BlurEffect
+            "fx-laser" or "fx-supernova" or "fx-warp" or "fx-analisar" or "fx-prosseguir" or "fx-novo-email" => new BlurEffect
             {
                 Radius = 0,
                 RenderingBias = RenderingBias.Performance,
@@ -573,6 +638,29 @@ static class ArrivalToastMotion
                 window.ActionBadgeMove.Y = 0;
                 window.ProsseguirStreamHost.Opacity = 0;
                 window.ProsseguirStreamMove.X = 0;
+                return;
+            case "fx-novo-email":
+                window.CardBorder.Clip = null;
+                window.CardMove.Y = layout.EnterTravel;
+                window.CardMove.X = 0;
+                window.CardSkew.AngleX = 0;
+                window.CardScale.ScaleX = 0.82;
+                window.CardScale.ScaleY = 0.82;
+                if (window.CardBorder.Effect is BlurEffect emailBlur) emailBlur.Radius = 10;
+                window.CardBorder.Opacity = 0;
+                window.ActionBadgeHost.Opacity = 0;
+                window.ActionBadgeScale.ScaleX = 0.4;
+                window.ActionBadgeScale.ScaleY = 0.4;
+                window.ActionBadgeMove.X = 0;
+                window.ActionBadgeMove.Y = -22;
+                window.EmailEnvelopeRig.Opacity = 0;
+                window.EmailEnvelopeMove.X = -0.55 * layout.CardWidth;
+                window.EmailEnvelopeMove.Y = -0.35 * layout.CardHeight;
+                window.EmailEnvelopeRotate.Angle = -35;
+                window.EmailEnvelopeScale.ScaleX = 0.3;
+                window.EmailEnvelopeScale.ScaleY = 0.3;
+                window.EmailCountScale.ScaleX = 0.9;
+                window.EmailCountScale.ScaleY = 0.9;
                 return;
             default:
                 window.CardBorder.Clip = null;

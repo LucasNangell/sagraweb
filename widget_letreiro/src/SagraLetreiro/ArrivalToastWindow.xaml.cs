@@ -110,10 +110,12 @@ public partial class ArrivalToastWindow : Window
     {
         var analisar = _animation == "fx-analisar";
         var follow = _animation == "fx-prosseguir";
+        var email = _animation == "fx-novo-email";
         MagnifierRig.Visibility = analisar ? Visibility.Visible : Visibility.Collapsed;
         ProsseguirStreamHost.Visibility = follow ? Visibility.Visible : Visibility.Collapsed;
-        ActionBadgeHost.Visibility = analisar || follow ? Visibility.Visible : Visibility.Collapsed;
-        if (!analisar && !follow) return;
+        EmailEnvelopeRig.Visibility = email ? Visibility.Visible : Visibility.Collapsed;
+        ActionBadgeHost.Visibility = analisar || follow || email ? Visibility.Visible : Visibility.Collapsed;
+        if (!analisar && !follow && !email) return;
 
         var cardLeft = _layout.SidePad;
         var cardTop = _layout.EnterSlack;
@@ -122,18 +124,29 @@ public partial class ArrivalToastWindow : Window
         ActionBadgeHost.Width = cardW;
         Canvas.SetLeft(ActionBadgeHost, cardLeft);
         Canvas.SetTop(ActionBadgeHost, Math.Max(0, cardTop - 22));
-        ActionBadgeText.Text = analisar ? "ANALISAR" : "DAR PROSSEGUIMENTO";
+        ActionBadgeText.Text = analisar ? "ANALISAR" : follow ? "DAR PROSSEGUIMENTO" : "NOVO E-MAIL";
         ActionBadgeText.Foreground = Frozen(new SolidColorBrush(
-            analisar ? Color.FromRgb(0x05, 0x10, 0x1f) : Color.FromRgb(0x02, 0x2c, 0x22)));
+            analisar ? Color.FromRgb(0x05, 0x10, 0x1f)
+            : follow ? Color.FromRgb(0x02, 0x2c, 0x22)
+            : Color.FromRgb(0x1c, 0x0f, 0x02)));
         ActionBadge.BorderBrush = Frozen(new SolidColorBrush(
-            analisar ? Color.FromRgb(0xe0, 0xf2, 0xfe) : Color.FromRgb(0xd1, 0xfa, 0xe5)));
+            analisar ? Color.FromRgb(0xe0, 0xf2, 0xfe)
+            : follow ? Color.FromRgb(0xd1, 0xfa, 0xe5)
+            : Color.FromRgb(0xfe, 0xf3, 0xc7)));
         ActionBadge.Background = analisar
             ? Frozen(new LinearGradientBrush(
                 Color.FromRgb(0x02, 0x84, 0xc7), Color.FromRgb(0x00, 0xff, 0xcc), 0))
+            : follow
+            ? Frozen(new LinearGradientBrush(
+                Color.FromRgb(0x05, 0x96, 0x69), Color.FromRgb(0xa7, 0xf3, 0xd0), 0))
             : Frozen(new LinearGradientBrush(
-                Color.FromRgb(0x05, 0x96, 0x69), Color.FromRgb(0xa7, 0xf3, 0xd0), 0));
-        ActionBadgeGlow.Color = analisar ? Color.FromRgb(0x38, 0xbd, 0xf8) : Color.FromRgb(0x10, 0xb9, 0x81);
-        ActionBadgeDot.Visibility = analisar ? Visibility.Visible : Visibility.Collapsed;
+                Color.FromRgb(0xd9, 0x77, 0x06), Color.FromRgb(0xfe, 0xf0, 0x8a), 0));
+        ActionBadgeGlow.Color = analisar ? Color.FromRgb(0x38, 0xbd, 0xf8)
+            : follow ? Color.FromRgb(0x10, 0xb9, 0x81)
+            : Color.FromRgb(0xf5, 0x9e, 0x0b);
+        ActionBadgeDot.Visibility = analisar || email ? Visibility.Visible : Visibility.Collapsed;
+        ActionBadgeDot.Fill = Frozen(new SolidColorBrush(
+            email ? Color.FromRgb(0xef, 0x44, 0x44) : Color.FromRgb(0x05, 0x10, 0x1f)));
         ActionChevrons.Visibility = follow ? Visibility.Visible : Visibility.Collapsed;
         if (analisar)
         {
@@ -148,6 +161,12 @@ public partial class ArrivalToastWindow : Window
             ProsseguirStream.Width = Math.Max(960, cardW * 3);
             Canvas.SetLeft(ProsseguirStreamHost, cardLeft);
             Canvas.SetTop(ProsseguirStreamHost, cardTop);
+        }
+        if (email)
+        {
+            var envW = EmailEnvelopeRig.Width;
+            Canvas.SetLeft(EmailEnvelopeRig, cardLeft + cardW - envW - 10);
+            Canvas.SetTop(EmailEnvelopeRig, cardTop + 8);
         }
     }
 

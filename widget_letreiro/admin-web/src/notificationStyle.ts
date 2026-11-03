@@ -14,6 +14,7 @@ export const CLASSIC_ENTRY_ANIMATIONS = [
   { id: "fx-ufo", label: "12. Disco voador" },
   { id: "fx-analisar", label: "13. Analisar (lupa)" },
   { id: "fx-prosseguir", label: "13. Dar prosseguimento" },
+  { id: "fx-novo-email", label: "120. Novo e-mail" },
 ] as const;
 
 export const DEFAULT_ENTRY_ANIMATION = "fx-iris";

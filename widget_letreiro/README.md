@@ -41,6 +41,16 @@ Ou `iniciar-letreiro.bat` (usa o exe instalado/`artifacts` se existir; senão `d
 
 Config local: `%APPDATA%\SagraLetreiro\config.json`. Log: `%LOCALAPPDATA%\SagraLetreiro\letreiro.log`.
 
+## Administração: ações do client
+
+Na aba Computadores, selecione uma única estação online. A coluna ao lado da lista consulta as janelas dessa sessão e permite maximizar, minimizar, alternar tela cheia sem bordas, trazer ao topo e solicitar fechamento. O fechamento usa a solicitação normal do aplicativo, que pode pedir para salvar documentos; não encerra o processo à força. HWND, PID, início do processo e sessão são conferidos antes de cada ação. O Windows pode impedir alterações em aplicativos com privilégio maior ou negar a mudança de foco.
+
+Print de tela captura a área de trabalho no instante solicitado, com horário e ampliação no painel. A imagem é uma prévia JPEG compactada (até 45 KB) para caber no canal existente. A captura é manual; trocar de estação limpa os dados exibidos. Os resultados seguem o histórico administrativo de jobs existente, inclusive sua persistência no servidor; não são gravados no armazenamento do navegador.
+
+Adicionar botão da biblioteca fixa um comando existente. Os atalhos guardam somente IDs no navegador, até 20 por origem; nomes e scripts continuam vindo da biblioteca. Comandos com variáveis pedem seus valores antes do envio. O alvo é sempre a única estação selecionada, e o retorno do atalho aparece no terminal.
+
+O painel reutiliza os jobs PS1 existentes e funciona com clients que já suportam esses jobs, sem migração de banco ou nova rota. As verificações de identidade e autorização do canal existente permanecem as mesmas. Execute `npm test` e `npm run build` em `admin-web` para validar protocolo, limites, scripts e frontend. O mock de desenvolvimento usa apenas dados simulados (`tests/fixtures/desktop-preview.jpg`); os testes de scripts compilam as declarações Win32 e analisam a sintaxe sem capturar ou controlar janelas reais.
+
 ## Comportamento
 
 - **Arrastar** pelo corpo da faixa; **largura** pelas bordas. Sem alça, engrenagem ou botões laterais.

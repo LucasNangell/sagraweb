@@ -25,6 +25,8 @@ import {
   Unplug,
 } from "lucide-react";
 import { ConfigPreview, SettingsSummary } from "./ui";
+import ClientControlPanel from "./ClientControlPanel";
+import { desktopJobLabel, desktopTargetKey, isDesktopJob } from "./desktop";
 import {
   api,
   ApiError,
@@ -1197,6 +1199,7 @@ export default function App() {
   const printedJobs = useRef(new Set<number>());
   const jobsPrimed = useRef(false);
   const burstUntil = useRef(0);
+  const onClientJobQueued = useCallback(() => { burstUntil.current = Date.now() + 120_000; }, []);
   const commandsRef = useRef<Command[]>([]);
   const logEl = useRef<HTMLPreElement | null>(null);
   const [draft, setDraft] = useState<Command>({ id: 0, name: "", kind: "bat", content: "", timeoutSec: 60 });
@@ -1255,6 +1258,7 @@ export default function App() {
     for (const job of [...next].sort((a, b) => a.id - b.id)) {
       if (printedJobs.current.has(job.id) || !jobDone(job)) continue;
       printedJobs.current.add(job.id);
+      if (isDesktopJob(job)) continue;
       newly.push(job);
       chunks.push(formatJobReply(job));
     }
@@ -1826,6 +1830,17 @@ export default function App() {
               </div>
             </div>
 
+            <ClientControlPanel
+              key={selectedRows.length === 1 ? desktopTargetKey(selectedRows[0]) : "no-single-target"}
+              target={selectedRows.length === 1 ? selectedRows[0] : null}
+              selectionCount={selectedRows.length}
+              commands={commands}
+              jobs={jobs}
+              onQueued={onClientJobQueued}
+              onJobs={applyJobs}
+              onOpenLibrary={() => setView("library")}
+            />
+
             <div className="computer-detail">
               <div className="selection-panel">
               <div className="selection-heading"><div><h2>{selectedRows.length ? `${selectedRows.length} ${selectedRows.length === 1 ? "estação selecionada" : "estações selecionadas"}` : "Selecione uma estação"}</h2><p>{selectedRows.length ? "Aplique um perfil ou use o terminal para enviar comandos." : "Use as caixas de seleção da lista para escolher os destinos."}</p></div><ArrowRight size={18} /></div>
@@ -2175,14 +2190,14 @@ export default function App() {
                   <p className="px-1 py-6 text-center text-sm text-slate-400">Nenhum comando.</p>
                 ) : jobs.map((job) => (
                   <button key={job.id} onClick={() => setJobId(job.id)} className={`mb-2 w-full min-w-0 overflow-hidden rounded-xl px-3 py-2 text-left ${activeJob?.id === job.id ? "bg-slate-800" : ""}`}>
-                    <div className="break-words font-medium">{job.name}</div>
+                    <div className="break-words font-medium">{isDesktopJob(job) ? desktopJobLabel(job) : job.name}</div>
                     <div className="truncate text-xs text-slate-400">{job.hostName} · {job.status}</div>
                   </button>
                 ))}
               </div>
             </div>
             <pre className="min-h-0 min-w-0 overflow-auto whitespace-pre-wrap break-words rounded-2xl border border-slate-800 bg-slate-950 p-4 font-mono text-sm text-emerald-300">
-              {activeJob ? `${activeJob.stdout || ""}${activeJob.stderr ? `\nSTDERR:\n${activeJob.stderr}` : ""}` : "Sem saída."}
+              {activeJob ? `${isDesktopJob(activeJob) ? `${desktopJobLabel(activeJob)} · ${activeJob.status}\nConsulte o painel Ações do client em Computadores. A captura pode ser atualizada pelo botão Print de tela.` : activeJob.stdout || ""}${activeJob.stderr ? `\nSTDERR:\n${activeJob.stderr}` : ""}` : "Sem saída."}
             </pre>
           </section>
         ) : null}

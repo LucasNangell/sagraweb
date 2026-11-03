@@ -5,6 +5,12 @@ import react from "@vitejs/plugin-react";
 import { readFileSync } from "node:fs";
 
 const appVersion = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).version as string;
+const mockScreenshot = readFileSync(new URL("./tests/fixtures/desktop-preview.jpg", import.meta.url)).toString("base64");
+const MOCK_WINDOWS = [
+  { handle: "108201", processId: 5472, processStart: "639000000000000000", title: "SAGRA - Painel de produção", processName: "chrome", state: "maximized", fullscreen: false },
+  { handle: "108202", processId: 24032, processStart: "639000000000000001", title: "Manual de produção - Word", processName: "WINWORD", state: "normal", fullscreen: false },
+  { handle: "108203", processId: 32848, processStart: "639000000000000002", title: "Notas da estação", processName: "ApplicationFrameHost", state: "minimized", fullscreen: false },
+];
 
 const MOCK_BOARD = {
   sector: "SEFOC",
@@ -65,6 +71,7 @@ function localPreviewMock(): Connect.NextHandleFunction {
     window: { width: 720, speedPxPerSec: 40, opacity: 0.95, transparentBg: false, notificationsEnabled: false, notificationWidth: 320, notificationHeight: 96, notificationAnimation: "fx-iris", tickerHtml: true, tickerCardModel: "fx-02-shimmer" },
   };
   const jobs: Record<string, unknown>[] = [];
+  const desktopWindows: Record<string, typeof MOCK_WINDOWS> = {};
   const remoteByTarget: Record<string, unknown> = {
     "PC-DEV\nusr_sefoc": { ...config },
   };
@@ -214,21 +221,26 @@ function localPreviewMock(): Connect.NextHandleFunction {
     }
     const runMatch = url.match(/^\/api\/letreiro\/commands\/(\d+)\/run$/);
     if (runMatch) {
-      req.resume();
       const command = MOCK_COMMANDS.find((item) => item.id === Number(runMatch[1]));
-      jobs.unshift({
-        id: jobId++,
-        name: command?.name ?? "biblioteca",
-        kind: command?.kind ?? "bat",
-        hostName: "PC-DEV",
-        windowsUser: "usr_sefoc",
-        status: "ok",
-        exitCode: 0,
-        stdout: command?.name === "Listar janelas" ? MOCK_WINDOW_TABLE : "Script da biblioteca executado.",
-        stderr: "",
-        createdAt: new Date().toISOString(),
+      const chunks: Buffer[] = [];
+      req.on("data", chunk => chunks.push(Buffer.from(chunk)));
+      req.on("end", () => {
+        const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { targets?: { hostName: string; windowsUser: string }[] };
+        const target = body.targets?.[0] ?? { hostName: "PC-DEV", windowsUser: "usr_sefoc" };
+        jobs.unshift({
+          id: jobId++,
+          name: command?.name ?? "biblioteca",
+          kind: command?.kind ?? "bat",
+          ...target,
+          status: "ok",
+          exitCode: 0,
+          stdout: command?.name === "Listar janelas" ? MOCK_WINDOW_TABLE : "Script da biblioteca executado.",
+          stderr: "",
+          createdAt: new Date().toISOString(),
+        });
+        sendJson(res, { queued: 1 });
       });
-      return sendJson(res, { queued: 1 });
+      return;
     }
     if (url === "/api/letreiro/jobs/run") {
       const chunks: Buffer[] = [];
@@ -242,10 +254,32 @@ function localPreviewMock(): Connect.NextHandleFunction {
             content?: string;
             name?: string;
             kind?: string;
+            targets?: { hostName: string; windowsUser: string }[];
           };
           if (body.content) stdout = `Executado: ${body.content}`;
           if (body.name) name = body.name;
           if (body.kind) kind = body.kind;
+          if (name.startsWith("sagra-desktop/")) {
+            const target = body.targets?.[0] ?? { hostName: "PC-DEV", windowsUser: "usr_sefoc" };
+            const key = `${target.hostName}\n${target.windowsUser}`;
+            const windows = desktopWindows[key] ??= structuredClone(MOCK_WINDOWS);
+            if (name.startsWith("sagra-desktop/windows/")) stdout = JSON.stringify({ type: "windows", windows, capturedAt: new Date().toISOString(), truncated: false });
+            else if (name.startsWith("sagra-desktop/screenshot/")) stdout = JSON.stringify({ type: "screenshot", mime: "image/jpeg", image: mockScreenshot, width: 1280, height: 720, originalWidth: 1920, originalHeight: 1080, capturedAt: new Date().toISOString() });
+            else {
+              const action = body.content?.match(/::Act\(\[long\](\d+), \[int\]\d+, \[long\]\d+, '(\w+)'\)/);
+              const row = windows.find(item => item.handle === action?.[1]);
+              if (row && action) {
+                if (action[2] === "close") windows.splice(windows.indexOf(row), 1);
+                if (action[2] === "minimize") row.state = "minimized";
+                if (action[2] === "maximize") row.state = "maximized";
+                if (action[2] === "fullscreen") row.fullscreen = !row.fullscreen;
+              }
+              stdout = JSON.stringify({ type: "action", message: "Ação aplicada na estação simulada." });
+            }
+            jobs.unshift({ id: jobId++, name, kind, ...target, status: "ok", exitCode: 0, stdout, stderr: "", createdAt: new Date().toISOString() });
+            sendJson(res, { queued: 1 });
+            return;
+          }
         } catch {
           /* keep defaults */
         }

@@ -9,7 +9,7 @@ import {
   Layers,
   Loader2,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import {
   gravacaoExternaCompositePreviewUrl,
@@ -821,6 +821,132 @@ function ArquivosChapaList({
   );
 }
 
+function measureCssTextWidth(el: HTMLElement | null, text: string): number {
+  if (!el || !text || typeof document === "undefined") return 0;
+  const style = getComputedStyle(el);
+  const probe = document.createElement("span");
+  probe.textContent = text;
+  probe.style.cssText = [
+    "position:absolute",
+    "visibility:hidden",
+    "white-space:nowrap",
+    "pointer-events:none",
+    `font:${style.font}`,
+    `letter-spacing:${style.letterSpacing}`,
+  ].join(";");
+  document.body.appendChild(probe);
+  const width = probe.offsetWidth;
+  probe.remove();
+  // jsdom reports 0 — approximate so narrow-layout tests still exercise collapse.
+  return width > 0 ? width : text.length * 7;
+}
+
+/** Header of a machine filter tab: collapses Download/Baixado to icon when the name would truncate. */
+function MachineFilterNameRow({
+  label,
+  active,
+  allDownloaded,
+  showDownloadBadge,
+  machineDownloadBusy,
+  onSelect,
+  onDownload,
+}: {
+  label: string;
+  active: boolean;
+  allDownloaded: boolean;
+  showDownloadBadge: boolean;
+  machineDownloadBusy: boolean;
+  onSelect: () => void;
+  onDownload: () => void;
+}) {
+  const rowRef = useRef<HTMLDivElement>(null);
+  const nameRef = useRef<HTMLButtonElement>(null);
+  const badgeRef = useRef<HTMLButtonElement>(null);
+  const [badgeIconOnly, setBadgeIconOnly] = useState(false);
+
+  const badgeLabel = allDownloaded ? "Baixado" : "Download";
+  const badgeTitle = allDownloaded
+    ? "Baixar arquivos novamente"
+    : "Baixar arquivos dessa máquina";
+  const badgeAria = allDownloaded
+    ? `Arquivos baixados ${label}`
+    : `Download arquivos ${label}`;
+
+  useLayoutEffect(() => {
+    if (!showDownloadBadge) {
+      setBadgeIconOnly(false);
+      return;
+    }
+    const row = rowRef.current;
+    if (!row) return;
+
+    const update = () => {
+      const available = row.clientWidth;
+      // jsdom / layout not ready: keep full label so tests and first paint stay readable.
+      if (available <= 0) {
+        setBadgeIconOnly(false);
+        return;
+      }
+      const nameW = measureCssTextWidth(nameRef.current, label);
+      const badgeTextW = measureCssTextWidth(badgeRef.current, badgeLabel);
+      const iconSize = 12;
+      const badgePadX = 12;
+      const badgeInnerGap = 2;
+      const rowGap = 4;
+      const badgeFullW = badgePadX + iconSize + badgeInnerGap + badgeTextW;
+      setBadgeIconOnly(nameW + rowGap + badgeFullW > available + 0.5);
+    };
+
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(update);
+    ro.observe(row);
+    return () => ro.disconnect();
+  }, [showDownloadBadge, label, badgeLabel]);
+
+  const badgeClass = cn(
+    "inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+    allDownloaded ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800",
+  );
+
+  return (
+    <div ref={rowRef} className="flex w-full min-w-0 items-center gap-1">
+      <button
+        ref={nameRef}
+        type="button"
+        aria-label={label}
+        aria-pressed={active}
+        onClick={onSelect}
+        className="min-w-0 flex-1 truncate text-left text-xs-button font-semibold leading-tight"
+      >
+        {label}
+      </button>
+      {showDownloadBadge ? (
+        <button
+          ref={badgeRef}
+          type="button"
+          aria-label={badgeAria}
+          title={badgeTitle}
+          disabled={machineDownloadBusy}
+          onClick={onDownload}
+          className={cn(
+            badgeClass,
+            "cursor-pointer hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
+            badgeIconOnly && "px-1",
+          )}
+        >
+          {allDownloaded ? (
+            <Check className="size-3" aria-hidden />
+          ) : (
+            <FileDown className="size-3" aria-hidden />
+          )}
+          {badgeIconOnly ? null : badgeLabel}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function GravacaoExternaArquivosPanel({
   ano,
   nrOs,
@@ -1069,20 +1195,8 @@ export function GravacaoExternaArquivosPanel({
             downloadableTotal > 0 &&
             opt.pdfDownloaded === opt.pdfTotal &&
             opt.tifDownloaded === opt.tifTotal;
-          const badgeClass = cn(
-            "inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
-            allDownloaded
-              ? "bg-emerald-100 text-emerald-800"
-              : "bg-amber-100 text-amber-800",
-          );
-          const badgeTitle = allDownloaded
-            ? "Baixar arquivos novamente"
-            : "Baixar arquivos dessa máquina";
-          const badgeIcon = allDownloaded ? (
-            <Check className="size-3" aria-hidden />
-          ) : (
-            <FileDown className="size-3" aria-hidden />
-          );
+          const showDownloadBadge =
+            downloadableTotal > 0 && Boolean(canDownload && onDownloadMachine);
           return (
             <div
               key={opt.value}
@@ -1094,37 +1208,15 @@ export function GravacaoExternaArquivosPanel({
                   : "mb-px border border-transparent bg-sagra-bg text-neutral-500 hover:text-neutral-700",
               )}
             >
-              <div className="flex w-full min-w-0 items-center gap-1">
-                <button
-                  type="button"
-                  aria-label={opt.label}
-                  aria-pressed={active}
-                  onClick={() => selectMachine(opt.value)}
-                  className="min-w-0 flex-1 truncate text-left text-xs-button font-semibold leading-tight"
-                >
-                  {opt.label}
-                </button>
-                {downloadableTotal > 0 && canDownload && onDownloadMachine ? (
-                  <button
-                    type="button"
-                    aria-label={
-                      allDownloaded
-                        ? `Arquivos baixados ${opt.label}`
-                        : `Download arquivos ${opt.label}`
-                    }
-                    title={badgeTitle}
-                    disabled={machineDownloadBusy}
-                    onClick={() => handleDownloadMachine(opt.value)}
-                    className={cn(
-                      badgeClass,
-                      "cursor-pointer hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
-                    )}
-                  >
-                    {badgeIcon}
-                    {allDownloaded ? "Baixado" : "Download"}
-                  </button>
-                ) : null}
-              </div>
+              <MachineFilterNameRow
+                label={opt.label}
+                active={active}
+                allDownloaded={allDownloaded}
+                showDownloadBadge={showDownloadBadge}
+                machineDownloadBusy={machineDownloadBusy}
+                onSelect={() => selectMachine(opt.value)}
+                onDownload={() => handleDownloadMachine(opt.value)}
+              />
               <button
                 type="button"
                 tabIndex={-1}

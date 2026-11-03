@@ -419,4 +419,54 @@ describe("composite preview", () => {
     expect(within(filter).getAllByText("Baixado")).toHaveLength(2);
     expect(within(filter).queryByText("Download")).toBeNull();
   });
+
+  it("collapses Download badge to icon when the machine name would not fit", () => {
+    const clientWidthSpy = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockImplementation(function (this: HTMLElement) {
+        if (
+          this.classList.contains("w-full") &&
+          this.classList.contains("min-w-0") &&
+          this.classList.contains("items-center")
+        ) {
+          // Narrower than name + full "Download" badge (canvas fallback uses ~7px/char).
+          return 80;
+        }
+        return 0;
+      });
+
+    try {
+      const arquivos = [
+        { id: 1, nome: `${GROUP_KEY} (C).tif`, maquina: "Komori" },
+        {
+          id: 2,
+          nome: "2026_OS 00612-Gr-Outro (Cad 2 A) (C).tif",
+          maquina: "SM74",
+        },
+      ];
+      render(
+        <GravacaoExternaArquivosPanel
+          ano={2024}
+          nrOs={1857}
+          arquivos={arquivos}
+          selection={null}
+          groupByMachine
+          onDownloadMachine={() => undefined}
+          onSelect={() => undefined}
+          onSelectComposite={() => undefined}
+        />,
+      );
+      const filter = screen.getByRole("group", { name: /Filtrar arquivos por máquina/i });
+      const komoriBadge = within(filter).getByRole("button", {
+        name: "Download arquivos Komori",
+      });
+      expect(komoriBadge).not.toHaveTextContent("Download");
+      expect(komoriBadge.querySelector("svg")).toBeTruthy();
+      expect(within(filter).getByRole("button", { name: "Komori" })).toHaveTextContent(
+        "Komori",
+      );
+    } finally {
+      clientWidthSpy.mockRestore();
+    }
+  });
 });

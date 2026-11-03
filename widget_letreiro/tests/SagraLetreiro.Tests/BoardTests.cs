@@ -579,47 +579,7 @@ public class BoardTests
     }
 
     [Fact]
-    public void SplitByPriorityOrdersPrometidoThenSolicitadoThenNormal()
-    {
-        var cards = new[]
-        {
-            new TickerCard { Label = "N1", Priority = null },
-            new TickerCard { Label = "S1", Priority = "priority-medium" },
-            new TickerCard { Label = "P1", Priority = "priority-high" },
-            new TickerCard { Label = "N2" },
-            new TickerCard { Label = "S2", Priority = "priority-medium" },
-            new TickerCard { Label = "P2", Priority = "priority-high" },
-        };
-        double[] widths = [10, 11, 12, 13, 14, 15];
-        var split = TickerLayout.SplitByPriority(cards, widths);
-        Assert.Equal(new[] { "P1", "P2", "S1", "S2" }, split.Pinned.Select(c => c.Label).ToArray());
-        Assert.Equal(new[] { 12d, 15d, 11d, 14d }, split.PinnedWidths.ToArray());
-        Assert.Equal(new[] { "N1", "N2" }, split.Rotating.Select(c => c.Label).ToArray());
-        Assert.Equal(new[] { 10d, 13d }, split.RotatingWidths.ToArray());
-    }
-
-    [Fact]
-    public void CarouselPinsPriorityRightAndKeepsNormalsToTheLeft()
-    {
-        var cards = new[]
-        {
-            new TickerCard { Label = "N", Priority = null },
-            new TickerCard { Label = "S", Priority = "priority-medium" },
-            new TickerCard { Label = "P", Priority = "priority-high" },
-        };
-        double[] widths = [40, 50, 60];
-        var placed = TickerLayout.PlaceCarousel(cards, widths, canvasWidth: 200, offset: 0, overflow: true);
-        var p = placed.Single(c => c.Card.Label == "P");
-        var s = placed.Single(c => c.Card.Label == "S");
-        var n = placed.Single(c => c.Card.Label == "N");
-        Assert.Equal(200 - TickerLayout.Pad - 60, p.X, 3);
-        Assert.Equal(p.X - TickerLayout.Gap - 50, s.X, 3);
-        Assert.True(n.X + n.Width <= s.X + 0.01);
-        Assert.True(s.X + s.Width <= p.X + 0.01);
-    }
-
-    [Fact]
-    public void CarouselOffsetMovesOnlyNormalCards()
+    public void CarouselScrollsPriorityWithNormals()
     {
         var cards = new[]
         {
@@ -630,28 +590,9 @@ public class BoardTests
         double[] widths = [80, 80, 50];
         var a = TickerLayout.PlaceCarousel(cards, widths, 200, offset: 0, overflow: true);
         var b = TickerLayout.PlaceCarousel(cards, widths, 200, offset: 20, overflow: true);
-        Assert.Equal(a.Single(c => c.Card.Label == "P").X, b.Single(c => c.Card.Label == "P").X, 3);
-        var nA = a.Where(c => c.Card.Label == "N1").Min(c => c.X);
-        var nB = b.Where(c => c.Card.Label == "N1").Min(c => c.X);
-        Assert.True(nB < nA);
-    }
-
-    [Fact]
-    public void CarouselKeepsPartialRotatingCardsBehindPins()
-    {
-        var cards = new[]
-        {
-            new TickerCard { Label = "N1" },
-            new TickerCard { Label = "N2" },
-            new TickerCard { Label = "P", Priority = "priority-high" },
-        };
-        double[] widths = [80, 80, 50];
-        var placed = TickerLayout.PlaceCarousel(cards, widths, 200, offset: 0, overflow: true);
-        var remaining = 200 - TickerLayout.PinnedReserve([50]);
-        var n1 = placed.Where(c => c.Card.Label == "N1").ToList();
-        Assert.NotEmpty(n1);
-        Assert.Contains(n1, p => p.X + p.Width > remaining);
-        Assert.Contains(placed, c => c.Card.Label == "P" && TickerLayout.IsPinnedPriority(c.Card));
+        var pA = a.Where(c => c.Card.Label == "P").Min(c => c.X);
+        var pB = b.Where(c => c.Card.Label == "P").Min(c => c.X);
+        Assert.True(pB < pA);
     }
 
     [Fact]
@@ -668,22 +609,10 @@ public class BoardTests
     }
 
     [Fact]
-    public void RotatingNeedsMarqueeIgnoresPinnedWidth()
+    public void NeedsMarqueeUsesFullCardWidth()
     {
-        var cards = new[]
-        {
-            new TickerCard { Label = "P", Priority = "priority-high" },
-            new TickerCard { Label = "N" },
-        };
-        Assert.False(TickerLayout.RotatingNeedsMarquee(cards, [40, 40], 200));
-        Assert.True(TickerLayout.RotatingNeedsMarquee(
-            [
-                new TickerCard { Label = "P", Priority = "priority-high" },
-                new TickerCard { Label = "N1" },
-                new TickerCard { Label = "N2" },
-            ],
-            [40, 90, 90],
-            200));
+        Assert.False(TickerLayout.NeedsMarquee([40, 40], 200));
+        Assert.True(TickerLayout.NeedsMarquee([90, 90, 90], 200));
     }
 
     static OsItem CloneSub(int pcpOrdem)
@@ -1311,12 +1240,12 @@ public class UpdateFinderTests
             Priority = "priority-high",
             ColumnIndex = 2,
         };
-        var item = TickerHtml.Item(new PlacedCard(card, 12, 140), "Offset", "fx-02-shimmer", enter: false, pinned: true);
+        var item = TickerHtml.Item(new PlacedCard(card, 12, 140), "Offset", "fx-02-shimmer", enter: false);
         var json = TickerHtml.Frame([item], 48, 42, 16, 12, 200, paused: false, empty: "");
         Assert.Contains("\"prio\":\"prio-high\"", json);
         Assert.Contains("\"w\":140", json);
         Assert.Contains("\"fx\":\"fx-02-shimmer\"", json);
-        Assert.Contains("\"pin\":true", json);
+        Assert.DoesNotContain("\"pin\"", json);
         Assert.Contains("#a30d0d", json);
         Assert.DoesNotContain("toast-action-pill", json);
     }
@@ -1324,12 +1253,12 @@ public class UpdateFinderTests
     [Fact]
     public void TickerHitUsesPlacedGeometry()
     {
-        var pin = new TickerCard { UniqueKey = "p", Label = "P", Priority = "priority-high" };
-        var rot = new TickerCard { UniqueKey = "r", Label = "R", Priority = "priority-normal" };
+        var high = new TickerCard { UniqueKey = "p", Label = "P", Priority = "priority-high" };
+        var normal = new TickerCard { UniqueKey = "r", Label = "R", Priority = "priority-normal" };
         var placed = new PlacedCard[]
         {
-            new(rot, 10, 80),
-            new(pin, 140, 60),
+            new(normal, 10, 80),
+            new(high, 140, 60),
         };
         Assert.Equal("r", TickerHit.At(placed, 20, 10, 48)?.UniqueKey);
         Assert.Equal("p", TickerHit.At(placed, 150, 12, 48)?.UniqueKey);

@@ -13,8 +13,7 @@ public readonly record struct TickerFrameItem(
     string Priority,
     string Accent,
     string Model,
-    bool Enter,
-    bool Pinned);
+    bool Enter);
 
 public static class TickerHtml
 {
@@ -36,14 +35,12 @@ public static class TickerHtml
             </head>
             <body>
             <div id="shell">
-            <div id="rotating"></div>
-            <div id="pinned"></div>
+            <div id="track"></div>
             <div id="empty"></div>
             </div>
             <script>
             const cards = new Map();
-            const rotating = document.getElementById('rotating');
-            const pinned = document.getElementById('pinned');
+            const track = document.getElementById('track');
             const emptyEl = document.getElementById('empty');
             let lastFrame = '';
             function prioClass(p) {
@@ -51,7 +48,6 @@ public static class TickerHtml
               if (p === 'priority-medium' || p === 'prio-med') return 'prio-med';
               return 'prio-norm';
             }
-            function hostOf(item) { return item.pin ? pinned : rotating; }
             function ensureCard(item) {
               let el = cards.get(item.k);
               if (!el) {
@@ -59,10 +55,8 @@ public static class TickerHtml
                 el.dataset.k = item.k;
                 el.innerHTML = (item.fx === 'fx-03-accent-scan' ? '<span class="accent-runner"></span>' : '')
                   + '<div class="os-line"></div><div class="sit-line"></div>';
-                hostOf(item).appendChild(el);
+                track.appendChild(el);
                 cards.set(item.k, el);
-              } else if (el.parentElement !== hostOf(item)) {
-                hostOf(item).appendChild(el);
               }
               return el;
             }
@@ -87,7 +81,7 @@ public static class TickerHtml
               if (frame.cardH) root.style.setProperty('--card-h', frame.cardH + 'px');
               if (frame.fontOs) root.style.setProperty('--font-os', frame.fontOs + 'px');
               if (frame.fontSit) root.style.setProperty('--font-sit', frame.fontSit + 'px');
-              rotating.style.width = (frame.clipW || frame.w || 0) + 'px';
+              track.style.width = (frame.clipW || frame.w || 0) + 'px';
               document.body.classList.toggle('paused', !!frame.paused);
               emptyEl.textContent = frame.empty || '';
               emptyEl.style.display = frame.empty ? 'block' : 'none';
@@ -147,7 +141,6 @@ public static class TickerHtml
                 ["accent"] = item.Accent,
                 ["fx"] = item.Model,
                 ["enter"] = item.Enter,
-                ["pin"] = item.Pinned,
             }).ToList(),
         };
         return JsonSerializer.Serialize(payload, JsonOpts);
@@ -176,8 +169,7 @@ public static class TickerHtml
         PlacedCard placed,
         string situacao,
         string model,
-        bool enter,
-        bool pinned)
+        bool enter)
     {
         var card = placed.Card;
         return new TickerFrameItem(
@@ -189,8 +181,7 @@ public static class TickerHtml
             CardAccent.PriorityClass(card.Priority),
             CardAccent.Hex(card),
             TickerModels.Clamp(model),
-            enter,
-            pinned);
+            enter);
     }
 
     public static string Inv(double value) =>

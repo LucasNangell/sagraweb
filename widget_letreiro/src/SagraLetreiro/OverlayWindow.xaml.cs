@@ -864,9 +864,8 @@ public partial class OverlayWindow : Window
 
     bool NeedsScroll()
     {
-        var cards = _layout.Select(c => c.Card).ToList();
         var widths = _layout.Select(c => c.Width).ToList();
-        return TickerLayout.RotatingNeedsMarquee(cards, widths, TickerWidth());
+        return TickerLayout.NeedsMarquee(widths, TickerWidth());
     }
 
     void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
@@ -874,8 +873,7 @@ public partial class OverlayWindow : Window
         if (!NeedsScroll()) return;
         e.Handled = true;
         var widths = _layout.Select(c => c.Width).ToList();
-        var split = TickerLayout.SplitByPriority(_layout.Select(c => c.Card).ToList(), widths);
-        _offset -= e.Delta / 120.0 * TickerLayout.MarqueeWheelStep(split.RotatingWidths);
+        _offset -= e.Delta / 120.0 * TickerLayout.MarqueeWheelStep(widths);
         Redraw();
     }
 
@@ -906,33 +904,6 @@ public partial class OverlayWindow : Window
             return;
         }
 
-        var rotating = new List<PlacedCard>();
-        var pinned = new List<PlacedCard>();
-        foreach (var item in placed)
-        {
-            if (TickerLayout.IsPinnedPriority(item.Card)) pinned.Add(item);
-            else rotating.Add(item);
-        }
-
-        var remaining = width - TickerLayout.PinnedReserve(pinned.Select(p => p.Width).ToList());
-        if (pinned.Count > 0 && rotating.Count > 0 && remaining > 0)
-        {
-            var host = new Canvas
-            {
-                Width = remaining,
-                Height = height,
-                ClipToBounds = true,
-            };
-            Canvas.SetLeft(host, 0);
-            Canvas.SetTop(host, 0);
-            foreach (var item in rotating)
-                host.Children.Add(Paint(item, height));
-            Ticker.Children.Add(host);
-            foreach (var item in pinned)
-                Ticker.Children.Add(Paint(item, height));
-            return;
-        }
-
         foreach (var item in placed)
             Ticker.Children.Add(Paint(item, height));
     }
@@ -950,16 +921,11 @@ public partial class OverlayWindow : Window
             var sit = _layout.First(c =>
                 ReferenceEquals(c.Card, item.Card) || c.Card.UniqueKey == item.Card.UniqueKey).Situacao;
             var enter = TickerModels.IsEntry(model) && _htmlEnterSeen.Add(item.Card.UniqueKey);
-            items.Add(TickerHtml.Item(item, sit, model, enter, TickerLayout.IsPinnedPriority(item.Card)));
+            items.Add(TickerHtml.Item(item, sit, model, enter));
         }
         _htmlEnterSeen.RemoveWhere(key => !live.Contains(key));
-        var pinWidths = placed.Where(p => TickerLayout.IsPinnedPriority(p.Card)).Select(p => p.Width).ToList();
-        var remaining = width - TickerLayout.PinnedReserve(pinWidths);
-        var clipW = pinWidths.Count > 0 && placed.Any(p => !TickerLayout.IsPinnedPriority(p.Card)) && remaining > 0
-            ? remaining
-            : width;
         var empty = _layout.Count == 0 && _status != "connected" ? _statusMsg : "";
-        var json = TickerHtml.Frame(items, height, cardH, numSize, sitSize, clipW, IsPaused(), empty);
+        var json = TickerHtml.Frame(items, height, cardH, numSize, sitSize, width, IsPaused(), empty);
         _tickerBridge.FrameJson = json;
         try { TickerWeb.CoreWebView2?.PostWebMessageAsJson(json); }
         catch { /* o rAF do host object aplica no próximo quadro */ }

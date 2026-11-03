@@ -10,6 +10,7 @@ type Pending = { name: string; kind: "windows" | "screenshot" | "action"; starte
 type Props = { target: Instance | null; selectionCount: number; commands: Command[]; jobs: Job[]; onQueued: () => void; onJobs: (jobs: Job[]) => void; onOpenLibrary: () => void };
 
 const ACTIONS: { id: WindowAction; label: string; icon: typeof Monitor }[] = [
+  { id: "refresh", label: "Atualizar janela (F5)", icon: RefreshCw },
   { id: "maximize", label: "Maximizar", icon: Maximize2 },
   { id: "minimize", label: "Minimizar", icon: Minimize2 },
   { id: "fullscreen", label: "Tela cheia", icon: Expand },

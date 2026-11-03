@@ -83,6 +83,7 @@ test("ação aceita apenas identidades e verbos permitidos, sem interpolar títu
   assert.ok(!safe.includes("Stop-Process"));
   assert.throws(() => windowActionScript(template, { ...windowRow, handle: "1; exit" }, "close"));
   assert.throws(() => windowActionScript(template, windowRow, "kill"));
+  assert.match(windowActionScript(template, windowRow, "refresh"), /::Act\(\[long\]12345, \[int\]120, \[long\]639000000000000000, 'refresh'\)/);
 });
 
 test("atalhos persistidos aceitam somente IDs únicos positivos e no máximo vinte", () => {

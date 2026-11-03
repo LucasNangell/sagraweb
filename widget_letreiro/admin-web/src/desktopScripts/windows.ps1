@@ -23,6 +23,7 @@ public static class SagraDesktop {
     [StructLayout(LayoutKind.Sequential)] struct Point { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)] struct Placement { public int Length; public int Flags, Show; public Point Min, Max; public Rect Normal; }
     [StructLayout(LayoutKind.Sequential)] struct MonitorInfo { public int Size; public Rect Monitor, Work; public uint Flags; }
+    [StructLayout(LayoutKind.Sequential)] struct GuiThreadInfo { public int Size, Flags; public IntPtr Active, Focus, Capture, MenuOwner, MoveSize, Caret; public Rect CaretRect; }
     [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc callback, IntPtr param);
     [DllImport("user32.dll")] static extern bool IsWindow(IntPtr hwnd);
     [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hwnd);
@@ -30,6 +31,8 @@ public static class SagraDesktop {
     [DllImport("user32.dll")] static extern bool IsZoomed(IntPtr hwnd);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr hwnd, StringBuilder title, int max);
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
+    [DllImport("user32.dll")] static extern bool GetGUIThreadInfo(uint thread, ref GuiThreadInfo info);
+    [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
     [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out int value, int size);
     [DllImport("user32.dll", SetLastError=true)] static extern bool ShowWindowAsync(IntPtr hwnd, int state);
     [DllImport("user32.dll", SetLastError=true)] static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int w, int h, uint flags);
@@ -84,7 +87,7 @@ public static class SagraDesktop {
     }
 
     public static string Act(long handle, int pid, long started, string action) {
-        if (action != "close" && action != "foreground" && action != "fullscreen" && action != "maximize" && action != "minimize" && action != "restore")
+        if (action != "close" && action != "foreground" && action != "fullscreen" && action != "maximize" && action != "minimize" && action != "restore" && action != "refresh")
             throw new ArgumentException("Ação de janela inválida.");
         var h = new IntPtr(handle);
         uint owner; GetWindowThreadProcessId(h, out owner);
@@ -92,6 +95,15 @@ public static class SagraDesktop {
         using (var process = Process.GetProcessById(pid)) {
             if (process.SessionId != Session || process.StartTime.ToUniversalTime().Ticks != started)
                 throw new InvalidOperationException("A janela não pertence mais à sessão consultada. Atualize a lista.");
+        }
+        if (action == "refresh") {
+            uint actualOwner; uint thread = GetWindowThreadProcessId(h, out actualOwner);
+            var info = new GuiThreadInfo(); info.Size = Marshal.SizeOf(typeof(GuiThreadInfo));
+            IntPtr destination = h;
+            if (GetGUIThreadInfo(thread, ref info) && info.Focus != IntPtr.Zero && GetAncestor(info.Focus, 2) == h) destination = info.Focus;
+            Require(PostMessage(destination, 0x0100, new IntPtr(0x74), new IntPtr(1)));
+            Require(PostMessage(destination, 0x0101, new IntPtr(0x74), new IntPtr(unchecked((int)0xC0000001))));
+            return "Atualização solicitada (F5). A resposta depende do aplicativo.";
         }
         if (action == "close") {
             Require(PostMessage(h, 0x0010, IntPtr.Zero, IntPtr.Zero));

@@ -2,7 +2,7 @@ import type { Instance, Job } from "./api";
 
 export const DESKTOP_JOB_PREFIX = "sagra-desktop/";
 export const QUICK_BUTTONS_KEY = "letreiro_quick_commands_v1";
-export type WindowAction = "maximize" | "minimize" | "fullscreen" | "foreground" | "close" | "restore";
+export type WindowAction = "maximize" | "minimize" | "fullscreen" | "foreground" | "close" | "restore" | "refresh";
 export type DesktopWindow = { handle: string; processId: number; processStart: string; title: string; processName: string; state: string; fullscreen: boolean };
 export type WindowResult = { type: "windows"; windows: DesktopWindow[]; capturedAt: string; truncated: boolean };
 export type ScreenshotResult = { type: "screenshot"; mime: "image/jpeg" | "image/png"; image: string; width: number; height: number; originalWidth: number; originalHeight: number; capturedAt: string };
@@ -69,7 +69,7 @@ function validPng(image: string, width: number, height: number) {
 }
 
 export function windowActionScript(template: string, row: DesktopWindow, action: WindowAction) {
-  if (!validWindowIdentity(row) || !["maximize", "minimize", "fullscreen", "foreground", "close", "restore"].includes(action)) throw new Error("Janela ou ação inválida. Atualize a lista.");
+  if (!validWindowIdentity(row) || !["maximize", "minimize", "fullscreen", "foreground", "close", "restore", "refresh"].includes(action)) throw new Error("Janela ou ação inválida. Atualize a lista.");
   return `${template}\n$message = [SagraDesktop]::Act([long]${row.handle}, [int]${row.processId}, [long]${row.processStart}, '${action}')\n@{ type = 'action'; message = $message } | ConvertTo-Json -Compress`;
 }
 

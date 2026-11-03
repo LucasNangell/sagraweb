@@ -1,5 +1,5 @@
 import { cn } from "@sagra/ui";
-import { ArrowLeft, CheckCircle2, Loader2, PackageCheck, Search } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2, PackageCheck, Search, Send } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
@@ -32,7 +32,7 @@ import {
   type GravacaoOsGroup,
 } from "../utils/groupGravacaoItemsByOs";
 import { GravacaoExternaStatusBadge } from "./GravacaoExternaActions";
-import { GravacaoExternaChatPanel } from "./GravacaoExternaChatPanel";
+import { GravacaoExternaChatModal } from "./GravacaoExternaChatModal";
 import {
   GravacaoExternaEnvioSection,
   gravacaoFornecedorKey,
@@ -156,6 +156,7 @@ export function GravacaoExternaTab() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [fornecedorFilter, setFornecedorFilter] = useState<string | null>(null);
   const [focusedSessionId, setFocusedSessionId] = useState<number | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
   const [previewSelection, setPreviewSelection] = useState<PreviewSelection | null>(null);
   const [optimisticDownloadedIds, setOptimisticDownloadedIds] = useState(
     () => new Set<number>(),
@@ -275,8 +276,6 @@ export function GravacaoExternaTab() {
       failed: idx >= 0 ? Boolean(detailQuery.failed[idx]) : false,
     };
   };
-  const focusedDetailState = detailFor(focusedId);
-
   const concluirMutation = useConcluirGravacaoExternaMutation();
   const entregaMutation = useLancarEntregaChapasMutation();
   const removerPendenteMutation = useRemoverOsGravacaoExternaMutation();
@@ -308,6 +307,7 @@ export function GravacaoExternaTab() {
     setFocusedSessionId(null);
     setPreviewSelection(null);
     setEntregaItem(null);
+    setChatOpen(false);
   };
 
   const handleSelectOs = (group: ExternaOsGroup, fornecedorKey: string | null = null) => {
@@ -876,50 +876,11 @@ export function GravacaoExternaTab() {
           </div>
         </div>
       </div>
-
-      {isMobile && focusedSession ? (
-        <GravacaoExternaChatPanel
-          ano={selected.ano}
-          nrOs={selected.nr_os}
-          gravacaoExternaId={focusedId}
-          currentPonto={ponto}
-          realtimeOwnedExternally
-        />
-      ) : null}
     </div>
   );
 
-  const chatSidebar = isAguardando ? (
-    <div className="flex h-full items-center justify-center p-4 text-center text-sm text-neutral-500">
-      Chat disponível na lista Gravação pendente.
-    </div>
-  ) : !selected ? (
-    <div className="flex h-full items-center justify-center p-4 text-center text-sm text-neutral-500">
-      Selecione uma OS na lista para ver as mensagens.
-    </div>
-  ) : !selectedHasSession ? (
-    <div className="flex h-full items-center justify-center p-4 text-center text-sm text-neutral-500">
-      Mensagens disponíveis quando a OS tiver arquivos vinculados.
-    </div>
-  ) : !focusedDetailState.detail && !focusedDetailState.failed ? (
-    <div className="flex h-full items-center justify-center">
-      <Loader2 className="size-6 animate-spin text-primary-green" />
-    </div>
-  ) : !focusedDetailState.detail ? (
-    <div className="flex h-full items-center justify-center p-4 text-center text-sm text-neutral-500">
-      Não foi possível carregar as mensagens.
-    </div>
-  ) : (
-    <GravacaoExternaChatPanel
-      key={focusedId ?? "none"}
-      ano={selected.ano}
-      nrOs={selected.nr_os}
-      gravacaoExternaId={focusedId}
-      currentPonto={ponto}
-      fill
-      realtimeOwnedExternally
-    />
-  );
+  const showChatFab =
+    !isAguardando && selected != null && selectedHasSession && focusedId != null;
 
   return (
     <>
@@ -933,11 +894,36 @@ export function GravacaoExternaTab() {
             {listPanel}
           </aside>
           <main className="min-w-0 flex-1">{detailPanel}</main>
-          <aside className="flex w-full max-w-sm shrink-0 flex-col border-l border-neutral-200 bg-white">
-            {chatSidebar}
-          </aside>
         </div>
       )}
+
+      {showChatFab ? (
+        <button
+          type="button"
+          onClick={() => setChatOpen(true)}
+          className={cn(
+            "fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-4 z-50",
+            "flex size-14 items-center justify-center rounded-full bg-primary-green text-white shadow-lg",
+            "hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-green",
+            "md:bottom-6",
+          )}
+          aria-label="Abrir mensagens"
+          title="Mensagens"
+        >
+          <Send className="size-6" aria-hidden />
+        </button>
+      ) : null}
+
+      {selected && showChatFab ? (
+        <GravacaoExternaChatModal
+          open={chatOpen}
+          ano={selected.ano}
+          nrOs={selected.nr_os}
+          gravacaoExternaId={focusedId}
+          currentPonto={ponto}
+          onClose={() => setChatOpen(false)}
+        />
+      ) : null}
 
       <GravacaoExternaEntregaModal
         open={entregaItem != null}

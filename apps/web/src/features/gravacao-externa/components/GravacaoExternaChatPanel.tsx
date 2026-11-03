@@ -28,6 +28,8 @@ interface GravacaoExternaChatPanelProps {
   compact?: boolean;
   /** Preenche a altura do container pai (coluna lateral). */
   fill?: boolean;
+  /** Oculta o cabeçalho interno (ex.: modal já traz título/fechar). */
+  hideHeader?: boolean;
   /** Quando true, o hook realtime da aba/página já cobre esta conversa. */
   realtimeOwnedExternally?: boolean;
   /** Polling de segurança (ms) enquanto o painel estiver montado. */
@@ -41,6 +43,7 @@ export function GravacaoExternaChatPanel({
   currentPonto,
   compact = false,
   fill = false,
+  hideHeader = false,
   realtimeOwnedExternally = false,
   safetyPollMs = GRAVACAO_EXTERNA_SAFETY_POLL_MS,
 }: GravacaoExternaChatPanelProps) {
@@ -91,12 +94,14 @@ export function GravacaoExternaChatPanel({
             ),
       )}
     >
-      <div className="border-b border-neutral-200 px-3 py-2">
-        <h3 className="text-sm font-semibold text-neutral-800">Mensagens</h3>
-        <p className="text-xs text-neutral-500">
-          Comunicação com a CGraf
-        </p>
-      </div>
+      {!hideHeader ? (
+        <div className="border-b border-neutral-200 px-3 py-2">
+          <h3 className="text-sm font-semibold text-neutral-800">Mensagens</h3>
+          <p className="text-xs text-neutral-500">
+            Comunicação com a CGraf
+          </p>
+        </div>
+      ) : null}
 
       <div
         ref={scrollRef}

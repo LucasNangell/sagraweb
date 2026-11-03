@@ -167,6 +167,7 @@ describe("GravacaoExternaTab card por OS", () => {
     expect(zeta).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("region", { name: "Envio Zeta Gráfica · Capa" })).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Envio Alfa Birô · Miolo" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir mensagens" }));
     expect(screen.getByTestId("chat").textContent).toBe("chat-1");
 
     fireEvent.click(zeta);
@@ -175,11 +176,16 @@ describe("GravacaoExternaTab card por OS", () => {
     expect(screen.getByRole("region", { name: "Envio Alfa Birô · Miolo" })).toBeTruthy();
   });
 
-  it("chat acompanha o envio em foco, sem badges na coluna de mensagens", () => {
+  it("abre o chat no modal via FAB e acompanha o envio em foco", () => {
     render(<GravacaoExternaTab />);
     fireEvent.click(screen.getByRole("button", { name: /^01001\/26/ }));
 
     expect(screen.queryByRole("group", { name: "Mensagens do envio" })).toBeNull();
+    expect(screen.queryByTestId("chat")).toBeNull();
+    expect(screen.getByRole("button", { name: "Abrir mensagens" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Abrir mensagens" }));
+    expect(screen.getByRole("dialog", { name: "Mensagens" })).toBeInTheDocument();
     expect(screen.getByTestId("chat").textContent).toBe("chat-1");
 
     fireEvent.pointerDown(screen.getByRole("region", { name: "Envio Alfa Birô · Miolo" }));

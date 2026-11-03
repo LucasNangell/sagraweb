@@ -26,7 +26,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (token) headers.set("X-Letreiro-Admin-Token", token);
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  const res = await fetch(path, { ...init, headers });
+  let res: Response;
+  try {
+    res = await fetch(path, { ...init, headers });
+  } catch (error) {
+    if (error instanceof TypeError) throw new Error("Não foi possível conectar ao letreiro neste computador. Abra o SAGRA Letreiro e volte a abrir a administração.");
+    throw error;
+  }
   const text = await res.text();
   if (!res.ok) {
     let detail = text;

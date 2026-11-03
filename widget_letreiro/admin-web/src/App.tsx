@@ -1217,6 +1217,8 @@ export default function App() {
   const [assignBusyKey, setAssignBusyKey] = useState("");
   const [profileDraftName, setProfileDraftName] = useState("");
   const [settingsProfileId, setSettingsProfileId] = useState(0);
+  const [editingProfileId, setEditingProfileId] = useState(0);
+  const profileReturnConfig = useRef<AppConfig | null>(null);
   const [applyProfileId, setApplyProfileId] = useState(0);
   const [setores, setSetores] = useState<string[]>(["SEFOC", "Papelaria", "Gravação"]);
   const [situacoes, setSituacoes] = useState<string[]>(DEFAULT_SITUACOES);
@@ -1547,22 +1549,49 @@ export default function App() {
   async function saveConfigProfile() {
     const name = profileDraftName.trim();
     if (!name) return setError("Informe o nome do perfil.");
-    const saved = settingsProfileId
-      ? await api.updateConfigProfile(settingsProfileId, name, localCfg)
-      : await api.saveConfigProfile(name, localCfg);
-    await refreshConfigProfiles();
-    setSettingsProfileId(saved.id);
-    setProfileDraftName(saved.name);
-    setApplyProfileId(saved.id);
-    setStatus(`Perfil “${saved.name}” gravado.`);
+    if (configProfiles.some((item) => item.id !== settingsProfileId && item.name.toLocaleLowerCase() === name.toLocaleLowerCase()))
+      return setError("Já existe um perfil com este nome.");
+    setError("");
+    setSaving(true);
+    try {
+      const saved = settingsProfileId
+        ? await api.updateConfigProfile(settingsProfileId, name, localCfg)
+        : await api.saveConfigProfile(name, localCfg);
+      setConfigProfiles((items) => [...items.filter((item) => item.id !== saved.id), saved]);
+      setSettingsProfileId(saved.id);
+      setProfileDraftName(saved.name);
+      setApplyProfileId(saved.id);
+      if (editingProfileId) {
+        if (profileReturnConfig.current) setLocalCfg(profileReturnConfig.current);
+        profileReturnConfig.current = null;
+        setEditingProfileId(0);
+        setSettingsSection("profiles");
+      }
+      setStatus(`Perfil “${saved.name}” gravado.`);
+    } finally {
+      setSaving(false);
+    }
   }
 
   function loadConfigProfile() {
     const row = configProfiles.find((item) => item.id === settingsProfileId);
     if (!row) return setError("Selecione um perfil para carregar.");
+    setError("");
+    profileReturnConfig.current = structuredClone(localCfg);
+    setEditingProfileId(row.id);
     setLocalCfg(mergeProfile(localCfg, row.payload ?? {}));
     setProfileDraftName(row.name);
-    setStatus(`Perfil “${row.name}” carregado neste formulário. Clique em Salvar para aplicar neste computador.`);
+    setSettingsSection("bar");
+    setStatus(`Editando o perfil “${row.name}”. Altere os ajustes e clique em Salvar perfil.`);
+  }
+
+  function cancelProfileEdit() {
+    if (profileReturnConfig.current) setLocalCfg(profileReturnConfig.current);
+    profileReturnConfig.current = null;
+    setEditingProfileId(0);
+    setError("");
+    setSettingsSection("profiles");
+    setStatus("Edição do perfil cancelada.");
   }
 
   async function deleteConfigProfile() {
@@ -2251,7 +2280,7 @@ export default function App() {
                     .catch((ex) => setError(errText(ex)))}
                 />
               </div>
-              <ConfigPreview cfg={localCfg} notifications={settingsSection === "notifications"} />
+              <ConfigPreview cfg={localCfg} notifications={settingsSection === "notifications"} editingProfile={!!editingProfileId} />
               </> : null}
             </div>
 
@@ -2369,6 +2398,7 @@ export default function App() {
                   <select
                     className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
                     value={settingsProfileId}
+                    disabled={!!editingProfileId}
                     onChange={(e) => selectSettingsProfile(Number(e.target.value))}
                   >
                     <option value={0}>Novo perfil…</option>
@@ -2398,7 +2428,7 @@ export default function App() {
                 <button
                   type="button"
                   className="rounded-lg bg-slate-800 px-3 py-2 text-sm disabled:opacity-50"
-                  disabled={!settingsProfileId}
+                  disabled={!settingsProfileId || !!editingProfileId}
                   onClick={() => loadConfigProfile()}
                 >
                   Carregar no formulário
@@ -2406,7 +2436,7 @@ export default function App() {
                 <button
                   type="button"
                   className="rounded-lg bg-slate-800 px-3 py-2 text-sm text-rose-200 disabled:opacity-50"
-                  disabled={!settingsProfileId}
+                  disabled={!settingsProfileId || !!editingProfileId}
                   onClick={() => void deleteConfigProfile().catch((ex) => setError(errText(ex)))}
                 >
                   Excluir
@@ -2415,8 +2445,13 @@ export default function App() {
             </div> : null}
             </fieldset>
             <div className="settings-savebar">
-              <div><span className={`save-indicator ${dirty || !savedConfig ? "is-dirty" : ""}`}>{dirty || !savedConfig ? <CircleAlert size={17} /> : <Check size={17} />}</span><div><strong>{!savedConfig ? "Configuração não carregada" : dirty ? "Alterações pendentes" : "Configuração sincronizada"}</strong><p>{!savedConfig ? "Atualize a página para tentar novamente." : dirty ? "Salve para aplicar os ajustes neste computador." : "Personalize seu letreiro em cada categoria acima."}</p></div></div>
-              <button type="button" className="primary-button" disabled={saving || !savedConfig} onClick={() => void saveLocal().catch((ex) => setError(errText(ex)))}>{saving ? <LoaderCircle size={16} className="animate-spin" /> : <Save size={16} />}{saving ? "Salvando…" : "Salvar alterações"}</button>
+              {editingProfileId ? <>
+                <div><span className="save-indicator is-dirty"><CircleAlert size={17} /></span><div><strong>Editando perfil: {profileDraftName}</strong><p>Os ajustes deste computador serão preservados.</p></div></div>
+                <div className="flex flex-wrap gap-2"><button type="button" className="rounded-lg bg-slate-800 px-3 py-2 text-sm disabled:opacity-50" disabled={saving} onClick={cancelProfileEdit}>Cancelar edição</button><button type="button" className="primary-button" disabled={saving} onClick={() => void saveConfigProfile().catch((ex) => setError(errText(ex)))}>{saving ? <LoaderCircle size={16} className="animate-spin" /> : <Save size={16} />}{saving ? "Salvando…" : "Salvar perfil"}</button></div>
+              </> : <>
+                <div><span className={`save-indicator ${dirty || !savedConfig ? "is-dirty" : ""}`}>{dirty || !savedConfig ? <CircleAlert size={17} /> : <Check size={17} />}</span><div><strong>{!savedConfig ? "Configuração não carregada" : dirty ? "Alterações pendentes" : "Configuração sincronizada"}</strong><p>{!savedConfig ? "Atualize a página para tentar novamente." : dirty ? "Salve para aplicar os ajustes neste computador." : "Personalize seu letreiro em cada categoria acima."}</p></div></div>
+                <button type="button" className="primary-button" disabled={saving || !savedConfig} onClick={() => void saveLocal().catch((ex) => setError(errText(ex)))}>{saving ? <LoaderCircle size={16} className="animate-spin" /> : <Save size={16} />}{saving ? "Salvando…" : "Salvar alterações"}</button>
+              </>}
             </div>
           </section>
         ) : null}

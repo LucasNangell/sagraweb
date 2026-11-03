@@ -1,7 +1,7 @@
 import { Bell, Check, CircleHelp, Monitor, Radio, SlidersHorizontal } from "lucide-react";
 import type { AppConfig } from "./api";
 
-export function ConfigPreview({ cfg, notifications }: { cfg: AppConfig; notifications: boolean }) {
+export function ConfigPreview({ cfg, notifications, editingProfile = false }: { cfg: AppConfig; notifications: boolean; editingProfile?: boolean }) {
   const win = cfg.window;
   return (
     <aside className="config-preview" aria-label="Resumo da exibição">
@@ -38,7 +38,7 @@ export function ConfigPreview({ cfg, notifications }: { cfg: AppConfig; notifica
           ["Opacidade", `${Math.round((win?.opacity ?? 0.95) * 100)}%`],
         ]).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
       </dl>
-      <div className="preview-tip"><CircleHelp size={16} /><p>As alterações são aplicadas ao clicar em <strong>Salvar alterações</strong>.</p></div>
+      <div className="preview-tip"><CircleHelp size={16} /><p>{editingProfile ? <>As alterações serão gravadas ao clicar em <strong>Salvar perfil</strong>.</> : <>As alterações são aplicadas ao clicar em <strong>Salvar alterações</strong>.</>}</p></div>
     </aside>
   );
 }

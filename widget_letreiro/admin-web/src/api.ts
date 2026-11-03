@@ -86,6 +86,7 @@ export type BoardColumn = {
   ponto?: string;
   observacao?: string;
   animation?: string;
+  sound?: string;
 };
 
 export type AppConfig = {
@@ -111,6 +112,7 @@ export type AppConfig = {
     notificationOffsetRight?: number;
     notificationOffsetBottom?: number;
     notificationAnimation?: string;
+    notificationSound?: string;
     notificationVisual?: import("./notificationStyle").NotificationVisual;
     tickerHtml?: boolean;
     tickerCardModel?: string;
@@ -128,6 +130,13 @@ export type ConfigProfile = {
   id: number;
   name: string;
   payload: AppConfig;
+};
+
+export type ConfigProfileAssignment = {
+  hostName: string;
+  windowsUser: string;
+  profileId: number;
+  profileName: string;
 };
 
 export const api = {
@@ -207,6 +216,13 @@ export const api = {
     }),
   deleteConfigProfile: (id: number) =>
     request("/local/config-profiles/" + id, { method: "DELETE" }),
+  configProfileAssignments: () =>
+    request<{ assignments: ConfigProfileAssignment[] }>("/local/config-profile-assignments"),
+  setConfigProfileAssignment: (hostName: string, windowsUser: string, profileId: number) =>
+    request<ConfigProfileAssignment>("/local/config-profile-assignments", {
+      method: "PUT",
+      body: JSON.stringify({ hostName, windowsUser, profileId }),
+    }),
   previewNotification: (size?: {
     width?: number;
     height?: number;
@@ -218,6 +234,7 @@ export const api = {
     offsetRight?: number;
     offsetBottom?: number;
     animation?: string;
+    sound?: string;
     visual?: import("./notificationStyle").NotificationVisual;
   }) =>
     request<{ status: string }>("/local/preview-notification", {
@@ -226,6 +243,29 @@ export const api = {
     }),
   painelPresets: () =>
     request<{ presets: { id: number; nome: string; payload: unknown }[] }>("/api/letreiro/painel-presets"),
+  listSounds: () => request<{ sounds: import("./notificationSounds").LetreiroSound[] }>("/api/letreiro/sounds"),
+  uploadSound: async (file: File) => {
+    const headers = new Headers();
+    if (token) headers.set("X-Letreiro-Admin-Token", token);
+    const body = new FormData();
+    body.append("file", file);
+    const res = await fetch("/api/letreiro/sounds", { method: "POST", headers, body });
+    const text = await res.text();
+    if (!res.ok) {
+      let detail = text;
+      try {
+        const parsed = JSON.parse(text) as { detail?: string };
+        if (parsed.detail) detail = parsed.detail;
+      } catch {
+        /* keep raw */
+      }
+      throw new ApiError(res.status, detail || `HTTP ${res.status}`);
+    }
+    return JSON.parse(text) as { status: string; sound: import("./notificationSounds").LetreiroSound };
+  },
+  deleteSound: (id: string) =>
+    request(`/api/letreiro/sounds/${encodeURIComponent(id)}?windowsUser=`, { method: "DELETE" }),
+  soundUrl: (id: string) => `/api/letreiro/sounds/${encodeURIComponent(id)}`,
   setores: () => request<{ setores: string[] }>("/local/setores"),
   situacoes: () => request<{ situacoes: string[] }>("/local/situacoes"),
 };

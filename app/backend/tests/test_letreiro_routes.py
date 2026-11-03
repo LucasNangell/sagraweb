@@ -752,3 +752,62 @@ def test_job_result_snapshot_independent_of_catalog(monkeypatch):
     assert updates
     assert updates[0][1][0] == "ok"
     assert updates[0][1][2] == "ok"
+
+
+def test_list_sounds_empty(tmp_path, monkeypatch):
+    monkeypatch.setattr(letreiro_routes.letreiro_sounds_service, "SOUNDS_DIR", tmp_path)
+    response = _client().get("/api/letreiro/sounds")
+    assert response.status_code == 200
+    assert response.json() == {"sounds": []}
+
+
+def test_upload_sound_requires_admin(tmp_path, monkeypatch):
+    monkeypatch.setattr(letreiro_routes.letreiro_sounds_service, "SOUNDS_DIR", tmp_path)
+    response = _client().post(
+        "/api/letreiro/sounds",
+        headers={"X-Letreiro-Windows-User": "outro"},
+        files={"file": ("beep.mp3", b"ID3" + b"\x00" * 64, "audio/mpeg")},
+    )
+    assert response.status_code == 403
+
+
+def test_upload_get_delete_sound(tmp_path, monkeypatch):
+    monkeypatch.setattr(letreiro_routes.letreiro_sounds_service, "SOUNDS_DIR", tmp_path)
+    # Minimal ID3 header so the validator accepts the payload.
+    payload = b"ID3" + b"\x00" * 200
+    response = _client().post(
+        "/api/letreiro/sounds",
+        headers={"X-Letreiro-Windows-User": "P_918713"},
+        files={"file": ("alerta.mp3", payload, "audio/mpeg")},
+    )
+    assert response.status_code == 200
+    sound = response.json()["sound"]
+    sound_id = sound["id"]
+    assert sound["name"] == "alerta"
+    assert sound["size"] == len(payload)
+
+    listed = _client().get("/api/letreiro/sounds")
+    assert listed.status_code == 200
+    assert listed.json()["sounds"][0]["id"] == sound_id
+
+    downloaded = _client().get(f"/api/letreiro/sounds/{sound_id}")
+    assert downloaded.status_code == 200
+    assert downloaded.content == payload
+    assert "audio/mpeg" in downloaded.headers.get("content-type", "")
+
+    deleted = _client().delete(
+        f"/api/letreiro/sounds/{sound_id}",
+        headers={"X-Letreiro-Windows-User": "P_918713"},
+    )
+    assert deleted.status_code == 200
+    assert _client().get(f"/api/letreiro/sounds/{sound_id}").status_code == 404
+
+
+def test_upload_rejects_non_mp3(tmp_path, monkeypatch):
+    monkeypatch.setattr(letreiro_routes.letreiro_sounds_service, "SOUNDS_DIR", tmp_path)
+    response = _client().post(
+        "/api/letreiro/sounds",
+        headers={"X-Letreiro-Windows-User": "P_918713"},
+        files={"file": ("nota.txt", b"hello world not audio", "text/plain")},
+    )
+    assert response.status_code == 400

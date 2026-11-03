@@ -13,13 +13,29 @@ import {
   Trash2,
   ChevronDown,
 } from "lucide-react";
-import { api, ApiError, type AppConfig, type BoardColumn, type Command, type ConfigProfile, type Instance, type Job } from "./api";
+import {
+  api,
+  ApiError,
+  type AppConfig,
+  type BoardColumn,
+  type Command,
+  type ConfigProfile,
+  type ConfigProfileAssignment,
+  type Instance,
+  type Job,
+} from "./api";
 import {
   CLASSIC_ENTRY_ANIMATIONS,
   clampColumnAnimation,
   clampEntryAnimation,
   visualFromPreset,
 } from "./notificationStyle";
+import {
+  MUTE_SOUND,
+  clampColumnSound,
+  clampNotificationSound,
+  type LetreiroSound,
+} from "./notificationSounds";
 import { TICKER_CARD_MODELS, clampTickerModel } from "./tickerModels";
 import {
   applyCapturesFromJobs,
@@ -286,6 +302,7 @@ type DisplayFilter = {
   ponto: string;
   observacao: string;
   animation: string;
+  sound: string;
 };
 
 const DEFAULT_SITUACOES = [
@@ -315,6 +332,7 @@ function filtersFromColumns(columns: BoardColumn[]): DisplayFilter[] {
         ponto: col.ponto ?? "",
         observacao: col.observacao ?? "",
         animation: clampColumnAnimation(col.animation),
+        sound: clampColumnSound(col.sound),
       });
       return;
     }
@@ -329,6 +347,7 @@ function filtersFromColumns(columns: BoardColumn[]): DisplayFilter[] {
         ponto: col.ponto ?? "",
         observacao: col.observacao ?? "",
         animation: clampColumnAnimation(col.animation),
+        sound: clampColumnSound(col.sound),
       });
     });
   });
@@ -340,10 +359,12 @@ function columnsFromFilters(filters: DisplayFilter[]): BoardColumn[] {
     const ponto = item.ponto.trim();
     const observacao = item.observacao.trim();
     const animation = clampColumnAnimation(item.animation);
+    const sound = clampColumnSound(item.sound);
     const extras = {
       ...(ponto ? { ponto } : {}),
       ...(observacao ? { observacao } : {}),
       ...(animation ? { animation } : {}),
+      ...(sound ? { sound } : {}),
     };
     if (item.fonte === "inbox") {
       return {
@@ -438,6 +459,7 @@ function remoteWindow(cfg: AppConfig, columns: BoardColumn[]) {
     notificationOffsetRight: cfg.window?.notificationOffsetRight ?? 24,
     notificationOffsetBottom: cfg.window?.notificationOffsetBottom ?? 24,
     notificationAnimation: clampEntryAnimation(cfg.window?.notificationAnimation),
+    notificationSound: clampNotificationSound(cfg.window?.notificationSound),
     notificationVisual: cfg.window?.notificationVisual,
     tickerHtml: cfg.window?.tickerHtml !== false,
     tickerCardModel: clampTickerModel(cfg.window?.tickerCardModel),
@@ -498,6 +520,56 @@ function withFilters(cfg: AppConfig, next: DisplayFilter[]): AppConfig {
   };
 }
 
+function playCatalogSound(id: string) {
+  const resolved = clampNotificationSound(id);
+  if (resolved === MUTE_SOUND) return;
+  try {
+    const audio = new Audio(api.soundUrl(resolved));
+    void audio.play();
+  } catch {
+    /* preview best-effort */
+  }
+}
+
+function SoundUploadButton({
+  onUploaded,
+  onError,
+}: {
+  onUploaded: (sound: LetreiroSound) => void;
+  onError?: (msg: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".mp3,audio/mpeg"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (!file) return;
+          setBusy(true);
+          void api.uploadSound(file)
+            .then((res) => onUploaded(res.sound))
+            .catch((ex) => onError?.(ex instanceof Error ? ex.message : String(ex)))
+            .finally(() => setBusy(false));
+        }}
+      />
+      <button
+        type="button"
+        className="rounded-lg bg-slate-800 px-3 py-2 text-sm disabled:opacity-50"
+        disabled={busy}
+        onClick={() => inputRef.current?.click()}
+      >
+        {busy ? "Enviando…" : "Enviar MP3"}
+      </button>
+    </>
+  );
+}
+
 function LetreiroDisplayFields({
   cfg,
   onChange,
@@ -505,6 +577,9 @@ function LetreiroDisplayFields({
   listId,
   onPreview,
   presets = [],
+  sounds = [],
+  onSoundsChange,
+  onError,
 }: {
   cfg: AppConfig;
   onChange: (next: AppConfig) => void;
@@ -512,8 +587,12 @@ function LetreiroDisplayFields({
   listId: string;
   onPreview?: (priority: string) => void;
   presets?: { id: number; nome: string; payload: unknown }[];
+  sounds?: LetreiroSound[];
+  onSoundsChange?: (next: LetreiroSound[]) => void;
+  onError?: (msg: string) => void;
 }) {
   const [previewPriority, setPreviewPriority] = useState("");
+  const globalSound = clampNotificationSound(cfg.window?.notificationSound);
   return (
     <>
       <label className="mt-4 block min-w-0 text-sm text-slate-400">
@@ -759,6 +838,39 @@ function LetreiroDisplayFields({
           ))}
         </select>
       </label>
+      <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end">
+        <label className="min-w-0 text-sm text-slate-400">
+          Som de notificação (global)
+          <select
+            className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+            value={globalSound}
+            onChange={(e) => onChange({ ...cfg, window: { ...cfg.window, notificationSound: e.target.value } })}
+          >
+            <option value={MUTE_SOUND}>Sem som</option>
+            {sounds.map((item) => (
+              <option key={item.id} value={item.id}>{item.name}</option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          className="rounded-lg bg-slate-800 px-3 py-2 text-sm disabled:opacity-50"
+          disabled={globalSound === MUTE_SOUND}
+          onClick={() => playCatalogSound(globalSound)}
+        >
+          Ouvir
+        </button>
+        <SoundUploadButton
+          onError={onError}
+          onUploaded={(sound) => {
+            onSoundsChange?.([...sounds.filter((item) => item.id !== sound.id), sound]);
+            onChange({ ...cfg, window: { ...cfg.window, notificationSound: sound.id } });
+          }}
+        />
+      </div>
+      <p className="mt-1 text-xs text-slate-500">
+        Sem som global: o toast fica mudo, salvo quando um filtro define um MP3 próprio. Os clients baixam o arquivo automaticamente.
+      </p>
       <label className="mt-3 block min-w-0 text-sm text-slate-400">
         Visual do card (layout, cores, fontes e efeitos do preset de admin/paineis)
         <select
@@ -802,6 +914,7 @@ function FilterListFields({
   situacoes,
   listId,
   actions,
+  sounds = [],
 }: {
   cfg: AppConfig;
   onChange: (next: AppConfig) => void;
@@ -810,6 +923,7 @@ function FilterListFields({
   situacoes: string[];
   listId: string;
   actions?: ReactNode;
+  sounds?: LetreiroSound[];
 }) {
   const filters = filtersFromColumns(cfg.board?.columns ?? []);
   const situacaoOptions = [...new Set([...situacoes, ...filters.map((row) => row.situacao).filter(Boolean)])];
@@ -821,7 +935,7 @@ function FilterListFields({
   function addFilter() {
     onChange(withFilters(cfg, [
       ...filters,
-      { key: `new-${Date.now()}`, setor: cfg.board?.sector ?? "", situacao: "", fonte: "situacao", notify: false, ponto: "", observacao: "", animation: "" },
+      { key: `new-${Date.now()}`, setor: cfg.board?.sector ?? "", situacao: "", fonte: "situacao", notify: false, ponto: "", observacao: "", animation: "", sound: "" },
     ]));
   }
 
@@ -838,7 +952,7 @@ function FilterListFields({
           <h2 className="text-xl font-bold">Filtros</h2>
           <p className="mt-1 max-w-xl text-sm text-slate-400">
             Cada linha vira um card na faixa. Marque Notificar para avisar quando uma OS entrar nessa situação.
-            Ponto e Observação são opcionais. Animação por filtro vale só com Notificar marcado.
+            Ponto e Observação são opcionais. Animação e som por filtro valem só com Notificar marcado.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -920,7 +1034,7 @@ function FilterListFields({
                   <Trash2 size={16} />
                 </button>
               </div>
-              <div className="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(6rem,8rem)_minmax(0,1fr)_minmax(10rem,14rem)] lg:items-end">
+              <div className="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(6rem,8rem)_minmax(0,1fr)_minmax(9rem,12rem)_minmax(9rem,12rem)] lg:items-end">
                 <label className="min-w-0 text-xs text-slate-500">
                   Ponto
                   <input
@@ -953,6 +1067,22 @@ function FilterListFields({
                     <option value="">Padrão</option>
                     {CLASSIC_ENTRY_ANIMATIONS.map((item) => (
                       <option key={item.id} value={item.id}>{item.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="min-w-0 text-xs text-slate-500">
+                  Som
+                  <select
+                    aria-label="Som deste filtro"
+                    className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 disabled:text-slate-500"
+                    value={clampColumnSound(row.sound)}
+                    disabled={!row.notify}
+                    onChange={(e) => patchFilter(index, { sound: e.target.value })}
+                  >
+                    <option value="">Padrão</option>
+                    <option value={MUTE_SOUND}>Sem som</option>
+                    {sounds.map((item) => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
                     ))}
                   </select>
                 </label>
@@ -996,7 +1126,10 @@ export default function App() {
   const [clientBusy, setClientBusy] = useState(false);
   const clickTimer = useRef(0);
   const [painelPresets, setPainelPresets] = useState<{ id: number; nome: string; payload: unknown }[]>([]);
+  const [sounds, setSounds] = useState<LetreiroSound[]>([]);
   const [configProfiles, setConfigProfiles] = useState<ConfigProfile[]>([]);
+  const [profileAssignments, setProfileAssignments] = useState<ConfigProfileAssignment[]>([]);
+  const [assignBusyKey, setAssignBusyKey] = useState("");
   const [profileDraftName, setProfileDraftName] = useState("");
   const [settingsProfileId, setSettingsProfileId] = useState(0);
   const [applyProfileId, setApplyProfileId] = useState(0);
@@ -1019,6 +1152,15 @@ export default function App() {
       textMatches(row.nome ?? "", profile.nome) && textMatches(row.setor ?? "", profile.setor),
     );
   }, [filteringList, instances, profile.nome, profile.setor]);
+  const settingsInstances = useMemo(
+    () => uniqueInstances(instances).sort(compareInstances),
+    [instances],
+  );
+  const assignmentByKey = useMemo(() => {
+    const map = new Map<string, ConfigProfileAssignment>();
+    for (const row of profileAssignments) map.set(keyOf(row), row);
+    return map;
+  }, [profileAssignments]);
 
   const applyJobs = useCallback((next: Job[]) => {
     setJobs(next);
@@ -1083,16 +1225,20 @@ export default function App() {
         setIsAdmin(me.isAdmin);
         const onlyAjustes = pageHash === "ajustes" || !me.isAdmin;
         if (onlyAjustes) setView("settings");
-        const [local, setorList, situacaoList, presetList, profileList] = await Promise.all([
+        const [local, setorList, situacaoList, presetList, profileList, assignmentList, soundList] = await Promise.all([
           api.localConfig(),
           api.setores(),
           api.situacoes().catch(() => ({ situacoes: [] as string[] })),
           api.painelPresets().catch(() => ({ presets: [] as { id: number; nome: string; payload: unknown }[] })),
           api.configProfiles().catch(() => ({ profiles: [] as ConfigProfile[] })),
+          api.configProfileAssignments().catch(() => ({ assignments: [] as ConfigProfileAssignment[] })),
+          api.listSounds().catch(() => ({ sounds: [] as LetreiroSound[] })),
         ]);
         setPainelPresets(presetList.presets ?? []);
+        setSounds(soundList.sounds ?? []);
         setLocalCfg(withNotifyMigration(withFreshPresetVisual(local, presetList.presets ?? [])));
         setConfigProfiles(profileList.profiles ?? []);
+        setProfileAssignments(assignmentList.assignments ?? []);
         if (setorList.setores?.length) setSetores(setorList.setores);
         if (situacaoList.situacoes?.length) {
           setSituacoes([...new Set([...situacaoList.situacoes, ...DEFAULT_SITUACOES])]);
@@ -1118,6 +1264,18 @@ export default function App() {
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
+
+  useEffect(() => {
+    if (view !== "settings" || !isAdmin || userAjustes) return;
+    void (async () => {
+      try {
+        if (instances.length === 0) await loadAll();
+        await refreshProfileAssignments();
+      } catch (ex) {
+        setError(errText(ex));
+      }
+    })();
+  }, [view, isAdmin, userAjustes, instances.length, loadAll]);
 
   useEffect(() => {
     if (!isAdmin || userAjustes) return;
@@ -1262,6 +1420,11 @@ export default function App() {
     setConfigProfiles(list.profiles ?? []);
   }
 
+  async function refreshProfileAssignments() {
+    const list = await api.configProfileAssignments();
+    setProfileAssignments(list.assignments ?? []);
+  }
+
   function selectSettingsProfile(id: number) {
     setSettingsProfileId(id);
     const row = configProfiles.find((item) => item.id === id);
@@ -1295,6 +1458,7 @@ export default function App() {
     if (!window.confirm(`Excluir o perfil “${row.name}”?`)) return;
     await api.deleteConfigProfile(row.id);
     await refreshConfigProfiles();
+    await refreshProfileAssignments().catch(() => undefined);
     setSettingsProfileId(0);
     setProfileDraftName("");
     if (applyProfileId === row.id) setApplyProfileId(0);
@@ -1314,12 +1478,42 @@ export default function App() {
         const cols = merged.board?.columns ?? [];
         if (cols.length === 0) throw new Error(`O perfil “${row.name}” não tem filtros.`);
         await api.putConfig(remotePayload(merged), target.hostName, target.windowsUser, false);
+        await api.setConfigProfileAssignment(target.hostName, target.windowsUser, row.id);
       }
+      await refreshProfileAssignments().catch(() => undefined);
       setStatus(`Perfil “${row.name}” aplicado em ${selectedRows.length} usuário(s). A posição da faixa permanece em cada PC.`);
     } catch (ex) {
       setError(errText(ex));
     } finally {
       setClientBusy(false);
+    }
+  }
+
+  async function assignProfileFromSettings(row: Instance, profileId: number) {
+    const busy = keyOf(row);
+    setAssignBusyKey(busy);
+    setError("");
+    try {
+      if (profileId <= 0) {
+        await api.setConfigProfileAssignment(row.hostName, row.windowsUser, 0);
+        await refreshProfileAssignments();
+        setStatus(`Perfil removido de ${row.hostName} (${row.windowsUser}).`);
+        return;
+      }
+      const profileRow = configProfiles.find((item) => item.id === profileId);
+      if (!profileRow) throw new Error("Perfil não encontrado.");
+      const data = await api.getConfig(row.hostName, row.windowsUser);
+      const merged = mergeProfile(seedClientConfig(row, data.payload), profileRow.payload ?? {});
+      const cols = merged.board?.columns ?? [];
+      if (cols.length === 0) throw new Error(`O perfil “${profileRow.name}” não tem filtros.`);
+      await api.putConfig(remotePayload(merged), row.hostName, row.windowsUser, false);
+      await api.setConfigProfileAssignment(row.hostName, row.windowsUser, profileRow.id);
+      await refreshProfileAssignments();
+      setStatus(`Perfil “${profileRow.name}” aplicado em ${row.hostName} (${row.windowsUser}).`);
+    } catch (ex) {
+      setError(errText(ex));
+    } finally {
+      setAssignBusyKey("");
     }
   }
 
@@ -1914,6 +2108,9 @@ export default function App() {
                   setores={setores}
                   listId="setores-list"
                   presets={painelPresets}
+                  sounds={sounds}
+                  onSoundsChange={setSounds}
+                  onError={setError}
                   onPreview={(priority) => void api.previewNotification({
                     width: localCfg.window?.notificationWidth ?? 320,
                     height: localCfg.window?.notificationHeight ?? 96,
@@ -1925,6 +2122,7 @@ export default function App() {
                     offsetRight: localCfg.window?.notificationOffsetRight ?? 24,
                     offsetBottom: localCfg.window?.notificationOffsetBottom ?? 24,
                     animation: clampEntryAnimation(localCfg.window?.notificationAnimation),
+                    sound: clampNotificationSound(localCfg.window?.notificationSound),
                     visual: localCfg.window?.notificationVisual,
                   }).then(() => setStatus("Notificação de teste disparada.")).catch((ex) => setError(errText(ex)))}
                 />
@@ -1939,6 +2137,7 @@ export default function App() {
                   onError={setError}
                   setores={setores}
                   situacoes={situacoes}
+                  sounds={sounds}
                   listId="setores-list-filtros"
                   actions={
                     <>
@@ -1959,20 +2158,79 @@ export default function App() {
                       <button className="rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950" onClick={() => void api.saveSettings(pollSec).then(() => setStatus(`Poll = ${pollSec}s`))}>Aplicar</button>
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:p-5">
-                    <h2 className="text-lg font-bold">Configuração remota</h2>
-                    <p className="mt-1 text-sm text-slate-400">
-                      Grave um perfil abaixo e aplique-o aos usuários selecionados em Computadores. Duplo clique ainda edita um usuário. A posição da faixa permanece no PC de destino.
-                    </p>
-                  </div>
                 </div>
               ) : null}
             </div>
 
+            {!userAjustes ? (
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 shadow-card">
+                <div className="border-b border-slate-800 px-4 py-4 sm:px-5">
+                  <h2 className="text-xl font-bold">Computadores e perfis</h2>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Escolha o perfil salvo na coluna Perfil para aplicar imediatamente naquela máquina. A posição da faixa permanece no PC de destino.
+                  </p>
+                </div>
+                <div className="max-h-[min(28rem,55vh)] overflow-auto">
+                  <table className="w-full min-w-[42rem] text-sm">
+                    <thead className="sticky top-0 bg-slate-900 text-left text-slate-400">
+                      <tr>
+                        <th className="w-6 px-3 py-3 font-medium" aria-label="Estado" />
+                        {["Nome", "Setor", "Computador", "Usuário", "Perfil"].map((h) => (
+                          <th key={h} className="px-3 py-3 font-medium">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {settingsInstances.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-3 py-8 text-center text-sm text-slate-400">
+                            Nenhum computador com letreiro.
+                          </td>
+                        </tr>
+                      ) : null}
+                      {settingsInstances.map((row) => {
+                        const busy = assignBusyKey === keyOf(row);
+                        const assignedId = assignmentByKey.get(keyOf(row))?.profileId ?? 0;
+                        return (
+                          <tr key={keyOf(row)} className="border-t border-slate-800 hover:bg-slate-800/40">
+                            <td className="px-3 py-3">
+                              <span
+                                className={`mx-auto block h-2 w-2 rounded-full ${row.online ? "bg-emerald-400" : "bg-rose-500"}`}
+                                title={row.online ? "Online" : "Offline"}
+                                aria-label={row.online ? "Online" : "Offline"}
+                              />
+                            </td>
+                            <td className="max-w-[8rem] truncate px-3 py-3 font-medium" title={row.nome || undefined}>{row.nome || "—"}</td>
+                            <td className="max-w-[7rem] truncate px-3 py-3" title={row.setor || undefined}>{row.setor || "—"}</td>
+                            <td className="max-w-[8rem] truncate px-3 py-3" title={row.hostName}>{row.hostName}</td>
+                            <td className="max-w-[8rem] truncate px-3 py-3" title={row.windowsUser}>{row.windowsUser}</td>
+                            <td className="min-w-[12rem] px-3 py-2">
+                              <select
+                                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-slate-100 disabled:opacity-60"
+                                value={assignedId}
+                                disabled={busy || clientBusy || configProfiles.length === 0}
+                                title={configProfiles.length === 0 ? "Cadastre um perfil abaixo" : undefined}
+                                onChange={(e) => void assignProfileFromSettings(row, Number(e.target.value))}
+                              >
+                                <option value={0}>{configProfiles.length ? "Sem perfil" : "Sem perfis salvos"}</option>
+                                {configProfiles.map((item) => (
+                                  <option key={item.id} value={item.id}>{item.name}</option>
+                                ))}
+                              </select>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
+
             <div className="min-w-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:p-5">
               <h2 className="text-xl font-bold">Perfis de configuração</h2>
               <p className="mt-1 text-sm text-slate-400">
-                Salva letreiro e filtros desta página (sem conta ou API). Na administração, o perfil pode ser aplicado aos usuários selecionados.
+                Salva letreiro e filtros desta página (sem conta ou API). Na administração, o perfil pode ser aplicado na lista acima ou aos usuários selecionados em Computadores.
               </p>
               <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,16rem)]">
                 <label className="min-w-0 text-sm text-slate-400">
@@ -2090,6 +2348,9 @@ export default function App() {
                   setores={setores}
                   listId="client-setores-list"
                   presets={painelPresets}
+                  sounds={sounds}
+                  onSoundsChange={setSounds}
+                  onError={setError}
                 />
               </div>
               <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
@@ -2099,6 +2360,7 @@ export default function App() {
                   onError={setError}
                   setores={setores}
                   situacoes={situacoes}
+                  sounds={sounds}
                   listId="client-setores-filtros"
                 />
               </div>

@@ -431,8 +431,10 @@ public partial class OverlayWindow : Window
             Priority = ArrivalNotify.ClampPriority(preview.Priority),
             OffsetRight = ArrivalNotify.ClampOffsetRight(preview.OffsetRight ?? _config.Window.NotificationOffsetRight),
             OffsetBottom = ArrivalNotify.ClampOffsetBottom(preview.OffsetBottom ?? _config.Window.NotificationOffsetBottom),
+            Sound = ArrivalSound.ClampColumn(preview.Sound),
         };
         var card = ArrivalNotify.PreviewCard(_previewToast?.Priority);
+        card.Sound = _previewToast?.Sound;
         if (_cards.All(item => item.UniqueKey != card.UniqueKey))
             _cards.Add(card);
         EnqueueArrivals([card], [card.UniqueKey]);
@@ -480,6 +482,7 @@ public partial class OverlayWindow : Window
         var textGap = ArrivalNotify.ClampTextGap(_config.Window.NotificationTextGap);
         var offsetRight = ArrivalNotify.ClampOffsetRight(_config.Window.NotificationOffsetRight);
         var offsetBottom = ArrivalNotify.ClampOffsetBottom(_config.Window.NotificationOffsetBottom);
+        var soundOverride = card.Sound;
         if (card.UniqueKey == ArrivalNotify.PreviewKey && _previewToast is { } preview)
         {
             width = preview.Width;
@@ -492,10 +495,15 @@ public partial class OverlayWindow : Window
             textGap = ArrivalNotify.ClampTextGap(preview.TextGap);
             offsetRight = ArrivalNotify.ClampOffsetRight(preview.OffsetRight);
             offsetBottom = ArrivalNotify.ClampOffsetBottom(preview.OffsetBottom);
+            if (!string.IsNullOrEmpty(preview.Sound))
+                soundOverride = preview.Sound;
         }
+        var soundId = ArrivalSound.Resolve(soundOverride, _config.Window.NotificationSound);
         _arrivalToast = new ArrivalToastWindow(card, width, height, animation, visual, titleFont, situationFont, padX, textGap, offsetRight, offsetBottom);
         _arrivalToast.Closed += OnArrivalToastClosed;
         _arrivalToast.ShowAbove(this);
+        if (soundId is not null)
+            _ = ArrivalSoundPlayer.PlayResolvedAsync(_client, soundId);
     }
 
     void OnArrivalToastClosed(object? sender, EventArgs e)

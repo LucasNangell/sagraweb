@@ -7,10 +7,12 @@ import re
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, File, Header, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from database import DatabaseConnectionError, db
+from services import letreiro_sounds_service
 
 logger = logging.getLogger(__name__)
 
@@ -897,4 +899,49 @@ async def post_job_result(job_id: int, body: JobResultBody):
             JOB_STATUS_RUNNING,
         ),
     )
+    return {"status": "ok"}
+
+
+@router.get("/sounds")
+async def list_sounds():
+    return {"sounds": letreiro_sounds_service.list_sounds()}
+
+
+@router.get("/sounds/{sound_id}")
+async def get_sound(sound_id: str):
+    path = letreiro_sounds_service.resolve_file(sound_id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Som não encontrado.")
+    return FileResponse(
+        path,
+        media_type="audio/mpeg",
+        filename=f"{sound_id}.mp3",
+        content_disposition_type="inline",
+    )
+
+
+@router.post("/sounds")
+async def upload_sound(
+    file: UploadFile = File(...),
+    x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
+    windows_user: Optional[str] = Query(default=None, alias="windowsUser"),
+):
+    _require_admin(x_letreiro_windows_user or windows_user)
+    content = await file.read()
+    try:
+        row = letreiro_sounds_service.save_upload(file.filename, content)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "ok", "sound": row}
+
+
+@router.delete("/sounds/{sound_id}")
+async def delete_sound(
+    sound_id: str,
+    x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
+    windows_user: Optional[str] = Query(default=None, alias="windowsUser"),
+):
+    _require_admin(x_letreiro_windows_user or windows_user)
+    if not letreiro_sounds_service.delete_sound(sound_id):
+        raise HTTPException(status_code=404, detail="Som não encontrado.")
     return {"status": "ok"}

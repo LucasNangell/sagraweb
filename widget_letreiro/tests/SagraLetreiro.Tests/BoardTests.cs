@@ -452,6 +452,7 @@ public class BoardTests
         Assert.Equal(ArrivalNotify.DefaultOffsetRight, cfg.Window.NotificationOffsetRight);
         Assert.Equal(ArrivalNotify.DefaultOffsetBottom, cfg.Window.NotificationOffsetBottom);
         Assert.Equal(ArrivalNotify.DefaultAnimation, cfg.Window.NotificationAnimation);
+        Assert.Equal("", cfg.Window.NotificationSound);
         Assert.True(cfg.Window.TickerHtml);
         Assert.Equal(TickerModels.DefaultId, cfg.Window.TickerCardModel);
         Assert.Equal(ConfigStore.ProductionApiBase, cfg.ApiBaseUrl);
@@ -864,6 +865,25 @@ public class LetreiroAdminTests
         Assert.Equal("fx-ufo", ArrivalNotify.ClampColumnAnimation("fx-ufo"));
         Assert.Equal("fx-analisar", ArrivalNotify.ClampColumnAnimation("fx-analisar"));
         Assert.Equal("fx-novo-email", ArrivalNotify.ClampColumnAnimation("fx-novo-email"));
+        Assert.Equal("", ArrivalSound.Clamp(null));
+        Assert.Equal(ArrivalSound.None, ArrivalSound.Clamp("none"));
+        Assert.Equal("alerta12ab", ArrivalSound.Clamp("alerta12ab"));
+        Assert.Equal("", ArrivalSound.Clamp("bad id!"));
+        Assert.Null(ArrivalSound.Resolve(null, null));
+        Assert.Null(ArrivalSound.Resolve("", ArrivalSound.None));
+        Assert.Equal("alerta12ab", ArrivalSound.Resolve("", "alerta12ab"));
+        Assert.Equal("filtro99xx", ArrivalSound.Resolve("filtro99xx", ArrivalSound.None));
+        Assert.Null(ArrivalSound.Resolve(ArrivalSound.None, "alerta12ab"));
+        Assert.Equal("alerta12ab", ConfigStore.ForRemote(new AppConfig
+        {
+            Window = new WindowConfig { NotificationSound = "alerta12ab" },
+        }).Window.NotificationSound);
+        Assert.Equal("filtro99xx", ConfigStore.NormalizeColumn(new BoardColumn
+        {
+            Title = "X",
+            Statuses = ["Recebido"],
+            Sound = "filtro99xx",
+        }, 0).Sound);
         var ufo = ArrivalNotify.Layout(320, 96, "fx-ufo");
         Assert.True(ufo.EnterTravel >= 130);
         Assert.True(ufo.SidePad >= 88);
@@ -1053,6 +1073,59 @@ public class ConfigProfilesTests
             Assert.Equal(800, loaded[0].Payload.Window.Width);
             Assert.True(ConfigProfiles.Remove(loaded, loaded[0].Id));
             Assert.Empty(loaded);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+}
+
+public class ConfigProfileAssignmentsTests
+{
+    [Fact]
+    public void SetReplaceAndClearByProfile()
+    {
+        var list = new List<ConfigProfileAssignment>();
+        list = ConfigProfileAssignments.Set(list, "PC1", "fulano", 2, " TV SEFOC ");
+        Assert.Single(list);
+        Assert.Equal(2, list[0].ProfileId);
+        Assert.Equal("TV SEFOC", list[0].ProfileName);
+        list = ConfigProfileAssignments.Set(list, "PC1", "fulano", 3, "Papelaria");
+        Assert.Single(list);
+        Assert.Equal(3, list[0].ProfileId);
+        list = ConfigProfileAssignments.Set(list, "PC2", "beltrano", 3, "Papelaria");
+        Assert.Equal(2, list.Count);
+        list = ConfigProfileAssignments.ClearProfile(list, 3);
+        Assert.Empty(list);
+        list = ConfigProfileAssignments.Set(list, "PC1", "fulano", 0, "");
+        Assert.Empty(list);
+        Assert.Throws<ArgumentException>(() => ConfigProfileAssignments.Set(list, "", "x", 1, "a"));
+    }
+
+    [Fact]
+    public void ResolveNamesDropsMissingProfilesAndPersists()
+    {
+        var assignments = new List<ConfigProfileAssignment>
+        {
+            new() { HostName = "PC1", WindowsUser = "a", ProfileId = 1, ProfileName = "Antigo" },
+            new() { HostName = "PC2", WindowsUser = "b", ProfileId = 9, ProfileName = "Sumiu" },
+        };
+        var profiles = new List<ConfigProfile>
+        {
+            new() { Id = 1, Name = "TV SEFOC", Payload = new AppConfig() },
+        };
+        var resolved = ConfigProfileAssignments.ResolveNames(assignments, profiles);
+        Assert.Single(resolved);
+        Assert.Equal("TV SEFOC", resolved[0].ProfileName);
+        var dir = Path.Combine(Path.GetTempPath(), "letreiro-assign-" + Guid.NewGuid().ToString("N"));
+        var path = Path.Combine(dir, "profile-assignments.json");
+        try
+        {
+            ConfigProfileAssignments.SaveTo(path, assignments);
+            var loaded = ConfigProfileAssignments.LoadFrom(path);
+            Assert.Equal(2, loaded.Count);
+            Assert.Equal("PC1", ConfigProfileAssignments.Find(loaded, "pc1", "A")?.HostName);
         }
         finally
         {

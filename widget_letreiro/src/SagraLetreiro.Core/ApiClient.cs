@@ -621,6 +621,57 @@ public sealed class LetreiroApiClient : IDisposable
         return list;
     }
 
+    public readonly record struct SoundCatalogItem(string Id, string Name, string OriginalName, long Size);
+
+    public async Task<List<SoundCatalogItem>> ListSoundsAsync(CancellationToken ct = default)
+    {
+        var row = await RequestAsync(HttpMethod.Get, "/letreiro/sounds", ct: ct).ConfigureAwait(false);
+        var list = new List<SoundCatalogItem>();
+        if (row.ValueKind != JsonValueKind.Object || !row.TryGetProperty("sounds", out var items)
+            || items.ValueKind != JsonValueKind.Array)
+            return list;
+        foreach (var item in items.EnumerateArray())
+        {
+            var id = GetString(item, "id") ?? "";
+            if (!ArrivalSound.IsPlayableId(id)) continue;
+            list.Add(new SoundCatalogItem(
+                id,
+                GetString(item, "name") ?? id,
+                GetString(item, "originalName") ?? "",
+                GetLong(item, "size")));
+        }
+        return list;
+    }
+
+    public async Task<byte[]?> DownloadSoundAsync(string soundId, CancellationToken ct = default)
+    {
+        var id = ArrivalSound.Clamp(soundId);
+        if (!ArrivalSound.IsPlayableId(id)) return null;
+        using var req = new HttpRequestMessage(HttpMethod.Get, Url($"/letreiro/sounds/{id}"));
+        req.Headers.TryAddWithoutValidation("X-Letreiro-Windows-User", LetreiroAdmin.CurrentWindowsUser());
+        HttpResponseMessage response;
+        try
+        {
+            response = await _http.SendAsync(req, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            throw new LetreiroApiException($"Falha de rede ao baixar som: {ex.Message}");
+        }
+        var code = (int)response.StatusCode;
+        if (code >= 400)
+            throw new LetreiroApiException($"HTTP {code}: som '{id}' indisponível.", code);
+        return await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+    }
+
+    static long GetLong(JsonElement row, string name)
+    {
+        if (!row.TryGetProperty(name, out var el) || el.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return 0;
+        if (el.TryGetInt64(out var n)) return n;
+        return long.TryParse(el.ToString(), out var parsed) ? parsed : 0;
+    }
+
     static LetreiroCommand? MapCommand(JsonElement item)
     {
         if (item.ValueKind != JsonValueKind.Object) return null;

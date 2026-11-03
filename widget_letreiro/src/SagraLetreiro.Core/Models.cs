@@ -66,6 +66,7 @@ public sealed class BoardColumn
     public string? Ponto { get; set; }
     public string? Observacao { get; set; }
     public string? Animation { get; set; }
+    public string? Sound { get; set; }
     public List<OsItem> Items { get; set; } = new();
 }
 
@@ -95,6 +96,7 @@ public sealed class WindowConfig
     public int? NotificationOffsetRight { get; set; }
     public int? NotificationOffsetBottom { get; set; }
     public string NotificationAnimation { get; set; } = ArrivalNotify.DefaultAnimation;
+    public string NotificationSound { get; set; } = "";
     public NotificationVisual NotificationVisual { get; set; } = new();
     public bool TickerHtml { get; set; } = true;
     public string TickerCardModel { get; set; } = TickerModels.DefaultId;
@@ -226,6 +228,7 @@ public sealed class TickerCard
     public int ColumnIndex { get; set; }
     public string ColumnTitle { get; set; } = "";
     public string? Animation { get; set; }
+    public string? Sound { get; set; }
     public object? NrOs { get; set; }
     public object? Ano { get; set; }
     public object? ParentNrOs { get; set; }

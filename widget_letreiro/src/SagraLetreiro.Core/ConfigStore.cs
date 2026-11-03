@@ -78,6 +78,7 @@ public static class ConfigStore
         var ponto = (col.Ponto ?? "").Trim();
         var observacao = (col.Observacao ?? "").Trim();
         var animation = ArrivalNotify.ClampColumnAnimation(col.Animation);
+        var sound = ArrivalSound.ClampColumn(col.Sound);
         var isInbox = col.Source == BoardConstants.InboxColumnSource;
         var outCol = new BoardColumn
         {
@@ -91,6 +92,7 @@ public static class ConfigStore
         if (ponto.Length > 0) outCol.Ponto = ponto;
         if (observacao.Length > 0) outCol.Observacao = observacao;
         if (animation.Length > 0) outCol.Animation = animation;
+        if (sound.Length > 0) outCol.Sound = sound;
         if (isInbox) outCol.Source = BoardConstants.InboxColumnSource;
         return outCol;
     }
@@ -138,6 +140,7 @@ public static class ConfigStore
             NotificationOffsetRight = ArrivalNotify.ClampOffsetRight(raw.NotificationOffsetRight),
             NotificationOffsetBottom = ArrivalNotify.ClampOffsetBottom(raw.NotificationOffsetBottom),
             NotificationAnimation = ArrivalNotify.ClampAnimation(raw.NotificationAnimation),
+            NotificationSound = ArrivalSound.Clamp(raw.NotificationSound),
             NotificationVisual = ArrivalNotify.NormalizeVisual(raw.NotificationVisual),
             TickerHtml = raw.TickerHtml,
             TickerCardModel = TickerModels.Clamp(raw.TickerCardModel),
@@ -235,6 +238,7 @@ public static class ConfigStore
             NotificationOffsetRight = n.Window.NotificationOffsetRight,
             NotificationOffsetBottom = n.Window.NotificationOffsetBottom,
             NotificationAnimation = n.Window.NotificationAnimation,
+            NotificationSound = n.Window.NotificationSound,
             NotificationVisual = n.Window.NotificationVisual,
             TickerHtml = n.Window.TickerHtml,
             TickerCardModel = n.Window.TickerCardModel,

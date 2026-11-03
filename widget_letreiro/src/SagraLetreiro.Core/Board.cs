@@ -429,6 +429,7 @@ public static class Board
             Ponto = col.Ponto,
             Observacao = col.Observacao,
             Animation = col.Animation,
+            Sound = col.Sound,
             Items = new List<OsItem>(),
         }).ToList();
         var unmapped = new List<OsItem>();
@@ -596,6 +597,7 @@ public static class Board
                     ColumnIndex = origIdx,
                     ColumnTitle = col.Title ?? "",
                     Animation = col.Animation,
+                    Sound = col.Sound,
                     NrOs = item.NrOs,
                     Ano = item.Ano,
                     ParentNrOs = item.ParentNrOs,

@@ -30,7 +30,8 @@ public readonly record struct ArrivalPreview(
     int? TextGap,
     string Priority,
     int? OffsetRight,
-    int? OffsetBottom);
+    int? OffsetBottom,
+    string Sound = "");
 
 public static class ArrivalNotify
 {

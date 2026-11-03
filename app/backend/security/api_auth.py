@@ -60,6 +60,8 @@ _PUBLIC_GET_EXACT: Set[str] = {
     "/api/letreiro/jobs/pending",
     "/api/letreiro/settings",
     "/api/letreiro/painel-presets",
+    "/api/letreiro/sounds",
+
 
     "/openapi.json",
 
@@ -97,6 +99,8 @@ _PUBLIC_POST_EXACT: Set[str] = {
 }
 
 _LETREIRO_JOB_RESULT_RE = re.compile(r"^/api/letreiro/jobs/\d+/result$")
+_LETREIRO_SOUND_FILE_RE = re.compile(r"^/api/letreiro/sounds/[A-Za-z0-9_-]+$")
+
 
 _PUBLIC_PREFIXES: Tuple[str, ...] = (
 
@@ -291,6 +295,10 @@ def _is_public_api(path: str, method: str) -> bool:
         return True
 
     if method == "POST" and _LETREIRO_JOB_RESULT_RE.match(path):
+
+        return True
+
+    if method == "GET" and _LETREIRO_SOUND_FILE_RE.match(path):
 
         return True
 

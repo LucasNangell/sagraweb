@@ -20,7 +20,7 @@ public sealed class AdminHost : IDisposable
 {
     public const int PreferredPort = 17890;
     const int PortRange = 30;
-    const int MaxProxyBody = 1024 * 1024;
+    const int MaxProxyBody = 3 * 1024 * 1024;
     const string CookieName = "t";
     static readonly JsonSerializerOptions JsonCamel = new()
     {
@@ -261,6 +261,7 @@ public sealed class AdminHost : IDisposable
             var width = 0;
             var height = 0;
             var animation = "";
+            var sound = "";
             var titleFont = 0;
             var situationFont = 0;
             var padX = 0;
@@ -294,6 +295,8 @@ public sealed class AdminHost : IDisposable
                         offsetBottom = parsedOffB;
                     if (doc.RootElement.TryGetProperty("animation", out var animEl) && animEl.ValueKind == JsonValueKind.String)
                         animation = animEl.GetString() ?? "";
+                    if (doc.RootElement.TryGetProperty("sound", out var soundEl) && soundEl.ValueKind == JsonValueKind.String)
+                        sound = soundEl.GetString() ?? "";
                     if (doc.RootElement.TryGetProperty("visual", out var visEl) && visEl.ValueKind == JsonValueKind.Object)
                         visual = visEl.Deserialize<NotificationVisual>(JsonCamel);
                 }
@@ -302,7 +305,7 @@ public sealed class AdminHost : IDisposable
                     /* usa o tamanho salvo no letreiro */
                 }
             }
-            _options.PreviewNotification?.Invoke(new ArrivalPreview(width, height, animation, visual, titleFont, situationFont, padX, textGap, priority, offsetRight, offsetBottom));
+            _options.PreviewNotification?.Invoke(new ArrivalPreview(width, height, animation, visual, titleFont, situationFont, padX, textGap, priority, offsetRight, offsetBottom, sound));
             await WriteJsonAsync(ctx, 200, new { status = "ok" }).ConfigureAwait(false);
             return;
         }
@@ -375,7 +378,77 @@ public sealed class AdminHost : IDisposable
             {
                 ConfigProfiles.Remove(list, profileId);
                 ConfigProfiles.Save(list);
+                var assignments = ConfigProfileAssignments.Load();
+                ConfigProfileAssignments.Save(ConfigProfileAssignments.ClearProfile(assignments, profileId));
                 await WriteJsonAsync(ctx, 200, new { status = "ok" }).ConfigureAwait(false);
+                return;
+            }
+        }
+
+        if (localPath.Equals("/local/config-profile-assignments", StringComparison.OrdinalIgnoreCase))
+        {
+            if (req.HttpMethod == "GET")
+            {
+                var profiles = ConfigProfiles.Load();
+                var resolved = ConfigProfileAssignments.ResolveNames(
+                    ConfigProfileAssignments.Load(), profiles);
+                await WriteJsonAsync(ctx, 200, new { assignments = resolved }).ConfigureAwait(false);
+                return;
+            }
+            if (req.HttpMethod == "PUT")
+            {
+                var body = await ReadBodyAsync(req, ctx, ct).ConfigureAwait(false);
+                if (body is null) return;
+                string hostName = "";
+                string windowsUser = "";
+                var assignedProfileId = 0;
+                try
+                {
+                    using var doc = JsonDocument.Parse(body.Length == 0 ? "{}" : System.Text.Encoding.UTF8.GetString(body));
+                    if (doc.RootElement.TryGetProperty("hostName", out var hostEl) && hostEl.ValueKind == JsonValueKind.String)
+                        hostName = hostEl.GetString() ?? "";
+                    if (doc.RootElement.TryGetProperty("windowsUser", out var userEl) && userEl.ValueKind == JsonValueKind.String)
+                        windowsUser = userEl.GetString() ?? "";
+                    if (doc.RootElement.TryGetProperty("profileId", out var idEl) && idEl.TryGetInt32(out var parsedId))
+                        assignedProfileId = parsedId;
+                }
+                catch
+                {
+                    await WriteTextAsync(ctx, 400, """{"detail":"atribuição inválida"}""").ConfigureAwait(false);
+                    return;
+                }
+
+                var profiles = ConfigProfiles.Load();
+                var profileName = "";
+                if (assignedProfileId > 0)
+                {
+                    var profile = profiles.FirstOrDefault(item => item.Id == assignedProfileId);
+                    if (profile is null)
+                    {
+                        await WriteTextAsync(ctx, 404, """{"detail":"perfil não encontrado"}""").ConfigureAwait(false);
+                        return;
+                    }
+                    profileName = profile.Name;
+                }
+
+                try
+                {
+                    var list = ConfigProfileAssignments.Load();
+                    list = ConfigProfileAssignments.Set(list, hostName, windowsUser, assignedProfileId, profileName);
+                    ConfigProfileAssignments.Save(list);
+                    var row = ConfigProfileAssignments.Find(list, hostName, windowsUser);
+                    await WriteJsonAsync(ctx, 200, row ?? new ConfigProfileAssignment
+                    {
+                        HostName = hostName.Trim(),
+                        WindowsUser = windowsUser.Trim(),
+                        ProfileId = 0,
+                        ProfileName = "",
+                    }).ConfigureAwait(false);
+                }
+                catch (ArgumentException ex)
+                {
+                    await WriteTextAsync(ctx, 400, JsonSerializer.Serialize(new { detail = ex.Message }, JsonCamel)).ConfigureAwait(false);
+                }
                 return;
             }
         }

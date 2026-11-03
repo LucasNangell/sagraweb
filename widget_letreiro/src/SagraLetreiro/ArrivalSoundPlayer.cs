@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows.Media;
 
 namespace SagraLetreiro;
@@ -26,7 +27,7 @@ internal static class ArrivalSoundPlayer
                 if (ReferenceEquals(_player, player)) _player = null;
             };
             _player = player;
-            player.Open(new Uri(path, UriKind.Absolute));
+            player.Open(new Uri(path!, UriKind.Absolute));
             player.Volume = 1.0;
             player.Play();
         }

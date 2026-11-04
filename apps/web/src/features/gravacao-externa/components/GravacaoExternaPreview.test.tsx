@@ -421,16 +421,16 @@ describe("composite preview", () => {
   });
 
   it("keeps the full Download badge and only shrinks the name when space is tight", () => {
-    let rowWidth = 200;
+    let nameTrackWidth = 124;
     const clientWidthSpy = vi
       .spyOn(HTMLElement.prototype, "clientWidth", "get")
       .mockImplementation(function (this: HTMLElement) {
+        // Name cell width from the grid track (used by the fit algorithm).
         if (
-          this.classList.contains("w-full") &&
-          this.classList.contains("min-w-0") &&
-          this.classList.contains("items-center")
+          this.getAttribute("aria-label") === "Komori" ||
+          this.getAttribute("aria-label") === "SM74"
         ) {
-          return rowWidth;
+          return nameTrackWidth;
         }
         return 0;
       });
@@ -441,10 +441,6 @@ describe("composite preview", () => {
         if (this.tagName === "SPAN" && this.style.visibility === "hidden") {
           const size = Number.parseFloat(this.style.fontSize) || 16;
           return (this.textContent?.length ?? 0) * size * 0.55;
-        }
-        // Badge button: fixed content width.
-        if (this.getAttribute("aria-label")?.startsWith("Download arquivos")) {
-          return 72;
         }
         return 0;
       });
@@ -477,16 +473,16 @@ describe("composite preview", () => {
       });
       expect(komoriBadge).toHaveTextContent("Download");
       expect(komoriBadge.className).toContain("shrink-0");
-      // 200px row - 72 badge - 4 gap = 124px; "Komori" fits → no shrink.
+      // Wide name track: "Komori" fits → no shrink.
       expect(komoriName.style.fontSize).toBe("");
+      expect(komoriName.className).toContain("overflow-hidden");
       unmount();
 
-      rowWidth = 90;
+      nameTrackWidth = 14;
       render(<GravacaoExternaArquivosPanel {...props} />);
       const tightName = within(
         screen.getByRole("group", { name: /Filtrar arquivos por máquina/i }),
       ).getByRole("button", { name: "Komori" });
-      // 90 - 72 - 4 = 14px available → name font must shrink below default.
       expect(tightName.style.fontSize).toMatch(/px$/);
       expect(Number.parseFloat(tightName.style.fontSize)).toBeLessThan(16);
       expect(Number.parseFloat(tightName.style.fontSize)).toBeGreaterThanOrEqual(10);

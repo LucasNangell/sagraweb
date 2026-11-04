@@ -884,28 +884,23 @@ function MachineFilterNameRow({
     if (!row || !nameEl) return;
 
     const fit = () => {
-      const available = row.clientWidth;
-      if (available <= 0) {
+      // Measure against the grid track already reserved for the name (badge is auto-sized).
+      nameEl.style.fontSize = "";
+      const nameAvail = nameEl.clientWidth;
+      if (nameAvail <= 0) {
         setNameFontPx(null);
         return;
       }
 
-      // Always measure from the CSS class size (ignore any previous inline shrink).
-      nameEl.style.fontSize = "";
       const baseFont =
         Number.parseFloat(getComputedStyle(nameEl).fontSize) || 16;
-      const badgeW = showDownloadBadge ? badgeRef.current?.offsetWidth ?? 0 : 0;
-      const gap = showDownloadBadge ? 4 : 0;
-      const nameAvail = Math.max(0, available - badgeW - gap);
-
       const naturalW = measureMachineNameWidth(nameEl, label, baseFont);
       if (naturalW <= nameAvail + 0.5) {
-        // Enough room: keep default font on this tab.
         setNameFontPx(null);
         return;
       }
 
-      // Binary search for the largest font that still fits (minimum reduction).
+      // Largest font that still fits = minimum visible reduction.
       let lo = MACHINE_NAME_MIN_FONT_PX;
       let hi = baseFont;
       let best = MACHINE_NAME_MIN_FONT_PX;
@@ -923,17 +918,31 @@ function MachineFilterNameRow({
     };
 
     fit();
-    if (typeof ResizeObserver === "undefined") return;
+    // Second pass after badge/grid settle (avoids measuring before badge width exists).
+    const raf = window.requestAnimationFrame(fit);
+    if (typeof ResizeObserver === "undefined") {
+      return () => window.cancelAnimationFrame(raf);
+    }
     const ro = new ResizeObserver(fit);
     ro.observe(row);
+    if (badgeRef.current) ro.observe(badgeRef.current);
     return () => {
+      window.cancelAnimationFrame(raf);
       ro.disconnect();
       nameEl.style.fontSize = "";
     };
   }, [label, badgeLabel, showDownloadBadge]);
 
   return (
-    <div ref={rowRef} className="flex w-full min-w-0 items-center gap-1">
+    <div
+      ref={rowRef}
+      className={cn(
+        "grid w-full min-w-0 items-center gap-1",
+        showDownloadBadge
+          ? "grid-cols-[minmax(0,1fr)_auto]"
+          : "grid-cols-1",
+      )}
+    >
       <button
         ref={nameRef}
         type="button"
@@ -941,7 +950,7 @@ function MachineFilterNameRow({
         aria-pressed={active}
         onClick={onSelect}
         style={nameFontPx != null ? { fontSize: `${nameFontPx}px` } : undefined}
-        className="min-w-0 flex-1 whitespace-nowrap text-left text-xs-button font-semibold leading-tight"
+        className="min-w-0 overflow-hidden whitespace-nowrap text-left text-xs-button font-semibold leading-tight"
       >
         {label}
       </button>

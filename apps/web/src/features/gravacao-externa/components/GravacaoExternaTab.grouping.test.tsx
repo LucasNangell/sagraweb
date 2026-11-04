@@ -214,27 +214,22 @@ describe("GravacaoExternaTab card por OS", () => {
     expect(screen.queryByRole("button", { name: "Iniciar gravação" })).toBeNull();
   });
 
-  it("card iniciada mostra barra de progresso; Concluir só para fornecedor", () => {
+  it("card iniciada mostra badge; Concluir só para fornecedor", () => {
     const { unmount } = render(<GravacaoExternaTab />);
 
     const osIniciada = cardOf(/^01002\/26/);
-    expect(within(osIniciada).getByTestId("gravacao-iniciada-progress")).toBeTruthy();
     expect(within(osIniciada).getByText("Iniciada")).toBeTruthy();
     expect(within(osIniciada).queryByRole("button", { name: "Concluir" })).toBeNull();
+    expect(within(osIniciada).queryByTestId("gravacao-iniciada-progress")).toBeNull();
 
     const osPendente = cardOf(/^01001\/26/);
-    expect(within(osPendente).queryByTestId("gravacao-iniciada-progress")).toBeNull();
     expect(within(osPendente).queryByRole("button", { name: "Concluir" })).toBeNull();
     unmount();
 
     isFornecedor = true;
     render(<GravacaoExternaTab />);
-    const osIniciadaFornecedor = cardOf(/^01002\/26/);
     expect(
-      within(osIniciadaFornecedor).getByTestId("gravacao-iniciada-progress"),
-    ).toBeTruthy();
-    expect(
-      within(osIniciadaFornecedor).getByRole("button", { name: "Concluir" }),
+      within(cardOf(/^01002\/26/)).getByRole("button", { name: "Concluir" }),
     ).toBeEnabled();
     expect(
       within(cardOf(/^01001\/26/)).queryByRole("button", { name: "Concluir" }),

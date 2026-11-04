@@ -27,7 +27,7 @@
   --color-sagra-accent: #0095d4;
   --font-sans: var(--font-main);
   /* Botões de filtro por máquina (Gravação Externa) */
-  --text-xs-button: 1.0rem;
+  --text-xs-button: 1.5rem;
   --text-xs-button--line-height: 1.25;
   --text-xs-button-meta: 0.7rem; /* PDFs/TIFs baixados */
   --text-xs-button-meta--line-height: 1.25;
@@ -119,27 +119,8 @@ body {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
-@keyframes gravacao-indeterminate {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
 @keyframes gravacao-gear-spin {
   to { transform: rotate(360deg); }
-}
-
-.gravacao-iniciada-progress {
-  height: 3px;
-  width: 100%;
-  background-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgb(34 197 94 / 0.15) 25%,
-    rgb(22 163 74 / 0.95) 50%,
-    rgb(34 197 94 / 0.15) 75%,
-    transparent 100%
-  );
-  background-size: 200% 100%;
-  animation: gravacao-indeterminate 1.4s linear infinite;
 }
 
 .gravacao-gear-spin {
@@ -151,12 +132,6 @@ body {
   .motion-safe\:animate-\[fadeIn_300ms_ease-out_both\],
   .motion-safe\:animate-\[fadeIn_280ms_ease-out\] {
     animation: none;
-  }
-
-  .gravacao-iniciada-progress {
-    animation: none;
-    background-image: none;
-    background-color: rgb(22 163 74 / 0.55);
   }
 
   .gravacao-gear-spin {

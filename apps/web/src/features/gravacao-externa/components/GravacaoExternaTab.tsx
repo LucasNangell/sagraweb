@@ -593,13 +593,6 @@ export function GravacaoExternaTab() {
                 })}
               </div>
             ) : null}
-            {isIniciada ? (
-              <div
-                className="gravacao-iniciada-progress"
-                data-testid="gravacao-iniciada-progress"
-                aria-hidden
-              />
-            ) : null}
           </div>
         </GravacaoQueueItemContextMenu>
       </li>

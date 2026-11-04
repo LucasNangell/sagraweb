@@ -1034,14 +1034,30 @@ export function GravacaoExternaArquivosPanel({
     const probe = probeRef.current;
     if (!bar || !probe) return;
 
+    const measureNeeded = () => {
+      const kids = Array.from(probe.children) as HTMLElement[];
+      const fromKids = kids.reduce((sum, el, i) => {
+        // gap-0.5 = 2px between tabs
+        return sum + el.offsetWidth + (i > 0 ? 2 : 0);
+      }, 0);
+      return Math.max(probe.scrollWidth, fromKids);
+    };
+
     const fit = () => {
       const available = bar.clientWidth;
       if (available <= 0) {
         setCompactInactive(false);
         return;
       }
-      const needed = probe.scrollWidth;
-      const next = needed > available + 0.5;
+      const styles = window.getComputedStyle(bar);
+      const padX =
+        (Number.parseFloat(styles.paddingLeft) || 0) +
+        (Number.parseFloat(styles.paddingRight) || 0);
+      const inner = Math.max(0, available - padX);
+      const needed = measureNeeded();
+      // Fallback: abas reais estourou a barra (probe às vezes subestima).
+      const visibleOverflow = bar.scrollWidth > available + 0.5;
+      const next = needed > inner + 0.5 || visibleOverflow;
       setCompactInactive((prev) => (prev === next ? prev : next));
     };
 
@@ -1199,12 +1215,13 @@ export function GravacaoExternaArquivosPanel({
             return (
               <div
                 key={`probe-${opt.value}`}
-                className="shrink-0 whitespace-nowrap px-2 py-1.5"
+                className="flex shrink-0 flex-col gap-0.5 whitespace-nowrap px-2 py-1.5"
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between gap-2">
                   <span className="text-xs-button font-semibold">{opt.label}</span>
                   {showDownloadBadge ? (
-                    <span className="text-xs-button-badge font-semibold">
+                    <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs-button-badge font-semibold">
+                      <span className="inline-block size-3 shrink-0" />
                       {badgeLabel}
                     </span>
                   ) : null}
@@ -1241,7 +1258,8 @@ export function GravacaoExternaArquivosPanel({
                     ? active
                       ? "shrink-0"
                       : "min-w-0 flex-1"
-                    : "min-w-fit flex-1",
+                    : // min-w-max: não encolhe abaixo do conteúdo; se estourar, o fallback liga o compacto
+                      "min-w-max flex-1",
                 active
                   ? "z-10 -mb-px border-x border-t border-sagra-border border-b border-b-white bg-white text-secondary-blue"
                   : "mb-px border border-transparent bg-sagra-bg text-neutral-500 hover:text-neutral-700",

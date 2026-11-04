@@ -489,6 +489,10 @@ describe("composite preview", () => {
         if (this.hasAttribute("data-machine-tabs-probe")) {
           return 280;
         }
+        // Bar itself not overflowing in the mock; probe width drives compact mode.
+        if (this.getAttribute("aria-label") === "Filtrar arquivos por máquina") {
+          return 120;
+        }
         return 0;
       });
 

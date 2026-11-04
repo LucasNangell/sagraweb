@@ -1,6 +1,6 @@
 {
   "name": "sagra-web-monorepo",
-  "version": "0.5.12",
+  "version": "0.5.13",
   "private": true,
   "description": "SAGRA Web — monorepo React + TypeScript (Fase 0)",
   "packageManager": "pnpm@9.15.0",

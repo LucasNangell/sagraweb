@@ -76,13 +76,6 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     label: "Painel setor",
-    to: "/painel/setor",
-    icon: LayoutDashboard,
-    permission: "sb_dashboard_setor",
-    opensInNewWindow: true,
-  },
-  {
-    label: "Painel setor moderno",
     to: "/painel/setor-moderno",
     icon: LayoutDashboard,
     permission: "sb_dashboard_setor",
@@ -141,7 +134,7 @@ export function getVisibleNavItems(
     if (item.to === "/admin/paineis") {
       return isPainelConfigAdminPonto(ponto);
     }
-    if (item.to === "/painel/setor" || item.to === "/painel/setor-moderno") {
+    if (item.to === "/painel/setor-moderno") {
       return hasPainelSetorAccess(permissions);
     }
     if (item.to === "/painel/global") {

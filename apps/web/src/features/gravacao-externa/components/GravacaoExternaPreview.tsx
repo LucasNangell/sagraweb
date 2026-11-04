@@ -871,7 +871,7 @@ function MachineFilterNameRow({
           onClick={onDownload}
           className={cn(
             "inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5",
-            "text-xs-button-meta font-semibold leading-none",
+            "text-xs-button-badge font-semibold leading-none",
             "cursor-pointer hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
             allDownloaded
               ? "bg-emerald-100 text-emerald-800"

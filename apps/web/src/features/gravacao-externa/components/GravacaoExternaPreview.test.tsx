@@ -459,8 +459,14 @@ describe("composite preview", () => {
     expect(komoriName).toHaveClass("whitespace-nowrap");
     expect(komoriName.className).not.toContain("truncate");
     expect(komoriTab).toHaveClass("shrink-0");
+    expect(
+      within(filter).getByRole("button", { name: "Download arquivos Komori" }),
+    ).toHaveClass("text-xs-button-badge");
     expect(within(komoriTab).getByText("PDFs baixados: 0 de 0")).toHaveClass(
       "whitespace-nowrap",
+    );
+    expect(within(komoriTab).getByText("PDFs baixados: 0 de 0")).toHaveClass(
+      "text-xs-button-meta",
     );
 
     expect(sm74Name).toHaveAttribute("aria-pressed", "false");

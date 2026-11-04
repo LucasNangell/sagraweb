@@ -26,8 +26,6 @@
   --color-sagra-danger: var(--danger-red);
   --color-sagra-accent: #0095d4;
   --font-sans: var(--font-main);
-  /* Breakpoint lg (Tailwind): lista|preview lado a lado na Gravação Externa, etc. */
-  --breakpoint-lg: 1024px;
   /* Botões de filtro por máquina (Gravação Externa) */
   --text-xs-button: 1.5rem;
   --text-xs-button--line-height: 1.25;

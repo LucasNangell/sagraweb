@@ -17,8 +17,6 @@ public partial class OverlayWindow : Window
     static readonly Brush CardBg = Frozen(new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x38)));
     static readonly Brush TextBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xe1, 0xe1, 0xe6)));
     static readonly Brush TextDim = Frozen(new SolidColorBrush(Color.FromRgb(0xa8, 0xa8, 0xb3)));
-    static readonly Brush Success = Frozen(new SolidColorBrush(Color.FromRgb(0x04, 0xd3, 0x61)));
-    static readonly Brush Danger = Frozen(new SolidColorBrush(Color.FromRgb(0xff, 0x69, 0x61)));
     static readonly Brush PriorityHigh = Frozen(new SolidColorBrush(Color.FromRgb(0xd3, 0x11, 0x11)));
     static readonly Brush PriorityMedium = Frozen(new SolidColorBrush(Color.FromRgb(0xff, 0x98, 0x00)));
     static readonly Brush PriorityMediumText = Frozen(new SolidColorBrush(Color.FromRgb(0x1a, 0x1a, 0x1a)));
@@ -46,7 +44,7 @@ public partial class OverlayWindow : Window
     AppConfig _config;
     List<TickerCard> _cards = [];
     List<(TickerCard Card, double Width, string Situacao)> _layout = [];
-    string _status = "disconnected";
+    string _status = "connecting";
     string _statusMsg = "Conectando…";
     bool _paused;
     bool _initial = true;
@@ -788,7 +786,7 @@ public partial class OverlayWindow : Window
 
     void PaintStatus()
     {
-        Lamp.Fill = _status == "connected" ? Success : Danger;
+        StatusHost.Visibility = _status == "disconnected" ? Visibility.Visible : Visibility.Collapsed;
         StatusHost.ToolTip = _statusMsg;
     }
 

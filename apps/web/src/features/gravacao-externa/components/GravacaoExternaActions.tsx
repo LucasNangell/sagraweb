@@ -42,13 +42,20 @@ function statusClass(status: string): string {
   }
 }
 
-export function GravacaoExternaStatusBadge({ status }: { status: string }) {
+export function GravacaoExternaStatusBadge({
+  status,
+  className,
+}: {
+  status: string;
+  className?: string;
+}) {
   const isIniciada = status === "iniciada";
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold",
         statusClass(status),
+        className,
       )}
     >
       {isIniciada ? (

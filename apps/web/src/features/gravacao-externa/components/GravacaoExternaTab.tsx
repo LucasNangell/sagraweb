@@ -537,8 +537,11 @@ export function GravacaoExternaTab() {
                   {formatOsCardSubtitle(item)}
                 </p>
               </button>
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <GravacaoExternaStatusBadge status={status} />
+              <div className="inline-grid shrink-0 grid-cols-1 justify-items-stretch gap-1">
+                <GravacaoExternaStatusBadge
+                  status={status}
+                  className="justify-center"
+                />
                 {showCardConcluir ? (
                   <button
                     type="button"
@@ -552,7 +555,7 @@ export function GravacaoExternaTab() {
                       e.stopPropagation();
                       void handleConcluir(concluivelSession);
                     }}
-                    className="inline-flex items-center gap-1 rounded-full border border-primary-green bg-primary-green px-2.5 py-0.5 text-xs font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-1 rounded-full border border-primary-green bg-primary-green px-2.5 py-0.5 text-xs font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {concluirMutation.isPending &&
                     concluirMutation.variables?.gravacaoExternaId ===

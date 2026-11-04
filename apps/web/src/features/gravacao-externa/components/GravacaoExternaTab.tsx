@@ -555,7 +555,7 @@ export function GravacaoExternaTab() {
                       e.stopPropagation();
                       void handleConcluir(concluivelSession);
                     }}
-                    className="inline-flex items-center justify-center gap-1 rounded-full border border-primary-green bg-primary-green px-2.5 py-0.5 text-xs font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex cursor-pointer items-center justify-center gap-1 rounded-full border border-primary-green bg-primary-green px-2.5 py-0.5 text-xs font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {concluirMutation.isPending &&
                     concluirMutation.variables?.gravacaoExternaId ===

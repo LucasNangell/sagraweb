@@ -854,7 +854,7 @@ function MachineFilterNameRow({
         aria-label={label}
         aria-pressed={active}
         onClick={onSelect}
-        className="min-w-0 flex-1 truncate text-left text-xs-button font-semibold leading-tight"
+        className="min-w-0 max-w-[calc(100%-2.75rem)] shrink-0 truncate text-left text-xs-button font-semibold leading-tight"
       >
         {label}
       </button>
@@ -866,7 +866,7 @@ function MachineFilterNameRow({
           disabled={machineDownloadBusy}
           onClick={onDownload}
           className={cn(
-            "inline-flex min-w-0 max-w-[50%] shrink items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+            "inline-flex min-w-0 flex-1 items-center justify-end gap-0.5 overflow-hidden rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
             "cursor-pointer hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
             allDownloaded
               ? "bg-emerald-100 text-emerald-800"

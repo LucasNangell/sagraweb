@@ -420,7 +420,7 @@ describe("composite preview", () => {
     expect(within(filter).queryByText("Download")).toBeNull();
   });
 
-  it("keeps Download badge text truncatable instead of hiding it on narrow layout", () => {
+  it("prefers truncating Download badge text over the machine name", () => {
     const arquivos = [
       { id: 1, nome: `${GROUP_KEY} (C).tif`, maquina: "Komori" },
       {
@@ -442,14 +442,14 @@ describe("composite preview", () => {
       />,
     );
     const filter = screen.getByRole("group", { name: /Filtrar arquivos por máquina/i });
+    const komoriName = within(filter).getByRole("button", { name: "Komori" });
     const komoriBadge = within(filter).getByRole("button", {
       name: "Download arquivos Komori",
     });
+    expect(komoriName).toHaveTextContent("Komori");
+    expect(komoriName.className).toContain("shrink-0");
     expect(komoriBadge).toHaveTextContent("Download");
+    expect(komoriBadge.className).toContain("flex-1");
     expect(komoriBadge.querySelector("span.truncate")).toBeTruthy();
-    expect(komoriBadge.className).toContain("max-w-[50%]");
-    expect(within(filter).getByRole("button", { name: "Komori" })).toHaveTextContent(
-      "Komori",
-    );
   });
 });

@@ -237,8 +237,19 @@ def _require_pending_queue_management_permission(request: Request) -> None:
         )
 
 
+def _caller_is_assigned_fornecedor(request: Request, session: dict) -> bool:
+    """True somente se o caller for o fornecedor atribuído à sessão."""
+    ponto = _session_ponto(request)
+    return bool(
+        fetch_user_fornecedor(ponto)
+        and session_allows_operacao_fornecedor(session, ponto)
+    )
+
+
 def _maybe_iniciar_on_download(request: Request, ano: int, os_id: int, session: dict) -> None:
-    """Marca gravação como iniciada ao baixar arquivos (idempotente se já iniciada)."""
+    """Marca gravação como iniciada ao baixar arquivos (somente fornecedor atribuído)."""
+    if not _caller_is_assigned_fornecedor(request, session):
+        return
     if str(session.get("status") or "") != "pendente":
         return
     try:
@@ -586,16 +597,17 @@ def _require_zip_session(
     return session
 
 
-def _zip_file_response(row: dict) -> FileResponse:
+def _zip_file_response(request: Request, session: dict, row: dict) -> FileResponse:
     session_id = int(row["gravacao_externa_id"])
     mark_zip_downloaded(session_id)
-    try:
-        mark_arquivos_baixados_for_zip(session_id, str(row.get("assinatura") or ""))
-    except Exception:
-        logger.exception(
-            "Falha ao persistir BaixadoEm no ZIP da sessão %s",
-            session_id,
-        )
+    if _caller_is_assigned_fornecedor(request, session):
+        try:
+            mark_arquivos_baixados_for_zip(session_id, str(row.get("assinatura") or ""))
+        except Exception:
+            logger.exception(
+                "Falha ao persistir BaixadoEm no ZIP da sessão %s",
+                session_id,
+            )
     return FileResponse(
         str(row["arquivo_path"]),
         media_type="application/zip",
@@ -659,7 +671,7 @@ def download_gravacao_externa_zip(
             status_code=409,
             detail="O ZIP ainda está sendo preparado. Aguarde e tente novamente.",
         )
-    return _zip_file_response(row)
+    return _zip_file_response(request, session, row)
 
 
 @router.get("/gravacao-externa/{ano}/{id}/arquivos/download-all")
@@ -673,7 +685,7 @@ def download_all_gravacao_externa_arquivos(
     _maybe_iniciar_on_download(request, ano, id, session)
     row = resolve_ready_zip(session)
     if row:
-        return _zip_file_response(row)
+        return _zip_file_response(request, session, row)
     enqueue_zip_job(session)
     raise HTTPException(
         status_code=409,
@@ -696,14 +708,15 @@ def download_gravacao_externa_arquivo(
     _maybe_iniciar_on_download(request, ano, id, session)
     arquivo = get_arquivo_for_session(session, arq_id)
     path = resolve_arquivo_absolute_path(session, arquivo)
-    try:
-        mark_arquivos_baixados([int(arquivo["id"])])
-    except Exception:
-        logger.exception(
-            "Falha ao persistir BaixadoEm do arquivo %s da sessão %s",
-            arq_id,
-            session.get("id"),
-        )
+    if _caller_is_assigned_fornecedor(request, session):
+        try:
+            mark_arquivos_baixados([int(arquivo["id"])])
+        except Exception:
+            logger.exception(
+                "Falha ao persistir BaixadoEm do arquivo %s da sessão %s",
+                arq_id,
+                session.get("id"),
+            )
     ext = path.rsplit(".", 1)[-1].lower()
     media = "application/pdf" if ext == "pdf" else "image/tiff"
     return FileResponse(

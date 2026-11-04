@@ -170,19 +170,24 @@ export function GravacaoExternaTab() {
     setOptimisticDownloadedIds(new Set());
   }, [selectedKey]);
 
-  const markArquivosDownloaded = useCallback((ids: Iterable<number>) => {
-    setOptimisticDownloadedIds((prev) => {
-      let changed = false;
-      const next = new Set(prev);
-      for (const id of ids) {
-        if (!next.has(id)) {
-          next.add(id);
-          changed = true;
+  const markArquivosDownloaded = useCallback(
+    (ids: Iterable<number>) => {
+      // Somente o fornecedor registra download otimista (espelha BaixadoEm no backend).
+      if (!isFornecedor) return;
+      setOptimisticDownloadedIds((prev) => {
+        let changed = false;
+        const next = new Set(prev);
+        for (const id of ids) {
+          if (!next.has(id)) {
+            next.add(id);
+            changed = true;
+          }
         }
-      }
-      return changed ? next : prev;
-    });
-  }, []);
+        return changed ? next : prev;
+      });
+    },
+    [isFornecedor],
+  );
 
   const markArquivoDownloaded = useCallback(
     (arquivoId: number) => {

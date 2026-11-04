@@ -9,7 +9,7 @@ import {
   Layers,
   Loader2,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import {
   gravacaoExternaCompositePreviewUrl,
@@ -821,10 +821,11 @@ function ArquivosChapaList({
   );
 }
 
-/** Header of a machine filter tab: fixed token fonts; name truncates only when inactive. */
+/** Header of a machine filter tab: fixed token fonts; truncate name only when compact+inactive. */
 function MachineFilterNameRow({
   label,
   active,
+  allowTruncate,
   allDownloaded,
   showDownloadBadge,
   machineDownloadBusy,
@@ -833,6 +834,8 @@ function MachineFilterNameRow({
 }: {
   label: string;
   active: boolean;
+  /** When true (and inactive), name may truncate with ellipsis. */
+  allowTruncate: boolean;
   allDownloaded: boolean;
   showDownloadBadge: boolean;
   machineDownloadBusy: boolean;
@@ -846,6 +849,7 @@ function MachineFilterNameRow({
   const badgeAria = allDownloaded
     ? `Arquivos baixados ${label}`
     : `Download arquivos ${label}`;
+  const truncateName = allowTruncate && !active;
 
   return (
     <div className="flex w-full min-w-0 items-center justify-between gap-2">
@@ -857,7 +861,9 @@ function MachineFilterNameRow({
         onClick={onSelect}
         className={cn(
           "text-left text-xs-button font-semibold leading-tight",
-          active ? "shrink-0 whitespace-nowrap" : "min-w-0 flex-1 truncate",
+          truncateName
+            ? "min-w-0 flex-1 truncate"
+            : "shrink-0 whitespace-nowrap",
         )}
       >
         {label}
@@ -1014,6 +1020,43 @@ export function GravacaoExternaArquivosPanel({
 
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set());
   const [espelhosExpanded, setEspelhosExpanded] = useState(true);
+  const barRef = useRef<HTMLDivElement>(null);
+  const probeRef = useRef<HTMLDivElement>(null);
+  const [compactInactive, setCompactInactive] = useState(false);
+
+  useLayoutEffect(() => {
+    const showFilter = machineFilterOptions.length > 0;
+    if (!showFilter || machineFilterOptions.length <= 1) {
+      setCompactInactive(false);
+      return;
+    }
+    const bar = barRef.current;
+    const probe = probeRef.current;
+    if (!bar || !probe) return;
+
+    const fit = () => {
+      const available = bar.clientWidth;
+      if (available <= 0) {
+        setCompactInactive(false);
+        return;
+      }
+      const needed = probe.scrollWidth;
+      const next = needed > available + 0.5;
+      setCompactInactive((prev) => (prev === next ? prev : next));
+    };
+
+    fit();
+    const raf = window.requestAnimationFrame(fit);
+    if (typeof ResizeObserver === "undefined") {
+      return () => window.cancelAnimationFrame(raf);
+    }
+    const ro = new ResizeObserver(fit);
+    ro.observe(bar);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  }, [machineFilterOptions, canDownload, onDownloadMachine]);
 
   useEffect(() => {
     if (allCadernos.cadernos.length === 0 && allCadernos.orphanChapas.length === 0) {
@@ -1131,10 +1174,51 @@ export function GravacaoExternaArquivosPanel({
   return (
     <div className="flex min-h-0 flex-col overflow-y-auto">
       <div
+        ref={barRef}
         role="group"
         aria-label="Filtrar arquivos por máquina"
-        className="flex w-full items-end gap-0.5 border-b border-sagra-border bg-sagra-bg px-1 pt-1"
+        data-machine-tabs-compact={compactInactive ? "1" : "0"}
+        className="relative flex w-full items-end gap-0.5 border-b border-sagra-border bg-sagra-bg px-1 pt-1"
       >
+        {/* Probe: largura natural de todas as abas (sem truncar) para decidir o modo compacto. */}
+        <div
+          ref={probeRef}
+          aria-hidden
+          data-machine-tabs-probe=""
+          className="pointer-events-none invisible absolute left-0 top-0 flex items-end gap-0.5"
+        >
+          {machineFilterOptions.map((opt) => {
+            const downloadableTotal = opt.pdfTotal + opt.tifTotal;
+            const allDownloaded =
+              downloadableTotal > 0 &&
+              opt.pdfDownloaded === opt.pdfTotal &&
+              opt.tifDownloaded === opt.tifTotal;
+            const showDownloadBadge =
+              downloadableTotal > 0 && Boolean(canDownload && onDownloadMachine);
+            const badgeLabel = allDownloaded ? "Baixado" : "Download";
+            return (
+              <div
+                key={`probe-${opt.value}`}
+                className="shrink-0 whitespace-nowrap px-2 py-1.5"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xs-button font-semibold">{opt.label}</span>
+                  {showDownloadBadge ? (
+                    <span className="text-xs-button-badge font-semibold">
+                      {badgeLabel}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="text-xs-button-meta">
+                  PDFs baixados: {opt.pdfDownloaded} de {opt.pdfTotal}
+                </div>
+                <div className="text-xs-button-meta">
+                  TIFFs baixados: {opt.tifDownloaded} de {opt.tifTotal}
+                </div>
+              </div>
+            );
+          })}
+        </div>
         {machineFilterOptions.map((opt) => {
           const active = opt.value === activeKey;
           const downloadableTotal = opt.pdfTotal + opt.tifTotal;
@@ -1144,16 +1228,20 @@ export function GravacaoExternaArquivosPanel({
             opt.tifDownloaded === opt.tifTotal;
           const showDownloadBadge =
             downloadableTotal > 0 && Boolean(canDownload && onDownloadMachine);
+          const truncateInactive = compactInactive && !active;
           return (
             <div
               key={opt.value}
+              data-machine-tab=""
               className={cn(
                 "relative flex flex-col gap-0.5 rounded-t-md px-2 py-1.5 transition-colors",
                 machineFilterOptions.length === 1
                   ? "w-1/2 shrink-0"
-                  : active
-                    ? "shrink-0"
-                    : "min-w-0 flex-1",
+                  : compactInactive
+                    ? active
+                      ? "shrink-0"
+                      : "min-w-0 flex-1"
+                    : "min-w-fit flex-1",
                 active
                   ? "z-10 -mb-px border-x border-t border-sagra-border border-b border-b-white bg-white text-secondary-blue"
                   : "mb-px border border-transparent bg-sagra-bg text-neutral-500 hover:text-neutral-700",
@@ -1162,6 +1250,7 @@ export function GravacaoExternaArquivosPanel({
               <MachineFilterNameRow
                 label={opt.label}
                 active={active}
+                allowTruncate={compactInactive}
                 allDownloaded={allDownloaded}
                 showDownloadBadge={showDownloadBadge}
                 machineDownloadBusy={machineDownloadBusy}
@@ -1178,7 +1267,7 @@ export function GravacaoExternaArquivosPanel({
                 <span
                   className={cn(
                     "text-xs-button-meta font-normal leading-tight opacity-80",
-                    active ? "whitespace-nowrap" : "w-full truncate",
+                    truncateInactive ? "w-full truncate" : "whitespace-nowrap",
                   )}
                 >
                   PDFs baixados: {opt.pdfDownloaded} de {opt.pdfTotal}
@@ -1186,7 +1275,7 @@ export function GravacaoExternaArquivosPanel({
                 <span
                   className={cn(
                     "text-xs-button-meta font-normal leading-tight opacity-80",
-                    active ? "whitespace-nowrap" : "w-full truncate",
+                    truncateInactive ? "w-full truncate" : "whitespace-nowrap",
                   )}
                 >
                   TIFFs baixados: {opt.tifDownloaded} de {opt.tifTotal}

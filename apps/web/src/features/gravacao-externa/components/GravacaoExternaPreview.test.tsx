@@ -423,11 +423,15 @@ describe("composite preview", () => {
     expect(
       within(filter).getAllByTitle("Baixar arquivos novamente")[0],
     ).toHaveClass("bg-emerald-100");
-    expect(within(filter).getAllByText("Baixado")).toHaveLength(2);
-    expect(within(filter).queryByText("Download")).toBeNull();
+    expect(
+      within(filter).getAllByRole("button", { name: /Arquivos baixados/ }),
+    ).toHaveLength(2);
+    expect(
+      within(filter).queryByRole("button", { name: /Download arquivos/ }),
+    ).toBeNull();
   });
 
-  it("keeps full labels on the active machine tab and truncates inactive names", () => {
+  it("keeps full labels on all tabs when machine names fit", () => {
     const arquivos = [
       { id: 1, nome: `${GROUP_KEY} (C).tif`, maquina: "Komori" },
       {
@@ -452,31 +456,88 @@ describe("composite preview", () => {
     const komoriName = within(filter).getByRole("button", { name: "Komori" });
     const sm74Name = within(filter).getByRole("button", { name: "SM74" });
     const komoriTab = komoriName.closest("[class*='rounded-t-md']") as HTMLElement;
-    const sm74Tab = sm74Name.closest("[class*='rounded-t-md']") as HTMLElement;
 
+    expect(filter).toHaveAttribute("data-machine-tabs-compact", "0");
     expect(komoriName).toHaveAttribute("aria-pressed", "true");
     expect(komoriName).toHaveClass("text-xs-button");
     expect(komoriName).toHaveClass("whitespace-nowrap");
     expect(komoriName.className).not.toContain("truncate");
-    expect(komoriTab).toHaveClass("shrink-0");
+    expect(sm74Name).toHaveAttribute("aria-pressed", "false");
+    expect(sm74Name).toHaveClass("whitespace-nowrap");
+    expect(sm74Name.className).not.toContain("truncate");
+    expect(komoriTab).toHaveClass("flex-1");
     expect(
       within(filter).getByRole("button", { name: "Download arquivos Komori" }),
     ).toHaveClass("text-xs-button-badge");
     expect(within(komoriTab).getByText("PDFs baixados: 0 de 0")).toHaveClass(
-      "whitespace-nowrap",
-    );
-    expect(within(komoriTab).getByText("PDFs baixados: 0 de 0")).toHaveClass(
       "text-xs-button-meta",
     );
+  });
 
-    expect(sm74Name).toHaveAttribute("aria-pressed", "false");
-    expect(sm74Name).toHaveClass("truncate");
-    expect(sm74Tab).toHaveClass("flex-1");
+  it("truncates inactive names only when machine tabs do not fit", () => {
+    const clientWidthSpy = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.getAttribute("aria-label") === "Filtrar arquivos por máquina") {
+          return 120;
+        }
+        return 0;
+      });
+    const scrollWidthSpy = vi
+      .spyOn(HTMLElement.prototype, "scrollWidth", "get")
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.hasAttribute("data-machine-tabs-probe")) {
+          return 280;
+        }
+        return 0;
+      });
 
-    fireEvent.click(sm74Name);
-    expect(sm74Name).toHaveAttribute("aria-pressed", "true");
-    expect(sm74Name).toHaveClass("whitespace-nowrap");
-    expect(sm74Name.className).not.toContain("truncate");
-    expect(komoriName).toHaveClass("truncate");
+    const arquivos = [
+      { id: 1, nome: `${GROUP_KEY} (C).tif`, maquina: "Komori" },
+      {
+        id: 2,
+        nome: "2026_OS 00612-Gr-Outro (Cad 2 A) (C).tif",
+        maquina: "SM74",
+      },
+    ];
+
+    try {
+      render(
+        <GravacaoExternaArquivosPanel
+          ano={2024}
+          nrOs={1857}
+          arquivos={arquivos}
+          selection={null}
+          groupByMachine
+          onDownloadMachine={() => undefined}
+          onSelect={() => undefined}
+          onSelectComposite={() => undefined}
+        />,
+      );
+      const filter = screen.getByRole("group", {
+        name: /Filtrar arquivos por máquina/i,
+      });
+      const komoriName = within(filter).getByRole("button", { name: "Komori" });
+      const sm74Name = within(filter).getByRole("button", { name: "SM74" });
+      const komoriTab = komoriName.closest("[class*='rounded-t-md']") as HTMLElement;
+      const sm74Tab = sm74Name.closest("[class*='rounded-t-md']") as HTMLElement;
+
+      expect(filter).toHaveAttribute("data-machine-tabs-compact", "1");
+      expect(komoriName).toHaveAttribute("aria-pressed", "true");
+      expect(komoriName).toHaveClass("whitespace-nowrap");
+      expect(komoriName.className).not.toContain("truncate");
+      expect(komoriTab).toHaveClass("shrink-0");
+      expect(sm74Name).toHaveClass("truncate");
+      expect(sm74Tab).toHaveClass("flex-1");
+
+      fireEvent.click(sm74Name);
+      expect(sm74Name).toHaveAttribute("aria-pressed", "true");
+      expect(sm74Name).toHaveClass("whitespace-nowrap");
+      expect(sm74Name.className).not.toContain("truncate");
+      expect(komoriName).toHaveClass("truncate");
+    } finally {
+      clientWidthSpy.mockRestore();
+      scrollWidthSpy.mockRestore();
+    }
   });
 });

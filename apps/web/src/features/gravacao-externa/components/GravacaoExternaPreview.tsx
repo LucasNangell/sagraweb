@@ -869,14 +869,18 @@ function MachineFilterNameRow({
           title={badgeTitle}
           disabled={machineDownloadBusy}
           onClick={onDownload}
-          className={cn(
-            "inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5",
-            "text-xs-button-badge font-semibold leading-none",
-            "cursor-pointer hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
-            allDownloaded
-              ? "bg-emerald-100 text-emerald-800"
-              : "bg-amber-100 text-amber-800",
-          )}
+          className={[
+            // Fora do twMerge: text-* de cor (emerald/amber) removia o token de fonte.
+            "text-xs-button-badge",
+            cn(
+              "inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5",
+              "font-semibold leading-none",
+              "cursor-pointer hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
+              allDownloaded
+                ? "bg-emerald-100 text-emerald-800"
+                : "bg-amber-100 text-amber-800",
+            ),
+          ].join(" ")}
         >
           {allDownloaded ? (
             <Check className="size-3" aria-hidden />

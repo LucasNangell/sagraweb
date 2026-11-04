@@ -18,11 +18,18 @@ export function Header() {
     await navigate({ to: "/login" });
   };
 
+  // Verde apenas em Vite DEV; builds de release mantêm o azul (import.meta.env.DEV → false).
+  const headerBg = syncAndamentosAlert
+    ? "bg-red-800"
+    : import.meta.env.DEV
+      ? "bg-green-900"
+      : "bg-secondary-blue";
+
   return (
     <header
       className={[
         "flex h-14 shrink-0 items-center justify-between gap-2 px-3 text-white shadow-md sm:h-16 sm:gap-3 sm:px-4 lg:h-20 lg:px-6",
-        syncAndamentosAlert ? "bg-red-800" : "bg-secondary-blue",
+        headerBg,
       ].join(" ")}
       role={syncAndamentosAlert ? "alert" : undefined}
     >

@@ -9,7 +9,7 @@ import {
   Layers,
   Loader2,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   gravacaoExternaCompositePreviewUrl,
@@ -821,14 +821,7 @@ function ArquivosChapaList({
   );
 }
 
-/** Base sizes for machine tab header (scaled down together only when the row is tight). */
-const MACHINE_TAB_NAME_FONT_PX = 14;
-const MACHINE_TAB_BADGE_FONT_PX = 10;
-const MACHINE_TAB_ICON_PX = 12;
-const MACHINE_TAB_GAP_PX = 8;
-const MACHINE_TAB_MIN_SCALE = 0.55;
-
-/** Header of a machine filter tab: name left, badge right; shrink both only if needed. */
+/** Header of a machine filter tab: fixed token fonts; name truncates only when inactive. */
 function MachineFilterNameRow({
   label,
   active,
@@ -846,11 +839,6 @@ function MachineFilterNameRow({
   onSelect: () => void;
   onDownload: () => void;
 }) {
-  const rowRef = useRef<HTMLDivElement>(null);
-  const nameRef = useRef<HTMLButtonElement>(null);
-  const badgeRef = useRef<HTMLButtonElement>(null);
-  const [scale, setScale] = useState(1);
-
   const badgeLabel = allDownloaded ? "Baixado" : "Download";
   const badgeTitle = allDownloaded
     ? "Baixar arquivos novamente"
@@ -859,110 +847,31 @@ function MachineFilterNameRow({
     ? `Arquivos baixados ${label}`
     : `Download arquivos ${label}`;
 
-  const nameFontPx = MACHINE_TAB_NAME_FONT_PX * scale;
-  const badgeFontPx = MACHINE_TAB_BADGE_FONT_PX * scale;
-  const iconPx = Math.max(8, MACHINE_TAB_ICON_PX * scale);
-  const badgePadX = Math.max(4, 6 * scale);
-  const badgePadY = Math.max(1, 2 * scale);
-
-  useLayoutEffect(() => {
-    const row = rowRef.current;
-    const nameEl = nameRef.current;
-    if (!row || !nameEl) return;
-
-    const applyBaseMeasureStyles = () => {
-      nameEl.style.fontSize = `${MACHINE_TAB_NAME_FONT_PX}px`;
-      const badgeEl = badgeRef.current;
-      if (!badgeEl) return;
-      badgeEl.style.fontSize = `${MACHINE_TAB_BADGE_FONT_PX}px`;
-      badgeEl.style.paddingLeft = "6px";
-      badgeEl.style.paddingRight = "6px";
-      badgeEl.style.paddingTop = "2px";
-      badgeEl.style.paddingBottom = "2px";
-      const svg = badgeEl.querySelector("svg");
-      if (svg) {
-        svg.style.width = `${MACHINE_TAB_ICON_PX}px`;
-        svg.style.height = `${MACHINE_TAB_ICON_PX}px`;
-      }
-    };
-
-    const fit = () => {
-      const available = row.clientWidth;
-      if (available <= 0) {
-        setScale(1);
-        return;
-      }
-
-      // Measure intrinsic widths at full size — shrink only when they exceed the row.
-      applyBaseMeasureStyles();
-      void row.offsetWidth;
-
-      const nameW = nameEl.scrollWidth;
-      const badgeEl = badgeRef.current;
-      const badgeW = badgeEl ? badgeEl.scrollWidth : 0;
-      const needed =
-        nameW + (badgeEl ? MACHINE_TAB_GAP_PX + badgeW : 0);
-      if (needed <= 0) {
-        setScale(1);
-        return;
-      }
-
-      const next =
-        needed <= available + 0.5
-          ? 1
-          : Math.max(MACHINE_TAB_MIN_SCALE, available / needed);
-      setScale((prev) => (Math.abs(prev - next) < 0.01 ? prev : next));
-    };
-
-    fit();
-    const raf = window.requestAnimationFrame(fit);
-    if (typeof ResizeObserver === "undefined") {
-      return () => window.cancelAnimationFrame(raf);
-    }
-    const ro = new ResizeObserver(fit);
-    ro.observe(row);
-    return () => {
-      window.cancelAnimationFrame(raf);
-      ro.disconnect();
-    };
-  }, [label, badgeLabel, showDownloadBadge, allDownloaded]);
-
   return (
-    <div
-      ref={rowRef}
-      className="flex w-full min-w-0 items-center justify-between"
-      style={{ gap: `${MACHINE_TAB_GAP_PX}px` }}
-      data-machine-tab-row=""
-      data-machine-tab-scale={scale}
-    >
+    <div className="flex w-full min-w-0 items-center justify-between gap-2">
       <button
-        ref={nameRef}
         type="button"
         aria-label={label}
         aria-pressed={active}
+        title={label}
         onClick={onSelect}
-        style={{ fontSize: `${nameFontPx}px` }}
-        className="shrink-0 whitespace-nowrap text-left font-semibold leading-tight"
+        className={cn(
+          "text-left text-xs-button font-semibold leading-tight",
+          active ? "shrink-0 whitespace-nowrap" : "min-w-0 flex-1 truncate",
+        )}
       >
         {label}
       </button>
       {showDownloadBadge ? (
         <button
-          ref={badgeRef}
           type="button"
           aria-label={badgeAria}
           title={badgeTitle}
           disabled={machineDownloadBusy}
           onClick={onDownload}
-          style={{
-            fontSize: `${badgeFontPx}px`,
-            paddingLeft: `${badgePadX}px`,
-            paddingRight: `${badgePadX}px`,
-            paddingTop: `${badgePadY}px`,
-            paddingBottom: `${badgePadY}px`,
-          }}
           className={cn(
-            "inline-flex shrink-0 items-center gap-0.5 rounded-full font-semibold leading-none",
+            "inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5",
+            "text-xs-button-meta font-semibold leading-none",
             "cursor-pointer hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
             allDownloaded
               ? "bg-emerald-100 text-emerald-800"
@@ -970,9 +879,9 @@ function MachineFilterNameRow({
           )}
         >
           {allDownloaded ? (
-            <Check style={{ width: iconPx, height: iconPx }} aria-hidden />
+            <Check className="size-3" aria-hidden />
           ) : (
-            <FileDown style={{ width: iconPx, height: iconPx }} aria-hidden />
+            <FileDown className="size-3" aria-hidden />
           )}
           {badgeLabel}
         </button>
@@ -1235,8 +1144,12 @@ export function GravacaoExternaArquivosPanel({
             <div
               key={opt.value}
               className={cn(
-                "relative flex min-w-0 flex-col gap-0.5 rounded-t-md px-2 py-1.5 transition-colors",
-                machineFilterOptions.length === 1 ? "w-1/2 shrink-0" : "flex-1",
+                "relative flex flex-col gap-0.5 rounded-t-md px-2 py-1.5 transition-colors",
+                machineFilterOptions.length === 1
+                  ? "w-1/2 shrink-0"
+                  : active
+                    ? "shrink-0"
+                    : "min-w-0 flex-1",
                 active
                   ? "z-10 -mb-px border-x border-t border-sagra-border border-b border-b-white bg-white text-secondary-blue"
                   : "mb-px border border-transparent bg-sagra-bg text-neutral-500 hover:text-neutral-700",
@@ -1256,12 +1169,22 @@ export function GravacaoExternaArquivosPanel({
                 tabIndex={-1}
                 aria-hidden
                 onClick={() => selectMachine(opt.value)}
-                className="flex w-full flex-col items-start gap-0.5 text-left"
+                className="flex w-full min-w-0 flex-col items-start gap-0.5 text-left"
               >
-                <span className="whitespace-nowrap text-xs-button-meta font-normal leading-tight opacity-80">
+                <span
+                  className={cn(
+                    "text-xs-button-meta font-normal leading-tight opacity-80",
+                    active ? "whitespace-nowrap" : "w-full truncate",
+                  )}
+                >
                   PDFs baixados: {opt.pdfDownloaded} de {opt.pdfTotal}
                 </span>
-                <span className="whitespace-nowrap text-xs-button-meta font-normal leading-tight opacity-80">
+                <span
+                  className={cn(
+                    "text-xs-button-meta font-normal leading-tight opacity-80",
+                    active ? "whitespace-nowrap" : "w-full truncate",
+                  )}
+                >
                   TIFFs baixados: {opt.tifDownloaded} de {opt.tifTotal}
                 </span>
               </button>

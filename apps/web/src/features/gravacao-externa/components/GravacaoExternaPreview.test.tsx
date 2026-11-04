@@ -427,32 +427,7 @@ describe("composite preview", () => {
     expect(within(filter).queryByText("Download")).toBeNull();
   });
 
-  it("scales name and badge fonts together instead of clipping text", () => {
-    let rowWidth = 220;
-    const NAME_W = 56;
-    const BADGE_W = 96;
-    const GAP = 8;
-    const needed = NAME_W + GAP + BADGE_W; // 160
-
-    const clientWidthSpy = vi
-      .spyOn(HTMLElement.prototype, "clientWidth", "get")
-      .mockImplementation(function (this: HTMLElement) {
-        if (this.hasAttribute("data-machine-tab-row")) {
-          return rowWidth;
-        }
-        return 0;
-      });
-    const scrollWidthSpy = vi
-      .spyOn(HTMLElement.prototype, "scrollWidth", "get")
-      .mockImplementation(function (this: HTMLElement) {
-        const aria = this.getAttribute("aria-label") ?? "";
-        if (aria === "Komori" || aria === "SM74") return NAME_W;
-        if (aria.startsWith("Download arquivos") || aria.startsWith("Arquivos baixados")) {
-          return BADGE_W;
-        }
-        return 0;
-      });
-
+  it("keeps full labels on the active machine tab and truncates inactive names", () => {
     const arquivos = [
       { id: 1, nome: `${GROUP_KEY} (C).tif`, maquina: "Komori" },
       {
@@ -461,57 +436,41 @@ describe("composite preview", () => {
         maquina: "SM74",
       },
     ];
-    const props = {
-      ano: 2024,
-      nrOs: 1857,
-      arquivos,
-      selection: null as null,
-      groupByMachine: true as const,
-      onDownloadMachine: () => undefined,
-      onSelect: () => undefined,
-      onSelectComposite: () => undefined,
-    };
+    render(
+      <GravacaoExternaArquivosPanel
+        ano={2024}
+        nrOs={1857}
+        arquivos={arquivos}
+        selection={null}
+        groupByMachine
+        onDownloadMachine={() => undefined}
+        onSelect={() => undefined}
+        onSelectComposite={() => undefined}
+      />,
+    );
+    const filter = screen.getByRole("group", { name: /Filtrar arquivos por máquina/i });
+    const komoriName = within(filter).getByRole("button", { name: "Komori" });
+    const sm74Name = within(filter).getByRole("button", { name: "SM74" });
+    const komoriTab = komoriName.closest("[class*='rounded-t-md']") as HTMLElement;
+    const sm74Tab = sm74Name.closest("[class*='rounded-t-md']") as HTMLElement;
 
-    try {
-      const { unmount } = render(<GravacaoExternaArquivosPanel {...props} />);
-      const filter = screen.getByRole("group", { name: /Filtrar arquivos por máquina/i });
-      const komoriName = within(filter).getByRole("button", { name: "Komori" });
-      const komoriBadge = within(filter).getByRole("button", {
-        name: "Download arquivos Komori",
-      });
-      expect(komoriBadge).toHaveTextContent("Download");
-      expect(komoriName).toHaveTextContent("Komori");
-      expect(komoriName.className).not.toContain("overflow-hidden");
-      expect(komoriName.className).not.toContain("truncate");
-      // Wide row (220 > 160): full base fonts; badge stays on the right.
-      expect(komoriName.style.fontSize).toBe("14px");
-      expect(komoriBadge.style.fontSize).toBe("10px");
-      expect(komoriName.parentElement).toHaveClass("justify-between");
-      unmount();
+    expect(komoriName).toHaveAttribute("aria-pressed", "true");
+    expect(komoriName).toHaveClass("text-xs-button");
+    expect(komoriName).toHaveClass("whitespace-nowrap");
+    expect(komoriName.className).not.toContain("truncate");
+    expect(komoriTab).toHaveClass("shrink-0");
+    expect(within(komoriTab).getByText("PDFs baixados: 0 de 0")).toHaveClass(
+      "whitespace-nowrap",
+    );
 
-      rowWidth = 100;
-      render(<GravacaoExternaArquivosPanel {...props} />);
-      const tightFilter = screen.getByRole("group", {
-        name: /Filtrar arquivos por máquina/i,
-      });
-      const tightName = within(tightFilter).getByRole("button", { name: "Komori" });
-      const tightBadge = within(tightFilter).getByRole("button", {
-        name: "Download arquivos Komori",
-      });
-      // 100/160 = 0.625 → both fonts scale together; full labels remain.
-      expect(tightName).toHaveTextContent("Komori");
-      expect(tightBadge).toHaveTextContent("Download");
-      expect(Number.parseFloat(tightName.style.fontSize)).toBeCloseTo(
-        14 * (100 / needed),
-        1,
-      );
-      expect(Number.parseFloat(tightBadge.style.fontSize)).toBeCloseTo(
-        10 * (100 / needed),
-        1,
-      );
-    } finally {
-      clientWidthSpy.mockRestore();
-      scrollWidthSpy.mockRestore();
-    }
+    expect(sm74Name).toHaveAttribute("aria-pressed", "false");
+    expect(sm74Name).toHaveClass("truncate");
+    expect(sm74Tab).toHaveClass("flex-1");
+
+    fireEvent.click(sm74Name);
+    expect(sm74Name).toHaveAttribute("aria-pressed", "true");
+    expect(sm74Name).toHaveClass("whitespace-nowrap");
+    expect(sm74Name.className).not.toContain("truncate");
+    expect(komoriName).toHaveClass("truncate");
   });
 });

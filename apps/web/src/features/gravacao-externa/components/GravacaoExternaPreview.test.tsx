@@ -420,27 +420,22 @@ describe("composite preview", () => {
     expect(within(filter).queryByText("Download")).toBeNull();
   });
 
-  it("keeps the full Download badge and only shrinks the name when space is tight", () => {
-    let nameTrackWidth = 124;
+  it("scales name and badge fonts together instead of clipping text", () => {
+    let rowWidth = 220;
     const clientWidthSpy = vi
       .spyOn(HTMLElement.prototype, "clientWidth", "get")
       .mockImplementation(function (this: HTMLElement) {
-        // Name cell width from the grid track (used by the fit algorithm).
-        if (
-          this.getAttribute("aria-label") === "Komori" ||
-          this.getAttribute("aria-label") === "SM74"
-        ) {
-          return nameTrackWidth;
+        if (this.hasAttribute("data-machine-tab-row")) {
+          return rowWidth;
         }
         return 0;
       });
-    const offsetWidthSpy = vi
-      .spyOn(HTMLElement.prototype, "offsetWidth", "get")
+    const scrollWidthSpy = vi
+      .spyOn(HTMLElement.prototype, "scrollWidth", "get")
       .mockImplementation(function (this: HTMLElement) {
-        // Probe spans created by measureMachineNameWidth.
-        if (this.tagName === "SPAN" && this.style.visibility === "hidden") {
-          const size = Number.parseFloat(this.style.fontSize) || 16;
-          return (this.textContent?.length ?? 0) * size * 0.55;
+        if (this.hasAttribute("data-machine-tab-scale")) {
+          // Natural content width at scale 1 (name + gap + badge).
+          return 160;
         }
         return 0;
       });
@@ -472,23 +467,31 @@ describe("composite preview", () => {
         name: "Download arquivos Komori",
       });
       expect(komoriBadge).toHaveTextContent("Download");
-      expect(komoriBadge.className).toContain("shrink-0");
-      // Wide name track: "Komori" fits → no shrink.
-      expect(komoriName.style.fontSize).toBe("");
-      expect(komoriName.className).toContain("overflow-hidden");
+      expect(komoriName).toHaveTextContent("Komori");
+      expect(komoriName.className).not.toContain("overflow-hidden");
+      expect(komoriName.className).not.toContain("truncate");
+      // Wide row (220 > 160): full base fonts.
+      expect(komoriName.style.fontSize).toBe("14px");
+      expect(komoriBadge.style.fontSize).toBe("10px");
       unmount();
 
-      nameTrackWidth = 14;
+      rowWidth = 100;
       render(<GravacaoExternaArquivosPanel {...props} />);
-      const tightName = within(
-        screen.getByRole("group", { name: /Filtrar arquivos por máquina/i }),
-      ).getByRole("button", { name: "Komori" });
-      expect(tightName.style.fontSize).toMatch(/px$/);
-      expect(Number.parseFloat(tightName.style.fontSize)).toBeLessThan(16);
-      expect(Number.parseFloat(tightName.style.fontSize)).toBeGreaterThanOrEqual(10);
+      const tightFilter = screen.getByRole("group", {
+        name: /Filtrar arquivos por máquina/i,
+      });
+      const tightName = within(tightFilter).getByRole("button", { name: "Komori" });
+      const tightBadge = within(tightFilter).getByRole("button", {
+        name: "Download arquivos Komori",
+      });
+      // 100/160 = 0.625 → both fonts scale together; full labels remain.
+      expect(tightName).toHaveTextContent("Komori");
+      expect(tightBadge).toHaveTextContent("Download");
+      expect(Number.parseFloat(tightName.style.fontSize)).toBeCloseTo(14 * (100 / 160), 1);
+      expect(Number.parseFloat(tightBadge.style.fontSize)).toBeCloseTo(10 * (100 / 160), 1);
     } finally {
       clientWidthSpy.mockRestore();
-      offsetWidthSpy.mockRestore();
+      scrollWidthSpy.mockRestore();
     }
   });
 });

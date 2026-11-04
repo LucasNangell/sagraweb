@@ -821,33 +821,13 @@ function ArquivosChapaList({
   );
 }
 
-const MACHINE_NAME_MIN_FONT_PX = 10;
+/** Base sizes for machine tab header (scaled down together when the row is tight). */
+const MACHINE_TAB_NAME_FONT_PX = 14;
+const MACHINE_TAB_BADGE_FONT_PX = 10;
+const MACHINE_TAB_ICON_PX = 12;
+const MACHINE_TAB_MIN_SCALE = 0.6;
 
-/** Measure intrinsic text width (avoids flex-1 scrollWidth false positives). */
-function measureMachineNameWidth(el: HTMLElement, text: string, fontSizePx: number): number {
-  if (!text || typeof document === "undefined") return 0;
-  const style = getComputedStyle(el);
-  const probe = document.createElement("span");
-  probe.textContent = text;
-  probe.style.cssText = [
-    "position:absolute",
-    "visibility:hidden",
-    "white-space:nowrap",
-    "pointer-events:none",
-    `font-family:${style.fontFamily}`,
-    `font-weight:${style.fontWeight}`,
-    `font-style:${style.fontStyle}`,
-    `letter-spacing:${style.letterSpacing}`,
-    `font-size:${fontSizePx}px`,
-  ].join(";");
-  document.body.appendChild(probe);
-  const width = probe.offsetWidth;
-  probe.remove();
-  // jsdom: approximate from font size so tests stay deterministic.
-  return width > 0 ? width : text.length * fontSizePx * 0.55;
-}
-
-/** Header of a machine filter tab: shrinks machine name font only as much as needed. */
+/** Header of a machine filter tab: scales name+badge proportionally — never clips text. */
 function MachineFilterNameRow({
   label,
   active,
@@ -866,9 +846,8 @@ function MachineFilterNameRow({
   onDownload: () => void;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
-  const nameRef = useRef<HTMLButtonElement>(null);
-  const badgeRef = useRef<HTMLButtonElement>(null);
-  const [nameFontPx, setNameFontPx] = useState<number | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
 
   const badgeLabel = allDownloaded ? "Baixado" : "Download";
   const badgeTitle = allDownloaded
@@ -878,106 +857,119 @@ function MachineFilterNameRow({
     ? `Arquivos baixados ${label}`
     : `Download arquivos ${label}`;
 
+  const nameFontPx = MACHINE_TAB_NAME_FONT_PX * scale;
+  const badgeFontPx = MACHINE_TAB_BADGE_FONT_PX * scale;
+  const iconPx = Math.max(8, MACHINE_TAB_ICON_PX * scale);
+  const badgePadX = Math.max(4, 6 * scale);
+  const badgePadY = Math.max(1, 2 * scale);
+  const gapPx = Math.max(2, 4 * scale);
+
   useLayoutEffect(() => {
     const row = rowRef.current;
-    const nameEl = nameRef.current;
-    if (!row || !nameEl) return;
+    const content = contentRef.current;
+    if (!row || !content) return;
 
     const fit = () => {
-      // Measure against the grid track already reserved for the name (badge is auto-sized).
-      nameEl.style.fontSize = "";
-      const nameAvail = nameEl.clientWidth;
-      if (nameAvail <= 0) {
-        setNameFontPx(null);
+      const available = row.clientWidth;
+      if (available <= 0) {
+        setScale(1);
         return;
       }
 
-      const baseFont =
-        Number.parseFloat(getComputedStyle(nameEl).fontSize) || 16;
-      const naturalW = measureMachineNameWidth(nameEl, label, baseFont);
-      if (naturalW <= nameAvail + 0.5) {
-        setNameFontPx(null);
-        return;
-      }
-
-      // Largest font that still fits = minimum visible reduction.
-      let lo = MACHINE_NAME_MIN_FONT_PX;
-      let hi = baseFont;
-      let best = MACHINE_NAME_MIN_FONT_PX;
-      while (hi - lo > 0.25) {
-        const mid = (lo + hi) / 2;
-        if (measureMachineNameWidth(nameEl, label, mid) <= nameAvail + 0.5) {
-          best = mid;
-          lo = mid;
-        } else {
-          hi = mid;
+      // Measure at full size so we only shrink when content truly overflows.
+      content.style.gap = "4px";
+      for (const child of Array.from(content.children) as HTMLElement[]) {
+        if (child.tagName === "BUTTON" && child.getAttribute("aria-label") === label) {
+          child.style.fontSize = `${MACHINE_TAB_NAME_FONT_PX}px`;
+        } else if (child.tagName === "BUTTON") {
+          child.style.fontSize = `${MACHINE_TAB_BADGE_FONT_PX}px`;
+          child.style.paddingLeft = "6px";
+          child.style.paddingRight = "6px";
+          child.style.paddingTop = "2px";
+          child.style.paddingBottom = "2px";
+          const svg = child.querySelector("svg");
+          if (svg) {
+            svg.style.width = `${MACHINE_TAB_ICON_PX}px`;
+            svg.style.height = `${MACHINE_TAB_ICON_PX}px`;
+          }
         }
       }
 
-      setNameFontPx(best < baseFont - 0.01 ? best : null);
+      const needed = content.scrollWidth;
+      if (needed <= 0) {
+        setScale(1);
+        return;
+      }
+
+      const next =
+        needed <= available + 0.5
+          ? 1
+          : Math.max(MACHINE_TAB_MIN_SCALE, available / needed);
+      setScale((prev) => (Math.abs(prev - next) < 0.01 ? prev : next));
     };
 
     fit();
-    // Second pass after badge/grid settle (avoids measuring before badge width exists).
     const raf = window.requestAnimationFrame(fit);
     if (typeof ResizeObserver === "undefined") {
       return () => window.cancelAnimationFrame(raf);
     }
     const ro = new ResizeObserver(fit);
     ro.observe(row);
-    if (badgeRef.current) ro.observe(badgeRef.current);
     return () => {
       window.cancelAnimationFrame(raf);
       ro.disconnect();
-      nameEl.style.fontSize = "";
     };
-  }, [label, badgeLabel, showDownloadBadge]);
+  }, [label, badgeLabel, showDownloadBadge, allDownloaded]);
 
   return (
-    <div
-      ref={rowRef}
-      className={cn(
-        "grid w-full min-w-0 items-center gap-1",
-        showDownloadBadge
-          ? "grid-cols-[minmax(0,1fr)_auto]"
-          : "grid-cols-1",
-      )}
-    >
-      <button
-        ref={nameRef}
-        type="button"
-        aria-label={label}
-        aria-pressed={active}
-        onClick={onSelect}
-        style={nameFontPx != null ? { fontSize: `${nameFontPx}px` } : undefined}
-        className="min-w-0 overflow-hidden whitespace-nowrap text-left text-xs-button font-semibold leading-tight"
+    <div ref={rowRef} className="w-full min-w-0" data-machine-tab-row="">
+      <div
+        ref={contentRef}
+        className="flex w-max max-w-none flex-nowrap items-center"
+        style={{ gap: `${gapPx}px` }}
+        data-machine-tab-scale={scale}
       >
-        {label}
-      </button>
-      {showDownloadBadge ? (
         <button
-          ref={badgeRef}
           type="button"
-          aria-label={badgeAria}
-          title={badgeTitle}
-          disabled={machineDownloadBusy}
-          onClick={onDownload}
-          className={cn(
-            "inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
-            "cursor-pointer hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
-            allDownloaded
-              ? "bg-emerald-100 text-emerald-800"
-              : "bg-amber-100 text-amber-800",
-          )}
+          aria-label={label}
+          aria-pressed={active}
+          onClick={onSelect}
+          style={{ fontSize: `${nameFontPx}px` }}
+          className="shrink-0 whitespace-nowrap text-left font-semibold leading-tight"
         >
-          {allDownloaded ? (
-            <Check className="size-3 shrink-0" aria-hidden />
-          ) : (
-            <FileDown className="size-3 shrink-0" aria-hidden />
-          )}
-          {badgeLabel}
+          {label}
         </button>
-      ) : null}
+        {showDownloadBadge ? (
+          <button
+            type="button"
+            aria-label={badgeAria}
+            title={badgeTitle}
+            disabled={machineDownloadBusy}
+            onClick={onDownload}
+            style={{
+              fontSize: `${badgeFontPx}px`,
+              paddingLeft: `${badgePadX}px`,
+              paddingRight: `${badgePadX}px`,
+              paddingTop: `${badgePadY}px`,
+              paddingBottom: `${badgePadY}px`,
+            }}
+            className={cn(
+              "inline-flex shrink-0 items-center gap-0.5 rounded-full font-semibold leading-none",
+              "cursor-pointer hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
+              allDownloaded
+                ? "bg-emerald-100 text-emerald-800"
+                : "bg-amber-100 text-amber-800",
+            )}
+          >
+            {allDownloaded ? (
+              <Check style={{ width: iconPx, height: iconPx }} aria-hidden />
+            ) : (
+              <FileDown style={{ width: iconPx, height: iconPx }} aria-hidden />
+            )}
+            {badgeLabel}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

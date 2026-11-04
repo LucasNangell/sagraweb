@@ -220,11 +220,11 @@ describe("composite preview", () => {
     const cardOf = (label: string) =>
       within(filter).getByRole("button", { name: label }).parentElement!.parentElement!;
     expect(within(cardOf("Espelhos")).getByText("PDFs baixados: 0 de 1")).toBeInTheDocument();
-    expect(within(cardOf("Espelhos")).getByText("TIFs baixados: 0 de 0")).toBeInTheDocument();
+    expect(within(cardOf("Espelhos")).getByText("TIFFs baixados: 0 de 0")).toBeInTheDocument();
     expect(within(cardOf("M2")).getByText("PDFs baixados: 0 de 0")).toBeInTheDocument();
-    expect(within(cardOf("M2")).getByText("TIFs baixados: 0 de 1")).toBeInTheDocument();
+    expect(within(cardOf("M2")).getByText("TIFFs baixados: 0 de 1")).toBeInTheDocument();
     expect(within(cardOf("M1")).getByText("PDFs baixados: 0 de 0")).toBeInTheDocument();
-    expect(within(cardOf("M1")).getByText("TIFs baixados: 0 de 2")).toBeInTheDocument();
+    expect(within(cardOf("M1")).getByText("TIFFs baixados: 0 de 2")).toBeInTheDocument();
   });
 
   it("filters the file list when a machine segment is selected", () => {
@@ -311,9 +311,9 @@ describe("composite preview", () => {
     const cardOf = (label: string) =>
       within(filter).getByRole("button", { name: label }).parentElement!.parentElement!;
     expect(within(cardOf("PM52")).getByText("PDFs baixados: 0 de 1")).toBeInTheDocument();
-    expect(within(cardOf("PM52")).getByText("TIFs baixados: 0 de 2")).toBeInTheDocument();
+    expect(within(cardOf("PM52")).getByText("TIFFs baixados: 0 de 2")).toBeInTheDocument();
     expect(within(cardOf("SM74")).getByText("PDFs baixados: 0 de 0")).toBeInTheDocument();
-    expect(within(cardOf("SM74")).getByText("TIFs baixados: 0 de 1")).toBeInTheDocument();
+    expect(within(cardOf("SM74")).getByText("TIFFs baixados: 0 de 1")).toBeInTheDocument();
   });
 
   it("updates PDF/TIF downloaded counts when files are marked downloaded", () => {
@@ -345,9 +345,9 @@ describe("composite preview", () => {
     const cardOf = (label: string) =>
       within(filter).getByRole("button", { name: label }).parentElement!.parentElement!;
     expect(within(cardOf("PM52")).getByText("PDFs baixados: 1 de 1")).toBeInTheDocument();
-    expect(within(cardOf("PM52")).getByText("TIFs baixados: 1 de 2")).toBeInTheDocument();
+    expect(within(cardOf("PM52")).getByText("TIFFs baixados: 1 de 2")).toBeInTheDocument();
     expect(within(cardOf("SM74")).getByText("PDFs baixados: 0 de 0")).toBeInTheDocument();
-    expect(within(cardOf("SM74")).getByText("TIFs baixados: 0 de 1")).toBeInTheDocument();
+    expect(within(cardOf("SM74")).getByText("TIFFs baixados: 0 de 1")).toBeInTheDocument();
     const pendingBadges = within(filter).getAllByTitle(
       "Baixar arquivos dessa máquina",
     );
@@ -420,53 +420,36 @@ describe("composite preview", () => {
     expect(within(filter).queryByText("Download")).toBeNull();
   });
 
-  it("collapses Download badge to icon when the machine name would not fit", () => {
-    const clientWidthSpy = vi
-      .spyOn(HTMLElement.prototype, "clientWidth", "get")
-      .mockImplementation(function (this: HTMLElement) {
-        if (
-          this.classList.contains("w-full") &&
-          this.classList.contains("min-w-0") &&
-          this.classList.contains("items-center")
-        ) {
-          // Narrower than name + full "Download" badge (canvas fallback uses ~7px/char).
-          return 80;
-        }
-        return 0;
-      });
-
-    try {
-      const arquivos = [
-        { id: 1, nome: `${GROUP_KEY} (C).tif`, maquina: "Komori" },
-        {
-          id: 2,
-          nome: "2026_OS 00612-Gr-Outro (Cad 2 A) (C).tif",
-          maquina: "SM74",
-        },
-      ];
-      render(
-        <GravacaoExternaArquivosPanel
-          ano={2024}
-          nrOs={1857}
-          arquivos={arquivos}
-          selection={null}
-          groupByMachine
-          onDownloadMachine={() => undefined}
-          onSelect={() => undefined}
-          onSelectComposite={() => undefined}
-        />,
-      );
-      const filter = screen.getByRole("group", { name: /Filtrar arquivos por máquina/i });
-      const komoriBadge = within(filter).getByRole("button", {
-        name: "Download arquivos Komori",
-      });
-      expect(komoriBadge).not.toHaveTextContent("Download");
-      expect(komoriBadge.querySelector("svg")).toBeTruthy();
-      expect(within(filter).getByRole("button", { name: "Komori" })).toHaveTextContent(
-        "Komori",
-      );
-    } finally {
-      clientWidthSpy.mockRestore();
-    }
+  it("keeps Download badge text truncatable instead of hiding it on narrow layout", () => {
+    const arquivos = [
+      { id: 1, nome: `${GROUP_KEY} (C).tif`, maquina: "Komori" },
+      {
+        id: 2,
+        nome: "2026_OS 00612-Gr-Outro (Cad 2 A) (C).tif",
+        maquina: "SM74",
+      },
+    ];
+    render(
+      <GravacaoExternaArquivosPanel
+        ano={2024}
+        nrOs={1857}
+        arquivos={arquivos}
+        selection={null}
+        groupByMachine
+        onDownloadMachine={() => undefined}
+        onSelect={() => undefined}
+        onSelectComposite={() => undefined}
+      />,
+    );
+    const filter = screen.getByRole("group", { name: /Filtrar arquivos por máquina/i });
+    const komoriBadge = within(filter).getByRole("button", {
+      name: "Download arquivos Komori",
+    });
+    expect(komoriBadge).toHaveTextContent("Download");
+    expect(komoriBadge.querySelector("span.truncate")).toBeTruthy();
+    expect(komoriBadge.className).toContain("max-w-[50%]");
+    expect(within(filter).getByRole("button", { name: "Komori" })).toHaveTextContent(
+      "Komori",
+    );
   });
 });

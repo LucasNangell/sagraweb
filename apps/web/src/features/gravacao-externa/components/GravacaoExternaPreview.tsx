@@ -9,7 +9,7 @@ import {
   Layers,
   Loader2,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   gravacaoExternaCompositePreviewUrl,
@@ -821,27 +821,7 @@ function ArquivosChapaList({
   );
 }
 
-function measureCssTextWidth(el: HTMLElement | null, text: string): number {
-  if (!el || !text || typeof document === "undefined") return 0;
-  const style = getComputedStyle(el);
-  const probe = document.createElement("span");
-  probe.textContent = text;
-  probe.style.cssText = [
-    "position:absolute",
-    "visibility:hidden",
-    "white-space:nowrap",
-    "pointer-events:none",
-    `font:${style.font}`,
-    `letter-spacing:${style.letterSpacing}`,
-  ].join(";");
-  document.body.appendChild(probe);
-  const width = probe.offsetWidth;
-  probe.remove();
-  // jsdom reports 0 — approximate so narrow-layout tests still exercise collapse.
-  return width > 0 ? width : text.length * 7;
-}
-
-/** Header of a machine filter tab: collapses Download/Baixado to icon when the name would truncate. */
+/** Header of a machine filter tab: badge text truncates with ellipsis when space is tight. */
 function MachineFilterNameRow({
   label,
   active,
@@ -859,11 +839,6 @@ function MachineFilterNameRow({
   onSelect: () => void;
   onDownload: () => void;
 }) {
-  const rowRef = useRef<HTMLDivElement>(null);
-  const nameRef = useRef<HTMLButtonElement>(null);
-  const badgeRef = useRef<HTMLButtonElement>(null);
-  const [badgeIconOnly, setBadgeIconOnly] = useState(false);
-
   const badgeLabel = allDownloaded ? "Baixado" : "Download";
   const badgeTitle = allDownloaded
     ? "Baixar arquivos novamente"
@@ -872,47 +847,9 @@ function MachineFilterNameRow({
     ? `Arquivos baixados ${label}`
     : `Download arquivos ${label}`;
 
-  useLayoutEffect(() => {
-    if (!showDownloadBadge) {
-      setBadgeIconOnly(false);
-      return;
-    }
-    const row = rowRef.current;
-    if (!row) return;
-
-    const update = () => {
-      const available = row.clientWidth;
-      // jsdom / layout not ready: keep full label so tests and first paint stay readable.
-      if (available <= 0) {
-        setBadgeIconOnly(false);
-        return;
-      }
-      const nameW = measureCssTextWidth(nameRef.current, label);
-      const badgeTextW = measureCssTextWidth(badgeRef.current, badgeLabel);
-      const iconSize = 12;
-      const badgePadX = 12;
-      const badgeInnerGap = 2;
-      const rowGap = 4;
-      const badgeFullW = badgePadX + iconSize + badgeInnerGap + badgeTextW;
-      setBadgeIconOnly(nameW + rowGap + badgeFullW > available + 0.5);
-    };
-
-    update();
-    if (typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(update);
-    ro.observe(row);
-    return () => ro.disconnect();
-  }, [showDownloadBadge, label, badgeLabel]);
-
-  const badgeClass = cn(
-    "inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
-    allDownloaded ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800",
-  );
-
   return (
-    <div ref={rowRef} className="flex w-full min-w-0 items-center gap-1">
+    <div className="flex w-full min-w-0 items-center gap-1">
       <button
-        ref={nameRef}
         type="button"
         aria-label={label}
         aria-pressed={active}
@@ -923,24 +860,25 @@ function MachineFilterNameRow({
       </button>
       {showDownloadBadge ? (
         <button
-          ref={badgeRef}
           type="button"
           aria-label={badgeAria}
           title={badgeTitle}
           disabled={machineDownloadBusy}
           onClick={onDownload}
           className={cn(
-            badgeClass,
+            "inline-flex min-w-0 max-w-[50%] shrink items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
             "cursor-pointer hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
-            badgeIconOnly && "px-1",
+            allDownloaded
+              ? "bg-emerald-100 text-emerald-800"
+              : "bg-amber-100 text-amber-800",
           )}
         >
           {allDownloaded ? (
-            <Check className="size-3" aria-hidden />
+            <Check className="size-3 shrink-0" aria-hidden />
           ) : (
-            <FileDown className="size-3" aria-hidden />
+            <FileDown className="size-3 shrink-0" aria-hidden />
           )}
-          {badgeIconOnly ? null : badgeLabel}
+          <span className="min-w-0 truncate">{badgeLabel}</span>
         </button>
       ) : null}
     </div>
@@ -1228,7 +1166,7 @@ export function GravacaoExternaArquivosPanel({
                   PDFs baixados: {opt.pdfDownloaded} de {opt.pdfTotal}
                 </span>
                 <span className="w-full truncate text-xs-button-meta font-normal leading-tight opacity-80">
-                  TIFs baixados: {opt.tifDownloaded} de {opt.tifTotal}
+                  TIFFs baixados: {opt.tifDownloaded} de {opt.tifTotal}
                 </span>
               </button>
             </div>

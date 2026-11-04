@@ -110,7 +110,7 @@ export function OsFiltersPanel({
   const anosAsStrings = (filters.anos ?? []).map(String);
 
   return (
-    <section className="shrink-0 rounded-lg border border-sagra-border border-t-4 border-t-secondary-blue bg-white shadow-sm">
+    <section className="@container/os-filters relative z-30 shrink-0 overflow-visible rounded-lg border border-sagra-border border-t-4 border-t-secondary-blue bg-white shadow-sm">
       <div className="flex items-center justify-between gap-2 border-b border-sagra-border px-3 py-2 md:hidden">
         <h2 className="min-w-0 flex-1 text-sm font-semibold text-secondary-blue">
           {titleStatus}
@@ -168,8 +168,8 @@ export function OsFiltersPanel({
           </div>
         </div>
 
-        <div className="os-filter-groups flex flex-col gap-3 px-3 py-3 lg:flex-row lg:items-center lg:gap-4">
-          <div className="os-filter-rail flex w-full shrink-0 flex-col gap-2 border-b border-sagra-border pb-3 lg:w-[11rem] lg:border-b-0 lg:border-r lg:pb-0 lg:pr-4">
+        <div className="os-filter-groups flex flex-col gap-3 px-3 py-3 @min-[48rem]/os-filters:flex-row @min-[48rem]/os-filters:items-stretch @min-[48rem]/os-filters:gap-4">
+          <div className="os-filter-rail flex w-full shrink-0 flex-col gap-2 border-b border-sagra-border pb-3 @min-[48rem]/os-filters:w-[11rem] @min-[48rem]/os-filters:border-b-0 @min-[48rem]/os-filters:border-r @min-[48rem]/os-filters:pb-0 @min-[48rem]/os-filters:pr-4">
             {onOpenSettings ? (
               <button
                 type="button"
@@ -200,13 +200,13 @@ export function OsFiltersPanel({
             </select>
           </div>
 
-          <div className="os-filter-group-grid flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap xl:flex-nowrap xl:items-stretch xl:gap-0">
+          <div className="os-filter-group-grid flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap">
             <FilterGroup
               title="Ordem de serviço"
-              className="w-auto shrink-0 xl:border-r xl:border-sagra-border xl:pr-4"
+              className="min-w-0 w-full max-w-full basis-[15rem] sm:max-w-[18rem] sm:flex-none @min-[72rem]/os-filters:border-r @min-[72rem]/os-filters:border-sagra-border @min-[72rem]/os-filters:pr-4"
             >
               <FilterField label="Nr OS/Ano" labelWidth="os">
-                <div className="flex w-[11.25rem] items-center gap-1.5">
+                <div className="flex min-w-0 w-full items-center gap-1.5">
                   <input
                     type="text"
                     inputMode="numeric"
@@ -218,7 +218,7 @@ export function OsFiltersPanel({
                         page: 1,
                       })
                     }
-                    className={cn(inputClass, "min-w-0 flex-[2]")}
+                    className={cn(inputClass, "w-[5.75rem] shrink-0")}
                     aria-label="Nr OS"
                     data-testid={homeTestIds.osFiltersNrOs}
                   />
@@ -233,7 +233,7 @@ export function OsFiltersPanel({
                     hideLabel
                     aria-label="Ano"
                     testId={homeTestIds.osFiltersAno}
-                    className="min-w-0 flex-[3] flex-none"
+                    className="min-w-0 flex-1"
                     dropdownClassName="min-w-[8rem]"
                     options={yearOptions}
                     value={anosAsStrings}
@@ -264,7 +264,7 @@ export function OsFiltersPanel({
                       page: 1,
                     })
                   }
-                  className={cn(inputClass, "w-[11.25rem] shrink-0")}
+                  className={cn(inputClass, "min-w-0 w-full")}
                   aria-label="Processo"
                   data-testid={homeTestIds.osFiltersProcesso}
                 />
@@ -273,7 +273,7 @@ export function OsFiltersPanel({
 
             <FilterGroup
               title="Solicitante"
-              className="min-w-0 flex-1 xl:border-r xl:border-sagra-border xl:px-4"
+              className="min-w-[13.5rem] flex-1 basis-[13.5rem] @min-[72rem]/os-filters:border-r @min-[72rem]/os-filters:border-sagra-border @min-[72rem]/os-filters:px-4"
             >
               <MultiSelect
                 label="Categoria"
@@ -321,8 +321,8 @@ export function OsFiltersPanel({
 
             <FilterGroup
               title="Dados da OS"
-              className="min-w-0 flex-[2] xl:border-r xl:border-sagra-border xl:px-4"
-              fieldsClassName="grid w-full grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(15rem,19rem)]"
+              className="@container min-w-[13.5rem] flex-[2] basis-[18rem] @min-[72rem]/os-filters:border-r @min-[72rem]/os-filters:border-sagra-border @min-[72rem]/os-filters:px-4"
+              fieldsClassName="grid w-full grid-cols-1 gap-2 @min-[26rem]:grid-cols-2"
             >
               <FilterField label="Título">
                 <input
@@ -375,7 +375,7 @@ export function OsFiltersPanel({
 
             <FilterGroup
               title="Andamento"
-              className="min-w-0 flex-1 xl:pl-4"
+              className="min-w-[13.5rem] flex-1 basis-[13.5rem] @min-[72rem]/os-filters:pl-4"
             >
               <MultiSelect
                 label="Setor"
@@ -400,7 +400,7 @@ export function OsFiltersPanel({
             </FilterGroup>
           </div>
 
-          <div className="os-filter-actions flex w-full shrink-0 items-center justify-end gap-1.5 border-t border-sagra-border pt-3 lg:w-auto lg:flex-col lg:justify-center lg:border-t-0 lg:border-l lg:pl-4 lg:pt-0">
+          <div className="os-filter-actions flex w-full shrink-0 items-center justify-end gap-1.5 border-t border-sagra-border pt-3 @min-[48rem]/os-filters:w-auto @min-[48rem]/os-filters:flex-col @min-[48rem]/os-filters:justify-center @min-[48rem]/os-filters:border-t-0 @min-[48rem]/os-filters:border-l @min-[48rem]/os-filters:pl-4 @min-[48rem]/os-filters:pt-0">
             <div className="flex flex-col gap-1.5">
               <button
                 type="button"
@@ -444,7 +444,7 @@ export function OsFiltersPanel({
         </div>
 
         {advancedOpen ? (
-          <div className="grid grid-cols-1 gap-3 border-t border-sagra-border bg-slate-50/50 px-3 py-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 border-t border-sagra-border bg-slate-50/50 px-3 py-3 @min-[40rem]/os-filters:grid-cols-2 @min-[56rem]/os-filters:grid-cols-3">
             <FilterField label="Data de entrada">
               <div className="flex min-w-0 flex-1 items-center gap-1.5">
                 <input
@@ -574,7 +574,12 @@ function FilterGroup({
   fieldsClassName?: string;
 }) {
   return (
-    <div className={cn("os-filter-group flex min-w-0 flex-col gap-2", className)}>
+    <div
+      className={cn(
+        "os-filter-group relative flex min-w-0 max-w-full flex-col gap-2 overflow-visible",
+        className,
+      )}
+    >
       <h3 className="text-[0.7rem] font-bold uppercase tracking-wide text-secondary-blue/80">
         {title}
       </h3>
@@ -594,20 +599,25 @@ function FilterField({
   label: string;
   children: ReactNode;
   className?: string;
-  /** Alinha rótulos do grupo Ordem de serviço (Nr OS/Ano + Processo). */
+  /** Alinha rótulos do grupo Ordem de serviço (Nr OS/Ano + Processo) no layout denso. */
   labelWidth?: "os";
 }) {
   return (
-    <div className={cn("flex min-w-0 items-center gap-2", className)}>
+    <div
+      className={cn(
+        "flex min-w-0 flex-col items-stretch gap-1 @min-[56rem]/os-filters:flex-row @min-[56rem]/os-filters:items-center @min-[56rem]/os-filters:gap-2",
+        className,
+      )}
+    >
       <label
         className={cn(
-          "shrink-0 whitespace-nowrap text-xs font-semibold text-neutral-600",
-          labelWidth === "os" && "w-[4.75rem]",
+          "text-xs font-semibold text-neutral-600 @min-[56rem]/os-filters:shrink-0 @min-[56rem]/os-filters:whitespace-nowrap",
+          labelWidth === "os" && "@min-[56rem]/os-filters:w-[4.75rem]",
         )}
       >
         {label}:
       </label>
-      {children}
+      <div className="min-w-0 w-full flex-1">{children}</div>
     </div>
   );
 }

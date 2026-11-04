@@ -38,13 +38,13 @@ export function GravacaoFornecedorSelectModal({
       aria-label="Selecionar fornecedor"
     >
       <div className="flex w-full max-w-md flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+        <div className="flex items-center justify-between border-b border-slate-200 px-3 py-3">
           <div>
             <h3 className="text-base font-semibold text-secondary-blue">
               Selecionar fornecedor
             </h3>
             <p className="mt-0.5 text-xs text-slate-500">
-              Escolha o fornecedor que receberá esta OS na Gravação Externa.
+              Escolha o fornecedor que receberá esta OS para gravação das chapas.
             </p>
           </div>
           <button

@@ -401,7 +401,7 @@ export function GravacaoExternaTab() {
     }
 
     const outros = multiEnvio ? ` (${envioLabel(session)})` : "";
-    if (!window.confirm(`Confirmar conclusão da Gravação Externa desta OS${outros}?`)) {
+    if (!window.confirm(`Confirmar conclusão da gravação desta OS${outros}?\nAo confirmar, a OS será retirada das pendências de gravação e a gráfica será notificada.`)) {
       return;
     }
     try {
@@ -415,7 +415,6 @@ export function GravacaoExternaTab() {
       } else if (previewSelection?.sessionId === session.gravacao_externa_id) {
         setPreviewSelection(null);
       }
-      window.alert("Gravação Externa concluída.");
     } catch (e) {
       const apiDetail = getApiErrorDetail(e);
       if (

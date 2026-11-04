@@ -45,6 +45,35 @@ function renderPanel(
   );
 }
 
+describe("OsFiltersPanel layout responsivo", () => {
+  beforeEach(() => {
+    categoriasLookup.data = [];
+    categoriasLookup.isLoading = false;
+    useOsFiltersStore.setState({
+      filters: defaultOsFilters(),
+      globalSearch: "",
+      filtersExpanded: true,
+    });
+  });
+
+  it("declara container de filtros e permite wrap dos grupos", () => {
+    const { container } = renderPanel();
+    const section = container.querySelector("section");
+    expect(section?.className).toContain("@container/os-filters");
+    expect(section?.className).toContain("z-30");
+    expect(section?.className).toContain("overflow-visible");
+    const grid = container.querySelector(".os-filter-group-grid");
+    expect(grid?.className).toContain("sm:flex-wrap");
+    expect(grid?.className).not.toContain("xl:flex-nowrap");
+    const group = container.querySelector(".os-filter-group");
+    expect(group?.className).toContain("overflow-visible");
+    expect(group?.className).not.toContain("overflow-hidden");
+    expect(screen.getByTestId("os-filters-nr-os")).toBeInTheDocument();
+    expect(screen.getByTestId("os-filters-categoria")).toBeInTheDocument();
+    expect(screen.getByText("Categoria:")).toBeInTheDocument();
+  });
+});
+
 describe("OsFiltersPanel advanced filters", () => {
   beforeEach(() => {
     categoriasLookup.data = [];

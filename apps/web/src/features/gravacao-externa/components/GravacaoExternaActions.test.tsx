@@ -50,28 +50,37 @@ describe("GravacaoExternaActions", () => {
     expect(screen.getByRole("button", { name: /gravação concluída/i })).toBeTruthy();
   });
 
-  it("badge iniciada inclui engrenagem animada", () => {
+  it("badge iniciada inclui engrenagem animada e pendente inclui relógio", () => {
     const { container, rerender } = render(
       <GravacaoExternaStatusBadge status="iniciada" />,
     );
     expect(screen.getByText("Iniciada")).toBeTruthy();
     expect(container.querySelector(".gravacao-gear-spin")).toBeTruthy();
+    expect(iniciadaBadge(container).className).not.toContain("rounded-full");
 
     rerender(<GravacaoExternaStatusBadge status="pendente" />);
     expect(screen.getByText("Pendente")).toBeTruthy();
     expect(container.querySelector(".gravacao-gear-spin")).toBeNull();
+    expect(container.querySelector(".lucide-clock")).toBeTruthy();
+    expect(iniciadaBadge(container).className).not.toContain("rounded-full");
   });
 
-  it("badge pendente e iniciada compartilham a mesma largura mínima", () => {
+  it("badge pendente e iniciada compartilham a mesma largura mínima sem cápsula", () => {
     const { rerender, container } = render(
       <GravacaoExternaStatusBadge status="iniciada" />,
     );
-    const iniciada = container.firstElementChild as HTMLElement;
+    const iniciada = iniciadaBadge(container);
     expect(iniciada.className).toContain("min-w-[5.75rem]");
+    expect(iniciada.className).not.toMatch(/\bborder\b/);
 
     rerender(<GravacaoExternaStatusBadge status="pendente" />);
-    const pendente = container.firstElementChild as HTMLElement;
+    const pendente = iniciadaBadge(container);
     expect(pendente.className).toContain("min-w-[5.75rem]");
     expect(pendente.className).toContain("justify-center");
+    expect(pendente.className).not.toContain("rounded-full");
   });
 });
+
+function iniciadaBadge(container: HTMLElement): HTMLElement {
+  return container.firstElementChild as HTMLElement;
+}

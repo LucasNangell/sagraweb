@@ -233,11 +233,10 @@ export function GravacaoExternaEnvioSection({
                 disabled={downloadBusy}
                 onClick={() => void handleDownloadAll()}
                 className={cn(
-                  "inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold leading-none",
+                  "ge-btn-3d shrink-0 px-2.5 py-1 text-xs",
                   allDownloadableDownloaded && downloadPhase !== "error" && !downloadBusy
-                    ? "bg-emerald-100 text-emerald-800"
-                    : "bg-amber-100 text-amber-800",
-                  "cursor-pointer hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
+                    ? "ge-btn-3d--emerald"
+                    : "ge-btn-3d--amber",
                 )}
                 title={
                   allDownloadableDownloaded

@@ -27,12 +27,12 @@
   --color-sagra-accent: #0095d4;
   --font-sans: var(--font-main);
   /* Botões de filtro por máquina (Gravação Externa) */
-  --text-xs-button: 1.5rem;
+  --text-xs-button: 1.2rem;
   --text-xs-button--line-height: 1.25;
   --text-xs-button-meta: 0.7rem; /* PDFs/TIFs baixados */
   --text-xs-button-meta--line-height: 1.25;
   --text-xs-button-badge: 0.625rem; /* Badge Download/Baixado */
-  --text-xs-button-badge--line-height: 1.25;
+  --text-xs-button-badge--line-height: 1.2;
 }
 
 html,
@@ -129,6 +129,91 @@ body {
   animation: gravacao-gear-spin 2.5s linear infinite;
 }
 
+/* Botões Download / Baixar todos — leve relevo, alinhado ao restante da UI */
+.ge-btn-3d {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border-radius: 0.375rem;
+  border: 1px solid transparent;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  cursor: pointer;
+  user-select: none;
+  text-decoration: none;
+  transform: translateY(0);
+  transition:
+    transform 80ms ease,
+    box-shadow 80ms ease,
+    background-color 80ms ease,
+    border-color 80ms ease;
+}
+
+.ge-btn-3d:active:not(:disabled):not([aria-disabled="true"]) {
+  transform: translateY(1px);
+}
+
+.ge-btn-3d:disabled,
+.ge-btn-3d[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+  box-shadow: none !important;
+}
+
+.ge-btn-3d--amber {
+  color: #92400e;
+  background-color: #fffbeb;
+  border-color: #fcd34d;
+  box-shadow: 0 1px 0 0 #d97706;
+}
+
+.ge-btn-3d--amber:hover:not(:disabled):not([aria-disabled="true"]) {
+  background-color: #fef3c7;
+  border-color: #f59e0b;
+}
+
+.ge-btn-3d--amber:active:not(:disabled):not([aria-disabled="true"]) {
+  background-color: #fde68a;
+  box-shadow: inset 0 1px 2px rgb(146 64 14 / 0.18);
+}
+
+.ge-btn-3d--emerald {
+  color: #065f46;
+  background-color: #ecfdf5;
+  border-color: #6ee7b7;
+  box-shadow: 0 1px 0 0 #059669;
+}
+
+.ge-btn-3d--emerald:hover:not(:disabled):not([aria-disabled="true"]) {
+  background-color: #d1fae5;
+  border-color: #34d399;
+}
+
+.ge-btn-3d--emerald:active:not(:disabled):not([aria-disabled="true"]) {
+  background-color: #a7f3d0;
+  box-shadow: inset 0 1px 2px rgb(6 95 70 / 0.18);
+}
+
+.ge-btn-3d--slate {
+  color: #404040;
+  background-color: #fff;
+  border-color: #d4d4d4;
+  box-shadow: 0 1px 0 0 #a3a3a3;
+}
+
+.ge-btn-3d--slate:hover:not(:disabled):not([aria-disabled="true"]) {
+  background-color: #fafafa;
+  border-color: #a3a3a3;
+}
+
+.ge-btn-3d--slate:active:not(:disabled):not([aria-disabled="true"]) {
+  background-color: #f5f5f5;
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.12);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .motion-safe\:animate-\[fadeIn_320ms_ease-out_both\],
   .motion-safe\:animate-\[fadeIn_300ms_ease-out_both\],
@@ -138,5 +223,12 @@ body {
 
   .gravacao-gear-spin {
     animation: none;
+  }
+
+  .ge-btn-3d,
+  .ge-btn-3d:hover:not(:disabled):not([aria-disabled="true"]),
+  .ge-btn-3d:active:not(:disabled):not([aria-disabled="true"]) {
+    transition: none;
+    transform: none;
   }
 }

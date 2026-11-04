@@ -660,7 +660,6 @@ export function OsHomePage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto md:h-full md:overflow-hidden">
-
       <OsFiltersPanel
         onRefresh={handleRefresh}
         isFetching={isListFetching}

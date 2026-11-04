@@ -74,9 +74,13 @@ function buildColumns(
     cell: ({ row, getValue }) => {
       const data = row.original;
       if (data.is_sub_os || data.kind === "sub_os") {
+        const label = data.display_label ?? `${data.nr_os}`;
         return (
-          <span className="font-medium text-secondary-blue">
-            {data.display_label ?? `${data.nr_os}`}
+          <span
+            className="block truncate font-medium text-secondary-blue"
+            title={label}
+          >
+            {label}
           </span>
         );
       }
@@ -84,12 +88,12 @@ function buildColumns(
       const hasSub = hasSubOsMap.get(key);
       const isExpanded = expanded.has(key);
       return (
-        <span className="inline-flex items-center gap-1 font-medium tabular-nums">
+        <span className="inline-flex min-w-0 max-w-full items-center gap-1 font-medium tabular-nums">
           {hasSub ? (
             <button
               type="button"
               title={isExpanded ? "Recolher Sub OS" : "Expandir Sub OS"}
-              className="rounded p-0.5 text-secondary-blue hover:bg-slate-100"
+              className="shrink-0 rounded p-0.5 text-secondary-blue hover:bg-slate-100"
               data-testid={homeTestIds.osTableExpand(data.ano, data.nr_os)}
               onClick={(e) => {
                 e.stopPropagation();
@@ -103,7 +107,7 @@ function buildColumns(
               )}
             </button>
           ) : null}
-          <span>
+          <span className="min-w-0 truncate">
             {getValue<number>()}
             {hasSub ? " +" : ""}
           </span>
@@ -116,18 +120,21 @@ function buildColumns(
     header: "Ano",
     size: 48,
     cell: ({ getValue }) => (
-      <span className="tabular-nums">{getValue<number>()}</span>
+      <span className="block truncate tabular-nums">{getValue<number>()}</span>
     ),
   },
   {
     accessorKey: "data_entrada",
     header: "Entrada",
     size: 76,
-    cell: ({ getValue }) => (
-      <span className="tabular-nums">
-        {formatDateBr(getValue<string | null>() ?? undefined)}
-      </span>
-    ),
+    cell: ({ getValue }) => {
+      const text = formatDateBr(getValue<string | null>() ?? undefined);
+      return (
+        <span className="block truncate tabular-nums" title={text}>
+          {text}
+        </span>
+      );
+    },
   },
   {
     accessorKey: "produto",
@@ -168,7 +175,12 @@ function buildColumns(
       if ((row.original.is_sub_os || row.original.kind === "sub_os") && !v) {
         return <span className="text-neutral-400">—</span>;
       }
-      return v ?? "";
+      const text = v ?? "";
+      return (
+        <span className="block truncate" title={text}>
+          {text}
+        </span>
+      );
     },
   },
   {
@@ -206,7 +218,14 @@ function buildColumns(
     accessorKey: "data_entrega",
     header: "Data",
     size: 76,
-    cell: ({ getValue }) => formatDateBr(getValue<string | null>() ?? undefined),
+    cell: ({ getValue }) => {
+      const text = formatDateBr(getValue<string | null>() ?? undefined);
+      return (
+        <span className="block truncate tabular-nums" title={text}>
+          {text}
+        </span>
+      );
+    },
   },
 ];
 }
@@ -582,7 +601,7 @@ export function OsOrdersTable({
           </div>
         ) : null}
         {/* Tabela — tablet/desktop */}
-        <table className="hidden w-full min-w-[980px] table-fixed border-collapse text-sm md:table">
+        <table className="hidden w-full min-w-[1180px] table-fixed border-collapse text-sm md:table">
           <thead className="sticky top-0 z-10 bg-secondary-blue text-white">
             {headerGroups.map((hg) => (
               <tr key={hg.id}>
@@ -591,7 +610,7 @@ export function OsOrdersTable({
                   return (
                     <th
                       key={header.id}
-                      className="cursor-pointer select-none whitespace-nowrap px-2 py-1.5 text-left text-xs font-semibold"
+                      className="max-w-0 cursor-pointer select-none overflow-hidden px-2 py-1.5 text-left text-xs font-semibold"
                       style={{ width: header.column.getSize() }}
                       onClick={() =>
                         onSortChange(
@@ -603,12 +622,14 @@ export function OsOrdersTable({
                       }
                       data-testid={homeTestIds.osTableSort(header.id)}
                     >
-                      <span className="inline-flex items-center gap-0.5">
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext(),
-                        )}
-                        <span className="inline-flex flex-col items-center justify-center leading-none">
+                      <span className="inline-flex max-w-full min-w-0 items-center gap-0.5">
+                        <span className="min-w-0 truncate">
+                          {flexRender(
+                            header.column.columnDef.header,
+                            header.getContext(),
+                          )}
+                        </span>
+                        <span className="inline-flex shrink-0 flex-col items-center justify-center leading-none">
                           {meta.badge ? (
                             <span
                               className="text-[0.55rem] font-bold leading-none"
@@ -703,7 +724,7 @@ export function OsOrdersTable({
                         {tableRow.getVisibleCells().map((cell) => (
                           <td
                             key={cell.id}
-                            className="px-2 py-1 align-middle"
+                            className="max-w-0 overflow-hidden px-2 py-1 align-middle"
                             style={{ width: cell.column.getSize() }}
                           >
                             {flexRender(

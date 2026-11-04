@@ -48,7 +48,7 @@ export function GravacaoObservacaoBox({
     >
       <div className="flex items-start justify-between gap-2">
         <h4 className="text-xs font-semibold uppercase tracking-wide text-black">
-          Observação
+          Observações para o birô
         </h4>
         {editable && !editing ? (
           <button

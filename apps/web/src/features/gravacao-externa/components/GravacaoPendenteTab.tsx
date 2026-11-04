@@ -1,6 +1,7 @@
 import { cn } from "@sagra/ui";
 import {
   ArrowLeft,
+  CheckCircle2,
   ChevronsLeft,
   ChevronsRight,
   Clock,
@@ -160,25 +161,28 @@ function historicoRowKey(item: GravacaoPendenteHistoricoItem): string {
 function PendenteStatusBadge({ status }: { status: string }) {
   const label =
     status === "ativa"
-      ? "Ativa"
+      ? ""
       : status === "enviada"
         ? "Enviada"
         : status === "sem_sessao"
           ? "Sem arquivos"
           : status;
-  const className =
+  const textClass =
     status === "ativa"
-      ? "bg-amber-100 text-amber-800 border-amber-200"
+      ? "text-amber-800"
       : status === "enviada"
-        ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-        : "bg-neutral-100 text-neutral-600 border-neutral-300";
+        ? "text-emerald-800"
+        : "text-neutral-600";
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold",
-        className,
+        "inline-flex items-center gap-1 text-xs font-semibold",
+        textClass,
       )}
     >
+      {status === "enviada" ? (
+        <CheckCircle2 className="size-3 shrink-0" aria-hidden />
+      ) : null}
       {label}
     </span>
   );
@@ -291,18 +295,34 @@ export function GravacaoPendenteTab() {
     details.some((d) =>
       d.arquivos.some((arq) => !selectedMaquinaKeys.includes(machineKey(arq.maquina))),
     );
-  const totalArquivos = details.reduce(
-    (sum, d) => sum + filterArquivosByMaquinaKeys(d.arquivos, selectedMaquinaKeys).length,
-    0,
-  );
+  /** Com chapas pendentes e permissão de envio, a lista só aparece após badge de máquina. */
+  const requiresMachineSelection = canEnviar && pendingChips.length > 0;
+  const hasMachineSelection = selectedMaquinaKeys.length > 0;
+  const showPendingArquivos = !requiresMachineSelection || hasMachineSelection;
+  const totalArquivos = showPendingArquivos
+    ? details.reduce(
+        (sum, d) =>
+          sum + filterArquivosByMaquinaKeys(d.arquivos, selectedMaquinaKeys).length,
+        0,
+      )
+    : 0;
 
   useEffect(() => {
-    if (selectedMaquinaKeys.length === 0 || previewSelection?.kind !== "file") return;
+    if (selectedMaquinaKeys.length === 0) {
+      if (
+        previewSelection != null &&
+        sessionIds.includes(previewSelection.sessionId)
+      ) {
+        setPreviewSelection(null);
+      }
+      return;
+    }
+    if (previewSelection?.kind !== "file") return;
     const key = machineKey(previewSelection.arquivo.maquina);
     if (!selectedMaquinaKeys.includes(key)) {
       setPreviewSelection(null);
     }
-  }, [selectedMaquinaKeys, previewSelection]);
+  }, [selectedMaquinaKeys, previewSelection, sessionIds]);
 
   const clearSelection = () => {
     setSelectedKey(null);
@@ -404,7 +424,7 @@ export function GravacaoPendenteTab() {
       setFornecedorModalOpen(false);
       setFornecedores([]);
       if (partial) {
-        window.alert(`Arquivos de ${maquinas.join(", ")} enviados para Gravação Externa.`);
+        // window.alert(`Arquivos de ${maquinas.join(", ")} enviados para Gravação Externa.`);
         setSelectedMaquinaKeys([]);
         setPreviewSelection(null);
       } else {
@@ -419,15 +439,10 @@ export function GravacaoPendenteTab() {
   };
 
   const handleEnviar = async () => {
-    if (!selected) {
-      return;
-    }
-    const confirmMessage = isPartialSelection
-      ? `Enviar somente os arquivos de ${selectedChips
-          .map((chip) => chip.maquina)
-          .join(", ")} da OS ${formatOsListLabel(selected)} para Gravação Externa?\n\nOs demais arquivos continuam nesta lista.`
-      : `Enviar OS ${formatOsListLabel(selected)} para Gravação Externa?`;
-    if (!window.confirm(confirmMessage)) {
+    if (requiresMachineSelection && !hasMachineSelection) {
+      window.alert(
+        "Selecione ao menos uma máquina nos badges de chapas para carregar os arquivos e enviar ao birô.",
+      );
       return;
     }
 
@@ -602,9 +617,9 @@ export function GravacaoPendenteTab() {
             {selected.solicitante}
             {selected.produto ? ` · ${selected.produto}` : ""}
           </p>
-          <p className="text-xs text-neutral-500">
+          {/* <p className="text-xs text-neutral-500">
             Lançado por {firstDetail.lancado_por_nome || firstDetail.lancado_por_ponto}
-          </p>
+          </p> */}
         </div>
         {canEnviar ? (
           <div className="flex flex-col items-end gap-1">
@@ -632,11 +647,11 @@ export function GravacaoPendenteTab() {
 
       {pendingChips.length > 0 || sentChips.length > 0 ? (
         <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-            Chapas
-            {canEnviar && pendingChips.length > 1 ? (
-              <span className="ml-2 font-normal normal-case tracking-normal text-neutral-500">
-                Selecione máquinas para enviar só os arquivos delas
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-600">
+            CHAPAS:
+            {requiresMachineSelection ? (
+              <span className="font-normal normal-case tracking-normal text-neutral-600">
+                
               </span>
             ) : null}
           </h3>
@@ -665,8 +680,8 @@ export function GravacaoPendenteTab() {
                       {chip.maquina}: <strong>{chip.quantidade}</strong>
                     </button>
                   ) : (
-                    <span className="inline-flex rounded-full border border-neutral-300 bg-white px-2.5 py-0.5">
-                      {chip.maquina}: <strong className="ml-1">{chip.quantidade}</strong>
+                    <span className="inline-flex items-center gap-1 text-sm font-medium text-neutral-700">
+                      {chip.maquina}: <strong>{chip.quantidade}</strong>
                     </span>
                   )}
                 </li>
@@ -675,14 +690,18 @@ export function GravacaoPendenteTab() {
             {sentChips.map((chip) => (
               <li
                 key={`s-${chip.key}`}
-                className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-amber-800"
+                className="inline-flex items-center gap-1 text-sm font-medium text-emerald-800"
                 title={`Enviado para o Birô ${chip.fornecedor}`}
               >
-                {chip.maquina}: <strong className="mx-1">{chip.quantidade}</strong>· Enviado p/{" "}
+                <CheckCircle2 className="size-3.5 shrink-0" aria-hidden />
+                {chip.maquina}: <strong>{chip.quantidade}</strong>· Enviado p/{" "}
                 {chip.fornecedor}
               </li>
             ))}
           </ul>
+          <span className="font-normal normal-case tracking-normal text-neutral-500">
+                Selecione o conjunto de chapas, clique Enviar para Gravação e indique o birô.
+          </span>
         </div>
       ) : null}
 
@@ -692,8 +711,23 @@ export function GravacaoPendenteTab() {
             Arquivos ({totalArquivos})
           </h3>
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
+            {requiresMachineSelection && !hasMachineSelection ? (
+              <div
+                role="status"
+                className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-4 text-sm text-amber-900"
+              >
+                Selecione ao menos um conjunto de chapas acima para carregar a lista de
+                arquivos.
+              </div>
+            ) : null}
             {details.map((sessionDetail) => {
               const componente = gravacaoComponenteLabel(sessionDetail.componente);
+              const pendingArquivos = showPendingArquivos
+                ? filterArquivosByMaquinaKeys(
+                    sessionDetail.arquivos,
+                    selectedMaquinaKeys,
+                  )
+                : [];
               return (
                 <section key={sessionDetail.id} className="space-y-2">
                   {multiSession && componente ? (
@@ -721,43 +755,44 @@ export function GravacaoPendenteTab() {
                       }
                     }}
                   />
-                  <GravacaoExternaArquivosPanel
-                    ano={selected.ano}
-                    nrOs={selected.nr_os}
-                    arquivos={filterArquivosByMaquinaKeys(
-                      sessionDetail.arquivos,
-                      selectedMaquinaKeys,
-                    )}
-                    selection={
-                      previewSelection?.sessionId === sessionDetail.id ? previewSelection : null
-                    }
-                    chapasPorMaquina={sessionDetail.chapas}
-                    canDownload={false}
-                    onSelect={(arq) =>
-                      setPreviewSelection({
-                        kind: "file",
-                        arquivo: arq,
-                        sessionId: sessionDetail.id,
-                      })
-                    }
-                    onSelectComposite={(chapa) =>
-                      setPreviewSelection({
-                        kind: "composite",
-                        groupKey: chapa.groupKey,
-                        chapaLabel: chapa.chapaLabel,
-                        displayLabel: chapa.displayLabel,
-                        sessionId: sessionDetail.id,
-                      })
-                    }
-                  />
+                  {showPendingArquivos ? (
+                    <GravacaoExternaArquivosPanel
+                      ano={selected.ano}
+                      nrOs={selected.nr_os}
+                      arquivos={pendingArquivos}
+                      selection={
+                        previewSelection?.sessionId === sessionDetail.id
+                          ? previewSelection
+                          : null
+                      }
+                      chapasPorMaquina={sessionDetail.chapas}
+                      canDownload={false}
+                      onSelect={(arq) =>
+                        setPreviewSelection({
+                          kind: "file",
+                          arquivo: arq,
+                          sessionId: sessionDetail.id,
+                        })
+                      }
+                      onSelectComposite={(chapa) =>
+                        setPreviewSelection({
+                          kind: "composite",
+                          groupKey: chapa.groupKey,
+                          chapaLabel: chapa.chapaLabel,
+                          displayLabel: chapa.displayLabel,
+                          sessionId: sessionDetail.id,
+                        })
+                      }
+                    />
+                  ) : null}
                   {(sessionDetail.envios ?? []).map((envio) => (
                     <div
                       key={envio.gravacao_pendente_id}
-                      className="space-y-1 rounded-lg border border-amber-200 bg-amber-50/60 p-2"
+                      className="space-y-1 rounded-lg border border-emerald-200 bg-emerald-50/60 p-2"
                     >
-                      <p className="text-xs font-semibold text-amber-800">
-                        Enviado p/ Birô {envioFornecedorLabel(envio)}
-                        {envio.maquinas.length > 0 ? ` · ${envio.maquinas.join(", ")}` : ""}
+                      <p className="text-xs font-semibold text-emerald-800">
+                        {envio.maquinas.length > 0 ? `${envio.maquinas.join(", ")}: ` : " "}
+                         enviado p/ {envioFornecedorLabel(envio)}
                         {envio.enviada_em ? ` · ${formatDateTimeBr(envio.enviada_em)}` : ""}
                       </p>
                       <div className="opacity-80">
@@ -1096,7 +1131,7 @@ export function GravacaoPendenteTab() {
             })
             .then(() => {
               setAdicionarModalOpen(false);
-              window.alert("OS adicionada à lista de Gravação Pendente.");
+              // window.alert("OS adicionada à lista de Gravação Pendente.");
             })
             .catch((error) => {
               window.alert(

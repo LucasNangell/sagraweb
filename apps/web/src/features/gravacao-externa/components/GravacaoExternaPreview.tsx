@@ -283,7 +283,7 @@ export function GravacaoExternaPreview({
             onClick={() => {
               if (arquivo) onArquivoDownloaded?.(arquivo.id);
             }}
-            className="inline-flex shrink-0 items-center gap-1 rounded border border-neutral-300 px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+            className="ge-btn-3d ge-btn-3d--slate shrink-0 px-2.5 py-1 text-xs"
           >
             <FileDown className="size-3.5" />
             Download
@@ -876,15 +876,11 @@ function MachineFilterNameRow({
           disabled={machineDownloadBusy}
           onClick={onDownload}
           className={[
-            // Fora do twMerge: text-* de cor (emerald/amber) removia o token de fonte.
+            // Fora do twMerge: text-* de cor removia o token de fonte.
             "text-xs-button-badge",
             cn(
-              "inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5",
-              "font-semibold leading-none",
-              "cursor-pointer hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
-              allDownloaded
-                ? "bg-emerald-100 text-emerald-800"
-                : "bg-amber-100 text-amber-800",
+              "ge-btn-3d shrink-0 gap-0.5 px-1.5 py-0.5",
+              allDownloaded ? "ge-btn-3d--emerald" : "ge-btn-3d--amber",
             ),
           ].join(" ")}
         >

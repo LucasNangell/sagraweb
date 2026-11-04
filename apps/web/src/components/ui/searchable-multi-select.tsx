@@ -277,7 +277,7 @@ export function SearchableMultiSelect({
       )}
 
       {open && !disabled && (
-        <div className="absolute z-40 mt-1 w-full rounded border border-sagra-border bg-white shadow-lg">
+        <div className="absolute z-50 mt-1 w-full rounded border border-sagra-border bg-white shadow-lg">
           <div className="border-b border-sagra-border/60 p-2">
             <input
               ref={searchRef}
@@ -349,7 +349,10 @@ export function SearchableMultiSelect({
       ref={rootRef}
       className={cn(
         "relative min-w-0",
-        isLeft ? "flex items-center gap-2" : "flex-1",
+        open && "z-50",
+        isLeft
+          ? "flex flex-col gap-1 @min-[56rem]/os-filters:flex-row @min-[56rem]/os-filters:items-center @min-[56rem]/os-filters:gap-2"
+          : "flex-1",
         className,
       )}
     >
@@ -358,7 +361,9 @@ export function SearchableMultiSelect({
           htmlFor={fieldId}
           className={cn(
             "text-xs font-semibold text-neutral-600",
-            isLeft ? "mb-0 shrink-0 whitespace-nowrap" : "mb-1 block",
+            isLeft
+              ? "mb-0 block @min-[56rem]/os-filters:shrink-0 @min-[56rem]/os-filters:whitespace-nowrap"
+              : "mb-1 block",
           )}
         >
           {isLeft ? `${label}:` : label}

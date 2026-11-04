@@ -42,24 +42,25 @@ export function GravacaoExternaDownloadsPendentesModal({
       aria-describedby="downloads-pendentes-desc"
     >
       <div className="flex w-full max-w-md flex-col overflow-hidden rounded-lg border-2 border-amber-500 bg-white shadow-2xl shadow-amber-900/20">
-        <div className="flex items-start gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3.5">
-          <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-amber-500 text-white shadow-sm">
-            <AlertTriangle className="size-5" aria-hidden />
+        <div className="flex items-start gap-3 border-b border-amber-200 bg-amber-50 px-2 py-2.5">
+          <span className="mt-0.5 flex size-12 shrink-0 items-center justify-center rounded-full bg-amber-500 text-white shadow-sm">
+            <AlertTriangle className="size-8" aria-hidden />
           </span>
           <div className="min-w-0 flex-1">
             <h3
               id="downloads-pendentes-title"
               className="text-base font-bold tracking-tight text-amber-950"
             >
-              Conclusão bloqueada
+              Conclusão de gravação desabilitada
             </h3>
             <p
               id="downloads-pendentes-desc"
               className="mt-1 text-sm font-medium text-amber-900"
             >
-              Ainda faltam downloads. Baixe ao menos o PDF de cada máquina
-              antes de concluir a gravação.
+              Ainda há chapas pendentes de download. <br />
+              Baixe os TIFFs ou PDF das respectivas máquinas.
             </p>
+
           </div>
           <button
             type="button"
@@ -70,7 +71,7 @@ export function GravacaoExternaDownloadsPendentesModal({
             <X className="size-4" />
           </button>
         </div>
-        <div className="bg-amber-50/40 px-4 py-4">
+        <div className="bg-amber-50/40 px-4 py-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
             Máquinas pendentes
           </p>

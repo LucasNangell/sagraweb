@@ -1,4 +1,4 @@
-import { Loader2, Play, CheckCircle2, Settings } from "lucide-react";
+import { Clock, Loader2, Play, CheckCircle2, Settings } from "lucide-react";
 
 import type { GravacaoExternaDetail } from "@/api/gravacaoExterna";
 import { cn } from "@sagra/ui";
@@ -27,18 +27,19 @@ function statusLabel(status: string): string {
   }
 }
 
-function statusClass(status: string): string {
+/** Só tipografia/ícone — badges informativos não usam cápsula colorida. */
+function statusTextClass(status: string): string {
   switch (status) {
     case "iniciada":
-      return "bg-emerald-100 text-emerald-800 border-emerald-200";
+      return "text-emerald-800";
     case "pendente":
-      return "bg-amber-100 text-amber-800 border-amber-200";
+      return "text-amber-800";
     case "concluida":
-      return "bg-blue-100 text-blue-800 border-blue-200";
+      return "text-blue-800";
     case "sem_sessao":
-      return "bg-neutral-100 text-neutral-600 border-neutral-300";
+      return "text-neutral-600";
     default:
-      return "bg-neutral-100 text-neutral-700 border-neutral-200";
+      return "text-neutral-700";
   }
 }
 
@@ -50,20 +51,21 @@ export function GravacaoExternaStatusBadge({
   className?: string;
 }) {
   const isIniciada = status === "iniciada";
+  const isPendente = status === "pendente";
+  const isConcluida = status === "concluida";
   return (
     <span
       className={cn(
-        "inline-flex min-w-[5.75rem] items-center justify-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold",
-        statusClass(status),
+        "inline-flex min-w-[5.75rem] items-center justify-center gap-1 text-xs font-semibold",
+        statusTextClass(status),
         className,
       )}
     >
       {isIniciada ? (
-        <Settings
-          className="size-3 shrink-0 gravacao-gear-spin"
-          aria-hidden
-        />
+        <Settings className="size-3 shrink-0 gravacao-gear-spin" aria-hidden />
       ) : null}
+      {isPendente ? <Clock className="size-3 shrink-0" aria-hidden /> : null}
+      {isConcluida ? <CheckCircle2 className="size-3 shrink-0" aria-hidden /> : null}
       {statusLabel(status)}
     </span>
   );

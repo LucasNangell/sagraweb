@@ -341,7 +341,7 @@ describe("GravacaoPendenteTab controle", () => {
       expect(screen.queryByText("Miolo")).toBeNull();
     });
 
-    it("soma chapas por máquina entre capa e miolo e envia todos sem seleção", async () => {
+    it("soma chapas por máquina e exige seleção antes de carregar arquivos ou enviar", async () => {
       listItems = capaMioloItems();
       detailsById = {
         42: sessionDetail(42, "capa", [{ maquina: "Komori", quantidade: 2 }]),
@@ -357,6 +357,22 @@ describe("GravacaoPendenteTab controle", () => {
       expect(komori).toHaveAttribute("aria-pressed", "false");
       expect(komori.className).toContain("cursor-pointer");
       expect(screen.getByRole("button", { name: /Heidelberg: 4/ })).toBeTruthy();
+      expect(
+        screen.getByText(/Selecione ao menos um conjunto de chapas/),
+      ).toBeTruthy();
+      expect(screen.queryByText("Komori.pdf")).toBeNull();
+      expect(screen.getByText("Arquivos (0)")).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("button", { name: "Enviar para gravação externa" }));
+      expect(enviarOs).not.toHaveBeenCalled();
+      expect(window.alert).toHaveBeenCalledWith(
+        expect.stringContaining("Selecione ao menos uma máquina"),
+      );
+
+      fireEvent.click(komori);
+      fireEvent.click(screen.getByRole("button", { name: /Heidelberg: 4/ }));
+      expect(screen.getAllByText("Komori.pdf").length).toBeGreaterThan(0);
+      expect(screen.getByText("Heidelberg.pdf")).toBeTruthy();
 
       fireEvent.click(screen.getByRole("button", { name: "Enviar para gravação externa" }));
       await waitFor(() => expect(enviarOs).toHaveBeenCalledTimes(1));
@@ -385,8 +401,8 @@ describe("GravacaoPendenteTab controle", () => {
       render(<GravacaoPendenteTab />);
       fireEvent.click(screen.getByText("00101/26"));
 
-      expect(screen.getByText("Komori.pdf")).toBeTruthy();
-      expect(screen.getByText("Heidelberg.pdf")).toBeTruthy();
+      expect(screen.queryByText("Komori.pdf")).toBeNull();
+      expect(screen.queryByText("Heidelberg.pdf")).toBeNull();
 
       const heidelberg = screen.getByRole("button", { name: /Heidelberg: 4/ });
       fireEvent.click(heidelberg);
@@ -404,9 +420,6 @@ describe("GravacaoPendenteTab controle", () => {
           maquinas: ["Heidelberg"],
         }),
       );
-      expect(window.confirm).toHaveBeenCalledWith(
-        expect.stringContaining("somente os arquivos de Heidelberg"),
-      );
       await waitFor(() =>
         expect(screen.getByRole("button", { name: /Heidelberg: 4/ })).toHaveAttribute(
           "aria-pressed",
@@ -415,6 +428,9 @@ describe("GravacaoPendenteTab controle", () => {
       );
       expect(
         screen.getByRole("button", { name: "Enviar para gravação externa" }),
+      ).toBeTruthy();
+      expect(
+        screen.getByText(/Selecione ao menos um conjunto de chapas/),
       ).toBeTruthy();
     });
 
@@ -425,7 +441,9 @@ describe("GravacaoPendenteTab controle", () => {
       };
       render(<GravacaoPendenteTab />);
       fireEvent.click(screen.getByText("00101/26"));
+      expect(screen.queryByText("Komori.pdf")).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: /Komori: 2/ }));
+      expect(screen.getByText("Komori.pdf")).toBeTruthy();
       expect(screen.queryByText(/Somente:/)).toBeNull();
 
       fireEvent.click(screen.getByRole("button", { name: "Enviar para gravação externa" }));
@@ -453,10 +471,11 @@ describe("GravacaoPendenteTab controle", () => {
       render(<GravacaoPendenteTab />);
       fireEvent.click(screen.getByText("00101/26"));
 
-      expect(screen.getByTitle("Enviado para o Birô Birô Alfa").textContent).toContain(
-        "Heidelberg",
-      );
-      expect(screen.getByText(/Enviado p\/ Birô Birô Alfa · Heidelberg/)).toBeTruthy();
+      const sentChip = screen.getByTitle("Enviado para o Birô Birô Alfa");
+      expect(sentChip.textContent).toContain("Heidelberg");
+      expect(sentChip.textContent).toContain("Enviado p/");
+      expect(sentChip.textContent).toContain("Birô Alfa");
+      expect(sentChip.className).not.toContain("rounded-full");
       expect(screen.queryByRole("button", { name: /Heidelberg: 4/ })).toBeNull();
     });
 

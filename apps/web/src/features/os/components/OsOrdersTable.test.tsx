@@ -109,6 +109,32 @@ describe("OsOrdersTable list expand toggle", () => {
   });
 });
 
+describe("OsOrdersTable column overflow", () => {
+  it("mantém células e tabela sem estouro horizontal por sobreposição", () => {
+    const { container } = renderTable({
+      rows: [
+        {
+          ...row,
+          situacao: "Em andamento na gráfica com texto longo",
+          titulo: "Título muito longo para forçar truncamento visual na célula",
+        },
+      ],
+    });
+    const table = container.querySelector("table");
+    expect(table?.className).toContain("table-fixed");
+    expect(table?.className).toContain("min-w-[1180px]");
+    const dataRow = container.querySelector(
+      `[data-testid="${homeTestIds.osTableRow(2026, 2244)}"]`,
+    );
+    const cell = dataRow?.querySelector("td");
+    expect(cell?.className).toContain("overflow-hidden");
+    expect(cell?.className).toContain("max-w-0");
+    expect(
+      screen.getByTitle("Em andamento na gráfica com texto longo").className,
+    ).toContain("truncate");
+  });
+});
+
 describe("OsOrdersTable sort header", () => {
   it("mostra o badge acima da seta de classificação", () => {
     renderTable({

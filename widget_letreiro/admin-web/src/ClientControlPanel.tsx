@@ -2,11 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera, Expand, Library, LoaderCircle, Maximize2, Minimize2, Monitor, Plus, RefreshCw, Square, SquareArrowOutUpRight, X } from "lucide-react";
 import { api, type Command, type Instance, type Job } from "./api";
 import { extractCommandVars } from "./commandVars";
-import { DESKTOP_JOB_PREFIX, QUICK_BUTTONS_KEY, desktopTargetGuard, desktopTargetKey, matchesDesktopJob, moveWindowScript, parseDesktopResult, parseQuickButtons, windowActionScript, type DesktopWindow, type ScreenshotResult, type WindowAction, type WindowResult } from "./desktop";
+import { DESKTOP_JOB_PREFIX, QUICK_BUTTONS_KEY, desktopTargetGuard, desktopTargetKey, matchesDesktopJob, moveWindowScript, parseDesktopResult, parseQuickButtons, supportsLargeScreenshot, windowActionScript, type DesktopWindow, type ScreenshotResult, type WindowAction, type WindowResult } from "./desktop";
 import windowsTemplate from "./desktopScripts/windows.ps1?raw";
 import screenshotScript from "./desktopScripts/screenshot.ps1?raw";
 
-type Pending = { name: string; kind: "windows" | "screenshot" | "action"; started: number; highQuality?: boolean };
+type Pending = { name: string; kind: "windows" | "screenshot" | "action"; started: number; highQuality?: boolean; reducedReason?: "client" | "server" | "truncated" };
 type Props = { target: Instance | null; selectionCount: number; commands: Command[]; jobs: Job[]; onQueued: () => void; onJobs: (jobs: Job[]) => void; onOpenLibrary: () => void };
 
 const ACTIONS: { id: WindowAction; label: string; icon: typeof Monitor }[] = [
@@ -46,7 +46,7 @@ export default function ClientControlPanel({ target, selectionCount, commands, j
   const availableCommands = [...commands].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   const targetKey = target ? desktopTargetKey(target) : "";
 
-  const queueDesktop = useCallback(async (kind: Pending["kind"], row?: DesktopWindow, action?: WindowAction, monitorId?: string) => {
+  const queueDesktop = useCallback(async (kind: Pending["kind"], row?: DesktopWindow, action?: WindowAction, monitorId?: string, retryReduced = false) => {
     if (!target?.online || pendingRef.current) return;
     const request: Pending = { name: `${DESKTOP_JOB_PREFIX}${kind}/${crypto.randomUUID()}`, kind, started: Date.now() };
     pendingRef.current = request;
@@ -54,7 +54,10 @@ export default function ClientControlPanel({ target, selectionCount, commands, j
     setError("");
     try {
       if (kind === "screenshot") {
-        request.highQuality = (await api.screenshotCapability())?.highQuality === true;
+        const serverSupports = (await api.screenshotCapability())?.highQuality === true;
+        const clientSupports = supportsLargeScreenshot(target.version ?? "");
+        request.highQuality = serverSupports && clientSupports !== false && !retryReduced;
+        if (!request.highQuality) request.reducedReason = retryReduced ? "truncated" : !serverSupports ? "server" : "client";
         if (!alive.current || pendingRef.current !== request) return;
         if (request.highQuality) request.name = `${DESKTOP_JOB_PREFIX}screenshot-hq/${crypto.randomUUID()}`;
       }
@@ -96,12 +99,27 @@ export default function ClientControlPanel({ target, selectionCount, commands, j
       if (!alive.current || pendingRef.current !== current) return;
       let result: ReturnType<typeof parseDesktopResult>;
       try { result = parseDesktopResult(raw); }
-      catch (error) { if (current.kind === "screenshot" && current.highQuality && raw.includes("[truncado]")) throw new Error("Atualize o SAGRA Letreiro na estação para receber capturas em alta qualidade."); throw error; }
+      catch (error) {
+        if (current.kind === "screenshot" && current.highQuality && raw.includes("[truncado]")) {
+          pendingRef.current = null;
+          setPending(null);
+          setMessage("A captura foi truncada. Tentando novamente em qualidade compatível…");
+          void queueDesktop("screenshot", undefined, undefined, undefined, true);
+          return;
+        }
+        throw error;
+      }
       if (result.type !== current.kind) throw new Error("O client retornou um resultado diferente do solicitado.");
       pendingRef.current = null;
       setPending(null);
       if (result.type === "windows") setWindows(result);
-      if (result.type === "screenshot") { setScreenshot(result); setMessage(current.highQuality ? "Captura recebida." : "Captura recebida em qualidade reduzida. Atualize a API central para obter melhor qualidade."); }
+      if (result.type === "screenshot") {
+        setScreenshot(result);
+        setMessage(current.highQuality ? "Captura recebida." : current.reducedReason === "client"
+          ? `Captura recebida em qualidade reduzida. A estação informa a versão ${target.version}; atualize e reinicie o letreiro nessa estação para usar alta qualidade.`
+          : current.reducedReason === "server" ? "Captura recebida em qualidade reduzida. Atualize a API central para obter melhor qualidade."
+          : "Captura recebida em qualidade reduzida após truncamento. Verifique a versão em execução na estação e a API central.");
+      }
       if (result.type === "action") { setMessage(result.message); void queueDesktop("windows"); }
     } catch (ex) {
       if (alive.current && pendingRef.current === current) { pendingRef.current = null; setPending(null); setError(ex instanceof Error ? ex.message : "Resposta inválida do client."); }

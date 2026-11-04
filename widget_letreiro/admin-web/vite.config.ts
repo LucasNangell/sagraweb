@@ -220,7 +220,7 @@ function localPreviewMock(): Connect.NextHandleFunction {
       return sendJson(res, {
         instances: [
           { hostName: "PC-DEV", windowsUser: "usr_sefoc", nome: "Dev", setor: "SEFOC", version: "2.18.0", ponto: "654321", online: true, hasConfig: true },
-          { hostName: "PC-SALA", windowsUser: "ana", nome: "Ana Souza", setor: "Papelaria", version: "2.18.0", ponto: "654321", online: true, hasConfig: true },
+          { hostName: "PC-SALA", windowsUser: "ana", nome: "Ana Souza", setor: "Papelaria", version: process.env.LETREIRO_MOCK_TRUNCATED_CAPTURE === "1" ? "2.40.2" : "2.15.0", ponto: "654321", online: true, hasConfig: true },
           { hostName: "PC-SALA", windowsUser: "bruno", nome: "Bruno Alves", setor: "Gravação", version: "2.18.0", ponto: "654321", online: true, hasConfig: false },
           { hostName: "PC-CARLOS", windowsUser: "carlos", nome: "Carlos Lima", setor: "SEFOC", version: "2.13.2", ponto: "654321", online: false, hasConfig: true },
         ],
@@ -274,7 +274,9 @@ function localPreviewMock(): Connect.NextHandleFunction {
             const key = `${target.hostName}\n${target.windowsUser}`;
             const windows = desktopWindows[key] ??= structuredClone(MOCK_WINDOWS);
             if (name.startsWith("sagra-desktop/windows/")) stdout = JSON.stringify({ type: "windows", windows, monitors: MOCK_MONITORS, capturedAt: new Date().toISOString(), truncated: false });
-            else if (name.startsWith("sagra-desktop/screenshot")) stdout = JSON.stringify({ type: "screenshot", mime: "image/jpeg", image: mockScreenshot, width: 1280, height: 720, originalWidth: 1920, originalHeight: 1080, capturedAt: new Date().toISOString() });
+            else if (name.startsWith("sagra-desktop/screenshot")) stdout = name.startsWith("sagra-desktop/screenshot-hq/") && process.env.LETREIRO_MOCK_TRUNCATED_CAPTURE === "1"
+              ? '{"type":"screenshot","image":"' + "A".repeat(65500) + '\n…[truncado]'
+              : JSON.stringify({ type: "screenshot", mime: "image/jpeg", image: mockScreenshot, width: 1280, height: 720, originalWidth: 1920, originalHeight: 1080, capturedAt: new Date().toISOString() });
             else {
               const move = body.content?.match(/::Move\(\[long\](\d+), \[int\]\d+, \[long\]\d+, '([\w.\\-]+)'\)/);
               const moved = windows.find(item => item.handle === move?.[1]);

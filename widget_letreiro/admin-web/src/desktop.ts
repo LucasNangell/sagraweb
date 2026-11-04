@@ -9,6 +9,14 @@ export type WindowResult = { type: "windows"; windows: DesktopWindow[]; monitors
 export type ScreenshotResult = { type: "screenshot"; mime: "image/jpeg" | "image/png"; image: string; width: number; height: number; originalWidth: number; originalHeight: number; capturedAt: string };
 export type ActionResult = { type: "action"; message: string };
 
+export function supportsLargeScreenshot(version: string): boolean | null {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:\+.*)?$/.exec(version.trim());
+  if (!match) return null;
+  const [major, minor] = [Number(match[1]), Number(match[2])];
+  if (!Number.isSafeInteger(major) || !Number.isSafeInteger(minor)) return null;
+  return major > 2 || (major === 2 && minor >= 40);
+}
+
 export function desktopTargetKey(row: Pick<Instance, "hostName" | "windowsUser">) {
   return `${row.hostName.trim().toLowerCase()}\n${row.windowsUser.trim().replaceAll("/", "\\").toLowerCase()}`;
 }

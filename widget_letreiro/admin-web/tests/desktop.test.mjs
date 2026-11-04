@@ -7,7 +7,7 @@ import ts from "typescript";
 
 // Transpila o módulo puro em memória, sem exigir runtime TS ou alterar o build.
 const protocol = ts.transpileModule(readFileSync(new URL("../src/desktop.ts", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-const { desktopTargetGuard, matchesDesktopJob, moveWindowScript, parseDesktopResult, parseQuickButtons, validWindowIdentity, windowActionScript } = await import(`data:text/javascript;base64,${Buffer.from(protocol).toString("base64")}`);
+const { desktopTargetGuard, matchesDesktopJob, moveWindowScript, parseDesktopResult, parseQuickButtons, supportsLargeScreenshot, validWindowIdentity, windowActionScript } = await import(`data:text/javascript;base64,${Buffer.from(protocol).toString("base64")}`);
 
 const windowRow = { handle: "12345", processId: 120, processStart: "639000000000000000", title: "Relatório <1>", processName: "WINWORD", state: "normal", fullscreen: false, monitorId: "DISPLAY1" };
 const monitors = [{ id: "DISPLAY1", name: "Monitor 1", primary: true }, { id: "DISPLAY2", name: "Monitor 2", primary: false }];
@@ -20,6 +20,15 @@ const template = readFileSync(templatePath, "utf8");
 const screenshotPath = fileURLToPath(new URL("../src/desktopScripts/screenshot.ps1", import.meta.url));
 const image = readFileSync(new URL("./fixtures/desktop-preview.jpg", import.meta.url)).toString("base64");
 const shot = { type: "screenshot", mime: "image/jpeg", image, width: 1280, height: 720, originalWidth: 1920, originalHeight: 1080, capturedAt: date };
+
+test("verifica a versão da estação, sem presumir capacidade para versões desconhecidas", () => {
+  assert.equal(supportsLargeScreenshot("2.15.0"), false);
+  assert.equal(supportsLargeScreenshot("2.39.9"), false);
+  assert.equal(supportsLargeScreenshot("2.40.2"), true);
+  assert.equal(supportsLargeScreenshot("3.0.0+build"), true);
+  assert.equal(supportsLargeScreenshot(""), null);
+  assert.equal(supportsLargeScreenshot("desconhecida"), null);
+});
 
 test("correlaciona somente a solicitação exata do host e usuário completo", () => {
   assert.equal(matchesDesktopJob(job, job.name, { hostName: "pc-sala", windowsUser: "dominio\\ANA" }), true);

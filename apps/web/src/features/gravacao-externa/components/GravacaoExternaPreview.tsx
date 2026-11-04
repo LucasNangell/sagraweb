@@ -9,7 +9,7 @@ import {
   Layers,
   Loader2,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import {
   gravacaoExternaCompositePreviewUrl,
@@ -821,7 +821,9 @@ function ArquivosChapaList({
   );
 }
 
-/** Header of a machine filter tab: badge text truncates with ellipsis when space is tight. */
+const MACHINE_NAME_MIN_FONT_PX = 10;
+
+/** Header of a machine filter tab: shrinks machine name font so the full badge always fits. */
 function MachineFilterNameRow({
   label,
   active,
@@ -839,6 +841,11 @@ function MachineFilterNameRow({
   onSelect: () => void;
   onDownload: () => void;
 }) {
+  const rowRef = useRef<HTMLDivElement>(null);
+  const nameRef = useRef<HTMLButtonElement>(null);
+  const badgeRef = useRef<HTMLButtonElement>(null);
+  const [nameFontPx, setNameFontPx] = useState<number | null>(null);
+
   const badgeLabel = allDownloaded ? "Baixado" : "Download";
   const badgeTitle = allDownloaded
     ? "Baixar arquivos novamente"
@@ -847,28 +854,70 @@ function MachineFilterNameRow({
     ? `Arquivos baixados ${label}`
     : `Download arquivos ${label}`;
 
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    const nameEl = nameRef.current;
+    if (!row || !nameEl) return;
+
+    const fit = () => {
+      const available = row.clientWidth;
+      if (available <= 0) {
+        setNameFontPx(null);
+        return;
+      }
+
+      // Reset to CSS class size before measuring the natural baseline.
+      nameEl.style.fontSize = "";
+      nameEl.style.whiteSpace = "nowrap";
+      const baseFont =
+        Number.parseFloat(getComputedStyle(nameEl).fontSize) || 16;
+      const badgeW = showDownloadBadge ? badgeRef.current?.offsetWidth ?? 0 : 0;
+      const gap = showDownloadBadge ? 4 : 0;
+      const nameAvail = Math.max(0, available - badgeW - gap);
+
+      let size = baseFont;
+      while (size > MACHINE_NAME_MIN_FONT_PX && nameEl.scrollWidth > nameAvail + 0.5) {
+        size = Math.max(MACHINE_NAME_MIN_FONT_PX, size - 0.5);
+        nameEl.style.fontSize = `${size}px`;
+      }
+
+      setNameFontPx(size < baseFont - 0.01 ? size : null);
+    };
+
+    fit();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(fit);
+    ro.observe(row);
+    return () => {
+      ro.disconnect();
+      nameEl.style.fontSize = "";
+      nameEl.style.whiteSpace = "";
+    };
+  }, [label, badgeLabel, showDownloadBadge]);
+
   return (
-    <div className="flex w-full min-w-0 items-center gap-1">
+    <div ref={rowRef} className="flex w-full min-w-0 items-center gap-1">
       <button
+        ref={nameRef}
         type="button"
         aria-label={label}
         aria-pressed={active}
         onClick={onSelect}
-        className="min-w-0 flex-1 truncate text-left text-xs-button font-semibold leading-tight"
+        style={nameFontPx != null ? { fontSize: `${nameFontPx}px` } : undefined}
+        className="min-w-0 flex-1 whitespace-nowrap text-left text-xs-button font-semibold leading-tight"
       >
         {label}
       </button>
       {showDownloadBadge ? (
         <button
+          ref={badgeRef}
           type="button"
           aria-label={badgeAria}
           title={badgeTitle}
           disabled={machineDownloadBusy}
           onClick={onDownload}
           className={cn(
-            // Sem grow: no layout normal o pill acompanha o texto.
-            // shrink alto: em tela estreita o badge encolhe antes do nome.
-            "inline-flex min-w-0 max-w-full shrink-[100] items-center gap-0.5 overflow-hidden rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+            "inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
             "cursor-pointer hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
             allDownloaded
               ? "bg-emerald-100 text-emerald-800"
@@ -880,7 +929,7 @@ function MachineFilterNameRow({
           ) : (
             <FileDown className="size-3 shrink-0" aria-hidden />
           )}
-          <span className="min-w-0 truncate">{badgeLabel}</span>
+          {badgeLabel}
         </button>
       ) : null}
     </div>

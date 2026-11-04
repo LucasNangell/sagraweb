@@ -218,7 +218,9 @@ describe("composite preview", () => {
       "M2",
     ]);
     const cardOf = (label: string) =>
-      within(filter).getByRole("button", { name: label }).parentElement!.parentElement!;
+      within(filter)
+        .getByRole("button", { name: label })
+        .closest("[class*='rounded-t-md']") as HTMLElement;
     expect(within(cardOf("Espelhos")).getByText("PDFs baixados: 0 de 1")).toBeInTheDocument();
     expect(within(cardOf("Espelhos")).getByText("TIFFs baixados: 0 de 0")).toBeInTheDocument();
     expect(within(cardOf("M2")).getByText("PDFs baixados: 0 de 0")).toBeInTheDocument();
@@ -278,8 +280,9 @@ describe("composite preview", () => {
       />,
     );
     const filter = screen.getByRole("group", { name: /Filtrar arquivos por máquina/i });
-    const tab = within(filter).getByRole("button", { name: "PM52" }).parentElement!
-      .parentElement!;
+    const tab = within(filter)
+      .getByRole("button", { name: "PM52" })
+      .closest("[class*='rounded-t-md']") as HTMLElement;
     expect(tab).toHaveClass("w-1/2");
     expect(screen.getByRole("button", { name: /Cad 1/i })).toBeInTheDocument();
   });
@@ -309,7 +312,9 @@ describe("composite preview", () => {
     );
     const filter = screen.getByRole("group", { name: /Filtrar arquivos por máquina/i });
     const cardOf = (label: string) =>
-      within(filter).getByRole("button", { name: label }).parentElement!.parentElement!;
+      within(filter)
+        .getByRole("button", { name: label })
+        .closest("[class*='rounded-t-md']") as HTMLElement;
     expect(within(cardOf("PM52")).getByText("PDFs baixados: 0 de 1")).toBeInTheDocument();
     expect(within(cardOf("PM52")).getByText("TIFFs baixados: 0 de 2")).toBeInTheDocument();
     expect(within(cardOf("SM74")).getByText("PDFs baixados: 0 de 0")).toBeInTheDocument();
@@ -343,7 +348,9 @@ describe("composite preview", () => {
     );
     const filter = screen.getByRole("group", { name: /Filtrar arquivos por máquina/i });
     const cardOf = (label: string) =>
-      within(filter).getByRole("button", { name: label }).parentElement!.parentElement!;
+      within(filter)
+        .getByRole("button", { name: label })
+        .closest("[class*='rounded-t-md']") as HTMLElement;
     expect(within(cardOf("PM52")).getByText("PDFs baixados: 1 de 1")).toBeInTheDocument();
     expect(within(cardOf("PM52")).getByText("TIFFs baixados: 1 de 2")).toBeInTheDocument();
     expect(within(cardOf("SM74")).getByText("PDFs baixados: 0 de 0")).toBeInTheDocument();

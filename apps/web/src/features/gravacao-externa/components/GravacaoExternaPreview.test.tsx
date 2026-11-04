@@ -420,7 +420,35 @@ describe("composite preview", () => {
     expect(within(filter).queryByText("Download")).toBeNull();
   });
 
-  it("keeps the full Download badge text and may shrink the machine name font", () => {
+  it("keeps the full Download badge and only shrinks the name when space is tight", () => {
+    let rowWidth = 200;
+    const clientWidthSpy = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockImplementation(function (this: HTMLElement) {
+        if (
+          this.classList.contains("w-full") &&
+          this.classList.contains("min-w-0") &&
+          this.classList.contains("items-center")
+        ) {
+          return rowWidth;
+        }
+        return 0;
+      });
+    const offsetWidthSpy = vi
+      .spyOn(HTMLElement.prototype, "offsetWidth", "get")
+      .mockImplementation(function (this: HTMLElement) {
+        // Probe spans created by measureMachineNameWidth.
+        if (this.tagName === "SPAN" && this.style.visibility === "hidden") {
+          const size = Number.parseFloat(this.style.fontSize) || 16;
+          return (this.textContent?.length ?? 0) * size * 0.55;
+        }
+        // Badge button: fixed content width.
+        if (this.getAttribute("aria-label")?.startsWith("Download arquivos")) {
+          return 72;
+        }
+        return 0;
+      });
+
     const arquivos = [
       { id: 1, nome: `${GROUP_KEY} (C).tif`, maquina: "Komori" },
       {
@@ -429,27 +457,42 @@ describe("composite preview", () => {
         maquina: "SM74",
       },
     ];
-    render(
-      <GravacaoExternaArquivosPanel
-        ano={2024}
-        nrOs={1857}
-        arquivos={arquivos}
-        selection={null}
-        groupByMachine
-        onDownloadMachine={() => undefined}
-        onSelect={() => undefined}
-        onSelectComposite={() => undefined}
-      />,
-    );
-    const filter = screen.getByRole("group", { name: /Filtrar arquivos por máquina/i });
-    const komoriName = within(filter).getByRole("button", { name: "Komori" });
-    const komoriBadge = within(filter).getByRole("button", {
-      name: "Download arquivos Komori",
-    });
-    expect(komoriName).toHaveTextContent("Komori");
-    expect(komoriName.className).toContain("whitespace-nowrap");
-    expect(komoriBadge).toHaveTextContent("Download");
-    expect(komoriBadge.className).toContain("shrink-0");
-    expect(komoriBadge.querySelector("span.truncate")).toBeNull();
+    const props = {
+      ano: 2024,
+      nrOs: 1857,
+      arquivos,
+      selection: null as null,
+      groupByMachine: true as const,
+      onDownloadMachine: () => undefined,
+      onSelect: () => undefined,
+      onSelectComposite: () => undefined,
+    };
+
+    try {
+      const { unmount } = render(<GravacaoExternaArquivosPanel {...props} />);
+      const filter = screen.getByRole("group", { name: /Filtrar arquivos por máquina/i });
+      const komoriName = within(filter).getByRole("button", { name: "Komori" });
+      const komoriBadge = within(filter).getByRole("button", {
+        name: "Download arquivos Komori",
+      });
+      expect(komoriBadge).toHaveTextContent("Download");
+      expect(komoriBadge.className).toContain("shrink-0");
+      // 200px row - 72 badge - 4 gap = 124px; "Komori" fits → no shrink.
+      expect(komoriName.style.fontSize).toBe("");
+      unmount();
+
+      rowWidth = 90;
+      render(<GravacaoExternaArquivosPanel {...props} />);
+      const tightName = within(
+        screen.getByRole("group", { name: /Filtrar arquivos por máquina/i }),
+      ).getByRole("button", { name: "Komori" });
+      // 90 - 72 - 4 = 14px available → name font must shrink below default.
+      expect(tightName.style.fontSize).toMatch(/px$/);
+      expect(Number.parseFloat(tightName.style.fontSize)).toBeLessThan(16);
+      expect(Number.parseFloat(tightName.style.fontSize)).toBeGreaterThanOrEqual(10);
+    } finally {
+      clientWidthSpy.mockRestore();
+      offsetWidthSpy.mockRestore();
+    }
   });
 });

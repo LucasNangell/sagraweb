@@ -823,7 +823,31 @@ function ArquivosChapaList({
 
 const MACHINE_NAME_MIN_FONT_PX = 10;
 
-/** Header of a machine filter tab: shrinks machine name font so the full badge always fits. */
+/** Measure intrinsic text width (avoids flex-1 scrollWidth false positives). */
+function measureMachineNameWidth(el: HTMLElement, text: string, fontSizePx: number): number {
+  if (!text || typeof document === "undefined") return 0;
+  const style = getComputedStyle(el);
+  const probe = document.createElement("span");
+  probe.textContent = text;
+  probe.style.cssText = [
+    "position:absolute",
+    "visibility:hidden",
+    "white-space:nowrap",
+    "pointer-events:none",
+    `font-family:${style.fontFamily}`,
+    `font-weight:${style.fontWeight}`,
+    `font-style:${style.fontStyle}`,
+    `letter-spacing:${style.letterSpacing}`,
+    `font-size:${fontSizePx}px`,
+  ].join(";");
+  document.body.appendChild(probe);
+  const width = probe.offsetWidth;
+  probe.remove();
+  // jsdom: approximate from font size so tests stay deterministic.
+  return width > 0 ? width : text.length * fontSizePx * 0.55;
+}
+
+/** Header of a machine filter tab: shrinks machine name font only as much as needed. */
 function MachineFilterNameRow({
   label,
   active,
@@ -866,22 +890,36 @@ function MachineFilterNameRow({
         return;
       }
 
-      // Reset to CSS class size before measuring the natural baseline.
+      // Always measure from the CSS class size (ignore any previous inline shrink).
       nameEl.style.fontSize = "";
-      nameEl.style.whiteSpace = "nowrap";
       const baseFont =
         Number.parseFloat(getComputedStyle(nameEl).fontSize) || 16;
       const badgeW = showDownloadBadge ? badgeRef.current?.offsetWidth ?? 0 : 0;
       const gap = showDownloadBadge ? 4 : 0;
       const nameAvail = Math.max(0, available - badgeW - gap);
 
-      let size = baseFont;
-      while (size > MACHINE_NAME_MIN_FONT_PX && nameEl.scrollWidth > nameAvail + 0.5) {
-        size = Math.max(MACHINE_NAME_MIN_FONT_PX, size - 0.5);
-        nameEl.style.fontSize = `${size}px`;
+      const naturalW = measureMachineNameWidth(nameEl, label, baseFont);
+      if (naturalW <= nameAvail + 0.5) {
+        // Enough room: keep default font on this tab.
+        setNameFontPx(null);
+        return;
       }
 
-      setNameFontPx(size < baseFont - 0.01 ? size : null);
+      // Binary search for the largest font that still fits (minimum reduction).
+      let lo = MACHINE_NAME_MIN_FONT_PX;
+      let hi = baseFont;
+      let best = MACHINE_NAME_MIN_FONT_PX;
+      while (hi - lo > 0.25) {
+        const mid = (lo + hi) / 2;
+        if (measureMachineNameWidth(nameEl, label, mid) <= nameAvail + 0.5) {
+          best = mid;
+          lo = mid;
+        } else {
+          hi = mid;
+        }
+      }
+
+      setNameFontPx(best < baseFont - 0.01 ? best : null);
     };
 
     fit();
@@ -891,7 +929,6 @@ function MachineFilterNameRow({
     return () => {
       ro.disconnect();
       nameEl.style.fontSize = "";
-      nameEl.style.whiteSpace = "";
     };
   }, [label, badgeLabel, showDownloadBadge]);
 

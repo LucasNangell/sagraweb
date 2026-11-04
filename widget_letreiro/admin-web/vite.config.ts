@@ -6,10 +6,11 @@ import { readFileSync } from "node:fs";
 
 const appVersion = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).version as string;
 const mockScreenshot = readFileSync(new URL("./tests/fixtures/desktop-preview.jpg", import.meta.url)).toString("base64");
+const MOCK_MONITORS = [{ id: "DISPLAY1", name: "Monitor 1", primary: true }, { id: "DISPLAY2", name: "Monitor 2", primary: false }];
 const MOCK_WINDOWS = [
-  { handle: "108201", processId: 5472, processStart: "639000000000000000", title: "SAGRA - Painel de produção", processName: "chrome", state: "maximized", fullscreen: false },
-  { handle: "108202", processId: 24032, processStart: "639000000000000001", title: "Manual de produção - Word", processName: "WINWORD", state: "normal", fullscreen: false },
-  { handle: "108203", processId: 32848, processStart: "639000000000000002", title: "Notas da estação", processName: "ApplicationFrameHost", state: "minimized", fullscreen: false },
+  { handle: "108201", processId: 5472, processStart: "639000000000000000", title: "SAGRA - Painel de produção", processName: "chrome", state: "maximized", fullscreen: false, monitorId: "DISPLAY1" },
+  { handle: "108202", processId: 24032, processStart: "639000000000000001", title: "Manual de produção - Word", processName: "WINWORD", state: "normal", fullscreen: false, monitorId: "DISPLAY2" },
+  { handle: "108203", processId: 32848, processStart: "639000000000000002", title: "Notas da estação", processName: "ApplicationFrameHost", state: "minimized", fullscreen: false, monitorId: "DISPLAY1" },
 ];
 
 const MOCK_BOARD = {
@@ -82,6 +83,7 @@ function localPreviewMock(): Connect.NextHandleFunction {
   return (req: IncomingMessage, res: ServerResponse, next: Connect.NextFunction) => {
     const url = (req.url ?? "").split("?")[0];
     if (url === "/local/me") return sendJson(res, { isAdmin: process.env.LETREIRO_MOCK_ADMIN === "1" });
+    if (url === "/api/letreiro/screenshot-capability") return sendJson(res, { highQuality: true });
     if (url === "/local/config" && req.method === "PUT") {
       const chunks: Buffer[] = [];
       req.on("data", chunk => chunks.push(Buffer.from(chunk)));
@@ -263,9 +265,12 @@ function localPreviewMock(): Connect.NextHandleFunction {
             const target = body.targets?.[0] ?? { hostName: "PC-DEV", windowsUser: "usr_sefoc" };
             const key = `${target.hostName}\n${target.windowsUser}`;
             const windows = desktopWindows[key] ??= structuredClone(MOCK_WINDOWS);
-            if (name.startsWith("sagra-desktop/windows/")) stdout = JSON.stringify({ type: "windows", windows, capturedAt: new Date().toISOString(), truncated: false });
-            else if (name.startsWith("sagra-desktop/screenshot/")) stdout = JSON.stringify({ type: "screenshot", mime: "image/jpeg", image: mockScreenshot, width: 1280, height: 720, originalWidth: 1920, originalHeight: 1080, capturedAt: new Date().toISOString() });
+            if (name.startsWith("sagra-desktop/windows/")) stdout = JSON.stringify({ type: "windows", windows, monitors: MOCK_MONITORS, capturedAt: new Date().toISOString(), truncated: false });
+            else if (name.startsWith("sagra-desktop/screenshot")) stdout = JSON.stringify({ type: "screenshot", mime: "image/jpeg", image: mockScreenshot, width: 1280, height: 720, originalWidth: 1920, originalHeight: 1080, capturedAt: new Date().toISOString() });
             else {
+              const move = body.content?.match(/::Move\(\[long\](\d+), \[int\]\d+, \[long\]\d+, '([\w.\\-]+)'\)/);
+              const moved = windows.find(item => item.handle === move?.[1]);
+              if (moved && move && MOCK_MONITORS.some(m => m.id === move[2])) moved.monitorId = move[2];
               const action = body.content?.match(/::Act\(\[long\](\d+), \[int\]\d+, \[long\]\d+, '(\w+)'\)/);
               const row = windows.find(item => item.handle === action?.[1]);
               if (row && action) {
@@ -299,6 +304,8 @@ function localPreviewMock(): Connect.NextHandleFunction {
       });
       return;
     }
+    const screenshotMatch = url.match(/^\/api\/letreiro\/jobs\/(\d+)\/result$/);
+    if (screenshotMatch) return sendJson(res, { stdout: jobs.find(job => job.id === Number(screenshotMatch[1]))?.stdout ?? "" });
     if (url === "/api/letreiro/jobs") {
       if (req.method === "DELETE") {
         jobs.length = 0;

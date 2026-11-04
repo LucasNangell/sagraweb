@@ -23,6 +23,8 @@ ONLINE_SECONDS = 120
 SCRIPT_KINDS = frozenset({"bat", "ps1"})
 MAX_SCRIPT_BYTES = 256 * 1024
 MAX_OUTPUT_CHARS = 64 * 1024
+MAX_SCREENSHOT_OUTPUT_CHARS = 900 * 1024
+SCREENSHOT_HQ_PREFIX = "sagra-desktop/screenshot-hq/"
 TIMEOUT_MIN = 5
 TIMEOUT_MAX = 300
 TIMEOUT_DEFAULT = 60
@@ -253,10 +255,10 @@ def _command_poll_interval() -> int:
     return _clamp_command_poll(rows[0].get("CommandPollIntervalSec"))
 
 
-def _clip_output(text: str | None) -> str:
+def _clip_output(text: str | None, limit: int = MAX_OUTPUT_CHARS) -> str:
     raw = text or ""
-    if len(raw) > MAX_OUTPUT_CHARS:
-        return raw[:MAX_OUTPUT_CHARS] + "\n…[truncado]"
+    if len(raw) > limit:
+        return raw[:limit] + "\n…[truncado]"
     return raw
 
 
@@ -838,7 +840,8 @@ async def list_jobs(
     rows = db.execute_query(
         f"""
         SELECT Id, ComandoId, Nome, Tipo, TimeoutSec, HostName, WindowsUser, Status,
-               ExitCode, Stdout, Stderr, CreatedBy, CreatedAt, StartedAt, FinishedAt
+               ExitCode, CASE WHEN LEFT(Nome, 28) = 'sagra-desktop/screenshot-hq/' THEN '' ELSE Stdout END AS Stdout,
+               Stderr, CreatedBy, CreatedAt, StartedAt, FinishedAt
         FROM tabLetreiroComandoJob
         {where}
         ORDER BY Id DESC
@@ -859,6 +862,21 @@ async def clear_jobs(
     return {"status": "ok"}
 
 
+@router.get("/screenshot-capability")
+async def screenshot_capability(x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User")):
+    _require_admin(x_letreiro_windows_user)
+    return {"highQuality": True}
+
+
+@router.get("/jobs/{job_id}/result")
+async def get_job_result(job_id: int, x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User")):
+    _require_admin(x_letreiro_windows_user)
+    rows = db.execute_query("SELECT Nome, Stdout FROM tabLetreiroComandoJob WHERE Id = %s LIMIT 1", (job_id,))
+    if not rows or not (rows[0].get("Nome") or "").startswith(SCREENSHOT_HQ_PREFIX):
+        raise HTTPException(status_code=404, detail="Captura não encontrada.")
+    return {"stdout": rows[0].get("Stdout") or ""}
+
+
 @router.post("/jobs/{job_id}/result")
 async def post_job_result(job_id: int, body: JobResultBody):
     host = _clip(body.host_name, 128)
@@ -867,7 +885,7 @@ async def post_job_result(job_id: int, body: JobResultBody):
         raise HTTPException(status_code=400, detail="hostName e windowsUser são obrigatórios.")
     rows = db.execute_query(
         """
-        SELECT Id, HostName, WindowsUser, Status
+        SELECT Id, HostName, WindowsUser, Status, Nome
         FROM tabLetreiroComandoJob
         WHERE Id = %s
         LIMIT 1
@@ -893,7 +911,7 @@ async def post_job_result(job_id: int, body: JobResultBody):
         (
             status,
             body.exit_code,
-            _clip_output(body.stdout),
+            _clip_output(body.stdout, MAX_SCREENSHOT_OUTPUT_CHARS if (row.get("Nome") or "").startswith(SCREENSHOT_HQ_PREFIX) else MAX_OUTPUT_CHARS),
             _clip_output(body.stderr),
             job_id,
             JOB_STATUS_RUNNING,

@@ -22,7 +22,7 @@ try {
     # Prefere resolução original sem perdas, respeitando o limite do canal.
     $stream = New-Object System.IO.MemoryStream
     $original.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
-    if ($stream.Length -le 45000) { $encoded = [Convert]::ToBase64String($stream.ToArray()) }
+    if ($stream.Length -le 650000) { $encoded = [Convert]::ToBase64String($stream.ToArray()) }
     $stream.Dispose(); $stream = $null
     if (-not $encoded) { $mime = 'image/jpeg' }
     foreach ($ratio in @(1.0, 0.8, 0.6, 0.4, 0.3)) {
@@ -34,12 +34,12 @@ try {
         $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
         $graphics.DrawImage($original, 0, 0, $width, $height)
         $graphics.Dispose(); $graphics = $null
-        foreach ($quality in @(100, 98, 95, 90, 85, 75, 60, 45, 30, 20, 10)) {
+        foreach ($quality in @(100, 98, 95, 90, 85, 80, 75, 70, 65, 60)) {
             $stream = New-Object System.IO.MemoryStream
             $encoderParams = New-Object System.Drawing.Imaging.EncoderParameters(1)
             $encoderParams.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter([System.Drawing.Imaging.Encoder]::Quality, [long]$quality)
             $scaled.Save($stream, $codec, $encoderParams)
-            if ($stream.Length -le 45000) { $encoded = [Convert]::ToBase64String($stream.ToArray()) }
+            if ($stream.Length -le 650000) { $encoded = [Convert]::ToBase64String($stream.ToArray()) }
             $encoderParams.Dispose(); $encoderParams = $null
             $stream.Dispose(); $stream = $null
             if ($encoded) { break }

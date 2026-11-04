@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera, Expand, Library, LoaderCircle, Maximize2, Minimize2, Monitor, Plus, RefreshCw, Square, SquareArrowOutUpRight, X } from "lucide-react";
-import { api, type Command, type Instance, type Job } from "./api";
+import { api, ApiError, type Command, type Instance, type Job } from "./api";
 import { extractCommandVars } from "./commandVars";
-import { DESKTOP_JOB_PREFIX, QUICK_BUTTONS_KEY, desktopTargetGuard, desktopTargetKey, matchesDesktopJob, parseDesktopResult, parseQuickButtons, windowActionScript, type DesktopWindow, type ScreenshotResult, type WindowAction, type WindowResult } from "./desktop";
+import { DESKTOP_JOB_PREFIX, QUICK_BUTTONS_KEY, desktopTargetGuard, desktopTargetKey, matchesDesktopJob, moveWindowScript, parseDesktopResult, parseQuickButtons, windowActionScript, type DesktopWindow, type ScreenshotResult, type WindowAction, type WindowResult } from "./desktop";
 import windowsTemplate from "./desktopScripts/windows.ps1?raw";
 import screenshotScript from "./desktopScripts/screenshot.ps1?raw";
 
-type Pending = { name: string; kind: "windows" | "screenshot" | "action"; started: number };
+type Pending = { name: string; kind: "windows" | "screenshot" | "action"; started: number; highQuality?: boolean };
 type Props = { target: Instance | null; selectionCount: number; commands: Command[]; jobs: Job[]; onQueued: () => void; onJobs: (jobs: Job[]) => void; onOpenLibrary: () => void };
 
 const ACTIONS: { id: WindowAction; label: string; icon: typeof Monitor }[] = [
@@ -30,7 +30,9 @@ export default function ClientControlPanel({ target, selectionCount, commands, j
   const [chosenId, setChosenId] = useState(0);
   const [pending, setPending] = useState<Pending | null>(null);
   const pendingRef = useRef<Pending | null>(null);
+  const fetchingScreenshot = useRef(false);
   const [windows, setWindows] = useState<WindowResult | null>(null);
+  const [draggedWindow, setDraggedWindow] = useState<DesktopWindow | null>(null);
   const [screenshot, setScreenshot] = useState<ScreenshotResult | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -44,15 +46,20 @@ export default function ClientControlPanel({ target, selectionCount, commands, j
   const availableCommands = [...commands].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   const targetKey = target ? desktopTargetKey(target) : "";
 
-  const queueDesktop = useCallback(async (kind: Pending["kind"], row?: DesktopWindow, action?: WindowAction) => {
+  const queueDesktop = useCallback(async (kind: Pending["kind"], row?: DesktopWindow, action?: WindowAction, monitorId?: string) => {
     if (!target?.online || pendingRef.current) return;
     const request: Pending = { name: `${DESKTOP_JOB_PREFIX}${kind}/${crypto.randomUUID()}`, kind, started: Date.now() };
     pendingRef.current = request;
     setPending(request);
     setError("");
     try {
-      const content = kind === "screenshot" ? screenshotScript : kind === "action" && row && action ? windowActionScript(windowsTemplate, row, action)
-        : `${windowsTemplate}\n$rows = @([SagraDesktop]::List())\n@{ type = 'windows'; windows = $rows; truncated = ($rows.Count -ge 100); capturedAt = [DateTime]::UtcNow.ToString('o') } | ConvertTo-Json -Depth 4 -Compress`;
+      if (kind === "screenshot") {
+        request.highQuality = await api.screenshotCapability().then(result => result.highQuality === true).catch(error => { if (error instanceof ApiError && error.status === 404) return false; throw error; });
+        if (!alive.current || pendingRef.current !== request) return;
+        if (request.highQuality) request.name = `${DESKTOP_JOB_PREFIX}screenshot-hq/${crypto.randomUUID()}`;
+      }
+      const content = kind === "screenshot" ? (request.highQuality ? screenshotScript : screenshotScript.replaceAll("650000", "45000").replace("@(100, 98, 95, 90, 85, 80, 75, 70, 65, 60)", "@(100, 98, 95, 90, 85, 75, 60, 45, 30, 20, 10)")) : kind === "action" && row && monitorId ? moveWindowScript(windowsTemplate, row, monitorId) : kind === "action" && row && action ? windowActionScript(windowsTemplate, row, action)
+        : `${windowsTemplate}\n$rows = @([SagraDesktop]::List())\n$monitors = @([SagraDesktop]::Monitors())\n@{ type = 'windows'; windows = $rows; monitors = $monitors; truncated = ($rows.Count -ge 100); capturedAt = [DateTime]::UtcNow.ToString('o') } | ConvertTo-Json -Depth 4 -Compress`;
       const result = await api.runAdhoc("ps1", desktopTargetGuard(target) + content, request.name, [{ hostName: target.hostName, windowsUser: target.windowsUser }], false, 30);
       if (!alive.current || pendingRef.current !== request) return;
       if (result.queued !== 1) throw new Error("Não foi possível enviar o comando a esta estação.");
@@ -81,18 +88,24 @@ export default function ClientControlPanel({ target, selectionCount, commands, j
     if (!current || !target) return;
     const job = jobs.find(item => matchesDesktopJob(item, current.name, target));
     if (!job || !["ok", "fail", "timeout"].includes(job.status)) return;
-    pendingRef.current = null;
-    setPending(null);
-    try {
+    if (current.kind === "screenshot" && fetchingScreenshot.current) return;
+    if (current.kind === "screenshot") fetchingScreenshot.current = true;
+    void (async () => { try {
       if (job.status !== "ok") throw new Error(job.status === "timeout" ? "O client não concluiu a ação no prazo. Atualize a lista e tente novamente." : job.stderr.trim().slice(0, 600) || "O Windows não conseguiu executar a ação.");
-      const result = parseDesktopResult(job.stdout);
+      const raw = current.kind === "screenshot" && current.highQuality ? (await api.screenshotResult(job.id)).stdout : job.stdout;
+      if (!alive.current || pendingRef.current !== current) return;
+      let result: ReturnType<typeof parseDesktopResult>;
+      try { result = parseDesktopResult(raw); }
+      catch (error) { if (current.kind === "screenshot" && current.highQuality && raw.includes("[truncado]")) throw new Error("Atualize o SAGRA Letreiro na estação para receber capturas em alta qualidade."); throw error; }
       if (result.type !== current.kind) throw new Error("O client retornou um resultado diferente do solicitado.");
+      pendingRef.current = null;
+      setPending(null);
       if (result.type === "windows") setWindows(result);
-      if (result.type === "screenshot") { setScreenshot(result); setMessage("Captura recebida."); }
+      if (result.type === "screenshot") { setScreenshot(result); setMessage(current.highQuality ? "Captura recebida." : "Captura recebida em qualidade reduzida. Atualize a API central para obter melhor qualidade."); }
       if (result.type === "action") { setMessage(result.message); void queueDesktop("windows"); }
     } catch (ex) {
-      setError(ex instanceof Error ? ex.message : "Resposta inválida do client.");
-    }
+      if (alive.current && pendingRef.current === current) { pendingRef.current = null; setPending(null); setError(ex instanceof Error ? ex.message : "Resposta inválida do client."); }
+    } finally { if (current.kind === "screenshot") fetchingScreenshot.current = false; } })();
   }, [jobs, target, queueDesktop]);
 
   useEffect(() => {
@@ -165,7 +178,11 @@ export default function ClientControlPanel({ target, selectionCount, commands, j
         <p role="status" aria-live="polite" className="client-panel-status">{pending ? <><LoaderCircle size={13} className="animate-spin" />{pending.kind === "windows" ? "Consultando janelas da estação…" : pending.kind === "screenshot" ? "Aguardando captura do client…" : "Enviando ação à janela…"}</> : message}</p>
         <div className="client-section-title client-windows-title"><div><h3>Janelas abertas <span className="count-badge">{windows?.windows.length ?? "—"}</span></h3>{windows ? <p>Consultadas às {timeLabel(windows.capturedAt)}</p> : null}</div><button type="button" className="icon-button" disabled={!enabled} aria-label="Atualizar janelas da estação" onClick={() => void queueDesktop("windows")}><RefreshCw size={15} /></button></div>
         {!target ? <div className="client-windows-empty"><Monitor size={24} /><p>As janelas aparecerão ao selecionar uma única estação.</p></div> : windows && !windows.windows.length ? <div className="client-windows-empty"><Square size={24} /><p>Nenhuma janela visível nesta sessão.</p></div> : !windows && !pending ? <div className="client-windows-empty"><p>{target.online ? "Atualize a lista para consultar as janelas." : "Aguardando a conexão da estação."}</p></div> : null}
-        <div className="client-window-list">{windows?.windows.map(row => <article className="client-window" key={`${row.handle}:${row.processStart}`}><div className="client-window-row"><Monitor size={15} /><div className="client-window-info"><strong title={row.title}>{row.title}</strong><p>{row.processName} · {row.fullscreen ? "Tela cheia" : row.state === "minimized" ? "Minimizada" : row.state === "maximized" ? "Maximizada" : "Normal"}</p></div><div className="client-window-actions">{ACTIONS.map(({ id, label, icon: Icon }) => <button type="button" key={id} disabled={!enabled} aria-label={`${id === "fullscreen" && row.fullscreen ? "Sair da tela cheia" : label}: ${row.title}`} title={id === "fullscreen" && row.fullscreen ? "Sair da tela cheia" : label} className={id === "close" ? "is-danger" : row.fullscreen && id === "fullscreen" ? "is-active" : ""} onClick={() => void queueDesktop("action", row, id)}><Icon size={14} /></button>)}</div></div></article>)}</div>
+        <div className="client-window-list">{windows?.monitors.map(monitor => <section key={monitor.id} className={`client-monitor ${draggedWindow && draggedWindow.monitorId !== monitor.id ? "is-drop-target" : ""}`} onDragOver={e => { if (enabled && draggedWindow && draggedWindow.monitorId !== monitor.id) { e.preventDefault(); e.dataTransfer.dropEffect = "move"; } }} onDrop={e => { e.preventDefault(); const row = draggedWindow; setDraggedWindow(null); if (enabled && row && row.monitorId !== monitor.id) void queueDesktop("action", row, undefined, monitor.id); }}>
+          <h4><Monitor size={14} />{monitor.name}{monitor.primary ? " · Principal" : ""}<span>{windows.windows.filter(row => row.monitorId === monitor.id).length}</span></h4>
+          {windows.windows.filter(row => row.monitorId === monitor.id).map(row => <article className="client-window" draggable={enabled} onDragStart={e => { setDraggedWindow(row); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", row.handle); }} onDragEnd={() => setDraggedWindow(null)} key={`${row.handle}:${row.processStart}`}><div className="client-window-row"><Monitor size={15} /><div className="client-window-info"><strong title={row.title}>{row.title}</strong><p>ID {row.handle} · {row.processName} · {row.fullscreen ? "Tela cheia" : row.state === "minimized" ? "Minimizada" : row.state === "maximized" ? "Maximizada" : "Normal"}</p></div><div className="client-window-actions">{ACTIONS.map(({ id, label, icon: Icon }) => <button type="button" key={id} disabled={!enabled} aria-label={`${id === "fullscreen" && row.fullscreen ? "Sair da tela cheia" : label}: ${row.title}`} title={id === "fullscreen" && row.fullscreen ? "Sair da tela cheia" : label} className={id === "close" ? "is-danger" : row.fullscreen && id === "fullscreen" ? "is-active" : ""} onClick={() => void queueDesktop("action", row, id)}><Icon size={14} /></button>)}</div></div>{windows.monitors.length > 1 ? <label className="client-window-move">Mover para <select aria-label={`Mover ${row.title} para monitor`} disabled={!enabled} value={row.monitorId} onChange={e => void queueDesktop("action", row, undefined, e.target.value)}>{windows.monitors.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label> : null}</article>)}
+          {!windows.windows.some(row => row.monitorId === monitor.id) ? <p className="client-monitor-empty">Nenhuma janela neste monitor. Arraste uma janela para cá.</p> : null}
+        </section>)}</div>
         {windows?.truncated ? <p className="client-panel-status">Exibindo as primeiras 100 janelas desta sessão.</p> : null}
       </div>
       <dialog ref={imageDialog} className="capture-dialog"><header><div><h2>Captura de {target?.hostName}</h2><p>{screenshot ? `${timeLabel(screenshot.capturedAt)} · área original ${screenshot.originalWidth} × ${screenshot.originalHeight}` : ""}</p></div><button type="button" className="icon-button" aria-label="Fechar captura ampliada" onClick={() => imageDialog.current?.close()}><X size={20} /></button></header>{screenshot ? <img src={`data:${screenshot.mime};base64,${screenshot.image}`} alt={`Área de trabalho de ${target?.hostName}`} /> : null}<p>A captura representa o instante informado. Use Print de tela para atualizar.</p></dialog>

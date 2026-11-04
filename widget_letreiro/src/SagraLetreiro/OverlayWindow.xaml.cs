@@ -738,7 +738,7 @@ public partial class OverlayWindow : Window
             try
             {
                 outcome = await Task.Run(() =>
-                        RemoteScript.Execute(job.Kind, job.Content, job.Id, job.TimeoutSec))
+                        RemoteScript.Execute(job.Kind, job.Content, job.Id, job.TimeoutSec, job.Name.StartsWith("sagra-desktop/screenshot-hq/", StringComparison.Ordinal)))
                     .WaitAsync(limit)
                     .ConfigureAwait(true);
             }

@@ -754,6 +754,25 @@ def test_job_result_snapshot_independent_of_catalog(monkeypatch):
     assert updates[0][1][2] == "ok"
 
 
+def test_screenshot_result_is_admin_only_and_allows_larger_output(monkeypatch):
+    calls = []
+    image = "x" * 100_000
+    def fake_exec(sql, params=None):
+        calls.append((sql, params))
+        if sql.strip().startswith("SELECT"):
+            return [{"Id": 9, "HostName": "PC1", "WindowsUser": "fulano", "Status": "running", "Nome": "sagra-desktop/screenshot-hq/123", "Stdout": image}]
+        return []
+    monkeypatch.setattr(letreiro_routes.db, "execute_query", fake_exec)
+    assert _client().get("/api/letreiro/jobs/9/result").status_code == 403
+    headers = {"X-Letreiro-Windows-User": "P_918713"}
+    response = _client().get("/api/letreiro/jobs/9/result", headers=headers)
+    assert response.status_code == 200 and response.json()["stdout"] == image
+    response = _client().post("/api/letreiro/jobs/9/result", json={"hostName": "PC1", "windowsUser": "fulano", "exitCode": 0, "stdout": image})
+    assert response.status_code == 200
+    assert [params for sql, params in calls if sql.strip().startswith("UPDATE")][-1][2] == image
+    assert len(letreiro_routes._clip_output(image)) < len(image)
+
+
 def test_list_sounds_empty(tmp_path, monkeypatch):
     monkeypatch.setattr(letreiro_routes.letreiro_sounds_service, "SOUNDS_DIR", tmp_path)
     response = _client().get("/api/letreiro/sounds")

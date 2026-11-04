@@ -17,6 +17,7 @@ public sealed class RemoteScriptOutcome
 public static class RemoteScript
 {
     public const int MaxOutputChars = 64 * 1024;
+    public const int MaxScreenshotOutputChars = 900 * 1024;
     public const int TimeoutMinSec = 5;
     public const int TimeoutMaxSec = 300;
     public const string TimeoutMessage = "Tempo esgotado. Processo encerrado.";
@@ -37,17 +38,17 @@ public static class RemoteScript
         return new ProcessLaunch("cmd.exe", ["/c"], ".bat");
     }
 
-    public static string TruncateOutput(string? text)
+    public static string TruncateOutput(string? text, int maxChars = MaxOutputChars)
     {
         var raw = text ?? "";
-        return raw.Length <= MaxOutputChars ? raw : raw[..MaxOutputChars] + "\n…[truncado]";
+        return raw.Length <= maxChars ? raw : raw[..maxChars] + "\n…[truncado]";
     }
 
-    public static RemoteScriptOutcome Execute(string kind, string content, int jobId, int timeoutSec)
+    public static RemoteScriptOutcome Execute(string kind, string content, int jobId, int timeoutSec, bool screenshot = false)
     {
         try
         {
-            return ExecuteCore(kind, content, jobId, timeoutSec);
+            return ExecuteCore(kind, content, jobId, timeoutSec, screenshot);
         }
         catch (Exception ex)
         {
@@ -59,7 +60,7 @@ public static class RemoteScript
         }
     }
 
-    static RemoteScriptOutcome ExecuteCore(string kind, string content, int jobId, int timeoutSec)
+    static RemoteScriptOutcome ExecuteCore(string kind, string content, int jobId, int timeoutSec, bool screenshot)
     {
         timeoutSec = Math.Clamp(timeoutSec, TimeoutMinSec, TimeoutMaxSec);
         var launch = BuildLaunch(kind);
@@ -127,7 +128,7 @@ public static class RemoteScript
             {
                 TimedOut = timedOut,
                 ExitCode = exitCode,
-                Stdout = TruncateOutput(stdout),
+                Stdout = TruncateOutput(stdout, screenshot ? MaxScreenshotOutputChars : MaxOutputChars),
                 Stderr = TruncateOutput(stderr),
             };
         }

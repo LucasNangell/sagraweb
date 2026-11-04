@@ -3,8 +3,9 @@ import type { Instance, Job } from "./api";
 export const DESKTOP_JOB_PREFIX = "sagra-desktop/";
 export const QUICK_BUTTONS_KEY = "letreiro_quick_commands_v1";
 export type WindowAction = "maximize" | "minimize" | "fullscreen" | "foreground" | "close" | "restore" | "refresh";
-export type DesktopWindow = { handle: string; processId: number; processStart: string; title: string; processName: string; state: string; fullscreen: boolean };
-export type WindowResult = { type: "windows"; windows: DesktopWindow[]; capturedAt: string; truncated: boolean };
+export type DesktopWindow = { handle: string; processId: number; processStart: string; title: string; processName: string; state: string; fullscreen: boolean; monitorId: string };
+export type DesktopMonitor = { id: string; name: string; primary: boolean };
+export type WindowResult = { type: "windows"; windows: DesktopWindow[]; monitors: DesktopMonitor[]; capturedAt: string; truncated: boolean };
 export type ScreenshotResult = { type: "screenshot"; mime: "image/jpeg" | "image/png"; image: string; width: number; height: number; originalWidth: number; originalHeight: number; capturedAt: string };
 export type ActionResult = { type: "action"; message: string };
 
@@ -27,7 +28,7 @@ export function matchesDesktopJob(job: Job, name: string, target: Pick<Instance,
 export function isDesktopJob(job: Pick<Job, "name">) { return job.name.startsWith(DESKTOP_JOB_PREFIX); }
 
 export function desktopJobLabel(job: Pick<Job, "name">) {
-  return job.name.startsWith(`${DESKTOP_JOB_PREFIX}screenshot/`) ? "Captura de tela" : job.name.startsWith(`${DESKTOP_JOB_PREFIX}windows/`) ? "Consulta de janelas" : "Controle de janela";
+  return job.name.startsWith(`${DESKTOP_JOB_PREFIX}screenshot`) ? "Captura de tela" : job.name.startsWith(`${DESKTOP_JOB_PREFIX}windows/`) ? "Consulta de janelas" : "Controle de janela";
 }
 
 export function validWindowIdentity(row: Pick<DesktopWindow, "handle" | "processId" | "processStart">) {
@@ -39,7 +40,7 @@ export function validWindowIdentity(row: Pick<DesktopWindow, "handle" | "process
 function validJpeg(image: string, width: number, height: number) {
   try {
     const bytes = atob(image);
-    if (bytes.length < 100 || bytes.length > 45000 || bytes.charCodeAt(0) !== 255 || bytes.charCodeAt(1) !== 216 || bytes.charCodeAt(2) !== 255
+    if (bytes.length < 100 || bytes.length > 650000 || bytes.charCodeAt(0) !== 255 || bytes.charCodeAt(1) !== 216 || bytes.charCodeAt(2) !== 255
       || bytes.charCodeAt(bytes.length - 2) !== 255 || bytes.charCodeAt(bytes.length - 1) !== 217) return false;
     const byte = (i: number) => bytes.charCodeAt(i);
     for (let offset = 2; offset + 3 < bytes.length;) {
@@ -62,7 +63,7 @@ function validJpeg(image: string, width: number, height: number) {
 function validPng(image: string, width: number, height: number) {
   try {
     const bytes = atob(image);
-    if (bytes.length < 45 || bytes.length > 45000 || bytes.slice(0, 8) !== "\x89PNG\r\n\x1a\n" || bytes.slice(12, 16) !== "IHDR" || bytes.slice(-8, -4) !== "IEND") return false;
+    if (bytes.length < 45 || bytes.length > 650000 || bytes.slice(0, 8) !== "\x89PNG\r\n\x1a\n" || bytes.slice(12, 16) !== "IHDR" || bytes.slice(-8, -4) !== "IEND") return false;
     const num = (i: number) => (((bytes.charCodeAt(i) * 256 + bytes.charCodeAt(i + 1)) * 256 + bytes.charCodeAt(i + 2)) * 256 + bytes.charCodeAt(i + 3));
     return num(8) === 13 && num(16) === width && num(20) === height;
   } catch { return false; }
@@ -73,22 +74,36 @@ export function windowActionScript(template: string, row: DesktopWindow, action:
   return `${template}\n$message = [SagraDesktop]::Act([long]${row.handle}, [int]${row.processId}, [long]${row.processStart}, '${action}')\n@{ type = 'action'; message = $message } | ConvertTo-Json -Compress`;
 }
 
+export function moveWindowScript(template: string, row: DesktopWindow, monitorId: string) {
+  if (!validWindowIdentity(row) || !validMonitorId(monitorId)) throw new Error("Janela ou monitor inválido. Atualize a lista.");
+  return `${template}\n$message = [SagraDesktop]::Move([long]${row.handle}, [int]${row.processId}, [long]${row.processStart}, '${monitorId}')\n@{ type = 'action'; message = $message } | ConvertTo-Json -Compress`;
+}
+
+function validMonitorId(id: unknown): id is string { return typeof id === "string" && id.length > 0 && id.length <= 128 && /^[a-zA-Z0-9_.\\-]+$/.test(id); }
+
 export function parseDesktopResult(raw: string): WindowResult | ScreenshotResult | ActionResult {
-  if (raw.length > 64 * 1024) throw new Error("Resposta do client excedeu o limite permitido.");
+  if (raw.length > 900 * 1024) throw new Error("Resposta do client excedeu o limite permitido.");
   let value: unknown;
   try { value = JSON.parse(raw.replace(/^\uFEFF/, "").trim()); } catch { throw new Error("O client retornou uma resposta inválida. Atualize a lista ou tente novamente."); }
   if (!value || typeof value !== "object") throw new Error("Resposta inválida do client.");
   const row = value as Record<string, unknown>;
   if (row.type === "windows" && Array.isArray(row.windows) && row.windows.length <= 100 && typeof row.capturedAt === "string" && Number.isFinite(Date.parse(row.capturedAt))) {
+    if (!Array.isArray(row.monitors) || row.monitors.length > 32 || row.monitors.length === 0) throw new Error("Lista de monitores inválida. Atualize a lista.");
+    const monitors: DesktopMonitor[] = row.monitors.map((item: unknown) => {
+      const m = item as DesktopMonitor;
+      if (!m || !validMonitorId(m.id) || typeof m.name !== "string" || !m.name || m.name.length > 100 || typeof m.primary !== "boolean") throw new Error("Monitor inválido na resposta do client.");
+      return { id: m.id, name: m.name, primary: m.primary };
+    });
+    if (new Set(monitors.map(m => m.id)).size !== monitors.length) throw new Error("Monitores duplicados na resposta do client.");
     const windows: DesktopWindow[] = row.windows.map((item: unknown) => {
       if (!item || typeof item !== "object") throw new Error("Lista de janelas inválida.");
       const w = item as DesktopWindow;
-      if (!validWindowIdentity(w) || typeof w.title !== "string" || w.title.length > 200 || typeof w.processName !== "string" || w.processName.length > 260 || !["normal", "minimized", "maximized"].includes(w.state) || typeof w.fullscreen !== "boolean") throw new Error("Janela inválida na resposta do client.");
-      return { handle: w.handle, processId: w.processId, processStart: w.processStart, title: w.title, processName: w.processName, state: w.state, fullscreen: w.fullscreen };
+      if (!validWindowIdentity(w) || typeof w.title !== "string" || w.title.length > 200 || typeof w.processName !== "string" || w.processName.length > 260 || !["normal", "minimized", "maximized"].includes(w.state) || typeof w.fullscreen !== "boolean" || !monitors.some(m => m.id === w.monitorId)) throw new Error("Janela inválida na resposta do client.");
+      return { handle: w.handle, processId: w.processId, processStart: w.processStart, title: w.title, processName: w.processName, state: w.state, fullscreen: w.fullscreen, monitorId: w.monitorId };
     });
-    return { type: "windows", windows, capturedAt: row.capturedAt, truncated: row.truncated === true };
+    return { type: "windows", windows, monitors, capturedAt: row.capturedAt, truncated: row.truncated === true };
   }
-  if (row.type === "screenshot" && (row.mime === "image/jpeg" || row.mime === "image/png") && typeof row.image === "string" && row.image.length <= 60000 && row.image.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(row.image)
+  if (row.type === "screenshot" && (row.mime === "image/jpeg" || row.mime === "image/png") && typeof row.image === "string" && row.image.length <= 866668 && row.image.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(row.image)
       && Number.isInteger(row.width) && Number(row.width) > 0 && Number(row.width) <= 32767 && Number.isInteger(row.height) && Number(row.height) > 0 && Number(row.height) <= 32767 && Number(row.width) * Number(row.height) <= 64000000
       && Number.isInteger(row.originalWidth) && Number(row.originalWidth) > 0 && Number(row.originalWidth) <= 64000000 && Number.isInteger(row.originalHeight) && Number(row.originalHeight) > 0 && Number(row.originalHeight) <= 64000000
       && typeof row.capturedAt === "string" && Number.isFinite(Date.parse(row.capturedAt)) && (row.mime === "image/jpeg" ? validJpeg(row.image, Number(row.width), Number(row.height)) : validPng(row.image, Number(row.width), Number(row.height)))) return row as ScreenshotResult;

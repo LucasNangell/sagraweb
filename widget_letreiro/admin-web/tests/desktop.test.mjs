@@ -7,11 +7,12 @@ import ts from "typescript";
 
 // Transpila o módulo puro em memória, sem exigir runtime TS ou alterar o build.
 const protocol = ts.transpileModule(readFileSync(new URL("../src/desktop.ts", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-const { desktopTargetGuard, matchesDesktopJob, parseDesktopResult, parseQuickButtons, validWindowIdentity, windowActionScript } = await import(`data:text/javascript;base64,${Buffer.from(protocol).toString("base64")}`);
+const { desktopTargetGuard, matchesDesktopJob, moveWindowScript, parseDesktopResult, parseQuickButtons, validWindowIdentity, windowActionScript } = await import(`data:text/javascript;base64,${Buffer.from(protocol).toString("base64")}`);
 
-const windowRow = { handle: "12345", processId: 120, processStart: "639000000000000000", title: "Relatório <1>", processName: "WINWORD", state: "normal", fullscreen: false };
+const windowRow = { handle: "12345", processId: 120, processStart: "639000000000000000", title: "Relatório <1>", processName: "WINWORD", state: "normal", fullscreen: false, monitorId: "DISPLAY1" };
+const monitors = [{ id: "DISPLAY1", name: "Monitor 1", primary: true }, { id: "DISPLAY2", name: "Monitor 2", primary: false }];
 const date = "2026-11-03T20:00:00Z";
-const reply = windows => JSON.stringify({ type: "windows", windows, capturedAt: date, truncated: false });
+const reply = windows => JSON.stringify({ type: "windows", windows, monitors, capturedAt: date, truncated: false });
 const target = { hostName: "PC-SALA", windowsUser: "DOMINIO\\ana" };
 const job = { ...target, name: "sagra-desktop/windows/request-1" };
 const templatePath = fileURLToPath(new URL("../src/desktopScripts/windows.ps1", import.meta.url));
@@ -47,7 +48,7 @@ test("rejeita IDs negativos, não numéricos, acima de Int64 e processos inváli
 });
 
 test("rejeita resposta truncada, tipo desconhecido e listas excessivas", () => {
-  for (const raw of ['{"type":', '{"type":"html"}', "x".repeat(65537), reply(Array(101).fill(windowRow))]) assert.throws(() => parseDesktopResult(raw));
+  for (const raw of ['{"type":', '{"type":"html"}', "x".repeat(900 * 1024 + 1), reply(Array(101).fill(windowRow))]) assert.throws(() => parseDesktopResult(raw));
   assert.throws(() => parseDesktopResult(reply([{ ...windowRow, title: "x".repeat(201) }])));
 });
 
@@ -56,6 +57,14 @@ test("captura JPEG do mock cabe inteira no limite do canal e preserva as dimens�
   assert.ok(raw.length < 65536);
   assert.equal(parseDesktopResult(raw).image, image);
   assert.equal(parseDesktopResult(raw).width, 1280);
+});
+
+test("aceita JPEG válido acima do antigo limite de 45 KB", () => {
+  const original = Buffer.from(image, "base64");
+  const comment = Buffer.alloc(50004, 65);
+  comment[0] = 255; comment[1] = 254; comment.writeUInt16BE(50002, 2);
+  const larger = Buffer.concat([original.subarray(0, 2), comment, original.subarray(2)]).toString("base64");
+  assert.equal(parseDesktopResult(JSON.stringify({ ...shot, image: larger })).image, larger);
 });
 
 test("aceita PNG sem perdas e rejeita dimensão divergente ou arquivo truncado", () => {
@@ -67,7 +76,14 @@ test("aceita PNG sem perdas e rejeita dimensão divergente ou arquivo truncado",
 });
 
 test("rejeita SVG, JPEG truncado, MIME adulterado e captura grande demais", () => {
-  for (const patch of [{ mime: "image/svg+xml" }, { image: btoa("<svg onload=alert(1)>") }, { image: "/9j/" }, { image: image.slice(0, -4) }, { width: 100000 }, { width: 1281 }, { height: 721 }, { capturedAt: "ontem" }, { image: "A".repeat(60004) }]) assert.throws(() => parseDesktopResult(JSON.stringify({ ...shot, ...patch })));
+  for (const patch of [{ mime: "image/svg+xml" }, { image: btoa("<svg onload=alert(1)>") }, { image: "/9j/" }, { image: image.slice(0, -4) }, { width: 100000 }, { width: 1281 }, { height: 721 }, { capturedAt: "ontem" }, { image: "A".repeat(866672) }]) assert.throws(() => parseDesktopResult(JSON.stringify({ ...shot, ...patch })));
+});
+
+test("valida monitores e protege a movimentação contra interpolação", () => {
+  assert.deepEqual(parseDesktopResult(reply([windowRow])).monitors, monitors);
+  assert.throws(() => parseDesktopResult(reply([{ ...windowRow, monitorId: "outro" }])));
+  assert.throws(() => moveWindowScript(template, windowRow, "DISPLAY1'; exit; '"));
+  assert.match(moveWindowScript(template, windowRow, "DISPLAY2"), /::Move\(\[long\]12345, \[int\]120, \[long\]639000000000000000, 'DISPLAY2'\)/);
 });
 
 test("rejeita JPEG com dimensões internas adulteradas antes da exibição", () => {

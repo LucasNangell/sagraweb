@@ -1,12 +1,14 @@
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+Add-Type -AssemblyName System.Windows.Forms
 # Executado pelo canal de jobs existente, na sessão Windows do client.
-Add-Type -TypeDefinition @'
+Add-Type -ReferencedAssemblies @('System.Windows.Forms', 'System.Drawing') -TypeDefinition @'
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Windows.Forms;
 
 public class SagraDesktopWindow {
     public string handle { get; set; }
@@ -16,6 +18,12 @@ public class SagraDesktopWindow {
     public string processName { get; set; }
     public string state { get; set; }
     public bool fullscreen { get; set; }
+    public string monitorId { get; set; }
+}
+public class SagraDesktopMonitor {
+    public string id { get; set; }
+    public string name { get; set; }
+    public bool primary { get; set; }
 }
 public static class SagraDesktop {
     delegate bool EnumProc(IntPtr hwnd, IntPtr param);
@@ -35,6 +43,8 @@ public static class SagraDesktop {
     [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
     [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out int value, int size);
     [DllImport("user32.dll", SetLastError=true)] static extern bool ShowWindowAsync(IntPtr hwnd, int state);
+    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr hwnd, int state);
+    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hwnd, out Rect rect);
     [DllImport("user32.dll", SetLastError=true)] static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int w, int h, uint flags);
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr hwnd);
     [DllImport("user32.dll", SetLastError=true)] static extern bool PostMessage(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
@@ -60,6 +70,13 @@ public static class SagraDesktop {
     }
     public static int FullscreenStyle(int style) { return style & ~(0x00C40000 | 0x20000000 | 0x01000000); }
 
+    public static List<SagraDesktopMonitor> Monitors() {
+        var result = new List<SagraDesktopMonitor>();
+        var screens = Screen.AllScreens;
+        for (int i = 0; i < screens.Length; i++) result.Add(new SagraDesktopMonitor { id = screens[i].DeviceName, name = "Monitor " + (i + 1), primary = screens[i].Primary });
+        return result;
+    }
+
     public static List<SagraDesktopWindow> List() {
         var rows = new List<SagraDesktopWindow>();
         EnumWindows(delegate(IntPtr h, IntPtr param) {
@@ -77,13 +94,42 @@ public static class SagraDesktop {
                         processStart = process.StartTime.ToUniversalTime().Ticks.ToString(),
                         title = title.ToString(), processName = process.ProcessName,
                         state = IsIconic(h) ? "minimized" : IsZoomed(h) ? "maximized" : "normal",
-                        fullscreen = GetProp(h, Prefix + "active") != IntPtr.Zero
+                        fullscreen = GetProp(h, Prefix + "active") != IntPtr.Zero,
+                        monitorId = Screen.FromHandle(h).DeviceName
                     });
                 }
             } catch { /* Janelas que fecharam ou não podem ser consultadas são ignoradas. */ }
             return true;
         }, IntPtr.Zero);
         return rows;
+    }
+
+    public static string Move(long handle, int pid, long started, string monitorId) {
+        var h = new IntPtr(handle);
+        uint owner; GetWindowThreadProcessId(h, out owner);
+        if (!IsWindow(h) || !IsWindowVisible(h) || owner != pid) throw new InvalidOperationException("A janela mudou ou foi fechada. Atualize a lista.");
+        using (var process = Process.GetProcessById(pid)) {
+            if (process.SessionId != Session || process.StartTime.ToUniversalTime().Ticks != started)
+                throw new InvalidOperationException("A janela não pertence mais à sessão consultada. Atualize a lista.");
+        }
+        Screen destination = null;
+        foreach (var screen in Screen.AllScreens) if (screen.DeviceName == monitorId) destination = screen;
+        if (destination == null) throw new InvalidOperationException("Monitor não encontrado. Atualize a lista.");
+        if (GetProp(h, Prefix + "active") != IntPtr.Zero) throw new InvalidOperationException("Saia da tela cheia antes de mover a janela.");
+        var source = Screen.FromHandle(h);
+        if (source.DeviceName == destination.DeviceName) return "A janela já está neste monitor.";
+        bool minimized = IsIconic(h), maximized = IsZoomed(h);
+        if (minimized || maximized) ShowWindow(h, 9);
+        Rect rect; Require(GetWindowRect(h, out rect));
+        var from = source.WorkingArea; var to = destination.WorkingArea;
+        int width = Math.Min(Math.Max(1, rect.Right - rect.Left), to.Width);
+        int height = Math.Min(Math.Max(1, rect.Bottom - rect.Top), to.Height);
+        int x = Math.Max(to.Left, Math.Min(to.Right - width, to.Left + rect.Left - from.Left));
+        int y = Math.Max(to.Top, Math.Min(to.Bottom - height, to.Top + rect.Top - from.Top));
+        Require(SetWindowPos(h, IntPtr.Zero, x, y, width, height, 0x0014));
+        if (maximized) ShowWindow(h, 3);
+        else if (minimized) ShowWindow(h, 6);
+        return "Janela movida para o monitor selecionado.";
     }
 
     public static string Act(long handle, int pid, long started, string action) {

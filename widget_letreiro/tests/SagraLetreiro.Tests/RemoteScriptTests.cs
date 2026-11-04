@@ -7,6 +7,14 @@ public class RemoteScriptTests
     static int NewJobId() => Random.Shared.Next(10_000, 1_000_000_000);
 
     [Fact]
+    public void ScreenshotOutputCanExceedOrdinaryLimitWithoutChangingOrdinaryJobs()
+    {
+        var output = new string('x', 100_000);
+        Assert.Contains("[truncado]", RemoteScript.TruncateOutput(output));
+        Assert.Equal(output, RemoteScript.TruncateOutput(output, RemoteScript.MaxScreenshotOutputChars));
+    }
+
+    [Fact]
     public void ExecuteCapturesStdout()
     {
         var outcome = RemoteScript.Execute("bat", "@echo hello-letreiro", NewJobId(), 10);

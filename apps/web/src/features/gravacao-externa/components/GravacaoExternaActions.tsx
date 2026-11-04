@@ -1,4 +1,4 @@
-import { Loader2, Play, CheckCircle2 } from "lucide-react";
+import { Loader2, Play, CheckCircle2, Settings } from "lucide-react";
 
 import type { GravacaoExternaDetail } from "@/api/gravacaoExterna";
 import { cn } from "@sagra/ui";
@@ -43,13 +43,20 @@ function statusClass(status: string): string {
 }
 
 export function GravacaoExternaStatusBadge({ status }: { status: string }) {
+  const isIniciada = status === "iniciada";
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold",
+        "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold",
         statusClass(status),
       )}
     >
+      {isIniciada ? (
+        <Settings
+          className="size-3 shrink-0 gravacao-gear-spin"
+          aria-hidden
+        />
+      ) : null}
       {statusLabel(status)}
     </span>
   );

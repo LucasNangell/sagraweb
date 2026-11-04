@@ -1,7 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { GravacaoExternaActions } from "./GravacaoExternaActions";
+import {
+  GravacaoExternaActions,
+  GravacaoExternaStatusBadge,
+} from "./GravacaoExternaActions";
 
 const baseDetail = {
   id: 1,
@@ -45,5 +48,17 @@ describe("GravacaoExternaActions", () => {
 
     expect(screen.getByRole("button", { name: /iniciar gravação/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /gravação concluída/i })).toBeTruthy();
+  });
+
+  it("badge iniciada inclui engrenagem animada", () => {
+    const { container, rerender } = render(
+      <GravacaoExternaStatusBadge status="iniciada" />,
+    );
+    expect(screen.getByText("Iniciada")).toBeTruthy();
+    expect(container.querySelector(".gravacao-gear-spin")).toBeTruthy();
+
+    rerender(<GravacaoExternaStatusBadge status="pendente" />);
+    expect(screen.getByText("Pendente")).toBeTruthy();
+    expect(container.querySelector(".gravacao-gear-spin")).toBeNull();
   });
 });

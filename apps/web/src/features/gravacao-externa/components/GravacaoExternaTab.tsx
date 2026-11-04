@@ -495,6 +495,12 @@ export function GravacaoExternaTab() {
     const item = group.anchor;
     const active = selectedKey === group.key;
     const fornecedores = showFornecedorBadges ? groupFornecedores(group) : [];
+    const status = isAguardando ? "concluida" : groupStatus(group);
+    const isIniciada = !isAguardando && status === "iniciada";
+    const concluivelSession =
+      group.sessions.find((s) => s.gravacao_status === "iniciada") ?? item;
+    const showCardConcluir = isIniciada && isFornecedor && listItemHasSession(concluivelSession);
+    const hasFooterActions = fornecedores.length > 0 || showCardConcluir;
     return (
       <li key={group.key}>
         <GravacaoQueueItemContextMenu
@@ -508,7 +514,7 @@ export function GravacaoExternaTab() {
         >
           <div
             className={cn(
-              "rounded-lg border transition-colors",
+              "overflow-hidden rounded-lg border transition-colors",
               active
                 ? "border-primary-green bg-primary-green/10"
                 : "border-neutral-200 bg-white hover:border-neutral-300",
@@ -517,22 +523,28 @@ export function GravacaoExternaTab() {
             <button
               type="button"
               onClick={() => handleSelectOs(group)}
-              className={cn("w-full px-3 pt-2.5 text-left", fornecedores.length ? "pb-1" : "pb-2.5")}
+              className={cn(
+                "w-full px-3 pt-2.5 text-left",
+                hasFooterActions ? "pb-1" : "pb-2.5",
+              )}
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs-button font-semibold text-neutral-900">
                   {formatOsListLabel(item)}
                 </span>
-                <GravacaoExternaStatusBadge
-                  status={isAguardando ? "concluida" : groupStatus(group)}
-                />
+                <GravacaoExternaStatusBadge status={status} />
               </div>
               <p className="mt-0.5 truncate text-xs text-neutral-600">
                 {formatOsCardSubtitle(item)}
               </p>
             </button>
             {fornecedores.length > 0 ? (
-              <div className="flex flex-wrap gap-1 px-3 pb-2.5">
+              <div
+                className={cn(
+                  "flex flex-wrap gap-1 px-3",
+                  showCardConcluir ? "pb-1" : "pb-2.5",
+                )}
+              >
                 {fornecedores.map((f) => {
                   const pressed = active && fornecedorFilter === f.key;
                   return (
@@ -554,6 +566,40 @@ export function GravacaoExternaTab() {
                   );
                 })}
               </div>
+            ) : null}
+            {showCardConcluir ? (
+              <div className="flex justify-end px-3 pb-2.5">
+                <button
+                  type="button"
+                  disabled={
+                    concluirMutation.isPending &&
+                    concluirMutation.variables?.gravacaoExternaId ===
+                      concluivelSession.gravacao_externa_id
+                  }
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void handleConcluir(concluivelSession);
+                  }}
+                  className="inline-flex h-7 items-center gap-1.5 rounded bg-primary-green px-3 text-xs font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {concluirMutation.isPending &&
+                  concluirMutation.variables?.gravacaoExternaId ===
+                    concluivelSession.gravacao_externa_id ? (
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  ) : (
+                    <CheckCircle2 className="size-3.5" aria-hidden />
+                  )}
+                  Concluir
+                </button>
+              </div>
+            ) : null}
+            {isIniciada ? (
+              <div
+                className="gravacao-iniciada-progress"
+                data-testid="gravacao-iniciada-progress"
+                aria-hidden
+              />
             ) : null}
           </div>
         </GravacaoQueueItemContextMenu>

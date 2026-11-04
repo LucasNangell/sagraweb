@@ -68,10 +68,15 @@ vi.mock("./GravacaoExternaPreview", () => ({
   GravacaoExternaPreview: () => null,
 }));
 
-vi.mock("./GravacaoExternaActions", () => ({
-  GravacaoExternaActions: () => null,
-  GravacaoExternaStatusBadge: () => <span>status</span>,
-}));
+vi.mock("./GravacaoExternaActions", async () => {
+  const actual = await vi.importActual<typeof import("./GravacaoExternaActions")>(
+    "./GravacaoExternaActions",
+  );
+  return {
+    GravacaoExternaActions: () => null,
+    GravacaoExternaStatusBadge: actual.GravacaoExternaStatusBadge,
+  };
+});
 
 const chatPanel = vi.fn();
 vi.mock("./GravacaoExternaChatPanel", () => ({
@@ -103,7 +108,7 @@ const andamentoItems = () => [
     ano: 2026,
     solicitante: "B",
     gravacao_externa_id: 2,
-    gravacao_status: "pendente",
+    gravacao_status: "iniciada",
     fornecedor_ponto: "100.002",
     fornecedor_nome: "Alfa Birô",
   },
@@ -207,6 +212,33 @@ describe("GravacaoExternaTab card por OS", () => {
     fireEvent.click(screen.getByRole("button", { name: /^01002\/26/ }));
     expect(screen.getByRole("button", { name: "Gravação concluída" })).toBeEnabled();
     expect(screen.queryByRole("button", { name: "Iniciar gravação" })).toBeNull();
+  });
+
+  it("card iniciada mostra barra de progresso; Concluir só para fornecedor", () => {
+    const { unmount } = render(<GravacaoExternaTab />);
+
+    const osIniciada = cardOf(/^01002\/26/);
+    expect(within(osIniciada).getByTestId("gravacao-iniciada-progress")).toBeTruthy();
+    expect(within(osIniciada).getByText("Iniciada")).toBeTruthy();
+    expect(within(osIniciada).queryByRole("button", { name: "Concluir" })).toBeNull();
+
+    const osPendente = cardOf(/^01001\/26/);
+    expect(within(osPendente).queryByTestId("gravacao-iniciada-progress")).toBeNull();
+    expect(within(osPendente).queryByRole("button", { name: "Concluir" })).toBeNull();
+    unmount();
+
+    isFornecedor = true;
+    render(<GravacaoExternaTab />);
+    const osIniciadaFornecedor = cardOf(/^01002\/26/);
+    expect(
+      within(osIniciadaFornecedor).getByTestId("gravacao-iniciada-progress"),
+    ).toBeTruthy();
+    expect(
+      within(osIniciadaFornecedor).getByRole("button", { name: "Concluir" }),
+    ).toBeEnabled();
+    expect(
+      within(cardOf(/^01001\/26/)).queryByRole("button", { name: "Concluir" }),
+    ).toBeNull();
   });
 
   it("badges clicáveis exibem o cursor de clique", () => {

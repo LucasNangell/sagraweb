@@ -22,6 +22,12 @@ export class ApiError extends Error {
   }
 }
 
+export class HtmlApiResponse extends Error {
+  constructor() {
+    super("O servidor retornou uma página HTML em vez de uma resposta da API.");
+  }
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (token) headers.set("X-Letreiro-Admin-Token", token);
@@ -45,7 +51,12 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError(res.status, detail || `HTTP ${res.status}`);
   }
   if (!text) return undefined as T;
-  return JSON.parse(text) as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch (error) {
+    if (/^\s*(?:<!doctype\s+html|<html\b)/i.test(text)) throw new HtmlApiResponse();
+    throw new Error("O servidor retornou uma resposta inválida da API.", { cause: error });
+  }
 }
 
 export type Instance = {
@@ -198,7 +209,14 @@ export const api = {
     }),
   jobs: () => request<{ jobs: Job[] }>("/api/letreiro/jobs"),
   screenshotResult: (id: number) => request<{ stdout: string }>(`/api/letreiro/jobs/${id}/result`),
-  screenshotCapability: () => request<{ highQuality: boolean }>("/api/letreiro/screenshot-capability"),
+  screenshotCapability: async () => {
+    try {
+      return await request<{ highQuality: boolean }>("/api/letreiro/screenshot-capability");
+    } catch (error) {
+      if (error instanceof HtmlApiResponse || (error instanceof ApiError && error.status === 404)) return { highQuality: false };
+      throw error;
+    }
+  },
   clearJobs: () => request("/api/letreiro/jobs?windowsUser=", { method: "DELETE" }),
   settings: () => request<{ commandPollIntervalSec: number }>("/api/letreiro/settings"),
   saveSettings: (commandPollIntervalSec: number) =>

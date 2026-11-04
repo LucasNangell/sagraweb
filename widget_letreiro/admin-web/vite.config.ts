@@ -83,7 +83,15 @@ function localPreviewMock(): Connect.NextHandleFunction {
   return (req: IncomingMessage, res: ServerResponse, next: Connect.NextFunction) => {
     const url = (req.url ?? "").split("?")[0];
     if (url === "/local/me") return sendJson(res, { isAdmin: process.env.LETREIRO_MOCK_ADMIN === "1" });
-    if (url === "/api/letreiro/screenshot-capability") return sendJson(res, { highQuality: true });
+    if (url === "/api/letreiro/screenshot-capability") {
+      if (process.env.LETREIRO_MOCK_LEGACY_CAPTURE === "1") {
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "text/html");
+        res.end("<!doctype html><html><body>SAGRA Web</body></html>");
+        return;
+      }
+      return sendJson(res, { highQuality: true });
+    }
     if (url === "/local/config" && req.method === "PUT") {
       const chunks: Buffer[] = [];
       req.on("data", chunk => chunks.push(Buffer.from(chunk)));

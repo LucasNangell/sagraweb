@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera, Expand, Library, LoaderCircle, Maximize2, Minimize2, Monitor, Plus, RefreshCw, Square, SquareArrowOutUpRight, X } from "lucide-react";
-import { api, ApiError, type Command, type Instance, type Job } from "./api";
+import { api, type Command, type Instance, type Job } from "./api";
 import { extractCommandVars } from "./commandVars";
 import { DESKTOP_JOB_PREFIX, QUICK_BUTTONS_KEY, desktopTargetGuard, desktopTargetKey, matchesDesktopJob, moveWindowScript, parseDesktopResult, parseQuickButtons, windowActionScript, type DesktopWindow, type ScreenshotResult, type WindowAction, type WindowResult } from "./desktop";
 import windowsTemplate from "./desktopScripts/windows.ps1?raw";
@@ -54,7 +54,7 @@ export default function ClientControlPanel({ target, selectionCount, commands, j
     setError("");
     try {
       if (kind === "screenshot") {
-        request.highQuality = await api.screenshotCapability().then(result => result.highQuality === true).catch(error => { if (error instanceof ApiError && error.status === 404) return false; throw error; });
+        request.highQuality = (await api.screenshotCapability())?.highQuality === true;
         if (!alive.current || pendingRef.current !== request) return;
         if (request.highQuality) request.name = `${DESKTOP_JOB_PREFIX}screenshot-hq/${crypto.randomUUID()}`;
       }

@@ -500,7 +500,6 @@ export function GravacaoExternaTab() {
     const concluivelSession =
       group.sessions.find((s) => s.gravacao_status === "iniciada") ?? item;
     const showCardConcluir = isIniciada && isFornecedor && listItemHasSession(concluivelSession);
-    const hasFooterActions = fornecedores.length > 0 || showCardConcluir;
     return (
       <li key={group.key}>
         <GravacaoQueueItemContextMenu
@@ -520,31 +519,55 @@ export function GravacaoExternaTab() {
                 : "border-neutral-200 bg-white hover:border-neutral-300",
             )}
           >
-            <button
-              type="button"
-              onClick={() => handleSelectOs(group)}
+            <div
               className={cn(
-                "w-full px-3 pt-2.5 text-left",
-                hasFooterActions ? "pb-1" : "pb-2.5",
+                "flex items-start gap-2 px-3 pt-2.5",
+                fornecedores.length > 0 ? "pb-1" : "pb-2.5",
               )}
             >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs-button font-semibold text-neutral-900">
+              <button
+                type="button"
+                onClick={() => handleSelectOs(group)}
+                className="min-w-0 flex-1 text-left"
+              >
+                <span className="block text-xs-button font-semibold text-neutral-900">
                   {formatOsListLabel(item)}
                 </span>
+                <p className="mt-0.5 truncate text-xs text-neutral-600">
+                  {formatOsCardSubtitle(item)}
+                </p>
+              </button>
+              <div className="flex shrink-0 flex-col items-end gap-1">
                 <GravacaoExternaStatusBadge status={status} />
+                {showCardConcluir ? (
+                  <button
+                    type="button"
+                    disabled={
+                      concluirMutation.isPending &&
+                      concluirMutation.variables?.gravacaoExternaId ===
+                        concluivelSession.gravacao_externa_id
+                    }
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      void handleConcluir(concluivelSession);
+                    }}
+                    className="inline-flex items-center gap-1 rounded-full border border-primary-green bg-primary-green px-2.5 py-0.5 text-xs font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {concluirMutation.isPending &&
+                    concluirMutation.variables?.gravacaoExternaId ===
+                      concluivelSession.gravacao_externa_id ? (
+                      <Loader2 className="size-3 animate-spin" aria-hidden />
+                    ) : (
+                      <CheckCircle2 className="size-3" aria-hidden />
+                    )}
+                    Concluir
+                  </button>
+                ) : null}
               </div>
-              <p className="mt-0.5 truncate text-xs text-neutral-600">
-                {formatOsCardSubtitle(item)}
-              </p>
-            </button>
+            </div>
             {fornecedores.length > 0 ? (
-              <div
-                className={cn(
-                  "flex flex-wrap gap-1 px-3",
-                  showCardConcluir ? "pb-1" : "pb-2.5",
-                )}
-              >
+              <div className="flex flex-wrap gap-1 px-3 pb-2.5">
                 {fornecedores.map((f) => {
                   const pressed = active && fornecedorFilter === f.key;
                   return (
@@ -565,33 +588,6 @@ export function GravacaoExternaTab() {
                     </button>
                   );
                 })}
-              </div>
-            ) : null}
-            {showCardConcluir ? (
-              <div className="flex justify-end px-3 pb-2.5">
-                <button
-                  type="button"
-                  disabled={
-                    concluirMutation.isPending &&
-                    concluirMutation.variables?.gravacaoExternaId ===
-                      concluivelSession.gravacao_externa_id
-                  }
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    void handleConcluir(concluivelSession);
-                  }}
-                  className="inline-flex h-7 items-center gap-1.5 rounded bg-primary-green px-3 text-xs font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {concluirMutation.isPending &&
-                  concluirMutation.variables?.gravacaoExternaId ===
-                    concluivelSession.gravacao_externa_id ? (
-                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                  ) : (
-                    <CheckCircle2 className="size-3.5" aria-hidden />
-                  )}
-                  Concluir
-                </button>
               </div>
             ) : null}
             {isIniciada ? (

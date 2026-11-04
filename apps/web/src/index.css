@@ -26,12 +26,14 @@
   --color-sagra-danger: var(--danger-red);
   --color-sagra-accent: #0095d4;
   --font-sans: var(--font-main);
+  /* Breakpoint lg (Tailwind): lista|preview lado a lado na Gravação Externa, etc. */
+  --breakpoint-lg: 1024px;
   /* Botões de filtro por máquina (Gravação Externa) */
-  --text-xs-button: 1rem;
+  --text-xs-button: 1.5rem;
   --text-xs-button--line-height: 1.25;
   --text-xs-button-meta: 0.7rem; /* PDFs/TIFs baixados */
   --text-xs-button-meta--line-height: 1.25;
-  --text-xs-button-badge: 0.5rem; /* Badge Download/Baixado */
+  --text-xs-button-badge: 0.625rem; /* Badge Download/Baixado */
   --text-xs-button-badge--line-height: 1.25;
 }
 

@@ -821,13 +821,14 @@ function ArquivosChapaList({
   );
 }
 
-/** Base sizes for machine tab header (scaled down together when the row is tight). */
+/** Base sizes for machine tab header (scaled down together only when the row is tight). */
 const MACHINE_TAB_NAME_FONT_PX = 14;
 const MACHINE_TAB_BADGE_FONT_PX = 10;
 const MACHINE_TAB_ICON_PX = 12;
-const MACHINE_TAB_MIN_SCALE = 0.6;
+const MACHINE_TAB_GAP_PX = 8;
+const MACHINE_TAB_MIN_SCALE = 0.55;
 
-/** Header of a machine filter tab: scales name+badge proportionally — never clips text. */
+/** Header of a machine filter tab: name left, badge right; shrink both only if needed. */
 function MachineFilterNameRow({
   label,
   active,
@@ -846,7 +847,8 @@ function MachineFilterNameRow({
   onDownload: () => void;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
+  const nameRef = useRef<HTMLButtonElement>(null);
+  const badgeRef = useRef<HTMLButtonElement>(null);
   const [scale, setScale] = useState(1);
 
   const badgeLabel = allDownloaded ? "Baixado" : "Download";
@@ -862,12 +864,27 @@ function MachineFilterNameRow({
   const iconPx = Math.max(8, MACHINE_TAB_ICON_PX * scale);
   const badgePadX = Math.max(4, 6 * scale);
   const badgePadY = Math.max(1, 2 * scale);
-  const gapPx = Math.max(2, 4 * scale);
 
   useLayoutEffect(() => {
     const row = rowRef.current;
-    const content = contentRef.current;
-    if (!row || !content) return;
+    const nameEl = nameRef.current;
+    if (!row || !nameEl) return;
+
+    const applyBaseMeasureStyles = () => {
+      nameEl.style.fontSize = `${MACHINE_TAB_NAME_FONT_PX}px`;
+      const badgeEl = badgeRef.current;
+      if (!badgeEl) return;
+      badgeEl.style.fontSize = `${MACHINE_TAB_BADGE_FONT_PX}px`;
+      badgeEl.style.paddingLeft = "6px";
+      badgeEl.style.paddingRight = "6px";
+      badgeEl.style.paddingTop = "2px";
+      badgeEl.style.paddingBottom = "2px";
+      const svg = badgeEl.querySelector("svg");
+      if (svg) {
+        svg.style.width = `${MACHINE_TAB_ICON_PX}px`;
+        svg.style.height = `${MACHINE_TAB_ICON_PX}px`;
+      }
+    };
 
     const fit = () => {
       const available = row.clientWidth;
@@ -876,26 +893,15 @@ function MachineFilterNameRow({
         return;
       }
 
-      // Measure at full size so we only shrink when content truly overflows.
-      content.style.gap = "4px";
-      for (const child of Array.from(content.children) as HTMLElement[]) {
-        if (child.tagName === "BUTTON" && child.getAttribute("aria-label") === label) {
-          child.style.fontSize = `${MACHINE_TAB_NAME_FONT_PX}px`;
-        } else if (child.tagName === "BUTTON") {
-          child.style.fontSize = `${MACHINE_TAB_BADGE_FONT_PX}px`;
-          child.style.paddingLeft = "6px";
-          child.style.paddingRight = "6px";
-          child.style.paddingTop = "2px";
-          child.style.paddingBottom = "2px";
-          const svg = child.querySelector("svg");
-          if (svg) {
-            svg.style.width = `${MACHINE_TAB_ICON_PX}px`;
-            svg.style.height = `${MACHINE_TAB_ICON_PX}px`;
-          }
-        }
-      }
+      // Measure intrinsic widths at full size — shrink only when they exceed the row.
+      applyBaseMeasureStyles();
+      void row.offsetWidth;
 
-      const needed = content.scrollWidth;
+      const nameW = nameEl.scrollWidth;
+      const badgeEl = badgeRef.current;
+      const badgeW = badgeEl ? badgeEl.scrollWidth : 0;
+      const needed =
+        nameW + (badgeEl ? MACHINE_TAB_GAP_PX + badgeW : 0);
       if (needed <= 0) {
         setScale(1);
         return;
@@ -922,54 +928,55 @@ function MachineFilterNameRow({
   }, [label, badgeLabel, showDownloadBadge, allDownloaded]);
 
   return (
-    <div ref={rowRef} className="w-full min-w-0" data-machine-tab-row="">
-      <div
-        ref={contentRef}
-        className="flex w-max max-w-none flex-nowrap items-center"
-        style={{ gap: `${gapPx}px` }}
-        data-machine-tab-scale={scale}
+    <div
+      ref={rowRef}
+      className="flex w-full min-w-0 items-center justify-between"
+      style={{ gap: `${MACHINE_TAB_GAP_PX}px` }}
+      data-machine-tab-row=""
+      data-machine-tab-scale={scale}
+    >
+      <button
+        ref={nameRef}
+        type="button"
+        aria-label={label}
+        aria-pressed={active}
+        onClick={onSelect}
+        style={{ fontSize: `${nameFontPx}px` }}
+        className="shrink-0 whitespace-nowrap text-left font-semibold leading-tight"
       >
+        {label}
+      </button>
+      {showDownloadBadge ? (
         <button
+          ref={badgeRef}
           type="button"
-          aria-label={label}
-          aria-pressed={active}
-          onClick={onSelect}
-          style={{ fontSize: `${nameFontPx}px` }}
-          className="shrink-0 whitespace-nowrap text-left font-semibold leading-tight"
+          aria-label={badgeAria}
+          title={badgeTitle}
+          disabled={machineDownloadBusy}
+          onClick={onDownload}
+          style={{
+            fontSize: `${badgeFontPx}px`,
+            paddingLeft: `${badgePadX}px`,
+            paddingRight: `${badgePadX}px`,
+            paddingTop: `${badgePadY}px`,
+            paddingBottom: `${badgePadY}px`,
+          }}
+          className={cn(
+            "inline-flex shrink-0 items-center gap-0.5 rounded-full font-semibold leading-none",
+            "cursor-pointer hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
+            allDownloaded
+              ? "bg-emerald-100 text-emerald-800"
+              : "bg-amber-100 text-amber-800",
+          )}
         >
-          {label}
+          {allDownloaded ? (
+            <Check style={{ width: iconPx, height: iconPx }} aria-hidden />
+          ) : (
+            <FileDown style={{ width: iconPx, height: iconPx }} aria-hidden />
+          )}
+          {badgeLabel}
         </button>
-        {showDownloadBadge ? (
-          <button
-            type="button"
-            aria-label={badgeAria}
-            title={badgeTitle}
-            disabled={machineDownloadBusy}
-            onClick={onDownload}
-            style={{
-              fontSize: `${badgeFontPx}px`,
-              paddingLeft: `${badgePadX}px`,
-              paddingRight: `${badgePadX}px`,
-              paddingTop: `${badgePadY}px`,
-              paddingBottom: `${badgePadY}px`,
-            }}
-            className={cn(
-              "inline-flex shrink-0 items-center gap-0.5 rounded-full font-semibold leading-none",
-              "cursor-pointer hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
-              allDownloaded
-                ? "bg-emerald-100 text-emerald-800"
-                : "bg-amber-100 text-amber-800",
-            )}
-          >
-            {allDownloaded ? (
-              <Check style={{ width: iconPx, height: iconPx }} aria-hidden />
-            ) : (
-              <FileDown style={{ width: iconPx, height: iconPx }} aria-hidden />
-            )}
-            {badgeLabel}
-          </button>
-        ) : null}
-      </div>
+      ) : null}
     </div>
   );
 }
@@ -1251,10 +1258,10 @@ export function GravacaoExternaArquivosPanel({
                 onClick={() => selectMachine(opt.value)}
                 className="flex w-full flex-col items-start gap-0.5 text-left"
               >
-                <span className="w-full truncate text-xs-button-meta font-normal leading-tight opacity-80">
+                <span className="whitespace-nowrap text-xs-button-meta font-normal leading-tight opacity-80">
                   PDFs baixados: {opt.pdfDownloaded} de {opt.pdfTotal}
                 </span>
-                <span className="w-full truncate text-xs-button-meta font-normal leading-tight opacity-80">
+                <span className="whitespace-nowrap text-xs-button-meta font-normal leading-tight opacity-80">
                   TIFFs baixados: {opt.tifDownloaded} de {opt.tifTotal}
                 </span>
               </button>

@@ -429,6 +429,11 @@ describe("composite preview", () => {
 
   it("scales name and badge fonts together instead of clipping text", () => {
     let rowWidth = 220;
+    const NAME_W = 56;
+    const BADGE_W = 96;
+    const GAP = 8;
+    const needed = NAME_W + GAP + BADGE_W; // 160
+
     const clientWidthSpy = vi
       .spyOn(HTMLElement.prototype, "clientWidth", "get")
       .mockImplementation(function (this: HTMLElement) {
@@ -440,9 +445,10 @@ describe("composite preview", () => {
     const scrollWidthSpy = vi
       .spyOn(HTMLElement.prototype, "scrollWidth", "get")
       .mockImplementation(function (this: HTMLElement) {
-        if (this.hasAttribute("data-machine-tab-scale")) {
-          // Natural content width at scale 1 (name + gap + badge).
-          return 160;
+        const aria = this.getAttribute("aria-label") ?? "";
+        if (aria === "Komori" || aria === "SM74") return NAME_W;
+        if (aria.startsWith("Download arquivos") || aria.startsWith("Arquivos baixados")) {
+          return BADGE_W;
         }
         return 0;
       });
@@ -477,9 +483,10 @@ describe("composite preview", () => {
       expect(komoriName).toHaveTextContent("Komori");
       expect(komoriName.className).not.toContain("overflow-hidden");
       expect(komoriName.className).not.toContain("truncate");
-      // Wide row (220 > 160): full base fonts.
+      // Wide row (220 > 160): full base fonts; badge stays on the right.
       expect(komoriName.style.fontSize).toBe("14px");
       expect(komoriBadge.style.fontSize).toBe("10px");
+      expect(komoriName.parentElement).toHaveClass("justify-between");
       unmount();
 
       rowWidth = 100;
@@ -494,8 +501,14 @@ describe("composite preview", () => {
       // 100/160 = 0.625 → both fonts scale together; full labels remain.
       expect(tightName).toHaveTextContent("Komori");
       expect(tightBadge).toHaveTextContent("Download");
-      expect(Number.parseFloat(tightName.style.fontSize)).toBeCloseTo(14 * (100 / 160), 1);
-      expect(Number.parseFloat(tightBadge.style.fontSize)).toBeCloseTo(10 * (100 / 160), 1);
+      expect(Number.parseFloat(tightName.style.fontSize)).toBeCloseTo(
+        14 * (100 / needed),
+        1,
+      );
+      expect(Number.parseFloat(tightBadge.style.fontSize)).toBeCloseTo(
+        10 * (100 / needed),
+        1,
+      );
     } finally {
       clientWidthSpy.mockRestore();
       scrollWidthSpy.mockRestore();

@@ -420,7 +420,7 @@ describe("composite preview", () => {
     expect(within(filter).queryByText("Download")).toBeNull();
   });
 
-  it("prefers truncating Download badge text over the machine name", () => {
+  it("keeps Download badge content-sized and truncatable under pressure", () => {
     const arquivos = [
       { id: 1, nome: `${GROUP_KEY} (C).tif`, maquina: "Komori" },
       {
@@ -447,9 +447,9 @@ describe("composite preview", () => {
       name: "Download arquivos Komori",
     });
     expect(komoriName).toHaveTextContent("Komori");
-    expect(komoriName.className).toContain("shrink-0");
     expect(komoriBadge).toHaveTextContent("Download");
-    expect(komoriBadge.className).toContain("flex-1");
+    expect(komoriBadge.className).toContain("shrink-[100]");
+    expect(komoriBadge.className).not.toContain("flex-1");
     expect(komoriBadge.querySelector("span.truncate")).toBeTruthy();
   });
 });

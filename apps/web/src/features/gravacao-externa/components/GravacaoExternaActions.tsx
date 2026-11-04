@@ -53,7 +53,7 @@ export function GravacaoExternaStatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold",
+        "inline-flex min-w-[5.75rem] items-center justify-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold",
         statusClass(status),
         className,
       )}

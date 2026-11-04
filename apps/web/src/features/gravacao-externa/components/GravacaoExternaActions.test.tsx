@@ -61,4 +61,17 @@ describe("GravacaoExternaActions", () => {
     expect(screen.getByText("Pendente")).toBeTruthy();
     expect(container.querySelector(".gravacao-gear-spin")).toBeNull();
   });
+
+  it("badge pendente e iniciada compartilham a mesma largura mínima", () => {
+    const { rerender, container } = render(
+      <GravacaoExternaStatusBadge status="iniciada" />,
+    );
+    const iniciada = container.firstElementChild as HTMLElement;
+    expect(iniciada.className).toContain("min-w-[5.75rem]");
+
+    rerender(<GravacaoExternaStatusBadge status="pendente" />);
+    const pendente = container.firstElementChild as HTMLElement;
+    expect(pendente.className).toContain("min-w-[5.75rem]");
+    expect(pendente.className).toContain("justify-center");
+  });
 });

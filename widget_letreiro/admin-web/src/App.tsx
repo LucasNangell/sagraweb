@@ -421,13 +421,6 @@ function columnsFromFilters(filters: DisplayFilter[]): BoardColumn[] {
   });
 }
 
-const DEFAULT_COLUMNS: BoardColumn[] = [
-  { id: "col_0", title: "p/ Triagem", statuses: ["Saída p/", "Saída parcial p/", "Entrada Inicial", "Tramit. de Prova p/", "Tramit. de Prévia p/", "Comentário"] },
-  { id: "col_1", title: "p/ Execução", statuses: ["Em Execução", "Recebido"] },
-  { id: "col_2", title: "Prob. Téc.", statuses: ["Problemas Técnicos", "Problema Técnico"] },
-  { id: "col_3", title: "enviar E-mail", statuses: ["Encam. de Docum."] },
-];
-
 function withFreshPresetVisual(
   cfg: AppConfig,
   presets: { id: number; nome: string; payload: unknown }[],
@@ -509,7 +502,7 @@ function remotePayload(cfg: AppConfig): AppConfig {
 
 function seedClientConfig(row: Instance, payload: AppConfig | null): AppConfig {
   const base = payload ?? {};
-  const columns = base.board?.columns?.length ? base.board.columns : DEFAULT_COLUMNS;
+  const columns = base.board?.columns ?? [];
   return withNotifyMigration({
     ...base,
     ponto: base.ponto || "654321",
@@ -971,7 +964,6 @@ function LetreiroDisplayFields({
 function FilterListFields({
   cfg,
   onChange,
-  onError,
   setores,
   situacoes,
   listId,
@@ -981,7 +973,6 @@ function FilterListFields({
 }: {
   cfg: AppConfig;
   onChange: (next: AppConfig) => void;
-  onError?: (msg: string) => void;
   setores: string[];
   situacoes: string[];
   listId: string;
@@ -1004,7 +995,6 @@ function FilterListFields({
   }
 
   function removeFilter(index: number) {
-    if (filters.length <= 1) return onError?.("É necessário pelo menos um filtro.");
     onChange(withFilters(cfg, filters.filter((_, i) => i !== index)));
   }
 
@@ -1494,8 +1484,6 @@ export default function App() {
   async function applyClientConfig() {
     if (!clientEdit) return;
     const { row, cfg } = clientEdit;
-    const cols = cfg.board?.columns ?? [];
-    if (cols.length === 0) return setError("É necessário pelo menos um filtro.");
     setClientBusy(true);
     setError("");
     try {
@@ -2288,7 +2276,6 @@ export default function App() {
                 <FilterListFields
                   cfg={localCfg}
                   onChange={patchLocal}
-                  onError={setError}
                   setores={setores}
                   situacoes={situacoes}
                   sounds={sounds}
@@ -2530,7 +2517,6 @@ export default function App() {
                 <FilterListFields
                   cfg={clientEdit.cfg}
                   onChange={(next) => setClientEdit((cur) => (cur ? { ...cur, cfg: next } : cur))}
-                  onError={setError}
                   setores={setores}
                   situacoes={situacoes}
                   sounds={sounds}

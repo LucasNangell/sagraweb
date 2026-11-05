@@ -100,9 +100,7 @@ public static class ConfigStore
     public static BoardConfig NormalizeBoard(BoardConfig? raw)
     {
         raw ??= new BoardConfig();
-        var columnsRaw = raw.Columns is { Count: > 0 } ? raw.Columns : DefaultBoard().Columns;
-        var columns = columnsRaw.Take(40).Select(NormalizeColumn).ToList();
-        if (columns.Count == 0) columns = DefaultBoard().Columns.Select(NormalizeColumn).ToList();
+        var columns = (raw.Columns ?? []).Take(40).Select(NormalizeColumn).ToList();
         var showOs = raw.ShowOs;
         var showSp = raw.ShowSp;
         if (!showOs && !showSp)
@@ -186,7 +184,7 @@ public static class ConfigStore
             // primeira execução ou arquivo inválido: grava o padrão
         }
 
-        var cfg = Normalize(new AppConfig { Board = DefaultBoard() });
+        var cfg = Normalize(new AppConfig());
         Save(cfg);
         return cfg;
     }

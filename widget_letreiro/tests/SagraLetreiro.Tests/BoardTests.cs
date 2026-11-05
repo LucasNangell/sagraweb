@@ -512,6 +512,27 @@ public class BoardTests
     }
 
     [Fact]
+    public void FreshInstallHasNoFiltersAndKeepsSavedColumns()
+    {
+        var fresh = ConfigStore.Normalize(new AppConfig());
+        Assert.Empty(fresh.Board.Columns);
+        Assert.Equal(0, fresh.Board.ColumnCount);
+
+        var kept = ConfigStore.Normalize(new AppConfig
+        {
+            Board = new BoardConfig
+            {
+                Columns = [new BoardColumn { Id = "mine", Title = "Recebido", Statuses = ["Recebido"] }],
+            },
+        });
+        Assert.Equal("mine", Assert.Single(kept.Board.Columns).Id);
+
+        var restored = ConfigStore.RestoreDefaultBoard(fresh);
+        Assert.Equal(4, restored.Board.Columns.Count);
+        Assert.Equal("p/ Triagem", restored.Board.Columns[0].Title);
+    }
+
+    [Fact]
     public void RestrictConnectionKeepsPreviousWhenUserCannotEdit()
     {
         var previous = ConfigStore.Normalize(new AppConfig { Ponto = "654321", Nome = "usr_sefoc" });

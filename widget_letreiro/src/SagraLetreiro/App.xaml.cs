@@ -35,7 +35,7 @@ public partial class App : Application
         catch (Exception ex)
         {
             AppLog.Error("Falha ao carregar config", ex);
-            CurrentConfig = ConfigStore.Normalize(new AppConfig { Board = ConfigStore.DefaultBoard() });
+            CurrentConfig = ConfigStore.Normalize(new AppConfig());
         }
 
         base.OnStartup(e);

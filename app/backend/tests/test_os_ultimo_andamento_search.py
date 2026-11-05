@@ -703,3 +703,125 @@ class TestHomeFetchAllFastPathSql:
         assert "MATCH" in sql
         assert "ROW_NUMBER()" not in sql
         assert "COUNT(DISTINCT" not in sql
+
+
+class TestHomeFetchAllMaterializedEnrich:
+    @patch(
+        "services.os_ultimo_andamento_service.fetch_operacional_rows_batch",
+        return_value={},
+    )
+    @patch(
+        "services.os_ultimo_andamento_service.fetch_materialized_operacional_rows_batch",
+        return_value={
+            (10, 2026): {
+                "nro_protocolo": 10,
+                "ano_protocolo": 2026,
+                "situacao": "Em Execução",
+                "setor": "SEFOC",
+                "data": "2026-01-15 10:00:00",
+            }
+        },
+    )
+    @patch("services.os_search_service.fulltext_text_search_indexes_ready", return_value=False)
+    @patch("services.os_search_service._prefer_materialized_andamento", return_value=True)
+    @patch(_MAT_POPULATED, return_value=True)
+    @patch("services.os_search_service.db")
+    def test_uses_materialized_batch_when_preferred(
+        self, mock_db, _pop, _prefer, _ft, mock_mat, mock_live
+    ):
+        mock_db.execute_query.side_effect = [
+            [
+                {
+                    "nr_os": 10,
+                    "ano": 2026,
+                    "solicitante": "Gab",
+                    "prioridade": "Normal",
+                    "titulo": None,
+                    "produto": None,
+                    "situacao": None,
+                    "setor": None,
+                    "last_update": None,
+                    "observacao": None,
+                    "formato": None,
+                    "data_entrega": None,
+                    "entreg_periodo": None,
+                    "sub_os_count": 0,
+                    "has_sub_os": 0,
+                }
+            ],
+            [],  # details
+            [],  # sub_os counts
+        ]
+        result = execute_os_search(
+            fetch_all=True,
+            anos=[2026],
+            include_finished=True,
+            sort_by="ano",
+            sort_dir="asc",
+            include_total=True,
+            simple_pagination=True,
+        )
+        assert result["data"][0]["situacao"] == "Em Execução"
+        assert result["data"][0]["setor"] == "SEFOC"
+        mock_mat.assert_called_once()
+        mock_live.assert_not_called()
+
+    @patch(
+        "services.os_ultimo_andamento_service.fetch_operacional_rows_batch",
+        return_value={
+            (11, 2026): {
+                "nro_protocolo": 11,
+                "ano_protocolo": 2026,
+                "situacao": "Entregue",
+                "setor": "Arte",
+                "data": "2026-02-01 09:00:00",
+            }
+        },
+    )
+    @patch(
+        "services.os_ultimo_andamento_service.fetch_materialized_operacional_rows_batch",
+        return_value={},
+    )
+    @patch("services.os_search_service.fulltext_text_search_indexes_ready", return_value=False)
+    @patch("services.os_search_service._prefer_materialized_andamento", return_value=True)
+    @patch(_MAT_POPULATED, return_value=True)
+    @patch("services.os_search_service.db")
+    def test_gaps_fall_back_to_live(
+        self, mock_db, _pop, _prefer, _ft, mock_mat, mock_live
+    ):
+        mock_db.execute_query.side_effect = [
+            [
+                {
+                    "nr_os": 11,
+                    "ano": 2026,
+                    "solicitante": "Gab",
+                    "prioridade": "Normal",
+                    "titulo": None,
+                    "produto": None,
+                    "situacao": None,
+                    "setor": None,
+                    "last_update": None,
+                    "observacao": None,
+                    "formato": None,
+                    "data_entrega": None,
+                    "entreg_periodo": None,
+                    "sub_os_count": 0,
+                    "has_sub_os": 0,
+                }
+            ],
+            [],
+            [],
+        ]
+        result = execute_os_search(
+            fetch_all=True,
+            anos=[2026],
+            include_finished=True,
+            sort_by="ano",
+            sort_dir="asc",
+            include_total=True,
+            simple_pagination=True,
+        )
+        assert result["data"][0]["situacao"] == "Entregue"
+        assert result["data"][0]["setor"] == "Arte"
+        mock_mat.assert_called_once()
+        mock_live.assert_called_once()

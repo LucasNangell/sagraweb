@@ -8,8 +8,8 @@ import {
 } from "@/features/os/osSearchUtils";
 import type { OsSearchFilters } from "@/features/os/types";
 
-/** WebSocket é fonte primária; fallback HTTP só com WS offline. */
-export const OS_SEARCH_STALE_MS = 0;
+/** WS invalida/refetch; staleTime evita re-GET ao remountar a home. */
+export const OS_SEARCH_STALE_MS = 30_000;
 export const OS_SEARCH_GC_MS = 5 * 60_000;
 /** Mantido para testes/compat; o poll contínuo da home foi desligado. */
 export const OS_SEARCH_SAFETY_POLL_MS = 120_000;
@@ -25,7 +25,7 @@ export function useOsSearch(filters: OsSearchFilters, enabled = true) {
     gcTime: OS_SEARCH_GC_MS,
     placeholderData: keepPreviousData,
     structuralSharing: false,
-    refetchOnMount: "always",
+    refetchOnMount: true,
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
     refetchInterval: false,

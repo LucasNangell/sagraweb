@@ -82,14 +82,15 @@ describe("toOsHomeDatasetFilters", () => {
     expect(dataset.anos).toEqual([2026]);
   });
 
-  it("preserva produtos e processo no conjunto", () => {
+  it("aplica produtos localmente e preserva processo no conjunto", () => {
     const dataset = toOsHomeDatasetFilters({
       ...baseFilters,
       produtos: ["Cartaz"],
       processo: "12",
       situacao: ["Entregue"],
     });
-    expect(dataset.produtos).toEqual(["Cartaz"]);
+    expect(dataset.produtos).toEqual([]);
+    expect(dataset.produto).toBe("");
     expect(dataset.processo).toBe("12");
     expect(dataset.situacao).toEqual([]);
   });
@@ -265,10 +266,10 @@ describe("osHomePatchTriggersFetch", () => {
     ).toBe(false);
   });
 
-  it("dispara GET ao mudar ano ou produto", () => {
+  it("dispara GET ao mudar ano; produto com ano é local", () => {
     expect(osHomePatchTriggersFetch({ anos: [2025] }, baseFilters)).toBe(true);
     expect(osHomePatchTriggersFetch({ produtos: ["Cartaz"] }, baseFilters)).toBe(
-      true,
+      false,
     );
   });
 
@@ -395,6 +396,19 @@ describe("applyOsHomeViewFilters", () => {
       nrOs: 11,
     });
     expect(filtered.map((r) => r.nr_os)).toEqual([11]);
+  });
+
+  it("filtra produtos localmente sobre row.produto", () => {
+    const withProduto: OsSearchRow[] = [
+      row({ nr_os: 1, ano: 2026, produto: "Cartaz" }),
+      row({ nr_os: 2, ano: 2026, produto: "Livreto" }),
+      row({ nr_os: 3, ano: 2026, produto: "Cartaz" }),
+    ];
+    const filtered = applyOsHomeViewFilters(withProduto, {
+      ...baseFilters,
+      produtos: ["Cartaz"],
+    });
+    expect(filtered.map((r) => r.nr_os)).toEqual([1, 3]);
   });
 
   it("respeita includeOs / includeSp", () => {

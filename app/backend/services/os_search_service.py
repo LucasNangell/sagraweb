@@ -1200,6 +1200,30 @@ def _fulltext_details_driver_from_sql(
     """
 
 
+def _apply_operacional_map(
+    rows: List[Dict[str, Any]],
+    op_map: Dict[Tuple[int, int], Dict[str, Any]],
+    *,
+    slim: bool = False,
+    include_user: bool = False,
+) -> None:
+    for row in rows:
+        nro, ano = row.get("nr_os"), row.get("ano")
+        if nro is None or ano is None:
+            continue
+        op = op_map.get((int(nro), int(ano)))
+        if not op:
+            continue
+        row["situacao"] = op.get("situacao")
+        row["setor"] = op.get("setor")
+        row["last_update"] = op.get("data")
+        if include_user:
+            row["andamento_usuario"] = op.get("andamento_usuario")
+        if not slim:
+            row["observacao"] = op.get("observacao")
+            row["andamento_ponto"] = op.get("ponto")
+
+
 def _enrich_operacional_from_live(
     rows: List[Dict[str, Any]], *, slim: bool = False, include_user: bool = False
 ) -> List[Dict[str, Any]]:
@@ -1215,21 +1239,49 @@ def _enrich_operacional_from_live(
             fetch_operacional_rows_batch(chunk, include_user=True)
             if include_user else fetch_operacional_rows_batch(chunk)
         )
-    for row in rows:
-        nro, ano = row.get("nr_os"), row.get("ano")
-        if nro is None or ano is None:
-            continue
-        live = live_map.get((int(nro), int(ano)))
-        if not live:
-            continue
-        row["situacao"] = live.get("situacao")
-        row["setor"] = live.get("setor")
-        row["last_update"] = live.get("data")
-        if include_user:
-            row["andamento_usuario"] = live.get("andamento_usuario")
-        if not slim:
-            row["observacao"] = live.get("observacao")
-            row["andamento_ponto"] = live.get("ponto")
+    _apply_operacional_map(rows, live_map, slim=slim, include_user=include_user)
+    return rows
+
+
+def _enrich_operacional_for_home(
+    rows: List[Dict[str, Any]], *, slim: bool = True
+) -> List[Dict[str, Any]]:
+    """
+    Home fetch_all: prefere materializada (1 query/lote); gaps vão para live.
+    Sem OS_SEARCH_PREFER_MATERIALIZED, equivalente a _enrich_operacional_from_live.
+    """
+    if not rows:
+        return rows
+    if not (_prefer_materialized_andamento() and materialized_table_populated()):
+        return _enrich_operacional_from_live(rows, slim=slim)
+
+    from services.os_ultimo_andamento_service import (
+        fetch_materialized_operacional_rows_batch,
+        fetch_operacional_rows_batch,
+    )
+
+    pairs = _protocol_pairs(rows)
+    mat_map: Dict[Tuple[int, int], Dict[str, Any]] = {}
+    for chunk in _chunks(pairs, OS_SEARCH_IN_CHUNK):
+        mat_map.update(fetch_materialized_operacional_rows_batch(chunk))
+
+    _apply_operacional_map(rows, mat_map, slim=slim, include_user=False)
+
+    gaps = [
+        (int(row["nr_os"]), int(row["ano"]))
+        for row in rows
+        if row.get("nr_os") is not None
+        and row.get("ano") is not None
+        and (int(row["nr_os"]), int(row["ano"])) not in mat_map
+    ]
+    if not gaps:
+        return rows
+
+    live_map: Dict[Tuple[int, int], Dict[str, Any]] = {}
+    for chunk in _chunks(gaps, OS_SEARCH_IN_CHUNK):
+        live_map.update(fetch_operacional_rows_batch(chunk))
+    if live_map:
+        _apply_operacional_map(rows, live_map, slim=slim, include_user=False)
     return rows
 
 
@@ -1336,7 +1388,7 @@ def _execute_home_fetch_all(
 
     if not need_details_join:
         data_results = _enrich_rows_with_details(data_results, slim=True)
-    data_results = _enrich_operacional_from_live(data_results, slim=True)
+    data_results = _enrich_operacional_for_home(data_results, slim=True)
     data_results = _enrich_sub_os_counts(data_results)
 
     if not include_finished:

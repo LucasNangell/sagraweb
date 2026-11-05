@@ -80,6 +80,64 @@ def fetch_materialized_operacional_row(
     return rows[0] if rows else None
 
 
+def fetch_materialized_operacional_rows_batch(
+    pairs: List[Tuple[int, int]],
+    *,
+    cursor=None,
+) -> Dict[Tuple[int, int], Dict[str, Any]]:
+    """
+    Situação/setor/data materializados para várias OSs — uma query por lote.
+    Usado no enrich do fetch_all da home (mais barato que live UltimoStatus).
+    """
+    if not pairs:
+        return {}
+
+    seen: set[Tuple[int, int]] = set()
+    unique: List[Tuple[int, int]] = []
+    for nro, ano in pairs:
+        if not nro or not ano:
+            continue
+        key = (int(nro), int(ano))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(key)
+
+    if not unique:
+        return {}
+
+    placeholders = ", ".join(["(%s, %s)"] * len(unique))
+    flat: List[Any] = []
+    for nro, ano in unique:
+        flat.extend([nro, ano])
+
+    sql = f"""
+    SELECT
+        nro_protocolo,
+        ano_protocolo,
+        situacao,
+        setor,
+        `data`,
+        observacao,
+        ponto
+    FROM {TABLE}
+    WHERE (nro_protocolo, ano_protocolo) IN ({placeholders})
+    """
+
+    if cursor is not None:
+        cursor.execute(sql, tuple(flat))
+        rows = cursor.fetchall() or []
+        raw_rows = [dict(r) for r in rows]
+    else:
+        raw_rows = db.execute_query(sql, tuple(flat)) or []
+
+    result: Dict[Tuple[int, int], Dict[str, Any]] = {}
+    for row in raw_rows:
+        key = (int(row["nro_protocolo"]), int(row["ano_protocolo"]))
+        result[key] = row
+    return result
+
+
 def fetch_operacional_row(nro: int, ano: int, *, cursor=None) -> Optional[Dict[str, Any]]:
     """Calcula último andamento operacional de uma OS (sem gravar)."""
     params = {"nro": nro, "ano": ano}

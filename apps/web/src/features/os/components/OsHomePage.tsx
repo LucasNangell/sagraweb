@@ -58,6 +58,7 @@ import { useOsFiltersStore } from "../osFiltersStore";
 import { useOsSelectionStore } from "../osSelectionStore";
 import type { ProvaFichaCorOptions } from "../utils/requisicaoReportUrl";
 import type { OsSearchRow, SavedFilter } from "../types";
+import { OS_HOME_FAST_PAGE_SIZE } from "../types";
 import { OsAuditLogModal } from "./OsAuditLogModal";
 import { OsDetailsPanel } from "./OsDetailsPanel";
 import { OsFiltersPanel } from "./OsFiltersPanel";
@@ -226,6 +227,18 @@ export function OsHomePage() {
     [searchFilters],
   );
 
+  /** Primeira página rápida — pinta a tabela antes do fetch_all do ano. */
+  const fastFilters = useMemo(
+    () => ({
+      ...toOsHomeDatasetFilters(searchFilters),
+      fetchAll: false as const,
+      page: 1,
+      limit: OS_HOME_FAST_PAGE_SIZE,
+      includeTotal: false as const,
+    }),
+    [searchFilters],
+  );
+
   const textBelowMinLength = useMemo(
     () => hasTextFilterBelowMinLength(filters),
     [filters],
@@ -275,23 +288,26 @@ export function OsHomePage() {
     [debouncedDatasetChoices, filters, localViewPending],
   );
 
-  const searchQuery = useOsSearch(datasetFilters, prefsBootstrapped);
+  const fullQuery = useOsSearch(datasetFilters, true);
+  const fastQuery = useOsSearch(fastFilters, true);
+  const listSource = fullQuery.data ? fullQuery : fastQuery;
+  const showingFastOnly = Boolean(fastQuery.data) && !fullQuery.data;
+
   const registerActiveSearch = useOsActiveSearchStore((s) => s.register);
   const clearActiveSearch = useOsActiveSearchStore((s) => s.clear);
 
   useLayoutEffect(() => {
-    if (!prefsBootstrapped) {
-      clearActiveSearch();
-      return;
-    }
-    registerActiveSearch(datasetFilters, () => searchQuery.refetch());
+    registerActiveSearch(datasetFilters, () => {
+      void fastQuery.refetch();
+      return fullQuery.refetch();
+    });
     return () => clearActiveSearch();
   }, [
     clearActiveSearch,
     datasetFilters,
-    prefsBootstrapped,
+    fastQuery.refetch,
+    fullQuery.refetch,
     registerActiveSearch,
-    searchQuery.refetch,
   ]);
 
   useEffect(() => {
@@ -300,11 +316,11 @@ export function OsHomePage() {
 
   const savedFiltersQuery = useSavedFilters(ponto);
   const defaultFiltersQuery = useUserFiltersDefault(ponto);
-  const yearsQuery = useOsFilterYears(prefsBootstrapped);
+  const yearsQuery = useOsFilterYears(true);
   const defaultYearAdjusted = useRef(false);
 
   useEffect(() => {
-    if (!prefsBootstrapped || defaultYearAdjusted.current) {
+    if (defaultYearAdjusted.current) {
       return;
     }
     const years = yearsQuery.data?.data;
@@ -313,25 +329,27 @@ export function OsHomePage() {
     }
     const preferred = getDefaultYearValue();
     const currentAnos = filters.anos ?? [];
+    // Usuário já mudou o ano (ou prefs aplicaram outro) — não forçar novo fetch_all.
     if (currentAnos.length !== 1 || currentAnos[0] !== preferred) {
       defaultYearAdjusted.current = true;
       return;
     }
     const resolved = resolveDefaultYear(preferred, years);
+    // Só patcha se o ano corrente não existir na lista do servidor.
     if (resolved != null && resolved !== preferred) {
       patchFilters({ anos: [resolved], page: 1 });
     }
     defaultYearAdjusted.current = true;
-  }, [filters.anos, patchFilters, prefsBootstrapped, yearsQuery.data]);
+  }, [filters.anos, patchFilters, yearsQuery.data]);
 
   const localView = useMemo(() => {
-    const raw = searchQuery.data?.data ?? [];
+    const raw = listSource.data?.data ?? [];
     return applyOsHomeLocalView(raw, searchFilters);
-  }, [searchFilters, searchQuery.data]);
+  }, [listSource.data, searchFilters]);
 
   const rows = localView.rows;
   const meta = useMemo(() => {
-    const base = searchQuery.data?.meta;
+    const base = listSource.data?.meta;
     if (!base) {
       return undefined;
     }
@@ -343,23 +361,24 @@ export function OsHomePage() {
       total_records: localView.totalRecords,
       total_pages: localView.totalRecords ? 1 : 0,
     };
-  }, [localView.totalRecords, searchQuery.data?.meta]);
+  }, [listSource.data?.meta, localView.totalRecords]);
 
   const markUserListFetch = useCallback(() => {
     setUserListFetchPending(true);
   }, []);
 
   useEffect(() => {
-    if (!searchQuery.isFetching && !isTextFilterPending) {
+    if (!fullQuery.isFetching && !fastQuery.isFetching && !isTextFilterPending) {
       setUserListFetchPending(false);
     }
-  }, [searchQuery.isFetching, isTextFilterPending]);
+  }, [fastQuery.isFetching, fullQuery.isFetching, isTextFilterPending]);
 
   const isListFetching =
     manualRefresh ||
     isTextFilterPending ||
     isChoiceFilterPending ||
-    (userListFetchPending && searchQuery.isFetching);
+    (showingFastOnly && fullQuery.isFetching) ||
+    (userListFetchPending && (fullQuery.isFetching || fastQuery.isFetching));
 
   const handleRefresh = useCallback(async () => {
     setManualRefresh(true);
@@ -368,7 +387,7 @@ export function OsHomePage() {
     let timer: ReturnType<typeof setTimeout> | null = null;
     try {
       await Promise.race([
-        searchQuery.refetch().then(() => undefined),
+        Promise.all([fullQuery.refetch(), fastQuery.refetch()]).then(() => undefined),
         new Promise<void>((resolve) => {
           timer = setTimeout(() => {
             timedOut = true;
@@ -389,7 +408,7 @@ export function OsHomePage() {
       }
       setManualRefresh(false);
     }
-  }, [searchQuery]);
+  }, [fastQuery, fullQuery]);
 
   const applySavedFilter = useCallback(
     (filter: SavedFilter) => {
@@ -739,12 +758,15 @@ export function OsHomePage() {
           <OsOrdersTable
             rows={rows}
             meta={meta}
-            isLoading={!prefsBootstrapped || searchQuery.isLoading}
+            isLoading={
+              !listSource.data &&
+              (fastQuery.isLoading || fullQuery.isLoading)
+            }
             isFetching={isListFetching}
-            isError={searchQuery.isError}
+            isError={Boolean(listSource.isError) && !listSource.data}
             errorMessage={
-              searchQuery.error instanceof Error
-                ? searchQuery.error.message
+              listSource.error instanceof Error
+                ? listSource.error.message
                 : undefined
             }
             selectedRow={selected}
@@ -756,7 +778,7 @@ export function OsHomePage() {
             onSortChange={handleSortChange}
             onExportReport={() => void handleExportReport()}
             isExporting={isExportingReport}
-            exportDisabled={!prefsBootstrapped || textBelowMinLength}
+            exportDisabled={textBelowMinLength}
             onOpenGerenciaDetail={handleOpenGerenciaDetail}
             listExpanded={listExpanded}
             onListExpandedChange={setListExpanded}

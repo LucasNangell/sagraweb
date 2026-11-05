@@ -98,7 +98,7 @@ export function buildOsSearchQueryString(filters: OsSearchFilters): string {
   params.append("include_sp", String(filters.includeSp));
   // Paginação simples (limit+1 + has_next). COUNT só fora do lookup exato por Nr OS.
   params.append("simple_pagination", "true");
-  if (!filters.exactOsLookup) {
+  if (!filters.exactOsLookup && filters.includeTotal !== false) {
     params.append("include_total", "true");
   }
   if (filters.fetchAll) {

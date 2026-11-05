@@ -31,6 +31,8 @@ export function toOsHomeDatasetFilters(filters: OsSearchFilters): OsSearchFilter
     titulo: "",
     solicitante: "",
     solicitantes: [],
+    produto: "",
+    produtos: [],
     situacao: [],
     setor: [],
     prioridade: [],
@@ -117,6 +119,8 @@ export function applyOsHomeViewFilters(
   const setores = cleanList(filters.setor);
   const prioridades = cleanList(filters.prioridade);
   const solicitantes = cleanList(filters.solicitantes);
+  const produtos = cleanList(filters.produtos);
+  const produtoTerm = (filters.produto ?? "").trim().toLowerCase();
   const solicitanteTerm = (filters.solicitante ?? "").trim().toLowerCase();
   const nrOs = filters.nrOs;
   const tituloTerm = (filters.titulo ?? "").trim().toLowerCase();
@@ -124,7 +128,7 @@ export function applyOsHomeViewFilters(
     tituloTerm.length >= OS_TEXT_SEARCH_MIN_CHARS ||
     (tituloTerm.length > 0 &&
       (nrOs != null ||
-        (filters.produtos?.length ?? 0) > 0 ||
+        produtos.length > 0 ||
         solicitantes.length > 0));
 
   const filtered = rows.filter((row) => {
@@ -144,6 +148,17 @@ export function applyOsHomeViewFilters(
     if (prioridades.length) {
       const prio = String(row.prioridade ?? "").trim();
       if (!prioridades.includes(prio)) {
+        return false;
+      }
+    }
+    if (produtos.length) {
+      const prod = String(row.produto ?? "").trim();
+      if (!produtos.includes(prod)) {
+        return false;
+      }
+    } else if (produtoTerm) {
+      const prod = String(row.produto ?? "").toLowerCase();
+      if (!prod.includes(produtoTerm)) {
         return false;
       }
     }

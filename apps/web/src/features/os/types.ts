@@ -112,7 +112,15 @@ export interface OsSearchFilters {
   exactOsLookup?: boolean;
   /** Home: GET /os/search com teto alto (sem paginação de UI). */
   fetchAll?: boolean;
+  /**
+   * Quando false, omite include_total no GET (primeira página rápida).
+   * Default/omitido: total incluído fora de exactOsLookup.
+   */
+  includeTotal?: boolean;
 }
+
+/** Primeira página da home (progressivo) — time-to-first-row. */
+export const OS_HOME_FAST_PAGE_SIZE = 80;
 
 export interface AuxOption {
   value: string;

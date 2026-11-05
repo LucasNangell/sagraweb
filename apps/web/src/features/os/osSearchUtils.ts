@@ -134,6 +134,7 @@ export function normalizeOsSearchFilters(
     sorts: resolveOsSorts(filters),
     exactOsLookup: filters.exactOsLookup === true,
     fetchAll: filters.fetchAll === true,
+    includeTotal: filters.includeTotal !== false,
   };
 }
 

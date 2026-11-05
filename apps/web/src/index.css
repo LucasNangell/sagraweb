@@ -226,6 +226,21 @@ body {
   --ink: #000000;
 }
 
+/* Adicionar OS — Arcade com cor/tamanho originais (primary-green) */
+.ge-btn-3d--primary {
+  --c: var(--primary-green);
+  --c2: color-mix(in srgb, var(--primary-green) 62%, #000);
+  --ink: #ffffff;
+  width: 100%;
+  gap: 0.5rem;
+  padding-inline: 1rem;
+  padding-block: 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .motion-safe\:animate-\[fadeIn_320ms_ease-out_both\],
   .motion-safe\:animate-\[fadeIn_300ms_ease-out_both\],

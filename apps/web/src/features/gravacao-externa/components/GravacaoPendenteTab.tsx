@@ -561,7 +561,7 @@ export function GravacaoPendenteTab() {
           <button
             type="button"
             onClick={() => setAdicionarModalOpen(true)}
-            className="inline-flex w-full items-center justify-center gap-2 rounded bg-primary-green px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="ge-btn-3d ge-btn-3d--primary"
           >
             <Plus className="size-4" />
             Adicionar OS

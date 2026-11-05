@@ -29,6 +29,7 @@ import {
   ConfigSectionHeader,
   ConfigSubsection,
 } from "./ConfigSectionLayout";
+import { toast } from "@/components/ui/toastStore";
 
 const QUERY_KEY = ["admin", "custos-funcoes"] as const;
 const HORAS_MES_PREVIEW = 176;
@@ -108,7 +109,7 @@ export function CustosSettingsSection() {
   }, [form.custoMensal, horasMes]);
 
   const reportError = (error: unknown) => {
-    window.alert(error instanceof Error ? error.message : "Operação falhou.");
+    toast.error(error instanceof Error ? error.message : "Operação falhou.");
   };
 
   const invalidate = () => {

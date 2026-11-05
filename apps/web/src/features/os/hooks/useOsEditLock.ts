@@ -7,6 +7,7 @@ import {
   releaseOsEditLockKeepalive,
   type OsEditLockOrigem,
 } from "@/api/os";
+import { toast } from "@/components/ui/toastStore";
 
 export const OS_EDIT_LOCK_HEARTBEAT_MS = 20_000;
 
@@ -69,7 +70,7 @@ export function useOsEditLock(opts: {
     } catch (err) {
       markHeld(false);
       setBlocked(true);
-      window.alert(osEditLockAlertMessage(err));
+      toast.error(osEditLockAlertMessage(err));
       return false;
     } finally {
       setAcquiring(false);
@@ -118,7 +119,7 @@ export function useOsEditLock(opts: {
         if (cancelled) return;
         markHeld(false);
         setBlocked(true);
-        window.alert(osEditLockAlertMessage(err));
+        toast.error(osEditLockAlertMessage(err));
       })
       .finally(() => {
         if (!cancelled) setAcquiring(false);

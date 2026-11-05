@@ -64,6 +64,7 @@ import {
   isGravacaoPendenteSituacao,
   SETOR_GRAVACAO_PENDENTE,
 } from "@/features/gravacao-externa/constants";
+import { toast } from "@/components/ui/toastStore";
 
 interface OsHistoryPanelProps {
   selected: OsSearchRow | null;
@@ -424,7 +425,7 @@ export function OsHistoryPanel({
 
   const startNew = async () => {
     if (frozen) {
-      window.alert("OS congelada (Entregue/Cancelada) — andamento bloqueado.");
+      toast.warning("OS congelada (Entregue/Cancelada) — andamento bloqueado.");
       return;
     }
     const ok = await lock.acquire();
@@ -450,7 +451,7 @@ export function OsHistoryPanel({
 
   const startEdit = async () => {
     if (!selectedHistory) {
-      window.alert("Selecione um andamento na lista para editar.");
+      toast.warning("Selecione um andamento na lista para editar.");
       return;
     }
     const ok = await lock.acquire();
@@ -542,19 +543,19 @@ export function OsHistoryPanel({
 
   const saveHistory = async (payloadOverride?: HistoryPayload) => {
     if (!selected) {
-      window.alert("Selecione uma OS primeiro.");
+      toast.warning("Selecione uma OS primeiro.");
       return;
     }
     if (frozen) {
-      window.alert("OS congelada (Entregue/Cancelada) — andamento bloqueado.");
+      toast.warning("OS congelada (Entregue/Cancelada) — andamento bloqueado.");
       return;
     }
     if (!form.situacao || !form.setor) {
-      window.alert("Preencha Situação e Setor.");
+      toast.warning("Preencha Situação e Setor.");
       return;
     }
     if (!canSaveNew) {
-      window.alert("Selecione o componente para lançar o andamento.");
+      toast.warning("Selecione o componente para lançar o andamento.");
       return;
     }
 
@@ -614,7 +615,7 @@ export function OsHistoryPanel({
 
         if (targetSubId != null) {
           if (isEditMode) {
-            window.alert("Edição de andamento de Sub OS não disponível nesta versão.");
+            toast.warning("Edição de andamento de Sub OS não disponível nesta versão.");
             return;
           }
           if (isSubOs) {
@@ -661,9 +662,7 @@ export function OsHistoryPanel({
       );
       setComponenteEspecifico(false);
     } catch (e) {
-      window.alert(
-        `Erro ao salvar: ${e instanceof Error ? e.message : "falha"}`,
-      );
+      toast.error(`Erro ao salvar: ${e instanceof Error ? e.message : "falha"}`,);
     }
   };
 
@@ -692,7 +691,7 @@ export function OsHistoryPanel({
       andamentoTarget.startsWith("sub:") ||
       andamentoTarget.startsWith("comp:");
     if (!hasComponentTarget) {
-      window.alert("Selecione o componente para lançar o andamento.");
+      toast.warning("Selecione o componente para lançar o andamento.");
       setComponenteEspecifico(true);
       setAndamentoTarget("");
       return;
@@ -727,7 +726,7 @@ export function OsHistoryPanel({
   const handleDelete = async () => {
     if (isSubOs) {
       if (!selectedSubHistory) {
-        window.alert("Selecione um andamento para excluir.");
+        toast.warning("Selecione um andamento para excluir.");
         return;
       }
       const label =
@@ -742,19 +741,17 @@ export function OsHistoryPanel({
       }
       try {
         await deleteSubOsMutation.mutateAsync(selectedSubHistory.id);
-        window.alert("Andamento da Sub OS excluído.");
+        toast.success("Andamento da Sub OS excluído.");
         setSelectedSubHistory(null);
         setForm(emptyForm());
       } catch (e) {
-        window.alert(
-          `Erro ao excluir: ${e instanceof Error ? e.message : "falha"}`,
-        );
+        toast.error(`Erro ao excluir: ${e instanceof Error ? e.message : "falha"}`,);
       }
       return;
     }
 
     if (!selectedHistory) {
-      window.alert("Selecione um andamento para excluir.");
+      toast.error("Selecione um andamento para excluir.");
       return;
     }
     const confirmMsg =
@@ -767,13 +764,11 @@ export function OsHistoryPanel({
     }
     try {
       await deleteMutation.mutateAsync(selectedHistory.CodStatus);
-      window.alert("Andamento excluído e lista reorganizada.");
+      toast.success("Andamento excluído e lista reorganizada.");
       setSelectedHistory(null);
       setForm(emptyForm());
     } catch (e) {
-      window.alert(
-        `Erro ao excluir: ${e instanceof Error ? e.message : "falha"}`,
-      );
+      toast.error(`Erro ao excluir: ${e instanceof Error ? e.message : "falha"}`,);
     }
   };
 
@@ -792,11 +787,9 @@ export function OsHistoryPanel({
           ...payload,
           replicar_alvo: origem === "juntada" ? "juntada" : "vinculo",
         });
-        window.alert(
-          origem === "juntada"
+        toast.warning(origem === "juntada"
             ? "Andamento replicado para as OSs juntadas."
-            : "Andamento replicado para o grupo.",
-        );
+            : "Andamento replicado para o grupo.",);
       } else {
         await addMutation.mutateAsync(payload);
         if (origem === "vinculo") {
@@ -806,19 +799,15 @@ export function OsHistoryPanel({
             situacao: payload.situacao,
             setor: payload.setor,
           });
-          window.alert(
-            "Andamento salvo apenas nesta OS. O criador do vínculo foi notificado.",
-          );
+          toast.success("Andamento salvo apenas nesta OS. O criador do vínculo foi notificado.",);
         } else {
-          window.alert("Andamento salvo apenas nesta OS.");
+          toast.success("Andamento salvo apenas nesta OS.");
         }
       }
       setTourSaved(true);
       resetForm();
     } catch (e) {
-      window.alert(
-        `Erro ao aplicar decisão: ${e instanceof Error ? e.message : "falha"}`,
-      );
+      toast.error(`Erro ao aplicar decisão: ${e instanceof Error ? e.message : "falha"}`,);
     }
   };
 

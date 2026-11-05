@@ -49,6 +49,7 @@ import {
   type MaquinaDownloadPendente,
 } from "../utils/plateFilenameUtils";
 import { getApiErrorDetail } from "@/lib/api";
+import { toast } from "@/components/ui/toastStore";
 
 type ExternaListSegment = "em_andamento" | "aguardando_entrega";
 type ExternaOsGroup = GravacaoOsGroup<GravacaoExternaOsItem>;
@@ -373,11 +374,9 @@ export function GravacaoExternaTab() {
       clearSelection();
     }
     if (errors.length > 0) {
-      window.alert(
-        errors.length === ids.length
+      toast.error(errors.length === ids.length
           ? errors[0] || "Não foi possível remover a OS da lista."
-          : `Parte da OS não pôde ser removida: ${errors.join(" · ")}`,
-      );
+          : `Parte da OS não pôde ser removida: ${errors.join(" · ")}`,);
     }
   };
 
@@ -438,9 +437,7 @@ export function GravacaoExternaTab() {
           return;
         }
       }
-      window.alert(
-        e instanceof Error ? e.message : "Não foi possível concluir a gravação.",
-      );
+      toast.error(e instanceof Error ? e.message : "Não foi possível concluir a gravação.",);
     }
   };
 
@@ -457,15 +454,13 @@ export function GravacaoExternaTab() {
         recebidoPorNome: payload.recebidoPorNome,
         gravacaoExternaId: entregaItem.gravacao_externa_id,
       });
-      window.alert("Recebimento das chapas lançado.");
+      toast.success("Recebimento das chapas lançado.");
       setEntregaItem(null);
       if ((selectedGroup?.sessions.length ?? 0) <= 1) {
         clearSelection();
       }
     } catch (e) {
-      window.alert(
-        e instanceof Error ? e.message : "Não foi possível lançar o recebimento.",
-      );
+      toast.error(e instanceof Error ? e.message : "Não foi possível lançar o recebimento.",);
     }
   };
 

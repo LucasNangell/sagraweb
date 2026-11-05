@@ -14,6 +14,7 @@ import {
   ConfigSectionBody,
   ConfigSectionHeader,
 } from "./ConfigSectionLayout";
+import { toast } from "@/components/ui/toastStore";
 
 export function DesenvolvimentoSettingsSection() {
   const qc = useQueryClient();
@@ -34,7 +35,7 @@ export function DesenvolvimentoSettingsSection() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "dev-features"] });
       void qc.invalidateQueries({ queryKey: queryKeys.devFeatures.all });
-      window.alert("Flags de desenvolvimento salvas.");
+      toast.success("Flags de desenvolvimento salvas.");
     },
   });
 

@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { toast } from "@/components/ui/toastStore";
+
 import { GravacaoPendenteLaunchModal } from "./GravacaoPendenteLaunchModal";
 
 const inspectNetworkFiles = vi.fn();
@@ -231,15 +233,17 @@ describe("GravacaoPendenteLaunchModal preview e inspeção", () => {
   });
 
   it("não confirma uma juntada sem OS adicional efetivamente incluída", () => {
-    const alert = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+    const warningSpy = vi.spyOn(toast, "warning").mockImplementation(() => 0);
     const onConfirm = renderLaunchModalWithFiles();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Juntada de OSs" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirmar lançamento" }));
 
     expect(onConfirm).not.toHaveBeenCalled();
-    expect(alert).toHaveBeenCalledWith(expect.stringContaining("Adicione ao menos uma OS"));
-    alert.mockRestore();
+    expect(warningSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Adicione ao menos uma OS"),
+    );
+    warningSpy.mockRestore();
   });
 
   it("envia todas as OSs adicionadas no payload da juntada", async () => {

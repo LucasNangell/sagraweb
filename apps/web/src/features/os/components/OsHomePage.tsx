@@ -73,6 +73,7 @@ import { SettingsModal } from "@/features/settings/components/SettingsModal";
 import { OsVincularModal } from "./OsVincularModal";
 import { OsNotificarModal } from "./OsNotificarModal";
 import { OsSaveCurrentFiltersModal } from "./OsSaveCurrentFiltersModal";
+import { toast } from "@/components/ui/toastStore";
 
 /** Sobrevive à navegação SPA; zera no refresh (novo carregamento do módulo). */
 let homeDefaultPrefsApplied = false;
@@ -376,16 +377,12 @@ export function OsHomePage() {
         }),
       ]);
       if (timedOut) {
-        window.alert(
-          "A atualização da lista está demorando. Tente novamente em alguns segundos.",
-        );
+        toast.warning("A atualização da lista está demorando. Tente novamente em alguns segundos.",);
       }
     } catch (err) {
-      window.alert(
-        err instanceof Error
+      toast.error(err instanceof Error
           ? err.message
-          : "Não foi possível atualizar a lista de OSs.",
-      );
+          : "Não foi possível atualizar a lista de OSs.",);
     } finally {
       if (timer != null) {
         clearTimeout(timer);
@@ -639,10 +636,8 @@ export function OsHomePage() {
 
   const handleExportReport = useCallback(async () => {
     if (textBelowMinLength) {
-      window.alert(
-        getTextFilterMinLengthHint(filters) ??
-          "Complete os filtros de texto antes de exportar.",
-      );
+      toast.warning(getTextFilterMinLengthHint(filters) ??
+          "Complete os filtros de texto antes de exportar.",);
       return;
     }
     setIsExportingReport(true);
@@ -650,9 +645,7 @@ export function OsHomePage() {
       const blob = await exportOsListXlsx(searchFilters);
       downloadOsListXlsx(blob);
     } catch (err) {
-      window.alert(
-        err instanceof Error ? err.message : "Falha ao gerar relatório.",
-      );
+      toast.error(err instanceof Error ? err.message : "Falha ao gerar relatório.",);
     } finally {
       setIsExportingReport(false);
     }
@@ -900,7 +893,7 @@ export function OsHomePage() {
         onMoverPastas={() => setMoverPastasOpen(true)}
         onPrintPicker={() => {
           if (!selected) {
-            window.alert("Selecione uma OS.");
+            toast.warning("Selecione uma OS.");
             return;
           }
           setPrintModePickerOpen(true);
@@ -908,7 +901,7 @@ export function OsHomePage() {
         onNotificar={() => setNotificarOpen(true)}
         onSeparador={() => {
           if (!selected) {
-            window.alert("Selecione uma OS.");
+            toast.warning("Selecione uma OS.");
             return;
           }
           setSeparadorOpen(true);

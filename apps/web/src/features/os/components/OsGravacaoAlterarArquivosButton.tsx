@@ -23,6 +23,7 @@ import {
 } from "@/features/gravacao-externa/constants";
 import { homeTestIds } from "@/lib/testId";
 import type { OsSearchRow } from "../types";
+import { toast } from "@/components/ui/toastStore";
 
 interface OsGravacaoAlterarArquivosButtonProps {
   selected: OsSearchRow;
@@ -116,7 +117,7 @@ export function OsGravacaoAlterarArquivosButton({
 
   const handleOpen = () => {
     if (detailLoading) {
-      window.alert("Carregando arquivos da sessão…");
+      toast.warning("Carregando arquivos da sessão…");
       return;
     }
     setModalOpen(true);
@@ -143,11 +144,9 @@ export function OsGravacaoAlterarArquivosButton({
         });
       }
       setModalOpen(false);
-      window.alert("Arquivos atualizados com sucesso.");
+      toast.success("Arquivos atualizados com sucesso.");
     } catch (e) {
-      window.alert(
-        e instanceof Error ? e.message : "Não foi possível alterar os arquivos.",
-      );
+      toast.error(e instanceof Error ? e.message : "Não foi possível alterar os arquivos.",);
     }
   };
 

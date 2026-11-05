@@ -3,6 +3,7 @@ import { FolderInput, X } from "lucide-react";
 import { OsFolderMoveForm } from "./OsFolderMoveForm";
 import type { OsSearchRow } from "../types";
 import { homeTestIds } from "@/lib/testId";
+import { toast } from "@/components/ui/toastStore";
 
 interface OsMoverPastasModalProps {
   row: OsSearchRow | null;
@@ -59,13 +60,11 @@ export function OsMoverPastasModal({
           onCancel={onClose}
           onSuccess={(result) => {
             const moved = result.moved_folders.map((item) => item.to_name).join(", ");
-            window.alert(
-              `Pastas movidas com sucesso para OS ${row.nr_os}/${row.ano}.\n\n` +
+            toast.success(`Pastas movidas com sucesso para OS ${row.nr_os}/${row.ano}.\n\n` +
                 `Itens: ${moved}\n` +
                 (result.dest_folder_created
                   ? "\nA pasta de destino foi criada na rede."
-                  : ""),
-            );
+                  : ""),);
             onClose();
           }}
         />

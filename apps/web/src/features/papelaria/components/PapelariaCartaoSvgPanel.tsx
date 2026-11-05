@@ -12,6 +12,7 @@ import {
 } from "@/api/papelariaSvg";
 import { queryKeys } from "@/api/query-keys";
 import type { PapelariaField } from "../types";
+import { toast } from "@/components/ui/toastStore";
 
 type Props = {
   osId: string | null;
@@ -161,7 +162,7 @@ export function PapelariaCartaoSvgPanel({ osId, osAno }: Props) {
       window.URL.revokeObjectURL(url);
     },
     onError: (err: Error) => {
-      window.alert(err.message || "Erro ao exportar SVG.");
+      toast.error(err.message || "Erro ao exportar SVG.");
     },
   });
 

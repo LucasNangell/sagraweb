@@ -8,6 +8,7 @@ import {
 } from "@/api/hooks/useGravacaoExterna";
 import { useGravacaoExternaChatRealtime } from "@/features/gravacao-externa/hooks/useGravacaoExternaChatRealtime";
 import { cn } from "@sagra/ui";
+import { toast } from "@/components/ui/toastStore";
 
 const MESSAGE_MAX = 8000;
 const NEAR_BOTTOM_THRESHOLD_PX = 96;
@@ -76,7 +77,7 @@ export function GravacaoExternaChatPanel({
       setText("");
       scrollToBottom();
     } catch {
-      window.alert("Não foi possível enviar a mensagem.");
+      toast.error("Não foi possível enviar a mensagem.");
     }
   };
 

@@ -17,6 +17,7 @@ import {
   parseCadUntil,
 } from "../separador/format";
 import type { OsSearchRow } from "../types";
+import { toast } from "@/components/ui/toastStore";
 
 interface OsSeparadorModalProps {
   row: OsSearchRow | null;
@@ -141,14 +142,12 @@ export function OsSeparadorModal({ row, open, onClose }: OsSeparadorModalProps) 
       return;
     }
     if (!parsedUntil.ok) {
-      window.alert(parsedUntil.message);
+      toast.warning(parsedUntil.message);
       return;
     }
     if (!printer) {
-      window.alert(
-        openerError ??
-          "Selecione a impressora Windows que tem o papel 102 × 297 mm.",
-      );
+      toast.warning(openerError ??
+          "Selecione a impressora Windows que tem o papel 102 × 297 mm.",);
       return;
     }
     setPrinting(true);
@@ -168,15 +167,13 @@ export function OsSeparadorModal({ row, open, onClose }: OsSeparadorModalProps) 
         heightMm: PAGE_HEIGHT_MM,
       });
       if (!printed.ok) {
-        window.alert(printed.error);
+        toast.warning(printed.error);
         return;
       }
       rememberPrinter(printer);
       setStatus(`Enviado para ${printer} em 102 × 297 mm.`);
     } catch (error) {
-      window.alert(
-        error instanceof Error ? error.message : "Falha ao gerar o PDF do separador.",
-      );
+      toast.error(error instanceof Error ? error.message : "Falha ao gerar o PDF do separador.",);
     } finally {
       setPrinting(false);
     }

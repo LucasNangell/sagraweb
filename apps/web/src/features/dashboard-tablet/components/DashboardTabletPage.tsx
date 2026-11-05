@@ -41,6 +41,7 @@ import { TabletOsModal } from "./TabletOsModal";
 import { TabletRecebimentoChapasModal } from "./TabletRecebimentoChapasModal";
 import type { TabletIdentityMode } from "../identityMode";
 import "../dashboard-tablet.css";
+import { toast } from "@/components/ui/toastStore";
 
 const LONG_PRESS_MS = 600;
 
@@ -300,11 +301,9 @@ export function DashboardTabletPage({
       setPushEnabled(Boolean(pref.enabled));
     } catch (err) {
       console.error("[PainelTablet] toggle push:", err);
-      window.alert(
-        err instanceof Error
+      toast.error(err instanceof Error
           ? err.message
-          : "Não foi possível alterar as notificações.",
-      );
+          : "Não foi possível alterar as notificações.",);
     } finally {
       setPushBusy(false);
     }
@@ -344,7 +343,7 @@ export function DashboardTabletPage({
     };
     setShowSettings(false);
     applyConfig(defaults);
-    window.alert("Cache limpo! Configuração padrão restaurada.");
+    toast.success("Cache limpo! Configuração padrão restaurada.");
   };
 
   const clearLongPress = useCallback(() => {

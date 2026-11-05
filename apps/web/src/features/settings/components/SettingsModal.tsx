@@ -44,6 +44,7 @@ import {
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { homeTestIds } from "@/lib/testId";
 import { cn } from "@sagra/ui";
+import { toast } from "@/components/ui/toastStore";
 
 interface SettingsModalProps {
   open: boolean;
@@ -204,12 +205,12 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
 
   const handleCreateFilter = async () => {
     if (!ponto) {
-      window.alert("Sessão inválida. Faça login novamente.");
+      toast.warning("Sessão inválida. Faça login novamente.");
       return;
     }
     const nome = newFilterName.trim();
     if (!nome) {
-      window.alert("Digite um nome para o filtro.");
+      toast.warning("Digite um nome para o filtro.");
       return;
     }
     try {
@@ -219,9 +220,9 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
         nome,
         ...currentPayload(),
       });
-      window.alert("Filtro salvo com sucesso.");
+      toast.success("Filtro salvo com sucesso.");
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Erro ao salvar filtro.");
+      toast.error(error instanceof Error ? error.message : "Erro ao salvar filtro.");
     }
   };
 
@@ -229,7 +230,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     if (editingFilterId == null) return;
     const nome = newFilterName.trim();
     if (!nome) {
-      window.alert("Digite um nome para o filtro.");
+      toast.error("Digite um nome para o filtro.");
       return;
     }
     try {
@@ -238,11 +239,9 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
         nome,
         ...currentPayload(),
       });
-      window.alert("Filtro atualizado com sucesso.");
+      toast.success("Filtro atualizado com sucesso.");
     } catch (error) {
-      window.alert(
-        error instanceof Error ? error.message : "Erro ao atualizar filtro.",
-      );
+      toast.error(error instanceof Error ? error.message : "Erro ao atualizar filtro.",);
     }
   };
 
@@ -251,7 +250,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     try {
       await setDefaultMutation.mutateAsync({ ponto, filter_id: filterId });
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Erro ao definir filtro padrão.");
+      toast.error(error instanceof Error ? error.message : "Erro ao definir filtro padrão.");
     }
   };
 
@@ -261,7 +260,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     try {
       await deleteFilterMutation.mutateAsync(filter.id);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Erro ao excluir filtro.");
+      toast.error(error instanceof Error ? error.message : "Erro ao excluir filtro.");
     }
   };
 

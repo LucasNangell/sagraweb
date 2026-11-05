@@ -18,6 +18,7 @@ import {
   type SequenciaProducaoDraft,
 } from "@/api/sequenciaProducao";
 import { useSequenciaProducao } from "@/features/os/hooks/useSequenciaProducao";
+import { toast } from "@/components/ui/toastStore";
 
 interface OsSequenciaProducaoTabProps {
   ano: number;
@@ -177,7 +178,7 @@ export function OsSequenciaProducaoTab({
     const result = await createDocxMutation.mutateAsync(draft);
     setLastDocx({ filename: result.filename, download_url: result.download_url });
     setSequenceDirty(false);
-    window.alert(`DOCX criado na pasta Sefoc: ${result.filename}`);
+    toast.success(`DOCX criado na pasta Sefoc: ${result.filename}`);
   };
 
   const handleDownload = async () => {

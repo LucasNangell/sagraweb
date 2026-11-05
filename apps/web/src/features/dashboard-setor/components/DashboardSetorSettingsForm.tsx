@@ -6,6 +6,7 @@ import { MultiSelect } from "@/components/ui/multi-select";
 import { INBOX_COLUMN_SOURCE, INBOX_DISPLAY_SITUACAO } from "../constants";
 import { showsAndamentoTime } from "../normalizeConfig";
 import type { DashboardColumnConfig, DashboardConfig } from "../types";
+import { toast } from "@/components/ui/toastStore";
 
 function isGenericColumnTitle(title: string): boolean {
   return !title.trim() || /^Coluna\s+\d+$/i.test(title.trim());
@@ -191,7 +192,7 @@ export function DashboardSetorSettingsForm({
   const addColumn = () => {
     setConfig((prev) => {
       if (prev.columns.length >= 6) {
-        window.alert("Máximo de 6 colunas atingido!");
+        toast.warning("Máximo de 6 colunas atingido!");
         return prev;
       }
       const columns: DashboardColumnConfig[] = [
@@ -209,7 +210,7 @@ export function DashboardSetorSettingsForm({
   const removeColumn = (idx: number) => {
     setConfig((prev) => {
       if (prev.columns.length <= 1) {
-        window.alert("É necessário ter pelo menos 1 coluna!");
+        toast.warning("É necessário ter pelo menos 1 coluna!");
         return prev;
       }
       const columns = prev.columns.filter((_, i) => i !== idx);

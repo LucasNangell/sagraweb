@@ -6,6 +6,7 @@ import {
 } from "../painelConfigStore";
 import { validateImportedConfig } from "../painelGlobalUtils";
 import type { PainelColumnConfig, PainelConfig } from "../types";
+import { toast } from "@/components/ui/toastStore";
 
 interface PainelGlobalSettingsModalProps {
   open: boolean;
@@ -108,7 +109,7 @@ export function PainelGlobalSettingsModal({
 
   const addColumn = () => {
     if (tempConfig.columns.length >= 8) {
-      window.alert("Máximo de 8 colunas atingido!");
+      toast.warning("Máximo de 8 colunas atingido!");
       return;
     }
     setTempConfig((prev) => {
@@ -126,7 +127,7 @@ export function PainelGlobalSettingsModal({
 
   const removeColumn = (idx: number) => {
     if (tempConfig.columns.length <= 1) {
-      window.alert("É necessário ter pelo menos 1 coluna!");
+      toast.warning("É necessário ter pelo menos 1 coluna!");
       return;
     }
     setTempConfig((prev) => {
@@ -152,7 +153,7 @@ export function PainelGlobalSettingsModal({
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Erro ao exportar configuração:", err);
-      window.alert("Erro ao exportar configuração.");
+      toast.error("Erro ao exportar configuração.");
     }
   };
 
@@ -168,20 +169,16 @@ export function PainelGlobalSettingsModal({
         const importedConfig = JSON.parse(String(e.target?.result ?? ""));
         validateImportedConfig(importedConfig);
         setTempConfig(normalizePainelConfig(importedConfig));
-        window.alert(
-          '✅ Configuração carregada com sucesso! \n\nClique em "Salvar e Recarregar" para aplicar as alterações ao painel.',
-        );
+        toast.success('✅ Configuração carregada com sucesso! \n\nClique em "Salvar e Recarregar" para aplicar as alterações ao painel.',);
       } catch (err) {
         console.error("Erro ao importar arquivo:", err);
-        window.alert(
-          `❌ Falha ao importar: ${err instanceof Error ? err.message : "Erro desconhecido"}`,
-        );
+        toast.error(`❌ Falha ao importar: ${err instanceof Error ? err.message : "Erro desconhecido"}`,);
       } finally {
         event.target.value = "";
       }
     };
     reader.onerror = () => {
-      window.alert("Erro ao ler o arquivo.");
+      toast.error("Erro ao ler o arquivo.");
     };
     reader.readAsText(file);
   };
@@ -197,7 +194,7 @@ export function PainelGlobalSettingsModal({
     onClearCache();
     setTempConfig(defaultPainelConfig());
     onClose();
-    window.alert("✅ Cache limpo! Configuração padrão restaurada.");
+    toast.success("✅ Cache limpo! Configuração padrão restaurada.");
   };
 
   return (

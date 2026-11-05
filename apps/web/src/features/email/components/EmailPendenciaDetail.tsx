@@ -37,6 +37,7 @@ import {
   type OsFolderPdfPick,
 } from "@/features/os/components/OsFolderBrowserModal";
 import type { OsSearchRow } from "@/features/os/types";
+import { toast } from "@/components/ui/toastStore";
 
 interface EmailPendenciaDetailProps {
   item: PendenciaOs | null;
@@ -304,7 +305,7 @@ export function EmailPendenciaDetail({
   const handleProofPdfPick = (pick: OsFolderPdfPick) => {
     const proofFilename = osRelativePathToProofFilename(pick.relative);
     if (!proofFilename) {
-      window.alert("Selecione um PDF dentro da pasta Sefoc.");
+      toast.warning("Selecione um PDF dentro da pasta Sefoc.");
       return;
     }
     setSelectedProofFile(proofFilename);
@@ -312,7 +313,7 @@ export function EmailPendenciaDetail({
 
   const handleSend = async () => {
     if (requiresVersao && !versao.trim()) {
-      window.alert("Preencha o número da versão (ex: 1, 2, 3...)");
+      toast.warning("Preencha o número da versão (ex: 1, 2, 3...)");
       return;
     }
     if (
@@ -321,7 +322,7 @@ export function EmailPendenciaDetail({
       !proofPrefersProvaWeb &&
       !selectedProofFile.trim()
     ) {
-      window.alert("Selecione o PDF de prova que será enviado ao cliente.");
+      toast.success("Selecione o PDF de prova que será enviado ao cliente.");
       return;
     }
     if (
@@ -329,26 +330,24 @@ export function EmailPendenciaDetail({
       !isApogee &&
       !(ptQuery.data?.timbrado_attachments?.length)
     ) {
-      window.alert(
-        "DOCX do Timbrado A4 Digital não encontrados na pasta Sefoc. Gere o Timbrado Digital antes de enviar.",
-      );
+      toast.warning("DOCX do Timbrado A4 Digital não encontrados na pasta Sefoc. Gere o Timbrado Digital antes de enviar.",);
       return;
     }
     if (isApogee && !item.body?.trim()) {
-      window.alert("Corpo do e-mail Apogee indisponível para envio.");
+      toast.warning("Corpo do e-mail Apogee indisponível para envio.");
       return;
     }
     const destinatarios = [emailDep, emailGab, ...emailsContato]
       .map((e) => e.trim())
       .filter(Boolean);
     if (destinatarios.length === 0) {
-      window.alert("Preencha pelo menos um e-mail de destinatário");
+      toast.warning("Preencha pelo menos um e-mail de destinatário");
       return;
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     for (const addr of destinatarios) {
       if (!emailRegex.test(addr)) {
-        window.alert(`E-mail inválido: ${addr}`);
+        toast.warning(`E-mail inválido: ${addr}`);
         return;
       }
     }
@@ -396,16 +395,14 @@ export function EmailPendenciaDetail({
               : {}),
           });
           onToast("Andamento registrado com sucesso.");
-          window.alert("E-mail enviado e andamento registrado.");
+          toast.success("E-mail enviado e andamento registrado.");
         } catch (andamentoErr) {
-          window.alert(
-            `E-mail enviado, mas falha ao registrar andamento: ${
+          toast.error(`E-mail enviado, mas falha ao registrar andamento: ${
               andamentoErr instanceof Error ? andamentoErr.message : String(andamentoErr)
-            }`,
-          );
+            }`,);
         }
       } else {
-        window.alert(msg);
+        toast.error(msg);
       }
       setVersao("");
       setEmailDep("");
@@ -413,9 +410,7 @@ export function EmailPendenciaDetail({
       setEmailsContato([""]);
       setSelectedProofFile("");
     } catch (e) {
-      window.alert(
-        `Erro ao enviar e-mail: ${e instanceof Error ? e.message : String(e)}`,
-      );
+      toast.error(`Erro ao enviar e-mail: ${e instanceof Error ? e.message : String(e)}`,);
     }
   };
 

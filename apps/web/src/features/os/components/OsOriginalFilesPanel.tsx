@@ -29,6 +29,7 @@ import {
   isPreviewableFileName,
   joinOsAbsolutePath,
 } from "../osOriginalFolders";
+import { toast } from "@/components/ui/toastStore";
 
 interface OsOriginalFilesPanelProps {
   ano: number | null;
@@ -242,9 +243,7 @@ export function OsOriginalFilesPanel({
         );
         return;
       }
-      window.alert(
-        "Não foi possível abrir este arquivo. Com o SAGRA Folder Opener em execução, PDF e imagens abrem no programa correspondente; outros tipos não podem ser abertos no navegador.",
-      );
+      toast.error("Não foi possível abrir este arquivo. Com o SAGRA Folder Opener em execução, PDF e imagens abrem no programa correspondente; outros tipos não podem ser abertos no navegador.",);
     } finally {
       setOpening(false);
     }

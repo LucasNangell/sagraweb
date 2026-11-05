@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GravacaoPendenteTab } from "./GravacaoPendenteTab";
+import { toast } from "@/components/ui/toastStore";
 
 const patchControle = vi.fn();
 const deleteControle = vi.fn();
@@ -329,7 +330,9 @@ describe("GravacaoPendenteTab controle", () => {
 
     beforeEach(() => {
       vi.spyOn(window, "confirm").mockReturnValue(true);
-      vi.spyOn(window, "alert").mockImplementation(() => undefined);
+      vi.spyOn(toast, "success").mockImplementation(() => 0);
+      vi.spyOn(toast, "warning").mockImplementation(() => 0);
+      vi.spyOn(toast, "error").mockImplementation(() => 0);
     });
 
     it("mostra um único card por OS sem chip de componente", () => {
@@ -365,8 +368,8 @@ describe("GravacaoPendenteTab controle", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Enviar para gravação externa" }));
       expect(enviarOs).not.toHaveBeenCalled();
-      expect(window.alert).toHaveBeenCalledWith(
-        expect.stringContaining("Selecione ao menos uma máquina"),
+      expect(toast.warning).toHaveBeenCalledWith(
+        expect.stringContaining("conjunto de chapas"),
       );
 
       fireEvent.click(komori);

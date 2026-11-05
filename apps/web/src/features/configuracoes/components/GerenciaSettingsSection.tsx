@@ -13,6 +13,7 @@ import {
   ConfigSectionBody,
   ConfigSectionHeader,
 } from "./ConfigSectionLayout";
+import { toast } from "@/components/ui/toastStore";
 
 export function GerenciaSettingsSection() {
   const qc = useQueryClient();
@@ -36,7 +37,7 @@ export function GerenciaSettingsSection() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "gerencia-settings"] });
       void qc.invalidateQueries({ queryKey: ["gerencia", "settings"] });
-      window.alert("Configurações de gerência salvas.");
+      toast.success("Configurações de gerência salvas.");
     },
   });
 

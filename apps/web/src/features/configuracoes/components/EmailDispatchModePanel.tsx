@@ -13,6 +13,7 @@ import type {
 } from "@/features/configuracoes/types";
 
 import { ConfigSubsection } from "./ConfigSectionLayout";
+import { toast } from "@/components/ui/toastStore";
 
 type DispatchMode = "portal" | "prova_web" | "anexo" | "inline";
 
@@ -136,7 +137,7 @@ export function EmailDispatchModePanel() {
       void qc.invalidateQueries({ queryKey: ["admin", "email-template-models"] });
     },
     onError: (error: unknown) => {
-      window.alert(error instanceof Error ? error.message : "Não foi possível alterar o tipo de envio.");
+      toast.error(error instanceof Error ? error.message : "Não foi possível alterar o tipo de envio.");
     },
   });
 
@@ -158,9 +159,7 @@ export function EmailDispatchModePanel() {
     const active = activeModelForGrupo(models, grupo);
     const target = findModelForMode(models, grupo, mode, active);
     if (!target) {
-      window.alert(
-        `Nenhum modelo «${modeLabel(mode, isProva)}» encontrado para ${grupo}. Verifique a seção «Modelos de envio».`,
-      );
+      toast.warning(`Nenhum modelo «${modeLabel(mode, isProva)}» encontrado para ${grupo}. Verifique a seção «Modelos de envio».`,);
       return;
     }
     const preferirProvaWeb =

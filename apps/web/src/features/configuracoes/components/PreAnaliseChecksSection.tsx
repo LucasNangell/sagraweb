@@ -14,6 +14,7 @@ import {
   ConfigSectionBody,
   ConfigSectionHeader,
 } from "./ConfigSectionLayout";
+import { toast } from "@/components/ui/toastStore";
 
 export function PreAnaliseChecksSection() {
   const qc = useQueryClient();
@@ -36,7 +37,7 @@ export function PreAnaliseChecksSection() {
     mutationFn: () => savePreAnaliseChecksConfig(Array.from(disabled)),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "pre-analise-checks"] });
-      window.alert("Scripts de pré-análise salvos.");
+      toast.success("Scripts de pré-análise salvos.");
     },
   });
 

@@ -37,6 +37,7 @@ import { CotasGrafFiltersPanel } from "./CotasGrafFiltersPanel";
 import { CotasGrafListPagination } from "./CotasGrafListPagination";
 import { CotasGrafSettingsModal } from "./CotasGrafSettingsModal";
 import { CotasGrafSolicitantesPanel } from "./CotasGrafSolicitantesPanel";
+import { toast } from "@/components/ui/toastStore";
 
 let cotasGrafDefaultPrefsApplied = false;
 let cotasGrafSavedFilterId = "";
@@ -405,9 +406,7 @@ export function CotasGrafPage() {
     try {
       await lancarMutation.mutateAsync({ ano: item.ano, nrOs: item.nr_os });
     } catch (err) {
-      window.alert(
-        err instanceof Error ? err.message : "Não foi possível lançar no CotasGraf.",
-      );
+      toast.error(err instanceof Error ? err.message : "Não foi possível lançar no CotasGraf.",);
     } finally {
       setPendingKey(null);
     }

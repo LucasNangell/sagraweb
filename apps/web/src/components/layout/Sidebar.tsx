@@ -18,6 +18,7 @@ import { cn } from "@sagra/ui";
 import { sidebarNavTestId, homeTestIds } from "@/lib/testId";
 
 import { navItemKey, type NavItem } from "./nav-config";
+import { toast } from "@/components/ui/toastStore";
 
 interface SidebarProps {
   collapsed: boolean;
@@ -208,7 +209,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                       : to === "/papelaria" && !selectedOs
                         ? (e) => {
                             e.preventDefault();
-                            window.alert("Por favor, selecione uma Ordem de Serviço.");
+                            toast.warning("Por favor, selecione uma Ordem de Serviço.");
                           }
                         : to === "/papelaria" &&
                             selectedOs &&
@@ -216,9 +217,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                             !isPapelariaProduct(selectedOs.produto)
                           ? (e) => {
                               e.preventDefault();
-                              window.alert(
-                                "O acesso à Papelaria é restrito a OS com número superior a 5000.",
-                              );
+                              toast.warning("O acesso à Papelaria é restrito a OS com número superior a 5000.",);
                             }
                           : (to === "/papelaria" || to === "/credenciais-depol") &&
                               selectedOs

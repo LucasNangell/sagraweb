@@ -1,6 +1,7 @@
 import { Loader2, Printer, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { homeTestIds } from "@/lib/testId";
+import { toast } from "@/components/ui/toastStore";
 
 interface RequisicaoFichaViewerProps {
   src: string;
@@ -184,7 +185,7 @@ export function RequisicaoFichaViewer({
   const handlePrint = useCallback(() => {
     const iframe = iframeRef.current;
     if (!iframe?.contentWindow) {
-      window.alert("Aguarde o carregamento completo da ficha antes de imprimir.");
+      toast.warning("Aguarde o carregamento completo da ficha antes de imprimir.");
       return;
     }
     triggerPrint(iframe);
@@ -319,8 +320,6 @@ function triggerPrint(iframe: HTMLIFrameElement | null): void {
   try {
     iframe.contentWindow.postMessage("print", "*");
   } catch (e) {
-    window.alert(
-      `Erro ao iniciar impressão: ${e instanceof Error ? e.message : "falha desconhecida"}`,
-    );
+    toast.error(`Erro ao iniciar impressão: ${e instanceof Error ? e.message : "falha desconhecida"}`,);
   }
 }

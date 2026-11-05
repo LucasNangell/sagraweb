@@ -56,6 +56,7 @@ import {
 } from "./ConfigSectionLayout";
 import { MachineGroupsPanel } from "./MachineGroupsPanel";
 import { ProdutoEtapasPanel } from "./ProdutoEtapasPanel";
+import { toast } from "@/components/ui/toastStore";
 
 const CATEGORY_ICONS: Record<SystemCatalogCategoryKey, ReactNode> = {
   setor: <Building2 className="size-3.5" aria-hidden />,
@@ -128,7 +129,7 @@ export function SistemaSettingsSection() {
   };
 
   const reportError = (error: unknown) => {
-    window.alert(error instanceof Error ? error.message : "Operação falhou.");
+    toast.error(error instanceof Error ? error.message : "Operação falhou.");
   };
 
   const createMutation = useMutation({
@@ -419,7 +420,7 @@ function CatalogItemRow({
       void qc.invalidateQueries({ queryKey: ["admin", "system-catalog", "produto"] });
     },
     onError: (err) =>
-      window.alert(err instanceof Error ? err.message : "Falha ao abrir o produto."),
+      toast.error(err instanceof Error ? err.message : "Falha ao abrir o produto."),
   });
 
   const toggleExpand = () => {
@@ -537,7 +538,7 @@ function VariacoesPanel({ catalogId }: { catalogId: number }) {
   const invalidate = () => void qc.invalidateQueries({ queryKey });
 
   const reportError = (error: unknown) => {
-    window.alert(error instanceof Error ? error.message : "Operação falhou.");
+    toast.error(error instanceof Error ? error.message : "Operação falhou.");
   };
 
   const createMutation = useMutation({

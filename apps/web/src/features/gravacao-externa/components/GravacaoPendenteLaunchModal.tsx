@@ -22,6 +22,7 @@ import { hydrateGravacaoPendenteLaunch } from "../utils/hydrateGravacaoPendenteL
 import { parsePlateFilename } from "../utils/plateFilenameUtils";
 import { NetworkFolderBrowserModal } from "./NetworkFolderBrowserModal";
 import { useNetworkFileInspections, networkInspectionKey as inspectionKey } from "../hooks/useNetworkFileInspections";
+import { toast } from "@/components/ui/toastStore";
 
 export interface GravacaoPendenteChapaInput {
   maquina: string;
@@ -584,7 +585,7 @@ export function GravacaoPendenteLaunchModal({
     if (browserTarget.kind === "espelho") {
       const pdfs = files.filter((f) => isPdfFile(f.nome));
       if (pdfs.length !== files.length) {
-        window.alert("Por máquina, selecione apenas arquivos PDF de espelho.");
+        toast.warning("Por máquina, selecione apenas arquivos PDF de espelho.");
       }
       if (pdfs.length > 0) {
         setChapas((prev) =>
@@ -598,7 +599,7 @@ export function GravacaoPendenteLaunchModal({
     } else {
       const tifs = files.filter((f) => isTifFile(f.nome));
       if (tifs.length !== files.length) {
-        window.alert("Por máquina, selecione apenas arquivos TIF de separação.");
+        toast.warning("Por máquina, selecione apenas arquivos TIF de separação.");
       }
       if (tifs.length > 0) {
         setChapas((prev) =>
@@ -632,17 +633,15 @@ export function GravacaoPendenteLaunchModal({
     const anoRaw = Number(juntadaAno.trim() || row.ano);
     const ano = normalizeAno(anoRaw);
     if (!Number.isFinite(nr) || nr <= 0 || ano == null) {
-      window.alert(
-        `Informe número e ano válidos da OS a juntar (ano entre ${OS_ANO_MIN} e ${OS_ANO_MAX}).`,
-      );
+      toast.warning(`Informe número e ano válidos da OS a juntar (ano entre ${OS_ANO_MIN} e ${OS_ANO_MAX}).`,);
       return;
     }
     if (nr === row.nr_os && ano === row.ano) {
-      window.alert("A OS atual já faz parte do lançamento.");
+      toast.warning("A OS atual já faz parte do lançamento.");
       return;
     }
     if (juntadas.some((j) => j.nr_os === nr && j.ano === ano)) {
-      window.alert("Esta OS já está na lista de juntadas.");
+      toast.warning("Esta OS já está na lista de juntadas.");
       return;
     }
     setJuntadaBusy(true);
@@ -653,9 +652,7 @@ export function GravacaoPendenteLaunchModal({
       );
       setJuntadaNumero("");
     } catch (e) {
-      window.alert(
-        e instanceof Error ? e.message : `OS ${nr}/${ano} não encontrada.`,
-      );
+      toast.error(e instanceof Error ? e.message : `OS ${nr}/${ano} não encontrada.`,);
     } finally {
       setJuntadaBusy(false);
     }
@@ -702,17 +699,15 @@ export function GravacaoPendenteLaunchModal({
   const handleConfirm = () => {
     if (!isEdit && juntadaEnabled) {
       if (juntadaBusy) {
-        window.alert("Aguarde a validação da OS que está sendo adicionada à juntada.");
+        toast.warning("Aguarde a validação da OS que está sendo adicionada à juntada.");
         return;
       }
       if (juntadaNumero.trim()) {
-        window.alert('Clique em "+ OS" para incluir a OS informada na juntada antes de confirmar.');
+        toast.warning('Clique em "+ OS" para incluir a OS informada na juntada antes de confirmar.');
         return;
       }
       if (juntadas.length === 0) {
-        window.alert(
-          'Adicione ao menos uma OS à juntada pelo botão "+ OS" ou desmarque "Juntada de OSs".',
-        );
+        toast.warning('Adicione ao menos uma OS à juntada pelo botão "+ OS" ou desmarque "Juntada de OSs".',);
         return;
       }
     }
@@ -728,9 +723,7 @@ export function GravacaoPendenteLaunchModal({
 
       if (!maquina) {
         if (hasTifs || hasPdfs) {
-          window.alert(
-            "Informe o nome da máquina para cada linha com arquivos PDF ou TIF.",
-          );
+          toast.warning("Informe o nome da máquina para cada linha com arquivos PDF ou TIF.",);
           return;
         }
         continue;
@@ -750,11 +743,9 @@ export function GravacaoPendenteLaunchModal({
 
       const quantidade = Number(rowItem.quantidade);
       if (!Number.isFinite(quantidade) || quantidade < 1) {
-        window.alert(
-          hasTifs
+        toast.warning(hasTifs
             ? `Quantidade de chapas inválida para máquina ${maquina}.`
-            : `Informe a quantidade de chapas para a máquina ${maquina} (lançamento só com PDF).`,
-        );
+            : `Informe a quantidade de chapas para a máquina ${maquina} (lançamento só com PDF).`,);
         return;
       }
 
@@ -773,11 +764,11 @@ export function GravacaoPendenteLaunchModal({
     const allArquivos = [...allTifArquivos, ...pdfArquivos];
 
     if (allArquivos.length === 0) {
-      window.alert("Selecione ao menos um arquivo TIF ou PDF de espelho.");
+      toast.warning("Selecione ao menos um arquivo TIF ou PDF de espelho.");
       return;
     }
     if (parsedChapas.length === 0) {
-      window.alert("Informe ao menos uma máquina com quantidade de chapas.");
+      toast.warning("Informe ao menos uma máquina com quantidade de chapas.");
       return;
     }
 
@@ -786,18 +777,14 @@ export function GravacaoPendenteLaunchModal({
         allTifArquivos.map((a) => ({ absolute_path: a.absolute_path, nome: a.nome })),
       );
       if (summary.orphanCount > 0) {
-        window.alert(
-          `Há ${summary.orphanCount} TIF(s) sem sufixo de canal (ex.: (C), (M), (Pantone…)). ` +
-            "Renomeie ou selecione arquivos com nomenclatura de separação para validar as lâminas contra o espelho.",
-        );
+        toast.warning(`Há ${summary.orphanCount} TIF(s) sem sufixo de canal (ex.: (C), (M), (Pantone…)). ` +
+            "Renomeie ou selecione arquivos com nomenclatura de separação para validar as lâminas contra o espelho.",);
         return;
       }
       if (summary.groupCount !== pdfPageCount) {
-        window.alert(
-          `Os espelhos têm ${pdfPageCount} página(s) → ${pdfPageCount} lâmina(s) de separação esperada(s). ` +
+        toast.warning(`Os espelhos têm ${pdfPageCount} página(s) → ${pdfPageCount} lâmina(s) de separação esperada(s). ` +
             `Você selecionou ${summary.groupCount} lâmina(s) (${summary.fileCount} arquivo(s) TIF). ` +
-            "Ajuste os TIFs para que o número de lâminas (mesmo nome-base com canais CMYK/PANTONE) coincida com as páginas do espelho.",
-        );
+            "Ajuste os TIFs para que o número de lâminas (mesmo nome-base com canais CMYK/PANTONE) coincida com as páginas do espelho.",);
         return;
       }
     }

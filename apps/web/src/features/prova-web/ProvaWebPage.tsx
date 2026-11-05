@@ -32,6 +32,7 @@ import { ProvaWebFilePicker } from "./ProvaWebFilePicker";
 import { ProvaWebGeneratedModal } from "./ProvaWebGeneratedModal";
 import { ProvaWebViewerShell } from "./ProvaWebViewerShell";
 import { pdfSourcesFromRecord } from "./provaWebPdfSources";
+import { toast } from "@/components/ui/toastStore";
 
 interface ProvaWebPageProps {
   ano: number;
@@ -187,7 +188,7 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
       setLinkCopied(true);
       window.setTimeout(() => setLinkCopied(false), 1500);
     } catch {
-      window.alert("Não foi possível copiar o link.");
+      toast.error("Não foi possível copiar o link.");
     }
   };
 

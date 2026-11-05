@@ -38,6 +38,7 @@ import {
 import { EmailEmptyState } from "./EmailEmptyState";
 import { EmailHtmlViewer } from "./EmailHtmlViewer";
 import { emailInputClass, emailLabelClass, emailPanelClass } from "./email-ui";
+import { toast } from "@/components/ui/toastStore";
 
 interface EmailInboxDetailProps {
   email: InboxEmail | null;
@@ -155,7 +156,7 @@ export function EmailInboxDetail({
 
   const handleSend = async () => {
     if (!osAnoPair || !osReady) {
-      window.alert("Informe uma OS existente (número e ano válidos).");
+      toast.warning("Informe uma OS existente (número e ano válidos).");
       return;
     }
     try {
@@ -179,9 +180,7 @@ export function EmailInboxDetail({
       setAno("");
       onClearSelection();
     } catch (e) {
-      window.alert(
-        `Erro ao enviar para execução: ${e instanceof Error ? e.message : String(e)}`,
-      );
+      toast.error(`Erro ao enviar para execução: ${e instanceof Error ? e.message : String(e)}`,);
     }
   };
 
@@ -193,15 +192,13 @@ export function EmailInboxDetail({
       setAno("");
       onClearSelection();
     } catch (e) {
-      window.alert(
-        `Erro ao desconsiderar: ${e instanceof Error ? e.message : String(e)}`,
-      );
+      toast.error(`Erro ao desconsiderar: ${e instanceof Error ? e.message : String(e)}`,);
     }
   };
 
   const handleReply = async () => {
     if (!osAnoPair || !osReady) {
-      window.alert("Informe uma OS existente (número e ano válidos).");
+      toast.error("Informe uma OS existente (número e ano válidos).");
       return;
     }
     try {
@@ -215,17 +212,17 @@ export function EmailInboxDetail({
       setAno("");
       onClearSelection();
     } catch (e) {
-      window.alert(`Erro ao responder: ${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`Erro ao responder: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
   const handleSaveMht = async () => {
     if (!osAnoPair || !osReady) {
-      window.alert("Informe uma OS existente (número e ano válidos).");
+      toast.error("Informe uma OS existente (número e ano válidos).");
       return;
     }
     if (!email.real_id) {
-      window.alert("Não foi possível identificar o e-mail no Exchange.");
+      toast.error("Não foi possível identificar o e-mail no Exchange.");
       return;
     }
     try {
@@ -236,9 +233,7 @@ export function EmailInboxDetail({
       });
       onToast("E-mail salvo em .mht na pasta Sefoc da OS.");
     } catch (e) {
-      window.alert(
-        `Erro ao salvar e-mail (.mht): ${e instanceof Error ? e.message : String(e)}`,
-      );
+      toast.error(`Erro ao salvar e-mail (.mht): ${e instanceof Error ? e.message : String(e)}`,);
     }
   };
 

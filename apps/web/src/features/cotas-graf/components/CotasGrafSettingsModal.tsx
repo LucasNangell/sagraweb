@@ -13,6 +13,7 @@ import { MultiSelect } from "@/components/ui/multi-select";
 import { useAuthStore } from "@/features/auth/authStore";
 import type { SavedFilter } from "@/features/os/types";
 import { SITUACAO_COTAS_OPTIONS } from "../types";
+import { toast } from "@/components/ui/toastStore";
 
 function hasAnyCotasGrafFilters(situacoes: string[]) {
   return situacoes.length > 0;
@@ -117,12 +118,12 @@ export function CotasGrafSettingsModal({ open, onClose }: CotasGrafSettingsModal
 
   const handleCreateFilter = async () => {
     if (!ponto) {
-      window.alert("Sessão inválida. Faça login novamente.");
+      toast.warning("Sessão inválida. Faça login novamente.");
       return;
     }
     const nome = newFilterName.trim();
     if (!nome) {
-      window.alert("Digite um nome para o filtro.");
+      toast.warning("Digite um nome para o filtro.");
       return;
     }
     try {
@@ -134,9 +135,9 @@ export function CotasGrafSettingsModal({ open, onClose }: CotasGrafSettingsModal
         setores: [],
         context: "cotas_graf",
       });
-      window.alert("Filtro salvo com sucesso.");
+      toast.success("Filtro salvo com sucesso.");
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Erro ao salvar filtro.");
+      toast.error(err instanceof Error ? err.message : "Erro ao salvar filtro.");
     }
   };
 
@@ -144,7 +145,7 @@ export function CotasGrafSettingsModal({ open, onClose }: CotasGrafSettingsModal
     if (editingFilterId == null) return;
     const nome = newFilterName.trim();
     if (!nome) {
-      window.alert("Digite um nome para o filtro.");
+      toast.error("Digite um nome para o filtro.");
       return;
     }
     try {
@@ -154,9 +155,9 @@ export function CotasGrafSettingsModal({ open, onClose }: CotasGrafSettingsModal
         situacoes: selectedSituacoesCotas,
         setores: [],
       });
-      window.alert("Filtro atualizado com sucesso.");
+      toast.success("Filtro atualizado com sucesso.");
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Erro ao atualizar filtro.");
+      toast.error(err instanceof Error ? err.message : "Erro ao atualizar filtro.");
     }
   };
 
@@ -171,7 +172,7 @@ export function CotasGrafSettingsModal({ open, onClose }: CotasGrafSettingsModal
         context: "cotas_graf",
       });
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Erro ao definir padrão.");
+      toast.error(err instanceof Error ? err.message : "Erro ao definir padrão.");
     }
   };
 
@@ -182,7 +183,7 @@ export function CotasGrafSettingsModal({ open, onClose }: CotasGrafSettingsModal
     try {
       await deleteFilterMutation.mutateAsync(filter.id);
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Erro ao excluir filtro.");
+      toast.error(err instanceof Error ? err.message : "Erro ao excluir filtro.");
     }
   };
 

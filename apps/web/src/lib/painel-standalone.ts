@@ -1,3 +1,5 @@
+import { toast } from "@/components/ui/toastStore";
+
 /** Rotas dos painéis exibidas sem AppShell (header/sidebar). */
 export const PAINEL_STANDALONE_PATHS = [
   "/painel/setor",
@@ -53,9 +55,7 @@ export function openPainelInNewWindow(path: PainelStandalonePath): boolean {
   const win = window.open(url, windowName, features);
 
   if (!win) {
-    window.alert(
-      "Não foi possível abrir o painel. Verifique se o bloqueador de pop-ups está desativado para este site.",
-    );
+    toast.error("Não foi possível abrir o painel. Verifique se o bloqueador de pop-ups está desativado para este site.",);
     return false;
   }
 

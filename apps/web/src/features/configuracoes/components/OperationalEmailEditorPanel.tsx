@@ -24,6 +24,7 @@ import type {
   EmailTemplateModelRecord,
   EmailTemplateModelVariante,
 } from "@/features/configuracoes/types";
+import { toast } from "@/components/ui/toastStore";
 
 const GRUPO_LABELS: Record<EmailTemplateModelGrupo, string> = {
   prova_os: "Prova OS",
@@ -134,7 +135,7 @@ export function OperationalEmailEditorPanel({
   }, [onHtmlEditorReady]);
 
   const reportError = (error: unknown) => {
-    window.alert(error instanceof Error ? error.message : "Operação falhou.");
+    toast.error(error instanceof Error ? error.message : "Operação falhou.");
   };
 
   const saveMutation = useMutation({
@@ -150,7 +151,7 @@ export function OperationalEmailEditorPanel({
     onSuccess: (data) => {
       applyModel(data.model);
       void qc.invalidateQueries({ queryKey: ["admin", "email-template-models"] });
-      window.alert("Modelo salvo.");
+      toast.success("Modelo salvo.");
     },
     onError: reportError,
   });
@@ -173,7 +174,7 @@ export function OperationalEmailEditorPanel({
     onSuccess: (data) => {
       void qc.invalidateQueries({ queryKey: ["admin", "email-template-models"] });
       onCreated(data.model);
-      window.alert("Modelo criado.");
+      toast.success("Modelo criado.");
     },
     onError: reportError,
   });
@@ -192,7 +193,7 @@ export function OperationalEmailEditorPanel({
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "email-template-models"] });
       onDeleted();
-      window.alert("Modelo excluído.");
+      toast.error("Modelo excluído.");
     },
     onError: reportError,
   });
@@ -217,7 +218,7 @@ export function OperationalEmailEditorPanel({
       return sendTestEmailTemplateModel(selectedModelId, to);
     },
     onSuccess: (data) => {
-      window.alert(`Teste enviado para ${data.to}\nAssunto: ${data.subject}`);
+      toast.success(`Teste enviado para ${data.to}\nAssunto: ${data.subject}`);
     },
     onError: reportError,
   });

@@ -11,6 +11,7 @@ import {
   saveProdutoPassos,
 } from "@/api/adminSystem";
 import type { ProdutoPassoRecord } from "@/features/configuracoes/types";
+import { toast } from "@/components/ui/toastStore";
 
 const EMPTY_PASSO = (nome = ""): ProdutoPassoRecord => ({
   ordem: 10,
@@ -87,7 +88,7 @@ export function ProdutoEtapasPanel({
       void qc.invalidateQueries({ queryKey });
     },
     onError: (err) =>
-      window.alert(err instanceof Error ? err.message : "Falha ao salvar etapas."),
+      toast.error(err instanceof Error ? err.message : "Falha ao salvar etapas."),
   });
 
   const copyMut = useMutation({
@@ -100,7 +101,7 @@ export function ProdutoEtapasPanel({
       void qc.invalidateQueries({ queryKey });
     },
     onError: (err) =>
-      window.alert(err instanceof Error ? err.message : "Falha ao copiar etapas."),
+      toast.error(err instanceof Error ? err.message : "Falha ao copiar etapas."),
   });
 
   const setores = query.data?.setores ?? [];

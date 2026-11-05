@@ -20,6 +20,7 @@ import { formatQueueDisplayLabel, getVisibleDashboardColumns } from "../utils";
 import type { DashboardConfig } from "../types";
 import { DashboardSetorSettingsModal } from "./DashboardSetorSettingsModal";
 import "../dashboard-setor.css";
+import { toast } from "@/components/ui/toastStore";
 
 const COLUMN_HEADER_CLASSES = [
   "column-header-first",
@@ -114,7 +115,7 @@ export function DashboardSetorPage() {
     };
     setShowSettings(false);
     applyConfig(defaults);
-    window.alert("✅ Cache limpo! Configuração padrão restaurada.");
+    toast.success("✅ Cache limpo! Configuração padrão restaurada.");
   };
 
   return (

@@ -41,6 +41,7 @@ import { OsSequenciaProducaoTab } from "./OsSequenciaProducaoTab";
 import { OsVinculosEditor } from "./OsVinculosEditor";
 import { ProducaoGanttPanel } from "./ProducaoGanttPanel";
 import type { OsSearchRow } from "../types";
+import { toast } from "@/components/ui/toastStore";
 
 export type GerenciaModalNavId =
   | GerenciaSectionId
@@ -282,7 +283,7 @@ export function OsGerenciaDetailModal({
 
   const applySaveResult = (result: SaveOsResponse) => {
     if (result.status !== "ok") {
-      window.alert(result.message || "Erro ao salvar OS.");
+      toast.error(result.message || "Erro ao salvar OS.");
       return;
     }
 
@@ -313,19 +314,15 @@ export function OsGerenciaDetailModal({
         });
         return;
       }
-      window.alert(
-        result.message ||
-          `OS salva com sucesso! (OS: ${result.id}/${result.ano})`,
-      );
+      toast.success(result.message ||
+          `OS salva com sucesso! (OS: ${result.id}/${result.ano})`,);
       finishCompose();
       return;
     }
 
     setEditing(false);
-    window.alert(
-      result.message ||
-        `OS salva com sucesso! (OS: ${result.id}/${result.ano})`,
-    );
+    toast.success(result.message ||
+        `OS salva com sucesso! (OS: ${result.id}/${result.ano})`,);
     void lock.release();
   };
 

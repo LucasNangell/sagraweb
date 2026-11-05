@@ -5,6 +5,7 @@ import {
   registerPushSubscription,
 } from "@/api/osNotificacao";
 import { appScope, getNotificationSupport } from "@/lib/nativeNotification";
+import { toast } from "@/components/ui/toastStore";
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -103,13 +104,11 @@ async function ensurePushServiceWorker(): Promise<ServiceWorkerRegistration> {
 async function ensureNotificationPermission(): Promise<boolean> {
   const support = getNotificationSupport();
   if (support === "unsupported") {
-    window.alert("Este navegador não suporta notificações.");
+    toast.warning("Este navegador não suporta notificações.");
     return false;
   }
   if (support === "insecure-context") {
-    window.alert(
-      "Notificações exigem conexão segura (HTTPS) ou localhost. Use https://cgrafsysvm/sagra/ ou abra o SAGRA em http://localhost:5173.",
-    );
+    toast.warning("Notificações exigem conexão segura (HTTPS) ou localhost. Use https://cgrafsysvm/sagra/ ou abra o SAGRA em http://localhost:5173.",);
     return false;
   }
 
@@ -118,9 +117,7 @@ async function ensureNotificationPermission(): Promise<boolean> {
     permission = await Notification.requestPermission();
   }
   if (permission !== "granted") {
-    window.alert(
-      "Permissão negada. No Windows, abra Configurações → Sistema → Notificações e permita o navegador (Edge/Chrome) exibir alertas.",
-    );
+    toast.warning("Permissão negada. No Windows, abra Configurações → Sistema → Notificações e permita o navegador (Edge/Chrome) exibir alertas.",);
     return false;
   }
   return true;

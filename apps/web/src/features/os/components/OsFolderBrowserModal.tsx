@@ -30,6 +30,7 @@ import {
   OsFolderCreatePanel,
 } from "./OsFolderCreatePanel";
 import type { OsSearchRow } from "../types";
+import { toast } from "@/components/ui/toastStore";
 
 export interface OsFolderPdfPick {
   relative: string;
@@ -357,12 +358,12 @@ export function OsFolderBrowserModal({
         return;
       }
       if (!entry.name.toLowerCase().endsWith(".pdf")) {
-        window.alert("Selecione um arquivo PDF.");
+        toast.warning("Selecione um arquivo PDF.");
         return;
       }
       const rel = entry.relative.replace(/\\/g, "/");
       if (!rel.toLowerCase().startsWith("sefoc/")) {
-        window.alert("O PDF de prova deve estar dentro da pasta Sefoc.");
+        toast.warning("O PDF de prova deve estar dentro da pasta Sefoc.");
         return;
       }
       onPickPdf?.({ relative: rel, name: entry.name });
@@ -376,7 +377,7 @@ export function OsFolderBrowserModal({
       return;
     }
     if (!isGravacaoExternaFile(entry.name)) {
-      window.alert("Selecione apenas arquivos PDF ou TIF.");
+      toast.warning("Selecione apenas arquivos PDF ou TIF.");
       return;
     }
     const rel = entry.relative.replace(/\\/g, "/");
@@ -391,7 +392,7 @@ export function OsFolderBrowserModal({
 
   const confirmGravacaoPicks = useCallback(() => {
     if (gravacaoPicks.length === 0) {
-      window.alert("Selecione ao menos um arquivo PDF ou TIF.");
+      toast.warning("Selecione ao menos um arquivo PDF ou TIF.");
       return;
     }
     onConfirmGravacaoExterna?.(gravacaoPicks);
@@ -410,9 +411,7 @@ export function OsFolderBrowserModal({
     try {
       await createMutation.mutateAsync();
     } catch (e) {
-      window.alert(
-        e instanceof Error ? e.message : "Não foi possível criar a pasta na rede.",
-      );
+      toast.error(e instanceof Error ? e.message : "Não foi possível criar a pasta na rede.",);
     }
   };
 

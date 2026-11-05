@@ -12,6 +12,7 @@ import type { GerenciaSearchParams } from "../types";
 import { GerenciaFormGrid } from "./GerenciaFormGrid";
 import { NovaOsArquivosModal } from "./NovaOsArquivosModal";
 import { NovaOsSetorModal } from "./NovaOsSetorModal";
+import { toast } from "@/components/ui/toastStore";
 
 interface GerenciaPageProps {
   search: GerenciaSearchParams;
@@ -59,7 +60,7 @@ export function GerenciaPage({ search }: GerenciaPageProps) {
 
   useEffect(() => {
     if (loadError) {
-      window.alert("Erro ao carregar dados da OS.");
+      toast.error("Erro ao carregar dados da OS.");
     }
   }, [loadError]);
 
@@ -93,7 +94,7 @@ export function GerenciaPage({ search }: GerenciaPageProps) {
 
   const applySaveResult = (result: SaveOsResponse, wasNewOs: boolean) => {
     if (result.status !== "ok") {
-      window.alert(result.message || "Erro ao salvar OS.");
+      toast.error(result.message || "Erro ao salvar OS.");
       return;
     }
     const persistAno = result.ano ?? (search.ano ? parseInt(search.ano, 10) : null);
@@ -116,10 +117,8 @@ export function GerenciaPage({ search }: GerenciaPageProps) {
       });
       return;
     }
-    window.alert(
-      result.message ||
-        `OS salva com sucesso! (OS: ${result.id}/${result.ano})`,
-    );
+    toast.success(result.message ||
+        `OS salva com sucesso! (OS: ${result.id}/${result.ano})`,);
     void lock.release();
     void navigate({ to: "/" });
   };

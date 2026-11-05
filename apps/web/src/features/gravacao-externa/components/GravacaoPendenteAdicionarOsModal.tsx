@@ -8,6 +8,7 @@ import {
   GravacaoPendenteLaunchModal,
   type GravacaoPendenteLaunchResult,
 } from "./GravacaoPendenteLaunchModal";
+import { toast } from "@/components/ui/toastStore";
 
 interface GravacaoPendenteAdicionarOsModalProps {
   open: boolean;
@@ -53,9 +54,7 @@ export function GravacaoPendenteAdicionarOsModal({
   const handleContinue = async () => {
     const parsed = parseOsAnoPair(numero, ano);
     if (!parsed) {
-      window.alert(
-        `Informe número e ano válidos (ano entre ${OS_ANO_MIN} e ${OS_ANO_MAX}).`,
-      );
+      toast.warning(`Informe número e ano válidos (ano entre ${OS_ANO_MIN} e ${OS_ANO_MAX}).`,);
       return;
     }
     setChecking(true);
@@ -63,9 +62,7 @@ export function GravacaoPendenteAdicionarOsModal({
       await fetchOsDetails(parsed.ano, parsed.os);
       setRow({ nr_os: parsed.os, ano: parsed.ano });
     } catch (error) {
-      window.alert(
-        error instanceof Error ? error.message : "Não foi possível localizar a OS.",
-      );
+      toast.error(error instanceof Error ? error.message : "Não foi possível localizar a OS.",);
     } finally {
       setChecking(false);
     }

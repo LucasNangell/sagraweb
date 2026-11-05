@@ -26,6 +26,7 @@ import {
   serializeVinculoAndamentos,
 } from "../osVinculoAndamentos";
 import type { OsSearchRow, OsVinculoGrupoAndamento } from "../types";
+import { toast } from "@/components/ui/toastStore";
 
 interface DraftPair extends OsVinculoGrupoAndamento {
   key: string;
@@ -175,38 +176,32 @@ export function OsVinculosEditor({ row, readOnly = false }: OsVinculosEditorProp
 
   const handleSaveAndamentos = async () => {
     if (completePairs.length === 0) {
-      window.alert("Informe ao menos um andamento e setor.");
+      toast.warning("Informe ao menos um andamento e setor.");
       return;
     }
     try {
       await persistAndamentosIfNeeded();
     } catch (e) {
-      window.alert(
-        `Erro ao salvar andamentos: ${e instanceof Error ? e.message : "falha"}`,
-      );
+      toast.error(`Erro ao salvar andamentos: ${e instanceof Error ? e.message : "falha"}`,);
     }
   };
 
   const handleAdd = async () => {
     const pair = parseOsAnoPair(numero, vAno);
     if (!pair) {
-      window.alert(
-        `Informe número e ano válidos (ano com 2 dígitos ou 4 dígitos entre ${OS_ANO_MIN} e ${OS_ANO_MAX}).`,
-      );
+      toast.error(`Informe número e ano válidos (ano com 2 dígitos ou 4 dígitos entre ${OS_ANO_MIN} e ${OS_ANO_MAX}).`,);
       return;
     }
     if (pair.os === id && pair.ano === ano) {
-      window.alert("Não é possível vincular uma OS a ela mesma.");
+      toast.warning("Não é possível vincular uma OS a ela mesma.");
       return;
     }
     if (!vinculoFound) {
-      window.alert(`OS ${pair.os}/${pair.ano} não encontrada.`);
+      toast.warning(`OS ${pair.os}/${pair.ano} não encontrada.`);
       return;
     }
     if (!grupoId && completePairs.length === 0) {
-      window.alert(
-        "Informe ao menos um andamento e setor que definem o comportamento do grupo.",
-      );
+      toast.warning("Informe ao menos um andamento e setor que definem o comportamento do grupo.",);
       return;
     }
     try {
@@ -217,9 +212,7 @@ export function OsVinculosEditor({ row, readOnly = false }: OsVinculosEditorProp
         andamentos: completePairs,
       });
     } catch (e) {
-      window.alert(
-        `Erro ao vincular: ${e instanceof Error ? e.message : "falha"}`,
-      );
+      toast.error(`Erro ao vincular: ${e instanceof Error ? e.message : "falha"}`,);
     }
   };
 
@@ -439,9 +432,7 @@ export function OsVinculosEditor({ row, readOnly = false }: OsVinculosEditorProp
                       vAno: v.ano,
                     });
                   } catch (e) {
-                    window.alert(
-                      `Erro: ${e instanceof Error ? e.message : "falha"}`,
-                    );
+                    toast.error(`Erro: ${e instanceof Error ? e.message : "falha"}`,);
                   }
                 }}
                 className="rounded p-1 text-sagra-danger hover:bg-red-50"

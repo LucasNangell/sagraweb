@@ -90,6 +90,7 @@ import {
   canPromptStartAnalise,
   isSefocSetor,
 } from "../analiseAccess";
+import { toast } from "@/components/ui/toastStore";
 
 function resolveVersaoKeyFromStored(
   stored: string | undefined,
@@ -633,9 +634,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
             i.uniqueId === itemId ? { ...i, componenteOrigem: previousComponente } : i,
           ),
         );
-        window.alert(
-          e instanceof Error ? e.message : "Erro ao mover item para outro componente.",
-        );
+        toast.error(e instanceof Error ? e.message : "Erro ao mover item para outro componente.",);
       }
     },
     [items, readOnlyMode],
@@ -739,7 +738,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
       const msg = e instanceof Error ? e.message : "Erro ao iniciar análise.";
       setBootstrapError(msg);
       if (msg.includes("já está sendo realizada")) {
-        window.alert(msg);
+        toast.error(msg);
         void navigate({ to: "/" });
       }
     } finally {
@@ -754,7 +753,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
   const addItemMutation = useMutation({
     mutationFn: addAnaliseItem,
     onError: (e) => {
-      window.alert(e instanceof Error ? e.message : "Erro ao adicionar item.");
+      toast.error(e instanceof Error ? e.message : "Erro ao adicionar item.");
     },
   });
 
@@ -770,7 +769,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
       }
     },
     onError: (e) => {
-      window.alert(e instanceof Error ? e.message : "Erro ao remover item.");
+      toast.error(e instanceof Error ? e.message : "Erro ao remover item.");
     },
     onSettled: () => {
       setDeletingItemId(null);
@@ -792,7 +791,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
       );
     },
     onError: (e) => {
-      window.alert(e instanceof Error ? e.message : "Erro ao atualizar resolução obrigatória.");
+      toast.error(e instanceof Error ? e.message : "Erro ao atualizar resolução obrigatória.");
     },
     onSettled: () => {
       setTogglingItemId(null);
@@ -818,7 +817,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
       );
     },
     onError: (e) => {
-      window.alert(e instanceof Error ? e.message : "Erro ao registrar correção interna.");
+      toast.error(e instanceof Error ? e.message : "Erro ao registrar correção interna.");
     },
     onSettled: () => {
       setTogglingCorrigirItemId(null);
@@ -852,15 +851,15 @@ export function AnalisePage({ search }: AnalisePageProps) {
 
   const handleRegisterPt = async () => {
     if (readOnlyMode) {
-      window.alert(readOnlyReason ?? "Análise em modo visualização.");
+      toast.warning(readOnlyReason ?? "Análise em modo visualização.");
       return;
     }
     if (!previewLibrary?.ID) {
-      window.alert("Selecione um item na biblioteca.");
+      toast.warning("Selecione um item na biblioteca.");
       return;
     }
     if (!validOs || !ponto) {
-      window.alert("OS ou usuário inválido para registro.");
+      toast.warning("OS ou usuário inválido para registro.");
       return;
     }
 
@@ -875,9 +874,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
         idAnalise = ensured.id;
         setAnalysisId(ensured.id);
       } catch (e) {
-        window.alert(
-          e instanceof Error ? e.message : "Erro ao preparar a análise para registro.",
-        );
+        toast.error(e instanceof Error ? e.message : "Erro ao preparar a análise para registro.",);
         return;
       }
     }
@@ -926,7 +923,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
   const saveNewLibraryMutation = useMutation({
     mutationFn: addProblemaPadrao,
     onSuccess: async (data) => {
-      window.alert(`Item "${data.titulo}" criado com sucesso!`);
+      toast.success(`Item "${data.titulo}" criado com sucesso!`);
       await qc.invalidateQueries({ queryKey: queryKeys.analise.library });
       const created: ProblemaPadrao = {
         ID: data.id,
@@ -938,28 +935,26 @@ export function AnalisePage({ search }: AnalisePageProps) {
       handlePreviewLibrary(created);
     },
     onError: (e) => {
-      window.alert(e instanceof Error ? e.message : "Erro ao criar item.");
+      toast.error(e instanceof Error ? e.message : "Erro ao criar item.");
     },
   });
 
   const handleReplicatePt = async () => {
     if (readOnlyMode) {
-      window.alert(readOnlyReason ?? "Análise em modo visualização.");
+      toast.error(readOnlyReason ?? "Análise em modo visualização.");
       return;
     }
     if (!selectedItem) {
-      window.alert("Nenhum item selecionado.");
+      toast.error("Nenhum item selecionado.");
       return;
     }
     const idPadrao = selectedItem.originalId;
     if (!idPadrao) {
-      window.alert(
-        "Este problema não possui vínculo com a biblioteca e não pode ser replicado automaticamente.",
-      );
+      toast.warning("Este problema não possui vínculo com a biblioteca e não pode ser replicado automaticamente.",);
       return;
     }
     if (!validOs || !ponto) {
-      window.alert("OS ou usuário inválido para registro.");
+      toast.warning("OS ou usuário inválido para registro.");
       return;
     }
 
@@ -974,9 +969,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
         idAnalise = ensured.id;
         setAnalysisId(ensured.id);
       } catch (e) {
-        window.alert(
-          e instanceof Error ? e.message : "Erro ao preparar a análise para replicação.",
-        );
+        toast.error(e instanceof Error ? e.message : "Erro ao preparar a análise para replicação.",);
         return;
       }
     }
@@ -1009,9 +1002,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
       setItems((prev) => [...prev, instance]);
       setSelectedItemId(instance.uniqueId);
       setComponente(targetComponente);
-      window.alert(
-        `Problema replicado para ${itemVersao} (${targetComponente}).`,
-      );
+      toast.warning(`Problema replicado para ${itemVersao} (${targetComponente}).`,);
     } catch {
       /* onError */
     }
@@ -1019,16 +1010,16 @@ export function AnalisePage({ search }: AnalisePageProps) {
 
   const handleOpenAnnotation = async () => {
     if (readOnlyMode) {
-      window.alert(readOnlyReason ?? "Análise em modo visualização.");
+      toast.error(readOnlyReason ?? "Análise em modo visualização.");
       return;
     }
     if (!selectedItem) {
-      window.alert("Nenhum item selecionado.");
+      toast.error("Nenhum item selecionado.");
       return;
     }
     const path = versionPaths[versaoKey];
     if (!path) {
-      window.alert("Selecione uma versão analisada válida.");
+      toast.error("Selecione uma versão analisada válida.");
       return;
     }
     try {
@@ -1038,7 +1029,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
       setFilePage(1);
       setShowFileModal(true);
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Erro ao listar arquivos.");
+      toast.error(e instanceof Error ? e.message : "Erro ao listar arquivos.");
     }
   };
 
@@ -1058,7 +1049,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
         );
         const newHtml = appendIndicationToAnaliseHtml(selectedItem.html || "", url);
         if (newHtml === (selectedItem.html || "")) {
-          window.alert("Não foi possível gerar a imagem de indicação.");
+          toast.error("Não foi possível gerar a imagem de indicação.");
           return;
         }
         const itemId = selectedItem.uniqueId;
@@ -1069,19 +1060,17 @@ export function AnalisePage({ search }: AnalisePageProps) {
         if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
         void updateAnaliseItem({ id_item: itemId, html_snapshot: newHtml }).catch((e) => {
           console.error(e);
-          window.alert("Erro ao gravar a indicação no item.");
+          toast.error("Erro ao gravar a indicação no item.");
         });
       } catch (e) {
-        window.alert(
-          e instanceof Error ? e.message : "Erro ao salvar imagem de indicação.",
-        );
+        toast.error(e instanceof Error ? e.message : "Erro ao salvar imagem de indicação.",);
       }
     })();
   };
 
   const handleRemoveIndication = () => {
     if (readOnlyMode) {
-      window.alert(readOnlyReason ?? "Análise em modo visualização.");
+      toast.error(readOnlyReason ?? "Análise em modo visualização.");
       return;
     }
     if (!selectedItem) return;
@@ -1094,7 +1083,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
     }
     const newHtml = removeIndicationFromAnaliseHtml(currentHtml);
     if (newHtml === currentHtml) {
-      window.alert("Não foi possível remover a indicação.");
+      toast.error("Não foi possível remover a indicação.");
       return;
     }
     const itemId = selectedItem.uniqueId;
@@ -1105,7 +1094,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
     if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
     void updateAnaliseItem({ id_item: itemId, html_snapshot: newHtml }).catch((e) => {
       console.error(e);
-      window.alert("Erro ao remover a indicação do item.");
+      toast.error("Erro ao remover a indicação do item.");
     });
   };
 
@@ -1180,7 +1169,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
       setShowAndamentoChoiceModal(false);
       void navigate({ to: "/" });
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Erro ao finalizar análise.");
+      toast.error(e instanceof Error ? e.message : "Erro ao finalizar análise.");
     } finally {
       setFinishing(false);
     }
@@ -1188,7 +1177,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
 
   const handleFinish = async () => {
     if (readOnlyMode) {
-      window.alert(readOnlyReason ?? "Análise em modo visualização.");
+      toast.error(readOnlyReason ?? "Análise em modo visualização.");
       return;
     }
     if (!validOs) return;
@@ -1225,7 +1214,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
 
   const handleConfirmObservacao = async () => {
     if (!obsText.trim()) {
-      window.alert("Informe a observação.");
+      toast.warning("Informe a observação.");
       return;
     }
     setFinishing(true);
@@ -1244,7 +1233,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
       setObsModalMode("empty");
       void navigate({ to: "/" });
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Erro ao registrar andamento.");
+      toast.error(e instanceof Error ? e.message : "Erro ao registrar andamento.");
     } finally {
       setFinishing(false);
     }

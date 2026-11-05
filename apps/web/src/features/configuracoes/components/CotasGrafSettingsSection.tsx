@@ -17,6 +17,7 @@ import {
   ConfigSectionHeader,
   ConfigSubsection,
 } from "./ConfigSectionLayout";
+import { toast } from "@/components/ui/toastStore";
 
 function formatSemestreLabel(ano: number, numero: number): string {
   return `${ano}/${numero}º semestre`;
@@ -66,10 +67,10 @@ export function CotasGrafSettingsSection() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "cotas-graf-semestre"] });
       void qc.invalidateQueries({ queryKey: ["cotasGraf"] });
-      window.alert("Novo semestre iniciado com sucesso.");
+      toast.success("Novo semestre iniciado com sucesso.");
     },
     onError: (err: Error) => {
-      window.alert(err.message || "Não foi possível iniciar o novo semestre.");
+      toast.error(err.message || "Não foi possível iniciar o novo semestre.");
     },
   });
 
@@ -84,7 +85,7 @@ export function CotasGrafSettingsSection() {
       if (fileInputRef.current) fileInputRef.current.value = "";
     },
     onError: (err: Error) => {
-      window.alert(err.message || "Não foi possível importar a planilha.");
+      toast.error(err.message || "Não foi possível importar a planilha.");
     },
   });
 
@@ -92,14 +93,12 @@ export function CotasGrafSettingsSection() {
     mutationFn: recalcularCotasGrafSemestre,
     onSuccess: (data) => {
       void qc.invalidateQueries({ queryKey: ["cotasGraf"] });
-      window.alert(
-        `Cotas recalculadas.\n\n` +
+      toast.error(`Cotas recalculadas.\n\n` +
           `Movimentos sincronizados: ${data.movimentos_inseridos.toLocaleString("pt-BR")}\n` +
-          `Clientes atualizados: ${data.clientes_atualizados.toLocaleString("pt-BR")}`,
-      );
+          `Clientes atualizados: ${data.clientes_atualizados.toLocaleString("pt-BR")}`,);
     },
     onError: (err: Error) => {
-      window.alert(err.message || "Não foi possível recalcular as cotas.");
+      toast.error(err.message || "Não foi possível recalcular as cotas.");
     },
   });
 
@@ -108,7 +107,7 @@ export function CotasGrafSettingsSection() {
   const handleIniciar = () => {
     if (!semestre) return;
     if (!form.data_inicio || !form.data_fim) {
-      window.alert("Informe o período do novo semestre.");
+      toast.error("Informe o período do novo semestre.");
       return;
     }
     const ok = window.confirm(

@@ -63,6 +63,7 @@ import {
   GravacaoExternaPreview,
   type PreviewSelection,
 } from "./GravacaoExternaPreview";
+import { toast } from "@/components/ui/toastStore";
 
 function formatOsListLabel(
   item: { nr_os: number; ano: number; membros?: { nr_os: number; ano: number }[] },
@@ -244,9 +245,7 @@ export function GravacaoPendenteTab() {
     try {
       await deleteControleMutation.mutateAsync(item.gravacao_pendente_id);
     } catch (error) {
-      window.alert(
-        error instanceof Error ? error.message : "Não foi possível excluir o lançamento.",
-      );
+      toast.error(error instanceof Error ? error.message : "Não foi possível excluir o lançamento.",);
     }
   };
 
@@ -400,11 +399,9 @@ export function GravacaoPendenteTab() {
       clearSelection();
     }
     if (errors.length > 0) {
-      window.alert(
-        errors.length === ids.length
+      toast.error(errors.length === ids.length
           ? errors[0] || "Não foi possível remover a OS da lista."
-          : `Parte da OS não pôde ser removida: ${errors.join(" · ")}`,
-      );
+          : `Parte da OS não pôde ser removida: ${errors.join(" · ")}`,);
     }
   };
 
@@ -428,20 +425,18 @@ export function GravacaoPendenteTab() {
         setSelectedMaquinaKeys([]);
         setPreviewSelection(null);
       } else {
-        window.alert("OS enviada para Gravação Externa.");
+        toast.success("OS enviada para Gravação Externa.");
         clearSelection();
       }
     } catch (e) {
-      window.alert(
-        e instanceof Error ? e.message : "Não foi possível enviar para Gravação Externa.",
-      );
+      toast.error(e instanceof Error ? e.message : "Não foi possível enviar para Gravação Externa.",);
     }
   };
 
   const handleEnviar = async () => {
     if (requiresMachineSelection && !hasMachineSelection) {
-      window.alert(
-        "Selecione ao menos uma máquina nos badges de chapas para carregar os arquivos e enviar ao birô.",
+      toast.warning(
+        "Selecione ao menos um conjunto de chapas para carregar os arquivos e enviar ao birô.",
       );
       return;
     }
@@ -450,9 +445,7 @@ export function GravacaoPendenteTab() {
       const res = await fetchGravacaoPendenteFornecedores();
       const items = res.items ?? [];
       if (items.length === 0) {
-        window.alert(
-          "Nenhum fornecedor cadastrado. Cadastre um usuário com flag Fornecedor.",
-        );
+        toast.warning("Nenhum fornecedor cadastrado. Cadastre um usuário como Fornecedor.",);
         return;
       }
       if (items.length === 1) {
@@ -462,9 +455,7 @@ export function GravacaoPendenteTab() {
       setFornecedores(items);
       setFornecedorModalOpen(true);
     } catch (e) {
-      window.alert(
-        e instanceof Error ? e.message : "Não foi possível carregar fornecedores.",
-      );
+      toast.error(e instanceof Error ? e.message : "Não foi possível carregar fornecedores.",);
     }
   };
 
@@ -746,11 +737,9 @@ export function GravacaoPendenteTab() {
                           gravacaoPendenteId: sessionDetail.id,
                         });
                       } catch (error) {
-                        window.alert(
-                          error instanceof Error
+                        toast.error(error instanceof Error
                             ? error.message
-                            : "Não foi possível salvar a observação.",
-                        );
+                            : "Não foi possível salvar a observação.",);
                         throw error;
                       }
                     }}
@@ -1134,11 +1123,9 @@ export function GravacaoPendenteTab() {
               // window.alert("OS adicionada à lista de Gravação Pendente.");
             })
             .catch((error) => {
-              window.alert(
-                error instanceof Error
+              toast.error(error instanceof Error
                   ? error.message
-                  : "Não foi possível adicionar a OS.",
-              );
+                  : "Não foi possível adicionar a OS.",);
             });
         }}
       />

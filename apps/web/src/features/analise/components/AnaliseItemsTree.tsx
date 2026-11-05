@@ -33,6 +33,7 @@ import {
 import { openPathLocally } from "@/lib/sagraLocalOpener";
 import type { AnaliseComponente, AnaliseSelectedItem, OsVersionItem } from "../types";
 import type { VersionPdfFile } from "../versionPdfClassify";
+import { toast } from "@/components/ui/toastStore";
 
 interface AnaliseItemsTreeProps {
   versions: OsVersionItem[];
@@ -351,9 +352,7 @@ function VersionPdfOpenRow({
     onOpen?.(file.componente);
     const ok = await openPathLocally(file.path, "file");
     if (!ok) {
-      window.alert(
-        `Não foi possível abrir o arquivo localmente.\n\nVerifique se o serviço SAGRA Folder Opener está em execução.\n\n${file.name}`,
-      );
+      toast.error(`Não foi possível abrir o arquivo localmente.\n\nVerifique se o serviço SAGRA Folder Opener está em execução.\n\n${file.name}`,);
     }
   };
 

@@ -5,6 +5,7 @@ import {
   osEditLockAlertMessage,
   useOsEditLock,
 } from "./useOsEditLock";
+import { toast } from "@/components/ui/toastStore";
 
 const acquireOsEditLock = vi.fn();
 const heartbeatOsEditLock = vi.fn();
@@ -43,7 +44,7 @@ describe("useOsEditLock", () => {
     heartbeatOsEditLock.mockReset();
     releaseOsEditLock.mockReset();
     releaseOsEditLockKeepalive.mockReset();
-    vi.stubGlobal("alert", vi.fn());
+    vi.spyOn(toast, "error").mockImplementation(() => 0);
     acquireOsEditLock.mockResolvedValue({ held: true, token: "t" });
     releaseOsEditLock.mockResolvedValue({ released: true });
   });
@@ -84,7 +85,7 @@ describe("useOsEditLock", () => {
 
     expect(result.current.held).toBe(false);
     expect(result.current.blocked).toBe(true);
-    expect(window.alert).toHaveBeenCalledWith(
+    expect(toast.error).toHaveBeenCalledWith(
       expect.stringContaining("Maria Silva"),
     );
   });

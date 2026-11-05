@@ -39,6 +39,7 @@ import {
   ConfigSectionHeader,
   ConfigSubsection,
 } from "./ConfigSectionLayout";
+import { toast } from "@/components/ui/toastStore";
 
 const STATUS_QUERY = ["admin", "sync", "status"] as const;
 const PENDING_QUERY = ["admin", "sync", "pending-deletes"] as const;
@@ -87,10 +88,10 @@ export function SincronizacaoSettingsSection() {
       ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: [...STATUS_QUERY] });
-      window.alert("Política de sincronização salva. O serviço aplica no próximo ciclo.");
+      toast.success("Política de sincronização salva. O serviço aplica no próximo ciclo.");
     },
     onError: (err: Error) => {
-      window.alert(`Falha ao salvar: ${err.message}`);
+      toast.error(`Falha ao salvar: ${err.message}`);
     },
   });
 
@@ -104,10 +105,10 @@ export function SincronizacaoSettingsSection() {
     }) => controlSyncService(name, action),
     onSuccess: (_data, vars) => {
       void qc.invalidateQueries({ queryKey: [...STATUS_QUERY] });
-      window.alert(`Comando ${vars.action} enviado para ${vars.name}.`);
+      toast.success(`Comando ${vars.action} enviado para ${vars.name}.`);
     },
     onError: (err: Error) => {
-      window.alert(`Falha no controle do serviço: ${err.message}`);
+      toast.error(`Falha no controle do serviço: ${err.message}`);
     },
   });
 
@@ -129,7 +130,7 @@ export function SincronizacaoSettingsSection() {
       void qc.invalidateQueries({ queryKey: [...STATUS_QUERY] });
     },
     onError: (err: Error) => {
-      window.alert(`Falha: ${err.message}`);
+      toast.error(`Falha: ${err.message}`);
     },
   });
 

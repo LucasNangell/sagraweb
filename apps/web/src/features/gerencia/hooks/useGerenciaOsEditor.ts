@@ -46,6 +46,7 @@ import {
   setGerenciaCoefA4PorProduto,
   validateEntregaDataForSave,
 } from "../utils";
+import { toast } from "@/components/ui/toastStore";
 
 const CALC_KEYS = [
   "req_categoria",
@@ -343,13 +344,11 @@ export function useGerenciaOsEditor({
     async (file: File) => {
       const nome = form.req_solicitante.trim();
       if (nome.length < 3) {
-        window.alert(
-          "Informe o Solicitante (mínimo 3 caracteres) antes de alterar a foto.",
-        );
+        toast.error("Informe o Solicitante (mínimo 3 caracteres) antes de alterar a foto.",);
         return;
       }
       if (file.size > 8 * 1024 * 1024) {
-        window.alert("Imagem muito grande (máx. 8MB).");
+        toast.warning("Imagem muito grande (máx. 8MB).");
         return;
       }
       setPhotoUploading(true);
@@ -361,9 +360,7 @@ export function useGerenciaOsEditor({
         );
         setDeputyPhoto(solicitanteFotoUrl(nome, Date.now()));
       } catch (e) {
-        window.alert(
-          e instanceof Error ? e.message : "Falha ao salvar a foto.",
-        );
+        toast.error(e instanceof Error ? e.message : "Falha ao salvar a foto.",);
       } finally {
         setPhotoUploading(false);
       }
@@ -455,20 +452,20 @@ export function useGerenciaOsEditor({
 
   const validateForSave = useCallback((): boolean => {
     if (!form.val_produto) {
-      window.alert("Selecione um Produto.");
+      toast.warning("Selecione um Produto.");
       return false;
     }
     if (!form.val_titulo.trim()) {
-      window.alert("Informe o Título.");
+      toast.warning("Informe o Título.");
       return false;
     }
     if (!form.req_solicitante.trim()) {
-      window.alert("Informe o Solicitante.");
+      toast.warning("Informe o Solicitante.");
       return false;
     }
     const entregaError = validateEntregaDataForSave(form);
     if (entregaError) {
-      window.alert(entregaError);
+      toast.warning(entregaError);
       return false;
     }
     return true;
@@ -519,9 +516,7 @@ export function useGerenciaOsEditor({
       }
       return result;
     } catch (e) {
-      window.alert(
-        `Erro de comunicação: ${e instanceof Error ? e.message : String(e)}`,
-      );
+      toast.error(`Erro de comunicação: ${e instanceof Error ? e.message : String(e)}`,);
       return null;
     } finally {
       setSaving(false);

@@ -35,6 +35,7 @@ import {
   ConfigSidebarGroupLabel,
 } from "./ConfigSectionLayout";
 import { EmailLivePreviewPanel } from "./EmailLivePreviewPanel";
+import { toast } from "@/components/ui/toastStore";
 
 const GRUPO_LABELS: Record<EmailTemplateModelGrupo, string> = {
   prova_os: "Prova OS",
@@ -119,7 +120,7 @@ export function EmailTemplateModelsSection() {
   };
 
   const reportError = (error: unknown) => {
-    window.alert(error instanceof Error ? error.message : "Operação falhou.");
+    toast.error(error instanceof Error ? error.message : "Operação falhou.");
   };
 
   const saveMutation = useMutation({
@@ -135,7 +136,7 @@ export function EmailTemplateModelsSection() {
     onSuccess: (data) => {
       applyModel(data.model);
       void qc.invalidateQueries({ queryKey: ["admin", "email-template-models"] });
-      window.alert("Modelo salvo.");
+      toast.success("Modelo salvo.");
     },
     onError: reportError,
   });
@@ -156,7 +157,7 @@ export function EmailTemplateModelsSection() {
       setCreatingGrupo(null);
       applyModel(data.model);
       void qc.invalidateQueries({ queryKey: ["admin", "email-template-models"] });
-      window.alert("Modelo criado.");
+      toast.success("Modelo criado.");
     },
     onError: reportError,
   });
@@ -175,7 +176,7 @@ export function EmailTemplateModelsSection() {
     onSuccess: () => {
       setSelectedId(null);
       void qc.invalidateQueries({ queryKey: ["admin", "email-template-models"] });
-      window.alert("Modelo excluído.");
+      toast.error("Modelo excluído.");
     },
     onError: reportError,
   });
@@ -200,7 +201,7 @@ export function EmailTemplateModelsSection() {
       return sendTestEmailTemplateModel(selectedId, to);
     },
     onSuccess: (data) => {
-      window.alert(`Teste enviado para ${data.to}\nAssunto: ${data.subject}`);
+      toast.error(`Teste enviado para ${data.to}\nAssunto: ${data.subject}`);
     },
     onError: reportError,
   });

@@ -11,6 +11,7 @@ import {
 import { UploadProgressBar } from "@/components/UploadProgressBar";
 import { OsFolderMoveForm } from "@/features/os/components/OsFolderMoveForm";
 import { homeTestIds } from "@/lib/testId";
+import { toast } from "@/components/ui/toastStore";
 
 export interface NovaOsArquivosModalProps {
   open: boolean;
@@ -131,7 +132,7 @@ export function NovaOsArquivosModal({
     setError(null);
     try {
       const res = await sendOsArquivosClientEmail(ano, osId, trimmed);
-      window.alert(res.message || "E-mail enviado ao cliente.");
+      toast.success(res.message || "E-mail enviado ao cliente.");
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha ao enviar e-mail.");
@@ -154,9 +155,7 @@ export function NovaOsArquivosModal({
         setUploadPct(pct);
         if (label) setUploadLabel(label);
       });
-      window.alert(
-        `Arquivos enviados (${res.files?.length ?? 0}) para a pasta ${res.folder ?? "Original"}.`,
-      );
+      toast.warning(`Arquivos enviados (${res.files?.length ?? 0}) para a pasta ${res.folder ?? "Original"}.`,);
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha ao enviar arquivos.");
@@ -365,13 +364,11 @@ export function NovaOsArquivosModal({
                 const moved = result.moved_folders
                   .map((item) => item.to_name)
                   .join(", ");
-                window.alert(
-                  `Pastas movidas com sucesso para OS ${osId}/${ano}.\n\n` +
+                toast.success(`Pastas movidas com sucesso para OS ${osId}/${ano}.\n\n` +
                     `Itens: ${moved}\n` +
                     (result.dest_folder_created
                       ? "\nA pasta de destino foi criada na rede."
-                      : ""),
-                );
+                      : ""),);
                 onDone();
               }}
             />

@@ -21,6 +21,7 @@ import {
   ConfigLoadingState,
   ConfigSubsection,
 } from "./ConfigSectionLayout";
+import { toast } from "@/components/ui/toastStore";
 
 const machineConfigQueryKey = ["admin", "system-catalog", "maquinas-config"] as const;
 
@@ -88,7 +89,7 @@ function draftToConfig(draft: MachineConfigDraft): MachineConfigRecord {
 }
 
 function reportError(error: unknown) {
-  window.alert(error instanceof Error ? error.message : "Operação falhou.");
+  toast.error(error instanceof Error ? error.message : "Operação falhou.");
 }
 
 export function MachineGroupsPanel() {

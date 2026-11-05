@@ -22,6 +22,7 @@ import { openNetworkFolder } from "../osFolderActions";
 import { normalizeOsSelection } from "../osTableRows";
 import { useOsSelectionStore } from "../osSelectionStore";
 import type { OsSearchRow } from "../types";
+import { toast } from "@/components/ui/toastStore";
 
 interface OsContextMenuProps {
   row: OsSearchRow;
@@ -70,7 +71,7 @@ export function OsRowContextMenu({
       };
       const perm = required[actionId];
       if (perm && !can(perm)) {
-        window.alert("Você não tem permissão para esta ação.");
+        toast.warning("Você não tem permissão para esta ação.");
         return;
       }
 

@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchNetworkBrowse, type NetworkFilePick } from "@/api/networkFiles";
 import { isGravacaoExternaFile } from "@/features/gravacao-externa/constants";
 import { compareNaturalName } from "@/features/gravacao-externa/utils/plateFilenameUtils";
+import { toast } from "@/components/ui/toastStore";
 
 interface NetworkFolderBrowserModalProps {
   open: boolean;
@@ -191,7 +192,7 @@ export function NetworkFolderBrowserModal({
   const togglePick = useCallback(
     (entryName: string, currentPath: string) => {
       if (!isGravacaoExternaFile(entryName)) {
-        window.alert("Selecione apenas arquivos PDF ou TIF.");
+        toast.warning("Selecione apenas arquivos PDF ou TIF.");
         return;
       }
       const absolute_path = currentPath;
@@ -208,7 +209,7 @@ export function NetworkFolderBrowserModal({
 
   const confirmPicks = useCallback(() => {
     if (picks.length === 0) {
-      window.alert("Selecione ao menos um arquivo PDF ou TIF.");
+      toast.warning("Selecione ao menos um arquivo PDF ou TIF.");
       return;
     }
     onConfirm(picks);

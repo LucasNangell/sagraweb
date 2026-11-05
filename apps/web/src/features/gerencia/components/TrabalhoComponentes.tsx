@@ -29,6 +29,7 @@ import type { FormatoLookupItem } from "../formatoDimensions";
 import { AcabamentoField } from "./AcabamentoField";
 import { FormatoCombobox } from "./FormatoCombobox";
 import { Field, Row, gerenciaInputClass } from "./gerenciaFormUi";
+import { toast } from "@/components/ui/toastStore";
 
 function SelectOptions({
   items,
@@ -112,9 +113,7 @@ export function TrabalhoComponentes({
     const nome = window.prompt("Nome do componente:");
     if (!nome?.trim()) return;
     if (isGenericoComponente({ nome, lotes: [] })) {
-      window.alert(
-        "Arquivo é um componente automático e não pode ser adicionado manualmente.",
-      );
+      toast.warning("Arquivo é um componente automático e não pode ser adicionado manualmente.",);
       return;
     }
     const total = parseTotalPaginas(totalPaginas);

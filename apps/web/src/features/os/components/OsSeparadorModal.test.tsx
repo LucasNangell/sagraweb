@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchSeparadorCadernos, fetchSeparadorPdf } from "@/api/separador";
+import { toast } from "@/components/ui/toastStore";
 import {
   fetchLocalPrinters,
   printPdfLocally,
@@ -94,7 +95,7 @@ describe("OsSeparadorModal", () => {
   });
 
   it("alerta se o caderno for inválido", async () => {
-    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const warningSpy = vi.spyOn(toast, "warning").mockImplementation(() => 0);
     render(<OsSeparadorModal row={row} open onClose={vi.fn()} />);
     await waitFor(() => {
       expect(screen.getByTestId("os-separador-print")).not.toBeDisabled();
@@ -103,10 +104,10 @@ describe("OsSeparadorModal", () => {
       target: { value: "0" },
     });
     fireEvent.click(screen.getByTestId("os-separador-print"));
-    expect(alertSpy).toHaveBeenCalled();
+    expect(warningSpy).toHaveBeenCalled();
     expect(fetchSeparadorPdf).not.toHaveBeenCalled();
     expect(printPdfLocally).not.toHaveBeenCalled();
-    alertSpy.mockRestore();
+    warningSpy.mockRestore();
   });
 
   it("mostra erro se o Folder Opener 1.2 não estiver no ar", async () => {

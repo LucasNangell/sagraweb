@@ -46,6 +46,7 @@ import {
   parseLabItemDragId,
   reorderIdsAfterDrop,
 } from "./analiseLabItemsTree";
+import { toast } from "@/components/ui/toastStore";
 
 interface AnaliseLabItemListProps {
   items: AnaliseLabItem[];
@@ -464,9 +465,7 @@ function VersionPdfOpenRow({ file }: { file: VersionPdfFile }) {
   const handleOpen = async () => {
     const ok = await openPathLocally(file.path, "file");
     if (!ok) {
-      window.alert(
-        `Não foi possível abrir o arquivo localmente.\n\nVerifique se o serviço SAGRA Folder Opener está em execução.\n\n${file.name}`,
-      );
+      toast.error(`Não foi possível abrir o arquivo localmente.\n\nVerifique se o serviço SAGRA Folder Opener está em execução.\n\n${file.name}`,);
     }
   };
 

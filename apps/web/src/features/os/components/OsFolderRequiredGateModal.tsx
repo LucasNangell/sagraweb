@@ -11,6 +11,7 @@ import {
   confirmCreateOsFolderDialog,
   OsFolderCreatePanel,
 } from "./OsFolderCreatePanel";
+import { toast } from "@/components/ui/toastStore";
 
 const PAPELARIA_FOLDER_PREREQUISITE =
   "A pasta da OS é necessária para prosseguir com a criação do arquivo de papelaria. Crie a pasta para continuar.";
@@ -64,9 +65,7 @@ export function OsFolderRequiredGateModal({
       await createMutation.mutateAsync();
       onFolderReady();
     } catch (e) {
-      window.alert(
-        e instanceof Error ? e.message : "Não foi possível criar a pasta na rede.",
-      );
+      toast.error(e instanceof Error ? e.message : "Não foi possível criar a pasta na rede.",);
     }
   };
 

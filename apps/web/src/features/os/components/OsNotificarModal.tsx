@@ -14,6 +14,7 @@ import { useWebPush } from "@/hooks/useWebPush";
 import { getNotificationSupport } from "@/lib/nativeNotification";
 import { homeTestIds } from "@/lib/testId";
 import type { OsSearchRow } from "../types";
+import { toast } from "@/components/ui/toastStore";
 
 interface OsNotificarModalProps {
   row: OsSearchRow | null;
@@ -121,7 +122,7 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
       }
     } else if (notifyAndamentos && !notifyAllAndamentos) {
       if (!andamentoSituacao.trim() || !andamentoSetor.trim()) {
-        window.alert("Informe o andamento e o setor, ou marque todos os andamentos.");
+        toast.warning("Informe o andamento e o setor, ou marque todos os andamentos.");
         return;
       }
     }
@@ -135,9 +136,7 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
             queryKey: queryKeys.os.notificacaoWatch(ano, id),
           });
         }
-        window.alert(
-          "Preferências salvas, mas o Windows não vai exibir o aviso. Permita notificações do navegador (Edge/Chrome) e tente de novo.",
-        );
+        toast.error("Preferências salvas, mas o Windows não vai exibir o aviso. Permita notificações do navegador (Edge/Chrome) e tente de novo.",);
         onClose();
         return;
       }
@@ -147,15 +146,11 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
             queryKey: queryKeys.os.notificacaoWatch(ano, id),
           });
         }
-        window.alert(
-          "Preferências salvas. A notificação do Windows funciona com o SAGRA aberto neste navegador. Com o navegador fechado não está disponível nesta rede.",
-        );
+        toast.warning("Preferências salvas. A notificação do Windows funciona com o SAGRA aberto neste navegador. Com o navegador fechado não está disponível nesta rede.",);
         onClose();
         return;
       }
-      window.alert(
-        `Erro ao salvar: ${e instanceof Error ? e.message : "falha"}`,
-      );
+      toast.error(`Erro ao salvar: ${e instanceof Error ? e.message : "falha"}`,);
     }
   };
 
@@ -183,9 +178,7 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
       }
       setTestHint(parts.join(" "));
     } catch (e) {
-      window.alert(
-        `Não foi possível testar: ${e instanceof Error ? e.message : "falha"}`,
-      );
+      toast.error(`Não foi possível testar: ${e instanceof Error ? e.message : "falha"}`,);
     } finally {
       setTestBusy(false);
     }
@@ -202,7 +195,7 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
       });
       onClose();
     } catch (e) {
-      window.alert(`Erro: ${e instanceof Error ? e.message : "falha"}`);
+      toast.error(`Erro: ${e instanceof Error ? e.message : "falha"}`);
     }
   };
 

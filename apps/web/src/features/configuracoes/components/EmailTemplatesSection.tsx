@@ -38,6 +38,7 @@ import {
   type OperationalEditorPreview,
 } from "./OperationalEmailEditorPanel";
 import { useEmailTemplateLivePreview } from "../hooks/useEmailTemplateLivePreview";
+import { toast } from "@/components/ui/toastStore";
 
 /** Modelos operacionais legados — editados via tabEmailTemplateModel na lista unificada. */
 const OPERATIONAL_LEGACY_TEMPLATE_IDS = new Set([
@@ -309,7 +310,7 @@ export function EmailTemplatesSection() {
   }, []);
 
   const reportError = (error: unknown) => {
-    window.alert(error instanceof Error ? error.message : "Operação falhou.");
+    toast.error(error instanceof Error ? error.message : "Operação falhou.");
   };
 
   const saveTemplateMutation = useMutation({
@@ -330,7 +331,7 @@ export function EmailTemplatesSection() {
       syncedSignatureRef.current = null;
       applyTemplate(data.template);
       void qc.invalidateQueries({ queryKey: ["admin", "email-templates"] });
-      window.alert("Modelo de e-mail salvo.");
+      toast.success("Modelo de e-mail salvo.");
     },
     onError: reportError,
   });
@@ -344,7 +345,7 @@ export function EmailTemplatesSection() {
       syncedSignatureRef.current = null;
       void qc.invalidateQueries({ queryKey: ["admin", "email-templates"] });
       applyTemplate(data.template);
-      window.alert("Modelo restaurado para o padrão do sistema.");
+      toast.success("Modelo restaurado para o padrão do sistema.");
     },
     onError: reportError,
   });
@@ -387,9 +388,7 @@ export function EmailTemplatesSection() {
       const fromLabel = data.from_mailbox
         ? data.from_mailbox
         : "conta autenticada no Exchange (.env)";
-      window.alert(
-        `E-mail de teste enviado para ${data.to}.\n\nAssunto: ${data.subject}\nRemetente: ${fromLabel}`,
-      );
+      toast.success(`E-mail de teste enviado para ${data.to}.\n\nAssunto: ${data.subject}\nRemetente: ${fromLabel}`,);
     },
     onError: reportError,
   });
@@ -420,7 +419,7 @@ export function EmailTemplatesSection() {
         uploadInputRef.current.value = "";
       }
       void qc.invalidateQueries({ queryKey: ["admin", "email-templates"] });
-      window.alert("Arquivo cadastrado e aplicado a este modelo.");
+      toast.success("Arquivo cadastrado e aplicado a este modelo.");
     },
     onError: reportError,
   });
@@ -444,7 +443,7 @@ export function EmailTemplatesSection() {
       syncedSignatureRef.current = null;
       applyTemplate(data.template);
       void qc.invalidateQueries({ queryKey: ["admin", "email-templates"] });
-      window.alert("Modelo cadastrado removido.");
+      toast.error("Modelo cadastrado removido.");
     },
     onError: reportError,
   });
@@ -458,7 +457,7 @@ export function EmailTemplatesSection() {
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "email-templates"] });
-      window.alert("Contas de envio salvas.");
+      toast.error("Contas de envio salvas.");
     },
     onError: reportError,
   });
@@ -484,7 +483,7 @@ export function EmailTemplatesSection() {
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "email-templates"] });
-      window.alert("Notificações de gravação salvas.");
+      toast.success("Notificações de gravação salvas.");
     },
     onError: reportError,
   });

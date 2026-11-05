@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SincronizacaoSettingsSection } from "./SincronizacaoSettingsSection";
+import { toast } from "@/components/ui/toastStore";
 
 vi.mock("@/api/adminSync", () => ({
   fetchSyncAdminStatus: vi.fn(),
@@ -120,7 +121,8 @@ describe("SincronizacaoSettingsSection", () => {
 
   it("salva política ao alterar e clicar", async () => {
     vi.mocked(saveSyncPolicy).mockResolvedValue({ policies: [] });
-    window.alert = vi.fn();
+    vi.spyOn(toast, "success").mockImplementation(() => 0);
+    vi.spyOn(toast, "error").mockImplementation(() => 0);
     renderSection();
     await waitFor(() => {
       expect(screen.getByText(/tabProtocolos/)).toBeInTheDocument();

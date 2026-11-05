@@ -12,6 +12,7 @@ import { formatDateBr } from "@/lib/format";
 import { homeTestIds } from "@/lib/testId";
 
 import { normalizeOsYear } from "../normalizeOsYear";
+import { toast } from "@/components/ui/toastStore";
 
 export type OsFolderMoveVariant = "mover" | "repeticao";
 
@@ -106,9 +107,7 @@ export function OsFolderMoveForm({
     },
     onSuccess,
     onError: (error) => {
-      window.alert(
-        error instanceof Error ? error.message : "Falha ao mover pastas.",
-      );
+      toast.error(error instanceof Error ? error.message : "Falha ao mover pastas.",);
     },
   });
 

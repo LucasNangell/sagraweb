@@ -341,7 +341,7 @@ export function ProvaWebSpiralWizard({
           type="button"
           onClick={onBack}
           disabled={saving}
-          className="rounded-lg border border-sagra-border bg-white px-4 py-2 text-sm disabled:opacity-40"
+          className="sagra-btn sagra-btn--outline sagra-btn--md"
         >
           Voltar
         </button>

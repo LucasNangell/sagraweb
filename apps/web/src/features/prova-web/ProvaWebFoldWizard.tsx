@@ -686,7 +686,7 @@ export function ProvaWebFoldWizard({
                 setSaveOpen(true);
                 setModelMessage(null);
               }}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-sagra-border bg-white px-3 py-1.5 text-xs font-medium text-neutral-800 hover:bg-neutral-50 disabled:opacity-50"
+              className="sagra-btn sagra-btn--outline sagra-btn--sm"
             >
               <Save className="size-3.5" />
               Salvar modelo atual
@@ -736,7 +736,7 @@ export function ProvaWebFoldWizard({
                 <button
                   type="button"
                   onClick={() => setSaveOpen(false)}
-                  className="rounded-lg border border-sagra-border bg-white px-3 py-1.5 text-xs"
+                  className="sagra-btn sagra-btn--outline sagra-btn--sm"
                 >
                   Cancelar
                 </button>
@@ -788,7 +788,7 @@ export function ProvaWebFoldWizard({
                 <button
                   type="button"
                   onClick={() => setEditingModel(null)}
-                  className="rounded-lg border border-sagra-border bg-white px-3 py-1.5 text-xs"
+                  className="sagra-btn sagra-btn--outline sagra-btn--sm"
                 >
                   Cancelar
                 </button>

@@ -175,7 +175,7 @@ export function OsFiltersPanel({
                 type="button"
                 title="Preferências de filtros"
                 onClick={onOpenSettings}
-                className="flex h-8 w-full items-center justify-center gap-1.5 rounded border border-sagra-border text-neutral-600 hover:bg-slate-50"
+              className="h-8 w-full sagra-btn sagra-btn--outline sagra-btn--sm"
                 aria-label="Abrir preferências de filtros"
                 data-testid={homeTestIds.osFiltersCreate}
               >

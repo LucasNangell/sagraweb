@@ -133,7 +133,7 @@ export function GravacaoExternaEntregaModal({
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="rounded border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+            className="sagra-btn sagra-btn--outline sagra-btn--sm"
           >
             Cancelar
           </button>

@@ -70,7 +70,7 @@ export function OsUnirSubOsModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded border border-sagra-border px-4 py-2 text-sm"
+              className="sagra-btn sagra-btn--outline sagra-btn--md"
               data-testid={homeTestIds.osUnirSubOsCancel}
             >
               Cancelar

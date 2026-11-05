@@ -377,7 +377,7 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
             <button
               type="button"
               onClick={() => void handleRemove()}
-              className="mr-auto rounded border border-red-300 px-3 py-2 text-sm text-red-700 hover:bg-red-50"
+              className="mr-auto sagra-btn sagra-btn--danger sagra-btn--md"
             >
               Remover inscrição
             </button>
@@ -386,7 +386,7 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
             type="button"
             onClick={() => void handleTest()}
             disabled={testBusy || saveMutation.isPending}
-            className="rounded border border-sagra-border px-3 py-2 text-sm disabled:opacity-60"
+            className="sagra-btn sagra-btn--outline sagra-btn--md"
             data-testid={homeTestIds.osNotificarTest}
           >
             {testBusy ? "Testando…" : "Testar notificação"}
@@ -394,7 +394,7 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
           <button
             type="button"
             onClick={onClose}
-            className="rounded border border-sagra-border px-4 py-2 text-sm"
+            className="sagra-btn sagra-btn--outline sagra-btn--md"
             data-testid={homeTestIds.osNotificarCancel}
           >
             Cancelar

@@ -624,7 +624,7 @@ export function EmailTemplatesSection() {
           type="button"
           disabled={saveMailboxesMutation.isPending}
           onClick={() => void saveMailboxesMutation.mutate()}
-          className="mt-3 inline-flex h-8 items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          className="mt-3 h-8 sagra-btn sagra-btn--outline sagra-btn--sm"
         >
           {saveMailboxesMutation.isPending ? (
             <Loader2 className="size-3 animate-spin" />
@@ -721,7 +721,7 @@ export function EmailTemplatesSection() {
           type="button"
           disabled={saveGravacaoNotificationsMutation.isPending}
           onClick={() => void saveGravacaoNotificationsMutation.mutate()}
-          className="mt-3 inline-flex h-8 items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          className="mt-3 h-8 sagra-btn sagra-btn--outline sagra-btn--sm"
         >
           {saveGravacaoNotificationsMutation.isPending ? (
             <Loader2 className="size-3 animate-spin" />

@@ -559,7 +559,7 @@ export function GravacaoExternaTab() {
                       e.stopPropagation();
                       void handleConcluir(concluivelSession);
                     }}
-                    className="inline-flex cursor-pointer items-center justify-center gap-1 rounded-full border border-primary-green bg-primary-green px-2.5 py-0.5 text-xs font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="sagra-btn sagra-btn--primary sagra-btn--xs"
                   >
                     {concluirMutation.isPending &&
                     concluirMutation.variables?.gravacaoExternaId ===
@@ -698,7 +698,7 @@ export function GravacaoExternaTab() {
     <button
       type="button"
       onClick={clearSelection}
-      className="inline-flex items-center gap-1 rounded border border-neutral-300 px-2 py-1 text-xs"
+      className="sagra-btn sagra-btn--outline sagra-btn--xs"
     >
       <ArrowLeft className="size-3.5" />
       Voltar

@@ -410,7 +410,7 @@ export function AnaliseLabMarkEditor({
           type="button"
           disabled={busy}
           onClick={onCancel}
-          className="rounded border border-sagra-border px-2 py-1.5 text-xs"
+          className="sagra-btn sagra-btn--outline sagra-btn--sm"
         >
           Cancelar
         </button>

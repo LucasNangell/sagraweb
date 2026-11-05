@@ -333,7 +333,7 @@ function MachineConfigRow({
           type="button"
           disabled={saveMutation.isPending}
           onClick={() => void saveMutation.mutate()}
-          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-secondary-blue/30 bg-white px-3 text-xs font-semibold text-secondary-blue hover:bg-secondary-blue/5 disabled:opacity-60"
+          className="h-8 sagra-btn sagra-btn--outline sagra-btn--sm !border-secondary-blue/30 !text-secondary-blue"
         >
           {saveMutation.isPending ? (
             <Loader2 className="size-3.5 animate-spin" />

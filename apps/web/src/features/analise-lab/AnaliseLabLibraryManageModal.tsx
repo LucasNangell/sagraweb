@@ -474,7 +474,7 @@ export function AnaliseLabLibraryManageModal({
           <div className="flex gap-1">
             <button
               type="button"
-              className="rounded border border-sagra-border px-3 py-1.5 text-xs hover:bg-neutral-50"
+              className="sagra-btn sagra-btn--outline sagra-btn--sm"
               onClick={requestClose}
               disabled={saving}
             >

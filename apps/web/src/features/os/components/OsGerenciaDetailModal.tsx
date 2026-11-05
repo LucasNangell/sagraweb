@@ -624,7 +624,7 @@ export function OsGerenciaDetailModal({
                   type="button"
                   onClick={handleCancelEdit}
                   disabled={saving}
-                  className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 shadow-sm transition hover:bg-red-50 disabled:opacity-50"
+                  className="sagra-btn sagra-btn--danger sagra-btn--md"
                   data-testid={homeTestIds.osGerenciaCancel}
                 >
                   Cancelar

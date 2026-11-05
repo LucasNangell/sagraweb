@@ -595,7 +595,7 @@ export function PortalPtPage({ token, osId, ano, embedded, onBack }: PortalPtPag
                                 type="button"
                                 disabled={itemBlocked || disregardMutation.isPending}
                                 onClick={() => handleDisregard(item)}
-                                className="inline-flex shrink-0 items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                                className="shrink-0 sagra-btn sagra-btn--outline sagra-btn--xs"
                                 title="Desconsiderar este problema"
                               >
                                 <XCircle className="size-3.5 text-red-600" />

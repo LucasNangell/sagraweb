@@ -602,7 +602,7 @@ export function GravacaoPendenteTab() {
               <button
                 type="button"
                 onClick={clearSelection}
-                className="inline-flex items-center gap-1 rounded border border-neutral-300 px-2 py-1 text-xs"
+                className="sagra-btn sagra-btn--outline sagra-btn--xs"
               >
                 <ArrowLeft className="size-3.5" />
                 Voltar

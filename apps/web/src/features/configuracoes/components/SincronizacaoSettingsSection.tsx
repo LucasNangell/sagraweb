@@ -187,7 +187,7 @@ export function SincronizacaoSettingsSection() {
             <button
               type="button"
               onClick={() => void statusQuery.refetch()}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              className="h-9 sagra-btn sagra-btn--outline sagra-btn--sm"
             >
               <RefreshCw className="size-3.5" />
               Atualizar

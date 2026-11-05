@@ -1523,7 +1523,7 @@ function ActiveJobCard({
           <button
             type="button"
             disabled={cancelPending}
-            className="inline-flex items-center gap-1 rounded border border-neutral-300 px-2 py-1 text-[11px] font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-60"
+            className="sagra-btn sagra-btn--outline sagra-btn--xs"
             onClick={onCancel}
           >
             <XCircle className="size-3.5" aria-hidden />

@@ -1747,7 +1747,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
                   setShowObsModal(false);
                   setObsModalMode("empty");
                 }}
-                className="flex-1 rounded border border-slate-300 py-2 text-sm"
+                className="flex-1 sagra-btn sagra-btn--outline sagra-btn--md"
               >
                 Cancelar
               </button>
@@ -1797,7 +1797,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
               <button
                 type="button"
                 onClick={() => setShowFileModal(false)}
-                className="rounded border border-slate-300 px-4 py-2 text-sm"
+                className="sagra-btn sagra-btn--outline sagra-btn--md"
               >
                 Cancelar
               </button>

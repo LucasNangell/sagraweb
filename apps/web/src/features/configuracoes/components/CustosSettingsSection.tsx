@@ -334,7 +334,7 @@ export function CustosSettingsSection() {
                   type="button"
                   disabled={pending}
                   onClick={resetForm}
-                  className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                  className="h-9 sagra-btn sagra-btn--outline sagra-btn--sm"
                 >
                   <X className="size-3.5" />
                   Cancelar edição

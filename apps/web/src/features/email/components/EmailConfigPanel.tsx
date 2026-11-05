@@ -586,7 +586,7 @@ export function EmailConfigPanel({
                         : null
                     }
                     disabled={!routingMailbox || isBusy}
-                    className="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                    className="h-10 shrink-0 sagra-btn sagra-btn--outline sagra-btn--md"
                   >
                     {foldersMutation.isPending ? (
                       <Loader2 className="size-4 animate-spin" />

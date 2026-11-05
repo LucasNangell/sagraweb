@@ -715,7 +715,7 @@ export function UserAdminProvider({
                   type="button"
                   onClick={() => void handleGeneratePasswordLink()}
                   disabled={passwordLinkBusy || editPonto === null}
-                  className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="sagra-btn sagra-btn--outline sagra-btn--md"
                 >
                   {passwordLinkBusy ? (
                     <Loader2 className="size-4 animate-spin" aria-hidden />

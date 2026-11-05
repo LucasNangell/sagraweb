@@ -412,7 +412,7 @@ export function ProvaWebBoxWizard({
           <button
             type="button"
             onClick={onBack}
-            className="rounded-lg border border-sagra-border px-3 py-1.5 text-xs font-medium text-neutral-600"
+            className="sagra-btn sagra-btn--outline sagra-btn--sm"
           >
             Voltar
           </button>

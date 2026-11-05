@@ -130,32 +130,28 @@ body {
 }
 
 /*
- * Botões Download / Baixar todos — press3d-2 (modelo) com paleta amarela.
- * Mapeamento do modelo azul-cinza → amarelo:
- *   #ffffff/#d2dce8 → #ffffff/#f0e0b0
- *   #a2b3c6 → #d4b87a | #91a4bb → #c9a84e | #526b86 → #a67c1a
- *   ink #30465f → #92400e | active → #e6d090/#f7efd4/#efe0b8
- *   (sem sombra blur do modelo)
+ * Botões Download / Baixar todos — modelo Porcelana (material3d-7),
+ * adaptado às paletas amber / emerald / slate do SAGRA.
  */
 .ge-btn-3d {
-  --press: 2px;
-  --ge-btn-face-top: #ffffff;
-  --ge-btn-face-bottom: #f0e0b0;
-  --ge-btn-border: #d4b87a;
-  --ge-btn-edge: #c9a84e;
-  --ge-btn-rim: #a67c1a;
-  --ge-btn-inset: #ffffff88;
-  --ge-btn-active-top: #e6d090;
-  --ge-btn-active-bottom: #f7efd4;
-  --ge-btn-active-inset: #efe0b8;
+  --press: 3px;
+  --c2: #a67c1a;
+  --ge-btn-face: #f0e0b0;
+  --ge-btn-edge: #d4b87a;
+  --ge-btn-rim: #c9a84e;
+  --ge-btn-soft: #92400e28;
+  --ge-btn-active-face: #efe0b8;
+  --ge-btn-active-inset: #c9a84e35;
   position: relative;
   isolation: isolate;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.35rem;
-  border-radius: 30px;
-  border: 1px solid var(--ge-btn-border);
+  padding-inline: 10px;
+  padding-block: 5px;
+  border-radius: 100px;
+  border: 1px solid white;
   font-weight: 600;
   letter-spacing: 0.01em;
   line-height: 1.2;
@@ -167,30 +163,39 @@ body {
   vertical-align: middle;
   -webkit-tap-highlight-color: transparent;
   color: #92400e;
-  background: linear-gradient(145deg, var(--ge-btn-face-top), var(--ge-btn-face-bottom));
+  background: radial-gradient(ellipse at 30% 0%, white 20%, var(--ge-btn-face) 90%);
   box-shadow:
     0 var(--press) 0 var(--ge-btn-edge),
     0 calc(var(--press) + 1px) 0 var(--ge-btn-rim),
-    inset 0 0 0 4px var(--ge-btn-inset);
-  transition: all 300ms ease;
+    0 10px 14px var(--ge-btn-soft),
+    inset 0 3px 4px white;
+  transition: all 220ms ease;
+  outline-offset: 5px;
 }
 
 .ge-btn-3d:hover:not(:disabled):not([aria-disabled="true"]) {
-  translate: 0 -2px;
+  translate: 0 -3px;
+  color: var(--c2);
   box-shadow:
-    0 calc(var(--press) + 2px) 0 var(--ge-btn-edge),
-    0 calc(var(--press) + 3px) 0 var(--ge-btn-rim),
-    inset 0 0 0 4px #fff;
+    0 calc(var(--press) + 3px) 0 var(--ge-btn-edge),
+    0 calc(var(--press) + 4px) 0 var(--ge-btn-rim),
+    0 14px 18px var(--ge-btn-soft),
+    inset 0 3px 4px white;
 }
 
 .ge-btn-3d:active:not(:disabled):not([aria-disabled="true"]) {
   translate: 0 var(--press);
-  background: linear-gradient(var(--ge-btn-active-top), var(--ge-btn-active-bottom));
+  background: var(--ge-btn-active-face);
   box-shadow:
     0 0 0 var(--ge-btn-edge),
     0 1px 0 var(--ge-btn-rim),
-    inset 0 0 0 4px var(--ge-btn-active-inset);
-  transition-duration: 60ms;
+    0 4px 5px var(--ge-btn-soft),
+    inset 0 3px 6px var(--ge-btn-active-inset);
+  transition-duration: 80ms;
+}
+
+.ge-btn-3d:focus-visible {
+  outline: 2px solid var(--c2);
 }
 
 .ge-btn-3d:disabled,
@@ -203,46 +208,40 @@ body {
   box-shadow: none !important;
 }
 
-/* Download / Baixar todos (estado pendente) — amarelo = modelo */
+/* Pendente / Baixar todos */
 .ge-btn-3d--amber {
+  --c2: #a67c1a;
+  --ge-btn-face: #f0e0b0;
+  --ge-btn-edge: #d4b87a;
+  --ge-btn-rim: #c9a84e;
+  --ge-btn-soft: #92400e28;
+  --ge-btn-active-face: #efe0b8;
+  --ge-btn-active-inset: #c9a84e35;
   color: #92400e;
-  --ge-btn-face-top: #ffffff;
-  --ge-btn-face-bottom: #f0e0b0;
-  --ge-btn-border: #d4b87a;
-  --ge-btn-edge: #c9a84e;
-  --ge-btn-rim: #a67c1a;
-  --ge-btn-inset: #ffffff88;
-  --ge-btn-active-top: #e6d090;
-  --ge-btn-active-bottom: #f7efd4;
-  --ge-btn-active-inset: #efe0b8;
 }
 
-/* Baixado — mesma estrutura, tons verdes */
+/* Baixado */
 .ge-btn-3d--emerald {
+  --c2: #047857;
+  --ge-btn-face: #d4ebe0;
+  --ge-btn-edge: #a8cfbc;
+  --ge-btn-rim: #6db89a;
+  --ge-btn-soft: #065f4628;
+  --ge-btn-active-face: #dceee6;
+  --ge-btn-active-inset: #6db89a35;
   color: #065f46;
-  --ge-btn-face-top: #ffffff;
-  --ge-btn-face-bottom: #b8e8d4;
-  --ge-btn-border: #8bc4ae;
-  --ge-btn-edge: #6db89a;
-  --ge-btn-rim: #2f7a5c;
-  --ge-btn-inset: #ffffff88;
-  --ge-btn-active-top: #8fd4b8;
-  --ge-btn-active-bottom: #e8faf2;
-  --ge-btn-active-inset: #b8e0d0;
 }
 
-/* Download avulso — mesma estrutura, tons cinza */
+/* Download avulso */
 .ge-btn-3d--slate {
-  color: #404040;
-  --ge-btn-face-top: #ffffff;
-  --ge-btn-face-bottom: #d8d8dc;
-  --ge-btn-border: #b0b0b6;
-  --ge-btn-edge: #9a9aa2;
-  --ge-btn-rim: #62626a;
-  --ge-btn-inset: #ffffff88;
-  --ge-btn-active-top: #c8c8ce;
-  --ge-btn-active-bottom: #ececf0;
-  --ge-btn-active-inset: #d4d4d8;
+  --c2: #24344d;
+  --ge-btn-face: #e4e9ef;
+  --ge-btn-edge: #b9c4d1;
+  --ge-btn-rim: #8698ad;
+  --ge-btn-soft: #24344d30;
+  --ge-btn-active-face: #e7edf3;
+  --ge-btn-active-inset: #8698ad35;
+  color: #4a5e76;
 }
 
 @media (prefers-reduced-motion: reduce) {

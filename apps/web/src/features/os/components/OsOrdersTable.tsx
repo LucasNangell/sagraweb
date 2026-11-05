@@ -879,7 +879,7 @@ export function OsOrdersTable({
             type="button"
             disabled={exportDisabled || isExporting}
             onClick={onExportReport}
-            className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg bg-[#217346] px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#1e6b41] disabled:cursor-not-allowed disabled:opacity-60"
+            className="sagra-btn sagra-btn--report sagra-btn--sm shrink-0"
             data-testid={homeTestIds.osTableReport}
           >
             {isExporting ? (

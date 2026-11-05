@@ -36,6 +36,8 @@ export type SagraBtnProfile =
   | "pending"
   | "download"
   | "success"
+  | "report"
+  | "delete-outline"
   | "outline"
   | "primary-outline"
   /* tons / legado */
@@ -49,7 +51,7 @@ export type SagraBtnProfile =
   | "emerald"
   | "slate";
 
-export type SagraBtnSize = "xs" | "sm" | "md" | "lg";
+export type SagraBtnSize = "xs" | "sm" | "md" | "lg" | "icon";
 
 /** @deprecated Use SagraBtnProfile */
 export type SagraBtnTone = SagraBtnProfile;
@@ -70,6 +72,8 @@ const PROFILE_CLASS: Record<SagraBtnProfile, string> = {
   pending: "sagra-btn--pending",
   download: "sagra-btn--download",
   success: "sagra-btn--success",
+  report: "sagra-btn--report",
+  "delete-outline": "sagra-btn--delete-outline",
   outline: "sagra-btn--outline",
   "primary-outline": "sagra-btn--primary-outline",
   primary: "sagra-btn--primary",
@@ -88,6 +92,7 @@ const SIZE_CLASS: Record<SagraBtnSize, string> = {
   sm: "sagra-btn--sm",
   md: "sagra-btn--md",
   lg: "sagra-btn--lg",
+  icon: "sagra-btn--icon",
 };
 
 export function sagraBtn(

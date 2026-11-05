@@ -537,7 +537,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                   void (isEditing ? handleUpdateFilter() : handleCreateFilter())
                 }
                 disabled={disabled}
-                className="sagra-btn sagra-btn--primary sagra-btn--md"
+                className="sagra-btn sagra-btn--save sagra-btn--md h-10"
                 data-testid={homeTestIds.osSettingsSave}
               >
                 {isEditing
@@ -553,7 +553,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                   type="button"
                   onClick={handleNewFilter}
                   disabled={isBusy}
-                  className="h-10 sagra-btn sagra-btn--outline sagra-btn--md"
+                  className="sagra-btn sagra-btn--clear sagra-btn--md h-10"
                 >
                   Novo filtro
                 </button>
@@ -621,7 +621,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                         type="button"
                         onClick={() => void handleDeleteFilter(filter)}
                         disabled={isBusy}
-                        className="inline-flex size-8 items-center justify-center rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-60"
+                        className="sagra-btn sagra-btn--delete-outline sagra-btn--icon"
                         title="Excluir filtro"
                         data-testid={homeTestIds.osSettingsDelete}
                       >

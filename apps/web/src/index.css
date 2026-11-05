@@ -90,6 +90,17 @@
   --sagra-btn-back-edge: #a3a3a3;
   --sagra-btn-back-ink: #404040;
   --sagra-btn-back-border: #d4d4d4;
+
+  /* Relatório Excel (página inicial) */
+  --sagra-btn-report-c: #217346;
+  --sagra-btn-report-edge: #1a5c37;
+  --sagra-btn-report-ink: #ffffff;
+
+  /* Excluir em outline (ícone na lista de filtros) */
+  --sagra-btn-delete-outline-c: #ffffff;
+  --sagra-btn-delete-outline-edge: #f87171;
+  --sagra-btn-delete-outline-ink: #dc2626;
+  --sagra-btn-delete-outline-border: #fecaca;
 }
 
 @theme {
@@ -368,6 +379,24 @@ body {
   --ink: var(--sagra-btn-success-ink);
 }
 
+.sagra-btn--report {
+  --c: var(--sagra-btn-report-c);
+  --c2: var(--sagra-btn-report-edge);
+  --ink: var(--sagra-btn-report-ink);
+}
+
+.sagra-btn--delete-outline {
+  --c: var(--sagra-btn-delete-outline-c);
+  --c2: var(--sagra-btn-delete-outline-edge);
+  --ink: var(--sagra-btn-delete-outline-ink);
+  border: 1px solid var(--sagra-btn-delete-outline-border);
+}
+
+.sagra-btn--delete-outline:hover:not(:disabled):not([aria-disabled="true"]) {
+  filter: none;
+  background: #fef2f2;
+}
+
 .sagra-btn--close,
 .sagra-btn--clear,
 .sagra-btn--back,
@@ -494,6 +523,18 @@ body {
   font-size: 0.75rem;
   font-weight: 500;
   line-height: 1rem;
+}
+
+/* Botão só ícone (Limpar / Salvar / Atualizar / Excluir na home) */
+.sagra-btn--icon {
+  width: 2rem;
+  height: 2rem;
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0;
+  gap: 0;
+  border-radius: 0.25rem;
+  flex-shrink: 0;
 }
 
 .sagra-btn--sm,

@@ -175,7 +175,7 @@ export function OsFiltersPanel({
                 type="button"
                 title="Preferências de filtros"
                 onClick={onOpenSettings}
-              className="h-8 w-full sagra-btn sagra-btn--outline sagra-btn--sm"
+              className="sagra-btn sagra-btn--outline sagra-btn--sm h-8 w-full"
                 aria-label="Abrir preferências de filtros"
                 data-testid={homeTestIds.osFiltersCreate}
               >
@@ -409,7 +409,7 @@ export function OsFiltersPanel({
                   setAdvancedOpen(false);
                   onResetFilters();
                 }}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                className="sagra-btn sagra-btn--pending sagra-btn--icon"
                 data-testid={homeTestIds.osFiltersClear}
               >
                 <Eraser className="size-3.5" />
@@ -420,7 +420,7 @@ export function OsFiltersPanel({
                   title="Salvar filtros"
                   aria-label="Salvar filtros"
                   onClick={onSaveCurrentFilters}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-sagra-border text-neutral-600 hover:bg-slate-50"
+                  className="sagra-btn sagra-btn--save sagra-btn--icon"
                   data-testid={homeTestIds.osFiltersSave}
                 >
                   <Save className="size-3.5" />
@@ -433,7 +433,7 @@ export function OsFiltersPanel({
               aria-label="Atualizar"
               onClick={onRefresh}
               disabled={isFetching}
-              className="flex h-8 w-8 shrink-0 sagra-btn sagra-btn--primary sagra-btn--md"
+              className="sagra-btn sagra-btn--confirm sagra-btn--icon"
               data-testid={homeTestIds.osFiltersRefresh}
             >
               <RefreshCw

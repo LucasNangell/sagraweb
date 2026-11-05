@@ -107,7 +107,7 @@ export function OsPrintModeModal({
           <button
             type="button"
             onClick={() => onSelect("normal")}
-            className="sagra-btn sagra-btn--secondary sagra-btn--md hover:opacity-95"
+            className="sagra-btn sagra-btn--secondary sagra-btn--lg w-full"
             data-testid={homeTestIds.osPrintConfirm}
           >
             <FileText className="size-5" />
@@ -116,7 +116,7 @@ export function OsPrintModeModal({
           <button
             type="button"
             onClick={() => onSelect("prova")}
-            className="inline-flex items-center justify-center gap-2 rounded bg-[#e67e22] px-4 py-3 text-base font-semibold text-white hover:opacity-95"
+            className="sagra-btn sagra-btn--previa sagra-btn--lg w-full"
           >
             <Printer className="size-5" />
             Ficha de Prévia
@@ -124,7 +124,7 @@ export function OsPrintModeModal({
           <button
             type="button"
             onClick={() => setProvaFichaOpen((prev) => !prev)}
-            className="inline-flex items-center justify-center gap-2 rounded bg-[#d35400] px-4 py-3 text-base font-semibold text-white hover:opacity-95"
+            className="sagra-btn sagra-btn--prova sagra-btn--lg w-full"
             aria-expanded={provaFichaOpen}
           >
             <Printer className="size-5" />
@@ -153,7 +153,7 @@ export function OsPrintModeModal({
                 <button
                   type="button"
                   onClick={handleProvaFichaOk}
-                  className="rounded bg-[#d35400] px-5 py-2 text-sm font-semibold text-white hover:opacity-95"
+                  className="sagra-btn sagra-btn--prova sagra-btn--md"
                 >
                   OK
                 </button>
@@ -166,7 +166,7 @@ export function OsPrintModeModal({
           <button
             type="button"
             onClick={onClose}
-            className="sagra-btn sagra-btn--neutral sagra-btn--md"
+            className="sagra-btn sagra-btn--cancel sagra-btn--md"
           >
             Cancelar
           </button>

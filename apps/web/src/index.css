@@ -97,6 +97,15 @@
   --sagra-btn-report-edge: #1a5c37;
   --sagra-btn-report-ink: #ffffff;
 
+  /* Impressão — Ficha de Prévia / Ficha de Prova */
+  --sagra-btn-previa-c: #e67e22;
+  --sagra-btn-previa-edge: #c56a1a;
+  --sagra-btn-previa-ink: #ffffff;
+
+  --sagra-btn-prova-c: #d35400;
+  --sagra-btn-prova-edge: #a84300;
+  --sagra-btn-prova-ink: #ffffff;
+
   /* Excluir em outline (ícone na lista de filtros) */
   --sagra-btn-delete-outline-c: #ffffff;
   --sagra-btn-delete-outline-edge: #f87171;
@@ -384,6 +393,18 @@ body {
   --c: var(--sagra-btn-report-c);
   --c2: var(--sagra-btn-report-edge);
   --ink: var(--sagra-btn-report-ink);
+}
+
+.sagra-btn--previa {
+  --c: var(--sagra-btn-previa-c);
+  --c2: var(--sagra-btn-previa-edge);
+  --ink: var(--sagra-btn-previa-ink);
+}
+
+.sagra-btn--prova {
+  --c: var(--sagra-btn-prova-c);
+  --c2: var(--sagra-btn-prova-edge);
+  --ink: var(--sagra-btn-prova-ink);
 }
 
 .sagra-btn--delete-outline {

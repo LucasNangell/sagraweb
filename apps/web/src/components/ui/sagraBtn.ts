@@ -37,6 +37,8 @@ export type SagraBtnProfile =
   | "download"
   | "success"
   | "report"
+  | "previa"
+  | "prova"
   | "delete-outline"
   | "outline"
   | "primary-outline"
@@ -73,6 +75,8 @@ const PROFILE_CLASS: Record<SagraBtnProfile, string> = {
   download: "sagra-btn--download",
   success: "sagra-btn--success",
   report: "sagra-btn--report",
+  previa: "sagra-btn--previa",
+  prova: "sagra-btn--prova",
   "delete-outline": "sagra-btn--delete-outline",
   outline: "sagra-btn--outline",
   "primary-outline": "sagra-btn--primary-outline",

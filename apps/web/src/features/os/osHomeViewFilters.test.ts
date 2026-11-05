@@ -11,7 +11,8 @@ import {
   sortOsHomeViewRows,
   toOsHomeDatasetFilters,
 } from "./osHomeViewFilters";
-import type { OsSearchFilters, OsSearchRow } from "./types";
+import { savedFilterToOsPatch } from "./savedFilterApply";
+import type { OsSearchFilters, OsSearchRow, SavedFilter } from "./types";
 
 const baseFilters: OsSearchFilters = {
   nrOs: undefined,
@@ -271,6 +272,54 @@ describe("osHomePatchTriggersFetch", () => {
     expect(osHomePatchTriggersFetch({ produtos: ["Cartaz"] }, baseFilters)).toBe(
       false,
     );
+  });
+
+  it("filtro salvo típico (visão) com ano corrente não dispara GET", () => {
+    // Situação/setor/prioridade/produto/título/solicitante/nrOs — só visão local.
+    expect(
+      osHomePatchTriggersFetch(
+        {
+          situacao: ["Em Execução"],
+          setor: ["SEFOC"],
+          prioridade: ["Normal"],
+          produtos: ["Cartaz"],
+          titulo: "sessão",
+          solicitantes: ["Gabinete A"],
+          nrOs: 10,
+          categorias: [],
+          maquinas: [],
+          processo: "",
+          page: 1,
+        },
+        baseFilters,
+      ),
+    ).toBe(false);
+  });
+
+  it("filtro salvo com categorias/maquinas/processo ainda dispara GET (servidor)", () => {
+    expect(
+      osHomePatchTriggersFetch({ categorias: ["Deputado"] }, baseFilters),
+    ).toBe(true);
+    expect(osHomePatchTriggersFetch({ maquinas: ["A1"] }, baseFilters)).toBe(
+      true,
+    );
+    expect(osHomePatchTriggersFetch({ processo: "12.345" }, baseFilters)).toBe(
+      true,
+    );
+  });
+
+  it("aplicar filtro salvo legado (só situação/setor) não marca fetch na home", () => {
+    // Espelha applySavedFilter: patch do salvo + osHomePatchTriggersFetch.
+    const legacy: SavedFilter = {
+      id: 9,
+      nome: "Em execução Arte",
+      situacoes: ["Em Execução"],
+      setores: ["Arte"],
+      is_default: false,
+    };
+    const patch = savedFilterToOsPatch(legacy);
+    expect(patch.anos).toBeUndefined();
+    expect(osHomePatchTriggersFetch(patch, baseFilters)).toBe(false);
   });
 
   it("dispara GET ao mudar situação sem ano", () => {

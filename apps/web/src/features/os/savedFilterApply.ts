@@ -57,9 +57,8 @@ export function savedFilterToOsPatch(
   filter: Pick<SavedFilter, "situacoes" | "setores" | "criterios">,
 ): Partial<OsSearchFilters> {
   const c = normalizeSavedFilterCriterios(filter.criterios);
-  return {
+  const patch: Partial<OsSearchFilters> = {
     nrOs: c.nr_os ?? undefined,
-    anos: c.anos,
     processo: c.processo ? formatProcessoMask(c.processo) : "",
     categorias: c.categorias,
     solicitantes: c.solicitantes,
@@ -73,6 +72,11 @@ export function savedFilterToOsPatch(
     setor: filter.setores ?? [],
     page: 1,
   };
+  // Sem anos no filtro salvo: não zerar o ano da home (evita fetch_all sem escopo).
+  if (c.anos.length > 0) {
+    patch.anos = c.anos;
+  }
+  return patch;
 }
 
 export function userDefaultToOsPatch(

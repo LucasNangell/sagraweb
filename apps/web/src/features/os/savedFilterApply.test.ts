@@ -43,7 +43,7 @@ describe("savedFilterApply", () => {
     expect(patch.setor).toEqual(["Arte"]);
   });
 
-  it("filtros legados sem criterios ainda aplicam situacao/setor", () => {
+  it("filtros legados sem criterios ainda aplicam situacao/setor sem limpar o ano", () => {
     const patch = savedFilterToOsPatch({
       id: 2,
       nome: "Legado",
@@ -52,8 +52,19 @@ describe("savedFilterApply", () => {
       is_default: true,
     });
     expect(patch.situacao).toEqual(["Entregue"]);
-    expect(patch.anos).toEqual([]);
+    expect(patch.anos).toBeUndefined();
     expect(patch.produtos).toEqual([]);
+  });
+
+  it("omite anos vazios e só aplica anos quando o filtro salvo os define", () => {
+    const withoutYear = savedFilterToOsPatch({
+      ...baseFilter,
+      criterios: { ...baseFilter.criterios!, anos: [] },
+    });
+    expect(withoutYear.anos).toBeUndefined();
+
+    const withYear = savedFilterToOsPatch(baseFilter);
+    expect(withYear.anos).toEqual([2026]);
   });
 
   it("detecta critérios ativos", () => {

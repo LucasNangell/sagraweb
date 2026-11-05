@@ -156,6 +156,7 @@ export default defineConfig(({ mode }) => {
     TanStackRouterVite({
       routesDirectory: "./src/routes",
       generatedRouteTree: "./src/routeTree.gen.ts",
+      autoCodeSplitting: true,
     }),
     react(),
     tailwindcss(),
@@ -293,6 +294,50 @@ export default defineConfig(({ mode }) => {
     outDir: "dist",
     sourcemap: process.env["NODE_ENV"] !== "production",
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          const norm = id.replace(/\\/g, "/");
+          if (
+            /\/node_modules\/(react-dom|react|scheduler)\//.test(norm) ||
+            /\/node_modules\/(react-dom|react|scheduler)$/.test(norm)
+          ) {
+            return "vendor-react";
+          }
+          if (
+            norm.includes("/@tanstack/react-router") ||
+            norm.includes("/@tanstack/react-query") ||
+            norm.includes("/@tanstack/react-table") ||
+            norm.includes("/@tanstack/react-virtual") ||
+            norm.includes("/@tanstack/router-core") ||
+            norm.includes("/@tanstack/query-core") ||
+            norm.includes("/@tanstack/table-core") ||
+            norm.includes("/@tanstack/virtual-core")
+          ) {
+            return "vendor-tanstack";
+          }
+          if (/\/node_modules\/three\//.test(norm)) {
+            return "vendor-three";
+          }
+          if (
+            /\/node_modules\/chart\.js\//.test(norm) ||
+            /\/node_modules\/chartjs-plugin-datalabels\//.test(norm)
+          ) {
+            return "vendor-chart";
+          }
+          if (/\/node_modules\/pdfjs-dist\//.test(norm)) {
+            return "vendor-pdfjs";
+          }
+          if (/\/node_modules\/page-flip\//.test(norm)) {
+            return "vendor-pageflip";
+          }
+          if (/\/node_modules\/lucide-react\//.test(norm)) {
+            return "vendor-lucide";
+          }
+        },
+      },
+    },
   },
 };
 });

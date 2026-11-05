@@ -14,6 +14,7 @@ _BLOCKED_STATIC_SUFFIXES = {
 }
 
 _SW_NO_CACHE = "no-cache, no-store, must-revalidate"
+_HASHED_ASSET_CACHE = "public, max-age=31536000, immutable"
 
 
 def strip_spa_base_prefix(path: str) -> str:
@@ -35,11 +36,37 @@ def is_service_worker_script_path(path: str) -> bool:
     )
 
 
+def is_hashed_vite_asset_path(path: str) -> bool:
+    """Assets Vite em assets/ são fingerprinted (name-hash.ext) e podem ser imutáveis."""
+    norm = strip_spa_base_prefix(path).replace("\\", "/").lstrip("/").lower()
+    if not norm.startswith("assets/"):
+        return False
+    name = Path(norm).name
+    # Arquivo com extensão; Vite não coloca index.html/sw aqui.
+    if not name or name in {"index.html", "sw.js", "push-sw.js"}:
+        return False
+    return "." in name
+
+
 def apply_sw_cache_headers(path: str, response) -> None:
     if not is_service_worker_script_path(path):
         return
     try:
         response.headers["Cache-Control"] = _SW_NO_CACHE
+    except Exception:
+        pass
+
+
+def apply_hashed_asset_cache_headers(path: str, response) -> None:
+    """Cache longo + immutable para assets hashed; não sobrescreve SW no-cache."""
+    if is_service_worker_script_path(path):
+        return
+    if not is_hashed_vite_asset_path(path):
+        return
+    if getattr(response, "status_code", 200) != 200:
+        return
+    try:
+        response.headers["Cache-Control"] = _HASHED_ASSET_CACHE
     except Exception:
         pass
 
@@ -123,6 +150,7 @@ class SafeStaticFiles(StaticFiles):
             raise HTTPException(status_code=404, detail="Not found")
         response = await super().get_response(path, scope)
         apply_sw_cache_headers(norm, response)
+        apply_hashed_asset_cache_headers(norm, response)
         return response
 
 
@@ -144,6 +172,11 @@ class SpaStaticFiles(SafeStaticFiles):
             )
         return self._legacy_static
 
+    def _finalize_static_response(self, norm: str, response):
+        apply_sw_cache_headers(norm, response)
+        apply_hashed_asset_cache_headers(norm, response)
+        return response
+
     async def _try_legacy(self, norm: str, scope):
         if not norm or not is_portal_static_path(norm):
             return None
@@ -162,8 +195,7 @@ class SpaStaticFiles(SafeStaticFiles):
         norm = lookup.replace("\\", "/").lstrip("/")
         legacy_resp = await self._try_legacy(norm, scope)
         if legacy_resp is not None:
-            apply_sw_cache_headers(norm, legacy_resp)
-            return legacy_resp
+            return self._finalize_static_response(norm, legacy_resp)
 
         try:
             response = await super().get_response(lookup or "index.html", scope)
@@ -172,8 +204,7 @@ class SpaStaticFiles(SafeStaticFiles):
                 raise
             legacy_resp = await self._try_legacy(norm, scope)
             if legacy_resp is not None:
-                apply_sw_cache_headers(norm, legacy_resp)
-                return legacy_resp
+                return self._finalize_static_response(norm, legacy_resp)
             if norm and "." in Path(norm).name:
                 raise
             return await super().get_response("index.html", scope)
@@ -181,9 +212,8 @@ class SpaStaticFiles(SafeStaticFiles):
         if getattr(response, "status_code", None) == 404:
             legacy_resp = await self._try_legacy(norm, scope)
             if legacy_resp is not None:
-                apply_sw_cache_headers(norm, legacy_resp)
-                return legacy_resp
+                return self._finalize_static_response(norm, legacy_resp)
             if norm and "." in Path(norm).name:
                 return response
             return await super().get_response("index.html", scope)
-        return response
+        return self._finalize_static_response(norm, response)

@@ -1,23 +1,27 @@
-import type { CSSProperties } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { useToastStore, type ToastVariant } from "./toastStore";
 
 const VARIANT_STYLES: Record<
   ToastVariant,
-  { accent: string; mark: string; label: string }
+  { accent: string; tint: string; mark: string; label: string }
 > = {
   success: {
     accent: "#b9f472",
+    tint: "#2a3a2f",
     mark: "✓",
     label: "Sucesso",
   },
   warning: {
     accent: "#f0b429",
+    tint: "#3a3424",
     mark: "!",
     label: "Atenção",
   },
   error: {
     accent: "#f87171",
+    tint: "#3a2828",
     mark: "✕",
     label: "Erro",
   },
@@ -25,12 +29,23 @@ const VARIANT_STYLES: Record<
 
 export function AppToastHost() {
   const items = useToastStore((s) => s.items);
+  const [mounted, setMounted] = useState(false);
 
-  if (items.length === 0) return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  return (
+  if (!mounted || items.length === 0) {
+    return null;
+  }
+
+  return createPortal(
     <div
-      className="pointer-events-none fixed right-3 z-[12000] flex w-[min(100%-1.5rem,26rem)] flex-col gap-2 sm:right-4 top-[calc(3.5rem+0.5rem)] sm:top-[calc(4rem+0.5rem)] lg:top-[calc(5rem+0.5rem)]"
+      data-testid="sagra-toast-host"
+      className="pointer-events-none fixed right-3 z-[2147483000] flex w-[min(100%-1.5rem,26rem)] flex-col gap-2 sm:right-4"
+      style={{
+        top: "calc(3.5rem + 0.5rem)",
+      }}
       aria-live="polite"
       aria-relevant="additions"
     >
@@ -40,21 +55,20 @@ export function AppToastHost() {
           <div
             key={item.id}
             role="status"
-            className="sagra-toast pointer-events-none flex items-center gap-2 rounded-[8px] border border-white/10 px-2.5 py-2 text-[13px] leading-[1.42] shadow-[0_14px_34px_#0002]"
-            style={
-              {
-                background: "#1d2724",
-                color: "#eef6e8",
-                borderLeft: `3px solid ${style.accent}`,
-                backgroundImage: `linear-gradient(90deg, color-mix(in srgb, ${style.accent} 17%, #1d2724), #1d2724 42%)`,
-              } satisfies CSSProperties
-            }
+            data-testid={`sagra-toast-${item.variant}`}
+            className="sagra-toast pointer-events-none flex items-center gap-2 rounded-[8px] border px-2.5 py-2 text-[13px] leading-[1.42] shadow-[0_14px_34px_rgba(0,0,0,0.35)]"
+            style={{
+              background: style.tint,
+              color: "#eef6e8",
+              borderColor: "rgba(255,255,255,0.12)",
+              borderLeft: `3px solid ${style.accent}`,
+            }}
           >
             <span
               aria-hidden
               className="grid size-[26px] shrink-0 place-items-center rounded-[6px] text-sm font-semibold"
               style={{
-                background: `color-mix(in srgb, ${style.accent} 22%, #1d2724)`,
+                background: "rgba(0,0,0,0.25)",
                 color: style.accent,
               }}
               title={style.label}
@@ -78,7 +92,14 @@ export function AppToastHost() {
         @media (prefers-reduced-motion: reduce) {
           .sagra-toast { animation: none; }
         }
+        @media (min-width: 640px) {
+          [data-testid="sagra-toast-host"] { top: calc(4rem + 0.5rem) !important; }
+        }
+        @media (min-width: 1024px) {
+          [data-testid="sagra-toast-host"] { top: calc(5rem + 0.5rem) !important; }
+        }
       `}</style>
-    </div>
+    </div>,
+    document.body,
   );
 }

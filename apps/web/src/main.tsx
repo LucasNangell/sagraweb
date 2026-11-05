@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import { AuthBootstrap } from "@/components/auth/AuthBootstrap";
 import { PwaProvider } from "@/components/pwa/PwaUpdatePrompt";
 import { AppErrorBoundary } from "@/components/ui/AppErrorBoundary";
+import { AppToastHost } from "@/components/ui/AppToastHost";
 import { queryClient } from "@/lib/query-client";
 import { routeTree } from "./routeTree.gen";
 import "./index.css";
@@ -53,6 +54,7 @@ createRoot(rootEl).render(
         <QueryClientProvider client={queryClient}>
           <AuthBootstrap>
             <RouterProvider router={router} />
+            <AppToastHost />
           </AuthBootstrap>
         </QueryClientProvider>
       </PwaProvider>

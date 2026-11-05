@@ -134,8 +134,8 @@ body {
  * Mapeamento do modelo azul-cinza → amarelo:
  *   #ffffff/#d2dce8 → #ffffff/#f0e0b0
  *   #a2b3c6 → #d4b87a | #91a4bb → #c9a84e | #526b86 → #a67c1a
- *   #18365435 → #7a5a1035 | ink #30465f → #92400e
- *   active #cbd6e5/#e6edf6/#d1dce8 → #e6d090/#f7efd4/#efe0b8
+ *   ink #30465f → #92400e | active → #e6d090/#f7efd4/#efe0b8
+ *   (sem sombra blur do modelo)
  */
 .ge-btn-3d {
   --press: 2px;
@@ -144,7 +144,6 @@ body {
   --ge-btn-border: #d4b87a;
   --ge-btn-edge: #c9a84e;
   --ge-btn-rim: #a67c1a;
-  --ge-btn-glow: #7a5a1035;
   --ge-btn-inset: #ffffff88;
   --ge-btn-active-top: #e6d090;
   --ge-btn-active-bottom: #f7efd4;
@@ -172,7 +171,6 @@ body {
   box-shadow:
     0 var(--press) 0 var(--ge-btn-edge),
     0 calc(var(--press) + 1px) 0 var(--ge-btn-rim),
-    0 15px 18px var(--ge-btn-glow),
     inset 0 0 0 4px var(--ge-btn-inset);
   transition: all 300ms ease;
 }
@@ -182,7 +180,6 @@ body {
   box-shadow:
     0 calc(var(--press) + 2px) 0 var(--ge-btn-edge),
     0 calc(var(--press) + 3px) 0 var(--ge-btn-rim),
-    0 18px 22px var(--ge-btn-glow),
     inset 0 0 0 4px #fff;
 }
 
@@ -192,7 +189,6 @@ body {
   box-shadow:
     0 0 0 var(--ge-btn-edge),
     0 1px 0 var(--ge-btn-rim),
-    0 3px 5px var(--ge-btn-glow),
     inset 0 0 0 4px var(--ge-btn-active-inset);
   transition-duration: 60ms;
 }
@@ -215,7 +211,6 @@ body {
   --ge-btn-border: #d4b87a;
   --ge-btn-edge: #c9a84e;
   --ge-btn-rim: #a67c1a;
-  --ge-btn-glow: #7a5a1035;
   --ge-btn-inset: #ffffff88;
   --ge-btn-active-top: #e6d090;
   --ge-btn-active-bottom: #f7efd4;
@@ -230,7 +225,6 @@ body {
   --ge-btn-border: #8bc4ae;
   --ge-btn-edge: #6db89a;
   --ge-btn-rim: #2f7a5c;
-  --ge-btn-glow: #065f4635;
   --ge-btn-inset: #ffffff88;
   --ge-btn-active-top: #8fd4b8;
   --ge-btn-active-bottom: #e8faf2;
@@ -245,7 +239,6 @@ body {
   --ge-btn-border: #b0b0b6;
   --ge-btn-edge: #9a9aa2;
   --ge-btn-rim: #62626a;
-  --ge-btn-glow: #30303835;
   --ge-btn-inset: #ffffff88;
   --ge-btn-active-top: #c8c8ce;
   --ge-btn-active-bottom: #ececf0;

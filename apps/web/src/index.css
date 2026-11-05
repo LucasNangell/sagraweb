@@ -130,68 +130,53 @@ body {
 }
 
 /*
- * Botões Download / Baixar todos — modelo Porcelana (material3d-7),
- * adaptado às paletas amber / emerald / slate do SAGRA.
+ * Botões Download / Baixar todos — Arcade press (depth-1 / estudos/button.html),
+ * tamanho compacto atual + paletas amber / emerald / slate.
  */
 .ge-btn-3d {
-  --press: 3px;
+  --c: #f0b429;
   --c2: #a67c1a;
-  --ge-btn-face: #f0e0b0;
-  --ge-btn-edge: #d4b87a;
-  --ge-btn-rim: #c9a84e;
-  --ge-btn-soft: #92400e28;
-  --ge-btn-active-face: #efe0b8;
-  --ge-btn-active-inset: #c9a84e35;
+  --ink: #ffffff;
+  --press: 3px;
+  --speed: 100ms;
   position: relative;
   isolation: isolate;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.35rem;
+  gap: 5px;
+  max-width: 100%;
   padding-inline: 10px;
   padding-block: 5px;
-  border-radius: 100px;
-  border: 1px solid white;
+  border: 0;
+  border-radius: 10px;
+  background: var(--c);
+  color: var(--ink);
   font-weight: 600;
   letter-spacing: 0.01em;
   line-height: 1.2;
-  cursor: pointer;
-  user-select: none;
-  touch-action: manipulation;
   text-decoration: none;
   white-space: nowrap;
   vertical-align: middle;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
-  color: #92400e;
-  background: radial-gradient(ellipse at 30% 0%, white 20%, var(--ge-btn-face) 90%);
+  outline-offset: 2px;
+  text-shadow: 0 0 #0003;
   box-shadow:
-    0 var(--press) 0 var(--ge-btn-edge),
-    0 calc(var(--press) + 1px) 0 var(--ge-btn-rim),
-    0 10px 14px var(--ge-btn-soft),
-    inset 0 3px 4px white;
-  transition: all 220ms ease;
-  outline-offset: 5px;
+    0 var(--press) 0 var(--c2),
+    0 6px 10px #0002;
+  transition: all var(--speed) ease;
 }
 
 .ge-btn-3d:hover:not(:disabled):not([aria-disabled="true"]) {
-  translate: 0 -3px;
-  color: var(--c2);
-  box-shadow:
-    0 calc(var(--press) + 3px) 0 var(--ge-btn-edge),
-    0 calc(var(--press) + 4px) 0 var(--ge-btn-rim),
-    0 14px 18px var(--ge-btn-soft),
-    inset 0 3px 4px white;
+  filter: brightness(1.04);
 }
 
 .ge-btn-3d:active:not(:disabled):not([aria-disabled="true"]) {
   translate: 0 var(--press);
-  background: var(--ge-btn-active-face);
-  box-shadow:
-    0 0 0 var(--ge-btn-edge),
-    0 1px 0 var(--ge-btn-rim),
-    0 4px 5px var(--ge-btn-soft),
-    inset 0 3px 6px var(--ge-btn-active-inset);
-  transition-duration: 80ms;
+  box-shadow: 0 0 0 var(--c2);
 }
 
 .ge-btn-3d:focus-visible {
@@ -210,38 +195,23 @@ body {
 
 /* Pendente / Baixar todos */
 .ge-btn-3d--amber {
+  --c: #f0b429;
   --c2: #a67c1a;
-  --ge-btn-face: #f0e0b0;
-  --ge-btn-edge: #d4b87a;
-  --ge-btn-rim: #c9a84e;
-  --ge-btn-soft: #92400e28;
-  --ge-btn-active-face: #efe0b8;
-  --ge-btn-active-inset: #c9a84e35;
-  color: #92400e;
+  --ink: #ffffff;
 }
 
 /* Baixado */
 .ge-btn-3d--emerald {
-  --c2: #047857;
-  --ge-btn-face: #d4ebe0;
-  --ge-btn-edge: #a8cfbc;
-  --ge-btn-rim: #6db89a;
-  --ge-btn-soft: #065f4628;
-  --ge-btn-active-face: #dceee6;
-  --ge-btn-active-inset: #6db89a35;
-  color: #065f46;
+  --c: #2fbf7a;
+  --c2: #1a7a4c;
+  --ink: #ffffff;
 }
 
 /* Download avulso */
 .ge-btn-3d--slate {
+  --c: #6b7c93;
   --c2: #24344d;
-  --ge-btn-face: #e4e9ef;
-  --ge-btn-edge: #b9c4d1;
-  --ge-btn-rim: #8698ad;
-  --ge-btn-soft: #24344d30;
-  --ge-btn-active-face: #e7edf3;
-  --ge-btn-active-inset: #8698ad35;
-  color: #4a5e76;
+  --ink: #ffffff;
 }
 
 @media (prefers-reduced-motion: reduce) {

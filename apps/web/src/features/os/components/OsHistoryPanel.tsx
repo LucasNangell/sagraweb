@@ -1168,7 +1168,7 @@ export function OsHistoryPanel({
                         : !selectedHistory || saving
                     }
                     onClick={() => void handleDelete()}
-                    className="flex size-8 items-center justify-center rounded bg-sagra-danger text-white disabled:opacity-40"
+                    className="sagra-btn sagra-btn--delete sagra-btn--icon"
                     data-testid={homeTestIds.osHistoryExcluir}
                   >
                     <Trash2 className="size-4" />
@@ -1185,7 +1185,7 @@ export function OsHistoryPanel({
                         ano: String(osAno),
                         id: String(osId),
                       }}
-                      className="sagra-btn sagra-btn--secondary sagra-btn--md no-underline hover:bg-secondary-blue/90 hover:text-white hover:no-underline"
+                      className="sagra-btn sagra-btn--search sagra-btn--sm no-underline hover:no-underline"
                       data-testid={homeTestIds.osHistoryAnalise}
                     >
                       <Search className="size-3.5" aria-hidden />
@@ -1207,7 +1207,7 @@ export function OsHistoryPanel({
                         onClick={() => void startNew()}
                         data-tour="os-history-novo"
                         data-testid={homeTestIds.osHistoryNovo}
-                        className="sagra-btn sagra-btn--primary sagra-btn--md"
+                        className="sagra-btn sagra-btn--add sagra-btn--sm"
                       >
                         Novo
                       </button>
@@ -1216,7 +1216,7 @@ export function OsHistoryPanel({
                           type="button"
                           onClick={() => void startEdit()}
                           disabled={lock.acquiring}
-                          className="rounded bg-amber-500 px-4 py-1.5 text-xs font-semibold text-white"
+                          className="sagra-btn sagra-btn--edit sagra-btn--sm"
                           data-testid={homeTestIds.osHistoryEditar}
                         >
                           Editar
@@ -1231,7 +1231,7 @@ export function OsHistoryPanel({
                         onClick={() => void saveHistory()}
                         data-tour="os-history-salvar"
                         data-testid={homeTestIds.osHistorySalvar}
-                        className="sagra-btn sagra-btn--primary sagra-btn--md"
+                        className="sagra-btn sagra-btn--save sagra-btn--sm"
                       >
                         Salvar
                       </button>
@@ -1239,7 +1239,7 @@ export function OsHistoryPanel({
                         type="button"
                         disabled={saving}
                         onClick={cancelEdit}
-                        className="rounded bg-sagra-danger px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                        className="sagra-btn sagra-btn--cancel sagra-btn--sm"
                         data-testid={homeTestIds.osHistoryCancelar}
                       >
                         Cancelar

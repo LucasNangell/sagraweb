@@ -39,8 +39,9 @@
   --sagra-btn-update-edge: color-mix(in srgb, var(--secondary-blue) 62%, #000);
   --sagra-btn-update-ink: #ffffff;
 
-  --sagra-btn-edit-c: var(--secondary-blue);
-  --sagra-btn-edit-edge: color-mix(in srgb, var(--secondary-blue) 62%, #000);
+  /* Edição — âmbar (histórico de tramitação / ações de editar) */
+  --sagra-btn-edit-c: #f59e0b;
+  --sagra-btn-edit-edge: #d97706;
   --sagra-btn-edit-ink: #ffffff;
 
   --sagra-btn-add-c: var(--primary-green);

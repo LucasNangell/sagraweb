@@ -134,9 +134,9 @@ body {
  * tamanho compacto atual + paletas amber / emerald / slate.
  */
 .ge-btn-3d {
-  --c: #f0b429;
-  --c2: #a67c1a;
-  --ink: #ffffff;
+  --c: #fef3c7;
+  --c2: #92400e;
+  --ink: #92400e;
   --press: 3px;
   --speed: 100ms;
   position: relative;
@@ -163,15 +163,14 @@ body {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   outline-offset: 2px;
-  text-shadow: 0 0 #0003;
   box-shadow:
     0 var(--press) 0 var(--c2),
-    0 6px 10px #0002;
+    0 6px 10px color-mix(in srgb, var(--c2) 18%, transparent);
   transition: all var(--speed) ease;
 }
 
 .ge-btn-3d:hover:not(:disabled):not([aria-disabled="true"]) {
-  filter: brightness(1.04);
+  filter: brightness(0.98);
 }
 
 .ge-btn-3d:active:not(:disabled):not([aria-disabled="true"]) {
@@ -193,25 +192,25 @@ body {
   box-shadow: none !important;
 }
 
-/* Pendente / Baixar todos */
+/* Pendente / Baixar todos — fonte antiga + fundo âmbar claro */
 .ge-btn-3d--amber {
-  --c: #f0b429;
-  --c2: #a67c1a;
-  --ink: #ffffff;
+  --c: #fef3c7;
+  --c2: #92400e;
+  --ink: #92400e;
 }
 
 /* Baixado */
 .ge-btn-3d--emerald {
-  --c: #2fbf7a;
-  --c2: #1a7a4c;
-  --ink: #ffffff;
+  --c: #d1fae5;
+  --c2: #065f46;
+  --ink: #065f46;
 }
 
 /* Download avulso */
 .ge-btn-3d--slate {
-  --c: #6b7c93;
-  --c2: #24344d;
-  --ink: #ffffff;
+  --c: #e8edf3;
+  --c2: #4a5e76;
+  --ink: #4a5e76;
 }
 
 @media (prefers-reduced-motion: reduce) {

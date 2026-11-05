@@ -551,7 +551,7 @@ export function PortalOsArquivosPage({
 
           onClick={handleUpload}
 
-          className="mt-4 w-full rounded-lg bg-primary-green py-3 text-sm font-semibold text-white disabled:opacity-60"
+          className="mt-4 w-full sagra-btn sagra-btn--primary sagra-btn--sm"
 
         >
 

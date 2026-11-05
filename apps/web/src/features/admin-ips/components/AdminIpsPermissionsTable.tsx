@@ -238,7 +238,7 @@ export function AdminIpsPermissionsTable({
                               onClick={() => onSave(ip)}
                               disabled={rowBusy}
                               title="Salvar"
-                              className="inline-flex items-center justify-center rounded bg-primary-green px-2.5 py-1.5 text-white transition hover:bg-primary-green/90 disabled:opacity-60"
+                              className="sagra-btn sagra-btn--primary sagra-btn--md transition hover:bg-primary-green/90 disabled:opacity-60"
                             >
                               {savingId === ip.id ? (
                                 <Loader2 className="size-4 animate-spin" aria-hidden />

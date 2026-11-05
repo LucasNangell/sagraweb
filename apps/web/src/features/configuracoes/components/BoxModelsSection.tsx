@@ -166,7 +166,7 @@ export function BoxModelsSection() {
         actions={
           <button
             type="button"
-            className="inline-flex items-center gap-1 rounded-lg bg-primary-green px-2.5 py-1.5 text-xs font-semibold text-white"
+            className="sagra-btn sagra-btn--primary sagra-btn--md"
             onClick={() => {
               setDraft(emptyDraft());
               setParseWarnings([]);
@@ -387,7 +387,7 @@ export function BoxModelsSection() {
                             <button
                               type="button"
                               disabled={alreadyInSequence}
-                              className="inline-flex items-center gap-1 rounded-lg bg-primary-green px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                              className="sagra-btn sagra-btn--primary sagra-btn--md"
                               onClick={() => {
                                 if (!selectedEdge.hingeId) return;
                                 patchConfig((c) =>
@@ -406,7 +406,7 @@ export function BoxModelsSection() {
                                 alreadyInSequence ||
                                 (draft.config?.operations?.length ?? 0) === 0
                               }
-                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
+                              className="sagra-btn sagra-btn--outline sagra-btn--sm"
                               onClick={() => {
                                 if (!selectedEdge.hingeId || !draft.config)
                                   return;
@@ -527,7 +527,7 @@ export function BoxModelsSection() {
               <button
                 type="button"
                 disabled={saveMut.isPending || !draft.config}
-                className="rounded-lg bg-primary-green px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                className="sagra-btn sagra-btn--primary sagra-btn--md"
                 onClick={() => saveMut.mutate()}
               >
                 {saveMut.isPending ? "Salvando…" : "Salvar modelo"}

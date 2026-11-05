@@ -361,21 +361,21 @@ export function ProvaWebCropPanel({
             onClick={centerOnFormat}
             disabled={!canCenterOnFormat}
             title={centerDisabledTitle}
-            className="rounded-lg border border-primary-green/40 bg-primary-green/10 px-2.5 py-1.5 text-xs font-medium text-primary-green hover:bg-primary-green/15 disabled:cursor-not-allowed disabled:opacity-50"
+            className="sagra-btn sagra-btn--primary-outline sagra-btn--sm"
           >
             Centralizar no formato
           </button>
           <button
             type="button"
             onClick={equalizeSides}
-            className="rounded-lg border border-sagra-border bg-white px-2.5 py-1.5 text-xs text-neutral-700 hover:bg-neutral-100"
+            className="sagra-btn sagra-btn--outline sagra-btn--sm hover:bg-neutral-100"
           >
             Igualar laterais
           </button>
           <button
             type="button"
             onClick={equalizeAll}
-            className="rounded-lg border border-sagra-border bg-white px-2.5 py-1.5 text-xs text-neutral-700 hover:bg-neutral-100"
+            className="sagra-btn sagra-btn--outline sagra-btn--sm hover:bg-neutral-100"
           >
             Igualar todas
           </button>
@@ -383,7 +383,7 @@ export function ProvaWebCropPanel({
             type="button"
             onClick={handleDetectMarks}
             disabled={detecting || metaQuery.isFetching}
-            className="inline-flex items-center gap-1 rounded-lg border border-sagra-border bg-white px-2.5 py-1.5 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+            className="sagra-btn sagra-btn--outline sagra-btn--sm hover:bg-neutral-100 disabled:opacity-50"
           >
             {detecting || (detectMarks && metaQuery.isFetching) ? (
               <Loader2 className="size-3 animate-spin" aria-hidden />
@@ -395,7 +395,7 @@ export function ProvaWebCropPanel({
           <button
             type="button"
             onClick={() => onChange(emptyCropSides("manual"))}
-            className="rounded-lg border border-sagra-border bg-white px-2.5 py-1.5 text-xs text-neutral-700 hover:bg-neutral-100"
+            className="sagra-btn sagra-btn--outline sagra-btn--sm hover:bg-neutral-100"
           >
             Zerar
           </button>

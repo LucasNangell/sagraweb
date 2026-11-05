@@ -107,7 +107,7 @@ export function OsPrintModeModal({
           <button
             type="button"
             onClick={() => onSelect("normal")}
-            className="inline-flex items-center justify-center gap-2 rounded bg-secondary-blue px-4 py-3 text-base font-semibold text-white hover:opacity-95"
+            className="sagra-btn sagra-btn--secondary sagra-btn--md hover:opacity-95"
             data-testid={homeTestIds.osPrintConfirm}
           >
             <FileText className="size-5" />
@@ -166,7 +166,7 @@ export function OsPrintModeModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded bg-neutral-500 px-5 py-2 text-sm font-semibold text-white hover:bg-neutral-600"
+            className="sagra-btn sagra-btn--neutral sagra-btn--md"
           >
             Cancelar
           </button>

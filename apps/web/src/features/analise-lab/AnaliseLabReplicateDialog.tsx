@@ -135,7 +135,7 @@ export function AnaliseLabReplicateDialog({
           <button
             type="button"
             disabled={busy || selected.length === 0}
-            className="rounded bg-secondary-blue px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+            className="sagra-btn sagra-btn--secondary sagra-btn--md"
             onClick={() =>
               onConfirm({ itemIds: selected, copiarMarcas })
             }

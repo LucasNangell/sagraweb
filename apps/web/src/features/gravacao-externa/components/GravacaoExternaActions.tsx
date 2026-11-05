@@ -93,7 +93,7 @@ export function GravacaoExternaActions({
         type="button"
         disabled={!pendente || iniciando || iniciada || concluida}
         onClick={onIniciar}
-        className="inline-flex items-center gap-2 rounded bg-primary-green px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        className="sagra-btn sagra-btn--primary sagra-btn--md"
       >
         {iniciando ? (
           <Loader2 className="size-4 animate-spin" />
@@ -107,7 +107,7 @@ export function GravacaoExternaActions({
         type="button"
         disabled={!iniciada || concluindo || concluida}
         onClick={onConcluir}
-        className="inline-flex items-center gap-2 rounded border border-primary-green bg-white px-4 py-2 text-sm font-medium text-primary-green hover:bg-primary-green/5 disabled:cursor-not-allowed disabled:opacity-50"
+        className="sagra-btn sagra-btn--primary-outline sagra-btn--md "
       >
         {concluindo ? (
           <Loader2 className="size-4 animate-spin" />

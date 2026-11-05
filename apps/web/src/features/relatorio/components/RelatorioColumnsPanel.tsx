@@ -124,7 +124,7 @@ export function RelatorioColumnsPanel({
             disabled={generatingFormat != null}
             onClick={onGeneratePdf}
             className={cn(
-              "flex w-full items-center justify-center gap-1.5 rounded-lg bg-secondary-blue px-3 py-2 text-xs font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-60 sm:w-auto sm:py-1.5",
+              "flex w-full sagra-btn sagra-btn--secondary sagra-btn--md shadow-sm hover:opacity-90 disabled:opacity-60 sm:w-auto sm:py-1.5",
             )}
           >
             {generatingFormat === "html" ? (

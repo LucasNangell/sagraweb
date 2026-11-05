@@ -15,6 +15,81 @@
   --danger-red: #dc3545;
   --gray-btn: #6c757d;
   --font-main: "Inter", system-ui, sans-serif;
+
+  /*
+   * Perfis semânticos de botão (sagra-btn).
+   * Edite APENAS estas variáveis para mudar a cor de toda uma família
+   * (ex.: todos os "Salvar", todos os "Cancelar").
+   * Cada perfil: face (--*-c), base/sombra (--*-edge), texto/ícone (--*-ink),
+   * e opcionalmente borda (--*-border) para estilos outline.
+   */
+  --sagra-btn-confirm-c: var(--primary-green);
+  --sagra-btn-confirm-edge: color-mix(in srgb, var(--primary-green) 62%, #000);
+  --sagra-btn-confirm-ink: #ffffff;
+
+  --sagra-btn-save-c: var(--primary-green);
+  --sagra-btn-save-edge: color-mix(in srgb, var(--primary-green) 62%, #000);
+  --sagra-btn-save-ink: #ffffff;
+
+  --sagra-btn-next-c: var(--primary-green);
+  --sagra-btn-next-edge: color-mix(in srgb, var(--primary-green) 62%, #000);
+  --sagra-btn-next-ink: #ffffff;
+
+  --sagra-btn-update-c: var(--secondary-blue);
+  --sagra-btn-update-edge: color-mix(in srgb, var(--secondary-blue) 62%, #000);
+  --sagra-btn-update-ink: #ffffff;
+
+  --sagra-btn-edit-c: var(--secondary-blue);
+  --sagra-btn-edit-edge: color-mix(in srgb, var(--secondary-blue) 62%, #000);
+  --sagra-btn-edit-ink: #ffffff;
+
+  --sagra-btn-add-c: var(--primary-green);
+  --sagra-btn-add-edge: color-mix(in srgb, var(--primary-green) 62%, #000);
+  --sagra-btn-add-ink: #ffffff;
+
+  --sagra-btn-search-c: var(--secondary-blue);
+  --sagra-btn-search-edge: color-mix(in srgb, var(--secondary-blue) 62%, #000);
+  --sagra-btn-search-ink: #ffffff;
+
+  /* Cancelamento: vermelho (ajustável). Neutro cinza fica em --sagra-btn-neutral-* */
+  --sagra-btn-cancel-c: #dc2626;
+  --sagra-btn-cancel-edge: color-mix(in srgb, #dc2626 62%, #000);
+  --sagra-btn-cancel-ink: #ffffff;
+
+  --sagra-btn-neutral-c: #525252;
+  --sagra-btn-neutral-edge: color-mix(in srgb, #525252 62%, #000);
+  --sagra-btn-neutral-ink: #ffffff;
+
+  --sagra-btn-close-c: #ffffff;
+  --sagra-btn-close-edge: #a3a3a3;
+  --sagra-btn-close-ink: #404040;
+  --sagra-btn-close-border: #d4d4d4;
+
+  --sagra-btn-clear-c: #ffffff;
+  --sagra-btn-clear-edge: #a3a3a3;
+  --sagra-btn-clear-ink: #404040;
+  --sagra-btn-clear-border: #d4d4d4;
+
+  --sagra-btn-delete-c: #dc2626;
+  --sagra-btn-delete-edge: color-mix(in srgb, #dc2626 62%, #000);
+  --sagra-btn-delete-ink: #ffffff;
+
+  --sagra-btn-pending-c: #f0b429;
+  --sagra-btn-pending-edge: #a67c1a;
+  --sagra-btn-pending-ink: #000000;
+
+  --sagra-btn-download-c: #f0b429;
+  --sagra-btn-download-edge: #a67c1a;
+  --sagra-btn-download-ink: #000000;
+
+  --sagra-btn-success-c: #2fbf7a;
+  --sagra-btn-success-edge: #1a7a4c;
+  --sagra-btn-success-ink: #000000;
+
+  --sagra-btn-back-c: #ffffff;
+  --sagra-btn-back-edge: #a3a3a3;
+  --sagra-btn-back-ink: #404040;
+  --sagra-btn-back-border: #d4d4d4;
 }
 
 @theme {
@@ -130,13 +205,19 @@ body {
 }
 
 /*
- * Botões Download / Baixar todos — Arcade press (depth-1 / estudos/button.html),
- * tamanho compacto atual + paletas amber / emerald / slate.
+ * ============================================================================
+ * Botões SAGRA — classe canônica do MODELO: `.sagra-btn`
+ * ============================================================================
+ * Para trocar o estilo 3D de TODOS os botões do sistema, edite APENAS o bloco
+ * `.sagra-btn` abaixo (modelo Arcade / depth-1 em estudos/button.html).
+ * Variantes (`.sagra-btn--*`) só definem cor (--c/--c2/--ink) e tamanho.
+ * Alias legado: `.ge-btn-3d` / `.ge-btn-3d--*` (mesmo modelo).
  */
+.sagra-btn,
 .ge-btn-3d {
-  --c: #f0b429;
-  --c2: #a67c1a;
-  --ink: #000000;
+  --c: var(--primary-green);
+  --c2: color-mix(in srgb, var(--primary-green) 62%, #000);
+  --ink: #ffffff;
   --press: 3px;
   --speed: 100ms;
   position: relative;
@@ -174,10 +255,12 @@ body {
   transition: all var(--speed) ease;
 }
 
+.sagra-btn:hover:not(:disabled):not([aria-disabled="true"]),
 .ge-btn-3d:hover:not(:disabled):not([aria-disabled="true"]) {
   filter: brightness(1.04);
 }
 
+.sagra-btn:active:not(:disabled):not([aria-disabled="true"]),
 .ge-btn-3d:active:not(:disabled):not([aria-disabled="true"]) {
   translate: 0 var(--press);
   background: linear-gradient(
@@ -191,10 +274,13 @@ body {
     inset 0 1px 2px color-mix(in srgb, var(--c2) 40%, #000);
 }
 
+.sagra-btn:focus-visible,
 .ge-btn-3d:focus-visible {
   outline: 2px solid var(--c2);
 }
 
+.sagra-btn:disabled,
+.sagra-btn[aria-disabled="true"],
 .ge-btn-3d:disabled,
 .ge-btn-3d[aria-disabled="true"] {
   cursor: not-allowed;
@@ -205,87 +291,112 @@ body {
   box-shadow: none !important;
 }
 
-/* Pendente / Baixar todos — fundo Arcade; texto/ícone pretos */
-.ge-btn-3d--amber {
-  --c: #f0b429;
-  --c2: #a67c1a;
-  --ink: #000000;
+/*
+ * Perfis SEMÂNTICOS — use estes nas telas:
+ *   sagra-btn sagra-btn--save sagra-btn--md
+ * Cores vêm das variáveis --sagra-btn-<perfil>-* em :root.
+ */
+.sagra-btn--confirm {
+  --c: var(--sagra-btn-confirm-c);
+  --c2: var(--sagra-btn-confirm-edge);
+  --ink: var(--sagra-btn-confirm-ink);
 }
 
-/* Baixado */
-.ge-btn-3d--emerald {
-  --c: #2fbf7a;
-  --c2: #1a7a4c;
-  --ink: #000000;
+.sagra-btn--save {
+  --c: var(--sagra-btn-save-c);
+  --c2: var(--sagra-btn-save-edge);
+  --ink: var(--sagra-btn-save-ink);
 }
 
-/* Download avulso */
-.ge-btn-3d--slate {
-  --c: #6b7c93;
-  --c2: #24344d;
-  --ink: #000000;
+.sagra-btn--next {
+  --c: var(--sagra-btn-next-c);
+  --c2: var(--sagra-btn-next-edge);
+  --ink: var(--sagra-btn-next-ink);
 }
 
-/* Ações de formulário/modal — tamanho original (px-4 py-2 text-sm) */
-.ge-btn-3d--md {
-  gap: 0.5rem;
-  padding-inline: 1rem;
-  padding-block: 0.5rem;
-  border-radius: 0.375rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  line-height: 1.25rem;
+.sagra-btn--update {
+  --c: var(--sagra-btn-update-c);
+  --c2: var(--sagra-btn-update-edge);
+  --ink: var(--sagra-btn-update-ink);
 }
 
-/* Compacto (px-3 py-1.5 text-xs) — ações internas do modal */
-.ge-btn-3d--sm {
-  gap: 0.375rem;
-  padding-inline: 0.75rem;
-  padding-block: 0.375rem;
-  border-radius: 0.375rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 1rem;
+.sagra-btn--edit {
+  --c: var(--sagra-btn-edit-c);
+  --c2: var(--sagra-btn-edit-edge);
+  --ink: var(--sagra-btn-edit-ink);
 }
 
-.ge-btn-3d--primary {
-  --c: var(--primary-green);
-  --c2: color-mix(in srgb, var(--primary-green) 62%, #000);
-  --ink: #ffffff;
+.sagra-btn--add {
+  --c: var(--sagra-btn-add-c);
+  --c2: var(--sagra-btn-add-edge);
+  --ink: var(--sagra-btn-add-ink);
 }
 
-.ge-btn-3d--neutral {
-  --c: #525252;
-  --c2: color-mix(in srgb, #525252 62%, #000);
-  --ink: #ffffff;
+.sagra-btn--search {
+  --c: var(--sagra-btn-search-c);
+  --c2: var(--sagra-btn-search-edge);
+  --ink: var(--sagra-btn-search-ink);
 }
 
-.ge-btn-3d--secondary {
-  --c: var(--secondary-blue);
-  --c2: color-mix(in srgb, var(--secondary-blue) 62%, #000);
-  --ink: #ffffff;
+.sagra-btn--cancel {
+  --c: var(--sagra-btn-cancel-c);
+  --c2: var(--sagra-btn-cancel-edge);
+  --ink: var(--sagra-btn-cancel-ink);
 }
 
-.ge-btn-3d--danger {
-  --c: #dc2626;
-  --c2: color-mix(in srgb, #dc2626 62%, #000);
-  --ink: #ffffff;
+.sagra-btn--delete {
+  --c: var(--sagra-btn-delete-c);
+  --c2: var(--sagra-btn-delete-edge);
+  --ink: var(--sagra-btn-delete-ink);
 }
 
-.ge-btn-3d--info {
-  --c: #2563eb;
-  --c2: color-mix(in srgb, #2563eb 62%, #000);
-  --ink: #ffffff;
+.sagra-btn--pending {
+  --c: var(--sagra-btn-pending-c);
+  --c2: var(--sagra-btn-pending-edge);
+  --ink: var(--sagra-btn-pending-ink);
 }
 
-/* Outline branco (Detalhes / Expandir) — cor e tamanho originais */
+.sagra-btn--download {
+  --c: var(--sagra-btn-download-c);
+  --c2: var(--sagra-btn-download-edge);
+  --ink: var(--sagra-btn-download-ink);
+}
+
+.sagra-btn--success {
+  --c: var(--sagra-btn-success-c);
+  --c2: var(--sagra-btn-success-edge);
+  --ink: var(--sagra-btn-success-ink);
+}
+
+.sagra-btn--close,
+.sagra-btn--clear,
+.sagra-btn--back,
+.sagra-btn--outline,
 .ge-btn-3d--outline {
-  --c: #ffffff;
-  --c2: #a3a3a3;
-  --ink: #404040;
-  border: 1px solid #d4d4d4;
+  --c: var(--sagra-btn-close-c);
+  --c2: var(--sagra-btn-close-edge);
+  --ink: var(--sagra-btn-close-ink);
+  border: 1px solid var(--sagra-btn-close-border);
 }
 
+.sagra-btn--clear {
+  --c: var(--sagra-btn-clear-c);
+  --c2: var(--sagra-btn-clear-edge);
+  --ink: var(--sagra-btn-clear-ink);
+  border: 1px solid var(--sagra-btn-clear-border);
+}
+
+.sagra-btn--back {
+  --c: var(--sagra-btn-back-c);
+  --c2: var(--sagra-btn-back-edge);
+  --ink: var(--sagra-btn-back-ink);
+  border: 1px solid var(--sagra-btn-back-border);
+}
+
+.sagra-btn--close:hover:not(:disabled):not([aria-disabled="true"]),
+.sagra-btn--clear:hover:not(:disabled):not([aria-disabled="true"]),
+.sagra-btn--back:hover:not(:disabled):not([aria-disabled="true"]),
+.sagra-btn--outline:hover:not(:disabled):not([aria-disabled="true"]),
 .ge-btn-3d--outline:hover:not(:disabled):not([aria-disabled="true"]) {
   filter: none;
   background: linear-gradient(
@@ -296,6 +407,85 @@ body {
   );
 }
 
+/* Contorno verde (ação positiva secundária) */
+.sagra-btn--primary-outline,
+.ge-btn-3d--primary-outline {
+  --c: #ffffff;
+  --c2: color-mix(in srgb, var(--primary-green) 45%, #666);
+  --ink: var(--primary-green);
+  border: 1px solid var(--primary-green);
+}
+
+.sagra-btn--primary-outline:hover:not(:disabled):not([aria-disabled="true"]),
+.ge-btn-3d--primary-outline:hover:not(:disabled):not([aria-disabled="true"]) {
+  filter: none;
+  background: color-mix(in srgb, var(--primary-green) 8%, #fff);
+}
+
+/*
+ * Alias de tom (legado / atalho cromático) → mesmos tokens semânticos.
+ * Preferir --confirm/--save/--cancel/--delete nas telas novas.
+ */
+.sagra-btn--primary,
+.ge-btn-3d--primary {
+  --c: var(--sagra-btn-confirm-c);
+  --c2: var(--sagra-btn-confirm-edge);
+  --ink: var(--sagra-btn-confirm-ink);
+}
+
+.sagra-btn--secondary,
+.ge-btn-3d--secondary {
+  --c: var(--sagra-btn-update-c);
+  --c2: var(--sagra-btn-update-edge);
+  --ink: var(--sagra-btn-update-ink);
+}
+
+.sagra-btn--neutral,
+.ge-btn-3d--neutral {
+  --c: var(--sagra-btn-neutral-c);
+  --c2: var(--sagra-btn-neutral-edge);
+  --ink: var(--sagra-btn-neutral-ink);
+}
+
+.sagra-btn--danger,
+.ge-btn-3d--danger {
+  --c: var(--sagra-btn-delete-c);
+  --c2: var(--sagra-btn-delete-edge);
+  --ink: var(--sagra-btn-delete-ink);
+}
+
+.sagra-btn--info,
+.ge-btn-3d--info {
+  --c: #2563eb;
+  --c2: color-mix(in srgb, #2563eb 62%, #000);
+  --ink: #ffffff;
+}
+
+.sagra-btn--warning,
+.ge-btn-3d--warning,
+.sagra-btn--amber,
+.ge-btn-3d--amber {
+  --c: var(--sagra-btn-pending-c);
+  --c2: var(--sagra-btn-pending-edge);
+  --ink: var(--sagra-btn-pending-ink);
+}
+
+.sagra-btn--emerald,
+.ge-btn-3d--emerald {
+  --c: var(--sagra-btn-success-c);
+  --c2: var(--sagra-btn-success-edge);
+  --ink: var(--sagra-btn-success-ink);
+}
+
+.sagra-btn--slate,
+.ge-btn-3d--slate {
+  --c: #6b7c93;
+  --c2: #24344d;
+  --ink: #000000;
+}
+
+/* --- Tamanhos --- */
+.sagra-btn--xs,
 .ge-btn-3d--xs {
   gap: 0.25rem;
   padding-inline: 0.625rem;
@@ -304,6 +494,39 @@ body {
   font-size: 0.75rem;
   font-weight: 500;
   line-height: 1rem;
+}
+
+.sagra-btn--sm,
+.ge-btn-3d--sm {
+  gap: 0.375rem;
+  padding-inline: 0.75rem;
+  padding-block: 0.375rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1rem;
+}
+
+.sagra-btn--md,
+.ge-btn-3d--md {
+  gap: 0.5rem;
+  padding-inline: 1rem;
+  padding-block: 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+}
+
+.sagra-btn--lg,
+.ge-btn-3d--lg {
+  gap: 0.5rem;
+  padding-inline: 1.25rem;
+  padding-block: 0.625rem;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.5rem;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -317,6 +540,9 @@ body {
     animation: none;
   }
 
+  .sagra-btn,
+  .sagra-btn:hover:not(:disabled):not([aria-disabled="true"]),
+  .sagra-btn:active:not(:disabled):not([aria-disabled="true"]),
   .ge-btn-3d,
   .ge-btn-3d:hover:not(:disabled):not([aria-disabled="true"]),
   .ge-btn-3d:active:not(:disabled):not([aria-disabled="true"]) {

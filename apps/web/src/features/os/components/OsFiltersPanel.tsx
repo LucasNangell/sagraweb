@@ -433,7 +433,7 @@ export function OsFiltersPanel({
               aria-label="Atualizar"
               onClick={onRefresh}
               disabled={isFetching}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-primary-green text-white hover:opacity-90 disabled:opacity-60"
+              className="flex h-8 w-8 shrink-0 sagra-btn sagra-btn--primary sagra-btn--md"
               data-testid={homeTestIds.osFiltersRefresh}
             >
               <RefreshCw

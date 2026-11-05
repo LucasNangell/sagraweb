@@ -537,7 +537,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                   void (isEditing ? handleUpdateFilter() : handleCreateFilter())
                 }
                 disabled={disabled}
-                className="inline-flex h-10 items-center justify-center rounded-lg bg-primary-green px-4 text-sm font-semibold text-white transition hover:bg-primary-green/90 disabled:opacity-60"
+                className="sagra-btn sagra-btn--primary sagra-btn--md"
                 data-testid={homeTestIds.osSettingsSave}
               >
                 {isEditing
@@ -553,7 +553,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                   type="button"
                   onClick={handleNewFilter}
                   disabled={isBusy}
-                  className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                  className="h-10 sagra-btn sagra-btn--outline sagra-btn--md"
                 >
                   Novo filtro
                 </button>

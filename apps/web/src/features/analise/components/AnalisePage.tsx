@@ -1338,7 +1338,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
             type="button"
             disabled={finishing || readOnlyMode}
             onClick={() => void handleFinish()}
-            className="inline-flex h-9 w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-primary-green px-5 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-60 sm:w-auto"
+            className="sagra-btn sagra-btn--primary sagra-btn--md sm:w-auto"
           >
             {finishing ? (
               <Loader2 className="size-4 animate-spin" />
@@ -1755,7 +1755,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
                 type="button"
                 disabled={finishing}
                 onClick={() => void handleConfirmObservacao()}
-                className="flex-1 rounded bg-primary-green py-2 text-sm font-semibold text-white disabled:opacity-60"
+                className="flex-1 sagra-btn sagra-btn--primary sagra-btn--sm"
               >
                 Confirmar
               </button>
@@ -1805,7 +1805,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
                 type="button"
                 onClick={handleConfirmFile}
                 disabled={!selectedFile}
-                className="rounded bg-primary-green px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                className="sagra-btn sagra-btn--primary sagra-btn--md"
               >
                 Confirmar
               </button>

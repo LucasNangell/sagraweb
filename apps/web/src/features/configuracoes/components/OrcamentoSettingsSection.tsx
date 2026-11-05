@@ -420,7 +420,7 @@ function ParametrosLayout({
         actions={
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 rounded-md bg-secondary-blue px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:opacity-95 disabled:opacity-60"
+            className="sagra-btn sagra-btn--secondary sagra-btn--md shadow-sm hover:opacity-95 disabled:opacity-60"
             onClick={() => mut.mutate()}
             disabled={mut.isPending}
           >

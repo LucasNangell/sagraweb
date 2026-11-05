@@ -32,7 +32,7 @@ export class AppErrorBoundary extends Component<Props, State> {
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="rounded bg-primary-green px-4 py-2 text-sm font-semibold text-white"
+            className="sagra-btn sagra-btn--primary sagra-btn--md"
           >
             Recarregar página
           </button>

@@ -298,7 +298,7 @@ export function OsSeparadorModal({ row, open, onClose }: OsSeparadorModalProps) 
               <button
                 type="submit"
                 disabled={printDisabled}
-                className="inline-flex items-center gap-1.5 rounded bg-secondary-blue px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-50"
+                className="sagra-btn sagra-btn--secondary sagra-btn--md hover:opacity-95 disabled:opacity-50"
                 data-testid={homeTestIds.osSeparadorPrint}
               >
                 <Printer className="size-4" />
@@ -307,7 +307,7 @@ export function OsSeparadorModal({ row, open, onClose }: OsSeparadorModalProps) 
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded bg-neutral-500 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-600"
+                className="sagra-btn sagra-btn--neutral sagra-btn--md"
                 data-testid={homeTestIds.osSeparadorCancel}
               >
                 Cancelar

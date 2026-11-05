@@ -26,13 +26,13 @@ interface NetworkFolderBrowserModalProps {
 }
 
 const BTN_SECONDARY =
-  "inline-flex items-center justify-center gap-1.5 rounded-md bg-secondary-blue px-3 py-1.5 text-xs font-semibold text-white hover:bg-secondary-blue/90 disabled:cursor-not-allowed disabled:opacity-50";
+  "sagra-btn sagra-btn--secondary sagra-btn--md";
 
 const BTN_CLEAR =
-  "inline-flex items-center justify-center gap-1.5 rounded-md border border-amber-600/50 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50";
+  "sagra-btn sagra-btn--warning sagra-btn--sm";
 
 const BTN_NAV =
-  "inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:border-secondary-blue/40 hover:bg-blue-50 hover:text-secondary-blue disabled:cursor-not-allowed disabled:opacity-40";
+  "inline-flex size-8 shrink-0 sagra-btn sagra-btn--outline sagra-btn--sm hover:border-secondary-blue/40 hover:bg-blue-50 hover:text-secondary-blue disabled:cursor-not-allowed disabled:opacity-40";
 
 function formatFileSize(bytes: number | null | undefined): string {
   if (bytes == null || Number.isNaN(bytes)) {
@@ -313,7 +313,7 @@ export function NetworkFolderBrowserModal({
           <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             Endereço
           </span>
-          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700">
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto sagra-btn sagra-btn--outline sagra-btn--sm">
             <button
               type="button"
               className="truncate hover:text-secondary-blue"
@@ -477,14 +477,14 @@ export function NetworkFolderBrowserModal({
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex items-center justify-center rounded-md bg-neutral-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-neutral-700"
+              className="sagra-btn sagra-btn--neutral sagra-btn--md"
             >
               Cancelar
             </button>
             <button
               type="button"
               onClick={confirmPicks}
-              className="inline-flex items-center justify-center rounded-md bg-primary-green px-4 py-1.5 text-sm font-semibold text-white hover:opacity-90"
+              className="sagra-btn sagra-btn--primary sagra-btn--md"
             >
               Confirmar seleção
             </button>

@@ -224,7 +224,7 @@ export function ClienteCadastroForm({
         type="button"
         onClick={() => void handleCreate()}
         disabled={creating}
-        className="mt-4 inline-flex items-center gap-2 rounded-lg bg-secondary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-secondary-blue/90 disabled:opacity-60"
+        className="mt-4 sagra-btn sagra-btn--secondary sagra-btn--md"
       >
         {creating ? (
           <Loader2 className="size-4 animate-spin" />

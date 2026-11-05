@@ -250,7 +250,7 @@ export function PapelariaCartaoSvgPanel({ osId, osAno }: Props) {
           {hasOs && (
             <button
               type="button"
-              className="flex w-full items-center justify-center gap-2 rounded border border-secondary-blue/30 bg-secondary-blue/5 px-2 py-1.5 text-xs font-semibold text-secondary-blue hover:bg-secondary-blue/10 disabled:opacity-50"
+              className="w-full sagra-btn sagra-btn--outline sagra-btn--sm !border-secondary-blue/30 !text-secondary-blue"
               disabled={prefillQuery.isLoading}
               onClick={applyPrefill}
             >
@@ -279,7 +279,7 @@ export function PapelariaCartaoSvgPanel({ osId, osAno }: Props) {
           <div className="mt-auto flex flex-col gap-2">
             <button
               type="button"
-              className="flex w-full items-center justify-center gap-2 rounded bg-secondary-blue px-3 py-2 text-sm font-bold text-white hover:bg-secondary-blue/90 disabled:opacity-60"
+              className="flex w-full sagra-btn sagra-btn--secondary sagra-btn--md"
               disabled={!selectedCodigo || renderMutation.isPending}
               onClick={() => renderMutation.mutate()}
             >
@@ -292,7 +292,7 @@ export function PapelariaCartaoSvgPanel({ osId, osAno }: Props) {
             </button>
             <button
               type="button"
-              className="flex w-full items-center justify-center gap-2 rounded border border-sagra-border bg-white px-3 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-60"
+              className="flex w-full sagra-btn sagra-btn--outline sagra-btn--sm"
               disabled={!selectedCodigo || exportMutation.isPending}
               onClick={() => exportMutation.mutate()}
             >

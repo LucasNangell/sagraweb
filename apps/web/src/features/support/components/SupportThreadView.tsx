@@ -649,7 +649,7 @@ export function SupportReplyForm({
 
         disabled={!canSubmit}
 
-        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary-green px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto"
+        className="sagra-btn sagra-btn--primary sagra-btn--md sm:w-auto"
 
       >
 

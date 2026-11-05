@@ -322,7 +322,7 @@ export function GravacaoPendenteDetalhesModal({
                   disabled={busy}
                   onClick={() => void handleSave()}
                   className={cn(
-                    "inline-flex items-center gap-2 rounded bg-primary-green px-3 py-1.5 text-sm font-medium text-white hover:opacity-90",
+                    "sagra-btn sagra-btn--primary sagra-btn--md",
                     busy && "opacity-50",
                   )}
                 >

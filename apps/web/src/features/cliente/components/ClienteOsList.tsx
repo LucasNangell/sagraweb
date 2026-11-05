@@ -83,7 +83,7 @@ export function ClienteOsList({
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(event) => event.stopPropagation()}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-primary-green px-3 py-2 text-sm font-medium text-white hover:bg-primary-green/90"
+                  className="inline-flex shrink-0 sagra-btn sagra-btn--primary sagra-btn--md"
                 >
                   {item.pendencia_label || "Ver pendência"}
                   <ExternalLink className="size-4" aria-hidden />

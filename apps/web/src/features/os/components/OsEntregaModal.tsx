@@ -181,7 +181,7 @@ export function OsEntregaModal({
             <button
               type="submit"
               disabled={saving}
-              className="rounded bg-primary-green px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              className="sagra-btn sagra-btn--primary sagra-btn--md"
               data-testid={homeTestIds.osEntregaConfirm}
             >
               Confirmar entrega

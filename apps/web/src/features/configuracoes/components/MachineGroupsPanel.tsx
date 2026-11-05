@@ -175,7 +175,7 @@ export function MachineGroupsPanel() {
         <button
           type="submit"
           disabled={createGroupMutation.isPending || !groupName.trim()}
-          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-primary-green px-4 text-xs font-semibold text-white hover:bg-primary-green/90 disabled:opacity-60"
+          className="sagra-btn sagra-btn--primary sagra-btn--md"
         >
           {createGroupMutation.isPending ? (
             <Loader2 className="size-3.5 animate-spin" />

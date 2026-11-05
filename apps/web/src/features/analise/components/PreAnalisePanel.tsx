@@ -222,7 +222,7 @@ export function PreAnalisePanel({
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              className="sagra-btn sagra-btn--outline sagra-btn--sm"
             >
               Cancelar
             </button>
@@ -334,7 +334,7 @@ export function PreAnalisePanel({
                     <button
                       type="button"
                       onClick={() => setShowFullReport((v) => !v)}
-                      className="flex w-full items-center justify-center gap-1 rounded border border-slate-300 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      className="flex w-full sagra-btn sagra-btn--outline sagra-btn--sm"
                     >
                       {showFullReport ? (
                         <>

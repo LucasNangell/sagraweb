@@ -316,7 +316,7 @@ export function SistemaSettingsSection() {
                   <button
                     type="submit"
                     disabled={pending || !newLabel.trim()}
-                    className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary-green px-4 text-xs font-semibold text-white hover:bg-primary-green/90 disabled:opacity-60"
+                    className="sagra-btn sagra-btn--primary sagra-btn--md"
                   >
                     {createMutation.isPending ? (
                       <Loader2 className="size-3.5 animate-spin" />
@@ -485,7 +485,7 @@ function CatalogItemRow({
             disabled={pending}
             onClick={onToggle}
             title={item.active ? "Desativar" : "Ativar"}
-            className="inline-flex size-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+            className="inline-flex size-8 sagra-btn sagra-btn--outline sagra-btn--sm"
           >
             {item.active ? (
               <ToggleRight className="size-4 text-emerald-600" aria-hidden />
@@ -659,7 +659,7 @@ function VariacoesPanel({ catalogId }: { catalogId: number }) {
             <button
               type="submit"
               disabled={pending || !newLabel.trim()}
-              className="inline-flex h-7 shrink-0 items-center gap-1 rounded bg-primary-green px-2.5 text-[11px] font-semibold text-white hover:bg-primary-green/90 disabled:opacity-60"
+              className="sagra-btn sagra-btn--primary sagra-btn--md"
             >
               {createMutation.isPending ? (
                 <Loader2 className="size-3 animate-spin" />

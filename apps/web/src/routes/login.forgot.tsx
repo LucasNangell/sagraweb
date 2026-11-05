@@ -59,7 +59,7 @@ function ForgotPasswordPage() {
           <button
             type="button"
             onClick={() => void navigate({ to: "/login" })}
-            className="mt-4 w-full rounded-md bg-primary-green py-2.5 text-sm font-semibold text-white hover:bg-primary-green/90"
+            className="mt-4 w-full sagra-btn sagra-btn--primary sagra-btn--sm hover:bg-primary-green/90"
           >
             Voltar ao login
           </button>
@@ -108,7 +108,7 @@ function ForgotPasswordPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="flex w-full items-center justify-center gap-2 rounded-md bg-primary-green py-2.5 text-sm font-semibold text-white hover:bg-primary-green/90 disabled:opacity-60"
+            className="sagra-btn sagra-btn--primary sagra-btn--md"
           >
             {submitting && <Loader2 className="size-4 animate-spin" />}
             Enviar link de recuperação

@@ -163,7 +163,7 @@ export function OsFolderMoveForm({
         type="button"
         onClick={() => previewMutation.mutate()}
         disabled={busy || !origemNumero.trim() || !origemAno.trim()}
-        className="mt-3 rounded bg-secondary-blue px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+        className="mt-3 sagra-btn sagra-btn--secondary sagra-btn--md hover:opacity-90 disabled:opacity-50"
       >
         {previewMutation.isPending ? "Conferindo…" : "Conferir"}
       </button>
@@ -311,7 +311,7 @@ export function OsFolderMoveForm({
           type="button"
           onClick={() => moveMutation.mutate()}
           disabled={!canMove}
-          className="rounded bg-primary-green px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+          className="sagra-btn sagra-btn--primary sagra-btn--md"
           data-testid={
             variant === "repeticao"
               ? homeTestIds.osArquivosConfirm

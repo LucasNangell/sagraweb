@@ -102,7 +102,7 @@ export function ClienteContasPanel() {
           <button
             type="submit"
             disabled={createMutation.isPending}
-            className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-secondary-blue px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-secondary-blue/90 disabled:opacity-60"
+            className="min-h-11 sagra-btn sagra-btn--secondary sagra-btn--md"
           >
             {createMutation.isPending ? (
               <Loader2 className="size-4 animate-spin" />

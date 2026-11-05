@@ -398,7 +398,7 @@ export function AdminIpsPage() {
                           <button
                             type="button"
                             onClick={() => handleFillFromRequest(req)}
-                            className="inline-flex items-center gap-1 rounded bg-primary-green px-2.5 py-1 text-xs font-semibold text-white hover:bg-primary-green/90"
+                            className="sagra-btn sagra-btn--primary sagra-btn--md"
                           >
                             <ArrowDown className="size-3.5" aria-hidden />
                             Cadastrar
@@ -475,7 +475,7 @@ export function AdminIpsPage() {
               type="button"
               onClick={() => void handleAddIp()}
               disabled={addIpMutation.isPending}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary-green px-4 text-sm font-semibold text-white transition hover:bg-primary-green/90 disabled:opacity-60"
+              className="sagra-btn sagra-btn--primary sagra-btn--md"
             >
               {addIpMutation.isPending ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden />

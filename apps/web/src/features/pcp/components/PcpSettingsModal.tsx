@@ -152,7 +152,7 @@ export function PcpSettingsModal({
           <button
             type="button"
             onClick={() => onSave(temp)}
-            className="rounded bg-primary-green px-4 py-2 text-sm font-semibold text-white"
+            className="sagra-btn sagra-btn--primary sagra-btn--md"
           >
             Salvar
           </button>

@@ -1025,7 +1025,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
                         modelDetailQuery.isLoading ||
                         folderCheckPending
                       }
-                      className="inline-flex min-h-9 flex-1 items-center justify-center rounded-lg bg-secondary-blue px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-secondary-blue/90 disabled:opacity-60"
+                      className="inline-flex min-h-9 flex-1 sagra-btn sagra-btn--secondary sagra-btn--md shadow-sm transition hover:bg-secondary-blue/90 disabled:opacity-60"
                       onClick={handleGerarArquivo}
                     >
                       {createJobMutation.isPending ? (
@@ -1048,7 +1048,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
                           modelDetailQuery.isLoading ||
                           folderCheckPending
                         }
-                        className="inline-flex min-h-9 flex-1 items-center justify-center rounded-lg border border-secondary-blue bg-white px-3 py-2 text-xs font-semibold text-secondary-blue shadow-sm transition hover:bg-secondary-blue/5 disabled:opacity-60"
+                        className="min-h-9 flex-1 sagra-btn sagra-btn--outline sagra-btn--md !border-secondary-blue !text-secondary-blue"
                         onClick={handleTimbradoA4Digital}
                       >
                         {createDigitalJobMutation.isPending ? (
@@ -1072,7 +1072,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
                         modelDetailQuery.isLoading ||
                         folderCheckPending
                       }
-                      className="inline-flex min-h-9 flex-1 items-center justify-center rounded-lg border border-secondary-blue bg-white px-3 py-2 text-xs font-semibold text-secondary-blue shadow-sm transition hover:bg-secondary-blue/5 disabled:opacity-60"
+                      className="min-h-9 flex-1 sagra-btn sagra-btn--outline sagra-btn--md !border-secondary-blue !text-secondary-blue"
                       onClick={handleAbrirCorel}
                     >
                       {abrirCorelMutation.isPending ? (
@@ -1230,14 +1230,14 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
             <div className="mt-5 flex flex-col gap-2 sm:flex-row">
               <button
                 type="button"
-                className="flex-1 rounded border border-slate-300 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                className="flex-1 sagra-btn sagra-btn--outline sagra-btn--md"
                 onClick={() => setCdrPickerOpen(false)}
               >
                 Cancelar
               </button>
               <button
                 type="button"
-                className="flex-1 rounded bg-secondary-blue py-2 text-sm font-semibold text-white hover:bg-secondary-blue/90"
+                className="sagra-btn sagra-btn--secondary sagra-btn--md"
                 onClick={handleConfirmCdrPicker}
               >
                 Usar este arquivo
@@ -1267,7 +1267,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
                   exportCdrMutation.isPending ||
                   abrirCorelMutation.isPending
                 }
-                className="flex-1 rounded border border-slate-300 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                className="flex-1 sagra-btn sagra-btn--outline sagra-btn--md"
                 onClick={() => handleAndamentoChoice(false)}
               >
                 Não, continuar
@@ -1280,7 +1280,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
                   exportCdrMutation.isPending ||
                   abrirCorelMutation.isPending
                 }
-                className="flex-1 rounded bg-secondary-blue py-2 text-sm font-semibold text-white hover:bg-secondary-blue/90 disabled:opacity-60"
+                className="sagra-btn sagra-btn--secondary sagra-btn--md"
                 onClick={() => handleAndamentoChoice(true)}
               >
                 Sim, lançar execução
@@ -1541,7 +1541,7 @@ function ActiveJobCard({
                 href={papelariaJobFileUrl(job.id, "pdf")}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 rounded bg-secondary-blue px-2 py-1 text-[11px] font-medium text-white hover:bg-secondary-blue/90"
+                className="sagra-btn sagra-btn--secondary sagra-btn--md"
               >
                 <ExternalLink className="size-3.5" aria-hidden />
                 Abrir PDF

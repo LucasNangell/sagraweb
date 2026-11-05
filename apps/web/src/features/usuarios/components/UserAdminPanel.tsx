@@ -185,7 +185,7 @@ function CopyableLink({
         <button
           type="button"
           onClick={() => void handleCopy()}
-          className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          className="inline-flex shrink-0 cursor-pointer sagra-btn sagra-btn--outline sagra-btn--sm"
         >
           {copied ? (
             <Check className="size-3.5 text-primary-green" aria-hidden />
@@ -380,7 +380,7 @@ export function UserCadastroForm({
         type="button"
         disabled={creating}
         onClick={() => void handleCreate()}
-        className="mt-4 inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary-green px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-green/90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+        className="mt-4 inline-flex w-full cursor-pointer sagra-btn sagra-btn--primary sagra-btn--md transition hover:bg-primary-green/90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
       >
         {creating ? (
           <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -817,7 +817,7 @@ export function UserAdminProvider({
               type="button"
               onClick={() => void saveEditUser()}
               disabled={editSaving}
-              className="mt-4 flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary-green py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+              className="mt-4 sagra-btn sagra-btn--primary sagra-btn--md"
             >
               {editSaving ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -935,7 +935,7 @@ export function UserAdminProvider({
                   type="button"
                   onClick={() => void savePermissions()}
                   disabled={permSaving}
-                  className="mt-4 flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary-green py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                  className="mt-4 sagra-btn sagra-btn--primary sagra-btn--md"
                 >
                   {permSaving ? (
                     <Loader2 className="size-4 animate-spin" />

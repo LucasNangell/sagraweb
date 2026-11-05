@@ -76,7 +76,7 @@ function CotasGrafActionButton({
         e.stopPropagation();
         onLancar(item);
       }}
-      className="rounded bg-primary-green px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+      className="sagra-btn sagra-btn--primary sagra-btn--md"
     >
       {pending ? (
         <span className="inline-flex items-center gap-1.5">

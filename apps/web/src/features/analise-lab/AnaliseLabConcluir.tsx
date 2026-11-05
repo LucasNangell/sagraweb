@@ -50,7 +50,7 @@ export function AnaliseLabConcluir({
           Concluir e salvar análise
         </h2>
         {hasClassicAnalise ? (
-          <p className="rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
+          <p className="sagra-btn sagra-btn--warning sagra-btn--sm">
             Esta OS já possui análise na página clássica. Concluir aqui sobrescreve o
             relatório consolidado enviado ao portal.
           </p>
@@ -98,7 +98,7 @@ export function AnaliseLabConcluir({
             <button
               type="button"
               disabled={busy || (hasClassicAnalise && !confirmed) || !html}
-              className="rounded bg-primary-green px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+              className="sagra-btn sagra-btn--primary sagra-btn--md"
               onClick={() => {
                 setBusy(true);
                 setError(null);

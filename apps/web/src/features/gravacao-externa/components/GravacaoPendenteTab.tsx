@@ -561,7 +561,7 @@ export function GravacaoPendenteTab() {
           <button
             type="button"
             onClick={() => setAdicionarModalOpen(true)}
-            className="ge-btn-3d ge-btn-3d--primary ge-btn-3d--md w-full font-medium"
+            className="sagra-btn sagra-btn--add sagra-btn--md w-full font-medium"
           >
             <Plus className="size-4" />
             Adicionar OS
@@ -627,7 +627,7 @@ export function GravacaoPendenteTab() {
               type="button"
               disabled={enviarMutation.isPending}
               onClick={() => void handleEnviar()}
-              className="inline-flex items-center justify-center gap-2 rounded bg-primary-green px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="sagra-btn sagra-btn--primary sagra-btn--md"
             >
               {enviarMutation.isPending ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -714,7 +714,7 @@ export function GravacaoPendenteTab() {
             {requiresMachineSelection && !hasMachineSelection ? (
               <div
                 role="status"
-                className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-4 text-sm text-amber-900"
+                className="sagra-btn sagra-btn--warning sagra-btn--sm"
               >
                 Selecione ao menos um conjunto de chapas acima para carregar a lista de
                 arquivos.
@@ -859,7 +859,7 @@ export function GravacaoPendenteTab() {
           <button
             type="button"
             onClick={() => setControleExpanded((v) => !v)}
-            className="ge-btn-3d ge-btn-3d--outline ge-btn-3d--xs !px-2"
+            className="sagra-btn sagra-btn--back sagra-btn--xs !px-2"
             aria-expanded={controleExpanded}
             aria-label={
               controleExpanded

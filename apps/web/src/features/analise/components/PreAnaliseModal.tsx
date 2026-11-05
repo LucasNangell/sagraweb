@@ -352,7 +352,7 @@ export function PreAnaliseModal({
               <button
                 type="button"
                 onClick={() => setShowFullReport((v) => !v)}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                className="flex w-full sagra-btn sagra-btn--outline sagra-btn--sm"
               >
                 {showFullReport ? (
                   <>
@@ -375,7 +375,7 @@ export function PreAnaliseModal({
             <button
               type="button"
               onClick={onCancel}
-              className="min-w-[100px] rounded-lg border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className="min-w-[100px] sagra-btn sagra-btn--outline sagra-btn--sm"
             >
               Cancelar análise
             </button>
@@ -384,7 +384,7 @@ export function PreAnaliseModal({
             type="button"
             onClick={onClose}
             disabled={running}
-            className="min-w-[100px] rounded-lg bg-primary-green px-5 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            className="min-w-[100px] sagra-btn sagra-btn--primary sagra-btn--md"
           >
             Fechar
           </button>

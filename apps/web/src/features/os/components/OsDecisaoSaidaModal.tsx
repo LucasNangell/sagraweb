@@ -107,7 +107,7 @@ export function OsDecisaoSaidaModal({
             </button>
             <button
               type="submit"
-              className="rounded bg-secondary-blue px-4 py-2 text-sm font-semibold text-white"
+              className="sagra-btn sagra-btn--secondary sagra-btn--md"
               data-testid={homeTestIds.osSaidaConfirm}
             >
               Confirmar

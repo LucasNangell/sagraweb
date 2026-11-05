@@ -157,7 +157,7 @@ export function OsGravacaoAlterarArquivosButton({
         type="button"
         disabled={disabled || saving || detailLoading}
         onClick={handleOpen}
-        className="inline-flex items-center gap-1.5 rounded border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+        className="sagra-btn sagra-btn--outline sagra-btn--sm"
         data-testid={homeTestIds.osHistoryAlterarArquivos}
       >
         <FolderOpen className="size-3.5" />

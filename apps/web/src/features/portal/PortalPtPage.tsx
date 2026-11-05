@@ -364,7 +364,7 @@ export function PortalPtPage({ token, osId, ano, embedded, onBack }: PortalPtPag
             <div className="mt-4 flex justify-end">
               <button
                 type="button"
-                className="rounded bg-secondary-blue px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+                className="sagra-btn sagra-btn--secondary sagra-btn--md hover:opacity-90"
                 onClick={() => setIdentityModalOpen(false)}
                 autoFocus
               >
@@ -523,7 +523,7 @@ export function PortalPtPage({ token, osId, ano, embedded, onBack }: PortalPtPag
                           type="button"
                           disabled={isPortalLocked}
                           onClick={() => triggerUpload(group)}
-                          className="inline-flex items-center gap-1 rounded bg-primary-green px-2 py-1 text-[10px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                          className="inline-flex items-center gap-1 sagra-btn sagra-btn--primary sagra-btn--sm"
                         >
                           {groupBlocked ? (
                             <Loader2 className="size-3 animate-spin" />

@@ -125,7 +125,7 @@ export function GravacaoPendenteAdicionarOsModal({
             type="button"
             onClick={onClose}
             disabled={checking}
-            className="ge-btn-3d ge-btn-3d--danger ge-btn-3d--md"
+            className="sagra-btn sagra-btn--cancel sagra-btn--md"
           >
             Cancelar
           </button>
@@ -133,7 +133,7 @@ export function GravacaoPendenteAdicionarOsModal({
             type="button"
             onClick={() => void handleContinue()}
             disabled={checking}
-            className="ge-btn-3d ge-btn-3d--primary ge-btn-3d--md"
+            className="sagra-btn sagra-btn--next sagra-btn--md"
           >
             {checking ? <Loader2 className="size-4 animate-spin" /> : null}
             Continuar

@@ -223,7 +223,7 @@ export function GravacaoExternaEnvioSection({
                 <button
                   type="button"
                   onClick={handleCancelDownload}
-                  className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+                  className="sagra-btn sagra-btn--outline sagra-btn--sm"
                 >
                   Cancelar
                 </button>
@@ -233,10 +233,10 @@ export function GravacaoExternaEnvioSection({
                 disabled={downloadBusy}
                 onClick={() => void handleDownloadAll()}
                 className={cn(
-                  "ge-btn-3d shrink-0 px-2.5 py-1 text-xs",
+                  "sagra-btn shrink-0 px-2.5 py-1 text-xs",
                   allDownloadableDownloaded && downloadPhase !== "error" && !downloadBusy
-                    ? "ge-btn-3d--emerald"
-                    : "ge-btn-3d--amber",
+                    ? "sagra-btn--success"
+                    : "sagra-btn--download",
                 )}
                 title={
                   allDownloadableDownloaded

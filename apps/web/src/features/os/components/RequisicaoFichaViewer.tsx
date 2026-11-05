@@ -201,7 +201,7 @@ export function RequisicaoFichaViewer({
           type="button"
           onClick={handlePrint}
           disabled={!ready || Boolean(error)}
-          className="inline-flex items-center gap-1.5 rounded bg-secondary-blue px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          className="sagra-btn sagra-btn--secondary sagra-btn--md"
         >
           <Printer className="size-4" />
           Imprimir
@@ -210,7 +210,7 @@ export function RequisicaoFichaViewer({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center gap-1.5 rounded bg-neutral-500 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-600"
+            className="sagra-btn sagra-btn--neutral sagra-btn--md"
             data-testid={
               variant === "modal" ? homeTestIds.osPrintFichaClose : undefined
             }
@@ -255,7 +255,7 @@ export function RequisicaoFichaViewer({
                 iframeRef.current.src = src;
               }
             }}
-            className="rounded bg-secondary-blue px-4 py-2 text-sm font-semibold text-white"
+            className="sagra-btn sagra-btn--secondary sagra-btn--md"
           >
             Tentar novamente
           </button>

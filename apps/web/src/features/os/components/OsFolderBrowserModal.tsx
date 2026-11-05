@@ -471,7 +471,7 @@ export function OsFolderBrowserModal({
           <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             Endereço
           </span>
-          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700">
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto sagra-btn sagra-btn--outline sagra-btn--sm">
             <button
               type="button"
               className="truncate hover:text-secondary-blue"
@@ -500,7 +500,7 @@ export function OsFolderBrowserModal({
           <button
             type="button"
             onClick={() => void handleCopyPath()}
-            className="inline-flex shrink-0 items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            className="inline-flex shrink-0 sagra-btn sagra-btn--outline sagra-btn--sm"
             title="Copiar caminho"
           >
             <Copy className="size-3.5" aria-hidden />
@@ -796,7 +796,7 @@ export function OsFolderBrowserModal({
               <button
                 type="button"
                 onClick={confirmGravacaoPicks}
-                className="rounded bg-primary-green px-4 py-1.5 text-sm font-semibold text-white hover:opacity-90"
+                className="sagra-btn sagra-btn--primary sagra-btn--md"
                 data-testid={homeTestIds.osFolderOpen}
               >
                 Confirmar seleção
@@ -805,7 +805,7 @@ export function OsFolderBrowserModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded bg-neutral-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-neutral-700"
+              className="sagra-btn sagra-btn--neutral sagra-btn--md"
             >
               {pickGravacaoMode ? "Cancelar" : "Fechar"}
             </button>

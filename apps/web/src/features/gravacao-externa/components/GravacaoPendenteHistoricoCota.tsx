@@ -57,7 +57,7 @@ export function GravacaoPendenteHistoricoCota({
             disabled={loading}
             onClick={() => setDetalhesOpen(true)}
             className={cn(
-              "ge-btn-3d ge-btn-3d--outline ge-btn-3d--xs",
+              "sagra-btn sagra-btn--outline sagra-btn--xs",
               loading && "cursor-not-allowed opacity-50",
             )}
           >

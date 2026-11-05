@@ -337,7 +337,7 @@ export function OsVinculosEditor({ row, readOnly = false }: OsVinculosEditorProp
                   saveAndamentosMutation.isPending
                 }
                 onClick={() => void handleSaveAndamentos()}
-                className="rounded bg-secondary-blue px-2 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                className="sagra-btn sagra-btn--secondary sagra-btn--md"
                 data-testid={homeTestIds.osVincularSaveAndamentos}
               >
                 Salvar andamentos
@@ -388,7 +388,7 @@ export function OsVinculosEditor({ row, readOnly = false }: OsVinculosEditorProp
               type="button"
               disabled={addMutation.isPending || !vinculoFound}
               onClick={() => void handleAdd()}
-              className="rounded bg-secondary-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              className="sagra-btn sagra-btn--secondary sagra-btn--md"
               data-testid={homeTestIds.osVincularConfirm}
             >
               Salvar

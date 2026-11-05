@@ -27,7 +27,7 @@ const btnIdle = `${btnBase} border-sagra-border bg-white text-neutral-700 hover:
 const btnActive =
   `${btnBase} border-primary-green bg-primary-green/10 text-primary-green`;
 const btnPrimary =
-  "inline-flex h-7 items-center rounded bg-secondary-blue px-2 text-[11px] font-semibold text-white disabled:opacity-50";
+  "sagra-btn sagra-btn--secondary sagra-btn--md";
 const divider = "mx-0.5 hidden h-6 w-px shrink-0 bg-sagra-border sm:block";
 
 export interface AnaliseLabMarkCreateOptionsProps {

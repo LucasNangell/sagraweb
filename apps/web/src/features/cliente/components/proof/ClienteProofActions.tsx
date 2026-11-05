@@ -129,8 +129,8 @@ export function ClienteProofActions({
           onClick={onRejectClick}
           className={
             publicPortal
-              ? "inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-60"
-              : "inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-60 sm:flex-none"
+              ? "min-h-11 flex-1 sagra-btn sagra-btn--warning sagra-btn--md"
+              : "min-h-11 flex-1 sagra-btn sagra-btn--warning sagra-btn--md sm:flex-none"
           }
         >
           <MessageSquareWarning className="size-4" aria-hidden />
@@ -143,8 +143,8 @@ export function ClienteProofActions({
           onClick={onApproveClick}
           className={
             publicPortal
-              ? "inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-primary-green px-4 py-2 text-sm font-semibold text-white hover:bg-primary-green/90 disabled:opacity-60"
-              : "inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-primary-green px-4 py-2 text-sm font-semibold text-white hover:bg-primary-green/90 disabled:opacity-60 sm:flex-none"
+              ? "min-h-11 flex-1 sagra-btn sagra-btn--primary sagra-btn--md"
+              : "min-h-11 flex-1 sagra-btn sagra-btn--primary sagra-btn--md sm:flex-none"
           }
         >
           {isPending ? (

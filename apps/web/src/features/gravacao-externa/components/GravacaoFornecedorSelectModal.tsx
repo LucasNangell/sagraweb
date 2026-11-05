@@ -98,7 +98,7 @@ export function GravacaoFornecedorSelectModal({
             type="button"
             disabled={saving || !selectedPonto}
             onClick={() => onConfirm(selectedPonto)}
-            className="rounded bg-primary-green px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+            className="sagra-btn sagra-btn--primary sagra-btn--md"
           >
             Enviar
           </button>

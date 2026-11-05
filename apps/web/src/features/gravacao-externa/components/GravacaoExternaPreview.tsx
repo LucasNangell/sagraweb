@@ -283,7 +283,7 @@ export function GravacaoExternaPreview({
             onClick={() => {
               if (arquivo) onArquivoDownloaded?.(arquivo.id);
             }}
-            className="ge-btn-3d ge-btn-3d--slate shrink-0 px-2.5 py-1 text-xs"
+            className="sagra-btn sagra-btn--slate shrink-0 px-2.5 py-1 text-xs"
           >
             <FileDown className="size-3.5" />
             Download
@@ -879,8 +879,8 @@ function MachineFilterNameRow({
             // Fora do twMerge: text-* de cor removia o token de fonte.
             "text-xs-button-badge",
             cn(
-              "ge-btn-3d shrink-0 gap-0.5 px-1.5 py-0.5",
-              allDownloaded ? "ge-btn-3d--emerald" : "ge-btn-3d--amber",
+              "sagra-btn shrink-0 gap-0.5 px-1.5 py-0.5",
+              allDownloaded ? "sagra-btn--success" : "sagra-btn--download",
             ),
           ].join(" ")}
         >

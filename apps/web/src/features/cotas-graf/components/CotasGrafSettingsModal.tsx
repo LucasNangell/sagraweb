@@ -250,7 +250,7 @@ export function CotasGrafSettingsModal({ open, onClose }: CotasGrafSettingsModal
                 void (isEditing ? handleUpdateFilter() : handleCreateFilter())
               }
               disabled={isBusy}
-              className="rounded bg-primary-green px-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+              className="sagra-btn sagra-btn--primary sagra-btn--sm"
             >
               {isEditing
                 ? updateFilterMutation.isPending

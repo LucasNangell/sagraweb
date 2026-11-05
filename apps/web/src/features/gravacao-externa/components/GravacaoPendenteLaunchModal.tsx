@@ -97,11 +97,11 @@ function emptyChapaRow(): ChapaRow {
 const TIF_EXTS = new Set(["tif", "tiff"]);
 
 /** Ação secundária genérica (ex.: + Máquina) */
-const BTN_SECONDARY = "ge-btn-3d ge-btn-3d--secondary ge-btn-3d--sm";
+const BTN_SECONDARY = "sagra-btn sagra-btn--edit sagra-btn--sm";
 
-const BTN_PDF = "ge-btn-3d ge-btn-3d--danger ge-btn-3d--sm";
+const BTN_PDF = "sagra-btn sagra-btn--delete sagra-btn--sm";
 
-const BTN_TIF = "ge-btn-3d ge-btn-3d--info ge-btn-3d--sm";
+const BTN_TIF = "sagra-btn sagra-btn--info sagra-btn--sm";
 
 /** Ícone destrutivo padronizado */
 const BTN_ICON_DANGER =
@@ -1344,7 +1344,7 @@ export function GravacaoPendenteLaunchModal({
               type="button"
               onClick={handleRequestClose}
               disabled={saving}
-              className="ge-btn-3d ge-btn-3d--neutral ge-btn-3d--md !py-1.5"
+              className="sagra-btn sagra-btn--cancel sagra-btn--md !py-1.5"
               data-testid={homeTestIds.osGravacaoCancel}
             >
               Cancelar
@@ -1353,7 +1353,7 @@ export function GravacaoPendenteLaunchModal({
               type="button"
               onClick={handleConfirm}
               disabled={saving || juntadaBusy}
-              className="ge-btn-3d ge-btn-3d--primary ge-btn-3d--md !py-1.5"
+              className="sagra-btn sagra-btn--confirm sagra-btn--md !py-1.5"
               data-testid={homeTestIds.osGravacaoConfirm}
             >
               {saving ? <Loader2 className="size-4 animate-spin" /> : null}

@@ -21,7 +21,7 @@ const buttonClass =
   "inline-flex items-center rounded-md border border-secondary-blue/30 bg-white px-2 py-1 text-xs font-semibold text-secondary-blue shadow-sm transition hover:border-secondary-blue/50 hover:bg-slate-50";
 
 const pdfButtonClass =
-  "inline-flex items-center gap-1.5 rounded bg-secondary-blue px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50";
+  "sagra-btn sagra-btn--secondary sagra-btn--md shadow-sm transition hover:opacity-90 disabled:opacity-50";
 
 export function OrcamentoCotaHeaderButton({
   ano,

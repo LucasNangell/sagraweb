@@ -359,7 +359,7 @@ describe("composite preview", () => {
       "Baixar arquivos dessa máquina",
     );
     expect(pendingBadges).toHaveLength(2);
-    expect(pendingBadges[0]).toHaveClass("ge-btn-3d--amber");
+    expect(pendingBadges[0]).toHaveClass("sagra-btn--download");
   });
 
   it("requests ZIP download for machine files when Download badge is clicked", () => {
@@ -422,7 +422,7 @@ describe("composite preview", () => {
     ).toHaveLength(2);
     expect(
       within(filter).getAllByTitle("Baixar arquivos novamente")[0],
-    ).toHaveClass("ge-btn-3d--emerald");
+    ).toHaveClass("sagra-btn--success");
     expect(
       within(filter).getAllByRole("button", { name: /Arquivos baixados/ }),
     ).toHaveLength(2);

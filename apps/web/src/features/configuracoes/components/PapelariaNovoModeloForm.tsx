@@ -343,7 +343,7 @@ export function PapelariaNovoModeloForm({
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 rounded bg-secondary-blue px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+          className="sagra-btn sagra-btn--secondary sagra-btn--md"
           disabled={!canSubmit || createMutation.isPending}
           onClick={() => createMutation.mutate()}
         >

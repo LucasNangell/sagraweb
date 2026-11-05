@@ -174,7 +174,7 @@ export function UsuariosPage() {
                 type="button"
                 onClick={() => void handleForceRefresh(false)}
                 disabled={forceAction !== null}
-                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60"
+                className="sagra-btn sagra-btn--danger sagra-btn--md transition hover:bg-red-700 disabled:opacity-60"
               >
                 {forceAction === "refresh" ? (
                   <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -202,7 +202,7 @@ export function UsuariosPage() {
                 type="button"
                 onClick={() => void refetch()}
                 disabled={isRefreshing}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                className="sagra-btn sagra-btn--outline sagra-btn--sm transition hover:bg-slate-50 disabled:opacity-60"
               >
                 <RefreshCw
                   className={cn("size-4", isRefreshing && "animate-spin")}
@@ -249,7 +249,7 @@ export function UsuariosPage() {
                 <button
                   type="button"
                   onClick={() => void refetch()}
-                  className="mt-2 inline-flex items-center gap-2 rounded-lg bg-primary-green px-4 py-2 text-sm font-semibold text-white hover:bg-primary-green/90"
+                  className="mt-2 sagra-btn sagra-btn--primary sagra-btn--md"
                 >
                   <RefreshCw className="size-4" aria-hidden />
                   Tentar novamente

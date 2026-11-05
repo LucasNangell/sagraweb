@@ -168,7 +168,7 @@ export function ProdutoEtapasPanel({
             type="button"
             disabled={saveMut.isPending}
             onClick={() => void saveMut.mutate()}
-            className="inline-flex h-7 items-center gap-1 rounded bg-secondary-blue px-2 text-[11px] font-semibold text-white disabled:opacity-60"
+            className="sagra-btn sagra-btn--secondary sagra-btn--md"
           >
             {saveMut.isPending ? <Loader2 className="size-3 animate-spin" /> : <Save className="size-3" />}
             Salvar

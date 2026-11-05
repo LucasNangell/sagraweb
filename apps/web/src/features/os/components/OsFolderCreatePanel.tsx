@@ -154,7 +154,7 @@ export function OsFolderCreatePanel({
             type="button"
             onClick={onCreate}
             disabled={creating}
-            className="inline-flex items-center gap-2 rounded bg-secondary-blue px-5 py-2.5 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-60"
+            className="sagra-btn sagra-btn--secondary sagra-btn--md hover:opacity-95 disabled:opacity-60"
             data-testid={homeTestIds.osFolderCreate}
           >
             {creating ? (

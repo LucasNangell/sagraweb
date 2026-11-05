@@ -351,7 +351,7 @@ export function ManipularImagemPage() {
                 type="button"
                 onClick={() => void downloadResult()}
                 disabled={!analise?.job_id || downloading || previewing}
-                className="inline-flex items-center gap-1.5 rounded bg-primary-green px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+                className="sagra-btn sagra-btn--primary sagra-btn--md"
               >
                 {downloading ? (
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden />

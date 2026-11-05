@@ -205,7 +205,7 @@ export function AnaliseLabSourcePicker({
           }}
           className={
             modo === "unico"
-              ? "rounded bg-primary-green px-3 py-1.5 text-sm text-white"
+              ? "sagra-btn sagra-btn--primary sagra-btn--md"
               : "rounded border border-sagra-border px-3 py-1.5 text-sm"
           }
         >
@@ -221,7 +221,7 @@ export function AnaliseLabSourcePicker({
           }}
           className={
             modo === "capa_miolo"
-              ? "rounded bg-primary-green px-3 py-1.5 text-sm text-white"
+              ? "sagra-btn sagra-btn--primary sagra-btn--md"
               : "rounded border border-sagra-border px-3 py-1.5 text-sm"
           }
         >
@@ -245,7 +245,7 @@ export function AnaliseLabSourcePicker({
             className={
               folhearModo === "flipbook"
                 ? "inline-flex cursor-pointer items-center gap-2 rounded-lg border border-primary-green bg-primary-green/10 px-3 py-2 text-sm text-primary-green"
-                : "inline-flex cursor-pointer items-center gap-2 rounded-lg border border-sagra-border bg-white px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50"
+                : "inline-flex cursor-pointer sagra-btn sagra-btn--outline sagra-btn--sm"
             }
           >
             <input
@@ -261,7 +261,7 @@ export function AnaliseLabSourcePicker({
             className={
               folhearModo === "folhas"
                 ? "inline-flex cursor-pointer items-center gap-2 rounded-lg border border-primary-green bg-primary-green/10 px-3 py-2 text-sm text-primary-green"
-                : "inline-flex cursor-pointer items-center gap-2 rounded-lg border border-sagra-border bg-white px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50"
+                : "inline-flex cursor-pointer sagra-btn sagra-btn--outline sagra-btn--sm"
             }
           >
             <input
@@ -323,7 +323,7 @@ export function AnaliseLabSourcePicker({
         type="button"
         disabled={!canGenerate || saving}
         onClick={handleGenerate}
-        className="inline-flex items-center justify-center gap-2 rounded-lg bg-secondary-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-secondary-blue/90 disabled:opacity-50"
+        className="sagra-btn sagra-btn--secondary sagra-btn--md"
       >
         {saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
         Gerar visualização

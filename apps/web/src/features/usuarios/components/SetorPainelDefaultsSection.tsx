@@ -120,7 +120,7 @@ export function SetorPainelDefaultsSection({
           type="button"
           onClick={() => setShowModal(true)}
           disabled={loading || saving}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          className="sagra-btn sagra-btn--outline sagra-btn--sm"
         >
           {loading ? (
             <Loader2 className="size-4 animate-spin" aria-hidden />

@@ -132,7 +132,7 @@ export function PcpPage() {
               window.setTimeout(() => setLoadingAny(false), 500);
             }}
             disabled={loadingAny}
-            className="inline-flex items-center gap-1 rounded bg-primary-green px-3 py-1.5 font-medium text-white hover:opacity-90 disabled:opacity-60"
+            className="sagra-btn sagra-btn--primary sagra-btn--md"
           >
             <RefreshCw className={cn("size-4", loadingAny && "animate-spin")} />
             Atualizar

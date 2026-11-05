@@ -254,7 +254,7 @@ function PaletteModal({
         <div className="mt-3 flex justify-end">
           <button
             type="button"
-            className="rounded bg-secondary-blue px-3 py-1.5 text-xs font-semibold text-white"
+            className="sagra-btn sagra-btn--secondary sagra-btn--md"
             onClick={onClose}
           >
             Pronto

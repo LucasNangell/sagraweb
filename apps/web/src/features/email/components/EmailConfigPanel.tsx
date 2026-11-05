@@ -401,7 +401,7 @@ export function EmailConfigPanel({
               type="button"
               onClick={() => void handleConnect()}
               disabled={isBusy}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-secondary-blue px-4 text-sm font-semibold text-white hover:bg-secondary-blue/90 disabled:opacity-60"
+              className="sagra-btn sagra-btn--secondary sagra-btn--md"
             >
               {connectMutation.isPending ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -690,7 +690,7 @@ export function EmailConfigPanel({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="sagra-btn sagra-btn--outline sagra-btn--md"
           >
             Cancelar
           </button>
@@ -698,7 +698,7 @@ export function EmailConfigPanel({
             type="button"
             onClick={() => void handleSave()}
             disabled={isBusy}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary-green px-4 py-2 text-sm font-semibold text-white hover:bg-primary-green/90 disabled:opacity-60"
+            className="sagra-btn sagra-btn--primary sagra-btn--md"
           >
             {saveMutation.isPending ? (
               <Loader2 className="size-4 animate-spin" />

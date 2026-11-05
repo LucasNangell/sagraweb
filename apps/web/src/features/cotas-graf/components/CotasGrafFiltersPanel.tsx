@@ -278,7 +278,7 @@ export function CotasGrafFiltersPanel({
               type="button"
               onClick={onRefresh}
               disabled={isFetching}
-              className="flex h-8 min-w-[7.5rem] items-center justify-center gap-1.5 rounded bg-primary-green px-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+              className="flex h-8 min-w-[7.5rem] items-center justify-center gap-1.5 sagra-btn sagra-btn--primary sagra-btn--sm"
             >
               <RefreshCw
                 className={cn("size-3.5", isFetching && "animate-spin")}

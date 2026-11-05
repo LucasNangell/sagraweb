@@ -177,7 +177,7 @@ export function ProvaWebSpiralWizard({
           type="button"
           onClick={onBack}
           disabled={saving}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-sagra-border bg-white px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
+          className="sagra-btn sagra-btn--outline sagra-btn--sm"
         >
           <ArrowLeft className="size-3.5" />
           Voltar
@@ -212,7 +212,7 @@ export function ProvaWebSpiralWizard({
           <button
             type="button"
             onClick={() => setHoleCount(suggested)}
-            className="rounded-lg border border-sagra-border bg-white px-2.5 py-1 text-[11px] font-medium text-neutral-700 hover:bg-neutral-50"
+            className="sagra-btn sagra-btn--outline sagra-btn--sm"
           >
             Usar sugestão
           </button>
@@ -349,7 +349,7 @@ export function ProvaWebSpiralWizard({
           type="button"
           onClick={handleGenerate}
           disabled={saving}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary-green px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="sagra-btn sagra-btn--primary sagra-btn--md"
         >
           {saving ? (
             <>

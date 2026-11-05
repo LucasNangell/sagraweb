@@ -58,7 +58,7 @@ export function ClienteProofDecisionModal({
             type="button"
             onClick={onCancel}
             disabled={loading}
-            className="inline-flex min-h-11 items-center rounded-xl border border-sagra-border px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-slate-50 disabled:opacity-60"
+            className="min-h-11 sagra-btn sagra-btn--outline sagra-btn--md"
           >
             {cancelLabel}
           </button>
@@ -68,8 +68,8 @@ export function ClienteProofDecisionModal({
             disabled={loading}
             className={
               variant === "approve"
-                ? "inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary-green px-4 py-2 text-sm font-semibold text-white hover:bg-primary-green/90 disabled:opacity-60"
-                : "inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-300 bg-red-50 px-4 py-2 text-sm font-semibold text-red-800 hover:bg-red-100 disabled:opacity-60"
+                ? "min-h-11 sagra-btn sagra-btn--primary sagra-btn--md"
+                : "min-h-11 sagra-btn sagra-btn--danger sagra-btn--md"
             }
           >
             {loading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}

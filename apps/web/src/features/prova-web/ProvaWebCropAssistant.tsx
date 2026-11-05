@@ -292,7 +292,7 @@ function ProvaWebBookCropAssistant({
           type="button"
           onClick={onBack}
           disabled={saving}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-sagra-border bg-white px-4 py-2 text-sm text-neutral-700 shadow-sm hover:bg-neutral-100 disabled:opacity-40"
+          className="sagra-btn sagra-btn--outline sagra-btn--sm shadow-sm hover:bg-neutral-100 disabled:opacity-40"
         >
           <ArrowLeft className="size-4" aria-hidden />
           Voltar
@@ -301,7 +301,7 @@ function ProvaWebBookCropAssistant({
           type="button"
           disabled={saving}
           onClick={handleGenerate}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary-green px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+          className="sagra-btn sagra-btn--primary sagra-btn--md shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {saving && <Loader2 className="size-4 animate-spin" aria-hidden />}
           Gerar Prova WEB

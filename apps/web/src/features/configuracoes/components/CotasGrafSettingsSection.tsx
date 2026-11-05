@@ -278,7 +278,7 @@ export function CotasGrafSettingsSection() {
                 type="button"
                 disabled={iniciarMutation.isPending}
                 onClick={handleIniciar}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary-green px-3 text-xs font-semibold text-white hover:bg-primary-green/90 disabled:opacity-60"
+                className="sagra-btn sagra-btn--primary sagra-btn--md"
               >
                 {iniciarMutation.isPending ? (
                   <Loader2 className="size-3.5 animate-spin" />
@@ -306,7 +306,7 @@ export function CotasGrafSettingsSection() {
                 if (!ok) return;
                 recalcularMutation.mutate();
               }}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-secondary-blue px-3 text-xs font-semibold text-white hover:bg-secondary-blue/90 disabled:opacity-60"
+              className="sagra-btn sagra-btn--secondary sagra-btn--md"
             >
               {recalcularMutation.isPending ? (
                 <Loader2 className="size-3.5 animate-spin" />

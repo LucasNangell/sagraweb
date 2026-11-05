@@ -313,7 +313,7 @@ export function AnaliseLabClientPortalPanel({
                           type="button"
                           disabled={isPortalLocked}
                           onClick={() => triggerUpload(group)}
-                          className="inline-flex items-center gap-1 rounded bg-primary-green px-2 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                          className="sagra-btn sagra-btn--primary sagra-btn--md"
                         >
                           {groupBlocked ? (
                             <Loader2 className="size-3 animate-spin" />
@@ -429,7 +429,7 @@ export function AnaliseLabClientPortalPanel({
             <div className="mt-3 flex justify-end">
               <button
                 type="button"
-                className="rounded bg-secondary-blue px-3 py-1.5 text-xs font-medium text-white"
+                className="sagra-btn sagra-btn--secondary sagra-btn--md"
                 onClick={() => setIdentityModalOpen(false)}
               >
                 Entendi

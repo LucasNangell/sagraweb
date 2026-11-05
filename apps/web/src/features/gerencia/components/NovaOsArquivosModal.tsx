@@ -246,7 +246,7 @@ export function NovaOsArquivosModal({
                 type="button"
                 disabled={busy}
                 onClick={() => void handleSendEmail()}
-                className="flex items-center justify-center gap-2 rounded-lg bg-secondary-blue px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+                className="flex sagra-btn sagra-btn--secondary sagra-btn--md hover:opacity-90 disabled:opacity-60"
               >
                 {busy ? (
                   <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -393,7 +393,7 @@ export function NovaOsArquivosModal({
               type="button"
               disabled={busy || !files.length}
               onClick={() => void handleConfirmSelf()}
-              className="flex items-center gap-2 rounded bg-primary-green px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              className="flex sagra-btn sagra-btn--primary sagra-btn--md"
               data-testid={homeTestIds.osArquivosConfirm}
             >
               {busy ? (

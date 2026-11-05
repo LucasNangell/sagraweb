@@ -115,7 +115,7 @@ export function EmailGalLookupField({
             aria-label={`Buscar ${label} no catálogo global`}
             disabled={searching}
             onClick={() => void handleSearch()}
-            className="inline-flex h-[42px] w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-secondary-blue hover:text-secondary-blue disabled:opacity-60"
+            className="inline-flex h-[42px] w-10 shrink-0 sagra-btn sagra-btn--outline sagra-btn--sm shadow-sm transition hover:border-secondary-blue hover:text-secondary-blue disabled:opacity-60"
           >
             {searching ? (
               <Loader2 className="size-4 animate-spin" aria-hidden />

@@ -556,14 +556,14 @@ function AcabamentoModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              className="sagra-btn sagra-btn--outline sagra-btn--sm"
             >
               Cancelar
             </button>
             <button
               type="button"
               onClick={() => onApply(draft)}
-              className="rounded-md bg-secondary-blue px-3 py-1.5 text-xs font-semibold text-white hover:bg-secondary-blue/90"
+              className="sagra-btn sagra-btn--secondary sagra-btn--md"
             >
               Aplicar
             </button>

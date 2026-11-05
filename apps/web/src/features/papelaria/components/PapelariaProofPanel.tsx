@@ -233,7 +233,7 @@ export function PapelariaProofPanel({
             <button
               type="button"
               disabled={cancelPending}
-              className="inline-flex items-center gap-1.5 rounded border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 shadow-sm hover:bg-neutral-50 disabled:opacity-60"
+              className="sagra-btn sagra-btn--outline sagra-btn--sm shadow-sm hover:bg-neutral-50 disabled:opacity-60"
               onClick={() => onCancelJob(activeJob.id)}
             >
               <XCircle className="size-3.5" aria-hidden />
@@ -279,7 +279,7 @@ export function PapelariaProofPanel({
                     approveProvaPending ||
                     !onDiscardProva
                   }
-                  className="inline-flex items-center gap-1.5 rounded border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 shadow-sm hover:bg-neutral-50 disabled:opacity-60"
+                  className="sagra-btn sagra-btn--outline sagra-btn--sm shadow-sm hover:bg-neutral-50 disabled:opacity-60"
                   onClick={() => onDiscardProva?.(activeJob.id)}
                 >
                   <XCircle className="size-3.5" aria-hidden />

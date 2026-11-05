@@ -102,7 +102,7 @@ function ClienteActivatePage() {
               </p>
               <Link
                 to="/cliente/login"
-                className="mt-4 inline-block rounded-md bg-primary-green px-4 py-2 text-sm font-semibold text-white"
+                className="mt-4 inline-block sagra-btn sagra-btn--primary sagra-btn--md"
               >
                 Ir para login
               </Link>
@@ -164,7 +164,7 @@ function ClienteActivatePage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex w-full items-center justify-center gap-2 rounded-md bg-primary-green py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                  className="sagra-btn sagra-btn--primary sagra-btn--md"
                 >
                   {submitting ? <Loader2 className="size-4 animate-spin" /> : null}
                   Ativar conta

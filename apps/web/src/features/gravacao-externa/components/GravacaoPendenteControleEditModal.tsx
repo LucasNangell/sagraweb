@@ -187,7 +187,7 @@ export function GravacaoPendenteControleEditModal({
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
           {isJuntada ? (
-            <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <p className="sagra-btn sagra-btn--warning sagra-btn--sm">
               Alterações serão aplicadas a todas as OSs juntadas.
             </p>
           ) : null}
@@ -344,7 +344,7 @@ export function GravacaoPendenteControleEditModal({
             type="button"
             onClick={() => void handleSubmit()}
             disabled={saving || item.gravacao_pendente_id == null}
-            className="inline-flex items-center gap-1.5 rounded bg-secondary-blue px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+            className="sagra-btn sagra-btn--secondary sagra-btn--md hover:opacity-90 disabled:opacity-50"
           >
             {saving ? <Loader2 className="size-3.5 animate-spin" /> : null}
             Salvar

@@ -25,7 +25,7 @@ export function ClienteLinkUnavailable({
             type="button"
             onClick={onRefresh}
             disabled={isRefreshing}
-            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-sagra-border bg-white px-4 py-2 text-sm font-medium text-secondary-blue hover:bg-slate-50 disabled:opacity-60"
+            className="min-h-11 sagra-btn sagra-btn--outline sagra-btn--md !text-secondary-blue"
           >
             <RefreshCw
               className={`size-4 ${isRefreshing ? "motion-safe:animate-spin" : ""}`}
@@ -36,7 +36,7 @@ export function ClienteLinkUnavailable({
         ) : null}
         <Link
           to="/cliente"
-          className="inline-flex min-h-11 items-center rounded-xl bg-secondary-blue px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+          className="min-h-11 sagra-btn sagra-btn--secondary sagra-btn--md"
         >
           Voltar ao painel
         </Link>

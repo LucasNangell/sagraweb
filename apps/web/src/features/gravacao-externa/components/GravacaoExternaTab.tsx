@@ -574,7 +574,10 @@ export function GravacaoExternaTab() {
               </div>
             </div>
             {fornecedores.length > 0 ? (
+              
               <div className="flex flex-wrap gap-1 px-3 pb-2.5">
+                <div><span className="text-xs font-semibold text-neutral-600">Clique para filtrar:</span></div>
+                <div>
                 {fornecedores.map((f) => {
                   const pressed = active && fornecedorFilter === f.key;
                   return (
@@ -595,6 +598,7 @@ export function GravacaoExternaTab() {
                     </button>
                   );
                 })}
+                </div>
               </div>
             ) : null}
           </div>
@@ -750,7 +754,7 @@ export function GravacaoExternaTab() {
                   type="button"
                   onClick={() => setEntregaItem(session)}
                   disabled={entregaMutation.isPending}
-                  className="inline-flex items-center gap-2 rounded bg-primary-green px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+                  className="sagra-btn sagra-btn--primary sagra-btn--md"
                 >
                   {receiving ? (
                     <Loader2 className="size-4 animate-spin" />
@@ -810,7 +814,7 @@ export function GravacaoExternaTab() {
           type="button"
           disabled={concluirMutation.isPending}
           onClick={() => void handleConcluir(selected)}
-          className="inline-flex items-center gap-2 rounded border border-primary-green bg-white px-4 py-2 text-sm font-medium text-primary-green hover:bg-primary-green/5 disabled:cursor-not-allowed disabled:opacity-50"
+          className="sagra-btn sagra-btn--primary-outline sagra-btn--md "
         >
           {concluirMutation.isPending ? (
             <Loader2 className="size-4 animate-spin" />
@@ -861,7 +865,7 @@ export function GravacaoExternaTab() {
                 previewSession.gravacao_externa_id
             }
             onClick={() => void handleConcluir(previewSession)}
-            className="inline-flex shrink-0 items-center gap-2 rounded border border-primary-green bg-white px-4 py-2 text-sm font-medium text-primary-green hover:bg-primary-green/5 disabled:cursor-not-allowed disabled:opacity-50"
+            className="sagra-btn sagra-btn--primary-outline sagra-btn--md "
           >
             {concluirMutation.isPending &&
             concluirMutation.variables?.gravacaoExternaId ===

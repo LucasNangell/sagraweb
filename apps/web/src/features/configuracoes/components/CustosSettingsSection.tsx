@@ -318,7 +318,7 @@ export function CustosSettingsSection() {
               <button
                 type="submit"
                 disabled={pending || !form.nome.trim()}
-                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-primary-green px-4 text-xs font-semibold text-white hover:bg-primary-green/90 disabled:opacity-60"
+                className="sagra-btn sagra-btn--primary sagra-btn--md"
               >
                 {createMutation.isPending || updateMutation.isPending ? (
                   <Loader2 className="size-3.5 animate-spin" />
@@ -453,7 +453,7 @@ export function CustosSettingsSection() {
                         disabled={pending}
                         onClick={() => startEdit(item)}
                         title="Editar"
-                        className="inline-flex size-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                        className="inline-flex size-8 sagra-btn sagra-btn--outline sagra-btn--sm"
                       >
                         <Pencil className="size-3.5" aria-hidden />
                       </button>
@@ -462,7 +462,7 @@ export function CustosSettingsSection() {
                         disabled={pending}
                         onClick={() => void toggleMutation.mutate(item)}
                         title={item.ativo ? "Desativar" : "Ativar"}
-                        className="inline-flex size-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                        className="inline-flex size-8 sagra-btn sagra-btn--outline sagra-btn--sm"
                       >
                         {item.ativo ? (
                           <ToggleRight className="size-4 text-emerald-600" aria-hidden />

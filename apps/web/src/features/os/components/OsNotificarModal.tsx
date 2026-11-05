@@ -340,7 +340,7 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
         </div>
 
         <div
-          className="mt-3 rounded border border-sagra-border bg-white px-3 py-2 text-xs text-neutral-600"
+          className="mt-3 sagra-btn sagra-btn--outline sagra-btn--sm"
           data-testid={homeTestIds.osNotificarStatus}
         >
           <p>
@@ -403,7 +403,7 @@ export function OsNotificarModal({ row, open, onClose }: OsNotificarModalProps) 
             type="button"
             disabled={saveMutation.isPending}
             onClick={() => void handleSave()}
-            className="rounded bg-secondary-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            className="sagra-btn sagra-btn--secondary sagra-btn--md"
             data-testid={homeTestIds.osNotificarSend}
           >
             {saveMutation.isPending ? "Salvando…" : "Ativar notificações"}

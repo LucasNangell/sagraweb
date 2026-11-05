@@ -204,7 +204,7 @@ export function GerenciaPage({ search }: GerenciaPageProps) {
             type="button"
             disabled={saving || setorModalOpen}
             onClick={() => void handleSave()}
-            className="pointer-events-auto flex items-center gap-2 rounded-lg bg-primary-green px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-primary-green/90 disabled:opacity-60"
+            className="pointer-events-auto flex sagra-btn sagra-btn--primary sagra-btn--md shadow-lg transition hover:bg-primary-green/90 disabled:opacity-60"
           >
             {saving ? (
               <Loader2 className="size-4 animate-spin" aria-hidden />

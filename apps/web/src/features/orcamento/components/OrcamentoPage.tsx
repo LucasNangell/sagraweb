@@ -56,7 +56,7 @@ export function OrcamentoPage({ ano, id }: OrcamentoPageProps) {
         </div>
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 rounded bg-secondary-blue px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+          className="sagra-btn sagra-btn--secondary sagra-btn--md"
           onClick={() => editor.gerarPdf()}
           disabled={editor.pdfPending}
         >

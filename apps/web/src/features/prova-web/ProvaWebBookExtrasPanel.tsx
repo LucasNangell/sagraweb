@@ -270,7 +270,7 @@ export function ProvaWebBookExtrasPanel({
           type="button"
           onClick={addOrUpdateInsert}
           disabled={kind === "custom-fold" && !packBookExtraFoldDraft(foldDraft, openWidth, openHeight)}
-          className="mt-5 inline-flex items-center justify-center gap-1.5 rounded-lg bg-secondary-blue px-3 py-2 text-sm font-semibold text-white hover:bg-secondary-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-5 sagra-btn sagra-btn--secondary sagra-btn--md"
         >
           <Plus className="size-4" aria-hidden />
           {editingId ? "Salvar" : "Adicionar"}

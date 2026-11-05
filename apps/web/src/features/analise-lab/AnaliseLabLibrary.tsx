@@ -51,7 +51,7 @@ export function AnaliseLabLibrary({ busy, onRegister }: AnaliseLabLibraryProps) 
           aria-label="Gerenciar biblioteca"
           disabled={busy}
           onClick={() => setManageOpen(true)}
-          className="inline-flex size-8 shrink-0 items-center justify-center rounded border border-sagra-border bg-white text-neutral-600 hover:bg-neutral-50 disabled:opacity-50"
+          className="inline-flex size-8 shrink-0 sagra-btn sagra-btn--outline sagra-btn--sm"
         >
           <Library className="size-4" aria-hidden />
         </button>

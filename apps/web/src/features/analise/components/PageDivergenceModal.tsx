@@ -76,7 +76,7 @@ export function PageDivergenceModal({ open, divergences, onClose }: PageDivergen
           <button
             type="button"
             onClick={onClose}
-            className="min-w-[120px] rounded-lg bg-primary-green px-6 py-2 text-sm font-semibold text-white hover:opacity-90"
+            className="min-w-[120px] sagra-btn sagra-btn--primary sagra-btn--md"
           >
             OK
           </button>

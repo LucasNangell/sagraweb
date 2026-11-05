@@ -57,7 +57,7 @@ export function GravacaoObservacaoBox({
               setDraft(observacao ?? "");
               setEditing(true);
             }}
-            className="inline-flex items-center gap-1 rounded border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-amber-900 hover:bg-amber-100"
+            className="sagra-btn sagra-btn--warning sagra-btn--sm"
           >
             {text ? <Pencil className="size-3" /> : <Plus className="size-3" />}
             {text ? "Editar" : "Adicionar"}
@@ -84,7 +84,7 @@ export function GravacaoObservacaoBox({
                 setDraft(observacao ?? "");
                 setEditing(false);
               }}
-              className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+              className="sagra-btn sagra-btn--outline sagra-btn--sm"
             >
               Cancelar
             </button>
@@ -92,7 +92,7 @@ export function GravacaoObservacaoBox({
               type="button"
               disabled={saving}
               onClick={() => void handleSave()}
-              className="inline-flex items-center gap-1 rounded bg-primary-green px-2 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              className="sagra-btn sagra-btn--primary sagra-btn--md"
             >
               {saving ? <Loader2 className="size-3 animate-spin" /> : null}
               Salvar

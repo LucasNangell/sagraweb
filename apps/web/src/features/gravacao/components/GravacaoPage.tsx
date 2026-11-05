@@ -132,7 +132,7 @@ export function GravacaoPage() {
       </header>
 
       {meta?.errors && meta.errors.length > 0 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+        <div className="sagra-btn sagra-btn--warning sagra-btn--sm">
           {meta.errors.join(" · ")}
         </div>
       )}

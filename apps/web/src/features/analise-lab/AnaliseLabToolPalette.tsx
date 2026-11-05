@@ -26,8 +26,8 @@ export function AnaliseLabToolPalette({
           onClick={() => onToolChange(t.id)}
           className={
             tool === t.id
-              ? `inline-flex ${size} items-center justify-center rounded bg-primary-green text-white`
-              : `inline-flex ${size} items-center justify-center rounded border border-sagra-border bg-white text-neutral-700 hover:bg-neutral-50 disabled:opacity-50`
+              ? `inline-flex ${size} sagra-btn sagra-btn--primary sagra-btn--md`
+              : `inline-flex ${size} sagra-btn sagra-btn--outline sagra-btn--sm
           }
         >
           {t.icon}

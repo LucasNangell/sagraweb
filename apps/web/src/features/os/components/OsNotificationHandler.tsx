@@ -367,7 +367,7 @@ export function OsNotificationHandler() {
           <button
             type="button"
             onClick={() => void dismiss()}
-            className="rounded bg-primary-green px-4 py-2 text-sm font-semibold text-white"
+            className="sagra-btn sagra-btn--primary sagra-btn--md"
           >
             OK
           </button>

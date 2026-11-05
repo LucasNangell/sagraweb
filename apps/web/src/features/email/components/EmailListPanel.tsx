@@ -170,7 +170,7 @@ export function EmailListPanel({
               <button
                 type="button"
                 onClick={onRefresh}
-                className="mt-4 rounded-lg bg-secondary-blue px-3 py-1.5 text-xs font-semibold text-white"
+                className="mt-4 sagra-btn sagra-btn--secondary sagra-btn--md"
               >
                 Tentar novamente
               </button>

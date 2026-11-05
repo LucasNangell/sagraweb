@@ -14,7 +14,7 @@ export function RouteErrorFallback({ error, reset }: ErrorComponentProps) {
         <button
           type="button"
           onClick={() => reset()}
-          className="rounded bg-secondary-blue px-4 py-2 text-sm font-semibold text-white"
+          className="sagra-btn sagra-btn--secondary sagra-btn--md"
         >
           Tentar novamente
         </button>

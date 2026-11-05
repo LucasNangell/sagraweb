@@ -262,7 +262,7 @@ export function AnaliseLabCropToolPanel({
                 showCover && (isCapaContext || capaChanged) ? capa : null,
             });
           }}
-          className="rounded-lg bg-secondary-blue px-3 py-1.5 text-xs font-semibold text-white hover:bg-secondary-blue/90 disabled:opacity-50"
+          className="sagra-btn sagra-btn--secondary sagra-btn--md"
         >
           {saving ? "Aplicando…" : "Aplicar crop e regenerar"}
         </button>

@@ -232,7 +232,7 @@ export function OsSequenciaProducaoTab({
           type="button"
           onClick={handleRegenerate}
           disabled={disabled || regenerateMutation.isPending}
-          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+          className="sagra-btn sagra-btn--outline sagra-btn--sm shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
         >
           {regenerateMutation.isPending ? (
             <Loader2 className="size-3.5 animate-spin" aria-hidden />
@@ -258,7 +258,7 @@ export function OsSequenciaProducaoTab({
           <button
             type="button"
             onClick={() => void handleDownload()}
-            className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            className="sagra-btn sagra-btn--outline sagra-btn--sm shadow-sm transition hover:bg-slate-50"
           >
             <Download className="size-3.5" aria-hidden />
             Baixar docx
@@ -268,7 +268,7 @@ export function OsSequenciaProducaoTab({
           type="button"
           onClick={handleCreateDocx}
           disabled={!canCreateDocx}
-          className="inline-flex items-center gap-1.5 rounded-md bg-primary-green px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-green/90 disabled:opacity-50"
+          className="sagra-btn sagra-btn--primary sagra-btn--md shadow-sm transition hover:bg-primary-green/90 disabled:opacity-50"
         >
           {createDocxMutation.isPending ? (
             <Loader2 className="size-3.5 animate-spin" aria-hidden />
@@ -280,14 +280,14 @@ export function OsSequenciaProducaoTab({
       </div>
 
       {osDirty ? (
-        <p className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+        <p className="shrink-0 sagra-btn sagra-btn--warning sagra-btn--sm">
           Salve as alterações da OS antes de criar o DOCX para que a sequência use
           os dados atualizados.
         </p>
       ) : null}
 
       {warnings.length ? (
-        <div className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+        <div className="shrink-0 sagra-btn sagra-btn--warning sagra-btn--sm">
           <p className="font-semibold">Conferir antes de gerar:</p>
           <ul className="mt-1 list-disc space-y-0.5 pl-4">
             {warnings.map((warning) => (

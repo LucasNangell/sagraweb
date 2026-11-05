@@ -554,7 +554,7 @@ export function OsGerenciaDetailModal({
                     type="button"
                     onClick={handleStartNovaOs}
                     disabled={loading || !!loadError}
-                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                    className="sagra-btn sagra-btn--outline sagra-btn--sm shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
                     data-testid={homeTestIds.osGerenciaNew}
                   >
                     <FilePlus className="size-4" aria-hidden />
@@ -566,7 +566,7 @@ export function OsGerenciaDetailModal({
                     type="button"
                     onClick={handleStartDuplicarOs}
                     disabled={loading || !!loadError}
-                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                    className="sagra-btn sagra-btn--outline sagra-btn--sm shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
                     data-testid={homeTestIds.osGerenciaDuplicate}
                   >
                     <Copy className="size-4" aria-hidden />
@@ -580,7 +580,7 @@ export function OsGerenciaDetailModal({
                       window.dispatchEvent(new CustomEvent("sagra:os-vincular"))
                     }
                     disabled={loading || !!loadError}
-                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                    className="sagra-btn sagra-btn--outline sagra-btn--sm shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
                     data-testid={homeTestIds.osGerenciaVincular}
                   >
                     <Link2 className="size-4" aria-hidden />
@@ -592,7 +592,7 @@ export function OsGerenciaDetailModal({
                     type="button"
                     onClick={handlePrintFicha}
                     disabled={loading || !!loadError}
-                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                    className="sagra-btn sagra-btn--outline sagra-btn--sm shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
                     data-testid={homeTestIds.osGerenciaPrint}
                   >
                     <Printer className="size-4" aria-hidden />
@@ -610,7 +610,7 @@ export function OsGerenciaDetailModal({
                     type="button"
                     onClick={() => void handleStartEdit()}
                     disabled={loading || !!loadError || lock.acquiring}
-                    className="inline-flex items-center gap-2 rounded-lg bg-secondary-blue px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-secondary-blue/90 disabled:opacity-50"
+                    className="sagra-btn sagra-btn--secondary sagra-btn--md shadow-sm transition hover:bg-secondary-blue/90 disabled:opacity-50"
                     data-testid={homeTestIds.osGerenciaEdit}
                   >
                     <Pencil className="size-4" aria-hidden />
@@ -633,7 +633,7 @@ export function OsGerenciaDetailModal({
                   type="button"
                   onClick={() => void handleSave()}
                   disabled={saving || setorModalOpen}
-                  className="inline-flex items-center gap-2 rounded-lg bg-primary-green px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-green/90 disabled:opacity-60"
+                  className="sagra-btn sagra-btn--primary sagra-btn--md shadow-sm transition hover:bg-primary-green/90 disabled:opacity-60"
                   data-testid={homeTestIds.osGerenciaSave}
                 >
                   {saving ? (

@@ -402,7 +402,7 @@ export function AnaliseLabMarkEditor({
               pagina_origem: paginaOrigem,
             });
           }}
-          className="flex-1 rounded bg-secondary-blue px-2 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+          className="flex-1 sagra-btn sagra-btn--secondary sagra-btn--md"
         >
           Salvar
         </button>

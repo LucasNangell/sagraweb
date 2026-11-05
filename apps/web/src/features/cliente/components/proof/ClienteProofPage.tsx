@@ -477,7 +477,7 @@ export function ClienteProofPage({
         {embedded ? (
           <Link
             to="/cliente"
-            className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-secondary-blue px-4 py-2 text-sm font-medium text-white"
+            className="mt-4 min-h-11 sagra-btn sagra-btn--secondary sagra-btn--md"
           >
             Voltar ao painel
           </Link>
@@ -567,14 +567,14 @@ export function ClienteProofPage({
               <button
                 type="button"
                 onClick={onBack}
-                className="inline-flex min-h-11 items-center rounded-xl bg-secondary-blue px-4 py-2 text-sm font-medium text-white"
+                className="min-h-11 sagra-btn sagra-btn--secondary sagra-btn--md"
               >
                 Voltar ao painel
               </button>
             ) : (
               <Link
                 to="/cliente"
-                className="inline-flex min-h-11 items-center rounded-xl bg-secondary-blue px-4 py-2 text-sm font-medium text-white"
+                className="min-h-11 sagra-btn sagra-btn--secondary sagra-btn--md"
               >
                 Voltar ao painel
               </Link>

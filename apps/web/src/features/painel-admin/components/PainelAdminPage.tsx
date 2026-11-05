@@ -553,7 +553,7 @@ export function PainelAdminPage() {
                   ) : null}
                   <button
                     type="button"
-                    className="inline-flex items-center gap-2 rounded bg-secondary-blue px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                    className="sagra-btn sagra-btn--secondary sagra-btn--md"
                     onClick={() => void handleSave()}
                     disabled={saving}
                   >

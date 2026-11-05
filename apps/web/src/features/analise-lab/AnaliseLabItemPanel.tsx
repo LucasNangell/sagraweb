@@ -331,7 +331,7 @@ export function AnaliseLabItemPanel({
       className={
         pagePickActive
           ? "inline-flex size-8 shrink-0 items-center justify-center rounded border border-sky-500 bg-sky-50 text-sky-700"
-          : "inline-flex size-8 shrink-0 items-center justify-center rounded border border-sagra-border bg-white text-neutral-600 hover:bg-neutral-50"
+          : "inline-flex size-8 shrink-0 sagra-btn sagra-btn--outline sagra-btn--sm"
       }
     >
       <MousePointerClick className="size-4" aria-hidden />
@@ -672,7 +672,7 @@ export function AnaliseLabItemPanel({
         <button
           type="button"
           disabled={busy || Boolean(pageError) || !pageSpec.trim()}
-          className="flex-1 rounded bg-secondary-blue px-2 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+          className="flex-1 sagra-btn sagra-btn--secondary sagra-btn--md"
           onClick={() => {
             const payload = buildPayload({
               titulo,

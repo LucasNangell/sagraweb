@@ -730,7 +730,7 @@ export function EmailPendenciaDetail({
             type="button"
             disabled={sendDisabled}
             onClick={() => void handleSend()}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-secondary-blue py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-secondary-blue/90 disabled:opacity-60"
+            className="sagra-btn sagra-btn--secondary sagra-btn--md"
           >
             {sending || registeringAndamento ? (
               <Loader2 className="size-4 animate-spin" aria-hidden />

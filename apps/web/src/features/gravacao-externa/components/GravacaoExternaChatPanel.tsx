@@ -164,7 +164,7 @@ export function GravacaoExternaChatPanel({
         <button
           type="submit"
           disabled={!text.trim() || postMutation.isPending}
-          className="inline-flex shrink-0 items-center justify-center rounded bg-primary-green px-3 text-white hover:opacity-90 disabled:opacity-50"
+          className="sagra-btn sagra-btn--primary sagra-btn--md"
           title="Enviar"
         >
           {postMutation.isPending ? (

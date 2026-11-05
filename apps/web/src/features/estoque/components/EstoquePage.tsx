@@ -428,7 +428,7 @@ export function EstoquePage() {
                   <>
                     <button
                       type="button"
-                      className="inline-flex items-center gap-1 rounded bg-primary-green px-2 py-1 text-xs text-white"
+                      className="sagra-btn sagra-btn--primary sagra-btn--md"
                       onClick={() =>
                         void atenderEstoquePedido(p.id)
                           .then(() => {
@@ -710,7 +710,7 @@ export function EstoquePage() {
                   <button
                     type="submit"
                     disabled={createSkuMut.isPending}
-                    className="flex items-center justify-center gap-1 rounded bg-primary-green px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60 sm:col-span-2 lg:col-span-6"
+                    className="flex sagra-btn sagra-btn--primary sagra-btn--md sm:col-span-2 lg:col-span-6"
                   >
                     <Plus className="size-4" />
                     Cadastrar SKU
@@ -816,7 +816,7 @@ export function EstoquePage() {
                     type="button"
                     disabled={movMut.isPending}
                     onClick={() => movMut.mutate()}
-                    className="rounded bg-primary-green px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+                    className="sagra-btn sagra-btn--primary sagra-btn--md"
                   >
                     Registrar
                   </button>
@@ -902,7 +902,7 @@ export function EstoquePage() {
                 type="button"
                 disabled={cart.length === 0 || pedidoMut.isPending}
                 onClick={() => pedidoMut.mutate()}
-                className="self-stretch rounded bg-primary-green px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60 sm:self-start"
+                className="self-stretch sagra-btn sagra-btn--primary sagra-btn--md sm:self-start"
               >
                 Enviar pedido
               </button>

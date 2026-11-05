@@ -467,7 +467,7 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
                   <button
                     type="button"
                     onClick={() => setPickerOpen(true)}
-                    className="rounded-lg border border-sagra-border bg-white px-3 py-1.5 text-xs text-neutral-700 shadow-sm hover:bg-neutral-50"
+                    className="sagra-btn sagra-btn--outline sagra-btn--sm shadow-sm hover:bg-neutral-50"
                   >
                     Escolher outro arquivo
                   </button>
@@ -504,7 +504,7 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
                   <button
                     type="button"
                     onClick={() => setPickerOpen(true)}
-                    className="rounded-lg border border-sagra-border bg-white px-3 py-1.5 text-xs text-neutral-700 shadow-sm hover:bg-neutral-50"
+                    className="sagra-btn sagra-btn--outline sagra-btn--sm shadow-sm hover:bg-neutral-50"
                   >
                     Escolher outro arquivo
                   </button>
@@ -609,7 +609,7 @@ function RetryButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-1.5 rounded-lg border border-sagra-border bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 shadow-sm hover:bg-neutral-50 disabled:opacity-50"
+      className="sagra-btn sagra-btn--outline sagra-btn--sm shadow-sm hover:bg-neutral-50 disabled:opacity-50"
     >
       <RefreshCw className="size-3.5" aria-hidden />
       {label}

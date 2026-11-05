@@ -195,7 +195,7 @@ export function AdminSupportMessagesPage({
                 type="button"
                 disabled={saveSettingsMutation.isPending || settingsQuery.isPending}
                 onClick={() => void saveSettingsMutation.mutate()}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary-green px-3 text-xs font-semibold text-white hover:bg-primary-green/90 disabled:opacity-60"
+                className="sagra-btn sagra-btn--primary sagra-btn--md"
               >
                 {saveSettingsMutation.isPending ? (
                   <Loader2 className="size-3.5 animate-spin" aria-hidden />

@@ -793,7 +793,7 @@ export function EmailTemplatesSection() {
                 }
                 void sendTestMutation.mutate();
               }}
-              className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-secondary-blue px-4 text-xs font-semibold text-white shadow-sm hover:bg-secondary-blue/90 disabled:opacity-50"
+              className="sagra-btn sagra-btn--secondary sagra-btn--md"
             >
               {sendTestMutation.isPending ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -1061,7 +1061,7 @@ export function EmailTemplatesSection() {
                         type="button"
                         disabled={uploadPresetMutation.isPending || !selectedUploadFile}
                         onClick={() => void uploadPresetMutation.mutate()}
-                        className="mt-2 inline-flex h-8 items-center gap-1 rounded-lg bg-secondary-blue px-3 text-xs font-semibold text-white hover:bg-secondary-blue/90 disabled:opacity-60"
+                        className="mt-2 sagra-btn sagra-btn--secondary sagra-btn--md"
                       >
                         {uploadPresetMutation.isPending ? (
                           <Loader2 className="size-3 animate-spin" />
@@ -1125,7 +1125,7 @@ export function EmailTemplatesSection() {
                 type="button"
                 disabled={saveTemplateMutation.isPending}
                 onClick={() => void saveTemplateMutation.mutate()}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary-green px-3 text-xs font-semibold text-white hover:bg-primary-green/90 disabled:opacity-60"
+                className="sagra-btn sagra-btn--primary sagra-btn--md"
               >
                 {saveTemplateMutation.isPending ? (
                   <Loader2 className="size-3.5 animate-spin" />

@@ -261,7 +261,7 @@ export function OperationalEmailEditorPanel({
           type="button"
           disabled={createMutation.isPending}
           onClick={() => void createMutation.mutate()}
-          className="inline-flex h-9 items-center gap-1 rounded-lg bg-secondary-blue px-3 text-xs font-semibold text-white"
+          className="sagra-btn sagra-btn--secondary sagra-btn--md"
         >
           {createMutation.isPending ? (
             <Loader2 className="size-3.5 animate-spin" />
@@ -370,7 +370,7 @@ export function OperationalEmailEditorPanel({
           type="button"
           disabled={saveMutation.isPending}
           onClick={() => void saveMutation.mutate()}
-          className="inline-flex h-8 items-center gap-1 rounded-lg bg-secondary-blue px-3 text-xs font-semibold text-white"
+          className="sagra-btn sagra-btn--secondary sagra-btn--md"
         >
           {saveMutation.isPending ? (
             <Loader2 className="size-3.5 animate-spin" />

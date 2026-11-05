@@ -254,7 +254,7 @@ export function CredenciaisDepolModelosSection() {
           ) : null}
           <button
             type="button"
-            className="mt-2 inline-flex items-center justify-center gap-1 rounded bg-secondary-blue px-3 py-1.5 text-xs font-semibold text-white hover:bg-secondary-blue/90 disabled:opacity-60"
+            className="mt-2 sagra-btn sagra-btn--secondary sagra-btn--md"
             disabled={settingsMut.isPending || settingsQ.isLoading}
             onClick={() => settingsMut.mutate()}
           >
@@ -280,7 +280,7 @@ export function CredenciaisDepolModelosSection() {
             </p>
             <button
               type="button"
-              className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              className="sagra-btn sagra-btn--outline sagra-btn--sm"
               disabled={syncMut.isPending}
               onClick={() => syncMut.mutate()}
             >
@@ -416,7 +416,7 @@ export function CredenciaisDepolModelosSection() {
 
               <button
                 type="button"
-                className="mt-2 inline-flex items-center justify-center gap-1 rounded bg-secondary-blue px-3 py-2 text-xs font-semibold text-white hover:bg-secondary-blue/90 disabled:opacity-60"
+                className="mt-2 sagra-btn sagra-btn--secondary sagra-btn--md"
                 disabled={saveMut.isPending}
                 onClick={() => saveMut.mutate()}
               >

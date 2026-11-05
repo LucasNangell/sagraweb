@@ -191,7 +191,7 @@ export function PapelariaProdutosAdminSection() {
                   </div>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1.5 rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    className="sagra-btn sagra-btn--outline sagra-btn--sm"
                     onClick={() => setMode("new-model")}
                   >
                     <Plus className="size-3.5" aria-hidden />

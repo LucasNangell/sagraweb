@@ -658,7 +658,7 @@ export function NotificationCenter() {
 
                 onClick={() => openNotification(persistentAlert)}
 
-                className="rounded-md bg-primary-green px-3 py-1.5 text-xs font-semibold text-white"
+                className="sagra-btn sagra-btn--primary sagra-btn--md"
 
               >
 
@@ -956,7 +956,7 @@ export function NotificationCenter() {
 
                 onClick={() => void dismissSelected()}
 
-                className="rounded-md bg-primary-green px-4 py-2 text-sm font-semibold text-white"
+                className="sagra-btn sagra-btn--primary sagra-btn--md"
 
               >
 

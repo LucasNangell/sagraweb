@@ -620,14 +620,14 @@ export function ProvaWebFoldWizard({
       </div>
 
       {legacy && (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+        <p className="sagra-btn sagra-btn--warning sagra-btn--sm">
           Este registro usa o formato antigo de dobras. Reconfigure os vincos
           abaixo (corte limpo do modelo) antes de gerar a prova.
         </p>
       )}
 
       {pageCount > 2 && (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+        <p className="sagra-btn sagra-btn--warning sagra-btn--sm">
           Este PDF tem {pageCount} páginas. Serão usadas só as páginas 2
           (frente) e 1 (verso). Use “Inverter páginas” se precisar trocar.
         </p>
@@ -729,7 +729,7 @@ export function ProvaWebFoldWizard({
                   type="button"
                   disabled={!saveNome.trim() || createModelMut.isPending}
                   onClick={() => createModelMut.mutate()}
-                  className="rounded-lg bg-primary-green px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                  className="sagra-btn sagra-btn--primary sagra-btn--md"
                 >
                   {createModelMut.isPending ? "Salvando…" : "Confirmar"}
                 </button>
@@ -781,7 +781,7 @@ export function ProvaWebFoldWizard({
                   type="button"
                   disabled={!editNome.trim() || updateModelMut.isPending}
                   onClick={() => updateModelMut.mutate()}
-                  className="rounded-lg bg-primary-green px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                  className="sagra-btn sagra-btn--primary sagra-btn--md"
                 >
                   {updateModelMut.isPending ? "Salvando…" : "Salvar alterações"}
                 </button>
@@ -1011,7 +1011,7 @@ export function ProvaWebFoldWizard({
                       return { ...p, pageFrente: verso, pageVerso: frente };
                     })
                   }
-                  className="rounded-lg border border-sagra-border bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+                  className="sagra-btn sagra-btn--outline sagra-btn--sm"
                 >
                   Inverter páginas
                 </button>
@@ -1313,7 +1313,7 @@ export function ProvaWebFoldWizard({
           type="button"
           onClick={onBack}
           disabled={saving}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-sagra-border bg-white px-4 py-2 text-sm text-neutral-700 shadow-sm hover:bg-neutral-100 disabled:opacity-40"
+          className="sagra-btn sagra-btn--outline sagra-btn--sm shadow-sm hover:bg-neutral-100 disabled:opacity-40"
         >
           <ArrowLeft className="size-4" aria-hidden />
           Voltar
@@ -1322,7 +1322,7 @@ export function ProvaWebFoldWizard({
           type="button"
           disabled={saving || hasErrors}
           onClick={() => onConfirm(cropJson)}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary-green px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+          className="sagra-btn sagra-btn--primary sagra-btn--md shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {saving && <Loader2 className="size-4 animate-spin" aria-hidden />}
           Gerar Prova WEB

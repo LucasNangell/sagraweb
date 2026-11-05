@@ -152,7 +152,7 @@ export function OsSaveCurrentFiltersModal({
             <button
               type="submit"
               disabled={busy}
-              className="inline-flex items-center gap-2 rounded bg-primary-green px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-60"
+              className="sagra-btn sagra-btn--primary sagra-btn--md hover:opacity-95 disabled:opacity-60"
               data-testid={homeTestIds.osSaveFiltersSubmit}
             >
               {busy ? (

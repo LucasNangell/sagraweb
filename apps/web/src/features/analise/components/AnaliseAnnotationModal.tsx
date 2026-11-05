@@ -919,7 +919,7 @@ export function AnaliseAnnotationModal({
           type="button"
           onClick={handleSave}
           disabled={loading || Boolean(error)}
-          className="rounded bg-primary-green px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+          className="sagra-btn sagra-btn--primary sagra-btn--md"
         >
           Salvar anotação
         </button>

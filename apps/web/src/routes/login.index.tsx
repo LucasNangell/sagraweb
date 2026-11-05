@@ -237,7 +237,7 @@ function LoginPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex w-full items-center justify-center gap-2 rounded-md bg-primary-green py-2.5 text-sm font-semibold text-white hover:bg-primary-green/90 disabled:opacity-60"
+              className="sagra-btn sagra-btn--primary sagra-btn--md"
             >
               {isSubmitting && <Loader2 className="size-4 animate-spin" />}
               Entrar
@@ -340,7 +340,7 @@ function LoginPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex w-full items-center justify-center gap-2 rounded-md bg-primary-green py-2.5 text-sm font-semibold text-white hover:bg-primary-green/90 disabled:opacity-60"
+              className="sagra-btn sagra-btn--primary sagra-btn--md"
             >
               {isSubmitting && <Loader2 className="size-4 animate-spin" />}
               Entrar

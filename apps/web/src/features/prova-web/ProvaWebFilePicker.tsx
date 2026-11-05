@@ -611,7 +611,7 @@ export function ProvaWebFilePicker({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-lg border border-sagra-border bg-white px-4 py-2 text-sm text-neutral-700 shadow-sm hover:bg-neutral-100"
+            className="sagra-btn sagra-btn--outline sagra-btn--sm shadow-sm hover:bg-neutral-100"
           >
             Cancelar
           </button>
@@ -623,7 +623,7 @@ export function ProvaWebFilePicker({
             setSaveError(null);
             setPhase("crop");
           }}
-          className="inline-flex items-center gap-2 rounded-lg bg-primary-green px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+          className="sagra-btn sagra-btn--primary sagra-btn--md shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Continuar
         </button>

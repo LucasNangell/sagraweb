@@ -146,7 +146,7 @@ export function GravacaoExternaEntregaModal({
                 recebidoPorNome: nome.trim(),
               })
             }
-            className="inline-flex items-center gap-2 rounded bg-primary-green px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+            className="sagra-btn sagra-btn--primary sagra-btn--md"
           >
             {saving ? <Loader2 className="size-4 animate-spin" /> : null}
             Confirmar recebimento

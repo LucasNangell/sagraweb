@@ -136,7 +136,7 @@ export function OrcamentoCamposPanel({
     <div className="space-y-3">
       {pdfError ? <p className="text-xs text-red-700">{pdfError}</p> : null}
       {r.alertas.length > 0 ? (
-        <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <div className="sagra-btn sagra-btn--warning sagra-btn--sm">
           {r.alertas.join(" · ")}
         </div>
       ) : null}

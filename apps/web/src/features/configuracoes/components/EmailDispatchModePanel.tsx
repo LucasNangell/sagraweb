@@ -193,7 +193,7 @@ export function EmailDispatchModePanel() {
       ) : null}
 
       {modelsQuery.isError ? (
-        <p className="mt-3 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
+        <p className="mt-3 sagra-btn sagra-btn--warning sagra-btn--sm">
           Não foi possível carregar os modelos de envio. Verifique se o backend está atualizado e se
           a tabela <code className="rounded bg-white px-1">tabEmailTemplateModel</code> existe.
         </p>

@@ -46,7 +46,7 @@ export function ProvaWebExistingModal({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-lg border border-sagra-border bg-white px-4 py-2 text-sm text-neutral-700 shadow-sm hover:bg-neutral-100"
+            className="sagra-btn sagra-btn--outline sagra-btn--sm shadow-sm hover:bg-neutral-100"
           >
             Cancelar
           </button>
@@ -61,7 +61,7 @@ export function ProvaWebExistingModal({
           <button
             type="button"
             onClick={onCreateNew}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary-green px-4 py-2 text-sm font-semibold text-white shadow-sm hover:brightness-110"
+            className="sagra-btn sagra-btn--primary sagra-btn--md shadow-sm hover:brightness-110"
           >
             <Plus className="size-4" aria-hidden />
             Criar Prova {versao + 1}

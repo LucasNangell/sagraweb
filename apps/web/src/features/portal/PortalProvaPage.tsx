@@ -112,14 +112,14 @@ export function PortalProvaPage({ token, osId, ano }: PortalProvaPageProps) {
             href={pdfUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded bg-secondary-blue px-4 py-2 text-sm font-semibold text-white"
+            className="sagra-btn sagra-btn--secondary sagra-btn--md"
           >
             Baixar PDF oficial
           </a>
           <button
             type="button"
             onClick={() => window.print()}
-            className="inline-flex items-center gap-2 rounded bg-neutral-500 px-4 py-2 text-sm font-semibold text-white"
+            className="sagra-btn sagra-btn--neutral sagra-btn--md"
           >
             <Printer className="size-4" />
             Imprimir

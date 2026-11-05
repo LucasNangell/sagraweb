@@ -1185,7 +1185,7 @@ export function OsHistoryPanel({
                         ano: String(osAno),
                         id: String(osId),
                       }}
-                      className="inline-flex items-center gap-1.5 rounded bg-secondary-blue px-3 py-1.5 text-xs font-semibold text-white no-underline hover:bg-secondary-blue/90 hover:text-white hover:no-underline"
+                      className="sagra-btn sagra-btn--secondary sagra-btn--md no-underline hover:bg-secondary-blue/90 hover:text-white hover:no-underline"
                       data-testid={homeTestIds.osHistoryAnalise}
                     >
                       <Search className="size-3.5" aria-hidden />
@@ -1207,7 +1207,7 @@ export function OsHistoryPanel({
                         onClick={() => void startNew()}
                         data-tour="os-history-novo"
                         data-testid={homeTestIds.osHistoryNovo}
-                        className="rounded bg-primary-green px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                        className="sagra-btn sagra-btn--primary sagra-btn--md"
                       >
                         Novo
                       </button>
@@ -1231,7 +1231,7 @@ export function OsHistoryPanel({
                         onClick={() => void saveHistory()}
                         data-tour="os-history-salvar"
                         data-testid={homeTestIds.osHistorySalvar}
-                        className="rounded bg-primary-green px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                        className="sagra-btn sagra-btn--primary sagra-btn--md"
                       >
                         Salvar
                       </button>

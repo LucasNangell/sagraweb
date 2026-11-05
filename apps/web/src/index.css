@@ -150,7 +150,12 @@ body {
   padding-block: 5px;
   border: 0;
   border-radius: 10px;
-  background: var(--c);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--c) 72%, white) 0%,
+    var(--c) 48%,
+    color-mix(in srgb, var(--c) 82%, var(--c2)) 100%
+  );
   color: var(--ink);
   font-weight: 600;
   letter-spacing: 0.01em;
@@ -175,6 +180,11 @@ body {
 
 .ge-btn-3d:active:not(:disabled):not([aria-disabled="true"]) {
   translate: 0 var(--press);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--c) 78%, var(--c2)) 0%,
+    var(--c) 100%
+  );
   box-shadow:
     0 0 0 var(--c2),
     inset 0 3px 6px color-mix(in srgb, var(--c2) 55%, transparent),

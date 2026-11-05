@@ -134,8 +134,8 @@ body {
  * tamanho compacto atual + paletas amber / emerald / slate.
  */
 .ge-btn-3d {
-  --c: #fef3c7;
-  --c2: #92400e;
+  --c: #f0b429;
+  --c2: #a67c1a;
   --ink: #92400e;
   --press: 3px;
   --speed: 100ms;
@@ -165,12 +165,12 @@ body {
   outline-offset: 2px;
   box-shadow:
     0 var(--press) 0 var(--c2),
-    0 6px 10px color-mix(in srgb, var(--c2) 18%, transparent);
+    0 6px 10px #0002;
   transition: all var(--speed) ease;
 }
 
 .ge-btn-3d:hover:not(:disabled):not([aria-disabled="true"]) {
-  filter: brightness(0.98);
+  filter: brightness(1.04);
 }
 
 .ge-btn-3d:active:not(:disabled):not([aria-disabled="true"]) {
@@ -192,24 +192,24 @@ body {
   box-shadow: none !important;
 }
 
-/* Pendente / Baixar todos — fonte antiga + fundo âmbar claro */
+/* Pendente / Baixar todos — fundo Arcade; texto/ícone na cor antiga */
 .ge-btn-3d--amber {
-  --c: #fef3c7;
-  --c2: #92400e;
+  --c: #f0b429;
+  --c2: #a67c1a;
   --ink: #92400e;
 }
 
 /* Baixado */
 .ge-btn-3d--emerald {
-  --c: #d1fae5;
-  --c2: #065f46;
+  --c: #2fbf7a;
+  --c2: #1a7a4c;
   --ink: #065f46;
 }
 
 /* Download avulso */
 .ge-btn-3d--slate {
-  --c: #e8edf3;
-  --c2: #4a5e76;
+  --c: #6b7c93;
+  --c2: #24344d;
   --ink: #4a5e76;
 }
 

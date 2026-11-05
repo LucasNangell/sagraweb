@@ -27,8 +27,8 @@
   --sagra-btn-confirm-edge: color-mix(in srgb, var(--primary-green) 62%, #000);
   --sagra-btn-confirm-ink: #ffffff;
 
-  --sagra-btn-save-c: var(--secondary-blue);
-  --sagra-btn-save-edge: color-mix(in srgb, var(--secondary-blue) 62%, #000);
+  --sagra-btn-save-c: #3b82f6;
+  --sagra-btn-save-edge: #1d4ed8;
   --sagra-btn-save-ink: #ffffff;
 
   --sagra-btn-next-c: var(--primary-green);

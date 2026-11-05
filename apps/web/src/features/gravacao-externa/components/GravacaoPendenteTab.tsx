@@ -714,7 +714,7 @@ export function GravacaoPendenteTab() {
             {requiresMachineSelection && !hasMachineSelection ? (
               <div
                 role="status"
-                className="sagra-btn sagra-btn--warning sagra-btn--sm"
+                className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-4 text-sm text-amber-900"
               >
                 Selecione ao menos um conjunto de chapas acima para carregar a lista de
                 arquivos.

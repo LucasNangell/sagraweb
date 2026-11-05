@@ -136,7 +136,7 @@ body {
 .ge-btn-3d {
   --c: #f0b429;
   --c2: #a67c1a;
-  --ink: #92400e;
+  --ink: #000000;
   --press: 3px;
   --speed: 100ms;
   position: relative;
@@ -195,25 +195,25 @@ body {
   box-shadow: none !important;
 }
 
-/* Pendente / Baixar todos — fundo Arcade; texto/ícone na cor antiga */
+/* Pendente / Baixar todos — fundo Arcade; texto/ícone pretos */
 .ge-btn-3d--amber {
   --c: #f0b429;
   --c2: #a67c1a;
-  --ink: #92400e;
+  --ink: #000000;
 }
 
 /* Baixado */
 .ge-btn-3d--emerald {
   --c: #2fbf7a;
   --c2: #1a7a4c;
-  --ink: #065f46;
+  --ink: #000000;
 }
 
 /* Download avulso */
 .ge-btn-3d--slate {
   --c: #6b7c93;
   --c2: #24344d;
-  --ink: #4a5e76;
+  --ink: #000000;
 }
 
 @media (prefers-reduced-motion: reduce) {

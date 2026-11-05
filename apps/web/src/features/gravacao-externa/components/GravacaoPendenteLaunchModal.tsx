@@ -97,14 +97,11 @@ function emptyChapaRow(): ChapaRow {
 const TIF_EXTS = new Set(["tif", "tiff"]);
 
 /** Ação secundária genérica (ex.: + Máquina) */
-const BTN_SECONDARY =
-  "inline-flex items-center justify-center gap-1.5 rounded-md bg-secondary-blue px-3 py-1.5 text-xs font-semibold text-white hover:bg-secondary-blue/90 disabled:cursor-not-allowed disabled:opacity-50";
+const BTN_SECONDARY = "ge-btn-3d ge-btn-3d--secondary ge-btn-3d--sm";
 
-const BTN_PDF =
-  "inline-flex items-center justify-center gap-1.5 rounded-md border border-red-600/40 bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50";
+const BTN_PDF = "ge-btn-3d ge-btn-3d--danger ge-btn-3d--sm";
 
-const BTN_TIF =
-  "inline-flex items-center justify-center gap-1.5 rounded-md border border-blue-600/40 bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50";
+const BTN_TIF = "ge-btn-3d ge-btn-3d--info ge-btn-3d--sm";
 
 /** Ícone destrutivo padronizado */
 const BTN_ICON_DANGER =
@@ -1347,7 +1344,7 @@ export function GravacaoPendenteLaunchModal({
               type="button"
               onClick={handleRequestClose}
               disabled={saving}
-              className="inline-flex items-center justify-center rounded-md bg-neutral-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50"
+              className="ge-btn-3d ge-btn-3d--neutral ge-btn-3d--md !py-1.5"
               data-testid={homeTestIds.osGravacaoCancel}
             >
               Cancelar
@@ -1356,7 +1353,7 @@ export function GravacaoPendenteLaunchModal({
               type="button"
               onClick={handleConfirm}
               disabled={saving || juntadaBusy}
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-primary-green px-4 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              className="ge-btn-3d ge-btn-3d--primary ge-btn-3d--md !py-1.5"
               data-testid={homeTestIds.osGravacaoConfirm}
             >
               {saving ? <Loader2 className="size-4 animate-spin" /> : null}

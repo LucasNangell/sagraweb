@@ -125,7 +125,7 @@ export function GravacaoPendenteAdicionarOsModal({
             type="button"
             onClick={onClose}
             disabled={checking}
-            className="rounded bg-neutral-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            className="ge-btn-3d ge-btn-3d--danger ge-btn-3d--md"
           >
             Cancelar
           </button>
@@ -133,7 +133,7 @@ export function GravacaoPendenteAdicionarOsModal({
             type="button"
             onClick={() => void handleContinue()}
             disabled={checking}
-            className="inline-flex items-center gap-2 rounded bg-primary-green px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            className="ge-btn-3d ge-btn-3d--primary ge-btn-3d--md"
           >
             {checking ? <Loader2 className="size-4 animate-spin" /> : null}
             Continuar

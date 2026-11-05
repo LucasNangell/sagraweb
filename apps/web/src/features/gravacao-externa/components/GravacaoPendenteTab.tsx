@@ -561,7 +561,7 @@ export function GravacaoPendenteTab() {
           <button
             type="button"
             onClick={() => setAdicionarModalOpen(true)}
-            className="ge-btn-3d ge-btn-3d--primary"
+            className="ge-btn-3d ge-btn-3d--primary ge-btn-3d--md w-full font-medium"
           >
             <Plus className="size-4" />
             Adicionar OS

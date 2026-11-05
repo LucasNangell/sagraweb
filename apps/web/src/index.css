@@ -226,19 +226,56 @@ body {
   --ink: #000000;
 }
 
-/* Adicionar OS — Arcade com cor/tamanho originais (primary-green) */
+/* Ações de formulário/modal — tamanho original (px-4 py-2 text-sm) */
+.ge-btn-3d--md {
+  gap: 0.5rem;
+  padding-inline: 1rem;
+  padding-block: 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+}
+
+/* Compacto (px-3 py-1.5 text-xs) — ações internas do modal */
+.ge-btn-3d--sm {
+  gap: 0.375rem;
+  padding-inline: 0.75rem;
+  padding-block: 0.375rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1rem;
+}
+
 .ge-btn-3d--primary {
   --c: var(--primary-green);
   --c2: color-mix(in srgb, var(--primary-green) 62%, #000);
   --ink: #ffffff;
-  width: 100%;
-  gap: 0.5rem;
-  padding-inline: 1rem;
-  padding-block: 0.5rem;
-  border-radius: 0.25rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  line-height: 1.25rem;
+}
+
+.ge-btn-3d--neutral {
+  --c: #525252;
+  --c2: color-mix(in srgb, #525252 62%, #000);
+  --ink: #ffffff;
+}
+
+.ge-btn-3d--secondary {
+  --c: var(--secondary-blue);
+  --c2: color-mix(in srgb, var(--secondary-blue) 62%, #000);
+  --ink: #ffffff;
+}
+
+.ge-btn-3d--danger {
+  --c: #dc2626;
+  --c2: color-mix(in srgb, #dc2626 62%, #000);
+  --ink: #ffffff;
+}
+
+.ge-btn-3d--info {
+  --c: #2563eb;
+  --c2: color-mix(in srgb, #2563eb 62%, #000);
+  --ink: #ffffff;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -859,7 +859,7 @@ export function GravacaoPendenteTab() {
           <button
             type="button"
             onClick={() => setControleExpanded((v) => !v)}
-            className="inline-flex items-center gap-1 rounded border border-neutral-300 bg-white px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+            className="ge-btn-3d ge-btn-3d--outline ge-btn-3d--xs !px-2"
             aria-expanded={controleExpanded}
             aria-label={
               controleExpanded

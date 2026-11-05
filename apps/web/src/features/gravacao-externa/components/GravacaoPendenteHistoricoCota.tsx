@@ -57,7 +57,7 @@ export function GravacaoPendenteHistoricoCota({
             disabled={loading}
             onClick={() => setDetalhesOpen(true)}
             className={cn(
-              "rounded border border-neutral-300 bg-white px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50",
+              "ge-btn-3d ge-btn-3d--outline ge-btn-3d--xs",
               loading && "cursor-not-allowed opacity-50",
             )}
           >

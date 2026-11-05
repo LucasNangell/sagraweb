@@ -81,7 +81,7 @@ public sealed class BoardConfig
 
 public sealed class WindowConfig
 {
-    public int Width { get; set; } = 720;
+    public int Width { get; set; } = OverlayBounds.MinWidth;
     public int? X { get; set; }
     public double Opacity { get; set; } = 0.95;
     public double SpeedPxPerSec { get; set; } = 40;

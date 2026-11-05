@@ -16,7 +16,6 @@ public partial class OverlayWindow : Window
     static readonly Brush PanelBackground = Frozen(new SolidColorBrush(PanelColor));
     static readonly Brush CardBg = Frozen(new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x38)));
     static readonly Brush TextBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xe1, 0xe1, 0xe6)));
-    static readonly Brush TextDim = Frozen(new SolidColorBrush(Color.FromRgb(0xa8, 0xa8, 0xb3)));
     static readonly Brush PriorityHigh = Frozen(new SolidColorBrush(Color.FromRgb(0xd3, 0x11, 0x11)));
     static readonly Brush PriorityMedium = Frozen(new SolidColorBrush(Color.FromRgb(0xff, 0x98, 0x00)));
     static readonly Brush PriorityMediumText = Frozen(new SolidColorBrush(Color.FromRgb(0x1a, 0x1a, 0x1a)));
@@ -44,8 +43,6 @@ public partial class OverlayWindow : Window
     AppConfig _config;
     List<TickerCard> _cards = [];
     List<(TickerCard Card, double Width, string Situacao)> _layout = [];
-    string _status = "connecting";
-    string _statusMsg = "Conectando…";
     bool _paused;
     bool _initial = true;
     bool _busyPoll;
@@ -54,7 +51,7 @@ public partial class OverlayWindow : Window
     DateTime _lastTick = DateTime.UtcNow;
     int _physX;
     int _physY;
-    int _physWidth = 720;
+    int _physWidth = OverlayBounds.MinWidth;
     int _physHeight = 48;
     string? _dragMode;
     int _dragOriginX;
@@ -84,6 +81,8 @@ public partial class OverlayWindow : Window
     {
         InitializeComponent();
         _config = ConfigStore.Normalize(config);
+        _physWidth = _config.Window.Width;
+        Width = _config.Window.Width;
         _client = NewClient(_config);
         OverlayChrome.ApplyFloatingStyle(this);
         Loaded += OnLoaded;
@@ -209,7 +208,6 @@ public partial class OverlayWindow : Window
         TickerHost.Background = fill;
         Ticker.Background = UseHtmlTicker ? HitBackground : fill;
         StatusHost.Background = fill;
-        PaintStatus();
     }
 
     void Place(bool persist, bool initial = false)
@@ -690,10 +688,8 @@ public partial class OverlayWindow : Window
             _cards = cards;
             PreserveHeldPreview();
             EnqueueArrivals(cards, processed.NewArrivalKeys);
-            _status = "connected";
-            _statusMsg = string.IsNullOrEmpty(inboxNote) ? $"{cards.Count} OP(s)" : inboxNote;
+            if (!string.IsNullOrEmpty(inboxNote)) AppLog.Warn(inboxNote);
             RebuildLayout();
-            PaintStatus();
             PumpArrivalQueue();
         }
         catch (Exception ex)
@@ -777,17 +773,7 @@ public partial class OverlayWindow : Window
 
     void ApplyError(string message)
     {
-        _status = "disconnected";
-        _statusMsg = message;
-        PaintStatus();
-        _needsDraw = true;
-        Redraw();
-    }
-
-    void PaintStatus()
-    {
-        StatusHost.Visibility = _status == "disconnected" ? Visibility.Visible : Visibility.Collapsed;
-        StatusHost.ToolTip = _statusMsg;
+        AppLog.Warn(message);
     }
 
     void OnTickerSizeChanged(object sender, SizeChangedEventArgs e)
@@ -904,11 +890,7 @@ public partial class OverlayWindow : Window
         }
 
         Ticker.Children.Clear();
-        if (_layout.Count == 0)
-        {
-            if (_status != "connected") DrawEmpty(_statusMsg, height);
-            return;
-        }
+        if (_layout.Count == 0) return;
 
         foreach (var item in placed)
             Ticker.Children.Add(Paint(item, height));
@@ -930,8 +912,7 @@ public partial class OverlayWindow : Window
             items.Add(TickerHtml.Item(item, sit, model, enter));
         }
         _htmlEnterSeen.RemoveWhere(key => !live.Contains(key));
-        var empty = _layout.Count == 0 && _status != "connected" ? _statusMsg : "";
-        var json = TickerHtml.Frame(items, height, cardH, numSize, sitSize, width, IsPaused(), empty);
+        var json = TickerHtml.Frame(items, height, cardH, numSize, sitSize, width, IsPaused(), "");
         _tickerBridge.FrameJson = json;
         try { TickerWeb.CoreWebView2?.PostWebMessageAsJson(json); }
         catch { /* o rAF do host object aplica no próximo quadro */ }
@@ -1042,24 +1023,6 @@ public partial class OverlayWindow : Window
     {
         var meta = _layout.First(c => ReferenceEquals(c.Card, item.Card) || c.Card.UniqueKey == item.Card.UniqueKey);
         return PaintCard(item.X, height, item.Width, meta.Card, meta.Situacao);
-    }
-
-    void DrawEmpty(string text, double height)
-    {
-        var shown = (text ?? "").Trim();
-        if (shown.Length == 0) return;
-        if (shown.Length >= 80) shown = shown[..77] + "…";
-        var tb = new TextBlock
-        {
-            Text = shown,
-            Foreground = TextDim,
-            FontFamily = new FontFamily("Segoe UI"),
-            FontSize = 12,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        Canvas.SetLeft(tb, 12);
-        Canvas.SetTop(tb, Math.Max(0, (height - 16) / 2));
-        Ticker.Children.Add(tb);
     }
 
     UIElement PaintCard(double x, double canvasH, double w, TickerCard card, string situacao)

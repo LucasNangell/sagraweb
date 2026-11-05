@@ -436,7 +436,7 @@ public class BoardTests
         Assert.Equal(1, cfg.Board.ColumnCount);
         Assert.Equal("inbox", cfg.Board.Columns[0].Source);
         Assert.Equal("SEFOC", cfg.Board.Columns[0].Sector);
-        Assert.Equal(720, cfg.Window.Width);
+        Assert.Equal(OverlayBounds.MinWidth, cfg.Window.Width);
         Assert.False(cfg.Window.TransparentBg);
         Assert.False(cfg.Window.NotificationsEnabled);
         Assert.False(cfg.Board.Columns[0].Notify);
@@ -1210,6 +1210,8 @@ public class OverlayBoundsTests
         Assert.Equal(OverlayBounds.MinWidth, ConfigStore.NormalizeWindow(new WindowConfig { Width = 10 }).Width);
         Assert.Equal(OverlayBounds.MaxWidth, ConfigStore.NormalizeWindow(new WindowConfig { Width = 99_999 }).Width);
         Assert.Equal(900, ConfigStore.NormalizeWindow(new WindowConfig { Width = 900 }).Width);
+        Assert.Equal(OverlayBounds.MinWidth, ConfigStore.Normalize(new AppConfig()).Window.Width);
+        Assert.Equal(720, ConfigStore.Normalize(new AppConfig { Window = new WindowConfig { Width = 720 } }).Window.Width);
     }
 }
 

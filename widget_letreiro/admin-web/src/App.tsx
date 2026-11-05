@@ -470,7 +470,7 @@ function mergeProfile(base: AppConfig, profile: AppConfig): AppConfig {
 
 function remoteWindow(cfg: AppConfig, columns: BoardColumn[]) {
   return {
-    width: cfg.window?.width ?? 720,
+    width: cfg.window?.width ?? 20,
     opacity: cfg.window?.opacity ?? 0.95,
     speedPxPerSec: cfg.window?.speedPxPerSec ?? 40,
     transparentBg: !!cfg.window?.transparentBg,
@@ -515,7 +515,7 @@ function seedClientConfig(row: Instance, payload: AppConfig | null): AppConfig {
       columnCount: columns.length,
     },
     window: {
-      width: base.window?.width ?? 720,
+      width: base.window?.width ?? 20,
       opacity: base.window?.opacity ?? 0.95,
       speedPxPerSec: base.window?.speedPxPerSec ?? 40,
       transparentBg: !!base.window?.transparentBg,
@@ -660,18 +660,18 @@ function LetreiroDisplayFields({
         Largura da barra (px)
         <input
           type="number"
-          min={320}
+          min={20}
           max={4000}
           step={1}
           className="mt-1 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
-          value={cfg.window?.width ?? 720}
+          value={cfg.window?.width ?? 20}
           onChange={(e) => {
             const width = Number(e.target.value);
             if (!Number.isFinite(width)) return;
             onChange({ ...cfg, window: { ...cfg.window, width } });
           }}
         />
-        <span className="mt-1 block text-xs text-slate-500">Entre 320 e 4000. Arrastar a faixa só move a posição.</span>
+        <span className="mt-1 block text-xs text-slate-500">Entre 20 e 4000. Arrastar a faixa só move a posição.</span>
       </label>
       <label className="mt-4 block text-sm text-slate-400">
         Velocidade do deslize ({Math.round(cfg.window?.speedPxPerSec ?? 40)} px/s)

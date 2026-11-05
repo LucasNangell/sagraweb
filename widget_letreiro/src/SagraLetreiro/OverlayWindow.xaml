@@ -12,7 +12,7 @@
         ResizeMode="NoResize"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
-        Width="720"
+        Width="20"
         Height="48">
     <Grid x:Name="Root">
         <Grid.ColumnDefinitions>

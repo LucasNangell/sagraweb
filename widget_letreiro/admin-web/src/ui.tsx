@@ -33,7 +33,7 @@ export function ConfigPreview({ cfg, notifications, editingProfile = false }: { 
           ["Distância das bordas", `${win?.notificationOffsetRight ?? 24} px direita · ${win?.notificationOffsetBottom ?? 24} px inferior`],
         ] : [
           ["Setor padrão", cfg.board?.sector || "Não definido"],
-          ["Largura", `${win?.width ?? 720} px`],
+          ["Largura", `${win?.width ?? 20} px`],
           ["Velocidade", `${win?.speedPxPerSec ?? 40} px/s`],
           ["Opacidade", `${Math.round((win?.opacity ?? 0.95) * 100)}%`],
         ]).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}

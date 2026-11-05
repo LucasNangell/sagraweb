@@ -114,6 +114,25 @@ function versaoLabelFromKey(
   return found?.label ?? versaoKey;
 }
 
+/** Snapshot estável dos problemas registrados para detectar alterações locais. */
+function analiseItemsFingerprint(items: AnaliseSelectedItem[]): string {
+  return JSON.stringify(
+    [...items]
+      .map((item) => ({
+        id: item.uniqueId,
+        titulo: item.titulo,
+        html: item.html,
+        obs: item.obs,
+        componenteOrigem: item.componenteOrigem,
+        versaoOrigem: item.versaoOrigem ?? "",
+        resolucaoObrigatoria: Boolean(item.resolucaoObrigatoria),
+        corrigidoSefoc: Boolean(item.corrigidoSefoc),
+        obsCorrecaoSefoc: item.obsCorrecaoSefoc ?? "",
+      }))
+      .sort((a, b) => a.id - b.id),
+  );
+}
+
 interface AnalisePageProps {
   search: AnaliseSearchParams;
 }
@@ -151,6 +170,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
   const [showObsModal, setShowObsModal] = useState(false);
   const [obsModalMode, setObsModalMode] = useState<"empty" | "all_corrected">("empty");
   const [obsText, setObsText] = useState("");
+  const [showAndamentoChoiceModal, setShowAndamentoChoiceModal] = useState(false);
   const [showFileModal, setShowFileModal] = useState(false);
   const [fileList, setFileList] = useState<{ name: string; path: string }[]>([]);
   const [selectedFile, setSelectedFile] = useState("");
@@ -187,11 +207,14 @@ export function AnalisePage({ search }: AnalisePageProps) {
   const pageDivergenceCheckedRef = useRef(false);
   const capaMioloPromptCheckedRef = useRef(false);
   const analysisStartPromptedRef = useRef<string | null>(null);
+  const itemsBaselineRef = useRef<string>(analiseItemsFingerprint([]));
 
   useEffect(() => {
     pageDivergenceCheckedRef.current = false;
     capaMioloPromptCheckedRef.current = false;
     analysisStartPromptedRef.current = null;
+    itemsBaselineRef.current = analiseItemsFingerprint([]);
+    setShowAndamentoChoiceModal(false);
     setPageDivergenceModalOpen(false);
     setCapaMioloChoiceByVersion({});
     setVersaoKey("");
@@ -699,15 +722,18 @@ export function AnalisePage({ search }: AnalisePageProps) {
       if (full.exists) {
         setAnalysisId(full.id ?? null);
         const fallbackVersao = full.versao?.trim() || "";
-        setItems(
-          mapAnaliseItems(full.items).map((item) => ({
-            ...item,
-            versaoOrigem: item.versaoOrigem || fallbackVersao || undefined,
-          })),
-        );
+        const loadedItems = mapAnaliseItems(full.items).map((item) => ({
+          ...item,
+          versaoOrigem: item.versaoOrigem || fallbackVersao || undefined,
+        }));
+        setItems(loadedItems);
+        itemsBaselineRef.current = analiseItemsFingerprint(loadedItems);
         if (full.componente && ANALISE_COMPONENTES.includes(full.componente as AnaliseComponente)) {
           setComponente(full.componente as AnaliseComponente);
         }
+      } else {
+        setItems([]);
+        itemsBaselineRef.current = analiseItemsFingerprint([]);
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erro ao iniciar análise.";
@@ -1083,13 +1109,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
     });
   };
 
-  const handleFinish = async () => {
-    if (readOnlyMode) {
-      window.alert(readOnlyReason ?? "Análise em modo visualização.");
-      return;
-    }
-    if (!validOs) return;
-
+  const flushPendingItemUpdates = () => {
     if (updateTimeoutRef.current) {
       clearTimeout(updateTimeoutRef.current);
       updateTimeoutRef.current = null;
@@ -1098,34 +1118,37 @@ export function AnalisePage({ search }: AnalisePageProps) {
       clearTimeout(correcaoObsTimeoutRef.current);
       correcaoObsTimeoutRef.current = null;
     }
+  };
 
+  const completeFinish = async (
+    mode: "default" | "encam" | "keep_current",
+  ) => {
     const correctedItems = items.filter((i) => i.corrigidoSefoc);
     const activeClientItems = items.filter((i) => !i.corrigidoSefoc);
-    const allCorrected = items.length > 0 && correctedItems.length === items.length;
     const hasCorrections = correctedItems.length > 0;
     const hasUncorrectedClientItems = activeClientItems.length > 0;
     const isPtSituation = lastAnalysisStatus === "Problemas Técnicos";
-
-    if (items.length === 0) {
-      setObsModalMode("empty");
-      setObsText("");
-      setShowObsModal(true);
-      return;
-    }
-
-    if (allCorrected) {
-      setObsModalMode("all_corrected");
-      setObsText(buildExecutionObsWithCorrecoes(items));
-      setShowObsModal(true);
-      return;
-    }
+    const versionLabel = versaoLabel || versaoKey.replace(/^v/, "v");
 
     setFinishing(true);
     try {
-      const versionLabel = versaoLabel || versaoKey.replace(/^v/, "v");
       await updateAnaliseMeta(ano, osId, { versao: versionLabel, componente });
 
-      if (hasCorrections && hasUncorrectedClientItems) {
+      if (mode === "keep_current") {
+        await generateAnaliseLink(ano, osId, versionLabel, ponto);
+      } else if (mode === "encam") {
+        await registerPtvDispatch({
+          os_id: osId,
+          ano,
+          usuario: ponto,
+          versao: versionLabel,
+          observacao:
+            hasCorrections && hasUncorrectedClientItems
+              ? buildPtMovementObsWithCorrecoes(items, versionLabel)
+              : undefined,
+        });
+        await generateAnaliseLink(ano, osId, versionLabel, ponto);
+      } else if (hasCorrections && hasUncorrectedClientItems) {
         const linkRes = await generateAnaliseLink(ano, osId, versionLabel, ponto);
         await registerLinkMovement({
           os_id: osId,
@@ -1154,13 +1177,50 @@ export function AnalisePage({ search }: AnalisePageProps) {
         });
       }
 
-      window.alert(isPtSituation ? "Problemas confirmados." : "Análise concluída.");
+      setShowAndamentoChoiceModal(false);
       void navigate({ to: "/" });
     } catch (e) {
       window.alert(e instanceof Error ? e.message : "Erro ao finalizar análise.");
     } finally {
       setFinishing(false);
     }
+  };
+
+  const handleFinish = async () => {
+    if (readOnlyMode) {
+      window.alert(readOnlyReason ?? "Análise em modo visualização.");
+      return;
+    }
+    if (!validOs) return;
+
+    flushPendingItemUpdates();
+
+    const correctedItems = items.filter((i) => i.corrigidoSefoc);
+    const allCorrected = items.length > 0 && correctedItems.length === items.length;
+    const isPtSituation = lastAnalysisStatus === "Problemas Técnicos";
+    const hasProblemChanges =
+      analiseItemsFingerprint(items) !== itemsBaselineRef.current;
+
+    if (items.length === 0) {
+      setObsModalMode("empty");
+      setObsText("");
+      setShowObsModal(true);
+      return;
+    }
+
+    if (allCorrected) {
+      setObsModalMode("all_corrected");
+      setObsText(buildExecutionObsWithCorrecoes(items));
+      setShowObsModal(true);
+      return;
+    }
+
+    if (isPtSituation && hasProblemChanges) {
+      setShowAndamentoChoiceModal(true);
+      return;
+    }
+
+    await completeFinish("default");
   };
 
   const handleConfirmObservacao = async () => {
@@ -1180,7 +1240,6 @@ export function AnalisePage({ search }: AnalisePageProps) {
         observacao: obsText.trim(),
         ponto,
       });
-      window.alert(obsModalMode === "all_corrected" ? "Análise concluída." : "Análise concluída.");
       setShowObsModal(false);
       setObsModalMode("empty");
       void navigate({ to: "/" });
@@ -1246,6 +1305,10 @@ export function AnalisePage({ search }: AnalisePageProps) {
         : "empty";
 
   const isPtSituation = lastAnalysisStatus === "Problemas Técnicos";
+  const hasProblemChanges =
+    analiseItemsFingerprint(items) !== itemsBaselineRef.current;
+  const finishButtonLabel =
+    isPtSituation && !hasProblemChanges ? "Confirmar problemas" : "Concluir e salvar";
 
   const mobilePanelClass = (panel: "library" | "items" | "preview") =>
     cn(
@@ -1345,7 +1408,7 @@ export function AnalisePage({ search }: AnalisePageProps) {
             ) : (
               <Save className="size-4 shrink-0" />
             )}
-            {isPtSituation ? "Confirmar problemas" : "Concluir e salvar"}
+            {finishButtonLabel}
           </button>
         </div>
       </section>
@@ -1758,6 +1821,59 @@ export function AnalisePage({ search }: AnalisePageProps) {
                 className="flex-1 sagra-btn sagra-btn--primary sagra-btn--sm"
               >
                 Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Modal andamento após alterar problemas em revisão PT */}
+      {showAndamentoChoiceModal ? (
+        <div
+          className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="analise-andamento-choice-title"
+        >
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+            <h3
+              id="analise-andamento-choice-title"
+              className="text-center text-lg font-bold text-slate-800"
+            >
+              Concluir e salvar
+            </h3>
+            <p className="mt-2 text-center text-sm text-slate-600">
+              Os problemas técnicos foram alterados. Deseja incluir o andamento{" "}
+              <strong>Encam. de Docum.</strong> para enviar o e-mail de problemas
+              técnicos, ou manter o andamento atual?
+            </p>
+            <div className="mt-5 flex flex-col gap-2">
+              <button
+                type="button"
+                disabled={finishing}
+                onClick={() => void completeFinish("encam")}
+                className="sagra-btn sagra-btn--primary sagra-btn--md w-full"
+              >
+                {finishing ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : null}
+                Incluir Encam. de Docum.
+              </button>
+              <button
+                type="button"
+                disabled={finishing}
+                onClick={() => void completeFinish("keep_current")}
+                className="sagra-btn sagra-btn--outline sagra-btn--md w-full"
+              >
+                Manter andamento atual
+              </button>
+              <button
+                type="button"
+                disabled={finishing}
+                onClick={() => setShowAndamentoChoiceModal(false)}
+                className="sagra-btn sagra-btn--cancel sagra-btn--md w-full"
+              >
+                Cancelar
               </button>
             </div>
           </div>

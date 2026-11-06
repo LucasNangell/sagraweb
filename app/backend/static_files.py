@@ -129,6 +129,38 @@ def is_spa_frontend(frontend_dir: Path) -> bool:
     return 'id="root"' in text or "id='root'" in text
 
 
+_BLOCKED_PATH_SEGMENTS = frozenset({
+    "venv",
+    "config",
+    "data",
+    "legacy_or_unused",
+})
+
+_BLOCKED_PATH_PREFIXES = (
+    "app/backend",
+    "app/services",
+)
+
+
+def is_blocked_static_path(path: str) -> bool:
+    """Bloqueia diretórios sensíveis, sem casar o nome do arquivo.
+
+    Um chunk Vite como ``useDashboardSetorData-*.js`` contém ``data`` no nome
+    e precisa ser servido. Só o segmento de pasta ``data/`` (ou ``config/``)
+    continua bloqueado.
+    """
+    norm = (path or "").replace("\\", "/").lstrip("/").lower()
+    if not norm:
+        return False
+    segments = [part for part in norm.split("/") if part]
+    if any(part in _BLOCKED_PATH_SEGMENTS for part in segments):
+        return True
+    return any(
+        norm == prefix or norm.startswith(f"{prefix}/")
+        for prefix in _BLOCKED_PATH_PREFIXES
+    )
+
+
 class SafeStaticFiles(StaticFiles):
     async def __call__(self, scope, receive, send):
         # Mount "/" recebe scopes WebSocket quando a rota exata não casa (ex.: /api/ws/).
@@ -143,8 +175,7 @@ class SafeStaticFiles(StaticFiles):
 
     async def get_response(self, path: str, scope):
         norm = path.replace("\\", "/").lstrip("/").lower()
-        blocked_parts = ("venv", "config", "data", "legacy_or_unused", "app/backend", "app/services")
-        if any(part in norm for part in blocked_parts):
+        if is_blocked_static_path(norm):
             raise HTTPException(status_code=404, detail="Not found")
         if Path(norm).suffix.lower() in _BLOCKED_STATIC_SUFFIXES:
             raise HTTPException(status_code=404, detail="Not found")

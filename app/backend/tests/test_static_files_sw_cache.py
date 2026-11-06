@@ -4,6 +4,7 @@ from __future__ import annotations
 from static_files import (
     apply_hashed_asset_cache_headers,
     apply_sw_cache_headers,
+    is_blocked_static_path,
     is_hashed_vite_asset_path,
     is_service_worker_script_path,
     strip_spa_base_prefix,
@@ -14,6 +15,19 @@ class _FakeResponse:
     def __init__(self, status_code: int = 200):
         self.status_code = status_code
         self.headers: dict[str, str] = {}
+
+
+def test_is_blocked_static_path_ignores_filename_substrings():
+    assert is_blocked_static_path("assets/useDashboardSetorData-p0gx4IFC.js") is False
+    assert is_blocked_static_path("assets/configuracoes-eEY5wlY6.js") is False
+    assert is_blocked_static_path("assets/getPapelariaMockupConfig-C4Ji-WX1.js") is False
+    assert is_blocked_static_path("data/secret.txt") is True
+    assert is_blocked_static_path("config/.env") is True
+    assert is_blocked_static_path("venv/lib/python.py") is True
+    assert is_blocked_static_path("legacy_or_unused/old.js") is True
+    assert is_blocked_static_path("app/backend/main.py") is True
+    assert is_blocked_static_path("app/services/foo.py") is True
+    assert is_blocked_static_path("assets/index-Db4zXL8J.js") is False
 
 
 def test_strip_spa_base_prefix():

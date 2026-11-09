@@ -74,7 +74,6 @@
 .os-pdf-changed-badge {
   display: inline-flex;
   align-items: center;
-  margin-left: 0.35rem;
   border-radius: 999px;
   padding: 0.3rem 0.65rem;
   font-size: 0.78rem;
@@ -509,6 +508,13 @@
   align-items: center;
   justify-content: space-between;
   flex: 0 0 auto;
+}
+
+.os-pdf-toolbar-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-left: auto;
 }
 
 .os-pdf-modes,

@@ -197,15 +197,6 @@ export function OsPdfCompareViewer({
               {label}
             </button>
           ))}
-          <span
-            className={
-              "os-pdf-changed-badge" +
-              (changedPages > 0 ? " has-changes" : " no-changes")
-            }
-          >
-            {changedPages} página{changedPages === 1 ? "" : "s"} alterada
-            {changedPages === 1 ? "" : "s"}
-          </span>
         </div>
         <div className="os-pdf-zoom">
           <button
@@ -225,9 +216,20 @@ export function OsPdfCompareViewer({
           </button>
           <span>{Math.round(zoom * 100)}%</span>
         </div>
-        <div className="os-pdf-page-meta">
-          Página {page.pageNumber} · {fmtPct(page.changedPercent)} ·{" "}
-          {page.boxes?.length ?? 0} regiões
+        <div className="os-pdf-toolbar-right">
+          <span
+            className={
+              "os-pdf-changed-badge" +
+              (changedPages > 0 ? " has-changes" : " no-changes")
+            }
+          >
+            {changedPages} página{changedPages === 1 ? "" : "s"} alterada
+            {changedPages === 1 ? "" : "s"}
+          </span>
+          <div className="os-pdf-page-meta">
+            Página {page.pageNumber} · {fmtPct(page.changedPercent)} ·{" "}
+            {page.boxes?.length ?? 0} regiões
+          </div>
         </div>
       </div>
 

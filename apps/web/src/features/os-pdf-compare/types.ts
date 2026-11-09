@@ -1,4 +1,10 @@
-export type ViewMode = "diff" | "blend" | "flicker" | "side";
+export type ViewMode =
+  | "diff"
+  | "blend"
+  | "flicker"
+  | "side"
+  | "previous"
+  | "current";
 
 export interface CompareOptions {
   dpi: number;

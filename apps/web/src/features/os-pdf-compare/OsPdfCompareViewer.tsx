@@ -44,6 +44,10 @@ function modeLegend(mode: ViewMode): { swatch: string; label: string }[] {
         { swatch: "prev", label: "Esquerda = anterior" },
         { swatch: "curr", label: "Direita = atual" },
       ];
+    case "previous":
+      return [{ swatch: "prev", label: "Exibe somente a versão anterior" }];
+    case "current":
+      return [{ swatch: "curr", label: "Exibe somente a versão atual" }];
     default:
       return [];
   }
@@ -106,7 +110,11 @@ export function OsPdfCompareViewer({
       return pageImageUrl(page, flickerShowB ? "current" : "previous");
     }
     if (viewMode === "side") return null;
-    return pageImageUrl(page, viewMode);
+    if (viewMode === "previous" || viewMode === "current") {
+      return pageImageUrl(page, viewMode);
+    }
+    if (viewMode === "blend") return pageImageUrl(page, "blend");
+    return pageImageUrl(page, "diff");
   }, [page, viewMode, flickerShowB]);
 
   const contentSize = useMemo(() => {
@@ -186,6 +194,8 @@ export function OsPdfCompareViewer({
               ["blend", "Sobreposição"],
               ["flicker", "Alternar"],
               ["side", "Lado a lado"],
+              ["previous", "Versão anterior"],
+              ["current", "Versão atual"],
             ] as const
           ).map(([mode, label]) => (
             <button
@@ -273,9 +283,17 @@ export function OsPdfCompareViewer({
             </div>
           ) : (
             <div className="os-pdf-main">
-              {viewMode === "flicker" && (
+              {(viewMode === "flicker" ||
+                viewMode === "previous" ||
+                viewMode === "current") && (
                 <span className="os-pdf-flicker-tag">
-                  {flickerShowB ? "Atual" : "Anterior"}
+                  {viewMode === "previous"
+                    ? "Anterior"
+                    : viewMode === "current"
+                      ? "Atual"
+                      : flickerShowB
+                        ? "Atual"
+                        : "Anterior"}
                 </span>
               )}
               {mainUrl ? (

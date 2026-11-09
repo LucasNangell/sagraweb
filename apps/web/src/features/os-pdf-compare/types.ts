@@ -28,6 +28,12 @@ export interface ComparePage {
   totalPixels: number;
   width: number;
   height: number;
+  /** Dimensões reais da versão anterior (px no DPI da comparação). */
+  widthA?: number;
+  heightA?: number;
+  /** Dimensões reais da versão atual (px no DPI da comparação). */
+  widthB?: number;
+  heightB?: number;
   boxes: CompareBBox[];
   urls: {
     a?: string | null;

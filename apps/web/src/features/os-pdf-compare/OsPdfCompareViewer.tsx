@@ -159,14 +159,48 @@ export function OsPdfCompareViewer({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [goNextPage, goPrevPage]);
 
+  const sizeA = useMemo(() => {
+    if (!page) return { w: 0, h: 0 };
+    return {
+      w: page.widthA || page.width || 0,
+      h: page.heightA || page.height || 0,
+    };
+  }, [page]);
+
+  const sizeB = useMemo(() => {
+    if (!page) return { w: 0, h: 0 };
+    return {
+      w: page.widthB || page.width || 0,
+      h: page.heightB || page.height || 0,
+    };
+  }, [page]);
+
+  const sizeCanvas = useMemo(() => {
+    if (!page) return { w: 0, h: 0 };
+    return { w: page.width || 0, h: page.height || 0 };
+  }, [page]);
+
+  const activeNativeSize = useMemo(() => {
+    if (viewMode === "previous") return sizeA;
+    if (viewMode === "current") return sizeB;
+    if (viewMode === "flicker") return flickerShowB ? sizeB : sizeA;
+    if (viewMode === "side") {
+      return {
+        w: sizeA.w + sizeB.w + 12,
+        h: Math.max(sizeA.h, sizeB.h) + 18,
+      };
+    }
+    return sizeCanvas;
+  }, [viewMode, flickerShowB, sizeA, sizeB, sizeCanvas]);
+
   useEffect(() => {
     setZoom(1);
-    if (page?.width && page?.height) {
-      setNaturalSize({ w: page.width, h: page.height });
-    } else {
-      setNaturalSize({ w: 0, h: 0 });
-    }
-  }, [page, pageIndex]);
+    setNaturalSize(
+      activeNativeSize.w && activeNativeSize.h
+        ? { w: activeNativeSize.w, h: activeNativeSize.h }
+        : { w: 0, h: 0 },
+    );
+  }, [page, pageIndex, viewMode, activeNativeSize.h, activeNativeSize.w]);
 
   useEffect(() => {
     setZoom(1);
@@ -193,16 +227,15 @@ export function OsPdfCompareViewer({
 
   const contentSize = useMemo(() => {
     if (!naturalSize.w || !naturalSize.h) return { w: 0, h: 0 };
-    if (viewMode === "side") {
-      const gap = 12;
-      const caption = 18;
-      return {
-        w: naturalSize.w * 2 + gap,
-        h: naturalSize.h + caption,
-      };
-    }
     return naturalSize;
-  }, [naturalSize, viewMode]);
+  }, [naturalSize]);
+
+  const rulerSize = useMemo(() => {
+    if (viewMode === "previous") return sizeA;
+    if (viewMode === "current") return sizeB;
+    if (viewMode === "flicker") return flickerShowB ? sizeB : sizeA;
+    return sizeCanvas;
+  }, [viewMode, flickerShowB, sizeA, sizeB, sizeCanvas]);
 
   useLayoutEffect(() => {
     const el = viewportRef.current;
@@ -225,6 +258,8 @@ export function OsPdfCompareViewer({
   }, [contentSize.h, contentSize.w, showRulers]);
 
   function onImageLoad(e: SyntheticEvent<HTMLImageElement>) {
+    // Prefere as dimensões reais vindas da API; só usa o load como fallback.
+    if (activeNativeSize.w > 0 && activeNativeSize.h > 0) return;
     const img = e.currentTarget;
     if (!img.naturalWidth || !img.naturalHeight) return;
     setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
@@ -253,9 +288,12 @@ export function OsPdfCompareViewer({
   const imgH = naturalSize.h ? naturalSize.h * displayScale : 0;
   const stageW = contentSize.w ? contentSize.w * displayScale : 0;
   const stageH = contentSize.h ? contentSize.h * displayScale : 0;
-  const pageSizeLabel = page
-    ? pageSizeMmLabel(page.width, page.height, dpi)
-    : null;
+  const sizeLabelA = pageSizeMmLabel(sizeA.w, sizeA.h, dpi);
+  const sizeLabelB = pageSizeMmLabel(sizeB.w, sizeB.h, dpi);
+  const imgWA = sizeA.w ? sizeA.w * displayScale : 0;
+  const imgHA = sizeA.h ? sizeA.h * displayScale : 0;
+  const imgWB = sizeB.w ? sizeB.w * displayScale : 0;
+  const imgHB = sizeB.h ? sizeB.h * displayScale : 0;
 
   const pageBody = viewMode === "side" ? (
     <div className="os-pdf-side" style={{ width: stageW || undefined, height: stageH || undefined }}>
@@ -266,7 +304,7 @@ export function OsPdfCompareViewer({
             src={pageImageUrl(page, "previous")!}
             alt="Anterior"
             onLoad={onImageLoad}
-            style={{ width: imgW || undefined, height: imgH || undefined }}
+            style={{ width: imgWA || undefined, height: imgHA || undefined }}
           />
         ) : null}
       </figure>
@@ -276,7 +314,7 @@ export function OsPdfCompareViewer({
           <img
             src={pageImageUrl(page, "current")!}
             alt="Atual"
-            style={{ width: imgW || undefined, height: imgH || undefined }}
+            style={{ width: imgWB || undefined, height: imgHB || undefined }}
           />
         ) : null}
       </figure>
@@ -367,10 +405,14 @@ export function OsPdfCompareViewer({
         <div className="os-pdf-stage">
           {showRulers && imgW > 0 && imgH > 0 ? (
             <OsPdfCompareRulers
-              pageWidthPx={naturalSize.w}
-              pageHeightPx={naturalSize.h}
-              displayWidth={imgW}
-              displayHeight={imgH}
+              pageWidthPx={rulerSize.w || naturalSize.w}
+              pageHeightPx={rulerSize.h || naturalSize.h}
+              displayWidth={
+                (rulerSize.w || naturalSize.w) * displayScale || imgW
+              }
+              displayHeight={
+                (rulerSize.h || naturalSize.h) * displayScale || imgH
+              }
               dpi={dpi}
               pageIndex={pageIndex}
               guides={guides}
@@ -401,15 +443,15 @@ export function OsPdfCompareViewer({
             className="os-pdf-legend-chip prev"
             title={
               previousName
-                ? `${previousName}${pageSizeLabel ? ` · ${pageSizeLabel}` : ""}`
+                ? `${previousName}${sizeLabelA ? ` · ${sizeLabelA}` : ""}`
                 : undefined
             }
           >
             <span className="os-pdf-legend-key">A</span>
             <span className="os-pdf-legend-chip-text">
               Anterior: {previousName || "—"}
-              {pageSizeLabel ? (
-                <span className="os-pdf-legend-size">{pageSizeLabel}</span>
+              {sizeLabelA ? (
+                <span className="os-pdf-legend-size">{sizeLabelA}</span>
               ) : null}
             </span>
           </span>
@@ -417,15 +459,15 @@ export function OsPdfCompareViewer({
             className="os-pdf-legend-chip curr"
             title={
               currentName
-                ? `${currentName}${pageSizeLabel ? ` · ${pageSizeLabel}` : ""}`
+                ? `${currentName}${sizeLabelB ? ` · ${sizeLabelB}` : ""}`
                 : undefined
             }
           >
             <span className="os-pdf-legend-key">B</span>
             <span className="os-pdf-legend-chip-text">
               Atual: {currentName || "—"}
-              {pageSizeLabel ? (
-                <span className="os-pdf-legend-size">{pageSizeLabel}</span>
+              {sizeLabelB ? (
+                <span className="os-pdf-legend-size">{sizeLabelB}</span>
               ) : null}
             </span>
           </span>

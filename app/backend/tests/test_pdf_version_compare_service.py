@@ -97,6 +97,37 @@ def test_path_traversal_asset_rejected(compare_tmp):
     assert path.name == "page-001-diff.jpg"
 
 
+def test_preserves_real_page_sizes(compare_tmp, tmp_path):
+    a = tmp_path / "a.pdf"
+    b = tmp_path / "b.pdf"
+    doc = fitz.open()
+    doc.new_page(width=200, height=100)
+    doc.save(a)
+    doc.close()
+    doc = fitz.open()
+    doc.new_page(width=120, height=180)
+    doc.save(b)
+    doc.close()
+
+    result = svc.compare_pdfs(
+        str(a),
+        str(b),
+        options=svc.PdfCompareOptions(dpi=150, threshold=16),
+    )
+    page = result.pages[0]
+    # Em 150 DPI: px = mm_pt * (dpi/72); page size is in points.
+    assert page.width_a > page.width_b
+    assert page.height_a < page.height_b
+    assert page.width == max(page.width_a, page.width_b)
+    assert page.height == max(page.height_a, page.height_b)
+    from PIL import Image
+
+    with Image.open(page.image_a) as img_a:
+        assert img_a.size == (page.width_a, page.height_a)
+    with Image.open(page.image_b) as img_b:
+        assert img_b.size == (page.width_b, page.height_b)
+
+
 def test_report_pdf_builds(compare_tmp, tmp_path):
     a = tmp_path / "a.pdf"
     b = tmp_path / "b.pdf"

@@ -64,6 +64,11 @@ class PdfComparePageResult:
     total_pixels: int
     width: int
     height: int
+    # Dimensões reais de cada versão (antes do canvas de comparação).
+    width_a: int = 0
+    height_a: int = 0
+    width_b: int = 0
+    height_b: int = 0
     boxes: list[PdfCompareBBox] = field(default_factory=list)
     image_a: str = ""
     image_b: str = ""
@@ -298,10 +303,15 @@ def _draw_boxes(img: Image.Image, boxes: list[PdfCompareBBox]) -> None:
 def _compare_bitmaps(
     session_dir: Path,
     index: int,
-    a: Image.Image,
-    b: Image.Image,
+    a_orig: Image.Image,
+    b_orig: Image.Image,
     threshold: int,
 ) -> PdfComparePageResult:
+    width_a, height_a = a_orig.size
+    width_b, height_b = b_orig.size
+    # Canvas comum só para o cálculo visual; as imagens A/B salvas
+    # preservam o tamanho real de cada arquivo.
+    a, b = _normalize_pair(a_orig.copy(), b_orig.copy())
     arr_a = np.asarray(a, dtype=np.int16)
     arr_b = np.asarray(b, dtype=np.int16)
     h, w = arr_a.shape[0], arr_a.shape[1]
@@ -353,8 +363,8 @@ def _compare_bitmaps(
     path_thumb = session_dir / f"{prefix}-thumb.jpg"
     path_meta = session_dir / f"{prefix}-meta.json"
 
-    _save_jpeg(a, path_a)
-    _save_jpeg(b, path_b)
+    _save_jpeg(a_orig, path_a)
+    _save_jpeg(b_orig, path_b)
     _save_jpeg(diff_img, path_diff)
     _save_jpeg(blend_img, path_blend)
     _save_thumb(diff_img, path_thumb)
@@ -370,6 +380,10 @@ def _compare_bitmaps(
         total_pixels=total_pixels,
         width=w,
         height=h,
+        width_a=width_a,
+        height_a=height_a,
+        width_b=width_b,
+        height_b=height_b,
         boxes=boxes,
         image_a=str(path_a),
         image_b=str(path_b),
@@ -446,6 +460,10 @@ def _save_missing_pair_page(
         total_pixels=w * h,
         width=w,
         height=h,
+        width_a=w if side == "a" else 0,
+        height_a=h if side == "a" else 0,
+        width_b=w if side == "b" else 0,
+        height_b=h if side == "b" else 0,
         boxes=[PdfCompareBBox(x=0, y=0, w=w, h=h)],
         image_a=str(path_a),
         image_b=str(path_b),
@@ -471,6 +489,10 @@ def _page_to_dict(page: PdfComparePageResult) -> dict[str, Any]:
         "totalPixels": page.total_pixels,
         "width": page.width,
         "height": page.height,
+        "widthA": page.width_a,
+        "heightA": page.height_a,
+        "widthB": page.width_b,
+        "heightB": page.height_b,
         "boxes": [asdict(b) for b in page.boxes],
         "imageA": os.path.basename(page.image_a) if page.image_a else None,
         "imageB": os.path.basename(page.image_b) if page.image_b else None,
@@ -579,7 +601,6 @@ def compare_pdfs(
             continue
 
         assert bmp_a is not None and bmp_b is not None
-        bmp_a, bmp_b = _normalize_pair(bmp_a, bmp_b)
         pages.append(
             _compare_bitmaps(session_dir, i, bmp_a, bmp_b, options.threshold)
         )

@@ -112,6 +112,22 @@ export function OsPdfCompareReport({
               <dd>{result.pageCountB}</dd>
             </div>
             <div>
+              <dt>Medida real A (pág. 1)</dt>
+              <dd>
+                {result.pages[0]?.widthA && result.pages[0]?.heightA
+                  ? `${result.pages[0].widthA} × ${result.pages[0].heightA} px`
+                  : "—"}
+              </dd>
+            </div>
+            <div>
+              <dt>Medida real B (pág. 1)</dt>
+              <dd>
+                {result.pages[0]?.widthB && result.pages[0]?.heightB
+                  ? `${result.pages[0].widthB} × ${result.pages[0].heightB} px`
+                  : "—"}
+              </dd>
+            </div>
+            <div>
               <dt>Páginas no relatório</dt>
               <dd>{list.length}</dd>
             </div>

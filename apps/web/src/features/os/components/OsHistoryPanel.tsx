@@ -916,13 +916,19 @@ export function OsHistoryPanel({
               >
                 <thead className="sticky top-0 bg-slate-100">
                   <tr>
-                    <th className="max-w-0 overflow-hidden px-2 py-1.5 text-left font-semibold" style={{ width: "42%" }}>
+                    <th className="min-w-0 overflow-hidden px-2 py-1.5 text-left font-semibold">
                       Situação
                     </th>
-                    <th className="max-w-0 overflow-hidden px-2 py-1.5 text-left font-semibold" style={{ width: "36%" }}>
+                    <th
+                      className="overflow-hidden px-1.5 py-1.5 text-left font-semibold"
+                      style={{ width: "6.5rem" }}
+                    >
                       Setor
                     </th>
-                    <th className="max-w-0 overflow-hidden px-2 py-1.5 text-left font-semibold" style={{ width: "22%" }}>
+                    <th
+                      className="overflow-hidden px-1.5 py-1.5 text-left font-semibold"
+                      style={{ width: "5.75rem" }}
+                    >
                       Data
                     </th>
                   </tr>
@@ -975,18 +981,18 @@ export function OsHistoryPanel({
                               isRowSelected && "bg-[var(--highlight-yellow)]",
                             )}
                           >
-                            <td className="max-w-0 overflow-hidden px-2 py-1">
+                            <td className="min-w-0 overflow-hidden px-2 py-1">
                               <span className="block truncate" title={subRow.situacao ?? undefined}>
                                 {subRow.situacao ?? "-"}
                               </span>
                             </td>
-                            <td className="max-w-0 overflow-hidden px-2 py-1">
+                            <td className="overflow-hidden px-1.5 py-1" style={{ width: "6.5rem" }}>
                               <span className="block truncate" title={subRow.setor ?? undefined}>
                                 {subRow.setor ?? "-"}
                               </span>
                             </td>
-                            <td className="max-w-0 overflow-hidden px-2 py-1">
-                              <span className="block truncate tabular-nums">
+                            <td className="overflow-hidden px-1.5 py-1 whitespace-nowrap" style={{ width: "5.75rem" }}>
+                              <span className="block tabular-nums">
                                 {formatDateBr(subRow.data ?? undefined)}
                               </span>
                             </td>
@@ -1010,18 +1016,18 @@ export function OsHistoryPanel({
                             isRowSelected && "bg-[var(--highlight-yellow)]",
                           )}
                         >
-                          <td className="max-w-0 overflow-hidden px-2 py-1">
+                          <td className="min-w-0 overflow-hidden px-2 py-1">
                             <span className="block truncate" title={mainRow.SituacaoLink ?? undefined}>
                               {mainRow.SituacaoLink ?? "-"}
                             </span>
                           </td>
-                          <td className="max-w-0 overflow-hidden px-2 py-1">
+                          <td className="overflow-hidden px-1.5 py-1" style={{ width: "6.5rem" }}>
                             <span className="block truncate" title={mainRow.SetorLink ?? undefined}>
                               {mainRow.SetorLink ?? "-"}
                             </span>
                           </td>
-                          <td className="max-w-0 overflow-hidden px-2 py-1">
-                            <span className="block truncate tabular-nums">
+                          <td className="overflow-hidden px-1.5 py-1 whitespace-nowrap" style={{ width: "5.75rem" }}>
+                            <span className="block tabular-nums">
                               {formatDateBr(mainRow.Data)}
                             </span>
                           </td>

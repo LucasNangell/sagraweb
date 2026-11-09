@@ -275,48 +275,54 @@ export function OsFiltersPanel({
               title="Solicitante"
               className="min-w-[13.5rem] flex-1 basis-[13.5rem] @min-[72rem]/os-filters:border-r @min-[72rem]/os-filters:border-sagra-border @min-[72rem]/os-filters:px-4"
             >
-              <MultiSelect
-                label="Categoria"
-                labelSide="left"
-                className="min-w-0 w-full flex-none"
-                testId={homeTestIds.osFiltersCategoria}
-                options={categoriasQuery.data ?? []}
-                value={filters.categorias}
-                onChange={(categorias) =>
-                  onPatchFilters({
-                    categorias,
-                    solicitantes: [],
-                    solicitante: "",
-                    page: 1,
-                  })
-                }
-                disabled={
-                  categoriasQuery.isLoading &&
-                  (categoriasQuery.data ?? []).length === 0
-                }
-                placeholder={
-                  categoriasQuery.isLoading &&
-                  (categoriasQuery.data ?? []).length === 0
-                    ? "Carregando..."
-                    : "Todos"
-                }
-                isLoading={categoriasQuery.isLoading}
-              />
-              <SearchableMultiSelect
-                label="Nome"
-                labelSide="left"
-                className="min-w-0 w-full flex-none"
-                testId={homeTestIds.osFiltersNome}
-                value={filters.solicitantes}
-                onChange={(solicitantes) =>
-                  onPatchFilters({ solicitantes, solicitante: "", page: 1 })
-                }
-                options={requestersQuery.data?.data ?? []}
-                isLoading={requestersQuery.isFetching}
-                searchQuery={requesterSearch}
-                onSearchChange={setRequesterSearch}
-                onOpen={() => setRequestersOpen(true)}
-              />
+              <FilterField label="Categoria" labelWidth="pair">
+                <MultiSelect
+                  label="Categoria"
+                  hideLabel
+                  aria-label="Categoria"
+                  className="min-w-0 w-full flex-1"
+                  testId={homeTestIds.osFiltersCategoria}
+                  options={categoriasQuery.data ?? []}
+                  value={filters.categorias}
+                  onChange={(categorias) =>
+                    onPatchFilters({
+                      categorias,
+                      solicitantes: [],
+                      solicitante: "",
+                      page: 1,
+                    })
+                  }
+                  disabled={
+                    categoriasQuery.isLoading &&
+                    (categoriasQuery.data ?? []).length === 0
+                  }
+                  placeholder={
+                    categoriasQuery.isLoading &&
+                    (categoriasQuery.data ?? []).length === 0
+                      ? "Carregando..."
+                      : "Todos"
+                  }
+                  isLoading={categoriasQuery.isLoading}
+                />
+              </FilterField>
+              <FilterField label="Nome" labelWidth="pair">
+                <SearchableMultiSelect
+                  label="Nome"
+                  hideLabel
+                  aria-label="Nome"
+                  className="min-w-0 w-full flex-1"
+                  testId={homeTestIds.osFiltersNome}
+                  value={filters.solicitantes}
+                  onChange={(solicitantes) =>
+                    onPatchFilters({ solicitantes, solicitante: "", page: 1 })
+                  }
+                  options={requestersQuery.data?.data ?? []}
+                  isLoading={requestersQuery.isFetching}
+                  searchQuery={requesterSearch}
+                  onSearchChange={setRequesterSearch}
+                  onOpen={() => setRequestersOpen(true)}
+                />
+              </FilterField>
             </FilterGroup>
 
             <FilterGroup
@@ -324,7 +330,7 @@ export function OsFiltersPanel({
               className="@container min-w-[13.5rem] flex-[2] basis-[18rem] @min-[72rem]/os-filters:border-r @min-[72rem]/os-filters:border-sagra-border @min-[72rem]/os-filters:px-4"
               fieldsClassName="grid w-full grid-cols-1 gap-2 @min-[26rem]:grid-cols-2"
             >
-              <FilterField label="Título">
+              <FilterField label="Título" labelWidth="pair">
                 <input
                   type="text"
                   value={filters.titulo ?? ""}
@@ -335,68 +341,83 @@ export function OsFiltersPanel({
                   data-testid={homeTestIds.osFiltersTitulo}
                 />
               </FilterField>
-              <MultiSelect
-                label="Máquina"
-                labelSide="left"
-                className="min-w-0 w-full flex-none"
-                testId={homeTestIds.osFiltersMaquina}
-                options={maquinasQuery.data ?? []}
-                value={filters.maquinas}
-                onChange={(maquinas) => onPatchFilters({ maquinas, page: 1 })}
-                disabled={maquinasQuery.isLoading}
-              />
-              <SearchableMultiSelect
-                label="Produto"
-                labelSide="left"
-                className="min-w-0 w-full flex-none"
-                testId={homeTestIds.osFiltersProduto}
-                value={filters.produtos}
-                onChange={(produtos) =>
-                  onPatchFilters({ produtos, produto: "", page: 1 })
-                }
-                options={productsQuery.data?.data ?? []}
-                isLoading={productsQuery.isFetching}
-                searchQuery={productSearch}
-                onSearchChange={setProductSearch}
-                onOpen={() => setProductsOpen(true)}
-              />
-              <MultiSelect
-                label="Prioridade"
-                labelSide="left"
-                className="min-w-0 w-full flex-none"
-                testId={homeTestIds.osFiltersPrioridade}
-                options={PRIORIDADE_OPTIONS}
-                value={filters.prioridade}
-                onChange={(prioridade) =>
-                  onPatchFilters({ prioridade, page: 1 })
-                }
-              />
+              <FilterField label="Máquina" labelWidth="pair">
+                <MultiSelect
+                  label="Máquina"
+                  hideLabel
+                  aria-label="Máquina"
+                  className="min-w-0 w-full flex-1"
+                  testId={homeTestIds.osFiltersMaquina}
+                  options={maquinasQuery.data ?? []}
+                  value={filters.maquinas}
+                  onChange={(maquinas) => onPatchFilters({ maquinas, page: 1 })}
+                  disabled={maquinasQuery.isLoading}
+                />
+              </FilterField>
+              <FilterField label="Produto" labelWidth="pair">
+                <SearchableMultiSelect
+                  label="Produto"
+                  hideLabel
+                  aria-label="Produto"
+                  className="min-w-0 w-full flex-1"
+                  testId={homeTestIds.osFiltersProduto}
+                  value={filters.produtos}
+                  onChange={(produtos) =>
+                    onPatchFilters({ produtos, produto: "", page: 1 })
+                  }
+                  options={productsQuery.data?.data ?? []}
+                  isLoading={productsQuery.isFetching}
+                  searchQuery={productSearch}
+                  onSearchChange={setProductSearch}
+                  onOpen={() => setProductsOpen(true)}
+                />
+              </FilterField>
+              <FilterField label="Prioridade" labelWidth="pair">
+                <MultiSelect
+                  label="Prioridade"
+                  hideLabel
+                  aria-label="Prioridade"
+                  className="min-w-0 w-full flex-1"
+                  testId={homeTestIds.osFiltersPrioridade}
+                  options={PRIORIDADE_OPTIONS}
+                  value={filters.prioridade}
+                  onChange={(prioridade) =>
+                    onPatchFilters({ prioridade, page: 1 })
+                  }
+                />
+              </FilterField>
             </FilterGroup>
 
             <FilterGroup
               title="Andamento"
               className="min-w-[13.5rem] flex-1 basis-[13.5rem] @min-[72rem]/os-filters:pl-4"
             >
-              <MultiSelect
-                label="Setor"
-                labelSide="left"
-                className="min-w-0 w-full flex-none"
-                testId={homeTestIds.osFiltersSetor}
-                options={setoresQuery.data ?? []}
-                value={filters.setor}
-                onChange={(setor) => onPatchFilters({ setor, page: 1 })}
-                disabled={setoresQuery.isLoading}
-              />
-              <MultiSelect
-                label="Situação"
-                labelSide="left"
-                className="min-w-0 w-full flex-none"
-                testId={homeTestIds.osFiltersSituacao}
-                options={situacoesQuery.data ?? []}
-                value={filters.situacao}
-                onChange={(situacao) => onPatchFilters({ situacao, page: 1 })}
-                disabled={situacoesQuery.isLoading}
-              />
+              <FilterField label="Setor" labelWidth="pair">
+                <MultiSelect
+                  label="Setor"
+                  hideLabel
+                  aria-label="Setor"
+                  className="min-w-0 w-full flex-1"
+                  testId={homeTestIds.osFiltersSetor}
+                  options={setoresQuery.data ?? []}
+                  value={filters.setor}
+                  onChange={(setor) => onPatchFilters({ setor, page: 1 })}
+                  disabled={setoresQuery.isLoading}
+                />
+              </FilterField>
+              <FilterField label="Situação" labelWidth="pair">
+                <MultiSelect
+                  label="Situação"
+                  hideLabel
+                  aria-label="Situação"
+                  className="min-w-0 w-full flex-1"
+                  testId={homeTestIds.osFiltersSituacao}
+                  options={situacoesQuery.data ?? []}
+                  value={filters.situacao}
+                  onChange={(situacao) => onPatchFilters({ situacao, page: 1 })}
+                  disabled={situacoesQuery.isLoading}
+                />
+              </FilterField>
             </FilterGroup>
           </div>
 
@@ -445,7 +466,7 @@ export function OsFiltersPanel({
 
         {advancedOpen ? (
           <div className="grid grid-cols-1 gap-3 border-t border-sagra-border bg-slate-50/50 px-3 py-3 @min-[40rem]/os-filters:grid-cols-2 @min-[56rem]/os-filters:grid-cols-3">
-            <FilterField label="Data de entrada">
+            <FilterField label="Data de entrada" labelWidth="advanced">
               <div className="flex min-w-0 flex-1 items-center gap-1.5">
                 <input
                   type="date"
@@ -476,20 +497,23 @@ export function OsFiltersPanel({
                 />
               </div>
             </FilterField>
-            <SearchableMultiSelect
-              label="Formato"
-              labelSide="left"
-              className="min-w-0 w-full flex-none"
-              testId={homeTestIds.osFiltersFormato}
-              value={filters.formatos ?? []}
-              onChange={(formatos) => onPatchFilters({ formatos, page: 1 })}
-              options={formatosQuery.data?.data ?? []}
-              isLoading={formatosQuery.isFetching}
-              searchQuery={formatoSearch}
-              onSearchChange={setFormatoSearch}
-              onOpen={() => setFormatosOpen(true)}
-            />
-            <FilterField label="Papel">
+            <FilterField label="Formato" labelWidth="advanced">
+              <SearchableMultiSelect
+                label="Formato"
+                hideLabel
+                aria-label="Formato"
+                className="min-w-0 w-full flex-1"
+                testId={homeTestIds.osFiltersFormato}
+                value={filters.formatos ?? []}
+                onChange={(formatos) => onPatchFilters({ formatos, page: 1 })}
+                options={formatosQuery.data?.data ?? []}
+                isLoading={formatosQuery.isFetching}
+                searchQuery={formatoSearch}
+                onSearchChange={setFormatoSearch}
+                onOpen={() => setFormatosOpen(true)}
+              />
+            </FilterField>
+            <FilterField label="Papel" labelWidth="advanced">
               <input
                 type="text"
                 value={filters.papel ?? ""}
@@ -500,7 +524,7 @@ export function OsFiltersPanel({
                 data-testid={homeTestIds.osFiltersPapel}
               />
             </FilterField>
-            <FilterField label="Cores">
+            <FilterField label="Cores" labelWidth="advanced">
               <input
                 type="text"
                 value={filters.cores ?? ""}
@@ -511,7 +535,7 @@ export function OsFiltersPanel({
                 data-testid={homeTestIds.osFiltersCores}
               />
             </FilterField>
-            <FilterField label="Acabamento">
+            <FilterField label="Acabamento" labelWidth="advanced">
               <input
                 type="text"
                 value={filters.acabamento ?? ""}
@@ -522,7 +546,7 @@ export function OsFiltersPanel({
                 data-testid={homeTestIds.osFiltersAcabamento}
               />
             </FilterField>
-            <FilterField label="Observação">
+            <FilterField label="Observação" labelWidth="advanced">
               <input
                 type="text"
                 value={filters.observacao ?? ""}
@@ -599,8 +623,11 @@ function FilterField({
   label: string;
   children: ReactNode;
   className?: string;
-  /** Alinha rótulos do grupo Ordem de serviço (Nr OS/Ano + Processo) no layout denso. */
-  labelWidth?: "os";
+  /**
+   * Largura fixa do rótulo no layout horizontal:
+   * texto alinhado à direita (espaço sobra à esquerda) para os campos ficarem alinhados.
+   */
+  labelWidth?: "os" | "pair" | "advanced";
 }) {
   return (
     <div
@@ -611,8 +638,10 @@ function FilterField({
     >
       <label
         className={cn(
-          "text-xs font-semibold text-neutral-600 @min-[56rem]/os-filters:shrink-0 @min-[56rem]/os-filters:whitespace-nowrap",
+          "text-xs font-semibold text-neutral-600 @min-[56rem]/os-filters:shrink-0 @min-[56rem]/os-filters:whitespace-nowrap @min-[56rem]/os-filters:text-right",
           labelWidth === "os" && "@min-[56rem]/os-filters:w-[4.75rem]",
+          labelWidth === "pair" && "@min-[56rem]/os-filters:w-[5.25rem]",
+          labelWidth === "advanced" && "@min-[56rem]/os-filters:w-[8.75rem]",
         )}
       >
         {label}:

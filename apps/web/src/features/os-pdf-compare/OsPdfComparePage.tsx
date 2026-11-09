@@ -73,6 +73,7 @@ export function OsPdfComparePage({
   const [viewMode, setViewMode] = useState<ViewMode>("diff");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [filesCollapsed, setFilesCollapsed] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const pollRef = useRef<number | null>(null);
   const autoStartedRef = useRef(false);
 
@@ -113,6 +114,7 @@ export function OsPdfComparePage({
     setCurrentName(null);
     setAssignSlot("previous");
     setFilesCollapsed(false);
+    setReportOpen(false);
   };
 
   const runCompare = useCallback(async () => {
@@ -123,6 +125,7 @@ export function OsPdfComparePage({
     setError(null);
     setInfo(null);
     setResult(null);
+    setReportOpen(false);
     setBusy(true);
     setProgress({
       sessionId: "",
@@ -353,20 +356,6 @@ export function OsPdfComparePage({
                     }
                   />
                 </label>
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={options.includeUnchangedInReport}
-                    disabled={busy}
-                    onChange={(e) =>
-                      setOptions((o) => ({
-                        ...o,
-                        includeUnchangedInReport: e.target.checked,
-                      }))
-                    }
-                  />
-                  Incluir páginas sem mudança no relatório
-                </label>
               </div>
 
               <div className="os-pdf-actions">
@@ -387,13 +376,6 @@ export function OsPdfComparePage({
                 </button>
                 <button type="button" disabled={busy} onClick={clearAll}>
                   Limpar
-                </button>
-                <button
-                  type="button"
-                  disabled={!result?.hasResult || busy}
-                  onClick={() => void onExportReport()}
-                >
-                  Exportar relatório PDF
                 </button>
               </div>
 
@@ -419,20 +401,14 @@ export function OsPdfComparePage({
 
         <main className="os-pdf-panel os-pdf-panel-main">
           {result?.hasResult ? (
-            <>
-              <OsPdfCompareViewer
-                pages={result.pages}
-                pageIndex={pageIndex}
-                viewMode={viewMode}
-                onViewModeChange={setViewMode}
-                previousName={previousName || result.previousName}
-                currentName={currentName || result.currentName}
-              />
-              <OsPdfCompareReport
-                result={result}
-                includeUnchanged={options.includeUnchangedInReport}
-              />
-            </>
+            <OsPdfCompareViewer
+              pages={result.pages}
+              pageIndex={pageIndex}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              previousName={previousName || result.previousName}
+              currentName={currentName || result.currentName}
+            />
           ) : (
             <div className="os-pdf-viewer-empty">
               {busy
@@ -442,6 +418,29 @@ export function OsPdfComparePage({
           )}
         </main>
       </div>
+
+      {result?.hasResult && !reportOpen ? (
+        <button
+          type="button"
+          className="os-pdf-report-fab"
+          onClick={() => setReportOpen(true)}
+        >
+          Exibir relatório
+        </button>
+      ) : null}
+
+      {result?.hasResult && reportOpen ? (
+        <OsPdfCompareReport
+          result={result}
+          includeUnchanged={options.includeUnchangedInReport}
+          onIncludeUnchangedChange={(value) =>
+            setOptions((o) => ({ ...o, includeUnchangedInReport: value }))
+          }
+          onExport={() => void onExportReport()}
+          exportDisabled={busy}
+          onClose={() => setReportOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

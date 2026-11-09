@@ -30,7 +30,7 @@ interface OsPdfCompareViewerProps {
 
 const RULER_CHROME_X = 28;
 const RULER_CHROME_Y = 28;
-const GUIDE_EDITOR_H = 36;
+const GUIDE_EDITOR_H = 0;
 
 function modeLegend(mode: ViewMode): { swatch: string; label: string }[] {
   switch (mode) {

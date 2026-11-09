@@ -993,25 +993,55 @@
 .os-pdf-guide.vertical {
   top: 0;
   bottom: 0;
+  width: 12px;
+  border-left: 0;
+  cursor: ew-resize;
+}
+
+.os-pdf-guide.vertical::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 5px;
   width: 0;
   border-left: 1px solid #ff6a00;
-  cursor: ew-resize;
 }
 
 .os-pdf-guide.horizontal {
   left: 0;
   right: 0;
-  height: 0;
-  border-top: 1px solid #ff6a00;
+  height: 12px;
+  border-top: 0;
   cursor: ns-resize;
 }
 
-.os-pdf-guide.selected {
-  border-color: #d50000;
+.os-pdf-guide.horizontal::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 5px;
+  height: 0;
+  border-top: 1px solid #ff6a00;
 }
 
-.os-pdf-guide.global {
-  border-style: dashed;
+.os-pdf-guide.selected.vertical::before {
+  border-left-color: #d50000;
+  border-left-width: 2px;
+}
+
+.os-pdf-guide.selected.horizontal::before {
+  border-top-color: #d50000;
+  border-top-width: 2px;
+}
+
+.os-pdf-guide.global.vertical::before {
+  border-left-style: dashed;
+}
+
+.os-pdf-guide.global.horizontal::before {
+  border-top-style: dashed;
 }
 
 .os-pdf-guide-label {
@@ -1028,59 +1058,122 @@
 
 .os-pdf-guide.vertical .os-pdf-guide-label {
   top: 4px;
-  left: 3px;
+  left: 10px;
 }
 
 .os-pdf-guide.horizontal .os-pdf-guide-label {
   left: 4px;
-  top: 3px;
+  top: 10px;
 }
 
 .os-pdf-guide.selected .os-pdf-guide-label {
   background: #d50000;
 }
 
-.os-pdf-guide-editor {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.45rem;
-  min-height: 2rem;
-  padding: 0.25rem 0.4rem;
+.os-pdf-guide-float {
+  position: fixed;
+  z-index: 60;
+  width: min(280px, calc(100vw - 16px));
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 12px;
   background: #fff;
-  font-size: 0.75rem;
+  box-shadow: 0 16px 40px rgb(23 53 44 / 18%);
   color: var(--ink);
+  font-size: 0.8rem;
 }
 
-.os-pdf-guide-all-check {
-  font-weight: 600;
-}
-
-.os-pdf-guide-editor label {
-  display: inline-flex;
+.os-pdf-guide-float-header {
+  display: flex;
   align-items: center;
-  gap: 0.35rem;
-  font-weight: 600;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border-bottom: 1px solid var(--line);
+  background: #f3f8f5;
+  border-radius: 12px 12px 0 0;
+  cursor: grab;
+  user-select: none;
 }
 
-.os-pdf-guide-editor input {
-  width: 5.5rem;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 0.2rem 0.35rem;
+.os-pdf-guide-float-header:active {
+  cursor: grabbing;
+}
+
+.os-pdf-guide-float-header strong {
   font-size: 0.78rem;
 }
 
-.os-pdf-guide-editor button {
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: #fff;
-  padding: 0.2rem 0.5rem;
-  font-size: 0.72rem;
-  font-weight: 600;
+.os-pdf-guide-float-close {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1;
   cursor: pointer;
+  padding: 0.1rem 0.35rem;
+}
+
+.os-pdf-guide-float-body {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.75rem;
+}
+
+.os-pdf-guide-float-body label {
+  display: grid;
+  gap: 0.3rem;
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.os-pdf-guide-all-check {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0.4rem;
+  grid-template-columns: none !important;
+}
+
+.os-pdf-guide-float-body input[type="number"] {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.35rem 0.45rem;
+  font-size: 0.82rem;
+}
+
+.os-pdf-guide-float-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.os-pdf-guide-float-actions button {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.os-pdf-guide-float-actions button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.os-pdf-guide-float-actions button.danger {
+  color: var(--danger);
+  border-color: #f5c6c2;
+  background: #fdecea;
+}
+
+.os-pdf-guide-float-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 500;
 }
 
 

@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
@@ -35,6 +36,7 @@ interface OsPdfCompareRulersProps {
 
 const RULER_SIZE = 28;
 const MM_PER_INCH = 25.4;
+const DRAG_THRESHOLD_PX = 3;
 
 function pxToMm(px: number, dpi: number): number {
   if (!dpi) return 0;
@@ -109,6 +111,20 @@ export function OsPdfCompareRulers({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draftMm, setDraftMm] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [panelPos, setPanelPos] = useState({ x: 72, y: 120 });
+  const guidePressRef = useRef<{
+    id: string;
+    axis: GuideAxis;
+    x: number;
+    y: number;
+    dragging: boolean;
+  } | null>(null);
+  const panelDragRef = useRef<{
+    x: number;
+    y: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
 
   const pageWidthMm = pxToMm(pageWidthPx, dpi);
   const pageHeightMm = pxToMm(pageHeightPx, dpi);
@@ -145,9 +161,37 @@ export function OsPdfCompareRulers({
     }
   }, [guides, pageIndex, selectedId]);
 
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (!selectedId) return;
+      e.preventDefault();
+      onGuidesChange((prev) => prev.filter((g) => g.id !== selectedId));
+      setSelectedId(null);
+      setDraftMm("");
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onGuidesChange, selectedId]);
+
   function selectGuide(guide: GuideLine) {
     setSelectedId(guide.id);
     setDraftMm(fmtMm(guide.mm));
+  }
+
+  function clearSelection() {
+    setSelectedId(null);
+    setDraftMm("");
   }
 
   function updateGuideMm(id: string, mm: number, axis?: GuideAxis) {
@@ -237,6 +281,7 @@ export function OsPdfCompareRulers({
 
   function onRulerPointerUp() {
     setDraggingId(null);
+    guidePressRef.current = null;
   }
 
   function onGuidePointerDown(
@@ -248,7 +293,37 @@ export function OsPdfCompareRulers({
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     selectGuide(guide);
-    setDraggingId(guide.id);
+    guidePressRef.current = {
+      id: guide.id,
+      axis: guide.axis,
+      x: e.clientX,
+      y: e.clientY,
+      dragging: false,
+    };
+  }
+
+  function onGuidePointerMove(
+    e: ReactPointerEvent<HTMLDivElement>,
+    guide: GuideLine,
+  ) {
+    const press = guidePressRef.current;
+    if (!press || press.id !== guide.id) return;
+    const content = e.currentTarget.parentElement;
+    if (!content) return;
+
+    if (!press.dragging) {
+      const dx = Math.abs(e.clientX - press.x);
+      const dy = Math.abs(e.clientY - press.y);
+      if (dx < DRAG_THRESHOLD_PX && dy < DRAG_THRESHOLD_PX) return;
+      press.dragging = true;
+      setDraggingId(guide.id);
+    }
+
+    const mm =
+      guide.axis === "x"
+        ? mmFromHorizontalClient(e.clientX, content)
+        : mmFromVerticalClient(e.clientY, content);
+    updateGuideMm(guide.id, mm, guide.axis);
   }
 
   function onContentPointerMove(e: ReactPointerEvent<HTMLDivElement>) {
@@ -262,6 +337,11 @@ export function OsPdfCompareRulers({
     updateGuideMm(draggingId, mm, guide.axis);
   }
 
+  function onContentPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    if (e.target !== e.currentTarget) return;
+    clearSelection();
+  }
+
   function applyDraft() {
     if (!selected) return;
     const parsed = Number(String(draftMm).replace(",", "."));
@@ -270,6 +350,35 @@ export function OsPdfCompareRulers({
       return;
     }
     updateGuideMm(selected.id, parsed);
+  }
+
+  function onPanelHeaderPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest("button, input, label")) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    panelDragRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      originX: panelPos.x,
+      originY: panelPos.y,
+    };
+  }
+
+  function onPanelHeaderPointerMove(e: ReactPointerEvent<HTMLDivElement>) {
+    const drag = panelDragRef.current;
+    if (!drag) return;
+    const nextX = drag.originX + (e.clientX - drag.x);
+    const nextY = drag.originY + (e.clientY - drag.y);
+    setPanelPos({
+      x: clamp(nextX, 8, window.innerWidth - 280),
+      y: clamp(nextY, 8, window.innerHeight - 160),
+    });
+  }
+
+  function onPanelHeaderPointerUp() {
+    panelDragRef.current = null;
   }
 
   if (!displayWidth || !displayHeight || !dpi) {
@@ -353,6 +462,7 @@ export function OsPdfCompareRulers({
         <div
           className="os-pdf-ruler-content"
           style={{ width: displayWidth, height: displayHeight }}
+          onPointerDown={onContentPointerDown}
           onPointerMove={onContentPointerMove}
           onPointerUp={onRulerPointerUp}
           onPointerCancel={onRulerPointerUp}
@@ -361,8 +471,8 @@ export function OsPdfCompareRulers({
           {visibleGuides.map((guide) => {
             const style: CSSProperties =
               guide.axis === "x"
-                ? { left: guide.mm * pxPerMm }
-                : { bottom: guide.mm * pxPerMm };
+                ? { left: guide.mm * pxPerMm - 6 }
+                : { bottom: guide.mm * pxPerMm - 6 };
             return (
               <div
                 key={guide.id}
@@ -374,16 +484,7 @@ export function OsPdfCompareRulers({
                 }
                 style={style}
                 onPointerDown={(e) => onGuidePointerDown(e, guide)}
-                onPointerMove={(e) => {
-                  if (!draggingId || draggingId !== guide.id) return;
-                  const content = e.currentTarget.parentElement;
-                  if (!content) return;
-                  const mm =
-                    guide.axis === "x"
-                      ? mmFromHorizontalClient(e.clientX, content)
-                      : mmFromVerticalClient(e.clientY, content);
-                  updateGuideMm(guide.id, mm, guide.axis);
-                }}
+                onPointerMove={(e) => onGuidePointerMove(e, guide)}
                 onPointerUp={onRulerPointerUp}
                 onPointerCancel={onRulerPointerUp}
                 title={`${guide.axis === "x" ? "X" : "Y"} = ${fmtMm(guide.mm)} mm · ${
@@ -398,45 +499,82 @@ export function OsPdfCompareRulers({
       </div>
 
       {selected ? (
-        <div className="os-pdf-guide-editor">
-          <label>
-            {selected.axis === "x" ? "Guia X" : "Guia Y"} (mm)
-            <input
-              type="number"
-              min={0}
-              max={
-                selected.axis === "x"
-                  ? Number(pageWidthMm.toFixed(2))
-                  : Number(pageHeightMm.toFixed(2))
-              }
-              step={0.1}
-              value={draftMm}
-              onChange={(e) => setDraftMm(e.target.value)}
-              onBlur={applyDraft}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  applyDraft();
+        <div
+          className="os-pdf-guide-float"
+          style={{ left: panelPos.x, top: panelPos.y }}
+          role="dialog"
+          aria-label="Configuração da linha guia"
+        >
+          <div
+            className="os-pdf-guide-float-header"
+            onPointerDown={onPanelHeaderPointerDown}
+            onPointerMove={onPanelHeaderPointerMove}
+            onPointerUp={onPanelHeaderPointerUp}
+            onPointerCancel={onPanelHeaderPointerUp}
+          >
+            <strong>
+              Guia {selected.axis === "x" ? "vertical (X)" : "horizontal (Y)"}
+            </strong>
+            <button
+              type="button"
+              className="os-pdf-guide-float-close"
+              onClick={clearSelection}
+              aria-label="Fechar"
+              title="Fechar"
+            >
+              ×
+            </button>
+          </div>
+          <div className="os-pdf-guide-float-body">
+            <label>
+              Posição (mm)
+              <input
+                type="number"
+                min={0}
+                max={
+                  selected.axis === "x"
+                    ? Number(pageWidthMm.toFixed(2))
+                    : Number(pageHeightMm.toFixed(2))
                 }
-              }}
-            />
-          </label>
-          <label className="os-pdf-guide-all-check">
-            <input
-              type="checkbox"
-              checked={selected.scope === "all"}
-              onChange={(e) =>
-                setGuideScope(selected.id, e.target.checked ? "all" : "page")
-              }
-            />
-            Aplicar em todas as páginas
-          </label>
-          <button type="button" onClick={applyDraft}>
-            Aplicar
-          </button>
-          <button type="button" onClick={() => removeGuide(selected.id)}>
-            Remover
-          </button>
+                step={0.1}
+                value={draftMm}
+                onChange={(e) => setDraftMm(e.target.value)}
+                onBlur={applyDraft}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    applyDraft();
+                  }
+                }}
+              />
+            </label>
+            <label className="os-pdf-guide-all-check">
+              <input
+                type="checkbox"
+                checked={selected.scope === "all"}
+                onChange={(e) =>
+                  setGuideScope(selected.id, e.target.checked ? "all" : "page")
+                }
+              />
+              Aplicar em todas as páginas
+            </label>
+            <div className="os-pdf-guide-float-actions">
+              <button type="button" className="primary" onClick={applyDraft}>
+                Aplicar
+              </button>
+              <button
+                type="button"
+                className="danger"
+                onClick={() => removeGuide(selected.id)}
+                title="Delete"
+              >
+                Apagar
+              </button>
+            </div>
+            <p className="os-pdf-guide-float-hint">
+              Arraste o painel pelo título · Delete remove a guia selecionada
+            </p>
+          </div>
         </div>
       ) : null}
     </div>

@@ -79,6 +79,17 @@ export type Command = {
   timeoutSec: number;
 };
 
+export type StationGroupMember = {
+  hostName: string;
+  windowsUser: string;
+};
+
+export type StationGroup = {
+  id: number;
+  name: string;
+  members: StationGroupMember[];
+};
+
 export type Job = {
   id: number;
   name: string;
@@ -185,15 +196,29 @@ export const api = {
     }),
   deleteCommand: (id: number) =>
     request(`/api/letreiro/commands/${id}?windowsUser=`, { method: "DELETE" }),
+  groups: () => request<{ groups: StationGroup[] }>("/api/letreiro/groups"),
+  createGroup: (name: string, members: StationGroupMember[]) =>
+    request<{ id: number }>("/api/letreiro/groups", {
+      method: "POST",
+      body: JSON.stringify({ windowsUser: "", name, members }),
+    }),
+  updateGroup: (id: number, name: string, members: StationGroupMember[]) =>
+    request(`/api/letreiro/groups/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ windowsUser: "", name, members }),
+    }),
+  deleteGroup: (id: number) =>
+    request(`/api/letreiro/groups/${id}?windowsUser=`, { method: "DELETE" }),
   runCommand: (
     id: number,
     targets: { hostName: string; windowsUser: string }[],
     allOnline: boolean,
     variables: Record<string, string> = {},
+    groupIds: number[] = [],
   ) =>
     request<{ queued: number }>(`/api/letreiro/commands/${id}/run`, {
       method: "POST",
-      body: JSON.stringify({ windowsUser: "", allOnline, targets, variables }),
+      body: JSON.stringify({ windowsUser: "", allOnline, targets, variables, groupIds }),
     }),
   runAdhoc: (
     kind: string,
@@ -202,10 +227,11 @@ export const api = {
     targets: { hostName: string; windowsUser: string }[],
     allOnline: boolean,
     timeoutSec = 60,
+    groupIds: number[] = [],
   ) =>
     request<{ queued: number }>("/api/letreiro/jobs/run", {
       method: "POST",
-      body: JSON.stringify({ windowsUser: "", kind, content, name, allOnline, targets, timeoutSec }),
+      body: JSON.stringify({ windowsUser: "", kind, content, name, allOnline, targets, timeoutSec, groupIds }),
     }),
   jobs: () => request<{ jobs: Job[] }>("/api/letreiro/jobs"),
   screenshotResult: (id: number) => request<{ stdout: string }>(`/api/letreiro/jobs/${id}/result`),

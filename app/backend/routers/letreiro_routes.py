@@ -136,6 +136,7 @@ class CommandRunBody(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     windows_user: str = Field(alias="windowsUser")
     targets: list[JobTarget] = Field(default_factory=list)
+    group_ids: list[int] = Field(default_factory=list, alias="groupIds")
     all_online: bool = Field(default=False, alias="allOnline")
     variables: dict[str, str] = Field(default_factory=dict)
 
@@ -170,6 +171,13 @@ class LetreiroSettingsPut(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     windows_user: str = Field(alias="windowsUser")
     command_poll_interval_sec: int = Field(alias="commandPollIntervalSec")
+
+
+class LetreiroGroupBody(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    windows_user: str = Field(alias="windowsUser")
+    name: str
+    members: list[JobTarget] = Field(default_factory=list)
 
 
 def _normalize_kind(kind: str | None) -> str:
@@ -264,7 +272,11 @@ def _clip_output(text: str | None, limit: int = MAX_OUTPUT_CHARS) -> str:
 
 def _is_duplicate_name(exc: BaseException) -> bool:
     message = str(exc).lower()
-    return "duplicate" in message or "uk_letreiro_comando_nome" in message
+    return (
+        "duplicate" in message
+        or "uk_letreiro_comando_nome" in message
+        or "uk_letreiro_grupo_nome" in message
+    )
 
 
 def _row_int(row: dict[str, Any], key: str) -> Optional[int]:
@@ -395,6 +407,83 @@ def _expire_stale_running_jobs() -> None:
     )
 
 
+def _normalize_members(members: list[JobTarget] | None) -> list[tuple[str, str]]:
+    seen: set[tuple[str, str]] = set()
+    out: list[tuple[str, str]] = []
+    for item in members or []:
+        host_name = _clip(item.host_name, 128)
+        windows_user = _clip(item.windows_user, 128)
+        if not host_name or not windows_user:
+            continue
+        key = (host_name.lower(), windows_user.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append((host_name, windows_user))
+    return out
+
+
+def _serialize_group(row: dict[str, Any], members: list[dict[str, str]]) -> dict[str, Any]:
+    return {
+        "id": _row_int(row, "Id"),
+        "name": row.get("Nome") or "",
+        "members": members,
+        "createdBy": row.get("CreatedBy") or "",
+        "updatedBy": row.get("UpdatedBy") or "",
+        "createdAt": row.get("CreatedAt"),
+        "updatedAt": row.get("UpdatedAt"),
+    }
+
+
+def _load_group(group_id: int) -> dict[str, Any]:
+    rows = db.execute_query(
+        """
+        SELECT Id, Nome, CreatedBy, UpdatedBy, CreatedAt, UpdatedAt
+        FROM tabLetreiroGrupo
+        WHERE Id = %s
+        LIMIT 1
+        """,
+        (group_id,),
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Grupo não encontrado.")
+    return rows[0]
+
+
+def _list_group_members(group_id: int) -> list[dict[str, str]]:
+    rows = db.execute_query(
+        """
+        SELECT HostName, WindowsUser
+        FROM tabLetreiroGrupoMembro
+        WHERE GrupoId = %s
+        ORDER BY HostName, WindowsUser
+        """,
+        (group_id,),
+    )
+    return [
+        {
+            "hostName": row.get("HostName") or "",
+            "windowsUser": row.get("WindowsUser") or "",
+        }
+        for row in rows or []
+    ]
+
+
+def _replace_group_members(group_id: int, members: list[tuple[str, str]]) -> None:
+    def op(cursor):
+        cursor.execute("DELETE FROM tabLetreiroGrupoMembro WHERE GrupoId = %s", (group_id,))
+        for host, user in members:
+            cursor.execute(
+                """
+                INSERT INTO tabLetreiroGrupoMembro (GrupoId, HostName, WindowsUser)
+                VALUES (%s, %s, %s)
+                """,
+                (group_id, host, user),
+            )
+
+    db.execute_transaction([op])
+
+
 def _collect_run_targets(body: CommandRunBody) -> list[tuple[str, str]]:
     seen: set[tuple[str, str]] = set()
     targets: list[tuple[str, str]] = []
@@ -412,6 +501,23 @@ def _collect_run_targets(body: CommandRunBody) -> list[tuple[str, str]]:
 
     for item in body.targets or []:
         add(item.host_name, item.windows_user)
+
+    group_ids: list[int] = []
+    seen_groups: set[int] = set()
+    for raw in body.group_ids or []:
+        try:
+            group_id = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if group_id <= 0 or group_id in seen_groups:
+            continue
+        seen_groups.add(group_id)
+        group_ids.append(group_id)
+
+    for group_id in group_ids:
+        _load_group(group_id)
+        for member in _list_group_members(group_id):
+            add(member.get("hostName"), member.get("windowsUser"))
 
     if body.all_online:
         rows = db.execute_query(
@@ -647,6 +753,90 @@ async def put_config(
         raise HTTPException(status_code=400, detail="hostName e targetUser são obrigatórios.")
     _upsert_config(host, target, payload_json, actor)
     return {"status": "ok", "updated": 1}
+
+
+@router.get("/groups")
+async def list_groups(
+    x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
+    windows_user: Optional[str] = Query(default=None, alias="windowsUser"),
+):
+    _require_admin(x_letreiro_windows_user or windows_user)
+    rows = db.execute_query(
+        """
+        SELECT Id, Nome, CreatedBy, UpdatedBy, CreatedAt, UpdatedAt
+        FROM tabLetreiroGrupo
+        ORDER BY Nome
+        """
+    )
+    groups = [
+        _serialize_group(row, _list_group_members(_row_int(row, "Id") or 0))
+        for row in rows or []
+    ]
+    return {"groups": groups}
+
+
+@router.post("/groups")
+async def create_group(
+    body: LetreiroGroupBody,
+    x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
+):
+    actor = _require_admin(x_letreiro_windows_user or body.windows_user)
+    nome = _validate_name(body.name)
+    members = _normalize_members(body.members)
+    try:
+        group_id = _insert_returning_id(
+            """
+            INSERT INTO tabLetreiroGrupo
+                (Nome, CreatedBy, UpdatedBy, CreatedAt, UpdatedAt)
+            VALUES (%s, %s, %s, NOW(), NOW())
+            """,
+            (nome, actor, actor),
+        )
+    except DatabaseConnectionError as exc:
+        if _is_duplicate_name(exc):
+            raise HTTPException(status_code=409, detail="Já existe um grupo com esse nome.") from exc
+        raise
+    _replace_group_members(group_id, members)
+    return {"status": "ok", "id": group_id}
+
+
+@router.put("/groups/{group_id}")
+async def update_group(
+    group_id: int,
+    body: LetreiroGroupBody,
+    x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
+):
+    actor = _require_admin(x_letreiro_windows_user or body.windows_user)
+    _load_group(group_id)
+    nome = _validate_name(body.name)
+    members = _normalize_members(body.members)
+    try:
+        db.execute_query(
+            """
+            UPDATE tabLetreiroGrupo
+            SET Nome = %s, UpdatedBy = %s, UpdatedAt = NOW()
+            WHERE Id = %s
+            """,
+            (nome, actor, group_id),
+        )
+    except DatabaseConnectionError as exc:
+        if _is_duplicate_name(exc):
+            raise HTTPException(status_code=409, detail="Já existe um grupo com esse nome.") from exc
+        raise
+    _replace_group_members(group_id, members)
+    return {"status": "ok"}
+
+
+@router.delete("/groups/{group_id}")
+async def delete_group(
+    group_id: int,
+    x_letreiro_windows_user: Optional[str] = Header(default=None, alias="X-Letreiro-Windows-User"),
+    windows_user: Optional[str] = Query(default=None, alias="windowsUser"),
+):
+    _require_admin(x_letreiro_windows_user or windows_user)
+    _load_group(group_id)
+    db.execute_query("DELETE FROM tabLetreiroGrupo WHERE Id = %s", (group_id,))
+    return {"status": "ok"}
 
 
 @router.get("/commands")

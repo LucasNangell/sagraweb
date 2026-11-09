@@ -100,6 +100,32 @@ VALUES (1, 10, '')
 ON DUPLICATE KEY UPDATE Id = Id
 """
 
+CREATE_TAB_LETREIRO_GRUPO = """
+CREATE TABLE IF NOT EXISTS tabLetreiroGrupo (
+    Id INT NOT NULL AUTO_INCREMENT,
+    Nome VARCHAR(128) NOT NULL,
+    CreatedBy VARCHAR(128) NOT NULL DEFAULT '',
+    UpdatedBy VARCHAR(128) NOT NULL DEFAULT '',
+    CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (Id),
+    UNIQUE KEY uk_letreiro_grupo_nome (Nome)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+"""
+
+CREATE_TAB_LETREIRO_GRUPO_MEMBRO = """
+CREATE TABLE IF NOT EXISTS tabLetreiroGrupoMembro (
+    GrupoId INT NOT NULL,
+    HostName VARCHAR(128) NOT NULL,
+    WindowsUser VARCHAR(128) NOT NULL,
+    PRIMARY KEY (GrupoId, HostName, WindowsUser),
+    KEY idx_letreiro_grupo_membro_host (HostName, WindowsUser),
+    CONSTRAINT fk_letreiro_grupo_membro_grupo
+        FOREIGN KEY (GrupoId) REFERENCES tabLetreiroGrupo (Id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+"""
+
 
 def _ensure_instancia_profile_columns(cursor) -> None:
     cursor.execute(
@@ -215,6 +241,8 @@ def ensure_letreiro_schema() -> None:
             cursor.execute(CREATE_TAB_LETREIRO_COMANDO_JOB)
             cursor.execute(CREATE_TAB_LETREIRO_AJUSTE)
             cursor.execute(ENSURE_TAB_LETREIRO_AJUSTE_ROW)
+            cursor.execute(CREATE_TAB_LETREIRO_GRUPO)
+            cursor.execute(CREATE_TAB_LETREIRO_GRUPO_MEMBRO)
             _ensure_instancia_profile_columns(cursor)
             _ensure_last_seen_not_auto_update(cursor)
             for table in _HOST_USER_PK_TABLES:

@@ -9,6 +9,8 @@ from letreiro_schema import (
     CREATE_TAB_LETREIRO_COMANDO,
     CREATE_TAB_LETREIRO_COMANDO_JOB,
     CREATE_TAB_LETREIRO_CONFIG,
+    CREATE_TAB_LETREIRO_GRUPO,
+    CREATE_TAB_LETREIRO_GRUPO_MEMBRO,
     CREATE_TAB_LETREIRO_INSTANCIA,
     HOST_USER_PRIMARY_KEY,
     hostname_only_unique_names,
@@ -37,6 +39,11 @@ def test_schema_sql_creates_letreiro_tables():
     assert "idx_letreiro_job_claim" in CREATE_TAB_LETREIRO_COMANDO_JOB
     assert "CREATE TABLE IF NOT EXISTS tabLetreiroAjuste" in CREATE_TAB_LETREIRO_AJUSTE
     assert "CommandPollIntervalSec" in CREATE_TAB_LETREIRO_AJUSTE
+    assert "CREATE TABLE IF NOT EXISTS tabLetreiroGrupo" in CREATE_TAB_LETREIRO_GRUPO
+    assert "UNIQUE KEY uk_letreiro_grupo_nome" in CREATE_TAB_LETREIRO_GRUPO
+    assert "CREATE TABLE IF NOT EXISTS tabLetreiroGrupoMembro" in CREATE_TAB_LETREIRO_GRUPO_MEMBRO
+    assert "PRIMARY KEY (GrupoId, HostName, WindowsUser)" in CREATE_TAB_LETREIRO_GRUPO_MEMBRO
+    assert "ON DELETE CASCADE" in CREATE_TAB_LETREIRO_GRUPO_MEMBRO
     assert "ON UPDATE CURRENT_TIMESTAMP" not in CREATE_TAB_LETREIRO_INSTANCIA
 
 
@@ -527,6 +534,225 @@ def test_adhoc_run_queues_without_catalog(monkeypatch):
     assert inserts[0][1][1] == "terminal"
     assert inserts[0][1][2] == "bat"
     assert inserts[0][1][3] == "ipconfig /all"
+
+
+def test_groups_forbidden_for_non_admin():
+    response = _client().get(
+        "/api/letreiro/groups",
+        headers={"X-Letreiro-Windows-User": "outro"},
+    )
+    assert response.status_code == 403
+
+
+def test_create_and_list_groups(monkeypatch):
+    calls = []
+    members_store: dict[int, list[tuple[str, str]]] = {}
+
+    def fake_tx(ops):
+        class Cursor:
+            lastrowid = 0
+
+            def execute(self, sql, params=None):
+                calls.append((sql, params))
+                if "INSERT INTO tabLetreiroGrupo" in sql and "Membro" not in sql:
+                    self.lastrowid = 7
+                if "DELETE FROM tabLetreiroGrupoMembro" in sql:
+                    members_store[int(params[0])] = []
+                if "INSERT INTO tabLetreiroGrupoMembro" in sql:
+                    gid, host, user = params
+                    members_store.setdefault(int(gid), []).append((host, user))
+
+            @property
+            def rowcount(self):
+                return 1
+
+        return [ops[0](Cursor())]
+
+    def fake_exec(sql, params=None):
+        calls.append((sql, params))
+        if "FROM tabLetreiroGrupoMembro" in sql:
+            gid = int(params[0]) if params else 0
+            return [
+                {"HostName": host, "WindowsUser": user}
+                for host, user in members_store.get(gid, [])
+            ]
+        if "FROM tabLetreiroGrupo" in sql and "INSERT" not in sql and "UPDATE" not in sql:
+            return [{
+                "Id": 7,
+                "Nome": "SEFOC",
+                "CreatedBy": "P_918713",
+                "UpdatedBy": "P_918713",
+                "CreatedAt": None,
+                "UpdatedAt": None,
+            }]
+        return []
+
+    monkeypatch.setattr(letreiro_routes.db, "execute_transaction", fake_tx)
+    monkeypatch.setattr(letreiro_routes.db, "execute_query", fake_exec)
+
+    create = _client().post(
+        "/api/letreiro/groups",
+        headers={"X-Letreiro-Windows-User": "P_918713"},
+        json={
+            "windowsUser": "P_918713",
+            "name": "SEFOC",
+            "members": [
+                {"hostName": "PC1", "windowsUser": "ana"},
+                {"hostName": "PC2", "windowsUser": "bruno"},
+                {"hostName": "PC1", "windowsUser": "ANA"},
+            ],
+        },
+    )
+    assert create.status_code == 200
+    assert create.json()["id"] == 7
+    assert members_store[7] == [("PC1", "ana"), ("PC2", "bruno")]
+
+    listed = _client().get(
+        "/api/letreiro/groups",
+        headers={"X-Letreiro-Windows-User": "P_918713"},
+    )
+    assert listed.status_code == 200
+    groups = listed.json()["groups"]
+    assert len(groups) == 1
+    assert groups[0]["name"] == "SEFOC"
+    assert len(groups[0]["members"]) == 2
+
+
+def test_member_can_belong_to_multiple_groups(monkeypatch):
+    members_store = {
+        1: [("PC1", "ana"), ("PC2", "bruno")],
+        2: [("PC1", "ana"), ("PC3", "carlos")],
+    }
+
+    def fake_exec(sql, params=None):
+        if "FROM tabLetreiroGrupoMembro" in sql:
+            return [
+                {"HostName": host, "WindowsUser": user}
+                for host, user in members_store.get(int(params[0]), [])
+            ]
+        if "FROM tabLetreiroGrupo" in sql and "WHERE Id" not in sql:
+            return [
+                {"Id": 1, "Nome": "A", "CreatedBy": "", "UpdatedBy": "", "CreatedAt": None, "UpdatedAt": None},
+                {"Id": 2, "Nome": "B", "CreatedBy": "", "UpdatedBy": "", "CreatedAt": None, "UpdatedAt": None},
+            ]
+        return []
+
+    monkeypatch.setattr(letreiro_routes.db, "execute_query", fake_exec)
+    response = _client().get(
+        "/api/letreiro/groups",
+        headers={"X-Letreiro-Windows-User": "P_918713"},
+    )
+    assert response.status_code == 200
+    groups = {row["name"]: row["members"] for row in response.json()["groups"]}
+    assert {"hostName": "PC1", "windowsUser": "ana"} in groups["A"]
+    assert {"hostName": "PC1", "windowsUser": "ana"} in groups["B"]
+
+
+def test_update_and_delete_group(monkeypatch):
+    calls = []
+    members_store: dict[int, list[tuple[str, str]]] = {5: [("PC1", "ana")]}
+
+    def fake_tx(ops):
+        class Cursor:
+            def execute(self, sql, params=None):
+                calls.append((sql, params))
+                if "DELETE FROM tabLetreiroGrupoMembro" in sql:
+                    members_store[int(params[0])] = []
+                if "INSERT INTO tabLetreiroGrupoMembro" in sql:
+                    gid, host, user = params
+                    members_store.setdefault(int(gid), []).append((host, user))
+
+        return [ops[0](Cursor())]
+
+    def fake_exec(sql, params=None):
+        calls.append((sql, params))
+        if "FROM tabLetreiroGrupoMembro" in sql:
+            return [
+                {"HostName": host, "WindowsUser": user}
+                for host, user in members_store.get(int(params[0]), [])
+            ]
+        if "FROM tabLetreiroGrupo" in sql and "WHERE Id" in sql:
+            return [{
+                "Id": 5,
+                "Nome": "Antigo",
+                "CreatedBy": "",
+                "UpdatedBy": "",
+                "CreatedAt": None,
+                "UpdatedAt": None,
+            }]
+        return []
+
+    monkeypatch.setattr(letreiro_routes.db, "execute_transaction", fake_tx)
+    monkeypatch.setattr(letreiro_routes.db, "execute_query", fake_exec)
+
+    updated = _client().put(
+        "/api/letreiro/groups/5",
+        headers={"X-Letreiro-Windows-User": "P_918713"},
+        json={
+            "windowsUser": "P_918713",
+            "name": "Novo",
+            "members": [{"hostName": "PC9", "windowsUser": "zoe"}],
+        },
+    )
+    assert updated.status_code == 200
+    assert members_store[5] == [("PC9", "zoe")]
+    assert any("UPDATE tabLetreiroGrupo" in c[0] and c[1][0] == "Novo" for c in calls)
+
+    deleted = _client().delete(
+        "/api/letreiro/groups/5",
+        headers={"X-Letreiro-Windows-User": "P_918713"},
+        params={"windowsUser": "P_918713"},
+    )
+    assert deleted.status_code == 200
+    assert any("DELETE FROM tabLetreiroGrupo WHERE Id" in c[0] for c in calls)
+
+
+def test_run_command_expands_group_ids(monkeypatch):
+    calls = []
+
+    def fake_exec(sql, params=None):
+        calls.append((sql, params))
+        if "FROM tabLetreiroComando" in sql and "INSERT" not in sql:
+            return [{"Id": 3, "Nome": "ping", "Tipo": "bat", "Conteudo": "@echo hi", "TimeoutSec": 60}]
+        if "FROM tabLetreiroGrupoMembro" in sql:
+            gid = int(params[0])
+            if gid == 1:
+                return [
+                    {"HostName": "PC1", "WindowsUser": "ana"},
+                    {"HostName": "PC2", "WindowsUser": "bruno"},
+                ]
+            if gid == 2:
+                return [
+                    {"HostName": "PC1", "WindowsUser": "ana"},
+                    {"HostName": "PC3", "WindowsUser": "carlos"},
+                ]
+            return []
+        if "FROM tabLetreiroGrupo" in sql and "WHERE Id" in sql:
+            return [{
+                "Id": int(params[0]),
+                "Nome": "G",
+                "CreatedBy": "",
+                "UpdatedBy": "",
+                "CreatedAt": None,
+                "UpdatedAt": None,
+            }]
+        return []
+
+    monkeypatch.setattr(letreiro_routes.db, "execute_query", fake_exec)
+    response = _client().post(
+        "/api/letreiro/commands/3/run",
+        headers={"X-Letreiro-Windows-User": "P_918713"},
+        json={
+            "windowsUser": "P_918713",
+            "groupIds": [1, 2],
+            "targets": [{"hostName": "PC2", "windowsUser": "bruno"}],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["queued"] == 3
+    inserts = [c for c in calls if "INSERT INTO tabLetreiroComandoJob" in c[0]]
+    hosts = {(c[1][5], c[1][6]) for c in inserts}
+    assert hosts == {("PC1", "ana"), ("PC2", "bruno"), ("PC3", "carlos")}
 
 
 def test_extract_command_vars_keeps_order_and_unique():

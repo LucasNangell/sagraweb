@@ -78,7 +78,11 @@ function localPreviewMock(): Connect.NextHandleFunction {
   };
   const configProfiles: { id: number; name: string; payload: unknown }[] = [];
   const profileAssignments: { hostName: string; windowsUser: string; profileId: number; profileName: string }[] = [];
+  const stationGroups: { id: number; name: string; members: { hostName: string; windowsUser: string }[] }[] = [
+    { id: 1, name: "SEFOC", members: [{ hostName: "PC-DEV", windowsUser: "usr_sefoc" }, { hostName: "PC-CARLOS", windowsUser: "carlos" }] },
+  ];
   let nextProfileId = 1;
+  let nextGroupId = 2;
   let jobId = 1;
   return (req: IncomingMessage, res: ServerResponse, next: Connect.NextFunction) => {
     const url = (req.url ?? "").split("?")[0];
@@ -226,6 +230,53 @@ function localPreviewMock(): Connect.NextHandleFunction {
         ],
       });
     }
+    if (url === "/api/letreiro/groups") {
+      if (req.method === "POST") {
+        const chunks: Buffer[] = [];
+        req.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+        req.on("end", () => {
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as {
+            name?: string;
+            members?: { hostName: string; windowsUser: string }[];
+          };
+          const id = nextGroupId++;
+          stationGroups.push({ id, name: body.name?.trim() || `Grupo ${id}`, members: body.members ?? [] });
+          sendJson(res, { status: "ok", id });
+        });
+        return;
+      }
+      return sendJson(res, { groups: stationGroups });
+    }
+    const groupMatch = url.match(/^\/api\/letreiro\/groups\/(\d+)$/);
+    if (groupMatch) {
+      const groupId = Number(groupMatch[1]);
+      const index = stationGroups.findIndex((item) => item.id === groupId);
+      if (req.method === "PUT") {
+        const chunks: Buffer[] = [];
+        req.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+        req.on("end", () => {
+          if (index < 0) {
+            res.statusCode = 404;
+            return sendJson(res, { detail: "Grupo não encontrado." });
+          }
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as {
+            name?: string;
+            members?: { hostName: string; windowsUser: string }[];
+          };
+          stationGroups[index] = {
+            id: groupId,
+            name: body.name?.trim() || stationGroups[index].name,
+            members: body.members ?? stationGroups[index].members,
+          };
+          sendJson(res, { status: "ok" });
+        });
+        return;
+      }
+      if (req.method === "DELETE") {
+        if (index >= 0) stationGroups.splice(index, 1);
+        return sendJson(res, { status: "ok" });
+      }
+    }
     if (url === "/api/letreiro/commands") {
       return sendJson(res, { commands: MOCK_COMMANDS });
     }
@@ -235,20 +286,29 @@ function localPreviewMock(): Connect.NextHandleFunction {
       const chunks: Buffer[] = [];
       req.on("data", chunk => chunks.push(Buffer.from(chunk)));
       req.on("end", () => {
-        const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { targets?: { hostName: string; windowsUser: string }[] };
-        const target = body.targets?.[0] ?? { hostName: "PC-DEV", windowsUser: "usr_sefoc" };
-        jobs.unshift({
-          id: jobId++,
-          name: command?.name ?? "biblioteca",
-          kind: command?.kind ?? "bat",
-          ...target,
-          status: "ok",
-          exitCode: 0,
-          stdout: command?.name === "Listar janelas" ? MOCK_WINDOW_TABLE : "Script da biblioteca executado.",
-          stderr: "",
-          createdAt: new Date().toISOString(),
-        });
-        sendJson(res, { queued: 1 });
+        const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as {
+          targets?: { hostName: string; windowsUser: string }[];
+          groupIds?: number[];
+        };
+        const fromGroups = (body.groupIds ?? []).flatMap((id) => stationGroups.find((group) => group.id === id)?.members ?? []);
+        const targets = [...(body.targets ?? []), ...fromGroups];
+        const unique = new Map(targets.map((row) => [`${row.hostName}\n${row.windowsUser}`, row]));
+        const resolved = [...unique.values()];
+        if (!resolved.length) resolved.push({ hostName: "PC-DEV", windowsUser: "usr_sefoc" });
+        for (const target of resolved) {
+          jobs.unshift({
+            id: jobId++,
+            name: command?.name ?? "biblioteca",
+            kind: command?.kind ?? "bat",
+            ...target,
+            status: "ok",
+            exitCode: 0,
+            stdout: command?.name === "Listar janelas" ? MOCK_WINDOW_TABLE : "Script da biblioteca executado.",
+            stderr: "",
+            createdAt: new Date().toISOString(),
+          });
+        }
+        sendJson(res, { queued: resolved.length });
       });
       return;
     }

@@ -23,6 +23,7 @@ import {
   Search,
   SlidersHorizontal,
   Unplug,
+  Users,
 } from "lucide-react";
 import { ConfigPreview, SettingsSummary } from "./ui";
 import ClientControlPanel from "./ClientControlPanel";
@@ -37,6 +38,7 @@ import {
   type ConfigProfileAssignment,
   type Instance,
   type Job,
+  type StationGroup,
 } from "./api";
 import {
   CLASSIC_ENTRY_ANIMATIONS,
@@ -1210,6 +1212,11 @@ export default function App() {
   const [editingProfileId, setEditingProfileId] = useState(0);
   const profileReturnConfig = useRef<AppConfig | null>(null);
   const [applyProfileId, setApplyProfileId] = useState(0);
+  const [stationGroups, setStationGroups] = useState<StationGroup[]>([]);
+  const [groupDraftName, setGroupDraftName] = useState("");
+  const [editingGroupId, setEditingGroupId] = useState(0);
+  const [sendGroupId, setSendGroupId] = useState(0);
+  const [groupBusy, setGroupBusy] = useState(false);
   const [setores, setSetores] = useState<string[]>(["SEFOC", "Papelaria", "Gravação"]);
   const [situacoes, setSituacoes] = useState<string[]>(DEFAULT_SITUACOES);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -1273,17 +1280,19 @@ export default function App() {
 
   const loadAll = useCallback(async () => {
     try {
-      const [inst, cmds, jobList, settings] = await Promise.all([
+      const [inst, cmds, jobList, settings, groupList] = await Promise.all([
         api.instances(),
         api.commands(),
         api.jobs(),
         api.settings(),
+        api.groups().catch(() => ({ groups: [] as StationGroup[] })),
       ]);
       setInstances(inst.instances ?? []);
       setCommands(cmds.commands ?? []);
       commandsRef.current = cmds.commands ?? [];
       applyJobs(jobList.jobs ?? []);
       setPollSec(settings.commandPollIntervalSec ?? 10);
+      setStationGroups(groupList.groups ?? []);
       setError("");
       setStatus(`${inst.instances?.length ?? 0} computador(es)`);
     } catch (ex) {
@@ -1669,9 +1678,69 @@ export default function App() {
     if (cmd) setShell(cmd.kind === "ps1" ? "ps1" : "bat");
   }
 
-  async function sendTerminal(allOnline: boolean) {
-    if (!allOnline && selectedRows.length === 0) return setError("Selecione computadores ou envie a todos os online.");
-    const targets = selectedRows.map((row) => ({ hostName: row.hostName, windowsUser: row.windowsUser }));
+  function selectGroupMembers(group: StationGroup, replace = false) {
+    const next = replace ? new Set<string>() : new Set(selected);
+    for (const member of group.members) next.add(keyOf(member));
+    setSelected(next);
+    syncProfileFromSelection(next);
+    setSendGroupId(group.id);
+    setEditingGroupId(group.id);
+    setGroupDraftName(group.name);
+    setStatus(`Grupo "${group.name}" · ${group.members.length} membro(s)`);
+  }
+
+  async function saveStationGroup() {
+    const name = groupDraftName.trim();
+    if (!name) return setError("Informe o nome do grupo.");
+    if (!selectedRows.length && editingGroupId <= 0) return setError("Selecione estações para montar o grupo.");
+    const members = selectedRows.map((row) => ({ hostName: row.hostName, windowsUser: row.windowsUser }));
+    setGroupBusy(true);
+    try {
+      if (editingGroupId > 0) {
+        const current = stationGroups.find((item) => item.id === editingGroupId);
+        const payload = members.length ? members : (current?.members ?? []);
+        await api.updateGroup(editingGroupId, name, payload);
+        setStatus(`Grupo "${name}" atualizado.`);
+      } else {
+        const created = await api.createGroup(name, members);
+        setEditingGroupId(created.id);
+        setSendGroupId(created.id);
+        setStatus(`Grupo "${name}" criado.`);
+      }
+      const refreshed = await api.groups();
+      setStationGroups(refreshed.groups ?? []);
+      setError("");
+    } finally {
+      setGroupBusy(false);
+    }
+  }
+
+  async function deleteStationGroup(group: StationGroup) {
+    if (!window.confirm(`Excluir o grupo "${group.name}"?`)) return;
+    setGroupBusy(true);
+    try {
+      await api.deleteGroup(group.id);
+      if (editingGroupId === group.id) {
+        setEditingGroupId(0);
+        setGroupDraftName("");
+      }
+      if (sendGroupId === group.id) setSendGroupId(0);
+      const refreshed = await api.groups();
+      setStationGroups(refreshed.groups ?? []);
+      setStatus(`Grupo "${group.name}" excluído.`);
+      setError("");
+    } finally {
+      setGroupBusy(false);
+    }
+  }
+
+  async function sendTerminal(allOnline: boolean, groupIds: number[] = []) {
+    if (!allOnline && selectedRows.length === 0 && groupIds.length === 0) {
+      return setError("Selecione computadores, um grupo, ou envie a todos os online.");
+    }
+    const targets = groupIds.length
+      ? []
+      : selectedRows.map((row) => ({ hostName: row.hostName, windowsUser: row.windowsUser }));
     const catalog = commands.find((cmd) => cmd.id === libraryId);
     if (catalog) {
       const varNames = extractCommandVars(catalog.content);
@@ -1683,8 +1752,8 @@ export default function App() {
         : catalog.name;
       setLog((prev) => `${prev}${marker} ${preview}\n`);
       const queued = varNames.length
-        ? await api.runAdhoc(catalog.kind === "ps1" ? "ps1" : "bat", rendered.content, catalog.name, targets, allOnline, catalog.timeoutSec)
-        : await api.runCommand(catalog.id, targets, allOnline);
+        ? await api.runAdhoc(catalog.kind === "ps1" ? "ps1" : "bat", rendered.content, catalog.name, targets, allOnline, catalog.timeoutSec, groupIds)
+        : await api.runCommand(catalog.id, targets, allOnline, {}, groupIds);
       await watchQueued(queued.queued, "");
       return;
     }
@@ -1695,7 +1764,7 @@ export default function App() {
     const name = text.replace(/\s+/g, " ").slice(0, 40);
     const marker = shell === "ps1" ? "PS>" : "C:\\>";
     setLog((prev) => `${prev}${marker} ${text.trim()}\n`);
-    const queued = await api.runAdhoc(shell, text, name, targets, allOnline);
+    const queued = await api.runAdhoc(shell, text, name, targets, allOnline, 60, groupIds);
     setPrompt("");
     await watchQueued(queued.queued, "");
   }
@@ -1822,6 +1891,69 @@ export default function App() {
                 <div className="flex items-center justify-between gap-2"><h2 className="font-semibold">Estações de trabalho</h2><span className="count-badge">{visibleInstances.length}</span></div>
                 <div className="search-field"><Search size={16} /><input aria-label="Buscar computadores" placeholder="Buscar nome, setor ou computador…" value={instanceSearch} onChange={e => setInstanceSearch(e.target.value)} /></div>
                 <div className="instance-list-toolbar"><div className="status-filters">{[["all", "Todos"], ["online", "Online"], ["offline", "Offline"]].map(([value, label]) => <button type="button" key={value} aria-pressed={instanceStatus === value} className={instanceStatus === value ? "is-active" : ""} onClick={() => setInstanceStatus(value)}>{label}</button>)}</div>{selected.size ? <button type="button" className="text-xs text-sky-300" onClick={() => { setSelected(new Set()); syncProfileFromSelection(new Set()); }}>Limpar seleção</button> : null}</div>
+                <div className="station-groups mt-3 rounded-xl border border-slate-800 bg-slate-950/50 p-2">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <strong className="inline-flex items-center gap-1.5 text-sm text-slate-200"><Users size={14} /> Grupos</strong>
+                    <button
+                      type="button"
+                      className="text-xs text-sky-300"
+                      onClick={() => {
+                        setEditingGroupId(0);
+                        setSendGroupId(0);
+                        setGroupDraftName("");
+                      }}
+                    >
+                      Novo
+                    </button>
+                  </div>
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    {stationGroups.length === 0 ? (
+                      <span className="text-[11px] text-slate-500">Nenhum grupo. Selecione estações e salve.</span>
+                    ) : (
+                      stationGroups.map((group) => (
+                        <button
+                          key={group.id}
+                          type="button"
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${editingGroupId === group.id || sendGroupId === group.id ? "bg-sky-400 text-slate-950" : "bg-slate-800 text-slate-200"}`}
+                          onClick={() => selectGroupMembers(group, true)}
+                          title={`${group.members.length} membro(s)`}
+                        >
+                          {group.name}
+                          <span className="ml-1 opacity-70">{group.members.length}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-sm text-slate-100"
+                      placeholder={editingGroupId ? "Renomear grupo" : "Nome do novo grupo"}
+                      value={groupDraftName}
+                      onChange={(e) => setGroupDraftName(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="rounded-lg bg-sky-400 px-2.5 py-1.5 text-xs font-semibold text-slate-950 disabled:opacity-60"
+                      disabled={groupBusy}
+                      onClick={() => void saveStationGroup().catch((ex) => setError(errText(ex)))}
+                    >
+                      {editingGroupId ? "Salvar" : "Criar"}
+                    </button>
+                    {editingGroupId ? (
+                      <button
+                        type="button"
+                        className="rounded-lg bg-rose-900 px-2.5 py-1.5 text-xs text-slate-100 disabled:opacity-60"
+                        disabled={groupBusy}
+                        onClick={() => {
+                          const group = stationGroups.find((item) => item.id === editingGroupId);
+                          if (group) void deleteStationGroup(group).catch((ex) => setError(errText(ex)));
+                        }}
+                      >
+                        Excluir
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
               </div>
               <div className="min-h-0 flex-1 overflow-auto">
                 <div className="instance-list">
@@ -2034,7 +2166,33 @@ export default function App() {
                       placeholder={libraryCmd ? `Enviar: ${libraryCmd.name}` : "ipconfig /all"}
                     />
                   )}
-                  <div className="flex shrink-0 flex-wrap gap-2">
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    <label className="inline-flex items-center gap-1.5 text-xs text-slate-400">
+                      Grupo
+                      <select
+                        className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-slate-100"
+                        value={sendGroupId}
+                        onChange={(e) => {
+                          const id = Number(e.target.value);
+                          setSendGroupId(id);
+                          const group = stationGroups.find((item) => item.id === id);
+                          if (group) selectGroupMembers(group, true);
+                        }}
+                      >
+                        <option value={0}>—</option>
+                        {stationGroups.map((group) => (
+                          <option key={group.id} value={group.id}>{group.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      className="rounded-lg bg-slate-800 px-3 py-2 text-sm disabled:opacity-60"
+                      disabled={!sendGroupId}
+                      onClick={() => void sendTerminal(false, sendGroupId ? [sendGroupId] : []).catch((ex) => setError(errText(ex)))}
+                    >
+                      Enviar ao grupo
+                    </button>
                     <button type="button" className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void sendTerminal(true).catch((ex) => setError(errText(ex)))}>
                       Todos online
                     </button>
@@ -2172,8 +2330,26 @@ export default function App() {
                         setView("computers");
                         const list = await api.jobs();
                         applyJobs(list.jobs ?? []);
-                      });
+                      }).catch((ex) => setError(errText(ex)));
                     }}>Enviar selecionados</button>
+                  ) : null}
+                  {draft.id > 0 && sendGroupId ? (
+                    <button className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => {
+                      if (draftVarNames.length) {
+                        chooseLibrary(draft.id);
+                        setView("computers");
+                        setStatus("Preencha as variáveis no terminal para enviar ao grupo.");
+                        return;
+                      }
+                      void api.runCommand(draft.id, [], false, {}, [sendGroupId]).then(async (r) => {
+                        setStatus(`${r.queued} job(s) no grupo`);
+                        burstUntil.current = Date.now() + 120_000;
+                        setLog((prev) => `${prev}${shell === "ps1" || draft.kind === "ps1" ? "PS>" : "C:\\>"} ${draft.content.trim()}\naguardando resposta (${r.queued})…\n`);
+                        setView("computers");
+                        const list = await api.jobs();
+                        applyJobs(list.jobs ?? []);
+                      }).catch((ex) => setError(errText(ex)));
+                    }}>Enviar ao grupo</button>
                   ) : null}
                 </div>
               </div>

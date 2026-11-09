@@ -76,6 +76,8 @@ export function OsPdfCompareViewer({
   }, [page, viewMode, flickerShowB]);
 
   function onWheel(e: WheelEvent<HTMLDivElement>) {
+    // Zoom só com Ctrl/Cmd; sem modificador deixa o scroll nativo da área.
+    if (!e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
     const factor = e.deltaY < 0 ? 1.1 : 0.9;
     setZoom((z) => Math.min(8, Math.max(0.2, Number((z * factor).toFixed(3)))));

@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useMemo,
   useState,
   type CSSProperties,
@@ -7,11 +8,15 @@ import {
 } from "react";
 
 export type GuideAxis = "x" | "y";
+export type GuideScope = "page" | "all";
 
 export interface GuideLine {
   id: string;
   axis: GuideAxis;
   mm: number;
+  scope: GuideScope;
+  /** Índice da página quando scope === "page". */
+  pageIndex?: number;
 }
 
 interface OsPdfCompareRulersProps {
@@ -20,6 +25,7 @@ interface OsPdfCompareRulersProps {
   displayWidth: number;
   displayHeight: number;
   dpi: number;
+  pageIndex: number;
   guides: GuideLine[];
   onGuidesChange: (
     guides: GuideLine[] | ((prev: GuideLine[]) => GuideLine[]),
@@ -52,6 +58,10 @@ function fmtMm(n: number): string {
 
 function nextId(): string {
   return `g-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+export function isGuideVisibleOnPage(guide: GuideLine, pageIndex: number): boolean {
+  return guide.scope === "all" || guide.pageIndex === pageIndex;
 }
 
 function buildTicks(maxMm: number, pxPerMm: number): {
@@ -91,6 +101,7 @@ export function OsPdfCompareRulers({
   displayWidth,
   displayHeight,
   dpi,
+  pageIndex,
   guides,
   onGuidesChange,
   children,
@@ -98,11 +109,25 @@ export function OsPdfCompareRulers({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draftMm, setDraftMm] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  /** Escopo padrão das novas guias criadas na régua. */
+  const [createScope, setCreateScope] = useState<GuideScope>("page");
 
   const pageWidthMm = pxToMm(pageWidthPx, dpi);
   const pageHeightMm = pxToMm(pageHeightPx, dpi);
   const scale = pageWidthPx > 0 ? displayWidth / pageWidthPx : 1;
   const pxPerMm = mmToPx(1, dpi) * scale;
+
+  const visibleGuides = useMemo(
+    () => guides.filter((g) => isGuideVisibleOnPage(g, pageIndex)),
+    [guides, pageIndex],
+  );
+
+  const pageOnlyCount = useMemo(
+    () =>
+      guides.filter((g) => g.scope === "page" && g.pageIndex === pageIndex)
+        .length,
+    [guides, pageIndex],
+  );
 
   const hTicks = useMemo(
     () => buildTicks(pageWidthMm, pxPerMm),
@@ -113,7 +138,21 @@ export function OsPdfCompareRulers({
     [pageHeightMm, pxPerMm],
   );
 
-  const selected = guides.find((g) => g.id === selectedId) || null;
+  const selected =
+    visibleGuides.find((g) => g.id === selectedId) ||
+    guides.find((g) => g.id === selectedId) ||
+    null;
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const stillVisible = guides.some(
+      (g) => g.id === selectedId && isGuideVisibleOnPage(g, pageIndex),
+    );
+    if (!stillVisible) {
+      setSelectedId(null);
+      setDraftMm("");
+    }
+  }, [guides, pageIndex, selectedId]);
 
   function selectGuide(guide: GuideLine) {
     setSelectedId(guide.id);
@@ -121,7 +160,10 @@ export function OsPdfCompareRulers({
   }
 
   function updateGuideMm(id: string, mm: number, axis?: GuideAxis) {
-    const guideAxis = axis || guides.find((g) => g.id === id)?.axis;
+    const guideAxis =
+      axis ||
+      visibleGuides.find((g) => g.id === id)?.axis ||
+      guides.find((g) => g.id === id)?.axis;
     if (!guideAxis) return;
     const max = guideAxis === "x" ? pageWidthMm : pageHeightMm;
     const next = clamp(mm, 0, max);
@@ -139,6 +181,28 @@ export function OsPdfCompareRulers({
     }
   }
 
+  function setGuideScope(id: string, scope: GuideScope) {
+    onGuidesChange((prev) =>
+      prev.map((g) => {
+        if (g.id !== id) return g;
+        if (scope === "all") {
+          return { ...g, scope: "all", pageIndex: undefined };
+        }
+        return { ...g, scope: "page", pageIndex };
+      }),
+    );
+  }
+
+  function applyPageGuidesToAll() {
+    onGuidesChange((prev) =>
+      prev.map((g) =>
+        g.scope === "page" && g.pageIndex === pageIndex
+          ? { ...g, scope: "all" as const, pageIndex: undefined }
+          : g,
+      ),
+    );
+  }
+
   function mmFromHorizontalClient(clientX: number, target: HTMLElement): number {
     const rect = target.getBoundingClientRect();
     return clamp((clientX - rect.left) / pxPerMm, 0, pageWidthMm);
@@ -153,7 +217,11 @@ export function OsPdfCompareRulers({
     const guide: GuideLine = {
       id: nextId(),
       axis,
-      mm: Number(clamp(mm, 0, axis === "x" ? pageWidthMm : pageHeightMm).toFixed(2)),
+      mm: Number(
+        clamp(mm, 0, axis === "x" ? pageWidthMm : pageHeightMm).toFixed(2),
+      ),
+      scope: createScope,
+      pageIndex: createScope === "page" ? pageIndex : undefined,
     };
     onGuidesChange((prev) => [...prev, guide]);
     selectGuide(guide);
@@ -204,7 +272,7 @@ export function OsPdfCompareRulers({
 
   function onContentPointerMove(e: ReactPointerEvent<HTMLDivElement>) {
     if (!draggingId) return;
-    const guide = guides.find((g) => g.id === draggingId);
+    const guide = visibleGuides.find((g) => g.id === draggingId);
     if (!guide) return;
     const mm =
       guide.axis === "x"
@@ -309,7 +377,7 @@ export function OsPdfCompareRulers({
           onPointerCancel={onRulerPointerUp}
         >
           {children}
-          {guides.map((guide) => {
+          {visibleGuides.map((guide) => {
             const style: CSSProperties =
               guide.axis === "x"
                 ? { left: guide.mm * pxPerMm }
@@ -320,6 +388,7 @@ export function OsPdfCompareRulers({
                 className={
                   "os-pdf-guide" +
                   (guide.axis === "x" ? " vertical" : " horizontal") +
+                  (guide.scope === "all" ? " global" : "") +
                   (selectedId === guide.id ? " selected" : "")
                 }
                 style={style}
@@ -336,7 +405,9 @@ export function OsPdfCompareRulers({
                 }}
                 onPointerUp={onRulerPointerUp}
                 onPointerCancel={onRulerPointerUp}
-                title={`${guide.axis === "x" ? "X" : "Y"} = ${fmtMm(guide.mm)} mm`}
+                title={`${guide.axis === "x" ? "X" : "Y"} = ${fmtMm(guide.mm)} mm · ${
+                  guide.scope === "all" ? "todas as páginas" : "esta página"
+                }`}
               >
                 <span className="os-pdf-guide-label">{fmtMm(guide.mm)}</span>
               </div>
@@ -346,6 +417,35 @@ export function OsPdfCompareRulers({
       </div>
 
       <div className={"os-pdf-guide-editor" + (selected ? "" : " idle")}>
+        <div className="os-pdf-guide-scope" role="group" aria-label="Escopo das guias">
+          <button
+            type="button"
+            className={createScope === "page" ? "active" : ""}
+            onClick={() => setCreateScope("page")}
+            title="Novas guias valem só nesta página"
+          >
+            Página atual
+          </button>
+          <button
+            type="button"
+            className={createScope === "all" ? "active" : ""}
+            onClick={() => setCreateScope("all")}
+            title="Novas guias valem em todas as páginas"
+          >
+            Todas as páginas
+          </button>
+          {pageOnlyCount > 0 ? (
+            <button
+              type="button"
+              className="os-pdf-guide-promote"
+              onClick={applyPageGuidesToAll}
+              title="Converte as guias só desta página para o documento inteiro"
+            >
+              Aplicar guias da página a todas
+            </button>
+          ) : null}
+        </div>
+
         {selected ? (
           <>
             <label>
@@ -370,6 +470,16 @@ export function OsPdfCompareRulers({
                 }}
               />
             </label>
+            <label className="os-pdf-guide-all-check">
+              <input
+                type="checkbox"
+                checked={selected.scope === "all"}
+                onChange={(e) =>
+                  setGuideScope(selected.id, e.target.checked ? "all" : "page")
+                }
+              />
+              Em todas as páginas
+            </label>
             <button type="button" onClick={applyDraft}>
               Aplicar
             </button>
@@ -377,14 +487,15 @@ export function OsPdfCompareRulers({
               Remover
             </button>
             <span className="os-pdf-guide-editor-meta">
-              Limites do arquivo: 0–{fmtMm(pageWidthMm)} mm (X) · 0–
-              {fmtMm(pageHeightMm)} mm (Y)
+              Limites: 0–{fmtMm(pageWidthMm)} × 0–{fmtMm(pageHeightMm)} mm
             </span>
           </>
         ) : (
           <span>
-            Clique nas réguas para criar guias · origem no canto inferior
-            esquerdo · limites {fmtMm(pageWidthMm)} × {fmtMm(pageHeightMm)} mm
+            Clique nas réguas para criar guias (
+            {createScope === "all" ? "todas as páginas" : "página atual"}) ·
+            origem inferior esquerda · {fmtMm(pageWidthMm)} ×{" "}
+            {fmtMm(pageHeightMm)} mm
           </span>
         )}
       </div>

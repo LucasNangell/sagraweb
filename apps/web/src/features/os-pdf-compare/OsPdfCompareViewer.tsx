@@ -103,7 +103,6 @@ export function OsPdfCompareViewer({
 
   useEffect(() => {
     setZoom(1);
-    setGuides([]);
     if (page?.width && page?.height) {
       setNaturalSize({ w: page.width, h: page.height });
     } else {
@@ -328,6 +327,7 @@ export function OsPdfCompareViewer({
               displayWidth={imgW}
               displayHeight={imgH}
               dpi={dpi}
+              pageIndex={pageIndex}
               guides={guides}
               onGuidesChange={setGuides}
             >

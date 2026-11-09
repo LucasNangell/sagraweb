@@ -75,6 +75,7 @@ export const homeTestIds = {
   osFiltersSp: "os-filters-sp",
   osFiltersCreate: "os-filters-create",
   osFiltersSaved: "os-filters-saved",
+  osFiltersBackToDefault: "os-filters-back-to-default",
   osFiltersNrOs: "os-filters-nr-os",
   osFiltersProcesso: "os-filters-processo",
   osFiltersTitulo: "os-filters-titulo",

@@ -148,6 +148,64 @@ describe("OsFiltersPanel save current filters", () => {
   });
 });
 
+describe("OsFiltersPanel voltar ao padrão", () => {
+  const savedFilters = [
+    {
+      id: 1,
+      nome: "Meu padrão",
+      situacoes: [],
+      setores: [],
+      is_default: true,
+    },
+    {
+      id: 2,
+      nome: "Outro",
+      situacoes: ["Em Execução"],
+      setores: [],
+      is_default: false,
+    },
+  ];
+
+  beforeEach(() => {
+    categoriasLookup.data = [];
+    categoriasLookup.isLoading = false;
+    useOsFiltersStore.setState({
+      filters: defaultOsFilters(),
+      globalSearch: "",
+      filtersExpanded: true,
+    });
+  });
+
+  it("oculta o botão quando o filtro selecionado já é o padrão", () => {
+    renderPanel(vi.fn(), vi.fn(), {
+      savedFilters,
+      savedFilterId: "1",
+    });
+    expect(
+      screen.queryByTestId("os-filters-back-to-default"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("mostra o botão e aplica o filtro padrão quando outro está selecionado", () => {
+    const onSavedFilterChange = vi.fn();
+    renderPanel(vi.fn(), vi.fn(), {
+      savedFilters,
+      savedFilterId: "2",
+      onSavedFilterChange,
+    });
+    fireEvent.click(screen.getByTestId("os-filters-back-to-default"));
+    expect(onSavedFilterChange).toHaveBeenCalledWith("1");
+  });
+
+  it("mostra o botão quando nenhum filtro salvo está selecionado", () => {
+    renderPanel(vi.fn(), vi.fn(), {
+      savedFilters,
+      savedFilterId: "",
+    });
+    expect(screen.getByTestId("os-filters-back-to-default")).toBeInTheDocument();
+  });
+});
+
 describe("OsFiltersPanel categoria lookup", () => {
   beforeEach(() => {
     categoriasLookup.data = [];

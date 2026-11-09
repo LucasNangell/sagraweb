@@ -109,6 +109,14 @@ export function OsFiltersPanel({
 
   const anosAsStrings = (filters.anos ?? []).map(String);
 
+  const defaultSavedFilter = useMemo(
+    () => savedFilters.find((f) => f.is_default) ?? null,
+    [savedFilters],
+  );
+  const showBackToDefault =
+    defaultSavedFilter != null &&
+    String(defaultSavedFilter.id) !== savedFilterId;
+
   return (
     <section className="@container/os-filters relative z-30 shrink-0 overflow-visible rounded-lg border border-sagra-border border-t-4 border-t-secondary-blue bg-white shadow-sm">
       <div className="flex items-center justify-between gap-2 border-b border-sagra-border px-3 py-2 md:hidden">
@@ -198,6 +206,19 @@ export function OsFiltersPanel({
                 </option>
               ))}
             </select>
+            {showBackToDefault ? (
+              <button
+                type="button"
+                title={`Voltar ao filtro padrão: ${defaultSavedFilter.nome}`}
+                onClick={() =>
+                  onSavedFilterChange(String(defaultSavedFilter.id))
+                }
+                className="sagra-btn sagra-btn--outline sagra-btn--sm h-8 w-full"
+                data-testid={homeTestIds.osFiltersBackToDefault}
+              >
+                <span className="text-xs font-medium">Voltar ao padrão</span>
+              </button>
+            ) : null}
           </div>
 
           <div className="os-filter-group-grid flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap">

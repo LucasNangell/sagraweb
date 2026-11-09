@@ -1,9 +1,10 @@
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type PointerEvent,
+  type SyntheticEvent,
   type WheelEvent,
 } from "react";
 
@@ -74,18 +75,22 @@ export function OsPdfCompareViewer({
   currentName = null,
 }: OsPdfCompareViewerProps) {
   const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [flickerShowB, setFlickerShowB] = useState(false);
-  const dragRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(
-    null,
-  );
+  const [fitScale, setFitScale] = useState(1);
+  const [naturalSize, setNaturalSize] = useState({ w: 0, h: 0 });
+  const viewportRef = useRef<HTMLDivElement | null>(null);
 
   const page = pages.find((p) => p.index === pageIndex) || pages[0] || null;
+  const isZoomed = zoom > 1.001;
 
   useEffect(() => {
     setZoom(1);
-    setPan({ x: 0, y: 0 });
-  }, [pageIndex]);
+    if (page?.width && page?.height) {
+      setNaturalSize({ w: page.width, h: page.height });
+    } else {
+      setNaturalSize({ w: 0, h: 0 });
+    }
+  }, [page, pageIndex, viewMode]);
 
   useEffect(() => {
     if (viewMode !== "flicker") return;
@@ -102,46 +107,72 @@ export function OsPdfCompareViewer({
     return pageImageUrl(page, viewMode);
   }, [page, viewMode, flickerShowB]);
 
+  const contentSize = useMemo(() => {
+    if (!naturalSize.w || !naturalSize.h) return { w: 0, h: 0 };
+    if (viewMode === "side") {
+      const gap = 12;
+      const caption = 18;
+      return {
+        w: naturalSize.w * 2 + gap,
+        h: naturalSize.h + caption,
+      };
+    }
+    return naturalSize;
+  }, [naturalSize, viewMode]);
+
+  useLayoutEffect(() => {
+    const el = viewportRef.current;
+    if (!el || !contentSize.w || !contentSize.h) return;
+
+    const measure = () => {
+      const pad = 8;
+      const availW = Math.max(1, el.clientWidth - pad);
+      const availH = Math.max(1, el.clientHeight - pad);
+      const next = Math.min(availW / contentSize.w, availH / contentSize.h);
+      setFitScale(Number(Math.max(0.05, next).toFixed(4)));
+    };
+
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [contentSize.h, contentSize.w]);
+
+  function onImageLoad(e: SyntheticEvent<HTMLImageElement>) {
+    const img = e.currentTarget;
+    if (!img.naturalWidth || !img.naturalHeight) return;
+    setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
+  }
+
   function onWheel(e: WheelEvent<HTMLDivElement>) {
-    // Zoom só com Ctrl/Cmd; sem modificador deixa o scroll nativo da área.
-    if (!e.ctrlKey && !e.metaKey) return;
+    if (!e.ctrlKey && !e.metaKey) {
+      if (!isZoomed) e.preventDefault();
+      return;
+    }
     e.preventDefault();
     const factor = e.deltaY < 0 ? 1.1 : 0.9;
-    setZoom((z) => Math.min(8, Math.max(0.2, Number((z * factor).toFixed(3)))));
-  }
-
-  function onPointerDown(e: PointerEvent<HTMLDivElement>) {
-    if (e.button !== 0) return;
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-    dragRef.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
-  }
-
-  function onPointerMove(e: PointerEvent<HTMLDivElement>) {
-    if (!dragRef.current) return;
-    setPan({
-      x: dragRef.current.panX + (e.clientX - dragRef.current.x),
-      y: dragRef.current.panY + (e.clientY - dragRef.current.y),
-    });
-  }
-
-  function onPointerUp() {
-    dragRef.current = null;
+    setZoom((z) => Math.min(8, Math.max(1, Number((z * factor).toFixed(3)))));
   }
 
   function fitZoom() {
     setZoom(1);
-    setPan({ x: 0, y: 0 });
   }
 
   function changeMode(mode: ViewMode) {
     onViewModeChange(mode);
     setFlickerShowB(false);
-    setPan({ x: 0, y: 0 });
+    setZoom(1);
   }
 
   if (!page) {
     return <div className="os-pdf-viewer-empty">Sem páginas para exibir.</div>;
   }
+
+  const displayScale = fitScale * zoom;
+  const imgW = naturalSize.w ? naturalSize.w * displayScale : undefined;
+  const imgH = naturalSize.h ? naturalSize.h * displayScale : undefined;
+  const stageW = contentSize.w ? contentSize.w * displayScale : undefined;
+  const stageH = contentSize.h ? contentSize.h * displayScale : undefined;
 
   return (
     <div className="os-pdf-viewer">
@@ -166,10 +197,16 @@ export function OsPdfCompareViewer({
           ))}
         </div>
         <div className="os-pdf-zoom">
-          <button type="button" onClick={() => setZoom((z) => Math.min(8, z * 1.15))}>
+          <button
+            type="button"
+            onClick={() => setZoom((z) => Math.min(8, Number((z * 1.15).toFixed(3))))}
+          >
             +
           </button>
-          <button type="button" onClick={() => setZoom((z) => Math.max(0.2, z / 1.15))}>
+          <button
+            type="button"
+            onClick={() => setZoom((z) => Math.max(1, Number((z / 1.15).toFixed(3))))}
+          >
             −
           </button>
           <button type="button" onClick={fitZoom}>
@@ -180,6 +217,65 @@ export function OsPdfCompareViewer({
         <div className="os-pdf-page-meta">
           Página {page.pageNumber} · {fmtPct(page.changedPercent)} ·{" "}
           {page.boxes?.length ?? 0} regiões
+        </div>
+      </div>
+
+      <div
+        ref={viewportRef}
+        className={
+          "os-pdf-viewport" + (isZoomed ? " is-zoomed" : " is-fitted")
+        }
+        onWheel={onWheel}
+      >
+        <div
+          className="os-pdf-stage"
+          style={{
+            width: stageW,
+            height: stageH,
+          }}
+        >
+          {viewMode === "side" ? (
+            <div className="os-pdf-side" style={{ width: stageW, height: stageH }}>
+              <figure>
+                <figcaption>Anterior</figcaption>
+                {pageImageUrl(page, "previous") ? (
+                  <img
+                    src={pageImageUrl(page, "previous")!}
+                    alt="Anterior"
+                    onLoad={onImageLoad}
+                    style={{ width: imgW, height: imgH }}
+                  />
+                ) : null}
+              </figure>
+              <figure>
+                <figcaption>Atual</figcaption>
+                {pageImageUrl(page, "current") ? (
+                  <img
+                    src={pageImageUrl(page, "current")!}
+                    alt="Atual"
+                    style={{ width: imgW, height: imgH }}
+                  />
+                ) : null}
+              </figure>
+            </div>
+          ) : (
+            <div className="os-pdf-main">
+              {viewMode === "flicker" && (
+                <span className="os-pdf-flicker-tag">
+                  {flickerShowB ? "Atual" : "Anterior"}
+                </span>
+              )}
+              {mainUrl ? (
+                <img
+                  src={mainUrl}
+                  alt="Comparação"
+                  draggable={false}
+                  onLoad={onImageLoad}
+                  style={{ width: imgW, height: imgH }}
+                />
+              ) : null}
+            </div>
+          )}
         </div>
       </div>
 
@@ -204,48 +300,6 @@ export function OsPdfCompareViewer({
               {item.label}
             </span>
           ))}
-        </div>
-      </div>
-
-      <div
-        className="os-pdf-viewport"
-        onWheel={onWheel}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-      >
-        <div
-          className="os-pdf-stage"
-          style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-          }}
-        >
-          {viewMode === "side" ? (
-            <div className="os-pdf-side">
-              <figure>
-                <figcaption>Anterior</figcaption>
-                {pageImageUrl(page, "previous") ? (
-                  <img src={pageImageUrl(page, "previous")!} alt="Anterior" />
-                ) : null}
-              </figure>
-              <figure>
-                <figcaption>Atual</figcaption>
-                {pageImageUrl(page, "current") ? (
-                  <img src={pageImageUrl(page, "current")!} alt="Atual" />
-                ) : null}
-              </figure>
-            </div>
-          ) : (
-            <div className="os-pdf-main">
-              {viewMode === "flicker" && (
-                <span className="os-pdf-flicker-tag">
-                  {flickerShowB ? "Atual" : "Anterior"}
-                </span>
-              )}
-              {mainUrl ? <img src={mainUrl} alt="Comparação" draggable={false} /> : null}
-            </div>
-          )}
         </div>
       </div>
     </div>

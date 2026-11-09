@@ -9,6 +9,10 @@ import {
 } from "react";
 
 import { pdfCompareAssetUrl } from "./api";
+import {
+  OsPdfCompareRulers,
+  type GuideLine,
+} from "./OsPdfCompareRulers";
 import type { ComparePage, ViewMode } from "./types";
 
 interface OsPdfCompareViewerProps {
@@ -19,7 +23,12 @@ interface OsPdfCompareViewerProps {
   previousName?: string | null;
   currentName?: string | null;
   changedPages?: number;
+  dpi?: number;
 }
+
+const RULER_CHROME_X = 28;
+const RULER_CHROME_Y = 28;
+const GUIDE_EDITOR_H = 34;
 
 function modeLegend(mode: ViewMode): { swatch: string; label: string }[] {
   switch (mode) {
@@ -79,24 +88,32 @@ export function OsPdfCompareViewer({
   previousName = null,
   currentName = null,
   changedPages = 0,
+  dpi = 150,
 }: OsPdfCompareViewerProps) {
   const [zoom, setZoom] = useState(1);
   const [flickerShowB, setFlickerShowB] = useState(false);
   const [fitScale, setFitScale] = useState(1);
   const [naturalSize, setNaturalSize] = useState({ w: 0, h: 0 });
+  const [guides, setGuides] = useState<GuideLine[]>([]);
   const viewportRef = useRef<HTMLDivElement | null>(null);
 
   const page = pages.find((p) => p.index === pageIndex) || pages[0] || null;
   const isZoomed = zoom > 1.001;
+  const showRulers = viewMode !== "side";
 
   useEffect(() => {
     setZoom(1);
+    setGuides([]);
     if (page?.width && page?.height) {
       setNaturalSize({ w: page.width, h: page.height });
     } else {
       setNaturalSize({ w: 0, h: 0 });
     }
-  }, [page, pageIndex, viewMode]);
+  }, [page, pageIndex]);
+
+  useEffect(() => {
+    setZoom(1);
+  }, [viewMode]);
 
   useEffect(() => {
     if (viewMode !== "flicker") return;
@@ -136,8 +153,10 @@ export function OsPdfCompareViewer({
 
     const measure = () => {
       const pad = 8;
-      const availW = Math.max(1, el.clientWidth - pad);
-      const availH = Math.max(1, el.clientHeight - pad);
+      const chromeX = showRulers ? RULER_CHROME_X : 0;
+      const chromeY = showRulers ? RULER_CHROME_Y + GUIDE_EDITOR_H : 0;
+      const availW = Math.max(1, el.clientWidth - pad - chromeX);
+      const availH = Math.max(1, el.clientHeight - pad - chromeY);
       const next = Math.min(availW / contentSize.w, availH / contentSize.h);
       setFitScale(Number(Math.max(0.05, next).toFixed(4)));
     };
@@ -146,7 +165,7 @@ export function OsPdfCompareViewer({
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [contentSize.h, contentSize.w]);
+  }, [contentSize.h, contentSize.w, showRulers]);
 
   function onImageLoad(e: SyntheticEvent<HTMLImageElement>) {
     const img = e.currentTarget;
@@ -179,10 +198,61 @@ export function OsPdfCompareViewer({
   }
 
   const displayScale = fitScale * zoom;
-  const imgW = naturalSize.w ? naturalSize.w * displayScale : undefined;
-  const imgH = naturalSize.h ? naturalSize.h * displayScale : undefined;
-  const stageW = contentSize.w ? contentSize.w * displayScale : undefined;
-  const stageH = contentSize.h ? contentSize.h * displayScale : undefined;
+  const imgW = naturalSize.w ? naturalSize.w * displayScale : 0;
+  const imgH = naturalSize.h ? naturalSize.h * displayScale : 0;
+  const stageW = contentSize.w ? contentSize.w * displayScale : 0;
+  const stageH = contentSize.h ? contentSize.h * displayScale : 0;
+
+  const pageBody = viewMode === "side" ? (
+    <div className="os-pdf-side" style={{ width: stageW || undefined, height: stageH || undefined }}>
+      <figure>
+        <figcaption>Anterior</figcaption>
+        {pageImageUrl(page, "previous") ? (
+          <img
+            src={pageImageUrl(page, "previous")!}
+            alt="Anterior"
+            onLoad={onImageLoad}
+            style={{ width: imgW || undefined, height: imgH || undefined }}
+          />
+        ) : null}
+      </figure>
+      <figure>
+        <figcaption>Atual</figcaption>
+        {pageImageUrl(page, "current") ? (
+          <img
+            src={pageImageUrl(page, "current")!}
+            alt="Atual"
+            style={{ width: imgW || undefined, height: imgH || undefined }}
+          />
+        ) : null}
+      </figure>
+    </div>
+  ) : (
+    <div className="os-pdf-main">
+      {(viewMode === "flicker" ||
+        viewMode === "previous" ||
+        viewMode === "current") && (
+        <span className="os-pdf-flicker-tag">
+          {viewMode === "previous"
+            ? "Anterior"
+            : viewMode === "current"
+              ? "Atual"
+              : flickerShowB
+                ? "Atual"
+                : "Anterior"}
+        </span>
+      )}
+      {mainUrl ? (
+        <img
+          src={mainUrl}
+          alt="Comparação"
+          draggable={false}
+          onLoad={onImageLoad}
+          style={{ width: imgW || undefined, height: imgH || undefined }}
+        />
+      ) : null}
+    </div>
+  );
 
   return (
     <div className="os-pdf-viewer">
@@ -250,62 +320,21 @@ export function OsPdfCompareViewer({
         }
         onWheel={onWheel}
       >
-        <div
-          className="os-pdf-stage"
-          style={{
-            width: stageW,
-            height: stageH,
-          }}
-        >
-          {viewMode === "side" ? (
-            <div className="os-pdf-side" style={{ width: stageW, height: stageH }}>
-              <figure>
-                <figcaption>Anterior</figcaption>
-                {pageImageUrl(page, "previous") ? (
-                  <img
-                    src={pageImageUrl(page, "previous")!}
-                    alt="Anterior"
-                    onLoad={onImageLoad}
-                    style={{ width: imgW, height: imgH }}
-                  />
-                ) : null}
-              </figure>
-              <figure>
-                <figcaption>Atual</figcaption>
-                {pageImageUrl(page, "current") ? (
-                  <img
-                    src={pageImageUrl(page, "current")!}
-                    alt="Atual"
-                    style={{ width: imgW, height: imgH }}
-                  />
-                ) : null}
-              </figure>
-            </div>
+        <div className="os-pdf-stage">
+          {showRulers && imgW > 0 && imgH > 0 ? (
+            <OsPdfCompareRulers
+              pageWidthPx={naturalSize.w}
+              pageHeightPx={naturalSize.h}
+              displayWidth={imgW}
+              displayHeight={imgH}
+              dpi={dpi}
+              guides={guides}
+              onGuidesChange={setGuides}
+            >
+              {pageBody}
+            </OsPdfCompareRulers>
           ) : (
-            <div className="os-pdf-main">
-              {(viewMode === "flicker" ||
-                viewMode === "previous" ||
-                viewMode === "current") && (
-                <span className="os-pdf-flicker-tag">
-                  {viewMode === "previous"
-                    ? "Anterior"
-                    : viewMode === "current"
-                      ? "Atual"
-                      : flickerShowB
-                        ? "Atual"
-                        : "Anterior"}
-                </span>
-              )}
-              {mainUrl ? (
-                <img
-                  src={mainUrl}
-                  alt="Comparação"
-                  draggable={false}
-                  onLoad={onImageLoad}
-                  style={{ width: imgW, height: imgH }}
-                />
-              ) : null}
-            </div>
+            pageBody
           )}
         </div>
       </div>

@@ -394,6 +394,7 @@ export function OsPdfComparePage({
               previousName={previousName || result.previousName}
               currentName={currentName || result.currentName}
               changedPages={result.changedPages}
+              dpi={result.dpi}
             />
           ) : (
             <div className="os-pdf-viewer-empty">

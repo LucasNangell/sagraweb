@@ -708,6 +708,241 @@
   margin: 0.5rem;
 }
 
+.os-pdf-ruler-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.os-pdf-ruler-frame {
+  display: grid;
+  grid-template-columns: var(--ruler-size, 28px) 1fr;
+  grid-template-rows: var(--ruler-size, 28px) 1fr;
+  background: #edf2ef;
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 12%);
+  user-select: none;
+}
+
+.os-pdf-ruler-corner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e3ebe7;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.os-pdf-ruler {
+  position: relative;
+  overflow: hidden;
+  background: #f4f8f6;
+  cursor: crosshair;
+}
+
+.os-pdf-ruler-h {
+  border-bottom: 1px solid var(--line);
+}
+
+.os-pdf-ruler-v {
+  border-right: 1px solid var(--line);
+}
+
+.os-pdf-ruler-limit-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgb(15 110 86 / 8%);
+  pointer-events: none;
+}
+
+.os-pdf-ruler-limit-band.vertical {
+  top: auto;
+  left: 0;
+  right: 0;
+}
+
+.os-pdf-ruler-tick {
+  position: absolute;
+  pointer-events: none;
+}
+
+.os-pdf-ruler-h .os-pdf-ruler-tick {
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1px solid #9bb0a6;
+}
+
+.os-pdf-ruler-h .os-pdf-ruler-tick.major {
+  border-left-color: #456257;
+}
+
+.os-pdf-ruler-h .os-pdf-ruler-tick.limit {
+  border-left: 2px solid var(--accent);
+}
+
+.os-pdf-ruler-h .os-pdf-ruler-tick em {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  font-style: normal;
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: #456257;
+  white-space: nowrap;
+}
+
+.os-pdf-ruler-v .os-pdf-ruler-tick {
+  left: 0;
+  right: 0;
+  height: 0;
+  border-bottom: 1px solid #9bb0a6;
+}
+
+.os-pdf-ruler-v .os-pdf-ruler-tick.major {
+  border-bottom-color: #456257;
+}
+
+.os-pdf-ruler-v .os-pdf-ruler-tick.limit {
+  border-bottom: 2px solid var(--accent);
+}
+
+.os-pdf-ruler-v .os-pdf-ruler-tick em {
+  position: absolute;
+  left: 2px;
+  bottom: 2px;
+  font-style: normal;
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: #456257;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  white-space: nowrap;
+}
+
+.os-pdf-ruler-content {
+  position: relative;
+  overflow: hidden;
+  background: #fff;
+}
+
+.os-pdf-ruler-content .os-pdf-main,
+.os-pdf-ruler-content .os-pdf-side {
+  width: 100%;
+  height: 100%;
+}
+
+.os-pdf-ruler-content .os-pdf-main img {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none;
+  box-shadow: none;
+}
+
+.os-pdf-guide {
+  position: absolute;
+  z-index: 5;
+  pointer-events: auto;
+}
+
+.os-pdf-guide.vertical {
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1px solid #ff6a00;
+  cursor: ew-resize;
+}
+
+.os-pdf-guide.horizontal {
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px solid #ff6a00;
+  cursor: ns-resize;
+}
+
+.os-pdf-guide.selected {
+  border-color: #d50000;
+}
+
+.os-pdf-guide-label {
+  position: absolute;
+  background: #ff6a00;
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.05rem 0.25rem;
+  border-radius: 3px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.os-pdf-guide.vertical .os-pdf-guide-label {
+  top: 4px;
+  left: 3px;
+}
+
+.os-pdf-guide.horizontal .os-pdf-guide-label {
+  left: 4px;
+  top: 3px;
+}
+
+.os-pdf-guide.selected .os-pdf-guide-label {
+  background: #d50000;
+}
+
+.os-pdf-guide-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 0.75rem;
+  color: var(--ink);
+}
+
+.os-pdf-guide-editor.idle {
+  color: var(--muted);
+}
+
+.os-pdf-guide-editor label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+
+.os-pdf-guide-editor input {
+  width: 5.5rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.2rem 0.35rem;
+  font-size: 0.78rem;
+}
+
+.os-pdf-guide-editor button {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.os-pdf-guide-editor-meta {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
 .os-pdf-main,
 .os-pdf-side {
   position: relative;

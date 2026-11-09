@@ -83,6 +83,19 @@ export function OsPdfCompareViewer({
     setZoom((z) => Math.min(8, Math.max(0.2, Number((z * factor).toFixed(3)))));
   }
 
+  function onThumbsWheel(e: WheelEvent<HTMLDivElement>) {
+    const el = e.currentTarget;
+    const delta =
+      Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (delta === 0) return;
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    if (maxScroll <= 0) return;
+    const next = Math.min(maxScroll, Math.max(0, el.scrollLeft + delta));
+    if (next === el.scrollLeft) return;
+    e.preventDefault();
+    el.scrollLeft = next;
+  }
+
   function onPointerDown(e: PointerEvent<HTMLDivElement>) {
     if (e.button !== 0) return;
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
@@ -118,7 +131,7 @@ export function OsPdfCompareViewer({
 
   return (
     <div className="os-pdf-viewer">
-      <div className="os-pdf-thumbs">
+      <div className="os-pdf-thumbs" onWheel={onThumbsWheel}>
         {pages.map((p) => {
           const thumb = pdfCompareAssetUrl(p.urls.thumb);
           return (

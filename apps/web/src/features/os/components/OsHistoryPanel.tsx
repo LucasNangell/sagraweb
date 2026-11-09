@@ -1048,7 +1048,7 @@ export function OsHistoryPanel({
                     </p>
                   ) : null}
 
-                  <div className="grid shrink-0 grid-cols-1 gap-1.5 sm:grid-cols-3">
+                  <div className="grid shrink-0 grid-cols-1 gap-1.5 sm:grid-cols-3 portrait:sm:grid-cols-2">
                     <label className="min-w-0 text-xs" data-tour="os-history-situacao" data-testid={homeTestIds.osHistorySituacao}>
                       <span className="font-semibold text-neutral-600">Andamento</span>
                       <select
@@ -1085,7 +1085,7 @@ export function OsHistoryPanel({
                         ))}
                       </select>
                     </label>
-                    <label className="min-w-0 text-xs" data-tour="os-history-ponto" data-testid={homeTestIds.osHistoryPonto}>
+                    <label className="min-w-0 text-xs portrait:sm:col-span-2" data-tour="os-history-ponto" data-testid={homeTestIds.osHistoryPonto}>
                       <span className="font-semibold text-neutral-600">Ponto</span>
                       <input
                         type="text"

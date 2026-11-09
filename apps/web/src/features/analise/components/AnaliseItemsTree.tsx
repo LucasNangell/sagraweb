@@ -62,6 +62,11 @@ interface AnaliseItemsTreeProps {
     targetComponent: string,
     versionKey: string,
   ) => void;
+  /** Modo seleção de PDFs para o comparador de versões. */
+  compareMode?: boolean;
+  /** Paths absolutos selecionados: [anterior, atual]. */
+  compareSelectedPaths?: [string | null, string | null];
+  onToggleCompareFile?: (file: { name: string; path: string }) => void;
   togglingItemId?: number;
   togglingCorrigirItemId?: number;
   deletingItemId?: number;
@@ -88,6 +93,9 @@ export function AnaliseItemsTree({
   onObsChange,
   onOpenVersionFile,
   onMoveItemToComponent,
+  compareMode = false,
+  compareSelectedPaths = [null, null],
+  onToggleCompareFile,
   togglingItemId,
   togglingCorrigirItemId,
   deletingItemId,
@@ -265,6 +273,15 @@ export function AnaliseItemsTree({
                                 key={pdfFile.path || pdfFile.name}
                                 file={pdfFile}
                                 onOpen={onOpenVersionFile}
+                                compareMode={compareMode}
+                                compareSlot={
+                                  compareSelectedPaths[0] === pdfFile.path
+                                    ? "A"
+                                    : compareSelectedPaths[1] === pdfFile.path
+                                      ? "B"
+                                      : null
+                                }
+                                onToggleCompare={onToggleCompareFile}
                               />
                             ),
                           )}
@@ -344,9 +361,15 @@ function VersionPdfAbsentRow({ componente }: { componente: string }) {
 function VersionPdfOpenRow({
   file,
   onOpen,
+  compareMode = false,
+  compareSlot = null,
+  onToggleCompare,
 }: {
   file: VersionPdfFile;
   onOpen?: (componente: AnaliseComponente) => void;
+  compareMode?: boolean;
+  compareSlot?: "A" | "B" | null;
+  onToggleCompare?: (file: { name: string; path: string }) => void;
 }) {
   const handleOpen = async () => {
     onOpen?.(file.componente);
@@ -355,6 +378,48 @@ function VersionPdfOpenRow({
       toast.error(`Não foi possível abrir o arquivo localmente.\n\nVerifique se o serviço SAGRA Folder Opener está em execução.\n\n${file.name}`,);
     }
   };
+
+  if (compareMode) {
+    return (
+      <div
+        className={cn(
+          "border-b border-slate-100 py-1.5 pl-8 pr-3",
+          compareSlot === "A" && "bg-blue-50",
+          compareSlot === "B" && "bg-pink-50",
+          !compareSlot && "bg-white",
+        )}
+      >
+        <button
+          type="button"
+          onClick={() => onToggleCompare?.({ name: file.name, path: file.path })}
+          title={`Selecionar ${file.name} para comparação`}
+          className={cn(
+            "inline-flex max-w-full items-center gap-1.5 rounded border px-2 py-1 text-[11px] font-medium",
+            compareSlot
+              ? "border-secondary-blue bg-white text-slate-800"
+              : "border-dashed border-slate-400 bg-white text-slate-700 hover:bg-slate-50",
+          )}
+        >
+          {compareSlot ? (
+            <span
+              className={cn(
+                "inline-flex size-4 shrink-0 items-center justify-center rounded text-[9px] font-bold text-white",
+                compareSlot === "A" ? "bg-blue-600" : "bg-pink-600",
+              )}
+            >
+              {compareSlot}
+            </span>
+          ) : (
+            <span className="inline-flex size-4 shrink-0 items-center justify-center rounded border border-slate-300 text-[9px] text-slate-400">
+              +
+            </span>
+          )}
+          <span className="truncate">{file.name}</span>
+          <span className="tabular-nums text-slate-500">({file.pages} pág.)</span>
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="border-b border-slate-100 bg-white py-1.5 pl-8 pr-3">

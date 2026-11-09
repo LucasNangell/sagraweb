@@ -8,6 +8,7 @@ import {
   ListChecks,
   Loader2,
   Copy,
+  GitCompareArrows,
   PenSquare,
   Plus,
   RefreshCw,
@@ -48,10 +49,16 @@ import {
 } from "@/api/preAnalise";
 import { queryKeys } from "@/api/query-keys";
 import { useAuthStore } from "@/features/auth/authStore";
+import { useAccessControl } from "@/features/auth/useAccessControl";
 import {
   silentRefreshOsPanels,
   silentRefreshOsSearch,
 } from "@/features/os/osRealtimeSync";
+import {
+  absoluteToOsRelative,
+  openCompareVersoesTab,
+  parentDir,
+} from "../compareVersionsPath";
 import type {
   AnaliseComponente,
   AnaliseSearchParams,
@@ -143,8 +150,10 @@ export function AnalisePage({ search }: AnalisePageProps) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const { can } = useAccessControl();
   const ponto = user?.ponto != null ? String(user.ponto) : "";
   const userSetor = user?.setor;
+  const canCompareVersoes = can("ctx_comparar_versoes");
 
   const osId = search.id ? parseInt(search.id, 10) : NaN;
   const ano = search.ano ? parseInt(search.ano, 10) : NaN;
@@ -202,6 +211,10 @@ export function AnalisePage({ search }: AnalisePageProps) {
   const [mobilePanel, setMobilePanel] = useState<"library" | "items" | "preview">(
     "items",
   );
+  const [compareSelecting, setCompareSelecting] = useState(false);
+  const [compareSlots, setCompareSlots] = useState<
+    [{ name: string; path: string } | null, { name: string; path: string } | null]
+  >([null, null]);
 
   const updateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const correcaoObsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -219,6 +232,8 @@ export function AnalisePage({ search }: AnalisePageProps) {
     setPageDivergenceModalOpen(false);
     setCapaMioloChoiceByVersion({});
     setVersaoKey("");
+    setCompareSelecting(false);
+    setCompareSlots([null, null]);
   }, [ano, osId]);
 
   const libraryQuery = useQuery({
@@ -552,6 +567,55 @@ export function AnalisePage({ search }: AnalisePageProps) {
     setCreatingNewItem(false);
     setMobilePanel("preview");
   }, []);
+
+  const osRootPath = useMemo(() => {
+    const first = osVersions[0]?.path;
+    return first ? parentDir(first) : null;
+  }, [osVersions]);
+
+  const cancelCompareSelection = useCallback(() => {
+    setCompareSelecting(false);
+    setCompareSlots([null, null]);
+  }, []);
+
+  const toggleCompareFile = useCallback((file: { name: string; path: string }) => {
+    setCompareSlots(([a, b]) => {
+      if (a?.path === file.path) return [b, null];
+      if (b?.path === file.path) return [a, null];
+      if (!a) return [file, b];
+      if (!b) return [a, file];
+      toast.warning("Já há 2 PDFs selecionados. Remova um antes de escolher outro.");
+      return [a, b];
+    });
+  }, []);
+
+  const handleCompareVersoesClick = useCallback(() => {
+    if (!compareSelecting) {
+      setCompareSelecting(true);
+      setCompareSlots([null, null]);
+      toast.success("Selecione 2 PDFs na lista de versões para comparar.");
+      return;
+    }
+    const [a, b] = compareSlots;
+    if (!a || !b) {
+      toast.warning("Selecione 2 PDFs na lista de versões.");
+      return;
+    }
+    if (!osRootPath) {
+      toast.error("Pasta da OS não encontrada para montar os caminhos.");
+      return;
+    }
+    const previous = absoluteToOsRelative(a.path, osRootPath);
+    const current = absoluteToOsRelative(b.path, osRootPath);
+    if (!previous || !current) {
+      toast.error(
+        "Não foi possível converter o caminho dos PDFs para a pasta da OS.",
+      );
+      return;
+    }
+    openCompareVersoesTab(ano, osId, previous, current);
+    cancelCompareSelection();
+  }, [ano, cancelCompareSelection, compareSelecting, compareSlots, osId, osRootPath]);
 
   useEffect(() => {
     if (!preAnalisePanelActive || preAnaliseRunningRef.current || !versionsQuery.isSuccess) return;
@@ -1572,12 +1636,53 @@ export function AnalisePage({ search }: AnalisePageProps) {
               onMoveItemToComponent={(itemId, targetComponent, versionKey) => {
                 void handleMoveItemToComponent(itemId, targetComponent, versionKey);
               }}
+              compareMode={compareSelecting}
+              compareSelectedPaths={[
+                compareSlots[0]?.path ?? null,
+                compareSlots[1]?.path ?? null,
+              ]}
+              onToggleCompareFile={toggleCompareFile}
               togglingItemId={togglingItemId ?? undefined}
               togglingCorrigirItemId={togglingCorrigirItemId ?? undefined}
               deletingItemId={deletingItemId ?? undefined}
               readOnly={readOnlyMode}
             />
           </div>
+          {canCompareVersoes ? (
+            <div className="flex shrink-0 flex-col gap-1.5 border-t border-slate-200 bg-white px-2.5 py-2">
+              {compareSelecting ? (
+                <p className="text-[11px] text-slate-600">
+                  {compareSlots[0] && compareSlots[1]
+                    ? `A: ${compareSlots[0].name} · B: ${compareSlots[1].name}`
+                    : "Selecione 2 PDFs na lista de versões (A = anterior, B = atual)."}
+                </p>
+              ) : null}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCompareVersoesClick}
+                  disabled={
+                    compareSelecting && (!compareSlots[0] || !compareSlots[1])
+                  }
+                  className="inline-flex items-center gap-1.5 rounded border border-secondary-blue bg-secondary-blue px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <GitCompareArrows className="size-3.5" aria-hidden />
+                  {compareSelecting && compareSlots[0] && compareSlots[1]
+                    ? "Comparar"
+                    : "Comparar versões"}
+                </button>
+                {compareSelecting ? (
+                  <button
+                    type="button"
+                    onClick={cancelCompareSelection}
+                    className="rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Cancelar
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           <div className="flex shrink-0 flex-col border-t-2 border-slate-200 bg-[#f8f9fa] max-md:overflow-visible md:min-h-0 md:flex-1 md:overflow-hidden">
             <header className="flex shrink-0 items-center gap-2 border-b border-slate-300 bg-[#e9ecef] px-2.5 py-1.5 text-xs font-bold text-slate-600">
               <Info className="size-3.5" />

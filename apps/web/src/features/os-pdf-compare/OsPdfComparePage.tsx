@@ -17,6 +17,9 @@ import "./os-pdf-compare.css";
 interface OsPdfComparePageProps {
   ano: number;
   osId: number;
+  initialPreviousRelative?: string | null;
+  initialCurrentRelative?: string | null;
+  autoStart?: boolean;
 }
 
 const DEFAULT_OPTIONS: CompareOptions = {
@@ -24,6 +27,11 @@ const DEFAULT_OPTIONS: CompareOptions = {
   threshold: 16,
   includeUnchangedInReport: false,
 };
+
+function fileNameFromRelative(relative: string): string {
+  const parts = relative.replace(/\\/g, "/").split("/").filter(Boolean);
+  return parts[parts.length - 1] || relative;
+}
 
 function firstInterestingPage(pages: CompareResult["pages"]): number {
   if (!pages?.length) return 0;
@@ -33,11 +41,25 @@ function firstInterestingPage(pages: CompareResult["pages"]): number {
   return hit ? hit.index : 0;
 }
 
-export function OsPdfComparePage({ ano, osId }: OsPdfComparePageProps) {
-  const [previousRelative, setPreviousRelative] = useState<string | null>(null);
-  const [currentRelative, setCurrentRelative] = useState<string | null>(null);
-  const [previousName, setPreviousName] = useState<string | null>(null);
-  const [currentName, setCurrentName] = useState<string | null>(null);
+export function OsPdfComparePage({
+  ano,
+  osId,
+  initialPreviousRelative = null,
+  initialCurrentRelative = null,
+  autoStart = false,
+}: OsPdfComparePageProps) {
+  const [previousRelative, setPreviousRelative] = useState<string | null>(
+    initialPreviousRelative,
+  );
+  const [currentRelative, setCurrentRelative] = useState<string | null>(
+    initialCurrentRelative,
+  );
+  const [previousName, setPreviousName] = useState<string | null>(
+    initialPreviousRelative ? fileNameFromRelative(initialPreviousRelative) : null,
+  );
+  const [currentName, setCurrentName] = useState<string | null>(
+    initialCurrentRelative ? fileNameFromRelative(initialCurrentRelative) : null,
+  );
   const [assignSlot, setAssignSlot] = useState<AssignSlot>("previous");
   const [options, setOptions] = useState<CompareOptions>(DEFAULT_OPTIONS);
   const [busy, setBusy] = useState(false);
@@ -49,6 +71,7 @@ export function OsPdfComparePage({ ano, osId }: OsPdfComparePageProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("diff");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
+  const autoStartedRef = useRef(false);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current != null) {
@@ -88,7 +111,7 @@ export function OsPdfComparePage({ ano, osId }: OsPdfComparePageProps) {
     setAssignSlot("previous");
   };
 
-  const runCompare = async () => {
+  const runCompare = useCallback(async () => {
     if (!previousRelative || !currentRelative) {
       setError("Selecione os dois PDFs para comparar.");
       return;
@@ -158,7 +181,14 @@ export function OsPdfComparePage({ ano, osId }: OsPdfComparePageProps) {
       setProgress(null);
       setError(err instanceof Error ? err.message : String(err));
     }
-  };
+  }, [ano, currentRelative, options, osId, previousRelative, stopPolling]);
+
+  useEffect(() => {
+    if (!autoStart || autoStartedRef.current) return;
+    if (!previousRelative || !currentRelative) return;
+    autoStartedRef.current = true;
+    void runCompare();
+  }, [autoStart, currentRelative, previousRelative, runCompare]);
 
   const onCancel = async () => {
     if (!sessionId) return;

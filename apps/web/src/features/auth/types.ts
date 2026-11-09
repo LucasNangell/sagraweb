@@ -10,6 +10,7 @@ export type PermissionKey =
   | "ctx_imprimir_separador"
   | "ctx_detalhes_os"
   | "ctx_prova_web"
+  | "ctx_comparar_versoes"
   | "ctx_orcamento"
   | "sb_inicio"
   | "sb_gerencia"
@@ -57,6 +58,7 @@ export const PERMISSION_KEYS: PermissionKey[] = [
   "ctx_imprimir_separador",
   "ctx_detalhes_os",
   "ctx_prova_web",
+  "ctx_comparar_versoes",
   "ctx_orcamento",
   "sb_inicio",
   "sb_gerencia",
@@ -110,6 +112,7 @@ export interface PermissionsResponse {
   ctx_imprimir_separador?: boolean;
   ctx_detalhes_os?: boolean;
   ctx_prova_web?: boolean;
+  ctx_comparar_versoes?: boolean;
   ctx_orcamento?: boolean;
   sb_inicio?: boolean;
   sb_gerencia?: boolean;

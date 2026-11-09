@@ -211,7 +211,7 @@ export function canAccessRoute(
     return hasPermission(permissions, "sb_gerencia");
   }
   if (/^\/os\/\d+\/\d+\/comparar-versoes$/.test(normalized)) {
-    return hasPermission(permissions, "ctx_abrir_pasta");
+    return hasPermission(permissions, "ctx_comparar_versoes");
   }
   if (/^\/impressao\/requisicao\/\d+\/\d+$/.test(normalized)) {
     return hasPermission(permissions, "ctx_imprimir_ficha");

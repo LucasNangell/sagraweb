@@ -15,7 +15,7 @@ function CompararVersoesRoute() {
   const idNum = Number.parseInt(id, 10);
 
   return (
-    <AuthGuard requiredPermission="ctx_abrir_pasta">
+    <AuthGuard requiredPermission="ctx_comparar_versoes">
       <OsPdfComparePage ano={anoNum} osId={idNum} />
     </AuthGuard>
   );

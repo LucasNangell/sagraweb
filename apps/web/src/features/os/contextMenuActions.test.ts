@@ -99,11 +99,11 @@ describe("getVisibleContextMenuItems", () => {
     ).toBe(false);
   });
 
-  it("mostra Comparar versões PDF com ctx_abrir_pasta", () => {
-    const can = (key: PermissionKey) => key === "ctx_abrir_pasta";
+  it("mostra Comparar versões PDF com ctx_comparar_versoes", () => {
+    const can = (key: PermissionKey) => key === "ctx_comparar_versoes";
     const ids = getVisibleContextMenuItems(can, osRow).map((item) => item.id);
     expect(ids).toContain("comparePdf");
-    expect(ids).toContain("folder");
+    expect(ids).not.toContain("folder");
   });
 });
 

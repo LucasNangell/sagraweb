@@ -76,7 +76,7 @@ class TestSpaAccessHelpers:
         )
         assert (
             required_permission_for_spa_path("/os/2026/123/comparar-versoes")
-            == "ctx_abrir_pasta"
+            == "ctx_comparar_versoes"
         )
         assert required_permission_for_spa_path("/os/invalida") == "__MASTER_ONLY__"
 

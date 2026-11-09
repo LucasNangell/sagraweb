@@ -34,6 +34,7 @@ _PERMISSION_BOOL_KEYS = (
     "ctx_imprimir_separador",
     "ctx_detalhes_os",
     "ctx_prova_web",
+    "ctx_comparar_versoes",
     "ctx_orcamento",
     "sb_inicio",
     "sb_gerencia",

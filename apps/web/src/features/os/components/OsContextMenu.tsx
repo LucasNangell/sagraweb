@@ -62,7 +62,7 @@ export function OsRowContextMenu({
         history: "ctx_detalhes_os",
         link: "ctx_vincular_os",
         folder: "ctx_abrir_pasta",
-        comparePdf: "ctx_abrir_pasta",
+        comparePdf: "ctx_comparar_versoes",
         moveFolders: "ctx_mover_pastas",
         provaWeb: "ctx_prova_web",
         print: "ctx_imprimir_ficha",

@@ -22,10 +22,11 @@ def _perms(request: Request) -> dict:
     return getattr(request.state, "sagra_permissions", None) or {}
 
 
-def _require_abrir_pasta(request: Request) -> None:
-    if not _perms(request).get("ctx_abrir_pasta"):
+def _require_comparar_versoes(request: Request) -> None:
+    if not _perms(request).get("ctx_comparar_versoes"):
         raise HTTPException(
-            status_code=403, detail="Permissão Abrir pasta necessária."
+            status_code=403,
+            detail="Permissão Comparar versões PDF necessária.",
         )
 
 
@@ -83,7 +84,7 @@ def start_pdf_compare(
     body: PdfCompareStartRequest,
     request: Request,
 ):
-    _require_abrir_pasta(request)
+    _require_comparar_versoes(request)
     prev_rel, prev_path = _resolve_pdf(ano, id, body.previous_relative)
     curr_rel, curr_path = _resolve_pdf(ano, id, body.current_relative)
     if os.path.normcase(os.path.abspath(prev_path)) == os.path.normcase(
@@ -113,7 +114,7 @@ def start_pdf_compare(
 
 @router.get("/os/{ano}/{id}/pdf-compare/{session_id}/progress")
 def pdf_compare_progress(ano: int, id: int, session_id: str, request: Request):
-    _require_abrir_pasta(request)
+    _require_comparar_versoes(request)
     job = _get_owned_job(ano, id, session_id)
     with job.lock:
         return {
@@ -131,7 +132,7 @@ def pdf_compare_progress(ano: int, id: int, session_id: str, request: Request):
 
 @router.get("/os/{ano}/{id}/pdf-compare/{session_id}")
 def pdf_compare_session(ano: int, id: int, session_id: str, request: Request):
-    _require_abrir_pasta(request)
+    _require_comparar_versoes(request)
     job = _get_owned_job(ano, id, session_id)
     with job.lock:
         if not job.done:
@@ -161,7 +162,7 @@ def pdf_compare_session(ano: int, id: int, session_id: str, request: Request):
 def pdf_compare_asset(
     ano: int, id: int, session_id: str, name: str, request: Request
 ):
-    _require_abrir_pasta(request)
+    _require_comparar_versoes(request)
     job = _get_owned_job(ano, id, session_id)
     try:
         path = compare_svc.resolve_asset_path(job, name)
@@ -175,7 +176,7 @@ def pdf_compare_asset(
 
 @router.post("/os/{ano}/{id}/pdf-compare/{session_id}/cancel")
 def pdf_compare_cancel(ano: int, id: int, session_id: str, request: Request):
-    _require_abrir_pasta(request)
+    _require_comparar_versoes(request)
     _get_owned_job(ano, id, session_id)
     compare_svc.cancel_job(session_id)
     return {"ok": True}
@@ -193,7 +194,7 @@ def pdf_compare_report(
     request: Request,
     body: Optional[PdfCompareReportRequest] = None,
 ):
-    _require_abrir_pasta(request)
+    _require_comparar_versoes(request)
     job = _get_owned_job(ano, id, session_id)
     with job.lock:
         if not job.done or not job.result:

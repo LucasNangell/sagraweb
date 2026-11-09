@@ -27,6 +27,7 @@ class ClientPermissionsResponse(BaseModel):
     ctx_imprimir_separador: bool = False
     ctx_detalhes_os: bool = True
     ctx_prova_web: bool = False
+    ctx_comparar_versoes: bool = False
     ctx_orcamento: bool = False
     sb_inicio: bool = True
     sb_gerencia: bool = True

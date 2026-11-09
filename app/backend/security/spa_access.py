@@ -196,7 +196,7 @@ def required_permission_for_spa_path(app_path: str) -> Optional[str]:
     if re.fullmatch(r"/os/\d+/\d+/fluxo-producao", app_path):
         return "sb_gerencia"
     if re.fullmatch(r"/os/\d+/\d+/comparar-versoes", app_path):
-        return "ctx_abrir_pasta"
+        return "ctx_comparar_versoes"
     if app_path.endswith(".html"):
         return LEGACY_HTML_PERMISSIONS.get(app_path, _MASTER_ONLY)
     return _MASTER_ONLY

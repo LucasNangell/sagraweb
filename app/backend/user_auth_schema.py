@@ -81,6 +81,7 @@ _USER_PERMISSIONS_EXTRA_COLUMNS: tuple[tuple[str, str], ...] = (
     ("sb_credenciais_depol", "TINYINT(1) DEFAULT 0"),
     ("sb_manipular_imagem", "TINYINT(1) DEFAULT 0"),
     ("ctx_prova_web", "TINYINT(1) DEFAULT 0"),
+    ("ctx_comparar_versoes", "TINYINT(1) DEFAULT 0"),
     ("ctx_orcamento", "TINYINT(1) DEFAULT 0"),
     ("ctx_imprimir_separador", "TINYINT(1) DEFAULT 0"),
 )

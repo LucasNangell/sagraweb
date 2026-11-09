@@ -40,6 +40,7 @@ import { sanitizePontoDigits } from "@/lib/format";
 const CONTEXT_PERMISSIONS: PermissionKey[] = [
   ...CONTEXT_PERMISSION_COLUMNS.map((c) => c.key),
   "ctx_prova_web",
+  "ctx_comparar_versoes",
 ];
 
 const SIDEBAR_PERMISSIONS = PERMISSION_KEYS.filter(
@@ -61,6 +62,7 @@ const PERMISSION_LABELS: Partial<Record<PermissionKey, string>> = {
   ctx_imprimir_separador: "Imprimir separador",
   ctx_detalhes_os: "Detalhes da OS",
   ctx_prova_web: "Prova WEB",
+  ctx_comparar_versoes: "Comparar versões PDF",
   ctx_orcamento: "Orçamento",
   sb_inicio: "Início",
   sb_gerencia: "Gerência",

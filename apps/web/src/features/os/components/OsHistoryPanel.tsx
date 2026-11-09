@@ -1205,11 +1205,16 @@ export function OsHistoryPanel({
                         ano: String(osAno),
                         id: String(osId),
                       }}
-                      className="sagra-btn sagra-btn--search sagra-btn--sm no-underline hover:no-underline"
+                      title={analiseCaption}
+                      aria-label={analiseCaption}
+                      className={cn(
+                        "sagra-btn sagra-btn--search sagra-btn--sm no-underline hover:no-underline",
+                        "portrait:h-8 portrait:w-8 portrait:min-h-8 portrait:min-w-8 portrait:shrink-0 portrait:gap-0 portrait:p-0 portrait:rounded",
+                      )}
                       data-testid={homeTestIds.osHistoryAnalise}
                     >
                       <Search className="size-3.5" aria-hidden />
-                      {analiseCaption}
+                      <span className="portrait:hidden">{analiseCaption}</span>
                     </Link>
                   ) : null}
                   {!editing && !isSubOs ? (

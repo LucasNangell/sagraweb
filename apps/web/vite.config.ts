@@ -245,7 +245,7 @@ export default defineConfig(({ mode }) => {
         ],
       },
       devOptions: {
-        enabled: env.VITE_PWA_DEV === "true",
+        enabled: env["VITE_PWA_DEV"] === "true",
       },
     }),
   ],

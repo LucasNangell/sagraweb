@@ -897,7 +897,7 @@ export function OsHistoryPanel({
             <div
               ref={historyListRef}
               className={cn(
-                "relative max-h-[min(40vh,280px)] min-h-[140px] min-w-0 shrink-0 overflow-y-auto overscroll-contain border-b border-sagra-border sm:max-h-none sm:h-auto sm:w-[45.6%] sm:border-r sm:border-b-0",
+                "relative max-h-[min(40vh,280px)] min-h-[140px] min-w-0 shrink-0 overflow-x-hidden overflow-y-auto overscroll-contain border-b border-sagra-border sm:max-h-none sm:h-auto sm:w-[45.6%] sm:border-r sm:border-b-0",
                 editing && "cursor-not-allowed",
               )}
             >
@@ -909,17 +909,21 @@ export function OsHistoryPanel({
               ) : null}
               <table
                 className={cn(
-                  "w-full border-collapse text-xs",
+                  "w-full min-w-0 table-fixed border-collapse text-xs",
                   editing && "pointer-events-none opacity-60",
                 )}
               >
                 <thead className="sticky top-0 bg-slate-100">
                   <tr>
-                    <th className="px-2 py-1.5 text-left font-semibold">
+                    <th className="max-w-0 overflow-hidden px-2 py-1.5 text-left font-semibold" style={{ width: "42%" }}>
                       Situação
                     </th>
-                    <th className="px-2 py-1.5 text-left font-semibold">Setor</th>
-                    <th className="px-2 py-1.5 text-left font-semibold">Data</th>
+                    <th className="max-w-0 overflow-hidden px-2 py-1.5 text-left font-semibold" style={{ width: "36%" }}>
+                      Setor
+                    </th>
+                    <th className="max-w-0 overflow-hidden px-2 py-1.5 text-left font-semibold" style={{ width: "22%" }}>
+                      Data
+                    </th>
                   </tr>
                 </thead>
                 <tbody key={historyOsKey ?? "empty"}>
@@ -970,10 +974,20 @@ export function OsHistoryPanel({
                               isRowSelected && "bg-[var(--highlight-yellow)]",
                             )}
                           >
-                            <td className="px-2 py-1">{subRow.situacao ?? "-"}</td>
-                            <td className="px-2 py-1">{subRow.setor ?? "-"}</td>
-                            <td className="px-2 py-1">
-                              {formatDateBr(subRow.data ?? undefined)}
+                            <td className="max-w-0 overflow-hidden px-2 py-1">
+                              <span className="block truncate" title={subRow.situacao ?? undefined}>
+                                {subRow.situacao ?? "-"}
+                              </span>
+                            </td>
+                            <td className="max-w-0 overflow-hidden px-2 py-1">
+                              <span className="block truncate" title={subRow.setor ?? undefined}>
+                                {subRow.setor ?? "-"}
+                              </span>
+                            </td>
+                            <td className="max-w-0 overflow-hidden px-2 py-1">
+                              <span className="block truncate tabular-nums">
+                                {formatDateBr(subRow.data ?? undefined)}
+                              </span>
                             </td>
                           </tr>
                         );
@@ -995,11 +1009,21 @@ export function OsHistoryPanel({
                             isRowSelected && "bg-[var(--highlight-yellow)]",
                           )}
                         >
-                          <td className="px-2 py-1">
-                            {mainRow.SituacaoLink ?? "-"}
+                          <td className="max-w-0 overflow-hidden px-2 py-1">
+                            <span className="block truncate" title={mainRow.SituacaoLink ?? undefined}>
+                              {mainRow.SituacaoLink ?? "-"}
+                            </span>
                           </td>
-                          <td className="px-2 py-1">{mainRow.SetorLink ?? "-"}</td>
-                          <td className="px-2 py-1">{formatDateBr(mainRow.Data)}</td>
+                          <td className="max-w-0 overflow-hidden px-2 py-1">
+                            <span className="block truncate" title={mainRow.SetorLink ?? undefined}>
+                              {mainRow.SetorLink ?? "-"}
+                            </span>
+                          </td>
+                          <td className="max-w-0 overflow-hidden px-2 py-1">
+                            <span className="block truncate tabular-nums">
+                              {formatDateBr(mainRow.Data)}
+                            </span>
+                          </td>
                         </tr>
                       );
                     })

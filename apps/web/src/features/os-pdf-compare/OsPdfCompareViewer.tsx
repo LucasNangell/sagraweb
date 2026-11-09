@@ -22,7 +22,6 @@ interface OsPdfCompareViewerProps {
   pageIndex: number;
   onPageIndexChange: (index: number) => void;
   viewMode: ViewMode;
-  onViewModeChange: (mode: ViewMode) => void;
   previousName?: string | null;
   currentName?: string | null;
   changedPages?: number;
@@ -88,7 +87,6 @@ export function OsPdfCompareViewer({
   pageIndex,
   onPageIndexChange,
   viewMode,
-  onViewModeChange,
   previousName = null,
   currentName = null,
   changedPages = 0,
@@ -229,12 +227,6 @@ export function OsPdfCompareViewer({
     setZoom(1);
   }
 
-  function changeMode(mode: ViewMode) {
-    onViewModeChange(mode);
-    setFlickerShowB(false);
-    setZoom(1);
-  }
-
   if (!page) {
     return <div className="os-pdf-viewer-empty">Sem páginas para exibir.</div>;
   }
@@ -299,27 +291,6 @@ export function OsPdfCompareViewer({
   return (
     <div className="os-pdf-viewer">
       <div className="os-pdf-toolbar">
-        <div className="os-pdf-modes">
-          {(
-            [
-              ["diff", "Diferença"],
-              ["blend", "Sobreposição"],
-              ["flicker", "Alternar"],
-              ["side", "Lado a lado"],
-              ["previous", "Versão anterior"],
-              ["current", "Versão atual"],
-            ] as const
-          ).map(([mode, label]) => (
-            <button
-              key={mode}
-              type="button"
-              className={viewMode === mode ? "active" : ""}
-              onClick={() => changeMode(mode)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
         <div className="os-pdf-zoom">
           <button
             type="button"

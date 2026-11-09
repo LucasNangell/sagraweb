@@ -234,13 +234,46 @@ export function OsPdfComparePage({
   return (
     <div className="os-pdf-compare-page">
       <header className="os-pdf-hero">
-        <div>
+        <div className="os-pdf-hero-copy">
           <h1>Comparador de versões PDF</h1>
           <p className="subtitle">
             OS {osId}/{ano} — selecione dois PDFs na pasta da OS e revise as
             diferenças visualmente.
           </p>
         </div>
+        <div
+          className={
+            "os-pdf-viewmode-menu" + (result?.hasResult ? "" : " is-disabled")
+          }
+          aria-label="Modo de visualização"
+        >
+          <span className="os-pdf-viewmode-title">Modo de visualização</span>
+          <div className="os-pdf-viewmode-track" role="tablist">
+            {(
+              [
+                ["diff", "Diferença"],
+                ["blend", "Sobreposição"],
+                ["flicker", "Alternar"],
+                ["side", "Lado a lado"],
+                ["previous", "Versão anterior"],
+                ["current", "Versão atual"],
+              ] as const
+            ).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                role="tab"
+                aria-selected={viewMode === mode}
+                className={viewMode === mode ? "active" : ""}
+                disabled={!result?.hasResult || busy}
+                onClick={() => setViewMode(mode)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="os-pdf-hero-spacer" aria-hidden />
       </header>
 
       {error ? <div className="os-pdf-banner error">{error}</div> : null}
@@ -391,7 +424,6 @@ export function OsPdfComparePage({
               pageIndex={pageIndex}
               onPageIndexChange={setPageIndex}
               viewMode={viewMode}
-              onViewModeChange={setViewMode}
               previousName={previousName || result.previousName}
               currentName={currentName || result.currentName}
               changedPages={result.changedPages}

@@ -23,11 +23,15 @@
 }
 
 .os-pdf-compare-page header.os-pdf-hero {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem 1rem;
   flex: 0 0 auto;
+}
+
+.os-pdf-hero-copy {
+  min-width: 0;
 }
 
 .os-pdf-compare-page header h1 {
@@ -41,6 +45,96 @@
   margin: 0.15rem 0 0;
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.os-pdf-hero-spacer {
+  min-width: 0;
+}
+
+.os-pdf-viewmode-menu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  justify-self: center;
+}
+
+.os-pdf-viewmode-menu.is-disabled {
+  opacity: 0.55;
+}
+
+.os-pdf-viewmode-title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.os-pdf-viewmode-track {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.2rem;
+  padding: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 82%);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 70%) inset,
+    0 8px 20px rgb(23 53 44 / 6%);
+  backdrop-filter: blur(8px);
+}
+
+.os-pdf-viewmode-track button {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.4rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.os-pdf-viewmode-track button:hover:not(:disabled) {
+  color: var(--ink);
+  background: rgb(15 110 86 / 8%);
+}
+
+.os-pdf-viewmode-track button.active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 4px 12px rgb(15 110 86 / 28%);
+}
+
+.os-pdf-viewmode-track button:disabled {
+  cursor: not-allowed;
+}
+
+@media (max-width: 1100px) {
+  .os-pdf-compare-page header.os-pdf-hero {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
+
+  .os-pdf-viewmode-menu {
+    justify-self: stretch;
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .os-pdf-viewmode-track {
+    justify-content: flex-start;
+  }
+
+  .os-pdf-hero-spacer {
+    display: none;
+  }
 }
 
 .os-pdf-pill {
@@ -525,14 +619,12 @@
   margin-left: auto;
 }
 
-.os-pdf-modes,
 .os-pdf-zoom {
   display: flex;
   flex-wrap: wrap;
   gap: 0.3rem;
 }
 
-.os-pdf-modes button,
 .os-pdf-zoom button {
   border: 1px solid var(--line);
   background: #fff;
@@ -541,12 +633,6 @@
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
-}
-
-.os-pdf-modes button.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
 }
 
 .os-pdf-page-meta {

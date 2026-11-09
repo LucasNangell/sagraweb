@@ -37,6 +37,9 @@ interface OsPdfCompareRulersProps {
 const RULER_SIZE = 28;
 const MM_PER_INCH = 25.4;
 const DRAG_THRESHOLD_PX = 3;
+const PANEL_WIDTH = 280;
+const PANEL_HEIGHT = 220;
+const PANEL_GAP = 14;
 
 function pxToMm(px: number, dpi: number): number {
   if (!dpi) return 0;
@@ -112,6 +115,8 @@ export function OsPdfCompareRulers({
   const [draftMm, setDraftMm] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [panelPos, setPanelPos] = useState({ x: 72, y: 120 });
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const panelUserMovedRef = useRef(false);
   const guidePressRef = useRef<{
     id: string;
     axis: GuideAxis;
@@ -184,14 +189,51 @@ export function OsPdfCompareRulers({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onGuidesChange, selectedId]);
 
-  function selectGuide(guide: GuideLine) {
+  function placePanelNearGuide(guide: GuideLine) {
+    const content = contentRef.current;
+    if (!content || pxPerMm <= 0) return;
+    const rect = content.getBoundingClientRect();
+    const maxX = Math.max(8, window.innerWidth - PANEL_WIDTH - 8);
+    const maxY = Math.max(8, window.innerHeight - PANEL_HEIGHT - 8);
+
+    let nextX: number;
+    let nextY: number;
+
+    if (guide.axis === "x") {
+      const guideX = rect.left + guide.mm * pxPerMm;
+      const preferRight = guideX + PANEL_GAP + PANEL_WIDTH <= window.innerWidth - 8;
+      nextX = preferRight
+        ? guideX + PANEL_GAP
+        : guideX - PANEL_GAP - PANEL_WIDTH;
+      nextY = rect.top + rect.height / 2 - PANEL_HEIGHT / 2;
+    } else {
+      const guideY = rect.bottom - guide.mm * pxPerMm;
+      nextX = rect.left + rect.width / 2 - PANEL_WIDTH / 2;
+      const preferAbove = guideY - PANEL_GAP - PANEL_HEIGHT >= 8;
+      nextY = preferAbove
+        ? guideY - PANEL_GAP - PANEL_HEIGHT
+        : guideY + PANEL_GAP;
+    }
+
+    setPanelPos({
+      x: clamp(nextX, 8, maxX),
+      y: clamp(nextY, 8, maxY),
+    });
+  }
+
+  function selectGuide(guide: GuideLine, reposition = true) {
     setSelectedId(guide.id);
     setDraftMm(fmtMm(guide.mm));
+    if (reposition) {
+      panelUserMovedRef.current = false;
+      requestAnimationFrame(() => placePanelNearGuide(guide));
+    }
   }
 
   function clearSelection() {
     setSelectedId(null);
     setDraftMm("");
+    panelUserMovedRef.current = false;
   }
 
   function updateGuideMm(id: string, mm: number, axis?: GuideAxis) {
@@ -280,8 +322,16 @@ export function OsPdfCompareRulers({
   }
 
   function onRulerPointerUp() {
+    const wasDragging = draggingId;
     setDraggingId(null);
     guidePressRef.current = null;
+    if (!wasDragging || panelUserMovedRef.current) return;
+    const guide =
+      visibleGuides.find((g) => g.id === wasDragging) ||
+      guides.find((g) => g.id === wasDragging);
+    if (guide) {
+      requestAnimationFrame(() => placePanelNearGuide(guide));
+    }
   }
 
   function onGuidePointerDown(
@@ -369,11 +419,12 @@ export function OsPdfCompareRulers({
   function onPanelHeaderPointerMove(e: ReactPointerEvent<HTMLDivElement>) {
     const drag = panelDragRef.current;
     if (!drag) return;
+    panelUserMovedRef.current = true;
     const nextX = drag.originX + (e.clientX - drag.x);
     const nextY = drag.originY + (e.clientY - drag.y);
     setPanelPos({
-      x: clamp(nextX, 8, window.innerWidth - 280),
-      y: clamp(nextY, 8, window.innerHeight - 160),
+      x: clamp(nextX, 8, window.innerWidth - PANEL_WIDTH - 8),
+      y: clamp(nextY, 8, window.innerHeight - PANEL_HEIGHT - 8),
     });
   }
 
@@ -460,6 +511,7 @@ export function OsPdfCompareRulers({
         </div>
 
         <div
+          ref={contentRef}
           className="os-pdf-ruler-content"
           style={{ width: displayWidth, height: displayHeight }}
           onPointerDown={onContentPointerDown}

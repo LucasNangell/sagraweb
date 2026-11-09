@@ -410,6 +410,121 @@
   color: var(--muted);
 }
 
+.os-pdf-legend {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f7faf8;
+  font-size: 0.78rem;
+}
+
+.os-pdf-legend-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.os-pdf-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  padding: 0.2rem 0.45rem;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.os-pdf-legend-chip.prev {
+  border-color: #9db7e8;
+  background: #eef4ff;
+}
+
+.os-pdf-legend-chip.curr {
+  border-color: #e8a0be;
+  background: #fff0f6;
+}
+
+.os-pdf-legend-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.os-pdf-legend-chip.prev .os-pdf-legend-key {
+  background: #2f6fed;
+}
+
+.os-pdf-legend-chip.curr .os-pdf-legend-key {
+  background: #c2185b;
+}
+
+.os-pdf-legend-mode {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 0.85rem;
+  color: var(--muted);
+}
+
+.os-pdf-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.os-pdf-legend-swatch {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 3px;
+  border: 1px solid rgb(0 0 0 / 15%);
+  flex-shrink: 0;
+}
+
+.os-pdf-legend-swatch.diff-red {
+  background: #dc3a3a;
+}
+
+.os-pdf-legend-swatch.diff-grey {
+  background: #9aa3a0;
+}
+
+.os-pdf-legend-swatch.diff-box {
+  background: transparent;
+  border: 2px solid #ff4000;
+}
+
+.os-pdf-legend-swatch.blend-cyan {
+  background: #00bcd4;
+}
+
+.os-pdf-legend-swatch.blend-magenta {
+  background: #e91e8c;
+}
+
+.os-pdf-legend-swatch.blend-grey {
+  background: #9aa3a0;
+}
+
+.os-pdf-legend-swatch.prev {
+  background: #2f6fed;
+}
+
+.os-pdf-legend-swatch.curr {
+  background: #c2185b;
+}
+
 .os-pdf-viewport {
   position: relative;
   min-height: 420px;

@@ -16,6 +16,36 @@ interface OsPdfCompareViewerProps {
   onPageIndexChange: (index: number) => void;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
+  previousName?: string | null;
+  currentName?: string | null;
+}
+
+function modeLegend(mode: ViewMode): { swatch: string; label: string }[] {
+  switch (mode) {
+    case "diff":
+      return [
+        { swatch: "diff-red", label: "Vermelho = pixels alterados" },
+        { swatch: "diff-grey", label: "Cinza = áreas iguais" },
+        { swatch: "diff-box", label: "Caixa laranja = região detectada" },
+      ];
+    case "blend":
+      return [
+        { swatch: "blend-cyan", label: "Ciano = versão anterior" },
+        { swatch: "blend-magenta", label: "Magenta = versão atual" },
+        { swatch: "blend-grey", label: "Cinza = áreas iguais" },
+      ];
+    case "flicker":
+      return [
+        { swatch: "prev", label: "Alterna anterior ↔ atual" },
+      ];
+    case "side":
+      return [
+        { swatch: "prev", label: "Esquerda = anterior" },
+        { swatch: "curr", label: "Direita = atual" },
+      ];
+    default:
+      return [];
+  }
 }
 
 function severityClass(page: ComparePage): string {
@@ -50,6 +80,8 @@ export function OsPdfCompareViewer({
   onPageIndexChange,
   viewMode,
   onViewModeChange,
+  previousName = null,
+  currentName = null,
 }: OsPdfCompareViewerProps) {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -192,6 +224,30 @@ export function OsPdfCompareViewer({
         <div className="os-pdf-page-meta">
           Página {page.pageNumber} · {fmtPct(page.changedPercent)} ·{" "}
           {page.boxes?.length ?? 0} regiões
+        </div>
+      </div>
+
+      <div className="os-pdf-legend" aria-label="Legenda da comparação">
+        <div className="os-pdf-legend-files">
+          <span className="os-pdf-legend-chip prev" title={previousName || undefined}>
+            <span className="os-pdf-legend-key">A</span>
+            Anterior: {previousName || "—"}
+          </span>
+          <span className="os-pdf-legend-chip curr" title={currentName || undefined}>
+            <span className="os-pdf-legend-key">B</span>
+            Atual: {currentName || "—"}
+          </span>
+        </div>
+        <div className="os-pdf-legend-mode">
+          {modeLegend(viewMode).map((item) => (
+            <span key={item.label} className="os-pdf-legend-item">
+              <span
+                className={`os-pdf-legend-swatch ${item.swatch}`}
+                aria-hidden
+              />
+              {item.label}
+            </span>
+          ))}
         </div>
       </div>
 

@@ -329,6 +329,7 @@ pre { tab-size: 2; }
 
 @media (min-width: 1800px) {
   .computers-workspace { flex: 1; grid-template-columns: clamp(260px, 18vw, 330px) 720px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .computers-workspace--no-client { grid-template-columns: clamp(260px, 18vw, 330px) minmax(0, 1fr); }
   .computer-detail { grid-column: auto; min-height: 0; }
   .client-control-panel { max-height: calc(100dvh - 320px); overflow-y: auto; }
   .client-window-list { max-height: none; overflow: visible; }

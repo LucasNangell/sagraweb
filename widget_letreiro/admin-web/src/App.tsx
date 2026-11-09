@@ -1217,6 +1217,8 @@ export default function App() {
   const [editingGroupId, setEditingGroupId] = useState(0);
   const [sendGroupId, setSendGroupId] = useState(0);
   const [groupBusy, setGroupBusy] = useState(false);
+  const [showClientActions, setShowClientActions] = useState(false);
+  const allOnlineClicks = useRef<number[]>([]);
   const [setores, setSetores] = useState<string[]>(["SEFOC", "Papelaria", "Gravação"]);
   const [situacoes, setSituacoes] = useState<string[]>(DEFAULT_SITUACOES);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -1734,6 +1736,17 @@ export default function App() {
     }
   }
 
+  function noteAllOnlineClick() {
+    const now = Date.now();
+    const recent = allOnlineClicks.current.filter((ts) => now - ts <= 2000);
+    recent.push(now);
+    allOnlineClicks.current = recent;
+    if (recent.length >= 4) {
+      allOnlineClicks.current = [];
+      setShowClientActions(true);
+    }
+  }
+
   async function sendTerminal(allOnline: boolean, groupIds: number[] = []) {
     if (!allOnline && selectedRows.length === 0 && groupIds.length === 0) {
       return setError("Selecione computadores, um grupo, ou envie a todos os online.");
@@ -1885,7 +1898,7 @@ export default function App() {
             <div><span className="metric-icon"><Unplug size={18} /></span><div><span>Offline</span><strong>{settingsInstances.length - onlineCount}</strong></div></div>
             <div><span className="metric-icon"><Check size={18} /></span><div><span>Selecionadas</span><strong>{selectedRows.length}<small>para ações</small></strong></div></div>
           </div>
-          <section className="computers-workspace">
+          <section className={`computers-workspace${showClientActions ? "" : " computers-workspace--no-client"}`}>
             <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 shadow-card">
               <div className="shrink-0 border-b border-slate-800 px-3 py-3 sm:px-4">
                 <div className="flex items-center justify-between gap-2"><h2 className="font-semibold">Estações de trabalho</h2><span className="count-badge">{visibleInstances.length}</span></div>
@@ -1979,16 +1992,18 @@ export default function App() {
               </div>
             </div>
 
-            <ClientControlPanel
-              key={selectedRows.length === 1 ? desktopTargetKey(selectedRows[0]) : "no-single-target"}
-              target={selectedRows.length === 1 ? selectedRows[0] : null}
-              selectionCount={selectedRows.length}
-              commands={commands}
-              jobs={jobs}
-              onQueued={onClientJobQueued}
-              onJobs={applyJobs}
-              onOpenLibrary={() => setView("library")}
-            />
+            {showClientActions ? (
+              <ClientControlPanel
+                key={selectedRows.length === 1 ? desktopTargetKey(selectedRows[0]) : "no-single-target"}
+                target={selectedRows.length === 1 ? selectedRows[0] : null}
+                selectionCount={selectedRows.length}
+                commands={commands}
+                jobs={jobs}
+                onQueued={onClientJobQueued}
+                onJobs={applyJobs}
+                onOpenLibrary={() => setView("library")}
+              />
+            ) : null}
 
             <div className="computer-detail">
               <div className="selection-panel">
@@ -2193,7 +2208,14 @@ export default function App() {
                     >
                       Enviar ao grupo
                     </button>
-                    <button type="button" className="rounded-lg bg-slate-800 px-3 py-2 text-sm" onClick={() => void sendTerminal(true).catch((ex) => setError(errText(ex)))}>
+                    <button
+                      type="button"
+                      className="rounded-lg bg-slate-800 px-3 py-2 text-sm"
+                      onClick={() => {
+                        noteAllOnlineClick();
+                        void sendTerminal(true).catch((ex) => setError(errText(ex)));
+                      }}
+                    >
                       Todos online
                     </button>
                     <button type="submit" className="inline-flex items-center gap-2 rounded-lg bg-sky-400 px-3 py-2 text-sm font-semibold text-slate-950">

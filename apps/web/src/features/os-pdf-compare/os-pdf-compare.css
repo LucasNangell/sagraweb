@@ -17,9 +17,7 @@
   padding: 0.5rem 0.75rem 0.5rem;
   overflow: hidden;
   color: var(--ink);
-  background:
-    radial-gradient(1200px 400px at 10% -10%, #dceee7 0%, transparent 55%),
-    linear-gradient(180deg, #eef5f1 0%, var(--paper) 40%, #f4f7f5 100%);
+  background: transparent;
 }
 
 .os-pdf-compare-page header.os-pdf-hero {

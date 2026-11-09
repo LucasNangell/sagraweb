@@ -71,10 +71,30 @@
   border: 1px solid #f5c6c2;
 }
 
-.os-pdf-banner.info {
-  background: #e8f6ef;
+.os-pdf-changed-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.35rem;
+  border-radius: 999px;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.os-pdf-changed-badge.has-changes {
+  color: #8a5a00;
+  background: #fff7e6;
+  border-color: #f0d7a0;
+}
+
+.os-pdf-changed-badge.no-changes {
   color: var(--accent);
-  border: 1px solid #9dcdb9;
+  background: #e8f6ef;
+  border-color: #9dcdb9;
 }
 
 .os-pdf-layout {

@@ -68,7 +68,6 @@ export function OsPdfComparePage({
   const [progress, setProgress] = useState<CompareProgress | null>(null);
   const [result, setResult] = useState<CompareResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
   const [viewMode, setViewMode] = useState<ViewMode>("diff");
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -104,7 +103,6 @@ export function OsPdfComparePage({
     setProgress(null);
     setResult(null);
     setError(null);
-    setInfo(null);
     setSessionId(null);
     setPageIndex(0);
     setViewMode("diff");
@@ -123,7 +121,6 @@ export function OsPdfComparePage({
       return;
     }
     setError(null);
-    setInfo(null);
     setResult(null);
     setReportOpen(false);
     setBusy(true);
@@ -157,7 +154,7 @@ export function OsPdfComparePage({
             stopPolling();
             if (prog.cancelled) {
               setBusy(false);
-              setInfo("Comparação cancelada.");
+              setError("Comparação cancelada.");
               return;
             }
             if (prog.error) {
@@ -173,7 +170,6 @@ export function OsPdfComparePage({
             setResult(data);
             setPageIndex(firstInterestingPage(data.pages));
             setViewMode("diff");
-            setInfo(data.summary);
             setBusy(false);
             setProgress(null);
             setFilesCollapsed(true);
@@ -202,7 +198,6 @@ export function OsPdfComparePage({
     if (!sessionId) return;
     try {
       await cancelPdfCompare(ano, osId, sessionId);
-      setInfo("Cancelando…");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -227,7 +222,6 @@ export function OsPdfComparePage({
         sessionId,
         options.includeUnchangedInReport,
       );
-      setInfo("Relatório baixado.");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -247,18 +241,9 @@ export function OsPdfComparePage({
             diferenças visualmente.
           </p>
         </div>
-        <div className={`os-pdf-pill ${result?.hasResult ? "ok" : "warn"}`}>
-          {result?.hasResult
-            ? `${result.changedPages} alterada(s)`
-            : "Seleção"}
-        </div>
       </header>
 
-      {(error || info) && (
-        <div className={`os-pdf-banner ${error ? "error" : "info"}`}>
-          {error || info}
-        </div>
-      )}
+      {error ? <div className="os-pdf-banner error">{error}</div> : null}
 
       <div
         className={
@@ -408,6 +393,7 @@ export function OsPdfComparePage({
               onViewModeChange={setViewMode}
               previousName={previousName || result.previousName}
               currentName={currentName || result.currentName}
+              changedPages={result.changedPages}
             />
           ) : (
             <div className="os-pdf-viewer-empty">

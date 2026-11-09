@@ -18,6 +18,7 @@ interface OsPdfCompareViewerProps {
   onViewModeChange: (mode: ViewMode) => void;
   previousName?: string | null;
   currentName?: string | null;
+  changedPages?: number;
 }
 
 function modeLegend(mode: ViewMode): { swatch: string; label: string }[] {
@@ -73,6 +74,7 @@ export function OsPdfCompareViewer({
   onViewModeChange,
   previousName = null,
   currentName = null,
+  changedPages = 0,
 }: OsPdfCompareViewerProps) {
   const [zoom, setZoom] = useState(1);
   const [flickerShowB, setFlickerShowB] = useState(false);
@@ -195,6 +197,15 @@ export function OsPdfCompareViewer({
               {label}
             </button>
           ))}
+          <span
+            className={
+              "os-pdf-changed-badge" +
+              (changedPages > 0 ? " has-changes" : " no-changes")
+            }
+          >
+            {changedPages} página{changedPages === 1 ? "" : "s"} alterada
+            {changedPages === 1 ? "" : "s"}
+          </span>
         </div>
         <div className="os-pdf-zoom">
           <button

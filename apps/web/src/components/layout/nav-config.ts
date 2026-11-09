@@ -210,6 +210,9 @@ export function canAccessRoute(
   if (/^\/os\/\d+\/\d+\/fluxo-producao$/.test(normalized)) {
     return hasPermission(permissions, "sb_gerencia");
   }
+  if (/^\/os\/\d+\/\d+\/comparar-versoes$/.test(normalized)) {
+    return hasPermission(permissions, "ctx_abrir_pasta");
+  }
   if (/^\/impressao\/requisicao\/\d+\/\d+$/.test(normalized)) {
     return hasPermission(permissions, "ctx_imprimir_ficha");
   }

@@ -98,6 +98,13 @@ describe("getVisibleContextMenuItems", () => {
       ),
     ).toBe(false);
   });
+
+  it("mostra Comparar versões PDF com ctx_abrir_pasta", () => {
+    const can = (key: PermissionKey) => key === "ctx_abrir_pasta";
+    const ids = getVisibleContextMenuItems(can, osRow).map((item) => item.id);
+    expect(ids).toContain("comparePdf");
+    expect(ids).toContain("folder");
+  });
 });
 
 describe("gerenciaModalTitle", () => {

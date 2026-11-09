@@ -60,6 +60,7 @@ from routers import (
     support_routes,
     os_notificacao_routes,
     prova_web_routes,
+    pdf_compare_routes,
     analise_lab_routes,
     orcamento_routes,
     sync_andamentos_status_routes,
@@ -1332,6 +1333,7 @@ app.include_router(gravacao_pendente_routes.router, prefix="/api")
 app.include_router(painel_gravacao_routes.router)
 app.include_router(network_files_routes.router, prefix="/api")
 app.include_router(prova_web_routes.router, prefix="/api")
+app.include_router(pdf_compare_routes.router, prefix="/api")
 app.include_router(analise_lab_routes.router, prefix="/api")
 app.include_router(realtime.router)
 app.include_router(requisicao_routes.router, prefix="/api")

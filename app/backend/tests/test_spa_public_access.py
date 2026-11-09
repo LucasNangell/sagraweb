@@ -74,6 +74,10 @@ class TestSpaAccessHelpers:
             required_permission_for_spa_path("/os/2026/123/fluxo-producao")
             == "sb_gerencia"
         )
+        assert (
+            required_permission_for_spa_path("/os/2026/123/comparar-versoes")
+            == "ctx_abrir_pasta"
+        )
         assert required_permission_for_spa_path("/os/invalida") == "__MASTER_ONLY__"
 
 

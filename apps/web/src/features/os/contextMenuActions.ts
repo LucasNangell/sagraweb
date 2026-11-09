@@ -61,6 +61,12 @@ export const OS_CONTEXT_MENU_ITEMS: OsContextMenuItem[] = [
     requiresRow: true,
   },
   {
+    id: "comparePdf",
+    label: "Comparar versões PDF",
+    permission: "ctx_abrir_pasta",
+    requiresRow: true,
+  },
+  {
     id: "moveFolders",
     label: "Mover Pastas",
     permission: "ctx_mover_pastas",

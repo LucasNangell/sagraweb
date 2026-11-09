@@ -62,6 +62,7 @@ export function OsRowContextMenu({
         history: "ctx_detalhes_os",
         link: "ctx_vincular_os",
         folder: "ctx_abrir_pasta",
+        comparePdf: "ctx_abrir_pasta",
         moveFolders: "ctx_mover_pastas",
         provaWeb: "ctx_prova_web",
         print: "ctx_imprimir_ficha",
@@ -107,6 +108,9 @@ export function OsRowContextMenu({
           await openNetworkFolder(row, (input) =>
             pathMutation.mutateAsync(input),
           );
+          break;
+        case "comparePdf":
+          openComparePdfTab(row);
           break;
         case "moveFolders":
           window.dispatchEvent(new CustomEvent("sagra:os-mover-pastas"));
@@ -165,11 +169,11 @@ export function OsRowContextMenu({
   );
 }
 
-function openProvaWebTab(row: OsSearchRow): void {
+function openOsFeatureTab(row: OsSearchRow, pathSuffix: string): void {
   const base = import.meta.env.BASE_URL;
   const baseWithSlash = base.endsWith("/") ? base : `${base}/`;
   const url = new URL(
-    `${baseWithSlash}prova-web/${row.ano}/${row.nr_os}`,
+    `${baseWithSlash}${pathSuffix}`,
     window.location.origin,
   ).href;
   // Âncora sintética garante nova ABA na mesma janela (window.open pode virar janela separada).
@@ -180,4 +184,12 @@ function openProvaWebTab(row: OsSearchRow): void {
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
+}
+
+function openProvaWebTab(row: OsSearchRow): void {
+  openOsFeatureTab(row, `prova-web/${row.ano}/${row.nr_os}`);
+}
+
+function openComparePdfTab(row: OsSearchRow): void {
+  openOsFeatureTab(row, `os/${row.ano}/${row.nr_os}/comparar-versoes`);
 }

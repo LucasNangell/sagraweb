@@ -148,6 +148,35 @@ def test_report_pdf_builds(compare_tmp, tmp_path):
     assert out.stat().st_size > 100
 
 
+def test_copies_inputs_into_session_dir(compare_tmp, tmp_path):
+    """Simula PDFs em pastas distintas (ex.: UNC) e exige cópia local na sessão."""
+    src_a = tmp_path / "share_a"
+    src_b = tmp_path / "share_b"
+    src_a.mkdir()
+    src_b.mkdir()
+    a = src_a / "prev.pdf"
+    b = src_b / "curr.pdf"
+    _write_pdf(a, text="PREV")
+    _write_pdf(b, text="CURR", color=(1, 0, 0))
+
+    result = svc.compare_pdfs(
+        str(a),
+        str(b),
+        previous_relative="prev.pdf",
+        current_relative="curr.pdf",
+        options=svc.PdfCompareOptions(dpi=150, threshold=8),
+    )
+    session = Path(result.session_dir)
+    assert (session / "input-a.pdf").is_file()
+    assert (session / "input-b.pdf").is_file()
+    assert (session / "input-a.pdf").stat().st_size == a.stat().st_size
+    assert (session / "input-b.pdf").stat().st_size == b.stat().st_size
+    assert result.previous_path == str(a)
+    assert result.current_path == str(b)
+    assert result.changed_pages == 1
+    assert Path(result.pages[0].image_diff).is_file()
+
+
 def test_start_compare_rejects_when_busy(compare_tmp, tmp_path, monkeypatch):
     import threading
     import time

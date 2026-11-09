@@ -14,6 +14,7 @@ import tempfile
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -202,19 +203,16 @@ def _report(
             pass
 
 
-def _page_count(pdf_path: str) -> int:
-    with fitz.open(pdf_path) as doc:
-        return doc.page_count
-
-
-def _render_page(pdf_path: str, page_index: int, dpi: int) -> Image.Image:
+def _render_page_from_doc(doc: fitz.Document, page_index: int, dpi: int) -> Image.Image:
     zoom = dpi / 72.0
     matrix = fitz.Matrix(zoom, zoom)
-    with fitz.open(pdf_path) as doc:
-        page = doc.load_page(page_index)
-        pix = page.get_pixmap(matrix=matrix, alpha=False, annots=True)
-        img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+    page = doc.load_page(page_index)
+    pix = page.get_pixmap(matrix=matrix, alpha=False, annots=True)
+    img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+    # pixmap RGB já vem sem alpha; só converte se o modo divergir.
+    if img.mode != "RGB":
         return img.convert("RGB")
+    return img
 
 
 def _pad_to_canvas(source: Image.Image, width: int, height: int) -> Image.Image:
@@ -226,6 +224,7 @@ def _pad_to_canvas(source: Image.Image, width: int, height: int) -> Image.Image:
 def _normalize_pair(
     a: Image.Image, b: Image.Image
 ) -> tuple[Image.Image, Image.Image]:
+    """Pad só quando necessário; evita copy quando o tamanho já bate."""
     w = max(a.width, b.width)
     h = max(a.height, b.height)
     if a.width != w or a.height != h:
@@ -236,7 +235,8 @@ def _normalize_pair(
 
 
 def _save_jpeg(img: Image.Image, path: Path, quality: int = 90) -> None:
-    img.convert("RGB").save(path, format="JPEG", quality=quality, optimize=True)
+    out = img if img.mode == "RGB" else img.convert("RGB")
+    out.save(path, format="JPEG", quality=quality)
 
 
 def _save_thumb(source: Image.Image, path: Path, max_edge: int = 160) -> None:
@@ -334,8 +334,9 @@ def _compare_bitmaps(
     width_a, height_a = a_orig.size
     width_b, height_b = b_orig.size
     # Canvas comum só para o cálculo visual; as imagens A/B salvas
-    # preservam o tamanho real de cada arquivo.
-    a, b = _normalize_pair(a_orig.copy(), b_orig.copy())
+    # preservam o tamanho real de cada arquivo. _normalize_pair só
+    # aloca cópia quando o pad é necessário.
+    a, b = _normalize_pair(a_orig, b_orig)
     arr_a = np.asarray(a, dtype=np.int16)
     arr_b = np.asarray(b, dtype=np.int16)
     h, w = arr_a.shape[0], arr_a.shape[1]
@@ -590,94 +591,135 @@ def compare_pdfs(
     session_dir = compare_root() / sid
     session_dir.mkdir(parents=True, exist_ok=True)
 
-    count_a = _page_count(previous_pdf)
-    count_b = _page_count(current_pdf)
-    if count_a == 0 and count_b == 0:
-        raise ValueError("Os PDFs não contêm páginas.")
+    if should_cancel and should_cancel():
+        raise OperationCanceledError("Comparação cancelada.")
+    _report(progress, job, "copy", 0, 1, "Copiando PDFs…")
+    local_a = session_dir / "input-a.pdf"
+    local_b = session_dir / "input-b.pdf"
+    shutil.copy2(previous_pdf, local_a)
+    if should_cancel and should_cancel():
+        raise OperationCanceledError("Comparação cancelada.")
+    shutil.copy2(current_pdf, local_b)
 
-    total = max(count_a, count_b)
-    pages: list[PdfComparePageResult] = []
-    _report(progress, job, "raster", 0, total, "Preparando páginas…")
+    doc_a: Optional[fitz.Document] = None
+    doc_b: Optional[fitz.Document] = None
+    try:
+        doc_a = fitz.open(str(local_a))
+        doc_b = fitz.open(str(local_b))
+        count_a = doc_a.page_count
+        count_b = doc_b.page_count
+        if count_a == 0 and count_b == 0:
+            raise ValueError("Os PDFs não contêm páginas.")
 
-    for i in range(total):
-        if should_cancel and should_cancel():
-            raise OperationCanceledError("Comparação cancelada.")
-        _report(
-            progress,
-            job,
-            "compare",
-            i,
-            total,
-            f"Comparando página {i + 1} de {total}…",
+        total = max(count_a, count_b)
+        pages: list[PdfComparePageResult] = []
+        _report(progress, job, "raster", 0, total, "Preparando páginas…")
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            for i in range(total):
+                if should_cancel and should_cancel():
+                    raise OperationCanceledError("Comparação cancelada.")
+                _report(
+                    progress,
+                    job,
+                    "compare",
+                    i,
+                    total,
+                    f"Comparando página {i + 1} de {total}…",
+                )
+                has_a = i < count_a
+                has_b = i < count_b
+
+                if has_a and has_b:
+                    # Dois documentos distintos — seguro em paralelo.
+                    fut_a = pool.submit(
+                        _render_page_from_doc, doc_a, i, options.dpi
+                    )
+                    fut_b = pool.submit(
+                        _render_page_from_doc, doc_b, i, options.dpi
+                    )
+                    bmp_a = fut_a.result()
+                    bmp_b = fut_b.result()
+                    pages.append(
+                        _compare_bitmaps(
+                            session_dir, i, bmp_a, bmp_b, options.threshold
+                        )
+                    )
+                    continue
+
+                bmp_a = (
+                    _render_page_from_doc(doc_a, i, options.dpi)
+                    if has_a
+                    else None
+                )
+                bmp_b = (
+                    _render_page_from_doc(doc_b, i, options.dpi)
+                    if has_b
+                    else None
+                )
+                only = bmp_a if has_a else bmp_b
+                status = "only-previous" if has_a else "only-current"
+                side = "a" if has_a else "b"
+                pages.append(
+                    _save_missing_pair_page(session_dir, i, only, status, side)
+                )
+
+        changed = sum(
+            1
+            for p in pages
+            if p.changed_percent > 0.01 or p.status != "compared"
         )
-        has_a = i < count_a
-        has_b = i < count_b
-        bmp_a = _render_page(previous_pdf, i, options.dpi) if has_a else None
-        bmp_b = _render_page(current_pdf, i, options.dpi) if has_b else None
-
-        if not has_a or not has_b:
-            only = bmp_a if has_a else bmp_b
-            status = "only-previous" if has_a else "only-current"
-            side = "a" if has_a else "b"
-            pages.append(
-                _save_missing_pair_page(session_dir, i, only, status, side)
-            )
-            continue
-
-        assert bmp_a is not None and bmp_b is not None
-        pages.append(
-            _compare_bitmaps(session_dir, i, bmp_a, bmp_b, options.threshold)
+        result = PdfCompareResult(
+            session_id=sid,
+            session_dir=str(session_dir),
+            previous_path=previous_pdf,
+            current_path=current_pdf,
+            previous_relative=previous_relative,
+            current_relative=current_relative,
+            dpi=options.dpi,
+            threshold=options.threshold,
+            page_count_a=count_a,
+            page_count_b=count_b,
+            compared_pages=len(pages),
+            changed_pages=changed,
+            pages=pages,
+            summary=(
+                "Nenhuma diferença visual detectada."
+                if changed == 0
+                else f"{changed} página(s) com alteração visual."
+            ),
+            include_unchanged_in_report=options.include_unchanged_in_report,
         )
-
-    changed = sum(
-        1 for p in pages if p.changed_percent > 0.01 or p.status != "compared"
-    )
-    result = PdfCompareResult(
-        session_id=sid,
-        session_dir=str(session_dir),
-        previous_path=previous_pdf,
-        current_path=current_pdf,
-        previous_relative=previous_relative,
-        current_relative=current_relative,
-        dpi=options.dpi,
-        threshold=options.threshold,
-        page_count_a=count_a,
-        page_count_b=count_b,
-        compared_pages=len(pages),
-        changed_pages=changed,
-        pages=pages,
-        summary=(
-            "Nenhuma diferença visual detectada."
-            if changed == 0
-            else f"{changed} página(s) com alteração visual."
-        ),
-        include_unchanged_in_report=options.include_unchanged_in_report,
-    )
-    (session_dir / "session.json").write_text(
-        json.dumps(
-            {
-                "sessionId": result.session_id,
-                "previousPath": result.previous_path,
-                "currentPath": result.current_path,
-                "previousRelative": result.previous_relative,
-                "currentRelative": result.current_relative,
-                "dpi": result.dpi,
-                "threshold": result.threshold,
-                "pageCountA": result.page_count_a,
-                "pageCountB": result.page_count_b,
-                "comparedPages": result.compared_pages,
-                "changedPages": result.changed_pages,
-                "summary": result.summary,
-                "includeUnchangedInReport": result.include_unchanged_in_report,
-                "pages": [_page_to_dict(p) for p in pages],
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
-    _report(progress, job, "done", total, total, result.summary)
-    return result
+        (session_dir / "session.json").write_text(
+            json.dumps(
+                {
+                    "sessionId": result.session_id,
+                    "previousPath": result.previous_path,
+                    "currentPath": result.current_path,
+                    "previousRelative": result.previous_relative,
+                    "currentRelative": result.current_relative,
+                    "dpi": result.dpi,
+                    "threshold": result.threshold,
+                    "pageCountA": result.page_count_a,
+                    "pageCountB": result.page_count_b,
+                    "comparedPages": result.compared_pages,
+                    "changedPages": result.changed_pages,
+                    "summary": result.summary,
+                    "includeUnchangedInReport": result.include_unchanged_in_report,
+                    "pages": [_page_to_dict(p) for p in pages],
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        _report(progress, job, "done", total, total, result.summary)
+        return result
+    finally:
+        if doc_a is not None:
+            doc_a.close()
+        if doc_b is not None:
+            doc_b.close()
 
 
 def severity_label(page: PdfComparePageResult) -> str:

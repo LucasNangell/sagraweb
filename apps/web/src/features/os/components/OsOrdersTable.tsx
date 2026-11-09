@@ -70,7 +70,7 @@ function buildColumns(
   {
     accessorKey: "nr_os",
     header: "Nr OS",
-    size: 32,
+    size: 64,
     cell: ({ row, getValue }) => {
       const data = row.original;
       if (data.is_sub_os || data.kind === "sub_os") {
@@ -118,7 +118,7 @@ function buildColumns(
   {
     accessorKey: "ano",
     header: "Ano",
-    size: 24,
+    size: 48,
     cell: ({ getValue }) => (
       <span className="block truncate tabular-nums">{getValue<number>()}</span>
     ),
@@ -575,7 +575,7 @@ export function OsOrdersTable({
       <div
         ref={parentRef}
         className={cn(
-          "relative min-h-0 flex-1 overflow-auto",
+          "relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto",
           selectionLocked && "cursor-not-allowed",
         )}
       >
@@ -600,8 +600,8 @@ export function OsOrdersTable({
             </div>
           </div>
         ) : null}
-        {/* Tabela — tablet/desktop */}
-        <table className="hidden w-full min-w-[1180px] table-fixed border-collapse text-sm md:table">
+        {/* Tabela — tablet/desktop: w-full + table-fixed redistribui colunas sem scrollbar horizontal */}
+        <table className="hidden w-full min-w-0 table-fixed border-collapse text-sm md:table">
           <thead className="sticky top-0 z-10 bg-secondary-blue text-white">
             {headerGroups.map((hg) => (
               <tr key={hg.id}>

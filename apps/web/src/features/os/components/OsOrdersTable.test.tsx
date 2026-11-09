@@ -122,7 +122,13 @@ describe("OsOrdersTable column overflow", () => {
     });
     const table = container.querySelector("table");
     expect(table?.className).toContain("table-fixed");
-    expect(table?.className).toContain("min-w-[1180px]");
+    expect(table?.className).toContain("w-full");
+    expect(table?.className).toContain("min-w-0");
+    expect(table?.className).not.toContain("min-w-[1180px]");
+    const section = container.querySelector(
+      `[data-testid="${homeTestIds.osTable}"]`,
+    );
+    expect(section?.querySelector(".overflow-x-hidden")).toBeTruthy();
     const dataRow = container.querySelector(
       `[data-testid="${homeTestIds.osTableRow(2026, 2244)}"]`,
     );

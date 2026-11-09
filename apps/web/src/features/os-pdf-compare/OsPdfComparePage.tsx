@@ -237,8 +237,9 @@ export function OsPdfComparePage({
         <div className="os-pdf-hero-copy">
           <h1>Comparador de versões PDF</h1>
           <p className="subtitle">
-            OS {osId}/{ano} — selecione dois PDFs na pasta da OS e revise as
-            diferenças visualmente.
+            {previousRelative && currentRelative
+              ? `Comparação entre os PDFs da OS ${osId}/${ano}`
+              : `OS ${osId}/${ano} — selecione dois PDFs na pasta da OS e revise as diferenças visualmente.`}
           </p>
         </div>
         <div

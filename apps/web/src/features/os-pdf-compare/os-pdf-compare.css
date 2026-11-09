@@ -917,36 +917,6 @@
   color: var(--muted);
 }
 
-.os-pdf-guide-scope {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem;
-  margin-right: 0.25rem;
-}
-
-.os-pdf-guide-scope button {
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: #fff;
-  padding: 0.2rem 0.45rem;
-  font-size: 0.7rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.os-pdf-guide-scope button.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-
-.os-pdf-guide-promote {
-  border-color: #f0d7a0 !important;
-  background: #fff7e6 !important;
-  color: #8a5a00 !important;
-}
-
 .os-pdf-guide-all-check {
   font-weight: 600;
 }

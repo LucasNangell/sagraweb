@@ -109,8 +109,6 @@ export function OsPdfCompareRulers({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draftMm, setDraftMm] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  /** Escopo padrão das novas guias criadas na régua. */
-  const [createScope, setCreateScope] = useState<GuideScope>("page");
 
   const pageWidthMm = pxToMm(pageWidthPx, dpi);
   const pageHeightMm = pxToMm(pageHeightPx, dpi);
@@ -119,13 +117,6 @@ export function OsPdfCompareRulers({
 
   const visibleGuides = useMemo(
     () => guides.filter((g) => isGuideVisibleOnPage(g, pageIndex)),
-    [guides, pageIndex],
-  );
-
-  const pageOnlyCount = useMemo(
-    () =>
-      guides.filter((g) => g.scope === "page" && g.pageIndex === pageIndex)
-        .length,
     [guides, pageIndex],
   );
 
@@ -193,16 +184,6 @@ export function OsPdfCompareRulers({
     );
   }
 
-  function applyPageGuidesToAll() {
-    onGuidesChange((prev) =>
-      prev.map((g) =>
-        g.scope === "page" && g.pageIndex === pageIndex
-          ? { ...g, scope: "all" as const, pageIndex: undefined }
-          : g,
-      ),
-    );
-  }
-
   function mmFromHorizontalClient(clientX: number, target: HTMLElement): number {
     const rect = target.getBoundingClientRect();
     return clamp((clientX - rect.left) / pxPerMm, 0, pageWidthMm);
@@ -220,8 +201,8 @@ export function OsPdfCompareRulers({
       mm: Number(
         clamp(mm, 0, axis === "x" ? pageWidthMm : pageHeightMm).toFixed(2),
       ),
-      scope: createScope,
-      pageIndex: createScope === "page" ? pageIndex : undefined,
+      scope: "page",
+      pageIndex,
     };
     onGuidesChange((prev) => [...prev, guide]);
     selectGuide(guide);
@@ -420,34 +401,6 @@ export function OsPdfCompareRulers({
         <span className="os-pdf-guide-editor-meta">
           {fmtMm(pageWidthMm)} × {fmtMm(pageHeightMm)} mm
         </span>
-        <div className="os-pdf-guide-scope" role="group" aria-label="Escopo das guias">
-          <button
-            type="button"
-            className={createScope === "page" ? "active" : ""}
-            onClick={() => setCreateScope("page")}
-            title="Novas guias valem só nesta página"
-          >
-            Página atual
-          </button>
-          <button
-            type="button"
-            className={createScope === "all" ? "active" : ""}
-            onClick={() => setCreateScope("all")}
-            title="Novas guias valem em todas as páginas"
-          >
-            Todas as páginas
-          </button>
-          {pageOnlyCount > 0 ? (
-            <button
-              type="button"
-              className="os-pdf-guide-promote"
-              onClick={applyPageGuidesToAll}
-              title="Converte as guias só desta página para o documento inteiro"
-            >
-              Aplicar guias da página a todas
-            </button>
-          ) : null}
-        </div>
 
         {selected ? (
           <>
@@ -481,7 +434,7 @@ export function OsPdfCompareRulers({
                   setGuideScope(selected.id, e.target.checked ? "all" : "page")
                 }
               />
-              Em todas as páginas
+              Aplicar em todas as páginas
             </label>
             <button type="button" onClick={applyDraft}>
               Aplicar

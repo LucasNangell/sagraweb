@@ -16,16 +16,21 @@ PORTA: 5566 (127.0.0.1:5566)
 Impressão (v1.2): GET /printers e POST /print-pdf enviam PDF 102x297 mm
 para uma fila do Windows com DEVMODE (o Chrome não consegue forçar o papel).
 
+Comparação PDF (v1.3): POST /pdf-compare/start e demais rotas processam
+comparação visual localmente (offload da API SAGRA).
+
 Para gerar executável (a partir de app/services):
     pyinstaller --onefile --noconsole --name "SAGRA-FolderOpener" ^
       --hidden-import win32print --hidden-import win32ui --hidden-import win32con ^
       --hidden-import win32gui --hidden-import fitz --hidden-import PIL ^
-      --hidden-import PIL.ImageWin folder_opener_service.py
+      --hidden-import PIL.ImageWin --hidden-import cv2 --hidden-import numpy ^
+      --hidden-import fpdf --hidden-import pdf_compare_engine ^
+      folder_opener_service.py
     Copiar dist\\SAGRA-FolderOpener.exe para local_services\\dist e C:\\_SAGRA
 
 Autor: Sistema SAGRA
 Data: 22/01/2026
-Versão: 1.2.0
+Versão: 1.3.0
 """
  
 import os
@@ -36,13 +41,14 @@ import ctypes
 import base64
 from pathlib import Path
 from datetime import datetime
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 
 # Configuração
 PORT = 5566
 HOST = '127.0.0.1'
-VERSION = "1.2.0"
+VERSION = "1.3.0"
+LOCAL_COMPARE_BASE = f"http://{HOST}:{PORT}"
 PRINT_MAX_PDF_BYTES = 12 * 1024 * 1024
 PRINT_MAX_PAGES = 99
 SEPARADOR_FORM_NAME = "SAGRA_102x297"
@@ -81,6 +87,11 @@ CORS(app, resources={
     r"/health": {
         "origins": "*",
         "methods": ["GET", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    },
+    r"/pdf-compare*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type"]
     },
 })
@@ -661,6 +672,231 @@ def print_pdf():
         return jsonify({"success": False, "error": str(exc)}), 500
 
 
+def _pdf_compare_engine():
+    """Import lazy do motor compartilhado (mesmo diretório / PyInstaller)."""
+    try:
+        import pdf_compare_engine as engine
+        return engine
+    except Exception as exc:
+        log(f"pdf_compare_engine indisponível: {exc}")
+        return None
+
+
+def _pdf_compare_capabilities() -> bool:
+    engine = _pdf_compare_engine()
+    if engine is None:
+        return False
+    try:
+        import cv2  # noqa: F401
+        import numpy  # noqa: F401
+        import fitz  # noqa: F401
+        from PIL import Image  # noqa: F401
+        from fpdf import FPDF  # noqa: F401
+        return True
+    except Exception as exc:
+        log(f"Deps de pdf-compare ausentes: {exc}")
+        return False
+
+
+def _validate_compare_pdf_path(raw: str) -> tuple[bool, str]:
+    path = (raw or "").strip()
+    if not path:
+        return False, "Caminho vazio"
+    try:
+        p = Path(path)
+    except Exception as exc:
+        return False, f"Caminho inválido: {exc}"
+    if p.suffix.lower() != ".pdf":
+        return False, "Somente arquivos PDF"
+    if not p.is_file():
+        return False, "PDF não encontrado"
+    return True, str(p.resolve())
+
+
+def _get_compare_job(session_id: str):
+    engine = _pdf_compare_engine()
+    if engine is None:
+        return None, (jsonify({"success": False, "error": "Motor de comparação indisponível."}), 503)
+    job = engine.get_job(session_id)
+    if not job:
+        return None, (jsonify({"success": False, "error": "Sessão não encontrada."}), 404)
+    return job, None
+
+
+@app.route('/pdf-compare/start', methods=['POST'])
+def pdf_compare_start():
+    """Inicia comparação visual local de dois PDFs (paths absolutos)."""
+    if not _pdf_compare_capabilities():
+        return jsonify({
+            "success": False,
+            "error": "Comparação PDF local indisponível neste Folder Opener.",
+        }), 503
+
+    data = request.get_json(silent=True) or {}
+    ok_prev, prev = _validate_compare_pdf_path(str(data.get("previous_path") or ""))
+    if not ok_prev:
+        return jsonify({"success": False, "error": f"PDF anterior: {prev}"}), 400
+    ok_curr, curr = _validate_compare_pdf_path(str(data.get("current_path") or ""))
+    if not ok_curr:
+        return jsonify({"success": False, "error": f"PDF atual: {curr}"}), 400
+    if os.path.normcase(prev) == os.path.normcase(curr):
+        return jsonify({"success": False, "error": "Selecione dois PDFs diferentes."}), 400
+
+    engine = _pdf_compare_engine()
+    options = engine.PdfCompareOptions(
+        dpi=int(data.get("dpi") or 150),
+        threshold=int(data.get("threshold") or 16),
+        include_unchanged_in_report=bool(data.get("include_unchanged") or False),
+    )
+    options.sanitize()
+    ano = int(data.get("ano") or 0)
+    os_id = int(data.get("os_id") or 0)
+    prev_rel = str(data.get("previous_relative") or Path(prev).name)
+    curr_rel = str(data.get("current_relative") or Path(curr).name)
+
+    try:
+        job = engine.start_compare_job(
+            ano=ano,
+            os_id=os_id,
+            previous_pdf=prev,
+            current_pdf=curr,
+            previous_relative=prev_rel,
+            current_relative=curr_rel,
+            options=options,
+            max_active_jobs=1,
+        )
+    except engine.CompareBusyError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 503
+    except Exception as exc:
+        log(f"Erro em /pdf-compare/start: {exc}")
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+    log(f"pdf-compare start session={job.session_id}")
+    return jsonify({
+        "success": True,
+        "session_id": job.session_id,
+        "message": "Comparação local iniciada.",
+        "execution": "local",
+    }), 200
+
+
+@app.route('/pdf-compare/<session_id>/progress', methods=['GET'])
+def pdf_compare_progress(session_id: str):
+    job, err = _get_compare_job(session_id)
+    if err:
+        return err
+    with job.lock:
+        return jsonify({
+            "sessionId": job.session_id,
+            "stage": job.stage,
+            "current": job.current,
+            "total": job.total,
+            "message": job.message,
+            "pct": job.pct,
+            "done": job.done,
+            "cancelled": job.cancelled,
+            "error": job.error,
+            "execution": "local",
+        }), 200
+
+
+@app.route('/pdf-compare/<session_id>', methods=['GET'])
+def pdf_compare_session(session_id: str):
+    job, err = _get_compare_job(session_id)
+    if err:
+        return err
+    engine = _pdf_compare_engine()
+    with job.lock:
+        if not job.done:
+            return jsonify({
+                "sessionId": job.session_id,
+                "hasResult": False,
+                "busy": True,
+                "stage": job.stage,
+                "pct": job.pct,
+                "message": job.message,
+                "execution": "local",
+            }), 200
+        if job.cancelled:
+            return jsonify({"success": False, "error": "Comparação cancelada."}), 409
+        if job.error:
+            return jsonify({"success": False, "error": job.error}), 500
+        if not job.result:
+            return jsonify({"success": False, "error": "Resultado indisponível."}), 404
+        asset_base = f"{LOCAL_COMPARE_BASE}/pdf-compare/{session_id}/asset"
+        payload = engine.result_to_api_dict(job.result, asset_base=asset_base)
+        payload["busy"] = False
+        payload["execution"] = "local"
+        return jsonify(payload), 200
+
+
+@app.route('/pdf-compare/<session_id>/asset/<name>', methods=['GET'])
+def pdf_compare_asset(session_id: str, name: str):
+    job, err = _get_compare_job(session_id)
+    if err:
+        return err
+    engine = _pdf_compare_engine()
+    try:
+        path = engine.resolve_asset_path(job, name)
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+    except FileNotFoundError:
+        return jsonify({"success": False, "error": "Asset não encontrado."}), 404
+    media = "image/jpeg" if name.lower().endswith((".jpg", ".jpeg")) else "application/octet-stream"
+    return send_file(str(path), mimetype=media, as_attachment=False)
+
+
+@app.route('/pdf-compare/<session_id>/cancel', methods=['POST'])
+def pdf_compare_cancel(session_id: str):
+    job, err = _get_compare_job(session_id)
+    if err:
+        return err
+    engine = _pdf_compare_engine()
+    engine.cancel_job(session_id)
+    return jsonify({"ok": True, "success": True}), 200
+
+
+@app.route('/pdf-compare/<session_id>/report', methods=['POST'])
+def pdf_compare_report(session_id: str):
+    job, err = _get_compare_job(session_id)
+    if err:
+        return err
+    engine = _pdf_compare_engine()
+    with job.lock:
+        if not job.done or not job.result:
+            return jsonify({
+                "success": False,
+                "error": "Comparação ainda não concluída.",
+            }), 409
+        result = job.result
+
+    data = request.get_json(silent=True) or {}
+    include = data.get("include_unchanged")
+    if include is None:
+        include = result.include_unchanged_in_report
+    dest = job.session_dir / "report.pdf"
+    try:
+        engine.build_report_pdf(
+            result,
+            dest,
+            include_unchanged=bool(include),
+            should_cancel=job.cancel_event.is_set,
+            job=job,
+        )
+    except engine.OperationCanceledError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 409
+    except Exception as exc:
+        log(f"Erro em /pdf-compare/report: {exc}")
+        return jsonify({"success": False, "error": f"Falha ao gerar relatório: {exc}"}), 500
+
+    return send_file(
+        str(dest),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"comparacao-local-{session_id[:8]}.pdf",
+    )
+
+
 @app.route('/health', methods=['GET'])
 def health():
     """Endpoint de verificação de saúde do serviço"""
@@ -671,6 +907,7 @@ def health():
         "version": VERSION,
         "port": PORT,
         "print": bool(win32print and fitz and Image),
+        "pdf_compare": _pdf_compare_capabilities(),
     }), 200
 
 @app.route('/ping', methods=['GET'])

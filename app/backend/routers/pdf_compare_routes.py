@@ -100,15 +100,19 @@ def start_pdf_compare(
         include_unchanged_in_report=body.include_unchanged,
     )
     options.sanitize()
-    job = compare_svc.start_compare_job(
-        ano=ano,
-        os_id=id,
-        previous_pdf=prev_path,
-        current_pdf=curr_path,
-        previous_relative=prev_rel,
-        current_relative=curr_rel,
-        options=options,
-    )
+    try:
+        job = compare_svc.start_compare_job(
+            ano=ano,
+            os_id=id,
+            previous_pdf=prev_path,
+            current_pdf=curr_path,
+            previous_relative=prev_rel,
+            current_relative=curr_rel,
+            options=options,
+            max_active_jobs=compare_svc.DEFAULT_MAX_ACTIVE_COMPARE_JOBS,
+        )
+    except compare_svc.CompareBusyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return PdfCompareStartResponse(session_id=job.session_id)
 
 

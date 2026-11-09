@@ -6,8 +6,10 @@ import {
   downloadPdfCompareReport,
   fetchPdfCompareProgress,
   fetchPdfCompareResult,
+  joinOsAbsolutePath,
   optionsToPayload,
   startPdfCompare,
+  type CompareExecution,
 } from "./api";
 import { OsPdfComparePagesColumn } from "./OsPdfComparePagesColumn";
 import { OsPdfCompareReport } from "./OsPdfCompareReport";
@@ -71,6 +73,8 @@ export function OsPdfComparePage({
   const [pageIndex, setPageIndex] = useState(0);
   const [viewMode, setViewMode] = useState<ViewMode>("diff");
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [execution, setExecution] = useState<CompareExecution | null>(null);
+  const [rootPath, setRootPath] = useState<string | null>(null);
   const [filesCollapsed, setFilesCollapsed] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const pollRef = useRef<number | null>(null);
@@ -104,6 +108,7 @@ export function OsPdfComparePage({
     setResult(null);
     setError(null);
     setSessionId(null);
+    setExecution(null);
     setPageIndex(0);
     setViewMode("diff");
     setPreviousRelative(null);
@@ -123,6 +128,7 @@ export function OsPdfComparePage({
     setError(null);
     setResult(null);
     setReportOpen(false);
+    setExecution(null);
     setBusy(true);
     setProgress({
       sessionId: "",
@@ -134,12 +140,33 @@ export function OsPdfComparePage({
       done: false,
     });
     try {
+      const absolutePaths =
+        rootPath
+          ? {
+              previous: joinOsAbsolutePath(rootPath, previousRelative),
+              current: joinOsAbsolutePath(rootPath, currentRelative),
+            }
+          : null;
       const started = await startPdfCompare(
         ano,
         osId,
         optionsToPayload(previousRelative, currentRelative, options),
+        absolutePaths,
       );
       setSessionId(started.session_id);
+      setExecution(started.execution);
+      setProgress({
+        sessionId: started.session_id,
+        stage: "queued",
+        current: 0,
+        total: 0,
+        message:
+          started.execution === "local"
+            ? "Processando neste computador…"
+            : "Processando no servidor…",
+        pct: 0,
+        done: false,
+      });
       stopPolling();
       pollRef.current = window.setInterval(() => {
         void (async () => {
@@ -148,8 +175,18 @@ export function OsPdfComparePage({
               ano,
               osId,
               started.session_id,
+              started.execution,
             );
-            setProgress(prog);
+            const where =
+              started.execution === "local"
+                ? "neste computador"
+                : "no servidor";
+            setProgress({
+              ...prog,
+              message: prog.message
+                ? `${prog.message} (${where})`
+                : `Processando ${where}…`,
+            });
             if (!prog.done) return;
             stopPolling();
             if (prog.cancelled) {
@@ -166,6 +203,7 @@ export function OsPdfComparePage({
               ano,
               osId,
               started.session_id,
+              started.execution,
             );
             setResult(data);
             setPageIndex(firstInterestingPage(data.pages));
@@ -185,26 +223,44 @@ export function OsPdfComparePage({
       setProgress(null);
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [ano, currentRelative, options, osId, previousRelative, stopPolling]);
+  }, [
+    ano,
+    currentRelative,
+    options,
+    osId,
+    previousRelative,
+    rootPath,
+    stopPolling,
+  ]);
 
   useEffect(() => {
     if (!autoStart || autoStartedRef.current) return;
     if (!previousRelative || !currentRelative) return;
-    autoStartedRef.current = true;
-    void runCompare();
-  }, [autoStart, currentRelative, previousRelative, runCompare]);
+    if (rootPath) {
+      autoStartedRef.current = true;
+      void runCompare();
+      return;
+    }
+    // Sem root ainda: aguarda browse publicar rootPath; senão cai no servidor.
+    const timer = window.setTimeout(() => {
+      if (autoStartedRef.current) return;
+      autoStartedRef.current = true;
+      void runCompare();
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [autoStart, currentRelative, previousRelative, rootPath, runCompare]);
 
   const onCancel = async () => {
-    if (!sessionId) return;
+    if (!sessionId || !execution) return;
     try {
-      await cancelPdfCompare(ano, osId, sessionId);
+      await cancelPdfCompare(ano, osId, sessionId, execution);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
   };
 
   const onExportReport = async () => {
-    if (!sessionId) return;
+    if (!sessionId || !execution) return;
     setError(null);
     try {
       setProgress({
@@ -212,7 +268,10 @@ export function OsPdfComparePage({
         stage: "report",
         current: 0,
         total: 1,
-        message: "Gerando relatório PDF…",
+        message:
+          execution === "local"
+            ? "Gerando relatório neste computador…"
+            : "Gerando relatório no servidor…",
         pct: 5,
         done: false,
       });
@@ -221,6 +280,7 @@ export function OsPdfComparePage({
         osId,
         sessionId,
         options.includeUnchangedInReport,
+        execution,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -342,6 +402,7 @@ export function OsPdfComparePage({
                 assignSlot={assignSlot}
                 onAssignSlotChange={setAssignSlot}
                 onSelectPdf={onSelectPdf}
+                onRootPath={setRootPath}
                 disabled={busy}
               />
 

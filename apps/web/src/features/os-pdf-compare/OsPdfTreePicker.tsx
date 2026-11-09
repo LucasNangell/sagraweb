@@ -24,6 +24,7 @@ interface OsPdfTreePickerProps {
   assignSlot: AssignSlot;
   onAssignSlotChange: (slot: AssignSlot) => void;
   onSelectPdf: (relative: string, name: string) => void;
+  onRootPath?: (rootPath: string) => void;
   disabled?: boolean;
 }
 
@@ -39,6 +40,7 @@ export function OsPdfTreePicker({
   assignSlot,
   onAssignSlotChange,
   onSelectPdf,
+  onRootPath,
   disabled,
 }: OsPdfTreePickerProps) {
   const [nodes, setNodes] = useState<Record<string, TreeNodeState>>({});
@@ -47,6 +49,9 @@ export function OsPdfTreePicker({
     async (relative: string): Promise<Pick<TreeNodeState, "folders" | "pdfs" | "error">> => {
       try {
         const data = await fetchOsFolderBrowse(ano, osId, relative);
+        if (relative === "" && data.root_path) {
+          onRootPath?.(data.root_path);
+        }
         if (data.error) {
           return { folders: [], pdfs: [], error: data.error };
         }
@@ -63,7 +68,7 @@ export function OsPdfTreePicker({
         };
       }
     },
-    [ano, osId],
+    [ano, onRootPath, osId],
   );
 
   const ensureLoaded = useCallback(

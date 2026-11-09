@@ -21,6 +21,10 @@ def _write_pdf(path: Path, *, text: str, color: tuple[float, float, float] = (0,
 def compare_tmp(tmp_path, monkeypatch):
     root = tmp_path / "Compare"
     root.mkdir()
+    # compare_pdfs resolve compare_root no módulo do motor, não no reexport.
+    import pdf_compare_engine as engine
+
+    monkeypatch.setattr(engine, "compare_root", lambda: root)
     monkeypatch.setattr(svc, "compare_root", lambda: root)
     return root
 
@@ -142,3 +146,54 @@ def test_report_pdf_builds(compare_tmp, tmp_path):
     out = svc.build_report_pdf(result, dest, include_unchanged=True)
     assert out.is_file()
     assert out.stat().st_size > 100
+
+
+def test_start_compare_rejects_when_busy(compare_tmp, tmp_path, monkeypatch):
+    import threading
+    import time
+
+    import pdf_compare_engine as engine
+
+    a = tmp_path / "a.pdf"
+    b = tmp_path / "b.pdf"
+    _write_pdf(a, text="A")
+    _write_pdf(b, text="B")
+
+    release = threading.Event()
+    original_compare = engine.compare_pdfs
+
+    def slow_compare(*args, **kwargs):
+        release.wait(timeout=5)
+        return original_compare(*args, **kwargs)
+
+    monkeypatch.setattr(engine, "compare_pdfs", slow_compare)
+    monkeypatch.setattr(svc, "compare_pdfs", slow_compare)
+
+    options = svc.PdfCompareOptions(dpi=150, threshold=16)
+    job1 = svc.start_compare_job(
+        ano=2026,
+        os_id=1,
+        previous_pdf=str(a),
+        current_pdf=str(b),
+        previous_relative="a.pdf",
+        current_relative="b.pdf",
+        options=options,
+        max_active_jobs=1,
+    )
+    with pytest.raises(svc.CompareBusyError):
+        svc.start_compare_job(
+            ano=2026,
+            os_id=2,
+            previous_pdf=str(a),
+            current_pdf=str(b),
+            previous_relative="a.pdf",
+            current_relative="b.pdf",
+            options=options,
+            max_active_jobs=1,
+        )
+    release.set()
+    deadline = time.time() + 10
+    while not job1.done and time.time() < deadline:
+        time.sleep(0.05)
+    assert job1.done
+    assert svc.count_active_jobs() == 0

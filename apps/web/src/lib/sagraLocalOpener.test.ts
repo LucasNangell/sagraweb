@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { blobToBase64, fetchLocalPrinters, printPdfLocally } from "./sagraLocalOpener";
+import {
+  blobToBase64,
+  fetchLocalPrinters,
+  printPdfLocally,
+  probeLocalPdfCompare,
+} from "./sagraLocalOpener";
 
 describe("sagraLocalOpener print", () => {
   afterEach(() => {
@@ -75,5 +80,48 @@ describe("sagraLocalOpener print", () => {
 
   it("converte blob para base64", async () => {
     await expect(blobToBase64(new Blob(["%PDF"]))).resolves.toBe(btoa("%PDF"));
+  });
+});
+
+describe("sagraLocalOpener pdf-compare", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("detecta suporte pdf_compare no health 1.3", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          version: "1.3.0",
+          pdf_compare: true,
+        }),
+      })),
+    );
+    await expect(probeLocalPdfCompare()).resolves.toEqual({
+      ok: true,
+      version: "1.3.0",
+    });
+  });
+
+  it("rejeita opener sem feature pdf_compare", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          version: "1.2.0",
+          print: true,
+        }),
+      })),
+    );
+    const result = await probeLocalPdfCompare();
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/1\.3/i);
+    }
   });
 });

@@ -898,6 +898,7 @@ export function OsHistoryPanel({
               ref={historyListRef}
               className={cn(
                 "relative max-h-[min(40vh,280px)] min-h-[140px] min-w-0 shrink-0 overflow-x-hidden overflow-y-auto overscroll-contain border-b border-sagra-border sm:max-h-none sm:h-auto sm:w-[45.6%] sm:border-r sm:border-b-0",
+                "portrait:sm:w-[54%]",
                 editing && "cursor-not-allowed",
               )}
             >

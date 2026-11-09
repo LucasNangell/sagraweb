@@ -23,8 +23,11 @@ export function osHomeDetailsPaneClassName(
     }
     return "flex min-h-0 flex-1 flex-col gap-2 overflow-hidden lg:hidden";
   }
-  const base =
-    "flex min-h-0 flex-col gap-2 md:grid md:grid-cols-1 md:gap-2 lg:grid-cols-2 lg:gap-3";
+  const base = cn(
+    "flex min-h-0 flex-col gap-2 md:grid md:grid-cols-1 md:gap-2 lg:grid-cols-2 lg:gap-3",
+    // Retrato: histórico um pouco mais largo que detalhes (lista de andamentos).
+    "portrait:lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]",
+  );
   if (mobileView === "list") {
     return cn(
       base,

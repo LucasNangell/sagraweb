@@ -26,4 +26,10 @@ describe("osHomeListLayout", () => {
       "lg:grid",
     );
   });
+
+  it("dá mais largura ao histórico no modo retrato", () => {
+    const classes = osHomeDetailsPaneClassName(false, "details");
+    expect(classes).toContain("lg:grid-cols-2");
+    expect(classes).toContain("portrait:lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]");
+  });
 });

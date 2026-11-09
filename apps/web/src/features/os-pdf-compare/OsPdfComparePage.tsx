@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight, FolderTree } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -8,6 +9,7 @@ import {
   optionsToPayload,
   startPdfCompare,
 } from "./api";
+import { OsPdfComparePagesColumn } from "./OsPdfComparePagesColumn";
 import { OsPdfCompareReport } from "./OsPdfCompareReport";
 import { OsPdfCompareViewer } from "./OsPdfCompareViewer";
 import { OsPdfTreePicker, type AssignSlot } from "./OsPdfTreePicker";
@@ -70,6 +72,7 @@ export function OsPdfComparePage({
   const [pageIndex, setPageIndex] = useState(0);
   const [viewMode, setViewMode] = useState<ViewMode>("diff");
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [filesCollapsed, setFilesCollapsed] = useState(false);
   const pollRef = useRef<number | null>(null);
   const autoStartedRef = useRef(false);
 
@@ -109,6 +112,7 @@ export function OsPdfComparePage({
     setPreviousName(null);
     setCurrentName(null);
     setAssignSlot("previous");
+    setFilesCollapsed(false);
   };
 
   const runCompare = useCallback(async () => {
@@ -169,6 +173,7 @@ export function OsPdfComparePage({
             setInfo(data.summary);
             setBusy(false);
             setProgress(null);
+            setFilesCollapsed(true);
           } catch (err) {
             stopPolling();
             setBusy(false);
@@ -252,114 +257,165 @@ export function OsPdfComparePage({
         </div>
       )}
 
-      <div className="os-pdf-layout">
-        <aside className="os-pdf-panel">
-          <h2>Arquivos</h2>
-          <div className="os-pdf-slots">
-            <div className="os-pdf-slot">
-              <label>Versão anterior</label>
-              <div className="path" title={previousRelative || undefined}>
-                {previousName || "—"}
-              </div>
-            </div>
-            <div className="os-pdf-slot">
-              <label>Versão atual</label>
-              <div className="path" title={currentRelative || undefined}>
-                {currentName || "—"}
-              </div>
-            </div>
-          </div>
-
-          <OsPdfTreePicker
-            ano={ano}
-            osId={osId}
-            previousRelative={previousRelative}
-            currentRelative={currentRelative}
-            assignSlot={assignSlot}
-            onAssignSlotChange={setAssignSlot}
-            onSelectPdf={onSelectPdf}
-            disabled={busy}
-          />
-
-          <div className="os-pdf-options">
-            <label>
-              Resolução
-              <select
-                value={options.dpi}
-                disabled={busy}
-                onChange={(e) =>
-                  setOptions((o) => ({ ...o, dpi: Number(e.target.value) }))
-                }
-              >
-                <option value={150}>150 DPI (rápido)</option>
-                <option value={300}>300 DPI (alta fidelidade)</option>
-              </select>
-            </label>
-            <label>
-              Tolerância ({options.threshold})
-              <input
-                type="range"
-                min={4}
-                max={48}
-                value={options.threshold}
-                disabled={busy}
-                onChange={(e) =>
-                  setOptions((o) => ({
-                    ...o,
-                    threshold: Number(e.target.value),
-                  }))
-                }
-              />
-            </label>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={options.includeUnchangedInReport}
-                disabled={busy}
-                onChange={(e) =>
-                  setOptions((o) => ({
-                    ...o,
-                    includeUnchangedInReport: e.target.checked,
-                  }))
-                }
-              />
-              Incluir páginas sem mudança no relatório
-            </label>
-          </div>
-
-          <div className="os-pdf-actions">
+      <div
+        className={
+          "os-pdf-layout" +
+          (filesCollapsed ? " files-collapsed" : "") +
+          (result?.hasResult ? " has-pages" : "")
+        }
+      >
+        <aside
+          className={
+            "os-pdf-panel os-pdf-files-panel" +
+            (filesCollapsed ? " is-collapsed" : "")
+          }
+        >
+          {filesCollapsed ? (
             <button
               type="button"
-              className="primary"
-              disabled={!canCompare}
-              onClick={() => void runCompare()}
+              className="os-pdf-files-rail"
+              onClick={() => setFilesCollapsed(false)}
+              title="Expandir arquivos"
+              aria-label="Expandir coluna de arquivos"
             >
-              Comparar
+              <ChevronRight className="size-4" aria-hidden />
+              <FolderTree className="size-4" aria-hidden />
+              <span>Arquivos</span>
             </button>
-            <button type="button" disabled={!busy} onClick={() => void onCancel()}>
-              Cancelar
-            </button>
-            <button type="button" disabled={busy} onClick={clearAll}>
-              Limpar
-            </button>
-            <button
-              type="button"
-              disabled={!result?.hasResult || busy}
-              onClick={() => void onExportReport()}
-            >
-              Exportar relatório PDF
-            </button>
-          </div>
-
-          {progress && (
-            <div className="os-pdf-progress">
-              <div className="bar">
-                <span style={{ width: `${Math.max(2, progress.pct)}%` }} />
+          ) : (
+            <>
+              <div className="os-pdf-files-header">
+                <h2>Arquivos</h2>
+                <button
+                  type="button"
+                  className="os-pdf-files-toggle"
+                  onClick={() => setFilesCollapsed(true)}
+                  title="Recolher arquivos"
+                  aria-label="Recolher coluna de arquivos"
+                  disabled={!result?.hasResult}
+                >
+                  <ChevronLeft className="size-4" aria-hidden />
+                </button>
               </div>
-              <div className="msg">{progress.message}</div>
-            </div>
+              <div className="os-pdf-slots">
+                <div className="os-pdf-slot">
+                  <label>Versão anterior</label>
+                  <div className="path" title={previousRelative || undefined}>
+                    {previousName || "—"}
+                  </div>
+                </div>
+                <div className="os-pdf-slot">
+                  <label>Versão atual</label>
+                  <div className="path" title={currentRelative || undefined}>
+                    {currentName || "—"}
+                  </div>
+                </div>
+              </div>
+
+              <OsPdfTreePicker
+                ano={ano}
+                osId={osId}
+                previousRelative={previousRelative}
+                currentRelative={currentRelative}
+                assignSlot={assignSlot}
+                onAssignSlotChange={setAssignSlot}
+                onSelectPdf={onSelectPdf}
+                disabled={busy}
+              />
+
+              <div className="os-pdf-options">
+                <label>
+                  Resolução
+                  <select
+                    value={options.dpi}
+                    disabled={busy}
+                    onChange={(e) =>
+                      setOptions((o) => ({ ...o, dpi: Number(e.target.value) }))
+                    }
+                  >
+                    <option value={150}>150 DPI (rápido)</option>
+                    <option value={300}>300 DPI (alta fidelidade)</option>
+                  </select>
+                </label>
+                <label>
+                  Tolerância ({options.threshold})
+                  <input
+                    type="range"
+                    min={4}
+                    max={48}
+                    value={options.threshold}
+                    disabled={busy}
+                    onChange={(e) =>
+                      setOptions((o) => ({
+                        ...o,
+                        threshold: Number(e.target.value),
+                      }))
+                    }
+                  />
+                </label>
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={options.includeUnchangedInReport}
+                    disabled={busy}
+                    onChange={(e) =>
+                      setOptions((o) => ({
+                        ...o,
+                        includeUnchangedInReport: e.target.checked,
+                      }))
+                    }
+                  />
+                  Incluir páginas sem mudança no relatório
+                </label>
+              </div>
+
+              <div className="os-pdf-actions">
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={!canCompare}
+                  onClick={() => void runCompare()}
+                >
+                  Comparar
+                </button>
+                <button
+                  type="button"
+                  disabled={!busy}
+                  onClick={() => void onCancel()}
+                >
+                  Cancelar
+                </button>
+                <button type="button" disabled={busy} onClick={clearAll}>
+                  Limpar
+                </button>
+                <button
+                  type="button"
+                  disabled={!result?.hasResult || busy}
+                  onClick={() => void onExportReport()}
+                >
+                  Exportar relatório PDF
+                </button>
+              </div>
+
+              {progress && (
+                <div className="os-pdf-progress">
+                  <div className="bar">
+                    <span style={{ width: `${Math.max(2, progress.pct)}%` }} />
+                  </div>
+                  <div className="msg">{progress.message}</div>
+                </div>
+              )}
+            </>
           )}
         </aside>
+
+        {result?.hasResult ? (
+          <OsPdfComparePagesColumn
+            pages={result.pages}
+            pageIndex={pageIndex}
+            onPageIndexChange={setPageIndex}
+          />
+        ) : null}
 
         <main className="os-pdf-panel os-pdf-panel-main">
           {result?.hasResult ? (
@@ -367,7 +423,6 @@ export function OsPdfComparePage({
               <OsPdfCompareViewer
                 pages={result.pages}
                 pageIndex={pageIndex}
-                onPageIndexChange={setPageIndex}
                 viewMode={viewMode}
                 onViewModeChange={setViewMode}
                 previousName={previousName || result.previousName}

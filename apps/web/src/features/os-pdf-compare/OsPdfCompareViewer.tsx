@@ -13,7 +13,6 @@ import type { ComparePage, ViewMode } from "./types";
 interface OsPdfCompareViewerProps {
   pages: ComparePage[];
   pageIndex: number;
-  onPageIndexChange: (index: number) => void;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
   previousName?: string | null;
@@ -48,14 +47,6 @@ function modeLegend(mode: ViewMode): { swatch: string; label: string }[] {
   }
 }
 
-function severityClass(page: ComparePage): string {
-  if (page.status !== "compared") return "sev-critical";
-  if (page.changedPercent <= 0.01) return "sev-none";
-  if (page.changedPercent < 0.5) return "sev-low";
-  if (page.changedPercent < 2) return "sev-mid";
-  return "sev-high";
-}
-
 function fmtPct(n: number): string {
   if (!Number.isFinite(n)) return "0%";
   if (n < 0.01) return "0%";
@@ -77,7 +68,6 @@ function pageImageUrl(
 export function OsPdfCompareViewer({
   pages,
   pageIndex,
-  onPageIndexChange,
   viewMode,
   onViewModeChange,
   previousName = null,
@@ -91,6 +81,11 @@ export function OsPdfCompareViewer({
   );
 
   const page = pages.find((p) => p.index === pageIndex) || pages[0] || null;
+
+  useEffect(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, [pageIndex]);
 
   useEffect(() => {
     if (viewMode !== "flicker") return;
@@ -113,19 +108,6 @@ export function OsPdfCompareViewer({
     e.preventDefault();
     const factor = e.deltaY < 0 ? 1.1 : 0.9;
     setZoom((z) => Math.min(8, Math.max(0.2, Number((z * factor).toFixed(3)))));
-  }
-
-  function onThumbsWheel(e: WheelEvent<HTMLDivElement>) {
-    const el = e.currentTarget;
-    const delta =
-      Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-    if (delta === 0) return;
-    const maxScroll = el.scrollWidth - el.clientWidth;
-    if (maxScroll <= 0) return;
-    const next = Math.min(maxScroll, Math.max(0, el.scrollLeft + delta));
-    if (next === el.scrollLeft) return;
-    e.preventDefault();
-    el.scrollLeft = next;
   }
 
   function onPointerDown(e: PointerEvent<HTMLDivElement>) {
@@ -163,32 +145,6 @@ export function OsPdfCompareViewer({
 
   return (
     <div className="os-pdf-viewer">
-      <div className="os-pdf-thumbs" onWheel={onThumbsWheel}>
-        {pages.map((p) => {
-          const thumb = pdfCompareAssetUrl(p.urls.thumb);
-          return (
-            <button
-              key={p.index}
-              type="button"
-              className={
-                "os-pdf-thumb " +
-                severityClass(p) +
-                (p.index === page.index ? " active" : "")
-              }
-              onClick={() => {
-                onPageIndexChange(p.index);
-                fitZoom();
-              }}
-            >
-              {thumb ? <img src={thumb} alt={`Pág. ${p.pageNumber}`} /> : null}
-              <span>
-                {p.pageNumber} · {fmtPct(p.changedPercent)}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
       <div className="os-pdf-toolbar">
         <div className="os-pdf-modes">
           {(

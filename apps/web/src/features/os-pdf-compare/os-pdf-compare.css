@@ -79,15 +79,30 @@
 
 .os-pdf-layout {
   display: grid;
-  grid-template-columns: minmax(280px, 360px) 1fr;
+  grid-template-columns: minmax(280px, 340px) 1fr;
   gap: 1rem;
   align-items: stretch;
   flex: 1 1 auto;
   min-height: 0;
 }
 
+.os-pdf-layout.has-pages {
+  grid-template-columns: minmax(280px, 340px) 112px 1fr;
+}
+
+.os-pdf-layout.files-collapsed {
+  grid-template-columns: 52px 1fr;
+}
+
+.os-pdf-layout.files-collapsed.has-pages {
+  grid-template-columns: 52px 112px 1fr;
+}
+
 @media (max-width: 960px) {
-  .os-pdf-layout {
+  .os-pdf-layout,
+  .os-pdf-layout.has-pages,
+  .os-pdf-layout.files-collapsed,
+  .os-pdf-layout.files-collapsed.has-pages {
     grid-template-columns: 1fr;
     overflow: auto;
   }
@@ -107,6 +122,101 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   max-height: 100%;
+}
+
+.os-pdf-files-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: auto;
+}
+
+.os-pdf-files-panel.is-collapsed {
+  padding: 0.35rem;
+  overflow: hidden;
+}
+
+.os-pdf-files-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.os-pdf-files-header h2 {
+  margin: 0;
+}
+
+.os-pdf-files-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.os-pdf-files-toggle:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.os-pdf-files-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.55rem;
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 0.5rem 0.15rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.os-pdf-files-rail span {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  letter-spacing: 0.04em;
+}
+
+.os-pdf-pages-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0.65rem 0.45rem;
+}
+
+.os-pdf-pages-column h2 {
+  margin: 0 0 0.45rem;
+  text-align: center;
+  font-size: 0.8rem;
+}
+
+.os-pdf-thumbs-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+  padding-right: 0.15rem;
+}
+
+.os-pdf-thumbs-vertical .os-pdf-thumb {
+  width: 100%;
 }
 
 .os-pdf-panel h2 {
@@ -321,13 +431,6 @@
   gap: 0.65rem;
 }
 
-.os-pdf-thumbs {
-  display: flex;
-  gap: 0.45rem;
-  overflow-x: auto;
-  padding-bottom: 0.25rem;
-}
-
 .os-pdf-thumb {
   flex: 0 0 auto;
   width: 88px;
@@ -342,7 +445,7 @@
 
 .os-pdf-thumb img {
   width: 100%;
-  height: 64px;
+  height: 72px;
   object-fit: contain;
   background: #f0f4f2;
   border-radius: 4px;

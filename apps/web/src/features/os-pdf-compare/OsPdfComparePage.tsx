@@ -361,7 +361,7 @@ export function OsPdfComparePage({
           )}
         </aside>
 
-        <main className="os-pdf-panel">
+        <main className="os-pdf-panel os-pdf-panel-main">
           {result?.hasResult ? (
             <>
               <OsPdfCompareViewer

@@ -9,7 +9,9 @@
   flex-direction: column;
   gap: 1rem;
   min-height: calc(100vh - 4rem);
+  max-height: calc(100vh - 4rem);
   padding: 1rem 1.25rem 2rem;
+  overflow: hidden;
   color: var(--ink);
   background:
     radial-gradient(1200px 400px at 10% -10%, #dceee7 0%, transparent 55%),
@@ -79,12 +81,15 @@
   display: grid;
   grid-template-columns: minmax(280px, 360px) 1fr;
   gap: 1rem;
-  align-items: start;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 @media (max-width: 960px) {
   .os-pdf-layout {
     grid-template-columns: 1fr;
+    overflow: auto;
   }
 }
 
@@ -94,6 +99,14 @@
   border-radius: 12px;
   padding: 0.85rem;
   box-shadow: 0 8px 24px rgb(23 53 44 / 4%);
+  min-height: 0;
+}
+
+.os-pdf-panel-main {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  max-height: 100%;
 }
 
 .os-pdf-panel h2 {
@@ -400,8 +413,8 @@
 .os-pdf-viewport {
   position: relative;
   min-height: 420px;
-  max-height: 70vh;
-  overflow: hidden;
+  max-height: min(70vh, 720px);
+  overflow: auto;
   border: 1px solid var(--line);
   border-radius: 10px;
   background:

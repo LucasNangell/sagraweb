@@ -37,13 +37,15 @@ function CompararVersoesRoute() {
 
   return (
     <AuthGuard requiredPermission="ctx_comparar_versoes">
-      <OsPdfComparePage
-        ano={anoNum}
-        osId={idNum}
-        initialPreviousRelative={search.previous ?? null}
-        initialCurrentRelative={search.current ?? null}
-        autoStart={Boolean(search.auto && search.previous && search.current)}
-      />
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <OsPdfComparePage
+          ano={anoNum}
+          osId={idNum}
+          initialPreviousRelative={search.previous ?? null}
+          initialCurrentRelative={search.current ?? null}
+          autoStart={Boolean(search.auto && search.previous && search.current)}
+        />
+      </div>
     </AuthGuard>
   );
 }

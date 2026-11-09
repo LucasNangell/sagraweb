@@ -397,54 +397,48 @@ export function OsPdfCompareRulers({
         </div>
       </div>
 
-      <div className={"os-pdf-guide-editor" + (selected ? "" : " idle")}>
-        <span className="os-pdf-guide-editor-meta">
-          {fmtMm(pageWidthMm)} × {fmtMm(pageHeightMm)} mm
-        </span>
-
-        {selected ? (
-          <>
-            <label>
-              {selected.axis === "x" ? "Guia X" : "Guia Y"} (mm)
-              <input
-                type="number"
-                min={0}
-                max={
-                  selected.axis === "x"
-                    ? Number(pageWidthMm.toFixed(2))
-                    : Number(pageHeightMm.toFixed(2))
+      {selected ? (
+        <div className="os-pdf-guide-editor">
+          <label>
+            {selected.axis === "x" ? "Guia X" : "Guia Y"} (mm)
+            <input
+              type="number"
+              min={0}
+              max={
+                selected.axis === "x"
+                  ? Number(pageWidthMm.toFixed(2))
+                  : Number(pageHeightMm.toFixed(2))
+              }
+              step={0.1}
+              value={draftMm}
+              onChange={(e) => setDraftMm(e.target.value)}
+              onBlur={applyDraft}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  applyDraft();
                 }
-                step={0.1}
-                value={draftMm}
-                onChange={(e) => setDraftMm(e.target.value)}
-                onBlur={applyDraft}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    applyDraft();
-                  }
-                }}
-              />
-            </label>
-            <label className="os-pdf-guide-all-check">
-              <input
-                type="checkbox"
-                checked={selected.scope === "all"}
-                onChange={(e) =>
-                  setGuideScope(selected.id, e.target.checked ? "all" : "page")
-                }
-              />
-              Aplicar em todas as páginas
-            </label>
-            <button type="button" onClick={applyDraft}>
-              Aplicar
-            </button>
-            <button type="button" onClick={() => removeGuide(selected.id)}>
-              Remover
-            </button>
-          </>
-        ) : null}
-      </div>
+              }}
+            />
+          </label>
+          <label className="os-pdf-guide-all-check">
+            <input
+              type="checkbox"
+              checked={selected.scope === "all"}
+              onChange={(e) =>
+                setGuideScope(selected.id, e.target.checked ? "all" : "page")
+              }
+            />
+            Aplicar em todas as páginas
+          </label>
+          <button type="button" onClick={applyDraft}>
+            Aplicar
+          </button>
+          <button type="button" onClick={() => removeGuide(selected.id)}>
+            Remover
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

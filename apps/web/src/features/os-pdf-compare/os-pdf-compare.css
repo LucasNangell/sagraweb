@@ -667,8 +667,26 @@
   border: 1px solid var(--line);
   background: #fff;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.os-pdf-legend-chip-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.os-pdf-legend-size {
+  flex-shrink: 0;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: rgb(23 53 44 / 8%);
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
 }
 
 .os-pdf-legend-chip.prev {
@@ -1036,10 +1054,6 @@
   color: var(--ink);
 }
 
-.os-pdf-guide-editor.idle {
-  color: var(--muted);
-}
-
 .os-pdf-guide-all-check {
   font-weight: 600;
 }
@@ -1069,12 +1083,6 @@
   cursor: pointer;
 }
 
-.os-pdf-guide-editor-meta {
-  color: var(--muted);
-  font-size: 0.7rem;
-  font-weight: 600;
-  margin-right: auto;
-}
 
 .os-pdf-main,
 .os-pdf-side {

@@ -30,7 +30,7 @@ interface OsPdfCompareViewerProps {
 
 const RULER_CHROME_X = 28;
 const RULER_CHROME_Y = 28;
-const GUIDE_EDITOR_H = 34;
+const GUIDE_EDITOR_H = 36;
 
 function modeLegend(mode: ViewMode): { swatch: string; label: string }[] {
   switch (mode) {
@@ -69,6 +69,23 @@ function fmtPct(n: number): string {
   if (n < 0.01) return "0%";
   if (n < 1) return `${n.toFixed(2)}%`;
   return `${n.toFixed(1)}%`;
+}
+
+function fmtMm(n: number): string {
+  if (!Number.isFinite(n)) return "0";
+  const rounded = Math.round(n * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
+}
+
+function pageSizeMmLabel(
+  widthPx: number,
+  heightPx: number,
+  dpi: number,
+): string | null {
+  if (!widthPx || !heightPx || !dpi) return null;
+  const w = (widthPx / dpi) * 25.4;
+  const h = (heightPx / dpi) * 25.4;
+  return `${fmtMm(w)} × ${fmtMm(h)} mm`;
 }
 
 function pageImageUrl(
@@ -236,6 +253,9 @@ export function OsPdfCompareViewer({
   const imgH = naturalSize.h ? naturalSize.h * displayScale : 0;
   const stageW = contentSize.w ? contentSize.w * displayScale : 0;
   const stageH = contentSize.h ? contentSize.h * displayScale : 0;
+  const pageSizeLabel = page
+    ? pageSizeMmLabel(page.width, page.height, dpi)
+    : null;
 
   const pageBody = viewMode === "side" ? (
     <div className="os-pdf-side" style={{ width: stageW || undefined, height: stageH || undefined }}>
@@ -379,13 +399,37 @@ export function OsPdfCompareViewer({
 
       <div className="os-pdf-legend" aria-label="Legenda da comparação">
         <div className="os-pdf-legend-files">
-          <span className="os-pdf-legend-chip prev" title={previousName || undefined}>
+          <span
+            className="os-pdf-legend-chip prev"
+            title={
+              previousName
+                ? `${previousName}${pageSizeLabel ? ` · ${pageSizeLabel}` : ""}`
+                : undefined
+            }
+          >
             <span className="os-pdf-legend-key">A</span>
-            Anterior: {previousName || "—"}
+            <span className="os-pdf-legend-chip-text">
+              Anterior: {previousName || "—"}
+              {pageSizeLabel ? (
+                <span className="os-pdf-legend-size">{pageSizeLabel}</span>
+              ) : null}
+            </span>
           </span>
-          <span className="os-pdf-legend-chip curr" title={currentName || undefined}>
+          <span
+            className="os-pdf-legend-chip curr"
+            title={
+              currentName
+                ? `${currentName}${pageSizeLabel ? ` · ${pageSizeLabel}` : ""}`
+                : undefined
+            }
+          >
             <span className="os-pdf-legend-key">B</span>
-            Atual: {currentName || "—"}
+            <span className="os-pdf-legend-chip-text">
+              Atual: {currentName || "—"}
+              {pageSizeLabel ? (
+                <span className="os-pdf-legend-size">{pageSizeLabel}</span>
+              ) : null}
+            </span>
           </span>
         </div>
         <div className="os-pdf-legend-mode">

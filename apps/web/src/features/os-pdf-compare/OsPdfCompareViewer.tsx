@@ -346,7 +346,13 @@ export function OsPdfCompareViewer({
         </div>
       </div>
 
-      <div className="os-pdf-viewport-shell">
+      <div
+        ref={viewportRef}
+        className={
+          "os-pdf-viewport" + (isZoomed ? " is-zoomed" : " is-fitted")
+        }
+        onWheel={onWheel}
+      >
         <button
           type="button"
           className="os-pdf-page-nav prev"
@@ -358,31 +364,23 @@ export function OsPdfCompareViewer({
           <ChevronLeft className="size-5" aria-hidden />
         </button>
 
-        <div
-          ref={viewportRef}
-          className={
-            "os-pdf-viewport" + (isZoomed ? " is-zoomed" : " is-fitted")
-          }
-          onWheel={onWheel}
-        >
-          <div className="os-pdf-stage">
-            {showRulers && imgW > 0 && imgH > 0 ? (
-              <OsPdfCompareRulers
-                pageWidthPx={naturalSize.w}
-                pageHeightPx={naturalSize.h}
-                displayWidth={imgW}
-                displayHeight={imgH}
-                dpi={dpi}
-                pageIndex={pageIndex}
-                guides={guides}
-                onGuidesChange={setGuides}
-              >
-                {pageBody}
-              </OsPdfCompareRulers>
-            ) : (
-              pageBody
-            )}
-          </div>
+        <div className="os-pdf-stage">
+          {showRulers && imgW > 0 && imgH > 0 ? (
+            <OsPdfCompareRulers
+              pageWidthPx={naturalSize.w}
+              pageHeightPx={naturalSize.h}
+              displayWidth={imgW}
+              displayHeight={imgH}
+              dpi={dpi}
+              pageIndex={pageIndex}
+              guides={guides}
+              onGuidesChange={setGuides}
+            >
+              {pageBody}
+            </OsPdfCompareRulers>
+          ) : (
+            pageBody
+          )}
         </div>
 
         <button

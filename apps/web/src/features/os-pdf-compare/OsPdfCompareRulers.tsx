@@ -417,6 +417,9 @@ export function OsPdfCompareRulers({
       </div>
 
       <div className={"os-pdf-guide-editor" + (selected ? "" : " idle")}>
+        <span className="os-pdf-guide-editor-meta">
+          {fmtMm(pageWidthMm)} × {fmtMm(pageHeightMm)} mm
+        </span>
         <div className="os-pdf-guide-scope" role="group" aria-label="Escopo das guias">
           <button
             type="button"
@@ -486,18 +489,8 @@ export function OsPdfCompareRulers({
             <button type="button" onClick={() => removeGuide(selected.id)}>
               Remover
             </button>
-            <span className="os-pdf-guide-editor-meta">
-              Limites: 0–{fmtMm(pageWidthMm)} × 0–{fmtMm(pageHeightMm)} mm
-            </span>
           </>
-        ) : (
-          <span>
-            Clique nas réguas para criar guias (
-            {createScope === "all" ? "todas as páginas" : "página atual"}) ·
-            origem inferior esquerda · {fmtMm(pageWidthMm)} ×{" "}
-            {fmtMm(pageHeightMm)} mm
-          </span>
-        )}
+        ) : null}
       </div>
     </div>
   );

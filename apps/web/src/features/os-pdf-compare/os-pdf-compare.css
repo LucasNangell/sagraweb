@@ -979,6 +979,8 @@
 .os-pdf-guide-editor-meta {
   color: var(--muted);
   font-size: 0.7rem;
+  font-weight: 600;
+  margin-right: auto;
 }
 
 .os-pdf-main,

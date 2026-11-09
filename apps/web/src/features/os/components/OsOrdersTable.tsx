@@ -70,7 +70,7 @@ function buildColumns(
   {
     accessorKey: "nr_os",
     header: "Nr OS",
-    size: 64,
+    size: 32,
     cell: ({ row, getValue }) => {
       const data = row.original;
       if (data.is_sub_os || data.kind === "sub_os") {
@@ -118,7 +118,7 @@ function buildColumns(
   {
     accessorKey: "ano",
     header: "Ano",
-    size: 48,
+    size: 24,
     cell: ({ getValue }) => (
       <span className="block truncate tabular-nums">{getValue<number>()}</span>
     ),

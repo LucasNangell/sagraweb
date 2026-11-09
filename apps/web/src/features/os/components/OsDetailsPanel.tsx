@@ -133,10 +133,31 @@ export function OsDetailsPanel({
       )}
 
       {showDetailsFields && data && (
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-1.5 overflow-y-auto p-2 text-xs sm:grid-cols-2 lg:grid-cols-[minmax(0,9fr)_minmax(0,9fr)_minmax(0,9fr)_minmax(0,13fr)] lg:grid-rows-[auto_minmax(0,1fr)] lg:overflow-hidden">
-          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2 lg:col-span-3">
-            <div className="grid grid-cols-2 items-end gap-1.5 sm:grid-cols-[minmax(0,2.2fr)_minmax(3.25rem,0.55fr)_minmax(3.25rem,0.55fr)_minmax(3.25rem,0.55fr)_auto]">
-              <Field label="Máquina" className="col-span-2 sm:col-span-1">
+        <div
+          className={cn(
+            "grid min-h-0 flex-1 grid-cols-1 gap-1.5 overflow-y-auto p-2 text-xs",
+            "sm:grid-cols-2",
+            "lg:grid-cols-[minmax(0,9fr)_minmax(0,9fr)_minmax(0,9fr)_minmax(0,13fr)]",
+            "lg:grid-rows-[auto_minmax(0,1fr)]",
+            "lg:overflow-hidden",
+            // Retrato: evita o layout largo (Contato lateral + 4 colunas estreitas).
+            "portrait:grid-cols-1",
+            "portrait:sm:grid-cols-2",
+            "portrait:lg:grid-cols-2",
+            "portrait:lg:grid-rows-none",
+            "portrait:lg:overflow-y-auto",
+          )}
+        >
+          <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2 lg:col-span-3 portrait:lg:col-span-2">
+            <div
+              className={cn(
+                "grid grid-cols-2 items-end gap-1.5",
+                "sm:grid-cols-[minmax(0,2.2fr)_minmax(3.25rem,0.55fr)_minmax(3.25rem,0.55fr)_minmax(3.25rem,0.55fr)_auto]",
+                "portrait:sm:grid-cols-2",
+                "portrait:lg:grid-cols-2",
+              )}
+            >
+              <Field label="Máquina" className="col-span-2 sm:col-span-1 portrait:col-span-1">
                 <ReadonlyInput value={maquina} testId={homeTestIds.osDetails("maquina")} />
               </Field>
               <Field label="Tiragem">
@@ -148,7 +169,7 @@ export function OsDetailsPanel({
               <Field label="Modelos">
                 <ReadonlyInput value={data.ModelosArq} testId={homeTestIds.osDetails("modelos")} />
               </Field>
-              <div className="flex items-end gap-1.5 pb-1">
+              <div className="flex items-end gap-1.5 pb-1 portrait:col-span-2">
                 <input
                   type="checkbox"
                   checked={toCheck(data.FrenteVerso)}
@@ -166,7 +187,13 @@ export function OsDetailsPanel({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+            <div
+              className={cn(
+                "grid grid-cols-2 gap-1.5 sm:grid-cols-4",
+                "portrait:sm:grid-cols-2",
+                "portrait:lg:grid-cols-2",
+              )}
+            >
               <Field label="Formato">
                 <ReadonlyInput value={data.FormatoLink} testId={homeTestIds.osDetails("formato")} />
               </Field>
@@ -191,25 +218,41 @@ export function OsDetailsPanel({
           <Field
             label="Contato"
             fill
-            className="min-h-[5.5rem] h-full sm:col-span-2 lg:col-span-1"
+            className={cn(
+              "min-h-[5.5rem] h-full sm:col-span-2 lg:col-span-1",
+              "portrait:col-span-1 portrait:sm:col-span-2 portrait:lg:col-span-2",
+              "portrait:min-h-[4.5rem] portrait:max-h-[9rem]",
+            )}
           >
             <ReadonlyTextarea value={data.ContatoTrab} fill testId={homeTestIds.osDetails("contato")} />
           </Field>
 
-          <Field label="Papel" fill className="min-h-[4.5rem] h-full lg:min-h-0">
+          <Field
+            label="Papel"
+            fill
+            className="min-h-[4.5rem] h-full lg:min-h-0 portrait:lg:min-h-[4.5rem]"
+          >
             <ReadonlyTextarea value={papel} fill testId={homeTestIds.osDetails("papel")} />
           </Field>
-          <Field label="Cores" fill className="min-h-[4.5rem] h-full lg:min-h-0">
+          <Field
+            label="Cores"
+            fill
+            className="min-h-[4.5rem] h-full lg:min-h-0 portrait:lg:min-h-[4.5rem]"
+          >
             <ReadonlyTextarea value={cores} fill testId={homeTestIds.osDetails("cores")} />
           </Field>
           <Field
             label="Acabamento"
             fill
-            className="min-h-[4.5rem] h-full lg:min-h-0"
+            className="min-h-[4.5rem] h-full lg:min-h-0 portrait:lg:min-h-[4.5rem]"
           >
             <ReadonlyTextarea value={data.DescAcabamento} fill testId={homeTestIds.osDetails("acabamento")} />
           </Field>
-          <Field label="Obs" fill className="min-h-[4.5rem] h-full lg:min-h-0">
+          <Field
+            label="Obs"
+            fill
+            className="min-h-[4.5rem] h-full lg:min-h-0 portrait:lg:min-h-[4.5rem]"
+          >
             <ReadonlyTextarea value={data.Observ} fill testId={homeTestIds.osDetails("obs")} />
           </Field>
         </div>

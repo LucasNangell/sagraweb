@@ -46,4 +46,16 @@ describe("OsDetailsPanel entrega", () => {
     expect(screen.getByText("Turno")).toBeInTheDocument();
     expect(screen.getByTestId("os-details-turno")).toHaveValue("Noite");
   });
+
+  it("declara overrides de grid para modo retrato sem alterar o layout paisagem", () => {
+    const { container } = render(<OsDetailsPanel selected={selected} />);
+    const grid = container.querySelector(".grid.min-h-0.flex-1");
+    expect(grid?.className).toContain("portrait:lg:grid-cols-2");
+    expect(grid?.className).toContain(
+      "lg:grid-cols-[minmax(0,9fr)_minmax(0,9fr)_minmax(0,9fr)_minmax(0,13fr)]",
+    );
+    const contato = screen.getByText("Contato").parentElement;
+    expect(contato?.className).toContain("portrait:lg:col-span-2");
+    expect(contato?.className).toContain("lg:col-span-1");
+  });
 });

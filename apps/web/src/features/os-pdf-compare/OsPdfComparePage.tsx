@@ -389,6 +389,7 @@ export function OsPdfComparePage({
             <OsPdfCompareViewer
               pages={result.pages}
               pageIndex={pageIndex}
+              onPageIndexChange={setPageIndex}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
               previousName={previousName || result.previousName}

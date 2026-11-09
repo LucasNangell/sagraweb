@@ -1,4 +1,6 @@
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -18,6 +20,7 @@ import type { ComparePage, ViewMode } from "./types";
 interface OsPdfCompareViewerProps {
   pages: ComparePage[];
   pageIndex: number;
+  onPageIndexChange: (index: number) => void;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
   previousName?: string | null;
@@ -83,6 +86,7 @@ function pageImageUrl(
 export function OsPdfCompareViewer({
   pages,
   pageIndex,
+  onPageIndexChange,
   viewMode,
   onViewModeChange,
   previousName = null,
@@ -100,6 +104,45 @@ export function OsPdfCompareViewer({
   const page = pages.find((p) => p.index === pageIndex) || pages[0] || null;
   const isZoomed = zoom > 1.001;
   const showRulers = viewMode !== "side";
+  const pageOrder = useMemo(() => pages.map((p) => p.index), [pages]);
+  const orderPos = pageOrder.indexOf(pageIndex);
+  const canGoPrev = orderPos > 0;
+  const canGoNext = orderPos >= 0 && orderPos < pageOrder.length - 1;
+
+  const goPrevPage = useCallback(() => {
+    if (!canGoPrev) return;
+    onPageIndexChange(pageOrder[orderPos - 1]);
+  }, [canGoPrev, onPageIndexChange, orderPos, pageOrder]);
+
+  const goNextPage = useCallback(() => {
+    if (!canGoNext) return;
+    onPageIndexChange(pageOrder[orderPos + 1]);
+  }, [canGoNext, onPageIndexChange, orderPos, pageOrder]);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        goPrevPage();
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        goNextPage();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [goNextPage, goPrevPage]);
 
   useEffect(() => {
     setZoom(1);
@@ -312,31 +355,55 @@ export function OsPdfCompareViewer({
         </div>
       </div>
 
-      <div
-        ref={viewportRef}
-        className={
-          "os-pdf-viewport" + (isZoomed ? " is-zoomed" : " is-fitted")
-        }
-        onWheel={onWheel}
-      >
-        <div className="os-pdf-stage">
-          {showRulers && imgW > 0 && imgH > 0 ? (
-            <OsPdfCompareRulers
-              pageWidthPx={naturalSize.w}
-              pageHeightPx={naturalSize.h}
-              displayWidth={imgW}
-              displayHeight={imgH}
-              dpi={dpi}
-              pageIndex={pageIndex}
-              guides={guides}
-              onGuidesChange={setGuides}
-            >
-              {pageBody}
-            </OsPdfCompareRulers>
-          ) : (
-            pageBody
-          )}
+      <div className="os-pdf-viewport-shell">
+        <button
+          type="button"
+          className="os-pdf-page-nav prev"
+          onClick={goPrevPage}
+          disabled={!canGoPrev}
+          title="Página anterior (←)"
+          aria-label="Página anterior"
+        >
+          <ChevronLeft className="size-5" aria-hidden />
+        </button>
+
+        <div
+          ref={viewportRef}
+          className={
+            "os-pdf-viewport" + (isZoomed ? " is-zoomed" : " is-fitted")
+          }
+          onWheel={onWheel}
+        >
+          <div className="os-pdf-stage">
+            {showRulers && imgW > 0 && imgH > 0 ? (
+              <OsPdfCompareRulers
+                pageWidthPx={naturalSize.w}
+                pageHeightPx={naturalSize.h}
+                displayWidth={imgW}
+                displayHeight={imgH}
+                dpi={dpi}
+                pageIndex={pageIndex}
+                guides={guides}
+                onGuidesChange={setGuides}
+              >
+                {pageBody}
+              </OsPdfCompareRulers>
+            ) : (
+              pageBody
+            )}
+          </div>
         </div>
+
+        <button
+          type="button"
+          className="os-pdf-page-nav next"
+          onClick={goNextPage}
+          disabled={!canGoNext}
+          title="Próxima página (→)"
+          aria-label="Próxima página"
+        >
+          <ChevronRight className="size-5" aria-hidden />
+        </button>
       </div>
 
       <div className="os-pdf-legend" aria-label="Legenda da comparação">

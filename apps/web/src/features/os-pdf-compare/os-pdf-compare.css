@@ -670,9 +670,46 @@
   background: #c2185b;
 }
 
+.os-pdf-viewport-shell {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 0.35rem;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.os-pdf-page-nav {
+  flex: 0 0 auto;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 4px 14px rgb(23 53 44 / 10%);
+  cursor: pointer;
+  z-index: 2;
+}
+
+.os-pdf-page-nav:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.os-pdf-page-nav:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .os-pdf-viewport {
   position: relative;
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--line);

@@ -6,6 +6,7 @@ import {
   Filter,
   RefreshCw,
   Save,
+  Undo2,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -216,6 +217,7 @@ export function OsFiltersPanel({
                 className="sagra-btn sagra-btn--outline sagra-btn--sm h-8 w-full"
                 data-testid={homeTestIds.osFiltersBackToDefault}
               >
+                <Undo2 className="size-3.5" aria-hidden />
                 <span className="text-xs font-medium">Voltar ao padrão</span>
               </button>
             ) : null}

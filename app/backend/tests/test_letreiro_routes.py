@@ -244,8 +244,11 @@ def test_heartbeat_updates_only_matching_user(monkeypatch):
 
     def fake_exec(sql, params=None):
         calls.append((sql, params))
-        if "SELECT WindowsUser FROM tabLetreiroInstancia" in sql:
-            return [{"WindowsUser": "ana"}, {"WindowsUser": "bruno"}]
+        if "FROM tabLetreiroInstancia" in sql and "SELECT" in sql and "INSERT" not in sql:
+            return [
+                {"HostName": "PC-SALA", "WindowsUser": "ana"},
+                {"HostName": "PC-SALA", "WindowsUser": "bruno"},
+            ]
         return []
 
     monkeypatch.setattr(letreiro_routes.db, "execute_query", fake_exec)
@@ -267,8 +270,8 @@ def test_heartbeat_inserts_sibling_user_on_same_host(monkeypatch):
 
     def fake_exec(sql, params=None):
         calls.append((sql, params))
-        if "SELECT WindowsUser FROM tabLetreiroInstancia" in sql:
-            return [{"WindowsUser": "ana"}]
+        if "FROM tabLetreiroInstancia" in sql and "SELECT" in sql and "INSERT" not in sql:
+            return [{"HostName": "PC-SALA", "WindowsUser": "ana"}]
         return []
 
     monkeypatch.setattr(letreiro_routes.db, "execute_query", fake_exec)
@@ -852,8 +855,8 @@ def test_pending_job_claims_running(monkeypatch):
             def execute(self, sql, params=None):
                 return None
 
-            def fetchone(self):
-                return {
+            def fetchall(self):
+                return [{
                     "Id": 9,
                     "ComandoId": 3,
                     "Nome": "ping",
@@ -862,7 +865,7 @@ def test_pending_job_claims_running(monkeypatch):
                     "TimeoutSec": 60,
                     "HostName": "PC1",
                     "WindowsUser": "fulano",
-                }
+                }]
 
         return [ops[0](Cursor())]
 
@@ -878,6 +881,117 @@ def test_pending_job_claims_running(monkeypatch):
     assert body["job"]["id"] == 9
     assert body["job"]["content"] == "@echo hi"
     assert body["pollIntervalSec"] == 7
+
+
+def test_enqueue_offline_target_stays_pending(monkeypatch):
+    calls = []
+
+    def fake_exec(sql, params=None):
+        calls.append((sql, params))
+        if "FROM tabLetreiroComando" in sql and "INSERT" not in sql:
+            return [{"Id": 3, "Nome": "ping", "Tipo": "bat", "Conteudo": "@echo hi", "TimeoutSec": 60}]
+        if "FROM tabLetreiroInstancia" in sql:
+            return [{"HostName": "PC-OFF", "WindowsUser": r"REDECAMARA\ana"}]
+        return []
+
+    monkeypatch.setattr(letreiro_routes.db, "execute_query", fake_exec)
+    response = _client().post(
+        "/api/letreiro/commands/3/run",
+        headers={"X-Letreiro-Windows-User": "P_918713"},
+        json={
+            "windowsUser": "P_918713",
+            "targets": [{"hostName": "pc-off", "windowsUser": "ana"}],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["queued"] == 1
+    inserts = [c for c in calls if "INSERT INTO tabLetreiroComandoJob" in c[0]]
+    assert inserts[0][1][5] == "PC-OFF"
+    assert inserts[0][1][6] == r"REDECAMARA\ana"
+    assert inserts[0][1][7] == "pending"
+
+
+def test_pending_job_claims_with_domain_user_format(monkeypatch):
+    claimed = {}
+
+    def fake_tx(ops):
+        class Cursor:
+            rowcount = 1
+
+            def execute(self, sql, params=None):
+                if "UPDATE tabLetreiroComandoJob" in sql and "StartedAt" in sql:
+                    claimed["id"] = params[1]
+
+            def fetchall(self):
+                return [
+                    {
+                        "Id": 21,
+                        "ComandoId": 3,
+                        "Nome": "ping",
+                        "Tipo": "bat",
+                        "Conteudo": "@echo hi",
+                        "TimeoutSec": 60,
+                        "HostName": "PC1",
+                        "WindowsUser": "fulano",
+                    },
+                    {
+                        "Id": 22,
+                        "ComandoId": 3,
+                        "Nome": "other",
+                        "Tipo": "bat",
+                        "Conteudo": "@echo no",
+                        "TimeoutSec": 60,
+                        "HostName": "PC1",
+                        "WindowsUser": "outro",
+                    },
+                ]
+
+        return [ops[0](Cursor())]
+
+    monkeypatch.setattr(letreiro_routes.db, "execute_transaction", fake_tx)
+    monkeypatch.setattr(
+        letreiro_routes.db,
+        "execute_query",
+        lambda *a, **k: [{"CommandPollIntervalSec": 10}],
+    )
+    response = _client().get(
+        "/api/letreiro/jobs/pending",
+        params={"host": "pc1", "user": r"REDECAMARA\fulano"},
+    )
+    assert response.status_code == 200
+    assert response.json()["job"]["id"] == 21
+    assert claimed["id"] == 21
+
+
+def test_job_result_accepts_sam_domain_mismatch(monkeypatch):
+    calls = []
+
+    def fake_exec(sql, params=None):
+        calls.append((sql, params))
+        if "FROM tabLetreiroComandoJob" in sql and "UPDATE" not in sql:
+            return [{
+                "Id": 9,
+                "HostName": "PC1",
+                "WindowsUser": "fulano",
+                "Status": "running",
+                "Nome": "ping",
+            }]
+        return []
+
+    monkeypatch.setattr(letreiro_routes.db, "execute_query", fake_exec)
+    response = _client().post(
+        "/api/letreiro/jobs/9/result",
+        json={
+            "hostName": "pc1",
+            "windowsUser": r"REDECAMARA\Fulano",
+            "exitCode": 0,
+            "stdout": "ok",
+        },
+    )
+    assert response.status_code == 200
+    updates = [c for c in calls if c[0].strip().startswith("UPDATE")]
+    assert updates
+    assert updates[0][1][0] == "ok"
 
 
 def test_settings_put_forbidden():

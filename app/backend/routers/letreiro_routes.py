@@ -51,19 +51,40 @@ def is_letreiro_admin(windows_user: str | None) -> bool:
     return normalize_windows_sam(windows_user) == ADMIN_SAM
 
 
-def _stored_windows_user(host: str, user: str) -> Optional[str]:
+def _lookup_instance(host: str | None, user: str | None) -> Optional[tuple[str, str]]:
+    host_name = _clip(host, 128)
     sam = normalize_windows_sam(user)
-    if not host or not sam:
+    if not host_name or not sam:
         return None
     rows = db.execute_query(
-        "SELECT WindowsUser FROM tabLetreiroInstancia WHERE HostName = %s",
-        (host,),
+        """
+        SELECT HostName, WindowsUser
+        FROM tabLetreiroInstancia
+        WHERE LOWER(HostName) = LOWER(%s)
+        """,
+        (host_name,),
     )
     for row in rows or []:
-        stored = (row.get("WindowsUser") or "").strip()
-        if normalize_windows_sam(stored) == sam:
-            return stored
+        stored_host = (row.get("HostName") or "").strip()
+        stored_user = (row.get("WindowsUser") or "").strip()
+        if normalize_windows_sam(stored_user) == sam:
+            return stored_host or host_name, stored_user
     return None
+
+
+def _resolve_instance_identity(host: str | None, user: str | None) -> tuple[str, str]:
+    """Return canonical (HostName, WindowsUser), preferring tabLetreiroInstancia."""
+    host_name = _clip(host, 128)
+    windows_user = _clip(user, 128)
+    found = _lookup_instance(host_name, windows_user)
+    if found:
+        return found
+    return host_name, windows_user
+
+
+def _stored_windows_user(host: str, user: str) -> Optional[str]:
+    found = _lookup_instance(host, user)
+    return found[1] if found else None
 
 
 def _require_admin(windows_user: str | None) -> str:
@@ -352,22 +373,39 @@ def _insert_returning_id(sql: str, params: tuple[Any, ...]) -> int:
     return inserted
 
 
+def _same_instance(left_host: str | None, left_user: str | None, right_host: str | None, right_user: str | None) -> bool:
+    host_a = _clip(left_host, 128).lower()
+    host_b = _clip(right_host, 128).lower()
+    if not host_a or not host_b or host_a != host_b:
+        return False
+    sam_a = normalize_windows_sam(left_user)
+    sam_b = normalize_windows_sam(right_user)
+    return bool(sam_a) and sam_a == sam_b
+
+
 def _claim_pending_job(host: str, user: str) -> Optional[dict[str, Any]]:
-    stored = _stored_windows_user(host, user) or user
+    host_name, _windows_user = _resolve_instance_identity(host, user)
+    sam = normalize_windows_sam(user)
+    if not host_name or not sam:
+        return None
 
     def op(cursor):
         cursor.execute(
             """
             SELECT Id, ComandoId, Nome, Tipo, Conteudo, TimeoutSec, HostName, WindowsUser
             FROM tabLetreiroComandoJob
-            WHERE HostName = %s AND WindowsUser = %s AND Status = %s
+            WHERE Status = %s AND LOWER(HostName) = LOWER(%s)
             ORDER BY Id ASC
-            LIMIT 1
             FOR UPDATE
             """,
-            (host, stored, JOB_STATUS_PENDING),
+            (JOB_STATUS_PENDING, host_name),
         )
-        row = cursor.fetchone()
+        rows = cursor.fetchall() or []
+        row = None
+        for candidate in rows:
+            if normalize_windows_sam(candidate.get("WindowsUser")) == sam:
+                row = candidate
+                break
         if not row:
             return None
         cursor.execute(
@@ -544,7 +582,11 @@ def _enqueue_jobs(
     actor: str,
     targets: list[tuple[str, str]],
 ) -> int:
+    queued = 0
     for host, user in targets:
+        resolved_host, resolved_user = _resolve_instance_identity(host, user)
+        if not resolved_host or not resolved_user:
+            continue
         db.execute_query(
             """
             INSERT INTO tabLetreiroComandoJob
@@ -558,13 +600,14 @@ def _enqueue_jobs(
                 kind,
                 content,
                 timeout,
-                host,
-                user,
+                resolved_host,
+                resolved_user,
                 JOB_STATUS_PENDING,
                 actor,
             ),
         )
-    return len(targets)
+        queued += 1
+    return queued
 
 
 @router.post("/heartbeat")
@@ -575,15 +618,16 @@ async def post_heartbeat(body: HeartbeatBody):
         raise HTTPException(status_code=400, detail="hostName e windowsUser são obrigatórios.")
     version = _clip(body.version, 32)
     ponto = _clip(body.ponto, 32)
-    stored = _stored_windows_user(host, user)
-    if stored:
+    found = _lookup_instance(host, user)
+    if found:
+        stored_host, stored_user = found
         db.execute_query(
             """
             UPDATE tabLetreiroInstancia
             SET Version = %s, Ponto = %s, LastSeen = NOW()
             WHERE HostName = %s AND WindowsUser = %s
             """,
-            (version, ponto, host, stored),
+            (version, ponto, stored_host, stored_user),
         )
         return {"status": "ok"}
     db.execute_query(
@@ -1085,7 +1129,7 @@ async def post_job_result(job_id: int, body: JobResultBody):
     if not rows:
         raise HTTPException(status_code=404, detail="Job não encontrado.")
     row = rows[0]
-    if (row.get("HostName") or "") != host or (row.get("WindowsUser") or "") != user:
+    if not _same_instance(row.get("HostName"), row.get("WindowsUser"), host, user):
         raise HTTPException(status_code=403, detail="Job não pertence a esta instância.")
     if (row.get("Status") or "") != JOB_STATUS_RUNNING:
         raise HTTPException(status_code=409, detail="Job não está em execução.")

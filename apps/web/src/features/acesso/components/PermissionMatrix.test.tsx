@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import type { PermissionKey } from "@/features/auth/types";
+
 import { PermissionMatrix } from "./PermissionMatrix";
 
 describe("PermissionMatrix", () => {
@@ -11,7 +13,7 @@ describe("PermissionMatrix", () => {
     const group = screen.getByRole("group", { name: "Menu de contexto da OS" });
     fireEvent.click(within(group).getByRole("button", { name: "Marcar categoria" }));
 
-    const next = onChange.mock.calls[0]![0] as Record<string, boolean>;
+    const next = onChange.mock.calls[0]![0] as Partial<Record<PermissionKey, boolean>>;
     expect(next.ctx_nova_os).toBe(true);
     expect(next.ctx_orcamento).toBe(true);
     // Prova WEB é só de usuário: não pode ser marcada no terminal.

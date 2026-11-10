@@ -3,7 +3,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { KeyRound } from "lucide-react";
 import { useMemo } from "react";
 
-import { AdminIpsPage } from "@/features/admin-ips/components/AdminIpsPage";
 import { useAuthStore } from "@/features/auth/authStore";
 
 import {
@@ -15,6 +14,7 @@ import {
 import { ClientesPortalTab } from "./ClientesPortalTab";
 import { ConfirmProvider } from "./ConfirmDialog";
 import { FeedbackProvider } from "./Feedback";
+import { TerminaisTab } from "./TerminaisTab";
 import { UsuariosTab } from "./UsuariosTab";
 import { VisaoGeralTab } from "./VisaoGeralTab";
 
@@ -37,6 +37,14 @@ export function AcessoPage({ search }: AcessoPageProps) {
     void navigate({
       to: "/admin/acesso",
       search: ponto == null ? { aba: "usuarios" } : { aba: "usuarios", ponto },
+      replace: true,
+    });
+  };
+
+  const selectTerminal = (terminal: number | undefined) => {
+    void navigate({
+      to: "/admin/acesso",
+      search: terminal == null ? { aba: "terminais" } : { aba: "terminais", terminal },
       replace: true,
     });
   };
@@ -95,7 +103,9 @@ export function AcessoPage({ search }: AcessoPageProps) {
             {activeTab === "usuarios" ? (
               <UsuariosTab selectedPonto={search.ponto} onSelect={selectUser} />
             ) : null}
-            {activeTab === "terminais" ? <AdminIpsPage /> : null}
+            {activeTab === "terminais" ? (
+              <TerminaisTab selectedId={search.terminal} onSelect={selectTerminal} />
+            ) : null}
             {activeTab === "clientes" ? <ClientesPortalTab /> : null}
           </div>
         </div>

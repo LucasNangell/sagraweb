@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
-  ChevronRight,
   File,
   FileImage,
   FileText,
@@ -33,7 +32,7 @@ const BTN_CLEAR =
   "sagra-btn sagra-btn--warning sagra-btn--sm";
 
 const BTN_NAV =
-  "inline-flex size-8 shrink-0 sagra-btn sagra-btn--outline sagra-btn--sm hover:border-secondary-blue/40 hover:bg-blue-50 hover:text-secondary-blue disabled:cursor-not-allowed disabled:opacity-40";
+  "sagra-btn sagra-btn--outline sagra-btn--icon hover:border-secondary-blue/40 hover:bg-blue-50 hover:text-secondary-blue disabled:cursor-not-allowed disabled:opacity-40";
 
 function formatFileSize(bytes: number | null | undefined): string {
   if (bytes == null || Number.isNaN(bytes)) {
@@ -100,6 +99,7 @@ export function NetworkFolderBrowserModal({
   onConfirm,
 }: NetworkFolderBrowserModalProps) {
   const [relative, setRelative] = useState("");
+  const [addressDraft, setAddressDraft] = useState("");
   const [picks, setPicks] = useState<NetworkFilePick[]>([]);
   const [fileFilter, setFileFilter] = useState("");
 
@@ -112,6 +112,7 @@ export function NetworkFolderBrowserModal({
   useEffect(() => {
     if (!open) {
       setRelative("");
+      setAddressDraft("");
       setPicks([]);
       setFileFilter("");
     }
@@ -124,35 +125,12 @@ export function NetworkFolderBrowserModal({
     setFileFilter("");
   }, [relative, open]);
 
-  const breadcrumbParts = useMemo(() => {
-    const current = browseQuery.data?.current_path;
-    const root = browseQuery.data?.root_path;
-    if (current && root) {
-      const normCurrent = current.replace(/\\/g, "/");
-      const normRoot = root.replace(/\\/g, "/").replace(/\/$/, "");
-      if (normCurrent === normRoot) {
-        return [];
-      }
-      if (normCurrent.startsWith(`${normRoot}/`)) {
-        return normCurrent.slice(normRoot.length + 1).split("/").filter(Boolean);
-      }
+  useEffect(() => {
+    if (!open) {
+      return;
     }
-    if (!relative) {
-      return [];
-    }
-    return relative.replace(/\\/g, "/").split("/").filter(Boolean);
-  }, [browseQuery.data?.current_path, browseQuery.data?.root_path, relative]);
-
-  const rootName = useMemo(() => {
-    if (!relative && !browseQuery.data?.current_path) {
-      return "Rede";
-    }
-    const root = browseQuery.data?.root_path;
-    if (!root) {
-      return "Rede";
-    }
-    return root.split(/[/\\]/).filter(Boolean).pop() ?? "Rede";
-  }, [browseQuery.data?.current_path, browseQuery.data?.root_path, relative]);
+    setAddressDraft(browseQuery.data?.current_path ?? relative);
+  }, [browseQuery.data?.current_path, open, relative]);
 
   const atRootsList = !relative;
   const canGoHome = !atRootsList;
@@ -188,6 +166,19 @@ export function NetworkFolderBrowserModal({
     }
     setRelative("");
   }, [browseQuery.data?.current_path, browseQuery.data?.root_path, relative]);
+
+  const submitAddress = useCallback(() => {
+    const next = addressDraft.trim();
+    if (!next) {
+      setRelative("");
+      return;
+    }
+    if (normPathKey(next) === normPathKey(relative)) {
+      void browseQuery.refetch();
+      return;
+    }
+    setRelative(next);
+  }, [addressDraft, browseQuery, relative]);
 
   const togglePick = useCallback(
     (entryName: string, currentPath: string) => {
@@ -299,7 +290,7 @@ export function NetworkFolderBrowserModal({
             title="Voltar"
             aria-label="Voltar uma pasta"
           >
-            <ArrowLeft className="size-4" />
+            <ArrowLeft className="size-4" aria-hidden />
           </button>
           <button
             type="button"
@@ -309,45 +300,32 @@ export function NetworkFolderBrowserModal({
             title="Início"
             aria-label="Ir para o início (lista de raízes)"
           >
-            <Home className="size-4" />
+            <Home className="size-4" aria-hidden />
           </button>
-          <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            Endereço
-          </span>
-          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto sagra-btn sagra-btn--outline sagra-btn--sm">
-            <button
-              type="button"
-              className="truncate hover:text-secondary-blue"
-              onClick={() => setRelative("")}
-              title={browseQuery.data?.root_path ?? rootName}
-            >
-              {rootName}
-            </button>
-            {breadcrumbParts.map((part, index) => {
-              const rel = breadcrumbParts.slice(0, index + 1).join("/");
-              return (
-                <span key={rel} className="flex shrink-0 items-center gap-1">
-                  <ChevronRight className="size-3 text-slate-400" aria-hidden />
-                  <button
-                    type="button"
-                    className="truncate hover:text-secondary-blue"
-                    onClick={() => {
-                      const root = browseQuery.data?.root_path;
-                      if (root) {
-                        const joined = `${root.replace(/[/\\]+$/, "")}\\${rel.replace(/\//g, "\\")}`;
-                        setRelative(joined);
-                      } else {
-                        setRelative(rel);
-                      }
-                    }}
-                    title={part}
-                  >
-                    {part}
-                  </button>
-                </span>
-              );
-            })}
-          </div>
+          <label className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Endereço
+            </span>
+            <input
+              type="text"
+              value={addressDraft}
+              onChange={(e) => setAddressDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  submitAddress();
+                }
+              }}
+              onBlur={() => {
+                setAddressDraft(browseQuery.data?.current_path ?? relative);
+              }}
+              placeholder="\\servidor\compartilhamento\pasta"
+              className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800"
+              aria-label="Endereço da pasta"
+              spellCheck={false}
+              autoComplete="off"
+            />
+          </label>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-300 bg-white px-3 py-2">
@@ -478,7 +456,7 @@ export function NetworkFolderBrowserModal({
             <button
               type="button"
               onClick={onClose}
-              className="sagra-btn sagra-btn--neutral sagra-btn--md"
+              className="sagra-btn sagra-btn--cancel sagra-btn--md"
             >
               Cancelar
             </button>

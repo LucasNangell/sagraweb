@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 
 import { OsFilterPreferencesSync } from "@/components/auth/OsFilterPreferencesSync";
+import { SessionRecoveryOverlay } from "@/components/auth/SessionRecoveryOverlay";
 import { useAuthStore } from "@/features/auth/authStore";
 
 interface AuthBootstrapProps {
@@ -19,6 +20,7 @@ export function AuthBootstrap({ children }: AuthBootstrapProps) {
     <>
       <OsFilterPreferencesSync />
       {children}
+      <SessionRecoveryOverlay />
     </>
   );
 }

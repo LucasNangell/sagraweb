@@ -29,6 +29,9 @@ class SessionUserResponse(BaseModel):
     auth_mode: str = "local"
     setor: str | None = None
     fornecedor: bool = False
+    # False quando o IP atual difere do IP da sessão (modo local) — o SPA
+    # reautentica o terminal sem perder a tela.
+    ip_matches: bool = True
 
 
 class PasswordLoginRequest(BaseModel):

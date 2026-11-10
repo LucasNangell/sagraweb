@@ -32,6 +32,8 @@ from security.session_auth import (
     SessionData,
     clear_session_cookie,
     get_session_from_request,
+    refresh_session_cookie,
+    session_needs_refresh,
     set_session_cookie,
 )
 
@@ -474,9 +476,29 @@ async def get_user_name_for_login(ponto: int, request: Request) -> dict:
     response_model=SessionUserResponse,
     summary="Usuário da sessão atual",
 )
-async def get_current_session(request: Request) -> SessionUserResponse:
-    """Rota pública no middleware: sem cookie → 401 (SPA redireciona ao login)."""
+async def get_current_session(
+    request: Request, response: Response
+) -> SessionUserResponse:
+    """Rota pública no middleware: sem cookie → 401 (SPA redireciona ao login).
+
+    Também funciona como heartbeat do SPA: renova o cookie (sliding) e informa
+    se o IP atual ainda corresponde ao IP da sessão.
+    """
     session = get_session_from_request(request)
     if session is None:
         raise HTTPException(status_code=401, detail="Não autenticado.")
-    return _session_user(session)
+    if session_needs_refresh(session):
+        refresh_session_cookie(response, session)
+    user = _session_user(session)
+    user.ip_matches = _session_ip_matches(request, session)
+    return user
+
+
+def _session_ip_matches(request: Request, session: SessionData) -> bool:
+    """Mesma regra de vínculo IP do APIAccessMiddleware (rotas de leitura)."""
+    from security.api_auth import _is_development_mode
+    from security.public_access import should_use_user_permissions
+
+    if _is_development_mode() or should_use_user_permissions(request, session):
+        return True
+    return session.ip == resolve_client_ip(request)

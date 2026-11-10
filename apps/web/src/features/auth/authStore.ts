@@ -15,8 +15,14 @@ import {
 } from "./permissions";
 import type { PermissionKey, Permissions, SessionUser } from "./types";
 
+/** ok = normal; recovering = reconectando em segundo plano; expired = pedir novo login (sem sair da tela). */
+export type SessionStatus = "ok" | "recovering" | "expired";
+
 interface AuthState {
   user: SessionUser | null;
+  sessionStatus: SessionStatus;
+  /** Motivo da última falha de reconexão (exibido no diálogo). */
+  sessionError: string | null;
   permissions: Permissions;
   isAuthenticated: boolean;
   isHydrating: boolean;
@@ -33,17 +39,52 @@ interface AuthState {
 
 let hydrateInFlight: Promise<void> | null = null;
 
+const HYDRATE_RETRY_DELAYS_MS = [1_000, 3_000, 6_000];
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** /auth/me com novas tentativas em falha de rede/servidor (não em 401/403). */
+async function fetchCurrentSessionWithRetry() {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= HYDRATE_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      return await fetchCurrentSession();
+    } catch (err) {
+      lastError = err;
+      const wait = HYDRATE_RETRY_DELAYS_MS[attempt];
+      if (wait === undefined) break;
+      await delay(wait);
+    }
+  }
+  throw lastError;
+}
+
+async function fetchPermissionsWithRetry() {
+  try {
+    return await fetchPermissions();
+  } catch {
+    await delay(1_500);
+    return fetchPermissions();
+  }
+}
+
 function applyDenied(state: Partial<AuthState>): Partial<AuthState> {
   return {
     user: null,
     permissions: createDeniedPermissions(),
     isAuthenticated: false,
+    sessionStatus: "ok",
+    sessionError: null,
     ...state,
   };
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
+  sessionStatus: "ok",
+  sessionError: null,
   permissions: createDeniedPermissions(),
   isAuthenticated: false,
   /** true até o primeiro hydrate — evita flash de "Acesso negado" nas rotas standalone. */
@@ -88,6 +129,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isHydrating: false,
         isSubmitting: false,
         error: null,
+        sessionStatus: "ok",
+        sessionError: null,
       });
     } catch (err) {
       set(
@@ -129,6 +172,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isHydrating: false,
         isSubmitting: false,
         error: null,
+        sessionStatus: "ok",
+        sessionError: null,
       });
     } catch (err) {
       set(
@@ -160,7 +205,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     hydrateInFlight = (async () => {
       set({ isHydrating: true });
       try {
-        const me = await fetchCurrentSession();
+        let me;
+        try {
+          me = await fetchCurrentSessionWithRetry();
+        } catch {
+          // Servidor inacessível: não apaga o cookie; usuário pode tentar de novo.
+          set(
+            applyDenied({
+              isHydrating: false,
+              error:
+                "Não foi possível conectar ao servidor do SAGRA para validar a sessão. Verifique a rede e tente novamente.",
+            }),
+          );
+          return;
+        }
         if (!me) {
           set(applyDenied({ isHydrating: false }));
           return;
@@ -176,20 +234,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         };
 
         try {
-          const raw = await fetchPermissions();
+          const raw = await fetchPermissionsWithRetry();
           set({
             user,
             permissions: parsePermissionsFromApi(raw),
             isAuthenticated: true,
             isHydrating: false,
             error: null,
+            sessionStatus: "ok",
+            sessionError: null,
           });
         } catch {
-          await logoutSession().catch(() => undefined);
+          // Anti fail-open: sem permissões não entra — mas NÃO derruba o cookie
+          // (falha pode ser transitória; recarregar a página resolve sem novo login).
           set(
             applyDenied({
               isHydrating: false,
-              error: "Sessão encerrada: permissões indisponíveis.",
+              error:
+                "Não foi possível carregar suas permissões no momento. Tente novamente em instantes.",
             }),
           );
         }

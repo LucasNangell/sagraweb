@@ -97,6 +97,8 @@ export interface SessionUser {
   auth_mode?: string;
   setor?: string | null;
   fornecedor?: boolean;
+  /** false quando o IP atual difere do IP da sessão (modo local). */
+  ip_matches?: boolean;
 }
 
 export interface PermissionsResponse {

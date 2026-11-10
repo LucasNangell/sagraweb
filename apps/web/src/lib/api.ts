@@ -1,3 +1,9 @@
+import {
+  isSessionProblemCode,
+  NETWORK_ERROR_CODE,
+  reportSessionProblem,
+} from "@/lib/sessionEvents";
+
 /**
  * Cliente HTTP — dev: /api (proxy Vite). Producao Nginx: /sagra/api.
  */
@@ -104,74 +110,123 @@ export function getApiErrorDetail(error: unknown): ApiErrorDetail | null {
   return detail && typeof detail === "object" ? detail : null;
 }
 
+const NETWORK_ERROR_MESSAGE =
+  "Não foi possível conectar ao servidor do SAGRA. Verifique sua conexão de rede — " +
+  "o sistema tentará novamente automaticamente.";
+
+const SESSION_ERROR_MESSAGE =
+  "Sua sessão expirou. Reconectando automaticamente — se necessário, " +
+  "será solicitado um novo login sem perder a tela atual.";
+
+function serverErrorMessage(status: number): string {
+  if (status === 502 || status === 503 || status === 504) {
+    return `O servidor do SAGRA está temporariamente indisponível (${status}). Tente novamente em instantes.`;
+  }
+  return `O servidor encontrou um erro ao processar a solicitação (${status}). Tente novamente; se o problema persistir, contate o suporte.`;
+}
+
+/** Erro amigável a partir de uma resposta HTTP não-OK. */
+function buildHttpError(status: number, text: string): ApiRequestError {
+  let data: {
+    detail?: string | ApiErrorDetail;
+    message?: string;
+    code?: string;
+  } | null = null;
+  try {
+    data = JSON.parse(text) as typeof data;
+  } catch {
+    data = null;
+  }
+
+  if (data && typeof data === "object") {
+    const code = typeof data.code === "string" ? data.code : undefined;
+    if (isSessionProblemCode(code)) {
+      reportSessionProblem(code);
+      const detailText = typeof data.detail === "string" ? data.detail : undefined;
+      return createApiError(SESSION_ERROR_MESSAGE, status, {
+        code,
+        message: detailText,
+      });
+    }
+    if (typeof data.detail === "string" && data.detail.trim()) {
+      if (status === 404 && data.detail === "Not Found") {
+        return createApiError(
+          "Rota da API não encontrada. Reinicie o backend (porta 8001) após atualizar o código.",
+          status,
+        );
+      }
+      return createApiError(data.detail, status, code ? { code } : undefined);
+    }
+    if (
+      data.detail &&
+      typeof data.detail === "object" &&
+      typeof data.detail.message === "string" &&
+      data.detail.message.trim()
+    ) {
+      return createApiError(data.detail.message, status, data.detail);
+    }
+    if (typeof data.message === "string" && data.message.trim()) {
+      return createApiError(data.message, status);
+    }
+  }
+
+  if (data === null) {
+    if (status === 502) {
+      return createApiError(
+        "Servidor indisponível (502). Confira se o túnel zrok (sagra-painel) está ativo e se a API foi reiniciada.",
+        status,
+      );
+    }
+    if (isHtmlApiResponse(text)) {
+      return createApiError(
+        status === 403
+          ? "Acesso bloqueado pelo proxy/WAF (403). O método HTTP pode ter sido bloqueado na borda; tente de novo ou use a rede interna."
+          : status >= 500
+            ? serverErrorMessage(status)
+            : `Resposta HTML inesperada da API (${status}). Verifique se a URL da API está correta.`,
+        status,
+      );
+    }
+  }
+
+  const snippet = text.replace(/\s+/g, " ").trim().slice(0, 200);
+  if (status >= 500) {
+    if (snippet) console.error(`[api] ${status}: ${snippet}`);
+    return createApiError(serverErrorMessage(status), status);
+  }
+  return createApiError(
+    data === null && snippet
+      ? `Resposta inválida da API (${status}): ${snippet}`
+      : `API ${status}: ${snippet}`,
+    status,
+  );
+}
+
 export async function apiFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
   const url = apiUrl(path);
-  const method = (init?.method ?? "GET").toUpperCase();
-  const res = await fetch(url, {
-    credentials: "include",
-    headers: {
-      Accept: "application/json",
-      "X-Requested-With": "XMLHttpRequest",
-      ...(init?.headers ?? {}),
-    },
-    ...init,
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      credentials: "include",
+      headers: {
+        Accept: "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+        ...(init?.headers ?? {}),
+      },
+      ...init,
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw err;
+    }
+    throw createApiError(NETWORK_ERROR_MESSAGE, 0, { code: NETWORK_ERROR_CODE });
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
-    try {
-      const data = JSON.parse(text) as {
-        detail?: string | ApiErrorDetail;
-        message?: string;
-      };
-      if (typeof data.detail === "string" && data.detail.trim()) {
-        if (res.status === 404 && data.detail === "Not Found") {
-          throw new Error(
-            "Rota da API não encontrada. Reinicie o backend (porta 8001) após atualizar o código.",
-          );
-        }
-        throw new Error(data.detail);
-      }
-      if (
-        data.detail &&
-        typeof data.detail === "object" &&
-        typeof data.detail.message === "string" &&
-        data.detail.message.trim()
-      ) {
-        throw createApiError(data.detail.message, res.status, data.detail);
-      }
-      if (typeof data.message === "string" && data.message.trim()) {
-        throw new Error(data.message);
-      }
-    } catch (parseErr) {
-      if (parseErr instanceof SyntaxError) {
-        const snippet = text.replace(/\s+/g, " ").trim().slice(0, 200);
-        if (res.status === 502) {
-          throw new Error(
-            "Servidor indisponível (502). Confira se o túnel zrok (sagra-painel) está ativo e se a API foi reiniciada.",
-          );
-        }
-        if (isHtmlApiResponse(text)) {
-          throw new Error(
-            res.status === 403
-              ? "Acesso bloqueado pelo proxy/WAF (403). O método HTTP pode ter sido bloqueado na borda; tente de novo ou use a rede interna."
-              : `Resposta HTML inesperada da API (${res.status}). Verifique se a URL da API está correta.`,
-          );
-        }
-        throw new Error(`Resposta inválida da API (${res.status}): ${snippet}`);
-      }
-      if (parseErr instanceof Error && !parseErr.message.startsWith("API ")) {
-        throw parseErr;
-      }
-    }
-    const snippet = text.replace(/\s+/g, " ").trim().slice(0, 200);
-    throw new Error(
-      res.status >= 500
-        ? `Erro no servidor (${res.status}). Reinicie a API e confira config/.env (SAGRA_SESSION_SECRET). ${snippet}`
-        : `API ${res.status}: ${snippet}`,
-    );
+    throw buildHttpError(res.status, text ?? "");
   }
   const text = await res.text();
   if (!text.trim()) {

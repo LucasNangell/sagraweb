@@ -104,6 +104,10 @@ export async function checkActivationToken(token: string): Promise<{
   return apiFetch(`/auth/activate/check?token=${encodeURIComponent(token)}`);
 }
 
+/**
+ * Sessão atual. `null` = não autenticado (401/403).
+ * Lança erro em falha de rede/servidor (transitória) para não deslogar à toa.
+ */
 export async function fetchCurrentSession(): Promise<SessionMeResponse | null> {
   const res = await fetch(apiUrl("/auth/me"), {
     credentials: "include",
@@ -113,7 +117,8 @@ export async function fetchCurrentSession(): Promise<SessionMeResponse | null> {
     return null;
   }
   if (!res.ok) {
-    return null;
+    // 5xx/proxy: falha transitória — NÃO significa sessão encerrada.
+    throw new Error(`Falha ao validar sessão (${res.status}).`);
   }
   return res.json() as Promise<SessionMeResponse>;
 }

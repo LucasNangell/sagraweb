@@ -21,6 +21,15 @@ logger = logging.getLogger(__name__)
 SESSION_COOKIE_NAME = "sagra_session"
 CLIENTE_SESSION_COOKIE_NAME = "sagra_cliente_session"
 SESSION_MAX_AGE_SECONDS = 7 * 24 * 3600
+# Renovação deslizante: sessão válida com mais de 1h é reemitida (novo iat).
+# Enquanto o sistema estiver aberto (polling/heartbeat), a sessão nunca expira;
+# só expira após SESSION_MAX_AGE_SECONDS sem nenhuma requisição autenticada.
+SESSION_REFRESH_AFTER_SECONDS = 3600
+
+# Códigos de erro de sessão (campo "code" no JSON de erro) — o SPA usa para
+# reconectar a sessão automaticamente em vez de exibir erro genérico.
+SESSION_ERROR_INVALID = "session_invalid"
+SESSION_ERROR_IP_MISMATCH = "session_ip_mismatch"
 
 
 AUTH_MODE_CLIENTE = "cliente"
@@ -261,6 +270,20 @@ def set_session_cookie(response: Response, session: SessionData) -> None:
         samesite="lax",
         path="/",
     )
+
+
+def session_needs_refresh(session: Optional[SessionData], now: float | None = None) -> bool:
+    if session is None:
+        return False
+    current = time.time() if now is None else now
+    return (current - session.iat) >= SESSION_REFRESH_AFTER_SECONDS
+
+
+def refresh_session_cookie(response: Response, session: SessionData) -> None:
+    """Reemite o cookie com iat atual (mesmos dados) — renovação deslizante."""
+    from dataclasses import replace
+
+    set_session_cookie(response, replace(session, iat=int(time.time())))
 
 
 def clear_session_cookie(response: Response) -> None:

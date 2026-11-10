@@ -27,7 +27,11 @@ from starlette.responses import JSONResponse
 
 
 
-from security.session_auth import get_session_from_request
+from security.session_auth import (
+    SESSION_ERROR_INVALID,
+    SESSION_ERROR_IP_MISMATCH,
+    get_session_from_request,
+)
 
 
 
@@ -341,9 +345,23 @@ def _is_development_mode() -> bool:
 
 
 
-def _forbidden(detail: str) -> JSONResponse:
+def _forbidden(detail: str, code: str | None = None) -> JSONResponse:
 
-    return JSONResponse(status_code=403, content={"detail": detail})
+    content: dict = {"detail": detail}
+    if code:
+        content["code"] = code
+    return JSONResponse(status_code=403, content=content)
+
+
+def _maybe_refresh_session(response, session) -> None:
+    """Renovação deslizante do cookie de sessão (ver session_auth)."""
+    from security.session_auth import refresh_session_cookie, session_needs_refresh
+
+    try:
+        if session_needs_refresh(session):
+            refresh_session_cookie(response, session)
+    except Exception:
+        logger.exception("Falha ao renovar cookie de sessão")
 
 
 def _normalize_api_middleware_path(path: str) -> str:
@@ -490,7 +508,8 @@ class APIAccessMiddleware(BaseHTTPMiddleware):
                 pass
             # #endregion
             return _forbidden(
-                "Sessão ausente ou inválida. Autentique-se em POST /api/auth/session."
+                "Sessão ausente ou expirada. Faça login novamente.",
+                SESSION_ERROR_INVALID,
             )
 
         from security.public_access import should_use_user_permissions
@@ -541,7 +560,11 @@ class APIAccessMiddleware(BaseHTTPMiddleware):
             except Exception:
                 pass
             # #endregion
-            return _forbidden("Sessão inválida para este terminal (IP divergente).")
+            return _forbidden(
+                "Sessão inválida para este terminal (o endereço IP do computador mudou). "
+                "Faça login novamente.",
+                SESSION_ERROR_IP_MISMATCH,
+            )
 
         if api_path.startswith("/api/sync/"):
 
@@ -577,7 +600,9 @@ class APIAccessMiddleware(BaseHTTPMiddleware):
 
                 return _forbidden("Acesso administrativo restrito ao MASTER_IP.")
 
-            return await call_next(request)
+            response = await call_next(request)
+            _maybe_refresh_session(response, session)
+            return response
 
 
 
@@ -603,6 +628,8 @@ class APIAccessMiddleware(BaseHTTPMiddleware):
         request.state.sagra_session = session
         request.state.sagra_permissions = perms
 
-        return await call_next(request)
+        response = await call_next(request)
+        _maybe_refresh_session(response, session)
+        return response
 
 

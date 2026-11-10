@@ -1,16 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { AuthGuard } from "@/components/auth/AuthGuard";
-import { AdminIpsPage } from "@/features/admin-ips/components/AdminIpsPage";
-
+/** Rota legada: Admin IPs virou a aba Terminais do Controle de Acesso. */
 export const Route = createFileRoute("/_authenticated/admin/ips")({
-  component: AdminIpsRoute,
+  beforeLoad: () => {
+    throw redirect({ to: "/admin/acesso", search: { aba: "terminais" }, replace: true });
+  },
 });
-
-function AdminIpsRoute() {
-  return (
-    <AuthGuard requiredPermission="sb_admin_ips">
-      <AdminIpsPage />
-    </AuthGuard>
-  );
-}

@@ -1,16 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { AuthGuard } from "@/components/auth/AuthGuard";
-import { UsuariosPage } from "@/features/usuarios/components/UsuariosPage";
-
+/** Rota legada: Usuários virou a aba Usuários do Controle de Acesso. */
 export const Route = createFileRoute("/_authenticated/usuarios")({
-  component: UsuariosRoute,
+  beforeLoad: () => {
+    throw redirect({ to: "/admin/acesso", search: { aba: "usuarios" }, replace: true });
+  },
 });
-
-function UsuariosRoute() {
-  return (
-    <AuthGuard requiredPermission="sb_usuarios">
-      <UsuariosPage />
-    </AuthGuard>
-  );
-}

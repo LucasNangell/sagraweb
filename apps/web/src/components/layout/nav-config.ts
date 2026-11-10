@@ -18,7 +18,6 @@ import {
   Printer,
   Settings,
   Shield,
-  Users,
 } from "lucide-react";
 
 import { isPainelConfigAdminPonto } from "@/features/auth/painelConfigAdmin";
@@ -93,8 +92,13 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Estoque", to: "/estoque", icon: Package, permission: "sb_estoque" },
   { label: "Gravação", to: "/gravacao-externa", icon: HardDrive, permission: "sb_gravacao_externa" },
   { label: "Gravação", to: "/gravacao", icon: Disc3, permission: "sb_gravacao" },
-  { label: "Usuários", to: "/usuarios", icon: Users, permission: "sb_usuarios" },
-  { label: "Admin IPs", to: "/admin/ips", icon: Shield, permission: "sb_admin_ips" },
+  {
+    label: "Controle de Acesso",
+    to: "/admin/acesso",
+    icon: Shield,
+    // Visível com sb_usuarios OU sb_admin_ips (ver getVisibleNavItems).
+    permission: "sb_usuarios",
+  },
   {
     label: "Mensagens",
     to: "/admin/mensagens",
@@ -121,6 +125,13 @@ export const NAV_ITEMS: NavItem[] = [
   },
 ];
 
+/** Controle de Acesso: aba Usuários (sb_usuarios) e/ou aba Terminais (sb_admin_ips). */
+export function hasAcessoAdminAccess(permissions: Permissions): boolean {
+  return (
+    hasPermission(permissions, "sb_usuarios") || hasPermission(permissions, "sb_admin_ips")
+  );
+}
+
 /** Itens do menu lateral permitidos para o IP/sessão atual. */
 export function getVisibleNavItems(
   permissions: Permissions,
@@ -145,6 +156,9 @@ export function getVisibleNavItems(
         hasPermission(permissions, "sb_gravacao_externa") ||
         hasPermission(permissions, "sb_gravacao_pendente")
       );
+    }
+    if (item.to === "/admin/acesso") {
+      return hasAcessoAdminAccess(permissions);
     }
     if (item.to === "/estoque") {
       return (
@@ -179,6 +193,7 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionKey> = {
   "/estoque": "sb_estoque",
   "/gravacao-externa": "sb_gravacao_externa",
   "/gravacao": "sb_gravacao",
+  // Rotas legadas (redirecionam para /admin/acesso).
   "/usuarios": "sb_usuarios",
   "/admin/ips": "sb_admin_ips",
   "/admin/mensagens": "sb_admin_ips",
@@ -206,6 +221,9 @@ export function canAccessRoute(
   }
   if (normalized === "/mensagens") {
     return true;
+  }
+  if (normalized === "/admin/acesso") {
+    return hasAcessoAdminAccess(permissions);
   }
   if (/^\/os\/\d+\/\d+\/fluxo-producao$/.test(normalized)) {
     return hasPermission(permissions, "sb_gerencia");

@@ -353,7 +353,7 @@ function LoginPage() {
             ? "Use o e-mail cadastrado ou o ponto numérico (somente dígitos)."
             : requiresPassword
               ? "Senha exigida porque este IP não está cadastrado para o seu usuário."
-              : "O IP desta estação deve estar cadastrado em Admin IPs."}
+              : "O IP desta estação deve estar cadastrado em Controle de Acesso › Terminais."}
         </p>
       </div>
     </div>

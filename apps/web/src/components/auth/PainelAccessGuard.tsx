@@ -71,7 +71,7 @@ export function PainelAccessGuard({ route, children }: PainelAccessGuardProps) {
         <p className="text-lg font-semibold text-sagra-danger">Acesso negado</p>
         <p className="max-w-md text-sm text-neutral-400">
           {label} não está liberado para este terminal ou usuário. Solicite a
-          permissão em Admin IPs ou Usuários.
+          permissão em Controle de Acesso (Terminais ou Usuários).
         </p>
       </div>
     );

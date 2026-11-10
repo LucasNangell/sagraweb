@@ -15,7 +15,7 @@ import {
 } from "@/api/adminUsers";
 import { useAdminIpList } from "@/api/hooks/useAdminIpsQueries";
 import { useSetoresLookup } from "@/api/hooks/useAuxLookups";
-import { readPermissionValue } from "@/features/admin-ips/constants";
+import { readPermissionValue } from "../terminalAccess";
 import { useAuthStore } from "@/features/auth/authStore";
 import { hasPermission } from "@/features/auth/permissions";
 import type { PermissionKey } from "@/features/auth/types";
@@ -24,8 +24,8 @@ import {
   enrollUserFace,
   fetchUserFaceStatus,
 } from "@/features/dashboard-tablet/api";
-import type { UsuarioRecord } from "@/features/usuarios/types";
-import { formatUltimoAcesso } from "@/features/usuarios/utils";
+import type { UsuarioRecord } from "@/features/acesso/types";
+import { formatUltimoAcesso } from "../userAccess";
 
 import { IP_PERMISSION_KEYS } from "../permissionCatalog";
 import {

@@ -3,12 +3,12 @@ import { Copy, Loader2, PlusCircle, Save, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { useAdminIpsMutations } from "@/api/hooks/useAdminIpsQueries";
-import { buildDefaultNewIpPayload } from "@/features/admin-ips/constants";
+import { buildDefaultNewIpPayload } from "../terminalAccess";
 import type {
   AccessRequestRecord,
   IpPermissionPayload,
   IpPermissionRecord,
-} from "@/features/admin-ips/types";
+} from "@/features/acesso/types";
 
 import { buildDefaultIpPermissionValues, IP_PERMISSION_KEYS } from "../permissionCatalog";
 import {

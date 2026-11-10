@@ -1,5 +1,7 @@
 import type { PermissionKey } from "@/features/auth/types";
 
+// ---- Terminais (ip_permissions) ----
+
 export interface IpPermissionRecord {
   id: number;
   ip: string;
@@ -51,12 +53,6 @@ export type IpPermissionPayload = Record<PermissionKey, boolean> & {
   ativo: boolean;
 };
 
-export interface IpMetaDraft {
-  ip?: string;
-  descricao?: string;
-  grupo?: string;
-}
-
 export interface IpPermissionUpdatePayload {
   id: number;
   ip?: string;
@@ -75,15 +71,31 @@ export interface AccessRequestRecord {
   data_solicitacao: string;
 }
 
-export interface PendingRequestMeta {
-  requestId: number;
-  ponto: number;
-  nome: string;
+// ---- Usuários (tabUsuarios) ----
+
+export interface UsuarioRecord {
+  Ponto: number;
+  Nome: string | null;
+  Setor?: string | null;
+  Fornecedor?: number | boolean | null;
+  UltimoAcesso: string | null;
+  IPUltimoAcesso?: string | null;
+  IpsCadastrados?: string[];
+  Email?: string | null;
+  EmailVerified?: number | boolean | null;
+  AuthAtivo?: number | boolean | null;
+  ContaInternet?: number | boolean | null;
 }
 
-export type AdminIpsMessageType = "success" | "error";
+export interface UsuarioRow extends UsuarioRecord {
+  isOnline: boolean;
+}
 
-export interface AdminIpsMessage {
-  type: AdminIpsMessageType;
-  text: string;
+export interface ForceRefreshPayload {
+  type: "force_refresh";
+  action: "reload";
+  id: number;
+  ano: number;
+  origem: string;
+  overwriteConfig?: boolean;
 }

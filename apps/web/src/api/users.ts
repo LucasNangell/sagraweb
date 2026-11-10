@@ -2,7 +2,7 @@ import { apiFetch, apiUrl } from "@/api/client";
 import type {
   ForceRefreshPayload,
   UsuarioRecord,
-} from "@/features/usuarios/types";
+} from "@/features/acesso/types";
 
 async function parseApiError(res: Response): Promise<string> {
   const text = await res.text().catch(() => res.statusText);

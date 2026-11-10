@@ -198,8 +198,8 @@ Nav: `components/layout/nav-config.ts`
 | `/relatorios` | `_authenticated/relatorios.tsx` | `RelatorioPage` (lazy) | `sb_relatorio` | Relatórios customizados HTML/XLSX | `POST /api/reports/custom`, `/xlsx` | |
 | `/pcp` | `_authenticated/pcp.tsx` | `PcpPage` (lazy) | `sb_pcp` | Fila kanban por setor | `GET/POST /api/pcp/queue` | DnD + WS |
 | `/gravacao` | `_authenticated/gravacao.tsx` | `GravacaoPage` (lazy) | `sb_gravacao` | Monitor Xpose/PrintQ | `/api/gravacao/*`, WS `/api/ws/jobs` | |
-| `/usuarios` | `_authenticated/usuarios.tsx` | `UsuariosPage` | `sb_usuarios` | Admin usuários e clientes gabinete | `/api/admin/users/*`, `/api/admin/clientes/*` | |
-| `/admin/ips` | `_authenticated/admin/ips.tsx` | `AdminIpsPage` | `sb_admin_ips` | Matriz RBAC por IP | `/api/admin/ip/*`, `/api/access-request` | |
+| `/admin/acesso` | `_authenticated/admin/acesso.tsx` | `AcessoPage` | `sb_usuarios` ou `sb_admin_ips` (por aba) | Controle de Acesso: Visão geral (simulador), Usuários, Terminais, Clientes do portal | `/api/admin/users/*`, `/api/admin/ip/*`, `/api/admin/access/*`, `/api/admin/clientes/*` | |
+| `/usuarios`, `/admin/ips` | `_authenticated/usuarios.tsx`, `admin/ips.tsx` | — | — | Redirects legados → `/admin/acesso?aba=usuarios` / `?aba=terminais` | — | |
 | `/admin/configuracoes` | `_authenticated/admin/configuracoes.tsx` | `ConfiguracoesPage` | `sb_admin_ips` | Pré-análise checks, templates e-mail | `/api/admin/system/*` | |
 | `/impressao/requisicao/$ano/$id` | `_authenticated/impressao/requisicao.$ano.$id.tsx` | `RequisicaoPrintPage` | `ctx_imprimir_ficha` | Ficha requisição para impressão | `GET /api/reports/requisicao/{ano}/{id}` | auto-print |
 | `/$` (catch-all) | `_authenticated/$.tsx` | `ModulePlaceholderPage` | sessão apenas | Placeholder rotas não migradas | — | "Módulo em migração" |
@@ -423,8 +423,7 @@ Layout: `routes/painel.tsx`
 | **Gravação** | `features/gravacao/` | `gravacao_routes.py` | `xpose_*`, `ct_gravacao_*` | WS jobs |
 | **Relatórios** | `features/relatorio/` | `report_custom_routes.py` | queries dinâmicas | openpyxl |
 | **Painéis** | `dashboard-setor/`, `painel-global/` | `os_routes.py`, `pcp_routes.py` | leitura OS | WS, Chart.js |
-| **Usuários** | `features/usuarios/` | `user_admin_routes.py` | `tabUsuarios`, `user_permissions` | SMTP ativação |
-| **Admin IPs** | `features/admin-ips/` | `ip_admin_routes.py` | `ip_permissions` | — |
+| **Controle de Acesso** | `features/acesso/` | `user_admin_routes.py`, `ip_admin_routes.py`, `acesso_admin_routes.py` | `tabUsuarios`, `user_permissions`, `ip_permissions` | SMTP ativação |
 | **Config sistema** | `features/configuracoes/` | `admin_system_routes.py` | templates, checks | EWS test send |
 | **Auth** | `features/auth/` | `auth_routes.py`, `security/` | `tabUsuarios` | cookies HMAC |
 | **Notificações** | `OsNotificationHandler` | `notifications_routes.py` | `tabNotificacoes` | WS push |

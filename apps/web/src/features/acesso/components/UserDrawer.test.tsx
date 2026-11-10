@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { UsuarioRecord } from "@/features/usuarios/types";
+import type { UsuarioRecord } from "@/features/acesso/types";
 
 import { ConfirmProvider } from "./ConfirmDialog";
 import { FeedbackProvider } from "./Feedback";
@@ -159,5 +159,24 @@ describe("UserDrawer", () => {
       await screen.findByText(/sem conta internet e sem permissões próprias/),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Salvar permissões/ })).not.toBeInTheDocument();
+  });
+
+  it("Redefinir senha gera e exibe o link para copiar", async () => {
+    const link = "http://cgrafsysvm/login/reset?token=xyz";
+    api.generatePasswordLink.mockResolvedValue({ status: "ok", ponto: 123, tipo: "reset", link });
+    wrap(
+      <UserDrawer
+        ponto={123}
+        user={internetUser}
+        allUsers={[internetUser]}
+        onClose={vi.fn()}
+        onChanged={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByText("Acesso internet"));
+    fireEvent.click(screen.getByRole("button", { name: "Redefinir senha" }));
+    await waitFor(() => expect(screen.getByDisplayValue(link)).toBeInTheDocument());
+    expect(api.generatePasswordLink).toHaveBeenCalledWith(123);
+    expect(screen.getByText("Link de redefinição de senha")).toBeInTheDocument();
   });
 });

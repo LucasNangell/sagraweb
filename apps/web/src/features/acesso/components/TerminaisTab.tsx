@@ -23,7 +23,7 @@ import {
   useAdminIpList,
   useAdminIpsMutations,
 } from "@/api/hooks/useAdminIpsQueries";
-import type { AccessRequestRecord, IpPermissionRecord } from "@/features/admin-ips/types";
+import type { AccessRequestRecord, IpPermissionRecord } from "@/features/acesso/types";
 
 import { IP_PERMISSION_KEYS } from "../permissionCatalog";
 import {

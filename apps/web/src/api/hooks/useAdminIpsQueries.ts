@@ -14,7 +14,7 @@ import { queryKeys } from "@/api/query-keys";
 import type {
   IpPermissionPayload,
   IpPermissionUpdatePayload,
-} from "@/features/admin-ips/types";
+} from "@/features/acesso/types";
 
 const ACCESS_REQUESTS_POLL_MS = 10_000;
 

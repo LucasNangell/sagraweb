@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { IpPermissionRecord } from "@/features/admin-ips/types";
+import type { IpPermissionRecord } from "@/features/acesso/types";
 
 import { IP_PERMISSION_KEYS } from "./permissionCatalog";
 import {

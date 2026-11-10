@@ -96,7 +96,7 @@ Gerenciar o ciclo de vida de **Ordens de Serviço (OS)** gráficas: busca, cria�
 | `/relatorios` | `routes/_authenticated/relatorios.tsx` | RelatorioPage | Relatórios customizados | `sb_relatorio` | RelatorioFiltersPanel | `POST /api/reports/custom`, `/xlsx` | **Pronta** | Lazy-loaded |
 | `/pcp` | `routes/_authenticated/pcp.tsx` | PcpPage | Fila kanban por setor | `sb_pcp` | PcpColumnWrapper, PcpSettingsModal | `GET/POST /api/pcp/queue` | **Pronta** | Drag-and-drop; WS refresh |
 | `/gravacao` | `routes/_authenticated/gravacao.tsx` | GravacaoPage | Monitor Xpose/PrintQ | `sb_gravacao` | Tabelas jobs/paths | `GET /api/gravacao/*`, WS `/api/ws/jobs` | **Pronta** | Suporte payload legado PrintQ |
-| `/usuarios` | `routes/_authenticated/usuarios.tsx` | UsuariosPage | Admin usuários e clientes | `sb_usuarios` | UserAdminPanel, ClienteCadastroForm | `/api/admin/users/*`, `/api/admin/clientes/*` | **Pronta** | Master para CRUD clientes |
+| `/admin/acesso` | `routes/_authenticated/admin/acesso.tsx` | AcessoPage | Controle de Acesso (usuários, terminais, clientes, simulador) | `sb_usuarios` ou `sb_admin_ips` | UserDrawer, TerminalDrawer, PermissionMatrix, AccessSimulator, ClienteCadastroForm | `/api/admin/users/*`, `/api/admin/ip/*`, `/api/admin/access/*`, `/api/admin/clientes/*` | **Pronta** | Master para mutações; `/usuarios` redireciona |
 | `/admin/ips` | `routes/_authenticated/admin/ips.tsx` | AdminIpsPage | Matriz de IPs | `sb_admin_ips` | Tabela IPs, solicitações acesso | `/api/admin/ip/*`, `/api/access-request` | **Pronta** | Master para mutações |
 | `/admin/configuracoes` | `routes/_authenticated/admin/configuracoes.tsx` | ConfiguracoesPage | Pré-análise e templates e-mail | `sb_admin_ips` | PreAnaliseChecksSection, EmailTemplatesSection | `/api/admin/system/*` | **Pronta** | Mesma permissão que Admin IPs |
 | `/impressao/requisicao/$ano/$id` | `routes/_authenticated/impressao/requisicao.$ano.$id.tsx` | RequisicaoPrintPage | Ficha/requisição para impressão | `ctx_imprimir_ficha` | Viewer HTML + auto-print | `GET /api/reports/requisicao/{ano}/{id}` | **Pronta** | Search: `mode`, `print` |
@@ -225,22 +225,13 @@ Gerenciar o ciclo de vida de **Ordens de Serviço (OS)** gráficas: busca, cria�
 - **APIs:** `/api/gravacao/xpose/status`, WS `/api/ws/jobs`
 - **Estado:** **Pronta** — compatível payload PrintQ legado
 
-### 3.9 Usuários (UsuariosPage)
+### 3.9 Controle de Acesso (AcessoPage)
 
-- **Rota:** `/usuarios`
-- **Arquivo:** `apps/web/src/features/usuarios/components/UsuariosPage.tsx`
-- **Objetivo:** CRUD usuários staff, permissões, setor, defaults painel; cadastro clientes gabinete
-- **Permissões:** `sb_usuarios` (UI); endpoints admin exigem Master
-- **APIs:** `/api/admin/users/*`, `/api/admin/clientes/*`, `/api/users/online`
-- **Estado:** **Pronta**
-
-### 3.10 Admin IPs (AdminIpsPage)
-
-- **Rota:** `/admin/ips`
-- **Arquivo:** `apps/web/src/features/admin-ips/components/AdminIpsPage.tsx`
-- **Objetivo:** Matriz RBAC por IP, grupos, solicitações de acesso
-- **Permissões:** `sb_admin_ips` (UI); mutações Master
-- **APIs:** `/api/admin/ip/*`, `/api/access-request`, `/api/admin/access-requests`
+- **Rota:** `/admin/acesso?aba=visao-geral|usuarios|terminais|clientes` (`/usuarios` e `/admin/ips` redirecionam)
+- **Arquivo:** `apps/web/src/features/acesso/components/AcessoPage.tsx`
+- **Objetivo:** página única de usuários (quem) e terminais (onde) com editor de permissões compartilhado (`PermissionMatrix` + catálogo `permissionCatalog.ts`), simulador de acesso efetivo, solicitações de acesso, clientes do portal e manutenção (forçar refresh dos clients). Padrão de painel por setor: Configurações › Painéis por setor.
+- **Permissões:** aba Usuários/Clientes `sb_usuarios`; aba Terminais `sb_admin_ips`; Visão geral com qualquer uma. Endpoints admin exigem Master.
+- **APIs:** `/api/admin/users/*`, `/api/admin/ip/*`, `/api/admin/access-requests`, `/api/admin/access/preview`, `/api/admin/access/overview`, `/api/admin/clientes/*`, `/api/users/online`
 - **Estado:** **Pronta**
 
 ### 3.11 Configurações (ConfiguracoesPage)

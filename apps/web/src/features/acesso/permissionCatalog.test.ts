@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  ALL_PERMISSION_COLUMNS,
-  buildDefaultNewIpPayload,
-} from "@/features/admin-ips/constants";
 import { PERMISSION_KEYS } from "@/features/auth/types";
 
 import {
@@ -16,6 +12,7 @@ import {
   PERMISSION_CATEGORIES,
   USER_MATRIX_PERMISSION_KEYS,
 } from "./permissionCatalog";
+import { buildDefaultNewIpPayload } from "./terminalAccess";
 
 /** Colunas booleanas de `ip_permissions` editadas pela tela de terminais (contrato histórico). */
 const IP_TABLE_COLUMNS = [
@@ -113,10 +110,6 @@ describe("permissionCatalog", () => {
     const payload = buildDefaultNewIpPayload("10.0.0.1", "Desc", "Sala");
     expect(payload).toMatchObject({ ip: "10.0.0.1", descricao: "Desc", grupo: "Sala", ativo: true });
     expect(payload).not.toHaveProperty("ctx_prova_web");
-  });
-
-  it("colunas de Admin IPs derivam do catálogo", () => {
-    expect(ALL_PERMISSION_COLUMNS.map((c) => c.key)).toEqual([...IP_PERMISSION_KEYS]);
   });
 
   it("agrupa por categoria sem perder chaves", () => {

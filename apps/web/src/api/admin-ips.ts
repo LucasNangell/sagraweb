@@ -4,7 +4,7 @@ import type {
   IpPermissionPayload,
   IpPermissionRecord,
   IpPermissionUpdatePayload,
-} from "@/features/admin-ips/types";
+} from "@/features/acesso/types";
 
 async function parseApiError(res: Response): Promise<string> {
   const text = await res.text().catch(() => res.statusText);

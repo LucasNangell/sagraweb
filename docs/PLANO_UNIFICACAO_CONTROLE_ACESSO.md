@@ -132,3 +132,23 @@ Cada fase fecha com commit e push versionados (MINOR) e pode ir a produção soz
 2. Destino do "Padrão de painel por setor": `/admin/paineis` (proposto) ou `/admin/configuracoes`?
 3. Perfis/templates de permissão (ex.: "Operador de gravação", "Gerência"): F6 futura ou fora do escopo?
 4. Por quanto tempo manter os redirects (sugestão: 2 releases)?
+
+## 11. Status da implementação (2026-11-10)
+
+Fases F0–F5 implementadas, uma versão MINOR por fase: 0.22.0 (F0) → 0.27.0 (F5).
+
+Decisões tomadas para as questões em aberto (§10):
+
+1. **Clientes do portal** — aba da nova página (como proposto).
+2. **Padrão de painel por setor** — foi para **Configurações › Painéis por setor**, não para `/admin/paineis`: esta é restrita a um único ponto (918713), o que tiraria a função de quem a usava; Configurações tem a mesma guarda efetiva (MASTER).
+3. **Perfis/templates de permissão** — fora do escopo (F6 futura).
+4. **Redirects** `/usuarios` e `/admin/ips` — mantidos; remover após 2 releases estáveis.
+
+Achados de integridade tratados durante a implementação:
+
+- O modal antigo de permissões reabria "Conta ativa" sempre marcado; salvar permissões reativava contas desativadas. Agora a conta ativa é salva à parte, com confirmação.
+- `POST /api/admin/ip/add` com IP já existente sobrescreve o terminal com os padrões; a UI bloqueia IP duplicado (cadastro, edição e aprovação de solicitação).
+- Regra real confirmada pelo simulador: permissões próprias do usuário **substituem por completo** as do terminal (inclusive no MASTER, exceto as rotas administrativas, que dependem só do IP MASTER); a UI explica isso.
+
+Não implementado (opcional): tabela `access_audit_log`.
+

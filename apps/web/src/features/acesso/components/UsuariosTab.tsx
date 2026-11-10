@@ -4,8 +4,8 @@ import { useMemo, useState, type ReactNode } from "react";
 
 import { useUsuariosOverview } from "@/api/hooks/useUsuariosQueries";
 import { useAuthStore } from "@/features/auth/authStore";
-import type { UsuarioRow } from "@/features/usuarios/types";
-import { formatUltimoAcesso } from "@/features/usuarios/utils";
+import type { UsuarioRow } from "@/features/acesso/types";
+import { formatUltimoAcesso } from "../userAccess";
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 
 import { hasInternetAccount, isAccountActive, isFornecedor } from "../userAccess";

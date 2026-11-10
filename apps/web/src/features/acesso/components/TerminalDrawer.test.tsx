@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { IpPermissionRecord } from "@/features/admin-ips/types";
+import type { IpPermissionRecord } from "@/features/acesso/types";
 
 import { IP_PERMISSION_KEYS } from "../permissionCatalog";
 import { ConfirmProvider } from "./ConfirmDialog";

@@ -6,8 +6,8 @@ import {
   postForceRefresh,
 } from "@/api/users";
 import { queryKeys } from "@/api/query-keys";
-import { mergeUsuariosWithOnline } from "@/features/usuarios/utils";
-import type { ForceRefreshPayload } from "@/features/usuarios/types";
+import { mergeUsuariosWithOnline } from "@/features/acesso/userAccess";
+import type { ForceRefreshPayload } from "@/features/acesso/types";
 
 const USUARIOS_POLL_MS = 15_000;
 

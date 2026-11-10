@@ -1,13 +1,40 @@
-import { isIpActive, readPermissionValue } from "@/features/admin-ips/constants";
-import type {
-  IpPermissionRecord,
-  IpPermissionUpdatePayload,
-} from "@/features/admin-ips/types";
 import type { PermissionKey } from "@/features/auth/types";
 
-import { IP_PERMISSION_KEYS } from "./permissionCatalog";
+import { buildDefaultIpPermissionValues, IP_PERMISSION_KEYS } from "./permissionCatalog";
+import type {
+  IpPermissionPayload,
+  IpPermissionRecord,
+  IpPermissionUpdatePayload,
+} from "./types";
 
 export const SEM_GRUPO = "Sem Grupo";
+
+/** MySQL devolve booleanos como 0/1. */
+export function isIpActive(value: boolean | number | null | undefined): boolean {
+  return value === true || value === 1;
+}
+
+export function readPermissionValue(
+  record: Record<string, boolean | number | null | undefined>,
+  key: PermissionKey,
+): boolean {
+  return isIpActive(record[key]);
+}
+
+/** Payload de POST /api/admin/ip/add com os padrões do catálogo para terminal novo. */
+export function buildDefaultNewIpPayload(
+  ip: string,
+  descricao: string,
+  grupo: string,
+): IpPermissionPayload {
+  return {
+    ...buildDefaultIpPermissionValues(),
+    ip,
+    descricao,
+    grupo,
+    ativo: true,
+  };
+}
 
 type RawRecord = Record<string, boolean | number | string | null | undefined>;
 

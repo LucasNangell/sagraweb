@@ -7,6 +7,7 @@ import {
   Database,
   FlaskConical,
   IdCard,
+  LayoutGrid,
   Mail,
   Package,
   Printer,
@@ -27,6 +28,7 @@ import { OrcamentoSettingsSection } from "./OrcamentoSettingsSection";
 import { PapelariaProdutosAdminSection } from "./PapelariaProdutosAdminSection";
 import { PapelariaWorkerQueueSection } from "./PapelariaWorkerQueueSection";
 import { PreAnaliseChecksSection } from "./PreAnaliseChecksSection";
+import { SetorPainelDefaultsPanel } from "./SetorPainelDefaultsSection";
 import { SincronizacaoSettingsSection } from "./SincronizacaoSettingsSection";
 import { SistemaSettingsSection } from "./SistemaSettingsSection";
 import "./configuracoesPage.css";
@@ -42,6 +44,7 @@ type ConfigTab =
   | "sistema"
   | "custos"
   | "orcamento"
+  | "paineis_setor"
   | "sincronizacao"
   | "desenvolvimento";
 
@@ -106,6 +109,12 @@ const TAB_META: Record<
     description:
       "Alíquotas, cliques, formatos e textos do ofício usados no cálculo Digital/Offset. Preços de material vêm do estoque.",
     icon: <Calculator className="size-3.5" aria-hidden />,
+  },
+  paineis_setor: {
+    label: "Painéis por setor",
+    description:
+      "Layout padrão do painel de setor: usuários sem configuração salva recebem este layout na primeira abertura, conforme o setor do cadastro.",
+    icon: <LayoutGrid className="size-3.5" aria-hidden />,
   },
   sincronizacao: {
     label: "Sincronização",
@@ -260,6 +269,15 @@ export function ConfiguracoesPage() {
             className="configuracoes-tab-panel"
           >
             <OrcamentoSettingsSection />
+          </div>
+          <div
+            role="tabpanel"
+            id="config-panel-paineis_setor"
+            aria-labelledby="config-tab-paineis_setor"
+            hidden={activeTab !== "paineis_setor"}
+            className="configuracoes-tab-panel"
+          >
+            {activeTab === "paineis_setor" ? <SetorPainelDefaultsPanel /> : null}
           </div>
           <div
             role="tabpanel"

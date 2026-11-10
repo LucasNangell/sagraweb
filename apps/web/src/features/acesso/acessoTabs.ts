@@ -19,11 +19,13 @@ export interface AcessoTabMeta {
 }
 
 export const ACESSO_TABS: ReadonlyArray<AcessoTabMeta> = [
+  { id: "visao-geral", label: "Visão geral", anyOf: ["sb_usuarios", "sb_admin_ips"] },
   { id: "usuarios", label: "Usuários", anyOf: ["sb_usuarios"] },
   { id: "terminais", label: "Terminais", anyOf: ["sb_admin_ips"] },
+  { id: "clientes", label: "Clientes do portal", anyOf: ["sb_usuarios"] },
 ];
 
-const ABA_IDS = new Set<string>(["visao-geral", "usuarios", "terminais", "clientes"]);
+const ABA_IDS = new Set<string>(ACESSO_TABS.map((t) => t.id));
 
 function parsePositiveInt(value: unknown): number | undefined {
   if (value == null || value === "") return undefined;

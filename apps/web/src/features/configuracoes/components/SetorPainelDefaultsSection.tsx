@@ -1,3 +1,4 @@
+import { cn } from "@sagra/ui";
 import { LayoutGrid, Loader2, Save } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -168,5 +169,40 @@ export function SetorPainelDefaultsSection({
         </p>
       )}
     </section>
+  );
+}
+
+/** Aba de Configurações: padrão de painel por setor com feedback próprio. */
+export function SetorPainelDefaultsPanel() {
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!message) return;
+    const timer = window.setTimeout(() => setMessage(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [message]);
+
+  const onSuccess = useCallback((text: string) => setMessage({ type: "success", text }), []);
+  const onError = useCallback((text: string) => setMessage({ type: "error", text }), []);
+
+  return (
+    <div className="space-y-3">
+      {message ? (
+        <p
+          role={message.type === "error" ? "alert" : "status"}
+          className={cn(
+            "rounded-lg border px-4 py-2 text-sm font-medium",
+            message.type === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-red-200 bg-red-50 text-red-800",
+          )}
+        >
+          {message.text}
+        </p>
+      ) : null}
+      <SetorPainelDefaultsSection onSuccess={onSuccess} onError={onError} />
+    </div>
   );
 }

@@ -12,6 +12,8 @@ import {
   type ClienteTipoConta,
 } from "@/api/cliente-portal";
 
+import { useConfirm } from "./ConfirmDialog";
+
 const TIPO_OPTIONS: Array<{ id: ClienteTipoConta; label: string }> = [
   { id: "gabinete", label: "Gabinete" },
   { id: "orgao", label: "Órgão" },
@@ -28,6 +30,7 @@ export function ClienteCadastroForm({
   onSuccess: (msg: string) => void;
   onError: (msg: string) => void;
 }) {
+  const confirm = useConfirm();
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [tipoConta, setTipoConta] = useState<ClienteTipoConta>("gabinete");
@@ -118,9 +121,13 @@ export function ClienteCadastroForm({
       cliente.ParentID === null
         ? "\n\nContas subordinadas vinculadas a esta conta principal também serão removidas."
         : "";
-    const ok = window.confirm(
-      `Tem certeza que deseja excluir o cliente "${cliente.Nome}" (${cliente.Email}) do portal externo?\nEsta ação não pode ser desfeita.${principalWarning}`,
-    );
+    const ok = await confirm({
+      title: `Excluir o cliente "${cliente.Nome}" do portal externo?`,
+      message: `${cliente.Email}
+Esta ação não pode ser desfeita.${principalWarning}`,
+      confirmLabel: "Excluir",
+      danger: true,
+    });
     if (!ok) return;
 
     setDeletingId(cliente.ID);

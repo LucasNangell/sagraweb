@@ -29,21 +29,21 @@ describe("parseAcessoSearch", () => {
 });
 
 describe("abas por permissão", () => {
-  it("sb_usuarios mostra só a aba Usuários", () => {
+  it("sb_usuarios: Visão geral, Usuários e Clientes do portal", () => {
     const tabs = getVisibleAcessoTabs(perms(["sb_usuarios"])).map((t) => t.id);
-    expect(tabs).toContain("usuarios");
-    expect(tabs).not.toContain("terminais");
+    expect(tabs).toEqual(["visao-geral", "usuarios", "clientes"]);
   });
 
-  it("sb_admin_ips mostra só a aba Terminais", () => {
+  it("sb_admin_ips: Visão geral e Terminais", () => {
     const tabs = getVisibleAcessoTabs(perms(["sb_admin_ips"])).map((t) => t.id);
-    expect(tabs).toContain("terminais");
-    expect(tabs).not.toContain("usuarios");
+    expect(tabs).toEqual(["visao-geral", "terminais"]);
   });
 
   it("aba pedida sem permissão cai na primeira visível", () => {
     const visible = getVisibleAcessoTabs(perms(["sb_admin_ips"]));
-    expect(resolveAcessoAba("usuarios", visible)).toBe("terminais");
+    expect(resolveAcessoAba("usuarios", visible)).toBe("visao-geral");
+    expect(resolveAcessoAba("terminais", visible)).toBe("terminais");
+    expect(getVisibleAcessoTabs(perms(["sb_inicio"]))).toEqual([]);
     expect(resolveAcessoAba(undefined, [])).toBeNull();
   });
 });

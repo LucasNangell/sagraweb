@@ -18,13 +18,13 @@ import {
 import { useAuthStore } from "@/features/auth/authStore";
 import type { UsuariosMessage } from "@/features/usuarios/types";
 import { formatUltimoAcesso } from "@/features/usuarios/utils";
-import { ClienteCadastroForm } from "@/features/usuarios/components/ClienteCadastroForm";
+import { ClienteCadastroForm } from "@/features/acesso/components/ClienteCadastroForm";
 import {
   UserAdminProvider,
   UserRowActions,
   UserCadastroForm,
 } from "@/features/usuarios/components/UserAdminPanel";
-import { SetorPainelDefaultsSection } from "@/features/usuarios/components/SetorPainelDefaultsSection";
+import { SetorPainelDefaultsSection } from "@/features/configuracoes/components/SetorPainelDefaultsSection";
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 
 const FORCE_REFRESH_CONFIRM =

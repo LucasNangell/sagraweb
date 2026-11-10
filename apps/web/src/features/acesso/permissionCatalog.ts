@@ -6,9 +6,9 @@
  * `permissionCatalog.test.ts` falha se alguma ficar de fora.
  *
  * Escopo:
- * - `ip`   — coluna de `ip_permissions` (terminal); no usuário é derivada de outro campo.
- * - `user` — só existe em `user_permissions` (não há coluna editável no terminal).
- * - `both` — editável no terminal e no usuário.
+ * - `ip`   — só no terminal (`ip_permissions`).
+ * - `user` — só no usuário (`user_permissions`).
+ * - `both` — no terminal e no usuário (hoje todas as chaves).
  */
 import type { PermissionKey } from "@/features/auth/types";
 
@@ -75,24 +75,8 @@ export const PERMISSION_CATALOG: ReadonlyArray<PermissionCatalogEntry> = [
   entry("ctx_imprimir_separador", "Sep", "Imprimir separador", "contexto", "both", false),
   entry("ctx_detalhes_os", "Det", "Detalhes da OS", "contexto", "both", true),
   entry("ctx_orcamento", "Orç", "Orçamento", "contexto", "both", false),
-  entry(
-    "ctx_prova_web",
-    "PWeb",
-    "Prova WEB",
-    "contexto",
-    "user",
-    false,
-    "Concedida apenas por usuário.",
-  ),
-  entry(
-    "ctx_comparar_versoes",
-    "Cmp",
-    "Comparar versões PDF",
-    "contexto",
-    "user",
-    false,
-    "Concedida apenas por usuário.",
-  ),
+  entry("ctx_prova_web", "PWeb", "Prova WEB", "contexto", "both", false),
+  entry("ctx_comparar_versoes", "Cmp", "Comparar versões PDF", "contexto", "both", false),
 
   // Menu lateral
   entry("sb_inicio", "Ini", "Início", "menu", "both", true),
@@ -103,15 +87,7 @@ export const PERMISSION_CATALOG: ReadonlyArray<PermissionCatalogEntry> = [
   entry("sb_usuario", "Usr", "Usuário", "menu", "both", true),
   entry("sb_configuracoes", "Cfg", "Configurações", "menu", "both", true),
   entry("sb_relatorio", "Rel", "Relatórios", "menu", "both", true),
-  entry(
-    "sb_dashboard_setor",
-    "Dsh",
-    "Painel de setor",
-    "paineis",
-    "ip",
-    true,
-    "No usuário é definido pela lista de setores da seção Painéis.",
-  ),
+  entry("sb_dashboard_setor", "Dsh", "Painel de setor", "paineis", "both", true),
   entry(
     "sb_admin_ips",
     "Adm",
@@ -121,26 +97,12 @@ export const PERMISSION_CATALOG: ReadonlyArray<PermissionCatalogEntry> = [
     false,
   ),
   entry("sb_pcp", "PCP", "PCP", "menu", "both", true),
-  entry(
-    "sb_usuarios",
-    "Usrs",
-    "Controle de Acesso — Usuários",
-    "outros",
-    "both",
-    true,
-  ),
+  entry("sb_usuarios", "Usrs", "Controle de Acesso — Usuários", "outros", "both", true),
   entry("sb_active_computers", "Atv", "Computadores ativos", "outros", "both", true),
   entry("sb_gravacao", "Grv", "Gravação", "gravacao", "both", true),
   entry("sb_gravacao_externa", "GEx", "Gravação Externa", "gravacao", "both", true),
   entry("sb_gravacao_pendente", "GPn", "Gravações Pendentes", "gravacao", "both", true),
-  entry(
-    "sb_gravacao_externa_operador",
-    "OpG",
-    "Operador Grv. Externa",
-    "gravacao",
-    "both",
-    false,
-  ),
+  entry("sb_gravacao_externa_operador", "OpG", "Operador Grv. Externa", "gravacao", "both", false),
   entry(
     "sb_gravacao_pendente_excluir",
     "ExG",
@@ -172,25 +134,9 @@ export const PERMISSION_CATALOG: ReadonlyArray<PermissionCatalogEntry> = [
   entry("sb_credenciais_depol", "Dep", "Credenciais DEPOL", "menu", "both", false),
   entry("sb_manipular_imagem", "Img", "Manipular Imagem", "menu", "both", false),
 
-  // Painéis — apenas por usuário
-  entry(
-    "sb_dashboard_global",
-    "DGl",
-    "Painel global",
-    "paineis",
-    "user",
-    false,
-    "Concedido apenas por usuário (seção Painéis).",
-  ),
-  entry(
-    "sb_dashboard_tablet",
-    "DTb",
-    "Painel tablet/celular/gravação",
-    "paineis",
-    "user",
-    false,
-    "Concedido apenas por usuário (seção Painéis).",
-  ),
+  // Painéis (no usuário, geridos na seção Painéis do painel lateral)
+  entry("sb_dashboard_global", "DGl", "Painel global", "paineis", "both", false),
+  entry("sb_dashboard_tablet", "DTb", "Painel tablet/celular/gravação", "paineis", "both", false),
 ];
 
 const CATALOG_BY_KEY: ReadonlyMap<PermissionKey, PermissionCatalogEntry> = new Map(
@@ -210,25 +156,23 @@ export function isPermissionInScope(
   entryOrKey: PermissionCatalogEntry | PermissionKey,
   target: PermissionTarget,
 ): boolean {
-  const item =
-    typeof entryOrKey === "string" ? CATALOG_BY_KEY.get(entryOrKey) : entryOrKey;
+  const item = typeof entryOrKey === "string" ? CATALOG_BY_KEY.get(entryOrKey) : entryOrKey;
   if (!item) return false;
   return item.scope === "both" || item.scope === target;
 }
 
 /** Chaves com coluna em `ip_permissions` editável na tela de terminais. */
-export const IP_PERMISSION_KEYS: ReadonlyArray<PermissionKey> = PERMISSION_CATALOG.filter(
-  (item) => isPermissionInScope(item, "ip"),
+export const IP_PERMISSION_KEYS: ReadonlyArray<PermissionKey> = PERMISSION_CATALOG.filter((item) =>
+  isPermissionInScope(item, "ip"),
 ).map((item) => item.key);
 
 /**
  * Chaves booleanas editadas na matriz do usuário.
  * Painéis (setor/global/tablet) ficam na seção Painéis do usuário, não na matriz.
  */
-export const USER_MATRIX_PERMISSION_KEYS: ReadonlyArray<PermissionKey> =
-  PERMISSION_CATALOG.filter(
-    (item) => isPermissionInScope(item, "user") && item.category !== "paineis",
-  ).map((item) => item.key);
+export const USER_MATRIX_PERMISSION_KEYS: ReadonlyArray<PermissionKey> = PERMISSION_CATALOG.filter(
+  (item) => isPermissionInScope(item, "user") && item.category !== "paineis",
+).map((item) => item.key);
 
 /** Valores iniciais das permissões de um terminal recém-cadastrado. */
 export function buildDefaultIpPermissionValues(): Record<PermissionKey, boolean> {

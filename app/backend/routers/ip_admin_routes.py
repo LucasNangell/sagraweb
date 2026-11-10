@@ -34,6 +34,8 @@ class IPPermission(BaseModel):
     ctx_imprimir_separador: bool = False
     ctx_detalhes_os: bool = True
     ctx_orcamento: bool = False
+    ctx_prova_web: bool = False
+    ctx_comparar_versoes: bool = False
     
     # Sidebar
     sb_inicio: bool = True
@@ -45,7 +47,8 @@ class IPPermission(BaseModel):
     sb_configuracoes: bool = True
     sb_relatorio: bool = True
     sb_dashboard_setor: bool = True
-    sb_dashboard_global: bool = True
+    sb_dashboard_global: bool = False
+    sb_dashboard_tablet: bool = False
     painel_setores: list[str] = []
     sb_admin_ips: bool = False
     
@@ -94,6 +97,8 @@ class IPPermissionUpdate(BaseModel):
     ctx_imprimir_separador: Optional[bool] = None
     ctx_detalhes_os: Optional[bool] = None
     ctx_orcamento: Optional[bool] = None
+    ctx_prova_web: Optional[bool] = None
+    ctx_comparar_versoes: Optional[bool] = None
     
     # Sidebar
     sb_inicio: Optional[bool] = None
@@ -106,6 +111,7 @@ class IPPermissionUpdate(BaseModel):
     sb_relatorio: Optional[bool] = None
     sb_dashboard_setor: Optional[bool] = None
     sb_dashboard_global: Optional[bool] = None
+    sb_dashboard_tablet: Optional[bool] = None
     painel_setores: Optional[list[str]] = None
     sb_admin_ips: Optional[bool] = None
     
@@ -239,6 +245,8 @@ def get_client_permissions(client_ip: str) -> dict:
                     'ctx_imprimir_separador': bool(exact_match.get('ctx_imprimir_separador', False)),
                     'ctx_detalhes_os': bool(exact_match.get('ctx_detalhes_os', True)),
                     'ctx_orcamento': bool(exact_match.get('ctx_orcamento', False)),
+                    'ctx_prova_web': bool(exact_match.get('ctx_prova_web', False)),
+                    'ctx_comparar_versoes': bool(exact_match.get('ctx_comparar_versoes', False)),
                     'sb_inicio': bool(exact_match.get('sb_inicio', True)),
                     'sb_gerencia': bool(exact_match.get('sb_gerencia', True)),
                     'sb_email': bool(exact_match.get('sb_email', True)),
@@ -249,6 +257,7 @@ def get_client_permissions(client_ip: str) -> dict:
                     'sb_relatorio': bool(exact_match.get('sb_relatorio', True)),
                     'sb_dashboard_setor': bool(exact_match.get('sb_dashboard_setor', True)),
                     'sb_dashboard_global': bool(exact_match.get('sb_dashboard_global', False)),
+                    'sb_dashboard_tablet': bool(exact_match.get('sb_dashboard_tablet', False)),
                     'painel_setores': parse_painel_setores_raw(exact_match.get('painel_setores')),
                     'sb_admin_ips': bool(exact_match.get('sb_admin_ips', False)),
                     'sb_pcp': bool(exact_match.get('sb_pcp', False)),
@@ -296,6 +305,8 @@ def get_client_permissions(client_ip: str) -> dict:
                         'ctx_imprimir_separador': bool(ip_data.get('ctx_imprimir_separador', False)),
                         'ctx_detalhes_os': bool(ip_data.get('ctx_detalhes_os', True)),
                         'ctx_orcamento': bool(ip_data.get('ctx_orcamento', False)),
+                        'ctx_prova_web': bool(ip_data.get('ctx_prova_web', False)),
+                        'ctx_comparar_versoes': bool(ip_data.get('ctx_comparar_versoes', False)),
                         'sb_inicio': bool(ip_data.get('sb_inicio', True)),
                         'sb_gerencia': bool(ip_data.get('sb_gerencia', True)),
                         'sb_email': bool(ip_data.get('sb_email', True)),
@@ -306,6 +317,7 @@ def get_client_permissions(client_ip: str) -> dict:
                         'sb_relatorio': bool(ip_data.get('sb_relatorio', True)),
                         'sb_dashboard_setor': bool(ip_data.get('sb_dashboard_setor', True)),
                         'sb_dashboard_global': bool(ip_data.get('sb_dashboard_global', False)),
+                        'sb_dashboard_tablet': bool(ip_data.get('sb_dashboard_tablet', False)),
                         'painel_setores': parse_painel_setores_raw(ip_data.get('painel_setores')),
                         'sb_admin_ips': bool(ip_data.get('sb_admin_ips', False)),
                         'sb_pcp': bool(ip_data.get('sb_pcp', False)),
@@ -500,7 +512,8 @@ async def add_ip(data: IPPermission, ponto: Optional[int] = None, nome_usuario: 
                         sb_inicio=%s, sb_gerencia=%s, sb_email=%s, sb_analise=%s,
                         sb_papelaria=%s, sb_usuario=%s, sb_configuracoes=%s,
                         sb_relatorio=%s, sb_dashboard_setor=%s, sb_admin_ips=%s,
-                        sb_pcp=%s, sb_usuarios=%s, sb_active_computers=%s, sb_gravacao=%s, sb_cotas_graf=%s, sb_gravacao_externa=%s, sb_gravacao_pendente=%s, sb_gravacao_externa_operador=%s, sb_gravacao_pendente_excluir=%s, sb_gravacao_externa_entrega=%s, sb_gravacao_externa_lancar=%s, sb_estoque=%s, sb_estoque_gerente=%s, sb_lombada=%s, sb_credenciais_depol=%s, sb_manipular_imagem=%s
+                        sb_pcp=%s, sb_usuarios=%s, sb_active_computers=%s, sb_gravacao=%s, sb_cotas_graf=%s, sb_gravacao_externa=%s, sb_gravacao_pendente=%s, sb_gravacao_externa_operador=%s, sb_gravacao_pendente_excluir=%s, sb_gravacao_externa_entrega=%s, sb_gravacao_externa_lancar=%s, sb_estoque=%s, sb_estoque_gerente=%s, sb_lombada=%s, sb_credenciais_depol=%s, sb_manipular_imagem=%s,
+                        ctx_prova_web=%s, ctx_comparar_versoes=%s, sb_dashboard_global=%s, sb_dashboard_tablet=%s
                     WHERE id=%s
                 """, (
                     data.descricao, data.grupo, data.ativo,
@@ -510,6 +523,7 @@ async def add_ip(data: IPPermission, ponto: Optional[int] = None, nome_usuario: 
                     data.sb_papelaria, data.sb_usuario, data.sb_configuracoes,
                     data.sb_relatorio, data.sb_dashboard_setor, data.sb_admin_ips,
                     data.sb_pcp, data.sb_usuarios, data.sb_active_computers, data.sb_gravacao, data.sb_cotas_graf, data.sb_gravacao_externa, data.sb_gravacao_pendente, data.sb_gravacao_externa_operador, data.sb_gravacao_pendente_excluir, data.sb_gravacao_externa_entrega, data.sb_gravacao_externa_lancar, data.sb_estoque, data.sb_estoque_gerente, data.sb_lombada, data.sb_credenciais_depol, data.sb_manipular_imagem,
+                    data.ctx_prova_web, data.ctx_comparar_versoes, data.sb_dashboard_global, data.sb_dashboard_tablet,
                     ip_id
                 ))
             else:
@@ -522,13 +536,15 @@ async def add_ip(data: IPPermission, ponto: Optional[int] = None, nome_usuario: 
                         sb_inicio, sb_gerencia, sb_email, sb_analise,
                         sb_papelaria, sb_usuario, sb_configuracoes,
                         sb_relatorio, sb_dashboard_setor, sb_admin_ips,
-                        sb_pcp, sb_usuarios, sb_active_computers, sb_gravacao, sb_cotas_graf, sb_gravacao_externa, sb_gravacao_pendente, sb_gravacao_externa_operador, sb_gravacao_pendente_excluir, sb_gravacao_externa_entrega, sb_gravacao_externa_lancar, sb_estoque, sb_estoque_gerente, sb_lombada, sb_credenciais_depol, sb_manipular_imagem
+                        sb_pcp, sb_usuarios, sb_active_computers, sb_gravacao, sb_cotas_graf, sb_gravacao_externa, sb_gravacao_pendente, sb_gravacao_externa_operador, sb_gravacao_pendente_excluir, sb_gravacao_externa_entrega, sb_gravacao_externa_lancar, sb_estoque, sb_estoque_gerente, sb_lombada, sb_credenciais_depol, sb_manipular_imagem,
+                        ctx_prova_web, ctx_comparar_versoes, sb_dashboard_global, sb_dashboard_tablet
                     ) VALUES (
                         %s, %s, %s, %s,
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s, %s, %s,
                         %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s
                     )
                 """, (
                     data.ip, data.descricao, data.grupo, data.ativo,
@@ -537,7 +553,8 @@ async def add_ip(data: IPPermission, ponto: Optional[int] = None, nome_usuario: 
                     data.sb_inicio, data.sb_gerencia, data.sb_email, data.sb_analise,
                     data.sb_papelaria, data.sb_usuario, data.sb_configuracoes,
                     data.sb_relatorio, data.sb_dashboard_setor, data.sb_admin_ips,
-                    data.sb_pcp, data.sb_usuarios, data.sb_active_computers, data.sb_gravacao, data.sb_cotas_graf, data.sb_gravacao_externa, data.sb_gravacao_pendente, data.sb_gravacao_externa_operador, data.sb_gravacao_pendente_excluir, data.sb_gravacao_externa_entrega, data.sb_gravacao_externa_lancar, data.sb_estoque, data.sb_estoque_gerente, data.sb_lombada, data.sb_credenciais_depol, data.sb_manipular_imagem
+                    data.sb_pcp, data.sb_usuarios, data.sb_active_computers, data.sb_gravacao, data.sb_cotas_graf, data.sb_gravacao_externa, data.sb_gravacao_pendente, data.sb_gravacao_externa_operador, data.sb_gravacao_pendente_excluir, data.sb_gravacao_externa_entrega, data.sb_gravacao_externa_lancar, data.sb_estoque, data.sb_estoque_gerente, data.sb_lombada, data.sb_credenciais_depol, data.sb_manipular_imagem,
+                    data.ctx_prova_web, data.ctx_comparar_versoes, data.sb_dashboard_global, data.sb_dashboard_tablet,
                 ))
 
             # 2. Se fornecido Ponto e Nome, cadastrar/atualizar na tabUsuarios

@@ -56,6 +56,6 @@ describe("terminalAccess", () => {
     expect(payload).not.toHaveProperty("ativo");
     for (const key of IP_PERMISSION_KEYS) expect(typeof payload[key]).toBe("boolean");
     expect(payload["sb_inicio"]).toBe(true);
-    expect(payload).not.toHaveProperty("ctx_prova_web");
+    expect(payload["ctx_prova_web"]).toBe(false);
   });
 });

@@ -136,7 +136,7 @@ export function UsuariosTab({ selectedPonto, onSelect, onSimulate }: UsuariosTab
         />
       ) : null}
 
-      <section className="flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white shadow-sm">
+      <section className="flex shrink-0 flex-col rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-end gap-2 border-b border-slate-200 p-3">
           <label className="relative min-w-[12rem] flex-1">
             <span className="sr-only">Buscar usuário</span>

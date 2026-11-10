@@ -162,7 +162,7 @@ export function TerminaisTab({ selectedId, onSelect }: TerminaisTabProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain p-1 pb-4 md:p-2">
       {requests.length > 0 || requestsQuery.isError ? (
-        <section className="rounded-xl border border-pink-200 bg-white shadow-sm">
+        <section className="shrink-0 rounded-xl border border-pink-200 bg-white shadow-sm">
           <header className="flex items-center gap-2 border-b border-pink-100 px-4 py-3 text-sm font-semibold text-pink-700">
             <Lock className="size-4" aria-hidden />
             Solicitações de acesso pendentes
@@ -218,7 +218,7 @@ export function TerminaisTab({ selectedId, onSelect }: TerminaisTabProps) {
         </section>
       ) : null}
 
-      <section className="flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white shadow-sm">
+      <section className="flex shrink-0 flex-col rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-end gap-2 border-b border-slate-200 p-3">
           <label className="relative min-w-[12rem] flex-1">
             <span className="sr-only">Buscar terminal</span>

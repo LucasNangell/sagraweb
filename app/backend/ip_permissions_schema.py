@@ -34,6 +34,9 @@ _EXTRA_COLUMNS: tuple[tuple[str, str], ...] = (
     ("ctx_comparar_versoes", "TINYINT(1) NOT NULL DEFAULT 0"),
     ("ctx_orcamento", "TINYINT(1) NOT NULL DEFAULT 0"),
     ("ctx_imprimir_separador", "TINYINT(1) NOT NULL DEFAULT 0"),
+    # Painéis concedidos por terminal (antes só por usuário).
+    ("sb_dashboard_global", "TINYINT(1) NOT NULL DEFAULT 0"),
+    ("sb_dashboard_tablet", "TINYINT(1) NOT NULL DEFAULT 0"),
 )
 
 _CREATE_TABLE_SQL = """

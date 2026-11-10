@@ -52,6 +52,10 @@ const IP_TABLE_COLUMNS = [
   "sb_lombada",
   "sb_credenciais_depol",
   "sb_manipular_imagem",
+  "ctx_prova_web",
+  "ctx_comparar_versoes",
+  "sb_dashboard_global",
+  "sb_dashboard_tablet",
 ];
 
 describe("permissionCatalog", () => {
@@ -75,17 +79,14 @@ describe("permissionCatalog", () => {
     expect([...IP_PERMISSION_KEYS].sort()).toEqual([...IP_TABLE_COLUMNS].sort());
   });
 
-  it("chaves só de usuário ficam fora do terminal", () => {
-    for (const key of [
-      "ctx_prova_web",
-      "ctx_comparar_versoes",
-      "sb_dashboard_global",
-      "sb_dashboard_tablet",
-    ] as const) {
-      expect(getPermissionEntry(key)?.scope).toBe("user");
-      expect(isPermissionInScope(key, "ip")).toBe(false);
-      expect(isPermissionInScope(key, "user")).toBe(true);
+  it("toda chave pode ser atribuída por terminal e por usuário", () => {
+    for (const item of PERMISSION_CATALOG) {
+      expect(item.scope, item.key).toBe("both");
+      expect(isPermissionInScope(item.key, "ip"), item.key).toBe(true);
+      expect(isPermissionInScope(item.key, "user"), item.key).toBe(true);
     }
+    expect([...IP_PERMISSION_KEYS].sort()).toEqual([...PERMISSION_KEYS].sort());
+    expect(getPermissionEntry("ctx_prova_web")?.scope).toBe("both");
   });
 
   it("matriz do usuário exclui painéis (geridos na seção Painéis)", () => {
@@ -109,7 +110,8 @@ describe("permissionCatalog", () => {
 
     const payload = buildDefaultNewIpPayload("10.0.0.1", "Desc", "Sala");
     expect(payload).toMatchObject({ ip: "10.0.0.1", descricao: "Desc", grupo: "Sala", ativo: true });
-    expect(payload).not.toHaveProperty("ctx_prova_web");
+    expect(payload.ctx_prova_web).toBe(false);
+    expect(payload.sb_dashboard_tablet).toBe(false);
   });
 
   it("agrupa por categoria sem perder chaves", () => {

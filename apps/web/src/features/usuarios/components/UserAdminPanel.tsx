@@ -25,9 +25,12 @@ import {
   updateUserProfile,
 } from "@/api/adminUsers";
 import { useSetoresLookup } from "@/api/hooks/useAuxLookups";
-import { CONTEXT_PERMISSION_COLUMNS } from "@/features/admin-ips/constants";
+import {
+  getPermissionLabel,
+  USER_MATRIX_PERMISSION_KEYS,
+} from "@/features/acesso/permissionCatalog";
 import { useAuthStore } from "@/features/auth/authStore";
-import { PERMISSION_KEYS, type PermissionKey } from "@/features/auth/types";
+import type { PermissionKey } from "@/features/auth/types";
 import {
   deleteUserFace,
   enrollUserFace,
@@ -36,61 +39,14 @@ import {
 import { EmailGalLookupField } from "@/features/email/components/EmailGalLookupField";
 import { sanitizePontoDigits } from "@/lib/format";
 
-// ctx_prova_web é administrável apenas por usuário (não existe na tela de IPs).
-const CONTEXT_PERMISSIONS: PermissionKey[] = [
-  ...CONTEXT_PERMISSION_COLUMNS.map((c) => c.key),
-  "ctx_prova_web",
-  "ctx_comparar_versoes",
-];
-
-const SIDEBAR_PERMISSIONS = PERMISSION_KEYS.filter(
-  (k) =>
-    k.startsWith("sb_") &&
-    k !== "sb_dashboard_setor" &&
-    k !== "sb_dashboard_global" &&
-    k !== "sb_dashboard_tablet",
+// Chaves e rótulos vêm do catálogo único (features/acesso/permissionCatalog).
+const CONTEXT_PERMISSIONS: PermissionKey[] = USER_MATRIX_PERMISSION_KEYS.filter((k) =>
+  k.startsWith("ctx_"),
 );
 
-const PERMISSION_LABELS: Partial<Record<PermissionKey, string>> = {
-  ctx_nova_os: "Nova OS",
-  ctx_duplicar_os: "Duplicar OS",
-  ctx_editar_os: "Editar OS",
-  ctx_vincular_os: "Vincular OS",
-  ctx_abrir_pasta: "Abrir pasta",
-  ctx_mover_pastas: "Mover pastas",
-  ctx_imprimir_ficha: "Imprimir ficha",
-  ctx_imprimir_separador: "Imprimir separador",
-  ctx_detalhes_os: "Detalhes da OS",
-  ctx_prova_web: "Prova WEB",
-  ctx_comparar_versoes: "Comparar versões PDF",
-  ctx_orcamento: "Orçamento",
-  sb_inicio: "Início",
-  sb_gerencia: "Gerência",
-  sb_email: "E-mail",
-  sb_analise: "Análise",
-  sb_papelaria: "Papelaria",
-  sb_usuario: "Usuário",
-  sb_configuracoes: "Configurações",
-  sb_relatorio: "Relatórios",
-  sb_admin_ips: "Admin IPs",
-  sb_pcp: "PCP",
-  sb_usuarios: "Usuários",
-  sb_active_computers: "Computadores",
-  sb_gravacao: "Gravação",
-  sb_gravacao_externa: "Gravação Externa",
-  sb_gravacao_pendente: "Gravações Pendentes",
-  sb_gravacao_externa_operador: "Operador Grv. Externa",
-  sb_gravacao_pendente_excluir: "Excluir controle de chapas",
-  sb_gravacao_externa_entrega: "Lançar recebimento das chapas",
-  sb_gravacao_externa_lancar: "Lançar gravação externa",
-  sb_cotas_graf: "Cotas Graf",
-  sb_estoque: "Estoque (operador)",
-  sb_estoque_gerente: "Estoque (gerente)",
-  sb_lombada: "Lombada",
-  sb_dashboard_tablet: "Painel tablet",
-  sb_credenciais_depol: "Credenciais DEPOL",
-  sb_manipular_imagem: "Manipular Imagem",
-};
+const SIDEBAR_PERMISSIONS: PermissionKey[] = USER_MATRIX_PERMISSION_KEYS.filter((k) =>
+  k.startsWith("sb_"),
+);
 
 interface UserAdminActions {
   openEditUser: (
@@ -539,14 +495,7 @@ export function UserAdminProvider({
       try {
         const data = await fetchUserPermissions(pontoNum);
         const values: Partial<Record<PermissionKey, boolean>> = {};
-        for (const key of PERMISSION_KEYS) {
-          if (
-            key === "sb_dashboard_setor" ||
-            key === "sb_dashboard_global" ||
-            key === "sb_dashboard_tablet"
-          ) {
-            continue;
-          }
+        for (const key of USER_MATRIX_PERMISSION_KEYS) {
           values[key] = Boolean(data[key]);
         }
         setPermValues(values);
@@ -913,7 +862,7 @@ export function UserAdminProvider({
                             setPermValues((p) => ({ ...p, [key]: e.target.checked }))
                           }
                         />
-                        {PERMISSION_LABELS[key] ?? key}
+                        {getPermissionLabel(key)}
                       </label>
                     ))}
                   </div>
@@ -929,7 +878,7 @@ export function UserAdminProvider({
                           setPermValues((p) => ({ ...p, [key]: e.target.checked }))
                         }
                       />
-                      {PERMISSION_LABELS[key] ?? key}
+                      {getPermissionLabel(key)}
                     </label>
                   ))}
                 </div>

@@ -163,6 +163,82 @@ def _empty_user_permissions(session_ip: str) -> dict[str, Any]:
     return enrich_permissions(perms)
 
 
+def _user_account_allows_password_login(ponto: int) -> bool:
+    """Conta ativa e e-mail verificado (pré-requisito do acesso via internet)."""
+    rows = db.execute_query(
+        """
+        SELECT AuthAtivo, EmailVerified FROM tabUsuarios WHERE Ponto = %s
+        """,
+        (ponto,),
+    )
+    if not rows or not rows[0].get("AuthAtivo", 1) or not rows[0].get("EmailVerified"):
+        return False
+    return True
+
+
+def resolve_effective_permissions_core(
+    ponto: int,
+    session_ip: str,
+    *,
+    via_internet: bool,
+    load_ip_permissions: Callable[[], Optional[dict]],
+    trace: Optional[dict[str, Any]] = None,
+) -> Optional[dict]:
+    """
+    Núcleo da resolução de permissões efetivas (sem Request).
+
+    Usado pelo middleware/rotas (via `resolve_effective_permissions`) e pelo simulador
+    do Controle de Acesso (`GET /api/admin/access/preview`) — mesma regra, sem cópia.
+
+    `trace`, quando informado, recebe `mode` (caminho percorrido) e `user_customized`.
+    """
+    from security.remote_master import is_remote_master_ponto
+
+    def _mark(mode: str, **extra: Any) -> None:
+        if trace is not None:
+            trace["mode"] = mode
+            trace.update(extra)
+
+    if via_internet and is_remote_master_ponto(ponto):
+        if not _user_account_allows_password_login(ponto):
+            _mark("conta_inativa")
+            return None
+        from routers.ip_admin_routes import _full_access_permissions
+
+        _mark("master_remoto")
+        return _full_access_permissions(session_ip)
+
+    if via_internet:
+        if not _user_account_allows_password_login(ponto):
+            _mark("conta_inativa")
+            return None
+        up_row = get_user_permissions_row(ponto)
+        if up_row and is_user_permissions_customized(up_row):
+            overlay = _row_to_permissions(up_row, ponto)
+            # Internet: usuário sobrescreve IP por completo (não herda flags do IP).
+            _mark("internet_usuario", user_customized=True)
+            return merge_permissions(None, overlay, session_ip=session_ip)
+        _mark("internet_sem_permissoes", user_customized=False)
+        return _empty_user_permissions(session_ip)
+
+    ip_perms = load_ip_permissions()
+
+    up_row = get_user_permissions_row(ponto)
+    if up_row and is_user_permissions_customized(up_row):
+        overlay = _row_to_permissions(up_row, ponto)
+        if ip_perms is None:
+            _mark("terminal_nao_autorizado", user_customized=True)
+            return None
+        _mark("local_usuario", user_customized=True)
+        return merge_permissions(ip_perms, overlay, session_ip=session_ip)
+
+    if ip_perms is None:
+        _mark("terminal_nao_autorizado", user_customized=False)
+    else:
+        _mark("local_terminal", user_customized=False)
+    return ip_perms
+
+
 def resolve_effective_permissions(
     request: "Request",
     session: "SessionData",
@@ -181,62 +257,26 @@ def resolve_effective_permissions(
         resolve_permissions_for_session,
     )
     from security.public_access import should_use_user_permissions
-    from security.remote_master import is_remote_master_ponto
 
-    if should_use_user_permissions(request, session) and is_remote_master_ponto(
-        session.ponto
-    ):
-        rows = db.execute_query(
-            """
-            SELECT AuthAtivo, EmailVerified FROM tabUsuarios WHERE Ponto = %s
-            """,
-            (session.ponto,),
-        )
-        if not rows or not rows[0].get("AuthAtivo", 1) or not rows[0].get(
-            "EmailVerified"
-        ):
-            return None
-        from routers.ip_admin_routes import _full_access_permissions
-
-        return _full_access_permissions(session.ip)
-
-    if should_use_user_permissions(request, session):
-        rows = db.execute_query(
-            """
-            SELECT AuthAtivo, EmailVerified FROM tabUsuarios WHERE Ponto = %s
-            """,
-            (session.ponto,),
-        )
-        if not rows or not rows[0].get("AuthAtivo", 1) or not rows[0].get("EmailVerified"):
-            return None
-        up_row = get_user_permissions_row(session.ponto)
-        if up_row and is_user_permissions_customized(up_row):
-            overlay = _row_to_permissions(up_row, session.ponto)
-            # Internet: usuário sobrescreve IP por completo (não herda flags do IP).
-            return merge_permissions(None, overlay, session_ip=session.ip)
-        return _empty_user_permissions(session.ip)
-
-    if path is not None:
-        ip_perms = resolve_permissions_for_api(
-            session.ip,
-            path,
-            method,
-            get_client_permissions=get_client_permissions,
-        )
-    else:
-        ip_perms = resolve_permissions_for_session(
+    def _load_ip_permissions() -> Optional[dict]:
+        if path is not None:
+            return resolve_permissions_for_api(
+                session.ip,
+                path,
+                method,
+                get_client_permissions=get_client_permissions,
+            )
+        return resolve_permissions_for_session(
             session.ip,
             get_client_permissions=get_client_permissions,
         )
 
-    up_row = get_user_permissions_row(session.ponto)
-    if up_row and is_user_permissions_customized(up_row):
-        overlay = _row_to_permissions(up_row, session.ponto)
-        if ip_perms is None:
-            return None
-        return merge_permissions(ip_perms, overlay, session_ip=session.ip)
-
-    return ip_perms
+    return resolve_effective_permissions_core(
+        session.ponto,
+        session.ip,
+        via_internet=should_use_user_permissions(request, session),
+        load_ip_permissions=_load_ip_permissions,
+    )
 
 
 def upsert_user_permissions(ponto: int, data: dict[str, Any]) -> None:

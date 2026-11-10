@@ -62,9 +62,11 @@ export function filterUsuarios(rows: ReadonlyArray<UsuarioRow>, f: UsuariosFilte
 interface UsuariosTabProps {
   selectedPonto?: number;
   onSelect: (ponto: number | undefined) => void;
+  /** Abre o simulador de acesso efetivo para o usuário. */
+  onSimulate?: (ponto: number) => void;
 }
 
-export function UsuariosTab({ selectedPonto, onSelect }: UsuariosTabProps) {
+export function UsuariosTab({ selectedPonto, onSelect, onSimulate }: UsuariosTabProps) {
   const feedback = useFeedback();
   const ponto = useAuthStore((s) => s.user?.ponto);
   const [filters, setFilters] = useState<UsuariosFilters>(EMPTY_FILTERS);
@@ -375,6 +377,7 @@ export function UsuariosTab({ selectedPonto, onSelect }: UsuariosTabProps) {
           allUsers={users}
           onClose={() => onSelect(undefined)}
           onChanged={() => void refetch()}
+          onSimulate={onSimulate}
         />
       ) : null}
     </div>

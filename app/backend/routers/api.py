@@ -45,6 +45,7 @@ from routers import (
     notifications_routes,
     user_routes,
     user_admin_routes,
+    acesso_admin_routes,
     setor_painel_routes,
     tablet_face_routes,
     admin_system_routes,
@@ -954,6 +955,7 @@ async def download_folder_opener():
 app.include_router(config_routes.router)
 app.include_router(auth_routes.router)
 app.include_router(user_admin_routes.router)
+app.include_router(acesso_admin_routes.router)
 app.include_router(setor_painel_routes.router)
 app.include_router(letreiro_routes.router)
 app.include_router(painel_remote_routes.router)

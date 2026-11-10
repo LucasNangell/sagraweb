@@ -41,6 +41,10 @@ export function AcessoPage({ search }: AcessoPageProps) {
     });
   };
 
+  const simulateUser = (ponto: number) => {
+    void navigate({ to: "/admin/acesso", search: { aba: "visao-geral", ponto }, replace: true });
+  };
+
   const selectTerminal = (terminal: number | undefined) => {
     void navigate({
       to: "/admin/acesso",
@@ -61,7 +65,7 @@ export function AcessoPage({ search }: AcessoPageProps) {
             <p className="mt-0.5 max-w-3xl text-xs leading-relaxed text-slate-600">
               Quem acessa (usuários) e de onde (terminais). Na rede local valem as permissões do
               terminal, substituídas pelas do usuário quando ele tem permissões próprias; via
-              internet valem só as do usuário; o terminal MASTER tem acesso total.
+              internet valem só as do usuário. Alterações só podem ser feitas do terminal MASTER.
             </p>
             <div
               role="tablist"
@@ -99,9 +103,19 @@ export function AcessoPage({ search }: AcessoPageProps) {
             aria-labelledby={activeTab ? `acesso-tab-${activeTab}` : undefined}
             className="flex min-h-0 flex-1 flex-col overflow-hidden"
           >
-            {activeTab === "visao-geral" ? <VisaoGeralTab /> : null}
+            {activeTab === "visao-geral" ? (
+              <VisaoGeralTab
+                canOpen={(aba) => visibleTabs.some((t) => t.id === aba)}
+                onOpen={selectTab}
+                simulatorPonto={search.ponto}
+              />
+            ) : null}
             {activeTab === "usuarios" ? (
-              <UsuariosTab selectedPonto={search.ponto} onSelect={selectUser} />
+              <UsuariosTab
+                selectedPonto={search.ponto}
+                onSelect={selectUser}
+                onSimulate={simulateUser}
+              />
             ) : null}
             {activeTab === "terminais" ? (
               <TerminaisTab selectedId={search.terminal} onSelect={selectTerminal} />

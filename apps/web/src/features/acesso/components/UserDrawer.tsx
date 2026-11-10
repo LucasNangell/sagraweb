@@ -58,6 +58,8 @@ interface UserDrawerProps {
   allUsers: ReadonlyArray<UsuarioRecord>;
   onClose: () => void;
   onChanged: () => void;
+  /** Abre o simulador de acesso efetivo (Visão geral) para este usuário. */
+  onSimulate?: (ponto: number) => void;
 }
 
 interface ProfileDraft {
@@ -79,7 +81,14 @@ function samePerms(a: PermDraft | null, b: PermDraft | null): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-export function UserDrawer({ ponto, user, allUsers, onClose, onChanged }: UserDrawerProps) {
+export function UserDrawer({
+  ponto,
+  user,
+  allUsers,
+  onClose,
+  onChanged,
+  onSimulate,
+}: UserDrawerProps) {
   const feedback = useFeedback();
   const confirm = useConfirm();
   const permissions = useAuthStore((s) => s.permissions);
@@ -381,6 +390,20 @@ export function UserDrawer({ ponto, user, allUsers, onClose, onChanged }: UserDr
     }
   };
 
+  const handleSimulate = async () => {
+    if (!onSimulate) return;
+    if (profileDirty || permsDirty) {
+      const ok = await confirm({
+        title: "Sair sem salvar?",
+        message: "O simulador usa o que está salvo. As alterações não salvas serão descartadas.",
+        confirmLabel: "Descartar e simular",
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    onSimulate(ponto);
+  };
+
   const canDelete = currentPonto == null || Number(currentPonto) !== Number(ponto);
 
   const handleDelete = async () => {
@@ -431,6 +454,15 @@ export function UserDrawer({ ponto, user, allUsers, onClose, onChanged }: UserDr
           <span>Ponto {ponto}</span>
           {user?.Setor ? <span>· {user.Setor}</span> : null}
           {user ? <span>· Último acesso {formatUltimoAcesso(user.UltimoAcesso)}</span> : null}
+          {onSimulate ? (
+            <button
+              type="button"
+              onClick={() => void handleSimulate()}
+              className="font-semibold text-secondary-blue hover:underline"
+            >
+              Simular acesso →
+            </button>
+          ) : null}
         </span>
       }
       footer={

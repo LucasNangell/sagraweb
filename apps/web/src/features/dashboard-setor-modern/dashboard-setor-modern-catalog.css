@@ -7,6 +7,12 @@
    Cada efeito traz fallback com a cor nativa do catálogo original.
    ========================================================================== */
 
+@property --sm-beam-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
 /* Conteúdo centralizado por padrão nos cards com efeito (como no catálogo). */
 .setor-modern .setor-modern-card[data-model] {
   align-items: center;
@@ -75,6 +81,7 @@
 
 .setor-modern .setor-modern-card[data-model="v37"] {
   background: var(--cm-bg, #0f172a);
+  border: 0;
   overflow: hidden;
   isolation: isolate;
   z-index: 1;
@@ -85,31 +92,35 @@
   position: relative;
   z-index: 1;
 }
+/* Anel no próprio card. Girar um retângulo maior deixa a luz falhar nos cantos. */
 .setor-modern .setor-modern-card[data-model="v37"]::before {
   content: "";
   position: absolute;
-  width: 250%;
-  height: 250%;
-  left: -75%;
-  top: -75%;
-  transform-origin: center;
+  inset: 0;
+  box-sizing: border-box;
+  border-radius: inherit;
+  padding: 4px;
   background: conic-gradient(
-    transparent,
-    transparent,
-    transparent,
-    var(--cm-border, #38bdf8),
-    var(--cm-accent, #ffffff)
+    from var(--sm-beam-angle),
+    transparent 0deg,
+    transparent 180deg,
+    var(--cm-border, #38bdf8) 270deg,
+    var(--cm-accent, #ffffff) 360deg
   );
-  animation: sm-spin-beam 2.6s linear infinite;
+  -webkit-mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  -webkit-mask-clip: content-box, border-box;
+  -webkit-mask-composite: xor;
+  mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
+  mask-clip: content-box, border-box;
+  mask-composite: exclude;
+  animation: sm-beam-angle 2.6s linear infinite;
   z-index: 0;
+  pointer-events: none;
 }
-.setor-modern .setor-modern-card[data-model="v37"]::after {
-  content: "";
-  position: absolute;
-  inset: 4px;
-  background: var(--cm-bg, #0f172a);
-  border-radius: 10px;
-  z-index: 0;
+@keyframes sm-beam-angle {
+  to {
+    --sm-beam-angle: 360deg;
+  }
 }
 .setor-modern .setor-modern-card[data-model="v37"] h3 {
   color: #fff;

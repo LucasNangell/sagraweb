@@ -227,6 +227,8 @@ describe("cardStyle", () => {
     expect(catalogCss).toContain("var(--cm-extra");
     expect(catalogCss).toContain("var(--fx-accent");
     expect(catalogCss).toContain('[data-model="v37"]::before');
+    expect(catalogCss).toContain("@property --sm-beam-angle");
+    expect(catalogCss).toContain("mask-composite: exclude");
     expect(catalogCss).toContain("left: -75%");
   });
 

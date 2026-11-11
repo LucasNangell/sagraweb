@@ -46,7 +46,7 @@ export function GravacaoObservacaoBox({
       className="max-h-40 shrink-0 overflow-y-auto rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-black"
       role="note"
     >
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-start justify-center gap-2">
         <h4 className="text-xs font-semibold uppercase tracking-wide text-black">
           Observações para o birô
         </h4>

@@ -17,6 +17,7 @@ VALID_PREFERENCE_KEYS = frozenset({
     "painel_setor_moderno",
     "os_filter_toggles",
     "painel_theme",
+    "os_home_table_layout",
 })
 
 

@@ -130,7 +130,6 @@ describe("prioridades no painel de TV", () => {
     const card = container.querySelector(".setor-modern-card");
     expect(card).toHaveAttribute("data-model", "v37");
     expect(card).toHaveStyle({ "--sm-beam-speed": "1.6" });
-    expect(container.querySelector(".setor-modern-laser-orbit")).not.toBeNull();
-    expect(container.querySelectorAll(".setor-modern-laser-orbit rect")).toHaveLength(2);
+    expect(container.querySelector(".setor-modern-laser-orbit")).toBeNull();
   });
 });

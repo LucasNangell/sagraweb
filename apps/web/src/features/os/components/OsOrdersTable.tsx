@@ -1,10 +1,29 @@
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  horizontalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
 import { cn } from "@sagra/ui";
 import {
   flexRender,
+  functionalUpdate,
   getCoreRowModel,
   useReactTable,
   type ColumnDef,
+  type ColumnOrderState,
+  type ColumnSizingState,
+  type Header,
+  type OnChangeFn,
   type SortingState,
+  type VisibilityState,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -16,6 +35,7 @@ import {
   ChevronUp,
   FileSpreadsheet,
   Loader2,
+  Settings,
 } from "lucide-react";
 import {
   useCallback,
@@ -27,7 +47,9 @@ import {
 } from "react";
 
 import { fetchSubOsList } from "@/api/os";
-import { formatDateBr } from "@/lib/format";
+import { useAuthStore } from "@/features/auth/authStore";
+import { useUserPreferenceSync } from "@/hooks/useUserPreferenceSync";
+import { formatDateBr, formatDateTimeBr } from "@/lib/format";
 import { homeTestIds } from "@/lib/testId";
 import {
   buildDisplayRows,
@@ -43,10 +65,30 @@ import {
   resolveOsSorts,
   type OsSortKey,
 } from "../osSortKeys";
+import {
+  OS_HOME_TABLE_COLUMN_LABELS,
+  OS_HOME_TABLE_DEFAULT_WIDTHS,
+  OS_HOME_TABLE_MAX_WIDTH,
+  OS_HOME_TABLE_MIN_WIDTHS,
+  isOsHomeTableColumnId,
+  isOsHomeTableColumnSortable,
+  mergeOsHomeTableLayout,
+  moveOsHomeTableColumn,
+  normalizeOsHomeTableVisibility,
+  osHomeTableColumnPercents,
+  readLocalOsHomeTableLayout,
+  resizeOsHomeTableColumnPair,
+  visibleOsHomeTableColumns,
+  type OsHomeTableColumnId,
+  type OsHomeTableLayout,
+} from "../osHomeTableLayout";
 import { OsRowContextMenu } from "./OsContextMenu";
+import { OsListConfigModal } from "./OsListConfigModal";
 
 const ROW_HEIGHT = 28;
 const MOBILE_CARD_HEIGHT = 120;
+/** Janela após resize/drag em que o click residual no header não ordena. */
+const HEADER_CLICK_SUPPRESS_MS = 250;
 
 function prioClass(prioridade: string | null | undefined): string {
   if (!prioridade) {
@@ -61,6 +103,31 @@ function prioClass(prioridade: string | null | undefined): string {
   return "";
 }
 
+function columnSizeDef(id: OsHomeTableColumnId) {
+  return {
+    enableSorting: isOsHomeTableColumnSortable(id),
+    size: OS_HOME_TABLE_DEFAULT_WIDTHS[id],
+    minSize: OS_HOME_TABLE_MIN_WIDTHS[id],
+    maxSize: OS_HOME_TABLE_MAX_WIDTH,
+  };
+}
+
+function textColumn(id: OsHomeTableColumnId): ColumnDef<OsSearchRow> {
+  return {
+    accessorKey: id,
+    header: OS_HOME_TABLE_COLUMN_LABELS[id],
+    ...columnSizeDef(id),
+    cell: ({ getValue }) => {
+      const text = String(getValue() ?? "");
+      return (
+        <span className="block truncate" title={text}>
+          {text}
+        </span>
+      );
+    },
+  };
+}
+
 function buildColumns(
   hasSubOsMap: ReadonlyMap<string, boolean>,
   expanded: ReadonlySet<string>,
@@ -69,8 +136,10 @@ function buildColumns(
   return [
   {
     accessorKey: "nr_os",
-    header: "Nr OS",
-    size: 64,
+    header: OS_HOME_TABLE_COLUMN_LABELS.nr_os,
+    ...columnSizeDef("nr_os"),
+    // Identidade da linha + expand de Sub OS: sempre visível.
+    enableHiding: false,
     cell: ({ row, getValue }) => {
       const data = row.original;
       if (data.is_sub_os || data.kind === "sub_os") {
@@ -117,16 +186,16 @@ function buildColumns(
   },
   {
     accessorKey: "ano",
-    header: "Ano",
-    size: 48,
+    header: OS_HOME_TABLE_COLUMN_LABELS.ano,
+    ...columnSizeDef("ano"),
     cell: ({ getValue }) => (
       <span className="block truncate tabular-nums">{getValue<number>()}</span>
     ),
   },
   {
     accessorKey: "data_entrada",
-    header: "Entrada",
-    size: 76,
+    header: OS_HOME_TABLE_COLUMN_LABELS.data_entrada,
+    ...columnSizeDef("data_entrada"),
     cell: ({ getValue }) => {
       const text = formatDateBr(getValue<string | null>() ?? undefined);
       return (
@@ -138,8 +207,8 @@ function buildColumns(
   },
   {
     accessorKey: "produto",
-    header: "Produto",
-    size: 150,
+    header: OS_HOME_TABLE_COLUMN_LABELS.produto,
+    ...columnSizeDef("produto"),
     cell: ({ getValue }) => (
       <span className="block truncate" title={String(getValue() ?? "")}>
         {getValue<string | null>() ?? ""}
@@ -148,8 +217,8 @@ function buildColumns(
   },
   {
     accessorKey: "solicitante",
-    header: "Solicitante",
-    size: 200,
+    header: OS_HOME_TABLE_COLUMN_LABELS.solicitante,
+    ...columnSizeDef("solicitante"),
     cell: ({ getValue }) => (
       <span className="block truncate" title={String(getValue() ?? "")}>
         {getValue<string | null>() ?? ""}
@@ -158,8 +227,8 @@ function buildColumns(
   },
   {
     accessorKey: "titulo",
-    header: "Título",
-    size: 350,
+    header: OS_HOME_TABLE_COLUMN_LABELS.titulo,
+    ...columnSizeDef("titulo"),
     cell: ({ getValue }) => (
       <span className="block truncate" title={String(getValue() ?? "")}>
         {getValue<string | null>() ?? ""}
@@ -168,8 +237,8 @@ function buildColumns(
   },
   {
     accessorKey: "situacao",
-    header: "Situação",
-    size: 140,
+    header: OS_HOME_TABLE_COLUMN_LABELS.situacao,
+    ...columnSizeDef("situacao"),
     cell: ({ row, getValue }) => {
       const v = getValue<string | null>();
       if ((row.original.is_sub_os || row.original.kind === "sub_os") && !v) {
@@ -185,8 +254,8 @@ function buildColumns(
   },
   {
     accessorKey: "setor",
-    header: "Setor",
-    size: 100,
+    header: OS_HOME_TABLE_COLUMN_LABELS.setor,
+    ...columnSizeDef("setor"),
     cell: ({ row, getValue }) => {
       const v = getValue<string | null>();
       if ((row.original.is_sub_os || row.original.kind === "sub_os") && !v) {
@@ -202,8 +271,8 @@ function buildColumns(
   },
   {
     accessorKey: "prioridade",
-    header: "Prioridade",
-    size: 95,
+    header: OS_HOME_TABLE_COLUMN_LABELS.prioridade,
+    ...columnSizeDef("prioridade"),
     cell: ({ getValue }) => {
       const v = getValue<string | null>();
       const text = v ?? "";
@@ -216,8 +285,8 @@ function buildColumns(
   },
   {
     accessorKey: "data_entrega",
-    header: "Data",
-    size: 76,
+    header: OS_HOME_TABLE_COLUMN_LABELS.data_entrega,
+    ...columnSizeDef("data_entrega"),
     cell: ({ getValue }) => {
       const text = formatDateBr(getValue<string | null>() ?? undefined);
       return (
@@ -227,7 +296,158 @@ function buildColumns(
       );
     },
   },
+  textColumn("formato"),
+  textColumn("entreg_periodo"),
+  {
+    accessorKey: "last_update",
+    header: OS_HOME_TABLE_COLUMN_LABELS.last_update,
+    ...columnSizeDef("last_update"),
+    cell: ({ getValue }) => {
+      const text = formatDateTimeBr(getValue<string | null>() ?? undefined);
+      return (
+        <span className="block truncate tabular-nums" title={text}>
+          {text}
+        </span>
+      );
+    },
+  },
+  textColumn("andamento_usuario"),
+  textColumn("observacao"),
+  {
+    accessorKey: "sub_os_count",
+    header: OS_HOME_TABLE_COLUMN_LABELS.sub_os_count,
+    ...columnSizeDef("sub_os_count"),
+    cell: ({ row, getValue }) => {
+      if (row.original.is_sub_os || row.original.kind === "sub_os") {
+        return <span className="text-neutral-400">—</span>;
+      }
+      const count = getValue<number | null | undefined>() ?? 0;
+      return <span className="block truncate tabular-nums">{count > 0 ? count : ""}</span>;
+    },
+  },
 ];
+}
+
+interface SortableHeaderCellProps {
+  header: Header<OsSearchRow, unknown>;
+  activeSorts: OsSortKey[];
+  onSortClick: (columnId: string) => void;
+  /** Última coluna visível: sem handle (borda = fim da lista) e espaço para a engrenagem. */
+  isLast: boolean;
+  isResizing: boolean;
+  onResizeStart: (columnId: string, clientX: number, th: HTMLElement | null) => void;
+  /** Abre "Configurar lista" (engrenagem no fim do cabeçalho; só na última coluna). */
+  onOpenConfig: () => void;
+}
+
+function SortableHeaderCell({
+  header,
+  activeSorts,
+  onSortClick,
+  isLast,
+  isResizing,
+  onResizeStart,
+  onOpenConfig,
+}: SortableHeaderCellProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: header.column.id });
+  const meta = osSortHeaderMeta(activeSorts, header.id);
+  const sortable = header.column.getCanSort();
+
+  return (
+    <th
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      className={cn(
+        "relative max-w-0 select-none overflow-hidden px-2 py-1.5 text-left text-xs font-semibold",
+        sortable ? "cursor-pointer" : "cursor-grab",
+        isLast && "pr-9",
+        isDragging && "z-20 bg-secondary-blue opacity-90 shadow-md",
+      )}
+      style={{
+        // Largura vem do <colgroup> (percentual). Apenas eixo X: reordenação horizontal.
+        transform: transform ? `translate3d(${transform.x}px, 0, 0)` : undefined,
+        transition,
+      }}
+      onClick={sortable ? () => onSortClick(header.id) : undefined}
+      data-testid={homeTestIds.osTableSort(header.id)}
+      data-column-id={header.column.id}
+    >
+      <span className="inline-flex max-w-full min-w-0 items-center gap-0.5">
+        <span className="min-w-0 truncate">
+          {flexRender(header.column.columnDef.header, header.getContext())}
+        </span>
+        {sortable ? (
+        <span className="inline-flex shrink-0 flex-col items-center justify-center leading-none">
+          {meta.badge ? (
+            <span
+              className="text-[0.55rem] font-bold leading-none"
+              data-testid={homeTestIds.osTableSortBadge(header.id)}
+            >
+              {meta.badge}
+            </span>
+          ) : null}
+          {meta.dir === "desc" ? (
+            <ArrowUp className="size-3.5" />
+          ) : meta.dir === "asc" ? (
+            <ArrowDown className="size-3.5" />
+          ) : (
+            <ArrowUpDown className="size-3.5 opacity-50" />
+          )}
+        </span>
+        ) : null}
+      </span>
+      {isLast ? (
+        <span className="absolute inset-y-0 right-0 flex w-8 items-center justify-center">
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenConfig();
+            }}
+            className="rounded p-1 text-white/90 hover:bg-white/15 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+            title="Configurar lista"
+            aria-label="Configurar lista"
+            data-testid={homeTestIds.osTableConfig}
+          >
+            <Settings className="size-4" aria-hidden />
+          </button>
+        </span>
+      ) : (
+        <span
+          role="separator"
+          aria-orientation="vertical"
+          title="Arraste para ajustar a largura"
+          aria-label={`Redimensionar coluna ${OS_HOME_TABLE_COLUMN_LABELS[header.column.id as OsHomeTableColumnId] ?? header.column.id}`}
+          data-testid={homeTestIds.osTableResize(header.id)}
+          className={cn(
+            "absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize touch-none select-none hover:bg-white/50",
+            isResizing && "bg-white/70",
+          )}
+          // Não iniciar drag de reordenação nem sort a partir do handle.
+          onPointerDown={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => {
+            if (e.button !== 0) return;
+            e.stopPropagation();
+            e.preventDefault();
+            onResizeStart(header.column.id, e.clientX, e.currentTarget.closest("th"));
+          }}
+          onTouchStart={(e) => {
+            const touch = e.touches[0];
+            if (!touch || e.touches.length > 1) return;
+            e.stopPropagation();
+            onResizeStart(header.column.id, touch.clientX, e.currentTarget.closest("th"));
+          }}
+        />
+      )}
+    </th>
+  );
 }
 
 interface OsOrdersTableProps {
@@ -509,14 +729,193 @@ export function OsOrdersTable({
     [activeSorts],
   );
 
+  const isAuthenticated = useAuthStore((s) => s.user != null);
+  const [tableLayout, setTableLayout] = useState<OsHomeTableLayout>(
+    () => readLocalOsHomeTableLayout(),
+  );
+
+  const handleRemoteLayoutLoaded = useCallback((value: OsHomeTableLayout) => {
+    setTableLayout(mergeOsHomeTableLayout(value));
+  }, []);
+
+  useUserPreferenceSync<OsHomeTableLayout>({
+    key: "os_home_table_layout",
+    enabled: isAuthenticated,
+    watchValue: tableLayout,
+    onRemoteLoaded: handleRemoteLayoutLoaded,
+  });
+
+  const columnSizing: ColumnSizingState = tableLayout.widths;
+  const columnVisibility: VisibilityState = tableLayout.visibility;
+  const columnOrder: ColumnOrderState = tableLayout.order;
+
+  const onColumnVisibilityChange: OnChangeFn<VisibilityState> = useCallback(
+    (updater) => {
+      setTableLayout((prev) => ({
+        ...prev,
+        visibility: normalizeOsHomeTableVisibility(
+          functionalUpdate(updater, prev.visibility as VisibilityState),
+          prev.visibility,
+        ),
+      }));
+    },
+    [],
+  );
+
+  const onColumnOrderChange: OnChangeFn<ColumnOrderState> = useCallback(
+    (updater) => {
+      setTableLayout((prev) =>
+        mergeOsHomeTableLayout({
+          ...prev,
+          order: functionalUpdate(updater, prev.order as ColumnOrderState),
+        }),
+      );
+    },
+    [],
+  );
+
   const table = useReactTable({
     data: displayRows,
     columns,
-    state: { sorting },
+    state: { sorting, columnSizing, columnVisibility, columnOrder },
     manualSorting: true,
+    onColumnVisibilityChange,
+    onColumnOrderChange,
     getCoreRowModel: getCoreRowModel(),
     getRowId: (row) => displayRowId(row),
   });
+
+  /** Click residual após resize/drag não deve ordenar. */
+  const suppressHeaderClickUntilRef = useRef(0);
+  const suppressHeaderClick = useCallback(() => {
+    suppressHeaderClickUntilRef.current = Date.now() + HEADER_CLICK_SUPPRESS_MS;
+  }, []);
+
+  const [resizingColumnId, setResizingColumnId] = useState<string | null>(null);
+  const [configOpen, setConfigOpen] = useState(false);
+
+  const visibleLeafColumns = table.getVisibleLeafColumns();
+  const visibleColumnIds = visibleLeafColumns.map((column) => column.id);
+  const visibleColumnCount = Math.max(1, visibleLeafColumns.length);
+  /** A lista sempre ocupa 100%: cada coluna recebe sua fração (responsivo à janela). */
+  const columnPercents = useMemo(
+    () => osHomeTableColumnPercents(tableLayout),
+    [tableLayout],
+  );
+
+  /**
+   * Resize pela borda direita do header: troca largura apenas com a coluna vizinha
+   * à direita (as demais não mudam e a lista continua com 100% da largura).
+   */
+  const handleResizeStart = useCallback(
+    (columnId: string, startX: number, th: HTMLElement | null) => {
+      const visible = visibleOsHomeTableColumns(tableLayout);
+      const index = visible.indexOf(columnId as OsHomeTableColumnId);
+      const leftId = visible[index];
+      const rightId = visible[index + 1];
+      if (index < 0 || leftId === undefined || rightId === undefined) {
+        return;
+      }
+      suppressHeaderClick();
+
+      // Larguras atuais em px (pesos na escala da janela atual).
+      const rendered = new Map<OsHomeTableColumnId, number>();
+      th?.closest("tr")
+        ?.querySelectorAll<HTMLElement>("th[data-column-id]")
+        .forEach((cell) => {
+          const id = cell.dataset.columnId;
+          const width = cell.getBoundingClientRect().width;
+          if (isOsHomeTableColumnId(id) && width > 0) {
+            rendered.set(id, width);
+          }
+        });
+      const hasRendered = visible.every((id) => rendered.has(id));
+      const snapshot = new Map<OsHomeTableColumnId, number>(
+        visible.map((id) => [id, hasRendered ? rendered.get(id)! : tableLayout.widths[id]]),
+      );
+      const startLeft = snapshot.get(leftId) ?? 0;
+      const startRight = snapshot.get(rightId) ?? 0;
+      setResizingColumnId(columnId);
+
+      const move = (clientX: number) => {
+        const pair = resizeOsHomeTableColumnPair(
+          startLeft,
+          startRight,
+          leftId,
+          rightId,
+          clientX - startX,
+        );
+        setTableLayout((prev) => {
+          const widths = { ...prev.widths };
+          for (const [id, width] of snapshot) {
+            widths[id] = Math.max(1, Math.round(width));
+          }
+          widths[leftId] = pair.left;
+          widths[rightId] = pair.right;
+          return { ...prev, widths };
+        });
+      };
+      const onMouseMove = (e: MouseEvent) => move(e.clientX);
+      const onTouchMove = (e: TouchEvent) => {
+        const touch = e.touches[0];
+        if (touch) move(touch.clientX);
+      };
+      const end = () => {
+        suppressHeaderClick();
+        setResizingColumnId(null);
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", end);
+        document.removeEventListener("touchmove", onTouchMove);
+        document.removeEventListener("touchend", end);
+        document.removeEventListener("touchcancel", end);
+      };
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", end);
+      document.addEventListener("touchmove", onTouchMove);
+      document.addEventListener("touchend", end);
+      document.addEventListener("touchcancel", end);
+    },
+    [suppressHeaderClick, tableLayout],
+  );
+
+  const handleHeaderSortClick = useCallback(
+    (columnId: string) => {
+      if (Date.now() < suppressHeaderClickUntilRef.current) {
+        return;
+      }
+      if (!isOsHomeTableColumnSortable(columnId)) {
+        return;
+      }
+      onSortChange(cycleOsSortKeys(activeSorts, columnId as OsSortColumn));
+    },
+    [activeSorts, onSortChange],
+  );
+
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  );
+
+  const handleHeaderDragEnd = useCallback(
+    ({ active, over }: DragEndEvent) => {
+      suppressHeaderClick();
+      if (!over || active.id === over.id) {
+        return;
+      }
+      setTableLayout((prev) => ({
+        ...prev,
+        order: moveOsHomeTableColumn(prev.order, String(active.id), String(over.id)),
+      }));
+    },
+    [suppressHeaderClick],
+  );
+
+  const handleApplyConfig = useCallback((next: OsHomeTableLayout) => {
+    setTableLayout(mergeOsHomeTableLayout(next));
+    setConfigOpen(false);
+  }, []);
+
+  const handleCloseConfig = useCallback(() => setConfigOpen(false), []);
+  const handleOpenConfig = useCallback(() => setConfigOpen(true), []);
 
   const { rows: tableRows } = table.getRowModel();
 
@@ -600,56 +999,47 @@ export function OsOrdersTable({
             </div>
           </div>
         ) : null}
-        {/* Tabela — tablet/desktop: w-full + table-fixed redistribui colunas sem scrollbar horizontal */}
+        {/* Tabela — tablet/desktop: sempre 100% da largura; colunas em % (responsivo). */}
+        <DndContext
+          sensors={dndSensors}
+          collisionDetection={closestCenter}
+          onDragStart={suppressHeaderClick}
+          onDragCancel={suppressHeaderClick}
+          onDragEnd={handleHeaderDragEnd}
+        >
         <table className="hidden w-full min-w-0 table-fixed border-collapse text-sm md:table">
+          {/* Fração de cada coluna na largura total: acompanha o tamanho da janela. */}
+          <colgroup>
+            {visibleLeafColumns.map((column) => (
+              <col
+                key={column.id}
+                data-column-id={column.id}
+                style={{
+                  width: `${(columnPercents.get(column.id as OsHomeTableColumnId) ?? 0).toFixed(4)}%`,
+                }}
+              />
+            ))}
+          </colgroup>
           <thead className="sticky top-0 z-10 bg-secondary-blue text-white">
             {headerGroups.map((hg) => (
               <tr key={hg.id}>
-                {hg.headers.map((header) => {
-                  const meta = osSortHeaderMeta(activeSorts, header.id);
-                  return (
-                    <th
+                <SortableContext
+                  items={visibleColumnIds}
+                  strategy={horizontalListSortingStrategy}
+                >
+                  {hg.headers.map((header, index) => (
+                    <SortableHeaderCell
                       key={header.id}
-                      className="max-w-0 cursor-pointer select-none overflow-hidden px-2 py-1.5 text-left text-xs font-semibold"
-                      style={{ width: header.column.getSize() }}
-                      onClick={() =>
-                        onSortChange(
-                          cycleOsSortKeys(
-                            activeSorts,
-                            header.id as OsSortColumn,
-                          ),
-                        )
-                      }
-                      data-testid={homeTestIds.osTableSort(header.id)}
-                    >
-                      <span className="inline-flex max-w-full min-w-0 items-center gap-0.5">
-                        <span className="min-w-0 truncate">
-                          {flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )}
-                        </span>
-                        <span className="inline-flex shrink-0 flex-col items-center justify-center leading-none">
-                          {meta.badge ? (
-                            <span
-                              className="text-[0.55rem] font-bold leading-none"
-                              data-testid={homeTestIds.osTableSortBadge(header.id)}
-                            >
-                              {meta.badge}
-                            </span>
-                          ) : null}
-                          {meta.dir === "desc" ? (
-                            <ArrowUp className="size-3.5" />
-                          ) : meta.dir === "asc" ? (
-                            <ArrowDown className="size-3.5" />
-                          ) : (
-                            <ArrowUpDown className="size-3.5 opacity-50" />
-                          )}
-                        </span>
-                      </span>
-                    </th>
-                  );
-                })}
+                      header={header}
+                      activeSorts={activeSorts}
+                      onSortClick={handleHeaderSortClick}
+                      isLast={index === hg.headers.length - 1}
+                      isResizing={resizingColumnId === header.column.id}
+                      onResizeStart={handleResizeStart}
+                      onOpenConfig={handleOpenConfig}
+                    />
+                  ))}
+                </SortableContext>
               </tr>
             ))}
           </thead>
@@ -657,7 +1047,7 @@ export function OsOrdersTable({
             {isError && (
               <tr>
                 <td
-                  colSpan={columns.length}
+                  colSpan={visibleColumnCount}
                   className="px-4 py-8 text-center text-sagra-danger"
                 >
                   {errorMessage ?? "Erro ao carregar ordens de serviço."}
@@ -667,7 +1057,7 @@ export function OsOrdersTable({
             {!isError && isLoading && rows.length === 0 && (
               <tr>
                 <td
-                  colSpan={columns.length}
+                  colSpan={visibleColumnCount}
                   className="px-4 py-8 text-center text-neutral-500"
                 >
                   Carregando...
@@ -677,7 +1067,7 @@ export function OsOrdersTable({
             {!isError && !isLoading && rows.length === 0 && (
               <tr>
                 <td
-                  colSpan={columns.length}
+                  colSpan={visibleColumnCount}
                   className="px-4 py-8 text-center text-neutral-500"
                 >
                   Nenhum registro encontrado.
@@ -688,7 +1078,7 @@ export function OsOrdersTable({
               <>
                 {virtualizer.getVirtualItems().length > 0 && (
                   <tr style={{ height: virtualizer.getVirtualItems()[0]?.start ?? 0 }}>
-                    <td colSpan={columns.length} />
+                    <td colSpan={visibleColumnCount} />
                   </tr>
                 )}
                 {virtualizer.getVirtualItems().map((virtualRow) => {
@@ -725,7 +1115,7 @@ export function OsOrdersTable({
                           <td
                             key={cell.id}
                             className="max-w-0 overflow-hidden px-2 py-1 align-middle"
-                            style={{ width: cell.column.getSize() }}
+                            data-column-id={cell.column.id}
                           >
                             {flexRender(
                               cell.column.columnDef.cell,
@@ -745,13 +1135,14 @@ export function OsOrdersTable({
                         (virtualizer.getVirtualItems().at(-1)?.end ?? 0),
                     }}
                   >
-                    <td colSpan={columns.length} />
+                    <td colSpan={visibleColumnCount} />
                   </tr>
                 )}
               </>
             )}
           </tbody>
         </table>
+        </DndContext>
 
         {/* Cards — mobile */}
         <div className="md:hidden">
@@ -912,6 +1303,12 @@ export function OsOrdersTable({
           )}
         </button>
       ) : null}
+      <OsListConfigModal
+        open={configOpen}
+        layout={tableLayout}
+        onClose={handleCloseConfig}
+        onApply={handleApplyConfig}
+      />
     </section>
   );
 }

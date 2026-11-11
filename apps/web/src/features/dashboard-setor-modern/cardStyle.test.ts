@@ -246,8 +246,9 @@ describe("cardStyle", () => {
     expect(catalogCss).toContain("var(--cm-accent");
     expect(catalogCss).toContain("var(--cm-extra");
     expect(catalogCss).toContain("var(--fx-accent");
-    expect(catalogCss).toContain(".setor-modern-laser-orbit");
-    expect(catalogCss).toContain("stroke-dashoffset: -100");
+    expect(catalogCss).toContain('[data-model="v37"]::before');
+    expect(catalogCss).toContain("conic-gradient");
+    expect(catalogCss).toContain("transparent 180deg");
     expect(catalogCss).toContain("var(--sm-beam-speed, 1)");
     expect(catalogCss).toContain("left: -75%");
   });

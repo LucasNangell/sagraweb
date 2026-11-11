@@ -111,6 +111,18 @@ export const homeTestIds = {
   osTableExpand: (ano: number | string, nrOs: number | string) =>
     testId("os-table-expand", ano, nrOs),
   osTableExpandToggle: "os-table-expand-toggle",
+  osTableResize: (column: string) => testId("os-table-resize", column),
+  osTableConfig: "os-table-config",
+  osListConfigModal: "os-list-config-modal",
+  osListConfigVisible: (column: string) => testId("os-list-config-visible", column),
+  osListConfigUp: (column: string) => testId("os-list-config-up", column),
+  osListConfigDown: (column: string) => testId("os-list-config-down", column),
+  osListConfigRemove: (column: string) => testId("os-list-config-remove", column),
+  osListConfigAdd: (column: string) => testId("os-list-config-add", column),
+  osListConfigReset: "os-list-config-reset",
+  osListConfigResetWidths: "os-list-config-reset-widths",
+  osListConfigCancel: "os-list-config-cancel",
+  osListConfigApply: "os-list-config-apply",
   osTableReport: "os-table-report",
 
   osHomeDetailsHistory: "os-home-details-history",

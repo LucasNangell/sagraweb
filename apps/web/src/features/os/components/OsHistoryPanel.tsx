@@ -755,9 +755,7 @@ export function OsHistoryPanel({
       return;
     }
     const confirmMsg =
-      "ATENÇÃO: Deseja excluir este andamento?\n\n" +
-      "Andamentos herdados ou espelhados nas Sub OSs correspondentes também serão removidos.\n\n" +
-      "Isso irá reorganizar a numeração de todos os andamentos desta OS.\n" +
+      "Confirma a exclusão deste andamento?\n\n" +
       "Essa ação não pode ser desfeita.";
     if (!window.confirm(confirmMsg)) {
       return;

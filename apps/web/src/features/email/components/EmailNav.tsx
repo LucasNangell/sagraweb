@@ -29,7 +29,7 @@ export function EmailNav({
       aria-label="Pastas de e-mail"
     >
       <div
-        className="mr-1 flex size-9 shrink-0 sagra-btn sagra-btn--secondary sagra-btn--md shadow-md shadow-secondary-blue/20 md:mb-3 md:mr-0"
+        className="mr-1 flex size-9 shrink-0 items-center justify-center shadow-md shadow-secondary-blue/20 md:mb-3 md:mr-0"
         title="Módulo E-mail"
       >
         <Mail className="size-4" aria-hidden />

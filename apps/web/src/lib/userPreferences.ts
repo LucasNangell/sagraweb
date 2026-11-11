@@ -5,6 +5,7 @@ import {
 } from "@/api/userPreferences";
 import { PAINEL_CONFIG_STORAGE_KEY } from "@/features/painel-global/painelConfigStore";
 import { MODERN_CONFIG_KEY } from "@/features/dashboard-setor-modern/configStorage";
+import { OS_HOME_TABLE_LAYOUT_STORAGE_KEY } from "@/features/os/osHomeTableLayout";
 
 const OS_TOGGLES_STORAGE_KEY = "sagra-os-filter-toggles";
 const THEME_STORAGE_KEY = "theme";
@@ -15,6 +16,7 @@ const LOCAL_STORAGE_BY_KEY: Record<UserPreferenceKey, string> = {
   painel_setor_moderno: MODERN_CONFIG_KEY,
   os_filter_toggles: OS_TOGGLES_STORAGE_KEY,
   painel_theme: THEME_STORAGE_KEY,
+  os_home_table_layout: OS_HOME_TABLE_LAYOUT_STORAGE_KEY,
 };
 
 const saveTimers = new Map<UserPreferenceKey, ReturnType<typeof setTimeout>>();

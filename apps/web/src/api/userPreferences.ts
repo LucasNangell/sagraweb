@@ -6,6 +6,7 @@ export const USER_PREFERENCE_KEYS = [
   "painel_setor_moderno",
   "os_filter_toggles",
   "painel_theme",
+  "os_home_table_layout",
 ] as const;
 
 export type UserPreferenceKey = (typeof USER_PREFERENCE_KEYS)[number];

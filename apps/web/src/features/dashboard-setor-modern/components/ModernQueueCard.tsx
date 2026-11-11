@@ -16,7 +16,6 @@ import {
 import { isHtmlCardModel } from "../htmlCardModels";
 import { AndamentoTimer } from "./AndamentoTimer";
 import { LabVidroFoscoCard } from "./LabVidroFoscoCard";
-import { LaserOrbitBeam } from "./LaserOrbitBeam";
 
 export function ModernQueueCard({
   item,
@@ -91,7 +90,6 @@ export function ModernQueueCard({
         }
         aria-label={`${displayLabel} · ${item.displaySituacao}${priority ? ` · ${priority}` : ""}`}
       >
-        {modelId === "v37" ? <LaserOrbitBeam /> : null}
         {htmlModel ? (
           <LabVidroFoscoCard
             osLabel={displayLabel}

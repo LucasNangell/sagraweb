@@ -8,7 +8,6 @@ import {
   cardSlotStyleVars,
   normalizeCardStyle,
 } from "@/features/dashboard-setor-modern/cardStyle";
-import { LaserOrbitBeam } from "@/features/dashboard-setor-modern/components/LaserOrbitBeam";
 import { LabVidroFoscoCard } from "@/features/dashboard-setor-modern/components/LabVidroFoscoCard";
 import { isHtmlCardModel } from "@/features/dashboard-setor-modern/htmlCardModels";
 import {
@@ -107,7 +106,6 @@ function CardThumb({
             data-highlight={highlightId || undefined}
             style={styleVars}
           >
-            {modelId === "v37" ? <LaserOrbitBeam /> : null}
             {isHtmlCardModel(modelId) ? (
               <LabVidroFoscoCard osLabel="1234/26" compact />
             ) : (

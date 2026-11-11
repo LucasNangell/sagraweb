@@ -43,3 +43,24 @@ def test_both_panels_keep_sector_defaults(key, preference_client, monkeypatch):
 
 def test_preference_key_validation_is_preserved(preference_client):
     assert preference_client.get("/settings/preferences/invalid").status_code == 400
+
+
+def test_os_home_table_layout_key_is_accepted(preference_client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(settings_routes.db, "execute_query", lambda sql, args: calls.append(args))
+    payload = {
+        "order": ["nr_os", "titulo", "ano"],
+        "visibility": {"nr_os": True, "ano": False},
+        "widths": {"titulo": 420},
+    }
+    response = preference_client.put("/settings/preferences/os_home_table_layout", json={"payload": payload})
+    assert response.status_code == 200
+    assert calls[0][:2] == ("999", "os_home_table_layout")
+    assert json.loads(calls[0][2]) == payload
+
+
+def test_os_home_table_layout_get_without_saved_value(preference_client, monkeypatch):
+    monkeypatch.setattr(settings_routes.db, "execute_query", lambda *args: [])
+    response = preference_client.get("/settings/preferences/os_home_table_layout")
+    assert response.status_code == 200
+    assert response.json()["payload"] is None

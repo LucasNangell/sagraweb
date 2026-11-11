@@ -119,6 +119,16 @@ function asSpeed(value: unknown): number {
   return Math.min(3, Math.max(0.4, Math.round(n * 10) / 10));
 }
 
+/** Ritmo da luz do Laser orbit. 1 é o padrão e não precisa ser gravado. */
+function asBeamSpeed(value: unknown): number | undefined {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n) || n <= 0) {
+    return undefined;
+  }
+  const clamped = Math.min(2.5, Math.max(0.4, Math.round(n * 10) / 10));
+  return clamped === 1 ? undefined : clamped;
+}
+
 function asModelId(value: unknown): string {
   const id = clipText(value, 32);
   return isCardModelId(id) ? id : "";
@@ -174,9 +184,11 @@ function asSlot(raw: unknown): DashboardCardSlot {
     const colors = asColors(parsed.colors);
     const highlight = asHighlightId(parsed.highlight);
     const highlightColors = asColors(parsed.highlightColors);
+    const beamSpeed = asBeamSpeed(parsed.beamSpeed);
     return {
       effect,
       ...(colors ? { colors } : {}),
+      ...(beamSpeed != null ? { beamSpeed } : {}),
       ...(highlight ? { highlight } : {}),
       ...(highlightColors ? { highlightColors } : {}),
     };
@@ -386,6 +398,9 @@ export function cardSlotStyleVars(
         vars[`--fx-${key}`] = value;
       }
     }
+  }
+  if (slot?.beamSpeed != null && slot.beamSpeed !== 1) {
+    vars["--sm-beam-speed"] = String(slot.beamSpeed);
   }
   return vars as CSSProperties;
 }

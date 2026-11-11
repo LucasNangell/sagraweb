@@ -1,14 +1,16 @@
 import { X } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { CARD_MODELS } from "@/features/dashboard-setor-modern/cardModels";
-import { isHtmlCardModel } from "@/features/dashboard-setor-modern/htmlCardModels";
-import { LabVidroFoscoCard } from "@/features/dashboard-setor-modern/components/LabVidroFoscoCard";
 import {
   CARD_FONT_OPTIONS,
   DEFAULT_CARD_STYLE,
+  cardSlotStyleVars,
   normalizeCardStyle,
 } from "@/features/dashboard-setor-modern/cardStyle";
+import { LaserOrbitBeam } from "@/features/dashboard-setor-modern/components/LaserOrbitBeam";
+import { LabVidroFoscoCard } from "@/features/dashboard-setor-modern/components/LabVidroFoscoCard";
+import { isHtmlCardModel } from "@/features/dashboard-setor-modern/htmlCardModels";
 import {
   animationSwatches,
   colorsFromSwatches,
@@ -76,6 +78,7 @@ function CardThumb({
   isAnim = false,
   label,
   active,
+  styleVars,
   onClick,
 }: {
   modelId?: string;
@@ -84,6 +87,7 @@ function CardThumb({
   isAnim?: boolean;
   label: string;
   active: boolean;
+  styleVars?: CSSProperties;
   onClick: (target: HTMLElement) => void;
 }) {
   return (
@@ -101,7 +105,9 @@ function CardThumb({
             className="setor-modern-card"
             data-model={modelId || undefined}
             data-highlight={highlightId || undefined}
+            style={styleVars}
           >
+            {modelId === "v37" ? <LaserOrbitBeam /> : null}
             {isHtmlCardModel(modelId) ? (
               <LabVidroFoscoCard osLabel="1234/26" compact />
             ) : (
@@ -188,13 +194,17 @@ function PaletteModal({
   title,
   swatches,
   anchor,
+  speed,
   onChange,
+  onSpeed,
   onClose,
 }: {
   title: string;
   swatches: ColorSwatch[];
   anchor: AnchorRect;
+  speed?: number;
   onChange: (key: string, value: string) => void;
+  onSpeed?: (value: number) => void;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -208,7 +218,7 @@ function PaletteModal({
       return;
     }
     setPos(placeBesideAnchor(anchor, el.offsetWidth, el.offsetHeight));
-  }, [anchor, swatches.length]);
+  }, [anchor, swatches.length, onSpeed]);
 
   return (
     <div
@@ -251,6 +261,20 @@ function PaletteModal({
             />
           ))}
         </div>
+        {onSpeed ? (
+          <label className="mt-3 flex flex-col gap-1 text-[11px] font-semibold text-slate-600">
+            Velocidade da luz ({(speed ?? 1).toFixed(1)}×)
+            <input
+              type="range"
+              min={0.4}
+              max={2.5}
+              step={0.1}
+              value={speed ?? 1}
+              aria-label="Velocidade da luz"
+              onChange={(e) => onSpeed(Number(e.target.value))}
+            />
+          </label>
+        ) : null}
         <div className="mt-3 flex justify-end">
           <button
             type="button"
@@ -566,6 +590,14 @@ export function PainelCardStyleForm({
     return mergeSwatchValues(animationSwatches(editor.id), style.entryColors);
   }, [editor, style]);
 
+  const setEditorSpeed = (beamSpeed: number) => {
+    if (!editor || editor.kind !== "visual") {
+      return;
+    }
+    const current = style.models[editor.slot];
+    updateSlot(editor.slot, { ...current, beamSpeed });
+  };
+
   const setEditorColor = (key: string, value: string) => {
     if (!editor) {
       return;
@@ -665,6 +697,11 @@ export function PainelCardStyleForm({
                           modelId={model.id}
                           label={model.label}
                           active={slotValue.effect === model.id}
+                          styleVars={
+                            model.id === "v37" && slotValue.effect === model.id
+                              ? cardSlotStyleVars(slotValue)
+                              : undefined
+                          }
                           onClick={(el) => pickVisual(slot, model.id, model.label, el)}
                         />
                       ))}
@@ -961,7 +998,17 @@ export function PainelCardStyleForm({
           title={editor.title}
           swatches={editorSwatches}
           anchor={editor.anchor}
+          speed={
+            editor.kind === "visual" && editor.id === "v37"
+              ? (style.models[editor.slot].beamSpeed ?? 1)
+              : undefined
+          }
           onChange={setEditorColor}
+          onSpeed={
+            editor.kind === "visual" && editor.id === "v37"
+              ? setEditorSpeed
+              : undefined
+          }
           onClose={() => setEditor(null)}
         />
       ) : null}

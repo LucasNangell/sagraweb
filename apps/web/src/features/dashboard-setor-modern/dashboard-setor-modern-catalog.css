@@ -7,12 +7,6 @@
    Cada efeito traz fallback com a cor nativa do catálogo original.
    ========================================================================== */
 
-@property --sm-beam-angle {
-  syntax: "<angle>";
-  inherits: false;
-  initial-value: 0deg;
-}
-
 /* Conteúdo centralizado por padrão nos cards com efeito (como no catálogo). */
 .setor-modern .setor-modern-card[data-model] {
   align-items: center;
@@ -80,46 +74,59 @@
 }
 
 .setor-modern .setor-modern-card[data-model="v37"] {
+  --v37-radius: 10px;
   background: var(--cm-bg, #0f172a);
   border: 0;
+  border-radius: var(--v37-radius);
   overflow: hidden;
   isolation: isolate;
   z-index: 1;
   box-shadow: 0 8px 25px
     color-mix(in srgb, var(--cm-accent, #38bdf8) 30%, transparent);
 }
+.painel-card-model-thumb .setor-modern-card[data-model="v37"] {
+  --v37-radius: 14px;
+}
 .setor-modern .setor-modern-card[data-model="v37"] > * {
   position: relative;
   z-index: 1;
 }
-/* Anel no próprio card. Girar um retângulo maior deixa a luz falhar nos cantos. */
-.setor-modern .setor-modern-card[data-model="v37"]::before {
-  content: "";
+/* Traço sobre o perímetro real do card: a volta tem velocidade uniforme. */
+.setor-modern .setor-modern-card[data-model="v37"] > .setor-modern-laser-orbit {
   position: absolute;
   inset: 0;
-  box-sizing: border-box;
-  border-radius: inherit;
-  padding: 4px;
-  background: conic-gradient(
-    from var(--sm-beam-angle),
-    transparent 0deg,
-    transparent 180deg,
-    var(--cm-border, #38bdf8) 270deg,
-    var(--cm-accent, #ffffff) 360deg
-  );
-  -webkit-mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
-  -webkit-mask-clip: content-box, border-box;
-  -webkit-mask-composite: xor;
-  mask-image: linear-gradient(#fff 0 0), linear-gradient(#fff 0 0);
-  mask-clip: content-box, border-box;
-  mask-composite: exclude;
-  animation: sm-beam-angle 2.6s linear infinite;
   z-index: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
   pointer-events: none;
 }
-@keyframes sm-beam-angle {
+.setor-modern-laser-orbit rect {
+  x: 2px;
+  y: 2px;
+  width: calc(100% - 4px);
+  height: calc(100% - 4px);
+  rx: calc(var(--v37-radius, 10px) - 2px);
+  ry: calc(var(--v37-radius, 10px) - 2px);
+  fill: none;
+  stroke-width: 4px;
+  stroke-linecap: round;
+}
+.setor-modern-laser-orbit-tail {
+  stroke: var(--cm-border, #38bdf8);
+  stroke-dasharray: 16 84;
+  animation: sm-beam-lap calc(2.6s / var(--sm-beam-speed, 1)) linear infinite;
+}
+.setor-modern-laser-orbit-head {
+  stroke: var(--cm-accent, #ffffff);
+  stroke-dasharray: 5 95;
+  filter: drop-shadow(0 0 3px var(--cm-accent, #ffffff));
+  animation: sm-beam-lap calc(2.6s / var(--sm-beam-speed, 1)) linear infinite;
+  animation-delay: calc(2.6s / var(--sm-beam-speed, 1) * -0.11);
+}
+@keyframes sm-beam-lap {
   to {
-    --sm-beam-angle: 360deg;
+    stroke-dashoffset: -100;
   }
 }
 .setor-modern .setor-modern-card[data-model="v37"] h3 {

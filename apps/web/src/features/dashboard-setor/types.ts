@@ -71,6 +71,11 @@ export interface DashboardCardSlot {
   /** Id do efeito (`v79`, `mod-aurora`, `txt-matrix`, …) ou "" para o visual padrão. */
   effect: string;
   colors?: DashboardCardColors;
+  /**
+   * Voltas por unidade de tempo da luz do Laser orbit (1 = ritmo do catálogo).
+   * A luz percorre a borda em velocidade uniforme; o valor só muda esse ritmo.
+   */
+  beamSpeed?: number;
   /** Animação de realce em loop (`fx-tesla`, `fx-matrix`, …) ou "" para nenhuma. */
   highlight?: string;
   /** Cores da animação de realce (independentes do efeito visual). */

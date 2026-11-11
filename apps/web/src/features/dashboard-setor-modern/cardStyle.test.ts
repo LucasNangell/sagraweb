@@ -43,6 +43,26 @@ describe("cardStyle", () => {
     expect(style?.entrySpeed).toBe(1.5);
   });
 
+  it("grava a velocidade da luz do Laser orbit e aplica no card", () => {
+    const style = normalizeCardStyle({
+      models: {
+        high: { effect: "v37", beamSpeed: 1.8 },
+        medium: { effect: "v37", beamSpeed: 1 },
+        normal: { effect: "v37", beamSpeed: 9 },
+      },
+      entryAnimation: "none",
+    });
+    expect(style?.models.high.beamSpeed).toBe(1.8);
+    expect(style?.models.medium.beamSpeed).toBeUndefined();
+    expect(style?.models.normal.beamSpeed).toBe(2.5);
+    expect(cardSlotStyleVars(style?.models.high)).toMatchObject({
+      "--sm-beam-speed": "1.8",
+    });
+    expect(cardSlotStyleVars(style?.models.medium)).not.toMatchObject({
+      "--sm-beam-speed": expect.anything(),
+    });
+  });
+
   it("aceita o formato novo (efeito + paleta) e mapeia por prioridade", () => {
     const style = normalizeCardStyle({
       models: {
@@ -226,9 +246,9 @@ describe("cardStyle", () => {
     expect(catalogCss).toContain("var(--cm-accent");
     expect(catalogCss).toContain("var(--cm-extra");
     expect(catalogCss).toContain("var(--fx-accent");
-    expect(catalogCss).toContain('[data-model="v37"]::before');
-    expect(catalogCss).toContain("@property --sm-beam-angle");
-    expect(catalogCss).toContain("mask-composite: exclude");
+    expect(catalogCss).toContain(".setor-modern-laser-orbit");
+    expect(catalogCss).toContain("stroke-dashoffset: -100");
+    expect(catalogCss).toContain("var(--sm-beam-speed, 1)");
     expect(catalogCss).toContain("left: -75%");
   });
 

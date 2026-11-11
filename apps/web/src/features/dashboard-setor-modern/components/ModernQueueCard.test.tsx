@@ -111,4 +111,26 @@ describe("prioridades no painel de TV", () => {
       "data-entry",
     );
   });
+
+  it("desenha a luz do Laser orbit e aplica a velocidade escolhida", () => {
+    const { container } = render(
+      <ModernQueueCard
+        item={{ ...item, isNew: false }}
+        index={0}
+        cardStyle={{
+          models: {
+            high: { effect: "v37", beamSpeed: 1.6 },
+            medium: { effect: "" },
+            normal: { effect: "" },
+          },
+          entryAnimation: "none",
+        }}
+      />,
+    );
+    const card = container.querySelector(".setor-modern-card");
+    expect(card).toHaveAttribute("data-model", "v37");
+    expect(card).toHaveStyle({ "--sm-beam-speed": "1.6" });
+    expect(container.querySelector(".setor-modern-laser-orbit")).not.toBeNull();
+    expect(container.querySelectorAll(".setor-modern-laser-orbit rect")).toHaveLength(2);
+  });
 });

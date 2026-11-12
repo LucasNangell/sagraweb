@@ -132,6 +132,7 @@ export const homeTestIds = {
   osHistoryPanel: "os-history-panel",
   osHistorySituacao: "os-history-situacao",
   osHistorySetor: "os-history-setor",
+  osHistoryData: "os-history-data",
   osHistoryPonto: "os-history-ponto",
   osHistoryObs: "os-history-obs",
   osHistoryObsHora: "os-history-obs-hora",

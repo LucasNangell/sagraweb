@@ -71,8 +71,8 @@ interface OsHistoryPanelProps {
   flash?: boolean;
   embedded?: boolean;
   /**
-   * `default`: Situação | Setor | Data.
-   * `compact`: Situação | Setor, com data e ponto numa linha abaixo.
+   * `default`: lista Situação|Setor|Data; formulário Andamento|Setor|Ponto.
+   * `compact`: lista só Situação|Setor; formulário Andamento|Setor e Data|Ponto abaixo.
    */
   listLayout?: "default" | "compact";
   onEditingChange?: (editing: boolean) => void;
@@ -81,6 +81,8 @@ interface OsHistoryPanelProps {
 interface HistoryFormState {
   situacao: string;
   setor: string;
+  /** Exibição da data do andamento selecionado (somente leitura no formulário). */
+  data: string;
   obs: string;
   usuario: string;
 }
@@ -88,6 +90,7 @@ interface HistoryFormState {
 const emptyForm = (): HistoryFormState => ({
   situacao: "",
   setor: "",
+  data: "",
   obs: "",
   usuario: "",
 });
@@ -154,16 +157,6 @@ function isOsFrozen(row: OsSearchRow | null): boolean {
   if (!row) return false;
   if (row.is_sub_os) return Boolean(row.congelada);
   return FROZEN_SITUACOES.has((row.situacao ?? "").trim());
-}
-
-function historyMetaLine(
-  data: string | null | undefined,
-  ponto: string | number | null | undefined,
-  usuarioNome?: string | null,
-): string {
-  const dateLabel = formatDateBr(data ?? undefined);
-  const pontoLabel = formatUsuarioPontoLabel(ponto, usuarioNome);
-  return [dateLabel, pontoLabel].filter(Boolean).join(" · ");
 }
 
 export function OsHistoryPanel({
@@ -329,6 +322,7 @@ export function OsHistoryPanel({
     setForm({
       situacao: row.SituacaoLink ?? "",
       setor: row.SetorLink ?? "",
+      data: formatDateBr(row.Data),
       obs: row.Observaçao ?? "",
       usuario: formatUsuarioPontoLabel(row.Ponto, row.usuario_nome),
     });
@@ -369,6 +363,7 @@ export function OsHistoryPanel({
       setForm({
         situacao: subRow.situacao ?? "",
         setor: subRow.setor ?? "",
+        data: formatDateBr(subRow.data ?? undefined),
         obs: subRow.observacao ?? "",
         usuario: formatUsuarioPontoLabel(subRow.ponto, subRow.usuario_nome),
       });
@@ -461,6 +456,7 @@ export function OsHistoryPanel({
     setForm({
       situacao: "",
       setor: "",
+      data: new Date().toLocaleDateString("pt-BR"),
       obs: "",
       usuario: user ? formatUsuarioPontoLabel(user.ponto, user.nome) : "",
     });
@@ -975,11 +971,6 @@ export function OsHistoryPanel({
                         const subRow = row as SubOsHistoryRow;
                         const isRowSelected =
                           selectedSubHistory?.id === subRow.id;
-                        const meta = historyMetaLine(
-                          subRow.data,
-                          subRow.ponto,
-                          subRow.usuario_nome,
-                        );
                         return (
                           <tr
                             key={`${historyOsKey}-${subRow.id}`}
@@ -990,6 +981,7 @@ export function OsHistoryPanel({
                                 setForm({
                                   situacao: subRow.situacao ?? "",
                                   setor: subRow.setor ?? "",
+                                  data: formatDateBr(subRow.data ?? undefined),
                                   obs: subRow.observacao ?? "",
                                   usuario: formatUsuarioPontoLabel(
                                     subRow.ponto,
@@ -1003,59 +995,32 @@ export function OsHistoryPanel({
                               isRowSelected && "bg-[var(--highlight-yellow)]",
                             )}
                           >
-                            {compactList ? (
-                              <td colSpan={2} className="px-2 py-1">
-                                <div className="grid grid-cols-[minmax(0,1fr)_5.5rem] gap-x-2">
-                                  <span
-                                    className="min-w-0 truncate"
-                                    title={subRow.situacao ?? undefined}
-                                  >
-                                    {subRow.situacao ?? "-"}
-                                  </span>
-                                  <span
-                                    className="truncate"
-                                    title={subRow.setor ?? undefined}
-                                  >
-                                    {subRow.setor ?? "-"}
-                                  </span>
-                                  <span
-                                    className="col-span-2 mt-0.5 truncate text-[10px] text-neutral-500 tabular-nums"
-                                    title={meta}
-                                  >
-                                    {meta || "—"}
-                                  </span>
-                                </div>
+                            <td className="min-w-0 overflow-hidden px-2 py-1">
+                              <span className="block truncate" title={subRow.situacao ?? undefined}>
+                                {subRow.situacao ?? "-"}
+                              </span>
+                            </td>
+                            <td
+                              className="overflow-hidden px-1.5 py-1"
+                              style={{ width: compactList ? "5.5rem" : "6.5rem" }}
+                            >
+                              <span className="block truncate" title={subRow.setor ?? undefined}>
+                                {subRow.setor ?? "-"}
+                              </span>
+                            </td>
+                            {!compactList ? (
+                              <td className="overflow-hidden px-1.5 py-1 whitespace-nowrap" style={{ width: "5.75rem" }}>
+                                <span className="block tabular-nums">
+                                  {formatDateBr(subRow.data ?? undefined)}
+                                </span>
                               </td>
-                            ) : (
-                              <>
-                                <td className="min-w-0 overflow-hidden px-2 py-1">
-                                  <span className="block truncate" title={subRow.situacao ?? undefined}>
-                                    {subRow.situacao ?? "-"}
-                                  </span>
-                                </td>
-                                <td className="overflow-hidden px-1.5 py-1" style={{ width: "6.5rem" }}>
-                                  <span className="block truncate" title={subRow.setor ?? undefined}>
-                                    {subRow.setor ?? "-"}
-                                  </span>
-                                </td>
-                                <td className="overflow-hidden px-1.5 py-1 whitespace-nowrap" style={{ width: "5.75rem" }}>
-                                  <span className="block tabular-nums">
-                                    {formatDateBr(subRow.data ?? undefined)}
-                                  </span>
-                                </td>
-                              </>
-                            )}
+                            ) : null}
                           </tr>
                         );
                       }
                       const mainRow = row as OsHistoryRow;
                       const isRowSelected =
                         selectedHistory?.CodStatus === mainRow.CodStatus;
-                      const meta = historyMetaLine(
-                        mainRow.Data,
-                        mainRow.Ponto,
-                        mainRow.usuario_nome,
-                      );
                       return (
                         <tr
                           key={`${historyOsKey}-${mainRow.CodStatus}`}
@@ -1070,48 +1035,26 @@ export function OsHistoryPanel({
                             isRowSelected && "bg-[var(--highlight-yellow)]",
                           )}
                         >
-                          {compactList ? (
-                            <td colSpan={2} className="px-2 py-1">
-                              <div className="grid grid-cols-[minmax(0,1fr)_5.5rem] gap-x-2">
-                                <span
-                                  className="min-w-0 truncate"
-                                  title={mainRow.SituacaoLink ?? undefined}
-                                >
-                                  {mainRow.SituacaoLink ?? "-"}
-                                </span>
-                                <span
-                                  className="truncate"
-                                  title={mainRow.SetorLink ?? undefined}
-                                >
-                                  {mainRow.SetorLink ?? "-"}
-                                </span>
-                                <span
-                                  className="col-span-2 mt-0.5 truncate text-[10px] text-neutral-500 tabular-nums"
-                                  title={meta}
-                                >
-                                  {meta || "—"}
-                                </span>
-                              </div>
+                          <td className="min-w-0 overflow-hidden px-2 py-1">
+                            <span className="block truncate" title={mainRow.SituacaoLink ?? undefined}>
+                              {mainRow.SituacaoLink ?? "-"}
+                            </span>
+                          </td>
+                          <td
+                            className="overflow-hidden px-1.5 py-1"
+                            style={{ width: compactList ? "5.5rem" : "6.5rem" }}
+                          >
+                            <span className="block truncate" title={mainRow.SetorLink ?? undefined}>
+                              {mainRow.SetorLink ?? "-"}
+                            </span>
+                          </td>
+                          {!compactList ? (
+                            <td className="overflow-hidden px-1.5 py-1 whitespace-nowrap" style={{ width: "5.75rem" }}>
+                              <span className="block tabular-nums">
+                                {formatDateBr(mainRow.Data)}
+                              </span>
                             </td>
-                          ) : (
-                            <>
-                              <td className="min-w-0 overflow-hidden px-2 py-1">
-                                <span className="block truncate" title={mainRow.SituacaoLink ?? undefined}>
-                                  {mainRow.SituacaoLink ?? "-"}
-                                </span>
-                              </td>
-                              <td className="overflow-hidden px-1.5 py-1" style={{ width: "6.5rem" }}>
-                                <span className="block truncate" title={mainRow.SetorLink ?? undefined}>
-                                  {mainRow.SetorLink ?? "-"}
-                                </span>
-                              </td>
-                              <td className="overflow-hidden px-1.5 py-1 whitespace-nowrap" style={{ width: "5.75rem" }}>
-                                <span className="block tabular-nums">
-                                  {formatDateBr(mainRow.Data)}
-                                </span>
-                              </td>
-                            </>
-                          )}
+                          ) : null}
                         </tr>
                       );
                     })
@@ -1129,7 +1072,14 @@ export function OsHistoryPanel({
                     </p>
                   ) : null}
 
-                  <div className="grid shrink-0 grid-cols-1 gap-1.5 sm:grid-cols-3 portrait:sm:grid-cols-2">
+                  <div
+                    className={cn(
+                      "grid shrink-0 gap-1.5",
+                      compactList
+                        ? "grid-cols-2"
+                        : "grid-cols-1 sm:grid-cols-3 portrait:sm:grid-cols-2",
+                    )}
+                  >
                     <label className="min-w-0 text-xs" data-tour="os-history-situacao" data-testid={homeTestIds.osHistorySituacao}>
                       <span className="font-semibold text-neutral-600">Andamento</span>
                       <select
@@ -1166,7 +1116,26 @@ export function OsHistoryPanel({
                         ))}
                       </select>
                     </label>
-                    <label className="min-w-0 text-xs portrait:sm:col-span-2" data-tour="os-history-ponto" data-testid={homeTestIds.osHistoryPonto}>
+                    {compactList ? (
+                      <label className="min-w-0 text-xs" data-testid={homeTestIds.osHistoryData}>
+                        <span className="font-semibold text-neutral-600">Data</span>
+                        <input
+                          type="text"
+                          value={form.data}
+                          readOnly
+                          disabled
+                          className="mt-0.5 h-8 w-full rounded border border-sagra-border bg-slate-50 px-2 text-xs tabular-nums"
+                        />
+                      </label>
+                    ) : null}
+                    <label
+                      className={cn(
+                        "min-w-0 text-xs",
+                        !compactList && "portrait:sm:col-span-2",
+                      )}
+                      data-tour="os-history-ponto"
+                      data-testid={homeTestIds.osHistoryPonto}
+                    >
                       <span className="font-semibold text-neutral-600">Ponto</span>
                       <input
                         type="text"

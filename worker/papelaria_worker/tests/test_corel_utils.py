@@ -18,7 +18,10 @@ from corel_generator import (  # noqa: E402
     CAMADA_PROVA_SEFOC,
     CorelGenerationError,
     _manter_somente_primeira_pagina,
+    _ajustar_pasta_avulso_para_a4,
+    calcular_ajuste_a4_paisagem,
     montar_carimbo_prova_email,
+    pagina_e_pasta_avulso_mm,
     resolve_prova_numero,
     _release_corel_after_job,
     dividir_frente_verso,
@@ -401,4 +404,72 @@ class TestCarimboProvaEmail:
         _manter_somente_primeira_pagina(doc, logs)
         assert doc.Pages.Count == 1
         assert any("página 1" in linha for linha in logs)
+
+
+class TestAjustePastaAvulsoA4:
+    def test_detecta_folha_470x460(self):
+        assert pagina_e_pasta_avulso_mm(470, 460)
+        assert pagina_e_pasta_avulso_mm(460, 470)
+        assert not pagina_e_pasta_avulso_mm(297, 210)
+
+    def test_escala_cabe_em_a4_paisagem(self):
+        ajuste = calcular_ajuste_a4_paisagem(470, 460)
+        assert ajuste["pagina_largura"] == 297
+        assert ajuste["pagina_altura"] == 210
+        assert ajuste["escala"] == pytest.approx(210 / 460)
+        largura = 470 * ajuste["escala"]
+        altura = 460 * ajuste["escala"]
+        assert largura <= 297
+        assert altura == pytest.approx(210)
+        assert ajuste["offset_x"] == pytest.approx((297 - largura) / 2)
+        assert ajuste["offset_y"] == pytest.approx(0)
+
+    def test_aplica_ajuste_so_na_folha_de_pasta(self):
+        class Shape:
+            def __init__(self) -> None:
+                self.Name = "arte"
+                self.LeftX = 10.0
+                self.BottomY = 20.0
+                self.SizeWidth = 100.0
+                self.SizeHeight = 50.0
+
+        class Shapes:
+            def __init__(self, itens: list[Shape]) -> None:
+                self.itens = itens
+
+            @property
+            def Count(self) -> int:
+                return len(self.itens)
+
+            def Item(self, indice: int) -> Shape:
+                return self.itens[indice - 1]
+
+        class Pagina:
+            def __init__(self, largura: float, altura: float) -> None:
+                self.SizeWidth = largura
+                self.SizeHeight = altura
+                self.Shapes = Shapes([Shape()])
+
+        class Documento:
+            def __init__(self, pagina: Pagina) -> None:
+                self.Unit = 0
+                self.Pages = type("Pages", (), {"Item": lambda _self, _i: pagina})()
+                self.pagina = pagina
+
+        pasta = Documento(Pagina(470, 460))
+        logs: list[str] = []
+        _ajustar_pasta_avulso_para_a4(pasta, logs)
+        shape = pasta.pagina.Shapes.itens[0]
+        ajuste = calcular_ajuste_a4_paisagem(470, 460)
+        assert pasta.pagina.SizeWidth == 297
+        assert pasta.pagina.SizeHeight == 210
+        assert shape.SizeWidth == pytest.approx(100 * ajuste["escala"])
+        assert shape.LeftX == pytest.approx(ajuste["offset_x"] + 10 * ajuste["escala"])
+        assert any("A4 paisagem" in linha for linha in logs)
+
+        cartao = Documento(Pagina(90, 50))
+        logs_cartao: list[str] = []
+        _ajustar_pasta_avulso_para_a4(cartao, logs_cartao)
+        assert cartao.pagina.SizeWidth == 90
+        assert cartao.pagina.SizeHeight == 50
 

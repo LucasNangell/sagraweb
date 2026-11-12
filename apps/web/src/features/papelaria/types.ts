@@ -97,6 +97,7 @@ export interface PapelariaOsContext {
   autoSelectedModelId: number | null;
   warnings: string[];
   cliente_alteracao?: PapelariaClienteAlteracao | null;
+  prova_modo?: "prova_web" | "prova_email";
 }
 
 export type PapelariaJobStatus =

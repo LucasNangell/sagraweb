@@ -50,6 +50,7 @@ type Props = {
   approveProvaPending?: boolean;
   discardProvaPending?: boolean;
   provaReviewMessage?: string | null;
+  provaModo?: "prova_web" | "prova_email";
   activeDynamicFields?: ActiveDynamicFieldPlacement[];
   onActiveDynamicFieldsChange?: (next: ActiveDynamicFieldPlacement[]) => void;
   onLivePreviewValueChange?: (key: string, value: string) => void;
@@ -81,6 +82,7 @@ export function PapelariaProofPanel({
   approveProvaPending = false,
   discardProvaPending = false,
   provaReviewMessage = null,
+  provaModo = "prova_web",
   activeDynamicFields = [],
   onActiveDynamicFieldsChange,
   onLivePreviewValueChange,
@@ -105,10 +107,12 @@ export function PapelariaProofPanel({
     activeJob?.prova_revisao !== "approved" &&
     activeJob?.prova_revisao !== "discarded";
 
+  const exibirMockup3d = provaModo !== "prova_email";
+
   const previewPagesQuery = useQuery({
     queryKey: queryKeys.papelaria.previewPages(activeJob?.id ?? 0),
     queryFn: () => fetchPapelariaJobPreviewPages(activeJob!.id),
-    enabled: showPdf && !!activeJob,
+    enabled: showPdf && !!activeJob && exibirMockup3d,
     staleTime: 120_000,
     retry: 1,
   });
@@ -199,10 +203,12 @@ export function PapelariaProofPanel({
               ? "DOCX Cor/PB e SVGs gerados na pasta Sefoc da OS."
               : needsProvaReview
               ? "Revise o arquivo gerado e confirme (OK) ou descarte (Cancelar)."
-              : showPdf
+                  : showPdf
                 ? activeJob?.prova_revisao === "approved"
                   ? "Prova aprovada. Pendência de e-mail criada em SEFOC."
-                  : "PDF e mockup 3D da prova gerada pelo sistema."
+                  : exibirMockup3d
+                    ? "PDF e mockup 3D da prova gerada pelo sistema."
+                    : "PDF da prova gerada pelo sistema."
                 : "Gere o arquivo para visualizar a prova."}
         </p>
       </div>
@@ -310,7 +316,13 @@ export function PapelariaProofPanel({
               {provaReviewMessage}
             </p>
           ) : null}
-          <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto p-3 lg:grid-cols-2">
+          <div
+            className={
+              exibirMockup3d
+                ? "grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto p-3 lg:grid-cols-2"
+                : "grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto p-3"
+            }
+          >
           <article className="flex min-h-[min(45vh,320px)] flex-col overflow-hidden rounded-lg border border-sagra-border bg-white shadow-sm sm:min-h-[280px]">
             <header className="flex items-center justify-between border-b border-sagra-border px-3 py-2">
               <h3 className="text-[11px] font-bold uppercase tracking-wide text-neutral-600">
@@ -334,6 +346,7 @@ export function PapelariaProofPanel({
             />
           </article>
 
+          {exibirMockup3d ? (
           <article className="flex min-h-[min(45vh,320px)] flex-col overflow-hidden rounded-lg border border-sagra-border bg-white shadow-sm sm:min-h-[280px]">
             <header className="border-b border-sagra-border px-3 py-2">
               <h3 className="text-[11px] font-bold uppercase tracking-wide text-neutral-600">
@@ -372,6 +385,7 @@ export function PapelariaProofPanel({
               )}
             </div>
           </article>
+          ) : null}
           </div>
         </div>
       ) : (

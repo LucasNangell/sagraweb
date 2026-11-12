@@ -353,6 +353,13 @@ class TestMatchingModelos:
 
 
 class TestBuildOsContextCoercion:
+    @pytest.fixture(autouse=True)
+    def _modo_prova_web(self, monkeypatch):
+        monkeypatch.setattr(
+            "services.papelaria_prova_modo.get_modo",
+            lambda: "prova_web",
+        )
+
     def test_build_os_context_com_campos_numericos(self, monkeypatch):
         from services import papelaria_models_service as svc
 

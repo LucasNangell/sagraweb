@@ -1390,6 +1390,146 @@ def _manter_somente_primeira_pagina(doc: Any, logs: list[str]) -> None:
     )
 
 
+_PASTA_AVULSO_LARGURA_MM = 470.0
+_PASTA_AVULSO_ALTURA_MM = 460.0
+_A4_PAISAGEM_LARGURA_MM = 297.0
+_A4_PAISAGEM_ALTURA_MM = 210.0
+_PASTA_AVULSO_TOLERANCIA_MM = 8.0
+_CDR_MILLIMETER = 3
+
+
+def pagina_e_pasta_avulso_mm(largura_mm: float, altura_mm: float) -> bool:
+    """A folha da pasta avulso é 470×460 mm (qualquer ordem)."""
+    lados = sorted((abs(float(largura_mm)), abs(float(altura_mm))))
+    alvo = sorted((_PASTA_AVULSO_LARGURA_MM, _PASTA_AVULSO_ALTURA_MM))
+    return (
+        abs(lados[0] - alvo[0]) <= _PASTA_AVULSO_TOLERANCIA_MM
+        and abs(lados[1] - alvo[1]) <= _PASTA_AVULSO_TOLERANCIA_MM
+    )
+
+
+def calcular_ajuste_a4_paisagem(
+    largura_mm: float, altura_mm: float
+) -> dict[str, float]:
+    """Escala proporcional para a arte caber em A4 paisagem, centralizada."""
+    largura = float(largura_mm)
+    altura = float(altura_mm)
+    if largura <= 0 or altura <= 0:
+        raise CorelGenerationError("Tamanho de página inválido para ajuste A4.")
+    escala = min(_A4_PAISAGEM_LARGURA_MM / largura, _A4_PAISAGEM_ALTURA_MM / altura)
+    conteudo_l = largura * escala
+    conteudo_a = altura * escala
+    return {
+        "escala": escala,
+        "offset_x": (_A4_PAISAGEM_LARGURA_MM - conteudo_l) / 2.0,
+        "offset_y": (_A4_PAISAGEM_ALTURA_MM - conteudo_a) / 2.0,
+        "pagina_largura": _A4_PAISAGEM_LARGURA_MM,
+        "pagina_altura": _A4_PAISAGEM_ALTURA_MM,
+    }
+
+
+def _definir_unidade_milimetros(doc: Any, logs: list[str]) -> None:
+    unidade = _CDR_MILLIMETER
+    try:
+        import win32com.client
+
+        unidade = int(win32com.client.constants.cdrMillimeter)
+    except Exception:
+        unidade = _CDR_MILLIMETER
+    try:
+        doc.Unit = unidade
+        logs.append(f"Document.Unit=cdrMillimeter ({unidade}).")
+    except Exception as exc:
+        logs.append(f"Aviso ao definir unidade em milímetros: {exc}")
+
+
+def _shapes_topo(page: Any) -> list[Any]:
+    colecao = page.Shapes
+    total = int(colecao.Count)
+    return [colecao.Item(indice) for indice in range(1, total + 1)]
+
+
+def _escalar_shape_proporcional(
+    shape: Any, escala: float, offset_x: float, offset_y: float
+) -> None:
+    esquerda = float(shape.LeftX)
+    base = float(shape.BottomY)
+    largura = float(shape.SizeWidth)
+    altura = float(shape.SizeHeight)
+    shape.SizeWidth = largura * escala
+    shape.SizeHeight = altura * escala
+    shape.LeftX = offset_x + esquerda * escala
+    shape.BottomY = offset_y + base * escala
+
+
+def _definir_tamanho_pagina_mm(page: Any, largura: float, altura: float) -> None:
+    try:
+        page.SizeWidth = largura
+        page.SizeHeight = altura
+    except Exception:
+        page.SetSize(largura, altura)
+    lida_l = float(page.SizeWidth)
+    lida_a = float(page.SizeHeight)
+    if abs(lida_l - largura) > 1.5 or abs(lida_a - altura) > 1.5:
+        raise CorelGenerationError(
+            f"Página não ficou em A4 paisagem "
+            f"(lido {lida_l:.1f}×{lida_a:.1f} mm)."
+        )
+
+
+def _ajustar_pasta_avulso_para_a4(doc: Any, logs: list[str]) -> None:
+    """Reduz a folha 470×460 mm para A4 paisagem só no PDF da prova."""
+    _definir_unidade_milimetros(doc, logs)
+    try:
+        pagina = doc.Pages.Item(1)
+        largura = float(pagina.SizeWidth)
+        altura = float(pagina.SizeHeight)
+    except Exception as exc:
+        raise CorelGenerationError(
+            f"Não foi possível ler o tamanho da página: {exc}"
+        ) from exc
+
+    if not pagina_e_pasta_avulso_mm(largura, altura):
+        logs.append(
+            f"Página {largura:.1f}×{altura:.1f} mm — PDF mantém o tamanho do modelo."
+        )
+        return
+
+    ajuste = calcular_ajuste_a4_paisagem(largura, altura)
+    try:
+        shapes = _shapes_topo(pagina)
+    except Exception as exc:
+        raise CorelGenerationError(
+            f"Não foi possível ler os objetos da pasta avulso: {exc}"
+        ) from exc
+
+    for shape in shapes:
+        try:
+            _escalar_shape_proporcional(
+                shape, ajuste["escala"], ajuste["offset_x"], ajuste["offset_y"]
+            )
+        except Exception as exc:
+            nome = ""
+            try:
+                nome = str(shape.Name or "").strip()
+            except Exception:
+                nome = ""
+            raise CorelGenerationError(
+                "Não foi possível reduzir a pasta avulso para A4"
+                + (f" (objeto {nome})" if nome else "")
+                + f": {exc}"
+            ) from exc
+
+    _definir_tamanho_pagina_mm(
+        pagina, ajuste["pagina_largura"], ajuste["pagina_altura"]
+    )
+    logs.append(
+        "Pasta avulso ajustada para A4 paisagem "
+        f"({ajuste['pagina_largura']:.0f}×{ajuste['pagina_altura']:.0f} mm, "
+        f"escala {ajuste['escala']:.3f})."
+    )
+
+
 def configurar_pdf(corel, doc, logs: list[str]) -> None:
     try:
         pdf = doc.PDFSettings
@@ -2112,6 +2252,7 @@ def _gerar_arquivo_corel_impl(
                     )
                     if pdf_somente_primeira_pagina:
                         _manter_somente_primeira_pagina(doc_pdf, logs)
+                        _ajustar_pasta_avulso_para_a4(doc_pdf, logs)
                     exportar_pdf(corel, doc_pdf, temp_pdf_path, logs)
                 finally:
                     _fechar_documento_corel(doc_pdf, logs)

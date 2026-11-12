@@ -214,4 +214,5 @@ def test_contexto_omite_modelo_sem_csp(monkeypatch):
     ctx = svc.build_os_context(2026, 5999)
     assert [m["id"] for m in ctx["modelos"]] == [14]
     assert ctx["autoSelectedModelId"] == 14
+    assert ctx["prova_modo"] == "prova_email"
     assert any("CtVisitaFVAssissor.cdr" in w for w in ctx["warnings"])

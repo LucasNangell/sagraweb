@@ -1434,7 +1434,7 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
         if alt_modelo_id and any(m.get("id") == alt_modelo_id for m in modelos):
             auto_id = alt_modelo_id
 
-    from services.papelaria_prova_modo import filtrar_modelos_para_modo
+    from services.papelaria_prova_modo import filtrar_modelos_para_modo, get_modo
 
     modelos, avisos_modo = filtrar_modelos_para_modo(modelos)
     warnings.extend(avisos_modo)
@@ -1466,4 +1466,5 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
         "autoSelectedModelId": auto_id,
         "warnings": warnings,
         "cliente_alteracao": cliente_alteracao,
+        "prova_modo": get_modo(),
     }

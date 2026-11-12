@@ -1183,6 +1183,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
             approveProvaPending={approveProvaMutation.isPending}
             discardProvaPending={discardProvaMutation.isPending}
             provaReviewMessage={provaReviewMessage}
+            provaModo={contextQuery.data?.prova_modo}
             activeDynamicFields={activeDynamicFields}
             onActiveDynamicFieldsChange={setActiveDynamicFields}
             onLivePreviewValueChange={(key, value) =>

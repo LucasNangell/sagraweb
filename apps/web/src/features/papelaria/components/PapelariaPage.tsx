@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { cn } from "@sagra/ui";
 
 import { OsHistoryPanel } from "@/features/os/components/OsHistoryPanel";
@@ -9,6 +9,10 @@ import {
   sameOsRow,
 } from "../papelariaSelection";
 import { setPapelariaNavigationContext } from "../papelariaSession";
+import {
+  papelariaSpJobUiKey,
+  type PapelariaSpJobUiStatus,
+} from "../papelariaSpJobUi";
 import { PapelariaCorelPanel } from "./PapelariaCorelPanel";
 import { PapelariaSpList } from "./PapelariaSpList";
 
@@ -21,6 +25,9 @@ export function PapelariaPage() {
   const [mobilePane, setMobilePane] = useState<MobilePane>(() =>
     osRowFromPapelariaSession() ? "trabalho" : "lista",
   );
+  const [jobUiBySp, setJobUiBySp] = useState<
+    Record<string, PapelariaSpJobUiStatus>
+  >({});
 
   const osId = selected ? String(selected.nr_os) : null;
   const osAno = selected ? String(selected.ano) : null;
@@ -44,6 +51,23 @@ export function PapelariaPage() {
     }
     handleSelect(row);
   };
+
+  const handleSpJobUiStatusChange = useCallback(
+    (ano: number, nro: number, status: PapelariaSpJobUiStatus | null) => {
+      const key = papelariaSpJobUiKey(ano, nro);
+      setJobUiBySp((prev) => {
+        if (status === null) {
+          if (!(key in prev)) return prev;
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        }
+        if (prev[key] === status) return prev;
+        return { ...prev, [key]: status };
+      });
+    },
+    [],
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto md:h-full md:overflow-hidden">
@@ -86,6 +110,7 @@ export function PapelariaPage() {
           <PapelariaSpList
             selected={selected}
             onSelect={handleSelectFromList}
+            jobUiBySp={jobUiBySp}
             className="min-h-[200px] flex-1 md:min-h-0"
           />
           <section className="flex min-h-[260px] min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-sagra-border border-t-4 border-t-secondary-blue bg-white shadow-sm md:min-h-[280px]">
@@ -111,6 +136,7 @@ export function PapelariaPage() {
             key={osPanelKey}
             osId={osId}
             osAno={osAno}
+            onSpJobUiStatusChange={handleSpJobUiStatusChange}
           />
         </div>
       </div>

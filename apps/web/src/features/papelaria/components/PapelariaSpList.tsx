@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Loader2, Settings2, X } from "lucide-react";
+import { Check, Loader2, Settings2, X } from "lucide-react";
 import { cn } from "@sagra/ui";
 
 import { useOsSearch } from "@/api/hooks/useOsSearch";
@@ -9,6 +9,10 @@ import { defaultOsFilters } from "@/features/os/osFiltersStore";
 import type { OsSearchFilters, OsSearchRow } from "@/features/os/types";
 import { sameOsRow } from "../papelariaSelection";
 import {
+  papelariaSpJobUiKey,
+  type PapelariaSpJobUiStatus,
+} from "../papelariaSpJobUi";
+import {
   loadPapelariaSpSituacoes,
   savePapelariaSpSituacoes,
 } from "../papelariaSpSituacoesPrefs";
@@ -16,6 +20,7 @@ import {
 type Props = {
   selected: OsSearchRow | null;
   onSelect: (row: OsSearchRow) => void;
+  jobUiBySp?: Record<string, PapelariaSpJobUiStatus>;
   className?: string;
 };
 
@@ -38,7 +43,12 @@ export function buildPapelariaSpFilters(situacoes: string[]): OsSearchFilters {
   };
 }
 
-export function PapelariaSpList({ selected, onSelect, className }: Props) {
+export function PapelariaSpList({
+  selected,
+  onSelect,
+  jobUiBySp = {},
+  className,
+}: Props) {
   const [situacoes, setSituacoes] = useState<string[]>(() =>
     loadPapelariaSpSituacoes(),
   );
@@ -131,11 +141,13 @@ export function PapelariaSpList({ selected, onSelect, className }: Props) {
                 <th className="px-2 py-1.5 font-semibold">Ano</th>
                 <th className="px-2 py-1.5 font-semibold">Produto</th>
                 <th className="px-2 py-1.5 font-semibold">Solicitante</th>
+                <th className="w-8 px-1 py-1.5" aria-label="Status da geração" />
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => {
                 const isSelected = sameOsRow(selected, row);
+                const jobUi = jobUiBySp[papelariaSpJobUiKey(row.ano, row.nr_os)];
                 return (
                   <tr
                     key={`${row.ano}-${row.nr_os}`}
@@ -158,6 +170,19 @@ export function PapelariaSpList({ selected, onSelect, className }: Props) {
                     </td>
                     <td className="max-w-[9rem] truncate px-2 py-1.5" title={row.solicitante ?? undefined}>
                       {row.solicitante ?? "—"}
+                    </td>
+                    <td className="w-8 px-1 py-1.5 text-center">
+                      {jobUi === "generating" ? (
+                        <Loader2
+                          className="mx-auto size-3.5 animate-spin text-secondary-blue"
+                          aria-label="Gerando arquivo"
+                        />
+                      ) : jobUi === "done" ? (
+                        <Check
+                          className="mx-auto size-3.5 text-emerald-600"
+                          aria-label="Geração concluída"
+                        />
+                      ) : null}
                     </td>
                   </tr>
                 );

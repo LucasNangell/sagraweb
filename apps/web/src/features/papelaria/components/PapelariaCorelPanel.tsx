@@ -43,6 +43,7 @@ import {
   resolveDefaultPapelariaViewMode,
   type PapelariaViewMode,
 } from "../papelariaViewMode";
+import type { PapelariaSpJobUiStatus } from "../papelariaSpJobUi";
 import type {
   PapelariaCorelModelSummary,
   PapelariaField,
@@ -54,6 +55,11 @@ import type {
 type Props = {
   osId: string | null;
   osAno: string | null;
+  onSpJobUiStatusChange?: (
+    ano: number,
+    nro: number,
+    status: PapelariaSpJobUiStatus | null,
+  ) => void;
 };
 
 function buildPreviaTextual(
@@ -120,7 +126,11 @@ export function dadosForProvaCdrExistente(
   return {};
 }
 
-export function PapelariaCorelPanel({ osId, osAno }: Props) {
+export function PapelariaCorelPanel({
+  osId,
+  osAno,
+  onSpJobUiStatusChange,
+}: Props) {
   const anoNum = osAno ? parseInt(osAno, 10) : NaN;
   const nroNum = osId ? parseInt(osId, 10) : NaN;
   const hasOs = Number.isFinite(anoNum) && Number.isFinite(nroNum);
@@ -786,6 +796,42 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
       resolveDefaultPapelariaViewMode(hasFolderProof || hasJobProof),
     );
   }, [hasOs, proofFilesQuery.isLoading, hasFolderProof, hasJobProof]);
+
+  const mutationGenerating =
+    createJobMutation.isPending ||
+    createDigitalJobMutation.isPending ||
+    exportCdrMutation.isPending ||
+    finalizeCorelMutation.isPending;
+  const jobPipelineBusy = Boolean(
+    activeJob &&
+      (activeJob.status === "pending" || activeJob.status === "processing"),
+  );
+
+  useEffect(() => {
+    if (!onSpJobUiStatusChange || !hasOs) return;
+    if (mutationGenerating || jobPipelineBusy) {
+      onSpJobUiStatusChange(anoNum, nroNum, "generating");
+      return;
+    }
+    if (activeJob?.status === "completed") {
+      onSpJobUiStatusChange(anoNum, nroNum, "done");
+      return;
+    }
+    if (
+      activeJob?.status === "failed" ||
+      activeJob?.status === "cancelled"
+    ) {
+      onSpJobUiStatusChange(anoNum, nroNum, null);
+    }
+  }, [
+    onSpJobUiStatusChange,
+    hasOs,
+    anoNum,
+    nroNum,
+    mutationGenerating,
+    jobPipelineBusy,
+    activeJob?.status,
+  ]);
 
   if (!hasOs) {
     return (

@@ -175,10 +175,22 @@ def read_restart_status(*, path: Optional[Path] = None) -> dict[str, Any]:
 def write_restart_status(payload: dict[str, Any], *, path: Optional[Path] = None) -> Path:
     status_path = path or resolve_status_path()
     status_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = status_path.with_suffix(status_path.suffix + f".{os.getpid()}.tmp")
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    tmp = status_path.with_name(
+        f"{status_path.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp"
+    )
     tmp.write_text(body, encoding="utf-8")
-    tmp.replace(status_path)
+    try:
+        tmp.replace(status_path)
+    except PermissionError:
+        # Arquivo travado/ACL estranha: tenta sobrescrever direto e remove o tmp.
+        try:
+            status_path.write_text(body, encoding="utf-8")
+        finally:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
     return status_path
 
 
@@ -293,69 +305,72 @@ def request_system_restart(
         return payload
 
     root_arg = str(root) if root is not None else ""
-    ps_args = [
-        "powershell.exe",
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        str(script),
-        "-RequestId",
-        request_id,
-        "-StatusFile",
-        str(status_file),
-        "-LogFile",
-        str(log_file),
-        "-Reason",
-        reason[:200],
-    ]
-    if root_arg:
-        ps_args.extend(["-Root", root_arg])
-
-    creationflags = 0
-    if hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"):
-        creationflags |= subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
-    if hasattr(subprocess, "DETACHED_PROCESS"):
-        creationflags |= subprocess.DETACHED_PROCESS  # type: ignore[attr-defined]
-    if hasattr(subprocess, "CREATE_NO_WINDOW"):
-        creationflags |= subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
-    creationflags |= _CREATE_BREAKAWAY_FROM_JOB
-
     log_file.parent.mkdir(parents=True, exist_ok=True)
+    status_file.parent.mkdir(parents=True, exist_ok=True)
+
+    # Launcher .cmd: evita DETACHED_PROCESS+handles herdados (PowerShell saía sem
+    # executar o -File). O .cmd redireciona stdout/stderr para o log e o .ps1
+    # também grava via Add-Content.
+    launcher = status_file.parent / f"system_restart_{request_id}.cmd"
+    reason_safe = (reason[:200] or "reinicio via UI").replace('"', "'")
+    ps_line = (
+        'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass '
+        f'-WindowStyle Hidden -File "{script}" '
+        f'-RequestId "{request_id}" '
+        f'-StatusFile "{status_file}" '
+        f'-LogFile "{log_file}" '
+        f'-Reason "{reason_safe}"'
+    )
+    if root_arg:
+        ps_line += f' -Root "{root_arg}"'
+    launcher_body = "\r\n".join(
+        [
+            "@echo off",
+            f'echo {_utc_now_iso()} launcher start id={request_id}>>"{log_file}"',
+            f'echo {_utc_now_iso()} launcher script={script}>>"{log_file}"',
+            ps_line + f' >>"{log_file}" 2>&1',
+            f'echo {_utc_now_iso()} launcher exit %ERRORLEVEL%>>"{log_file}"',
+            "exit /b %ERRORLEVEL%",
+            "",
+        ]
+    )
     try:
-        # append mode: o .ps1 também escreve neste arquivo via Add-Content
-        log_handle = open(log_file, "a", encoding="utf-8", errors="replace")
-        log_handle.write(
-            f"\n{_utc_now_iso()} API spawn helper id={request_id} by={requested_by} "
-            f"script={script}\n"
-        )
-        log_handle.flush()
+        launcher.write_text(launcher_body, encoding="utf-8")
+        with open(log_file, "a", encoding="utf-8", errors="replace") as log_handle:
+            log_handle.write(
+                f"\n{_utc_now_iso()} API spawn helper id={request_id} by={requested_by} "
+                f"script={script} launcher={launcher}\n"
+            )
     except OSError as exc:
         payload["phase"] = "done"
         payload["ok"] = False
         payload["finished_at"] = _utc_now_iso()
-        payload["detail"] = f"falha ao abrir log do helper: {exc}"
+        payload["detail"] = f"falha ao preparar launcher/log: {exc}"
         write_restart_status(payload, path=status_file)
         raise SystemRestartError(
-            f"Não foi possível iniciar o reinício (log): {exc}",
+            f"Não foi possível iniciar o reinício (launcher): {exc}",
             status_code=500,
         ) from exc
 
+    creationflags = 0
+    if hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"):
+        creationflags |= subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
+    if hasattr(subprocess, "CREATE_NO_WINDOW"):
+        creationflags |= subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
+    creationflags |= _CREATE_BREAKAWAY_FROM_JOB
+
     try:
+        # start /B: processo em background, independente do job da API quando breakaway ok.
         proc = subprocess.Popen(
-            ps_args,
+            ["cmd.exe", "/c", "start", "", "/B", str(launcher)],
             cwd=str(script.parent),
             stdin=subprocess.DEVNULL,
-            stdout=log_handle,
-            stderr=log_handle,
-            close_fds=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
             creationflags=creationflags,
         )
     except OSError as exc:
-        try:
-            log_handle.close()
-        except OSError:
-            pass
         payload["phase"] = "done"
         payload["ok"] = False
         payload["finished_at"] = _utc_now_iso()
@@ -365,23 +380,19 @@ def request_system_restart(
             f"Não foi possível iniciar o reinício: {exc}",
             status_code=500,
         ) from exc
-    finally:
-        # O filho herda o handle; fechar no pai não corta o pipe no Windows com DETACHED.
-        try:
-            log_handle.close()
-        except OSError:
-            pass
 
     payload["phase"] = "running"
     payload["pid"] = proc.pid
     payload["detail"] = "helper iniciado"
+    payload["launcher"] = str(launcher)
     write_restart_status(payload, path=status_file)
     logger.warning(
-        "Reinício de sistema solicitado id=%s by=%s pid=%s log=%s services=%s",
+        "Reinício de sistema solicitado id=%s by=%s pid=%s log=%s launcher=%s services=%s",
         request_id,
         requested_by,
         proc.pid,
         log_file,
+        launcher,
         ",".join(DEFAULT_SERVICES),
     )
     return payload

@@ -83,6 +83,23 @@ def test_request_system_restart_requires_script(tmp_path: Path, monkeypatch):
     assert exc.value.status_code == 503
 
 
+def test_write_restart_status_falls_back_on_permission_error(tmp_path: Path, monkeypatch):
+    status_path = tmp_path / "system_restart_status.json"
+    status_path.write_text("{}", encoding="utf-8")
+
+    real_replace = Path.replace
+
+    def boom(self, target):  # noqa: ANN001
+        if self.suffix == ".tmp" or ".tmp" in self.name:
+            raise PermissionError("denied")
+        return real_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", boom)
+    svc.write_restart_status({"phase": "done", "ok": True}, path=status_path)
+    saved = json.loads(status_path.read_text(encoding="utf-8"))
+    assert saved["phase"] == "done"
+
+
 def test_abandoned_helper_allows_retry(tmp_path: Path):
     status_path = tmp_path / "system_restart_status.json"
     started = "2026-01-01T12:00:00+00:00"

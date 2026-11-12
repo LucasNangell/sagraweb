@@ -205,6 +205,8 @@ class TestProcessJobDispatch:
         worker_mod._process_job_body(api, cfg, _job(tipo_job="create"))
         gerar.assert_called_once()
         exportar.assert_not_called()
+        assert gerar.call_args.kwargs["carimbo"] is None
+        assert gerar.call_args.kwargs["pdf_somente_primeira_pagina"] is False
         assert api.completed
 
     def test_create_email_abre_arquivo_da_pasta_csp(self, patched_runtime, monkeypatch, tmp_path):
@@ -233,8 +235,14 @@ class TestProcessJobDispatch:
         assert seen["dir"] == str(tmp_path / "CSP")
         assert seen["name"] == "CtVisitaF.cdr"
         gerar.assert_called_once()
+        carimbo = gerar.call_args.kwargs["carimbo"]
+        assert carimbo["TipoOSint"] == "SP"
+        assert carimbo["OSint"] == "05954/2026"
+        assert carimbo["ProvaNroInt"] == "1"
+        assert gerar.call_args.kwargs["pdf_somente_primeira_pagina"] is True
         assert api.completed
         assert any("CtVisitaF.cdr" in msg for msg in api.logs)
+        assert any("somente da página 1" in msg for msg in api.logs)
 
     def test_create_email_sem_arquivo_falha(self, patched_runtime, tmp_path):
         gerar, _exportar, cfg = patched_runtime

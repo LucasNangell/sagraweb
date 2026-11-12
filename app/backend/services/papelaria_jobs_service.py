@@ -1658,6 +1658,12 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
                 "Modelo sem arquivo correspondente na pasta CSP para o modo Prova e-mail."
             )
         payload["arquivo_modelo_email"] = arquivo_email
+        prova_numero = extract_prova_version_from_filename(pdf_name)
+        if prova_numero is None:
+            raise ValueError(
+                "Não foi possível determinar o número da prova para o carimbo."
+            )
+        payload["prova_numero"] = prova_numero
 
     return payload
 

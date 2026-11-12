@@ -26,6 +26,8 @@ from runtime import (
 from corel_generator import (
     CorelGenerationError,
     aguardar_corel_disponivel,
+    montar_carimbo_prova_email,
+    resolve_prova_numero,
     cleanup_temp_dir,
     corel_em_uso_externamente,
     encerrar_corel_forcadamente,
@@ -548,6 +550,24 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
             }
             dados = job.get("dados") or {}
             caminho_modelo = _caminho_modelo_create(cfg, job)
+            prova_email = str(job.get("prova_modo") or "").strip() == "prova_email"
+            carimbo = None
+            if prova_email:
+                carimbo = montar_carimbo_prova_email(
+                    nro=int(job["nro"]),
+                    ano=int(job["ano"]),
+                    prova_numero=resolve_prova_numero(job),
+                )
+                api.append_log(
+                    job_id,
+                    (
+                        "Prova e-mail — carimbo "
+                        f"{carimbo['TipoOSint']} {carimbo['OSint']} "
+                        f"prova {carimbo['ProvaNroInt']} em {carimbo['DataInt']}; "
+                        "PDF somente da página 1."
+                    ),
+                    "info",
+                )
             api.append_log(
                 job_id,
                 f"Iniciando geração — modelo {os.path.basename(caminho_modelo)}",
@@ -566,6 +586,8 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 preview_config=job.get("preview_config"),
                 campos_dinamicos_layout=job.get("campos_dinamicos_layout"),
                 exclusoes=job.get("exclusoes") or [],
+                carimbo=carimbo,
+                pdf_somente_primeira_pagina=prova_email,
             )
         else:
             raise CorelGenerationError(f"Tipo de job não suportado: {tipo_job}")

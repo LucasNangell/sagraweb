@@ -14,6 +14,7 @@ import time
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
+from datetime import date
 from typing import Any, Callable, Optional
 
 from runtime import dispatch_corel_application
@@ -1308,6 +1309,87 @@ def aplicar_campos_dinamicos(
         )
 
 
+def montar_carimbo_prova_email(
+    *,
+    nro: int,
+    ano: int,
+    prova_numero: int,
+    hoje: date | None = None,
+) -> dict[str, str]:
+    """Textos literais dos objetos do carimbo na folha A4 da Prova e-mail."""
+    dia = hoje or date.today()
+    numero = int(prova_numero)
+    if numero < 1:
+        raise CorelGenerationError("Número da prova inválido para o carimbo.")
+    return {
+        "TipoOSint": "OS" if int(nro) < 5000 else "SP",
+        "OSint": f"{int(nro):05d}/{int(ano):04d}",
+        "DataInt": dia.strftime("%d/%m/%Y"),
+        "ProvaNroInt": str(numero),
+    }
+
+
+def resolve_prova_numero(job: dict[str, Any]) -> int:
+    """Número da prova já reservado no nome do PDF (próxima sequência da pasta)."""
+    bruto = job.get("prova_numero")
+    if bruto not in (None, ""):
+        try:
+            numero = int(bruto)
+        except (TypeError, ValueError) as exc:
+            raise CorelGenerationError("Número da prova inválido no job.") from exc
+        if numero < 1:
+            raise CorelGenerationError("Número da prova inválido no job.")
+        return numero
+
+    nome = os.path.basename(str(job.get("output_pdf_name") or ""))
+    match = re.search(r"ProvaSefoc\s+(\d+)", nome, re.IGNORECASE)
+    if not match:
+        match = re.search(r"Prova(\d+)_SEFOC", nome, re.IGNORECASE)
+    if not match:
+        raise CorelGenerationError(
+            "Não foi possível determinar o número da prova a partir do PDF."
+        )
+    return int(match.group(1))
+
+
+def _manter_somente_primeira_pagina(doc: Any, logs: list[str]) -> None:
+    """A prova em PDF da Prova e-mail é a folha A4 (página 1), sem as demais."""
+    try:
+        total = int(doc.Pages.Count)
+    except Exception as exc:
+        raise CorelGenerationError(
+            f"Não foi possível ler as páginas do documento: {exc}"
+        ) from exc
+    if total <= 1:
+        logs.append("PDF da prova limitado à página 1.")
+        return
+    removidas = 0
+    while True:
+        try:
+            restante = int(doc.Pages.Count)
+        except Exception as exc:
+            raise CorelGenerationError(
+                f"Não foi possível ler as páginas do documento: {exc}"
+            ) from exc
+        if restante <= 1:
+            break
+        try:
+            doc.Pages.Item(2).Delete()
+        except Exception as exc:
+            raise CorelGenerationError(
+                "Não foi possível exportar só a primeira página da prova: "
+                f"{exc}"
+            ) from exc
+        removidas += 1
+        if removidas > total:
+            raise CorelGenerationError(
+                "Não foi possível exportar só a primeira página da prova."
+            )
+    logs.append(
+        f"PDF da prova: somente a página 1 ({removidas} página(s) seguinte(s) omitida(s))."
+    )
+
+
 def configurar_pdf(corel, doc, logs: list[str]) -> None:
     try:
         pdf = doc.PDFSettings
@@ -1885,6 +1967,8 @@ def _gerar_arquivo_corel_impl(
     preview_config: Optional[dict[str, Any]] = None,
     campos_dinamicos_layout: Optional[dict[str, Any]] = None,
     exclusoes: Optional[list[str]] = None,
+    carimbo: Optional[dict[str, str]] = None,
+    pdf_somente_primeira_pagina: bool = False,
 ) -> None:
     t0 = time.perf_counter()
     _corel_session._ensure_com()
@@ -1983,6 +2067,18 @@ def _gerar_arquivo_corel_impl(
                 except Exception as exc:
                     logs.append(f"Aviso campos dinâmicos: {exc}")
 
+                if carimbo:
+                    for nome_carimbo, texto_carimbo in carimbo.items():
+                        logs.append(f"Carimbo {nome_carimbo}: {texto_carimbo}")
+                        aplicar_campo(
+                            doc,
+                            nome_carimbo,
+                            str(texto_carimbo),
+                            {},
+                            logs,
+                            indice_shapes=indice_shapes,
+                        )
+
                 temp_pdf_path = os.path.join(os.path.dirname(temp_cdr_path), "working.pdf")
 
                 # sync → Save → fechar → copiar CDR (antes do PDF).
@@ -2014,6 +2110,8 @@ def _gerar_arquivo_corel_impl(
                     logs.append(
                         f"Documento reaberto para PDF — {doc_pdf.Pages.Count} página(s)."
                     )
+                    if pdf_somente_primeira_pagina:
+                        _manter_somente_primeira_pagina(doc_pdf, logs)
                     exportar_pdf(corel, doc_pdf, temp_pdf_path, logs)
                 finally:
                     _fechar_documento_corel(doc_pdf, logs)
@@ -2084,6 +2182,8 @@ def gerar_arquivo_corel(
     preview_config: Optional[dict[str, Any]] = None,
     campos_dinamicos_layout: Optional[dict[str, Any]] = None,
     exclusoes: Optional[list[str]] = None,
+    carimbo: Optional[dict[str, str]] = None,
+    pdf_somente_primeira_pagina: bool = False,
 ) -> GenerationResult:
     """
     Gera CDR e PDF a partir de cópia temporária do modelo.
@@ -2127,6 +2227,8 @@ def gerar_arquivo_corel(
             preview_config=preview_config,
             campos_dinamicos_layout=campos_dinamicos_layout,
             exclusoes=exclusoes,
+            carimbo=carimbo,
+            pdf_somente_primeira_pagina=pdf_somente_primeira_pagina,
         )
         try:
             future.result(timeout=max(30, job_timeout_sec))

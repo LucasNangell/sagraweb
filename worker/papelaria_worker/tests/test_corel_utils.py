@@ -12,8 +12,14 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from datetime import date  # noqa: E402
+
 from corel_generator import (  # noqa: E402
     CAMADA_PROVA_SEFOC,
+    CorelGenerationError,
+    _manter_somente_primeira_pagina,
+    montar_carimbo_prova_email,
+    resolve_prova_numero,
     _release_corel_after_job,
     dividir_frente_verso,
     humanizar_erro_corel,
@@ -338,4 +344,61 @@ class TestExportProvaSemAlterar:
         assert origem.read_bytes() == b"cdr-original"
         assert out_pdf.is_file()
         assert fake_session.get_application.called
+
+
+class TestCarimboProvaEmail:
+    def test_sp_e_os(self):
+        email = montar_carimbo_prova_email(
+            nro=5954, ano=2026, prova_numero=3, hoje=date(2026, 11, 12)
+        )
+        assert email == {
+            "TipoOSint": "SP",
+            "OSint": "05954/2026",
+            "DataInt": "12/11/2026",
+            "ProvaNroInt": "3",
+        }
+        os_menor = montar_carimbo_prova_email(
+            nro=4999, ano=2026, prova_numero=1, hoje=date(2026, 1, 2)
+        )
+        assert os_menor["TipoOSint"] == "OS"
+        assert os_menor["OSint"] == "04999/2026"
+        assert os_menor["DataInt"] == "02/01/2026"
+
+    def test_numero_da_prova_vem_do_pdf(self):
+        assert (
+            resolve_prova_numero({"output_pdf_name": "05954-Nome-ProvaSefoc 4.pdf"})
+            == 4
+        )
+        assert resolve_prova_numero({"prova_numero": 2, "output_pdf_name": "x.pdf"}) == 2
+        with pytest.raises(CorelGenerationError):
+            resolve_prova_numero({"output_pdf_name": "sem-numero.pdf"})
+
+    def test_pdf_fica_so_com_a_primeira_pagina(self):
+        class Paginas:
+            def __init__(self, total: int):
+                self.total = total
+
+            @property
+            def Count(self) -> int:
+                return self.total
+
+            def Item(self, indice: int):
+                assert indice == 2
+                paginas = self
+
+                class Pagina:
+                    def Delete(self) -> None:
+                        paginas.total -= 1
+
+                return Pagina()
+
+        class Documento:
+            def __init__(self, total: int):
+                self.Pages = Paginas(total)
+
+        doc = Documento(3)
+        logs: list[str] = []
+        _manter_somente_primeira_pagina(doc, logs)
+        assert doc.Pages.Count == 1
+        assert any("página 1" in linha for linha in logs)
 

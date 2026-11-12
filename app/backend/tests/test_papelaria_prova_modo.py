@@ -98,7 +98,11 @@ def test_payload_create_email_envia_arquivo_csp(monkeypatch, tmp_path):
     }
     monkeypatch.setattr(svc, "get_job", lambda job_id: job if job_id == 77 else None)
     monkeypatch.setattr(svc, "resolve_os_papelaria_dir", lambda *a, **k: str(tmp_path))
-    monkeypatch.setattr(svc, "build_output_filenames", lambda ano, nro: ("os.cdr", "os.pdf"))
+    monkeypatch.setattr(
+        svc,
+        "build_output_filenames",
+        lambda ano, nro: ("os.cdr", "05954-Nome-ProvaSefoc 2.pdf"),
+    )
     monkeypatch.setattr(
         "services.papelaria_prova_modo.get_modo",
         lambda: "prova_email",
@@ -119,6 +123,7 @@ def test_payload_create_email_envia_arquivo_csp(monkeypatch, tmp_path):
     assert payload["prova_modo"] == "prova_email"
     assert payload["arquivo_modelo"] == "CtVisitaFV.cdr"
     assert payload["arquivo_modelo_email"] == "CtVisitaF.cdr"
+    assert payload["prova_numero"] == 2
 
 
 def test_payload_create_sem_csp_falha(monkeypatch, tmp_path):

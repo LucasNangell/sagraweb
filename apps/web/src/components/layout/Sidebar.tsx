@@ -7,7 +7,7 @@ import { useGravacaoPendenteHasItems } from "@/api/hooks/useGravacaoPendente";
 import { useAccessControl } from "@/features/auth/useAccessControl";
 import { useLombadaUiStore } from "@/features/lombada/lombadaUiStore";
 import { useOsSelectionStore } from "@/features/os/osSelectionStore";
-import { isPapelariaProduct, setPapelariaNavigationContext } from "@/features/papelaria/papelariaSession";
+import { setPapelariaNavigationContext } from "@/features/papelaria/papelariaSession";
 import {
   isPainelStandalonePath,
   openPainelInNewWindow,
@@ -18,7 +18,6 @@ import { cn } from "@sagra/ui";
 import { sidebarNavTestId, homeTestIds } from "@/lib/testId";
 
 import { navItemKey, type NavItem } from "./nav-config";
-import { toast } from "@/components/ui/toastStore";
 
 interface SidebarProps {
   collapsed: boolean;
@@ -206,29 +205,16 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                           e.preventDefault();
                           openPainelInNewWindow(to as PainelStandalonePath);
                         }
-                      : to === "/papelaria" && !selectedOs
-                        ? (e) => {
-                            e.preventDefault();
-                            toast.warning("Por favor, selecione uma Ordem de Serviço.");
+                      : (to === "/papelaria" || to === "/credenciais-depol") &&
+                          selectedOs
+                        ? () => {
+                            setPapelariaNavigationContext({
+                              nr_os: selectedOs.nr_os,
+                              ano: selectedOs.ano,
+                              produto: selectedOs.produto,
+                            });
                           }
-                        : to === "/papelaria" &&
-                            selectedOs &&
-                            selectedOs.nr_os <= 5000 &&
-                            !isPapelariaProduct(selectedOs.produto)
-                          ? (e) => {
-                              e.preventDefault();
-                              toast.warning("O acesso à Papelaria é restrito a OS com número superior a 5000.",);
-                            }
-                          : (to === "/papelaria" || to === "/credenciais-depol") &&
-                              selectedOs
-                            ? () => {
-                                setPapelariaNavigationContext({
-                                  nr_os: selectedOs.nr_os,
-                                  ano: selectedOs.ano,
-                                  produto: selectedOs.produto,
-                                });
-                              }
-                            : undefined
+                        : undefined
                   }
                 >
                   <NavItemContent

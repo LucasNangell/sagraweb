@@ -1,13 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@sagra/ui";
-import {
-  AlertTriangle,
-  Clock,
-  Download,
-  ExternalLink,
-  Loader2,
-  XCircle,
-} from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -24,15 +17,14 @@ import {
   fetchPapelariaOsContext,
   finalizarCorelPapelariaOs,
   gerarProvaCdrExistentePapelariaOs,
-  papelariaJobFileUrl,
 } from "@/api/papelaria";
 import { fetchOsFolderBrowse } from "@/api/os";
 import { queryKeys } from "@/api/query-keys";
 import { useAuthStore } from "@/features/auth/authStore";
+import { OsFolderRequiredGateModal } from "@/features/os/components/OsFolderRequiredGateModal";
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 import { tryOpenFileLocally } from "@/lib/sagraLocalOpener";
 import { authenticatedWsPath } from "@/lib/websocket";
-import { OsFolderRequiredGateModal } from "@/features/os/components/OsFolderRequiredGateModal";
 import { PapelariaProofPanel } from "./PapelariaProofPanel";
 import {
   mergeDadosWithDynamicLayout,
@@ -86,40 +78,6 @@ const TERMINAL_JOB_STATUSES: PapelariaJobStatus[] = [
   "failed",
   "cancelled",
 ];
-
-function jobStatusLabel(status: PapelariaJobStatus): string {
-  switch (status) {
-    case "pending":
-      return "Aguardando na fila";
-    case "processing":
-      return "Processando";
-    case "completed":
-      return "Concluído";
-    case "failed":
-      return "Erro";
-    case "cancelled":
-      return "Cancelado";
-    default:
-      return status;
-  }
-}
-
-function jobStatusClass(status: PapelariaJobStatus): string {
-  switch (status) {
-    case "pending":
-      return "bg-amber-100 text-amber-800";
-    case "processing":
-      return "bg-blue-100 text-blue-800";
-    case "completed":
-      return "bg-emerald-100 text-emerald-800";
-    case "failed":
-      return "bg-red-100 text-red-800";
-    case "cancelled":
-      return "bg-neutral-200 text-neutral-600";
-    default:
-      return "bg-neutral-100 text-neutral-700";
-  }
-}
 
 function usableCdrFiles(
   data:
@@ -773,8 +731,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
   if (!hasOs) {
     return (
       <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-sagra-border bg-white p-8 text-center text-sm text-neutral-500">
-        Selecione uma OS de papelaria (número &gt; 5000) na página Início e abra
-        Papelaria pelo menu lateral.
+        Selecione uma SP na lista ao lado para preencher o formulário.
       </div>
     );
   }
@@ -1145,20 +1102,6 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
                 </div>
               </div>
             )}
-
-            <JobsSection
-              activeJob={activeJob}
-              activeJobLoading={activeJobId !== null && activeJobQuery.isLoading}
-              history={jobsQuery.data ?? []}
-              historyLoading={jobsQuery.isLoading}
-              onSelectJob={(jobId) => {
-                setActiveJobId(jobId);
-                setMobilePanel("preview");
-              }}
-              onCancel={handleCancelJob}
-              cancelPending={cancelJobMutation.isPending}
-              compact
-            />
           </div>
         </section>
 
@@ -1319,247 +1262,6 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
           }
         }}
       />
-    </div>
-  );
-}
-
-function JobsSection({
-  activeJob,
-  activeJobLoading,
-  history,
-  historyLoading,
-  onSelectJob,
-  onCancel,
-  cancelPending,
-  compact = false,
-}: {
-  activeJob: PapelariaJob | null;
-  activeJobLoading: boolean;
-  history: PapelariaJob[];
-  historyLoading: boolean;
-  onSelectJob: (id: number) => void;
-  onCancel: (id: number) => void;
-  cancelPending: boolean;
-  compact?: boolean;
-}) {
-  return (
-    <section
-      className={cn(
-        "mt-3 shrink-0 rounded-lg border border-sagra-border bg-slate-50/50",
-        compact ? "p-2" : "shadow-sm",
-      )}
-    >
-      <div className={cn(!compact && "border-b border-sagra-border bg-slate-50/80 px-4 py-2")}>
-        <h2 className="text-[11px] font-bold text-secondary-blue">
-          Fila / histórico
-        </h2>
-        {!compact && (
-          <p className="text-[10px] text-neutral-500">
-            Status atualizado automaticamente quando o worker Windows processa o job.
-          </p>
-        )}
-      </div>
-
-      <div className={cn("space-y-3", compact ? "pt-2" : "grid gap-4 p-4 lg:grid-cols-2")}>
-        <div>
-          <h3 className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-neutral-600">
-            Solicitação ativa
-          </h3>
-          {activeJobLoading && !activeJob ? (
-            <p className="flex items-center gap-2 text-xs text-neutral-500">
-              <Loader2 className="size-3.5 animate-spin" aria-hidden />
-              Carregando job...
-            </p>
-          ) : !activeJob ? (
-            <p className="text-[11px] text-neutral-500">
-              Nenhuma solicitação selecionada.
-            </p>
-          ) : (
-            <ActiveJobCard
-              job={activeJob}
-              onCancel={() => onCancel(activeJob.id)}
-              cancelPending={cancelPending}
-              compact={compact}
-            />
-          )}
-        </div>
-
-        <div>
-          <h3 className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-neutral-600">
-            Histórico da OS
-          </h3>
-          {historyLoading && history.length === 0 ? (
-            <p className="flex items-center gap-2 text-xs text-neutral-500">
-              <Loader2 className="size-3.5 animate-spin" aria-hidden />
-              Carregando...
-            </p>
-          ) : history.length === 0 ? (
-            <p className="text-[11px] text-neutral-500">
-              Nenhuma geração para esta OS.
-            </p>
-          ) : (
-            <ul className="max-h-32 space-y-1 overflow-y-auto">
-              {history.map((job) => (
-                <li key={job.id}>
-                  <button
-                    type="button"
-                    className={cn(
-                      "flex w-full items-center justify-between gap-2 rounded border px-2 py-1 text-left text-[10px] transition",
-                      activeJob?.id === job.id
-                        ? "border-secondary-blue bg-secondary-blue/5"
-                        : "border-sagra-border hover:bg-white",
-                    )}
-                    onClick={() => onSelectJob(job.id)}
-                  >
-                    <span className="truncate">
-                      <span className="font-mono text-neutral-500">#{job.id}</span>{" "}
-                      {job.arquivo_modelo}
-                    </span>
-                    <span
-                      className={cn(
-                        "shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold",
-                        jobStatusClass(job.status),
-                      )}
-                    >
-                      {jobStatusLabel(job.status)}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ActiveJobCard({
-  job,
-  onCancel,
-  cancelPending,
-  compact = false,
-}: {
-  job: PapelariaJob;
-  onCancel: () => void;
-  cancelPending: boolean;
-  compact?: boolean;
-}) {
-  const canCancel = job.status === "pending" || job.status === "processing";
-
-  return (
-    <div
-      className={cn(
-        "rounded-lg border border-sagra-border bg-white",
-        compact ? "p-2" : "p-3",
-      )}
-    >
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-xs font-bold text-secondary-blue">
-          Job #{job.id}
-        </span>
-        <span
-          className={cn(
-            "rounded px-2 py-0.5 text-[10px] font-semibold",
-            jobStatusClass(job.status),
-          )}
-        >
-          {jobStatusLabel(job.status)}
-        </span>
-        {job.ordem_fila != null && job.status === "pending" && (
-          <span className="flex items-center gap-1 text-[10px] text-neutral-500">
-            <Clock className="size-3" aria-hidden />
-            Posição na fila: {job.ordem_fila}
-          </span>
-        )}
-      </div>
-
-      <p className="mt-2 text-xs text-neutral-700">
-        Modelo: <strong>{job.arquivo_modelo}</strong>
-      </p>
-      <p className="text-[11px] text-neutral-500">
-        Solicitado por {job.solicitado_por} em {job.solicitado_em ?? "—"}
-      </p>
-
-      {job.status === "pending" && (
-        <p className="mt-2 flex items-start gap-1.5 rounded bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
-          <Clock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          Aguardando processamento pelo computador CorelDRAW.
-        </p>
-      )}
-
-      {job.status === "processing" && (
-        <p className="mt-2 flex items-start gap-1.5 rounded bg-blue-50 px-2 py-1.5 text-[11px] text-blue-800">
-          <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin" aria-hidden />
-          CorelDRAW em execução no worker. Você pode cancelar; o worker descarta o
-          resultado ao detectar o cancelamento.
-        </p>
-      )}
-
-      {job.status === "cancelled" && (
-        <p className="mt-2 rounded bg-neutral-100 px-2 py-1.5 text-[11px] text-neutral-600">
-          Solicitação cancelada.
-          {job.erro ? ` ${job.erro}` : ""}
-        </p>
-      )}
-
-      {job.status === "failed" && job.erro && (
-        <p className="mt-2 rounded bg-red-50 px-2 py-1.5 text-[11px] text-red-700">
-          {job.erro}
-        </p>
-      )}
-
-      {job.warnings?.map((w) => (
-        <p
-          key={w}
-          className="mt-1 flex items-start gap-1 text-[10px] text-amber-700"
-        >
-          <AlertTriangle className="mt-0.5 size-3 shrink-0" aria-hidden />
-          {w}
-        </p>
-      ))}
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        {canCancel && (
-          <button
-            type="button"
-            disabled={cancelPending}
-            className="sagra-btn sagra-btn--outline sagra-btn--xs"
-            onClick={onCancel}
-          >
-            <XCircle className="size-3.5" aria-hidden />
-            {cancelPending
-              ? "Cancelando..."
-              : job.status === "processing"
-                ? "Cancelar processamento"
-                : "Cancelar"}
-          </button>
-        )}
-        {job.status === "completed" && (
-          <>
-            {(job.tem_arquivo_pdf || job.arquivo_pdf) && (
-              <a
-                href={papelariaJobFileUrl(job.id, "pdf")}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="sagra-btn sagra-btn--secondary sagra-btn--md"
-              >
-                <ExternalLink className="size-3.5" aria-hidden />
-                Abrir PDF
-              </a>
-            )}
-            {(job.tem_arquivo_cdr || job.arquivo_cdr) && (
-              <a
-                href={papelariaJobFileUrl(job.id, "cdr")}
-                className="inline-flex items-center gap-1 rounded border border-secondary-blue px-2 py-1 text-[11px] font-medium text-secondary-blue hover:bg-secondary-blue/5"
-              >
-                <Download className="size-3.5" aria-hidden />
-                Baixar CDR
-              </a>
-            )}
-          </>
-        )}
-      </div>
     </div>
   );
 }

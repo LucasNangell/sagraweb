@@ -71,6 +71,29 @@ export function isTimbradoA4DigitalProduct(
   return product.trim().toLowerCase() === "timbrado a4 (digital)";
 }
 
+/** Pastas avulso (paisagem larga) — prova PDF ajustada à largura. */
+export function isPastaAvulsoProduct(
+  product: string | null | undefined,
+): boolean {
+  if (!product) return false;
+  return product.trim().toLowerCase().startsWith("pasta avulso");
+}
+
+/**
+ * Fragmento do visualizador PDF embutido:
+ * pastas avulso → FitH (largura); demais → FitV (altura).
+ */
+export function papelariaProofPdfViewerSrc(
+  pdfUrl: string,
+  product?: string | null,
+): string {
+  const raw = pdfUrl.trim();
+  if (!raw) return "";
+  const base = raw.split("#", 1)[0] ?? raw;
+  const fit = isPastaAvulsoProduct(product) ? "FitH" : "FitV";
+  return `${base}#view=${fit}`;
+}
+
 export type PapelariaTabId = "cartao" | "corel";
 
 /**

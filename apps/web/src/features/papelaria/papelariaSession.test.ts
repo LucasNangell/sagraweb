@@ -4,7 +4,9 @@ import { validateRequiredFields, dadosForProvaCdrExistente } from "./components/
 import {
   isPapelariaCorelOs,
   isPapelariaProduct,
+  isPastaAvulsoProduct,
   isTimbradoA4DigitalProduct,
+  papelariaProofPdfViewerSrc,
   resolveInitialPapelariaTab,
   type PapelariaSessionContext,
 } from "./papelariaSession";
@@ -59,6 +61,24 @@ describe("isTimbradoA4DigitalProduct", () => {
     expect(isTimbradoA4DigitalProduct("Timbrado A4")).toBe(false);
     expect(isTimbradoA4DigitalProduct("Bloco A5")).toBe(false);
     expect(isTimbradoA4DigitalProduct(null)).toBe(false);
+  });
+});
+
+describe("isPastaAvulsoProduct / papelariaProofPdfViewerSrc", () => {
+  it("reconhece pastas avulso", () => {
+    expect(isPastaAvulsoProduct("Pasta Avulso c/ Bolso")).toBe(true);
+    expect(isPastaAvulsoProduct("pasta avulso s/ bolso")).toBe(true);
+    expect(isPastaAvulsoProduct("Ct Visita")).toBe(false);
+    expect(isPastaAvulsoProduct(null)).toBe(false);
+  });
+
+  it("usa FitH para pasta e FitV para os demais", () => {
+    expect(
+      papelariaProofPdfViewerSrc("/api/email/os/2026/1/proof-file?f=a.pdf", "Pasta Avulso c/ Bolso"),
+    ).toBe("/api/email/os/2026/1/proof-file?f=a.pdf#view=FitH");
+    expect(
+      papelariaProofPdfViewerSrc("/api/x.pdf#old", "Ct Visita"),
+    ).toBe("/api/x.pdf#view=FitV");
   });
 });
 

@@ -1,5 +1,6 @@
 import { Check, ExternalLink, FileText, Loader2, XCircle } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import { cn } from "@sagra/ui";
 
 import { apiUrl } from "@/api/client";
 import {
@@ -16,6 +17,10 @@ import {
   PAPELARIA_MOCKUP_SCENE_BASE_PX,
   PAPELARIA_MOCKUP_SCENE_BASE_PX_NARROW,
 } from "../mockup";
+import {
+  isPastaAvulsoProduct,
+  papelariaProofPdfViewerSrc,
+} from "../papelariaSession";
 import type { PapelariaViewMode } from "../papelariaViewMode";
 import {
   buildRuntimePreviewConfig,
@@ -136,6 +141,12 @@ export function PapelariaProofPanel({
   const jobPdfUrl = activeJob && showPdf ? papelariaJobFileUrl(activeJob.id, "pdf") : "";
   const provaPdfUrl = showPdf ? jobPdfUrl : folderProofPdfUrl ?? "";
   const showingFolderProof = !showPdf && Boolean(folderProofPdfUrl);
+  const produtoParaPdf = produto || activeJob?.produto || "";
+  const pastaAvulsoPdf = isPastaAvulsoProduct(produtoParaPdf);
+  const provaPdfViewerSrc = papelariaProofPdfViewerSrc(
+    provaPdfUrl,
+    produtoParaPdf,
+  );
 
   const jobModeloQuery = useQuery({
     queryKey: queryKeys.papelaria.corelModelo(activeJob?.modelo_id ?? 0),
@@ -345,13 +356,23 @@ export function PapelariaProofPanel({
                 : "grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto p-3"
             }
           >
-          <article className="flex min-h-[min(45vh,320px)] flex-col overflow-hidden rounded-lg border border-sagra-border bg-white shadow-sm sm:min-h-[280px]">
-            <header className="flex items-center justify-between border-b border-sagra-border px-3 py-2">
+          <article
+            className={cn(
+              "flex flex-col overflow-hidden rounded-lg border border-sagra-border bg-white shadow-sm",
+              pastaAvulsoPdf
+                ? "min-h-[min(42vh,300px)] sm:min-h-[280px]"
+                : "min-h-[min(50vh,360px)] flex-1 sm:min-h-[320px]",
+            )}
+          >
+            <header className="flex shrink-0 items-center justify-between border-b border-sagra-border px-3 py-2">
               <h3 className="text-[11px] font-bold uppercase tracking-wide text-neutral-600">
                 PDF
+                <span className="ml-2 font-normal normal-case tracking-normal text-neutral-400">
+                  {pastaAvulsoPdf ? "ajuste à largura" : "ajuste à altura"}
+                </span>
               </h3>
               <a
-                href={provaPdfUrl}
+                href={provaPdfViewerSrc || provaPdfUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-[10px] font-medium text-secondary-blue hover:underline"
@@ -363,16 +384,21 @@ export function PapelariaProofPanel({
             <iframe
               key={
                 showPdf && activeJob
-                  ? `${activeJob.id}-${activeJob.concluido_em ?? "pdf"}`
-                  : folderProofLabel ?? provaPdfUrl
+                  ? `${activeJob.id}-${activeJob.concluido_em ?? "pdf"}-${pastaAvulsoPdf ? "w" : "h"}`
+                  : `${folderProofLabel ?? provaPdfUrl}-${pastaAvulsoPdf ? "w" : "h"}`
               }
               title={
                 showPdf && activeJob
                   ? `Prova PDF — job ${activeJob.id}`
                   : `Prova PDF — ${folderProofLabel ?? "pasta Sefoc"}`
               }
-              src={provaPdfUrl}
-              className="h-[min(50vh,520px)] min-h-[220px] w-full flex-1 border-0 bg-white sm:h-[min(45vh,520px)]"
+              src={provaPdfViewerSrc}
+              className={cn(
+                "w-full border-0 bg-neutral-100",
+                pastaAvulsoPdf
+                  ? "h-[min(48vh,560px)] min-h-[240px] flex-1"
+                  : "min-h-0 h-full flex-1",
+              )}
             />
           </article>
 

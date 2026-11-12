@@ -409,7 +409,7 @@ class TestCarimboProvaEmail:
 
 
 class TestAjustePastaAvulsoA4:
-    def test_shapes_all_aceita_metodo_com_callable(self):
+    def test_shapes_all_usa_metodo_all(self):
         class ShapeRange:
             Count = 1
             CenterX = 10
@@ -421,6 +421,25 @@ class TestAjustePastaAvulsoA4:
         shape_range = _resolver_shapes_all(Shapes())
         assert shape_range.Count == 1
         assert shape_range.CenterX == 10
+
+    def test_shapes_all_fallback_range_quando_all_falha(self):
+        class ShapeRange:
+            def __init__(self, total: int) -> None:
+                self.Count = total
+
+        class Shapes:
+            Count = 3
+
+            @property
+            def All(self):
+                raise RuntimeError("All indisponível")
+
+            def Range(self, indices):
+                assert list(indices) == [1, 2, 3]
+                return ShapeRange(len(indices))
+
+        shape_range = _resolver_shapes_all(Shapes())
+        assert shape_range.Count == 3
 
     def test_detecta_folha_470x460(self):
         assert pagina_e_pasta_avulso_mm(470, 460)
@@ -519,7 +538,6 @@ class TestAjustePastaAvulsoA4:
             def __init__(self, shape_range: ShapeRange) -> None:
                 self._all = shape_range
 
-            @property
             def All(self) -> ShapeRange:
                 return self._all
 
@@ -550,7 +568,7 @@ class TestAjustePastaAvulsoA4:
         pasta = Documento(Pagina(470, 460))
         logs: list[str] = []
         _ajustar_pasta_avulso_para_a4(pasta, logs)
-        shape_range = pasta.pagina.Shapes.All
+        shape_range = pasta.pagina.Shapes.All()
         escala = 210 / 460
         assert pasta.pagina.SizeWidth == 297
         assert pasta.pagina.SizeHeight == 210
@@ -618,7 +636,12 @@ class TestAjustePastaAvulsoA4:
                 self.SizeHeight = 460.0
                 self.CenterX = 235.0
                 self.CenterY = 230.0
-                self.Shapes = type("Shapes", (), {"All": ShapeRange()})()
+                self._range = ShapeRange()
+                self.Shapes = type(
+                    "Shapes",
+                    (),
+                    {"All": lambda _self=None: self._range},
+                )()
 
             def SetSize(self, largura: float, altura: float) -> None:
                 self.SizeWidth = largura
@@ -635,7 +658,7 @@ class TestAjustePastaAvulsoA4:
         pasta = Documento(Pagina())
         _ajustar_pasta_avulso_para_a4(pasta, [])
         pagina = pasta.pagina
-        shape_range = pagina.Shapes.All
+        shape_range = pagina.Shapes.All()
         page_left = pagina.CenterX - pagina.SizeWidth / 2
         page_bottom = pagina.CenterY - pagina.SizeHeight / 2
         assert shape_range.LeftX == pytest.approx(

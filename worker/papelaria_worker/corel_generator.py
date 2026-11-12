@@ -1526,36 +1526,81 @@ def _retangulo_range_mm(shape_range: Any) -> tuple[float, float, float, float]:
         ) from exc
 
 
-def _resolver_shapes_all(shapes: Any) -> Any:
-    """No win32com, `Shapes.All` pode vir como método e precisa de `All()`."""
+def _contar_shapes(shapes: Any) -> int:
     try:
-        shape_range = shapes.All
-    except Exception as exc:
-        raise CorelGenerationError(
-            f"Não foi possível selecionar os objetos da pasta avulso: {exc}"
-        ) from exc
-    if callable(shape_range):
-        try:
-            shape_range = shape_range()
-        except Exception as exc:
-            raise CorelGenerationError(
-                f"Não foi possível obter o ShapeRange da pasta avulso: {exc}"
-            ) from exc
-    return shape_range
-
-
-def _obter_shape_range_pagina(page: Any) -> Any:
-    shape_range = _resolver_shapes_all(page.Shapes)
-    if callable(shape_range) or not hasattr(shape_range, "Count"):
-        raise CorelGenerationError(
-            "Corel não retornou um ShapeRange válido para a pasta avulso."
-        )
-    try:
-        total = int(shape_range.Count)
+        return int(shapes.Count)
     except Exception as exc:
         raise CorelGenerationError(
             f"Não foi possível contar os objetos da pasta avulso: {exc}"
         ) from exc
+
+
+def _probe_shape_range(shape_range: Any) -> int | None:
+    """Confirma ShapeRange lendo Count — evita hasattr(), instável no win32com."""
+    if shape_range is None or callable(shape_range):
+        return None
+    try:
+        return int(shape_range.Count)
+    except Exception:
+        return None
+
+
+def _resolver_shapes_all(shapes: Any) -> Any:
+    """Obtém ShapeRange; no Corel 2017 `Shapes.All` é método (`All()`)."""
+    erros: list[str] = []
+
+    # Preferência: All() — padrão já usado em credenciais_depol_generator.
+    try:
+        shape_range = shapes.All()
+        total = _probe_shape_range(shape_range)
+        if total is not None:
+            return shape_range
+        erros.append("All() sem Count legível")
+    except Exception as exc:
+        erros.append(f"All(): {exc}")
+
+    # Alguns wrappers expõem All como propriedade.
+    try:
+        shape_range = shapes.All
+        if callable(shape_range):
+            shape_range = shape_range()
+        total = _probe_shape_range(shape_range)
+        if total is not None:
+            return shape_range
+        erros.append("All propriedade sem Count legível")
+    except Exception as exc:
+        erros.append(f"All propriedade: {exc}")
+
+    # Fallback: Range com todos os índices 1..N.
+    total_shapes = _contar_shapes(shapes)
+    if total_shapes <= 0:
+        raise CorelGenerationError(
+            "A pasta avulso não tem objetos para reduzir ao A4."
+        )
+    indices = list(range(1, total_shapes + 1))
+    try:
+        shape_range = shapes.Range(indices)
+        total = _probe_shape_range(shape_range)
+        if total is not None:
+            return shape_range
+        erros.append("Range(indices) sem Count legível")
+    except Exception as exc:
+        erros.append(f"Range(indices): {exc}")
+
+    raise CorelGenerationError(
+        "Não foi possível obter o ShapeRange da pasta avulso ("
+        + "; ".join(erros)
+        + ")."
+    )
+
+
+def _obter_shape_range_pagina(page: Any) -> Any:
+    shape_range = _resolver_shapes_all(page.Shapes)
+    total = _probe_shape_range(shape_range)
+    if total is None:
+        raise CorelGenerationError(
+            "Corel não retornou um ShapeRange válido para a pasta avulso."
+        )
     if total == 0:
         raise CorelGenerationError(
             "A pasta avulso não tem objetos para reduzir ao A4."

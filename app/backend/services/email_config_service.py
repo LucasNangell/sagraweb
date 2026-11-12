@@ -79,18 +79,17 @@ def ensure_email_config_schema() -> None:
         )
         """
     )
-    # Migração aditiva para bases antigas já existentes.
-    alter_statements = [
-        "ALTER TABLE tabEmailExchangeConfig ADD COLUMN SendRouting JSON NULL",
-        "ALTER TABLE tabEmailExchangeConfig ADD COLUMN SentFolderRouting JSON NULL",
-        "ALTER TABLE tabEmailExchangeConfig ADD COLUMN ConfigVersion INT NOT NULL DEFAULT 1",
-    ]
-    for statement in alter_statements:
-        try:
-            db.execute_query(statement)
-        except Exception:
-            # Coluna já pode existir dependendo da versão do banco.
-            continue
+    # Migração aditiva para bases antigas já existentes (idempotente, sem ruído de log).
+    from schema_utils import ensure_columns
+
+    ensure_columns(
+        "tabEmailExchangeConfig",
+        {
+            "SendRouting": "JSON NULL",
+            "SentFolderRouting": "JSON NULL",
+            "ConfigVersion": "INT NOT NULL DEFAULT 1",
+        },
+    )
 
 
 def _parse_json(value: Any, fallback: Any) -> Any:

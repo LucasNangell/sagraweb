@@ -144,15 +144,15 @@ def ensure_deputados_cache_email_columns() -> None:
     global _schema_email_ok
     if _schema_email_ok:
         return
-    for ddl in (
-        "ALTER TABLE DeputadosCache ADD COLUMN EmailDep VARCHAR(255) NOT NULL DEFAULT ''",
-        "ALTER TABLE DeputadosCache ADD COLUMN EmailGab VARCHAR(255) NOT NULL DEFAULT ''",
-    ):
-        try:
-            db.execute_query(ddl)
-        except Exception as exc:
-            if "Duplicate column" not in str(exc):
-                logger.debug("ensure DeputadosCache email columns: %s", exc)
+    from schema_utils import ensure_columns
+
+    ensure_columns(
+        "DeputadosCache",
+        {
+            "EmailDep": "VARCHAR(255) NOT NULL DEFAULT ''",
+            "EmailGab": "VARCHAR(255) NOT NULL DEFAULT ''",
+        },
+    )
     _schema_email_ok = True
 
 

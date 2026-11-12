@@ -81,8 +81,23 @@ def strip_blank_lines(text: str | None) -> str:
     return html_body_to_plain_text(text)
 
 
+_REPLY_HEADER_DE_RE = re.compile(r"(?m)^De:\s")
+
+
+def truncate_body_before_reply_header(text: str | None) -> str:
+    """Remove o trecho a partir do cabeçalho de resposta «De: …»."""
+    cleaned = text or ""
+    match = _REPLY_HEADER_DE_RE.search(cleaned)
+    if match:
+        return cleaned[: match.start()].rstrip()
+    idx = cleaned.find("De: ")
+    if idx >= 0:
+        return cleaned[:idx].rstrip()
+    return cleaned
+
+
 def build_prova_obs(body: str | None) -> str:
-    cleaned = strip_blank_lines(body)
+    cleaned = truncate_body_before_reply_header(strip_blank_lines(body))
     if cleaned:
         return f"Dar prosseguimento:\n\n{cleaned}"
     return "Dar prosseguimento:"

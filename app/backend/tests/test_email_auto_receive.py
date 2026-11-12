@@ -13,6 +13,7 @@ from services.email_auto_receive_service import (
     produto_exige_capa_miolo,
     resolve_original_folder_componente,
     strip_blank_lines,
+    truncate_body_before_reply_header,
 )
 
 
@@ -107,6 +108,21 @@ class TestBodyAndObs:
     def test_build_prova_obs(self):
         obs = build_prova_obs("Aprovado\n\nP_918713")
         assert obs == "Dar prosseguimento:\n\nAprovado\nP_918713"
+
+    def test_truncate_body_before_de_header(self):
+        body = (
+            "Aprovado\n"
+            "P_918713\n"
+            "\n"
+            "De: Gabinete <gabinete@camara.leg.br>\n"
+            "Enviado: terça-feira\n"
+            "Assunto: Prova 1234/2026"
+        )
+        assert truncate_body_before_reply_header(body) == "Aprovado\nP_918713"
+        obs = build_prova_obs(body)
+        assert obs == "Dar prosseguimento:\n\nAprovado\nP_918713"
+        assert "De:" not in obs
+        assert "Enviado" not in obs
 
 
 class TestOriginalFolders:

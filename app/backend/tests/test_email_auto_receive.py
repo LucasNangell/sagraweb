@@ -9,6 +9,7 @@ from services.email_auto_receive_service import (
     componente_por_paginas,
     count_original_folders,
     is_os_enabled_for_settings,
+    is_ultimo_andamento_elegivel_auto_receive,
     next_original_folder_name,
     produto_exige_capa_miolo,
     resolve_original_folder_componente,
@@ -235,6 +236,36 @@ class TestOsSpGate:
     def test_sp_toggle(self):
         assert is_os_enabled_for_settings(5000, enabled_os=False, enabled_sp=True) is True
         assert is_os_enabled_for_settings(5123, enabled_os=True, enabled_sp=False) is False
+
+
+class TestUltimoAndamentoGate:
+    def test_allowed_situacoes(self, monkeypatch):
+        from services import email_auto_receive_service as svc
+
+        for situacao in ("Pendência Usuário", "Aguard. Aprovação"):
+            monkeypatch.setattr(
+                svc,
+                "fetch_ultimo_andamento_situacao",
+                lambda *_a, _s=situacao, **_k: _s,
+            )
+            assert is_ultimo_andamento_elegivel_auto_receive(100, 2026) is True
+
+    def test_rejects_other_or_missing(self, monkeypatch):
+        from services import email_auto_receive_service as svc
+
+        monkeypatch.setattr(
+            svc,
+            "fetch_ultimo_andamento_situacao",
+            lambda *_a, **_k: "Em Execução",
+        )
+        assert is_ultimo_andamento_elegivel_auto_receive(100, 2026) is False
+
+        monkeypatch.setattr(
+            svc,
+            "fetch_ultimo_andamento_situacao",
+            lambda *_a, **_k: None,
+        )
+        assert is_ultimo_andamento_elegivel_auto_receive(100, 2026) is False
 
 
 class TestAutoReceiveSettings:

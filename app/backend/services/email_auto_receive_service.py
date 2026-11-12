@@ -208,6 +208,40 @@ def is_os_enabled_for_settings(
     return bool(enabled_os)
 
 
+_AUTO_RECEIVE_ALLOWED_SITUACOES = frozenset(
+    {
+        "Pendência Usuário",
+        "Aguard. Aprovação",
+    }
+)
+
+
+def fetch_ultimo_andamento_situacao(os_num: int, ano: int) -> Optional[str]:
+    from database import db
+
+    rows = db.execute_query(
+        """
+        SELECT SituacaoLink
+        FROM tabAndamento
+        WHERE NroProtocoloLink = %(os)s
+          AND AnoProtocoloLink = %(ano)s
+          AND UltimoStatus = 1
+        ORDER BY `Data` DESC, CodStatus DESC
+        LIMIT 1
+        """,
+        {"os": os_num, "ano": ano},
+    )
+    if not rows:
+        return None
+    value = str(rows[0].get("SituacaoLink") or "").strip()
+    return value or None
+
+
+def is_ultimo_andamento_elegivel_auto_receive(os_num: int, ano: int) -> bool:
+    situacao = fetch_ultimo_andamento_situacao(os_num, ano)
+    return situacao in _AUTO_RECEIVE_ALLOWED_SITUACOES
+
+
 def attachment_is_pdf(name: str | None) -> bool:
     return str(name or "").strip().lower().endswith(".pdf")
 
@@ -472,6 +506,16 @@ def _process_one_email(
     try:
         ano = require_protocolo_mysql(os_num, ano)
     except OsProtocoloGuardError:
+        return "skipped"
+
+    if not is_ultimo_andamento_elegivel_auto_receive(os_num, ano):
+        situacao = fetch_ultimo_andamento_situacao(os_num, ano)
+        logger.info(
+            "auto_receive: skip OS %s/%s — último andamento=%r (exige Pendência Usuário ou Aguard. Aprovação)",
+            os_num,
+            ano,
+            situacao,
+        )
         return "skipped"
 
     os_path = _get_os_folder_path(ano, os_num)

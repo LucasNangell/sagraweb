@@ -3006,9 +3006,10 @@ def _coletar_arte_na_area_borda(
                 continue
 
     if not arte_na_pagina:
-        raise CorelGenerationError(
-            "Camada 'arte' sem objetos no documento (BordaF/BordaV não ficam nessa camada)."
+        logs.append(
+            f"Camada 'arte' sem objetos — '{nome_borda}' gera página em branco."
         )
+        return []
 
     dentro: list[Any] = []
     for shape in arte_na_pagina:
@@ -3021,9 +3022,11 @@ def _coletar_arte_na_area_borda(
             dentro.append(shape)
 
     if not dentro:
-        raise CorelGenerationError(
-            f"Nenhum objeto da camada 'arte' encontrado dentro da área de '{nome_borda}'."
+        # Verso (ou face) sem arte na área da borda = página em branco, não é erro
+        logs.append(
+            f"Nenhum objeto da camada 'arte' dentro de '{nome_borda}' — página em branco."
         )
+        return []
 
     logs.append(
         f"Camada 'arte' dentro de '{nome_borda}': {len(dentro)} objeto(s) "
@@ -3257,9 +3260,11 @@ def _copiar_arte_para_pagina(
         pares.append((shape, rel_left, rel_bottom))
 
     if not pares:
-        raise CorelGenerationError(
-            "Nenhum objeto da camada 'arte' com posição válida dentro da borda."
+        nome_borda = str(getattr(borda_shape, "Name", "") or "borda")
+        logs.append(
+            f"Página de imposição de '{nome_borda}' permanece em branco."
         )
+        return 0
 
     copiados = 0
     for shape, rel_left, rel_bottom in pares:
@@ -3275,9 +3280,9 @@ def _copiar_arte_para_pagina(
         ):
             copiados += 1
 
-    if copiados == 0:
+    if copiados == 0 and pares:
         raise CorelGenerationError(
-            "Nenhum objeto da camada 'arte' foi copiado para a página de imposição."
+            "Havia arte na área da borda, mas nenhum objeto pôde ser copiado."
         )
 
     logs.append(

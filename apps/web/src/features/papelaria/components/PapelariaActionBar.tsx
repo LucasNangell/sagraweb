@@ -20,6 +20,7 @@ export type PapelariaActionBarProps = {
   onAbrirCorel: () => void;
   onFinalizarCorel: () => void;
   onGerarProvaCdr: () => void;
+  onImposicao: () => void;
   className?: string;
 };
 
@@ -81,6 +82,7 @@ export function PapelariaActionBar({
   onAbrirCorel,
   onFinalizarCorel,
   onGerarProvaCdr,
+  onImposicao,
   className,
 }: PapelariaActionBarProps) {
   const baseDisabled =
@@ -149,6 +151,12 @@ export function PapelariaActionBar({
           onClick={onGerarProvaCdr}
         />
       ) : null}
+      <ActionButton
+        label="Imposição"
+        disabled={baseDisabled || createJobPending || createDigitalPending || exportCdrPending || abrirCorelPending || finalizeCorelPending || isJobGenerating}
+        title="Imposição"
+        onClick={onImposicao}
+      />
     </aside>
   );
 }

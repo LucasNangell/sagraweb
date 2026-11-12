@@ -1115,6 +1115,7 @@ export function PapelariaCorelPanel({
           onAbrirCorel={handleAbrirCorel}
           onFinalizarCorel={handleFinalizarCorel}
           onGerarProvaCdr={handleGerarProvaCdrExistente}
+          onImposicao={() => undefined}
         />
 
         <div className={cn(mobilePanelClass("preview"), "max-md:order-3")}>

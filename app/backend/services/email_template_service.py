@@ -610,6 +610,43 @@ def save_auto_receive_settings(
     return get_auto_receive_settings()
 
 
+def get_auto_send_settings() -> Dict[str, Any]:
+    with _lock:
+        raw = _load_raw()
+    stored = raw.get("auto_send")
+    if not isinstance(stored, dict):
+        stored = {}
+    enabled_os = stored.get("enabled_os")
+    enabled_sp = stored.get("enabled_sp")
+    return {
+        "enabled_os": enabled_os if isinstance(enabled_os, bool) else False,
+        "enabled_sp": enabled_sp if isinstance(enabled_sp, bool) else False,
+        "ponto": str(stored.get("ponto") or "").strip(),
+    }
+
+
+def save_auto_send_settings(
+    *,
+    enabled_os: bool,
+    enabled_sp: bool,
+    ponto: str,
+) -> Dict[str, Any]:
+    ponto_clean = str(ponto or "").strip()
+    if (enabled_os or enabled_sp) and not ponto_clean:
+        raise ValueError(
+            "Informe o ponto a ser usado nos envios automáticos."
+        )
+    with _lock:
+        raw = _load_raw()
+        raw["auto_send"] = {
+            "enabled_os": bool(enabled_os),
+            "enabled_sp": bool(enabled_sp),
+            "ponto": ponto_clean,
+        }
+        _save_raw(raw)
+    return get_auto_send_settings()
+
+
 def get_gravacao_notification_settings() -> Dict[str, Dict[str, Any]]:
     with _lock:
         raw = _load_raw()

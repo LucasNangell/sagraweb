@@ -2489,6 +2489,33 @@ def register_ptv_dispatch(req: PtvDispatchRequest):
             setor="SEFOC",
             origem="portal_cliente",
         )
+        try:
+            from services.email_auto_send_service import schedule_auto_send_after_encam
+
+            custom_obs = (req.observacao or "").strip()
+            ver_clean = (
+                req.versao.lower()
+                .replace("original", "")
+                .replace("v", "")
+                .replace("(", "")
+                .replace(")", "")
+                .strip()
+            )
+            obs_ver = f"PTV{ver_clean}" if ver_clean else "PTV?"
+            schedule_auto_send_after_encam(
+                os_num=req.os_id,
+                ano=req.ano,
+                situacao="Encam. de Docum.",
+                setor="SEFOC",
+                observacao=custom_obs if custom_obs else f"Enviar {obs_ver}",
+            )
+        except Exception as auto_exc:
+            logger.warning(
+                "auto_send schedule falhou após PTV dispatch OS %s/%s: %s",
+                req.os_id,
+                req.ano,
+                auto_exc,
+            )
         return result
     except Exception as e:
         logger.error(f"PTV Dispatch Register error: {e}")

@@ -230,6 +230,21 @@ export async function saveEmailAutoReceive(payload: {
   );
 }
 
+export async function saveEmailAutoSend(payload: {
+  enabled_os: boolean;
+  enabled_sp: boolean;
+  ponto: string;
+}) {
+  return apiFetch<{ auto_send: EmailTemplatesConfigResponse["auto_send"] }>(
+    "/admin/system/email-auto-send",
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
 export async function saveGravacaoEmailNotifications(
   payload: GravacaoEmailNotificationSettings,
 ) {

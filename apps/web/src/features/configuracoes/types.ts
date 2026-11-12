@@ -179,6 +179,12 @@ export interface EmailAutoReceiveSettings {
   ponto: string;
 }
 
+export interface EmailAutoSendSettings {
+  enabled_os: boolean;
+  enabled_sp: boolean;
+  ponto: string;
+}
+
 export interface GravacaoEmailNotificationEvent {
   enabled: boolean;
   mode: "usuario" | "personalizado";
@@ -195,6 +201,7 @@ export interface EmailTemplatesConfigResponse {
   templates: EmailTemplateRecord[];
   send_mailboxes: EmailSendMailboxes;
   auto_receive?: EmailAutoReceiveSettings;
+  auto_send?: EmailAutoSendSettings;
   gravacao_notifications: GravacaoEmailNotificationSettings;
   variable_hints: string[];
   sample_variables: Record<string, string>;

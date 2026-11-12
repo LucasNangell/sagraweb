@@ -1931,6 +1931,24 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
                 situacao=item.situacao,
             )
 
+        try:
+            from services.email_auto_send_service import schedule_auto_send_after_encam
+
+            schedule_auto_send_after_encam(
+                os_num=id,
+                ano=ano,
+                situacao=str(item.situacao or ""),
+                setor=str(item.setor or ""),
+                observacao=str(item.obs or ""),
+            )
+        except Exception as auto_exc:
+            logger.warning(
+                "auto_send schedule falhou após history OS %s/%s: %s",
+                id,
+                ano,
+                auto_exc,
+            )
+
         if validated_gp_arquivos:
             from services.gravacao_preview_cache_service import enqueue_preview_warmup
 

@@ -2386,6 +2386,24 @@ def approve_job_prova(job_id: int, aprovado_por: str) -> dict[str, Any]:
             task_name="papelaria_aprovar_prova",
         )
 
+    try:
+        from services.email_auto_send_service import schedule_auto_send_after_encam
+
+        schedule_auto_send_after_encam(
+            os_num=nro,
+            ano=ano,
+            situacao="Encam. de Docum.",
+            setor="SEFOC",
+            observacao=obs,
+        )
+    except Exception as auto_exc:
+        logger.warning(
+            "auto_send schedule falhou após aprovar prova OS %s/%s: %s",
+            nro,
+            ano,
+            auto_exc,
+        )
+
     updated = get_job(job_id)
     if updated:
         broadcast_job_update(updated)

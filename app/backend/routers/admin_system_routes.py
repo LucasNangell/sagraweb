@@ -99,6 +99,12 @@ class EmailAutoReceiveSaveRequest(BaseModel):
     ponto: str = ""
 
 
+class EmailAutoSendSaveRequest(BaseModel):
+    enabled_os: bool = False
+    enabled_sp: bool = False
+    ponto: str = ""
+
+
 class GravacaoNotificationEventRequest(BaseModel):
     enabled: bool = True
     mode: Literal["usuario", "personalizado"] = "usuario"
@@ -464,6 +470,7 @@ def get_email_templates_config():
         "templates": email_tpl.list_templates_public(),
         "send_mailboxes": email_tpl.get_global_send_mailboxes(),
         "auto_receive": email_tpl.get_auto_receive_settings(),
+        "auto_send": email_tpl.get_auto_send_settings(),
         "gravacao_notifications": email_tpl.get_gravacao_notification_settings(),
         "variable_hints": email_tpl.VARIABLE_HINTS,
         "sample_variables": email_tpl.SAMPLE_PREVIEW_VARS,
@@ -618,6 +625,28 @@ def save_email_auto_receive(body: EmailAutoReceiveSaveRequest):
             detail=f"Falha ao persistir recebimento automático: {exc}",
         ) from exc
     return {"auto_receive": saved, "storage": "mysql"}
+
+
+@router.put(
+    "/api/admin/system/email-auto-send",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def save_email_auto_send(body: EmailAutoSendSaveRequest):
+    try:
+        saved = email_tpl.save_auto_send_settings(
+            enabled_os=body.enabled_os,
+            enabled_sp=body.enabled_sp,
+            ponto=body.ponto,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Erro ao salvar envio automático de e-mail")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Falha ao persistir envio automático: {exc}",
+        ) from exc
+    return {"auto_send": saved, "storage": "mysql"}
 
 
 @router.put(

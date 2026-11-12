@@ -10,6 +10,7 @@ import {
   previewEmailTemplate,
   resetEmailTemplate,
   saveEmailAutoReceive,
+  saveEmailAutoSend,
   saveEmailSendMailboxes,
   saveGravacaoEmailNotifications,
   saveEmailTemplate,
@@ -138,6 +139,9 @@ export function EmailTemplatesSection() {
   const [autoReceiveOs, setAutoReceiveOs] = useState(false);
   const [autoReceiveSp, setAutoReceiveSp] = useState(false);
   const [autoReceivePonto, setAutoReceivePonto] = useState("");
+  const [autoSendOs, setAutoSendOs] = useState(false);
+  const [autoSendSp, setAutoSendSp] = useState(false);
+  const [autoSendPonto, setAutoSendPonto] = useState("");
   const [forwardedEnabled, setForwardedEnabled] = useState(true);
   const [forwardedRecipientMode, setForwardedRecipientMode] =
     useState<"usuario" | "personalizado">("usuario");
@@ -246,6 +250,14 @@ export function EmailTemplatesSection() {
     setAutoReceiveSp(Boolean(settings.enabled_sp));
     setAutoReceivePonto(settings.ponto ?? "");
   }, [configQuery.data?.auto_receive]);
+
+  useEffect(() => {
+    const settings = configQuery.data?.auto_send;
+    if (!settings) return;
+    setAutoSendOs(Boolean(settings.enabled_os));
+    setAutoSendSp(Boolean(settings.enabled_sp));
+    setAutoSendPonto(settings.ponto ?? "");
+  }, [configQuery.data?.auto_send]);
 
   useEffect(() => {
     const settings = configQuery.data?.gravacao_notifications;
@@ -488,6 +500,20 @@ export function EmailTemplatesSection() {
     onError: reportError,
   });
 
+  const saveAutoSendMutation = useMutation({
+    mutationFn: () =>
+      saveEmailAutoSend({
+        enabled_os: autoSendOs,
+        enabled_sp: autoSendSp,
+        ponto: autoSendPonto.trim(),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin", "email-templates"] });
+      toast.success("Envio automático salvo.");
+    },
+    onError: reportError,
+  });
+
   const saveGravacaoNotificationsMutation = useMutation({
     mutationFn: () =>
       saveGravacaoEmailNotifications({
@@ -653,6 +679,64 @@ export function EmailTemplatesSection() {
             <Save className="size-3" />
           )}
           Salvar recebimento automático
+        </button>
+      </ConfigSubsection>
+
+      <ConfigSubsection title="Envio automático" tone="muted">
+        <p className="mb-3 text-xs text-slate-600">
+          Quando ativo, ao lançar Encam. de Docum. com observação &quot;Enviar Prova N&quot;,
+          &quot;Enviar pN&quot; ou &quot;Enviar PTVN&quot;, o sistema tenta enviar o e-mail como na página
+          E-mail. Se faltar destinatário, tipo, versão ou anexo, a OS permanece na pendência
+          para envio manual.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <label className="flex items-center gap-2 text-xs text-slate-700">
+            <input
+              type="checkbox"
+              checked={autoSendOs}
+              onChange={(e) => setAutoSendOs(e.target.checked)}
+              className="size-3.5 rounded border-slate-300"
+            />
+            Ativar para OS (&lt; 5000)
+          </label>
+          <label className="flex items-center gap-2 text-xs text-slate-700">
+            <input
+              type="checkbox"
+              checked={autoSendSp}
+              onChange={(e) => setAutoSendSp(e.target.checked)}
+              className="size-3.5 rounded border-slate-300"
+            />
+            Ativar para SP (≥ 5000)
+          </label>
+          <label className="block text-xs text-slate-600 sm:col-span-2 lg:col-span-1">
+            Ponto dos envios automáticos
+            <input
+              type="text"
+              value={autoSendPonto}
+              onChange={(e) => setAutoSendPonto(e.target.value)}
+              placeholder="Ex.: 918713"
+              className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm"
+            />
+          </label>
+        </div>
+        <button
+          type="button"
+          disabled={saveAutoSendMutation.isPending}
+          onClick={() => {
+            if ((autoSendOs || autoSendSp) && !autoSendPonto.trim()) {
+              toast.error("Informe o ponto para os envios automáticos.");
+              return;
+            }
+            void saveAutoSendMutation.mutate();
+          }}
+          className="mt-3 h-8 sagra-btn sagra-btn--outline sagra-btn--sm"
+        >
+          {saveAutoSendMutation.isPending ? (
+            <Loader2 className="size-3 animate-spin" />
+          ) : (
+            <Save className="size-3" />
+          )}
+          Salvar envio automático
         </button>
       </ConfigSubsection>
 

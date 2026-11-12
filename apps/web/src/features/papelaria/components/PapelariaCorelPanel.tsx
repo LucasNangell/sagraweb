@@ -943,100 +943,104 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
             </p>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
-            {modelos.length === 0 ? (
-              <p className="p-4 text-center text-xs text-neutral-500">
-                Importe a planilha de modelos ou verifique o produto da OS.
-              </p>
-            ) : (
-              modelos.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  className={cn(
-                    "rounded-lg border p-3 text-left text-xs transition-colors",
-                    selectedModelId === m.id
-                      ? "border-secondary-blue bg-secondary-blue/5 ring-1 ring-secondary-blue/30"
-                      : "border-sagra-border hover:border-secondary-blue/40 hover:bg-slate-50",
-                  )}
-                  onClick={() => handleSelectModel(m)}
-                >
-                  <p className="font-semibold text-secondary-blue">
-                    {m.nome_exibicao}
-                  </p>
-                  <p className="mt-1 text-neutral-600">{m.frente_versao}</p>
-                  <p className="text-neutral-500">{m.cores}</p>
-                  <p className="mt-1 font-mono text-[10px] text-neutral-400">
-                    {m.arquivo_modelo}
-                  </p>
-                </button>
-              ))
-            )}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
+            <div className="min-h-0 shrink-0 space-y-2 overflow-y-auto">
+              {modelos.length === 0 ? (
+                <p className="p-4 text-center text-xs text-neutral-500">
+                  Importe a planilha de modelos ou verifique o produto da OS.
+                </p>
+              ) : (
+                modelos.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={cn(
+                      "w-full rounded-lg border p-3 text-left text-xs transition-colors",
+                      selectedModelId === m.id
+                        ? "border-secondary-blue bg-secondary-blue/5 ring-1 ring-secondary-blue/30"
+                        : "border-sagra-border hover:border-secondary-blue/40 hover:bg-slate-50",
+                    )}
+                    onClick={() => handleSelectModel(m)}
+                  >
+                    <p className="font-semibold text-secondary-blue">
+                      {m.nome_exibicao}
+                    </p>
+                    <p className="mt-1 text-neutral-600">{m.frente_versao}</p>
+                    <p className="text-neutral-500">{m.cores}</p>
+                    <p className="mt-1 font-mono text-[10px] text-neutral-400">
+                      {m.arquivo_modelo}
+                    </p>
+                  </button>
+                ))
+              )}
 
-            {selectedModelId !== null && (
-              <div className="mt-2 border-t border-neutral-200 pt-2">
-                <h3 className="mb-2 text-xs font-bold text-neutral-700">
-                  Campos do formulário
-                </h3>
-                <DynamicFields
-                  fields={modelDetailQuery.data?.campos_formulario}
-                  isLoading={modelDetailQuery.isLoading}
-                  values={fieldValues}
-                  camposAlterados={camposAlteradosByKey}
-                  onChange={(key, value) =>
-                    setFieldValues((prev) => ({ ...prev, [key]: value }))
-                  }
-                  excludedFields={excludedFields}
-                  onToggleExclude={(key) =>
-                    setExcludedFields((prev) =>
-                      prev.includes(key)
-                        ? prev.filter((k) => k !== key)
-                        : [...prev, key],
-                    )
-                  }
-                />
-                {formError && (
-                  <p className="mt-2 text-[11px] text-sagra-danger">{formError}</p>
-                )}
-                {contextQuery.data?.cliente_alteracao?.observacao ? (
-                  <div className="mt-3">
-                    <label className="mb-0.5 block text-[11px] font-medium text-amber-800">
-                      Observações do cliente (alteração solicitada
-                      {contextQuery.data.cliente_alteracao.versao
-                        ? ` — prova v${contextQuery.data.cliente_alteracao.versao}`
-                        : ""}
+              {selectedModelId !== null ? (
+                <div className="border-t border-neutral-200 pt-2">
+                  <h3 className="mb-2 text-xs font-bold text-neutral-700">
+                    Campos do formulário
+                  </h3>
+                  <DynamicFields
+                    fields={modelDetailQuery.data?.campos_formulario}
+                    isLoading={modelDetailQuery.isLoading}
+                    values={fieldValues}
+                    camposAlterados={camposAlteradosByKey}
+                    onChange={(key, value) =>
+                      setFieldValues((prev) => ({ ...prev, [key]: value }))
+                    }
+                    excludedFields={excludedFields}
+                    onToggleExclude={(key) =>
+                      setExcludedFields((prev) =>
+                        prev.includes(key)
+                          ? prev.filter((k) => k !== key)
+                          : [...prev, key],
                       )
-                    </label>
-                    <textarea
-                      readOnly
-                      disabled
-                      rows={3}
-                      value={contextQuery.data.cliente_alteracao.observacao}
-                      className="w-full resize-none rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-950"
-                    />
-                  </div>
-                ) : null}
-                <div className="mt-3">
-                  <label className="mb-0.5 block text-[11px] font-medium text-neutral-700">
-                    Observações
-                  </label>
-                  <textarea
-                    readOnly
-                    disabled
-                    rows={3}
-                    value={contextQuery.data?.os.observ ?? ""}
-                    className="w-full resize-none rounded border border-sagra-border bg-slate-50 px-2 py-1 text-xs text-neutral-800"
-                    placeholder="Sem observações na OS"
+                    }
                   />
+                  {formError ? (
+                    <p className="mt-2 text-[11px] text-sagra-danger">{formError}</p>
+                  ) : null}
+                  {contextQuery.data?.cliente_alteracao?.observacao ? (
+                    <div className="mt-3">
+                      <label className="mb-0.5 block text-[11px] font-medium text-amber-800">
+                        Observações do cliente (alteração solicitada
+                        {contextQuery.data.cliente_alteracao.versao
+                          ? ` — prova v${contextQuery.data.cliente_alteracao.versao}`
+                          : ""}
+                        )
+                      </label>
+                      <textarea
+                        readOnly
+                        disabled
+                        rows={3}
+                        value={contextQuery.data.cliente_alteracao.observacao}
+                        className="w-full resize-none rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-950"
+                      />
+                    </div>
+                  ) : null}
+                  {corelEditMode ? (
+                    <p className="mt-3 text-[10px] leading-relaxed text-neutral-600">
+                      Após editar no CorelDRAW e exportar o PDF de prova na pasta Sefoc,
+                      use Finalizar na barra de ações para montar a visualização e aprovar.
+                    </p>
+                  ) : null}
                 </div>
-                {corelEditMode ? (
-                  <p className="mt-3 text-[10px] leading-relaxed text-neutral-600">
-                    Após editar no CorelDRAW e exportar o PDF de prova na pasta Sefoc,
-                    use Finalizar na barra de ações para montar a visualização e aprovar.
-                  </p>
-                ) : null}
+              ) : null}
+            </div>
+
+            {selectedModelId !== null ? (
+              <div className="mt-2 flex min-h-[7rem] min-w-0 flex-1 flex-col">
+                <label className="mb-0.5 shrink-0 text-[11px] font-medium text-neutral-700">
+                  Observações
+                </label>
+                <textarea
+                  readOnly
+                  disabled
+                  value={contextQuery.data?.os.observ ?? ""}
+                  className="min-h-0 w-full flex-1 resize-none rounded border border-sagra-border bg-slate-50 px-2 py-1 text-xs text-neutral-800"
+                  placeholder="Sem observações na OS"
+                />
               </div>
-            )}
+            ) : null}
           </div>
         </section>
 

@@ -665,8 +665,8 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
         tb = traceback.format_exc()
         msg_usuario = humanizar_erro_corel(exc)
         logging.error("Job #%s falhou: %s", job_id, msg_usuario)
-        if isinstance(exc, CorelGenerationError):
-            reset_corel_session()
+        # Garante que CorelDRW não fique aberto travando a fila do worker
+        encerrar_corel_forcadamente(matar_processo=True)
         msg_lower = msg_usuario.lower()
         retryable = isinstance(exc, CorelGenerationError) and (
             "timeout" in msg_lower
@@ -678,7 +678,7 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
         tb = traceback.format_exc()
         msg_usuario = humanizar_erro_corel(exc)
         logging.error("Job #%s falhou (inesperado): %s", job_id, msg_usuario)
-        reset_corel_session()
+        encerrar_corel_forcadamente(matar_processo=True)
         api.fail(job_id, msg_usuario, log_resumo=tb[-3000:], retryable=False)
     finally:
         stop_heartbeat.set()

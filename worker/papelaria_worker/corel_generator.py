@@ -2908,48 +2908,128 @@ def _nome_igual(a: str, b: str) -> bool:
     return (a or "").strip().lower() == (b or "").strip().lower()
 
 
-def _layer_name_of_shape(shape: Any) -> str:
-    try:
-        layer = getattr(shape, "Layer", None)
-        if layer is not None:
-            return str(getattr(layer, "Name", "") or "")
-    except Exception:
-        pass
-    return ""
-
-
-def _iter_powerclip_shapes(borda_shape: Any) -> list[Any]:
-    """Shapes dentro do PowerClip de BordaF/BordaV, se existir."""
+def _shapes_from_collection(shapes_coll: Any) -> list[Any]:
     encontrados: list[Any] = []
+    if shapes_coll is None:
+        return encontrados
     try:
-        pc = getattr(borda_shape, "PowerClip", None)
-        if pc is None:
-            return encontrados
-        shapes = getattr(pc, "Shapes", None)
-        if shapes is None:
-            return encontrados
-        count = int(shapes.Count)
-        for i in range(1, count + 1):
-            try:
-                encontrados.append(shapes.Item(i))
-            except Exception:
-                continue
+        count = int(shapes_coll.Count)
     except Exception:
-        return []
+        return encontrados
+    for i in range(1, count + 1):
+        try:
+            encontrados.append(shapes_coll.Item(i))
+        except Exception:
+            continue
     return encontrados
 
 
-def _filtrar_shapes_camada_arte(shapes: list[Any]) -> list[Any]:
-    arte = [s for s in shapes if _nome_igual(_layer_name_of_shape(s), "arte")]
-    if arte:
-        return arte
-    # Fallback: grupo/objeto chamado arte
-    nomeados = [
-        s
-        for s in shapes
-        if _nome_igual(str(getattr(s, "Name", "") or ""), "arte")
-    ]
-    return nomeados
+def _eh_shape_borda_referencia(shape: Any) -> bool:
+    """BordaF/BordaV são só referência — nunca copiar para a página de imposição."""
+    nome = str(getattr(shape, "Name", "") or "")
+    return _nome_igual(nome, "BordaF") or _nome_igual(nome, "BordaV")
+
+
+def shape_centro_dentro_borda(
+    shape_bounds: tuple[float, float, float, float],
+    borda_bounds: tuple[float, float, float, float],
+) -> bool:
+    """True se o centro do shape está dentro do retângulo da borda (left,bottom,right,top)."""
+    sl, sb, sr, st = shape_bounds
+    bl, bb, br, bt = borda_bounds
+    cx = (sl + sr) / 2.0
+    cy = (sb + st) / 2.0
+    return bl <= cx <= br and bb <= cy <= bt
+
+
+def _listar_shapes_camada_arte_na_pagina(page: Any, logs: list[str]) -> list[Any]:
+    """Shapes da camada 'arte' na página (não inclui BordaF/BordaV)."""
+    camadas: list[str] = []
+    arte_shapes: list[Any] = []
+    try:
+        layers = getattr(page, "Layers", None)
+    except Exception:
+        layers = None
+    for layer in _shapes_from_collection(layers):
+        lname = str(getattr(layer, "Name", "") or "")
+        if lname:
+            camadas.append(lname)
+        if not _nome_igual(lname, "arte"):
+            continue
+        for shape in _shapes_from_collection(getattr(layer, "Shapes", None)):
+            if _eh_shape_borda_referencia(shape):
+                continue
+            arte_shapes.append(shape)
+    if not any(_nome_igual(c, "arte") for c in camadas):
+        logs.append(
+            "Camada 'arte' não encontrada na página "
+            f"(camadas: {', '.join(camadas) or 'nenhuma'})."
+        )
+    return arte_shapes
+
+
+def _coletar_arte_na_area_borda(
+    doc: Any,
+    borda_shape: Any,
+    pagina_num: int,
+    logs: list[str],
+) -> list[Any]:
+    """
+    Usa BordaF/BordaV só como área/tamanho: pega objetos da camada 'arte'
+    cujo centro está dentro da borda. Não copia a própria borda.
+    """
+    nome_borda = str(getattr(borda_shape, "Name", "") or "borda")
+    borda_bounds = _extrair_bounds_shape(borda_shape)
+    if not borda_bounds:
+        raise CorelGenerationError(
+            f"Não foi possível ler a área de '{nome_borda}'."
+        )
+
+    try:
+        page = doc.Pages.Item(int(pagina_num))
+    except Exception as exc:
+        raise CorelGenerationError(
+            f"Página {pagina_num} de '{nome_borda}' inacessível: {exc}"
+        ) from exc
+
+    arte_na_pagina = _listar_shapes_camada_arte_na_pagina(page, logs)
+    if not arte_na_pagina:
+        # Algumas artes ficam em outra página do mesmo doc — varre todas
+        for p in range(1, int(doc.Pages.Count) + 1):
+            if p == int(pagina_num):
+                continue
+            try:
+                arte_na_pagina.extend(
+                    _listar_shapes_camada_arte_na_pagina(doc.Pages.Item(p), logs)
+                )
+            except Exception:
+                continue
+
+    if not arte_na_pagina:
+        raise CorelGenerationError(
+            "Camada 'arte' sem objetos no documento (BordaF/BordaV não ficam nessa camada)."
+        )
+
+    dentro: list[Any] = []
+    for shape in arte_na_pagina:
+        if _eh_shape_borda_referencia(shape):
+            continue
+        sb = _extrair_bounds_shape(shape)
+        if not sb:
+            continue
+        if shape_centro_dentro_borda(sb, borda_bounds):
+            dentro.append(shape)
+
+    if not dentro:
+        raise CorelGenerationError(
+            f"Nenhum objeto da camada 'arte' encontrado dentro da área de '{nome_borda}'."
+        )
+
+    logs.append(
+        f"Camada 'arte' dentro de '{nome_borda}': {len(dentro)} objeto(s) "
+        f"(de {len(arte_na_pagina)} na camada)."
+    )
+    return dentro
 
 
 def _borda_size(borda_shape: Any) -> tuple[float, float]:
@@ -3004,70 +3084,61 @@ def _copiar_arte_para_pagina(
     corel: Any,
     doc: Any,
     borda_shape: Any,
+    pagina_borda: int,
     page: Any,
     logs: list[str],
 ) -> int:
-    """Copia shapes da camada arte (PowerClip da borda) para a página, posições relativas."""
-    internos = _iter_powerclip_shapes(borda_shape)
-    if not internos:
-        raise CorelGenerationError(
-            f"Objeto '{getattr(borda_shape, 'Name', 'borda')}' sem conteúdo PowerClip/arte."
-        )
-    arte_shapes = _filtrar_shapes_camada_arte(internos)
-    if not arte_shapes:
-        raise CorelGenerationError(
-            f"Camada 'arte' não encontrada dentro de "
-            f"'{getattr(borda_shape, 'Name', 'borda')}'."
-        )
-
+    """
+    Copia objetos da camada 'arte' que estão na área de BordaF/BordaV
+    para a página de imposição, nas posições relativas à borda.
+    A borda em si não é copiada.
+    """
     borda_bounds = _extrair_bounds_shape(borda_shape)
     if not borda_bounds:
         raise CorelGenerationError("Não foi possível ler a posição da borda.")
     borda_left, borda_bottom, _, _ = borda_bounds
 
-    # Entra no PowerClip para Copy funcionar com o conteúdo clipado
-    entered = False
-    try:
-        pc = getattr(borda_shape, "PowerClip", None)
-        if pc is not None:
-            pc.EnterEditMode()
-            entered = True
-    except Exception as exc:
-        logs.append(f"Aviso EnterEditMode PowerClip: {exc}")
+    arte_shapes = _coletar_arte_na_area_borda(
+        doc, borda_shape, pagina_borda, logs
+    )
+    offsets: list[tuple[float, float]] = []
+    for shape in arte_shapes:
+        sb = _extrair_bounds_shape(shape)
+        if not sb:
+            continue
+        offsets.append(
+            offset_relativo_borda(sb[0], sb[1], borda_left, borda_bottom)
+        )
 
-    copiados = 0
     try:
+        doc.ClearSelection()
+    except Exception:
+        pass
+    for shape in arte_shapes:
         try:
-            doc.ClearSelection()
+            shape.AddToSelection()
         except Exception:
-            pass
-        for shape in arte_shapes:
             try:
-                shape.AddToSelection()
+                shape.Selected = True
             except Exception:
-                try:
-                    shape.Selected = True
-                except Exception:
-                    continue
+                continue
+    try:
+        count_sel = 0
         try:
-            count_sel = 0
-            try:
-                count_sel = int(doc.ActiveSelection.Shapes.Count)
-            except Exception:
-                count_sel = int(getattr(doc.ActiveSelection, "Count", 0) or 0)
-            if count_sel < 1:
-                raise CorelGenerationError("Nenhum shape da camada arte selecionável.")
-            doc.ActiveSelection.Copy()
-        except CorelGenerationError:
-            raise
-        except Exception as exc:
-            raise CorelGenerationError(f"Falha ao copiar arte da borda: {exc}") from exc
-    finally:
-        if entered:
-            try:
-                borda_shape.PowerClip.LeaveEditMode()
-            except Exception as exc:
-                logs.append(f"Aviso LeaveEditMode: {exc}")
+            count_sel = int(doc.ActiveSelection.Shapes.Count)
+        except Exception:
+            count_sel = int(getattr(doc.ActiveSelection, "Count", 0) or 0)
+        if count_sel < 1:
+            raise CorelGenerationError(
+                "Nenhum objeto da camada 'arte' selecionável para cópia."
+            )
+        doc.ActiveSelection.Copy()
+    except CorelGenerationError:
+        raise
+    except Exception as exc:
+        raise CorelGenerationError(
+            f"Falha ao copiar arte na área da borda: {exc}"
+        ) from exc
 
     try:
         page.Activate()
@@ -3083,30 +3154,17 @@ def _copiar_arte_para_pagina(
         try:
             corel.ActiveDocument.ActiveLayer.Paste()
         except Exception as exc:
-            raise CorelGenerationError(f"Falha ao colar arte na página: {exc}") from exc
+            raise CorelGenerationError(
+                f"Falha ao colar arte na página: {exc}"
+            ) from exc
 
-    # Reposiciona shapes colados com offsets relativos à borda
-    try:
-        pasted = list(page.ActiveLayer.Shapes)
-    except Exception:
-        pasted = []
-        try:
-            sh = page.ActiveLayer.Shapes
-            for i in range(1, int(sh.Count) + 1):
-                pasted.append(sh.Item(i))
-        except Exception:
-            pasted = []
+    pasted = [
+        s
+        for s in _shapes_from_collection(getattr(page.ActiveLayer, "Shapes", None))
+        if not _eh_shape_borda_referencia(s)
+    ]
 
-    # Usa os offsets calculados dos originais na ordem (melhor esforço)
-    offsets: list[tuple[float, float]] = []
-    for shape in arte_shapes:
-        sb = _extrair_bounds_shape(shape)
-        if not sb:
-            continue
-        offsets.append(
-            offset_relativo_borda(sb[0], sb[1], borda_left, borda_bottom)
-        )
-
+    copiados = 0
     for idx, pasted_shape in enumerate(pasted):
         if idx >= len(offsets):
             break
@@ -3129,9 +3187,13 @@ def _copiar_arte_para_pagina(
             f"({copiados} objeto(s))."
         )
     elif copiados == 0:
-        raise CorelGenerationError("Nenhum shape foi colado na página de imposição.")
+        raise CorelGenerationError(
+            "Nenhum objeto da camada 'arte' foi colado na página de imposição."
+        )
 
-    logs.append(f"{copiados} objeto(s) da camada arte posicionados na página.")
+    logs.append(
+        f"{copiados} objeto(s) da camada 'arte' posicionados na página."
+    )
     return copiados
 
 
@@ -3152,24 +3214,31 @@ def _remover_paginas_exceto(doc: Any, nomes_manter: set[str], logs: list[str]) -
 
 
 def _montar_imposicao_no_documento(corel: Any, doc: Any, logs: list[str]) -> list[str]:
-    """Cria páginas Frente/Verso a partir de BordaF/BordaV; retorna nomes criados."""
+    """
+    Cria páginas Frente/Verso com o tamanho de BordaF/BordaV e a arte
+    da camada 'arte' que está dentro dessas áreas (bordas não são copiadas).
+    """
     bordas_f = encontrar_shapes_no_documento(doc, "BordaF")
     if not bordas_f:
         raise CorelGenerationError(
             "Objeto 'BordaF' não encontrado no documento — necessário para imposição."
         )
-    borda_f = bordas_f[0]["shape"]
+    occ_f = bordas_f[0]
+    borda_f = occ_f["shape"]
+    pagina_f = int(occ_f.get("pagina") or 1)
     w_f, h_f = _borda_size(borda_f)
     page_f = _criar_pagina_nomeada(doc, "Frente", w_f, h_f, logs)
-    _copiar_arte_para_pagina(corel, doc, borda_f, page_f, logs)
+    _copiar_arte_para_pagina(corel, doc, borda_f, pagina_f, page_f, logs)
 
     criadas = ["Frente"]
     bordas_v = encontrar_shapes_no_documento(doc, "BordaV")
     if bordas_v:
-        borda_v = bordas_v[0]["shape"]
+        occ_v = bordas_v[0]
+        borda_v = occ_v["shape"]
+        pagina_v = int(occ_v.get("pagina") or 1)
         w_v, h_v = _borda_size(borda_v)
         page_v = _criar_pagina_nomeada(doc, "Verso", w_v, h_v, logs)
-        _copiar_arte_para_pagina(corel, doc, borda_v, page_v, logs)
+        _copiar_arte_para_pagina(corel, doc, borda_v, pagina_v, page_v, logs)
         criadas.append("Verso")
     else:
         logs.append("Objeto 'BordaV' não encontrado — imposição somente Frente.")
@@ -3247,7 +3316,7 @@ def _gerar_imposicao_impl(
             except Exception as exc:
                 if attempt == 0 and reuse_corel_session and _is_com_disconnect_error(exc):
                     logs.append("COM desconectou — reiniciando Corel e tentando de novo.")
-                    reset_corel_session()
+                    encerrar_corel_forcadamente(matar_processo=True)
                     continue
                 raise
             finally:
@@ -3262,8 +3331,12 @@ def _gerar_imposicao_impl(
                     except Exception:
                         pass
     finally:
-        if reuse_corel_session and not job_completed:
-            pass
+        # Sucesso: encerra sessão COM. Falha: mata CorelDRW para não travar a fila.
+        if job_completed:
+            _release_corel_after_job(logs, completed=True)
+        else:
+            encerrar_corel_forcadamente(matar_processo=True)
+            logs.append("CorelDRAW encerrado à força após falha na imposição.")
 
 
 def gerar_imposicao_de_cdr(
@@ -3307,8 +3380,8 @@ def gerar_imposicao_de_cdr(
                 "CorelDRAW encerrado. O job pode ser reprocessado por outro worker."
             ) from exc
         except Exception as exc:
+            encerrar_corel_forcadamente(matar_processo=True)
             if _is_com_disconnect_error(exc):
-                reset_corel_session()
                 raise CorelGenerationError(
                     humanizar_erro_corel(exc, contexto="CorelDRAW desconectado")
                 ) from exc
@@ -3317,6 +3390,7 @@ def gerar_imposicao_de_cdr(
             raise CorelGenerationError(humanizar_erro_corel(exc)) from exc
 
     if not os.path.isfile(output_pdf_path):
+        encerrar_corel_forcadamente(matar_processo=True)
         raise CorelGenerationError("PDF de imposição não foi gerado.")
 
     return GenerationResult(

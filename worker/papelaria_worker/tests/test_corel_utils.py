@@ -23,6 +23,7 @@ from corel_generator import (  # noqa: E402
     aplicar_campo,
     calcular_ajuste_a4_paisagem,
     offset_relativo_borda,
+    shape_centro_dentro_borda,
     encaixar_retangulo_na_pagina,
     montar_carimbo_prova_email,
     pagina_e_pasta_avulso_mm,
@@ -356,6 +357,11 @@ class TestExportProvaSemAlterar:
 class TestOffsetRelativoBorda:
     def test_offset_basico(self):
         assert offset_relativo_borda(120.0, 80.0, 100.0, 50.0) == (20.0, 30.0)
+
+    def test_centro_dentro_da_borda(self):
+        borda = (0.0, 0.0, 100.0, 200.0)
+        assert shape_centro_dentro_borda((10.0, 10.0, 30.0, 40.0), borda) is True
+        assert shape_centro_dentro_borda((200.0, 10.0, 250.0, 40.0), borda) is False
 
 
 class TestAplicarCampoOpcional:

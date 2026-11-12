@@ -31,6 +31,7 @@ _ALTER_RE = re.compile(
 _PONTO_RE = re.compile(r"\bp_\d{4,6}\b", re.IGNORECASE)
 _PROVA_SUBJECT_RE = re.compile(r"prova", re.IGNORECASE)
 _PT_SUBJECT_RE = re.compile(r"problemas\s+t[eé]cnicos", re.IGNORECASE)
+_C_CAPA_RE = re.compile(r"c/\s*capa", re.IGNORECASE)
 
 
 class _HTMLTextExtractor(HTMLParser):
@@ -104,9 +105,81 @@ def count_original_folders(os_path: str) -> int:
     return count
 
 
-def next_original_folder_name(os_path: str) -> Tuple[str, int]:
+def next_original_folder_name(
+    os_path: str,
+    *,
+    componente: str | None = None,
+) -> Tuple[str, int]:
     version = count_original_folders(os_path) + 1
-    return f"Original v{version}", version
+    name = f"Original V{version}"
+    if componente in ("Capa", "Miolo"):
+        name = f"{name} - {componente}"
+    return name, version
+
+
+def produto_exige_capa_miolo(produto: str | None) -> bool:
+    """Livro ou produto com «c/ capa» no nome — mesma regra da análise."""
+    p = (produto or "").strip()
+    if not p:
+        return False
+    if p.lower() == "livro":
+        return True
+    return bool(_C_CAPA_RE.search(p))
+
+
+def componente_por_paginas(pages: int) -> Literal["Capa", "Miolo"]:
+    return "Miolo" if int(pages) > 4 else "Capa"
+
+
+def pdf_page_count(content: bytes) -> Optional[int]:
+    try:
+        import fitz  # type: ignore
+    except Exception:
+        return None
+    try:
+        doc = fitz.open(stream=content, filetype="pdf")
+        try:
+            return int(getattr(doc, "page_count", 0) or 0)
+        finally:
+            doc.close()
+    except Exception as exc:
+        logger.warning("auto_receive: falha ao contar páginas do PDF: %s", exc)
+        return None
+
+
+def fetch_os_produto(os_num: int, ano: int) -> Optional[str]:
+    from database import db
+
+    rows = db.execute_query(
+        """
+        SELECT TipoPublicacaoLink
+        FROM tabDetalhesServico
+        WHERE NroProtocoloLinkDet = %(os)s AND AnoProtocoloLinkDet = %(ano)s
+        LIMIT 1
+        """,
+        {"os": os_num, "ano": ano},
+    )
+    if not rows:
+        return None
+    value = rows[0].get("TipoPublicacaoLink")
+    text = str(value or "").strip()
+    return text or None
+
+
+def resolve_original_folder_componente(
+    *,
+    produto: str | None,
+    pdf_count: int,
+    first_pdf_bytes: bytes | None,
+) -> Optional[Literal["Capa", "Miolo"]]:
+    if pdf_count != 1 or not produto_exige_capa_miolo(produto):
+        return None
+    if not first_pdf_bytes:
+        return None
+    pages = pdf_page_count(first_pdf_bytes)
+    if pages is None or pages <= 0:
+        return None
+    return componente_por_paginas(pages)
 
 
 def is_os_enabled_for_settings(
@@ -282,12 +355,10 @@ def _save_pdf_attachments(
     service: Any,
     details: Dict[str, Any],
     os_path: str,
+    os_num: int,
+    ano: int,
 ) -> Tuple[str, int, List[str]]:
-    folder_name, version = next_original_folder_name(os_path)
-    target_dir = os.path.join(os_path, folder_name)
-    os.makedirs(target_dir, exist_ok=True)
-
-    saved: List[str] = []
+    downloaded: List[Tuple[str, bytes]] = []
     for att in details.get("attachments") or []:
         name = str(att.get("name") or "")
         if not attachment_is_pdf(name):
@@ -301,13 +372,31 @@ def _save_pdf_attachments(
         safe_name = _safe_filename(name_found or name, fallback="anexo.pdf")
         if not safe_name.lower().endswith(".pdf"):
             safe_name = f"{safe_name}.pdf"
+        downloaded.append((safe_name, content_bytes))
+
+    if not downloaded:
+        raise RuntimeError("Nenhum anexo PDF pôde ser salvo.")
+
+    produto = fetch_os_produto(os_num, ano)
+    componente = resolve_original_folder_componente(
+        produto=produto,
+        pdf_count=len(downloaded),
+        first_pdf_bytes=downloaded[0][1],
+    )
+    folder_name, version = next_original_folder_name(
+        os_path,
+        componente=componente,
+    )
+    target_dir = os.path.join(os_path, folder_name)
+    os.makedirs(target_dir, exist_ok=True)
+
+    saved: List[str] = []
+    for safe_name, content_bytes in downloaded:
         out_path = os.path.join(target_dir, safe_name)
         with open(out_path, "wb") as fh:
             fh.write(content_bytes)
         saved.append(out_path)
 
-    if not saved:
-        raise RuntimeError("Nenhum anexo PDF pôde ser salvo.")
     return folder_name, version, saved
 
 
@@ -388,6 +477,8 @@ def _process_one_email(
             service=service,
             details=details,
             os_path=os_path,
+            os_num=os_num,
+            ano=ano,
         )
         observacao = f"Analisar arquivos v{version}"
     else:

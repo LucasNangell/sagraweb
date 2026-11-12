@@ -6,9 +6,12 @@ from pathlib import Path
 from services.email_auto_receive_service import (
     build_prova_obs,
     classify_email,
+    componente_por_paginas,
     count_original_folders,
     is_os_enabled_for_settings,
     next_original_folder_name,
+    produto_exige_capa_miolo,
+    resolve_original_folder_componente,
     strip_blank_lines,
 )
 
@@ -117,12 +120,95 @@ class TestOriginalFolders:
         assert count_original_folders(str(tmp_path)) == 2
         name, version = next_original_folder_name(str(tmp_path))
         assert version == 3
-        assert name == "Original v3"
+        assert name == "Original V3"
 
     def test_first_version_when_empty(self, tmp_path: Path):
         name, version = next_original_folder_name(str(tmp_path))
         assert version == 1
-        assert name == "Original v1"
+        assert name == "Original V1"
+
+    def test_next_with_capa_suffix(self, tmp_path: Path):
+        (tmp_path / "Original").mkdir()
+        name, version = next_original_folder_name(str(tmp_path), componente="Capa")
+        assert version == 2
+        assert name == "Original V2 - Capa"
+
+    def test_next_with_miolo_suffix(self, tmp_path: Path):
+        name, version = next_original_folder_name(str(tmp_path), componente="Miolo")
+        assert version == 1
+        assert name == "Original V1 - Miolo"
+
+
+class TestCapaMioloNaming:
+    def test_produto_exige_capa_miolo(self):
+        assert produto_exige_capa_miolo("Livro") is True
+        assert produto_exige_capa_miolo("livro") is True
+        assert produto_exige_capa_miolo("Livreto c/ capa") is True
+        assert produto_exige_capa_miolo("Revista c/capa") is True
+        assert produto_exige_capa_miolo("Folder") is False
+        assert produto_exige_capa_miolo("") is False
+        assert produto_exige_capa_miolo(None) is False
+
+    def test_componente_por_paginas(self):
+        assert componente_por_paginas(1) == "Capa"
+        assert componente_por_paginas(4) == "Capa"
+        assert componente_por_paginas(5) == "Miolo"
+
+    def test_resolve_invalid_pdf_bytes_no_suffix(self):
+        assert (
+            resolve_original_folder_componente(
+                produto="Livro",
+                pdf_count=1,
+                first_pdf_bytes=b"not-a-pdf",
+            )
+            is None
+        )
+
+    def test_resolve_skips_when_multiple_pdfs_or_wrong_produto(self):
+        assert (
+            resolve_original_folder_componente(
+                produto="Livro",
+                pdf_count=2,
+                first_pdf_bytes=b"%PDF",
+            )
+            is None
+        )
+        assert (
+            resolve_original_folder_componente(
+                produto="Folder",
+                pdf_count=1,
+                first_pdf_bytes=b"%PDF",
+            )
+            is None
+        )
+
+    def test_resolve_with_real_pdf_pages(self):
+        import fitz
+
+        def make_pdf(pages: int) -> bytes:
+            doc = fitz.open()
+            for _ in range(pages):
+                doc.new_page()
+            data = doc.tobytes()
+            doc.close()
+            return data
+
+        assert (
+            resolve_original_folder_componente(
+                produto="Livro",
+                pdf_count=1,
+                first_pdf_bytes=make_pdf(1),
+            )
+            == "Capa"
+        )
+        assert (
+            resolve_original_folder_componente(
+                produto="Revista c/ capa",
+                pdf_count=1,
+                first_pdf_bytes=make_pdf(5),
+            )
+            == "Miolo"
+        )
 
 
 class TestOsSpGate:

@@ -98,6 +98,8 @@ class WorkerConfig:
 
     timbrado_a4_digital_templates_dir: str = ""
 
+    models_dir_email: str = ""
+
 
 
     @classmethod
@@ -172,6 +174,8 @@ class WorkerConfig:
             timbrado_a4_digital_templates_dir=str(
                 data.get("timbrado_a4_digital_templates_dir", "")
             ).strip(),
+
+            models_dir_email=str(data.get("models_dir_email", "")).strip(),
 
         )
 

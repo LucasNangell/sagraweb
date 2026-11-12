@@ -1434,6 +1434,13 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
         if alt_modelo_id and any(m.get("id") == alt_modelo_id for m in modelos):
             auto_id = alt_modelo_id
 
+    from services.papelaria_prova_modo import filtrar_modelos_para_modo
+
+    modelos, avisos_modo = filtrar_modelos_para_modo(modelos)
+    warnings.extend(avisos_modo)
+    if not any(m.get("id") == auto_id for m in modelos):
+        auto_id = modelos[0]["id"] if len(modelos) == 1 else None
+
     partido, uf = _parse_partido_uf(
         _as_str(row.get("SiglaOrgao")),
         _as_str(row.get("Titulo")),

@@ -130,12 +130,15 @@ def listar_modelos_corel(
 ):
     try:
         from services import papelaria_models_service as models_svc
+        from services.papelaria_prova_modo import filtrar_modelos_para_modo
 
-        return models_svc.list_modelos(
+        modelos = models_svc.list_modelos(
             produto=produto,
             cores=cores,
             frente_verso=frente_verso,
         )
+        visiveis, _avisos = filtrar_modelos_para_modo(modelos)
+        return visiveis
     except Exception as e:
         logger.exception("Erro ao listar modelos Corel: %s", e)
         raise HTTPException(500, "Erro ao listar modelos de papelaria.")

@@ -14,7 +14,7 @@ if str(_ROOT) not in sys.path:
 import worker as worker_mod  # noqa: E402
 from corel_generator import GenerationResult  # noqa: E402
 from timbrado_a4_digital_generator import TimbradoDigitalResult  # noqa: E402
-from worker import resolve_worker_tipo_job  # noqa: E402
+from worker import resolve_create_models_dir, resolve_worker_tipo_job  # noqa: E402
 
 
 class FakeThread:
@@ -113,6 +113,25 @@ def patched_runtime(monkeypatch, tmp_path):
     return gerar, exportar, _cfg(tmp_path)
 
 
+class TestResolveCreateModelsDir:
+    def test_web_usa_models_dir(self, tmp_path):
+        cfg = _cfg(tmp_path)
+        assert resolve_create_models_dir(cfg, {"prova_modo": "prova_web"}) == cfg.models_dir
+
+    def test_email_sobe_da_pasta_web(self, tmp_path):
+        cfg = _cfg(tmp_path)
+        web = tmp_path / "CSP" / "WEB"
+        cfg.models_dir = str(web)
+        resolved = resolve_create_models_dir(cfg, {"prova_modo": "prova_email"})
+        assert resolved == str(tmp_path / "CSP")
+
+    def test_email_respeita_models_dir_email(self, tmp_path):
+        cfg = _cfg(tmp_path)
+        cfg.models_dir_email = str(tmp_path / "pasta-csp")
+        resolved = resolve_create_models_dir(cfg, {"prova_modo": "prova_email"})
+        assert resolved == str(tmp_path / "pasta-csp")
+
+
 class TestResolveWorkerTipoJob:
     def test_export_pelo_tipo(self):
         assert (
@@ -187,6 +206,50 @@ class TestProcessJobDispatch:
         gerar.assert_called_once()
         exportar.assert_not_called()
         assert api.completed
+
+    def test_create_email_abre_arquivo_da_pasta_csp(self, patched_runtime, monkeypatch, tmp_path):
+        gerar, _exportar, cfg = patched_runtime
+        web = tmp_path / "CSP" / "WEB"
+        web.mkdir(parents=True)
+        cfg.models_dir = str(web)
+        seen: dict[str, str] = {}
+
+        def resolve(models_dir, name):
+            seen["dir"] = models_dir
+            seen["name"] = name
+            return str(tmp_path / name)
+
+        monkeypatch.setattr(worker_mod, "_resolve_model_path", resolve)
+        api = FakeApi()
+        worker_mod._process_job_body(
+            api,
+            cfg,
+            _job(
+                prova_modo="prova_email",
+                arquivo_modelo="CtVisitaFV.cdr",
+                arquivo_modelo_email="CtVisitaF.cdr",
+            ),
+        )
+        assert seen["dir"] == str(tmp_path / "CSP")
+        assert seen["name"] == "CtVisitaF.cdr"
+        gerar.assert_called_once()
+        assert api.completed
+        assert any("CtVisitaF.cdr" in msg for msg in api.logs)
+
+    def test_create_email_sem_arquivo_falha(self, patched_runtime, tmp_path):
+        gerar, _exportar, cfg = patched_runtime
+        web = tmp_path / "CSP" / "WEB"
+        web.mkdir(parents=True)
+        cfg.models_dir = str(web)
+        api = FakeApi()
+        worker_mod._process_job_body(
+            api,
+            cfg,
+            _job(prova_modo="prova_email", arquivo_modelo_email=""),
+        )
+        gerar.assert_not_called()
+        assert api.failed
+        assert "arquivo_modelo_email" in api.failed[0][1]
 
     def test_timbrado_digital_nao_chama_gerar_arquivo(
         self, patched_runtime, monkeypatch, tmp_path

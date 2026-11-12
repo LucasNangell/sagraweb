@@ -7,6 +7,7 @@ import type {
   GravacaoEmailNotificationSettings,
   EmailTemplateRecord,
   GerenciaSettings,
+  PapelariaProvaModoSettings,
   DevFeaturesConfig,
   CotasGrafSemestreInfo,
   CotasGrafProximoSemestreInfo,
@@ -63,6 +64,20 @@ export async function saveGerenciaSettingsConfig(
   payload: GerenciaSettings,
 ): Promise<GerenciaSettings> {
   return apiFetch<GerenciaSettings>("/admin/system/gerencia-settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchPapelariaProvaModo(): Promise<PapelariaProvaModoSettings> {
+  return apiFetch<PapelariaProvaModoSettings>("/admin/system/papelaria-prova-modo");
+}
+
+export async function savePapelariaProvaModo(
+  payload: PapelariaProvaModoSettings,
+): Promise<PapelariaProvaModoSettings> {
+  return apiFetch<PapelariaProvaModoSettings>("/admin/system/papelaria-prova-modo", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),

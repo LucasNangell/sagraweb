@@ -247,6 +247,42 @@ def _handle_signal(signum, _frame):
     _shutdown = True
 
 
+def resolve_create_models_dir(cfg: WorkerConfig, job: dict) -> str:
+    """Pasta dos .cdr de um job create. Prova e-mail usa CSP, não CSP\\WEB."""
+    modo = str(job.get("prova_modo") or "prova_web").strip()
+    if modo != "prova_email":
+        return cfg.models_dir
+    explicit = (getattr(cfg, "models_dir_email", "") or "").strip()
+    if explicit:
+        return explicit
+    base = os.path.normpath(cfg.models_dir)
+    if os.path.basename(base).upper() == "WEB":
+        return os.path.dirname(base)
+    raise CorelGenerationError(
+        "Modo Prova e-mail ativo, mas models_dir não termina em WEB "
+        "e models_dir_email não foi configurado."
+    )
+
+
+def resolve_create_arquivo(job: dict) -> str:
+    modo = str(job.get("prova_modo") or "prova_web").strip()
+    if modo != "prova_email":
+        return str(job.get("arquivo_modelo") or "")
+    nome = str(job.get("arquivo_modelo_email") or "").strip()
+    if not nome:
+        raise CorelGenerationError(
+            "Modo Prova e-mail ativo, mas a API não enviou arquivo_modelo_email."
+        )
+    return nome
+
+
+def _caminho_modelo_create(cfg: WorkerConfig, job: dict) -> str:
+    return _resolve_model_path(
+        resolve_create_models_dir(cfg, job),
+        resolve_create_arquivo(job),
+    )
+
+
 def _resolve_model_path(models_dir: str, arquivo_modelo: str) -> str:
     nome = (arquivo_modelo or "").strip()
     if not nome.lower().endswith(".cdr"):
@@ -387,15 +423,15 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
             api.fail(job_id, str(exc), retryable=False)
             return
     else:
-        caminho_modelo = _resolve_model_path(cfg.models_dir, job["arquivo_modelo"])
         models_cache_dir = os.path.join(cfg.temp_dir, "_models_cache")
         try:
+            caminho_modelo = _caminho_modelo_create(cfg, job)
             validar_acesso_job(
                 caminho_modelo,
                 output_dir,
                 models_cache_dir=models_cache_dir,
             )
-        except CorelGenerationError as exc:
+        except (CorelGenerationError, FileNotFoundError) as exc:
             logging.error("Job #%s — pré-validação falhou: %s", job_id, exc)
             api.fail(job_id, str(exc), retryable=False)
             return
@@ -511,8 +547,12 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 "campos": job.get("campos") or {},
             }
             dados = job.get("dados") or {}
-            caminho_modelo = _resolve_model_path(cfg.models_dir, job["arquivo_modelo"])
-            api.append_log(job_id, f"Iniciando geração — modelo {job['arquivo_modelo']}", "info")
+            caminho_modelo = _caminho_modelo_create(cfg, job)
+            api.append_log(
+                job_id,
+                f"Iniciando geração — modelo {os.path.basename(caminho_modelo)}",
+                "info",
+            )
             result = gerar_arquivo_corel(
                 modelo=modelo,
                 dados=dados,

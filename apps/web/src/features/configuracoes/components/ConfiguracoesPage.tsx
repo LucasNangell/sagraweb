@@ -26,6 +26,7 @@ import { EmailTemplatesSection } from "./EmailTemplatesSection";
 import { GerenciaSettingsSection } from "./GerenciaSettingsSection";
 import { OrcamentoSettingsSection } from "./OrcamentoSettingsSection";
 import { PapelariaProdutosAdminSection } from "./PapelariaProdutosAdminSection";
+import { PapelariaProvaModoSection } from "./PapelariaProvaModoSection";
 import { PapelariaWorkerQueueSection } from "./PapelariaWorkerQueueSection";
 import { PreAnaliseChecksSection } from "./PreAnaliseChecksSection";
 import { SetorPainelDefaultsPanel } from "./SetorPainelDefaultsSection";
@@ -222,6 +223,7 @@ export function ConfiguracoesPage() {
             hidden={activeTab !== "papelaria"}
             className="configuracoes-tab-panel"
           >
+            <PapelariaProvaModoSection />
             <PapelariaProdutosAdminSection />
             <PapelariaWorkerQueueSection />
           </div>

@@ -403,6 +403,11 @@ def create_job(
     if not modelo:
         raise LookupError("Modelo não encontrado ou inativo.")
 
+    if tipo_job == TIPO_JOB_CREATE:
+        from services.papelaria_prova_modo import assert_modelo_create_permitido
+
+        assert_modelo_create_permitido(modelo.get("arquivo_modelo") or "")
+
     dados_clean = _sanitize_dados(dados)
     missing = _validate_required_fields(modelo, dados_clean)
     if missing:
@@ -1638,6 +1643,22 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
         payload["output_cdr_name"] = ""
         payload["output_pdf_name"] = ""
 
+    from services.papelaria_prova_modo import (
+        MODO_PROVA_EMAIL,
+        get_modo,
+        resolve_arquivo_email,
+    )
+
+    modo = get_modo()
+    payload["prova_modo"] = modo
+    if job["tipo_job"] == TIPO_JOB_CREATE and modo == MODO_PROVA_EMAIL:
+        arquivo_email = resolve_arquivo_email(job.get("arquivo_modelo") or "")
+        if not arquivo_email:
+            raise ValueError(
+                "Modelo sem arquivo correspondente na pasta CSP para o modo Prova e-mail."
+            )
+        payload["arquivo_modelo_email"] = arquivo_email
+
     return payload
 
 
@@ -1695,7 +1716,7 @@ def claim_next_job(worker_id: str) -> Optional[dict[str, Any]]:
     append_job_log(job_id, f"Job reivindicado pelo worker {wid}.", "info")
     try:
         payload = build_worker_job_payload(job_id)
-    except LookupError as exc:
+    except (LookupError, ValueError) as exc:
         # Job já está processing; sem fail o front fica em "Processando" e o worker
         # não consegue chamar /fail (não recebeu job_id).
         fail_job(job_id, wid, str(exc), retryable=False)

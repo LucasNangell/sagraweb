@@ -58,6 +58,10 @@ class GerenciaSettingsSaveRequest(BaseModel):
     os_arquivos_client_email_enabled: bool
 
 
+class PapelariaProvaModoSaveRequest(BaseModel):
+    modo: Literal["prova_web", "prova_email"]
+
+
 class DevFeaturesSaveRequest(BaseModel):
     enabled: Dict[str, bool] = Field(default_factory=dict)
 
@@ -154,6 +158,27 @@ def save_gerencia_settings_config(body: GerenciaSettingsSaveRequest):
     )
 
     set_os_arquivos_client_email_enabled(body.os_arquivos_client_email_enabled)
+    return get_public_settings()
+
+
+@router.get(
+    "/api/admin/system/papelaria-prova-modo",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def get_papelaria_prova_modo():
+    from services.papelaria_prova_modo import get_public_settings
+
+    return get_public_settings()
+
+
+@router.put(
+    "/api/admin/system/papelaria-prova-modo",
+    dependencies=[Depends(require_admin_config_access)],
+)
+def save_papelaria_prova_modo(body: PapelariaProvaModoSaveRequest):
+    from services.papelaria_prova_modo import get_public_settings, set_modo
+
+    set_modo(body.modo)
     return get_public_settings()
 
 

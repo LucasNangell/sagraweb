@@ -9,6 +9,12 @@ export interface GerenciaSettings {
   os_arquivos_client_email_enabled: boolean;
 }
 
+export type PapelariaProvaModo = "prova_web" | "prova_email";
+
+export interface PapelariaProvaModoSettings {
+  modo: PapelariaProvaModo;
+}
+
 export interface DevFeatureItem {
   id: string;
   label: string;

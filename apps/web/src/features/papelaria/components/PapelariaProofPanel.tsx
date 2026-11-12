@@ -21,6 +21,10 @@ import {
   isPastaAvulsoProduct,
   papelariaProofPdfViewerSrc,
 } from "../papelariaSession";
+import {
+  papelariaGenerationStatusLabel,
+  resolvePapelariaGenerationPhase,
+} from "../papelariaGenerationStatus";
 import type { PapelariaViewMode } from "../papelariaViewMode";
 import {
   buildRuntimePreviewConfig,
@@ -107,6 +111,19 @@ export function PapelariaProofPanel({
   const isNarrowViewport = useMatchMedia("(max-width: 767px)");
   const isTimbradoDigitalJob =
     activeJob?.tipo_job === "timbrado_a4_digital";
+  const generationPhase = resolvePapelariaGenerationPhase(
+    isJobGenerating,
+    activeJob,
+  );
+  const generationCopy = papelariaGenerationStatusLabel(generationPhase, {
+    ordemFila: activeJob?.ordem_fila,
+    isTimbradoDigital: isTimbradoDigitalJob,
+  });
+  const showGenerating = generationPhase === "submitting" ||
+    generationPhase === "pending" ||
+    generationPhase === "processing";
+  const showGenerationFailed = generationPhase === "failed";
+  const showGenerationCancelled = generationPhase === "cancelled";
   const showDigitalDone =
     !!activeJob &&
     isTimbradoDigitalJob &&
@@ -216,23 +233,25 @@ export function PapelariaProofPanel({
   const subtitle =
     viewMode === "previa"
       ? "Prévia em tempo real dos campos do formulário."
-      : isJobGenerating
-        ? isTimbradoDigitalJob
-          ? "Aguardando Timbrado A4 Digital (SVG + DOCX)..."
-          : "Aguardando conclusão do worker CorelDRAW..."
-        : showDigitalDone
-          ? "DOCX Cor/PB e SVGs gerados na pasta Sefoc da OS."
-          : needsProvaReview
-            ? "Revise o arquivo gerado e confirme (OK) ou descarte (Cancelar)."
-            : showPdf
-              ? activeJob?.prova_revisao === "approved"
-                ? "Prova aprovada. Pendência de e-mail criada em SEFOC."
-                : exibirMockup3d
-                  ? "PDF e mockup 3D da prova gerada pelo sistema."
-                  : "PDF da prova gerada pelo sistema."
-              : showingFolderProof
-                ? `Última prova na pasta Sefoc${folderProofLabel ? `: ${folderProofLabel}` : "."}`
-                : "Nenhuma prova encontrada na pasta desta OS.";
+      : showGenerating
+        ? generationCopy.detail
+        : showGenerationFailed
+          ? "A geração falhou."
+          : showGenerationCancelled
+            ? "A solicitação foi cancelada."
+            : showDigitalDone
+              ? "DOCX Cor/PB e SVGs gerados na pasta Sefoc da OS."
+              : needsProvaReview
+                ? "Revise o arquivo gerado e confirme (OK) ou descarte (Cancelar)."
+                : showPdf
+                  ? activeJob?.prova_revisao === "approved"
+                    ? "Prova aprovada. Pendência de e-mail criada em SEFOC."
+                    : exibirMockup3d
+                      ? "PDF e mockup 3D da prova gerada pelo sistema."
+                      : "PDF da prova gerada pelo sistema."
+                  : showingFolderProof
+                    ? `Última prova na pasta Sefoc${folderProofLabel ? `: ${folderProofLabel}` : "."}`
+                    : "Nenhuma prova encontrada na pasta desta OS.";
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-sagra-border bg-neutral-50 shadow-sm max-md:overflow-visible md:overflow-hidden">
@@ -246,29 +265,46 @@ export function PapelariaProofPanel({
         <PapelariaViewModeToggle value={viewMode} onChange={onViewModeChange} />
       </div>
 
-      {viewMode === "prova" && isJobGenerating ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+      {viewMode === "prova" && showGenerating ? (
+        <div
+          className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center"
+          data-testid="papelaria-generation-loading"
+        >
           <Loader2 className="size-10 animate-spin text-secondary-blue" aria-hidden />
           <div>
             <p className="text-sm font-medium text-neutral-700">
-              {isTimbradoDigitalJob
-                ? "Gerando Timbrado A4 Digital"
-                : "Gerando arquivo Corel/PDF"}
+              {generationCopy.title}
             </p>
-            <p className="mt-1 text-xs text-neutral-500">
-              {activeJob?.status === "processing"
-                ? isTimbradoDigitalJob
-                  ? "CorelDRAW e Word em execução no worker..."
-                  : "CorelDRAW em execução no worker..."
-                : "Job na fila — aguardando o worker..."}
+            <p
+              className={cn(
+                "mt-2 inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
+                generationPhase === "processing"
+                  ? "bg-amber-100 text-amber-900"
+                  : "bg-sky-100 text-sky-900",
+              )}
+            >
+              {generationPhase === "processing"
+                ? "Processando"
+                : generationPhase === "pending"
+                  ? "Na fila"
+                  : "Enviando"}
             </p>
-            {activeJob && (
+            <p className="mt-2 text-xs text-neutral-500">{generationCopy.detail}</p>
+            {activeJob &&
+            (generationPhase === "pending" ||
+              generationPhase === "processing") ? (
               <p className="mt-2 font-mono text-[10px] text-neutral-400">
                 Job #{activeJob.id}
+                {activeJob.ordem_fila != null && activeJob.ordem_fila > 0
+                  ? ` · fila ${activeJob.ordem_fila}`
+                  : ""}
               </p>
-            )}
+            ) : null}
           </div>
-          {activeJob && onCancelJob && (
+          {activeJob &&
+          onCancelJob &&
+          (generationPhase === "pending" ||
+            generationPhase === "processing") ? (
             <button
               type="button"
               disabled={cancelPending}
@@ -278,11 +314,46 @@ export function PapelariaProofPanel({
               <XCircle className="size-3.5" aria-hidden />
               {cancelPending
                 ? "Cancelando..."
-                : activeJob.status === "processing"
+                : generationPhase === "processing"
                   ? "Cancelar processamento"
                   : "Cancelar solicitação"}
             </button>
-          )}
+          ) : null}
+        </div>
+      ) : viewMode === "prova" && showGenerationFailed && activeJob ? (
+        <div
+          className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center"
+          data-testid="papelaria-generation-error"
+        >
+          <XCircle className="size-10 text-red-500" aria-hidden />
+          <div>
+            <p className="text-sm font-medium text-red-800">
+              {generationCopy.title}
+            </p>
+            <p className="mt-2 inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-[11px] font-semibold text-red-900">
+              Erro
+            </p>
+            <p className="mt-3 max-w-md text-xs text-red-700/90">
+              {activeJob.erro?.trim() ||
+                "Falha ao gerar o arquivo. Tente novamente."}
+            </p>
+            <p className="mt-2 font-mono text-[10px] text-neutral-400">
+              Job #{activeJob.id}
+            </p>
+          </div>
+        </div>
+      ) : viewMode === "prova" && showGenerationCancelled && activeJob ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+          <XCircle className="size-10 text-neutral-400" aria-hidden />
+          <div>
+            <p className="text-sm font-medium text-neutral-700">
+              {generationCopy.title}
+            </p>
+            <p className="mt-2 text-xs text-neutral-500">{generationCopy.detail}</p>
+            <p className="mt-2 font-mono text-[10px] text-neutral-400">
+              Job #{activeJob.id}
+            </p>
+          </div>
         </div>
       ) : viewMode === "prova" && showDigitalDone && activeJob ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">

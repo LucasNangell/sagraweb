@@ -808,6 +808,12 @@ export function PapelariaCorelPanel({
   );
 
   useEffect(() => {
+    if (!(mutationGenerating || jobPipelineBusy)) return;
+    setViewMode("prova");
+    setMobilePanel("preview");
+  }, [mutationGenerating, jobPipelineBusy]);
+
+  useEffect(() => {
     if (!onSpJobUiStatusChange || !hasOs) return;
     if (mutationGenerating || jobPipelineBusy) {
       onSpJobUiStatusChange(anoNum, nroNum, "generating");
@@ -879,6 +885,7 @@ export function PapelariaCorelPanel({
     createJobMutation.isPending ||
     createDigitalJobMutation.isPending ||
     exportCdrMutation.isPending ||
+    finalizeCorelMutation.isPending ||
     (!!activeJob &&
       (activeJob.status === "pending" || activeJob.status === "processing"));
   const cdrFiles = usableCdrFiles(cdrPathQuery.data);

@@ -815,8 +815,12 @@ export function PapelariaCorelPanel({
 
   useEffect(() => {
     if (!onSpJobUiStatusChange || !hasOs) return;
-    if (mutationGenerating || jobPipelineBusy) {
+    if (activeJob?.status === "processing") {
       onSpJobUiStatusChange(anoNum, nroNum, "generating");
+      return;
+    }
+    if (mutationGenerating || activeJob?.status === "pending") {
+      onSpJobUiStatusChange(anoNum, nroNum, "pending");
       return;
     }
     if (activeJob?.status === "completed") {
@@ -835,7 +839,6 @@ export function PapelariaCorelPanel({
     anoNum,
     nroNum,
     mutationGenerating,
-    jobPipelineBusy,
     activeJob?.status,
   ]);
 

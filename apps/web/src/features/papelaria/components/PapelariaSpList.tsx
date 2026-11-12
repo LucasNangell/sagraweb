@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Check, Loader2, Settings2, X } from "lucide-react";
+import { Check, Clock, Loader2, Settings2, X } from "lucide-react";
 import { cn } from "@sagra/ui";
 
 import { useOsSearch } from "@/api/hooks/useOsSearch";
@@ -172,10 +172,15 @@ export function PapelariaSpList({
                       {row.solicitante ?? "—"}
                     </td>
                     <td className="w-8 px-1 py-1.5 text-center">
-                      {jobUi === "generating" ? (
+                      {jobUi === "pending" ? (
+                        <Clock
+                          className="mx-auto size-3.5 text-amber-600"
+                          aria-label="Na fila"
+                        />
+                      ) : jobUi === "generating" ? (
                         <Loader2
                           className="mx-auto size-3.5 animate-spin text-secondary-blue"
-                          aria-label="Gerando arquivo"
+                          aria-label="Processando"
                         />
                       ) : jobUi === "done" ? (
                         <Check

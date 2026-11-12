@@ -1395,7 +1395,14 @@ _PASTA_AVULSO_ALTURA_MM = 460.0
 _A4_PAISAGEM_LARGURA_MM = 297.0
 _A4_PAISAGEM_ALTURA_MM = 210.0
 _PASTA_AVULSO_TOLERANCIA_MM = 8.0
+# cdrUnit (Object Model Corel):
+# cdrTenthMicron=0, cdrInch=1, cdrFoot=2, cdrMillimeter=3, cdrCentimeter=4
+_CDR_INCH = 1
 _CDR_MILLIMETER = 3
+_CDR_CENTER = 9  # cdrReferencePoint.cdrCenter
+# PrnPlaceType.prnPlaceCenterPage — ImagePlacement=2 no PrintSett_ReduçaoA3_A4.prs
+_PRN_PLACE_CENTER_PAGE = 2
+_MM_POR_POLEGADA = 25.4
 
 
 def pagina_e_pasta_avulso_mm(largura_mm: float, altura_mm: float) -> bool:
@@ -1426,30 +1433,6 @@ def calcular_ajuste_a4_paisagem(
         "pagina_largura": _A4_PAISAGEM_LARGURA_MM,
         "pagina_altura": _A4_PAISAGEM_ALTURA_MM,
     }
-
-
-def _definir_unidade_milimetros(doc: Any, logs: list[str]) -> None:
-    unidade = _CDR_MILLIMETER
-    try:
-        import win32com.client
-
-        unidade = int(win32com.client.constants.cdrMillimeter)
-    except Exception:
-        unidade = _CDR_MILLIMETER
-    try:
-        app = doc.Application
-        for attr in ("Unit", "Units"):
-            try:
-                setattr(app, attr, unidade)
-            except Exception:
-                pass
-    except Exception:
-        pass
-    try:
-        doc.Unit = unidade
-        logs.append(f"Document.Unit=cdrMillimeter ({unidade}).")
-    except Exception as exc:
-        logs.append(f"Aviso ao definir unidade em milímetros: {exc}")
 
 
 def encaixar_retangulo_na_pagina(
@@ -1487,43 +1470,83 @@ def encaixar_retangulo_na_pagina(
     )
 
 
-def _centro_pagina_mm(page: Any) -> tuple[float, float, float, float]:
-    """Centro e tamanho da página (cx, cy, width, height) em mm."""
-    largura = float(page.SizeWidth)
-    altura = float(page.SizeHeight)
+def _resolver_constante_corel(nome: str, fallback: int) -> int:
     try:
-        return float(page.CenterX), float(page.CenterY), largura, altura
+        import win32com.client
+
+        return int(getattr(win32com.client.constants, nome))
     except Exception:
-        pass
-    try:
-        esquerda = float(page.LeftX)
-        base = float(page.BottomY)
-        return esquerda + largura / 2.0, base + altura / 2.0, largura, altura
-    except Exception:
-        return largura / 2.0, altura / 2.0, largura, altura
+        return fallback
 
 
-def _retangulo_range_mm(shape_range: Any) -> tuple[float, float, float, float]:
-    """Left, bottom, width, height do ShapeRange."""
+def _app_do_documento(doc: Any) -> Any | None:
     try:
-        return (
-            float(shape_range.LeftX),
-            float(shape_range.BottomY),
-            float(shape_range.SizeWidth),
-            float(shape_range.SizeHeight),
-        )
+        return doc.Application
     except Exception:
-        pass
+        return None
+
+
+def _definir_unidade_documento(
+    doc: Any, unidade: int, nome: str, logs: list[str]
+) -> int:
+    """Força Application+Document.Unit e confere o valor lido (padrão DEPOL/SEFOC)."""
+    app = _app_do_documento(doc)
+    if app is not None:
+        for attr in ("Unit", "Units"):
+            try:
+                setattr(app, attr, unidade)
+            except Exception:
+                pass
     try:
-        cx = float(shape_range.CenterX)
-        cy = float(shape_range.CenterY)
-        largura = float(shape_range.SizeWidth)
-        altura = float(shape_range.SizeHeight)
-        return cx - largura / 2.0, cy - altura / 2.0, largura, altura
+        doc.Unit = unidade
     except Exception as exc:
         raise CorelGenerationError(
-            f"Não foi possível ler o bounding box da arte: {exc}"
+            f"Não foi possível definir Document.Unit={nome} ({unidade}): {exc}"
         ) from exc
+    try:
+        atual = int(doc.Unit)
+    except Exception:
+        atual = -1
+    if atual != unidade:
+        try:
+            doc.Unit = unidade
+            atual = int(doc.Unit)
+        except Exception:
+            pass
+    if atual != unidade:
+        raise CorelGenerationError(
+            f"Document.Unit não ficou em {nome} "
+            f"(lido={atual}, esperado={unidade}). "
+            "Sem unidade correta o Corel interpreta SizeWidth/SetSize errado."
+        )
+    logs.append(f"Document.Unit={nome} ({unidade}).")
+    return atual
+
+
+def _tamanho_pagina(page: Any) -> tuple[float, float]:
+    try:
+        return float(page.SizeWidth), float(page.SizeHeight)
+    except Exception:
+        pass
+    try:
+        largura, altura = page.GetSize()
+        return float(largura), float(altura)
+    except Exception as exc:
+        raise CorelGenerationError(
+            f"Não foi possível ler o tamanho da página: {exc}"
+        ) from exc
+
+
+def _centro_pagina(page: Any) -> tuple[float, float]:
+    try:
+        return float(page.CenterX), float(page.CenterY)
+    except Exception:
+        pass
+    largura, altura = _tamanho_pagina(page)
+    try:
+        return float(page.LeftX) + largura / 2.0, float(page.BottomY) + altura / 2.0
+    except Exception:
+        return largura / 2.0, altura / 2.0
 
 
 def _contar_shapes(shapes: Any) -> int:
@@ -1535,16 +1558,11 @@ def _contar_shapes(shapes: Any) -> int:
         ) from exc
 
 
-_CDR_CENTER = 9  # cdrReferencePoint.cdrCenter
-# PrnPlaceType.prnPlaceCenterPage — ImagePlacement=2 no PrintSett_ReduçaoA3_A4.prs
-_PRN_PLACE_CENTER_PAGE = 2
-
-
 def _shape_range_utilizavel(shape_range: Any) -> bool:
     """Valida o range por geometria/API — nunca use callable() em COM win32com."""
     if shape_range is None:
         return False
-    for attr in ("SizeWidth", "LeftX", "CenterX", "SetSize", "Count"):
+    for attr in ("SizeWidth", "Stretch", "SetSize", "AlignToPageCenter", "Count"):
         try:
             getattr(shape_range, attr)
             return True
@@ -1554,14 +1572,9 @@ def _shape_range_utilizavel(shape_range: Any) -> bool:
 
 
 def _resolver_shapes_all(shapes: Any) -> Any:
-    """Obtém ShapeRange; no Corel 2017 `Shapes.All` é método (`All()`).
-
-    Objetos COM do win32com costumam ser `callable(...) == True`; isso não
-    indica método Python e não pode descartar o ShapeRange.
-    """
+    """Obtém ShapeRange; no Corel 2017 `Shapes.All` é método (`All()`)."""
     erros: list[str] = []
 
-    # Preferência: All() — padrão já usado em credenciais_depol_generator.
     try:
         shape_range = shapes.All()
         if _shape_range_utilizavel(shape_range):
@@ -1570,7 +1583,6 @@ def _resolver_shapes_all(shapes: Any) -> Any:
     except Exception as exc:
         erros.append(f"All(): {exc}")
 
-    # Fallback: Range com todos os índices 1..N.
     total_shapes = _contar_shapes(shapes)
     if total_shapes <= 0:
         raise CorelGenerationError(
@@ -1585,7 +1597,6 @@ def _resolver_shapes_all(shapes: Any) -> Any:
     except Exception as exc:
         erros.append(f"Range(indices): {exc}")
 
-    # Último recurso: selecionar item a item.
     try:
         shapes.Item(1).CreateSelection()
         for indice in range(2, total_shapes + 1):
@@ -1614,12 +1625,7 @@ def _obter_shape_range_pagina(page: Any) -> Any:
 
 
 def _definir_reference_point_centro(doc: Any, logs: list[str]) -> None:
-    try:
-        import win32com.client
-
-        centro = int(win32com.client.constants.cdrCenter)
-    except Exception:
-        centro = _CDR_CENTER
+    centro = _resolver_constante_corel("cdrCenter", _CDR_CENTER)
     try:
         doc.ReferencePoint = centro
         logs.append(f"Document.ReferencePoint=cdrCenter ({centro}).")
@@ -1627,26 +1633,49 @@ def _definir_reference_point_centro(doc: Any, logs: list[str]) -> None:
         logs.append(f"Aviso ao definir ReferencePoint central: {exc}")
 
 
-def _redimensionar_range_mm(
-    shape_range: Any, largura: float, altura: float
-) -> None:
-    """Define o tamanho absoluto do range (equivalente à escala do .prs da SEFOC)."""
+def _reduzir_range_proporcional(shape_range: Any, page: Any, escala: float) -> None:
+    """Reduz a composição pelo fator da página (não confia em SizeWidth do range).
+
+    ShapeRange.SizeWidth nesta pasta chega ~45720 enquanto a página está ~470 mm —
+    propriedade inconsistente. Stretch(fator) multiplica a geometria real.
+    """
+    cx, cy = _centro_pagina(page)
     try:
-        shape_range.SetSize(largura, altura)
+        shape_range.RotationCenterX = cx
+        shape_range.RotationCenterY = cy
     except Exception:
         try:
-            shape_range.SetSizeEx(largura, altura)
+            shape_range.SetRotationCenter(cx, cy)
+        except Exception:
+            pass
+
+    erros: list[str] = []
+    for kwargs in (
+        {"SizeCharacters": True},
+        {},
+    ):
+        try:
+            if kwargs:
+                shape_range.Stretch(escala, escala, True)
+            else:
+                shape_range.Stretch(escala, escala)
+            return
         except Exception as exc:
-            raise CorelGenerationError(
-                f"Não foi possível redimensionar a pasta avulso para A4: {exc}"
-            ) from exc
-    lida_l = float(shape_range.SizeWidth)
-    lida_a = float(shape_range.SizeHeight)
-    if abs(lida_l - largura) > 2.0 or abs(lida_a - altura) > 2.0:
-        raise CorelGenerationError(
-            "Redimensionamento da pasta avulso não aplicou o tamanho esperado "
-            f"(pedido {largura:.1f}×{altura:.1f} mm, lido {lida_l:.1f}×{lida_a:.1f} mm)."
-        )
+            erros.append(f"Stretch{kwargs or ''}: {exc}")
+
+    # Fallback: SetSize absoluto a partir do tamanho da PÁGINA (mesma unidade).
+    try:
+        page_w, page_h = _tamanho_pagina(page)
+        shape_range.SetSize(page_w * escala, page_h * escala)
+        return
+    except Exception as exc:
+        erros.append(f"SetSize(page*escala): {exc}")
+
+    raise CorelGenerationError(
+        "Não foi possível reduzir a pasta avulso para A4 ("
+        + "; ".join(erros)
+        + ")."
+    )
 
 
 def _centralizar_range_na_pagina(shape_range: Any, page: Any) -> None:
@@ -1663,45 +1692,83 @@ def _centralizar_range_na_pagina(shape_range: Any, page: Any) -> None:
     except Exception:
         pass
     try:
-        shape_range.CenterX = float(page.CenterX)
-        shape_range.CenterY = float(page.CenterY)
+        cx, cy = _centro_pagina(page)
+        shape_range.CenterX = cx
+        shape_range.CenterY = cy
     except Exception as exc:
         raise CorelGenerationError(
             f"Não foi possível centralizar a pasta avulso no A4: {exc}"
         ) from exc
 
 
-def _definir_tamanho_pagina_mm(page: Any, largura: float, altura: float) -> None:
+def _definir_tamanho_pagina(
+    page: Any, largura: float, altura: float, unidade_nome: str
+) -> None:
     try:
         page.SetSize(largura, altura)
     except Exception:
         page.SizeWidth = largura
         page.SizeHeight = altura
-    lida_l = float(page.SizeWidth)
-    lida_a = float(page.SizeHeight)
-    if abs(lida_l - largura) > 1.5 or abs(lida_a - altura) > 1.5:
+    lida_l, lida_a = _tamanho_pagina(page)
+    if abs(lida_l - largura) > 0.05 or abs(lida_a - altura) > 0.05:
         raise CorelGenerationError(
-            f"Página não ficou em A4 paisagem "
-            f"(lido {lida_l:.1f}×{lida_a:.1f} mm)."
+            f"Página não ficou em A4 paisagem em {unidade_nome} "
+            f"(lido {lida_l:.4f}×{lida_a:.4f}, esperado {largura:.4f}×{altura:.4f})."
         )
 
 
+def _bbox_objetos_pagina(page: Any) -> tuple[float, float, float, float] | None:
+    """Tenta GetObjectsBoundingBox — mais confiável que ShapeRange.SizeWidth."""
+    for args in ((False, False), (True, False), (False,), tuple()):
+        try:
+            resultado = page.GetObjectsBoundingBox(*args)
+            if resultado is None:
+                continue
+            if isinstance(resultado, (list, tuple)) and len(resultado) >= 4:
+                left, bottom, width, height = (float(resultado[i]) for i in range(4))
+                if width > 0 and height > 0:
+                    return left, bottom, width, height
+        except Exception:
+            continue
+    return None
+
+
 def _arte_cabe_na_pagina(
-    page: Any, shape_range: Any, tolerancia_mm: float = 1.5
+    page: Any, shape_range: Any, tolerancia: float = 0.05
 ) -> tuple[bool, str]:
-    page_cx, page_cy, page_w, page_h = _centro_pagina_mm(page)
+    page_w, page_h = _tamanho_pagina(page)
+    page_cx, page_cy = _centro_pagina(page)
     page_left = page_cx - page_w / 2.0
     page_bottom = page_cy - page_h / 2.0
-    left, bottom, width, height = _retangulo_range_mm(shape_range)
+
+    bbox = _bbox_objetos_pagina(page)
+    if bbox is None:
+        try:
+            left = float(shape_range.LeftX)
+            bottom = float(shape_range.BottomY)
+            width = float(shape_range.SizeWidth)
+            height = float(shape_range.SizeHeight)
+            # SizeWidth do range nesta pasta já veio ~100× maior que a página.
+            if width > page_w * 3 or height > page_h * 3:
+                return True, (
+                    "bbox do range inconsistente com a unidade da página "
+                    f"(range {width:.1f}×{height:.1f}, página {page_w:.2f}×{page_h:.2f}); "
+                    "aceitou Stretch pela escala da página"
+                )
+            bbox = (left, bottom, width, height)
+        except Exception as exc:
+            return False, f"não foi possível validar a arte: {exc}"
+
+    left, bottom, width, height = bbox
     ok = (
-        left >= page_left - tolerancia_mm
-        and bottom >= page_bottom - tolerancia_mm
-        and left + width <= page_left + page_w + tolerancia_mm
-        and bottom + height <= page_bottom + page_h + tolerancia_mm
+        left >= page_left - tolerancia
+        and bottom >= page_bottom - tolerancia
+        and left + width <= page_left + page_w + tolerancia
+        and bottom + height <= page_bottom + page_h + tolerancia
     )
     detalhe = (
-        f"arte {width:.1f}×{height:.1f} mm em "
-        f"({left:.1f},{bottom:.1f}); página {page_w:.1f}×{page_h:.1f} mm"
+        f"arte {width:.3f}×{height:.3f} em ({left:.3f},{bottom:.3f}); "
+        f"página {page_w:.3f}×{page_h:.3f}"
     )
     return ok, detalhe
 
@@ -1709,41 +1776,55 @@ def _arte_cabe_na_pagina(
 def _ajustar_pasta_avulso_para_a4(doc: Any, logs: list[str]) -> None:
     """Reduz a folha 470×460 mm para A4 paisagem só no PDF da prova.
 
-    A macro SEFOC não transforma a arte com StretchEx: carrega
-    PrintSett_ReduçaoA3_A4.prs (DefaultX/YScale≈0.47, ImagePlacement=2=centro)
-    na impressão. PublishToPDF não aplica esse estilo, então replicamos aqui
-    com SetSize absoluto + alinhamento ao centro da página.
+    Macros SEFOC leem SizeWidth em polegadas (`* 2.54` → cm) e reduzem na
+    impressão via PrintSett_ReduçaoA3_A4.prs (escala ~0.47, ImagePlacement=2).
+    Aqui forçamos cdrInch (como o Object Model espera nesses macros), aplicamos
+    Stretch pela escala da página e centralizamos — sem confiar no SizeWidth
+    mentiroso do ShapeRange.
     """
-    _definir_unidade_milimetros(doc, logs)
+    unidade_pol = _resolver_constante_corel("cdrInch", _CDR_INCH)
+    _definir_unidade_documento(doc, unidade_pol, "cdrInch", logs)
     _definir_reference_point_centro(doc, logs)
+
     try:
         pagina = doc.Pages.Item(1)
-        _, _, largura, altura = _centro_pagina_mm(pagina)
+        largura_in, altura_in = _tamanho_pagina(pagina)
     except Exception as exc:
         raise CorelGenerationError(
             f"Não foi possível ler o tamanho da página: {exc}"
         ) from exc
 
-    if not pagina_e_pasta_avulso_mm(largura, altura):
+    largura_mm = largura_in * _MM_POR_POLEGADA
+    altura_mm = altura_in * _MM_POR_POLEGADA
+    logs.append(
+        f"Página pasta (cdrInch): {largura_in:.4f}×{altura_in:.4f} in "
+        f"(≈ {largura_mm:.1f}×{altura_mm:.1f} mm)."
+    )
+
+    if not pagina_e_pasta_avulso_mm(largura_mm, altura_mm):
         logs.append(
-            f"Página {largura:.1f}×{altura:.1f} mm — PDF mantém o tamanho do modelo."
+            f"Página {largura_mm:.1f}×{altura_mm:.1f} mm — PDF mantém o tamanho do modelo."
         )
         return
 
-    ajuste = calcular_ajuste_a4_paisagem(largura, altura)
-    shape_range = _obter_shape_range_pagina(pagina)
-    before = _retangulo_range_mm(shape_range)
-    logs.append(
-        "Pasta avulso antes do ajuste: "
-        f"{before[2]:.1f}×{before[3]:.1f} mm em ({before[0]:.1f},{before[1]:.1f})."
-    )
+    ajuste = calcular_ajuste_a4_paisagem(largura_mm, altura_mm)
+    escala = ajuste["escala"]
+    a4_w_in = _A4_PAISAGEM_LARGURA_MM / _MM_POR_POLEGADA
+    a4_h_in = _A4_PAISAGEM_ALTURA_MM / _MM_POR_POLEGADA
 
-    nova_largura = before[2] * ajuste["escala"]
-    nova_altura = before[3] * ajuste["escala"]
-    _redimensionar_range_mm(shape_range, nova_largura, nova_altura)
-    _definir_tamanho_pagina_mm(
-        pagina, ajuste["pagina_largura"], ajuste["pagina_altura"]
-    )
+    shape_range = _obter_shape_range_pagina(pagina)
+    try:
+        sel_w = float(shape_range.SizeWidth)
+        sel_h = float(shape_range.SizeHeight)
+        logs.append(
+            f"ShapeRange.SizeWidth/Height brutos: {sel_w:.1f}×{sel_h:.1f} "
+            f"(ignorados se incoerentes com a página {largura_in:.3f}×{altura_in:.3f} in)."
+        )
+    except Exception:
+        pass
+
+    _reduzir_range_proporcional(shape_range, pagina, escala)
+    _definir_tamanho_pagina(pagina, a4_w_in, a4_h_in, "cdrInch")
     _centralizar_range_na_pagina(shape_range, pagina)
 
     ok, detalhe = _arte_cabe_na_pagina(pagina, shape_range)
@@ -1755,9 +1836,8 @@ def _ajustar_pasta_avulso_para_a4(doc: Any, logs: list[str]) -> None:
     logs.append(
         "Pasta avulso ajustada para A4 paisagem "
         f"({ajuste['pagina_largura']:.0f}×{ajuste['pagina_altura']:.0f} mm, "
-        f"escala {ajuste['escala']:.3f}, SetSize+centro como "
-        f"PrintSett_ReduçaoA3_A4/ImagePlacement={_PRN_PLACE_CENTER_PAGE}); "
-        f"{detalhe}."
+        f"escala {escala:.3f}, Stretch em cdrInch + centro "
+        f"ImagePlacement={_PRN_PLACE_CENTER_PAGE}); {detalhe}."
     )
 
 

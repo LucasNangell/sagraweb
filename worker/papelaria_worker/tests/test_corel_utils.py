@@ -422,15 +422,36 @@ class TestAjustePastaAvulsoA4:
         assert shape_range.Count == 1
         assert shape_range.CenterX == 10
 
+    def test_shapes_all_aceita_com_callable(self):
+        """win32com marca Dispatch como callable; isso não invalida o range."""
+
+        class FakeComRange:
+            Count = 2
+            SizeWidth = 100.0
+
+            def __call__(self):
+                raise AssertionError("ShapeRange COM não deve ser chamado")
+
+            def StretchEx(self, *args, **kwargs):
+                return None
+
+        class Shapes:
+            def All(self):
+                return FakeComRange()
+
+        shape_range = _resolver_shapes_all(Shapes())
+        assert callable(shape_range)
+        assert shape_range.Count == 2
+
     def test_shapes_all_fallback_range_quando_all_falha(self):
         class ShapeRange:
             def __init__(self, total: int) -> None:
                 self.Count = total
+                self.SizeWidth = 1.0
 
         class Shapes:
             Count = 3
 
-            @property
             def All(self):
                 raise RuntimeError("All indisponível")
 
@@ -537,6 +558,7 @@ class TestAjustePastaAvulsoA4:
         class Shapes:
             def __init__(self, shape_range: ShapeRange) -> None:
                 self._all = shape_range
+                self.Count = 2
 
             def All(self) -> ShapeRange:
                 return self._all
@@ -640,7 +662,10 @@ class TestAjustePastaAvulsoA4:
                 self.Shapes = type(
                     "Shapes",
                     (),
-                    {"All": lambda _self=None: self._range},
+                    {
+                        "Count": 1,
+                        "All": lambda _self=None: self._range,
+                    },
                 )()
 
             def SetSize(self, largura: float, altura: float) -> None:

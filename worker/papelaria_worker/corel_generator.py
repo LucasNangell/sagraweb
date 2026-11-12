@@ -1535,41 +1535,35 @@ def _contar_shapes(shapes: Any) -> int:
         ) from exc
 
 
-def _probe_shape_range(shape_range: Any) -> int | None:
-    """Confirma ShapeRange lendo Count — evita hasattr(), instável no win32com."""
-    if shape_range is None or callable(shape_range):
-        return None
-    try:
-        return int(shape_range.Count)
-    except Exception:
-        return None
+def _shape_range_utilizavel(shape_range: Any) -> bool:
+    """Valida o range por geometria/API — nunca use callable() em COM win32com."""
+    if shape_range is None:
+        return False
+    for attr in ("SizeWidth", "LeftX", "CenterX", "StretchEx", "Move", "Count"):
+        try:
+            getattr(shape_range, attr)
+            return True
+        except Exception:
+            continue
+    return False
 
 
 def _resolver_shapes_all(shapes: Any) -> Any:
-    """Obtém ShapeRange; no Corel 2017 `Shapes.All` é método (`All()`)."""
+    """Obtém ShapeRange; no Corel 2017 `Shapes.All` é método (`All()`).
+
+    Objetos COM do win32com costumam ser `callable(...) == True`; isso não
+    indica método Python e não pode descartar o ShapeRange.
+    """
     erros: list[str] = []
 
     # Preferência: All() — padrão já usado em credenciais_depol_generator.
     try:
         shape_range = shapes.All()
-        total = _probe_shape_range(shape_range)
-        if total is not None:
+        if _shape_range_utilizavel(shape_range):
             return shape_range
-        erros.append("All() sem Count legível")
+        erros.append("All() retornou objeto sem API de ShapeRange")
     except Exception as exc:
         erros.append(f"All(): {exc}")
-
-    # Alguns wrappers expõem All como propriedade.
-    try:
-        shape_range = shapes.All
-        if callable(shape_range):
-            shape_range = shape_range()
-        total = _probe_shape_range(shape_range)
-        if total is not None:
-            return shape_range
-        erros.append("All propriedade sem Count legível")
-    except Exception as exc:
-        erros.append(f"All propriedade: {exc}")
 
     # Fallback: Range com todos os índices 1..N.
     total_shapes = _contar_shapes(shapes)
@@ -1580,12 +1574,24 @@ def _resolver_shapes_all(shapes: Any) -> Any:
     indices = list(range(1, total_shapes + 1))
     try:
         shape_range = shapes.Range(indices)
-        total = _probe_shape_range(shape_range)
-        if total is not None:
+        if _shape_range_utilizavel(shape_range):
             return shape_range
-        erros.append("Range(indices) sem Count legível")
+        erros.append("Range(indices) retornou objeto sem API de ShapeRange")
     except Exception as exc:
         erros.append(f"Range(indices): {exc}")
+
+    # Último recurso: selecionar item a item.
+    try:
+        shapes.Item(1).CreateSelection()
+        for indice in range(2, total_shapes + 1):
+            shapes.Item(indice).AddToSelection()
+        app = shapes.Application
+        shape_range = app.ActiveSelection
+        if _shape_range_utilizavel(shape_range):
+            return shape_range
+        erros.append("ActiveSelection sem API de ShapeRange")
+    except Exception as exc:
+        erros.append(f"CreateSelection: {exc}")
 
     raise CorelGenerationError(
         "Não foi possível obter o ShapeRange da pasta avulso ("
@@ -1595,17 +1601,11 @@ def _resolver_shapes_all(shapes: Any) -> Any:
 
 
 def _obter_shape_range_pagina(page: Any) -> Any:
-    shape_range = _resolver_shapes_all(page.Shapes)
-    total = _probe_shape_range(shape_range)
-    if total is None:
-        raise CorelGenerationError(
-            "Corel não retornou um ShapeRange válido para a pasta avulso."
-        )
-    if total == 0:
+    if _contar_shapes(page.Shapes) == 0:
         raise CorelGenerationError(
             "A pasta avulso não tem objetos para reduzir ao A4."
         )
-    return shape_range
+    return _resolver_shapes_all(page.Shapes)
 
 
 def _stretch_range_em_torno(

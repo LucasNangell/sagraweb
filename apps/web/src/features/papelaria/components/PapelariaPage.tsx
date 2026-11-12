@@ -97,6 +97,7 @@ export function PapelariaPage() {
               }
               selected={selected}
               embedded
+              listLayout="compact"
             />
           </section>
         </div>

@@ -70,6 +70,11 @@ interface OsHistoryPanelProps {
   selected: OsSearchRow | null;
   flash?: boolean;
   embedded?: boolean;
+  /**
+   * `default`: Situação | Setor | Data.
+   * `compact`: Situação | Setor, com data e ponto numa linha abaixo.
+   */
+  listLayout?: "default" | "compact";
   onEditingChange?: (editing: boolean) => void;
 }
 
@@ -151,12 +156,24 @@ function isOsFrozen(row: OsSearchRow | null): boolean {
   return FROZEN_SITUACOES.has((row.situacao ?? "").trim());
 }
 
+function historyMetaLine(
+  data: string | null | undefined,
+  ponto: string | number | null | undefined,
+  usuarioNome?: string | null,
+): string {
+  const dateLabel = formatDateBr(data ?? undefined);
+  const pontoLabel = formatUsuarioPontoLabel(ponto, usuarioNome);
+  return [dateLabel, pontoLabel].filter(Boolean).join(" · ");
+}
+
 export function OsHistoryPanel({
   selected,
   flash,
   embedded = false,
+  listLayout = "default",
   onEditingChange,
 }: OsHistoryPanelProps) {
+  const compactList = listLayout === "compact";
   const queryClient = useQueryClient();
   const filters = useOsFiltersStore((s) => s.filters);
   const user = useAuthStore((s) => s.user);
@@ -919,23 +936,25 @@ export function OsHistoryPanel({
                     </th>
                     <th
                       className="overflow-hidden px-1.5 py-1.5 text-left font-semibold"
-                      style={{ width: "6.5rem" }}
+                      style={{ width: compactList ? "5.5rem" : "6.5rem" }}
                     >
                       Setor
                     </th>
-                    <th
-                      className="overflow-hidden px-1.5 py-1.5 text-left font-semibold"
-                      style={{ width: "5.75rem" }}
-                    >
-                      Data
-                    </th>
+                    {!compactList ? (
+                      <th
+                        className="overflow-hidden px-1.5 py-1.5 text-left font-semibold"
+                        style={{ width: "5.75rem" }}
+                      >
+                        Data
+                      </th>
+                    ) : null}
                   </tr>
                 </thead>
                 <tbody key={historyOsKey ?? "empty"}>
                   {showHistoryLoading ? (
                     <tr>
                       <td
-                        colSpan={3}
+                        colSpan={compactList ? 2 : 3}
                         className="px-2 py-4 text-center text-neutral-500"
                       >
                         Carregando...
@@ -944,7 +963,7 @@ export function OsHistoryPanel({
                   ) : rows.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={3}
+                        colSpan={compactList ? 2 : 3}
                         className="px-2 py-4 text-center text-neutral-500"
                       >
                         Nenhum andamento.
@@ -956,6 +975,11 @@ export function OsHistoryPanel({
                         const subRow = row as SubOsHistoryRow;
                         const isRowSelected =
                           selectedSubHistory?.id === subRow.id;
+                        const meta = historyMetaLine(
+                          subRow.data,
+                          subRow.ponto,
+                          subRow.usuario_nome,
+                        );
                         return (
                           <tr
                             key={`${historyOsKey}-${subRow.id}`}
@@ -979,27 +1003,59 @@ export function OsHistoryPanel({
                               isRowSelected && "bg-[var(--highlight-yellow)]",
                             )}
                           >
-                            <td className="min-w-0 overflow-hidden px-2 py-1">
-                              <span className="block truncate" title={subRow.situacao ?? undefined}>
-                                {subRow.situacao ?? "-"}
-                              </span>
-                            </td>
-                            <td className="overflow-hidden px-1.5 py-1" style={{ width: "6.5rem" }}>
-                              <span className="block truncate" title={subRow.setor ?? undefined}>
-                                {subRow.setor ?? "-"}
-                              </span>
-                            </td>
-                            <td className="overflow-hidden px-1.5 py-1 whitespace-nowrap" style={{ width: "5.75rem" }}>
-                              <span className="block tabular-nums">
-                                {formatDateBr(subRow.data ?? undefined)}
-                              </span>
-                            </td>
+                            {compactList ? (
+                              <td colSpan={2} className="px-2 py-1">
+                                <div className="grid grid-cols-[minmax(0,1fr)_5.5rem] gap-x-2">
+                                  <span
+                                    className="min-w-0 truncate"
+                                    title={subRow.situacao ?? undefined}
+                                  >
+                                    {subRow.situacao ?? "-"}
+                                  </span>
+                                  <span
+                                    className="truncate"
+                                    title={subRow.setor ?? undefined}
+                                  >
+                                    {subRow.setor ?? "-"}
+                                  </span>
+                                  <span
+                                    className="col-span-2 mt-0.5 truncate text-[10px] text-neutral-500 tabular-nums"
+                                    title={meta}
+                                  >
+                                    {meta || "—"}
+                                  </span>
+                                </div>
+                              </td>
+                            ) : (
+                              <>
+                                <td className="min-w-0 overflow-hidden px-2 py-1">
+                                  <span className="block truncate" title={subRow.situacao ?? undefined}>
+                                    {subRow.situacao ?? "-"}
+                                  </span>
+                                </td>
+                                <td className="overflow-hidden px-1.5 py-1" style={{ width: "6.5rem" }}>
+                                  <span className="block truncate" title={subRow.setor ?? undefined}>
+                                    {subRow.setor ?? "-"}
+                                  </span>
+                                </td>
+                                <td className="overflow-hidden px-1.5 py-1 whitespace-nowrap" style={{ width: "5.75rem" }}>
+                                  <span className="block tabular-nums">
+                                    {formatDateBr(subRow.data ?? undefined)}
+                                  </span>
+                                </td>
+                              </>
+                            )}
                           </tr>
                         );
                       }
                       const mainRow = row as OsHistoryRow;
                       const isRowSelected =
                         selectedHistory?.CodStatus === mainRow.CodStatus;
+                      const meta = historyMetaLine(
+                        mainRow.Data,
+                        mainRow.Ponto,
+                        mainRow.usuario_nome,
+                      );
                       return (
                         <tr
                           key={`${historyOsKey}-${mainRow.CodStatus}`}
@@ -1014,21 +1070,48 @@ export function OsHistoryPanel({
                             isRowSelected && "bg-[var(--highlight-yellow)]",
                           )}
                         >
-                          <td className="min-w-0 overflow-hidden px-2 py-1">
-                            <span className="block truncate" title={mainRow.SituacaoLink ?? undefined}>
-                              {mainRow.SituacaoLink ?? "-"}
-                            </span>
-                          </td>
-                          <td className="overflow-hidden px-1.5 py-1" style={{ width: "6.5rem" }}>
-                            <span className="block truncate" title={mainRow.SetorLink ?? undefined}>
-                              {mainRow.SetorLink ?? "-"}
-                            </span>
-                          </td>
-                          <td className="overflow-hidden px-1.5 py-1 whitespace-nowrap" style={{ width: "5.75rem" }}>
-                            <span className="block tabular-nums">
-                              {formatDateBr(mainRow.Data)}
-                            </span>
-                          </td>
+                          {compactList ? (
+                            <td colSpan={2} className="px-2 py-1">
+                              <div className="grid grid-cols-[minmax(0,1fr)_5.5rem] gap-x-2">
+                                <span
+                                  className="min-w-0 truncate"
+                                  title={mainRow.SituacaoLink ?? undefined}
+                                >
+                                  {mainRow.SituacaoLink ?? "-"}
+                                </span>
+                                <span
+                                  className="truncate"
+                                  title={mainRow.SetorLink ?? undefined}
+                                >
+                                  {mainRow.SetorLink ?? "-"}
+                                </span>
+                                <span
+                                  className="col-span-2 mt-0.5 truncate text-[10px] text-neutral-500 tabular-nums"
+                                  title={meta}
+                                >
+                                  {meta || "—"}
+                                </span>
+                              </div>
+                            </td>
+                          ) : (
+                            <>
+                              <td className="min-w-0 overflow-hidden px-2 py-1">
+                                <span className="block truncate" title={mainRow.SituacaoLink ?? undefined}>
+                                  {mainRow.SituacaoLink ?? "-"}
+                                </span>
+                              </td>
+                              <td className="overflow-hidden px-1.5 py-1" style={{ width: "6.5rem" }}>
+                                <span className="block truncate" title={mainRow.SetorLink ?? undefined}>
+                                  {mainRow.SetorLink ?? "-"}
+                                </span>
+                              </td>
+                              <td className="overflow-hidden px-1.5 py-1 whitespace-nowrap" style={{ width: "5.75rem" }}>
+                                <span className="block tabular-nums">
+                                  {formatDateBr(mainRow.Data)}
+                                </span>
+                              </td>
+                            </>
+                          )}
                         </tr>
                       );
                     })

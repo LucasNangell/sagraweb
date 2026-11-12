@@ -9,6 +9,7 @@ import {
   fetchEmailTemplatesConfig,
   previewEmailTemplate,
   resetEmailTemplate,
+  saveEmailAutoReceive,
   saveEmailSendMailboxes,
   saveGravacaoEmailNotifications,
   saveEmailTemplate,
@@ -134,6 +135,9 @@ export function EmailTemplatesSection() {
   const [osLt, setOsLt] = useState(MAILBOX_OPTIONS[0].value);
   const [osGte, setOsGte] = useState(MAILBOX_OPTIONS[1].value);
   const [activationBox, setActivationBox] = useState("");
+  const [autoReceiveOs, setAutoReceiveOs] = useState(false);
+  const [autoReceiveSp, setAutoReceiveSp] = useState(false);
+  const [autoReceivePonto, setAutoReceivePonto] = useState("");
   const [forwardedEnabled, setForwardedEnabled] = useState(true);
   const [forwardedRecipientMode, setForwardedRecipientMode] =
     useState<"usuario" | "personalizado">("usuario");
@@ -234,6 +238,14 @@ export function EmailTemplatesSection() {
       setActivationBox(configQuery.data.send_mailboxes.activation ?? "");
     }
   }, [configQuery.data?.send_mailboxes]);
+
+  useEffect(() => {
+    const settings = configQuery.data?.auto_receive;
+    if (!settings) return;
+    setAutoReceiveOs(Boolean(settings.enabled_os));
+    setAutoReceiveSp(Boolean(settings.enabled_sp));
+    setAutoReceivePonto(settings.ponto ?? "");
+  }, [configQuery.data?.auto_receive]);
 
   useEffect(() => {
     const settings = configQuery.data?.gravacao_notifications;
@@ -462,6 +474,20 @@ export function EmailTemplatesSection() {
     onError: reportError,
   });
 
+  const saveAutoReceiveMutation = useMutation({
+    mutationFn: () =>
+      saveEmailAutoReceive({
+        enabled_os: autoReceiveOs,
+        enabled_sp: autoReceiveSp,
+        ponto: autoReceivePonto.trim(),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin", "email-templates"] });
+      toast.success("Recebimento automático salvo.");
+    },
+    onError: reportError,
+  });
+
   const saveGravacaoNotificationsMutation = useMutation({
     mutationFn: () =>
       saveGravacaoEmailNotifications({
@@ -572,6 +598,63 @@ export function EmailTemplatesSection() {
 
       <ConfigSectionBody className="space-y-4">
       <EmailDispatchModePanel />
+
+      <ConfigSubsection title="Recebimento automático" tone="muted">
+        <p className="mb-3 text-xs text-slate-600">
+          Quando ativo, e-mails de Prova e Problemas técnicos que cumprirem os critérios são
+          processados automaticamente (andamento, .mht e marcação no Outlook). Demais mensagens
+          permanecem na caixa de entrada para tratamento manual.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <label className="flex items-center gap-2 text-xs text-slate-700">
+            <input
+              type="checkbox"
+              checked={autoReceiveOs}
+              onChange={(e) => setAutoReceiveOs(e.target.checked)}
+              className="size-3.5 rounded border-slate-300"
+            />
+            Ativar para OS (&lt; 5000)
+          </label>
+          <label className="flex items-center gap-2 text-xs text-slate-700">
+            <input
+              type="checkbox"
+              checked={autoReceiveSp}
+              onChange={(e) => setAutoReceiveSp(e.target.checked)}
+              className="size-3.5 rounded border-slate-300"
+            />
+            Ativar para SP (≥ 5000)
+          </label>
+          <label className="block text-xs text-slate-600 sm:col-span-2 lg:col-span-1">
+            Ponto dos lançamentos automáticos
+            <input
+              type="text"
+              value={autoReceivePonto}
+              onChange={(e) => setAutoReceivePonto(e.target.value)}
+              placeholder="Ex.: 918713"
+              className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm"
+            />
+          </label>
+        </div>
+        <button
+          type="button"
+          disabled={saveAutoReceiveMutation.isPending}
+          onClick={() => {
+            if ((autoReceiveOs || autoReceiveSp) && !autoReceivePonto.trim()) {
+              toast.error("Informe o ponto para os lançamentos automáticos.");
+              return;
+            }
+            void saveAutoReceiveMutation.mutate();
+          }}
+          className="mt-3 h-8 sagra-btn sagra-btn--outline sagra-btn--sm"
+        >
+          {saveAutoReceiveMutation.isPending ? (
+            <Loader2 className="size-3 animate-spin" />
+          ) : (
+            <Save className="size-3" />
+          )}
+          Salvar recebimento automático
+        </button>
+      </ConfigSubsection>
 
       <ConfigSubsection title="Contas de envio (Exchange)" tone="muted">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

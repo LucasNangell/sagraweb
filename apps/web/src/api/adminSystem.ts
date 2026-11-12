@@ -215,6 +215,21 @@ export async function saveEmailSendMailboxes(payload: {
   );
 }
 
+export async function saveEmailAutoReceive(payload: {
+  enabled_os: boolean;
+  enabled_sp: boolean;
+  ponto: string;
+}) {
+  return apiFetch<{ auto_receive: EmailTemplatesConfigResponse["auto_receive"] }>(
+    "/admin/system/email-auto-receive",
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
 export async function saveGravacaoEmailNotifications(
   payload: GravacaoEmailNotificationSettings,
 ) {

@@ -1437,16 +1437,19 @@ def _definir_unidade_milimetros(doc: Any, logs: list[str]) -> None:
     except Exception:
         unidade = _CDR_MILLIMETER
     try:
+        app = doc.Application
+        for attr in ("Unit", "Units"):
+            try:
+                setattr(app, attr, unidade)
+            except Exception:
+                pass
+    except Exception:
+        pass
+    try:
         doc.Unit = unidade
         logs.append(f"Document.Unit=cdrMillimeter ({unidade}).")
     except Exception as exc:
         logs.append(f"Aviso ao definir unidade em milímetros: {exc}")
-
-
-def _shapes_topo(page: Any) -> list[Any]:
-    colecao = page.Shapes
-    total = int(colecao.Count)
-    return [colecao.Item(indice) for indice in range(1, total + 1)]
 
 
 def encaixar_retangulo_na_pagina(
@@ -1465,11 +1468,7 @@ def encaixar_retangulo_na_pagina(
     nova_altura: float,
     escala: float,
 ) -> tuple[float, float, float, float]:
-    """Escala o retângulo em torno do centro da página e o alinha ao centro novo.
-
-    A composição permanece a do Corel. O que mudou de lugar foi só o centro
-    da folha ao reduzir o tamanho.
-    """
+    """Escala o retângulo em torno do centro da página e o alinha ao centro novo."""
     centro_x = pagina_esquerda + pagina_largura / 2.0
     centro_y = pagina_base + pagina_altura / 2.0
     novo_centro_x = nova_esquerda + nova_largura / 2.0
@@ -1488,81 +1487,104 @@ def encaixar_retangulo_na_pagina(
     )
 
 
-def _retangulo_pagina_mm(page: Any) -> tuple[float, float, float, float]:
-    """Left, bottom, width, height da página no sistema de coordenadas do documento."""
+def _centro_pagina_mm(page: Any) -> tuple[float, float, float, float]:
+    """Centro e tamanho da página (cx, cy, width, height) em mm."""
     largura = float(page.SizeWidth)
     altura = float(page.SizeHeight)
     try:
-        cx = float(page.CenterX)
-        cy = float(page.CenterY)
-        return cx - largura / 2.0, cy - altura / 2.0, largura, altura
+        return float(page.CenterX), float(page.CenterY), largura, altura
     except Exception:
         pass
     try:
-        return float(page.LeftX), float(page.BottomY), largura, altura
+        esquerda = float(page.LeftX)
+        base = float(page.BottomY)
+        return esquerda + largura / 2.0, base + altura / 2.0, largura, altura
     except Exception:
-        return 0.0, 0.0, largura, altura
+        return largura / 2.0, altura / 2.0, largura, altura
 
 
-def _centro_shape(shape: Any) -> tuple[float, float]:
-    if hasattr(shape, "CenterX") and hasattr(shape, "CenterY"):
-        try:
-            return float(shape.CenterX), float(shape.CenterY)
-        except Exception:
-            pass
-    return (
-        float(shape.LeftX) + float(shape.SizeWidth) / 2.0,
-        float(shape.BottomY) + float(shape.SizeHeight) / 2.0,
-    )
+def _retangulo_range_mm(shape_range: Any) -> tuple[float, float, float, float]:
+    """Left, bottom, width, height do ShapeRange."""
+    try:
+        return (
+            float(shape_range.LeftX),
+            float(shape_range.BottomY),
+            float(shape_range.SizeWidth),
+            float(shape_range.SizeHeight),
+        )
+    except Exception:
+        pass
+    try:
+        cx = float(shape_range.CenterX)
+        cy = float(shape_range.CenterY)
+        largura = float(shape_range.SizeWidth)
+        altura = float(shape_range.SizeHeight)
+        return cx - largura / 2.0, cy - altura / 2.0, largura, altura
+    except Exception as exc:
+        raise CorelGenerationError(
+            f"Não foi possível ler o bounding box da arte: {exc}"
+        ) from exc
 
 
-def _definir_centro_shape(shape: Any, cx: float, cy: float) -> None:
-    if hasattr(shape, "CenterX") and hasattr(shape, "CenterY"):
-        try:
-            shape.CenterX = cx
-            shape.CenterY = cy
-            return
-        except Exception:
-            pass
-    largura = float(shape.SizeWidth)
-    altura = float(shape.SizeHeight)
-    shape.LeftX = cx - largura / 2.0
-    shape.BottomY = cy - altura / 2.0
+def _obter_shape_range_pagina(page: Any) -> Any:
+    try:
+        shape_range = page.Shapes.All
+    except Exception as exc:
+        raise CorelGenerationError(
+            f"Não foi possível selecionar os objetos da pasta avulso: {exc}"
+        ) from exc
+    try:
+        total = int(shape_range.Count)
+    except Exception:
+        total = -1
+    if total == 0:
+        raise CorelGenerationError(
+            "A pasta avulso não tem objetos para reduzir ao A4."
+        )
+    return shape_range
 
 
-def _escalar_shape_em_torno(
-    shape: Any, escala: float, centro_x: float, centro_y: float
+def _stretch_range_em_torno(
+    shape_range: Any, centro_x: float, centro_y: float, escala: float
 ) -> None:
-    cx, cy = _centro_shape(shape)
-    shape.SizeWidth = float(shape.SizeWidth) * escala
-    shape.SizeHeight = float(shape.SizeHeight) * escala
-    _definir_centro_shape(
-        shape,
-        centro_x + (cx - centro_x) * escala,
-        centro_y + (cy - centro_y) * escala,
-    )
+    """Reduz toda a composição de uma vez (grupos/powerclips inclusive)."""
+    try:
+        shape_range.StretchEx(centro_x, centro_y, escala, escala, True)
+        return
+    except Exception:
+        pass
+    try:
+        shape_range.StretchEx(centro_x, centro_y, escala, escala)
+        return
+    except Exception as exc:
+        raise CorelGenerationError(
+            f"Não foi possível reduzir a pasta avulso com StretchEx: {exc}"
+        ) from exc
 
 
-def _deslocar_shape(shape: Any, dx: float, dy: float) -> None:
+def _mover_range(shape_range: Any, dx: float, dy: float) -> None:
     if abs(dx) < 0.01 and abs(dy) < 0.01:
         return
-    if hasattr(shape, "CenterX") and hasattr(shape, "CenterY"):
-        try:
-            shape.CenterX = float(shape.CenterX) + dx
-            shape.CenterY = float(shape.CenterY) + dy
-            return
-        except Exception:
-            pass
-    shape.LeftX = float(shape.LeftX) + dx
-    shape.BottomY = float(shape.BottomY) + dy
+    try:
+        shape_range.Move(dx, dy)
+        return
+    except Exception:
+        pass
+    try:
+        shape_range.CenterX = float(shape_range.CenterX) + dx
+        shape_range.CenterY = float(shape_range.CenterY) + dy
+    except Exception as exc:
+        raise CorelGenerationError(
+            f"Não foi possível centralizar a pasta avulso no A4: {exc}"
+        ) from exc
 
 
 def _definir_tamanho_pagina_mm(page: Any, largura: float, altura: float) -> None:
     try:
+        page.SetSize(largura, altura)
+    except Exception:
         page.SizeWidth = largura
         page.SizeHeight = altura
-    except Exception:
-        page.SetSize(largura, altura)
     lida_l = float(page.SizeWidth)
     lida_a = float(page.SizeHeight)
     if abs(lida_l - largura) > 1.5 or abs(lida_a - altura) > 1.5:
@@ -1572,12 +1594,32 @@ def _definir_tamanho_pagina_mm(page: Any, largura: float, altura: float) -> None
         )
 
 
+def _arte_cabe_na_pagina(
+    page: Any, shape_range: Any, tolerancia_mm: float = 1.5
+) -> tuple[bool, str]:
+    page_cx, page_cy, page_w, page_h = _centro_pagina_mm(page)
+    page_left = page_cx - page_w / 2.0
+    page_bottom = page_cy - page_h / 2.0
+    left, bottom, width, height = _retangulo_range_mm(shape_range)
+    ok = (
+        left >= page_left - tolerancia_mm
+        and bottom >= page_bottom - tolerancia_mm
+        and left + width <= page_left + page_w + tolerancia_mm
+        and bottom + height <= page_bottom + page_h + tolerancia_mm
+    )
+    detalhe = (
+        f"arte {width:.1f}×{height:.1f} mm em "
+        f"({left:.1f},{bottom:.1f}); página {page_w:.1f}×{page_h:.1f} mm"
+    )
+    return ok, detalhe
+
+
 def _ajustar_pasta_avulso_para_a4(doc: Any, logs: list[str]) -> None:
     """Reduz a folha 470×460 mm para A4 paisagem só no PDF da prova."""
     _definir_unidade_milimetros(doc, logs)
     try:
         pagina = doc.Pages.Item(1)
-        esquerda, base, largura, altura = _retangulo_pagina_mm(pagina)
+        centro_x, centro_y, largura, altura = _centro_pagina_mm(pagina)
     except Exception as exc:
         raise CorelGenerationError(
             f"Não foi possível ler o tamanho da página: {exc}"
@@ -1590,49 +1632,32 @@ def _ajustar_pasta_avulso_para_a4(doc: Any, logs: list[str]) -> None:
         return
 
     ajuste = calcular_ajuste_a4_paisagem(largura, altura)
-    centro_x = esquerda + largura / 2.0
-    centro_y = base + altura / 2.0
-    try:
-        shapes = _shapes_topo(pagina)
-    except Exception as exc:
-        raise CorelGenerationError(
-            f"Não foi possível ler os objetos da pasta avulso: {exc}"
-        ) from exc
+    shape_range = _obter_shape_range_pagina(pagina)
+    before = _retangulo_range_mm(shape_range)
+    logs.append(
+        "Pasta avulso antes do ajuste: "
+        f"{before[2]:.1f}×{before[3]:.1f} mm em ({before[0]:.1f},{before[1]:.1f})."
+    )
 
-    for shape in shapes:
-        try:
-            _escalar_shape_em_torno(
-                shape, ajuste["escala"], centro_x, centro_y
-            )
-        except Exception as exc:
-            nome = ""
-            try:
-                nome = str(shape.Name or "").strip()
-            except Exception:
-                nome = ""
-            raise CorelGenerationError(
-                "Não foi possível reduzir a pasta avulso para A4"
-                + (f" (objeto {nome})" if nome else "")
-                + f": {exc}"
-            ) from exc
-
+    _stretch_range_em_torno(
+        shape_range, centro_x, centro_y, ajuste["escala"]
+    )
     _definir_tamanho_pagina_mm(
         pagina, ajuste["pagina_largura"], ajuste["pagina_altura"]
     )
-    nova_esquerda, nova_base, nova_largura, nova_altura = _retangulo_pagina_mm(pagina)
-    dx = (nova_esquerda + nova_largura / 2.0) - centro_x
-    dy = (nova_base + nova_altura / 2.0) - centro_y
-    for shape in shapes:
-        try:
-            _deslocar_shape(shape, dx, dy)
-        except Exception as exc:
-            raise CorelGenerationError(
-                f"Não foi possível centralizar a pasta avulso no A4: {exc}"
-            ) from exc
+    novo_cx, novo_cy, _, _ = _centro_pagina_mm(pagina)
+    _mover_range(shape_range, novo_cx - centro_x, novo_cy - centro_y)
+
+    ok, detalhe = _arte_cabe_na_pagina(pagina, shape_range)
+    if not ok:
+        raise CorelGenerationError(
+            "A pasta avulso não coube no A4 após a redução "
+            f"({detalhe})."
+        )
     logs.append(
         "Pasta avulso ajustada para A4 paisagem "
         f"({ajuste['pagina_largura']:.0f}×{ajuste['pagina_altura']:.0f} mm, "
-        f"escala {ajuste['escala']:.3f}, centralizada)."
+        f"escala {ajuste['escala']:.3f}, StretchEx centralizado); {detalhe}."
     )
 
 

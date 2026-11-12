@@ -116,6 +116,35 @@ def _mdb_snapshot() -> dict[str, Any]:
         return {"error": "unavailable"}
 
 
+# Limitador de threads do Starlette/anyio (concorrência de handlers sync + to_thread).
+# É ligado ao event loop (RunVar), então guardamos a referência no startup para
+# poder lê-la de qualquer thread (métricas rodam fora do loop).
+_thread_limiter: Any = None
+
+
+def register_thread_limiter(limiter: Any) -> None:
+    global _thread_limiter
+    _thread_limiter = limiter
+
+
+def _threadpool_snapshot() -> dict[str, Any]:
+    limiter = _thread_limiter
+    if limiter is None:
+        return {"configured": False}
+    try:
+        total = limiter.total_tokens
+        borrowed = limiter.borrowed_tokens
+        return {
+            "configured": True,
+            "total": total,
+            "in_use": borrowed,
+            "available": (total - borrowed) if isinstance(total, (int, float)) else None,
+        }
+    except Exception as exc:
+        logger.debug("runtime-metrics threadpool: %s", exc)
+        return {"error": "unavailable"}
+
+
 def _mysql_pool_snapshot() -> dict[str, Any]:
     try:
         from database import db
@@ -158,6 +187,7 @@ def collect_runtime_metrics() -> dict[str, Any]:
     return {
         "process": _process_snapshot(),
         "mysql_pool": _mysql_pool_snapshot(),
+        "threadpool": _threadpool_snapshot(),
         "mdb_sync": _mdb_snapshot(),
         "websocket": _websocket_snapshot(),
         "os_search": _fetch_all_snapshot(),
@@ -196,20 +226,27 @@ def _log_metrics_once() -> None:
     m = collect_runtime_metrics()
     proc = m.get("process") or {}
     pool = m.get("mysql_pool") or {}
+    tp = m.get("threadpool") or {}
     mdb = m.get("mdb_sync") or {}
 
     in_use = pool.get("in_use")
     pool_max = pool.get("max")
+    tp_in_use = tp.get("in_use")
+    tp_total = tp.get("total")
     rss_mb = proc.get("rss_mb")
     threads = proc.get("threads")
     q_size = mdb.get("queue_size")
     q_max = mdb.get("queue_max")
     circuit_open = bool(mdb.get("circuit_open"))
+    overflow_dropped = mdb.get("overflow_dropped_total")
 
     alerts: list[str] = []
     if isinstance(in_use, int) and isinstance(pool_max, int) and pool_max > 0:
         if in_use >= max(1, int(pool_max * 0.8)):
             alerts.append(f"pool {in_use}/{pool_max}")
+    if isinstance(tp_in_use, int) and isinstance(tp_total, int) and tp_total > 0:
+        if tp_in_use >= max(1, int(tp_total * 0.8)):
+            alerts.append(f"threadpool {tp_in_use}/{tp_total}")
     if isinstance(rss_mb, (int, float)) and rss_mb >= _rss_warn_mb():
         alerts.append(f"rss {rss_mb}MB")
     if circuit_open:
@@ -217,10 +254,12 @@ def _log_metrics_once() -> None:
     if isinstance(q_size, int) and isinstance(q_max, int) and q_max > 0:
         if q_size >= max(1, int(q_max * 0.8)):
             alerts.append(f"mdb_queue {q_size}/{q_max}")
+    if isinstance(overflow_dropped, int) and overflow_dropped > 0:
+        alerts.append(f"mdb_dropped {overflow_dropped}")
 
     line = (
-        "runtime pid=%s rss_mb=%s threads=%s cpu=%s pool=%s/%s "
-        "mdb_queue=%s/%s mdb_circuit=%s ws=%s os_search_1min=%s"
+        "runtime pid=%s rss_mb=%s threads=%s cpu=%s pool=%s/%s threadpool=%s/%s "
+        "mdb_queue=%s/%s mdb_circuit=%s mdb_dropped=%s ws=%s os_search_1min=%s"
     )
     args = (
         proc.get("pid"),
@@ -229,9 +268,12 @@ def _log_metrics_once() -> None:
         proc.get("cpu_percent"),
         in_use,
         pool_max,
+        tp_in_use,
+        tp_total,
         q_size,
         q_max,
         circuit_open,
+        overflow_dropped,
         (m.get("websocket") or {}).get("connections"),
         (m.get("os_search") or {}).get("last_minute"),
     )

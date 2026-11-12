@@ -1009,6 +1009,23 @@ async def startup_bind_realtime_loop():
 
     start_mdb_access_probe_scheduler()
     try:
+        import anyio.to_thread
+
+        from services.runtime_metrics_service import register_thread_limiter
+
+        limiter = anyio.to_thread.current_default_thread_limiter()
+        desired = os.getenv("SAGRA_THREADPOOL_SIZE")
+        if desired:
+            try:
+                limiter.total_tokens = max(8, int(desired))
+                logger.info("Startup: threadpool anyio = %s tokens", limiter.total_tokens)
+            except (TypeError, ValueError):
+                logger.warning("SAGRA_THREADPOOL_SIZE inválido: %r (mantido padrão)", desired)
+        register_thread_limiter(limiter)
+    except Exception as exc:
+        logger.warning("Startup: limitador de threadpool indisponível: %s", exc)
+
+    try:
         from services.runtime_metrics_service import start_runtime_metrics_logging
 
         start_runtime_metrics_logging()

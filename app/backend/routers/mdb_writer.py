@@ -45,6 +45,23 @@ _MDB_SYNC_WORKER_LOCK = threading.Lock()
 _MDB_SYNC_WORKER_STARTED = False
 _MDB_SYNC_STOP_EVENT = threading.Event()
 
+
+def _mdb_env_int(name: str, default: int, minimum: int) -> int:
+    try:
+        return max(minimum, int(os.getenv(name, str(default))))
+    except (TypeError, ValueError):
+        return default
+
+
+# Overflow: quando a fila (256) enche porque o Access ficou inacessível por muito
+# tempo, limitamos quantas threads aguardam espaço — senão elas vazam sem limite
+# (uma por gravação), consumindo threads/memória até derrubar o processo.
+_MDB_OVERFLOW_MAX = _mdb_env_int("SAGRA_MDB_OVERFLOW_MAX", 64, 4)
+_MDB_OVERFLOW_PUT_TIMEOUT = 30.0
+_MDB_OVERFLOW_LOCK = threading.Lock()
+_MDB_OVERFLOW_ACTIVE = 0
+_MDB_OVERFLOW_DROPPED = 0
+
 # Saturação ACE (-1036 / HY000 vazio em SQLDriverConnect): poucas tentativas e
 # pausa da fila inteira para não martelar o Jet.
 _MDB_SATURATION_MAX_ATTEMPTS = 2
@@ -117,17 +134,54 @@ def _enqueue_mdb_sync_when_queue_full(
     Enfileira tarefa MDB sem bloquear a thread da requisição HTTP.
     Preserva ordem FIFO e o worker único (evita escrita concorrente no Access).
     """
+    global _MDB_OVERFLOW_ACTIVE, _MDB_OVERFLOW_DROPPED
+    with _MDB_OVERFLOW_LOCK:
+        if _MDB_OVERFLOW_ACTIVE >= _MDB_OVERFLOW_MAX:
+            _MDB_OVERFLOW_DROPPED += 1
+            dropped = _MDB_OVERFLOW_DROPPED
+            saturated = True
+        else:
+            _MDB_OVERFLOW_ACTIVE += 1
+            saturated = False
+
+    if saturated:
+        # Access inacessível há muito tempo: fila cheia (256) + limite de overflow.
+        # MySQL já commitado — não bloqueamos a API nem vazamos threads. A réplica
+        # Access desta tarefa fica pendente (reconciliar via sync/probe).
+        logger.error(
+            "Fila MDB saturada e limite de overflow (%s) atingido — tarefa %s "
+            "DESCARTADA (MySQL OK; réplica Access pendente). Total descartado=%s",
+            _MDB_OVERFLOW_MAX,
+            task_name,
+            dropped,
+        )
+        return
+
     def _wait_and_enqueue() -> None:
-        _ensure_mdb_sync_worker()
+        global _MDB_OVERFLOW_ACTIVE
         try:
-            _MDB_SYNC_QUEUE.put((task_name, callback, context))
-        except Exception as exc:
-            logger.error(
-                "Falha ao enfileirar sync MDB overflow (%s): %s",
-                task_name,
-                exc,
-            )
-            _run_mdb_sync_task(task_name, callback, context)
+            _ensure_mdb_sync_worker()
+            try:
+                _MDB_SYNC_QUEUE.put(
+                    (task_name, callback, context),
+                    timeout=_MDB_OVERFLOW_PUT_TIMEOUT,
+                )
+            except Full:
+                logger.error(
+                    "Overflow MDB expirou após %.0fs (Access saturado) — tarefa %s "
+                    "DESCARTADA (réplica Access pendente).",
+                    _MDB_OVERFLOW_PUT_TIMEOUT,
+                    task_name,
+                )
+            except Exception as exc:
+                logger.error(
+                    "Falha ao enfileirar sync MDB overflow (%s): %s",
+                    task_name,
+                    exc,
+                )
+        finally:
+            with _MDB_OVERFLOW_LOCK:
+                _MDB_OVERFLOW_ACTIVE = max(0, _MDB_OVERFLOW_ACTIVE - 1)
 
     threading.Thread(
         target=_wait_and_enqueue,
@@ -512,6 +566,9 @@ def get_mdb_sync_snapshot() -> dict[str, Any]:
         with _MDB_CIRCUIT_LOCK:
             open_until = _MDB_CIRCUIT_OPEN_UNTIL
         circuit_remaining = max(0.0, open_until - time.monotonic())
+        with _MDB_OVERFLOW_LOCK:
+            overflow_active = _MDB_OVERFLOW_ACTIVE
+            overflow_dropped = _MDB_OVERFLOW_DROPPED
         return {
             "enabled": config_manager.is_mdb_write_enabled(),
             "queue_size": _MDB_SYNC_QUEUE.qsize(),
@@ -519,6 +576,9 @@ def get_mdb_sync_snapshot() -> dict[str, Any]:
             "worker_started": _MDB_SYNC_WORKER_STARTED,
             "circuit_open": circuit_remaining > 0,
             "circuit_seconds_left": round(circuit_remaining, 1),
+            "overflow_active": overflow_active,
+            "overflow_max": _MDB_OVERFLOW_MAX,
+            "overflow_dropped_total": overflow_dropped,
             "access_status": get_mdb_access_state().get("status"),
         }
     except Exception as exc:  # pragma: no cover - métricas best-effort

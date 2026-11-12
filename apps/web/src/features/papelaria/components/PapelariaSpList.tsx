@@ -131,7 +131,6 @@ export function PapelariaSpList({ selected, onSelect, className }: Props) {
                 <th className="px-2 py-1.5 font-semibold">Ano</th>
                 <th className="px-2 py-1.5 font-semibold">Produto</th>
                 <th className="px-2 py-1.5 font-semibold">Solicitante</th>
-                <th className="px-2 py-1.5 font-semibold">Situação</th>
               </tr>
             </thead>
             <tbody>
@@ -154,14 +153,11 @@ export function PapelariaSpList({ selected, onSelect, className }: Props) {
                       {row.nr_os}
                     </td>
                     <td className="px-2 py-1.5">{row.ano}</td>
-                    <td className="max-w-[8rem] truncate px-2 py-1.5" title={row.produto ?? undefined}>
+                    <td className="max-w-[9rem] truncate px-2 py-1.5" title={row.produto ?? undefined}>
                       {row.produto ?? "—"}
                     </td>
-                    <td className="max-w-[8rem] truncate px-2 py-1.5" title={row.solicitante ?? undefined}>
+                    <td className="max-w-[9rem] truncate px-2 py-1.5" title={row.solicitante ?? undefined}>
                       {row.solicitante ?? "—"}
-                    </td>
-                    <td className="max-w-[7rem] truncate px-2 py-1.5" title={row.situacao ?? undefined}>
-                      {row.situacao ?? "—"}
                     </td>
                   </tr>
                 );

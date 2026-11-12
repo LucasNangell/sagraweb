@@ -81,3 +81,31 @@ def test_request_system_restart_requires_script(tmp_path: Path, monkeypatch):
             script_path=tmp_path / "missing.ps1",
         )
     assert exc.value.status_code == 503
+
+
+def test_abandoned_helper_allows_retry(tmp_path: Path):
+    status_path = tmp_path / "system_restart_status.json"
+    started = "2026-01-01T12:00:00+00:00"
+    status_path.write_text(
+        json.dumps(
+            {
+                "request_id": "stuck",
+                "phase": "running",
+                "ok": None,
+                "started_at": started,
+                "finished_at": None,
+                "services": [],
+                "detail": "helper iniciado",
+            }
+        ),
+        encoding="utf-8",
+    )
+    status = svc.read_restart_status(path=status_path)
+    started_ts = svc._parse_iso(started)
+    assert started_ts is not None
+    # Ainda fresco: bloqueia
+    with pytest.raises(svc.SystemRestartError) as exc:
+        svc._assert_can_start(status, now=started_ts + 30)
+    assert exc.value.status_code == 409
+    # Abandonado sem progresso: libera novo pedido
+    svc._assert_can_start(status, now=started_ts + 120)

@@ -15,15 +15,21 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 STATUS_FILENAME = "system_restart_status.json"
+LOG_FILENAME = "system_restart.log"
 SCRIPT_NAME = "reiniciar-servicos-sagra.ps1"
 COOLDOWN_SECONDS = 180
 IN_PROGRESS_MAX_AGE_SECONDS = 600
+# Helper que nunca atualizou o status (só "helper iniciado") é abandonado cedo.
+ABANDONED_HELPER_SECONDS = 90
 DEFAULT_SERVICES = (
     "SAGRA-SyncAndamentos",
     "SAGRA-MonitorSyncAndamentos",
     "SAGRA-OrganizadorEmailSepim",
     "SAGRA-Api",
 )
+
+# Evita que o job object do NSSM mate o helper quando a API for reiniciada.
+_CREATE_BREAKAWAY_FROM_JOB = 0x01000000
 
 
 class SystemRestartError(Exception):
@@ -76,8 +82,17 @@ def resolve_status_path(*, system_root: Optional[Path] = None) -> Path:
     root = system_root or resolve_system_root()
     if root is not None:
         return root / "shared" / "run" / STATUS_FILENAME
-    # Fallback: ao lado do cwd (útil em testes).
     return Path.cwd() / "shared" / "run" / STATUS_FILENAME
+
+
+def resolve_log_path(*, system_root: Optional[Path] = None) -> Path:
+    env = (os.getenv("SAGRA_SYSTEM_RESTART_LOG_FILE") or "").strip()
+    if env:
+        return Path(env)
+    root = system_root or resolve_system_root()
+    if root is not None:
+        return root / "shared" / "logs" / "system" / LOG_FILENAME
+    return Path.cwd() / "shared" / "logs" / "system" / LOG_FILENAME
 
 
 def resolve_restart_script(*, system_root: Optional[Path] = None) -> Optional[Path]:
@@ -94,7 +109,6 @@ def resolve_restart_script(*, system_root: Optional[Path] = None) -> Optional[Pa
                 root / SCRIPT_NAME,
             ]
         )
-    # Repo / release: deploy/templates ou raiz da release empacotada.
     here = Path(__file__).resolve()
     repo_root = here.parents[3]
     candidates.extend(
@@ -125,6 +139,7 @@ def read_restart_status(*, path: Optional[Path] = None) -> dict[str, Any]:
         "services": [],
         "detail": None,
         "path": str(status_path),
+        "log_file": None,
     }
     try:
         if not status_path.is_file():
@@ -145,6 +160,7 @@ def read_restart_status(*, path: Optional[Path] = None) -> dict[str, Any]:
                 "services": data.get("services") if isinstance(data.get("services"), list) else [],
                 "detail": data.get("detail"),
                 "pid": data.get("pid"),
+                "log_file": data.get("log_file"),
             }
         )
         return out
@@ -166,22 +182,53 @@ def write_restart_status(payload: dict[str, Any], *, path: Optional[Path] = None
     return status_path
 
 
+def _is_abandoned_helper(status: dict[str, Any], *, now_ts: float) -> bool:
+    """True quando o helper nunca reportou progresso (status ficou em 'helper iniciado')."""
+    phase = str(status.get("phase") or "")
+    if phase not in ("running", "queued"):
+        return False
+    started = _parse_iso(status.get("started_at"))
+    if started is None:
+        return False
+    age = now_ts - started
+    if age < ABANDONED_HELPER_SECONDS:
+        return False
+    services = status.get("services") or []
+    detail = str(status.get("detail") or "").lower()
+    if services:
+        return age >= IN_PROGRESS_MAX_AGE_SECONDS
+    return detail in {
+        "helper iniciado",
+        "solicitação aceita; iniciando helper",
+        "solicitacao aceita; iniciando helper",
+        "",
+    }
+
+
 def _assert_can_start(status: dict[str, Any], *, now: Optional[float] = None) -> None:
     now_ts = time.time() if now is None else now
     phase = str(status.get("phase") or "idle")
     started = _parse_iso(status.get("started_at"))
     finished = _parse_iso(status.get("finished_at"))
 
-    if phase == "running" and started is not None:
-        age = now_ts - started
-        if age < IN_PROGRESS_MAX_AGE_SECONDS:
-            raise SystemRestartError(
-                "Já existe um reinício em andamento. Aguarde a conclusão.",
-                status_code=409,
+    if phase in ("running", "queued") and started is not None:
+        if _is_abandoned_helper(status, now_ts=now_ts):
+            logger.warning(
+                "Ignorando reinício abandonado id=%s detail=%s age=%.0fs",
+                status.get("request_id"),
+                status.get("detail"),
+                now_ts - started,
             )
+        else:
+            age = now_ts - started
+            if age < IN_PROGRESS_MAX_AGE_SECONDS:
+                raise SystemRestartError(
+                    "Já existe um reinício em andamento. Aguarde a conclusão.",
+                    status_code=409,
+                )
 
     last_done = finished or (started if phase == "done" else None)
-    if last_done is not None:
+    if last_done is not None and phase == "done":
         elapsed = now_ts - last_done
         if elapsed < COOLDOWN_SECONDS:
             wait = int(COOLDOWN_SECONDS - elapsed) + 1
@@ -198,6 +245,7 @@ def request_system_restart(
     system_root: Optional[Path] = None,
     status_path: Optional[Path] = None,
     script_path: Optional[Path] = None,
+    log_path: Optional[Path] = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     if sys.platform != "win32":
@@ -215,12 +263,13 @@ def request_system_restart(
         )
 
     status_file = status_path or resolve_status_path(system_root=root)
+    log_file = log_path or resolve_log_path(system_root=root)
     current = read_restart_status(path=status_file)
     _assert_can_start(current)
 
     request_id = uuid.uuid4().hex
     started_at = _utc_now_iso()
-    payload = {
+    payload: dict[str, Any] = {
         "request_id": request_id,
         "phase": "queued",
         "ok": None,
@@ -231,6 +280,7 @@ def request_system_restart(
         "detail": "solicitação aceita; iniciando helper",
         "requested_by": requested_by or None,
         "pid": None,
+        "log_file": str(log_file),
     }
     write_restart_status(payload, path=status_file)
 
@@ -254,6 +304,8 @@ def request_system_restart(
         request_id,
         "-StatusFile",
         str(status_file),
+        "-LogFile",
+        str(log_file),
         "-Reason",
         reason[:200],
     ]
@@ -267,18 +319,43 @@ def request_system_restart(
         creationflags |= subprocess.DETACHED_PROCESS  # type: ignore[attr-defined]
     if hasattr(subprocess, "CREATE_NO_WINDOW"):
         creationflags |= subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
+    creationflags |= _CREATE_BREAKAWAY_FROM_JOB
+
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        # append mode: o .ps1 também escreve neste arquivo via Add-Content
+        log_handle = open(log_file, "a", encoding="utf-8", errors="replace")
+        log_handle.write(
+            f"\n{_utc_now_iso()} API spawn helper id={request_id} by={requested_by} "
+            f"script={script}\n"
+        )
+        log_handle.flush()
+    except OSError as exc:
+        payload["phase"] = "done"
+        payload["ok"] = False
+        payload["finished_at"] = _utc_now_iso()
+        payload["detail"] = f"falha ao abrir log do helper: {exc}"
+        write_restart_status(payload, path=status_file)
+        raise SystemRestartError(
+            f"Não foi possível iniciar o reinício (log): {exc}",
+            status_code=500,
+        ) from exc
 
     try:
         proc = subprocess.Popen(
             ps_args,
             cwd=str(script.parent),
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            close_fds=True,
+            stdout=log_handle,
+            stderr=log_handle,
+            close_fds=False,
             creationflags=creationflags,
         )
     except OSError as exc:
+        try:
+            log_handle.close()
+        except OSError:
+            pass
         payload["phase"] = "done"
         payload["ok"] = False
         payload["finished_at"] = _utc_now_iso()
@@ -288,16 +365,23 @@ def request_system_restart(
             f"Não foi possível iniciar o reinício: {exc}",
             status_code=500,
         ) from exc
+    finally:
+        # O filho herda o handle; fechar no pai não corta o pipe no Windows com DETACHED.
+        try:
+            log_handle.close()
+        except OSError:
+            pass
 
     payload["phase"] = "running"
     payload["pid"] = proc.pid
     payload["detail"] = "helper iniciado"
     write_restart_status(payload, path=status_file)
     logger.warning(
-        "Reinício de sistema solicitado id=%s by=%s pid=%s services=%s",
+        "Reinício de sistema solicitado id=%s by=%s pid=%s log=%s services=%s",
         request_id,
         requested_by,
         proc.pid,
+        log_file,
         ",".join(DEFAULT_SERVICES),
     )
     return payload

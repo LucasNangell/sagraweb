@@ -1449,17 +1449,112 @@ def _shapes_topo(page: Any) -> list[Any]:
     return [colecao.Item(indice) for indice in range(1, total + 1)]
 
 
-def _escalar_shape_proporcional(
-    shape: Any, escala: float, offset_x: float, offset_y: float
-) -> None:
-    esquerda = float(shape.LeftX)
-    base = float(shape.BottomY)
+def encaixar_retangulo_na_pagina(
+    *,
+    pagina_esquerda: float,
+    pagina_base: float,
+    pagina_largura: float,
+    pagina_altura: float,
+    esquerda: float,
+    base: float,
+    largura: float,
+    altura: float,
+    nova_esquerda: float,
+    nova_base: float,
+    nova_largura: float,
+    nova_altura: float,
+    escala: float,
+) -> tuple[float, float, float, float]:
+    """Escala o retângulo em torno do centro da página e o alinha ao centro novo.
+
+    A composição permanece a do Corel. O que mudou de lugar foi só o centro
+    da folha ao reduzir o tamanho.
+    """
+    centro_x = pagina_esquerda + pagina_largura / 2.0
+    centro_y = pagina_base + pagina_altura / 2.0
+    novo_centro_x = nova_esquerda + nova_largura / 2.0
+    novo_centro_y = nova_base + nova_altura / 2.0
+    forma_cx = esquerda + largura / 2.0
+    forma_cy = base + altura / 2.0
+    nova_largura_forma = largura * escala
+    nova_altura_forma = altura * escala
+    cx = novo_centro_x + (forma_cx - centro_x) * escala
+    cy = novo_centro_y + (forma_cy - centro_y) * escala
+    return (
+        cx - nova_largura_forma / 2.0,
+        cy - nova_altura_forma / 2.0,
+        nova_largura_forma,
+        nova_altura_forma,
+    )
+
+
+def _retangulo_pagina_mm(page: Any) -> tuple[float, float, float, float]:
+    """Left, bottom, width, height da página no sistema de coordenadas do documento."""
+    largura = float(page.SizeWidth)
+    altura = float(page.SizeHeight)
+    try:
+        cx = float(page.CenterX)
+        cy = float(page.CenterY)
+        return cx - largura / 2.0, cy - altura / 2.0, largura, altura
+    except Exception:
+        pass
+    try:
+        return float(page.LeftX), float(page.BottomY), largura, altura
+    except Exception:
+        return 0.0, 0.0, largura, altura
+
+
+def _centro_shape(shape: Any) -> tuple[float, float]:
+    if hasattr(shape, "CenterX") and hasattr(shape, "CenterY"):
+        try:
+            return float(shape.CenterX), float(shape.CenterY)
+        except Exception:
+            pass
+    return (
+        float(shape.LeftX) + float(shape.SizeWidth) / 2.0,
+        float(shape.BottomY) + float(shape.SizeHeight) / 2.0,
+    )
+
+
+def _definir_centro_shape(shape: Any, cx: float, cy: float) -> None:
+    if hasattr(shape, "CenterX") and hasattr(shape, "CenterY"):
+        try:
+            shape.CenterX = cx
+            shape.CenterY = cy
+            return
+        except Exception:
+            pass
     largura = float(shape.SizeWidth)
     altura = float(shape.SizeHeight)
-    shape.SizeWidth = largura * escala
-    shape.SizeHeight = altura * escala
-    shape.LeftX = offset_x + esquerda * escala
-    shape.BottomY = offset_y + base * escala
+    shape.LeftX = cx - largura / 2.0
+    shape.BottomY = cy - altura / 2.0
+
+
+def _escalar_shape_em_torno(
+    shape: Any, escala: float, centro_x: float, centro_y: float
+) -> None:
+    cx, cy = _centro_shape(shape)
+    shape.SizeWidth = float(shape.SizeWidth) * escala
+    shape.SizeHeight = float(shape.SizeHeight) * escala
+    _definir_centro_shape(
+        shape,
+        centro_x + (cx - centro_x) * escala,
+        centro_y + (cy - centro_y) * escala,
+    )
+
+
+def _deslocar_shape(shape: Any, dx: float, dy: float) -> None:
+    if abs(dx) < 0.01 and abs(dy) < 0.01:
+        return
+    if hasattr(shape, "CenterX") and hasattr(shape, "CenterY"):
+        try:
+            shape.CenterX = float(shape.CenterX) + dx
+            shape.CenterY = float(shape.CenterY) + dy
+            return
+        except Exception:
+            pass
+    shape.LeftX = float(shape.LeftX) + dx
+    shape.BottomY = float(shape.BottomY) + dy
 
 
 def _definir_tamanho_pagina_mm(page: Any, largura: float, altura: float) -> None:
@@ -1482,8 +1577,7 @@ def _ajustar_pasta_avulso_para_a4(doc: Any, logs: list[str]) -> None:
     _definir_unidade_milimetros(doc, logs)
     try:
         pagina = doc.Pages.Item(1)
-        largura = float(pagina.SizeWidth)
-        altura = float(pagina.SizeHeight)
+        esquerda, base, largura, altura = _retangulo_pagina_mm(pagina)
     except Exception as exc:
         raise CorelGenerationError(
             f"Não foi possível ler o tamanho da página: {exc}"
@@ -1496,6 +1590,8 @@ def _ajustar_pasta_avulso_para_a4(doc: Any, logs: list[str]) -> None:
         return
 
     ajuste = calcular_ajuste_a4_paisagem(largura, altura)
+    centro_x = esquerda + largura / 2.0
+    centro_y = base + altura / 2.0
     try:
         shapes = _shapes_topo(pagina)
     except Exception as exc:
@@ -1505,8 +1601,8 @@ def _ajustar_pasta_avulso_para_a4(doc: Any, logs: list[str]) -> None:
 
     for shape in shapes:
         try:
-            _escalar_shape_proporcional(
-                shape, ajuste["escala"], ajuste["offset_x"], ajuste["offset_y"]
+            _escalar_shape_em_torno(
+                shape, ajuste["escala"], centro_x, centro_y
             )
         except Exception as exc:
             nome = ""
@@ -1523,10 +1619,20 @@ def _ajustar_pasta_avulso_para_a4(doc: Any, logs: list[str]) -> None:
     _definir_tamanho_pagina_mm(
         pagina, ajuste["pagina_largura"], ajuste["pagina_altura"]
     )
+    nova_esquerda, nova_base, nova_largura, nova_altura = _retangulo_pagina_mm(pagina)
+    dx = (nova_esquerda + nova_largura / 2.0) - centro_x
+    dy = (nova_base + nova_altura / 2.0) - centro_y
+    for shape in shapes:
+        try:
+            _deslocar_shape(shape, dx, dy)
+        except Exception as exc:
+            raise CorelGenerationError(
+                f"Não foi possível centralizar a pasta avulso no A4: {exc}"
+            ) from exc
     logs.append(
         "Pasta avulso ajustada para A4 paisagem "
         f"({ajuste['pagina_largura']:.0f}×{ajuste['pagina_altura']:.0f} mm, "
-        f"escala {ajuste['escala']:.3f})."
+        f"escala {ajuste['escala']:.3f}, centralizada)."
     )
 
 

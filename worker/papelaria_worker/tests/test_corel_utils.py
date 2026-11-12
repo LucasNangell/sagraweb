@@ -20,6 +20,7 @@ from corel_generator import (  # noqa: E402
     _manter_somente_primeira_pagina,
     _ajustar_pasta_avulso_para_a4,
     calcular_ajuste_a4_paisagem,
+    encaixar_retangulo_na_pagina,
     montar_carimbo_prova_email,
     pagina_e_pasta_avulso_mm,
     resolve_prova_numero,
@@ -424,6 +425,32 @@ class TestAjustePastaAvulsoA4:
         assert ajuste["offset_x"] == pytest.approx((297 - largura) / 2)
         assert ajuste["offset_y"] == pytest.approx(0)
 
+    def test_folha_inteira_cabe_centralizada_no_a4(self):
+        escala = 210 / 460
+        esquerda, base, largura, altura = encaixar_retangulo_na_pagina(
+            pagina_esquerda=0,
+            pagina_base=0,
+            pagina_largura=470,
+            pagina_altura=460,
+            esquerda=0,
+            base=0,
+            largura=470,
+            altura=460,
+            nova_esquerda=0,
+            nova_base=0,
+            nova_largura=297,
+            nova_altura=210,
+            escala=escala,
+        )
+        assert largura == pytest.approx(470 * escala)
+        assert altura == pytest.approx(210)
+        assert esquerda == pytest.approx((297 - largura) / 2)
+        assert base == pytest.approx(0)
+        assert esquerda >= 0
+        assert base >= 0
+        assert esquerda + largura <= 297 + 0.01
+        assert base + altura <= 210 + 0.01
+
     def test_aplica_ajuste_so_na_folha_de_pasta(self):
         class Shape:
             def __init__(self) -> None:
@@ -460,16 +487,85 @@ class TestAjustePastaAvulsoA4:
         logs: list[str] = []
         _ajustar_pasta_avulso_para_a4(pasta, logs)
         shape = pasta.pagina.Shapes.itens[0]
-        ajuste = calcular_ajuste_a4_paisagem(470, 460)
+        esquerda, base, largura, altura = encaixar_retangulo_na_pagina(
+            pagina_esquerda=0,
+            pagina_base=0,
+            pagina_largura=470,
+            pagina_altura=460,
+            esquerda=10,
+            base=20,
+            largura=100,
+            altura=50,
+            nova_esquerda=0,
+            nova_base=0,
+            nova_largura=297,
+            nova_altura=210,
+            escala=210 / 460,
+        )
         assert pasta.pagina.SizeWidth == 297
         assert pasta.pagina.SizeHeight == 210
-        assert shape.SizeWidth == pytest.approx(100 * ajuste["escala"])
-        assert shape.LeftX == pytest.approx(ajuste["offset_x"] + 10 * ajuste["escala"])
-        assert any("A4 paisagem" in linha for linha in logs)
+        assert shape.LeftX == pytest.approx(esquerda)
+        assert shape.BottomY == pytest.approx(base)
+        assert shape.SizeWidth == pytest.approx(largura)
+        assert shape.SizeHeight == pytest.approx(altura)
+        assert 0 <= shape.LeftX
+        assert 0 <= shape.BottomY
+        assert shape.LeftX + shape.SizeWidth <= 297 + 0.01
+        assert shape.BottomY + shape.SizeHeight <= 210 + 0.01
+        assert any("centralizada" in linha for linha in logs)
 
         cartao = Documento(Pagina(90, 50))
         logs_cartao: list[str] = []
         _ajustar_pasta_avulso_para_a4(cartao, logs_cartao)
         assert cartao.pagina.SizeWidth == 90
         assert cartao.pagina.SizeHeight == 50
+
+    def test_folha_inteira_continua_dentro_quando_o_centro_nao_muda(self):
+        class Shape:
+            def __init__(self) -> None:
+                self.Name = "folha"
+                self.LeftX = 0.0
+                self.BottomY = 0.0
+                self.SizeWidth = 470.0
+                self.SizeHeight = 460.0
+
+        class Shapes:
+            def __init__(self, itens: list[Shape]) -> None:
+                self.itens = itens
+
+            @property
+            def Count(self) -> int:
+                return len(self.itens)
+
+            def Item(self, indice: int) -> Shape:
+                return self.itens[indice - 1]
+
+        class Pagina:
+            def __init__(self) -> None:
+                self.SizeWidth = 470.0
+                self.SizeHeight = 460.0
+                self.CenterX = 235.0
+                self.CenterY = 230.0
+                self.Shapes = Shapes([Shape()])
+
+        class Documento:
+            def __init__(self, pagina: Pagina) -> None:
+                self.Unit = 0
+                self.Pages = type("Pages", (), {"Item": lambda _self, _i: pagina})()
+                self.pagina = pagina
+
+        pasta = Documento(Pagina())
+        _ajustar_pasta_avulso_para_a4(pasta, [])
+        pagina = pasta.pagina
+        shape = pagina.Shapes.itens[0]
+        assert pagina.CenterX == 235
+        assert pagina.CenterY == 230
+        page_left = pagina.CenterX - pagina.SizeWidth / 2
+        page_bottom = pagina.CenterY - pagina.SizeHeight / 2
+        assert shape.LeftX == pytest.approx(page_left + (297 - 470 * (210 / 460)) / 2)
+        assert shape.BottomY == pytest.approx(page_bottom)
+        assert shape.LeftX + shape.SizeWidth <= page_left + pagina.SizeWidth + 0.05
+        assert shape.BottomY + shape.SizeHeight <= page_bottom + pagina.SizeHeight + 0.05
+        assert shape.LeftX >= page_left - 0.05
+        assert shape.BottomY >= page_bottom - 0.05
 

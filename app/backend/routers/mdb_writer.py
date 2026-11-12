@@ -502,6 +502,29 @@ def reset_mdb_circuit_for_tests() -> None:
         _MDB_CIRCUIT_OPEN_UNTIL = 0.0
 
 
+def get_mdb_sync_snapshot() -> dict[str, Any]:
+    """Estado da fila de dual-write MDB p/ métricas (fila, worker, circuit breaker).
+
+    Observabilidade da Fase 0: expõe saturação do Access/Jet e backlog antes da queda.
+    Nunca levanta exceção — métricas não podem derrubar a rota que as consome.
+    """
+    try:
+        with _MDB_CIRCUIT_LOCK:
+            open_until = _MDB_CIRCUIT_OPEN_UNTIL
+        circuit_remaining = max(0.0, open_until - time.monotonic())
+        return {
+            "enabled": config_manager.is_mdb_write_enabled(),
+            "queue_size": _MDB_SYNC_QUEUE.qsize(),
+            "queue_max": _MDB_SYNC_QUEUE.maxsize,
+            "worker_started": _MDB_SYNC_WORKER_STARTED,
+            "circuit_open": circuit_remaining > 0,
+            "circuit_seconds_left": round(circuit_remaining, 1),
+            "access_status": get_mdb_access_state().get("status"),
+        }
+    except Exception as exc:  # pragma: no cover - métricas best-effort
+        return {"error": str(exc)[:200]}
+
+
 _MDB_ACCESS_PROBE_INTERVAL_SECONDS = 300.0
 _MDB_ACCESS_LOCK = threading.Lock()
 _MDB_ACCESS_STATE: dict[str, Any] = {

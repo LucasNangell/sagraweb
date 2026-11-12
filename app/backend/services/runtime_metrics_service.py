@@ -46,6 +46,49 @@ def _fetch_all_snapshot() -> dict[str, Any]:
     }
 
 
+def _rss_bytes() -> int | None:
+    """Memória residente (RSS) do processo — best-effort, sem derrubar métricas.
+
+    psutil (dev) → GetProcessMemoryInfo via ctypes (Windows, zero-dependência) → None.
+    O fallback ctypes evita depender do psutil estar no pacote de produção.
+    """
+    try:
+        import psutil  # type: ignore
+
+        return int(psutil.Process().memory_info().rss)
+    except Exception:
+        pass
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class _PMC(ctypes.Structure):
+                _fields_ = [
+                    ("cb", wintypes.DWORD),
+                    ("PageFaultCount", wintypes.DWORD),
+                    ("PeakWorkingSetSize", ctypes.c_size_t),
+                    ("WorkingSetSize", ctypes.c_size_t),
+                    ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                    ("PagefileUsage", ctypes.c_size_t),
+                    ("PeakPagefileUsage", ctypes.c_size_t),
+                ]
+
+            counters = _PMC()
+            counters.cb = ctypes.sizeof(_PMC)
+            handle = ctypes.windll.kernel32.GetCurrentProcess()
+            if ctypes.windll.psapi.GetProcessMemoryInfo(
+                handle, ctypes.byref(counters), counters.cb
+            ):
+                return int(counters.WorkingSetSize)
+        except Exception:
+            pass
+    return None
+
+
 def _process_snapshot() -> dict[str, Any]:
     global _cpu_sample
     now_cpu, now_wall = time.process_time(), time.perf_counter()
@@ -53,11 +96,24 @@ def _process_snapshot() -> dict[str, Any]:
     dt = now_wall - prev_wall
     cpu_pct = round(100.0 * (now_cpu - prev_cpu) / dt, 1) if dt > 0.05 else None
     _cpu_sample = (now_cpu, now_wall)
+    rss = _rss_bytes()
     return {
         "pid": os.getpid(),
         "threads": threading.active_count(),
         "cpu_percent": cpu_pct,
+        "rss_bytes": rss,
+        "rss_mb": round(rss / (1024 * 1024), 1) if rss is not None else None,
     }
+
+
+def _mdb_snapshot() -> dict[str, Any]:
+    try:
+        from routers.mdb_writer import get_mdb_sync_snapshot
+
+        return get_mdb_sync_snapshot()
+    except Exception as exc:
+        logger.debug("runtime-metrics mdb: %s", exc)
+        return {"error": "unavailable"}
 
 
 def _mysql_pool_snapshot() -> dict[str, Any]:
@@ -102,6 +158,7 @@ def collect_runtime_metrics() -> dict[str, Any]:
     return {
         "process": _process_snapshot(),
         "mysql_pool": _mysql_pool_snapshot(),
+        "mdb_sync": _mdb_snapshot(),
         "websocket": _websocket_snapshot(),
         "os_search": _fetch_all_snapshot(),
         "papelaria": _papelaria_snapshot(),
@@ -110,3 +167,105 @@ def collect_runtime_metrics() -> dict[str, Any]:
             **cpu_snapshot(),
         },
     }
+
+
+# --- Logger periódico (Fase 0: detectar vazamento/exaustão antes da queda) ---
+
+_metrics_logger = logging.getLogger("sagra.runtime_metrics")
+_metrics_thread: threading.Thread | None = None
+_metrics_thread_lock = threading.Lock()
+
+
+def _metrics_log_interval() -> float:
+    """Intervalo do log periódico (s). 0 (ou inválido) desliga."""
+    try:
+        return max(0.0, min(3600.0, float(os.getenv("SAGRA_RUNTIME_METRICS_LOG_SEC", "60"))))
+    except (TypeError, ValueError):
+        return 60.0
+
+
+def _rss_warn_mb() -> float:
+    try:
+        return max(0.0, float(os.getenv("SAGRA_RUNTIME_METRICS_RSS_WARN_MB", "1500")))
+    except (TypeError, ValueError):
+        return 1500.0
+
+
+def _log_metrics_once() -> None:
+    """Uma linha compacta; WARNING se algum limiar de alerta precoce for atingido."""
+    m = collect_runtime_metrics()
+    proc = m.get("process") or {}
+    pool = m.get("mysql_pool") or {}
+    mdb = m.get("mdb_sync") or {}
+
+    in_use = pool.get("in_use")
+    pool_max = pool.get("max")
+    rss_mb = proc.get("rss_mb")
+    threads = proc.get("threads")
+    q_size = mdb.get("queue_size")
+    q_max = mdb.get("queue_max")
+    circuit_open = bool(mdb.get("circuit_open"))
+
+    alerts: list[str] = []
+    if isinstance(in_use, int) and isinstance(pool_max, int) and pool_max > 0:
+        if in_use >= max(1, int(pool_max * 0.8)):
+            alerts.append(f"pool {in_use}/{pool_max}")
+    if isinstance(rss_mb, (int, float)) and rss_mb >= _rss_warn_mb():
+        alerts.append(f"rss {rss_mb}MB")
+    if circuit_open:
+        alerts.append(f"mdb_circuit {mdb.get('circuit_seconds_left')}s")
+    if isinstance(q_size, int) and isinstance(q_max, int) and q_max > 0:
+        if q_size >= max(1, int(q_max * 0.8)):
+            alerts.append(f"mdb_queue {q_size}/{q_max}")
+
+    line = (
+        "runtime pid=%s rss_mb=%s threads=%s cpu=%s pool=%s/%s "
+        "mdb_queue=%s/%s mdb_circuit=%s ws=%s os_search_1min=%s"
+    )
+    args = (
+        proc.get("pid"),
+        rss_mb,
+        threads,
+        proc.get("cpu_percent"),
+        in_use,
+        pool_max,
+        q_size,
+        q_max,
+        circuit_open,
+        (m.get("websocket") or {}).get("connections"),
+        (m.get("os_search") or {}).get("last_minute"),
+    )
+    if alerts:
+        _metrics_logger.warning(line + " ALERTA=[%s]", *args, "; ".join(alerts))
+    else:
+        _metrics_logger.info(line, *args)
+
+
+def _metrics_loop(interval: float) -> None:
+    while True:
+        time.sleep(interval)
+        try:
+            _log_metrics_once()
+        except Exception as exc:  # pragma: no cover - nunca derruba o processo
+            _metrics_logger.debug("runtime-metrics loop: %s", exc)
+
+
+def start_runtime_metrics_logging() -> bool:
+    """Inicia o logger periódico de métricas (daemon). Idempotente."""
+    global _metrics_thread
+    interval = _metrics_log_interval()
+    if interval <= 0:
+        _metrics_logger.info("Logger de runtime-metrics desligado (SAGRA_RUNTIME_METRICS_LOG_SEC=0)")
+        return False
+    with _metrics_thread_lock:
+        if _metrics_thread is not None and _metrics_thread.is_alive():
+            return True
+        _metrics_thread = threading.Thread(
+            target=_metrics_loop,
+            args=(interval,),
+            name="sagra-runtime-metrics",
+            daemon=True,
+        )
+        _metrics_thread.start()
+    _metrics_logger.info("Logger de runtime-metrics iniciado (intervalo=%.0fs)", interval)
+    return True

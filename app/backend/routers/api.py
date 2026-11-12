@@ -224,7 +224,7 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
         xff = request.headers.get("x-forwarded-for")
         
         # LOG IP DEBUG
-        logger.info(f"🛡️ MW_CHECK: Path={path} | IP={client_ip} | XFF={xff}")
+        logger.debug("MW_CHECK: Path=%s | IP=%s | XFF=%s", path, client_ip, xff)
 
         
         perms = resolve_page_permissions(client_ip, app_path, request=request)
@@ -1008,6 +1008,12 @@ async def startup_bind_realtime_loop():
     from routers.mdb_writer import start_mdb_access_probe_scheduler
 
     start_mdb_access_probe_scheduler()
+    try:
+        from services.runtime_metrics_service import start_runtime_metrics_logging
+
+        start_runtime_metrics_logging()
+    except Exception as exc:
+        logger.warning("Startup: logger de runtime-metrics indisponível: %s", exc)
     try:
         from services.andamento_table import ensure_andamento_table
 

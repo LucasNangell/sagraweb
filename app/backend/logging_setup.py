@@ -100,12 +100,32 @@ def setup_rotating_logger(
     return logger
 
 
+def quiet_noisy_loggers() -> None:
+    """Reduz ruído de bibliotecas no caminho da requisição (I/O e disco).
+
+    urllib3/pymysql/pyodbc em WARNING e silencia o flood de InsecureRequestWarning
+    (chamadas HTTPS sem verificação a serviços internos da Câmara). Idempotente.
+    """
+    for name in ("urllib3", "urllib3.connectionpool", "pymysql", "pyodbc", "PIL"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+    try:
+        import warnings
+
+        from urllib3.exceptions import InsecureRequestWarning
+
+        warnings.simplefilter("ignore", InsecureRequestWarning)
+    except Exception:
+        pass
+
+
 def configure_root_api_logging() -> None:
     """Aplica RotatingFileHandler ao logger raiz da API."""
     log_path = _project_root() / "logs" / "api" / "sagra_api.log"
 
     root = logging.getLogger()
     root.setLevel(logging.INFO)
+
+    quiet_noisy_loggers()
 
     formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     if any(

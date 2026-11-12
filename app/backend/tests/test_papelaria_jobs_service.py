@@ -1470,7 +1470,7 @@ class TestImposicaoJob:
         from services import papelaria_jobs_service as svc
 
         monkeypatch.setattr(svc, "get_os_folder_basename", lambda ano, nro: "05954-Teste")
-        assert svc.build_imposicao_pdf_name(2026, 5954) == "05954-Teste_Imposição.pdf"
+        assert svc.build_imposicao_pdf_name(2026, 5954) == "2026_05954-Teste_Imposição.pdf"
 
     def test_cria_job_e_payload(self, monkeypatch, tmp_path):
         from services import papelaria_jobs_service as svc
@@ -1567,7 +1567,7 @@ class TestImposicaoJob:
 
         payload = svc.build_worker_job_payload(90)
         assert payload["tipo_job"] == svc.TIPO_JOB_IMPOSICAO
-        assert payload["output_pdf_name"] == "05954-Teste_Imposição.pdf"
+        assert payload["output_pdf_name"] == "2026_05954-Teste_Imposição.pdf"
         assert payload["output_cdr_name"] == ""
         assert payload["input_cdr_path"] == str(chosen_file.resolve())
         assert payload["modelo_id"] is None

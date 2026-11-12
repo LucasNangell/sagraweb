@@ -1561,9 +1561,9 @@ def build_output_filenames(ano: int, nro: int) -> tuple[str, str]:
 
 
 def build_imposicao_pdf_name(ano: int, nro: int) -> str:
-    """PDF de imposição: {NUMOS-NomePastaOS}_Imposição.pdf."""
+    """PDF de imposição: {ANO}_{NUMOS-NomePastaOS}_Imposição.pdf."""
     prefix = get_os_folder_basename(ano, nro)
-    return f"{prefix}_Imposição.pdf"
+    return f"{int(ano)}_{prefix}_Imposição.pdf"
 
 
 def resolve_imposicao_output_dir(

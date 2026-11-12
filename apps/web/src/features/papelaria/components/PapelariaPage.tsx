@@ -79,7 +79,7 @@ export function PapelariaPage() {
       <div className="flex min-h-0 flex-1 flex-col gap-2 md:flex-row md:overflow-hidden">
         <div
           className={cn(
-            "flex min-h-[min(55vh,560px)] w-full min-w-0 flex-col gap-2 md:min-h-0 md:w-[340px] md:shrink-0 lg:w-[400px]",
+            "flex min-h-[min(55vh,560px)] w-full min-w-0 flex-col gap-2 md:min-h-0 md:w-[408px] md:shrink-0 lg:w-[480px]",
             mobilePane !== "lista" && "max-md:hidden",
           )}
         >

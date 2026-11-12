@@ -842,7 +842,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
       mobilePanel !== panel && "max-md:hidden",
       panel === "preview"
         ? "flex min-h-[min(50vh,480px)] min-w-0 flex-1 flex-col md:min-h-0"
-        : "flex min-h-[min(50vh,480px)] w-full flex-col md:min-h-0 md:w-[360px] md:shrink-0",
+        : "flex min-h-[min(50vh,480px)] w-full flex-col md:min-h-0 md:w-[288px] md:shrink-0",
       "max-md:overflow-visible md:overflow-hidden",
     );
 

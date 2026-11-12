@@ -1002,6 +1002,10 @@ def inspecionar_cdr(
                 pass
 
 
+# Objetos do carimbo/template que podem faltar em alguns CDR — não abortam o job.
+CAMPOS_COREL_OPCIONAIS = frozenset({"TipoOSint"})
+
+
 def aplicar_campo(
     doc,
     nome_campo_corel: str,
@@ -1015,6 +1019,11 @@ def aplicar_campo(
         doc, nome_campo_corel, indice=indice_shapes
     )
     if not ocorrencias:
+        if nome_campo_corel in CAMPOS_COREL_OPCIONAIS:
+            logs.append(
+                f"Objeto '{nome_campo_corel}' não encontrado — ignorado."
+            )
+            return
         raise CorelGenerationError(
             f"Objeto '{nome_campo_corel}' não encontrado em nenhuma página do documento."
         )

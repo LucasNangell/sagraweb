@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  papelariaSpJobUiFromJobStatus,
   papelariaSpJobUiKey,
-  type PapelariaSpJobUiStatus,
 } from "./papelariaSpJobUi";
 
 describe("papelariaSpJobUiKey", () => {
@@ -11,15 +11,12 @@ describe("papelariaSpJobUiKey", () => {
   });
 });
 
-describe("PapelariaSpJobUiStatus", () => {
-  it("distingue pendência de processamento", () => {
-    const pending: PapelariaSpJobUiStatus = "pending";
-    const generating: PapelariaSpJobUiStatus = "generating";
-    const done: PapelariaSpJobUiStatus = "done";
-    expect([pending, generating, done]).toEqual([
-      "pending",
-      "generating",
-      "done",
-    ]);
+describe("papelariaSpJobUiFromJobStatus", () => {
+  it("mapeia pending/processing/completed", () => {
+    expect(papelariaSpJobUiFromJobStatus("pending")).toBe("pending");
+    expect(papelariaSpJobUiFromJobStatus("processing")).toBe("generating");
+    expect(papelariaSpJobUiFromJobStatus("completed")).toBe("done");
+    expect(papelariaSpJobUiFromJobStatus("failed")).toBeNull();
+    expect(papelariaSpJobUiFromJobStatus("cancelled")).toBeNull();
   });
 });

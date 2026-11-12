@@ -20,6 +20,7 @@ from corel_generator import (  # noqa: E402
     _manter_somente_primeira_pagina,
     _ajustar_pasta_avulso_para_a4,
     _resolver_shapes_all,
+    aplicar_campo,
     calcular_ajuste_a4_paisagem,
     encaixar_retangulo_na_pagina,
     montar_carimbo_prova_email,
@@ -349,6 +350,31 @@ class TestExportProvaSemAlterar:
         assert origem.read_bytes() == b"cdr-original"
         assert out_pdf.is_file()
         assert fake_session.get_application.called
+
+
+class TestAplicarCampoOpcional:
+    def test_tipoosint_ausente_e_ignorado(self):
+        logs: list[str] = []
+        aplicar_campo(
+            object(),
+            "TipoOSint",
+            "SP",
+            {},
+            logs,
+            indice_shapes={},
+        )
+        assert any("ignorado" in log.lower() for log in logs)
+
+    def test_campo_obrigatorio_ausente_falha(self):
+        with pytest.raises(CorelGenerationError, match="OSint"):
+            aplicar_campo(
+                object(),
+                "OSint",
+                "05954/2026",
+                {},
+                [],
+                indice_shapes={},
+            )
 
 
 class TestCarimboProvaEmail:

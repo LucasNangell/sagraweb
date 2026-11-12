@@ -1,6 +1,9 @@
-import { useCallback, useState } from "react";
+import { useQueries } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "@sagra/ui";
 
+import { fetchPapelariaJob } from "@/api/papelaria";
+import { queryKeys } from "@/api/query-keys";
 import { OsHistoryPanel } from "@/features/os/components/OsHistoryPanel";
 import type { OsSearchRow } from "@/features/os/types";
 
@@ -10,6 +13,7 @@ import {
 } from "../papelariaSelection";
 import { setPapelariaNavigationContext } from "../papelariaSession";
 import {
+  papelariaSpJobUiFromJobStatus,
   papelariaSpJobUiKey,
   type PapelariaSpJobUiStatus,
 } from "../papelariaSpJobUi";
@@ -28,6 +32,10 @@ export function PapelariaPage() {
   const [jobUiBySp, setJobUiBySp] = useState<
     Record<string, PapelariaSpJobUiStatus>
   >({});
+  /** Jobs em voo por SP — continuam sendo polled mesmo ao trocar de SP. */
+  const [trackedJobIdsBySp, setTrackedJobIdsBySp] = useState<
+    Record<string, number>
+  >({});
 
   const osId = selected ? String(selected.nr_os) : null;
   const osAno = selected ? String(selected.ano) : null;
@@ -37,7 +45,6 @@ export function PapelariaPage() {
     setPapelariaNavigationContext({
       nr_os: row.nr_os,
       ano: row.ano,
-      produto: row.produto,
     });
     setSelected(row);
     setMobilePane("trabalho");
@@ -53,7 +60,12 @@ export function PapelariaPage() {
   };
 
   const handleSpJobUiStatusChange = useCallback(
-    (ano: number, nro: number, status: PapelariaSpJobUiStatus | null) => {
+    (
+      ano: number,
+      nro: number,
+      status: PapelariaSpJobUiStatus | null,
+      jobId?: number | null,
+    ) => {
       const key = papelariaSpJobUiKey(ano, nro);
       setJobUiBySp((prev) => {
         if (status === null) {
@@ -65,9 +77,63 @@ export function PapelariaPage() {
         if (prev[key] === status) return prev;
         return { ...prev, [key]: status };
       });
+
+      setTrackedJobIdsBySp((prev) => {
+        if (
+          status === "pending" ||
+          status === "generating"
+        ) {
+          if (jobId == null || jobId <= 0) return prev;
+          if (prev[key] === jobId) return prev;
+          return { ...prev, [key]: jobId };
+        }
+        if (!(key in prev)) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
     },
     [],
   );
+
+  const trackedEntries = useMemo(
+    () => Object.entries(trackedJobIdsBySp),
+    [trackedJobIdsBySp],
+  );
+
+  const trackedJobQueries = useQueries({
+    queries: trackedEntries.map(([spKey, jobId]) => ({
+      queryKey: queryKeys.papelaria.job(jobId),
+      queryFn: () => fetchPapelariaJob(jobId),
+      refetchInterval: 2_000,
+      meta: { spKey, jobId },
+    })),
+  });
+
+  useEffect(() => {
+    trackedEntries.forEach(([spKey], index) => {
+      const job = trackedJobQueries[index]?.data;
+      if (!job) return;
+      const ui = papelariaSpJobUiFromJobStatus(job.status);
+      setJobUiBySp((prev) => {
+        if (ui === null) {
+          if (!(spKey in prev)) return prev;
+          const next = { ...prev };
+          delete next[spKey];
+          return next;
+        }
+        if (prev[spKey] === ui) return prev;
+        return { ...prev, [spKey]: ui };
+      });
+      if (ui === "pending" || ui === "generating") return;
+      setTrackedJobIdsBySp((prev) => {
+        if (!(spKey in prev)) return prev;
+        const next = { ...prev };
+        delete next[spKey];
+        return next;
+      });
+    });
+  }, [trackedEntries, trackedJobQueries]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto md:h-full md:overflow-hidden">

@@ -59,6 +59,7 @@ type Props = {
     ano: number,
     nro: number,
     status: PapelariaSpJobUiStatus | null,
+    jobId?: number | null,
   ) => void;
 };
 
@@ -284,16 +285,40 @@ export function PapelariaCorelPanel({
     if (activeJobId === null || !jobsQuery.data?.length) return;
     const listed = jobsQuery.data.find((j) => j.id === activeJobId);
     const cached = activeJobQuery.data;
-    if (
-      listed?.status === "completed" &&
-      cached &&
-      cached.status !== "completed"
-    ) {
+    if (!listed) return;
+    if (!cached || listed.status !== cached.status) {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.papelaria.job(activeJobId),
       });
     }
   }, [activeJobId, activeJobQuery.data, jobsQuery.data, queryClient]);
+
+  /** Ao abrir/voltar para a SP, retoma o job ainda na fila ou em processamento. */
+  useEffect(() => {
+    if (!hasOs || !jobsQuery.data?.length) return;
+    const inFlight = [...jobsQuery.data]
+      .filter(
+        (j) => j.status === "pending" || j.status === "processing",
+      )
+      .sort((a, b) => b.id - a.id)[0];
+    if (!inFlight) return;
+
+    setActiveJobId((prev) => {
+      if (prev === inFlight.id) return prev;
+      if (prev != null) {
+        const current = jobsQuery.data.find((j) => j.id === prev);
+        if (
+          current &&
+          (current.status === "pending" || current.status === "processing")
+        ) {
+          return prev;
+        }
+      }
+      return inFlight.id;
+    });
+    setViewMode("prova");
+    setMobilePanel("preview");
+  }, [hasOs, jobsQuery.data, anoNum, nroNum]);
 
   const createJobMutation = useMutation({
     mutationFn: createPapelariaJob,
@@ -813,25 +838,56 @@ export function PapelariaCorelPanel({
     setMobilePanel("preview");
   }, [mutationGenerating, jobPipelineBusy]);
 
+  const listInFlightJob = useMemo(() => {
+    if (!jobsQuery.data?.length) return null;
+    return (
+      [...jobsQuery.data]
+        .filter(
+          (j) => j.status === "pending" || j.status === "processing",
+        )
+        .sort((a, b) => b.id - a.id)[0] ?? null
+    );
+  }, [jobsQuery.data]);
+
   useEffect(() => {
     if (!onSpJobUiStatusChange || !hasOs) return;
-    if (activeJob?.status === "processing") {
-      onSpJobUiStatusChange(anoNum, nroNum, "generating");
+    const pipelineJob =
+      activeJob &&
+      (activeJob.status === "pending" || activeJob.status === "processing")
+        ? activeJob
+        : listInFlightJob;
+
+    if (pipelineJob?.status === "processing") {
+      onSpJobUiStatusChange(
+        anoNum,
+        nroNum,
+        "generating",
+        pipelineJob.id,
+      );
       return;
     }
-    if (mutationGenerating || activeJob?.status === "pending") {
-      onSpJobUiStatusChange(anoNum, nroNum, "pending");
+    if (mutationGenerating) {
+      onSpJobUiStatusChange(
+        anoNum,
+        nroNum,
+        "pending",
+        pipelineJob?.id ?? activeJobId,
+      );
+      return;
+    }
+    if (pipelineJob?.status === "pending") {
+      onSpJobUiStatusChange(anoNum, nroNum, "pending", pipelineJob.id);
       return;
     }
     if (activeJob?.status === "completed") {
-      onSpJobUiStatusChange(anoNum, nroNum, "done");
+      onSpJobUiStatusChange(anoNum, nroNum, "done", activeJob.id);
       return;
     }
     if (
       activeJob?.status === "failed" ||
       activeJob?.status === "cancelled"
     ) {
-      onSpJobUiStatusChange(anoNum, nroNum, null);
+      onSpJobUiStatusChange(anoNum, nroNum, null, activeJob.id);
     }
   }, [
     onSpJobUiStatusChange,
@@ -839,7 +895,9 @@ export function PapelariaCorelPanel({
     anoNum,
     nroNum,
     mutationGenerating,
-    activeJob?.status,
+    activeJob,
+    activeJobId,
+    listInFlightJob,
   ]);
 
   if (!hasOs) {
@@ -890,7 +948,9 @@ export function PapelariaCorelPanel({
     exportCdrMutation.isPending ||
     finalizeCorelMutation.isPending ||
     (!!activeJob &&
-      (activeJob.status === "pending" || activeJob.status === "processing"));
+      (activeJob.status === "pending" ||
+        activeJob.status === "processing")) ||
+    !!listInFlightJob;
   const cdrFiles = usableCdrFiles(cdrPathQuery.data);
 
   const mobilePanelClass = (panel: "form" | "preview") =>

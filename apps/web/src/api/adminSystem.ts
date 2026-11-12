@@ -477,6 +477,20 @@ export async function savePapelariaAdminNomeExibicao(
   );
 }
 
+export async function savePapelariaAdminPastaImposicao(
+  modeloId: number,
+  pastaImposicao: string | null,
+): Promise<PapelariaAdminModelRecord> {
+  return apiFetch<PapelariaAdminModelRecord>(
+    `/papelaria/admin/modelos/${modeloId}/pasta-imposicao`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pasta_imposicao: pastaImposicao }),
+    },
+  );
+}
+
 export async function deletePapelariaAdminModelo(
   modeloId: number,
 ): Promise<{ success: boolean }> {

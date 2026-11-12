@@ -6,6 +6,7 @@ import { useState } from "react";
 import {
   deletePapelariaAdminModelo,
   savePapelariaAdminNomeExibicao,
+  savePapelariaAdminPastaImposicao,
 } from "@/api/adminSystem";
 import type { PapelariaAdminModelRecord } from "@/features/configuracoes/types";
 
@@ -18,9 +19,12 @@ export function PapelariaModeloDadosPanel({
 }) {
   const qc = useQueryClient();
   const [nome, setNome] = useState(modelo.nome_exibicao);
+  const [pastaImposicao, setPastaImposicao] = useState(
+    modelo.pasta_imposicao ?? "",
+  );
   const [localMsg, setLocalMsg] = useState<string | null>(null);
 
-  const saveMutation = useMutation({
+  const saveNomeMutation = useMutation({
     mutationFn: () => {
       const trimmed = nome.trim();
       return savePapelariaAdminNomeExibicao(modelo.id, trimmed || null);
@@ -33,7 +37,25 @@ export function PapelariaModeloDadosPanel({
     onError: (err: Error) => setLocalMsg(err.message),
   });
 
-  const dirty = nome.trim() !== modelo.nome_exibicao.trim();
+  const savePastaMutation = useMutation({
+    mutationFn: () => {
+      const trimmed = pastaImposicao.trim();
+      return savePapelariaAdminPastaImposicao(modelo.id, trimmed || null);
+    },
+    onSuccess: (data) => {
+      setLocalMsg("Pasta de imposição salva.");
+      setPastaImposicao(data.pasta_imposicao ?? "");
+      void qc.invalidateQueries({ queryKey: ["admin", "papelaria-modelos"] });
+    },
+    onError: (err: Error) => setLocalMsg(err.message),
+  });
+
+  const dirtyNome = nome.trim() !== modelo.nome_exibicao.trim();
+  const dirtyPasta =
+    pastaImposicao.trim() !== (modelo.pasta_imposicao ?? "").trim();
+  const saving =
+    saveNomeMutation.isPending ||
+    savePastaMutation.isPending;
 
   const deleteMutation = useMutation({
     mutationFn: () => deletePapelariaAdminModelo(modelo.id),
@@ -55,6 +77,11 @@ export function PapelariaModeloDadosPanel({
     }
     deleteMutation.mutate();
   };
+
+  const msgIsError =
+    saveNomeMutation.isError ||
+    savePastaMutation.isError ||
+    deleteMutation.isError;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
@@ -99,14 +126,14 @@ export function PapelariaModeloDadosPanel({
           type="button"
           className={cn(
             "inline-flex items-center justify-center gap-1 rounded px-3 py-1.5 text-xs font-semibold",
-            dirty
+            dirtyNome
               ? "bg-secondary-blue text-white hover:bg-secondary-blue/90"
               : "border border-slate-300 text-slate-500",
           )}
-          disabled={!dirty || saveMutation.isPending}
-          onClick={() => saveMutation.mutate()}
+          disabled={!dirtyNome || saving}
+          onClick={() => saveNomeMutation.mutate()}
         >
-          {saveMutation.isPending ? (
+          {saveNomeMutation.isPending ? (
             <Loader2 className="size-3.5 animate-spin" aria-hidden />
           ) : (
             <Save className="size-3.5" aria-hidden />
@@ -116,7 +143,7 @@ export function PapelariaModeloDadosPanel({
         <button
           type="button"
           className="inline-flex items-center justify-center gap-1 rounded border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
-          disabled={deleteMutation.isPending || saveMutation.isPending}
+          disabled={deleteMutation.isPending || saving}
           onClick={handleDelete}
         >
           {deleteMutation.isPending ? (
@@ -128,11 +155,50 @@ export function PapelariaModeloDadosPanel({
         </button>
       </div>
 
+      <label className="flex max-w-xl flex-col gap-1 text-xs text-slate-600">
+        Pasta do PDF de Imposição
+        <input
+          type="text"
+          className="rounded border border-slate-300 px-2 py-1.5 font-mono text-xs text-slate-800"
+          value={pastaImposicao}
+          maxLength={512}
+          placeholder="\\redecamara\DfsData\..."
+          onChange={(e) => {
+            setPastaImposicao(e.target.value);
+            setLocalMsg(null);
+          }}
+        />
+        <span className="text-[10px] text-slate-500">
+          Caminho absoluto UNC onde o botão Imposição grava o PDF. Em branco = pasta Sefoc da OS.
+        </span>
+      </label>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className={cn(
+            "inline-flex items-center justify-center gap-1 rounded px-3 py-1.5 text-xs font-semibold",
+            dirtyPasta
+              ? "bg-secondary-blue text-white hover:bg-secondary-blue/90"
+              : "border border-slate-300 text-slate-500",
+          )}
+          disabled={!dirtyPasta || saving}
+          onClick={() => savePastaMutation.mutate()}
+        >
+          {savePastaMutation.isPending ? (
+            <Loader2 className="size-3.5 animate-spin" aria-hidden />
+          ) : (
+            <Save className="size-3.5" aria-hidden />
+          )}
+          Salvar pasta
+        </button>
+      </div>
+
       {localMsg ? (
         <p
           className={cn(
             "text-xs",
-            saveMutation.isError || deleteMutation.isError ? "text-red-600" : "text-emerald-700",
+            msgIsError ? "text-red-600" : "text-emerald-700",
           )}
         >
           {localMsg}

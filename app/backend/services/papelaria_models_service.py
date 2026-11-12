@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import unicodedata
 from pathlib import Path
@@ -364,6 +365,7 @@ def ensure_papelaria_modelos_table() -> None:
         ("Cores", "VARCHAR(64) NULL"),
         ("ArquivoModelo", "VARCHAR(255) NULL"),
         ("NomeExibicao", "VARCHAR(255) NULL"),
+        ("PastaImposicao", "VARCHAR(512) NULL"),
         ("CamposJson", "JSON NULL"),
         ("VariaveisJson", "JSON NULL"),
         ("MockupConfigJson", "JSON NULL"),
@@ -633,6 +635,8 @@ def _models_select_columns() -> str:
         cols.append("PreviewConfigJson")
     if _table_has_column("NomeExibicao"):
         cols.append("NomeExibicao")
+    if _table_has_column("PastaImposicao"):
+        cols.append("PastaImposicao")
     return ", ".join(cols)
 
 
@@ -643,6 +647,24 @@ def _build_nome_exibicao_padrao(produto: str, frente: str, cores: str) -> str:
     if cores:
         nome_exibicao += f" — {cores}"
     return nome_exibicao
+
+
+_DRIVE_ABS_RE = re.compile(r"^[A-Za-z]:[\\/]")
+
+
+def normalize_pasta_imposicao(value: Any) -> Optional[str]:
+    """Valida e normaliza pasta UNC/absoluta; vazio → None (fallback Sefoc)."""
+    raw = _as_str(value)
+    if not raw:
+        return None
+    if len(raw) > 512:
+        raise ValueError("Pasta de imposição deve ter no máximo 512 caracteres.")
+    if raw.startswith("\\\\") or raw.startswith("//") or _DRIVE_ABS_RE.match(raw):
+        return os.path.normpath(raw)
+    raise ValueError(
+        "Pasta de imposição deve ser caminho absoluto UNC (\\\\servidor\\...) "
+        "ou com letra de unidade (ex.: C:\\pasta)."
+    )
 
 
 def _resolve_nome_exibicao(
@@ -691,6 +713,11 @@ def _row_to_modelo(row: dict[str, Any], include_campos: bool = False) -> dict[st
     mockup_json = _mockup_config_json_from_row(row)
     preview_json = _preview_config_json_from_row(row)
 
+    pasta_imposicao = None
+    if _table_has_column("PastaImposicao"):
+        pasta_raw = _as_str(row.get("PastaImposicao"))
+        pasta_imposicao = pasta_raw or None
+
     out: dict[str, Any] = {
         "id": row["ID"],
         "produto": produto,
@@ -699,6 +726,7 @@ def _row_to_modelo(row: dict[str, Any], include_campos: bool = False) -> dict[st
         "arquivo_modelo": arquivo,
         "variaveis": variaveis,
         "nome_exibicao": nome_exibicao,
+        "pasta_imposicao": pasta_imposicao,
         "ordem": row.get("Ordem") or 0,
         "mockup_config_json": mockup_json,
         "tem_mockup_config": bool(mockup_json),
@@ -893,6 +921,39 @@ def update_modelo_nome_exibicao(
         WHERE ID = %(id)s
         """,
         {"id": modelo_id, "nome": nome},
+    )
+
+    updated = get_modelo_admin_by_id(modelo_id)
+    if not updated:
+        raise LookupError("Modelo não encontrado após atualização.")
+    return updated
+
+
+def update_modelo_pasta_imposicao(
+    modelo_id: int,
+    pasta_imposicao: Optional[str],
+) -> dict[str, Any]:
+    """Salva ou limpa a pasta UNC do PDF de Imposição (NULL = Sefoc da OS)."""
+    ensure_papelaria_modelos_table()
+    if not _table_has_column("PastaImposicao"):
+        raise RuntimeError("Coluna PastaImposicao não disponível no banco.")
+
+    pasta = normalize_pasta_imposicao(pasta_imposicao)
+
+    existing = db.execute_query(
+        "SELECT ID FROM tabPapelariaModelos WHERE ID = %(id)s AND Ativo = 1 LIMIT 1",
+        {"id": modelo_id},
+    )
+    if not existing:
+        raise LookupError("Modelo não encontrado.")
+
+    db.execute_query(
+        """
+        UPDATE tabPapelariaModelos
+        SET PastaImposicao = %(pasta)s
+        WHERE ID = %(id)s
+        """,
+        {"id": modelo_id, "pasta": pasta},
     )
 
     updated = get_modelo_admin_by_id(modelo_id)

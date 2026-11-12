@@ -83,6 +83,7 @@ export interface PapelariaAdminModelRecord {
   cores: string;
   arquivo_modelo: string;
   nome_exibicao: string;
+  pasta_imposicao?: string | null;
   ordem?: number;
   mockup_config_json?: string | null;
   tem_mockup_config?: boolean;

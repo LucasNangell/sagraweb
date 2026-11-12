@@ -707,3 +707,30 @@ class TestBuildOsContextCoercion:
 
         with pytest.raises(ValueError, match="OS de papelaria deve ter número >= 5000 ou possuir produto de papelaria configurado"):
             svc.build_os_context(2026, 1234)
+
+
+class TestPastaImposicao:
+    def test_normalize_vazio_vira_none(self):
+        from services.papelaria_models_service import normalize_pasta_imposicao
+
+        assert normalize_pasta_imposicao(None) is None
+        assert normalize_pasta_imposicao("") is None
+        assert normalize_pasta_imposicao("   ") is None
+
+    def test_normalize_unc_e_drive(self):
+        from services.papelaria_models_service import normalize_pasta_imposicao
+        import os
+
+        unc = normalize_pasta_imposicao(r"\\redecamara\DfsData\CGraf\Pasta")
+        assert unc == os.path.normpath(r"\\redecamara\DfsData\CGraf\Pasta")
+
+        drive = normalize_pasta_imposicao(r"C:\SAGRA\Imposicao")
+        assert drive == os.path.normpath(r"C:\SAGRA\Imposicao")
+
+    def test_normalize_rejeita_relativo(self):
+        from services.papelaria_models_service import normalize_pasta_imposicao
+
+        with pytest.raises(ValueError, match="absoluto"):
+            normalize_pasta_imposicao("Sefoc/Offset")
+        with pytest.raises(ValueError, match="absoluto"):
+            normalize_pasta_imposicao("pasta")

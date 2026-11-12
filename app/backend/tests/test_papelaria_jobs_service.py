@@ -1571,6 +1571,71 @@ class TestImposicaoJob:
         assert payload["output_cdr_name"] == ""
         assert payload["input_cdr_path"] == str(chosen_file.resolve())
         assert payload["modelo_id"] is None
+        assert payload["output_dir"] == str(sefoc)
+
+    def test_output_dir_usa_pasta_imposicao_do_modelo(self, monkeypatch, tmp_path):
+        from services import papelaria_jobs_service as svc
+
+        sefoc = tmp_path / "Sefoc"
+        sefoc.mkdir()
+        custom = tmp_path / "CustomUNC"
+        custom.mkdir()
+
+        monkeypatch.setattr(
+            svc,
+            "resolve_os_papelaria_dir",
+            lambda ano, nro, create=False: str(sefoc),
+        )
+
+        class _Models:
+            @staticmethod
+            def get_modelo_by_id(modelo_id):
+                assert modelo_id == 7
+                return {
+                    "id": 7,
+                    "pasta_imposicao": str(custom),
+                    "arquivo_modelo": "X.cdr",
+                    "produto": "Ct Visita",
+                }
+
+        monkeypatch.setattr(
+            "services.papelaria_models_service.get_modelo_by_id",
+            _Models.get_modelo_by_id,
+        )
+        # import path used inside resolve_imposicao_output_dir
+        import services.papelaria_models_service as models_svc
+
+        monkeypatch.setattr(models_svc, "get_modelo_by_id", _Models.get_modelo_by_id)
+
+        out = svc.resolve_imposicao_output_dir(2026, 5954, modelo_id=7, create=True)
+        assert out == str(custom)
+
+    def test_output_dir_fallback_sefoc_sem_pasta(self, monkeypatch, tmp_path):
+        from services import papelaria_jobs_service as svc
+
+        sefoc = tmp_path / "Sefoc"
+        sefoc.mkdir()
+        monkeypatch.setattr(
+            svc,
+            "resolve_os_papelaria_dir",
+            lambda ano, nro, create=False: str(sefoc),
+        )
+
+        import services.papelaria_models_service as models_svc
+
+        monkeypatch.setattr(
+            models_svc,
+            "get_modelo_by_id",
+            lambda modelo_id: {
+                "id": modelo_id,
+                "pasta_imposicao": None,
+                "arquivo_modelo": "X.cdr",
+                "produto": "Ct",
+            },
+        )
+
+        out = svc.resolve_imposicao_output_dir(2026, 5954, modelo_id=3, create=False)
+        assert out == str(sefoc)
 
 
 class TestDiscoverOsCdr:

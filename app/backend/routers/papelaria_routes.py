@@ -55,6 +55,7 @@ class PapelariaImposicaoPayload(BaseModel):
     ano: int = Field(..., ge=2000, le=2100)
     nro: int = Field(..., ge=1)
     arquivo_cdr: Optional[str] = Field(None, max_length=255)
+    modelo_id: Optional[int] = Field(None, ge=1)
 
 
 class PapelariaOsActionPayload(BaseModel):
@@ -79,6 +80,10 @@ class PapelariaPreviewValidatePayload(BaseModel):
 
 class PapelariaNomeExibicaoPayload(BaseModel):
     nome_exibicao: Optional[str] = Field(None, max_length=255)
+
+
+class PapelariaPastaImposicaoPayload(BaseModel):
+    pasta_imposicao: Optional[str] = Field(None, max_length=512)
 
 
 def _require_papelaria_access(
@@ -238,6 +243,30 @@ def salvar_nome_exibicao_modelo(
     except Exception as e:
         logger.exception("Erro ao salvar nome exibição modelo %s: %s", modelo_id, e)
         raise HTTPException(500, "Erro ao salvar nome de exibição.")
+
+
+@router.put("/admin/modelos/{modelo_id}/pasta-imposicao")
+def salvar_pasta_imposicao_modelo(
+    modelo_id: int,
+    payload: PapelariaPastaImposicaoPayload,
+    _session: SessionData = Depends(_require_import_access),
+):
+    try:
+        from services import papelaria_models_service as models_svc
+
+        return models_svc.update_modelo_pasta_imposicao(
+            modelo_id,
+            payload.pasta_imposicao,
+        )
+    except LookupError:
+        raise HTTPException(404, "Modelo não encontrado.")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        raise HTTPException(500, str(e))
+    except Exception as e:
+        logger.exception("Erro ao salvar pasta imposição modelo %s: %s", modelo_id, e)
+        raise HTTPException(500, "Erro ao salvar pasta de imposição.")
 
 
 @router.delete("/admin/modelos/{modelo_id}")
@@ -781,6 +810,7 @@ def gerar_imposicao_os(
             nro=payload.nro,
             solicitado_por=str(session.ponto),
             arquivo_cdr=payload.arquivo_cdr,
+            modelo_id=payload.modelo_id,
         )
     except LookupError as e:
         raise HTTPException(404, str(e))

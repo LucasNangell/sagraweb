@@ -808,6 +808,7 @@ export function PapelariaCorelPanel({
       ano: anoNum,
       nro: nroNum,
       arquivo_cdr: arquivoCdr,
+      modelo_id: selectedModelId ?? undefined,
     });
   };
 

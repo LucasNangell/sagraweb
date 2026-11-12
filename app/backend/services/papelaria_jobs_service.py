@@ -473,6 +473,7 @@ def create_imposicao_job(
     nro: int,
     solicitado_por: str,
     arquivo_cdr: Optional[str] = None,
+    modelo_id: Optional[int] = None,
 ) -> dict[str, Any]:
     """Enfileira geração do PDF de imposição a partir do CDR da OS (BordaF/BordaV)."""
     ensure_papelaria_jobs_tables()
@@ -483,13 +484,27 @@ def create_imposicao_job(
     ordem = next_queue_position()
     produto_job = (os_row.get("produto") or "").strip() or "Papelaria"
 
+    modelo_id_job: Optional[int] = None
+    arquivo_modelo = ""
+    if modelo_id:
+        from services import papelaria_models_service as models_svc
+
+        modelo = models_svc.get_modelo_by_id(int(modelo_id))
+        if not modelo:
+            raise LookupError("Modelo não encontrado ou inativo.")
+        modelo_id_job = int(modelo["id"])
+        arquivo_modelo = (modelo.get("arquivo_modelo") or "").strip()
+        produto_modelo = (modelo.get("produto") or "").strip()
+        if produto_modelo:
+            produto_job = produto_modelo
+
     insert_params = {
         "nro": nro,
         "ano": ano,
         "tipo": TIPO_JOB_IMPOSICAO,
         "produto": produto_job,
-        "modelo_id": None,
-        "arquivo": "",
+        "modelo_id": modelo_id_job,
+        "arquivo": arquivo_modelo,
         "dados": json.dumps(dados_clean, ensure_ascii=False),
         "status": STATUS_PENDING,
         "ordem": ordem,
@@ -1551,6 +1566,28 @@ def build_imposicao_pdf_name(ano: int, nro: int) -> str:
     return f"{prefix}_Imposição.pdf"
 
 
+def resolve_imposicao_output_dir(
+    ano: int,
+    nro: int,
+    *,
+    modelo_id: Optional[int] = None,
+    create: bool = True,
+) -> str:
+    """Pasta do PDF de imposição: PastaImposicao do modelo ou Sefoc da OS."""
+    if modelo_id:
+        from services import papelaria_models_service as models_svc
+
+        modelo = models_svc.get_modelo_by_id(int(modelo_id))
+        if modelo:
+            pasta = (modelo.get("pasta_imposicao") or "").strip()
+            if pasta:
+                out = os.path.normpath(pasta)
+                if create:
+                    os.makedirs(out, exist_ok=True)
+                return out
+    return resolve_os_papelaria_dir(ano, nro, create=create)
+
+
 def build_timbrado_a4_digital_artifact_names(ano: int, nro: int) -> dict[str, str]:
     """Nomes relativos dos artefatos Timbrado A4 Digital na pasta Sefoc."""
     prefix = get_os_folder_basename(ano, nro)
@@ -1607,14 +1644,22 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
             job["nro_protocolo"],
             input_cdr_rel_imp if isinstance(input_cdr_rel_imp, str) else None,
         )
+        modelo_id_imp = job.get("modelo_id")
+        arquivo_modelo_imp = (job.get("arquivo_modelo") or "").strip()
+        imposicao_dir = resolve_imposicao_output_dir(
+            job["ano_protocolo"],
+            job["nro_protocolo"],
+            modelo_id=int(modelo_id_imp) if modelo_id_imp else None,
+            create=True,
+        )
         return {
             "job_id": job["id"],
             "ano": job["ano_protocolo"],
             "nro": job["nro_protocolo"],
             "tipo_job": job["tipo_job"],
             "produto": job["produto"],
-            "modelo_id": None,
-            "arquivo_modelo": "",
+            "modelo_id": modelo_id_imp,
+            "arquivo_modelo": arquivo_modelo_imp,
             "campos": {},
             "dados": {},
             "campos_dinamicos_layout": {},
@@ -1622,7 +1667,7 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
             "preview_config": None,
             "frente_versao": None,
             "cores": None,
-            "output_dir": output_dir,
+            "output_dir": imposicao_dir,
             "output_cdr_name": "",
             "output_pdf_name": build_imposicao_pdf_name(
                 job["ano_protocolo"],

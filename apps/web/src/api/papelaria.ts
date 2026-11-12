@@ -158,6 +158,7 @@ export async function criarPapelariaImposicaoJob(payload: {
   ano: number;
   nro: number;
   arquivo_cdr?: string;
+  modelo_id?: number | null;
 }): Promise<PapelariaJob> {
   return apiFetch<PapelariaJob>(
     `/papelaria/os/${payload.ano}/${payload.nro}/imposicao`,

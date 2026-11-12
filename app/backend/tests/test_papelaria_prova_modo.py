@@ -9,7 +9,8 @@ import pytest
 def test_resolve_aliases_e_modelos_sem_csp():
     from services.papelaria_prova_modo import resolve_arquivo_email
 
-    assert resolve_arquivo_email("CtVisitaFV.cdr") == "CtVisitaF.cdr"
+    assert resolve_arquivo_email("CtVisita.cdr") == "CtVisitaF.cdr"
+    assert resolve_arquivo_email("CtVisitaFV.cdr") == "CtVisita.cdr"
     assert resolve_arquivo_email("ctvisitarS.cdr") == "CtVisitaR.cdr"
     assert resolve_arquivo_email("PastaCBolso") == "PastaAvulsocBolso.cdr"
     assert resolve_arquivo_email("BlocoA5.cdr") == "BlocoA5.cdr"
@@ -122,8 +123,51 @@ def test_payload_create_email_envia_arquivo_csp(monkeypatch, tmp_path):
 
     assert payload["prova_modo"] == "prova_email"
     assert payload["arquivo_modelo"] == "CtVisitaFV.cdr"
-    assert payload["arquivo_modelo_email"] == "CtVisitaF.cdr"
+    assert payload["arquivo_modelo_email"] == "CtVisita.cdr"
     assert payload["prova_numero"] == 2
+
+
+def test_payload_create_email_ct_visita_f_usa_ctvisitaf(monkeypatch, tmp_path):
+    from services import papelaria_jobs_service as svc
+
+    job = {
+        "id": 78,
+        "ano_protocolo": 2026,
+        "nro_protocolo": 5954,
+        "tipo_job": svc.TIPO_JOB_CREATE,
+        "produto": "Ct Visita",
+        "modelo_id": 15,
+        "arquivo_modelo": "CtVisita.cdr",
+        "dados": {"nome_deputado": "Ana"},
+        "tentativas": 0,
+    }
+    monkeypatch.setattr(svc, "get_job", lambda job_id: job if job_id == 78 else None)
+    monkeypatch.setattr(svc, "resolve_os_papelaria_dir", lambda *a, **k: str(tmp_path))
+    monkeypatch.setattr(
+        svc,
+        "build_output_filenames",
+        lambda ano, nro: ("os.cdr", "05954-Nome-ProvaSefoc 2.pdf"),
+    )
+    monkeypatch.setattr(
+        "services.papelaria_prova_modo.get_modo",
+        lambda: "prova_email",
+    )
+    with patch(
+        "services.papelaria_models_service.get_modelo_by_id",
+        return_value={
+            "id": 15,
+            "produto": "Ct Visita",
+            "arquivo_modelo": "CtVisita.cdr",
+            "campos": {},
+            "frente_versao": "Somente Frente",
+            "cores": "Policromia",
+            "nome_exibicao": "Ct Visita F",
+        },
+    ):
+        payload = svc.build_worker_job_payload(78)
+
+    assert payload["arquivo_modelo"] == "CtVisita.cdr"
+    assert payload["arquivo_modelo_email"] == "CtVisitaF.cdr"
 
 
 def test_payload_create_sem_csp_falha(monkeypatch, tmp_path):

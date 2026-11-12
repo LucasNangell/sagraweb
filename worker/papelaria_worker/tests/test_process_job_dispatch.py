@@ -228,7 +228,7 @@ class TestProcessJobDispatch:
             cfg,
             _job(
                 prova_modo="prova_email",
-                arquivo_modelo="CtVisitaFV.cdr",
+                arquivo_modelo="CtVisita.cdr",
                 arquivo_modelo_email="CtVisitaF.cdr",
             ),
         )

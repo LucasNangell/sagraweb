@@ -29,8 +29,10 @@ EMAIL_MODEL_ALIASES: dict[str, str] = {
     "CtDpRtLtRS.cdr": "CtDuploRetratoLateralR.cdr",
     "CtGabSimples.cdr": "CtGabSimples(Cor).cdr",
     "CtGabSimplesRS.cdr": "CtGabSimples(Cor)R.cdr",
-    "CtVisitaFV.cdr": "CtVisitaF.cdr",
-    "CtVisita.cdr": "CtVisita.cdr",
+    # WEB CtVisita.cdr = Somente Frente ("Ct Visita F") → CSP CtVisitaF.cdr
+    # WEB CtVisitaFV.cdr = Frente e Verso → CSP CtVisita.cdr (FV)
+    "CtVisita.cdr": "CtVisitaF.cdr",
+    "CtVisitaFV.cdr": "CtVisita.cdr",
     "CtVisitaRS.cdr": "CtVisitaR.cdr",
     "PastaCBolso.cdr": "PastaAvulsocBolso.cdr",
     "PastaSBolso.cdr": "PastaAvulsoSemBolso.cdr",

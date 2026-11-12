@@ -1317,6 +1317,27 @@ def list_os_proof_files(
     return list_proof_pdf_files(ano, os)
 
 
+@router.get("/os/{ano}/{os}/proof-file")
+def serve_os_proof_file(
+    ano: int,
+    os: int,
+    filename: str = Query(..., description="Nome do PDF em Sefoc/"),
+    session: SessionData = Depends(require_session),
+):
+    """Serve inline um PDF de prova da pasta Sefoc da OS (sem expor UNC)."""
+    from pathlib import Path
+
+    from services.proof_files_service import resolve_proof_pdf_path
+
+    pdf_path = resolve_proof_pdf_path(ano, os, filename)
+    return FileResponse(
+        path=pdf_path,
+        media_type="application/pdf",
+        filename=Path(pdf_path).name,
+        content_disposition_type="inline",
+    )
+
+
 def _pendencia_andamento_meta(
     email_type: str,
     nova_versao: str,

@@ -18,7 +18,8 @@ import {
   finalizarCorelPapelariaOs,
   gerarProvaCdrExistentePapelariaOs,
 } from "@/api/papelaria";
-import { fetchOsFolderBrowse, osFolderFileUrl } from "@/api/os";
+import { emailProofFileUrl } from "@/api/email";
+import { fetchOsFolderBrowse } from "@/api/os";
 import { useEmailProofFiles } from "@/api/hooks/useEmailQueries";
 import { queryKeys } from "@/api/query-keys";
 import { useAuthStore } from "@/features/auth/authStore";
@@ -772,7 +773,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
   );
   const folderProofPdfUrl =
     hasOs && folderProofName
-      ? osFolderFileUrl(anoNum, nroNum, `Sefoc/${folderProofName}`)
+      ? emailProofFileUrl(anoNum, nroNum, folderProofName)
       : null;
 
   useEffect(() => {

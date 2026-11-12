@@ -80,6 +80,16 @@ export async function fetchEmailProofFiles(
   return apiFetch<EmailProofFilesResponse>(`/email/os/${ano}/${os}/proof-files`);
 }
 
+/** URL inline do PDF de prova em Sefoc/ (não usar folder-file — só Original). */
+export function emailProofFileUrl(
+  ano: number,
+  os: number,
+  filename: string,
+): string {
+  const params = new URLSearchParams({ filename });
+  return apiUrl(`/email/os/${ano}/${os}/proof-file?${params}`);
+}
+
 export async function fetchProtocoloLookup(
   os: number,
   ano: number,

@@ -22,6 +22,7 @@ from corel_generator import (  # noqa: E402
     _resolver_shapes_all,
     aplicar_campo,
     calcular_ajuste_a4_paisagem,
+    offset_relativo_borda,
     encaixar_retangulo_na_pagina,
     montar_carimbo_prova_email,
     pagina_e_pasta_avulso_mm,
@@ -350,6 +351,11 @@ class TestExportProvaSemAlterar:
         assert origem.read_bytes() == b"cdr-original"
         assert out_pdf.is_file()
         assert fake_session.get_application.called
+
+
+class TestOffsetRelativoBorda:
+    def test_offset_basico(self):
+        assert offset_relativo_borda(120.0, 80.0, 100.0, 50.0) == (20.0, 30.0)
 
 
 class TestAplicarCampoOpcional:

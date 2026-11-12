@@ -137,8 +137,7 @@ export function PapelariaProofPanel({
 
   const needsProvaReview =
     showPdf &&
-    activeJob?.prova_revisao !== "approved" &&
-    activeJob?.prova_revisao !== "discarded";
+    activeJob?.prova_revisao === "pending";
 
   const exibirMockup3d = provaModo !== "prova_email";
 

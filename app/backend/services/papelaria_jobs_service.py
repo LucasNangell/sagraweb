@@ -32,6 +32,7 @@ TIPO_JOB_MANUAL_COREL = "manual_corel"
 TIPO_JOB_EXPORT_EXISTING_CDR = "export_existing_cdr"
 TIPO_JOB_CREDENCIAIS_DEPOL = "credenciais_depol"
 TIPO_JOB_TIMBRADO_A4_DIGITAL = "timbrado_a4_digital"
+TIPO_JOB_IMPOSICAO = "imposicao"
 
 CDR_BACKUP_NAME_FRAGMENT = "cópia_de_segurança"
 INPUT_CDR_DADOS_KEY = "__input_cdr"
@@ -463,6 +464,65 @@ def create_job(
         append_job_log(job_id, warning, "warning")
         job["warnings"] = [warning]
 
+    broadcast_job_update(job)
+    return job
+
+
+def create_imposicao_job(
+    ano: int,
+    nro: int,
+    solicitado_por: str,
+    arquivo_cdr: Optional[str] = None,
+) -> dict[str, Any]:
+    """Enfileira geração do PDF de imposição a partir do CDR da OS (BordaF/BordaV)."""
+    ensure_papelaria_jobs_tables()
+
+    os_row = _validate_os_exists(ano, nro)
+    chosen = select_os_usable_cdr(ano, nro, arquivo_cdr)
+    dados_clean = {INPUT_CDR_DADOS_KEY: chosen["relative_path"]}
+    ordem = next_queue_position()
+    produto_job = (os_row.get("produto") or "").strip() or "Papelaria"
+
+    insert_params = {
+        "nro": nro,
+        "ano": ano,
+        "tipo": TIPO_JOB_IMPOSICAO,
+        "produto": produto_job,
+        "modelo_id": None,
+        "arquivo": "",
+        "dados": json.dumps(dados_clean, ensure_ascii=False),
+        "status": STATUS_PENDING,
+        "ordem": ordem,
+        "ponto": solicitado_por,
+        "job_pai": None,
+    }
+
+    def _insert_job(cursor) -> int:
+        cursor.execute(
+            """
+            INSERT INTO tabPapelariaJobs (
+                NroProtocolo, AnoProtocolo, TipoJob, Produto, ModeloID, ArquivoModelo,
+                DadosJson, Status, Prioridade, OrdemFila, SolicitadoPor, Versao, JobPaiID
+            ) VALUES (
+                %(nro)s, %(ano)s, %(tipo)s, %(produto)s, %(modelo_id)s, %(arquivo)s,
+                %(dados)s, %(status)s, 0, %(ordem)s, %(ponto)s, 1, %(job_pai)s
+            )
+            """,
+            insert_params,
+        )
+        return int(cursor.lastrowid)
+
+    results = db.execute_transaction([_insert_job])
+    job_id = int(results[0])
+    job = get_job(job_id)
+    if not job:
+        raise RuntimeError("Falha ao recuperar job criado.")
+
+    append_job_log(
+        job_id,
+        f"Imposição a partir do Corel ({chosen['filename']}).",
+        "info",
+    )
     broadcast_job_update(job)
     return job
 
@@ -1485,6 +1545,12 @@ def build_output_filenames(ano: int, nro: int) -> tuple[str, str]:
     return cdr_name, pdf_name
 
 
+def build_imposicao_pdf_name(ano: int, nro: int) -> str:
+    """PDF de imposição: {NUMOS-NomePastaOS}_Imposição.pdf."""
+    prefix = get_os_folder_basename(ano, nro)
+    return f"{prefix}_Imposição.pdf"
+
+
 def build_timbrado_a4_digital_artifact_names(ano: int, nro: int) -> dict[str, str]:
     """Nomes relativos dos artefatos Timbrado A4 Digital na pasta Sefoc."""
     prefix = get_os_folder_basename(ano, nro)
@@ -1531,6 +1597,39 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
             "output_cdr_name": cdr_name,
             "output_pdf_name": pdf_name,
             "tentativas": job.get("tentativas") or 0,
+        }
+
+    if job["tipo_job"] == TIPO_JOB_IMPOSICAO:
+        dados_imp = dict(job.get("dados") or {})
+        input_cdr_rel_imp = dados_imp.get(INPUT_CDR_DADOS_KEY)
+        input_cdr_path_imp = resolve_export_input_cdr_path(
+            job["ano_protocolo"],
+            job["nro_protocolo"],
+            input_cdr_rel_imp if isinstance(input_cdr_rel_imp, str) else None,
+        )
+        return {
+            "job_id": job["id"],
+            "ano": job["ano_protocolo"],
+            "nro": job["nro_protocolo"],
+            "tipo_job": job["tipo_job"],
+            "produto": job["produto"],
+            "modelo_id": None,
+            "arquivo_modelo": "",
+            "campos": {},
+            "dados": {},
+            "campos_dinamicos_layout": {},
+            "exclusoes": [],
+            "preview_config": None,
+            "frente_versao": None,
+            "cores": None,
+            "output_dir": output_dir,
+            "output_cdr_name": "",
+            "output_pdf_name": build_imposicao_pdf_name(
+                job["ano_protocolo"],
+                job["nro_protocolo"],
+            ),
+            "tentativas": job.get("tentativas") or 0,
+            "input_cdr_path": input_cdr_path_imp,
         }
 
     from services import papelaria_models_service as models_svc
@@ -1775,7 +1874,8 @@ def complete_job(
     )
     pdf_abs = os.path.normpath(os.path.join(output_dir, pdf_rel))
 
-    if job.get("tipo_job") == TIPO_JOB_EXPORT_EXISTING_CDR:
+    tipo_job = job.get("tipo_job")
+    if tipo_job in (TIPO_JOB_EXPORT_EXISTING_CDR, TIPO_JOB_IMPOSICAO):
         dados_job = job.get("dados") or {}
         cdr_abs = resolve_export_input_cdr_path(
             job["ano_protocolo"],
@@ -1798,6 +1898,17 @@ def complete_job(
         if not os.path.isfile(path):
             raise FileNotFoundError(f"Arquivo não encontrado no destino: {os.path.basename(path)}")
 
+    prova_revisao = (
+        PROVA_REVISAO_NA
+        if tipo_job == TIPO_JOB_IMPOSICAO
+        else PROVA_REVISAO_PENDING
+    )
+    default_msg = (
+        "Imposição concluída."
+        if tipo_job == TIPO_JOB_IMPOSICAO
+        else "Geração concluída com sucesso. Aguardando aprovação do técnico."
+    )
+
     db.execute_query(
         """
         UPDATE tabPapelariaJobs
@@ -1814,7 +1925,7 @@ def complete_job(
             "status": STATUS_COMPLETED,
             "cdr": cdr_rel,
             "pdf": pdf_rel,
-            "prova_revisao": PROVA_REVISAO_PENDING,
+            "prova_revisao": prova_revisao,
             "processing": STATUS_PROCESSING,
             "worker_id": worker_id.strip(),
         },
@@ -1824,7 +1935,7 @@ def complete_job(
     if not updated or updated["status"] != STATUS_COMPLETED:
         raise ValueError("Job não pôde ser concluído (status alterado).")
 
-    msg = log_resumo or "Geração concluída com sucesso. Aguardando aprovação do técnico."
+    msg = log_resumo or default_msg
     append_job_log(job_id, msg[:4000], "info")
     broadcast_job_update(updated)
     if updated.get("tipo_job") == TIPO_JOB_CREDENCIAIS_DEPOL:

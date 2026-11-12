@@ -1465,6 +1465,114 @@ class TestExportExistingCdrJob:
         assert payload["output_pdf_name"].endswith(".pdf")
 
 
+class TestImposicaoJob:
+    def test_nome_pdf_imposicao(self, monkeypatch):
+        from services import papelaria_jobs_service as svc
+
+        monkeypatch.setattr(svc, "get_os_folder_basename", lambda ano, nro: "05954-Teste")
+        assert svc.build_imposicao_pdf_name(2026, 5954) == "05954-Teste_Imposição.pdf"
+
+    def test_cria_job_e_payload(self, monkeypatch, tmp_path):
+        from services import papelaria_jobs_service as svc
+
+        captured = {}
+        sefoc = tmp_path / "Sefoc"
+        sefoc.mkdir()
+        chosen_file = sefoc / "layout.cdr"
+        chosen_file.write_bytes(b"cdr")
+
+        class _FakeCursor:
+            lastrowid = 90
+
+            def execute(self, sql, params=None):
+                captured["params"] = params
+
+        def fake_transaction(operations):
+            cursor = _FakeCursor()
+            return [op(cursor) for op in operations]
+
+        def fake_query(sql, params=None):
+            if "FROM tabProtocolos" in sql:
+                return [
+                    {
+                        "NroProtocolo": 5954,
+                        "AnoProtocolo": 2026,
+                        "produto": "Ct Visita",
+                    }
+                ]
+            if "SELECT * FROM tabPapelariaJobs WHERE ID" in sql:
+                return [
+                    {
+                        "ID": 90,
+                        "NroProtocolo": 5954,
+                        "AnoProtocolo": 2026,
+                        "TipoJob": svc.TIPO_JOB_IMPOSICAO,
+                        "Produto": "Ct Visita",
+                        "ModeloID": None,
+                        "ArquivoModelo": "",
+                        "DadosJson": captured.get("params", {}).get("dados") or "{}",
+                        "Status": "pending",
+                        "Prioridade": 0,
+                        "OrdemFila": 1,
+                        "SolicitadoPor": "918713",
+                        "SolicitadoEm": None,
+                        "IniciadoEm": None,
+                        "ConcluidoEm": None,
+                        "WorkerID": None,
+                        "ArquivoCdrGerado": None,
+                        "ArquivoPdfGerado": None,
+                        "Erro": None,
+                        "Tentativas": 0,
+                        "Versao": 1,
+                        "JobPaiID": None,
+                        "ProvaRevisao": None,
+                    }
+                ]
+            if "MAX(OrdemFila)" in sql:
+                return [{"next_pos": 1}]
+            return []
+
+        monkeypatch.setattr(svc.db, "execute_query", fake_query)
+        monkeypatch.setattr(svc.db, "execute_transaction", fake_transaction)
+        monkeypatch.setattr(svc, "broadcast_job_update", lambda *a, **k: None)
+        monkeypatch.setattr(
+            svc,
+            "select_os_usable_cdr",
+            lambda ano, nro, arquivo_cdr=None: {
+                "filename": "layout.cdr",
+                "relative_path": "Sefoc/layout.cdr",
+                "absolute_path": str(chosen_file),
+                "mtime": 1.0,
+            },
+        )
+        monkeypatch.setattr(
+            svc,
+            "resolve_os_papelaria_dir",
+            lambda ano, nro, create=False: str(sefoc),
+        )
+        monkeypatch.setattr(svc, "get_os_folder_basename", lambda ano, nro: "05954-Teste")
+        monkeypatch.setattr(
+            "routers.os_routes._get_os_folder_path",
+            lambda ano, nro: str(tmp_path),
+        )
+
+        job = svc.create_imposicao_job(
+            ano=2026,
+            nro=5954,
+            solicitado_por="918713",
+            arquivo_cdr="Sefoc/layout.cdr",
+        )
+        assert job["tipo_job"] == svc.TIPO_JOB_IMPOSICAO
+        assert job["dados"][svc.INPUT_CDR_DADOS_KEY] == "Sefoc/layout.cdr"
+
+        payload = svc.build_worker_job_payload(90)
+        assert payload["tipo_job"] == svc.TIPO_JOB_IMPOSICAO
+        assert payload["output_pdf_name"] == "05954-Teste_Imposição.pdf"
+        assert payload["output_cdr_name"] == ""
+        assert payload["input_cdr_path"] == str(chosen_file.resolve())
+        assert payload["modelo_id"] is None
+
+
 class TestDiscoverOsCdr:
     def _mock_os_paths(self, monkeypatch, os_root, sefoc):
         from services import papelaria_jobs_service as svc

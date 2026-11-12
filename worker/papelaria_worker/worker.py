@@ -33,6 +33,7 @@ from corel_generator import (
     encerrar_corel_forcadamente,
     exportar_prova_de_cdr_existente,
     gerar_arquivo_corel,
+    gerar_imposicao_de_cdr,
     humanizar_erro_corel,
     inspecionar_cdr,
     reset_corel_session,
@@ -88,19 +89,23 @@ TIPO_JOB_CREATE = "create"
 TIPO_JOB_EXPORT_EXISTING_CDR = "export_existing_cdr"
 TIPO_JOB_CREDENCIAIS_DEPOL = "credenciais_depol"
 TIPO_JOB_TIMBRADO_A4_DIGITAL = "timbrado_a4_digital"
+TIPO_JOB_IMPOSICAO = "imposicao"
 KNOWN_WORKER_TIPOS = frozenset(
     {
         TIPO_JOB_CREATE,
         TIPO_JOB_EXPORT_EXISTING_CDR,
         TIPO_JOB_CREDENCIAIS_DEPOL,
         TIPO_JOB_TIMBRADO_A4_DIGITAL,
+        TIPO_JOB_IMPOSICAO,
     }
 )
 
 
 def resolve_worker_tipo_job(job: dict) -> str:
-    """Exporta PDF se o tipo for export_existing_cdr ou houver input_cdr_path."""
+    """Resolve o tipo efetivo; imposicao tem prioridade sobre input_cdr_path."""
     tipo = str(job.get("tipo_job") or "").strip()
+    if tipo == TIPO_JOB_IMPOSICAO:
+        return TIPO_JOB_IMPOSICAO
     input_cdr = str(job.get("input_cdr_path") or "").strip()
     if input_cdr or tipo == TIPO_JOB_EXPORT_EXISTING_CDR:
         return TIPO_JOB_EXPORT_EXISTING_CDR
@@ -376,12 +381,17 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
         api.fail(job_id, msg, retryable=False)
         return
 
-    if tipo_job == TIPO_JOB_EXPORT_EXISTING_CDR:
+    if tipo_job in (TIPO_JOB_EXPORT_EXISTING_CDR, TIPO_JOB_IMPOSICAO):
         input_cdr = (job.get("input_cdr_path") or "").strip()
         try:
             validar_acesso_export_cdr(input_cdr, output_dir)
         except CorelGenerationError as exc:
-            logging.error("Job #%s — pré-validação export CDR falhou: %s", job_id, exc)
+            logging.error(
+                "Job #%s — pré-validação %s falhou: %s",
+                job_id,
+                tipo_job,
+                exc,
+            )
             api.fail(job_id, str(exc), retryable=False)
             return
     elif tipo_job == TIPO_JOB_CREDENCIAIS_DEPOL:
@@ -482,6 +492,21 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 "info",
             )
             result = exportar_prova_de_cdr_existente(
+                caminho_cdr=input_cdr,
+                temp_dir=cfg.temp_dir,
+                output_pdf_path=output_pdf,
+                corel_visible=cfg.corel_visible,
+                job_timeout_sec=cfg.job_timeout_sec,
+                job_id=job_id,
+            )
+        elif tipo_job == TIPO_JOB_IMPOSICAO:
+            input_cdr = (job.get("input_cdr_path") or "").strip()
+            api.append_log(
+                job_id,
+                f"Iniciando imposição — {os.path.basename(input_cdr)}",
+                "info",
+            )
+            result = gerar_imposicao_de_cdr(
                 caminho_cdr=input_cdr,
                 temp_dir=cfg.temp_dir,
                 output_pdf_path=output_pdf,
@@ -608,7 +633,7 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
         log_resumo = "; ".join(result.logs[-5:]) if result.logs else "OK"
         cdr_for_complete = cdr_name
         artefatos_complete = None
-        if tipo_job == TIPO_JOB_EXPORT_EXISTING_CDR:
+        if tipo_job in (TIPO_JOB_EXPORT_EXISTING_CDR, TIPO_JOB_IMPOSICAO):
             input_cdr = (job.get("input_cdr_path") or "").strip()
             if input_cdr:
                 cdr_for_complete = os.path.basename(input_cdr)

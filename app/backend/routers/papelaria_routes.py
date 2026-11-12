@@ -51,6 +51,12 @@ class PapelariaExportExistingCdrPayload(BaseModel):
     arquivo_cdr: Optional[str] = Field(None, max_length=255)
 
 
+class PapelariaImposicaoPayload(BaseModel):
+    ano: int = Field(..., ge=2000, le=2100)
+    nro: int = Field(..., ge=1)
+    arquivo_cdr: Optional[str] = Field(None, max_length=255)
+
+
 class PapelariaOsActionPayload(BaseModel):
     lancar_andamento: bool = False
 
@@ -751,6 +757,40 @@ def gerar_prova_cdr_existente_os(
     except Exception as e:
         logger.exception("Erro gerar prova CDR existente OS %s/%s: %s", nro, ano, e)
         raise HTTPException(500, "Erro ao solicitar exportação de prova do Corel existente.")
+
+
+@router.post("/os/{ano}/{nro}/imposicao")
+def gerar_imposicao_os(
+    ano: int,
+    nro: int,
+    payload: PapelariaImposicaoPayload,
+    session: SessionData = Depends(_require_papelaria_access),
+):
+    if nro < 5000:
+        from services import papelaria_models_service as models_svc
+        if not models_svc.is_papelaria_os_by_product(ano, nro):
+            raise HTTPException(
+                status_code=400,
+                detail="Disponível apenas para OS >= 5000 ou com produto de papelaria configurado.",
+            )
+    try:
+        from services import papelaria_jobs_service as jobs_svc
+
+        return jobs_svc.create_imposicao_job(
+            ano=payload.ano,
+            nro=payload.nro,
+            solicitado_por=str(session.ponto),
+            arquivo_cdr=payload.arquivo_cdr,
+        )
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.exception("Erro imposição OS %s/%s: %s", nro, ano, e)
+        raise HTTPException(500, "Erro ao solicitar imposição.")
 
 
 @router.get("/jobs/{job_id}")

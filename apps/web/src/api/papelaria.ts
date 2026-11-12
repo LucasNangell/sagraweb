@@ -154,6 +154,21 @@ export async function gerarProvaCdrExistentePapelariaOs(payload: {
   );
 }
 
+export async function criarPapelariaImposicaoJob(payload: {
+  ano: number;
+  nro: number;
+  arquivo_cdr?: string;
+}): Promise<PapelariaJob> {
+  return apiFetch<PapelariaJob>(
+    `/papelaria/os/${payload.ano}/${payload.nro}/imposicao`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
 export async function fetchPapelariaJob(jobId: number): Promise<PapelariaJob> {
   return apiFetch<PapelariaJob>(`/papelaria/jobs/${jobId}`);
 }

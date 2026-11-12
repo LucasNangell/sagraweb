@@ -108,9 +108,11 @@ def patched_runtime(monkeypatch, tmp_path):
     )
     gerar = MagicMock(return_value=_ok_result())
     exportar = MagicMock(return_value=_ok_result())
+    imposicao = MagicMock(return_value=_ok_result("imp.pdf"))
     monkeypatch.setattr(worker_mod, "gerar_arquivo_corel", gerar)
     monkeypatch.setattr(worker_mod, "exportar_prova_de_cdr_existente", exportar)
-    return gerar, exportar, _cfg(tmp_path)
+    monkeypatch.setattr(worker_mod, "gerar_imposicao_de_cdr", imposicao)
+    return gerar, exportar, imposicao, _cfg(tmp_path)
 
 
 class TestResolveCreateModelsDir:
@@ -150,13 +152,24 @@ class TestResolveWorkerTipoJob:
             == "export_existing_cdr"
         )
 
+    def test_imposicao_tem_prioridade_sobre_input_cdr(self):
+        assert (
+            resolve_worker_tipo_job(
+                {
+                    "tipo_job": "imposicao",
+                    "input_cdr_path": r"C:\os\Sefoc\pronto.cdr",
+                }
+            )
+            == "imposicao"
+        )
+
     def test_vazio_vira_create(self):
         assert resolve_worker_tipo_job({}) == "create"
 
 
 class TestProcessJobDispatch:
     def test_export_nao_chama_gerar_arquivo(self, patched_runtime):
-        gerar, exportar, cfg = patched_runtime
+        gerar, exportar, _imposicao, cfg = patched_runtime
         api = FakeApi()
         worker_mod._process_job_body(
             api,
@@ -173,7 +186,7 @@ class TestProcessJobDispatch:
         assert api.completed[0][1] == "pronto.cdr"
 
     def test_input_cdr_path_sozinho_exporta(self, patched_runtime):
-        gerar, exportar, cfg = patched_runtime
+        gerar, exportar, _imposicao, cfg = patched_runtime
         api = FakeApi()
         worker_mod._process_job_body(
             api,
@@ -186,8 +199,28 @@ class TestProcessJobDispatch:
         exportar.assert_called_once()
         gerar.assert_not_called()
 
+    def test_imposicao_chama_gerar_imposicao(self, patched_runtime):
+        gerar, exportar, imposicao, cfg = patched_runtime
+        api = FakeApi()
+        worker_mod._process_job_body(
+            api,
+            cfg,
+            _job(
+                tipo_job="imposicao",
+                input_cdr_path=r"C:\os\Sefoc\pronto.cdr",
+                output_cdr_name="",
+                output_pdf_name="05024-Nome_Imposição.pdf",
+            ),
+        )
+        imposicao.assert_called_once()
+        exportar.assert_not_called()
+        gerar.assert_not_called()
+        assert api.completed
+        assert api.completed[0][1] == "pronto.cdr"
+        assert api.completed[0][2] == "05024-Nome_Imposição.pdf"
+
     def test_tipo_desconhecido_nao_gera_arquivo(self, patched_runtime):
-        gerar, exportar, cfg = patched_runtime
+        gerar, exportar, imposicao, cfg = patched_runtime
         api = FakeApi()
         worker_mod._process_job_body(
             api,
@@ -196,11 +229,12 @@ class TestProcessJobDispatch:
         )
         gerar.assert_not_called()
         exportar.assert_not_called()
+        imposicao.assert_not_called()
         assert api.failed
         assert api.failed[0][2] is False
 
     def test_create_ainda_gera_arquivo(self, patched_runtime):
-        gerar, exportar, cfg = patched_runtime
+        gerar, exportar, _imposicao, cfg = patched_runtime
         api = FakeApi()
         worker_mod._process_job_body(api, cfg, _job(tipo_job="create"))
         gerar.assert_called_once()
@@ -210,7 +244,7 @@ class TestProcessJobDispatch:
         assert api.completed
 
     def test_create_email_abre_arquivo_da_pasta_csp(self, patched_runtime, monkeypatch, tmp_path):
-        gerar, _exportar, cfg = patched_runtime
+        gerar, _exportar, _imposicao, cfg = patched_runtime
         web = tmp_path / "CSP" / "WEB"
         web.mkdir(parents=True)
         cfg.models_dir = str(web)
@@ -245,7 +279,7 @@ class TestProcessJobDispatch:
         assert any("somente da página 1" in msg for msg in api.logs)
 
     def test_create_email_sem_arquivo_falha(self, patched_runtime, tmp_path):
-        gerar, _exportar, cfg = patched_runtime
+        gerar, _exportar, _imposicao, cfg = patched_runtime
         web = tmp_path / "CSP" / "WEB"
         web.mkdir(parents=True)
         cfg.models_dir = str(web)
@@ -262,7 +296,7 @@ class TestProcessJobDispatch:
     def test_timbrado_digital_nao_chama_gerar_arquivo(
         self, patched_runtime, monkeypatch, tmp_path
     ):
-        gerar, exportar, cfg = patched_runtime
+        gerar, exportar, _imposicao, cfg = patched_runtime
         templates = tmp_path / "templates"
         templates.mkdir()
         cfg.timbrado_a4_digital_templates_dir = str(templates)

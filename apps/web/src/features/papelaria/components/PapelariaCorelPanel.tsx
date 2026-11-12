@@ -9,6 +9,7 @@ import {
   cancelPapelariaJob,
   createPapelariaJob,
   createPapelariaTimbradoA4DigitalJob,
+  criarPapelariaImposicaoJob,
   discardPapelariaJobProva,
   fetchPapelariaCdrPath,
   fetchPapelariaCorelModelo,
@@ -154,12 +155,15 @@ export function PapelariaCorelPanel({
     "gerar" | "digital" | "corel" | "export" | null
   >(null);
   const [folderGateAction, setFolderGateAction] = useState<
-    "gerar" | "digital" | "corel" | "export" | null
+    "gerar" | "digital" | "corel" | "export" | "imposicao" | null
   >(null);
   const [folderCheckPending, setFolderCheckPending] = useState(false);
   const [exportCdrRel, setExportCdrRel] = useState<string | null>(null);
   const [cdrPickerOpen, setCdrPickerOpen] = useState(false);
   const [cdrPickerChoice, setCdrPickerChoice] = useState("");
+  const [cdrPickerMode, setCdrPickerMode] = useState<"export" | "imposicao">(
+    "export",
+  );
   const autoSelectDone = useRef(false);
   const prefillApplied = useRef(false);
   const appliedAlteracaoRef = useRef<string | null>(null);
@@ -399,6 +403,34 @@ export function PapelariaCorelPanel({
     },
     onError: (err: Error) => {
       setFormError(err.message || "Erro ao solicitar exportação de prova.");
+    },
+  });
+
+  const imposicaoMutation = useMutation({
+    mutationFn: criarPapelariaImposicaoJob,
+    onSuccess: (job) => {
+      if (!job?.id) {
+        setFormError("Job criado, mas a resposta da API veio inválida. Atualize a página.");
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.papelaria.jobsOs(anoNum, nroNum),
+        });
+        return;
+      }
+      setActiveJobId(job.id);
+      setCorelEditMode(false);
+      setFormError(null);
+      setProvaReviewMessage(null);
+      setViewMode("prova");
+      setMobilePanel("preview");
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.papelaria.jobsOs(anoNum, nroNum),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.email.proofFiles(anoNum, nroNum),
+      });
+    },
+    onError: (err: Error) => {
+      setFormError(err.message || "Erro ao solicitar imposição.");
     },
   });
 
@@ -756,6 +788,7 @@ export function PapelariaCorelPanel({
       return;
     }
     setFormError(null);
+    setCdrPickerMode("export");
     if (files.length === 1) {
       setExportCdrRel(files[0].relative_path);
       void ensureOsFolderThen("export");
@@ -765,15 +798,77 @@ export function PapelariaCorelPanel({
     setCdrPickerOpen(true);
   };
 
+  const runImposicao = () => {
+    const arquivoCdr = exportCdrRel?.trim();
+    if (!arquivoCdr) {
+      setFormError("Selecione o arquivo Corel que deve ser usado na imposição.");
+      return;
+    }
+    imposicaoMutation.mutate({
+      ano: anoNum,
+      nro: nroNum,
+      arquivo_cdr: arquivoCdr,
+    });
+  };
+
+  const ensureOsFolderThenImposicao = async () => {
+    setFolderCheckPending(true);
+    setFormError(null);
+    try {
+      const browse = await fetchOsFolderBrowse(anoNum, nroNum, "");
+      const folderMissing = Boolean(browse.error || !browse.root_path);
+      if (folderMissing) {
+        setFolderGateAction("imposicao");
+        return;
+      }
+      runImposicao();
+    } catch (e) {
+      setFormError(
+        e instanceof Error
+          ? e.message
+          : "Não foi possível verificar a pasta da OS na rede.",
+      );
+    } finally {
+      setFolderCheckPending(false);
+    }
+  };
+
+  const handleImposicao = () => {
+    const files = usableCdrFiles(cdrPathQuery.data);
+    if (files.length === 0) {
+      setFormError(
+        "Nenhum arquivo Corel utilizável encontrado na pasta desta OS.",
+      );
+      return;
+    }
+    setFormError(null);
+    setCdrPickerMode("imposicao");
+    if (files.length === 1) {
+      setExportCdrRel(files[0].relative_path);
+      void ensureOsFolderThenImposicao();
+      return;
+    }
+    setCdrPickerChoice(files[0].relative_path);
+    setCdrPickerOpen(true);
+  };
+
   const handleConfirmCdrPicker = () => {
     const choice = cdrPickerChoice.trim();
     if (!choice) {
-      setFormError("Selecione o arquivo Corel que deve ser usado na prova.");
+      setFormError(
+        cdrPickerMode === "imposicao"
+          ? "Selecione o arquivo Corel que deve ser usado na imposição."
+          : "Selecione o arquivo Corel que deve ser usado na prova.",
+      );
       return;
     }
     setExportCdrRel(choice);
     setCdrPickerOpen(false);
     setFormError(null);
+    if (cdrPickerMode === "imposicao") {
+      void ensureOsFolderThenImposicao();
+      return;
+    }
     void ensureOsFolderThen("export");
   };
 
@@ -826,6 +921,7 @@ export function PapelariaCorelPanel({
     createJobMutation.isPending ||
     createDigitalJobMutation.isPending ||
     exportCdrMutation.isPending ||
+    imposicaoMutation.isPending ||
     finalizeCorelMutation.isPending;
   const jobPipelineBusy = Boolean(
     activeJob &&
@@ -946,6 +1042,7 @@ export function PapelariaCorelPanel({
     createJobMutation.isPending ||
     createDigitalJobMutation.isPending ||
     exportCdrMutation.isPending ||
+    imposicaoMutation.isPending ||
     finalizeCorelMutation.isPending ||
     (!!activeJob &&
       (activeJob.status === "pending" ||
@@ -1169,6 +1266,7 @@ export function PapelariaCorelPanel({
             createJobMutation.isPending ||
             createDigitalJobMutation.isPending ||
             exportCdrMutation.isPending ||
+            imposicaoMutation.isPending ||
             abrirCorelMutation.isPending
           }
           folderCheckPending={folderCheckPending}
@@ -1177,15 +1275,17 @@ export function PapelariaCorelPanel({
           createJobPending={createJobMutation.isPending}
           createDigitalPending={createDigitalJobMutation.isPending}
           exportCdrPending={exportCdrMutation.isPending}
+          imposicaoPending={imposicaoMutation.isPending}
           abrirCorelPending={abrirCorelMutation.isPending}
           finalizeCorelPending={finalizeCorelMutation.isPending}
           selectedModelId={selectedModelId}
+          cdrDisponivel={cdrFiles.length > 0}
           onGerarArquivo={handleGerarArquivo}
           onTimbradoA4Digital={handleTimbradoA4Digital}
           onAbrirCorel={handleAbrirCorel}
           onFinalizarCorel={handleFinalizarCorel}
           onGerarProvaCdr={handleGerarProvaCdrExistente}
-          onImposicao={() => undefined}
+          onImposicao={handleImposicao}
         />
 
         <div className={cn(mobilePanelClass("preview"), "max-md:order-3")}>
@@ -1344,6 +1444,10 @@ export function PapelariaCorelPanel({
           void queryClient.invalidateQueries({
             queryKey: queryKeys.papelaria.cdrPath(anoNum, nroNum),
           });
+          if (action === "imposicao") {
+            runImposicao();
+            return;
+          }
           if (action) {
             setAndamentoModal(action);
           }

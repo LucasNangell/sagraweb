@@ -2894,6 +2894,438 @@ def exportar_prova_de_cdr_existente(
     )
 
 
+def offset_relativo_borda(
+    shape_left: float,
+    shape_bottom: float,
+    borda_left: float,
+    borda_bottom: float,
+) -> tuple[float, float]:
+    """Posição do shape relativa à origem inferior-esquerda da borda."""
+    return shape_left - borda_left, shape_bottom - borda_bottom
+
+
+def _nome_igual(a: str, b: str) -> bool:
+    return (a or "").strip().lower() == (b or "").strip().lower()
+
+
+def _layer_name_of_shape(shape: Any) -> str:
+    try:
+        layer = getattr(shape, "Layer", None)
+        if layer is not None:
+            return str(getattr(layer, "Name", "") or "")
+    except Exception:
+        pass
+    return ""
+
+
+def _iter_powerclip_shapes(borda_shape: Any) -> list[Any]:
+    """Shapes dentro do PowerClip de BordaF/BordaV, se existir."""
+    encontrados: list[Any] = []
+    try:
+        pc = getattr(borda_shape, "PowerClip", None)
+        if pc is None:
+            return encontrados
+        shapes = getattr(pc, "Shapes", None)
+        if shapes is None:
+            return encontrados
+        count = int(shapes.Count)
+        for i in range(1, count + 1):
+            try:
+                encontrados.append(shapes.Item(i))
+            except Exception:
+                continue
+    except Exception:
+        return []
+    return encontrados
+
+
+def _filtrar_shapes_camada_arte(shapes: list[Any]) -> list[Any]:
+    arte = [s for s in shapes if _nome_igual(_layer_name_of_shape(s), "arte")]
+    if arte:
+        return arte
+    # Fallback: grupo/objeto chamado arte
+    nomeados = [
+        s
+        for s in shapes
+        if _nome_igual(str(getattr(s, "Name", "") or ""), "arte")
+    ]
+    return nomeados
+
+
+def _borda_size(borda_shape: Any) -> tuple[float, float]:
+    bounds = _extrair_bounds_shape(borda_shape)
+    if bounds:
+        left, bottom, right, top = bounds
+        w, h = right - left, top - bottom
+        if w > 0 and h > 0:
+            return w, h
+    sw = _ler_float_shape(borda_shape, "SizeWidth", "Width")
+    sh = _ler_float_shape(borda_shape, "SizeHeight", "Height")
+    if sw and sh and sw > 0 and sh > 0:
+        return float(sw), float(sh)
+    raise CorelGenerationError("Não foi possível ler as dimensões da borda.")
+
+
+def _set_page_size(page: Any, width: float, height: float, logs: list[str]) -> None:
+    try:
+        page.SetSize(width, height)
+        return
+    except Exception as exc:
+        logs.append(f"Aviso SetSize página: {exc}")
+    try:
+        page.SizeWidth = width
+        page.SizeHeight = height
+    except Exception as exc:
+        raise CorelGenerationError(
+            f"Não foi possível definir o tamanho da página: {exc}"
+        ) from exc
+
+
+def _criar_pagina_nomeada(doc: Any, nome: str, width: float, height: float, logs: list[str]) -> Any:
+    before = int(doc.Pages.Count)
+    try:
+        doc.AddPages(1)
+    except Exception:
+        try:
+            doc.InsertPages(1, False, before)
+        except Exception as exc:
+            raise CorelGenerationError(f"Falha ao criar página '{nome}': {exc}") from exc
+    page = doc.Pages.Item(int(doc.Pages.Count))
+    try:
+        page.Name = nome
+    except Exception as exc:
+        logs.append(f"Aviso ao nomear página '{nome}': {exc}")
+    _set_page_size(page, width, height, logs)
+    logs.append(f"Página '{nome}' criada ({width:.2f}×{height:.2f}).")
+    return page
+
+
+def _copiar_arte_para_pagina(
+    corel: Any,
+    doc: Any,
+    borda_shape: Any,
+    page: Any,
+    logs: list[str],
+) -> int:
+    """Copia shapes da camada arte (PowerClip da borda) para a página, posições relativas."""
+    internos = _iter_powerclip_shapes(borda_shape)
+    if not internos:
+        raise CorelGenerationError(
+            f"Objeto '{getattr(borda_shape, 'Name', 'borda')}' sem conteúdo PowerClip/arte."
+        )
+    arte_shapes = _filtrar_shapes_camada_arte(internos)
+    if not arte_shapes:
+        raise CorelGenerationError(
+            f"Camada 'arte' não encontrada dentro de "
+            f"'{getattr(borda_shape, 'Name', 'borda')}'."
+        )
+
+    borda_bounds = _extrair_bounds_shape(borda_shape)
+    if not borda_bounds:
+        raise CorelGenerationError("Não foi possível ler a posição da borda.")
+    borda_left, borda_bottom, _, _ = borda_bounds
+
+    # Entra no PowerClip para Copy funcionar com o conteúdo clipado
+    entered = False
+    try:
+        pc = getattr(borda_shape, "PowerClip", None)
+        if pc is not None:
+            pc.EnterEditMode()
+            entered = True
+    except Exception as exc:
+        logs.append(f"Aviso EnterEditMode PowerClip: {exc}")
+
+    copiados = 0
+    try:
+        try:
+            doc.ClearSelection()
+        except Exception:
+            pass
+        for shape in arte_shapes:
+            try:
+                shape.AddToSelection()
+            except Exception:
+                try:
+                    shape.Selected = True
+                except Exception:
+                    continue
+        try:
+            count_sel = 0
+            try:
+                count_sel = int(doc.ActiveSelection.Shapes.Count)
+            except Exception:
+                count_sel = int(getattr(doc.ActiveSelection, "Count", 0) or 0)
+            if count_sel < 1:
+                raise CorelGenerationError("Nenhum shape da camada arte selecionável.")
+            doc.ActiveSelection.Copy()
+        except CorelGenerationError:
+            raise
+        except Exception as exc:
+            raise CorelGenerationError(f"Falha ao copiar arte da borda: {exc}") from exc
+    finally:
+        if entered:
+            try:
+                borda_shape.PowerClip.LeaveEditMode()
+            except Exception as exc:
+                logs.append(f"Aviso LeaveEditMode: {exc}")
+
+    try:
+        page.Activate()
+    except Exception:
+        try:
+            doc.ActivePage = page
+        except Exception:
+            pass
+
+    try:
+        page.ActiveLayer.Paste()
+    except Exception:
+        try:
+            corel.ActiveDocument.ActiveLayer.Paste()
+        except Exception as exc:
+            raise CorelGenerationError(f"Falha ao colar arte na página: {exc}") from exc
+
+    # Reposiciona shapes colados com offsets relativos à borda
+    try:
+        pasted = list(page.ActiveLayer.Shapes)
+    except Exception:
+        pasted = []
+        try:
+            sh = page.ActiveLayer.Shapes
+            for i in range(1, int(sh.Count) + 1):
+                pasted.append(sh.Item(i))
+        except Exception:
+            pasted = []
+
+    # Usa os offsets calculados dos originais na ordem (melhor esforço)
+    offsets: list[tuple[float, float]] = []
+    for shape in arte_shapes:
+        sb = _extrair_bounds_shape(shape)
+        if not sb:
+            continue
+        offsets.append(
+            offset_relativo_borda(sb[0], sb[1], borda_left, borda_bottom)
+        )
+
+    for idx, pasted_shape in enumerate(pasted):
+        if idx >= len(offsets):
+            break
+        rel_left, rel_bottom = offsets[idx]
+        try:
+            pasted_shape.LeftX = rel_left
+            pasted_shape.BottomY = rel_bottom
+            copiados += 1
+        except Exception:
+            try:
+                pasted_shape.SetPosition(rel_left, rel_bottom)
+                copiados += 1
+            except Exception as exc:
+                logs.append(f"Aviso ao posicionar shape colado: {exc}")
+
+    if copiados == 0 and pasted:
+        copiados = len(pasted)
+        logs.append(
+            "Shapes colados sem reposicionamento explícito "
+            f"({copiados} objeto(s))."
+        )
+    elif copiados == 0:
+        raise CorelGenerationError("Nenhum shape foi colado na página de imposição.")
+
+    logs.append(f"{copiados} objeto(s) da camada arte posicionados na página.")
+    return copiados
+
+
+def _remover_paginas_exceto(doc: Any, nomes_manter: set[str], logs: list[str]) -> None:
+    manter = {n.strip().lower() for n in nomes_manter}
+    # Remove do fim para o início
+    for i in range(int(doc.Pages.Count), 0, -1):
+        page = doc.Pages.Item(i)
+        nome = str(getattr(page, "Name", "") or "").strip().lower()
+        if nome in manter:
+            continue
+        if int(doc.Pages.Count) <= len(manter):
+            break
+        try:
+            page.Delete()
+        except Exception as exc:
+            logs.append(f"Aviso ao excluir página '{nome}': {exc}")
+
+
+def _montar_imposicao_no_documento(corel: Any, doc: Any, logs: list[str]) -> list[str]:
+    """Cria páginas Frente/Verso a partir de BordaF/BordaV; retorna nomes criados."""
+    bordas_f = encontrar_shapes_no_documento(doc, "BordaF")
+    if not bordas_f:
+        raise CorelGenerationError(
+            "Objeto 'BordaF' não encontrado no documento — necessário para imposição."
+        )
+    borda_f = bordas_f[0]["shape"]
+    w_f, h_f = _borda_size(borda_f)
+    page_f = _criar_pagina_nomeada(doc, "Frente", w_f, h_f, logs)
+    _copiar_arte_para_pagina(corel, doc, borda_f, page_f, logs)
+
+    criadas = ["Frente"]
+    bordas_v = encontrar_shapes_no_documento(doc, "BordaV")
+    if bordas_v:
+        borda_v = bordas_v[0]["shape"]
+        w_v, h_v = _borda_size(borda_v)
+        page_v = _criar_pagina_nomeada(doc, "Verso", w_v, h_v, logs)
+        _copiar_arte_para_pagina(corel, doc, borda_v, page_v, logs)
+        criadas.append("Verso")
+    else:
+        logs.append("Objeto 'BordaV' não encontrado — imposição somente Frente.")
+
+    _remover_paginas_exceto(doc, set(criadas), logs)
+    logs.append(
+        f"Documento preparado para PDF com página(s): {', '.join(criadas)}."
+    )
+    return criadas
+
+
+def _gerar_imposicao_impl(
+    caminho_cdr: str,
+    temp_cdr_path: str,
+    output_pdf_path: str,
+    corel_visible: bool,
+    logs: list[str],
+    *,
+    reuse_corel_session: bool = True,
+) -> None:
+    t0 = time.perf_counter()
+    _corel_session._ensure_com()
+
+    if not os.path.isfile(caminho_cdr):
+        raise CorelGenerationError(f"Corel da OS não encontrado: {caminho_cdr}")
+
+    os.makedirs(os.path.dirname(temp_cdr_path), exist_ok=True)
+    if os.path.exists(temp_cdr_path):
+        os.remove(temp_cdr_path)
+    shutil.copy(caminho_cdr, temp_cdr_path)
+    logs.append(f"Cópia temp para imposição ({os.path.basename(caminho_cdr)}).")
+
+    corel_reused = reuse_corel_session and _corel_session.has_application()
+    job_completed = False
+
+    try:
+        for attempt in range(2):
+            doc = None
+            force_new_corel = attempt > 0
+            try:
+                if reuse_corel_session:
+                    corel = _corel_session.get_application(
+                        corel_visible,
+                        force_new=force_new_corel,
+                    )
+                    logs.append(
+                        f"CorelDRAW {'reutilizado' if corel_reused and not force_new_corel else 'iniciado'} "
+                        f"(Visible={corel_visible})."
+                    )
+                else:
+                    _ensure_com_in_current_thread()
+                    corel = dispatch_corel_application()
+                    corel.Visible = corel_visible
+
+                temp_abs = os.path.abspath(temp_cdr_path)
+                doc = corel.OpenDocument(temp_abs)
+                logs.append(f"Documento aberto — {doc.Pages.Count} página(s).")
+                _assert_documento_e_copia_temp(doc, temp_abs, caminho_cdr, logs)
+
+                _montar_imposicao_no_documento(corel, doc, logs)
+
+                temp_pdf_path = os.path.join(os.path.dirname(temp_cdr_path), "imposicao.pdf")
+                exportar_pdf(corel, doc, temp_pdf_path, logs)
+
+                os.makedirs(os.path.dirname(output_pdf_path), exist_ok=True)
+                if os.path.exists(output_pdf_path):
+                    os.remove(output_pdf_path)
+                shutil.copy2(temp_pdf_path, output_pdf_path)
+                logs.append(
+                    f"PDF imposição salvo: {os.path.basename(output_pdf_path)} "
+                    f"({(time.perf_counter() - t0):.1f}s)."
+                )
+                job_completed = True
+                break
+            except Exception as exc:
+                if attempt == 0 and reuse_corel_session and _is_com_disconnect_error(exc):
+                    logs.append("COM desconectou — reiniciando Corel e tentando de novo.")
+                    reset_corel_session()
+                    continue
+                raise
+            finally:
+                if doc is not None:
+                    try:
+                        doc.Close()
+                    except Exception:
+                        pass
+                if not reuse_corel_session:
+                    try:
+                        corel.Quit()
+                    except Exception:
+                        pass
+    finally:
+        if reuse_corel_session and not job_completed:
+            pass
+
+
+def gerar_imposicao_de_cdr(
+    caminho_cdr: str,
+    temp_dir: str,
+    output_pdf_path: str,
+    *,
+    corel_visible: bool = False,
+    job_timeout_sec: int = 300,
+    job_id: Optional[int] = None,
+) -> GenerationResult:
+    """
+    Extrai arte de BordaF/BordaV para páginas Frente/Verso e gera PDF *_Imposição.
+    Não altera o CDR original na pasta da OS.
+    """
+    logs: list[str] = []
+    job_tag = f"job_{job_id}" if job_id else "job"
+    temp_job_dir = os.path.join(temp_dir, job_tag)
+    os.makedirs(temp_job_dir, exist_ok=True)
+    temp_cdr_path = os.path.join(temp_job_dir, "imposicao_working.cdr")
+
+    output_dir = os.path.dirname(output_pdf_path) or output_pdf_path
+    validar_acesso_export_cdr(caminho_cdr, output_dir)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(
+            _gerar_imposicao_impl,
+            caminho_cdr,
+            temp_cdr_path,
+            output_pdf_path,
+            corel_visible,
+            logs,
+            reuse_corel_session=True,
+        )
+        try:
+            future.result(timeout=max(30, job_timeout_sec))
+        except FuturesTimeoutError as exc:
+            encerrar_corel_forcadamente(matar_processo=True)
+            raise CorelGenerationError(
+                f"Imposição excedeu o tempo limite de {job_timeout_sec}s — "
+                "CorelDRAW encerrado. O job pode ser reprocessado por outro worker."
+            ) from exc
+        except Exception as exc:
+            if _is_com_disconnect_error(exc):
+                reset_corel_session()
+                raise CorelGenerationError(
+                    humanizar_erro_corel(exc, contexto="CorelDRAW desconectado")
+                ) from exc
+            if isinstance(exc, CorelGenerationError):
+                raise
+            raise CorelGenerationError(humanizar_erro_corel(exc)) from exc
+
+    if not os.path.isfile(output_pdf_path):
+        raise CorelGenerationError("PDF de imposição não foi gerado.")
+
+    return GenerationResult(
+        cdr_path=os.path.abspath(caminho_cdr),
+        pdf_path=output_pdf_path,
+        logs=logs,
+    )
+
+
 def cleanup_temp_dir(temp_dir: str, job_id: Optional[int] = None) -> None:
     if job_id is not None:
         path = os.path.join(temp_dir, f"job_{job_id}")

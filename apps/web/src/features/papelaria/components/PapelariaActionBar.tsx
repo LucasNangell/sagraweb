@@ -12,9 +12,11 @@ export type PapelariaActionBarProps = {
   createJobPending: boolean;
   createDigitalPending: boolean;
   exportCdrPending: boolean;
+  imposicaoPending: boolean;
   abrirCorelPending: boolean;
   finalizeCorelPending: boolean;
   selectedModelId: number | null;
+  cdrDisponivel: boolean;
   onGerarArquivo: () => void;
   onTimbradoA4Digital: () => void;
   onAbrirCorel: () => void;
@@ -74,9 +76,11 @@ export function PapelariaActionBar({
   createJobPending,
   createDigitalPending,
   exportCdrPending,
+  imposicaoPending,
   abrirCorelPending,
   finalizeCorelPending,
   selectedModelId,
+  cdrDisponivel,
   onGerarArquivo,
   onTimbradoA4Digital,
   onAbrirCorel,
@@ -87,6 +91,17 @@ export function PapelariaActionBar({
 }: PapelariaActionBarProps) {
   const baseDisabled =
     busy || folderCheckPending || modelLoading || !selectedModelId;
+  const imposicaoDisabled =
+    busy ||
+    folderCheckPending ||
+    !cdrDisponivel ||
+    createJobPending ||
+    createDigitalPending ||
+    exportCdrPending ||
+    imposicaoPending ||
+    abrirCorelPending ||
+    finalizeCorelPending ||
+    isJobGenerating;
 
   return (
     <aside
@@ -101,14 +116,26 @@ export function PapelariaActionBar({
         label="Gerar arquivo"
         tone="primary"
         pending={createJobPending}
-        disabled={baseDisabled || createDigitalPending || exportCdrPending || abrirCorelPending}
+        disabled={
+          baseDisabled ||
+          createDigitalPending ||
+          exportCdrPending ||
+          imposicaoPending ||
+          abrirCorelPending
+        }
         onClick={onGerarArquivo}
       />
       {showTimbradoA4Digital ? (
         <ActionButton
           label="Timb A4 Digital"
           pending={createDigitalPending}
-          disabled={baseDisabled || createJobPending || exportCdrPending || abrirCorelPending}
+          disabled={
+            baseDisabled ||
+            createJobPending ||
+            exportCdrPending ||
+            imposicaoPending ||
+            abrirCorelPending
+          }
           onClick={onTimbradoA4Digital}
         />
       ) : null}
@@ -120,6 +147,7 @@ export function PapelariaActionBar({
           createJobPending ||
           createDigitalPending ||
           exportCdrPending ||
+          imposicaoPending ||
           finalizeCorelPending
         }
         onClick={onAbrirCorel}
@@ -143,6 +171,7 @@ export function PapelariaActionBar({
             baseDisabled ||
             createJobPending ||
             exportCdrPending ||
+            imposicaoPending ||
             abrirCorelPending ||
             finalizeCorelPending ||
             isJobGenerating
@@ -153,8 +182,9 @@ export function PapelariaActionBar({
       ) : null}
       <ActionButton
         label="Imposição"
-        disabled={baseDisabled || createJobPending || createDigitalPending || exportCdrPending || abrirCorelPending || finalizeCorelPending || isJobGenerating}
-        title="Imposição"
+        pending={imposicaoPending}
+        disabled={imposicaoDisabled}
+        title="Gerar PDF de imposição (BordaF/BordaV)"
         onClick={onImposicao}
       />
     </aside>

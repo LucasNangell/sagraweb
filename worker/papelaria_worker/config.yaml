@@ -1,14 +1,22 @@
-# API única — servidor de produção (mesmo destino para .exe, python worker.py e painel admin)
-api_base_url: "https://cgrafsysvm.redecamara.camara.gov.br/sagra/api"
-# Inspeção de .cdr no admin (DEV): aponte para a mesma API do painel, ex.:
-# api_base_url: "http://127.0.0.1:8001/api"
-ssl_verify: false
+# Perfis de API — escolha automática:
+#   .exe (PyInstaller) → prod
+#   python worker.py   → dev
+# Override: --profile, SAGRA_PAPELARIA_WORKER_PROFILE ou active_profile abaixo.
+profiles:
+  dev:
+    api_base_url: "http://127.0.0.1:8001/api"
+    ssl_verify: true
+  prod:
+    api_base_url: "https://cgrafsysvm.redecamara.camara.gov.br/sagra/api"
+    ssl_verify: false
 
 worker_secret: "dsajkfhkdjsfleuwahfkKHKHKJGEKkhdsfkjhHKFhkjhkjdhakhKJH"
 worker_id: auto
 
 poll_interval_sec: 1
 models_dir: "\\\\redecamara\\DfsData\\CGraf\\Sefoc\\Laboratorio\\Modelos\\Modelos Corel\\Papelaria\\CSP\\WEB"
+# Pasta CSP do modo Prova e-mail. Vazio = pasta pai de models_dir quando ela se chama WEB.
+# models_dir_email: "\\\\redecamara\\DfsData\\CGraf\\Sefoc\\Laboratorio\\Modelos\\Modelos Corel\\Papelaria\\CSP"
 temp_dir: "C:\\SAGRA-Papelaria-Worker\\temp"
 logs_dir: "C:\\SAGRA-Papelaria-Worker\\logs"
 

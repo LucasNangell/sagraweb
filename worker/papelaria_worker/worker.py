@@ -774,6 +774,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Caminho do arquivo YAML de configuração",
     )
     parser.add_argument(
+        "--profile",
+        default=None,
+        help="Perfil de API: dev|prod (default: prod no .exe, dev no python)",
+    )
+    parser.add_argument(
         "--test-connection",
         action="store_true",
         help="Testa conexão com API e encerra",
@@ -783,7 +788,7 @@ def main(argv: list[str] | None = None) -> int:
     if is_frozen() and config_embutida_no_exe():
         args.config = str(default_config_path())
 
-    cfg = load_config(args.config)
+    cfg = load_config(args.config, profile=args.profile)
     _setup_logging(cfg.logs_dir, console=not is_frozen())
 
     if not acquire_single_instance_lock(cfg.temp_dir):
@@ -793,8 +798,10 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    profile_label = cfg.api_profile or "(plano)"
+    logging.info("Perfil: %s — API %s", profile_label, cfg.api_base_url)
     if config_embutida_no_exe():
-        logging.info("Configuração embutida no executável — API %s", cfg.api_base_url)
+        logging.info("Configuração embutida no executável")
 
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)

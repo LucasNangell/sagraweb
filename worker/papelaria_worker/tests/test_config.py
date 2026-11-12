@@ -26,8 +26,20 @@ def test_normalize_api_base_url_collapses_slashes():
     )
 
 
-def test_load_config_flat_api():
+def test_load_config_example_defaults_to_dev_when_not_frozen(monkeypatch):
+    monkeypatch.setattr("config.is_frozen", lambda: False)
+    monkeypatch.delenv("SAGRA_PAPELARIA_WORKER_PROFILE", raising=False)
     cfg = load_config(_ROOT / "config.example.yaml")
+    assert cfg.api_profile == "dev"
+    assert cfg.api_base_url == "http://127.0.0.1:8001/api"
+    assert cfg.ssl_verify is True
+
+
+def test_load_config_example_defaults_to_prod_when_frozen(monkeypatch):
+    monkeypatch.setattr("config.is_frozen", lambda: True)
+    monkeypatch.delenv("SAGRA_PAPELARIA_WORKER_PROFILE", raising=False)
+    cfg = load_config(_ROOT / "config.example.yaml")
+    assert cfg.api_profile == "prod"
     assert (
         cfg.api_base_url
         == "https://cgrafsysvm.redecamara.camara.gov.br/sagra/api"
@@ -35,7 +47,9 @@ def test_load_config_flat_api():
     assert cfg.ssl_verify is False
 
 
-def test_load_config_load_balance_defaults():
+def test_load_config_load_balance_defaults(monkeypatch):
+    monkeypatch.setattr("config.is_frozen", lambda: False)
+    monkeypatch.delenv("SAGRA_PAPELARIA_WORKER_PROFILE", raising=False)
     cfg = load_config(_ROOT / "config.example.yaml")
     assert cfg.load_balance_enabled is True
     assert cfg.max_cpu_percent == 75.0
@@ -96,3 +110,113 @@ def test_load_config_legacy_profiles_still_work(tmp_path):
         cfg.api_base_url
         == "https://cgrafsysvm.redecamara.camara.gov.br/sagra/api"
     )
+    assert cfg.api_profile == "prod"
+
+
+def test_load_config_flat_legacy_without_profiles(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "api_base_url: https://cgrafsysvm/sagra/api\n"
+        "ssl_verify: false\n"
+        "worker_secret: x\n"
+        "models_dir: C:\\\\temp\n",
+        encoding="utf-8",
+    )
+    cfg = load_config(path)
+    assert (
+        cfg.api_base_url
+        == "https://cgrafsysvm.redecamara.camara.gov.br/sagra/api"
+    )
+    assert cfg.api_profile == ""
+
+
+def test_load_config_auto_profile_dev_when_not_frozen(monkeypatch, tmp_path):
+    monkeypatch.setattr("config.is_frozen", lambda: False)
+    monkeypatch.delenv("SAGRA_PAPELARIA_WORKER_PROFILE", raising=False)
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "profiles:\n"
+        "  dev:\n"
+        "    api_base_url: http://127.0.0.1:8001/api\n"
+        "    ssl_verify: true\n"
+        "  prod:\n"
+        "    api_base_url: https://cgrafsysvm/sagra/api\n"
+        "    ssl_verify: false\n"
+        "worker_secret: x\n"
+        "models_dir: C:\\\\temp\n",
+        encoding="utf-8",
+    )
+    cfg = load_config(path)
+    assert cfg.api_profile == "dev"
+    assert cfg.api_base_url == "http://127.0.0.1:8001/api"
+    assert cfg.ssl_verify is True
+
+
+def test_load_config_auto_profile_prod_when_frozen(monkeypatch, tmp_path):
+    monkeypatch.setattr("config.is_frozen", lambda: True)
+    monkeypatch.delenv("SAGRA_PAPELARIA_WORKER_PROFILE", raising=False)
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "profiles:\n"
+        "  dev:\n"
+        "    api_base_url: http://127.0.0.1:8001/api\n"
+        "    ssl_verify: true\n"
+        "  prod:\n"
+        "    api_base_url: https://cgrafsysvm/sagra/api\n"
+        "    ssl_verify: false\n"
+        "worker_secret: x\n"
+        "models_dir: C:\\\\temp\n",
+        encoding="utf-8",
+    )
+    cfg = load_config(path)
+    assert cfg.api_profile == "prod"
+    assert (
+        cfg.api_base_url
+        == "https://cgrafsysvm.redecamara.camara.gov.br/sagra/api"
+    )
+    assert cfg.ssl_verify is False
+
+
+def test_load_config_profile_arg_overrides_auto(monkeypatch, tmp_path):
+    monkeypatch.setattr("config.is_frozen", lambda: False)
+    monkeypatch.delenv("SAGRA_PAPELARIA_WORKER_PROFILE", raising=False)
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "profiles:\n"
+        "  dev:\n"
+        "    api_base_url: http://127.0.0.1:8001/api\n"
+        "    ssl_verify: true\n"
+        "  prod:\n"
+        "    api_base_url: https://cgrafsysvm/sagra/api\n"
+        "    ssl_verify: false\n"
+        "worker_secret: x\n"
+        "models_dir: C:\\\\temp\n",
+        encoding="utf-8",
+    )
+    cfg = load_config(path, profile="prod")
+    assert cfg.api_profile == "prod"
+    assert (
+        cfg.api_base_url
+        == "https://cgrafsysvm.redecamara.camara.gov.br/sagra/api"
+    )
+
+
+def test_load_config_env_overrides_auto(monkeypatch, tmp_path):
+    monkeypatch.setattr("config.is_frozen", lambda: True)
+    monkeypatch.setenv("SAGRA_PAPELARIA_WORKER_PROFILE", "dev")
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "profiles:\n"
+        "  dev:\n"
+        "    api_base_url: http://127.0.0.1:8001/api\n"
+        "    ssl_verify: true\n"
+        "  prod:\n"
+        "    api_base_url: https://cgrafsysvm/sagra/api\n"
+        "    ssl_verify: false\n"
+        "worker_secret: x\n"
+        "models_dir: C:\\\\temp\n",
+        encoding="utf-8",
+    )
+    cfg = load_config(path)
+    assert cfg.api_profile == "dev"
+    assert cfg.api_base_url == "http://127.0.0.1:8001/api"

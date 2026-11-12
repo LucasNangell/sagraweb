@@ -1,10 +1,15 @@
-# API única — servidor de produção
-# Use o FQDN — o alias curto cgrafsysvm redireciona 301 e quebra POST do worker.
-api_base_url: "https://cgrafsysvm.redecamara.camara.gov.br/sagra/api"
-ssl_verify: false
-
-# Para testar inspeção de .cdr no admin (DEV), use a mesma API do painel local:
-# api_base_url: "http://127.0.0.1:8001/api"
+# Perfis de API — escolha automática:
+#   .exe (PyInstaller) → prod
+#   python worker.py   → dev
+# Override: --profile, SAGRA_PAPELARIA_WORKER_PROFILE ou active_profile abaixo.
+profiles:
+  dev:
+    api_base_url: "http://127.0.0.1:8001/api"
+    ssl_verify: true
+  prod:
+    # Use o FQDN — o alias curto cgrafsysvm redireciona 301 e quebra POST do worker.
+    api_base_url: "https://cgrafsysvm.redecamara.camara.gov.br/sagra/api"
+    ssl_verify: false
 
 worker_secret: "trocar"
 worker_id: auto

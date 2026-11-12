@@ -49,12 +49,11 @@ Para mudar qualquer configuração, altere `config.yaml` e **recompile**.
 
 ```powershell
 Start-Process "C:\SAGRA-Papelaria-Worker\SAGRA-Papelaria-Worker.exe"
-Start-Process "C:\SAGRA-Papelaria-Worker\SAGRA-Papelaria-Worker.exe" -ArgumentList "--profile","prod"
 ```
 
 Ou dê duplo clique no `.exe`. Acompanhe o status em `logs_dir` (`worker_YYYYMMDD.log`) ou no painel de workers do SAGRA Web.
 
-Use `--profile prod` ou `dev` para trocar o perfil de API sem recompilar (sobrescreve `active_profile` do YAML embutido).
+O `.exe` usa automaticamente o perfil `prod`. Para forçar outro: `--profile dev` ou `SAGRA_PAPELARIA_WORKER_PROFILE`.
 
 **`worker_id`:** use `auto` (padrão) — cada máquina se identifica pelo hostname (`corel-NOME-PC`). Para forçar um ID fixo, defina no YAML ou use a variável `SAGRA_PAPELARIA_WORKER_ID`.
 
@@ -74,9 +73,9 @@ SAGRA_PAPELARIA_WORKER_SECRET=seu-secret-aqui
 
 | Campo | Descrição |
 |-------|-----------|
-| `active_profile` | Perfil padrão: `dev` ou `prod` |
-| `profiles.dev` | API local, ex.: `http://127.0.0.1:8001/api` |
-| `profiles.prod` | API produção, ex.: `https://cgrafsysvm/sagra/api` |
+| `profiles.dev` / `profiles.prod` | URLs e `ssl_verify` por ambiente |
+| *(auto)* | Sem override: `.exe` → `prod`; `python worker.py` → `dev` |
+| `active_profile` | Opcional; sobrescreve o auto (também `--profile` / env) |
 | `ssl_verify` | Por perfil: `true` no dev HTTP; `false` no HTTPS interno |
 | `worker_secret` | Igual a `SAGRA_PAPELARIA_WORKER_SECRET` no servidor |
 | `worker_id` | Identificador único. Use `auto` para derivar do hostname (`corel-MAQUINA`) |
@@ -132,7 +131,9 @@ O Corel aberto **pelo próprio worker** roda sempre **oculto** (`Visible=False`)
 cd worker\papelaria_worker
 .\.venv\Scripts\activate
 python worker.py --config config.yaml
+# aponta para DEV (127.0.0.1:8001) automaticamente
 python worker.py --config config.yaml --profile prod
+# força PROD mesmo rodando via python
 ```
 
 ## Testar conexão com a API
@@ -142,8 +143,7 @@ python worker.py --config config.yaml --test-connection
 python worker.py --config config.yaml --profile prod --test-connection
 ```
 
-Alternativa sem `--profile`: defina `active_profile: dev` ou `prod` no `config.yaml`,
-ou a variável de ambiente `SAGRA_PAPELARIA_WORKER_PROFILE=prod`.
+Override sem CLI: `active_profile` no YAML ou `SAGRA_PAPELARIA_WORKER_PROFILE=prod`.
 
 Resposta esperada: `Conexão OK: {...}`
 

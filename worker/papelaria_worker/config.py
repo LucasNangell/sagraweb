@@ -19,6 +19,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import yaml
 
+from runtime import is_frozen
 
 
 _PROFILE_KEYS = frozenset({"api_base_url", "ssl_verify"})
@@ -268,79 +269,50 @@ def _parse_ssl_verify(value: Any) -> bool | str:
 
 
 
+def _default_profile_name() -> str:
+    """Exe (frozen) → prod; python worker.py → dev."""
+    return "prod" if is_frozen() else "dev"
+
+
 def _resolve_profile_name(raw: dict[str, Any], profile: str | None) -> str:
-
     chosen = (profile or os.environ.get("SAGRA_PAPELARIA_WORKER_PROFILE") or "").strip()
-
     if not chosen:
-
         chosen = str(raw.get("active_profile", "")).strip()
-
+    if not chosen:
+        chosen = _default_profile_name()
     return chosen
 
 
-
-
-
 def _merge_profile(raw: dict[str, Any], profile_name: str) -> tuple[dict[str, Any], str]:
-    """Config plana (api_base_url no topo) ou legado com profiles."""
-    if str(raw.get("api_base_url", "")).strip():
-        merged = {k: v for k, v in raw.items() if k not in ("profiles", "active_profile")}
-        return merged, ""
-
+    """Merge profiles.dev/prod quando existir; senão config plana (api_base_url no topo)."""
     profiles = raw.get("profiles")
 
     if not isinstance(profiles, dict) or not profiles:
-
-        return dict(raw), profile_name
-
-
+        merged = {k: v for k, v in raw.items() if k not in ("profiles", "active_profile")}
+        return merged, ""
 
     if not profile_name:
-
         if len(profiles) == 1:
-
             profile_name = next(iter(profiles))
-
         else:
-
             available = ", ".join(sorted(profiles))
-
             raise ValueError(
-
                 "Defina active_profile no YAML, use --profile dev|prod "
-
                 f"ou SAGRA_PAPELARIA_WORKER_PROFILE. Perfis: {available}"
-
             )
 
-
-
     if profile_name not in profiles:
-
         available = ", ".join(sorted(profiles))
-
         raise ValueError(f"Perfil '{profile_name}' não encontrado. Opções: {available}")
 
-
-
     merged = {k: v for k, v in raw.items() if k not in ("profiles", "active_profile")}
-
     profile_data = profiles[profile_name]
-
     if not isinstance(profile_data, dict):
-
         raise ValueError(f"Perfil '{profile_name}' inválido no YAML.")
 
-
-
     for key, value in profile_data.items():
-
         if key in _PROFILE_KEYS or key not in merged:
-
             merged[key] = value
-
-
 
     return merged, profile_name
 

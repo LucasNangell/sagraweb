@@ -133,6 +133,15 @@ export const PERMISSION_CATALOG: ReadonlyArray<PermissionCatalogEntry> = [
   entry("sb_lombada", "Lom", "Calculadora de lombada", "outros", "both", false),
   entry("sb_credenciais_depol", "Dep", "Credenciais DEPOL", "menu", "both", false),
   entry("sb_manipular_imagem", "Img", "Manipular Imagem", "menu", "both", false),
+  entry(
+    "sb_reiniciar_sistema",
+    "Rst",
+    "Reiniciar sistema (serviços de produção)",
+    "outros",
+    "both",
+    false,
+    "Exibe o botão no header para reiniciar API, Sync, Monitor e Organizador.",
+  ),
 
   // Painéis (no usuário, geridos na seção Painéis do painel lateral)
   entry("sb_dashboard_global", "DGl", "Painel global", "paineis", "both", false),

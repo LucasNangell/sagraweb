@@ -351,7 +351,8 @@ $requiredTemplates = @(
     "status-watchdog-sistema.ps1",
     "suspender-watchdog-sistema.ps1",
     "retomar-watchdog-sistema.ps1",
-    "desinstalar-servico-watchdog-sistema.ps1"
+    "desinstalar-servico-watchdog-sistema.ps1",
+    "reiniciar-servicos-sagra.ps1"
 )
 foreach ($name in $requiredTemplates) {
     if (-not (Test-Path -LiteralPath (Join-Path $Release $name) -PathType Leaf)) {

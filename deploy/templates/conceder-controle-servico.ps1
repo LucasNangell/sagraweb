@@ -7,7 +7,9 @@ param(
     # Exemplos: "NT AUTHORITY\SYSTEM", "DOMINIO\usuario", ".\sagra-api"
     [string[]]$ServiceNames = @(
         "SAGRA-SyncAndamentos",
-        "SAGRA-MonitorSyncAndamentos"
+        "SAGRA-MonitorSyncAndamentos",
+        "SAGRA-OrganizadorEmailSepim",
+        "SAGRA-Api"
     ),
     [switch]$WhatIf
 )

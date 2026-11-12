@@ -52,6 +52,7 @@ const IP_TABLE_COLUMNS = [
   "sb_lombada",
   "sb_credenciais_depol",
   "sb_manipular_imagem",
+  "sb_reiniciar_sistema",
   "ctx_prova_web",
   "ctx_comparar_versoes",
   "sb_dashboard_global",

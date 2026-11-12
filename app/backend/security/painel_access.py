@@ -134,6 +134,7 @@ def build_painel_only_permissions(client_ip: str) -> dict:
         "sb_lombada": False,
         "sb_credenciais_depol": False,
         "sb_manipular_imagem": False,
+        "sb_reiniciar_sistema": False,
         "ip": client_ip,
     })
 

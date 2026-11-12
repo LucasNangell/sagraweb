@@ -111,6 +111,7 @@ class UserPermissionsUpdate(BaseModel):
     sb_lombada: Optional[bool] = None
     sb_credenciais_depol: Optional[bool] = None
     sb_manipular_imagem: Optional[bool] = None
+    sb_reiniciar_sistema: Optional[bool] = None
     auth_ativo: Optional[bool] = None
 
 
@@ -439,7 +440,7 @@ async def get_user_permissions_admin(ponto: int):
             "sb_inicio", "sb_gerencia", "sb_email", "sb_analise", "sb_papelaria",
             "sb_usuario", "sb_configuracoes", "sb_relatorio", "sb_dashboard_setor",
             "sb_dashboard_global", "sb_dashboard_tablet", "sb_admin_ips", "sb_pcp", "sb_usuarios",
-            "sb_active_computers", "sb_gravacao", "sb_cotas_graf", "sb_gravacao_externa", "sb_gravacao_pendente", "sb_gravacao_externa_operador", "sb_gravacao_pendente_excluir", "sb_gravacao_externa_entrega", "sb_gravacao_externa_lancar", "sb_estoque", "sb_estoque_gerente", "sb_lombada", "sb_credenciais_depol", "sb_manipular_imagem",
+            "sb_active_computers", "sb_gravacao", "sb_cotas_graf", "sb_gravacao_externa", "sb_gravacao_pendente", "sb_gravacao_externa_operador", "sb_gravacao_pendente_excluir", "sb_gravacao_externa_entrega", "sb_gravacao_externa_lancar", "sb_estoque", "sb_estoque_gerente", "sb_lombada", "sb_credenciais_depol", "sb_manipular_imagem", "sb_reiniciar_sistema",
         )}
         perms["ip"] = f"user:{ponto}"
         perms["painel_setores"] = []

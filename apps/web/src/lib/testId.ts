@@ -43,6 +43,7 @@ export const homeTestIds = {
   sidebarHelpSupport: "sidebar-help-suporte",
 
   headerLogout: "header-logout",
+  headerRestartSystem: "header-restart-system",
   headerNotifications: "header-notifications",
   headerNotificationsDismiss: "header-notifications-dismiss",
   headerNotificationsOpen: "header-notifications-open",

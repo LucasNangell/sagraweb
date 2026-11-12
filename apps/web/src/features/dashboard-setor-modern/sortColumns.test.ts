@@ -176,4 +176,40 @@ describe("ordenação do painel moderno", () => {
       sortModernDashboardColumns(next)[0]!.items.map((op) => op.nr_os),
     ).toEqual([102, 101]);
   });
+
+  it("coloca Recebido depois de qualquer outro andamento na coluna", () => {
+    const mixedConfig: DashboardConfig = {
+      sector: "SEFOC",
+      columnCount: 1,
+      columns: [
+        {
+          id: "exec",
+          title: "Execução",
+          statuses: ["Em Execução", "Recebido"],
+        },
+      ],
+    };
+    const columns = processDashboardData(
+      [
+        { ...item(201), situacao: "Recebido" },
+        item(101, "Prometido p/"),
+        { ...item(202, "Prometido p/"), situacao: "Recebido" },
+        item(102),
+        {
+          ...item(203, null, "2026-10-21 08:00:00"),
+          situacao: "Recebido",
+        },
+        {
+          ...item(204, null, "2026-10-21 12:00:00"),
+          situacao: "Recebido",
+        },
+      ],
+      mixedConfig,
+      new Map(),
+      { isInitialLoad: true },
+    ).columns;
+    expect(
+      sortModernDashboardColumns(columns)[0]!.items.map((op) => op.nr_os),
+    ).toEqual([101, 102, 202, 203, 201, 204]);
+  });
 });

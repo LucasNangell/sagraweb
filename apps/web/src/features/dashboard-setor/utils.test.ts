@@ -117,6 +117,37 @@ describe("formatQueueDisplaySituacao", () => {
       formatQueueDisplaySituacao({ nr_os: 1, ano: 2026, situacao: "Recebido" }),
     ).toBe("Recebido");
   });
+
+  it('Em Execução com "Dar prosseguimento" na observação vira subtítulo', () => {
+    expect(
+      formatQueueDisplaySituacao({
+        nr_os: 1,
+        ano: 2026,
+        situacao: "Em Execução",
+        observacao: "Correções SEFOC\n\nDar prosseguimento:",
+      }),
+    ).toBe("Dar prosseguimento");
+  });
+
+  it("Em Execução sem a frase mantém a situação original", () => {
+    expect(
+      formatQueueDisplaySituacao({
+        nr_os: 1,
+        ano: 2026,
+        situacao: "Em Execução",
+        observacao: "09h30\nRecebido para execução",
+      }),
+    ).toBe("Em Execução");
+  });
+
+  it('Sub OS prefixa componente em "Dar prosseguimento"', () => {
+    expect(
+      formatQueueDisplaySituacao({
+        ...subOs,
+        observacao: "Dar prosseguimento:",
+      }),
+    ).toBe("[Miolo] Dar prosseguimento");
+  });
 });
 
 describe("mergeDashboardQueueSources", () => {

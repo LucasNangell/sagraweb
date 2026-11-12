@@ -21,7 +21,14 @@ function priorityRank(item: DashboardOsItem): number {
   return 2;
 }
 
+/** Recebido fica no fim da coluna, depois de qualquer outro andamento. */
+function recebidoRank(item: DashboardOsItem): number {
+  return (item.situacao ?? "").trim() === "Recebido" ? 1 : 0;
+}
+
 function compareItems(a: DashboardOsItem, b: DashboardOsItem): number {
+  const recebido = recebidoRank(a) - recebidoRank(b);
+  if (recebido) return recebido;
   const group = protocolGroup(a) - protocolGroup(b);
   if (group) return group;
   const priority = priorityRank(a) - priorityRank(b);

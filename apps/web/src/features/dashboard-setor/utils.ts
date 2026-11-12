@@ -51,6 +51,9 @@ function resolvePriorityType(prioridade?: string | null): DashboardPriorityType 
 function resolveDisplaySituacao(item: PcpQueueItem): string {
   const situacao = item.situacao ?? "";
   const obsText = String(item.observacao ?? "").toLowerCase();
+  if (situacao === "Em Execução" && obsText.includes("dar prosseguimento")) {
+    return "Dar prosseguimento";
+  }
   if (situacao === "Em Execução" && obsText.includes("analis")) {
     return "Analisar arquivo";
   }

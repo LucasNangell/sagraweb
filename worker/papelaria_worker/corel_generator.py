@@ -1535,11 +1535,16 @@ def _contar_shapes(shapes: Any) -> int:
         ) from exc
 
 
+_CDR_CENTER = 9  # cdrReferencePoint.cdrCenter
+# PrnPlaceType.prnPlaceCenterPage — ImagePlacement=2 no PrintSett_ReduçaoA3_A4.prs
+_PRN_PLACE_CENTER_PAGE = 2
+
+
 def _shape_range_utilizavel(shape_range: Any) -> bool:
     """Valida o range por geometria/API — nunca use callable() em COM win32com."""
     if shape_range is None:
         return False
-    for attr in ("SizeWidth", "LeftX", "CenterX", "StretchEx", "Move", "Count"):
+    for attr in ("SizeWidth", "LeftX", "CenterX", "SetSize", "Count"):
         try:
             getattr(shape_range, attr)
             return True
@@ -1608,35 +1613,58 @@ def _obter_shape_range_pagina(page: Any) -> Any:
     return _resolver_shapes_all(page.Shapes)
 
 
-def _stretch_range_em_torno(
-    shape_range: Any, centro_x: float, centro_y: float, escala: float
-) -> None:
-    """Reduz toda a composição de uma vez (grupos/powerclips inclusive)."""
+def _definir_reference_point_centro(doc: Any, logs: list[str]) -> None:
     try:
-        shape_range.StretchEx(centro_x, centro_y, escala, escala, True)
-        return
+        import win32com.client
+
+        centro = int(win32com.client.constants.cdrCenter)
     except Exception:
-        pass
+        centro = _CDR_CENTER
     try:
-        shape_range.StretchEx(centro_x, centro_y, escala, escala)
-        return
+        doc.ReferencePoint = centro
+        logs.append(f"Document.ReferencePoint=cdrCenter ({centro}).")
     except Exception as exc:
-        raise CorelGenerationError(
-            f"Não foi possível reduzir a pasta avulso com StretchEx: {exc}"
-        ) from exc
+        logs.append(f"Aviso ao definir ReferencePoint central: {exc}")
 
 
-def _mover_range(shape_range: Any, dx: float, dy: float) -> None:
-    if abs(dx) < 0.01 and abs(dy) < 0.01:
-        return
+def _redimensionar_range_mm(
+    shape_range: Any, largura: float, altura: float
+) -> None:
+    """Define o tamanho absoluto do range (equivalente à escala do .prs da SEFOC)."""
     try:
-        shape_range.Move(dx, dy)
+        shape_range.SetSize(largura, altura)
+    except Exception:
+        try:
+            shape_range.SetSizeEx(largura, altura)
+        except Exception as exc:
+            raise CorelGenerationError(
+                f"Não foi possível redimensionar a pasta avulso para A4: {exc}"
+            ) from exc
+    lida_l = float(shape_range.SizeWidth)
+    lida_a = float(shape_range.SizeHeight)
+    if abs(lida_l - largura) > 2.0 or abs(lida_a - altura) > 2.0:
+        raise CorelGenerationError(
+            "Redimensionamento da pasta avulso não aplicou o tamanho esperado "
+            f"(pedido {largura:.1f}×{altura:.1f} mm, lido {lida_l:.1f}×{lida_a:.1f} mm)."
+        )
+
+
+def _centralizar_range_na_pagina(shape_range: Any, page: Any) -> None:
+    """Espelha ImagePlacement=2 / AlignAndDistribute ao centro da página."""
+    try:
+        shape_range.AlignToPageCenter()
         return
     except Exception:
         pass
     try:
-        shape_range.CenterX = float(shape_range.CenterX) + dx
-        shape_range.CenterY = float(shape_range.CenterY) + dy
+        # Macro SEFOC: AlignAndDistribute 3, 3, 2, 0, False, 2
+        shape_range.AlignAndDistribute(3, 3, 2, 0, False, 2)
+        return
+    except Exception:
+        pass
+    try:
+        shape_range.CenterX = float(page.CenterX)
+        shape_range.CenterY = float(page.CenterY)
     except Exception as exc:
         raise CorelGenerationError(
             f"Não foi possível centralizar a pasta avulso no A4: {exc}"
@@ -1679,11 +1707,18 @@ def _arte_cabe_na_pagina(
 
 
 def _ajustar_pasta_avulso_para_a4(doc: Any, logs: list[str]) -> None:
-    """Reduz a folha 470×460 mm para A4 paisagem só no PDF da prova."""
+    """Reduz a folha 470×460 mm para A4 paisagem só no PDF da prova.
+
+    A macro SEFOC não transforma a arte com StretchEx: carrega
+    PrintSett_ReduçaoA3_A4.prs (DefaultX/YScale≈0.47, ImagePlacement=2=centro)
+    na impressão. PublishToPDF não aplica esse estilo, então replicamos aqui
+    com SetSize absoluto + alinhamento ao centro da página.
+    """
     _definir_unidade_milimetros(doc, logs)
+    _definir_reference_point_centro(doc, logs)
     try:
         pagina = doc.Pages.Item(1)
-        centro_x, centro_y, largura, altura = _centro_pagina_mm(pagina)
+        _, _, largura, altura = _centro_pagina_mm(pagina)
     except Exception as exc:
         raise CorelGenerationError(
             f"Não foi possível ler o tamanho da página: {exc}"
@@ -1703,14 +1738,13 @@ def _ajustar_pasta_avulso_para_a4(doc: Any, logs: list[str]) -> None:
         f"{before[2]:.1f}×{before[3]:.1f} mm em ({before[0]:.1f},{before[1]:.1f})."
     )
 
-    _stretch_range_em_torno(
-        shape_range, centro_x, centro_y, ajuste["escala"]
-    )
+    nova_largura = before[2] * ajuste["escala"]
+    nova_altura = before[3] * ajuste["escala"]
+    _redimensionar_range_mm(shape_range, nova_largura, nova_altura)
     _definir_tamanho_pagina_mm(
         pagina, ajuste["pagina_largura"], ajuste["pagina_altura"]
     )
-    novo_cx, novo_cy, _, _ = _centro_pagina_mm(pagina)
-    _mover_range(shape_range, novo_cx - centro_x, novo_cy - centro_y)
+    _centralizar_range_na_pagina(shape_range, pagina)
 
     ok, detalhe = _arte_cabe_na_pagina(pagina, shape_range)
     if not ok:
@@ -1721,7 +1755,9 @@ def _ajustar_pasta_avulso_para_a4(doc: Any, logs: list[str]) -> None:
     logs.append(
         "Pasta avulso ajustada para A4 paisagem "
         f"({ajuste['pagina_largura']:.0f}×{ajuste['pagina_altura']:.0f} mm, "
-        f"escala {ajuste['escala']:.3f}, StretchEx centralizado); {detalhe}."
+        f"escala {ajuste['escala']:.3f}, SetSize+centro como "
+        f"PrintSett_ReduçaoA3_A4/ImagePlacement={_PRN_PLACE_CENTER_PAGE}); "
+        f"{detalhe}."
     )
 
 

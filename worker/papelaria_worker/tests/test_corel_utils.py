@@ -505,7 +505,7 @@ class TestAjustePastaAvulsoA4:
         assert esquerda + largura <= 297 + 0.01
         assert base + altura <= 210 + 0.01
 
-    def test_aplica_ajuste_com_stretchex_do_range(self):
+    def test_aplica_ajuste_com_setsize_e_centro(self):
         class ShapeRange:
             def __init__(self) -> None:
                 self.Count = 2
@@ -513,8 +513,8 @@ class TestAjustePastaAvulsoA4:
                 self.BottomY = 20.0
                 self.SizeWidth = 100.0
                 self.SizeHeight = 50.0
-                self.stretch_calls: list[tuple[float, float, float, float]] = []
-                self.move_calls: list[tuple[float, float]] = []
+                self.size_calls: list[tuple[float, float]] = []
+                self.align_calls = 0
 
             @property
             def CenterX(self) -> float:
@@ -532,28 +532,19 @@ class TestAjustePastaAvulsoA4:
             def CenterY(self, value: float) -> None:
                 self.BottomY = value - self.SizeHeight / 2.0
 
-            def StretchEx(
-                self,
-                centro_x: float,
-                centro_y: float,
-                stretch_x: float,
-                stretch_y: float,
-                size_characters: bool = True,
-            ) -> None:
-                self.stretch_calls.append(
-                    (centro_x, centro_y, stretch_x, stretch_y)
-                )
-                old_cx = self.CenterX
-                old_cy = self.CenterY
-                self.SizeWidth *= stretch_x
-                self.SizeHeight *= stretch_y
-                self.CenterX = centro_x + (old_cx - centro_x) * stretch_x
-                self.CenterY = centro_y + (old_cy - centro_y) * stretch_y
+            def SetSize(self, largura: float, altura: float) -> None:
+                self.size_calls.append((largura, altura))
+                cx, cy = self.CenterX, self.CenterY
+                self.SizeWidth = largura
+                self.SizeHeight = altura
+                self.CenterX = cx
+                self.CenterY = cy
 
-            def Move(self, dx: float, dy: float) -> None:
-                self.move_calls.append((dx, dy))
-                self.LeftX += dx
-                self.BottomY += dy
+            def AlignToPageCenter(self) -> None:
+                self.align_calls += 1
+                # Página já redimensionada pelo teste.
+                self.CenterX = 297 / 2
+                self.CenterY = 210 / 2
 
         class Shapes:
             def __init__(self, shape_range: ShapeRange) -> None:
@@ -572,17 +563,15 @@ class TestAjustePastaAvulsoA4:
                 self.Shapes = Shapes(ShapeRange())
 
             def SetSize(self, largura: float, altura: float) -> None:
-                # Corel tipicamente mantém o canto inferior esquerdo.
-                esquerda = self.CenterX - self.SizeWidth / 2.0
-                base = self.CenterY - self.SizeHeight / 2.0
                 self.SizeWidth = largura
                 self.SizeHeight = altura
-                self.CenterX = esquerda + largura / 2.0
-                self.CenterY = base + altura / 2.0
+                self.CenterX = largura / 2.0
+                self.CenterY = altura / 2.0
 
         class Documento:
             def __init__(self, pagina: Pagina) -> None:
                 self.Unit = 0
+                self.ReferencePoint = 0
                 self.Application = type("App", (), {})()
                 self.Pages = type("Pages", (), {"Item": lambda _self, _i: pagina})()
                 self.pagina = pagina
@@ -594,13 +583,13 @@ class TestAjustePastaAvulsoA4:
         escala = 210 / 460
         assert pasta.pagina.SizeWidth == 297
         assert pasta.pagina.SizeHeight == 210
-        assert shape_range.stretch_calls == [(235.0, 230.0, escala, escala)]
-        assert shape_range.move_calls
+        assert shape_range.size_calls == [(100 * escala, 50 * escala)]
+        assert shape_range.align_calls == 1
         assert shape_range.LeftX >= -0.05
         assert shape_range.BottomY >= -0.05
         assert shape_range.LeftX + shape_range.SizeWidth <= 297 + 0.05
         assert shape_range.BottomY + shape_range.SizeHeight <= 210 + 0.05
-        assert any("StretchEx" in linha for linha in logs)
+        assert any("SetSize+centro" in linha for linha in logs)
 
         cartao = Documento(Pagina(90, 50))
         logs_cartao: list[str] = []
@@ -608,7 +597,7 @@ class TestAjustePastaAvulsoA4:
         assert cartao.pagina.SizeWidth == 90
         assert cartao.pagina.SizeHeight == 50
 
-    def test_folha_inteira_continua_dentro_quando_o_centro_nao_muda(self):
+    def test_folha_inteira_continua_dentro_quando_centralizada(self):
         class ShapeRange:
             def __init__(self) -> None:
                 self.Count = 1
@@ -633,24 +622,16 @@ class TestAjustePastaAvulsoA4:
             def CenterY(self, value: float) -> None:
                 self.BottomY = value - self.SizeHeight / 2.0
 
-            def StretchEx(
-                self,
-                centro_x: float,
-                centro_y: float,
-                stretch_x: float,
-                stretch_y: float,
-                size_characters: bool = True,
-            ) -> None:
-                old_cx = self.CenterX
-                old_cy = self.CenterY
-                self.SizeWidth *= stretch_x
-                self.SizeHeight *= stretch_y
-                self.CenterX = centro_x + (old_cx - centro_x) * stretch_x
-                self.CenterY = centro_y + (old_cy - centro_y) * stretch_y
+            def SetSize(self, largura: float, altura: float) -> None:
+                cx, cy = self.CenterX, self.CenterY
+                self.SizeWidth = largura
+                self.SizeHeight = altura
+                self.CenterX = cx
+                self.CenterY = cy
 
-            def Move(self, dx: float, dy: float) -> None:
-                self.LeftX += dx
-                self.BottomY += dy
+            def AlignToPageCenter(self) -> None:
+                self.CenterX = 235.0
+                self.CenterY = 230.0
 
         class Pagina:
             def __init__(self) -> None:
@@ -676,6 +657,7 @@ class TestAjustePastaAvulsoA4:
         class Documento:
             def __init__(self, pagina: Pagina) -> None:
                 self.Unit = 0
+                self.ReferencePoint = 0
                 self.Application = type("App", (), {})()
                 self.Pages = type("Pages", (), {"Item": lambda _self, _i: pagina})()
                 self.pagina = pagina
@@ -686,8 +668,10 @@ class TestAjustePastaAvulsoA4:
         shape_range = pagina.Shapes.All()
         page_left = pagina.CenterX - pagina.SizeWidth / 2
         page_bottom = pagina.CenterY - pagina.SizeHeight / 2
+        assert shape_range.SizeWidth == pytest.approx(470 * (210 / 460))
+        assert shape_range.SizeHeight == pytest.approx(210)
         assert shape_range.LeftX == pytest.approx(
-            page_left + (297 - 470 * (210 / 460)) / 2
+            page_left + (297 - shape_range.SizeWidth) / 2
         )
         assert shape_range.BottomY == pytest.approx(page_bottom)
         assert shape_range.LeftX + shape_range.SizeWidth <= page_left + pagina.SizeWidth + 0.05

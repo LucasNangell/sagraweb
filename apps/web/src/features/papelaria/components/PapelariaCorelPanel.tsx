@@ -18,13 +18,15 @@ import {
   finalizarCorelPapelariaOs,
   gerarProvaCdrExistentePapelariaOs,
 } from "@/api/papelaria";
-import { fetchOsFolderBrowse } from "@/api/os";
+import { fetchOsFolderBrowse, osFolderFileUrl } from "@/api/os";
+import { useEmailProofFiles } from "@/api/hooks/useEmailQueries";
 import { queryKeys } from "@/api/query-keys";
 import { useAuthStore } from "@/features/auth/authStore";
 import { OsFolderRequiredGateModal } from "@/features/os/components/OsFolderRequiredGateModal";
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 import { tryOpenFileLocally } from "@/lib/sagraLocalOpener";
 import { authenticatedWsPath } from "@/lib/websocket";
+import { PapelariaActionBar } from "./PapelariaActionBar";
 import { PapelariaProofPanel } from "./PapelariaProofPanel";
 import {
   mergeDadosWithDynamicLayout,
@@ -36,6 +38,10 @@ import {
   mergePapelariaFieldValues,
 } from "../applyPapelariaPrefill";
 import { isTimbradoA4DigitalProduct } from "../papelariaSession";
+import {
+  resolveDefaultPapelariaViewMode,
+  type PapelariaViewMode,
+} from "../papelariaViewMode";
 import type {
   PapelariaCorelModelSummary,
   PapelariaField,
@@ -146,6 +152,8 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
   const prefillApplied = useRef(false);
   const appliedAlteracaoRef = useRef<string | null>(null);
   const [mobilePanel, setMobilePanel] = useState<"form" | "preview">("form");
+  const [viewMode, setViewMode] = useState<PapelariaViewMode>("previa");
+  const viewModeInitialized = useRef(false);
 
   const contextQuery = useQuery({
     queryKey: queryKeys.papelaria.contexto(anoNum, nroNum),
@@ -222,6 +230,12 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
   });
   const papelariaWsConnected = papelariaWsStatus === "connected";
 
+  const proofFilesQuery = useEmailProofFiles(
+    Number.isFinite(anoNum) ? anoNum : null,
+    Number.isFinite(nroNum) ? nroNum : null,
+    hasOs,
+  );
+
   const jobsQuery = useQuery({
     queryKey: queryKeys.papelaria.jobsOs(anoNum, nroNum),
     queryFn: () => fetchPapelariaJobsForOs(anoNum, nroNum),
@@ -283,9 +297,13 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
       setActiveJobId(job.id);
       setFormError(null);
       setProvaReviewMessage(null);
+      setViewMode("prova");
       setMobilePanel("preview");
       void queryClient.invalidateQueries({
         queryKey: queryKeys.papelaria.jobsOs(anoNum, nroNum),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.email.proofFiles(anoNum, nroNum),
       });
     },
     onError: (err: Error) => {
@@ -306,9 +324,13 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
       setActiveJobId(job.id);
       setFormError(null);
       setProvaReviewMessage(null);
+      setViewMode("prova");
       setMobilePanel("preview");
       void queryClient.invalidateQueries({
         queryKey: queryKeys.papelaria.jobsOs(anoNum, nroNum),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.email.proofFiles(anoNum, nroNum),
       });
     },
     onError: (err: Error) => {
@@ -330,9 +352,13 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
       setCorelEditMode(false);
       setFormError(null);
       setProvaReviewMessage(null);
+      setViewMode("prova");
       setMobilePanel("preview");
       void queryClient.invalidateQueries({
         queryKey: queryKeys.papelaria.jobsOs(anoNum, nroNum),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.email.proofFiles(anoNum, nroNum),
       });
     },
     onError: (err: Error) => {
@@ -374,6 +400,9 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.os.history(anoNum, nroNum),
       });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.email.proofFiles(anoNum, nroNum),
+      });
     },
     onError: (err: Error) => {
       setFormError(err.message || "Não foi possível aprovar a prova.");
@@ -409,6 +438,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
       setCorelEditMode(false);
       setFormError(null);
       setProvaReviewMessage(null);
+      setViewMode("prova");
       setMobilePanel("preview");
       void queryClient.invalidateQueries({
         queryKey: queryKeys.papelaria.jobsOs(anoNum, nroNum),
@@ -418,6 +448,9 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
       });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.papelaria.previewPages(job.id),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.email.proofFiles(anoNum, nroNum),
       });
     },
     onError: (err: Error) => {
@@ -728,6 +761,31 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
     modelDetailQuery.data?.arquivo_modelo ??
     "";
 
+  const folderProofName = proofFilesQuery.data?.suggested ?? null;
+  const hasFolderProof = (proofFilesQuery.data?.files.length ?? 0) > 0;
+  const hasJobProof = Boolean(
+    activeJob &&
+      activeJob.status === "completed" &&
+      activeJob.tipo_job !== "timbrado_a4_digital" &&
+      activeJob.prova_revisao !== "discarded" &&
+      (activeJob.tem_arquivo_pdf || activeJob.arquivo_pdf),
+  );
+  const folderProofPdfUrl =
+    hasOs && folderProofName
+      ? osFolderFileUrl(anoNum, nroNum, `Sefoc/${folderProofName}`)
+      : null;
+
+  useEffect(() => {
+    if (!hasOs || proofFilesQuery.isLoading) {
+      return;
+    }
+    if (viewModeInitialized.current) return;
+    viewModeInitialized.current = true;
+    setViewMode(
+      resolveDefaultPapelariaViewMode(hasFolderProof || hasJobProof),
+    );
+  }, [hasOs, proofFilesQuery.isLoading, hasFolderProof, hasJobProof]);
+
   if (!hasOs) {
     return (
       <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-sagra-border bg-white p-8 text-center text-sm text-neutral-500">
@@ -870,7 +928,7 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
         <section
           className={cn(
             mobilePanelClass("form"),
-            "rounded-lg border border-sagra-border bg-white shadow-sm",
+            "max-md:order-1 rounded-lg border border-sagra-border bg-white shadow-sm",
           )}
         >
           <div className="border-b border-sagra-border bg-slate-50/80 px-3 py-2">
@@ -970,142 +1028,45 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
                     placeholder="Sem observações na OS"
                   />
                 </div>
-                <div className="mt-3 flex flex-col gap-2">
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      disabled={
-                        createJobMutation.isPending ||
-                        createDigitalJobMutation.isPending ||
-                        exportCdrMutation.isPending ||
-                        abrirCorelMutation.isPending ||
-                        modelDetailQuery.isLoading ||
-                        folderCheckPending
-                      }
-                      className="inline-flex min-h-9 flex-1 sagra-btn sagra-btn--secondary sagra-btn--md shadow-sm transition hover:bg-secondary-blue/90 disabled:opacity-60"
-                      onClick={handleGerarArquivo}
-                    >
-                      {createJobMutation.isPending ? (
-                        <span className="inline-flex items-center justify-center gap-2">
-                          <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                          Enviando...
-                        </span>
-                      ) : (
-                        "Gerar arquivo"
-                      )}
-                    </button>
-                    {showTimbradoA4Digital ? (
-                      <button
-                        type="button"
-                        disabled={
-                          createJobMutation.isPending ||
-                          createDigitalJobMutation.isPending ||
-                          exportCdrMutation.isPending ||
-                          abrirCorelMutation.isPending ||
-                          modelDetailQuery.isLoading ||
-                          folderCheckPending
-                        }
-                        className="min-h-9 flex-1 sagra-btn sagra-btn--outline sagra-btn--md !border-secondary-blue !text-secondary-blue"
-                        onClick={handleTimbradoA4Digital}
-                      >
-                        {createDigitalJobMutation.isPending ? (
-                          <span className="inline-flex items-center justify-center gap-2">
-                            <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                            Enviando...
-                          </span>
-                        ) : (
-                          "Timb A4 Digital"
-                        )}
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      disabled={
-                        createJobMutation.isPending ||
-                        createDigitalJobMutation.isPending ||
-                        exportCdrMutation.isPending ||
-                        abrirCorelMutation.isPending ||
-                        finalizeCorelMutation.isPending ||
-                        modelDetailQuery.isLoading ||
-                        folderCheckPending
-                      }
-                      className="min-h-9 flex-1 sagra-btn sagra-btn--outline sagra-btn--md !border-secondary-blue !text-secondary-blue"
-                      onClick={handleAbrirCorel}
-                    >
-                      {abrirCorelMutation.isPending ? (
-                        <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                      ) : (
-                        "Abrir Corel"
-                      )}
-                    </button>
-                  </div>
-                  {corelEditMode ? (
-                    <button
-                      type="button"
-                      disabled={finalizeCorelMutation.isPending}
-                      className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border border-emerald-600 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 shadow-sm transition hover:bg-emerald-100 disabled:opacity-60"
-                      onClick={handleFinalizarCorel}
-                    >
-                      {finalizeCorelMutation.isPending ? (
-                        <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                      ) : null}
-                      Finalizar
-                    </button>
-                  ) : null}
-                  {corelEditMode ? (
-                    <p className="text-[10px] leading-relaxed text-neutral-600">
-                      Após editar no CorelDRAW e exportar o PDF de prova na pasta Sefoc,
-                      clique em Finalizar para montar a visualização e aprovar.
-                    </p>
-                  ) : null}
-                  {cdrFiles.length > 0 ? (
-                    <>
-                      <button
-                        type="button"
-                        disabled={
-                          !selectedModelId ||
-                          createJobMutation.isPending ||
-                          exportCdrMutation.isPending ||
-                          abrirCorelMutation.isPending ||
-                          finalizeCorelMutation.isPending ||
-                          modelDetailQuery.isLoading ||
-                          isJobGenerating ||
-                          folderCheckPending
-                        }
-                        className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border border-violet-600 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-900 shadow-sm transition hover:bg-violet-100 disabled:opacity-60"
-                        onClick={handleGerarProvaCdrExistente}
-                      >
-                        {exportCdrMutation.isPending ? (
-                          <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                        ) : null}
-                        Gerar prova do Corel pronto
-                      </button>
-                      <p className="text-[10px] leading-relaxed text-neutral-600">
-                        {cdrFiles.length === 1 ? (
-                          <>
-                            Usa o arquivo{" "}
-                            <span className="font-mono">{cdrFiles[0].filename}</span> da
-                            pasta da OS (qualquer .cdr, exceto cópia de segurança) —
-                            exporta PDF/mockup sem reaplicar os campos do formulário
-                            nem alterar o Corel.
-                          </>
-                        ) : (
-                          <>
-                            Há {cdrFiles.length} arquivos .cdr na pasta da OS. O
-                            sistema perguntará qual usar e exportará PDF/mockup sem
-                            reaplicar os campos nem alterar o Corel.
-                          </>
-                        )}
-                      </p>
-                    </>
-                  ) : null}
-                </div>
+                {corelEditMode ? (
+                  <p className="mt-3 text-[10px] leading-relaxed text-neutral-600">
+                    Após editar no CorelDRAW e exportar o PDF de prova na pasta Sefoc,
+                    use Finalizar na barra de ações para montar a visualização e aprovar.
+                  </p>
+                ) : null}
               </div>
             )}
           </div>
         </section>
 
-        <div className={mobilePanelClass("preview")}>
+        <PapelariaActionBar
+          className="max-md:order-2 max-md:h-auto max-md:w-full max-md:flex-row max-md:overflow-x-auto"
+          showTimbradoA4Digital={showTimbradoA4Digital}
+          showGerarProvaCdr={cdrFiles.length > 0}
+          showFinalizar={corelEditMode}
+          busy={
+            createJobMutation.isPending ||
+            createDigitalJobMutation.isPending ||
+            exportCdrMutation.isPending ||
+            abrirCorelMutation.isPending
+          }
+          folderCheckPending={folderCheckPending}
+          modelLoading={modelDetailQuery.isLoading}
+          isJobGenerating={isJobGenerating}
+          createJobPending={createJobMutation.isPending}
+          createDigitalPending={createDigitalJobMutation.isPending}
+          exportCdrPending={exportCdrMutation.isPending}
+          abrirCorelPending={abrirCorelMutation.isPending}
+          finalizeCorelPending={finalizeCorelMutation.isPending}
+          selectedModelId={selectedModelId}
+          onGerarArquivo={handleGerarArquivo}
+          onTimbradoA4Digital={handleTimbradoA4Digital}
+          onAbrirCorel={handleAbrirCorel}
+          onFinalizarCorel={handleFinalizarCorel}
+          onGerarProvaCdr={handleGerarProvaCdrExistente}
+        />
+
+        <div className={cn(mobilePanelClass("preview"), "max-md:order-3")}>
           <PapelariaProofPanel
             activeJob={activeJob}
             isJobGenerating={isJobGenerating}
@@ -1119,6 +1080,10 @@ export function PapelariaCorelPanel({ osId, osAno }: Props) {
             previa={previa}
             selectedModelId={selectedModelId}
             modelLoading={modelDetailQuery.isLoading}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            folderProofPdfUrl={folderProofPdfUrl}
+            folderProofLabel={folderProofName}
             onCancelJob={handleCancelJob}
             cancelPending={cancelJobMutation.isPending}
             onApproveProva={handleApproveProva}

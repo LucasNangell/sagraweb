@@ -16,6 +16,7 @@ import {
   PAPELARIA_MOCKUP_SCENE_BASE_PX,
   PAPELARIA_MOCKUP_SCENE_BASE_PX_NARROW,
 } from "../mockup";
+import type { PapelariaViewMode } from "../papelariaViewMode";
 import {
   buildRuntimePreviewConfig,
   getGroupedTemplateIds,
@@ -29,6 +30,7 @@ import type { PapelariaJob } from "../types";
 import { PapelariaLivePreview } from "./PapelariaLivePreview";
 import { PapelariaProofDynamicFields } from "./PapelariaProofDynamicFields";
 import { PapelariaProofMockup3D } from "./PapelariaProofMockup3D";
+import { PapelariaViewModeToggle } from "./PapelariaViewModeToggle";
 
 type Props = {
   activeJob: PapelariaJob | null;
@@ -43,6 +45,11 @@ type Props = {
   previa: Record<string, string> | null;
   selectedModelId: number | null;
   modelLoading: boolean;
+  viewMode: PapelariaViewMode;
+  onViewModeChange: (mode: PapelariaViewMode) => void;
+  /** PDF da última prova na pasta Sefoc (quando não há job ativo com PDF). */
+  folderProofPdfUrl?: string | null;
+  folderProofLabel?: string | null;
   onCancelJob?: (jobId: number) => void;
   cancelPending?: boolean;
   onApproveProva?: (jobId: number) => void;
@@ -75,6 +82,10 @@ export function PapelariaProofPanel({
   previa,
   selectedModelId,
   modelLoading,
+  viewMode,
+  onViewModeChange,
+  folderProofPdfUrl = null,
+  folderProofLabel = null,
   onCancelJob,
   cancelPending = false,
   onApproveProva,
@@ -112,7 +123,8 @@ export function PapelariaProofPanel({
   const previewPagesQuery = useQuery({
     queryKey: queryKeys.papelaria.previewPages(activeJob?.id ?? 0),
     queryFn: () => fetchPapelariaJobPreviewPages(activeJob!.id),
-    enabled: showPdf && !!activeJob && exibirMockup3d,
+    enabled:
+      viewMode === "prova" && showPdf && !!activeJob && exibirMockup3d,
     staleTime: 120_000,
     retry: 1,
   });
@@ -121,12 +133,14 @@ export function PapelariaProofPanel({
     previewPagesQuery.data?.pages.map((p) => resolvePreviewImageUrl(p.url)) ??
     [];
 
-  const pdfUrl = activeJob ? papelariaJobFileUrl(activeJob.id, "pdf") : "";
+  const jobPdfUrl = activeJob && showPdf ? papelariaJobFileUrl(activeJob.id, "pdf") : "";
+  const provaPdfUrl = showPdf ? jobPdfUrl : folderProofPdfUrl ?? "";
+  const showingFolderProof = !showPdf && Boolean(folderProofPdfUrl);
 
   const jobModeloQuery = useQuery({
     queryKey: queryKeys.papelaria.corelModelo(activeJob?.modelo_id ?? 0),
     queryFn: () => fetchPapelariaCorelModelo(activeJob!.modelo_id!),
-    enabled: showPdf && !!activeJob?.modelo_id,
+    enabled: viewMode === "prova" && showPdf && !!activeJob?.modelo_id,
     staleTime: 60_000,
   });
 
@@ -188,32 +202,40 @@ export function PapelariaProofPanel({
     selectedModelId !== null &&
     Boolean(livePreviewValues);
 
+  const subtitle =
+    viewMode === "previa"
+      ? "Prévia em tempo real dos campos do formulário."
+      : isJobGenerating
+        ? isTimbradoDigitalJob
+          ? "Aguardando Timbrado A4 Digital (SVG + DOCX)..."
+          : "Aguardando conclusão do worker CorelDRAW..."
+        : showDigitalDone
+          ? "DOCX Cor/PB e SVGs gerados na pasta Sefoc da OS."
+          : needsProvaReview
+            ? "Revise o arquivo gerado e confirme (OK) ou descarte (Cancelar)."
+            : showPdf
+              ? activeJob?.prova_revisao === "approved"
+                ? "Prova aprovada. Pendência de e-mail criada em SEFOC."
+                : exibirMockup3d
+                  ? "PDF e mockup 3D da prova gerada pelo sistema."
+                  : "PDF da prova gerada pelo sistema."
+              : showingFolderProof
+                ? `Última prova na pasta Sefoc${folderProofLabel ? `: ${folderProofLabel}` : "."}`
+                : "Nenhuma prova encontrada na pasta desta OS.";
+
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-sagra-border bg-neutral-50 shadow-sm max-md:overflow-visible md:overflow-hidden">
-      <div className="border-b border-sagra-border bg-white px-3 py-2">
-        <h2 className="text-xs font-bold text-secondary-blue">
-          Visualização da prova
-        </h2>
-        <p className="text-[10px] text-neutral-500">
-          {isJobGenerating
-            ? isTimbradoDigitalJob
-              ? "Aguardando Timbrado A4 Digital (SVG + DOCX)..."
-              : "Aguardando conclusão do worker CorelDRAW..."
-            : showDigitalDone
-              ? "DOCX Cor/PB e SVGs gerados na pasta Sefoc da OS."
-              : needsProvaReview
-              ? "Revise o arquivo gerado e confirme (OK) ou descarte (Cancelar)."
-                  : showPdf
-                ? activeJob?.prova_revisao === "approved"
-                  ? "Prova aprovada. Pendência de e-mail criada em SEFOC."
-                  : exibirMockup3d
-                    ? "PDF e mockup 3D da prova gerada pelo sistema."
-                    : "PDF da prova gerada pelo sistema."
-                : "Gere o arquivo para visualizar a prova."}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-2 border-b border-sagra-border bg-white px-3 py-2">
+        <div className="min-w-0">
+          <h2 className="text-xs font-bold text-secondary-blue">
+            Visualização
+          </h2>
+          <p className="text-[10px] text-neutral-500">{subtitle}</p>
+        </div>
+        <PapelariaViewModeToggle value={viewMode} onChange={onViewModeChange} />
       </div>
 
-      {isJobGenerating ? (
+      {viewMode === "prova" && isJobGenerating ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
           <Loader2 className="size-10 animate-spin text-secondary-blue" aria-hidden />
           <div>
@@ -251,7 +273,7 @@ export function PapelariaProofPanel({
             </button>
           )}
         </div>
-      ) : showDigitalDone && activeJob ? (
+      ) : viewMode === "prova" && showDigitalDone && activeJob ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
           <FileText className="size-10 text-emerald-600" aria-hidden />
           <div>
@@ -270,9 +292,9 @@ export function PapelariaProofPanel({
             ) : null}
           </div>
         </div>
-      ) : showPdf && activeJob ? (
+      ) : viewMode === "prova" && (showPdf || showingFolderProof) && provaPdfUrl ? (
         <div className="flex min-h-0 flex-1 flex-col max-md:overflow-visible md:overflow-hidden">
-          {needsProvaReview ? (
+          {needsProvaReview && activeJob ? (
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2">
               <p className="text-[11px] font-medium text-amber-900">
                 Arquivo gerado — aguardando sua aprovação
@@ -318,7 +340,7 @@ export function PapelariaProofPanel({
           ) : null}
           <div
             className={
-              exibirMockup3d
+              showPdf && exibirMockup3d
                 ? "grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto p-3 lg:grid-cols-2"
                 : "grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto p-3"
             }
@@ -329,7 +351,7 @@ export function PapelariaProofPanel({
                 PDF
               </h3>
               <a
-                href={pdfUrl}
+                href={provaPdfUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-[10px] font-medium text-secondary-blue hover:underline"
@@ -339,14 +361,22 @@ export function PapelariaProofPanel({
               </a>
             </header>
             <iframe
-              key={`${activeJob.id}-${activeJob.concluido_em ?? "pdf"}`}
-              title={`Prova PDF — job ${activeJob.id}`}
-              src={pdfUrl}
+              key={
+                showPdf && activeJob
+                  ? `${activeJob.id}-${activeJob.concluido_em ?? "pdf"}`
+                  : folderProofLabel ?? provaPdfUrl
+              }
+              title={
+                showPdf && activeJob
+                  ? `Prova PDF — job ${activeJob.id}`
+                  : `Prova PDF — ${folderProofLabel ?? "pasta Sefoc"}`
+              }
+              src={provaPdfUrl}
               className="h-[min(50vh,520px)] min-h-[220px] w-full flex-1 border-0 bg-white sm:h-[min(45vh,520px)]"
             />
           </article>
 
-          {exibirMockup3d ? (
+          {showPdf && exibirMockup3d ? (
           <article className="flex min-h-[min(45vh,320px)] flex-col overflow-hidden rounded-lg border border-sagra-border bg-white shadow-sm sm:min-h-[280px]">
             <header className="border-b border-sagra-border px-3 py-2">
               <h3 className="text-[11px] font-bold uppercase tracking-wide text-neutral-600">
@@ -388,13 +418,20 @@ export function PapelariaProofPanel({
           ) : null}
           </div>
         </div>
+      ) : viewMode === "prova" ? (
+        <div className="flex flex-1 items-center justify-center p-8 text-center text-sm text-neutral-400">
+          <div>
+            <FileText className="mx-auto mb-2 size-10 text-neutral-300" aria-hidden />
+            Nenhuma prova gerada nesta OS. Gere um arquivo ou alterne para Prévia.
+          </div>
+        </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-auto p-3">
           {!selectedModelId ? (
             <div className="flex flex-1 items-center justify-center text-center text-sm text-neutral-400">
               <div>
                 <FileText className="mx-auto mb-2 size-10 text-neutral-300" aria-hidden />
-                Selecione um modelo e gere o arquivo para visualizar a prova.
+                Selecione um modelo para ver a prévia em tempo real.
               </div>
             </div>
           ) : modelLoading ? (

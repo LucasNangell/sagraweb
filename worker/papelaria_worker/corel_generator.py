@@ -3080,6 +3080,150 @@ def _criar_pagina_nomeada(doc: Any, nome: str, width: float, height: float, logs
     return page
 
 
+def _ativar_pagina_doc(doc: Any, page_or_num: Any, logs: list[str]) -> None:
+    try:
+        if hasattr(page_or_num, "Activate"):
+            page_or_num.Activate()
+            return
+        doc.Pages.Item(int(page_or_num)).Activate()
+    except Exception:
+        try:
+            doc.ActivePage = (
+                page_or_num
+                if hasattr(page_or_num, "Shapes")
+                else doc.Pages.Item(int(page_or_num))
+            )
+        except Exception as exc:
+            logs.append(f"Aviso ao ativar página: {exc}")
+
+
+def _copiar_selection_via_app(corel: Any, doc: Any) -> None:
+    """Copia a seleção ativa — ActiveSelection é da Application, não do Document."""
+    erros: list[str] = []
+    for getter in (
+        lambda: corel.ActiveSelection,
+        lambda: doc.Application.ActiveSelection,
+        lambda: getattr(doc, "ActiveSelection", None),
+    ):
+        try:
+            sel = getter()
+            if sel is None:
+                continue
+            sel.Copy()
+            return
+        except Exception as exc:
+            erros.append(str(exc))
+    raise CorelGenerationError(
+        "Falha ao copiar seleção ativa: " + "; ".join(erros[:3])
+    )
+
+
+def _posicionar_shape(
+    shape: Any, rel_left: float, rel_bottom: float, logs: list[str]
+) -> bool:
+    try:
+        shape.LeftX = rel_left
+        shape.BottomY = rel_bottom
+        return True
+    except Exception:
+        pass
+    try:
+        shape.SetPosition(rel_left, rel_bottom)
+        return True
+    except Exception as exc:
+        logs.append(f"Aviso ao posicionar shape: {exc}")
+        return False
+
+
+def _copiar_um_shape_para_pagina(
+    corel: Any,
+    doc: Any,
+    shape: Any,
+    pagina_origem: int,
+    page_dest: Any,
+    rel_left: float,
+    rel_bottom: float,
+    logs: list[str],
+) -> bool:
+    """Copia um shape (CreateSelection/Copy/Paste ou Duplicate). Não usa doc.ActiveSelection."""
+    nome = str(getattr(shape, "Name", "") or "?")
+
+    # 1) Duplicate + MoveToLayer (mesmo documento)
+    try:
+        dup = shape.Duplicate()
+        moved = False
+        dest_layer = page_dest.ActiveLayer
+        for mover in (
+            lambda: dup.MoveToLayer(dest_layer),
+            lambda: dup.Order.MoveToLayer(dest_layer),
+        ):
+            try:
+                mover()
+                moved = True
+                break
+            except Exception:
+                continue
+        if moved:
+            _posicionar_shape(dup, rel_left, rel_bottom, logs)
+            return True
+        # Duplicate ficou na página origem — remove e cai no Copy/Paste
+        try:
+            dup.Delete()
+        except Exception:
+            pass
+    except Exception as exc:
+        logs.append(f"Duplicate '{nome}': {exc}")
+
+    # 2) CreateSelection + Application.ActiveSelection.Copy + Paste
+    _ativar_pagina_doc(doc, pagina_origem, logs)
+    try:
+        doc.ClearSelection()
+    except Exception:
+        pass
+    try:
+        shape.CreateSelection()
+    except Exception as exc:
+        logs.append(f"CreateSelection '{nome}': {exc}")
+        try:
+            shape.Copy()
+        except Exception as exc2:
+            logs.append(f"Copy direto '{nome}' falhou: {exc2}")
+            return False
+    else:
+        try:
+            _copiar_selection_via_app(corel, doc)
+        except Exception:
+            try:
+                shape.Copy()
+            except Exception as exc:
+                logs.append(f"Copy '{nome}' falhou: {exc}")
+                return False
+
+    _ativar_pagina_doc(doc, page_dest, logs)
+    try:
+        page_dest.ActiveLayer.Paste()
+    except Exception:
+        try:
+            corel.ActiveDocument.ActiveLayer.Paste()
+        except Exception as exc:
+            logs.append(f"Paste '{nome}' falhou: {exc}")
+            return False
+
+    colado = None
+    try:
+        colado = doc.ActiveShape
+    except Exception:
+        pasted = _shapes_from_collection(
+            getattr(page_dest.ActiveLayer, "Shapes", None)
+        )
+        if pasted:
+            colado = pasted[-1]
+    if colado is not None and not _eh_shape_borda_referencia(colado):
+        _posicionar_shape(colado, rel_left, rel_bottom, logs)
+        return True
+    return False
+
+
 def _copiar_arte_para_pagina(
     corel: Any,
     doc: Any,
@@ -3101,94 +3245,39 @@ def _copiar_arte_para_pagina(
     arte_shapes = _coletar_arte_na_area_borda(
         doc, borda_shape, pagina_borda, logs
     )
-    offsets: list[tuple[float, float]] = []
+
+    pares: list[tuple[Any, float, float]] = []
     for shape in arte_shapes:
         sb = _extrair_bounds_shape(shape)
         if not sb:
             continue
-        offsets.append(
-            offset_relativo_borda(sb[0], sb[1], borda_left, borda_bottom)
+        rel_left, rel_bottom = offset_relativo_borda(
+            sb[0], sb[1], borda_left, borda_bottom
         )
+        pares.append((shape, rel_left, rel_bottom))
 
-    try:
-        doc.ClearSelection()
-    except Exception:
-        pass
-    for shape in arte_shapes:
-        try:
-            shape.AddToSelection()
-        except Exception:
-            try:
-                shape.Selected = True
-            except Exception:
-                continue
-    try:
-        count_sel = 0
-        try:
-            count_sel = int(doc.ActiveSelection.Shapes.Count)
-        except Exception:
-            count_sel = int(getattr(doc.ActiveSelection, "Count", 0) or 0)
-        if count_sel < 1:
-            raise CorelGenerationError(
-                "Nenhum objeto da camada 'arte' selecionável para cópia."
-            )
-        doc.ActiveSelection.Copy()
-    except CorelGenerationError:
-        raise
-    except Exception as exc:
+    if not pares:
         raise CorelGenerationError(
-            f"Falha ao copiar arte na área da borda: {exc}"
-        ) from exc
-
-    try:
-        page.Activate()
-    except Exception:
-        try:
-            doc.ActivePage = page
-        except Exception:
-            pass
-
-    try:
-        page.ActiveLayer.Paste()
-    except Exception:
-        try:
-            corel.ActiveDocument.ActiveLayer.Paste()
-        except Exception as exc:
-            raise CorelGenerationError(
-                f"Falha ao colar arte na página: {exc}"
-            ) from exc
-
-    pasted = [
-        s
-        for s in _shapes_from_collection(getattr(page.ActiveLayer, "Shapes", None))
-        if not _eh_shape_borda_referencia(s)
-    ]
+            "Nenhum objeto da camada 'arte' com posição válida dentro da borda."
+        )
 
     copiados = 0
-    for idx, pasted_shape in enumerate(pasted):
-        if idx >= len(offsets):
-            break
-        rel_left, rel_bottom = offsets[idx]
-        try:
-            pasted_shape.LeftX = rel_left
-            pasted_shape.BottomY = rel_bottom
+    for shape, rel_left, rel_bottom in pares:
+        if _copiar_um_shape_para_pagina(
+            corel,
+            doc,
+            shape,
+            pagina_borda,
+            page,
+            rel_left,
+            rel_bottom,
+            logs,
+        ):
             copiados += 1
-        except Exception:
-            try:
-                pasted_shape.SetPosition(rel_left, rel_bottom)
-                copiados += 1
-            except Exception as exc:
-                logs.append(f"Aviso ao posicionar shape colado: {exc}")
 
-    if copiados == 0 and pasted:
-        copiados = len(pasted)
-        logs.append(
-            "Shapes colados sem reposicionamento explícito "
-            f"({copiados} objeto(s))."
-        )
-    elif copiados == 0:
+    if copiados == 0:
         raise CorelGenerationError(
-            "Nenhum objeto da camada 'arte' foi colado na página de imposição."
+            "Nenhum objeto da camada 'arte' foi copiado para a página de imposição."
         )
 
     logs.append(

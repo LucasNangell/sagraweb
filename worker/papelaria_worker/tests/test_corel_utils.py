@@ -19,6 +19,7 @@ from corel_generator import (  # noqa: E402
     CorelGenerationError,
     _manter_somente_primeira_pagina,
     _ajustar_pasta_avulso_para_a4,
+    _resolver_shapes_all,
     calcular_ajuste_a4_paisagem,
     encaixar_retangulo_na_pagina,
     montar_carimbo_prova_email,
@@ -408,6 +409,19 @@ class TestCarimboProvaEmail:
 
 
 class TestAjustePastaAvulsoA4:
+    def test_shapes_all_aceita_metodo_com_callable(self):
+        class ShapeRange:
+            Count = 1
+            CenterX = 10
+
+        class Shapes:
+            def All(self):
+                return ShapeRange()
+
+        shape_range = _resolver_shapes_all(Shapes())
+        assert shape_range.Count == 1
+        assert shape_range.CenterX == 10
+
     def test_detecta_folha_470x460(self):
         assert pagina_e_pasta_avulso_mm(470, 460)
         assert pagina_e_pasta_avulso_mm(460, 470)

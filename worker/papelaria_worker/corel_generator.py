@@ -1526,17 +1526,36 @@ def _retangulo_range_mm(shape_range: Any) -> tuple[float, float, float, float]:
         ) from exc
 
 
-def _obter_shape_range_pagina(page: Any) -> Any:
+def _resolver_shapes_all(shapes: Any) -> Any:
+    """No win32com, `Shapes.All` pode vir como método e precisa de `All()`."""
     try:
-        shape_range = page.Shapes.All
+        shape_range = shapes.All
     except Exception as exc:
         raise CorelGenerationError(
             f"Não foi possível selecionar os objetos da pasta avulso: {exc}"
         ) from exc
+    if callable(shape_range):
+        try:
+            shape_range = shape_range()
+        except Exception as exc:
+            raise CorelGenerationError(
+                f"Não foi possível obter o ShapeRange da pasta avulso: {exc}"
+            ) from exc
+    return shape_range
+
+
+def _obter_shape_range_pagina(page: Any) -> Any:
+    shape_range = _resolver_shapes_all(page.Shapes)
+    if callable(shape_range) or not hasattr(shape_range, "Count"):
+        raise CorelGenerationError(
+            "Corel não retornou um ShapeRange válido para a pasta avulso."
+        )
     try:
         total = int(shape_range.Count)
-    except Exception:
-        total = -1
+    except Exception as exc:
+        raise CorelGenerationError(
+            f"Não foi possível contar os objetos da pasta avulso: {exc}"
+        ) from exc
     if total == 0:
         raise CorelGenerationError(
             "A pasta avulso não tem objetos para reduzir ao A4."

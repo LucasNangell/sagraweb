@@ -15,7 +15,26 @@ describe("imposicaoConfigUtils (JDF)", () => {
     expect(cfg.pagina.origem).toBe("fixixa");
     expect(cfg.grid).toEqual({ colunas: 2, linhas: 1 });
     expect(cfg.marcas_corte).toBe(false);
+    expect(cfg.marcas_pdf_path).toBeNull();
     expect(cfg.work_style).toBe("Simplex");
+  });
+
+  it("exige PDF de marcas quando marcas_corte=true", () => {
+    expect(() =>
+      validateImposicaoConfigObject({
+        ...DEFAULT_IMPOSICAO_CONFIG,
+        marcas_corte: true,
+        marcas_pdf_path: null,
+      }),
+    ).toThrow(/caminho do PDF de marcas/);
+
+    const cfg = validateImposicaoConfigObject({
+      ...DEFAULT_IMPOSICAO_CONFIG,
+      marcas_corte: true,
+      marcas_pdf_path:
+        "\\\\redecamara\\dfsdata\\CGraf\\ImposicaoSIELT_5x2_A4.pdf",
+    });
+    expect(cfg.marcas_pdf_path).toContain("ImposicaoSIELT_5x2_A4.pdf");
   });
 
   it("parse vazio retorna null", () => {

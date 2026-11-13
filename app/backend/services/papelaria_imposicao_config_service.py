@@ -137,6 +137,23 @@ def validate_imposicao_config_payload(data: Any) -> dict[str, Any]:
     else:
         marcas = False
 
+    marcas_pdf_raw = data.get("marcas_pdf_path")
+    if marcas_pdf_raw is None or marcas_pdf_raw == "":
+        marcas_pdf_path: str | None = None
+    elif not isinstance(marcas_pdf_raw, str):
+        raise ValueError("marcas_pdf_path deve ser texto (caminho do PDF).")
+    else:
+        marcas_pdf_path = marcas_pdf_raw.strip() or None
+        if marcas_pdf_path and not marcas_pdf_path.lower().endswith(".pdf"):
+            raise ValueError("marcas_pdf_path deve apontar para um arquivo .pdf.")
+
+    if marcas and not marcas_pdf_path:
+        raise ValueError(
+            "Com marcas de corte ativas, informe marcas_pdf_path (PDF de marcas)."
+        )
+    if not marcas:
+        marcas_pdf_path = None
+
     if "centralizar_na_folha" in data:
         centralizar = _require_bool(data, "centralizar_na_folha")
     else:
@@ -149,6 +166,7 @@ def validate_imposicao_config_payload(data: Any) -> dict[str, Any]:
         "espacamento_mm": espacamento_out,
         "sangria_mm": float(sangria),
         "marcas_corte": marcas,
+        "marcas_pdf_path": marcas_pdf_path,
         "centralizar_na_folha": centralizar,
         "work_style": work_style,
     }

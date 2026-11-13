@@ -150,11 +150,26 @@ def test_build_apogee_jdf_xml_a5_2x1(tmp_path: Path):
     assert "SourceWorkStyle=\"Simplex\"" in xml
 
 
+def test_path_to_file_url_unc_encode_espacos():
+    from services.papelaria_jdf_service import path_to_file_url
+
+    url = path_to_file_url(
+        r"\\redecamara\dfsdata\CGraf\Modelos Corel\ImposicaoSIELT_5x2_A4.pdf"
+    )
+    assert url.startswith("file://redecamara/")
+    assert "Modelos%20Corel" in url
+    assert url.endswith("ImposicaoSIELT_5x2_A4.pdf")
+
+
 def test_build_apogee_jdf_xml_com_marcas_corte(tmp_path: Path):
     from services.papelaria_jdf_service import build_apogee_jdf_xml
 
     pdf = tmp_path / "06227-AirtonFaleiro-BlocoA5-BaseSefoc.pdf"
     pdf.write_bytes(b"%PDF")
+    marcas = (
+        r"\\redecamara\dfsdata\CGraf\Sefoc\Laboratorio\Modelos\\"
+        r"Modelos Corel\Papelaria\CSP\ImposicaoSIELT_5x2_A4.pdf"
+    )
     xml = build_apogee_jdf_xml(
         ano=2026,
         nro=6227,
@@ -164,17 +179,38 @@ def test_build_apogee_jdf_xml_com_marcas_corte(tmp_path: Path):
         export_filename="06227-AirtonFaleiro-BlocoA5_Imposição.pdf",
         base_pdf_path=str(pdf),
         base_pdf_user_name=pdf.stem,
-        config=_base_config(marcas_corte=True),
+        config=_base_config(marcas_corte=True, marcas_pdf_path=marcas),
         page_w_mm=148,
         page_h_mm=210,
     )
-    assert "JDFNoMarks" not in xml
-    assert (
-        'NamedFeatures="Imposition resultexport ExportPDF_Sefoc '
-        'resultexport@Export ExportPDF_Sefoc"'
-    ) in xml
-    assert 'NamedFeatures="Imposition resultexport ExportPDF_Sefoc"' in xml
-    assert "MarkObject" not in xml
+    # Marcas vêm do PDF; JDFNoMarks permanece para não usar marcas auto do Apogee.
+    assert "JDFNoMarks" in xml
+    assert 'ID="RL_Marcas"' in xml
+    assert "MarkObject" in xml
+    assert 'ProcessUsage="Marks"' in xml
+    assert "ImposicaoSIELT_5x2_A4" in xml
+    assert "Modelos%20Corel" in xml
+
+
+def test_build_apogee_jdf_xml_marcas_sem_path_falha(tmp_path: Path):
+    from services.papelaria_jdf_service import build_apogee_jdf_xml
+
+    pdf = tmp_path / "base.pdf"
+    pdf.write_bytes(b"%PDF")
+    with pytest.raises(ValueError, match="caminho do PDF de marcas"):
+        build_apogee_jdf_xml(
+            ano=2026,
+            nro=6227,
+            descriptive_name="x",
+            comment="x",
+            export_folder=str(tmp_path),
+            export_filename="x.pdf",
+            base_pdf_path=str(pdf),
+            base_pdf_user_name="x",
+            config=_base_config(marcas_corte=True),
+            page_w_mm=148,
+            page_h_mm=210,
+        )
 
 
 def test_write_jdf_file(tmp_path: Path):

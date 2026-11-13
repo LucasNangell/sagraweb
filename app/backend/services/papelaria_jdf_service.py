@@ -5,6 +5,7 @@ import os
 import re
 from datetime import datetime, timezone, timedelta
 from typing import Any
+from urllib.parse import quote
 from xml.sax.saxutils import escape
 
 MM_TO_PT = 72.0 / 25.4
@@ -25,18 +26,28 @@ def get_jdf_import_root() -> str:
     return os.path.normpath(raw or DEFAULT_JDF_IMPORT_ROOT)
 
 
+def _encode_file_url_path(posix_path: str) -> str:
+    """Percent-encode segmentos (espaços → %20); preserva / e : (letra de unidade)."""
+    return "/".join(quote(seg, safe=":") for seg in posix_path.split("/"))
+
+
 def path_to_file_url(path: str) -> str:
-    """Converte caminho Windows absoluto em file:///… (barra /)."""
-    abs_path = os.path.abspath(os.path.normpath(path))
-    # UNC \\server\share\… → file://server/share/…
+    """Converte caminho Windows absoluto em file:///… (barra /, espaços %20)."""
+    raw = (path or "").strip()
+    if not raw:
+        raise ValueError("Caminho de arquivo vazio.")
+    # Mantém UNC sem forçar abspath local (pode não existir na máquina da API).
+    if raw.startswith("\\\\") or raw.startswith("//"):
+        rest = raw.lstrip("\\/").replace("\\", "/")
+        return f"file://{_encode_file_url_path(rest)}"
+    abs_path = os.path.abspath(os.path.normpath(raw))
     if abs_path.startswith("\\\\"):
         rest = abs_path[2:].replace("\\", "/")
-        return f"file://{rest}"
-    # C:\foo → file:///C:/foo
+        return f"file://{_encode_file_url_path(rest)}"
     drive = abs_path.replace("\\", "/")
     if re.match(r"^[A-Za-z]:/", drive):
-        return f"file:///{drive}"
-    return f"file:///{drive.lstrip('/')}"
+        return f"file:///{_encode_file_url_path(drive)}"
+    return f"file:///{_encode_file_url_path(drive.lstrip('/'))}"
 
 
 def resolve_pagina_mm(
@@ -157,14 +168,13 @@ def _export_filename_stem(export_filename: str) -> str:
     return name
 
 
-def _named_features(*, marcas_corte: bool, root: bool) -> str:
+def _named_features(*, root: bool) -> str:
     """
-    Apogee: 'JDFNoMarks' desliga marcas de corte no Impose.
-    Com marcas_corte=True, omite JDFNoMarks.
+    Sempre inclui JDFNoMarks: marcas vêm do PDF (MarkObject + RL_Marcas),
+    não das marcas automáticas do Apogee.
     """
-    marks = "" if marcas_corte else "JDFNoMarks "
     export = _ROOT_EXPORT_FEATURE if root else _EXPORT_FEATURE
-    return f"Imposition {marks}{export}".strip()
+    return f"Imposition JDFNoMarks {export}"
 
 
 def build_apogee_jdf_xml(
@@ -204,6 +214,11 @@ def build_apogee_jdf_xml(
     centralizar = bool(config.get("centralizar_na_folha", True))
     work_style = str(config.get("work_style") or "Simplex")
     marcas_corte = bool(config.get("marcas_corte", False))
+    marcas_pdf_path = str(config.get("marcas_pdf_path") or "").strip()
+    if marcas_corte and not marcas_pdf_path:
+        raise ValueError(
+            "Com marcas de corte ativas, informe o caminho do PDF de marcas."
+        )
 
     nro5 = format_os_number(nro)
     # Job Name / JobPartID: sempre 5 dígitos (ex.: 06227).
@@ -232,6 +247,13 @@ def build_apogee_jdf_xml(
     )
 
     content_xml_parts: list[str] = []
+    if marcas_corte:
+        # MarkObject cobre a folha inteira (Ord=0 do RunList de marcas).
+        content_xml_parts.append(
+            "              <MarkObject Ord=\"0\" CTM=\"1 0 0 1 0 0\" "
+            f'TrimCTM="1 0 0 1 0 0"\n'
+            f'                          ClipBox="0 0 {folha_w_pt:.3f} {folha_h_pt:.3f}"/>'
+        )
     for x_mm, y_mm in positions:
         x_pt = mm_to_pt(x_mm)
         y_pt = mm_to_pt(y_mm)
@@ -262,8 +284,32 @@ def build_apogee_jdf_xml(
     user_name_esc = escape(base_pdf_user_name)
     job_id = str(int(ano))
     job_part = nro5
-    root_features = escape(_named_features(marcas_corte=marcas_corte, root=True))
-    imp_features = escape(_named_features(marcas_corte=marcas_corte, root=False))
+    root_features = escape(_named_features(root=True))
+    imp_features = escape(_named_features(root=False))
+
+    marcas_runlist_xml = ""
+    str_marks_link = ""
+    imp_marks_link = ""
+    if marcas_corte:
+        marcas_url = escape(path_to_file_url(marcas_pdf_path))
+        marcas_user = escape(
+            os.path.splitext(os.path.basename(marcas_pdf_path.replace("/", "\\")))[0]
+        )
+        marcas_runlist_xml = f"""
+      <RunList Class="Parameter" ID="RL_Marcas" Status="Available" NPage="1">
+        <LayoutElement>
+          <FileSpec URL="{marcas_url}"
+                    MimeType="application/pdf" FileVersion="1"
+                    UserFileName="{marcas_user}"/>
+        </LayoutElement>
+      </RunList>
+"""
+        str_marks_link = (
+            '\n        <RunListLink rRef="RL_Marcas" ProcessUsage="Marks" Usage="Output"/>'
+        )
+        imp_marks_link = (
+            '\n        <RunListLink rRef="RL_Marcas" ProcessUsage="Marks" Usage="Input"/>'
+        )
 
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <JDF xmlns="http://www.CIP4.org/JDFSchema_1_1"
@@ -320,7 +366,7 @@ def build_apogee_jdf_xml(
         </LayoutElement>
       </RunList>
       <RunList Class="Parameter" ID="RL_{nro5}_D" Status="Unavailable"/>
-
+{marcas_runlist_xml}
       <Layout Class="Parameter" ID="LAY_{nro5}" Status="Available" Automated="false">
         <Signature Name="SIG1">
           <Sheet Name="SHT1" SourceWorkStyle="{escape(work_style)}">
@@ -344,7 +390,7 @@ def build_apogee_jdf_xml(
     <JDF ID="STR_{nro5}" JobPartID="STR_{nro5}" Type="ProcessGroup" Types="ImpositionPreparation"
          Category="MISPRE.ImpositionPreparation" Status="Waiting" DescriptiveName="GB ImpositionPreparation">
       <ResourceLinkPool>
-        <LayoutLink rRef="LAY_{nro5}" Usage="Output"/>
+        <LayoutLink rRef="LAY_{nro5}" Usage="Output"/>{str_marks_link}
       </ResourceLinkPool>
     </JDF>
 
@@ -354,7 +400,7 @@ def build_apogee_jdf_xml(
          NamedFeatures="{imp_features}">
       <ResourceLinkPool>
         <RunListLink rRef="RL_{nro5}_D" ProcessUsage="Document" Usage="Input"/>
-        <LayoutLink rRef="LAY_{nro5}" Usage="Input"/>
+        <LayoutLink rRef="LAY_{nro5}" Usage="Input"/>{imp_marks_link}
         <ColorantControlLink rRef="CC_{nro5}" Usage="Input"/>
         <MediaLink rRef="PAP_{nro5}" Usage="Input"/>
       </ResourceLinkPool>

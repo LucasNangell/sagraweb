@@ -14,6 +14,7 @@ def _valid_payload() -> dict:
         "espacamento_mm": {"horizontal": 0, "vertical": 0},
         "sangria_mm": 0,
         "marcas_corte": False,
+        "marcas_pdf_path": None,
         "centralizar_na_folha": True,
         "work_style": "Simplex",
     }
@@ -40,7 +41,26 @@ class TestImposicaoConfigService:
         assert parsed["pagina"]["largura_mm"] == 148
         assert parsed["grid"] == {"colunas": 2, "linhas": 1}
         assert parsed["marcas_corte"] is False
+        assert parsed["marcas_pdf_path"] is None
         assert parsed["work_style"] == "Simplex"
+
+    def test_marcas_corte_exige_pdf_path(self):
+        from services.papelaria_imposicao_config_service import (
+            validate_imposicao_config_payload,
+        )
+
+        bad = _valid_payload()
+        bad["marcas_corte"] = True
+        with pytest.raises(ValueError, match="marcas_pdf_path"):
+            validate_imposicao_config_payload(bad)
+
+        ok = _valid_payload()
+        ok["marcas_corte"] = True
+        ok["marcas_pdf_path"] = (
+            r"\\redecamara\dfsdata\CGraf\Modelos\ImposicaoSIELT_5x2_A4.pdf"
+        )
+        out = validate_imposicao_config_payload(ok)
+        assert out["marcas_pdf_path"].endswith("ImposicaoSIELT_5x2_A4.pdf")
 
     def test_pagina_borda_sem_tamanho_fixo(self):
         from services.papelaria_imposicao_config_service import (

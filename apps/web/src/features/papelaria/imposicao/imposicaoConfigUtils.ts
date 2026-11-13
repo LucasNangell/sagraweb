@@ -63,6 +63,7 @@ function coerceRaw(data: Record<string, unknown>): Record<string, unknown> {
 
   if (out.sangria_mm == null) out.sangria_mm = 0;
   if (out.marcas_corte == null) out.marcas_corte = false;
+  if (out.marcas_pdf_path === undefined) out.marcas_pdf_path = null;
   if (out.centralizar_na_folha == null) out.centralizar_na_folha = true;
   if (out.work_style == null) out.work_style = "Simplex";
 
@@ -136,6 +137,26 @@ export function validateImposicaoConfigObject(
     },
     sangria_mm: sangria,
     marcas_corte: requireBool(raw, "marcas_corte"),
+    marcas_pdf_path: (() => {
+      const marcas = requireBool(raw, "marcas_corte");
+      const pathRaw = raw.marcas_pdf_path;
+      if (pathRaw == null || pathRaw === "") {
+        if (marcas) {
+          throw new Error(
+            "Com marcas de corte ativas, informe o caminho do PDF de marcas.",
+          );
+        }
+        return null;
+      }
+      if (typeof pathRaw !== "string") {
+        throw new Error("marcas_pdf_path deve ser texto.");
+      }
+      const path = pathRaw.trim();
+      if (!path.toLowerCase().endsWith(".pdf")) {
+        throw new Error("marcas_pdf_path deve apontar para um arquivo .pdf.");
+      }
+      return marcas ? path : null;
+    })(),
     centralizar_na_folha: requireBool(raw, "centralizar_na_folha"),
     work_style: "Simplex",
   };

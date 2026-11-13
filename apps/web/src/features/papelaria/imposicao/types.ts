@@ -26,8 +26,13 @@ export interface PapelariaImposicaoConfig {
   };
   /** Sangria / bleed (mm). 0 = sem sangria. */
   sangria_mm: number;
-  /** false = NamedFeatures inclui JDFNoMarks; true = Apogee gera marcas. */
+  /**
+   * true = inclui PDF de marcas no JDF (RL_Marcas + MarkObject).
+   * NamedFeatures sempre usa JDFNoMarks (marcas vêm do PDF).
+   */
   marcas_corte: boolean;
+  /** Caminho UNC/local do PDF de marcas (obrigatório se marcas_corte). */
+  marcas_pdf_path: string | null;
   /** Distribui sobra da folha igualmente (margens). */
   centralizar_na_folha: boolean;
   /** SourceWorkStyle do Sheet. */
@@ -42,6 +47,7 @@ export const DEFAULT_IMPOSICAO_CONFIG: PapelariaImposicaoConfig = {
   espacamento_mm: { horizontal: 0, vertical: 0 },
   sangria_mm: 0,
   marcas_corte: false,
+  marcas_pdf_path: null,
   centralizar_na_folha: true,
   work_style: "Simplex",
 };

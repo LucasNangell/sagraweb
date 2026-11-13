@@ -230,9 +230,33 @@ export function ImposicaoConfigEditor({
         <CheckboxField
           label="Marcas de corte"
           checked={config.marcas_corte}
-          hint="desligado = NamedFeatures JDFNoMarks no Apogee"
-          onChange={(v) => patch("marcas_corte", v)}
+          hint="Usa PDF de marcas no JDF (RL_Marcas + MarkObject). O arquivo varia por produto/grade."
+          onChange={(v) =>
+            onChange({
+              ...config,
+              marcas_corte: v,
+              marcas_pdf_path: v ? config.marcas_pdf_path : null,
+            })
+          }
         />
+        {config.marcas_corte ? (
+          <label className="flex flex-col gap-1 text-xs text-slate-600">
+            PDF de marcas (caminho UNC ou local)
+            <input
+              type="text"
+              className="rounded border border-slate-300 px-2 py-1.5 font-mono text-xs text-slate-800"
+              value={config.marcas_pdf_path ?? ""}
+              placeholder="\\redecamara\dfsdata\...\ImposicaoSIELT_5x2_A4.pdf"
+              onChange={(e) =>
+                patch("marcas_pdf_path", e.target.value.trim() || null)
+              }
+            />
+            <span className="text-[10px] text-slate-400">
+              Um PDF por produto/grade (ex.: cartão 5×2 → ImposicaoSIELT_5x2_A4.pdf).
+              Deve ter o tamanho da folha, com as marcas já posicionadas.
+            </span>
+          </label>
+        ) : null}
       </section>
     </div>
   );

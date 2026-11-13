@@ -1324,18 +1324,23 @@ def montar_carimbo_prova_email(
     ano: int,
     prova_numero: int,
     hoje: date | None = None,
+    produto_nome: str | None = None,
 ) -> dict[str, str]:
-    """Textos literais dos objetos do carimbo na folha A4 da Prova e-mail."""
+    """Dados do carimbo SEFOC na folha A4 da Prova e-mail."""
     dia = hoje or date.today()
     numero = int(prova_numero)
     if numero < 1:
         raise CorelGenerationError("Número da prova inválido para o carimbo.")
-    return {
+    out = {
         "TipoOSint": "OS" if int(nro) < 5000 else "SP",
         "OSint": f"{int(nro):05d}/{int(ano):04d}",
         "DataInt": dia.strftime("%d/%m/%Y"),
         "ProvaNroInt": str(numero),
     }
+    nome = (produto_nome or "").strip()
+    if nome:
+        out["ProdutoNome"] = nome
+    return out
 
 
 def resolve_prova_numero(job: dict[str, Any]) -> int:

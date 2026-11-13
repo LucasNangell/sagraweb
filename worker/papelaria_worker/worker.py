@@ -621,6 +621,7 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                     nro=int(job["nro"]),
                     ano=int(job["ano"]),
                     prova_numero=resolve_prova_numero(job),
+                    produto_nome=str(job.get("produto") or "").strip() or None,
                 )
                 prova_path = os.path.join(output_dir, prova_name)
                 api.append_log(

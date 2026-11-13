@@ -392,13 +392,18 @@ class TestAplicarCampoOpcional:
 class TestCarimboProvaEmail:
     def test_sp_e_os(self):
         email = montar_carimbo_prova_email(
-            nro=5954, ano=2026, prova_numero=3, hoje=date(2026, 11, 12)
+            nro=5954,
+            ano=2026,
+            prova_numero=3,
+            hoje=date(2026, 11, 12),
+            produto_nome="Credencial",
         )
         assert email == {
             "TipoOSint": "SP",
             "OSint": "05954/2026",
             "DataInt": "12/11/2026",
             "ProvaNroInt": "3",
+            "ProdutoNome": "Credencial",
         }
         os_menor = montar_carimbo_prova_email(
             nro=4999, ano=2026, prova_numero=1, hoje=date(2026, 1, 2)
@@ -406,6 +411,7 @@ class TestCarimboProvaEmail:
         assert os_menor["TipoOSint"] == "OS"
         assert os_menor["OSint"] == "04999/2026"
         assert os_menor["DataInt"] == "02/01/2026"
+        assert "ProdutoNome" not in os_menor
 
     def test_numero_da_prova_vem_do_pdf(self):
         assert (

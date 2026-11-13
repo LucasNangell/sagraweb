@@ -11,6 +11,10 @@ MM_TO_PT = 72.0 / 25.4
 
 DEFAULT_JDF_IMPORT_ROOT = r"\\apogee\JDFImportRoot\Papelaria"
 
+# NamedFeatures do Hot Ticket / Export TP (Base Attribute Map MIS Export).
+_EXPORT_FEATURE = "resultexport ExportPDF_Sefoc"
+_ROOT_EXPORT_FEATURE = f"{_EXPORT_FEATURE} resultexport@Export ExportPDF_Sefoc"
+
 
 def mm_to_pt(mm: float) -> float:
     return float(mm) * MM_TO_PT
@@ -118,34 +122,22 @@ def compute_content_positions(
     return positions
 
 
-def _build_cut_mark_object_xml(
-    *,
-    content_id: str,
-    x_pt: float,
-    y_pt: float,
-    page_w_pt: float,
-    page_h_pt: float,
-) -> str:
-    """
-    MarkObject com CutMark nos 4 cantos do TrimBox (CIP4 eCutMarkType_).
+def _export_filename_stem(export_filename: str) -> str:
+    """GeneralID ExportFileName: sem extensão (.pdf)."""
+    name = (export_filename or "").strip()
+    if name.lower().endswith(".pdf"):
+        return name[:-4]
+    return name
 
-    Apogee (Impose From input) usa esses MarkObject do Layout para gerar
-    as marcas de corte no PDF imposto.
+
+def _named_features(*, marcas_corte: bool, root: bool) -> str:
     """
-    return (
-        f'              <MarkObject CTM="1 0 0 1 {x_pt:.3f} {y_pt:.3f}" '
-        f'ContentRef="{content_id}"\n'
-        f'                             TrimCTM="1 0 0 1 {x_pt:.3f} {y_pt:.3f}" '
-        f'TrimSize="{page_w_pt:.3f} {page_h_pt:.3f}">\n'
-        f'                <CutMark MarkType="LowerLeftCutMark" Position="0 0"/>\n'
-        f'                <CutMark MarkType="LowerRightCutMark" '
-        f'Position="{page_w_pt:.3f} 0"/>\n'
-        f'                <CutMark MarkType="UpperLeftCutMark" '
-        f'Position="0 {page_h_pt:.3f}"/>\n'
-        f'                <CutMark MarkType="UpperRightCutMark" '
-        f'Position="{page_w_pt:.3f} {page_h_pt:.3f}"/>\n'
-        f"              </MarkObject>"
-    )
+    Apogee: 'JDFNoMarks' desliga marcas de corte no Impose.
+    Com marcas_corte=True, omite JDFNoMarks.
+    """
+    marks = "" if marcas_corte else "JDFNoMarks "
+    export = _ROOT_EXPORT_FEATURE if root else _EXPORT_FEATURE
+    return f"Imposition {marks}{export}".strip()
 
 
 def build_apogee_jdf_xml(
@@ -164,7 +156,16 @@ def build_apogee_jdf_xml(
     agent_version: str = "1.0",
     timestamp: datetime | None = None,
 ) -> str:
-    """Monta XML JDF no padrão Apogee (Product + PrePress step&repeat)."""
+    """
+    Monta XML JDF no padrão Apogee (Product + PrePress step&repeat).
+
+    Base Attribute Map "MIS Export" (raiz):
+      Order Number     -> @JobID
+      Job Name         -> @DescriptiveName
+      Job Description  -> GeneralID[@IDUsage='JobDescription']
+      Order Description-> GeneralID[@IDUsage='ExportFolder']
+      (+ ExportFileName via GeneralID)
+    """
     folha = config["folha_mm"]
     folha_w = float(folha["largura"])
     folha_h = float(folha["altura"])
@@ -178,6 +179,7 @@ def build_apogee_jdf_xml(
     marcas_corte = bool(config.get("marcas_corte", False))
 
     nro5 = f"{int(nro):05d}"
+    job_name = str(int(nro))  # DescriptiveName raiz = Job (sem zeros à esquerda)
     root_id = f"ROOT_{nro5}"
     ts = timestamp or datetime.now(timezone(timedelta(hours=-3)))
     ts_str = ts.strftime("%Y-%m-%dT%H:%M:%S%z")
@@ -202,51 +204,42 @@ def build_apogee_jdf_xml(
     )
 
     content_xml_parts: list[str] = []
-    for idx, (x_mm, y_mm) in enumerate(positions):
+    for x_mm, y_mm in positions:
         x_pt = mm_to_pt(x_mm)
         y_pt = mm_to_pt(y_mm)
         clip_x1 = x_pt + page_w_pt
         clip_y1 = y_pt + page_h_pt
-        content_id = f"CO_{nro5}_{idx}"
         content_xml_parts.append(
-            f"              <ContentObject ID=\"{content_id}\" Ord=\"0\"\n"
+            "              <ContentObject Ord=\"0\"\n"
             f"                             CTM=\"1 0 0 1 {x_pt:.3f} {y_pt:.3f}\" "
             f"TrimCTM=\"1 0 0 1 {x_pt:.3f} {y_pt:.3f}\"\n"
             f"                             TrimSize=\"{page_w_pt:.3f} {page_h_pt:.3f}\"\n"
             f"                             ClipBox=\"{x_pt:.3f} {y_pt:.3f} "
             f"{clip_x1:.3f} {clip_y1:.3f}\"/>"
         )
-        if marcas_corte:
-            # CIP4/Apogee: MarkObject + CutMark nos 4 cantos do TrimBox da página.
-            content_xml_parts.append(
-                _build_cut_mark_object_xml(
-                    content_id=content_id,
-                    x_pt=x_pt,
-                    y_pt=y_pt,
-                    page_w_pt=page_w_pt,
-                    page_h_pt=page_h_pt,
-                )
-            )
     contents = "\n".join(content_xml_parts)
 
     file_url = escape(path_to_file_url(base_pdf_path))
     export_folder_esc = escape(export_folder.replace("/", "\\"))
-    export_name_esc = escape(export_filename)
-    desc_esc = escape(descriptive_name)
+    export_stem_esc = escape(_export_filename_stem(export_filename))
+    job_desc_esc = escape((descriptive_name or "").strip() or job_name)
     comment_esc = escape(comment)
     user_name_esc = escape(base_pdf_user_name)
     job_id = str(int(ano))
     job_part = nro5
-    job_name = nro5  # DescriptiveName raiz = Job
+    root_features = escape(_named_features(marcas_corte=marcas_corte, root=True))
+    imp_features = escape(_named_features(marcas_corte=marcas_corte, root=False))
 
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <JDF xmlns="http://www.CIP4.org/JDFSchema_1_1"
      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-     xmlns:mis="http://www.exemplo.com.br/mis"
      ID="{root_id}" Type="Product" Version="1.4" Status="Waiting"
      JobID="{escape(job_id)}" JobPartID="{job_part}" DescriptiveName="{escape(job_name)}"
-     mis:ExportFolder="{export_folder_esc}"
-     mis:ExportFileName="{export_name_esc}">
+     NamedFeatures="{root_features}">
+
+  <GeneralID DataType="string" IDUsage="JobDescription" IDValue="{job_desc_esc}"/>
+  <GeneralID DataType="string" IDUsage="ExportFolder"   IDValue="{export_folder_esc}"/>
+  <GeneralID DataType="string" IDUsage="ExportFileName" IDValue="{export_stem_esc}"/>
 
   <Comment Name="JobDescription">{comment_esc}</Comment>
 
@@ -281,7 +274,7 @@ def build_apogee_jdf_xml(
   </ResourceLinkPool>
 
   <JDF ID="PRE_{nro5}" JobPartID="PRE_{nro5}" Type="ProcessGroup" Category="PrePress"
-       Status="Waiting" DescriptiveName="{desc_esc}">
+       Status="Waiting" DescriptiveName="PrePress">
 
     <ResourcePool>
       <RunList Class="Parameter" ID="RL_{nro5}" Status="Available" NPage="1">
@@ -323,7 +316,7 @@ def build_apogee_jdf_xml(
     <JDF ID="IMP_{nro5}" JobPartID="IMP_{nro5}" Type="ProcessGroup"
          Types="Imposition DigitalDelivery ProofImaging"
          Category="MISPRE.ImpositionProofing" Status="Waiting" DescriptiveName="GB Export PDF Imposto"
-         NamedFeatures="resultexport ExportPDF_Sefoc">
+         NamedFeatures="{imp_features}">
       <ResourceLinkPool>
         <RunListLink rRef="RL_{nro5}_D" ProcessUsage="Document" Usage="Input"/>
         <LayoutLink rRef="LAY_{nro5}" Usage="Input"/>

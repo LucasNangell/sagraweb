@@ -1575,6 +1575,7 @@ class TestImposicaoJob:
             nro=5954,
             solicitado_por="918713",
             modelo_id=7,
+            variante="digital",
         )
         assert job["tipo_job"] == svc.TIPO_JOB_IMPOSICAO
         assert job["status"] == svc.STATUS_COMPLETED
@@ -1584,7 +1585,11 @@ class TestImposicaoJob:
         jdf_name = job["dados"]["jdf_name"]
         assert jdf_name.endswith(".jdf")
         assert (jdf_root / jdf_name).is_file()
-        assert "ContentObject" in (jdf_root / jdf_name).read_text(encoding="utf-8")
+        jdf_text = (jdf_root / jdf_name).read_text(encoding="utf-8")
+        assert "ContentObject" in jdf_text
+        assert 'IDUsage="ExportFolder"' in jdf_text
+        assert "JDFNoMarks" in jdf_text
+        assert "xmlns:mis=" not in jdf_text
 
     def test_poll_imposicao_move_para_digital(self, monkeypatch, tmp_path):
         from services import papelaria_jobs_service as svc

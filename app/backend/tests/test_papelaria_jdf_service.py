@@ -74,10 +74,8 @@ def test_compute_positions_a5_2x1_centralizado():
     assert mm_to_pt(0.5) == pytest.approx(1.417, abs=0.01)
 
 
-def test_build_apogee_jdf_xml_a5_2x1(tmp_path: Path):
-    from services.papelaria_jdf_service import build_apogee_jdf_xml
-
-    config = {
+def _base_config(**overrides):
+    cfg = {
         "folha_mm": {"largura": 297, "altura": 210},
         "pagina": {"origem": "fixixa", "largura_mm": 148, "altura_mm": 210},
         "grid": {"colunas": 2, "linhas": 1},
@@ -87,66 +85,76 @@ def test_build_apogee_jdf_xml_a5_2x1(tmp_path: Path):
         "centralizar_na_folha": True,
         "work_style": "Simplex",
     }
+    cfg.update(overrides)
+    return cfg
+
+
+def test_build_apogee_jdf_xml_a5_2x1(tmp_path: Path):
+    from services.papelaria_jdf_service import build_apogee_jdf_xml
+
     pdf = tmp_path / "06227-AirtonFaleiro-BlocoA5-BaseSefoc.pdf"
     pdf.write_bytes(b"%PDF")
     xml = build_apogee_jdf_xml(
         ano=2026,
         nro=6227,
-        descriptive_name="06227-AirtonFaleiro-BlocoA5",
+        descriptive_name="AirtonFaleiro-BlocoA5",
         comment="teste 2x1",
         export_folder=str(tmp_path),
         export_filename="06227-AirtonFaleiro-BlocoA5_Imposição.pdf",
         base_pdf_path=str(pdf),
         base_pdf_user_name=pdf.stem,
-        config=config,
+        config=_base_config(),
         page_w_mm=148,
         page_h_mm=210,
     )
     assert 'JobID="2026"' in xml
     assert 'JobPartID="06227"' in xml
-    assert "ContentObject" in xml
+    assert 'DescriptiveName="6227"' in xml
+    assert "xmlns:mis=" not in xml
+    assert "mis:ExportFolder" not in xml
+    assert 'IDUsage="JobDescription" IDValue="AirtonFaleiro-BlocoA5"' in xml
+    assert 'IDUsage="ExportFolder"' in xml
+    assert 'IDUsage="ExportFileName" IDValue="06227-AirtonFaleiro-BlocoA5_Imposição"' in xml
+    assert "JDFNoMarks" in xml
+    assert (
+        'NamedFeatures="Imposition JDFNoMarks resultexport ExportPDF_Sefoc '
+        'resultexport@Export ExportPDF_Sefoc"'
+    ) in xml
+    assert (
+        'NamedFeatures="Imposition JDFNoMarks resultexport ExportPDF_Sefoc"'
+    ) in xml
+    assert 'DescriptiveName="PrePress"' in xml
     assert xml.count("<ContentObject") == 2
     assert "MarkObject" not in xml
     assert "CutMark" not in xml
-    assert "file:///" in xml or "file://apogee" in xml or "file://J" in xml.lower() or "file:///" in xml
-    assert "TrimSize=\"419.528 595.276\"" in xml or "419.528" in xml
     assert "SourceWorkStyle=\"Simplex\"" in xml
 
 
 def test_build_apogee_jdf_xml_com_marcas_corte(tmp_path: Path):
     from services.papelaria_jdf_service import build_apogee_jdf_xml
 
-    config = {
-        "folha_mm": {"largura": 297, "altura": 210},
-        "pagina": {"origem": "fixixa", "largura_mm": 148, "altura_mm": 210},
-        "grid": {"colunas": 2, "linhas": 1},
-        "espacamento_mm": {"horizontal": 0, "vertical": 0},
-        "sangria_mm": 0,
-        "marcas_corte": True,
-        "centralizar_na_folha": True,
-        "work_style": "Simplex",
-    }
     pdf = tmp_path / "06227-AirtonFaleiro-BlocoA5-BaseSefoc.pdf"
     pdf.write_bytes(b"%PDF")
     xml = build_apogee_jdf_xml(
         ano=2026,
         nro=6227,
-        descriptive_name="06227-AirtonFaleiro-BlocoA5",
+        descriptive_name="AirtonFaleiro-BlocoA5",
         comment="teste 2x1 com marcas",
         export_folder=str(tmp_path),
         export_filename="06227-AirtonFaleiro-BlocoA5_Imposição.pdf",
         base_pdf_path=str(pdf),
         base_pdf_user_name=pdf.stem,
-        config=config,
+        config=_base_config(marcas_corte=True),
         page_w_mm=148,
         page_h_mm=210,
     )
-    assert xml.count("<ContentObject") == 2
-    assert xml.count("<MarkObject") == 2
-    assert xml.count('MarkType="LowerLeftCutMark"') == 2
-    assert xml.count('MarkType="UpperRightCutMark"') == 2
-    assert 'ContentRef="CO_06227_0"' in xml
-    assert 'ContentRef="CO_06227_1"' in xml
+    assert "JDFNoMarks" not in xml
+    assert (
+        'NamedFeatures="Imposition resultexport ExportPDF_Sefoc '
+        'resultexport@Export ExportPDF_Sefoc"'
+    ) in xml
+    assert 'NamedFeatures="Imposition resultexport ExportPDF_Sefoc"' in xml
+    assert "MarkObject" not in xml
 
 
 def test_write_jdf_file(tmp_path: Path):

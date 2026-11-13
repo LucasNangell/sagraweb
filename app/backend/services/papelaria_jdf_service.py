@@ -272,12 +272,19 @@ def build_apogee_jdf_xml(
     file_url = escape(path_to_file_url(base_pdf_path))
     export_folder_esc = escape(export_folder.replace("/", "\\"))
     # Job Name (DescriptiveName) já é NNNNN. JobDescription e ExportFileName
-    # NÃO podem repetir o Nr OS — o Apogee concatena e duplica pasta/arquivo.
+    # NÃO repetem o Nr OS nem o sufixo "Imposição" (o Apogee acrescenta).
     job_desc = strip_leading_os_number(descriptive_name, nro) or "Papelaria"
-    export_stem = (
-        strip_leading_os_number(_export_filename_stem(export_filename), nro)
-        or "Imposição"
-    )
+    export_stem = strip_leading_os_number(
+        _export_filename_stem(export_filename),
+        nro,
+    ) or job_desc
+    # Remove sufixo legado "_Imposição" / "-Imposição" se ainda vier no input.
+    export_stem = re.sub(
+        r"([_-]?Imposi[cç][aã]o)$",
+        "",
+        export_stem,
+        flags=re.IGNORECASE,
+    ).rstrip("_- ") or job_desc
     # Comment também sem Nr OS no início (alguns mapas usam como descrição).
     comment_clean = strip_leading_os_number(comment, nro) or comment
     job_desc_esc = escape(job_desc)

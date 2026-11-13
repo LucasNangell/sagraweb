@@ -132,9 +132,10 @@ def test_build_apogee_jdf_xml_a5_2x1(tmp_path: Path):
     assert "mis:ExportFolder" not in xml
     assert 'IDUsage="JobDescription" IDValue="AirtonFaleiro-BlocoA5"' in xml
     assert 'IDUsage="ExportFolder"' in xml
-    # ExportFileName / JobDescription sem Nr OS (Job Name já é 06227).
-    assert 'IDUsage="ExportFileName" IDValue="AirtonFaleiro-BlocoA5_Imposição"' in xml
+    # ExportFileName / JobDescription sem Nr OS e sem sufixo Imposição.
+    assert 'IDUsage="ExportFileName" IDValue="AirtonFaleiro-BlocoA5"' in xml
     assert 'IDUsage="JobDescription" IDValue="06227' not in xml
+    assert "_Imposição" not in xml
     assert "06227-06227" not in xml
     assert "6227-06227" not in xml
 
@@ -158,8 +159,9 @@ def test_build_apogee_jdf_xml_strip_os_da_descricao_e_export(tmp_path: Path):
         page_h_mm=210,
     )
     assert 'IDUsage="JobDescription" IDValue="AirtonFaleiro-BlocoA5"' in xml
-    assert 'IDUsage="ExportFileName" IDValue="AirtonFaleiro-BlocoA5_Imposição"' in xml
+    assert 'IDUsage="ExportFileName" IDValue="AirtonFaleiro-BlocoA5"' in xml
     assert 'UserFileName="AirtonFaleiro-BlocoA5-BaseSefoc"' in xml
+    assert "_Imposição" not in xml
     assert "06227 —" not in xml
     assert "06227-06227" not in xml
     assert "JDFNoMarks" in xml

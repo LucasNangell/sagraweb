@@ -493,8 +493,9 @@ def _build_imposicao_jdf_artifacts(
         nro=nro,
         folder_basename=f"{label}_{cols}x{rows}",
     )
-    # Sem Nr OS: Job Name do JDF já é NNNNN; Apogee concatena e duplicaria.
-    export_pdf_name = f"{label}_Imposição.pdf"
+    # Sem Nr OS e sem "_Imposição": Job Name já é NNNNN; o sufixo
+    # "Imposição" é acrescentado pelo próprio Apogee no export.
+    export_pdf_name = f"{label}.pdf"
     jdf_xml = jdf_svc.build_apogee_jdf_xml(
         ano=ano,
         nro=nro,
@@ -1815,7 +1816,7 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
             nro=nro_imp,
             folder_basename=f"{label}_{cols}x{rows}",
         )
-        export_pdf_name = f"{label}_Imposição.pdf"
+        export_pdf_name = f"{label}.pdf"
         jdf_xml = jdf_svc.build_apogee_jdf_xml(
             ano=ano_imp,
             nro=nro_imp,

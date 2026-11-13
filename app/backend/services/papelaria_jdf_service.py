@@ -69,10 +69,37 @@ def read_pdf_page_size_mm(pdf_path: str) -> tuple[float, float]:
         doc.close()
 
 
+def format_os_number(nro: int) -> str:
+    """Número da OS sempre com 5 dígitos (zero à esquerda)."""
+    return f"{int(nro):05d}"
+
+
 def strip_leading_os_number(text: str, nro: int) -> str:
-    """Remove um ou mais prefixos '{nro:05d}-' do início (evita 06227-06227-…)."""
-    num = f"{int(nro):05d}"
-    return re.sub(rf"^({re.escape(num)}-)+", "", (text or "").strip())
+    """
+    Remove um ou mais prefixos do Nr OS no início.
+    Aceita com ou sem zero à esquerda (06227- / 6227-) para evitar
+    06227-06227-… ou 06227-6227-….
+    """
+    raw = (text or "").strip()
+    if not raw:
+        return ""
+    num = format_os_number(nro)
+    bare = str(int(nro))
+    return re.sub(
+        rf"^(({re.escape(num)}|{re.escape(bare)})-)+",
+        "",
+        raw,
+        flags=re.IGNORECASE,
+    ).strip("-")
+
+
+def ensure_os_prefixed_name(text: str, nro: int) -> str:
+    """Garante um único prefixo NNNNN- no nome (colapsa duplicatas)."""
+    num = format_os_number(nro)
+    rest = strip_leading_os_number(text, nro)
+    if not rest:
+        return num
+    return f"{num}-{rest}"
 
 
 def build_jdf_filename(*, ano: int, nro: int, folder_basename: str) -> str:
@@ -82,7 +109,7 @@ def build_jdf_filename(*, ano: int, nro: int, folder_basename: str) -> str:
     O número da OS entra uma vez (após o ano). O basename da pasta/OS
     é limpo de prefixos '{nro}-' repetidos antes de compor o nome.
     """
-    num = f"{int(nro):05d}"
+    num = format_os_number(nro)
     rest = strip_leading_os_number(folder_basename, nro)
     safe = re.sub(r"[^\w\-]+", "_", rest, flags=re.UNICODE).strip("_")
     if safe:
@@ -178,8 +205,9 @@ def build_apogee_jdf_xml(
     work_style = str(config.get("work_style") or "Simplex")
     marcas_corte = bool(config.get("marcas_corte", False))
 
-    nro5 = f"{int(nro):05d}"
-    job_name = str(int(nro))  # DescriptiveName raiz = Job (sem zeros à esquerda)
+    nro5 = format_os_number(nro)
+    # Job Name / JobPartID: sempre 5 dígitos (ex.: 06227).
+    job_name = nro5
     root_id = f"ROOT_{nro5}"
     ts = timestamp or datetime.now(timezone(timedelta(hours=-3)))
     ts_str = ts.strftime("%Y-%m-%dT%H:%M:%S%z")
@@ -221,8 +249,15 @@ def build_apogee_jdf_xml(
 
     file_url = escape(path_to_file_url(base_pdf_path))
     export_folder_esc = escape(export_folder.replace("/", "\\"))
-    export_stem_esc = escape(_export_filename_stem(export_filename))
-    job_desc_esc = escape((descriptive_name or "").strip() or job_name)
+    # ExportFileName: um único prefixo NNNNN- (sem .pdf).
+    export_stem = ensure_os_prefixed_name(
+        _export_filename_stem(export_filename),
+        nro,
+    )
+    export_stem_esc = escape(export_stem)
+    # JobDescription: rótulo sem Nr OS (evita duplicar no Apogee).
+    job_desc = strip_leading_os_number(descriptive_name, nro) or job_name
+    job_desc_esc = escape(job_desc)
     comment_esc = escape(comment)
     user_name_esc = escape(base_pdf_user_name)
     job_id = str(int(ano))

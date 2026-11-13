@@ -7,7 +7,11 @@ import pytest
 
 
 def test_build_jdf_filename_nao_duplica_nro_os():
-    from services.papelaria_jdf_service import build_jdf_filename
+    from services.papelaria_jdf_service import (
+        build_jdf_filename,
+        ensure_os_prefixed_name,
+        strip_leading_os_number,
+    )
 
     assert (
         build_jdf_filename(
@@ -29,9 +33,23 @@ def test_build_jdf_filename_nao_duplica_nro_os():
         build_jdf_filename(
             ano=2026,
             nro=6227,
+            folder_basename="6227-AirtonFaleiro-BlocoA5_2x1",
+        )
+        == "2026_06227_AirtonFaleiro-BlocoA5_2x1.jdf"
+    )
+    assert (
+        build_jdf_filename(
+            ano=2026,
+            nro=6227,
             folder_basename="AirtonFaleiro-BlocoA5_2x1",
         )
         == "2026_06227_AirtonFaleiro-BlocoA5_2x1.jdf"
+    )
+    assert strip_leading_os_number("06227-06227-Nome", 6227) == "Nome"
+    assert strip_leading_os_number("6227-Nome", 6227) == "Nome"
+    assert (
+        ensure_os_prefixed_name("6227-06227-AirtonFaleiro", 6227)
+        == "06227-AirtonFaleiro"
     )
 
 
@@ -109,12 +127,14 @@ def test_build_apogee_jdf_xml_a5_2x1(tmp_path: Path):
     )
     assert 'JobID="2026"' in xml
     assert 'JobPartID="06227"' in xml
-    assert 'DescriptiveName="6227"' in xml
+    assert 'DescriptiveName="06227"' in xml
     assert "xmlns:mis=" not in xml
     assert "mis:ExportFolder" not in xml
     assert 'IDUsage="JobDescription" IDValue="AirtonFaleiro-BlocoA5"' in xml
     assert 'IDUsage="ExportFolder"' in xml
     assert 'IDUsage="ExportFileName" IDValue="06227-AirtonFaleiro-BlocoA5_Imposição"' in xml
+    assert "06227-06227" not in xml
+    assert "6227-06227" not in xml
     assert "JDFNoMarks" in xml
     assert (
         'NamedFeatures="Imposition JDFNoMarks resultexport ExportPDF_Sefoc '

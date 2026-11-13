@@ -104,6 +104,10 @@ def test_compute_os_folder_name_nao_duplica_numero_os():
         == "06227-Airtonfaleiro-Blocoa5"
     )
     assert (
+        compute_os_folder_name(6227, "6227-AirtonFaleiro", "Bloco A5")
+        == "06227-Airtonfaleiro-Blocoa5"
+    )
+    assert (
         compute_os_folder_name(6227, "Airton Faleiro", "Bloco A5")
         == "06227-Airtonfaleiro-Blocoa5"
     )

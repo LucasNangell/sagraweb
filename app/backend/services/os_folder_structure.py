@@ -46,10 +46,11 @@ def compute_os_folder_name(
     titulo: str = "",
 ) -> str:
     num = f"{int(nr_os):05d}"
+    bare = str(int(nr_os))
     solicitante_norm = normalize_text_custom(solicitante)
-    # Evita 06227-06227-Nome quando o solicitante já traz o número da OS.
+    # Evita 06227-06227-Nome / 6227-Nome quando o solicitante já traz o Nr OS.
     solicitante_norm = re.sub(
-        rf"^({re.escape(num)}-?)+",
+        rf"^(({re.escape(num)}|{re.escape(bare)})-?)+",
         "",
         solicitante_norm,
         flags=re.IGNORECASE,

@@ -493,12 +493,12 @@ def _build_imposicao_jdf_artifacts(
         nro=nro,
         folder_basename=f"{label}_{cols}x{rows}",
     )
-    export_pdf_name = f"{prefix}_Imposição.pdf"
+    export_pdf_name = f"{jdf_svc.ensure_os_prefixed_name(prefix, nro)}_Imposição.pdf"
     jdf_xml = jdf_svc.build_apogee_jdf_xml(
         ano=ano,
         nro=nro,
         descriptive_name=label,
-        comment=f"{nro:05d} — imposição {cols}x{rows} ({produto or 'Papelaria'})",
+        comment=f"{jdf_svc.format_os_number(nro)} — imposição {cols}x{rows} ({produto or 'Papelaria'})",
         export_folder=sefoc_dir,
         export_filename=export_pdf_name,
         base_pdf_path=base_pdf_path,
@@ -1611,16 +1611,12 @@ def resolve_os_timbrado_digital_dir(ano: int, nro: int, create: bool = True) -> 
 def normalize_os_artifact_prefix(basename: str, nro: int) -> str:
     """
     Prefixo de artefato a partir do nome da pasta da OS.
-    Colapsa número da OS repetido no início (ex.: 06227-06227-Nome → 06227-Nome).
+    Colapsa Nr OS repetido no início, com ou sem zero à esquerda
+    (ex.: 06227-06227-Nome / 6227-Nome → 06227-Nome).
     """
-    text = (basename or "").strip()
-    if not text:
-        return f"{int(nro):05d}"
-    num = f"{int(nro):05d}"
-    collapsed = re.sub(rf"^({re.escape(num)}-)+", f"{num}-", text)
-    if not collapsed.startswith(f"{num}-") and not collapsed.startswith(num):
-        return f"{num}-{collapsed}"
-    return collapsed
+    from services import papelaria_jdf_service as jdf_svc
+
+    return jdf_svc.ensure_os_prefixed_name(basename, nro)
 
 
 def get_os_folder_basename(ano: int, nro: int) -> str:
@@ -1812,13 +1808,15 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
             nro=nro_imp,
             folder_basename=f"{label}_{cols}x{rows}",
         )
-        export_pdf_name = f"{prefix}_Imposição.pdf"
+        export_pdf_name = (
+            f"{jdf_svc.ensure_os_prefixed_name(prefix, nro_imp)}_Imposição.pdf"
+        )
         jdf_xml = jdf_svc.build_apogee_jdf_xml(
             ano=ano_imp,
             nro=nro_imp,
             descriptive_name=label,
             comment=(
-                f"{nro_imp:05d} — imposição {cols}x{rows} "
+                f"{jdf_svc.format_os_number(nro_imp)} — imposição {cols}x{rows} "
                 f"({job.get('produto') or 'Papelaria'})"
             ),
             export_folder=sefoc_dir,

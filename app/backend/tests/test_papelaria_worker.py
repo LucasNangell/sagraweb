@@ -334,6 +334,10 @@ class TestOutputNames:
             == "06227-AirtonFaleiro-BlocoA5"
         )
         assert (
+            normalize_os_artifact_prefix("6227-AirtonFaleiro-BlocoA5", 6227)
+            == "06227-AirtonFaleiro-BlocoA5"
+        )
+        assert (
             normalize_os_artifact_prefix("06227-AirtonFaleiro-BlocoA5", 6227)
             == "06227-AirtonFaleiro-BlocoA5"
         )

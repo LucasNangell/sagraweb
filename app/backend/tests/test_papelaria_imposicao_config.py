@@ -77,3 +77,58 @@ class TestImposicaoConfigService:
         out = validate_imposicao_config_payload(legado)
         assert out["folha_mm"]["largura"] == 297
         assert out["centralizar_na_folha"] is True
+
+
+class TestProdutoImposicaoResolve:
+    def test_parse_modelo_legado_aplica_nas_duas_variantes(self):
+        from services.papelaria_produto_imposicao_service import (
+            parse_modelo_variants_override,
+        )
+
+        out = parse_modelo_variants_override(_valid_payload())
+        assert out["digital"]["grid"] == {"colunas": 2, "linhas": 1}
+        assert out["offset"] == out["digital"]
+
+    def test_parse_modelo_envelope_parcial(self):
+        from services.papelaria_produto_imposicao_service import (
+            parse_modelo_variants_override,
+        )
+
+        out = parse_modelo_variants_override(
+            {"digital": _valid_payload(), "offset": None}
+        )
+        assert out["digital"] is not None
+        assert out["offset"] is None
+
+    def test_resolve_override_modelo_vence_produto(self, monkeypatch):
+        from services import papelaria_produto_imposicao_service as svc
+
+        produto_cfg = _valid_payload()
+        produto_cfg["grid"] = {"colunas": 1, "linhas": 1}
+        modelo_cfg = _valid_payload()
+        modelo_cfg["grid"] = {"colunas": 3, "linhas": 2}
+
+        monkeypatch.setattr(
+            svc,
+            "get_produto_imposicao_map",
+            lambda _p: {"digital": produto_cfg, "offset": None},
+        )
+        out = svc.resolve_imposicao_opcoes(
+            produto="Cartao",
+            modelo_imposicao_config_json={"digital": modelo_cfg},
+        )
+        assert out["digital"]["grid"] == {"colunas": 3, "linhas": 2}
+        assert out["fontes"]["digital"] == "modelo"
+        assert out["variantes_disponiveis"] == ["digital"]
+
+    def test_resolve_sem_produto_usa_so_modelo(self):
+        from services.papelaria_produto_imposicao_service import (
+            resolve_imposicao_opcoes,
+        )
+
+        out = resolve_imposicao_opcoes(
+            produto="",
+            modelo_imposicao_config_json={"offset": _valid_payload()},
+        )
+        assert out["variantes_disponiveis"] == ["offset"]
+        assert out["fontes"]["offset"] == "modelo"

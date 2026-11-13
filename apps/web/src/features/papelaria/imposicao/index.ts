@@ -8,6 +8,12 @@ export {
   cloneDefaultImposicaoConfig,
   configFromModeloOrDefault,
   formatImposicaoConfigJson,
+  formatImposicaoVariantsJson,
   parseImposicaoConfigJson,
+  parseImposicaoVariantsJson,
   validateImposicaoConfigObject,
+  variantsFromModeloOrEmpty,
+  type PapelariaImposicaoVariante,
+  type PapelariaImposicaoVariants,
 } from "./imposicaoConfigUtils";
+export { ImposicaoConfigEditor } from "./ImposicaoConfigEditor";

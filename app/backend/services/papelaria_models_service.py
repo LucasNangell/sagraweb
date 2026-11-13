@@ -619,6 +619,26 @@ def _imposicao_config_json_from_row(row: dict[str, Any]) -> Optional[str]:
     return _json_column_from_row(row, "ImposicaoConfigJson")
 
 
+def _tem_imposicao_disponivel(
+    *,
+    produto: str,
+    modelo_imposicao_config_json: Any,
+) -> bool:
+    """True se houver Digital e/ou Offset (override do modelo ou padrão do produto)."""
+    if not str(produto or "").strip() and not modelo_imposicao_config_json:
+        return False
+    try:
+        from services import papelaria_produto_imposicao_service as produto_imp_svc
+
+        opcoes = produto_imp_svc.resolve_imposicao_opcoes(
+            produto=produto or "",
+            modelo_imposicao_config_json=modelo_imposicao_config_json,
+        )
+        return bool(opcoes.get("variantes_disponiveis"))
+    except Exception:
+        return bool(modelo_imposicao_config_json)
+
+
 def _models_select_columns() -> str:
     cols = [
         "ID",
@@ -741,7 +761,10 @@ def _row_to_modelo(row: dict[str, Any], include_campos: bool = False) -> dict[st
         "preview_config_json": preview_json,
         "tem_preview_config": bool(preview_json),
         "imposicao_config_json": imposicao_json,
-        "tem_imposicao_config": bool(imposicao_json),
+        "tem_imposicao_config": _tem_imposicao_disponivel(
+            produto=produto,
+            modelo_imposicao_config_json=imposicao_json,
+        ),
     }
     if include_campos:
         out["campos"] = campos if isinstance(campos, dict) else {}
@@ -1021,14 +1044,14 @@ def update_modelo_imposicao_config(
     modelo_id: int,
     imposicao_config_json: Any,
 ) -> dict[str, Any]:
-    """Salva ou limpa ImposicaoConfigJson do modelo."""
+    """Salva ou limpa override de imposição do modelo ({digital, offset} ou legado)."""
     ensure_papelaria_modelos_table()
     if not _table_has_column("ImposicaoConfigJson"):
         raise RuntimeError("Coluna ImposicaoConfigJson não disponível no banco.")
 
-    from services import papelaria_imposicao_config_service as imposicao_svc
+    from services import papelaria_produto_imposicao_service as produto_imp_svc
 
-    normalized = imposicao_svc.normalize_imposicao_config_json(imposicao_config_json)
+    normalized = produto_imp_svc.normalize_modelo_variants_json(imposicao_config_json)
 
     existing = db.execute_query(
         "SELECT ID FROM tabPapelariaModelos WHERE ID = %(id)s AND Ativo = 1 LIMIT 1",
@@ -1053,12 +1076,13 @@ def update_modelo_imposicao_config(
 
 
 def validate_modelo_imposicao_config(imposicao_config_json: Any) -> dict[str, Any]:
-    from services import papelaria_imposicao_config_service as imposicao_svc
+    from services import papelaria_produto_imposicao_service as produto_imp_svc
 
-    parsed = imposicao_svc.parse_imposicao_config_json(imposicao_config_json)
-    if parsed is None:
-        return {"valid": True, "message": "Configuração vazia (sem imposição configurada)."}
-    imposicao_svc.validate_imposicao_config_payload(parsed)
+    if imposicao_config_json is None or imposicao_config_json == "":
+        return {"valid": True, "message": "Configuração vazia (usa padrão do produto)."}
+    parsed = produto_imp_svc.parse_modelo_variants_override(imposicao_config_json)
+    if not parsed["digital"] and not parsed["offset"]:
+        return {"valid": True, "message": "Configuração vazia (usa padrão do produto)."}
     return {"valid": True, "message": "Configuração válida."}
 
 

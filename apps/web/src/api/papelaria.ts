@@ -154,11 +154,35 @@ export async function gerarProvaCdrExistentePapelariaOs(payload: {
   );
 }
 
+export type PapelariaImposicaoOpcoes = {
+  produto: string;
+  digital: Record<string, unknown> | null;
+  offset: Record<string, unknown> | null;
+  fontes: {
+    digital: "modelo" | "produto" | null;
+    offset: "modelo" | "produto" | null;
+  };
+  variantes_disponiveis: Array<"digital" | "offset">;
+};
+
+export async function fetchPapelariaImposicaoOpcoes(
+  ano: number,
+  nro: number,
+  modeloId: number,
+): Promise<PapelariaImposicaoOpcoes> {
+  const qs = new URLSearchParams({ modelo_id: String(modeloId) });
+  return apiFetch<PapelariaImposicaoOpcoes>(
+    `/papelaria/os/${ano}/${nro}/imposicao-opcoes?${qs}`,
+  );
+}
+
 export async function criarPapelariaImposicaoJob(payload: {
   ano: number;
   nro: number;
   arquivo_cdr?: string;
   modelo_id?: number | null;
+  variante?: "digital" | "offset";
+  imposicao_config?: Record<string, unknown>;
 }): Promise<PapelariaJob> {
   return apiFetch<PapelariaJob>(
     `/papelaria/os/${payload.ano}/${payload.nro}/imposicao`,

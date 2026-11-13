@@ -531,15 +531,18 @@ def create_imposicao_job(
     solicitado_por: str,
     arquivo_cdr: Optional[str] = None,
     modelo_id: Optional[int] = None,
+    variante: Optional[str] = None,
+    imposicao_config: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Gera e grava JDF Apogee imediatamente (sem fila Corel) a partir do BaseSefoc.pdf."""
     ensure_papelaria_jobs_tables()
     from services import papelaria_imposicao_config_service as imposicao_cfg_svc
     from services import papelaria_models_service as models_svc
+    from services import papelaria_produto_imposicao_service as produto_imp_svc
 
     if not modelo_id:
         raise ValueError(
-            "Selecione o modelo com configuração de imposição (JDF) antes de gerar."
+            "Selecione o modelo antes de gerar a imposição (JDF)."
         )
 
     os_row = _validate_os_exists(ano, nro)
@@ -547,21 +550,42 @@ def create_imposicao_job(
     if not modelo:
         raise LookupError("Modelo não encontrado ou inativo.")
 
-    raw_cfg = modelo.get("imposicao_config_json")
-    parsed_cfg = imposicao_cfg_svc.parse_imposicao_config_json(raw_cfg)
-    if not parsed_cfg:
+    produto_job = (modelo.get("produto") or os_row.get("produto") or "").strip() or "Papelaria"
+    opcoes = produto_imp_svc.resolve_imposicao_opcoes(
+        produto=produto_job,
+        modelo_imposicao_config_json=modelo.get("imposicao_config_json"),
+    )
+    disponiveis = list(opcoes.get("variantes_disponiveis") or [])
+    if not disponiveis:
         raise ValueError(
-            "Este modelo não possui ImposicaoConfigJson válido. "
-            "Configure a aba Imposição nas Configurações."
+            "Nenhuma imposição configurada para este produto/modelo. "
+            "Configure Digital e/ou Offset nas Configurações."
         )
-    config = imposicao_cfg_svc.validate_imposicao_config_payload(parsed_cfg)
+
+    if variante:
+        var = produto_imp_svc.normalize_variante(variante)
+    elif len(disponiveis) == 1:
+        var = disponiveis[0]
+    else:
+        raise ValueError(
+            "Há mais de uma imposição (Digital/Offset). Informe a variante."
+        )
+
+    if imposicao_config is not None:
+        config = imposicao_cfg_svc.validate_imposicao_config_payload(imposicao_config)
+    else:
+        resolved = opcoes.get(var)
+        if not isinstance(resolved, dict):
+            raise ValueError(
+                f"Imposição '{var}' não configurada para este produto/modelo."
+            )
+        config = resolved
 
     base_pdf_path = resolve_base_sefoc_pdf_path(ano, nro)
     base_pdf_name = os.path.basename(base_pdf_path)
     # arquivo_cdr ignorado no fluxo JDF (compat com payload antigo da API)
     _ = arquivo_cdr
 
-    produto_job = (modelo.get("produto") or os_row.get("produto") or "").strip() or "Papelaria"
     artifacts = _build_imposicao_jdf_artifacts(
         ano=ano,
         nro=nro,
@@ -574,6 +598,7 @@ def create_imposicao_job(
     dados_clean = {
         "base_pdf": base_pdf_name,
         "imposicao_config": config,
+        "imposicao_variante": var,
         "jdf_path": artifacts["jdf_path"],
         "jdf_dir": artifacts["jdf_dir"],
         "jdf_name": artifacts["jdf_name"],

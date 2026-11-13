@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_IMPOSICAO_CONFIG,
+  formatImposicaoVariantsJson,
   parseImposicaoConfigJson,
+  parseImposicaoVariantsJson,
   validateImposicaoConfigObject,
 } from "./index";
 
@@ -36,5 +38,22 @@ describe("imposicaoConfigUtils (JDF)", () => {
         pagina: { origem: "fixixa" },
       }),
     ).toThrow(/largura_mm/);
+  });
+
+  it("parse envelope digital/offset e legado único", () => {
+    const envelope = parseImposicaoVariantsJson(
+      JSON.stringify({ digital: DEFAULT_IMPOSICAO_CONFIG, offset: null }),
+    );
+    expect(envelope.digital?.grid.colunas).toBe(2);
+    expect(envelope.offset).toBeNull();
+
+    const legado = parseImposicaoVariantsJson(
+      JSON.stringify(DEFAULT_IMPOSICAO_CONFIG),
+    );
+    expect(legado.digital).toEqual(legado.offset);
+
+    expect(
+      formatImposicaoVariantsJson({ digital: null, offset: null }),
+    ).toBeNull();
   });
 });

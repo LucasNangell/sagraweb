@@ -56,6 +56,15 @@ class PapelariaImposicaoPayload(BaseModel):
     nro: int = Field(..., ge=1)
     arquivo_cdr: Optional[str] = Field(None, max_length=255)
     modelo_id: Optional[int] = Field(None, ge=1)
+    variante: Optional[str] = Field(None, max_length=16)
+    imposicao_config: Optional[Any] = None
+
+
+class PapelariaProdutoImposicaoPayload(BaseModel):
+    produto: str = Field(..., min_length=1, max_length=120)
+    variante: str = Field(..., min_length=1, max_length=16)
+    imposicao_config_json: Optional[Any] = None
+    pasta_imposicao: Optional[str] = Field(None, max_length=512)
 
 
 class PapelariaOsActionPayload(BaseModel):
@@ -373,6 +382,55 @@ def validar_imposicao_config_modelo(
     except Exception as e:
         logger.exception("Erro ao validar imposicao config: %s", e)
         raise HTTPException(500, "Erro ao validar configuração de imposição.")
+
+
+@router.get("/admin/produtos/{produto}/imposicao-configs")
+def listar_imposicao_configs_produto(
+    produto: str,
+    _session: SessionData = Depends(_require_import_access),
+):
+    try:
+        from urllib.parse import unquote
+
+        from services import papelaria_produto_imposicao_service as prod_imp_svc
+
+        nome = unquote(produto)
+        return {
+            "produto": nome,
+            "configs": prod_imp_svc.list_produto_imposicao_configs(nome),
+            "mapa": prod_imp_svc.get_produto_imposicao_map(nome),
+        }
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.exception("Erro ao listar imposicao produto: %s", e)
+        raise HTTPException(500, "Erro ao listar configurações de imposição do produto.")
+
+
+@router.put("/admin/produtos/imposicao-config")
+def salvar_imposicao_config_produto(
+    payload: PapelariaProdutoImposicaoPayload,
+    _session: SessionData = Depends(_require_import_access),
+):
+    try:
+        from services import papelaria_produto_imposicao_service as prod_imp_svc
+
+        if payload.imposicao_config_json is None:
+            return prod_imp_svc.delete_produto_imposicao_config(
+                produto=payload.produto,
+                variante=payload.variante,
+            )
+        return prod_imp_svc.upsert_produto_imposicao_config(
+            produto=payload.produto,
+            variante=payload.variante,
+            imposicao_config_json=payload.imposicao_config_json,
+            pasta_imposicao=payload.pasta_imposicao,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.exception("Erro ao salvar imposicao produto: %s", e)
+        raise HTTPException(500, "Erro ao salvar configuração de imposição do produto.")
 
 
 @router.put("/admin/modelos/{modelo_id}/preview-config")
@@ -836,6 +894,35 @@ def gerar_prova_cdr_existente_os(
         raise HTTPException(500, "Erro ao solicitar exportação de prova do Corel existente.")
 
 
+@router.get("/os/{ano}/{nro}/imposicao-opcoes")
+def listar_imposicao_opcoes_os(
+    ano: int,
+    nro: int,
+    modelo_id: int,
+    _session: SessionData = Depends(_require_papelaria_access),
+):
+    """Opções Digital/Offset resolvidas (override do modelo > padrão do produto)."""
+    try:
+        from services import papelaria_models_service as models_svc
+        from services import papelaria_produto_imposicao_service as prod_imp_svc
+
+        modelo = models_svc.get_modelo_by_id(int(modelo_id))
+        if not modelo:
+            raise LookupError("Modelo não encontrado ou inativo.")
+        produto = (modelo.get("produto") or "").strip()
+        return prod_imp_svc.resolve_imposicao_opcoes(
+            produto=produto,
+            modelo_imposicao_config_json=modelo.get("imposicao_config_json"),
+        )
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.exception("Erro opções imposição OS %s/%s: %s", nro, ano, e)
+        raise HTTPException(500, "Erro ao obter opções de imposição.")
+
+
 @router.post("/os/{ano}/{nro}/imposicao")
 def gerar_imposicao_os(
     ano: int,
@@ -859,6 +946,12 @@ def gerar_imposicao_os(
             solicitado_por=str(session.ponto),
             arquivo_cdr=payload.arquivo_cdr,
             modelo_id=payload.modelo_id,
+            variante=payload.variante,
+            imposicao_config=(
+                payload.imposicao_config
+                if isinstance(payload.imposicao_config, dict)
+                else None
+            ),
         )
     except LookupError as e:
         raise HTTPException(404, str(e))

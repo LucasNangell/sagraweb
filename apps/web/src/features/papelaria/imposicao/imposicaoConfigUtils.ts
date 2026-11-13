@@ -166,3 +166,63 @@ export function configFromModeloOrDefault(
     return cloneDefaultImposicaoConfig();
   }
 }
+
+export type PapelariaImposicaoVariante = "digital" | "offset";
+
+export type PapelariaImposicaoVariants = {
+  digital: PapelariaImposicaoConfig | null;
+  offset: PapelariaImposicaoConfig | null;
+};
+
+function isVariantsEnvelope(data: Record<string, unknown>): boolean {
+  return "digital" in data || "offset" in data;
+}
+
+/** Lê override do modelo (legado único ou {digital, offset}). */
+export function parseImposicaoVariantsJson(
+  raw: string | null | undefined,
+): PapelariaImposicaoVariants {
+  const empty: PapelariaImposicaoVariants = { digital: null, offset: null };
+  if (!raw?.trim()) return empty;
+  const parsed = JSON.parse(raw) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Configuração de imposição inválida.");
+  }
+  const obj = parsed as Record<string, unknown>;
+  if (isVariantsEnvelope(obj)) {
+    return {
+      digital:
+        obj.digital == null
+          ? null
+          : validateImposicaoConfigObject(obj.digital),
+      offset:
+        obj.offset == null ? null : validateImposicaoConfigObject(obj.offset),
+    };
+  }
+  const single = validateImposicaoConfigObject(obj);
+  return { digital: single, offset: single };
+}
+
+export function formatImposicaoVariantsJson(
+  variants: PapelariaImposicaoVariants,
+): string | null {
+  if (!variants.digital && !variants.offset) return null;
+  return JSON.stringify(
+    {
+      digital: variants.digital,
+      offset: variants.offset,
+    },
+    null,
+    2,
+  );
+}
+
+export function variantsFromModeloOrEmpty(
+  raw: string | null | undefined,
+): PapelariaImposicaoVariants {
+  try {
+    return parseImposicaoVariantsJson(raw);
+  } catch {
+    return { digital: null, offset: null };
+  }
+}

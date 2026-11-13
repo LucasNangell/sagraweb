@@ -518,6 +518,42 @@ export async function validatePapelariaAdminImposicaoConfig(
   );
 }
 
+export type PapelariaProdutoImposicaoMap = {
+  digital: Record<string, unknown> | null;
+  offset: Record<string, unknown> | null;
+};
+
+export async function fetchPapelariaProdutoImposicaoConfigs(
+  produto: string,
+): Promise<{
+  produto: string;
+  configs: Array<{
+    id: number;
+    produto: string;
+    variante: string;
+    imposicao_config_json: string | null;
+    pasta_imposicao: string | null;
+  }>;
+  mapa: PapelariaProdutoImposicaoMap;
+}> {
+  return apiFetch(
+    `/papelaria/admin/produtos/${encodeURIComponent(produto)}/imposicao-configs`,
+  );
+}
+
+export async function savePapelariaProdutoImposicaoConfig(payload: {
+  produto: string;
+  variante: "digital" | "offset";
+  imposicao_config_json: string | null;
+  pasta_imposicao?: string | null;
+}): Promise<Record<string, unknown>> {
+  return apiFetch("/papelaria/admin/produtos/imposicao-config", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function deletePapelariaAdminModelo(
   modeloId: number,
 ): Promise<{ success: boolean }> {

@@ -13,11 +13,13 @@ import {
   discardPapelariaJobProva,
   fetchPapelariaCdrPath,
   fetchPapelariaCorelModelo,
+  fetchPapelariaImposicaoOpcoes,
   fetchPapelariaJob,
   fetchPapelariaJobsForOs,
   fetchPapelariaOsContext,
   finalizarCorelPapelariaOs,
   gerarProvaCdrExistentePapelariaOs,
+  type PapelariaImposicaoOpcoes,
 } from "@/api/papelaria";
 import { emailProofFileUrl } from "@/api/email";
 import { fetchOsFolderBrowse } from "@/api/os";
@@ -29,7 +31,9 @@ import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 import { tryOpenFileLocally } from "@/lib/sagraLocalOpener";
 import { authenticatedWsPath } from "@/lib/websocket";
 import { PapelariaActionBar } from "./PapelariaActionBar";
+import { PapelariaImposicaoOsModal } from "./PapelariaImposicaoOsModal";
 import { PapelariaProofPanel } from "./PapelariaProofPanel";
+import type { PapelariaImposicaoConfig } from "@/features/papelaria/imposicao";
 import {
   mergeDadosWithDynamicLayout,
   applyPreviewTemplate,
@@ -163,6 +167,13 @@ export function PapelariaCorelPanel({
   const [cdrPickerChoice, setCdrPickerChoice] = useState("");
   const [cdrPickerMode, setCdrPickerMode] = useState<"export" | "imposicao">(
     "export",
+  );
+  const [imposicaoModalOpen, setImposicaoModalOpen] = useState(false);
+  const [imposicaoOpcoes, setImposicaoOpcoes] =
+    useState<PapelariaImposicaoOpcoes | null>(null);
+  const [imposicaoOpcoesLoading, setImposicaoOpcoesLoading] = useState(false);
+  const [imposicaoModalError, setImposicaoModalError] = useState<string | null>(
+    null,
   );
   const autoSelectDone = useRef(false);
   const prefillApplied = useRef(false);
@@ -798,16 +809,71 @@ export function PapelariaCorelPanel({
     setCdrPickerOpen(true);
   };
 
-  const runImposicao = () => {
+  const openImposicaoModal = async () => {
     if (!selectedModelId) {
       setFormError("Selecione o modelo com configuração de imposição.");
       return;
     }
-    imposicaoMutation.mutate({
-      ano: anoNum,
-      nro: nroNum,
-      modelo_id: selectedModelId,
-    });
+    setImposicaoModalOpen(true);
+    setImposicaoModalError(null);
+    setImposicaoOpcoesLoading(true);
+    try {
+      const opcoes = await fetchPapelariaImposicaoOpcoes(
+        anoNum,
+        nroNum,
+        selectedModelId,
+      );
+      if (!(opcoes.variantes_disponiveis || []).length) {
+        setImposicaoModalOpen(false);
+        setFormError(
+          "Nenhuma imposição Digital/Offset configurada para este produto/modelo.",
+        );
+        return;
+      }
+      setImposicaoOpcoes(opcoes);
+    } catch (e) {
+      setImposicaoModalOpen(false);
+      setFormError(
+        e instanceof Error
+          ? e.message
+          : "Não foi possível carregar as opções de imposição.",
+      );
+    } finally {
+      setImposicaoOpcoesLoading(false);
+    }
+  };
+
+  const runImposicao = (payload?: {
+    variante: "digital" | "offset";
+    imposicao_config: PapelariaImposicaoConfig;
+  }) => {
+    if (!selectedModelId) {
+      setFormError("Selecione o modelo com configuração de imposição.");
+      return;
+    }
+    if (!payload) {
+      void openImposicaoModal();
+      return;
+    }
+    setImposicaoModalError(null);
+    imposicaoMutation.mutate(
+      {
+        ano: anoNum,
+        nro: nroNum,
+        modelo_id: selectedModelId,
+        variante: payload.variante,
+        imposicao_config: payload.imposicao_config,
+      },
+      {
+        onSuccess: () => {
+          setImposicaoModalOpen(false);
+          setImposicaoOpcoes(null);
+        },
+        onError: (err: Error) => {
+          setImposicaoModalError(err.message || "Erro ao gerar imposição.");
+        },
+      },
+    );
   };
 
   const ensureOsFolderThenImposicao = async () => {
@@ -820,7 +886,7 @@ export function PapelariaCorelPanel({
         setFolderGateAction("imposicao");
         return;
       }
-      runImposicao();
+      await openImposicaoModal();
     } catch (e) {
       setFormError(
         e instanceof Error
@@ -842,7 +908,7 @@ export function PapelariaCorelPanel({
       modelDetailQuery.data;
     if (!modeloSel?.tem_imposicao_config) {
       setFormError(
-        "Este modelo não possui configuração de imposição (JDF). Configure na aba Imposição.",
+        "Não há imposição Digital/Offset configurada para este produto/modelo. Configure nas Configurações → Imposição.",
       );
       return;
     }
@@ -1443,13 +1509,28 @@ export function PapelariaCorelPanel({
             queryKey: queryKeys.papelaria.cdrPath(anoNum, nroNum),
           });
           if (action === "imposicao") {
-            runImposicao();
+            void openImposicaoModal();
             return;
           }
           if (action) {
             setAndamentoModal(action);
           }
         }}
+      />
+
+      <PapelariaImposicaoOsModal
+        open={imposicaoModalOpen}
+        opcoes={imposicaoOpcoes}
+        loading={imposicaoOpcoesLoading}
+        submitting={imposicaoMutation.isPending}
+        error={imposicaoModalError}
+        onClose={() => {
+          if (imposicaoMutation.isPending) return;
+          setImposicaoModalOpen(false);
+          setImposicaoOpcoes(null);
+          setImposicaoModalError(null);
+        }}
+        onConfirm={(payload) => runImposicao(payload)}
       />
     </div>
   );

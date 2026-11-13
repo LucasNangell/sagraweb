@@ -6,11 +6,14 @@ import {
   validateImposicaoConfigObject,
 } from "./index";
 
-describe("imposicaoConfigUtils", () => {
-  it("aceita config padrão", () => {
+describe("imposicaoConfigUtils (JDF)", () => {
+  it("aceita exemplo A5 2x1", () => {
     const cfg = validateImposicaoConfigObject(DEFAULT_IMPOSICAO_CONFIG);
-    expect(cfg.folha.largura_mm).toBe(320);
-    expect(cfg.grid.colunas).toBe(2);
+    expect(cfg.folha_mm.largura).toBe(297);
+    expect(cfg.pagina.origem).toBe("fixixa");
+    expect(cfg.grid).toEqual({ colunas: 2, linhas: 1 });
+    expect(cfg.marcas_corte).toBe(false);
+    expect(cfg.work_style).toBe("Simplex");
   });
 
   it("parse vazio retorna null", () => {
@@ -18,12 +21,20 @@ describe("imposicaoConfigUtils", () => {
     expect(parseImposicaoConfigJson("")).toBeNull();
   });
 
-  it("rejeita grid inválido", () => {
+  it("aceita origem borda sem mm", () => {
+    const cfg = validateImposicaoConfigObject({
+      ...DEFAULT_IMPOSICAO_CONFIG,
+      pagina: { origem: "borda" },
+    });
+    expect(cfg.pagina).toEqual({ origem: "borda" });
+  });
+
+  it("rejeita fixixa sem tamanho", () => {
     expect(() =>
       validateImposicaoConfigObject({
         ...DEFAULT_IMPOSICAO_CONFIG,
-        grid: { colunas: 0, linhas: 1, repeticoes: 1 },
+        pagina: { origem: "fixixa" },
       }),
-    ).toThrow(/colunas/);
+    ).toThrow(/largura_mm/);
   });
 });

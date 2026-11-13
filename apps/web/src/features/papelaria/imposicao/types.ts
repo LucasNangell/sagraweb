@@ -1,41 +1,47 @@
-export type PapelariaImposicaoPaginaOrigem = "borda";
+/** Config salva no modelo — campos suficientes para gerar JDF Apogee no futuro. */
+export type PapelariaImposicaoPaginaOrigem = "borda" | "fixixa";
+export type PapelariaImposicaoWorkStyle = "Simplex";
 
 export interface PapelariaImposicaoConfig {
-  folha: {
-    largura_mm: number;
-    altura_mm: number;
+  /** Media Dimension da folha (mm). Ex.: A4 paisagem 297×210. */
+  folha_mm: {
+    largura: number;
+    altura: number;
   };
+  /** TrimSize da página: BordaF/V ou tamanho fixo (mm). */
   pagina: {
     origem: PapelariaImposicaoPaginaOrigem;
-    rotacao_graus: number;
+    largura_mm?: number;
+    altura_mm?: number;
   };
+  /** Step & repeat: colunas × linhas (ex.: 2×1). */
   grid: {
     colunas: number;
     linhas: number;
-    repeticoes: number;
   };
+  /** Gap entre páginas (mm). 0 = corte seco. */
   espacamento_mm: {
     horizontal: number;
     vertical: number;
   };
-  margens_mm: {
-    esquerda: number;
-    direita: number;
-    superior: number;
-    inferior: number;
-  };
+  /** Sangria / bleed (mm). 0 = sem sangria. */
+  sangria_mm: number;
+  /** MarkObject no Layout. false = sem marcas. */
   marcas_corte: boolean;
-  separacao_paginas: boolean;
-  incluir_verso: boolean;
+  /** Distribui sobra da folha igualmente (margens). */
+  centralizar_na_folha: boolean;
+  /** SourceWorkStyle do Sheet. */
+  work_style: PapelariaImposicaoWorkStyle;
 }
 
+/** Default alinhado ao exemplo JDF A5 2×1 em A4 paisagem, corte seco, sem marcas. */
 export const DEFAULT_IMPOSICAO_CONFIG: PapelariaImposicaoConfig = {
-  folha: { largura_mm: 320, altura_mm: 450 },
-  pagina: { origem: "borda", rotacao_graus: 0 },
-  grid: { colunas: 2, linhas: 5, repeticoes: 10 },
-  espacamento_mm: { horizontal: 2, vertical: 2 },
-  margens_mm: { esquerda: 5, direita: 5, superior: 5, inferior: 5 },
-  marcas_corte: true,
-  separacao_paginas: true,
-  incluir_verso: true,
+  folha_mm: { largura: 297, altura: 210 },
+  pagina: { origem: "fixixa", largura_mm: 148, altura_mm: 210 },
+  grid: { colunas: 2, linhas: 1 },
+  espacamento_mm: { horizontal: 0, vertical: 0 },
+  sangria_mm: 0,
+  marcas_corte: false,
+  centralizar_na_folha: true,
+  work_style: "Simplex",
 };

@@ -14,6 +14,7 @@ import {
   formatImposicaoConfigJson,
   parseImposicaoConfigJson,
   type PapelariaImposicaoConfig,
+  type PapelariaImposicaoPaginaOrigem,
   validateImposicaoConfigObject,
 } from "@/features/papelaria/imposicao";
 
@@ -23,12 +24,14 @@ function NumberField({
   onChange,
   min = 0,
   step = 1,
+  hint,
 }: {
   label: string;
   value: number;
   onChange: (n: number) => void;
   min?: number;
   step?: number;
+  hint?: string;
 }) {
   return (
     <label className="flex flex-col gap-1 text-xs text-slate-600">
@@ -41,6 +44,7 @@ function NumberField({
         step={step}
         onChange={(e) => onChange(Number(e.target.value))}
       />
+      {hint ? <span className="text-[10px] text-slate-400">{hint}</span> : null}
     </label>
   );
 }
@@ -49,20 +53,25 @@ function CheckboxField({
   label,
   checked,
   onChange,
+  hint,
 }: {
   label: string;
   checked: boolean;
   onChange: (v: boolean) => void;
+  hint?: string;
 }) {
   return (
-    <label className="inline-flex items-center gap-2 text-xs text-slate-700">
-      <input
-        type="checkbox"
-        className="size-3.5 rounded border-slate-300"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-      />
-      {label}
+    <label className="flex flex-col gap-0.5 text-xs text-slate-700">
+      <span className="inline-flex items-center gap-2">
+        <input
+          type="checkbox"
+          className="size-3.5 rounded border-slate-300"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        {label}
+      </span>
+      {hint ? <span className="pl-5 text-[10px] text-slate-400">{hint}</span> : null}
     </label>
   );
 }
@@ -98,6 +107,23 @@ export function PapelariaModeloImposicaoPanel({
   ) => {
     setCleared(false);
     setConfig((prev) => ({ ...prev, [key]: value }));
+    setLocalMsg(null);
+    setLocalError(null);
+  };
+
+  const setPaginaOrigem = (origem: PapelariaImposicaoPaginaOrigem) => {
+    setCleared(false);
+    setConfig((prev) => ({
+      ...prev,
+      pagina:
+        origem === "fixixa"
+          ? {
+              origem,
+              largura_mm: prev.pagina.largura_mm ?? 148,
+              altura_mm: prev.pagina.altura_mm ?? 210,
+            }
+          : { origem },
+    }));
     setLocalMsg(null);
     setLocalError(null);
   };
@@ -148,76 +174,110 @@ export function PapelariaModeloImposicaoPanel({
     onError: (err: Error) => setLocalError(err.message),
   });
 
-  const handleClear = () => {
-    setCleared(true);
-    setLocalMsg(null);
-    setLocalError(null);
-  };
-
-  const handleResetDefaults = () => {
-    setCleared(false);
-    setConfig(cloneDefaultImposicaoConfig());
-    setLocalMsg(null);
-    setLocalError(null);
-  };
-
   const busy = saveMutation.isPending || validateMutation.isPending;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-      <p className="text-[11px] text-slate-500">
-        Configuração salva para uso futuro na geração do PDF de Imposição. Não altera o
-        worker nesta versão.
+      <p className="max-w-3xl text-[11px] text-slate-500">
+        Parâmetros usados futuramente para montar o JDF Apogee (Media, TrimSize, Layout
+        N×M step&amp;repeat, marcas, sangria e WorkStyle). Ordem, pasta e PDF de entrada
+        vêm da OS em runtime.
       </p>
 
       <section className="grid max-w-3xl gap-3 sm:grid-cols-2">
         <NumberField
           label="Folha — largura (mm)"
-          value={config.folha.largura_mm}
+          value={config.folha_mm.largura}
           min={1}
           step={0.1}
+          hint="Media Dimension (ex.: A4 paisagem = 297)"
           onChange={(n) =>
-            patch("folha", { ...config.folha, largura_mm: n })
+            patch("folha_mm", { ...config.folha_mm, largura: n })
           }
         />
         <NumberField
           label="Folha — altura (mm)"
-          value={config.folha.altura_mm}
+          value={config.folha_mm.altura}
           min={1}
           step={0.1}
+          hint="Media Dimension (ex.: A4 paisagem = 210)"
           onChange={(n) =>
-            patch("folha", { ...config.folha, altura_mm: n })
+            patch("folha_mm", { ...config.folha_mm, altura: n })
           }
+        />
+      </section>
+
+      <section className="flex max-w-3xl flex-col gap-3">
+        <label className="flex flex-col gap-1 text-xs text-slate-600">
+          Tamanho da página (TrimSize)
+          <select
+            className="rounded border border-slate-300 px-2 py-1.5 text-xs text-slate-800"
+            value={config.pagina.origem}
+            onChange={(e) =>
+              setPaginaOrigem(e.target.value as PapelariaImposicaoPaginaOrigem)
+            }
+          >
+            <option value="fixixa">Fixo (mm)</option>
+            <option value="borda">Da BordaF/BordaV do CDR</option>
+          </select>
+        </label>
+        {config.pagina.origem === "fixixa" ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <NumberField
+              label="Página — largura (mm)"
+              value={config.pagina.largura_mm ?? 0}
+              min={1}
+              step={0.1}
+              hint="Ex.: A5 = 148"
+              onChange={(n) =>
+                patch("pagina", {
+                  ...config.pagina,
+                  origem: "fixixa",
+                  largura_mm: n,
+                })
+              }
+            />
+            <NumberField
+              label="Página — altura (mm)"
+              value={config.pagina.altura_mm ?? 0}
+              min={1}
+              step={0.1}
+              hint="Ex.: A5 = 210"
+              onChange={(n) =>
+                patch("pagina", {
+                  ...config.pagina,
+                  origem: "fixixa",
+                  altura_mm: n,
+                })
+              }
+            />
+          </div>
+        ) : null}
+      </section>
+
+      <section className="grid max-w-3xl gap-3 sm:grid-cols-2">
+        <NumberField
+          label="Colunas (N)"
+          value={config.grid.colunas}
+          min={1}
+          hint="Step & repeat — ex.: 2×1"
+          onChange={(n) => patch("grid", { ...config.grid, colunas: n })}
+        />
+        <NumberField
+          label="Linhas (M)"
+          value={config.grid.linhas}
+          min={1}
+          onChange={(n) => patch("grid", { ...config.grid, linhas: n })}
         />
       </section>
 
       <section className="grid max-w-3xl gap-3 sm:grid-cols-3">
         <NumberField
-          label="Grid — colunas"
-          value={config.grid.colunas}
-          min={1}
-          onChange={(n) => patch("grid", { ...config.grid, colunas: n })}
-        />
-        <NumberField
-          label="Grid — linhas"
-          value={config.grid.linhas}
-          min={1}
-          onChange={(n) => patch("grid", { ...config.grid, linhas: n })}
-        />
-        <NumberField
-          label="Repetições"
-          value={config.grid.repeticoes}
-          min={1}
-          onChange={(n) => patch("grid", { ...config.grid, repeticoes: n })}
-        />
-      </section>
-
-      <section className="grid max-w-3xl gap-3 sm:grid-cols-2">
-        <NumberField
-          label="Espaçamento horizontal (mm)"
+          label="Espaço horizontal (mm)"
           value={config.espacamento_mm.horizontal}
           min={0}
           step={0.1}
+          hint="0 = páginas encostadas"
           onChange={(n) =>
             patch("espacamento_mm", {
               ...config.espacamento_mm,
@@ -226,7 +286,7 @@ export function PapelariaModeloImposicaoPanel({
           }
         />
         <NumberField
-          label="Espaçamento vertical (mm)"
+          label="Espaço vertical (mm)"
           value={config.espacamento_mm.vertical}
           min={0}
           step={0.1}
@@ -237,82 +297,40 @@ export function PapelariaModeloImposicaoPanel({
             })
           }
         />
-      </section>
-
-      <section className="grid max-w-3xl gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <NumberField
-          label="Margem esquerda (mm)"
-          value={config.margens_mm.esquerda}
+          label="Sangria (mm)"
+          value={config.sangria_mm}
           min={0}
           step={0.1}
-          onChange={(n) =>
-            patch("margens_mm", { ...config.margens_mm, esquerda: n })
-          }
+          hint="0 = corte seco"
+          onChange={(n) => patch("sangria_mm", n)}
         />
-        <NumberField
-          label="Margem direita (mm)"
-          value={config.margens_mm.direita}
-          min={0}
-          step={0.1}
-          onChange={(n) =>
-            patch("margens_mm", { ...config.margens_mm, direita: n })
-          }
-        />
-        <NumberField
-          label="Margem superior (mm)"
-          value={config.margens_mm.superior}
-          min={0}
-          step={0.1}
-          onChange={(n) =>
-            patch("margens_mm", { ...config.margens_mm, superior: n })
-          }
-        />
-        <NumberField
-          label="Margem inferior (mm)"
-          value={config.margens_mm.inferior}
-          min={0}
-          step={0.1}
-          onChange={(n) =>
-            patch("margens_mm", { ...config.margens_mm, inferior: n })
-          }
-        />
-      </section>
-
-      <section className="grid max-w-3xl gap-3 sm:grid-cols-2">
-        <NumberField
-          label="Rotação da página (graus)"
-          value={config.pagina.rotacao_graus}
-          step={1}
-          onChange={(n) =>
-            patch("pagina", { ...config.pagina, rotacao_graus: n })
-          }
-        />
-        <label className="flex flex-col gap-1 text-xs text-slate-600">
-          Origem do tamanho da página
-          <input
-            type="text"
-            className="rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-600"
-            value="borda (BordaF/BordaV)"
-            readOnly
-          />
-        </label>
       </section>
 
       <section className="flex max-w-3xl flex-col gap-2">
+        <label className="flex flex-col gap-1 text-xs text-slate-600">
+          WorkStyle (Sheet)
+          <select
+            className="rounded border border-slate-300 px-2 py-1.5 text-xs text-slate-800"
+            value={config.work_style}
+            onChange={(e) =>
+              patch("work_style", e.target.value as PapelariaImposicaoConfig["work_style"])
+            }
+          >
+            <option value="Simplex">Simplex</option>
+          </select>
+        </label>
+        <CheckboxField
+          label="Centralizar na folha"
+          checked={config.centralizar_na_folha}
+          hint="Sobra de largura/altura vira margem igual dos dois lados"
+          onChange={(v) => patch("centralizar_na_folha", v)}
+        />
         <CheckboxField
           label="Marcas de corte"
           checked={config.marcas_corte}
+          hint="false = sem MarkObject no Layout"
           onChange={(v) => patch("marcas_corte", v)}
-        />
-        <CheckboxField
-          label="Separação entre páginas"
-          checked={config.separacao_paginas}
-          onChange={(v) => patch("separacao_paginas", v)}
-        />
-        <CheckboxField
-          label="Incluir verso"
-          checked={config.incluir_verso}
-          onChange={(v) => patch("incluir_verso", v)}
         />
       </section>
 
@@ -364,15 +382,24 @@ export function PapelariaModeloImposicaoPanel({
           type="button"
           className="inline-flex items-center justify-center gap-1 rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
           disabled={busy}
-          onClick={handleResetDefaults}
+          onClick={() => {
+            setCleared(false);
+            setConfig(cloneDefaultImposicaoConfig());
+            setLocalMsg(null);
+            setLocalError(null);
+          }}
         >
-          Valores padrão
+          Exemplo A5 2×1
         </button>
         <button
           type="button"
           className="inline-flex items-center justify-center gap-1 rounded border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
           disabled={busy || (cleared && !modelo.imposicao_config_json)}
-          onClick={handleClear}
+          onClick={() => {
+            setCleared(true);
+            setLocalMsg(null);
+            setLocalError(null);
+          }}
         >
           <Eraser className="size-3.5" aria-hidden />
           Limpar config

@@ -11,23 +11,28 @@ function requirePositive(
   obj: Record<string, unknown>,
   key: string,
   allowZero = false,
+  label = key,
 ): number {
   const value = obj[key];
   if (!isNumber(value)) {
-    throw new Error(`${key} deve ser numérico.`);
+    throw new Error(`${label} deve ser numérico.`);
   }
   if (allowZero) {
-    if (value < 0) throw new Error(`${key} deve ser >= 0.`);
+    if (value < 0) throw new Error(`${label} deve ser >= 0.`);
   } else if (value <= 0) {
-    throw new Error(`${key} deve ser > 0.`);
+    throw new Error(`${label} deve ser > 0.`);
   }
   return value;
 }
 
-function requirePositiveInt(obj: Record<string, unknown>, key: string): number {
+function requirePositiveInt(
+  obj: Record<string, unknown>,
+  key: string,
+  label = key,
+): number {
   const value = obj[key];
   if (!isNumber(value) || !Number.isInteger(value) || value < 1) {
-    throw new Error(`${key} deve ser inteiro >= 1.`);
+    throw new Error(`${label} deve ser inteiro >= 1.`);
   }
   return value;
 }
@@ -40,17 +45,41 @@ function requireBool(obj: Record<string, unknown>, key: string): boolean {
   return value;
 }
 
+/** Aceita schema novo e legado (folha/largura_mm, repeticoes, etc.). */
+function coerceRaw(data: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...data };
+
+  if (!out.folha_mm && out.folha && typeof out.folha === "object") {
+    const f = out.folha as Record<string, unknown>;
+    out.folha_mm = {
+      largura: f.largura_mm ?? f.largura,
+      altura: f.altura_mm ?? f.altura,
+    };
+  }
+
+  if (!out.espacamento_mm) {
+    out.espacamento_mm = { horizontal: 0, vertical: 0 };
+  }
+
+  if (out.sangria_mm == null) out.sangria_mm = 0;
+  if (out.marcas_corte == null) out.marcas_corte = false;
+  if (out.centralizar_na_folha == null) out.centralizar_na_folha = true;
+  if (out.work_style == null) out.work_style = "Simplex";
+
+  return out;
+}
+
 export function validateImposicaoConfigObject(
   data: unknown,
 ): PapelariaImposicaoConfig {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new Error("Configuração de imposição deve ser um objeto JSON.");
   }
-  const raw = data as Record<string, unknown>;
+  const raw = coerceRaw(data as Record<string, unknown>);
 
-  const folhaRaw = raw.folha;
+  const folhaRaw = raw.folha_mm;
   if (!folhaRaw || typeof folhaRaw !== "object" || Array.isArray(folhaRaw)) {
-    throw new Error("Campo obrigatório ausente: folha.");
+    throw new Error("Campo obrigatório ausente: folha_mm.");
   }
   const folha = folhaRaw as Record<string, unknown>;
 
@@ -59,12 +88,9 @@ export function validateImposicaoConfigObject(
     throw new Error("Campo obrigatório ausente: pagina.");
   }
   const pagina = paginaRaw as Record<string, unknown>;
-  if (pagina.origem !== "borda") {
-    throw new Error("pagina.origem inválido. Valores: borda.");
-  }
-  const rotacao = pagina.rotacao_graus ?? 0;
-  if (!isNumber(rotacao)) {
-    throw new Error("pagina.rotacao_graus deve ser numérico.");
+  const origem = pagina.origem;
+  if (origem !== "borda" && origem !== "fixixa") {
+    throw new Error("pagina.origem inválido. Valores: borda, fixixa.");
   }
 
   const gridRaw = raw.grid;
@@ -79,39 +105,39 @@ export function validateImposicaoConfigObject(
   }
   const esp = espRaw as Record<string, unknown>;
 
-  const margRaw = raw.margens_mm;
-  if (!margRaw || typeof margRaw !== "object" || Array.isArray(margRaw)) {
-    throw new Error("Campo obrigatório ausente: margens_mm.");
+  const sangria = raw.sangria_mm;
+  if (!isNumber(sangria) || sangria < 0) {
+    throw new Error("sangria_mm deve ser numérico >= 0.");
   }
-  const marg = margRaw as Record<string, unknown>;
+
+  if (raw.work_style !== "Simplex") {
+    throw new Error("work_style inválido. Valores: Simplex.");
+  }
+
+  const paginaOut: PapelariaImposicaoConfig["pagina"] = { origem };
+  if (origem === "fixixa") {
+    paginaOut.largura_mm = requirePositive(pagina, "largura_mm", false, "pagina.largura_mm");
+    paginaOut.altura_mm = requirePositive(pagina, "altura_mm", false, "pagina.altura_mm");
+  }
 
   return {
-    folha: {
-      largura_mm: requirePositive(folha, "largura_mm"),
-      altura_mm: requirePositive(folha, "altura_mm"),
+    folha_mm: {
+      largura: requirePositive(folha, "largura", false, "folha_mm.largura"),
+      altura: requirePositive(folha, "altura", false, "folha_mm.altura"),
     },
-    pagina: {
-      origem: "borda",
-      rotacao_graus: rotacao,
-    },
+    pagina: paginaOut,
     grid: {
-      colunas: requirePositiveInt(grid, "colunas"),
-      linhas: requirePositiveInt(grid, "linhas"),
-      repeticoes: requirePositiveInt(grid, "repeticoes"),
+      colunas: requirePositiveInt(grid, "colunas", "grid.colunas"),
+      linhas: requirePositiveInt(grid, "linhas", "grid.linhas"),
     },
     espacamento_mm: {
-      horizontal: requirePositive(esp, "horizontal", true),
-      vertical: requirePositive(esp, "vertical", true),
+      horizontal: requirePositive(esp, "horizontal", true, "espacamento_mm.horizontal"),
+      vertical: requirePositive(esp, "vertical", true, "espacamento_mm.vertical"),
     },
-    margens_mm: {
-      esquerda: requirePositive(marg, "esquerda", true),
-      direita: requirePositive(marg, "direita", true),
-      superior: requirePositive(marg, "superior", true),
-      inferior: requirePositive(marg, "inferior", true),
-    },
+    sangria_mm: sangria,
     marcas_corte: requireBool(raw, "marcas_corte"),
-    separacao_paginas: requireBool(raw, "separacao_paginas"),
-    incluir_verso: requireBool(raw, "incluir_verso"),
+    centralizar_na_folha: requireBool(raw, "centralizar_na_folha"),
+    work_style: "Simplex",
   };
 }
 

@@ -1,40 +1,49 @@
-"""Validação de ImposicaoConfigJson para modelos Papelaria."""
+"""Validação de ImposicaoConfigJson para modelos Papelaria (campos para JDF Apogee)."""
 from __future__ import annotations
 
 import json
 from typing import Any
 
-_VALID_ORIGENS = {"borda"}
+_VALID_ORIGENS = {"borda", "fixixa"}
+_VALID_WORK_STYLES = {"Simplex"}
 
 
 def _is_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
-def _require_positive_number(obj: dict[str, Any], key: str, *, allow_zero: bool = False) -> float:
+def _require_positive_number(
+    obj: dict[str, Any],
+    key: str,
+    *,
+    allow_zero: bool = False,
+    label: str | None = None,
+) -> float:
+    name = label or key
     if key not in obj:
-        raise ValueError(f"Campo obrigatório ausente: {key}.")
+        raise ValueError(f"Campo obrigatório ausente: {name}.")
     value = obj.get(key)
     if not _is_number(value):
-        raise ValueError(f"{key} deve ser numérico.")
+        raise ValueError(f"{name} deve ser numérico.")
     num = float(value)
     if allow_zero:
         if num < 0:
-            raise ValueError(f"{key} deve ser >= 0.")
+            raise ValueError(f"{name} deve ser >= 0.")
     elif num <= 0:
-        raise ValueError(f"{key} deve ser > 0.")
+        raise ValueError(f"{name} deve ser > 0.")
     return num
 
 
-def _require_positive_int(obj: dict[str, Any], key: str) -> int:
+def _require_positive_int(obj: dict[str, Any], key: str, *, label: str | None = None) -> int:
+    name = label or key
     if key not in obj:
-        raise ValueError(f"Campo obrigatório ausente: {key}.")
+        raise ValueError(f"Campo obrigatório ausente: {name}.")
     value = obj.get(key)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError(f"{key} deve ser inteiro >= 1.")
+        raise ValueError(f"{name} deve ser inteiro >= 1.")
     num = int(value)
     if num != value or num < 1:
-        raise ValueError(f"{key} deve ser inteiro >= 1.")
+        raise ValueError(f"{name} deve ser inteiro >= 1.")
     return num
 
 
@@ -48,18 +57,31 @@ def _require_bool(obj: dict[str, Any], key: str) -> bool:
 
 
 def validate_imposicao_config_payload(data: Any) -> dict[str, Any]:
-    """Valida e retorna dict normalizado da config de imposição."""
+    """
+    Valida e retorna dict normalizado da config de imposição.
+
+    Campos alinhados ao JDF Apogee (Media, TrimSize, Layout NxM step&repeat,
+    marcas, sangria/gap, centralização e WorkStyle).
+    """
     if data is None:
         raise ValueError("Configuração de imposição vazia.")
     if not isinstance(data, dict):
         raise ValueError("Configuração de imposição deve ser um objeto JSON.")
 
-    folha = data.get("folha")
+    # Compat: aceitar legado "folha.largura_mm" → "folha_mm.largura"
+    folha = data.get("folha_mm")
     if not isinstance(folha, dict):
-        raise ValueError("Campo obrigatório ausente: folha.")
+        legado = data.get("folha")
+        if isinstance(legado, dict):
+            folha = {
+                "largura": legado.get("largura_mm", legado.get("largura")),
+                "altura": legado.get("altura_mm", legado.get("altura")),
+            }
+        else:
+            raise ValueError("Campo obrigatório ausente: folha_mm.")
     folha_out = {
-        "largura_mm": _require_positive_number(folha, "largura_mm"),
-        "altura_mm": _require_positive_number(folha, "altura_mm"),
+        "largura": _require_positive_number(folha, "largura", label="folha_mm.largura"),
+        "altura": _require_positive_number(folha, "altura", label="folha_mm.altura"),
     }
 
     pagina = data.get("pagina")
@@ -70,50 +92,65 @@ def validate_imposicao_config_payload(data: Any) -> dict[str, Any]:
         raise ValueError(
             f"pagina.origem inválido. Valores: {', '.join(sorted(_VALID_ORIGENS))}."
         )
-    rotacao = pagina.get("rotacao_graus", 0)
-    if not _is_number(rotacao):
-        raise ValueError("pagina.rotacao_graus deve ser numérico.")
-    pagina_out = {
-        "origem": origem,
-        "rotacao_graus": float(rotacao),
-    }
+    pagina_out: dict[str, Any] = {"origem": origem}
+    if origem == "fixixa":
+        pagina_out["largura_mm"] = _require_positive_number(
+            pagina, "largura_mm", label="pagina.largura_mm"
+        )
+        pagina_out["altura_mm"] = _require_positive_number(
+            pagina, "altura_mm", label="pagina.altura_mm"
+        )
 
     grid = data.get("grid")
     if not isinstance(grid, dict):
         raise ValueError("Campo obrigatório ausente: grid.")
     grid_out = {
-        "colunas": _require_positive_int(grid, "colunas"),
-        "linhas": _require_positive_int(grid, "linhas"),
-        "repeticoes": _require_positive_int(grid, "repeticoes"),
+        "colunas": _require_positive_int(grid, "colunas", label="grid.colunas"),
+        "linhas": _require_positive_int(grid, "linhas", label="grid.linhas"),
     }
 
     espacamento = data.get("espacamento_mm")
     if not isinstance(espacamento, dict):
-        raise ValueError("Campo obrigatório ausente: espacamento_mm.")
+        # legado: separacao_paginas false → gap 0
+        espacamento = {"horizontal": 0, "vertical": 0}
     espacamento_out = {
-        "horizontal": _require_positive_number(espacamento, "horizontal", allow_zero=True),
-        "vertical": _require_positive_number(espacamento, "vertical", allow_zero=True),
+        "horizontal": _require_positive_number(
+            espacamento, "horizontal", allow_zero=True, label="espacamento_mm.horizontal"
+        ),
+        "vertical": _require_positive_number(
+            espacamento, "vertical", allow_zero=True, label="espacamento_mm.vertical"
+        ),
     }
 
-    margens = data.get("margens_mm")
-    if not isinstance(margens, dict):
-        raise ValueError("Campo obrigatório ausente: margens_mm.")
-    margens_out = {
-        "esquerda": _require_positive_number(margens, "esquerda", allow_zero=True),
-        "direita": _require_positive_number(margens, "direita", allow_zero=True),
-        "superior": _require_positive_number(margens, "superior", allow_zero=True),
-        "inferior": _require_positive_number(margens, "inferior", allow_zero=True),
-    }
+    sangria = data.get("sangria_mm", 0)
+    if not _is_number(sangria) or float(sangria) < 0:
+        raise ValueError("sangria_mm deve ser numérico >= 0.")
+
+    work_style = data.get("work_style", "Simplex")
+    if not isinstance(work_style, str) or work_style not in _VALID_WORK_STYLES:
+        raise ValueError(
+            f"work_style inválido. Valores: {', '.join(sorted(_VALID_WORK_STYLES))}."
+        )
+
+    if "marcas_corte" in data:
+        marcas = _require_bool(data, "marcas_corte")
+    else:
+        marcas = False
+
+    if "centralizar_na_folha" in data:
+        centralizar = _require_bool(data, "centralizar_na_folha")
+    else:
+        centralizar = True
 
     return {
-        "folha": folha_out,
+        "folha_mm": folha_out,
         "pagina": pagina_out,
         "grid": grid_out,
         "espacamento_mm": espacamento_out,
-        "margens_mm": margens_out,
-        "marcas_corte": _require_bool(data, "marcas_corte"),
-        "separacao_paginas": _require_bool(data, "separacao_paginas"),
-        "incluir_verso": _require_bool(data, "incluir_verso"),
+        "sangria_mm": float(sangria),
+        "marcas_corte": marcas,
+        "centralizar_na_folha": centralizar,
+        "work_style": work_style,
     }
 
 

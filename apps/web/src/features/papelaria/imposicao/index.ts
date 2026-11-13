@@ -2,6 +2,7 @@ export {
   DEFAULT_IMPOSICAO_CONFIG,
   type PapelariaImposicaoConfig,
   type PapelariaImposicaoPaginaOrigem,
+  type PapelariaImposicaoWorkStyle,
 } from "./types";
 export {
   cloneDefaultImposicaoConfig,

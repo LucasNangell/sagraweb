@@ -227,6 +227,27 @@ def normalize_modelo_variants_json(raw: Any) -> Optional[str]:
     )
 
 
+def _merge_imposicao_override(
+    override: Optional[dict[str, Any]],
+    base: Optional[dict[str, Any]],
+) -> Optional[dict[str, Any]]:
+    """
+    Override do modelo sobre o padrão do produto.
+    Se o modelo liga marcas_corte mas não traz marcas_pdf_path (legado),
+    herda o caminho do produto — evita pedir de novo no modal da OS.
+    """
+    if not override:
+        return base
+    if not base:
+        return override
+    merged = dict(override)
+    if merged.get("marcas_corte") and not merged.get("marcas_pdf_path"):
+        path = base.get("marcas_pdf_path")
+        if path:
+            merged["marcas_pdf_path"] = path
+    return merged
+
+
 def resolve_imposicao_opcoes(
     *,
     produto: str,
@@ -246,8 +267,8 @@ def resolve_imposicao_opcoes(
         except Exception as exc:
             logger.warning("resolve imposicao produto map: %s", exc)
     modelo_map = parse_modelo_variants_override(modelo_imposicao_config_json)
-    digital = modelo_map["digital"] or produto_map["digital"]
-    offset = modelo_map["offset"] or produto_map["offset"]
+    digital = _merge_imposicao_override(modelo_map["digital"], produto_map["digital"])
+    offset = _merge_imposicao_override(modelo_map["offset"], produto_map["offset"])
     fontes = {
         "digital": (
             "modelo"

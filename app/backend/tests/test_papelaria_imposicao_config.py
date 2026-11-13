@@ -149,6 +149,34 @@ class TestProdutoImposicaoResolve:
         assert out["fontes"]["digital"] == "modelo"
         assert out["variantes_disponiveis"] == ["digital"]
 
+    def test_resolve_herda_marcas_pdf_do_produto(self, monkeypatch):
+        from services import papelaria_produto_imposicao_service as svc
+
+        produto_cfg = _valid_payload()
+        produto_cfg["marcas_corte"] = True
+        produto_cfg["marcas_pdf_path"] = (
+            r"\\redecamara\dfsdata\CGraf\ImposicaoSIELT_5x2_A4.pdf"
+        )
+        # Legado no modelo: marcas sem path (sombra incompleta).
+        modelo_cfg = _valid_payload()
+        modelo_cfg["marcas_corte"] = True
+        modelo_cfg.pop("marcas_pdf_path", None)
+
+        monkeypatch.setattr(
+            svc,
+            "get_produto_imposicao_map",
+            lambda _p: {"digital": produto_cfg, "offset": None},
+        )
+        out = svc.resolve_imposicao_opcoes(
+            produto="Ct Visita",
+            modelo_imposicao_config_json=modelo_cfg,
+        )
+        assert out["fontes"]["digital"] == "modelo"
+        assert out["digital"]["marcas_corte"] is True
+        assert out["digital"]["marcas_pdf_path"].endswith(
+            "ImposicaoSIELT_5x2_A4.pdf"
+        )
+
     def test_resolve_sem_produto_usa_so_modelo(self):
         from services.papelaria_produto_imposicao_service import (
             resolve_imposicao_opcoes,

@@ -95,7 +95,9 @@ export function PapelariaModeloImposicaoPanel({
       const raw = mapa[key];
       if (!raw) continue;
       try {
-        next[key] = validateImposicaoConfigObject(raw);
+        next[key] = validateImposicaoConfigObject(raw, {
+          requireMarcasPdf: false,
+        });
       } catch {
         next[key] = null;
       }

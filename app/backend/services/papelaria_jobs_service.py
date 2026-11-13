@@ -1580,13 +1580,29 @@ def resolve_os_timbrado_digital_dir(ano: int, nro: int, create: bool = True) -> 
     return digital_dir
 
 
+def normalize_os_artifact_prefix(basename: str, nro: int) -> str:
+    """
+    Prefixo de artefato a partir do nome da pasta da OS.
+    Colapsa número da OS repetido no início (ex.: 06227-06227-Nome → 06227-Nome).
+    """
+    text = (basename or "").strip()
+    if not text:
+        return f"{int(nro):05d}"
+    num = f"{int(nro):05d}"
+    collapsed = re.sub(rf"^({re.escape(num)}-)+", f"{num}-", text)
+    if not collapsed.startswith(f"{num}-") and not collapsed.startswith(num):
+        return f"{num}-{collapsed}"
+    return collapsed
+
+
 def get_os_folder_basename(ano: int, nro: int) -> str:
     from routers.os_routes import _get_os_folder_path
 
     os_path = _get_os_folder_path(ano, nro)
     if not os_path:
         raise LookupError("Pasta da OS não encontrada na rede.")
-    return os.path.basename(os.path.normpath(os_path))
+    raw = os.path.basename(os.path.normpath(os_path))
+    return normalize_os_artifact_prefix(raw, nro)
 
 
 def _sanitize_relative_filename(name: str) -> str:

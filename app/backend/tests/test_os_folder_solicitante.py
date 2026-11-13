@@ -98,6 +98,17 @@ def test_compute_os_folder_name_com_sigla():
     assert compute_os_folder_name(123, "SECOM", "Cartão de Visita") == "00123-Secom-Cartaodevisita"
 
 
+def test_compute_os_folder_name_nao_duplica_numero_os():
+    assert (
+        compute_os_folder_name(6227, "06227-AirtonFaleiro", "Bloco A5")
+        == "06227-Airtonfaleiro-Blocoa5"
+    )
+    assert (
+        compute_os_folder_name(6227, "Airton Faleiro", "Bloco A5")
+        == "06227-Airtonfaleiro-Blocoa5"
+    )
+
+
 def test_compute_os_folder_name_com_titulo():
     assert (
         compute_os_folder_name(123, "SECOM", "Cartão de Visita", "Título X")

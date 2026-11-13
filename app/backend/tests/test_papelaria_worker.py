@@ -326,6 +326,18 @@ class TestWorkerClaimComplete:
 
 
 class TestOutputNames:
+    def test_normalize_prefix_colapsa_os_duplicada(self):
+        from services.papelaria_jobs_service import normalize_os_artifact_prefix
+
+        assert (
+            normalize_os_artifact_prefix("06227-06227-AirtonFaleiro-BlocoA5", 6227)
+            == "06227-AirtonFaleiro-BlocoA5"
+        )
+        assert (
+            normalize_os_artifact_prefix("06227-AirtonFaleiro-BlocoA5", 6227)
+            == "06227-AirtonFaleiro-BlocoA5"
+        )
+
     def test_build_output_filenames_padrao_sefoc(self, monkeypatch, tmp_path):
         from services import papelaria_jobs_service as svc
 

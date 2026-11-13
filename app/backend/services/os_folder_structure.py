@@ -45,11 +45,18 @@ def compute_os_folder_name(
     produto: str,
     titulo: str = "",
 ) -> str:
-    base = (
-        f"{int(nr_os):05d}-"
-        f"{normalize_text_custom(solicitante)}-"
-        f"{normalize_text_custom(produto, is_product=True)}"
+    num = f"{int(nr_os):05d}"
+    solicitante_norm = normalize_text_custom(solicitante)
+    # Evita 06227-06227-Nome quando o solicitante já traz o número da OS.
+    solicitante_norm = re.sub(
+        rf"^({re.escape(num)}-?)+",
+        "",
+        solicitante_norm,
+        flags=re.IGNORECASE,
     )
+    produto_norm = normalize_text_custom(produto, is_product=True)
+    base = f"{num}-{solicitante_norm}-{produto_norm}".replace("--", "-")
+    base = re.sub(r"-{2,}", "-", base).strip("-")
     titulo_snip = normalize_text_custom(titulo or "")[:5]
     if titulo_snip:
         return f"{base}_{titulo_snip}"

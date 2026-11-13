@@ -1,12 +1,15 @@
 """Geração de JDF Apogee para imposição Papelaria (step & repeat)."""
 from __future__ import annotations
 
+import logging
 import os
 import re
 from datetime import datetime, timezone, timedelta
 from typing import Any
 from urllib.parse import quote
 from xml.sax.saxutils import escape
+
+logger = logging.getLogger(__name__)
 
 MM_TO_PT = 72.0 / 25.4
 
@@ -168,6 +171,53 @@ def _export_filename_stem(export_filename: str) -> str:
     return name
 
 
+def _marks_scale_to_folha(
+    *,
+    marcas_pdf_path: str,
+    folha_w_pt: float,
+    folha_h_pt: float,
+) -> tuple[float, float]:
+    """
+    Escala o PDF de marcas para caber exatamente na folha configurada.
+    Evita o Apogee expandir o export pela MediaBox do PDF de marcas.
+    """
+    try:
+        mw_mm, mh_mm = read_pdf_page_size_mm(marcas_pdf_path)
+        mw_pt = mm_to_pt(mw_mm)
+        mh_pt = mm_to_pt(mh_mm)
+        if mw_pt <= 0 or mh_pt <= 0:
+            return 1.0, 1.0
+        return folha_w_pt / mw_pt, folha_h_pt / mh_pt
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Não foi possível ler tamanho do PDF de marcas (%s): %s — CTM 1:1",
+            marcas_pdf_path,
+            exc,
+        )
+        return 1.0, 1.0
+
+
+def _build_mark_object_xml(
+    *,
+    folha_w_pt: float,
+    folha_h_pt: float,
+    marcas_pdf_path: str,
+) -> str:
+    """MarkObject cobrindo exatamente a folha (TrimSize = Media Dimension)."""
+    sx, sy = _marks_scale_to_folha(
+        marcas_pdf_path=marcas_pdf_path,
+        folha_w_pt=folha_w_pt,
+        folha_h_pt=folha_h_pt,
+    )
+    return (
+        "              <MarkObject Ord=\"0\"\n"
+        f'                             CTM="{sx:.6f} 0 0 {sy:.6f} 0 0" '
+        f'TrimCTM="{sx:.6f} 0 0 {sy:.6f} 0 0"\n'
+        f'                             TrimSize="{folha_w_pt:.3f} {folha_h_pt:.3f}"\n'
+        f'                             ClipBox="0 0 {folha_w_pt:.3f} {folha_h_pt:.3f}"/>'
+    )
+
+
 def _named_features(*, root: bool) -> str:
     """
     Sempre inclui JDFNoMarks: marcas vêm do PDF (MarkObject + RL_Marcas),
@@ -248,11 +298,13 @@ def build_apogee_jdf_xml(
 
     content_xml_parts: list[str] = []
     if marcas_corte:
-        # MarkObject cobre a folha inteira (Ord=0 do RunList de marcas).
+        # Marcas escaladas + TrimSize = folha → export no tamanho configurado.
         content_xml_parts.append(
-            "              <MarkObject Ord=\"0\" CTM=\"1 0 0 1 0 0\" "
-            f'TrimCTM="1 0 0 1 0 0"\n'
-            f'                          ClipBox="0 0 {folha_w_pt:.3f} {folha_h_pt:.3f}"/>'
+            _build_mark_object_xml(
+                folha_w_pt=folha_w_pt,
+                folha_h_pt=folha_h_pt,
+                marcas_pdf_path=marcas_pdf_path,
+            )
         )
     for x_mm, y_mm in positions:
         x_pt = mm_to_pt(x_mm)
@@ -357,9 +409,11 @@ def build_apogee_jdf_xml(
     </ColorantControl>
 
     <Media Class="Consumable" ID="PAP_{nro5}" MediaType="Paper" Status="Available"
+           SettingsPolicy="MustHonor"
            DescriptiveName="Folha imposicao" Dimension="{folha_w_pt:.3f} {folha_h_pt:.3f}"/>
 
-    <Component ID="COMP_{nro5}" Class="Quantity" ComponentType="FinalProduct" Status="Unavailable"/>
+    <Component ID="COMP_{nro5}" Class="Quantity" ComponentType="FinalProduct" Status="Unavailable"
+               Dimensions="{folha_w_pt:.3f} {folha_h_pt:.3f}"/>
   </ResourcePool>
 
   <ResourceLinkPool>

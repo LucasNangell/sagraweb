@@ -191,34 +191,48 @@ def test_path_to_file_url_unc_encode_espacos():
 
 
 def test_build_apogee_jdf_xml_com_marcas_corte(tmp_path: Path):
-    from services.papelaria_jdf_service import build_apogee_jdf_xml
+    import fitz
+
+    from services.papelaria_jdf_service import MM_TO_PT, build_apogee_jdf_xml
 
     pdf = tmp_path / "06227-AirtonFaleiro-BlocoA5-BaseSefoc.pdf"
     pdf.write_bytes(b"%PDF")
-    marcas = (
-        r"\\redecamara\dfsdata\CGraf\Sefoc\Laboratorio\Modelos\\"
-        r"Modelos Corel\Papelaria\CSP\ImposicaoSIELT_5x2_A4.pdf"
-    )
+    # PDF de marcas menor que A4 — deve ser escalado para a folha.
+    marcas_path = tmp_path / "marcas_190x277.pdf"
+    doc = fitz.open()
+    page = doc.new_page(width=190 * MM_TO_PT, height=277 * MM_TO_PT)
+    page.insert_text((10, 20), "marcas")
+    doc.save(str(marcas_path))
+    doc.close()
+
     xml = build_apogee_jdf_xml(
         ano=2026,
         nro=6227,
         descriptive_name="AirtonFaleiro-BlocoA5",
         comment="teste 2x1 com marcas",
         export_folder=str(tmp_path),
-        export_filename="06227-AirtonFaleiro-BlocoA5_Imposição.pdf",
+        export_filename="AirtonFaleiro-BlocoA5.pdf",
         base_pdf_path=str(pdf),
         base_pdf_user_name=pdf.stem,
-        config=_base_config(marcas_corte=True, marcas_pdf_path=marcas),
-        page_w_mm=148,
-        page_h_mm=210,
+        config=_base_config(
+            marcas_corte=True,
+            marcas_pdf_path=str(marcas_path),
+            folha_mm={"largura": 210, "altura": 297},
+        ),
+        page_w_mm=85,
+        page_h_mm=50,
     )
-    # Marcas vêm do PDF; JDFNoMarks permanece para não usar marcas auto do Apogee.
     assert "JDFNoMarks" in xml
     assert 'ID="RL_Marcas"' in xml
     assert "MarkObject" in xml
     assert 'ProcessUsage="Marks"' in xml
-    assert "ImposicaoSIELT_5x2_A4" in xml
-    assert "Modelos%20Corel" in xml
+    assert 'SettingsPolicy="MustHonor"' in xml
+    # Folha A4 em pt
+    assert 'Dimension="595.276 841.890"' in xml
+    assert 'Dimensions="595.276 841.890"' in xml
+    assert 'TrimSize="595.276 841.890"' in xml
+    # Escala 210/190 e 297/277
+    assert "CTM=\"1.105263 0 0 1.072202 0 0\"" in xml or "1.105263" in xml
 
 
 def test_build_apogee_jdf_xml_marcas_sem_path_falha(tmp_path: Path):

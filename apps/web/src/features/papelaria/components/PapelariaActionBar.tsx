@@ -17,6 +17,7 @@ export type PapelariaActionBarProps = {
   finalizeCorelPending: boolean;
   selectedModelId: number | null;
   cdrDisponivel: boolean;
+  canImposicao: boolean;
   onGerarArquivo: () => void;
   onTimbradoA4Digital: () => void;
   onAbrirCorel: () => void;
@@ -80,7 +81,8 @@ export function PapelariaActionBar({
   abrirCorelPending,
   finalizeCorelPending,
   selectedModelId,
-  cdrDisponivel,
+  cdrDisponivel: _cdrDisponivel,
+  canImposicao,
   onGerarArquivo,
   onTimbradoA4Digital,
   onAbrirCorel,
@@ -94,7 +96,7 @@ export function PapelariaActionBar({
   const imposicaoDisabled =
     busy ||
     folderCheckPending ||
-    !cdrDisponivel ||
+    !canImposicao ||
     createJobPending ||
     createDigitalPending ||
     exportCdrPending ||
@@ -184,7 +186,7 @@ export function PapelariaActionBar({
         label="Imposição"
         pending={imposicaoPending}
         disabled={imposicaoDisabled}
-        title="Gerar PDF de imposição (BordaF/BordaV)"
+        title="Enviar JDF de imposição ao Apogee (BaseSefoc.pdf)"
         onClick={onImposicao}
       />
     </aside>

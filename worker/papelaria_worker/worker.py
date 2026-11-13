@@ -25,6 +25,7 @@ from runtime import (
 )
 from corel_generator import (
     CorelGenerationError,
+    GenerationResult,
     aguardar_corel_disponivel,
     montar_carimbo_prova_email,
     resolve_prova_numero,
@@ -33,13 +34,13 @@ from corel_generator import (
     encerrar_corel_forcadamente,
     exportar_prova_de_cdr_existente,
     gerar_arquivo_corel,
-    gerar_imposicao_de_cdr,
     humanizar_erro_corel,
     inspecionar_cdr,
     reset_corel_session,
     validar_acesso_export_cdr,
     validar_acesso_job,
 )
+from prova_email_a4 import compose_prova_email_a4
 from credenciais_depol_generator import gerar_credenciais_depol
 from timbrado_a4_digital_generator import (
     gerar_timbrado_a4_digital,
@@ -255,32 +256,14 @@ def _handle_signal(signum, _frame):
 
 
 def resolve_create_models_dir(cfg: WorkerConfig, job: dict) -> str:
-    """Pasta dos .cdr de um job create. Prova e-mail usa CSP, não CSP\\WEB."""
-    modo = str(job.get("prova_modo") or "prova_web").strip()
-    if modo != "prova_email":
-        return cfg.models_dir
-    explicit = (getattr(cfg, "models_dir_email", "") or "").strip()
-    if explicit:
-        return explicit
-    base = os.path.normpath(cfg.models_dir)
-    if os.path.basename(base).upper() == "WEB":
-        return os.path.dirname(base)
-    raise CorelGenerationError(
-        "Modo Prova e-mail ativo, mas models_dir não termina em WEB "
-        "e models_dir_email não foi configurado."
-    )
+    """Pasta dos .cdr de create — sempre modelos WEB (prova_web e prova_email)."""
+    _ = job
+    return cfg.models_dir
 
 
 def resolve_create_arquivo(job: dict) -> str:
-    modo = str(job.get("prova_modo") or "prova_web").strip()
-    if modo != "prova_email":
-        return str(job.get("arquivo_modelo") or "")
-    nome = str(job.get("arquivo_modelo_email") or "").strip()
-    if not nome:
-        raise CorelGenerationError(
-            "Modo Prova e-mail ativo, mas a API não enviou arquivo_modelo_email."
-        )
-    return nome
+    """Arquivo do modelo WEB; alias CSP não é mais usado no create."""
+    return str(job.get("arquivo_modelo") or "")
 
 
 def _caminho_modelo_create(cfg: WorkerConfig, job: dict) -> str:
@@ -381,7 +364,27 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
         api.fail(job_id, msg, retryable=False)
         return
 
-    if tipo_job in (TIPO_JOB_EXPORT_EXISTING_CDR, TIPO_JOB_IMPOSICAO):
+    if tipo_job == TIPO_JOB_IMPOSICAO:
+        jdf_dir = str(job.get("jdf_output_dir") or output_dir or "").strip()
+        base_pdf = str(job.get("base_pdf_path") or "").strip()
+        missing_imp = []
+        if not job.get("jdf_xml"):
+            missing_imp.append("jdf_xml")
+        if not jdf_dir:
+            missing_imp.append("jdf_output_dir")
+        if not base_pdf or not os.path.isfile(base_pdf):
+            missing_imp.append(f"base_pdf={base_pdf or '(vazio)'}")
+        if missing_imp:
+            msg = "Pré-validação JDF falhou: " + "; ".join(missing_imp)
+            logging.error("Job #%s — %s", job_id, msg)
+            api.fail(job_id, msg, retryable=False)
+            return
+        try:
+            os.makedirs(jdf_dir, exist_ok=True)
+        except OSError as exc:
+            api.fail(job_id, f"Hotfolder JDF inacessível: {exc}", retryable=False)
+            return
+    elif tipo_job == TIPO_JOB_EXPORT_EXISTING_CDR:
         input_cdr = (job.get("input_cdr_path") or "").strip()
         try:
             validar_acesso_export_cdr(input_cdr, output_dir)
@@ -500,20 +503,31 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 job_id=job_id,
             )
         elif tipo_job == TIPO_JOB_IMPOSICAO:
-            input_cdr = (job.get("input_cdr_path") or "").strip()
+            jdf_xml = str(job.get("jdf_xml") or "")
+            jdf_dir = str(job.get("jdf_output_dir") or job.get("output_dir") or "").strip()
+            jdf_name = str(job.get("jdf_filename") or pdf_name or "").strip()
+            if not jdf_xml or not jdf_dir or not jdf_name:
+                raise CorelGenerationError(
+                    "Job de imposição incompleto (jdf_xml / jdf_output_dir / jdf_filename)."
+                )
             api.append_log(
                 job_id,
-                f"Iniciando imposição — {os.path.basename(input_cdr)}",
+                f"Gravando JDF Apogee — {jdf_name}",
                 "info",
             )
-            result = gerar_imposicao_de_cdr(
-                caminho_cdr=input_cdr,
-                temp_dir=cfg.temp_dir,
-                output_pdf_path=output_pdf,
-                corel_visible=cfg.corel_visible,
-                job_timeout_sec=cfg.job_timeout_sec,
-                job_id=job_id,
+            os.makedirs(jdf_dir, exist_ok=True)
+            jdf_path = os.path.normpath(os.path.join(jdf_dir, jdf_name))
+            with open(jdf_path, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(jdf_xml)
+            if not os.path.isfile(jdf_path):
+                raise CorelGenerationError(f"Falha ao gravar JDF: {jdf_name}")
+            result = GenerationResult(
+                cdr_path="",
+                pdf_path=jdf_path,
+                logs=[f"JDF enviado ao Apogee: {jdf_name}"],
             )
+            pdf_name = jdf_name
+            output_pdf = jdf_path
         elif tipo_job == TIPO_JOB_CREDENCIAIS_DEPOL:
             dados = job.get("dados") or {}
             n_itens = len(dados.get("itens") or [])
@@ -576,26 +590,9 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
             dados = job.get("dados") or {}
             caminho_modelo = _caminho_modelo_create(cfg, job)
             prova_email = str(job.get("prova_modo") or "").strip() == "prova_email"
-            carimbo = None
-            if prova_email:
-                carimbo = montar_carimbo_prova_email(
-                    nro=int(job["nro"]),
-                    ano=int(job["ano"]),
-                    prova_numero=resolve_prova_numero(job),
-                )
-                api.append_log(
-                    job_id,
-                    (
-                        "Prova e-mail — carimbo "
-                        f"{carimbo['TipoOSint']} {carimbo['OSint']} "
-                        f"prova {carimbo['ProvaNroInt']} em {carimbo['DataInt']}; "
-                        "PDF somente da página 1."
-                    ),
-                    "info",
-                )
             api.append_log(
                 job_id,
-                f"Iniciando geração — modelo {os.path.basename(caminho_modelo)}",
+                f"Iniciando geração WEB — modelo {os.path.basename(caminho_modelo)}",
                 "info",
             )
             result = gerar_arquivo_corel(
@@ -611,9 +608,39 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 preview_config=job.get("preview_config"),
                 campos_dinamicos_layout=job.get("campos_dinamicos_layout"),
                 exclusoes=job.get("exclusoes") or [],
-                carimbo=carimbo,
-                pdf_somente_primeira_pagina=prova_email,
+                carimbo=None,
+                pdf_somente_primeira_pagina=False,
             )
+            if prova_email and not cancel_requested.is_set():
+                prova_name = str(job.get("prova_email_pdf_name") or "").strip()
+                if not prova_name:
+                    raise CorelGenerationError(
+                        "Modo Prova e-mail sem prova_email_pdf_name no payload."
+                    )
+                carimbo = montar_carimbo_prova_email(
+                    nro=int(job["nro"]),
+                    ano=int(job["ano"]),
+                    prova_numero=resolve_prova_numero(job),
+                )
+                prova_path = os.path.join(output_dir, prova_name)
+                api.append_log(
+                    job_id,
+                    (
+                        "Prova e-mail A4 — carimbo "
+                        f"{carimbo['TipoOSint']} {carimbo['OSint']} "
+                        f"prova {carimbo['ProvaNroInt']} em {carimbo['DataInt']}"
+                    ),
+                    "info",
+                )
+                a4_logs = compose_prova_email_a4(
+                    base_pdf_path=output_pdf,
+                    output_pdf_path=prova_path,
+                    carimbo=carimbo,
+                )
+                result.logs.extend(a4_logs)
+                # UI / e-mail / portal usam o A4 carimbado; BaseSefoc.pdf permanece no disco.
+                pdf_name = prova_name
+                result.pdf_path = prova_path
         else:
             raise CorelGenerationError(f"Tipo de job não suportado: {tipo_job}")
         if cancel_requested.is_set():
@@ -633,7 +660,10 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
         log_resumo = "; ".join(result.logs[-5:]) if result.logs else "OK"
         cdr_for_complete = cdr_name
         artefatos_complete = None
-        if tipo_job in (TIPO_JOB_EXPORT_EXISTING_CDR, TIPO_JOB_IMPOSICAO):
+        if tipo_job == TIPO_JOB_IMPOSICAO:
+            cdr_for_complete = ""
+            pdf_name = str(job.get("jdf_filename") or pdf_name or "")
+        elif tipo_job == TIPO_JOB_EXPORT_EXISTING_CDR:
             input_cdr = (job.get("input_cdr_path") or "").strip()
             if input_cdr:
                 cdr_for_complete = os.path.basename(input_cdr)

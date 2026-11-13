@@ -1,4 +1,4 @@
-"""Modo de prova da papelaria: persistência, aliases CSP e filtro de modelos."""
+"""Modo de prova da papelaria: persistência e create unificado WEB."""
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -31,7 +31,7 @@ def test_modo_padrao_e_persistencia(tmp_path, monkeypatch):
         modo.set_modo("outro")
 
 
-def test_filtro_email_oculta_sem_equivalente(monkeypatch):
+def test_filtro_email_nao_oculta_modelos(monkeypatch):
     from services import papelaria_prova_modo as modo
 
     monkeypatch.setattr(modo, "get_modo", lambda: modo.MODO_PROVA_EMAIL)
@@ -40,8 +40,8 @@ def test_filtro_email_oculta_sem_equivalente(monkeypatch):
         {"id": 2, "arquivo_modelo": "CtVisitaFVAssissor.cdr"},
     ]
     visiveis, avisos = modo.filtrar_modelos_para_modo(modelos)
-    assert [m["id"] for m in visiveis] == [1]
-    assert avisos and "CtVisitaFVAssissor.cdr" in avisos[0]
+    assert [m["id"] for m in visiveis] == [1, 2]
+    assert avisos == []
 
 
 def test_filtro_web_mantem_lista(monkeypatch):
@@ -54,36 +54,14 @@ def test_filtro_web_mantem_lista(monkeypatch):
     assert avisos == []
 
 
-def test_create_job_recusa_modelo_indisponivel(monkeypatch):
-    from services import papelaria_jobs_service as svc
+def test_assert_modelo_create_permitido_noop():
+    from services.papelaria_prova_modo import assert_modelo_create_permitido
 
-    monkeypatch.setattr(svc, "ensure_papelaria_jobs_tables", lambda: None)
-    monkeypatch.setattr(svc, "_validate_os_exists", lambda ano, nro: {"produto": "Ct Visita"})
-    monkeypatch.setattr(
-        "services.papelaria_prova_modo.get_modo",
-        lambda: "prova_email",
-    )
-    modelo = {
-        "id": 15,
-        "produto": "Ct Visita",
-        "arquivo_modelo": "CtVisitaFVIngles.cdr",
-        "campos_formulario": [],
-    }
-    with patch(
-        "services.papelaria_models_service.get_modelo_by_id",
-        return_value=modelo,
-    ):
-        with pytest.raises(ValueError, match="Prova e-mail"):
-            svc.create_job(
-                ano=2026,
-                nro=5954,
-                modelo_id=15,
-                dados={"nome_deputado": "Ana"},
-                solicitado_por="918713",
-            )
+    assert_modelo_create_permitido("CtVisitaFVIngles.cdr")
+    assert_modelo_create_permitido("")
 
 
-def test_payload_create_email_envia_arquivo_csp(monkeypatch, tmp_path):
+def test_payload_create_email_sem_alias_csp(monkeypatch, tmp_path):
     from services import papelaria_jobs_service as svc
 
     job = {
@@ -102,7 +80,12 @@ def test_payload_create_email_envia_arquivo_csp(monkeypatch, tmp_path):
     monkeypatch.setattr(
         svc,
         "build_output_filenames",
-        lambda ano, nro: ("os.cdr", "05954-Nome-ProvaSefoc 2.pdf"),
+        lambda ano, nro: ("os.cdr", "05954-Nome-BaseSefoc.pdf"),
+    )
+    monkeypatch.setattr(
+        svc,
+        "build_prova_email_pdf_name",
+        lambda ano, nro: "05954-Nome-ProvaSefoc 2.pdf",
     )
     monkeypatch.setattr(
         "services.papelaria_prova_modo.get_modo",
@@ -123,54 +106,13 @@ def test_payload_create_email_envia_arquivo_csp(monkeypatch, tmp_path):
 
     assert payload["prova_modo"] == "prova_email"
     assert payload["arquivo_modelo"] == "CtVisitaFV.cdr"
-    assert payload["arquivo_modelo_email"] == "CtVisita.cdr"
+    assert "arquivo_modelo_email" not in payload
+    assert payload["output_pdf_name"] == "05954-Nome-BaseSefoc.pdf"
+    assert payload["prova_email_pdf_name"] == "05954-Nome-ProvaSefoc 2.pdf"
     assert payload["prova_numero"] == 2
 
 
-def test_payload_create_email_ct_visita_f_usa_ctvisitaf(monkeypatch, tmp_path):
-    from services import papelaria_jobs_service as svc
-
-    job = {
-        "id": 78,
-        "ano_protocolo": 2026,
-        "nro_protocolo": 5954,
-        "tipo_job": svc.TIPO_JOB_CREATE,
-        "produto": "Ct Visita",
-        "modelo_id": 15,
-        "arquivo_modelo": "CtVisita.cdr",
-        "dados": {"nome_deputado": "Ana"},
-        "tentativas": 0,
-    }
-    monkeypatch.setattr(svc, "get_job", lambda job_id: job if job_id == 78 else None)
-    monkeypatch.setattr(svc, "resolve_os_papelaria_dir", lambda *a, **k: str(tmp_path))
-    monkeypatch.setattr(
-        svc,
-        "build_output_filenames",
-        lambda ano, nro: ("os.cdr", "05954-Nome-ProvaSefoc 2.pdf"),
-    )
-    monkeypatch.setattr(
-        "services.papelaria_prova_modo.get_modo",
-        lambda: "prova_email",
-    )
-    with patch(
-        "services.papelaria_models_service.get_modelo_by_id",
-        return_value={
-            "id": 15,
-            "produto": "Ct Visita",
-            "arquivo_modelo": "CtVisita.cdr",
-            "campos": {},
-            "frente_versao": "Somente Frente",
-            "cores": "Policromia",
-            "nome_exibicao": "Ct Visita F",
-        },
-    ):
-        payload = svc.build_worker_job_payload(78)
-
-    assert payload["arquivo_modelo"] == "CtVisita.cdr"
-    assert payload["arquivo_modelo_email"] == "CtVisitaF.cdr"
-
-
-def test_payload_create_sem_csp_falha(monkeypatch, tmp_path):
+def test_payload_create_modelo_sem_csp_alias_ok(monkeypatch, tmp_path):
     from services import papelaria_jobs_service as svc
 
     job = {
@@ -186,7 +128,16 @@ def test_payload_create_sem_csp_falha(monkeypatch, tmp_path):
     }
     monkeypatch.setattr(svc, "get_job", lambda job_id: job if job_id == 78 else None)
     monkeypatch.setattr(svc, "resolve_os_papelaria_dir", lambda *a, **k: str(tmp_path))
-    monkeypatch.setattr(svc, "build_output_filenames", lambda ano, nro: ("os.cdr", "os.pdf"))
+    monkeypatch.setattr(
+        svc,
+        "build_output_filenames",
+        lambda ano, nro: ("os.cdr", "os-BaseSefoc.pdf"),
+    )
+    monkeypatch.setattr(
+        svc,
+        "build_prova_email_pdf_name",
+        lambda ano, nro: "os-ProvaSefoc 1.pdf",
+    )
     monkeypatch.setattr(
         "services.papelaria_prova_modo.get_modo",
         lambda: "prova_email",
@@ -195,11 +146,12 @@ def test_payload_create_sem_csp_falha(monkeypatch, tmp_path):
         "services.papelaria_models_service.get_modelo_by_id",
         return_value={"id": 16, "campos": {}, "frente_versao": None, "cores": None},
     ):
-        with pytest.raises(ValueError, match="pasta CSP"):
-            svc.build_worker_job_payload(78)
+        payload = svc.build_worker_job_payload(78)
+    assert payload["arquivo_modelo"] == "CtVisitaFV-Instagram.cdr"
+    assert payload["prova_email_pdf_name"] == "os-ProvaSefoc 1.pdf"
 
 
-def test_contexto_omite_modelo_sem_csp(monkeypatch):
+def test_contexto_email_mantem_todos_modelos(monkeypatch):
     from services import papelaria_models_service as svc
 
     monkeypatch.setattr(
@@ -256,7 +208,5 @@ def test_contexto_omite_modelo_sem_csp(monkeypatch):
     )
 
     ctx = svc.build_os_context(2026, 5999)
-    assert [m["id"] for m in ctx["modelos"]] == [14]
-    assert ctx["autoSelectedModelId"] == 14
+    assert [m["id"] for m in ctx["modelos"]] == [14, 15]
     assert ctx["prova_modo"] == "prova_email"
-    assert any("CtVisitaFVAssissor.cdr" in w for w in ctx["warnings"])

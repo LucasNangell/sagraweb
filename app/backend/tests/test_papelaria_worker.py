@@ -344,12 +344,16 @@ class TestOutputNames:
 
         cdr, pdf = svc.build_output_filenames(2025, 5024)
         assert cdr == "05024-JonasDonizette-CtVisita-BaseSefoc.cdr"
-        assert pdf == "05024-JonasDonizette-CtVisita-ProvaSefoc 1.pdf"
+        assert pdf == "05024-JonasDonizette-CtVisita-BaseSefoc.pdf"
 
+        prova1 = svc.build_prova_email_pdf_name(2025, 5024)
+        assert prova1 == "05024-JonasDonizette-CtVisita-ProvaSefoc 1.pdf"
         (sefoc / "05024-JonasDonizette_CtVisita-Prova1_SEFOC.pdf").write_bytes(b"x")
+        prova2 = svc.build_prova_email_pdf_name(2025, 5024)
+        assert prova2 == "05024-JonasDonizette-CtVisita-ProvaSefoc 2.pdf"
         cdr2, pdf2 = svc.build_output_filenames(2025, 5024)
         assert cdr2 == cdr
-        assert pdf2 == "05024-JonasDonizette-CtVisita-ProvaSefoc 2.pdf"
+        assert pdf2 == "05024-JonasDonizette-CtVisita-BaseSefoc.pdf"
 
     def test_sanitize_relative_filename_rejeita_traversal(self):
         from services.papelaria_jobs_service import _sanitize_relative_filename

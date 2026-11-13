@@ -84,40 +84,13 @@ def set_modo(modo: str) -> None:
 def filtrar_modelos_para_modo(
     modelos: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    """No modo e-mail, remove modelos sem arquivo CSP e devolve um aviso se houve omissão."""
-    if get_modo() != MODO_PROVA_EMAIL:
-        return list(modelos), []
-
-    visiveis: list[dict[str, Any]] = []
-    omitidos: list[str] = []
-    for modelo in modelos:
-        arquivo = str(modelo.get("arquivo_modelo") or "")
-        if resolve_arquivo_email(arquivo):
-            visiveis.append(modelo)
-        else:
-            omitidos.append(_normalize_arquivo(arquivo) or "sem arquivo")
-
-    if not omitidos:
-        return visiveis, []
-
-    nomes = ", ".join(omitidos)
-    return visiveis, [
-        (
-            "Modo Prova e-mail: "
-            f"{len(omitidos)} modelo(s) sem arquivo correspondente na pasta CSP "
-            f"foram ocultados ({nomes})."
-        )
-    ]
+    """Prova e-mail usa os mesmos modelos WEB — sem filtrar por alias CSP."""
+    return list(modelos), []
 
 
 def assert_modelo_create_permitido(arquivo: str) -> None:
-    if get_modo() != MODO_PROVA_EMAIL:
-        return
-    if resolve_arquivo_email(arquivo) is None:
-        raise ValueError(
-            "Este modelo não está disponível no modo Prova e-mail "
-            "(não há arquivo correspondente na pasta CSP)."
-        )
+    """Mantido por compatibilidade; create usa modelos WEB em ambos os modos."""
+    return
 
 
 def _load_raw() -> dict[str, object]:

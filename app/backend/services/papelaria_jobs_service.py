@@ -404,11 +404,6 @@ def create_job(
     if not modelo:
         raise LookupError("Modelo não encontrado ou inativo.")
 
-    if tipo_job == TIPO_JOB_CREATE:
-        from services.papelaria_prova_modo import assert_modelo_create_permitido
-
-        assert_modelo_create_permitido(modelo.get("arquivo_modelo") or "")
-
     dados_clean = _sanitize_dados(dados)
     missing = _validate_required_fields(modelo, dados_clean)
     if missing:
@@ -475,36 +470,49 @@ def create_imposicao_job(
     arquivo_cdr: Optional[str] = None,
     modelo_id: Optional[int] = None,
 ) -> dict[str, Any]:
-    """Enfileira geração do PDF de imposição a partir do CDR da OS (BordaF/BordaV)."""
+    """Enfileira geração de JDF Apogee a partir do BaseSefoc.pdf + ImposicaoConfigJson."""
     ensure_papelaria_jobs_tables()
+    from services import papelaria_imposicao_config_service as imposicao_cfg_svc
+    from services import papelaria_models_service as models_svc
+
+    if not modelo_id:
+        raise ValueError(
+            "Selecione o modelo com configuração de imposição (JDF) antes de gerar."
+        )
 
     os_row = _validate_os_exists(ano, nro)
-    chosen = select_os_usable_cdr(ano, nro, arquivo_cdr)
-    dados_clean = {INPUT_CDR_DADOS_KEY: chosen["relative_path"]}
+    modelo = models_svc.get_modelo_by_id(int(modelo_id))
+    if not modelo:
+        raise LookupError("Modelo não encontrado ou inativo.")
+
+    raw_cfg = modelo.get("imposicao_config_json")
+    parsed_cfg = imposicao_cfg_svc.parse_imposicao_config_json(raw_cfg)
+    if not parsed_cfg:
+        raise ValueError(
+            "Este modelo não possui ImposicaoConfigJson válido. "
+            "Configure a aba Imposição nas Configurações."
+        )
+    config = imposicao_cfg_svc.validate_imposicao_config_payload(parsed_cfg)
+
+    base_pdf_path = resolve_base_sefoc_pdf_path(ano, nro)
+    base_pdf_name = os.path.basename(base_pdf_path)
+    # arquivo_cdr ignorado no fluxo JDF (compat com payload antigo da API)
+    _ = arquivo_cdr
+
     ordem = next_queue_position()
-    produto_job = (os_row.get("produto") or "").strip() or "Papelaria"
-
-    modelo_id_job: Optional[int] = None
-    arquivo_modelo = ""
-    if modelo_id:
-        from services import papelaria_models_service as models_svc
-
-        modelo = models_svc.get_modelo_by_id(int(modelo_id))
-        if not modelo:
-            raise LookupError("Modelo não encontrado ou inativo.")
-        modelo_id_job = int(modelo["id"])
-        arquivo_modelo = (modelo.get("arquivo_modelo") or "").strip()
-        produto_modelo = (modelo.get("produto") or "").strip()
-        if produto_modelo:
-            produto_job = produto_modelo
+    produto_job = (modelo.get("produto") or os_row.get("produto") or "").strip() or "Papelaria"
+    dados_clean = {
+        "base_pdf": base_pdf_name,
+        "imposicao_config": config,
+    }
 
     insert_params = {
         "nro": nro,
         "ano": ano,
         "tipo": TIPO_JOB_IMPOSICAO,
         "produto": produto_job,
-        "modelo_id": modelo_id_job,
-        "arquivo": arquivo_modelo,
+        "modelo_id": int(modelo["id"]),
+        "arquivo": (modelo.get("arquivo_modelo") or "").strip(),
         "dados": json.dumps(dados_clean, ensure_ascii=False),
         "status": STATUS_PENDING,
         "ordem": ordem,
@@ -535,7 +543,7 @@ def create_imposicao_job(
 
     append_job_log(
         job_id,
-        f"Imposição a partir do Corel ({chosen['filename']}).",
+        f"Imposição JDF Apogee a partir de {base_pdf_name}.",
         "info",
     )
     broadcast_job_update(job)
@@ -1548,22 +1556,39 @@ def extract_prova_version_from_filename(filename: str) -> Optional[int]:
 
 def build_output_filenames(ano: int, nro: int) -> tuple[str, str]:
     """
-    Nomenclatura Sefoc:
-    - CDR: {NUMOS-NomePastaOS}-BaseSefoc.cdr (substitui se já existir)
-    - PDF: {NUMOS-NomePastaOS}-ProvaSefoc {x}.pdf (x = próxima versão)
+    Artefatos Corel (CREATE / formato final):
+    - CDR: {NUMOS-NomePastaOS}-BaseSefoc.cdr (substitui)
+    - PDF: {NUMOS-NomePastaOS}-BaseSefoc.pdf (substitui)
     """
     prefix = get_os_folder_basename(ano, nro)
-    sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
     cdr_name = f"{prefix}-BaseSefoc.cdr"
-    next_ver = _max_prova_sefoc_version(sefoc_dir, prefix, nro) + 1
-    pdf_name = f"{prefix}-ProvaSefoc {next_ver}.pdf"
+    pdf_name = f"{prefix}-BaseSefoc.pdf"
     return cdr_name, pdf_name
 
 
-def build_imposicao_pdf_name(ano: int, nro: int) -> str:
-    """PDF de imposição: {ANO}_{NUMOS-NomePastaOS}_Imposição.pdf."""
+def build_prova_email_pdf_name(ano: int, nro: int) -> str:
+    """PDF A4 carimbado (modo e-mail): {prefix}-ProvaSefoc {x}.pdf."""
     prefix = get_os_folder_basename(ano, nro)
-    return f"{int(ano)}_{prefix}_Imposição.pdf"
+    sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
+    next_ver = _max_prova_sefoc_version(sefoc_dir, prefix, nro) + 1
+    return f"{prefix}-ProvaSefoc {next_ver}.pdf"
+
+
+def build_base_sefoc_pdf_name(ano: int, nro: int) -> str:
+    prefix = get_os_folder_basename(ano, nro)
+    return f"{prefix}-BaseSefoc.pdf"
+
+
+def resolve_base_sefoc_pdf_path(ano: int, nro: int) -> str:
+    """Caminho absoluto do PDF BaseSefoc na pasta Sefoc da OS."""
+    sefoc = resolve_os_papelaria_dir(ano, nro, create=False)
+    path = os.path.normpath(os.path.join(sefoc, build_base_sefoc_pdf_name(ano, nro)))
+    if not os.path.isfile(path):
+        raise FileNotFoundError(
+            f"PDF BaseSefoc não encontrado: {os.path.basename(path)}. "
+            "Gere o arquivo Corel antes da imposição."
+        )
+    return path
 
 
 def resolve_imposicao_output_dir(
@@ -1637,29 +1662,60 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
         }
 
     if job["tipo_job"] == TIPO_JOB_IMPOSICAO:
+        from services import papelaria_jdf_service as jdf_svc
+
         dados_imp = dict(job.get("dados") or {})
-        input_cdr_rel_imp = dados_imp.get(INPUT_CDR_DADOS_KEY)
-        input_cdr_path_imp = resolve_export_input_cdr_path(
-            job["ano_protocolo"],
-            job["nro_protocolo"],
-            input_cdr_rel_imp if isinstance(input_cdr_rel_imp, str) else None,
+        config = dados_imp.get("imposicao_config")
+        if not isinstance(config, dict):
+            raise ValueError("Job de imposição sem ImposicaoConfigJson.")
+
+        ano_imp = int(job["ano_protocolo"])
+        nro_imp = int(job["nro_protocolo"])
+        base_pdf_path = resolve_base_sefoc_pdf_path(ano_imp, nro_imp)
+        sefoc_dir = resolve_os_papelaria_dir(ano_imp, nro_imp, create=False)
+        prefix = get_os_folder_basename(ano_imp, nro_imp)
+
+        pagina = config.get("pagina") or {}
+        if pagina.get("origem") == "fixixa":
+            page_w_mm = float(pagina["largura_mm"])
+            page_h_mm = float(pagina["altura_mm"])
+        else:
+            page_w_mm, page_h_mm = jdf_svc.read_pdf_page_size_mm(base_pdf_path)
+
+        grid = config.get("grid") or {}
+        cols = int(grid.get("colunas") or 1)
+        rows = int(grid.get("linhas") or 1)
+        jdf_name = jdf_svc.build_jdf_filename(
+            ano=ano_imp,
+            nro=nro_imp,
+            folder_basename=f"{prefix}_{cols}x{rows}",
         )
-        modelo_id_imp = job.get("modelo_id")
-        arquivo_modelo_imp = (job.get("arquivo_modelo") or "").strip()
-        imposicao_dir = resolve_imposicao_output_dir(
-            job["ano_protocolo"],
-            job["nro_protocolo"],
-            modelo_id=int(modelo_id_imp) if modelo_id_imp else None,
-            create=True,
+        export_pdf_name = f"{prefix}_Imposição.pdf"
+        jdf_xml = jdf_svc.build_apogee_jdf_xml(
+            ano=ano_imp,
+            nro=nro_imp,
+            descriptive_name=prefix,
+            comment=(
+                f"{nro_imp:05d} — imposição {cols}x{rows} "
+                f"({job.get('produto') or 'Papelaria'})"
+            ),
+            export_folder=sefoc_dir,
+            export_filename=export_pdf_name,
+            base_pdf_path=base_pdf_path,
+            base_pdf_user_name=os.path.splitext(os.path.basename(base_pdf_path))[0],
+            config=config,
+            page_w_mm=page_w_mm,
+            page_h_mm=page_h_mm,
         )
+        jdf_dir = jdf_svc.get_jdf_import_root()
         return {
             "job_id": job["id"],
-            "ano": job["ano_protocolo"],
-            "nro": job["nro_protocolo"],
+            "ano": ano_imp,
+            "nro": nro_imp,
             "tipo_job": job["tipo_job"],
             "produto": job["produto"],
-            "modelo_id": modelo_id_imp,
-            "arquivo_modelo": arquivo_modelo_imp,
+            "modelo_id": job.get("modelo_id"),
+            "arquivo_modelo": (job.get("arquivo_modelo") or "").strip(),
             "campos": {},
             "dados": {},
             "campos_dinamicos_layout": {},
@@ -1667,14 +1723,14 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
             "preview_config": None,
             "frente_versao": None,
             "cores": None,
-            "output_dir": imposicao_dir,
+            "output_dir": jdf_dir,
             "output_cdr_name": "",
-            "output_pdf_name": build_imposicao_pdf_name(
-                job["ano_protocolo"],
-                job["nro_protocolo"],
-            ),
+            "output_pdf_name": jdf_name,
             "tentativas": job.get("tentativas") or 0,
-            "input_cdr_path": input_cdr_path_imp,
+            "base_pdf_path": base_pdf_path,
+            "jdf_xml": jdf_xml,
+            "jdf_filename": jdf_name,
+            "jdf_output_dir": jdf_dir,
         }
 
     from services import papelaria_models_service as models_svc
@@ -1741,7 +1797,10 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
             "cores": modelo.get("cores"),
             "output_dir": output_dir,
             "output_cdr_name": "",
-            "output_pdf_name": pdf_name,
+            "output_pdf_name": build_prova_email_pdf_name(
+                job["ano_protocolo"],
+                job["nro_protocolo"],
+            ),
             "tentativas": job.get("tentativas") or 0,
             "input_cdr_path": input_cdr_path,
         }
@@ -1787,26 +1846,21 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
         payload["output_cdr_name"] = ""
         payload["output_pdf_name"] = ""
 
-    from services.papelaria_prova_modo import (
-        MODO_PROVA_EMAIL,
-        get_modo,
-        resolve_arquivo_email,
-    )
+    from services.papelaria_prova_modo import MODO_PROVA_EMAIL, get_modo
 
     modo = get_modo()
     payload["prova_modo"] = modo
     if job["tipo_job"] == TIPO_JOB_CREATE and modo == MODO_PROVA_EMAIL:
-        arquivo_email = resolve_arquivo_email(job.get("arquivo_modelo") or "")
-        if not arquivo_email:
-            raise ValueError(
-                "Modelo sem arquivo correspondente na pasta CSP para o modo Prova e-mail."
-            )
-        payload["arquivo_modelo_email"] = arquivo_email
-        prova_numero = extract_prova_version_from_filename(pdf_name)
+        prova_email_pdf = build_prova_email_pdf_name(
+            job["ano_protocolo"],
+            job["nro_protocolo"],
+        )
+        prova_numero = extract_prova_version_from_filename(prova_email_pdf)
         if prova_numero is None:
             raise ValueError(
                 "Não foi possível determinar o número da prova para o carimbo."
             )
+        payload["prova_email_pdf_name"] = prova_email_pdf
         payload["prova_numero"] = prova_numero
 
     return payload
@@ -1909,7 +1963,7 @@ def complete_job(
             log_resumo=log_resumo,
         )
 
-    cdr_rel = _sanitize_relative_filename(arquivo_cdr)
+    cdr_rel = _sanitize_relative_filename(arquivo_cdr) if arquivo_cdr else ""
     pdf_rel = _sanitize_relative_filename(arquivo_pdf)
 
     output_dir = resolve_os_papelaria_dir(
@@ -1920,7 +1974,20 @@ def complete_job(
     pdf_abs = os.path.normpath(os.path.join(output_dir, pdf_rel))
 
     tipo_job = job.get("tipo_job")
-    if tipo_job in (TIPO_JOB_EXPORT_EXISTING_CDR, TIPO_JOB_IMPOSICAO):
+    if tipo_job == TIPO_JOB_IMPOSICAO:
+        from services import papelaria_jdf_service as jdf_svc
+
+        jdf_dir = jdf_svc.get_jdf_import_root()
+        jdf_abs = os.path.normpath(os.path.join(jdf_dir, pdf_rel))
+        if not pdf_rel.lower().endswith(".jdf"):
+            raise ValueError("Imposição JDF exige arquivo .jdf.")
+        if not os.path.isfile(jdf_abs):
+            raise FileNotFoundError(
+                f"JDF não encontrado no hotfolder Apogee: {pdf_rel}"
+            )
+        cdr_rel = ""
+        paths_to_check: tuple[str, ...] = ()
+    elif tipo_job == TIPO_JOB_EXPORT_EXISTING_CDR:
         dados_job = job.get("dados") or {}
         cdr_abs = resolve_export_input_cdr_path(
             job["ano_protocolo"],
@@ -1949,7 +2016,7 @@ def complete_job(
         else PROVA_REVISAO_PENDING
     )
     default_msg = (
-        "Imposição concluída."
+        "JDF enviado ao Apogee."
         if tipo_job == TIPO_JOB_IMPOSICAO
         else "Geração concluída com sucesso. Aguardando aprovação do técnico."
     )

@@ -246,7 +246,9 @@ export function PapelariaProofPanel({
                   ? activeJob?.prova_revisao === "approved"
                     ? "Prova aprovada. Pendência de e-mail criada em SEFOC."
                     : exibirMockup3d
-                      ? "PDF e mockup 3D da prova gerada pelo sistema."
+                      ? provaModo === "prova_email"
+                        ? "PDF A4 carimbado (ProvaSefoc) para envio por e-mail."
+                        : "PDF BaseSefoc e mockup 3D da prova gerada pelo sistema."
                       : "PDF da prova gerada pelo sistema."
                   : showingFolderProof
                     ? `Última prova na pasta Sefoc${folderProofLabel ? `: ${folderProofLabel}` : "."}`

@@ -419,7 +419,7 @@ export function PapelariaCorelPanel({
       setActiveJobId(job.id);
       setCorelEditMode(false);
       setFormError(null);
-      setProvaReviewMessage(null);
+      setProvaReviewMessage("JDF enviado à fila do Apogee.");
       setViewMode("prova");
       setMobilePanel("preview");
       void queryClient.invalidateQueries({
@@ -430,7 +430,7 @@ export function PapelariaCorelPanel({
       });
     },
     onError: (err: Error) => {
-      setFormError(err.message || "Erro ao solicitar imposição.");
+      setFormError(err.message || "Erro ao solicitar imposição (JDF).");
     },
   });
 
@@ -799,16 +799,14 @@ export function PapelariaCorelPanel({
   };
 
   const runImposicao = () => {
-    const arquivoCdr = exportCdrRel?.trim();
-    if (!arquivoCdr) {
-      setFormError("Selecione o arquivo Corel que deve ser usado na imposição.");
+    if (!selectedModelId) {
+      setFormError("Selecione o modelo com configuração de imposição.");
       return;
     }
     imposicaoMutation.mutate({
       ano: anoNum,
       nro: nroNum,
-      arquivo_cdr: arquivoCdr,
-      modelo_id: selectedModelId ?? undefined,
+      modelo_id: selectedModelId,
     });
   };
 
@@ -835,41 +833,32 @@ export function PapelariaCorelPanel({
   };
 
   const handleImposicao = () => {
-    const files = usableCdrFiles(cdrPathQuery.data);
-    if (files.length === 0) {
+    if (!selectedModelId) {
+      setFormError("Selecione o modelo antes de gerar a imposição (JDF).");
+      return;
+    }
+    const modeloSel =
+      contextQuery.data?.modelos.find((m) => m.id === selectedModelId) ??
+      modelDetailQuery.data;
+    if (!modeloSel?.tem_imposicao_config) {
       setFormError(
-        "Nenhum arquivo Corel utilizável encontrado na pasta desta OS.",
+        "Este modelo não possui configuração de imposição (JDF). Configure na aba Imposição.",
       );
       return;
     }
     setFormError(null);
-    setCdrPickerMode("imposicao");
-    if (files.length === 1) {
-      setExportCdrRel(files[0].relative_path);
-      void ensureOsFolderThenImposicao();
-      return;
-    }
-    setCdrPickerChoice(files[0].relative_path);
-    setCdrPickerOpen(true);
+    void ensureOsFolderThenImposicao();
   };
 
   const handleConfirmCdrPicker = () => {
     const choice = cdrPickerChoice.trim();
     if (!choice) {
-      setFormError(
-        cdrPickerMode === "imposicao"
-          ? "Selecione o arquivo Corel que deve ser usado na imposição."
-          : "Selecione o arquivo Corel que deve ser usado na prova.",
-      );
+      setFormError("Selecione o arquivo Corel que deve ser usado na prova.");
       return;
     }
     setExportCdrRel(choice);
     setCdrPickerOpen(false);
     setFormError(null);
-    if (cdrPickerMode === "imposicao") {
-      void ensureOsFolderThenImposicao();
-      return;
-    }
     void ensureOsFolderThen("export");
   };
 
@@ -1281,6 +1270,14 @@ export function PapelariaCorelPanel({
           finalizeCorelPending={finalizeCorelMutation.isPending}
           selectedModelId={selectedModelId}
           cdrDisponivel={cdrFiles.length > 0}
+          canImposicao={Boolean(
+            selectedModelId &&
+              (
+                contextQuery.data?.modelos.find((m) => m.id === selectedModelId)
+                  ?.tem_imposicao_config ||
+                modelDetailQuery.data?.tem_imposicao_config
+              ),
+          )}
           onGerarArquivo={handleGerarArquivo}
           onTimbradoA4Digital={handleTimbradoA4Digital}
           onAbrirCorel={handleAbrirCorel}

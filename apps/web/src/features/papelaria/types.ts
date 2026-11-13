@@ -32,6 +32,8 @@ export interface PapelariaCorelModelSummary {
   preview_config_json?: string | null;
   tem_preview_config?: boolean;
   preview_faces?: PapelariaPreviewFaceMeta[];
+  tem_imposicao_config?: boolean;
+  imposicao_config_json?: string | null;
 }
 
 export interface PapelariaPreviewFaceMeta {

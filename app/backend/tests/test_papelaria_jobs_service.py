@@ -1466,20 +1466,27 @@ class TestExportExistingCdrJob:
 
 
 class TestImposicaoJob:
-    def test_nome_pdf_imposicao(self, monkeypatch):
-        from services import papelaria_jobs_service as svc
-
-        monkeypatch.setattr(svc, "get_os_folder_basename", lambda ano, nro: "05954-Teste")
-        assert svc.build_imposicao_pdf_name(2026, 5954) == "2026_05954-Teste_Imposição.pdf"
-
-    def test_cria_job_e_payload(self, monkeypatch, tmp_path):
+    def test_cria_job_e_payload_jdf(self, monkeypatch, tmp_path):
         from services import papelaria_jobs_service as svc
 
         captured = {}
         sefoc = tmp_path / "Sefoc"
         sefoc.mkdir()
-        chosen_file = sefoc / "layout.cdr"
-        chosen_file.write_bytes(b"cdr")
+        base_pdf = sefoc / "05954-Teste-BaseSefoc.pdf"
+        base_pdf.write_bytes(b"%PDF-1.4")
+        jdf_root = tmp_path / "JDFImportRoot"
+        jdf_root.mkdir()
+
+        config = {
+            "folha_mm": {"largura": 297, "altura": 210},
+            "pagina": {"origem": "fixixa", "largura_mm": 148, "altura_mm": 210},
+            "grid": {"colunas": 2, "linhas": 1},
+            "espacamento_mm": {"horizontal": 0, "vertical": 0},
+            "sangria_mm": 0,
+            "marcas_corte": False,
+            "centralizar_na_folha": True,
+            "work_style": "Simplex",
+        }
 
         class _FakeCursor:
             lastrowid = 90
@@ -1508,8 +1515,8 @@ class TestImposicaoJob:
                         "AnoProtocolo": 2026,
                         "TipoJob": svc.TIPO_JOB_IMPOSICAO,
                         "Produto": "Ct Visita",
-                        "ModeloID": None,
-                        "ArquivoModelo": "",
+                        "ModeloID": 7,
+                        "ArquivoModelo": "BlocoA5.cdr",
                         "DadosJson": captured.get("params", {}).get("dados") or "{}",
                         "Status": "pending",
                         "Prioridade": 0,
@@ -1537,16 +1544,6 @@ class TestImposicaoJob:
         monkeypatch.setattr(svc, "broadcast_job_update", lambda *a, **k: None)
         monkeypatch.setattr(
             svc,
-            "select_os_usable_cdr",
-            lambda ano, nro, arquivo_cdr=None: {
-                "filename": "layout.cdr",
-                "relative_path": "Sefoc/layout.cdr",
-                "absolute_path": str(chosen_file),
-                "mtime": 1.0,
-            },
-        )
-        monkeypatch.setattr(
-            svc,
             "resolve_os_papelaria_dir",
             lambda ano, nro, create=False: str(sefoc),
         )
@@ -1555,23 +1552,43 @@ class TestImposicaoJob:
             "routers.os_routes._get_os_folder_path",
             lambda ano, nro: str(tmp_path),
         )
+        monkeypatch.setenv("SAGRA_JDF_IMPORT_ROOT", str(jdf_root))
+
+        class _Models:
+            @staticmethod
+            def get_modelo_by_id(modelo_id):
+                return {
+                    "id": 7,
+                    "produto": "Bloco A5",
+                    "arquivo_modelo": "BlocoA5.cdr",
+                    "imposicao_config_json": __import__("json").dumps(config),
+                }
+
+        monkeypatch.setattr(
+            "services.papelaria_models_service.get_modelo_by_id",
+            _Models.get_modelo_by_id,
+        )
 
         job = svc.create_imposicao_job(
             ano=2026,
             nro=5954,
             solicitado_por="918713",
-            arquivo_cdr="Sefoc/layout.cdr",
+            modelo_id=7,
         )
         assert job["tipo_job"] == svc.TIPO_JOB_IMPOSICAO
-        assert job["dados"][svc.INPUT_CDR_DADOS_KEY] == "Sefoc/layout.cdr"
+        assert job["modelo_id"] == 7
+        assert job["dados"]["base_pdf"] == "05954-Teste-BaseSefoc.pdf"
 
         payload = svc.build_worker_job_payload(90)
         assert payload["tipo_job"] == svc.TIPO_JOB_IMPOSICAO
-        assert payload["output_pdf_name"] == "2026_05954-Teste_Imposição.pdf"
+        assert payload["output_pdf_name"].endswith(".jdf")
+        assert payload["jdf_xml"]
+        assert "ContentObject" in payload["jdf_xml"]
+        assert payload["jdf_output_dir"] == str(jdf_root)
+        assert payload["base_pdf_path"] == str(base_pdf.resolve()) or payload[
+            "base_pdf_path"
+        ].endswith("BaseSefoc.pdf")
         assert payload["output_cdr_name"] == ""
-        assert payload["input_cdr_path"] == str(chosen_file.resolve())
-        assert payload["modelo_id"] is None
-        assert payload["output_dir"] == str(sefoc)
 
     def test_output_dir_usa_pasta_imposicao_do_modelo(self, monkeypatch, tmp_path):
         from services import papelaria_jobs_service as svc

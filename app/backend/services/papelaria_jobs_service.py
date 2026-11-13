@@ -493,12 +493,13 @@ def _build_imposicao_jdf_artifacts(
         nro=nro,
         folder_basename=f"{label}_{cols}x{rows}",
     )
-    export_pdf_name = f"{jdf_svc.ensure_os_prefixed_name(prefix, nro)}_Imposição.pdf"
+    # Sem Nr OS: Job Name do JDF já é NNNNN; Apogee concatena e duplicaria.
+    export_pdf_name = f"{label}_Imposição.pdf"
     jdf_xml = jdf_svc.build_apogee_jdf_xml(
         ano=ano,
         nro=nro,
         descriptive_name=label,
-        comment=f"{jdf_svc.format_os_number(nro)} — imposição {cols}x{rows} ({produto or 'Papelaria'})",
+        comment=f"imposição {cols}x{rows} ({produto or 'Papelaria'})",
         export_folder=sefoc_dir,
         export_filename=export_pdf_name,
         base_pdf_path=base_pdf_path,
@@ -1814,15 +1815,13 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
             nro=nro_imp,
             folder_basename=f"{label}_{cols}x{rows}",
         )
-        export_pdf_name = (
-            f"{jdf_svc.ensure_os_prefixed_name(prefix, nro_imp)}_Imposição.pdf"
-        )
+        export_pdf_name = f"{label}_Imposição.pdf"
         jdf_xml = jdf_svc.build_apogee_jdf_xml(
             ano=ano_imp,
             nro=nro_imp,
             descriptive_name=label,
             comment=(
-                f"{jdf_svc.format_os_number(nro_imp)} — imposição {cols}x{rows} "
+                f"imposição {cols}x{rows} "
                 f"({job.get('produto') or 'Papelaria'})"
             ),
             export_folder=sefoc_dir,

@@ -88,8 +88,8 @@ def format_os_number(nro: int) -> str:
 def strip_leading_os_number(text: str, nro: int) -> str:
     """
     Remove um ou mais prefixos do Nr OS no início.
-    Aceita com ou sem zero à esquerda (06227- / 6227-) para evitar
-    06227-06227-… ou 06227-6227-….
+    Aceita com ou sem zero à esquerda e separadores -, _, espaço, —/–.
+    Evita 06227-06227-… / "06227 — descrição".
     """
     raw = (text or "").strip()
     if not raw:
@@ -97,11 +97,11 @@ def strip_leading_os_number(text: str, nro: int) -> str:
     num = format_os_number(nro)
     bare = str(int(nro))
     return re.sub(
-        rf"^(({re.escape(num)}|{re.escape(bare)})-)+",
+        rf"^(({re.escape(num)}|{re.escape(bare)})([-\s_—–:]+))+",
         "",
         raw,
         flags=re.IGNORECASE,
-    ).strip("-")
+    ).strip("-_ \t—–:")
 
 
 def ensure_os_prefixed_name(text: str, nro: int) -> str:
@@ -271,17 +271,22 @@ def build_apogee_jdf_xml(
 
     file_url = escape(path_to_file_url(base_pdf_path))
     export_folder_esc = escape(export_folder.replace("/", "\\"))
-    # ExportFileName: um único prefixo NNNNN- (sem .pdf).
-    export_stem = ensure_os_prefixed_name(
-        _export_filename_stem(export_filename),
-        nro,
+    # Job Name (DescriptiveName) já é NNNNN. JobDescription e ExportFileName
+    # NÃO podem repetir o Nr OS — o Apogee concatena e duplica pasta/arquivo.
+    job_desc = strip_leading_os_number(descriptive_name, nro) or "Papelaria"
+    export_stem = (
+        strip_leading_os_number(_export_filename_stem(export_filename), nro)
+        or "Imposição"
     )
-    export_stem_esc = escape(export_stem)
-    # JobDescription: rótulo sem Nr OS (evita duplicar no Apogee).
-    job_desc = strip_leading_os_number(descriptive_name, nro) or job_name
+    # Comment também sem Nr OS no início (alguns mapas usam como descrição).
+    comment_clean = strip_leading_os_number(comment, nro) or comment
     job_desc_esc = escape(job_desc)
-    comment_esc = escape(comment)
-    user_name_esc = escape(base_pdf_user_name)
+    export_stem_esc = escape(export_stem)
+    comment_esc = escape(comment_clean)
+    # UserFileName do PDF base: sem Nr OS (evita eco no nome do job).
+    user_name_esc = escape(
+        strip_leading_os_number(base_pdf_user_name, nro) or base_pdf_user_name
+    )
     job_id = str(int(ano))
     job_part = nro5
     root_features = escape(_named_features(root=True))

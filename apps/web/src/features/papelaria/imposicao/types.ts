@@ -26,7 +26,7 @@ export interface PapelariaImposicaoConfig {
   };
   /** Sangria / bleed (mm). 0 = sem sangria. */
   sangria_mm: number;
-  /** MarkObject no Layout. false = sem marcas. */
+  /** true = MarkObject + CutMark (4 cantos) no Layout JDF. */
   marcas_corte: boolean;
   /** Distribui sobra da folha igualmente (margens). */
   centralizar_na_folha: boolean;

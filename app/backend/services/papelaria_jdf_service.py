@@ -118,6 +118,36 @@ def compute_content_positions(
     return positions
 
 
+def _build_cut_mark_object_xml(
+    *,
+    content_id: str,
+    x_pt: float,
+    y_pt: float,
+    page_w_pt: float,
+    page_h_pt: float,
+) -> str:
+    """
+    MarkObject com CutMark nos 4 cantos do TrimBox (CIP4 eCutMarkType_).
+
+    Apogee (Impose From input) usa esses MarkObject do Layout para gerar
+    as marcas de corte no PDF imposto.
+    """
+    return (
+        f'              <MarkObject CTM="1 0 0 1 {x_pt:.3f} {y_pt:.3f}" '
+        f'ContentRef="{content_id}"\n'
+        f'                             TrimCTM="1 0 0 1 {x_pt:.3f} {y_pt:.3f}" '
+        f'TrimSize="{page_w_pt:.3f} {page_h_pt:.3f}">\n'
+        f'                <CutMark MarkType="LowerLeftCutMark" Position="0 0"/>\n'
+        f'                <CutMark MarkType="LowerRightCutMark" '
+        f'Position="{page_w_pt:.3f} 0"/>\n'
+        f'                <CutMark MarkType="UpperLeftCutMark" '
+        f'Position="0 {page_h_pt:.3f}"/>\n'
+        f'                <CutMark MarkType="UpperRightCutMark" '
+        f'Position="{page_w_pt:.3f} {page_h_pt:.3f}"/>\n'
+        f"              </MarkObject>"
+    )
+
+
 def build_apogee_jdf_xml(
     *,
     ano: int,
@@ -145,7 +175,7 @@ def build_apogee_jdf_xml(
     gap_v = float((config.get("espacamento_mm") or {}).get("vertical") or 0)
     centralizar = bool(config.get("centralizar_na_folha", True))
     work_style = str(config.get("work_style") or "Simplex")
-    # marcas_corte / sangria: schema reservado; exemplo sem MarkObject
+    marcas_corte = bool(config.get("marcas_corte", False))
 
     nro5 = f"{int(nro):05d}"
     root_id = f"ROOT_{nro5}"
@@ -172,19 +202,31 @@ def build_apogee_jdf_xml(
     )
 
     content_xml_parts: list[str] = []
-    for x_mm, y_mm in positions:
+    for idx, (x_mm, y_mm) in enumerate(positions):
         x_pt = mm_to_pt(x_mm)
         y_pt = mm_to_pt(y_mm)
         clip_x1 = x_pt + page_w_pt
         clip_y1 = y_pt + page_h_pt
+        content_id = f"CO_{nro5}_{idx}"
         content_xml_parts.append(
-            "              <ContentObject Ord=\"0\"\n"
+            f"              <ContentObject ID=\"{content_id}\" Ord=\"0\"\n"
             f"                             CTM=\"1 0 0 1 {x_pt:.3f} {y_pt:.3f}\" "
             f"TrimCTM=\"1 0 0 1 {x_pt:.3f} {y_pt:.3f}\"\n"
             f"                             TrimSize=\"{page_w_pt:.3f} {page_h_pt:.3f}\"\n"
             f"                             ClipBox=\"{x_pt:.3f} {y_pt:.3f} "
             f"{clip_x1:.3f} {clip_y1:.3f}\"/>"
         )
+        if marcas_corte:
+            # CIP4/Apogee: MarkObject + CutMark nos 4 cantos do TrimBox da página.
+            content_xml_parts.append(
+                _build_cut_mark_object_xml(
+                    content_id=content_id,
+                    x_pt=x_pt,
+                    y_pt=y_pt,
+                    page_w_pt=page_w_pt,
+                    page_h_pt=page_h_pt,
+                )
+            )
     contents = "\n".join(content_xml_parts)
 
     file_url = escape(path_to_file_url(base_pdf_path))

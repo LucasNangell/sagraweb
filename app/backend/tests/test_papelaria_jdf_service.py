@@ -106,9 +106,47 @@ def test_build_apogee_jdf_xml_a5_2x1(tmp_path: Path):
     assert 'JobPartID="06227"' in xml
     assert "ContentObject" in xml
     assert xml.count("<ContentObject") == 2
+    assert "MarkObject" not in xml
+    assert "CutMark" not in xml
     assert "file:///" in xml or "file://apogee" in xml or "file://J" in xml.lower() or "file:///" in xml
     assert "TrimSize=\"419.528 595.276\"" in xml or "419.528" in xml
     assert "SourceWorkStyle=\"Simplex\"" in xml
+
+
+def test_build_apogee_jdf_xml_com_marcas_corte(tmp_path: Path):
+    from services.papelaria_jdf_service import build_apogee_jdf_xml
+
+    config = {
+        "folha_mm": {"largura": 297, "altura": 210},
+        "pagina": {"origem": "fixixa", "largura_mm": 148, "altura_mm": 210},
+        "grid": {"colunas": 2, "linhas": 1},
+        "espacamento_mm": {"horizontal": 0, "vertical": 0},
+        "sangria_mm": 0,
+        "marcas_corte": True,
+        "centralizar_na_folha": True,
+        "work_style": "Simplex",
+    }
+    pdf = tmp_path / "06227-AirtonFaleiro-BlocoA5-BaseSefoc.pdf"
+    pdf.write_bytes(b"%PDF")
+    xml = build_apogee_jdf_xml(
+        ano=2026,
+        nro=6227,
+        descriptive_name="06227-AirtonFaleiro-BlocoA5",
+        comment="teste 2x1 com marcas",
+        export_folder=str(tmp_path),
+        export_filename="06227-AirtonFaleiro-BlocoA5_Imposição.pdf",
+        base_pdf_path=str(pdf),
+        base_pdf_user_name=pdf.stem,
+        config=config,
+        page_w_mm=148,
+        page_h_mm=210,
+    )
+    assert xml.count("<ContentObject") == 2
+    assert xml.count("<MarkObject") == 2
+    assert xml.count('MarkType="LowerLeftCutMark"') == 2
+    assert xml.count('MarkType="UpperRightCutMark"') == 2
+    assert 'ContentRef="CO_06227_0"' in xml
+    assert 'ContentRef="CO_06227_1"' in xml
 
 
 def test_write_jdf_file(tmp_path: Path):

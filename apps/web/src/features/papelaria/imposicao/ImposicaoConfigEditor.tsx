@@ -230,7 +230,7 @@ export function ImposicaoConfigEditor({
         <CheckboxField
           label="Marcas de corte"
           checked={config.marcas_corte}
-          hint="false = sem MarkObject no Layout"
+          hint="true = MarkObject/CutMark no JDF (Apogee)"
           onChange={(v) => patch("marcas_corte", v)}
         />
       </section>

@@ -93,7 +93,11 @@ def get_produto_imposicao_map(produto: str) -> dict[str, Optional[dict[str, Any]
         variante = row["variante"]
         parsed = cfg_svc.parse_imposicao_config_json(row.get("imposicao_config_json"))
         if parsed and variante in out:
-            out[variante] = cfg_svc.validate_imposicao_config_payload(parsed)
+            # Leitura permissiva: PDF de marcas pode ser completado no modal da OS.
+            out[variante] = cfg_svc.validate_imposicao_config_payload(
+                parsed,
+                require_marcas_pdf=False,
+            )
     return out
 
 
@@ -185,23 +189,40 @@ def parse_modelo_variants_override(raw: Any) -> dict[str, Optional[dict[str, Any
         for key in ("digital", "offset"):
             if key not in data or data[key] is None:
                 continue
-            out[key] = cfg_svc.validate_imposicao_config_payload(data[key])
+            out[key] = cfg_svc.validate_imposicao_config_payload(
+                data[key],
+                require_marcas_pdf=False,
+            )
         return out
 
     # Legado: um único bloco → override nas duas variantes
-    single = cfg_svc.validate_imposicao_config_payload(data)
+    single = cfg_svc.validate_imposicao_config_payload(
+        data,
+        require_marcas_pdf=False,
+    )
     return {"digital": single, "offset": single}
 
 
 def normalize_modelo_variants_json(raw: Any) -> Optional[str]:
     """Normaliza override do modelo para JSON {digital, offset} ou None."""
+    from services import papelaria_imposicao_config_service as cfg_svc
+
     if raw is None or raw == "":
         return None
     parsed = parse_modelo_variants_override(raw)
     if not parsed["digital"] and not parsed["offset"]:
         return None
+    # Ao gravar, PDF de marcas é obrigatório se marcas_corte estiver ativo.
+    strict = {
+        key: (
+            cfg_svc.validate_imposicao_config_payload(cfg, require_marcas_pdf=True)
+            if cfg is not None
+            else None
+        )
+        for key, cfg in parsed.items()
+    }
     return json.dumps(
-        {"digital": parsed["digital"], "offset": parsed["offset"]},
+        {"digital": strict["digital"], "offset": strict["offset"]},
         ensure_ascii=False,
     )
 

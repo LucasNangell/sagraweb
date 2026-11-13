@@ -20,6 +20,17 @@ describe("imposicaoConfigUtils (JDF)", () => {
   });
 
   it("exige PDF de marcas quando marcas_corte=true", () => {
+    const soft = validateImposicaoConfigObject(
+      {
+        ...DEFAULT_IMPOSICAO_CONFIG,
+        marcas_corte: true,
+        marcas_pdf_path: null,
+      },
+      { requireMarcasPdf: false },
+    );
+    expect(soft.marcas_corte).toBe(true);
+    expect(soft.marcas_pdf_path).toBeNull();
+
     expect(() =>
       validateImposicaoConfigObject({
         ...DEFAULT_IMPOSICAO_CONFIG,

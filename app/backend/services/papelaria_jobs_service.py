@@ -572,14 +572,20 @@ def create_imposicao_job(
         )
 
     if imposicao_config is not None:
-        config = imposicao_cfg_svc.validate_imposicao_config_payload(imposicao_config)
+        config = imposicao_cfg_svc.validate_imposicao_config_payload(
+            imposicao_config,
+            require_marcas_pdf=True,
+        )
     else:
         resolved = opcoes.get(var)
         if not isinstance(resolved, dict):
             raise ValueError(
                 f"Imposição '{var}' não configurada para este produto/modelo."
             )
-        config = resolved
+        config = imposicao_cfg_svc.validate_imposicao_config_payload(
+            resolved,
+            require_marcas_pdf=True,
+        )
 
     base_pdf_path = resolve_base_sefoc_pdf_path(ano, nro)
     base_pdf_name = os.path.basename(base_pdf_path)

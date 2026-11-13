@@ -831,9 +831,10 @@ export function PapelariaCorelPanel({
         return;
       }
       setImposicaoOpcoes(opcoes);
+      setFormError(null);
     } catch (e) {
-      setImposicaoModalOpen(false);
-      setFormError(
+      // Mantém o modal aberto e mostra o erro nele (não na barra da OS).
+      setImposicaoModalError(
         e instanceof Error
           ? e.message
           : "Não foi possível carregar as opções de imposição.",

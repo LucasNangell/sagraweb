@@ -18,7 +18,8 @@ const TABS: { id: PapelariaImposicaoVariante; label: string }[] = [
 function asConfig(raw: unknown): PapelariaImposicaoConfig | null {
   if (!raw) return null;
   try {
-    return validateImposicaoConfigObject(raw);
+    // Leitura permissiva: PDF de marcas pode estar vazio e ser preenchido aqui.
+    return validateImposicaoConfigObject(raw, { requireMarcasPdf: false });
   } catch {
     return null;
   }
@@ -170,7 +171,9 @@ export function PapelariaImposicaoOsModal({
                 return;
               }
               try {
-                const cfg = validateImposicaoConfigObject(current);
+                const cfg = validateImposicaoConfigObject(current, {
+                  requireMarcasPdf: true,
+                });
                 onConfirm({ variante: tab, imposicao_config: cfg });
               } catch (e) {
                 setLocalError(

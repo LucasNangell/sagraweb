@@ -46,20 +46,28 @@ class TestImposicaoConfigService:
 
     def test_marcas_corte_exige_pdf_path(self):
         from services.papelaria_imposicao_config_service import (
+            normalize_imposicao_config_json,
             validate_imposicao_config_payload,
         )
 
         bad = _valid_payload()
         bad["marcas_corte"] = True
-        with pytest.raises(ValueError, match="marcas_pdf_path"):
-            validate_imposicao_config_payload(bad)
+        # Leitura (opções da OS) permite incompleto.
+        soft = validate_imposicao_config_payload(bad, require_marcas_pdf=False)
+        assert soft["marcas_corte"] is True
+        assert soft["marcas_pdf_path"] is None
+        # Gravação / gerar JDF exige o caminho.
+        with pytest.raises(ValueError, match="caminho do PDF de marcas"):
+            validate_imposicao_config_payload(bad, require_marcas_pdf=True)
+        with pytest.raises(ValueError, match="caminho do PDF de marcas"):
+            normalize_imposicao_config_json(bad)
 
         ok = _valid_payload()
         ok["marcas_corte"] = True
         ok["marcas_pdf_path"] = (
             r"\\redecamara\dfsdata\CGraf\Modelos\ImposicaoSIELT_5x2_A4.pdf"
         )
-        out = validate_imposicao_config_payload(ok)
+        out = validate_imposicao_config_payload(ok, require_marcas_pdf=True)
         assert out["marcas_pdf_path"].endswith("ImposicaoSIELT_5x2_A4.pdf")
 
     def test_pagina_borda_sem_tamanho_fixo(self):

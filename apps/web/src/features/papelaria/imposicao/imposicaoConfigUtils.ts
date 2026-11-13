@@ -72,7 +72,9 @@ function coerceRaw(data: Record<string, unknown>): Record<string, unknown> {
 
 export function validateImposicaoConfigObject(
   data: unknown,
+  options?: { requireMarcasPdf?: boolean },
 ): PapelariaImposicaoConfig {
+  const requireMarcasPdf = options?.requireMarcasPdf ?? true;
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new Error("Configuração de imposição deve ser um objeto JSON.");
   }
@@ -141,7 +143,7 @@ export function validateImposicaoConfigObject(
       const marcas = requireBool(raw, "marcas_corte");
       const pathRaw = raw.marcas_pdf_path;
       if (pathRaw == null || pathRaw === "") {
-        if (marcas) {
+        if (marcas && requireMarcasPdf) {
           throw new Error(
             "Com marcas de corte ativas, informe o caminho do PDF de marcas.",
           );

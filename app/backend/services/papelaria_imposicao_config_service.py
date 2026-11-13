@@ -56,12 +56,19 @@ def _require_bool(obj: dict[str, Any], key: str) -> bool:
     return value
 
 
-def validate_imposicao_config_payload(data: Any) -> dict[str, Any]:
+def validate_imposicao_config_payload(
+    data: Any,
+    *,
+    require_marcas_pdf: bool = False,
+) -> dict[str, Any]:
     """
     Valida e retorna dict normalizado da config de imposição.
 
     Campos alinhados ao JDF Apogee (Media, TrimSize, Layout NxM step&repeat,
     marcas, sangria/gap, centralização e WorkStyle).
+
+    require_marcas_pdf: True ao gravar/gerar JDF; False ao listar opções
+    (permite abrir o modal e completar o caminho lá).
     """
     if data is None:
         raise ValueError("Configuração de imposição vazia.")
@@ -147,9 +154,9 @@ def validate_imposicao_config_payload(data: Any) -> dict[str, Any]:
         if marcas_pdf_path and not marcas_pdf_path.lower().endswith(".pdf"):
             raise ValueError("marcas_pdf_path deve apontar para um arquivo .pdf.")
 
-    if marcas and not marcas_pdf_path:
+    if marcas and not marcas_pdf_path and require_marcas_pdf:
         raise ValueError(
-            "Com marcas de corte ativas, informe marcas_pdf_path (PDF de marcas)."
+            "Com marcas de corte ativas, informe o caminho do PDF de marcas."
         )
     if not marcas:
         marcas_pdf_path = None
@@ -197,5 +204,8 @@ def normalize_imposicao_config_json(raw: Any) -> str | None:
     parsed = parse_imposicao_config_json(raw)
     if parsed is None:
         return None
-    normalized = validate_imposicao_config_payload(parsed)
+    normalized = validate_imposicao_config_payload(
+        parsed,
+        require_marcas_pdf=True,
+    )
     return json.dumps(normalized, ensure_ascii=False, separators=(",", ":"))

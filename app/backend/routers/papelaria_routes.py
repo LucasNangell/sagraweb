@@ -994,6 +994,27 @@ def servir_preview_page_job(
         raise HTTPException(500, "Erro ao obter imagem de prévia.")
 
 
+@router.get("/jobs/{job_id}/imposicao-resultado")
+def poll_imposicao_resultado_job(
+    job_id: int,
+    _session: SessionData = Depends(_require_papelaria_access),
+):
+    """Polling: aguarda PDF do Apogee em Sefoc, move para Digital e libera visualização."""
+    try:
+        from services import papelaria_jobs_service as jobs_svc
+
+        return jobs_svc.poll_imposicao_apogee_result(job_id)
+    except LookupError:
+        raise HTTPException(404, "Job não encontrado.")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        logger.exception("Erro poll imposição job %s: %s", job_id, e)
+        raise HTTPException(500, "Erro ao verificar resultado da imposição no Apogee.")
+
+
 @router.get("/jobs/{job_id}/arquivo/{tipo}")
 def baixar_arquivo_job(
     job_id: int,

@@ -7,9 +7,10 @@ import {
   fetchPapelariaCorelModelo,
   fetchPapelariaJobPreviewPages,
   papelariaJobFileUrl,
+  pollPapelariaImposicaoResultado,
 } from "@/api/papelaria";
 import { queryKeys } from "@/api/query-keys";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useMatchMedia } from "@/hooks/useMatchMedia";
 import {
@@ -108,9 +109,17 @@ export function PapelariaProofPanel({
   onLivePreviewValueChange,
 }: Props) {
   const [previewFaceId, setPreviewFaceId] = useState("frente");
+  const queryClient = useQueryClient();
   const isNarrowViewport = useMatchMedia("(max-width: 767px)");
   const isTimbradoDigitalJob =
     activeJob?.tipo_job === "timbrado_a4_digital";
+  const isImposicaoJob = activeJob?.tipo_job === "imposicao";
+  const arquivoPdfName = (activeJob?.arquivo_pdf || "").trim();
+  const waitingImposicaoApogee =
+    !!activeJob &&
+    isImposicaoJob &&
+    activeJob.status === "completed" &&
+    (!arquivoPdfName || arquivoPdfName.toLowerCase().endsWith(".jdf"));
   const generationPhase = resolvePapelariaGenerationPhase(
     isJobGenerating,
     activeJob,
@@ -131,9 +140,34 @@ export function PapelariaProofPanel({
   const showPdf =
     !!activeJob &&
     !isTimbradoDigitalJob &&
+    !waitingImposicaoApogee &&
     activeJob.status === "completed" &&
     activeJob.prova_revisao !== "discarded" &&
     (activeJob.tem_arquivo_pdf || !!activeJob.arquivo_pdf);
+
+  useQuery({
+    queryKey: ["papelaria", "imposicao-resultado", activeJob?.id ?? 0],
+    queryFn: async () => {
+      const result = await pollPapelariaImposicaoResultado(activeJob!.id);
+      if (result.status === "ready" && result.job) {
+        queryClient.setQueryData(
+          queryKeys.papelaria.job(result.job.id),
+          result.job,
+        );
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.papelaria.jobsOs(
+            result.job.ano_protocolo,
+            result.job.nro_protocolo,
+          ),
+        });
+      }
+      return result;
+    },
+    enabled: viewMode === "prova" && waitingImposicaoApogee && !!activeJob,
+    refetchInterval: (query) =>
+      query.state.data?.status === "ready" ? false : 3000,
+    retry: false,
+  });
 
   const needsProvaReview =
     showPdf &&
@@ -234,25 +268,29 @@ export function PapelariaProofPanel({
       ? "Prévia em tempo real dos campos do formulário."
       : showGenerating
         ? generationCopy.detail
-        : showGenerationFailed
-          ? "A geração falhou."
-          : showGenerationCancelled
-            ? "A solicitação foi cancelada."
-            : showDigitalDone
-              ? "DOCX Cor/PB e SVGs gerados na pasta Sefoc da OS."
-              : needsProvaReview
-                ? "Revise o arquivo gerado e confirme (OK) ou descarte (Cancelar)."
-                : showPdf
-                  ? activeJob?.prova_revisao === "approved"
-                    ? "Prova aprovada. Pendência de e-mail criada em SEFOC."
-                    : exibirMockup3d
-                      ? provaModo === "prova_email"
-                        ? "PDF A4 carimbado (ProvaSefoc) para envio por e-mail."
-                        : "PDF BaseSefoc e mockup 3D da prova gerada pelo sistema."
-                      : "PDF da prova gerada pelo sistema."
-                  : showingFolderProof
-                    ? `Última prova na pasta Sefoc${folderProofLabel ? `: ${folderProofLabel}` : "."}`
-                    : "Nenhuma prova encontrada na pasta desta OS.";
+        : waitingImposicaoApogee
+          ? "Aguardando processamento pelo Apogee."
+          : showGenerationFailed
+            ? "A geração falhou."
+            : showGenerationCancelled
+              ? "A solicitação foi cancelada."
+              : showDigitalDone
+                ? "DOCX Cor/PB e SVGs gerados na pasta Sefoc da OS."
+                : needsProvaReview
+                  ? "Revise o arquivo gerado e confirme (OK) ou descarte (Cancelar)."
+                  : showPdf
+                    ? isImposicaoJob
+                      ? "PDF de imposição (Digital) gerado pelo Apogee."
+                      : activeJob?.prova_revisao === "approved"
+                        ? "Prova aprovada. Pendência de e-mail criada em SEFOC."
+                        : exibirMockup3d
+                          ? provaModo === "prova_email"
+                            ? "PDF A4 carimbado (ProvaSefoc) para envio por e-mail."
+                            : "PDF BaseSefoc e mockup 3D da prova gerada pelo sistema."
+                          : "PDF da prova gerada pelo sistema."
+                    : showingFolderProof
+                      ? `Última prova na pasta Sefoc${folderProofLabel ? `: ${folderProofLabel}` : "."}`
+                      : "Nenhuma prova encontrada na pasta desta OS.";
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-sagra-border bg-neutral-50 shadow-sm max-md:overflow-visible md:overflow-hidden">
@@ -320,6 +358,28 @@ export function PapelariaProofPanel({
                   : "Cancelar solicitação"}
             </button>
           ) : null}
+        </div>
+      ) : viewMode === "prova" && waitingImposicaoApogee && activeJob ? (
+        <div
+          className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center"
+          data-testid="papelaria-imposicao-apogee-loading"
+        >
+          <Loader2 className="size-10 animate-spin text-secondary-blue" aria-hidden />
+          <div>
+            <p className="text-sm font-medium text-neutral-700">
+              Aguardando processamento pelo Apogee
+            </p>
+            <p className="mt-2 inline-flex items-center rounded-full bg-violet-100 px-2.5 py-0.5 text-[11px] font-semibold text-violet-900">
+              Imposição
+            </p>
+            <p className="mt-2 max-w-sm text-xs text-neutral-500">
+              O JDF foi enviado. Verificando a pasta Sefoc até surgir o PDF de
+              imposição…
+            </p>
+            <p className="mt-2 font-mono text-[10px] text-neutral-400">
+              Job #{activeJob.id}
+            </p>
+          </div>
         </div>
       ) : viewMode === "prova" && showGenerationFailed && activeJob ? (
         <div

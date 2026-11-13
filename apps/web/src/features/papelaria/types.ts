@@ -142,7 +142,7 @@ export interface PapelariaJob {
   produto: string;
   modelo_id: number | null;
   arquivo_modelo: string;
-  dados: Record<string, string>;
+  dados: Record<string, unknown>;
   status: PapelariaJobStatus;
   prioridade: number;
   ordem_fila: number | null;

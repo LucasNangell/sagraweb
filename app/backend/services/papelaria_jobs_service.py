@@ -576,6 +576,8 @@ def create_imposicao_job(
         "imposicao_config": config,
         "jdf_path": artifacts["jdf_path"],
         "jdf_dir": artifacts["jdf_dir"],
+        "jdf_name": artifacts["jdf_name"],
+        "aguardando_apogee": True,
     }
 
     insert_params = {
@@ -590,7 +592,6 @@ def create_imposicao_job(
         "ordem": ordem,
         "ponto": solicitado_por,
         "job_pai": None,
-        "jdf_name": artifacts["jdf_name"],
         "prova_revisao": PROVA_REVISAO_NA,
     }
 
@@ -604,7 +605,7 @@ def create_imposicao_job(
             ) VALUES (
                 %(nro)s, %(ano)s, %(tipo)s, %(produto)s, %(modelo_id)s, %(arquivo)s,
                 %(dados)s, %(status)s, 0, %(ordem)s, %(ponto)s, 1, %(job_pai)s,
-                %(jdf_name)s, %(prova_revisao)s, NOW()
+                NULL, %(prova_revisao)s, NOW()
             )
             """,
             insert_params,
@@ -2388,6 +2389,161 @@ def worker_append_log(
     append_job_log(job_id, mensagem, nivel, detalhe)
 
 
+def _waiting_apogee_message() -> str:
+    return "Aguardando processamento pelo Apogee."
+
+
+def _waiting_corel_message() -> str:
+    return "Arquivo ainda não disponível. Aguardando processamento pelo worker CorelDRAW."
+
+
+def format_folha_impressao_label(folha_mm: dict[str, Any]) -> str:
+    """Rótulo do tamanho da folha de impressão para o nome do PDF Digital."""
+    w = float(folha_mm.get("largura") or 0)
+    h = float(folha_mm.get("altura") or 0)
+    known = (
+        ((210.0, 297.0), "A4"),
+        ((297.0, 210.0), "A4-Paisagem"),
+        ((148.0, 210.0), "A5"),
+        ((210.0, 148.0), "A5-Paisagem"),
+        ((420.0, 297.0), "A3"),
+        ((297.0, 420.0), "A3-Paisagem"),
+    )
+    for (ew, eh), label in known:
+        if abs(w - ew) < 1.0 and abs(h - eh) < 1.0:
+            return label
+    w_s = f"{w:.0f}" if abs(w - round(w)) < 0.05 else f"{w:g}"
+    h_s = f"{h:.0f}" if abs(h - round(h)) < 0.05 else f"{h:g}"
+    return f"{w_s}x{h_s}mm"
+
+
+def build_imposicao_digital_pdf_name(
+    *,
+    ano: int,
+    nro: int,
+    config: dict[str, Any],
+) -> str:
+    """
+    {NUMOS-NomePasta}_Digit_{N}Up_{TAMANHO-FOLHA}.pdf
+    N = colunas × linhas (repetições na folha).
+    """
+    prefix = get_os_folder_basename(ano, nro)
+    grid = config.get("grid") or {}
+    cols = max(1, int(grid.get("colunas") or 1))
+    rows = max(1, int(grid.get("linhas") or 1))
+    n_up = cols * rows
+    folha = format_folha_impressao_label(config.get("folha_mm") or {})
+    safe_folha = re.sub(r"[^\w.\-]+", "-", folha).strip("-") or "Folha"
+    return f"{prefix}_Digit_{n_up}Up_{safe_folha}.pdf"
+
+
+def find_imposicao_pdf_in_sefoc(sefoc_dir: str) -> Optional[str]:
+    """PDF mais recente em Sefoc cujo nome contém 'Imposição'."""
+    if not os.path.isdir(sefoc_dir):
+        return None
+    mark = re.compile(r"imposi[cç][aã]o", re.IGNORECASE)
+    matches: list[tuple[float, str]] = []
+    for fname in os.listdir(sefoc_dir):
+        if not fname.lower().endswith(".pdf"):
+            continue
+        if not mark.search(fname):
+            continue
+        path = os.path.normpath(os.path.join(sefoc_dir, fname))
+        if os.path.isfile(path):
+            try:
+                matches.append((os.path.getmtime(path), path))
+            except OSError:
+                continue
+    if not matches:
+        return None
+    matches.sort(key=lambda item: item[0], reverse=True)
+    return matches[0][1]
+
+
+def poll_imposicao_apogee_result(job_id: int) -> dict[str, Any]:
+    """
+    Verifica Sefoc por PDF de Imposição do Apogee; move para Digital com
+    nomenclatura Digit_NUp e atualiza o job.
+    """
+    ensure_papelaria_jobs_tables()
+    job = get_job(job_id)
+    if not job:
+        raise LookupError("Job não encontrado.")
+    if job.get("tipo_job") != TIPO_JOB_IMPOSICAO:
+        raise ValueError("Job não é de imposição.")
+    if job.get("status") != STATUS_COMPLETED:
+        raise ValueError("Job de imposição ainda não está concluído.")
+
+    arquivo_atual = (job.get("arquivo_pdf") or "").strip()
+    if arquivo_atual and not arquivo_atual.lower().endswith(".jdf"):
+        try:
+            resolve_job_file_path(job_id, "pdf")
+            return {
+                "status": "ready",
+                "message": "PDF de imposição pronto.",
+                "job": job,
+            }
+        except FileNotFoundError:
+            pass
+
+    dados = dict(job.get("dados") or {})
+    config = dados.get("imposicao_config")
+    if not isinstance(config, dict):
+        raise ValueError("Job de imposição sem ImposicaoConfigJson.")
+
+    ano = int(job["ano_protocolo"])
+    nro = int(job["nro_protocolo"])
+    sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
+    found = find_imposicao_pdf_in_sefoc(sefoc_dir)
+    if not found:
+        return {
+            "status": "waiting_apogee",
+            "message": _waiting_apogee_message(),
+            "job": job,
+        }
+
+    dest_name = build_imposicao_digital_pdf_name(ano=ano, nro=nro, config=config)
+    digital_dir = os.path.normpath(os.path.join(sefoc_dir, "Digital"))
+    os.makedirs(digital_dir, exist_ok=True)
+    dest_abs = os.path.normpath(os.path.join(digital_dir, dest_name))
+    if os.path.isfile(dest_abs):
+        os.remove(dest_abs)
+    shutil.move(found, dest_abs)
+    rel_pdf = f"Digital/{dest_name}"
+
+    dados["aguardando_apogee"] = False
+    dados["imposicao_pdf_origem"] = os.path.basename(found)
+    dados["imposicao_pdf_digital"] = rel_pdf
+
+    db.execute_query(
+        """
+        UPDATE tabPapelariaJobs
+        SET ArquivoPdfGerado = %(pdf)s,
+            DadosJson = %(dados)s
+        WHERE ID = %(id)s
+        """,
+        {
+            "pdf": rel_pdf,
+            "dados": json.dumps(dados, ensure_ascii=False),
+            "id": job_id,
+        },
+    )
+    updated = get_job(job_id)
+    if not updated:
+        raise RuntimeError("Falha ao recuperar job após mover PDF de imposição.")
+    append_job_log(
+        job_id,
+        f"PDF Apogee movido para Digital: {dest_name}",
+        "info",
+    )
+    broadcast_job_update(updated)
+    return {
+        "status": "ready",
+        "message": "PDF de imposição pronto.",
+        "job": updated,
+    }
+
+
 def resolve_job_file_path(job_id: int, tipo: str) -> tuple[str, str]:
     """Retorna (caminho_absoluto, nome_download) — apenas backend."""
     ensure_papelaria_jobs_tables()
@@ -2395,10 +2551,13 @@ def resolve_job_file_path(job_id: int, tipo: str) -> tuple[str, str]:
     if not job:
         raise LookupError("Job não encontrado.")
 
+    is_imposicao = job.get("tipo_job") == TIPO_JOB_IMPOSICAO
+    waiting_msg = (
+        _waiting_apogee_message() if is_imposicao else _waiting_corel_message()
+    )
+
     if job["status"] != STATUS_COMPLETED:
-        raise FileNotFoundError(
-            "Arquivo ainda não disponível. Aguardando processamento pelo worker CorelDRAW."
-        )
+        raise FileNotFoundError(waiting_msg)
 
     col_map = {"pdf": "ArquivoPdfGerado", "cdr": "ArquivoCdrGerado"}
     tipo_l = (tipo or "").strip().lower()
@@ -2411,10 +2570,8 @@ def resolve_job_file_path(job_id: int, tipo: str) -> tuple[str, str]:
         {"id": job_id},
     )
     rel_path = (rows[0].get("path") or "").strip() if rows else ""
-    if not rel_path:
-        raise FileNotFoundError(
-            "Arquivo ainda não disponível. Aguardando processamento pelo worker CorelDRAW."
-        )
+    if not rel_path or (tipo_l == "pdf" and rel_path.lower().endswith(".jdf")):
+        raise FileNotFoundError(waiting_msg)
 
     from routers.os_routes import _get_os_folder_path
 
@@ -2423,10 +2580,11 @@ def resolve_job_file_path(job_id: int, tipo: str) -> tuple[str, str]:
         raise FileNotFoundError("Pasta da OS não encontrada.")
 
     sefoc_base = os.path.normpath(os.path.join(os_path, "Sefoc"))
-    rel_norm = rel_path.replace("\\", "/")
+    rel_norm = rel_path.replace("\\", "/").lstrip("/")
     candidates = [
-        os.path.normpath(os.path.join(sefoc_base, rel_norm)),
-        os.path.normpath(os.path.join(sefoc_base, "Papelaria", rel_norm)),
+        os.path.normpath(os.path.join(sefoc_base, *rel_norm.split("/"))),
+        os.path.normpath(os.path.join(sefoc_base, "Papelaria", os.path.basename(rel_norm))),
+        os.path.normpath(os.path.join(sefoc_base, "Digital", os.path.basename(rel_norm))),
     ]
     full_path = candidates[0]
     for candidate in candidates:
@@ -2445,9 +2603,7 @@ def resolve_job_file_path(job_id: int, tipo: str) -> tuple[str, str]:
         raise FileNotFoundError("Arquivo não encontrado.") from exc
 
     if not os.path.isfile(full_path):
-        raise FileNotFoundError(
-            "Arquivo ainda não disponível. Aguardando processamento pelo worker CorelDRAW."
-        )
+        raise FileNotFoundError(waiting_msg)
 
     return full_path, os.path.basename(full_path)
 

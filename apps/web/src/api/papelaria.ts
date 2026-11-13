@@ -170,6 +170,22 @@ export async function criarPapelariaImposicaoJob(payload: {
   );
 }
 
+export type PapelariaImposicaoResultadoStatus = "waiting_apogee" | "ready";
+
+export interface PapelariaImposicaoResultado {
+  status: PapelariaImposicaoResultadoStatus;
+  message: string;
+  job: PapelariaJob;
+}
+
+export async function pollPapelariaImposicaoResultado(
+  jobId: number,
+): Promise<PapelariaImposicaoResultado> {
+  return apiFetch<PapelariaImposicaoResultado>(
+    `/papelaria/jobs/${jobId}/imposicao-resultado`,
+  );
+}
+
 export async function fetchPapelariaJob(jobId: number): Promise<PapelariaJob> {
   return apiFetch<PapelariaJob>(`/papelaria/jobs/${jobId}`);
 }

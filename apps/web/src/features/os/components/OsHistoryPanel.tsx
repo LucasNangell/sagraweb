@@ -899,7 +899,9 @@ export function OsHistoryPanel({
 
         {!selected && (
           <p className="flex flex-1 items-center justify-center p-4 text-sm text-neutral-500">
-            Selecione uma OS para ver o histórico.
+            {embedded
+              ? "Selecione uma SP na lista para ver o histórico."
+              : "Selecione uma OS para ver o histórico."}
           </p>
         )}
 

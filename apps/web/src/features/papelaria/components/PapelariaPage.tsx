@@ -7,10 +7,7 @@ import { queryKeys } from "@/api/query-keys";
 import { OsHistoryPanel } from "@/features/os/components/OsHistoryPanel";
 import type { OsSearchRow } from "@/features/os/types";
 
-import {
-  osRowFromPapelariaSession,
-  sameOsRow,
-} from "../papelariaSelection";
+import { sameOsRow } from "../papelariaSelection";
 import { setPapelariaNavigationContext } from "../papelariaSession";
 import {
   papelariaSpJobUiFromJobStatus,
@@ -23,12 +20,9 @@ import { PapelariaSpList } from "./PapelariaSpList";
 type MobilePane = "lista" | "trabalho";
 
 export function PapelariaPage() {
-  const [selected, setSelected] = useState<OsSearchRow | null>(() =>
-    osRowFromPapelariaSession(),
-  );
-  const [mobilePane, setMobilePane] = useState<MobilePane>(() =>
-    osRowFromPapelariaSession() ? "trabalho" : "lista",
-  );
+  /** Só preenche histórico/formulário/visualização após clique na lista de SPs. */
+  const [selected, setSelected] = useState<OsSearchRow | null>(null);
+  const [mobilePane, setMobilePane] = useState<MobilePane>("lista");
   const [jobUiBySp, setJobUiBySp] = useState<
     Record<string, PapelariaSpJobUiStatus>
   >({});

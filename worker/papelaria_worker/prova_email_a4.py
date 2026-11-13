@@ -43,6 +43,13 @@ def compose_prova_email_a4(
             y0 = MARGIN_PT + (usable_h - dest_h) / 2.0
             dest = fitz.Rect(x0, y0, x0 + dest_w, y0 + dest_h)
             page.show_pdf_page(dest, src, 0)
+            # Borda no tamanho real da arte (após escala), para sinalizar o formato.
+            page.draw_rect(
+                dest,
+                color=(0, 0, 0),
+                width=1.0,
+                fill=None,
+            )
 
             linha1 = (
                 f"{carimbo.get('TipoOSint', '')} {carimbo.get('OSint', '')}  "

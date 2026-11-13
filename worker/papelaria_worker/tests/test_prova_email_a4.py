@@ -44,5 +44,8 @@ def test_compose_prova_email_a4(tmp_path: Path):
         text = result[0].get_text()
         assert "05954/2026" in text
         assert "Prova 1" in text
+        # Borda desenhada como path vetorial ao redor da arte.
+        drawings = result[0].get_drawings()
+        assert drawings, "esperava borda (drawings) ao redor da arte"
     finally:
         result.close()

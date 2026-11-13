@@ -419,7 +419,7 @@ export function PapelariaCorelPanel({
       setActiveJobId(job.id);
       setCorelEditMode(false);
       setFormError(null);
-      setProvaReviewMessage("JDF enviado à fila do Apogee.");
+      setProvaReviewMessage("JDF enviado ao Apogee.");
       setViewMode("prova");
       setMobilePanel("preview");
       void queryClient.invalidateQueries({

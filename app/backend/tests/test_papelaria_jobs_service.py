@@ -1466,7 +1466,7 @@ class TestExportExistingCdrJob:
 
 
 class TestImposicaoJob:
-    def test_cria_job_e_payload_jdf(self, monkeypatch, tmp_path):
+    def test_cria_job_grava_jdf_sincrono(self, monkeypatch, tmp_path):
         from services import papelaria_jobs_service as svc
 
         captured = {}
@@ -1508,17 +1508,18 @@ class TestImposicaoJob:
                     }
                 ]
             if "SELECT * FROM tabPapelariaJobs WHERE ID" in sql:
+                p = captured.get("params") or {}
                 return [
                     {
                         "ID": 90,
                         "NroProtocolo": 5954,
                         "AnoProtocolo": 2026,
                         "TipoJob": svc.TIPO_JOB_IMPOSICAO,
-                        "Produto": "Ct Visita",
+                        "Produto": "Bloco A5",
                         "ModeloID": 7,
                         "ArquivoModelo": "BlocoA5.cdr",
-                        "DadosJson": captured.get("params", {}).get("dados") or "{}",
-                        "Status": "pending",
+                        "DadosJson": p.get("dados") or "{}",
+                        "Status": p.get("status") or "completed",
                         "Prioridade": 0,
                         "OrdemFila": 1,
                         "SolicitadoPor": "918713",
@@ -1527,12 +1528,12 @@ class TestImposicaoJob:
                         "ConcluidoEm": None,
                         "WorkerID": None,
                         "ArquivoCdrGerado": None,
-                        "ArquivoPdfGerado": None,
+                        "ArquivoPdfGerado": p.get("jdf_name"),
                         "Erro": None,
                         "Tentativas": 0,
                         "Versao": 1,
                         "JobPaiID": None,
-                        "ProvaRevisao": None,
+                        "ProvaRevisao": p.get("prova_revisao"),
                     }
                 ]
             if "MAX(OrdemFila)" in sql:
@@ -1576,19 +1577,13 @@ class TestImposicaoJob:
             modelo_id=7,
         )
         assert job["tipo_job"] == svc.TIPO_JOB_IMPOSICAO
+        assert job["status"] == svc.STATUS_COMPLETED
         assert job["modelo_id"] == 7
-        assert job["dados"]["base_pdf"] == "05954-Teste-BaseSefoc.pdf"
-
-        payload = svc.build_worker_job_payload(90)
-        assert payload["tipo_job"] == svc.TIPO_JOB_IMPOSICAO
-        assert payload["output_pdf_name"].endswith(".jdf")
-        assert payload["jdf_xml"]
-        assert "ContentObject" in payload["jdf_xml"]
-        assert payload["jdf_output_dir"] == str(jdf_root)
-        assert payload["base_pdf_path"] == str(base_pdf.resolve()) or payload[
-            "base_pdf_path"
-        ].endswith("BaseSefoc.pdf")
-        assert payload["output_cdr_name"] == ""
+        assert job["arquivo_pdf"].endswith(".jdf")
+        assert (jdf_root / job["arquivo_pdf"]).is_file()
+        assert "ContentObject" in (jdf_root / job["arquivo_pdf"]).read_text(
+            encoding="utf-8"
+        )
 
     def test_output_dir_usa_pasta_imposicao_do_modelo(self, monkeypatch, tmp_path):
         from services import papelaria_jobs_service as svc

@@ -463,6 +463,66 @@ def create_job(
     return job
 
 
+def _build_imposicao_jdf_artifacts(
+    *,
+    ano: int,
+    nro: int,
+    produto: str,
+    config: dict[str, Any],
+    base_pdf_path: str,
+) -> dict[str, str]:
+    """Monta XML/nome/pasta do JDF e grava no hotfolder Apogee (síncrono na API)."""
+    from services import papelaria_jdf_service as jdf_svc
+
+    sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
+    prefix = get_os_folder_basename(ano, nro)
+    pagina = config.get("pagina") or {}
+    if pagina.get("origem") == "fixixa":
+        page_w_mm = float(pagina["largura_mm"])
+        page_h_mm = float(pagina["altura_mm"])
+    else:
+        page_w_mm, page_h_mm = jdf_svc.read_pdf_page_size_mm(base_pdf_path)
+
+    grid = config.get("grid") or {}
+    cols = int(grid.get("colunas") or 1)
+    rows = int(grid.get("linhas") or 1)
+    jdf_name = jdf_svc.build_jdf_filename(
+        ano=ano,
+        nro=nro,
+        folder_basename=f"{prefix}_{cols}x{rows}",
+    )
+    export_pdf_name = f"{prefix}_Imposição.pdf"
+    jdf_xml = jdf_svc.build_apogee_jdf_xml(
+        ano=ano,
+        nro=nro,
+        descriptive_name=prefix,
+        comment=f"{nro:05d} — imposição {cols}x{rows} ({produto or 'Papelaria'})",
+        export_folder=sefoc_dir,
+        export_filename=export_pdf_name,
+        base_pdf_path=base_pdf_path,
+        base_pdf_user_name=os.path.splitext(os.path.basename(base_pdf_path))[0],
+        config=config,
+        page_w_mm=page_w_mm,
+        page_h_mm=page_h_mm,
+    )
+    jdf_dir = jdf_svc.get_jdf_import_root()
+    try:
+        jdf_path = jdf_svc.write_jdf_file(jdf_xml, jdf_dir, jdf_name)
+    except OSError as exc:
+        raise RuntimeError(
+            f"Não foi possível gravar o JDF em {jdf_dir}: {exc}"
+        ) from exc
+    if not os.path.isfile(jdf_path):
+        raise RuntimeError(f"JDF não persistiu no hotfolder: {jdf_path}")
+    return {
+        "jdf_name": jdf_name,
+        "jdf_path": jdf_path,
+        "jdf_dir": jdf_dir,
+        "jdf_xml": jdf_xml,
+        "base_pdf_path": base_pdf_path,
+    }
+
+
 def create_imposicao_job(
     ano: int,
     nro: int,
@@ -470,7 +530,7 @@ def create_imposicao_job(
     arquivo_cdr: Optional[str] = None,
     modelo_id: Optional[int] = None,
 ) -> dict[str, Any]:
-    """Enfileira geração de JDF Apogee a partir do BaseSefoc.pdf + ImposicaoConfigJson."""
+    """Gera e grava JDF Apogee imediatamente (sem fila Corel) a partir do BaseSefoc.pdf."""
     ensure_papelaria_jobs_tables()
     from services import papelaria_imposicao_config_service as imposicao_cfg_svc
     from services import papelaria_models_service as models_svc
@@ -499,11 +559,21 @@ def create_imposicao_job(
     # arquivo_cdr ignorado no fluxo JDF (compat com payload antigo da API)
     _ = arquivo_cdr
 
-    ordem = next_queue_position()
     produto_job = (modelo.get("produto") or os_row.get("produto") or "").strip() or "Papelaria"
+    artifacts = _build_imposicao_jdf_artifacts(
+        ano=ano,
+        nro=nro,
+        produto=produto_job,
+        config=config,
+        base_pdf_path=base_pdf_path,
+    )
+
+    ordem = next_queue_position()
     dados_clean = {
         "base_pdf": base_pdf_name,
         "imposicao_config": config,
+        "jdf_path": artifacts["jdf_path"],
+        "jdf_dir": artifacts["jdf_dir"],
     }
 
     insert_params = {
@@ -514,10 +584,12 @@ def create_imposicao_job(
         "modelo_id": int(modelo["id"]),
         "arquivo": (modelo.get("arquivo_modelo") or "").strip(),
         "dados": json.dumps(dados_clean, ensure_ascii=False),
-        "status": STATUS_PENDING,
+        "status": STATUS_COMPLETED,
         "ordem": ordem,
         "ponto": solicitado_por,
         "job_pai": None,
+        "jdf_name": artifacts["jdf_name"],
+        "prova_revisao": PROVA_REVISAO_NA,
     }
 
     def _insert_job(cursor) -> int:
@@ -525,10 +597,12 @@ def create_imposicao_job(
             """
             INSERT INTO tabPapelariaJobs (
                 NroProtocolo, AnoProtocolo, TipoJob, Produto, ModeloID, ArquivoModelo,
-                DadosJson, Status, Prioridade, OrdemFila, SolicitadoPor, Versao, JobPaiID
+                DadosJson, Status, Prioridade, OrdemFila, SolicitadoPor, Versao, JobPaiID,
+                ArquivoPdfGerado, ProvaRevisao, ConcluidoEm
             ) VALUES (
                 %(nro)s, %(ano)s, %(tipo)s, %(produto)s, %(modelo_id)s, %(arquivo)s,
-                %(dados)s, %(status)s, 0, %(ordem)s, %(ponto)s, 1, %(job_pai)s
+                %(dados)s, %(status)s, 0, %(ordem)s, %(ponto)s, 1, %(job_pai)s,
+                %(jdf_name)s, %(prova_revisao)s, NOW()
             )
             """,
             insert_params,
@@ -543,7 +617,10 @@ def create_imposicao_job(
 
     append_job_log(
         job_id,
-        f"Imposição JDF Apogee a partir de {base_pdf_name}.",
+        (
+            f"JDF enviado ao Apogee: {artifacts['jdf_name']} "
+            f"({artifacts['jdf_dir']}) a partir de {base_pdf_name}."
+        ),
         "info",
     )
     broadcast_job_update(job)

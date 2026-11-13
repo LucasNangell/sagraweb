@@ -80,6 +80,23 @@ def read_pdf_page_size_mm(pdf_path: str) -> tuple[float, float]:
         doc.close()
 
 
+def read_pdf_trimbox_origin_pt(pdf_path: str) -> tuple[float, float]:
+    """
+    Origem (x0, y0) da TrimBox da 1ª página, em pt.
+    Se o PDF não tiver TrimBox distinta, cai na MediaBox (geralmente 0,0).
+    """
+    import fitz  # pymupdf
+
+    doc = fitz.open(pdf_path)
+    try:
+        if doc.page_count < 1:
+            return 0.0, 0.0
+        tb = doc[0].trimbox
+        return float(tb.x0), float(tb.y0)
+    finally:
+        doc.close()
+
+
 def format_os_number(nro: int) -> str:
     """Número da OS sempre com 5 dígitos (zero à esquerda)."""
     return f"{int(nro):05d}"
@@ -170,11 +187,19 @@ def _export_filename_stem(export_filename: str) -> str:
 
 def _named_features(*, root: bool) -> str:
     """
-    Sempre inclui JDFNoMarks: marcas vêm do PDF (MarkObject + RL_Marcas),
-    não das marcas automáticas do Apogee.
+    Sempre inclui JDFNoMarks: marcas vêm do PDF como ContentObject (Ord=1),
+    não das marcas automáticas do Apogee / MarkObject.
     """
     export = _ROOT_EXPORT_FEATURE if root else _EXPORT_FEATURE
     return f"Imposition JDFNoMarks {export}"
+
+
+def _marcas_trim_origin_pt(marcas_pdf_path: str) -> tuple[float, float]:
+    """Lê TrimBox do PDF de marcas; se falhar, (0, 0)."""
+    try:
+        return read_pdf_trimbox_origin_pt(marcas_pdf_path)
+    except Exception:
+        return 0.0, 0.0
 
 
 def build_apogee_jdf_xml(
@@ -202,6 +227,9 @@ def build_apogee_jdf_xml(
       Job Description  -> GeneralID[@IDUsage='JobDescription']
       Order Description-> GeneralID[@IDUsage='ExportFolder']
       (+ ExportFileName via GeneralID)
+
+    Marcas de corte: PDF entra como 2ª página do RunList Document e
+    ContentObject Ord=1 (não MarkObject), para o Apogee não expandir a MediaBox.
     """
     folha = config["folha_mm"]
     folha_w = float(folha["largura"])
@@ -247,13 +275,6 @@ def build_apogee_jdf_xml(
     )
 
     content_xml_parts: list[str] = []
-    if marcas_corte:
-        # MarkObject cobre a folha inteira (Ord=0 do RunList de marcas).
-        content_xml_parts.append(
-            "              <MarkObject Ord=\"0\" CTM=\"1 0 0 1 0 0\" "
-            f'TrimCTM="1 0 0 1 0 0"\n'
-            f'                          ClipBox="0 0 {folha_w_pt:.3f} {folha_h_pt:.3f}"/>'
-        )
     for x_mm, y_mm in positions:
         x_pt = mm_to_pt(x_mm)
         y_pt = mm_to_pt(y_mm)
@@ -266,6 +287,16 @@ def build_apogee_jdf_xml(
             f"                             TrimSize=\"{page_w_pt:.3f} {page_h_pt:.3f}\"\n"
             f"                             ClipBox=\"{x_pt:.3f} {y_pt:.3f} "
             f"{clip_x1:.3f} {clip_y1:.3f}\"/>"
+        )
+    if marcas_corte:
+        # PDF de marcas como conteúdo (Ord=1), por último (fica por cima).
+        # CTM = MediaBox em (0,0); TrimCTM = origem da TrimBox do arquivo.
+        trim_x, trim_y = _marcas_trim_origin_pt(marcas_pdf_path)
+        content_xml_parts.append(
+            "              <ContentObject Ord=\"1\" "
+            'CTM="1 0 0 1 0 0" '
+            f'TrimCTM="1 0 0 1 {trim_x:.3f} {trim_y:.3f}"\n'
+            f'                             ClipBox="0 0 {folha_w_pt:.3f} {folha_h_pt:.3f}"/>'
         )
     contents = "\n".join(content_xml_parts)
 
@@ -299,29 +330,35 @@ def build_apogee_jdf_xml(
     root_features = escape(_named_features(root=True))
     imp_features = escape(_named_features(root=False))
 
-    marcas_runlist_xml = ""
-    str_marks_link = ""
-    imp_marks_link = ""
     if marcas_corte:
         marcas_url = escape(path_to_file_url(marcas_pdf_path))
         marcas_user = escape(
             os.path.splitext(os.path.basename(marcas_pdf_path.replace("/", "\\")))[0]
         )
-        marcas_runlist_xml = f"""
-      <RunList Class="Parameter" ID="RL_Marcas" Status="Available" NPage="1">
+        document_runlist_xml = f"""      <RunList Class="Parameter" ID="RL_{nro5}" Status="Available" PartIDKeys="Run" NPage="2">
+        <RunList Run="Arte" Pages="0">
+          <LayoutElement>
+            <FileSpec URL="{file_url}"
+                      MimeType="application/pdf" FileVersion="1"
+                      UserFileName="{user_name_esc}"/>
+          </LayoutElement>
+        </RunList>
+        <RunList Run="Marcas" Pages="0">
+          <LayoutElement>
+            <FileSpec URL="{marcas_url}"
+                      MimeType="application/pdf" FileVersion="1"
+                      UserFileName="{marcas_user}"/>
+          </LayoutElement>
+        </RunList>
+      </RunList>"""
+    else:
+        document_runlist_xml = f"""      <RunList Class="Parameter" ID="RL_{nro5}" Status="Available" NPage="1">
         <LayoutElement>
-          <FileSpec URL="{marcas_url}"
+          <FileSpec URL="{file_url}"
                     MimeType="application/pdf" FileVersion="1"
-                    UserFileName="{marcas_user}"/>
+                    UserFileName="{user_name_esc}"/>
         </LayoutElement>
-      </RunList>
-"""
-        str_marks_link = (
-            '\n        <RunListLink rRef="RL_Marcas" ProcessUsage="Marks" Usage="Output"/>'
-        )
-        imp_marks_link = (
-            '\n        <RunListLink rRef="RL_Marcas" ProcessUsage="Marks" Usage="Input"/>'
-        )
+      </RunList>"""
 
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <JDF xmlns="http://www.CIP4.org/JDFSchema_1_1"
@@ -370,15 +407,8 @@ def build_apogee_jdf_xml(
        Status="Waiting" DescriptiveName="PrePress">
 
     <ResourcePool>
-      <RunList Class="Parameter" ID="RL_{nro5}" Status="Available" NPage="1">
-        <LayoutElement>
-          <FileSpec URL="{file_url}"
-                    MimeType="application/pdf" FileVersion="1"
-                    UserFileName="{user_name_esc}"/>
-        </LayoutElement>
-      </RunList>
+{document_runlist_xml}
       <RunList Class="Parameter" ID="RL_{nro5}_D" Status="Unavailable"/>
-{marcas_runlist_xml}
       <Layout Class="Parameter" ID="LAY_{nro5}" Status="Available" Automated="false">
         <Signature Name="SIG1">
           <Sheet Name="SHT1" SourceWorkStyle="{escape(work_style)}">
@@ -402,7 +432,7 @@ def build_apogee_jdf_xml(
     <JDF ID="STR_{nro5}" JobPartID="STR_{nro5}" Type="ProcessGroup" Types="ImpositionPreparation"
          Category="MISPRE.ImpositionPreparation" Status="Waiting" DescriptiveName="GB ImpositionPreparation">
       <ResourceLinkPool>
-        <LayoutLink rRef="LAY_{nro5}" Usage="Output"/>{str_marks_link}
+        <LayoutLink rRef="LAY_{nro5}" Usage="Output"/>
       </ResourceLinkPool>
     </JDF>
 
@@ -412,7 +442,7 @@ def build_apogee_jdf_xml(
          NamedFeatures="{imp_features}">
       <ResourceLinkPool>
         <RunListLink rRef="RL_{nro5}_D" ProcessUsage="Document" Usage="Input"/>
-        <LayoutLink rRef="LAY_{nro5}" Usage="Input"/>{imp_marks_link}
+        <LayoutLink rRef="LAY_{nro5}" Usage="Input"/>
         <ColorantControlLink rRef="CC_{nro5}" Usage="Input"/>
         <MediaLink rRef="PAP_{nro5}" Usage="Input"/>
       </ResourceLinkPool>

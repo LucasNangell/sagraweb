@@ -191,34 +191,56 @@ def test_path_to_file_url_unc_encode_espacos():
 
 
 def test_build_apogee_jdf_xml_com_marcas_corte(tmp_path: Path):
-    from services.papelaria_jdf_service import build_apogee_jdf_xml
+    import fitz
+
+    from services.papelaria_jdf_service import MM_TO_PT, build_apogee_jdf_xml
 
     pdf = tmp_path / "06227-AirtonFaleiro-BlocoA5-BaseSefoc.pdf"
     pdf.write_bytes(b"%PDF")
-    marcas = (
-        r"\\redecamara\dfsdata\CGraf\Sefoc\Laboratorio\Modelos\\"
-        r"Modelos Corel\Papelaria\CSP\ImposicaoSIELT_5x2_A4.pdf"
-    )
+    # PDF de marcas A4 com TrimBox deslocada (como ImposicaoSIELT_5x2_A4).
+    marcas_path = tmp_path / "ImposicaoSIELT_5x2_A4.pdf"
+    doc = fitz.open()
+    page = doc.new_page(width=210 * MM_TO_PT, height=297 * MM_TO_PT)
+    # TrimBox ≈ grade centralizada 170×250 mm em A4 → origem ~20×23.5 mm
+    trim = fitz.Rect(20 * MM_TO_PT, 23.5 * MM_TO_PT, 190 * MM_TO_PT, 273.5 * MM_TO_PT)
+    page.set_trimbox(trim)
+    doc.save(str(marcas_path))
+    doc.close()
+
     xml = build_apogee_jdf_xml(
         ano=2026,
         nro=6227,
         descriptive_name="AirtonFaleiro-BlocoA5",
-        comment="teste 2x1 com marcas",
+        comment="teste com marcas como conteúdo",
         export_folder=str(tmp_path),
-        export_filename="06227-AirtonFaleiro-BlocoA5_Imposição.pdf",
+        export_filename="AirtonFaleiro-BlocoA5.pdf",
         base_pdf_path=str(pdf),
         base_pdf_user_name=pdf.stem,
-        config=_base_config(marcas_corte=True, marcas_pdf_path=marcas),
-        page_w_mm=148,
-        page_h_mm=210,
+        config=_base_config(
+            marcas_corte=True,
+            marcas_pdf_path=str(marcas_path),
+            folha_mm={"largura": 210, "altura": 297},
+            grid={"colunas": 5, "linhas": 2},
+        ),
+        page_w_mm=85,
+        page_h_mm=50,
     )
-    # Marcas vêm do PDF; JDFNoMarks permanece para não usar marcas auto do Apogee.
+    # Marcas como conteúdo (Ord=1), sem MarkObject / RL_Marcas.
     assert "JDFNoMarks" in xml
-    assert 'ID="RL_Marcas"' in xml
-    assert "MarkObject" in xml
-    assert 'ProcessUsage="Marks"' in xml
+    assert "MarkObject" not in xml
+    assert 'ID="RL_Marcas"' not in xml
+    assert 'ProcessUsage="Marks"' not in xml
+    assert 'Run="Arte"' in xml
+    assert 'Run="Marcas"' in xml
+    assert 'NPage="2"' in xml
+    assert 'ContentObject Ord="1"' in xml
+    assert 'CTM="1 0 0 1 0 0"' in xml
     assert "ImposicaoSIELT_5x2_A4" in xml
-    assert "Modelos%20Corel" in xml
+    # TrimCTM usa origem da TrimBox (~56.693, 66.614)
+    assert "TrimCTM=\"1 0 0 1 56.693 66.614\"" in xml
+    # Arte Ord=0 + marcas Ord=1
+    assert xml.count('ContentObject Ord="0"') == 10
+    assert xml.count('ContentObject Ord="1"') == 1
 
 
 def test_build_apogee_jdf_xml_marcas_sem_path_falha(tmp_path: Path):

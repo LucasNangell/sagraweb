@@ -476,6 +476,8 @@ def _build_imposicao_jdf_artifacts(
 
     sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
     prefix = get_os_folder_basename(ano, nro)
+    # Nome “humano” sem o Nr OS (já vai em JobPartID / nome do .jdf).
+    label = jdf_svc.strip_leading_os_number(prefix, nro) or prefix
     pagina = config.get("pagina") or {}
     if pagina.get("origem") == "fixixa":
         page_w_mm = float(pagina["largura_mm"])
@@ -489,13 +491,13 @@ def _build_imposicao_jdf_artifacts(
     jdf_name = jdf_svc.build_jdf_filename(
         ano=ano,
         nro=nro,
-        folder_basename=f"{prefix}_{cols}x{rows}",
+        folder_basename=f"{label}_{cols}x{rows}",
     )
     export_pdf_name = f"{prefix}_Imposição.pdf"
     jdf_xml = jdf_svc.build_apogee_jdf_xml(
         ano=ano,
         nro=nro,
-        descriptive_name=prefix,
+        descriptive_name=label,
         comment=f"{nro:05d} — imposição {cols}x{rows} ({produto or 'Papelaria'})",
         export_folder=sefoc_dir,
         export_filename=export_pdf_name,
@@ -1767,6 +1769,7 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
         base_pdf_path = resolve_base_sefoc_pdf_path(ano_imp, nro_imp)
         sefoc_dir = resolve_os_papelaria_dir(ano_imp, nro_imp, create=False)
         prefix = get_os_folder_basename(ano_imp, nro_imp)
+        label = jdf_svc.strip_leading_os_number(prefix, nro_imp) or prefix
 
         pagina = config.get("pagina") or {}
         if pagina.get("origem") == "fixixa":
@@ -1781,13 +1784,13 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
         jdf_name = jdf_svc.build_jdf_filename(
             ano=ano_imp,
             nro=nro_imp,
-            folder_basename=f"{prefix}_{cols}x{rows}",
+            folder_basename=f"{label}_{cols}x{rows}",
         )
         export_pdf_name = f"{prefix}_Imposição.pdf"
         jdf_xml = jdf_svc.build_apogee_jdf_xml(
             ano=ano_imp,
             nro=nro_imp,
-            descriptive_name=prefix,
+            descriptive_name=label,
             comment=(
                 f"{nro_imp:05d} — imposição {cols}x{rows} "
                 f"({job.get('produto') or 'Papelaria'})"

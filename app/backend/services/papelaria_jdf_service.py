@@ -65,10 +65,25 @@ def read_pdf_page_size_mm(pdf_path: str) -> tuple[float, float]:
         doc.close()
 
 
+def strip_leading_os_number(text: str, nro: int) -> str:
+    """Remove um ou mais prefixos '{nro:05d}-' do início (evita 06227-06227-…)."""
+    num = f"{int(nro):05d}"
+    return re.sub(rf"^({re.escape(num)}-)+", "", (text or "").strip())
+
+
 def build_jdf_filename(*, ano: int, nro: int, folder_basename: str) -> str:
-    """Ex.: 2026_06227_AirtonFaleiro_A5_2x1.jdf — usa basename da pasta OS."""
-    safe = re.sub(r"[^\w\-]+", "_", folder_basename, flags=re.UNICODE).strip("_")
-    return f"{int(ano)}_{int(nro):05d}_{safe}.jdf"
+    """
+    Ex.: 2026_06227_AirtonFaleiro-BlocoA5_2x1.jdf
+
+    O número da OS entra uma vez (após o ano). O basename da pasta/OS
+    é limpo de prefixos '{nro}-' repetidos antes de compor o nome.
+    """
+    num = f"{int(nro):05d}"
+    rest = strip_leading_os_number(folder_basename, nro)
+    safe = re.sub(r"[^\w\-]+", "_", rest, flags=re.UNICODE).strip("_")
+    if safe:
+        return f"{int(ano)}_{num}_{safe}.jdf"
+    return f"{int(ano)}_{num}.jdf"
 
 
 def compute_content_positions(

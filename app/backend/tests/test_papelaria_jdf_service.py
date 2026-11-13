@@ -6,6 +6,35 @@ from pathlib import Path
 import pytest
 
 
+def test_build_jdf_filename_nao_duplica_nro_os():
+    from services.papelaria_jdf_service import build_jdf_filename
+
+    assert (
+        build_jdf_filename(
+            ano=2026,
+            nro=6227,
+            folder_basename="06227-AirtonFaleiro-BlocoA5_2x1",
+        )
+        == "2026_06227_AirtonFaleiro-BlocoA5_2x1.jdf"
+    )
+    assert (
+        build_jdf_filename(
+            ano=2026,
+            nro=6227,
+            folder_basename="06227-06227-AirtonFaleiro-BlocoA5_2x1",
+        )
+        == "2026_06227_AirtonFaleiro-BlocoA5_2x1.jdf"
+    )
+    assert (
+        build_jdf_filename(
+            ano=2026,
+            nro=6227,
+            folder_basename="AirtonFaleiro-BlocoA5_2x1",
+        )
+        == "2026_06227_AirtonFaleiro-BlocoA5_2x1.jdf"
+    )
+
+
 def test_path_to_file_url_drive():
     from services.papelaria_jdf_service import path_to_file_url
 

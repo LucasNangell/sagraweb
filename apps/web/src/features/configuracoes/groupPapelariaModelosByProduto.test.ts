@@ -24,6 +24,7 @@ describe("groupPapelariaModelosByProduto", () => {
         ordem: 20,
         tem_mockup_config: true,
         tem_preview_config: true,
+        tem_imposicao_config: true,
       }),
       modelo({
         id: 1,
@@ -39,6 +40,8 @@ describe("groupPapelariaModelosByProduto", () => {
     expect(groups[1].modelos.map((m) => m.id)).toEqual([1, 2]);
     expect(groups[1].comMockup).toBe(1);
     expect(groups[1].comPreview).toBe(2);
+    expect(groups[1].comImposicao).toBe(1);
+    expect(groups[0].comImposicao).toBe(0);
   });
 
   it("trata produto vazio como grupo único", () => {

@@ -5,6 +5,7 @@ export type PapelariaProdutoGroup = {
   modelos: PapelariaAdminModelRecord[];
   comMockup: number;
   comPreview: number;
+  comImposicao: number;
 };
 
 export function groupPapelariaModelosByProduto(
@@ -26,6 +27,7 @@ export function groupPapelariaModelosByProduto(
       modelos: list,
       comMockup: list.filter((m) => m.tem_mockup_config).length,
       comPreview: list.filter((m) => m.tem_preview_config).length,
+      comImposicao: list.filter((m) => m.tem_imposicao_config).length,
     });
   }
 

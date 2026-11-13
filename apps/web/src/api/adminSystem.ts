@@ -491,6 +491,33 @@ export async function savePapelariaAdminPastaImposicao(
   );
 }
 
+export async function savePapelariaAdminImposicaoConfig(
+  modeloId: number,
+  imposicaoConfigJson: string | null,
+): Promise<PapelariaAdminModelRecord> {
+  return apiFetch<PapelariaAdminModelRecord>(
+    `/papelaria/admin/modelos/${modeloId}/imposicao-config`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imposicao_config_json: imposicaoConfigJson }),
+    },
+  );
+}
+
+export async function validatePapelariaAdminImposicaoConfig(
+  imposicaoConfigJson: string | null,
+): Promise<{ valid: boolean; message: string }> {
+  return apiFetch<{ valid: boolean; message: string }>(
+    "/papelaria/admin/modelos/imposicao-config/validate",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imposicao_config_json: imposicaoConfigJson }),
+    },
+  );
+}
+
 export async function deletePapelariaAdminModelo(
   modeloId: number,
 ): Promise<{ success: boolean }> {

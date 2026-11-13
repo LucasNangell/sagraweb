@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@sagra/ui";
-import { Box, Eye, Loader2, Plus, Printer, Tag } from "lucide-react";
+import { Box, Eye, LayoutGrid, Loader2, Plus, Printer, Tag } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { fetchPapelariaAdminModelos } from "@/api/adminSystem";
@@ -14,17 +14,19 @@ import {
   ConfigSectionHeader,
 } from "./ConfigSectionLayout";
 import { PapelariaModeloDadosPanel } from "./PapelariaModeloDadosPanel";
+import { PapelariaModeloImposicaoPanel } from "./PapelariaModeloImposicaoPanel";
 import { PapelariaModeloMockupPanel } from "./PapelariaModeloMockupPanel";
 import { PapelariaModeloPreviewPanel } from "./PapelariaModeloPreviewPanel";
 import { PapelariaNovoModeloForm } from "./PapelariaNovoModeloForm";
 
-type InnerTab = "dados" | "mockup" | "preview";
+type InnerTab = "dados" | "mockup" | "preview" | "imposicao";
 type WorkspaceMode = "browse" | "new-model" | "new-product";
 
 const INNER_TABS: { id: InnerTab; label: string; icon: typeof Tag }[] = [
   { id: "dados", label: "Dados", icon: Tag },
   { id: "mockup", label: "Mockup 3D", icon: Box },
   { id: "preview", label: "Prévia", icon: Eye },
+  { id: "imposicao", label: "Imposição", icon: LayoutGrid },
 ];
 
 function modeloChipLabel(modelo: PapelariaAdminModelRecord): string {
@@ -135,6 +137,7 @@ export function PapelariaProdutosAdminSection() {
                           {g.modelos.length} modelo{g.modelos.length === 1 ? "" : "s"}
                           {g.comMockup > 0 ? ` · ${g.comMockup} mockup` : ""}
                           {g.comPreview > 0 ? ` · ${g.comPreview} prévia` : ""}
+                          {g.comImposicao > 0 ? ` · ${g.comImposicao} imposição` : ""}
                         </span>
                       </button>
                     </li>
@@ -218,6 +221,9 @@ export function PapelariaProdutosAdminSection() {
                       {m.tem_preview_config ? (
                         <span className="size-1.5 shrink-0 rounded-full bg-sky-500" title="Prévia configurada" />
                       ) : null}
+                      {m.tem_imposicao_config ? (
+                        <span className="size-1.5 shrink-0 rounded-full bg-violet-500" title="Imposição configurada" />
+                      ) : null}
                     </button>
                   ))}
                 </div>
@@ -274,6 +280,12 @@ export function PapelariaProdutosAdminSection() {
                     ) : null}
                     {innerTab === "preview" ? (
                       <PapelariaModeloPreviewPanel
+                        key={selectedModelo.id}
+                        modelo={selectedModelo}
+                      />
+                    ) : null}
+                    {innerTab === "imposicao" ? (
+                      <PapelariaModeloImposicaoPanel
                         key={selectedModelo.id}
                         modelo={selectedModelo}
                       />

@@ -86,6 +86,14 @@ class PapelariaPastaImposicaoPayload(BaseModel):
     pasta_imposicao: Optional[str] = Field(None, max_length=512)
 
 
+class PapelariaImposicaoConfigPayload(BaseModel):
+    imposicao_config_json: Optional[Any] = None
+
+
+class PapelariaImposicaoConfigValidatePayload(BaseModel):
+    imposicao_config_json: Optional[Any] = None
+
+
 def _require_papelaria_access(
     request: Request,
     session: SessionData = Depends(require_session),
@@ -325,6 +333,46 @@ def validar_mockup_config_modelo(
     except Exception as e:
         logger.exception("Erro ao validar mockup config: %s", e)
         raise HTTPException(500, "Erro ao validar configuração de mockup.")
+
+
+@router.put("/admin/modelos/{modelo_id}/imposicao-config")
+def salvar_imposicao_config_modelo(
+    modelo_id: int,
+    payload: PapelariaImposicaoConfigPayload,
+    _session: SessionData = Depends(_require_import_access),
+):
+    try:
+        from services import papelaria_models_service as models_svc
+
+        return models_svc.update_modelo_imposicao_config(
+            modelo_id,
+            payload.imposicao_config_json,
+        )
+    except LookupError:
+        raise HTTPException(404, "Modelo não encontrado.")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        raise HTTPException(500, str(e))
+    except Exception as e:
+        logger.exception("Erro ao salvar imposicao config modelo %s: %s", modelo_id, e)
+        raise HTTPException(500, "Erro ao salvar configuração de imposição.")
+
+
+@router.post("/admin/modelos/imposicao-config/validate")
+def validar_imposicao_config_modelo(
+    payload: PapelariaImposicaoConfigValidatePayload,
+    _session: SessionData = Depends(_require_import_access),
+):
+    try:
+        from services import papelaria_models_service as models_svc
+
+        return models_svc.validate_modelo_imposicao_config(payload.imposicao_config_json)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.exception("Erro ao validar imposicao config: %s", e)
+        raise HTTPException(500, "Erro ao validar configuração de imposição.")
 
 
 @router.put("/admin/modelos/{modelo_id}/preview-config")

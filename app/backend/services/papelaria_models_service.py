@@ -366,6 +366,7 @@ def ensure_papelaria_modelos_table() -> None:
         ("ArquivoModelo", "VARCHAR(255) NULL"),
         ("NomeExibicao", "VARCHAR(255) NULL"),
         ("PastaImposicao", "VARCHAR(512) NULL"),
+        ("ImposicaoConfigJson", "JSON NULL"),
         ("CamposJson", "JSON NULL"),
         ("VariaveisJson", "JSON NULL"),
         ("MockupConfigJson", "JSON NULL"),
@@ -614,6 +615,10 @@ def _preview_config_json_from_row(row: dict[str, Any]) -> Optional[str]:
     return _json_column_from_row(row, "PreviewConfigJson")
 
 
+def _imposicao_config_json_from_row(row: dict[str, Any]) -> Optional[str]:
+    return _json_column_from_row(row, "ImposicaoConfigJson")
+
+
 def _models_select_columns() -> str:
     cols = [
         "ID",
@@ -637,6 +642,8 @@ def _models_select_columns() -> str:
         cols.append("NomeExibicao")
     if _table_has_column("PastaImposicao"):
         cols.append("PastaImposicao")
+    if _table_has_column("ImposicaoConfigJson"):
+        cols.append("ImposicaoConfigJson")
     return ", ".join(cols)
 
 
@@ -712,6 +719,7 @@ def _row_to_modelo(row: dict[str, Any], include_campos: bool = False) -> dict[st
 
     mockup_json = _mockup_config_json_from_row(row)
     preview_json = _preview_config_json_from_row(row)
+    imposicao_json = _imposicao_config_json_from_row(row)
 
     pasta_imposicao = None
     if _table_has_column("PastaImposicao"):
@@ -732,6 +740,8 @@ def _row_to_modelo(row: dict[str, Any], include_campos: bool = False) -> dict[st
         "tem_mockup_config": bool(mockup_json),
         "preview_config_json": preview_json,
         "tem_preview_config": bool(preview_json),
+        "imposicao_config_json": imposicao_json,
+        "tem_imposicao_config": bool(imposicao_json),
     }
     if include_campos:
         out["campos"] = campos if isinstance(campos, dict) else {}
@@ -1004,6 +1014,51 @@ def validate_modelo_mockup_config(mockup_config_json: Any) -> dict[str, Any]:
     if parsed is None:
         return {"valid": True, "message": "Configuração vazia (usará preset automático)."}
     mockup_svc.validate_mockup_config_payload(parsed)
+    return {"valid": True, "message": "Configuração válida."}
+
+
+def update_modelo_imposicao_config(
+    modelo_id: int,
+    imposicao_config_json: Any,
+) -> dict[str, Any]:
+    """Salva ou limpa ImposicaoConfigJson do modelo."""
+    ensure_papelaria_modelos_table()
+    if not _table_has_column("ImposicaoConfigJson"):
+        raise RuntimeError("Coluna ImposicaoConfigJson não disponível no banco.")
+
+    from services import papelaria_imposicao_config_service as imposicao_svc
+
+    normalized = imposicao_svc.normalize_imposicao_config_json(imposicao_config_json)
+
+    existing = db.execute_query(
+        "SELECT ID FROM tabPapelariaModelos WHERE ID = %(id)s AND Ativo = 1 LIMIT 1",
+        {"id": modelo_id},
+    )
+    if not existing:
+        raise LookupError("Modelo não encontrado.")
+
+    db.execute_query(
+        """
+        UPDATE tabPapelariaModelos
+        SET ImposicaoConfigJson = %(cfg)s
+        WHERE ID = %(id)s
+        """,
+        {"id": modelo_id, "cfg": normalized},
+    )
+
+    updated = get_modelo_admin_by_id(modelo_id)
+    if not updated:
+        raise LookupError("Modelo não encontrado após atualização.")
+    return updated
+
+
+def validate_modelo_imposicao_config(imposicao_config_json: Any) -> dict[str, Any]:
+    from services import papelaria_imposicao_config_service as imposicao_svc
+
+    parsed = imposicao_svc.parse_imposicao_config_json(imposicao_config_json)
+    if parsed is None:
+        return {"valid": True, "message": "Configuração vazia (sem imposição configurada)."}
+    imposicao_svc.validate_imposicao_config_payload(parsed)
     return {"valid": True, "message": "Configuração válida."}
 
 

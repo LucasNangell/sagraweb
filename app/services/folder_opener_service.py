@@ -30,7 +30,7 @@ Para gerar executável (a partir de app/services):
 
 Autor: Sistema SAGRA
 Data: 22/01/2026
-Versão: 1.3.0
+Versão: 1.3.1
 """
  
 import os
@@ -47,7 +47,7 @@ from flask_cors import CORS
 # Configuração
 PORT = 5566
 HOST = '127.0.0.1'
-VERSION = "1.3.0"
+VERSION = "1.3.1"
 LOCAL_COMPARE_BASE = f"http://{HOST}:{PORT}"
 PRINT_MAX_PDF_BYTES = 12 * 1024 * 1024
 PRINT_MAX_PAGES = 99
@@ -428,6 +428,147 @@ def is_valid_file_path(path):
         return False, "Tipo de arquivo não permitido"
     return True, "OK"
 
+
+_EXPLORER_WINDOW_CLASSES = frozenset({"CabinetWClass", "ExploreWClass"})
+_SW_RESTORE = 9
+_SWP_NOSIZE = 0x0001
+_SWP_NOMOVE = 0x0002
+_SWP_SHOWWINDOW = 0x0040
+_HWND_TOPMOST = -1
+_HWND_NOTOPMOST = -2
+
+
+def _find_explorer_hwnd_for_folder(folder_path: str):
+    """Retorna HWND da janela do Explorer cujo título corresponde à pasta."""
+    folder_name = Path(folder_path).name.strip()
+    if not folder_name:
+        return None
+
+    user32 = ctypes.windll.user32
+    GetClassNameW = user32.GetClassNameW
+    GetWindowTextW = user32.GetWindowTextW
+    IsWindowVisible = user32.IsWindowVisible
+
+    matches = []
+    folder_name_lower = folder_name.casefold()
+
+    @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+    def enum_callback(hwnd, _lparam):
+        if not IsWindowVisible(hwnd):
+            return True
+        class_buf = ctypes.create_unicode_buffer(256)
+        GetClassNameW(hwnd, class_buf, 256)
+        if class_buf.value not in _EXPLORER_WINDOW_CLASSES:
+            return True
+        title_buf = ctypes.create_unicode_buffer(512)
+        GetWindowTextW(hwnd, title_buf, 512)
+        title = title_buf.value or ""
+        if folder_name_lower in title.casefold():
+            matches.append(int(hwnd))
+        return True
+
+    user32.EnumWindows(enum_callback, 0)
+    return matches[-1] if matches else None
+
+
+def _force_window_foreground(hwnd: int) -> bool:
+    """Traz hwnd ao topo: restore + flash TOPMOST + SetForegroundWindow."""
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+
+    if user32.IsIconic(hwnd):
+        user32.ShowWindow(hwnd, _SW_RESTORE)
+
+    user32.SetWindowPos(
+        hwnd,
+        _HWND_TOPMOST,
+        0,
+        0,
+        0,
+        0,
+        _SWP_NOMOVE | _SWP_NOSIZE | _SWP_SHOWWINDOW,
+    )
+    brought = bool(user32.SetForegroundWindow(hwnd))
+    user32.SetWindowPos(
+        hwnd,
+        _HWND_NOTOPMOST,
+        0,
+        0,
+        0,
+        0,
+        _SWP_NOMOVE | _SWP_NOSIZE | _SWP_SHOWWINDOW,
+    )
+    user32.BringWindowToTop(hwnd)
+    user32.ShowWindow(hwnd, _SW_RESTORE)
+
+    if brought:
+        return True
+
+    # Fallback: AttachThreadInput para contornar restrição de foco do Windows
+    try:
+        foreground = user32.GetForegroundWindow()
+        if not foreground:
+            return False
+        current_thread = kernel32.GetCurrentThreadId()
+        foreground_thread = user32.GetWindowThreadProcessId(foreground, None)
+        target_thread = user32.GetWindowThreadProcessId(hwnd, None)
+        if foreground_thread and foreground_thread != current_thread:
+            user32.AttachThreadInput(current_thread, foreground_thread, True)
+        if target_thread and target_thread != current_thread:
+            user32.AttachThreadInput(current_thread, target_thread, True)
+        user32.SetWindowPos(
+            hwnd,
+            _HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            _SWP_NOMOVE | _SWP_NOSIZE | _SWP_SHOWWINDOW,
+        )
+        brought = bool(user32.SetForegroundWindow(hwnd))
+        user32.SetWindowPos(
+            hwnd,
+            _HWND_NOTOPMOST,
+            0,
+            0,
+            0,
+            0,
+            _SWP_NOMOVE | _SWP_NOSIZE | _SWP_SHOWWINDOW,
+        )
+        if foreground_thread and foreground_thread != current_thread:
+            user32.AttachThreadInput(current_thread, foreground_thread, False)
+        if target_thread and target_thread != current_thread:
+            user32.AttachThreadInput(current_thread, target_thread, False)
+        return brought
+    except Exception:
+        return False
+
+
+def _bring_explorer_folder_to_front(folder_path: str, timeout_s: float = 2.0) -> bool:
+    """
+    Localiza a janela do Explorer da pasta e a traz ao topo (flash TOPMOST).
+    Não falha o endpoint se a janela não for encontrada.
+    """
+    deadline = time.time() + timeout_s
+    hwnd = None
+    while time.time() < deadline:
+        hwnd = _find_explorer_hwnd_for_folder(folder_path)
+        if hwnd:
+            break
+        time.sleep(0.15)
+
+    if not hwnd:
+        log(f"Aviso: janela do Explorer nao encontrada para: {folder_path}")
+        return False
+
+    ok = _force_window_foreground(hwnd)
+    if ok:
+        log(f"Explorer trazido ao topo (hwnd={hwnd})")
+    else:
+        log(f"Aviso: SetForegroundWindow falhou para hwnd={hwnd}")
+    return ok
+
+
 @app.route('/open-folder', methods=['POST'])
 def open_folder():
     """
@@ -543,39 +684,13 @@ def open_folder():
         
         # Abrir pasta no Explorer
         try:
-            # Usar subprocess para abrir a pasta
             subprocess.Popen(['explorer', folder_path], shell=True)
-            
-            # Aguardar a janela ser criada
-            time.sleep(0.7)
-            
-            # Trazer a janela do Explorer para o primeiro plano
+
             try:
-                def bring_to_front():
-                    """Traz a janela do Explorer para o primeiro plano"""
-                    EnumWindows = ctypes.windll.user32.EnumWindows
-                    SetForegroundWindow = ctypes.windll.user32.SetForegroundWindow
-                    ShowWindow = ctypes.windll.user32.ShowWindow
-                    
-                    hwnd_list = []
-                    
-                    def enum_callback(hwnd, param):
-                        hwnd_list.append(hwnd)
-                        return True
-                    
-                    callback_func = ctypes.CFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)(enum_callback)
-                    EnumWindows(callback_func, 0)
-                    
-                    # Trazer a última janela para frente (deve ser a do Explorer)
-                    if hwnd_list:
-                        hwnd = hwnd_list[-1]
-                        SetForegroundWindow(hwnd)
-                        ShowWindow(hwnd, 5)  # SW_SHOW = 5
-                
-                bring_to_front()
+                _bring_explorer_folder_to_front(folder_path)
             except Exception as e:
                 log(f"Aviso: Nao foi possivel trazer janela para frente: {e}")
-            
+
             log(f"Pasta aberta com sucesso: {folder_path}")
             
             return jsonify({

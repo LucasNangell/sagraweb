@@ -44,7 +44,7 @@ def test_health_exposes_pdf_compare_flag(opener):
     res = client.get("/health")
     assert res.status_code == 200
     data = res.get_json()
-    assert data["version"] == "1.3.0"
+    assert data["version"] == "1.3.1"
     assert "pdf_compare" in data
     assert isinstance(data["pdf_compare"], bool)
 

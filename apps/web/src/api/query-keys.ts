@@ -174,6 +174,8 @@ export const queryKeys = {
     svgFields: (codigo: string) => ["papelaria", "svg", "fields", codigo] as const,
     svgPrefill: (ano: number, nro: number) =>
       ["papelaria", "svg", "prefill", ano, nro] as const,
+    deputadoEnrich: (ano: number, nro: number, nome: string) =>
+      ["papelaria", "deputadoEnrich", ano, nro, nome] as const,
   },
   credenciaisDepol: {
     modelos: ["credenciais-depol", "modelos"] as const,

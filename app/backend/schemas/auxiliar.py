@@ -94,6 +94,8 @@ class DeputadoLookupResponse(BaseModel):
     uf: str = ""
     partido_uf: str = ""
     situacao: str = ""
+    sexo: str = ""
+    fones_camara: str = ""
 
 
 class DeputadoEmailsResponse(BaseModel):

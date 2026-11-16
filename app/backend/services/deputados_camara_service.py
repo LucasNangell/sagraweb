@@ -68,6 +68,7 @@ class DeputadoCamara:
             "ramal": self.ramal,
             "foto": self.foto,
             "situacao": self.situacao,
+            "sexo": self.sexo,
             "fones_camara": self.formatar_fones_camara(),
         }
 

@@ -66,6 +66,9 @@ export interface DeputadoLookup {
   uf?: string;
   partido_uf?: string;
   situacao?: string;
+  /** "F" | "M" quando disponível (API Câmara / cache). */
+  sexo?: string;
+  fones_camara?: string;
 }
 
 export async function fetchSetores(): Promise<string[]> {

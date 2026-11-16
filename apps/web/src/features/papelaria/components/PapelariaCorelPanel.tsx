@@ -21,6 +21,7 @@ import {
   gerarProvaCdrExistentePapelariaOs,
   type PapelariaImposicaoOpcoes,
 } from "@/api/papelaria";
+import { fetchDeputadoLookup } from "@/api/auxLookups";
 import { emailProofFileUrl } from "@/api/email";
 import { fetchOsFolderBrowse } from "@/api/os";
 import { useOsPathMutation } from "@/api/hooks/useOsPath";
@@ -46,6 +47,10 @@ import {
   clienteAlteracaoIdentity,
   mergePapelariaFieldValues,
 } from "../applyPapelariaPrefill";
+import {
+  applyCamaraCorelEnrichment,
+  deputadoLookupToCorelPrefill,
+} from "../deputadoCorelPrefill";
 import {
   isReadyImposicaoPdf,
   isWaitingImposicaoApogee,
@@ -190,6 +195,7 @@ export function PapelariaCorelPanel({
   );
   const autoSelectDone = useRef(false);
   const prefillApplied = useRef(false);
+  const camaraEnrichApplied = useRef(false);
   const appliedAlteracaoRef = useRef<string | null>(null);
   const [mobilePanel, setMobilePanel] = useState<"form" | "preview">("form");
   const [viewMode, setViewMode] = useState<PapelariaViewMode>("previa");
@@ -205,6 +211,20 @@ export function PapelariaCorelPanel({
   });
 
   const contextReady = hasOs && contextQuery.isSuccess;
+  const enrichNome = (
+    contextQuery.data?.prefill?.nome_deputado ||
+    contextQuery.data?.os?.titular ||
+    contextQuery.data?.os?.solicitante ||
+    ""
+  ).trim();
+
+  const deputadoEnrichQuery = useQuery({
+    queryKey: queryKeys.papelaria.deputadoEnrich(anoNum, nroNum, enrichNome),
+    queryFn: () => fetchDeputadoLookup(enrichNome),
+    enabled: contextReady && enrichNome.length >= 3,
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
 
   const cdrPathQuery = useQuery({
     queryKey: queryKeys.papelaria.cdrPath(anoNum, nroNum),
@@ -669,6 +689,30 @@ export function PapelariaCorelPanel({
   }, [contextQuery.data]);
 
   useEffect(() => {
+    if (!prefillApplied.current || camaraEnrichApplied.current) return;
+    const dep = deputadoEnrichQuery.data;
+    if (!dep) return;
+    const hasIdentity =
+      Boolean((dep.nome_eleitoral || dep.nome || "").trim()) ||
+      Boolean((dep.email || "").trim()) ||
+      Boolean((dep.partido || "").trim());
+    if (!hasIdentity) {
+      camaraEnrichApplied.current = true;
+      return;
+    }
+    const enrich = deputadoLookupToCorelPrefill(dep);
+    if (Object.keys(enrich).length === 0) {
+      camaraEnrichApplied.current = true;
+      return;
+    }
+    const clienteCampos = contextQuery.data?.cliente_alteracao?.campos ?? null;
+    setFieldValues((prev) =>
+      applyCamaraCorelEnrichment(prev, enrich, clienteCampos),
+    );
+    camaraEnrichApplied.current = true;
+  }, [deputadoEnrichQuery.data, contextQuery.data?.cliente_alteracao?.campos]);
+
+  useEffect(() => {
     const alt = contextQuery.data?.cliente_alteracao;
     if (!alt?.job_id) return;
     const jobId = Number(alt.job_id);
@@ -695,13 +739,16 @@ export function PapelariaCorelPanel({
     setSelectedModelId(model.id);
     setActiveDynamicFields([]);
     setExcludedFields([]);
-    setFieldValues(
-      mergePapelariaFieldValues(
-        {},
-        contextQuery.data?.prefill,
-        contextQuery.data?.cliente_alteracao?.campos,
-      ),
+    const clienteCampos = contextQuery.data?.cliente_alteracao?.campos ?? null;
+    const base = mergePapelariaFieldValues(
+      {},
+      contextQuery.data?.prefill,
+      clienteCampos,
     );
+    const enrich = deputadoEnrichQuery.data
+      ? deputadoLookupToCorelPrefill(deputadoEnrichQuery.data)
+      : {};
+    setFieldValues(applyCamaraCorelEnrichment(base, enrich, clienteCampos));
   };
 
   const camposAlteradosByKey = useMemo(() => {

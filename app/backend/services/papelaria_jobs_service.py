@@ -477,7 +477,6 @@ def _build_imposicao_jdf_artifacts(
 ) -> dict[str, str]:
     """Monta XML/nome/pasta do JDF e grava no hotfolder Apogee (síncrono na API)."""
     from services import papelaria_jdf_service as jdf_svc
-    from services.papelaria_imposicao_juntada_service import resolve_jdf_import_root
 
     sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
     prefix = get_os_folder_basename(ano, nro)

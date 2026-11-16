@@ -511,19 +511,7 @@ def _build_imposicao_jdf_artifacts(
         produto=produto,
     )
 
-    # PDF no hotfolder junto do .jdf (Apogee não busca UNC da Sefoc).
-    staged_pdf = base_pdf_path
-    if sem_imposicao:
-        try:
-            staged_pdf = jdf_svc.stage_pdf_in_hotfolder(
-                base_pdf_path, resolved_jdf_dir
-            )
-        except OSError as exc:
-            raise RuntimeError(
-                f"Não foi possível copiar o PDF para {resolved_jdf_dir}: {exc}"
-            ) from exc
-
-    pdf_for_jdf = staged_pdf if sem_imposicao else base_pdf_path
+    # Só o .jdf vai ao hotfolder. O PDF fica na Sefoc e é referenciado no FileSpec.
     if sem_imposicao:
         jdf_xml = jdf_svc.build_apogee_passthrough_jdf_xml(
             ano=ano,
@@ -532,11 +520,11 @@ def _build_imposicao_jdf_artifacts(
             comment=cmt,
             export_folder=sefoc_dir,
             export_filename=export_pdf_name,
-            base_pdf_path=pdf_for_jdf,
-            base_pdf_user_name=os.path.splitext(os.path.basename(pdf_for_jdf))[0],
+            base_pdf_path=base_pdf_path,
+            base_pdf_user_name=os.path.splitext(os.path.basename(base_pdf_path))[0],
             page_w_mm=page_w_mm,
             page_h_mm=page_h_mm,
-            n_pages=jdf_svc.read_pdf_page_count(pdf_for_jdf),
+            n_pages=jdf_svc.read_pdf_page_count(base_pdf_path),
         )
     else:
         jdf_xml = jdf_svc.build_apogee_jdf_xml(
@@ -546,8 +534,8 @@ def _build_imposicao_jdf_artifacts(
             comment=cmt,
             export_folder=sefoc_dir,
             export_filename=export_pdf_name,
-            base_pdf_path=pdf_for_jdf,
-            base_pdf_user_name=os.path.splitext(os.path.basename(pdf_for_jdf))[0],
+            base_pdf_path=base_pdf_path,
+            base_pdf_user_name=os.path.splitext(os.path.basename(base_pdf_path))[0],
             config=config,
             page_w_mm=page_w_mm,
             page_h_mm=page_h_mm,
@@ -565,8 +553,7 @@ def _build_imposicao_jdf_artifacts(
         "jdf_path": jdf_path,
         "jdf_dir": resolved_jdf_dir,
         "jdf_xml": jdf_xml,
-        "base_pdf_path": pdf_for_jdf,
-        "hotfolder_pdf_path": staged_pdf if sem_imposicao else "",
+        "base_pdf_path": base_pdf_path,
     }
 
 
@@ -3183,9 +3170,6 @@ def _complete_pre_impresso_imposicao_job(
             "jdf_dir": artifacts["jdf_dir"],
             "jdf_name": artifacts["jdf_name"],
             "base_pdf": os.path.basename(gang_path),
-            "hotfolder_pdf": os.path.basename(
-                artifacts.get("hotfolder_pdf_path") or gang_path
-            ),
             "aguardando_apogee": True,
             "pre_impresso_pipeline": False,
             "jdf_sem_imposicao": True,

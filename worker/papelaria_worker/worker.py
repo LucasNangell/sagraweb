@@ -647,19 +647,26 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 if not gang_path:
                     raise CorelGenerationError("gang_pdf_path ausente no job.")
                 os.makedirs(os.path.dirname(gang_path) or ".", exist_ok=True)
+                # Expande por slot (Pasta=2 pastas; Timbrado=4).
+                # 1 OS na Pasta → 2 slots → arte duplicada.
+                art_by_slot: list[str] = []
+                for item, src in zip(lote, pre_pdfs):
+                    copies = max(1, int(item.get("slots") or 1))
+                    art_by_slot.extend([src] * copies)
+
                 if job.get("pasta_art_blank_pages"):
-                    # Pasta: 1 página arte 220×320 + 1 página em branco (por OS).
-                    # Posicionamento no Apogee — sem template/compose.
+                    # Pasta: por pasta na folha → arte 220×320 + branco 220×320.
+                    # 2 pastas ⇒ 4 páginas (ex.: 1 OS: art,branco, art, branco).
                     from imposicao_folha_compose import build_pasta_art_blank_gang
 
                     api.append_log(
                         job_id,
-                        "Montando PDF Pasta: arte + página em branco "
-                        "(posição no Apogee).",
+                        f"Montando PDF Pasta: {len(art_by_slot)} pasta(s) "
+                        f"(arte+branco cada; posição no Apogee).",
                         "info",
                     )
                     gang_logs = build_pasta_art_blank_gang(
-                        art_pdf_paths=pre_pdfs,
+                        art_pdf_paths=art_by_slot,
                         output_pdf_path=gang_path,
                     )
                     pre_logs.extend(gang_logs)
@@ -668,10 +675,6 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                     )
                 else:
                     # Timbrado: PDF multipágina com duplicatas por slot.
-                    art_by_slot: list[str] = []
-                    for item, src in zip(lote, pre_pdfs):
-                        copies = max(1, int(item.get("slots") or 1))
-                        art_by_slot.extend([src] * copies)
                     out = fitz.open()
                     try:
                         for src in art_by_slot:

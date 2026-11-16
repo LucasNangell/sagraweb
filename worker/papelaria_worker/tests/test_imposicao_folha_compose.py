@@ -64,6 +64,26 @@ def test_build_pasta_duas_os(tmp_path: Path):
         assert doc.page_count == 4
 
 
+def test_build_pasta_uma_os_duplicada_4_paginas(tmp_path: Path):
+    """1 OS com 2 slots → arte duplicada → art,branco, art, branco."""
+    art = tmp_path / "art.pdf"
+    out = tmp_path / "gang.pdf"
+    _make_pdf(art, w=220 * MM_TO_PT, h=320 * MM_TO_PT, color=(0.1, 0.1, 0.9))
+    build_pasta_art_blank_gang(
+        art_pdf_paths=[str(art), str(art)],
+        output_pdf_path=str(out),
+    )
+    with fitz.open(out) as doc:
+        assert doc.page_count == 4
+        # Páginas ímpares com tinta; pares em branco.
+        for i in (0, 2):
+            pix = doc[i].get_pixmap(matrix=fitz.Matrix(0.2, 0.2), alpha=False)
+            assert pix.pixel(pix.width // 2, pix.height // 2)[2] > 100
+        for i in (1, 3):
+            pix = doc[i].get_pixmap(matrix=fitz.Matrix(0.2, 0.2), alpha=False)
+            assert sum(pix.pixel(pix.width // 2, pix.height // 2)) > 700
+
+
 def test_expand_art_alinha_direita(tmp_path: Path):
     art = tmp_path / "art.pdf"
     out = tmp_path / "pagina.pdf"

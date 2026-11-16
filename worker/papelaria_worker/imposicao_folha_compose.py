@@ -19,8 +19,11 @@ def build_pasta_art_blank_gang(
     output_pdf_path: str,
 ) -> list[str]:
     """
-    Para cada arte 220×320: página da arte + página em branco (mesmo tamanho).
-    Posicionamento na folha fica a cargo do Apogee (sem compose/template).
+    Folha Pasta = sempre 2 pastas. Cada pasta no PDF:
+      página arte (220×320) + página em branco (mesmo tamanho).
+
+    art_pdf_paths já vem expandido por slot (1 OS com 2 slots → [art, art]
+    ⇒ 4 páginas: art, branco, art, branco). Posição no Apogee.
     """
     if not art_pdf_paths:
         raise ValueError("Nenhuma arte para montar o PDF da Pasta.")

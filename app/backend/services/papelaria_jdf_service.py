@@ -706,8 +706,8 @@ def build_apogee_passthrough_jdf_xml(
     """
     Ticket Apogee sem Layout/ImpositionPreparation/ContentObjects.
 
-    O hotfolder Papelaria_Pasta aplica o Hot Ticket (posição no Apogee).
-    Layout vazio + NamedFeatures «Imposition» gerava «Unknown template».
+    Só o .jdf vai ao hotfolder; FileSpec aponta ao PDF na Sefoc (UNC).
+    Posição/template ficam no Hot Ticket do Apogee.
     """
     nro5 = format_os_number(nro)
     job_name = nro5
@@ -823,28 +823,6 @@ def build_apogee_passthrough_jdf_xml(
   </JDF>
 </JDF>
 """
-
-
-def stage_pdf_in_hotfolder(pdf_path: str, hotfolder: str) -> str:
-    """
-    Copia o PDF para o hotfolder Apogee (mesmo diretório do .jdf).
-    Retorna o caminho absoluto do PDF no hotfolder.
-    """
-    import shutil
-
-    src = os.path.normpath((pdf_path or "").strip())
-    if not src or not os.path.isfile(src):
-        raise FileNotFoundError(f"PDF para hotfolder não encontrado: {src or '(vazio)'}")
-    dest_dir = os.path.normpath((hotfolder or "").strip())
-    if not dest_dir:
-        raise ValueError("Hotfolder Apogee vazio.")
-    os.makedirs(dest_dir, exist_ok=True)
-    dest = os.path.normpath(os.path.join(dest_dir, os.path.basename(src)))
-    if dest.lower() != src.lower():
-        shutil.copy2(src, dest)
-    if not os.path.isfile(dest):
-        raise RuntimeError(f"PDF não persistiu no hotfolder: {dest}")
-    return dest
 
 
 def write_jdf_file(jdf_xml: str, output_dir: str, filename: str) -> str:

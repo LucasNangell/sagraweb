@@ -312,9 +312,9 @@ export function ImposicaoConfigEditor({
         ) : null}
         {isPasta && config.usar_pre_impresso ? (
           <p className="text-[10px] text-slate-500">
-            Pasta pré-impresso: envia PDF com página da arte (220×320) + página
-            em branco (mesmo tamanho). O posicionamento na folha é feito no
-            Apogee (JDF sem layout de imposição).
+            Pasta: 2 pastas na folha. Cada uma = arte 220×320 + página em branco.
+            1 OS → 4 páginas (arte duplicada). Só o .jdf vai ao hotfolder; ele
+            referencia o PDF na Sefoc (posição no Apogee).
           </p>
         ) : null}
         <label className="flex flex-col gap-1 text-xs text-slate-600">

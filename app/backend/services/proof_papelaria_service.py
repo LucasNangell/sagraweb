@@ -162,13 +162,32 @@ def build_portal_papelaria_edit_payload(
     }
 
 
+_PROVA_JOB_TIPOS = frozenset(
+    {
+        "create",
+        "manual_corel",
+        "export_existing_cdr",
+        "credenciais_depol",
+    }
+)
+
+
+def _as_positive_int(value: Any) -> int:
+    try:
+        n = int(str(value or "").strip() or 0)
+    except (TypeError, ValueError):
+        return 0
+    return n if n > 0 else 0
+
+
 def load_cliente_alteracao_prova(ano: int, os_id: int) -> dict[str, Any] | None:
     """Última solicitação de alteração de prova (token rejeitado com JSON de campos)."""
     if os_id < 5000:
         return None
     rows = db.execute_query(
         """
-        SELECT AlteracoesJson, Versao
+        SELECT ID, AlteracoesJson, Versao,
+               COALESCE(DataResposta, DataEnvio) AS DataResposta
         FROM tabProofTokens
         WHERE NroProtocolo = %(nro)s AND AnoProtocolo = %(ano)s
           AND Aprovado = 0
@@ -203,4 +222,34 @@ def load_cliente_alteracao_prova(ano: int, os_id: int) -> dict[str, Any] | None:
         "versao": str(parsed.get("versao") or rows[0].get("Versao") or "").strip(),
         "modelo_id": parsed.get("modelo_id"),
         "job_id": parsed.get("job_id"),
+        "token_id": rows[0].get("ID"),
+        "data_resposta": rows[0].get("DataResposta"),
     }
+
+
+def cliente_alteracao_ainda_pendente(
+    ano: int, os_id: int, alt: dict[str, Any] | None
+) -> bool:
+    """True enquanto não houver prova completed gerada após o pedido do cliente."""
+    if not alt:
+        return False
+    alt_ver = _as_positive_int(alt.get("versao"))
+    alt_job_id = _as_positive_int(alt.get("job_id"))
+    jobs = list_jobs_for_os(ano, os_id, limit=50)
+    for job in jobs:
+        if job.get("status") != STATUS_COMPLETED:
+            continue
+        if (job.get("prova_revisao") or "").strip() == "discarded":
+            continue
+        tipo = (job.get("tipo_job") or "create").strip()
+        if tipo not in _PROVA_JOB_TIPOS:
+            continue
+        job_ver = _as_positive_int(job.get("versao"))
+        job_id = _as_positive_int(job.get("id"))
+        if alt_ver and job_ver > alt_ver:
+            return False
+        if alt_job_id and job_id > alt_job_id:
+            return False
+        # Última prova completed ainda é a rejeitada (ou mesma versão).
+        return True
+    return True

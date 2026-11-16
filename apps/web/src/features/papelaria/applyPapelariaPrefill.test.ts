@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   clienteAlteracaoIdentity,
+  isClienteAlteracaoPendente,
   mergePapelariaFieldValues,
 } from "./applyPapelariaPrefill";
 
@@ -117,5 +118,45 @@ describe("clienteAlteracaoIdentity", () => {
         campos: { a: "1", b: "2" },
       }),
     );
+  });
+});
+
+describe("isClienteAlteracaoPendente", () => {
+  it("fica pendente sem prova completed mais nova", () => {
+    expect(
+      isClienteAlteracaoPendente(
+        { job_id: 42, versao: "2" },
+        [
+          {
+            id: 42,
+            status: "completed",
+            versao: 2,
+            tipo_job: "create",
+          },
+        ],
+      ),
+    ).toBe(true);
+  });
+
+  it("encerra destaque quando há prova completed com versão maior", () => {
+    expect(
+      isClienteAlteracaoPendente(
+        { job_id: 42, versao: "2" },
+        [
+          {
+            id: 50,
+            status: "completed",
+            versao: 3,
+            tipo_job: "create",
+          },
+          {
+            id: 42,
+            status: "completed",
+            versao: 2,
+            tipo_job: "create",
+          },
+        ],
+      ),
+    ).toBe(false);
   });
 });

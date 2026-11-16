@@ -484,6 +484,10 @@ class TestBuildOsContextCoercion:
             },
         )
         monkeypatch.setattr(
+            "services.proof_papelaria_service.cliente_alteracao_ainda_pendente",
+            lambda *_a, **_k: True,
+        )
+        monkeypatch.setattr(
             "services.papelaria_jobs_service.get_job",
             lambda _job_id: {
                 "id": 42,
@@ -578,6 +582,10 @@ class TestBuildOsContextCoercion:
                 "job_id": None,
             },
         )
+        monkeypatch.setattr(
+            "services.proof_papelaria_service.cliente_alteracao_ainda_pendente",
+            lambda *_a, **_k: True,
+        )
 
         ctx = svc.build_os_context(2026, 5024)
 
@@ -629,6 +637,10 @@ class TestBuildOsContextCoercion:
                 "job_id": 99,
             },
         )
+        monkeypatch.setattr(
+            "services.proof_papelaria_service.cliente_alteracao_ainda_pendente",
+            lambda *_a, **_k: True,
+        )
 
         def _job_boom(_job_id):
             raise RuntimeError("db down")
@@ -641,6 +653,64 @@ class TestBuildOsContextCoercion:
         assert ctx["prefill"]["nome_deputado"] == "Nome da API"
         assert ctx["cliente_alteracao"] is not None
         assert ctx["cliente_alteracao"]["campos"]["email"] == "novo@x.com"
+
+    def test_build_os_context_sem_destaque_apos_nova_prova(self, monkeypatch):
+        from services import papelaria_models_service as svc
+
+        monkeypatch.setattr(
+            svc.db,
+            "execute_query",
+            lambda sql, params=None: [
+                {
+                    "NroProtocolo": 5024,
+                    "AnoProtocolo": 2026,
+                    "NomeUsuario": "Teste",
+                    "Titular": "Nome Teste",
+                    "SiglaOrgao": "PL/DF",
+                    "GabSalaUsuario": 716,
+                    "RamalUsuario": 55716,
+                    "Titulo": "Titulo",
+                    "TipoPublicacaoLink": "Ct Visita",
+                    "Cores": 4,
+                    "CoresDescricao": None,
+                    "FrenteVerso": 1,
+                    "Observ": "",
+                }
+            ],
+        )
+        monkeypatch.setattr(
+            svc,
+            "build_prefill_corel",
+            lambda *_a, **_k: {"email": "antigo@x.com", "partido": "PL"},
+        )
+        monkeypatch.setattr(svc, "list_modelos", lambda *a, **k: [])
+        monkeypatch.setattr(
+            "services.proof_papelaria_service.load_cliente_alteracao_prova",
+            lambda *_a, **_k: {
+                "campos": {"email": "novo@x.com"},
+                "observacao_cliente": "Corrigir e-mail",
+                "versao": "2",
+                "modelo_id": None,
+                "job_id": 42,
+            },
+        )
+        monkeypatch.setattr(
+            "services.proof_papelaria_service.cliente_alteracao_ainda_pendente",
+            lambda *_a, **_k: False,
+        )
+        monkeypatch.setattr(
+            "services.papelaria_jobs_service.get_job",
+            lambda _job_id: {
+                "id": 42,
+                "dados": {"email": "antigo@x.com", "partido": "PL"},
+            },
+        )
+
+        ctx = svc.build_os_context(2026, 5024)
+
+        assert ctx["prefill"]["email"] == "novo@x.com"
+        assert ctx["prefill"]["partido"] == "PL"
+        assert ctx["cliente_alteracao"] is None
 
     def test_build_os_context_os_menor_5000_com_produto_papelaria(self, monkeypatch):
         from services import papelaria_models_service as svc

@@ -1637,7 +1637,10 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
     cliente_alteracao = None
     alt = None
     try:
-        from services.proof_papelaria_service import load_cliente_alteracao_prova
+        from services.proof_papelaria_service import (
+            cliente_alteracao_ainda_pendente,
+            load_cliente_alteracao_prova,
+        )
 
         alt = load_cliente_alteracao_prova(ano, nro)
     except Exception as exc:
@@ -1684,14 +1687,17 @@ def build_os_context(ano: int, nro: int) -> dict[str, Any]:
                         }
                     )
         if obs_cli or campos_alt:
-            cliente_alteracao = {
-                "observacao": obs_cli,
-                "versao": alt.get("versao") or "",
-                "modelo_id": alt.get("modelo_id"),
-                "job_id": alt.get("job_id"),
-                "campos": campos_alt if campos_alt else None,
-                "campos_alterados": campos_alterados or None,
-            }
+            # Prefill já recebe os valores do cliente; o destaque só permanece
+            # enquanto a nova prova ainda não foi gerada.
+            if cliente_alteracao_ainda_pendente(ano, nro, alt):
+                cliente_alteracao = {
+                    "observacao": obs_cli,
+                    "versao": alt.get("versao") or "",
+                    "modelo_id": alt.get("modelo_id"),
+                    "job_id": alt.get("job_id"),
+                    "campos": campos_alt if campos_alt else None,
+                    "campos_alterados": campos_alterados or None,
+                }
 
     modelos, warnings, auto_id = match_modelos_para_os(
         produto, cores, frente_verso, todos_modelos

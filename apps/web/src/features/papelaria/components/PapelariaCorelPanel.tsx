@@ -45,6 +45,7 @@ import {
 } from "../preview";
 import {
   clienteAlteracaoIdentity,
+  isClienteAlteracaoPendente,
   mergePapelariaFieldValues,
 } from "../applyPapelariaPrefill";
 import {
@@ -288,6 +289,10 @@ export function PapelariaCorelPanel({
           queryFn: () => fetchPapelariaJob(data.job_id!),
         });
       }
+      // Nova prova gerada: limpa destaque "(alterado pelo cliente)".
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.papelaria.contexto(anoNum, nroNum),
+      });
     },
   });
   const papelariaWsConnected = papelariaWsStatus === "connected";
@@ -782,11 +787,17 @@ export function PapelariaCorelPanel({
     setFieldValues(applyCamaraCorelEnrichment(base, enrich, clienteCampos));
   };
 
+  const clienteAlteracaoPendente = useMemo(() => {
+    const alt = contextQuery.data?.cliente_alteracao;
+    if (!alt) return null;
+    return isClienteAlteracaoPendente(alt, jobsQuery.data) ? alt : null;
+  }, [contextQuery.data?.cliente_alteracao, jobsQuery.data]);
+
   const camposAlteradosByKey = useMemo(() => {
-    const items = contextQuery.data?.cliente_alteracao?.campos_alterados;
+    const items = clienteAlteracaoPendente?.campos_alterados;
     if (!items?.length) return {};
     return Object.fromEntries(items.map((item) => [item.key, item]));
-  }, [contextQuery.data?.cliente_alteracao?.campos_alterados]);
+  }, [clienteAlteracaoPendente?.campos_alterados]);
 
   const previa = useMemo(() => {
     if (!modelDetailQuery.data?.campos) return null;
@@ -1352,12 +1363,12 @@ export function PapelariaCorelPanel({
             ))}
           </ul>
         )}
-        {ctx.cliente_alteracao ? (
+        {clienteAlteracaoPendente ? (
           <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs text-amber-950">
             <p className="font-semibold text-amber-900">
               Alteração solicitada pelo cliente
-              {ctx.cliente_alteracao.versao
-                ? ` — prova v${ctx.cliente_alteracao.versao}`
+              {clienteAlteracaoPendente.versao
+                ? ` — prova v${clienteAlteracaoPendente.versao}`
                 : ""}
             </p>
             <p className="mt-1 text-amber-900/90">
@@ -1365,10 +1376,10 @@ export function PapelariaCorelPanel({
               Campos alterados estão destacados abaixo com o valor anterior e o novo valor.
               Revise e gere uma nova prova ou edite no CorelDRAW.
             </p>
-            {ctx.cliente_alteracao.observacao ? (
+            {clienteAlteracaoPendente.observacao ? (
               <p className="mt-2 rounded border border-amber-200 bg-white/70 px-2 py-1.5 whitespace-pre-wrap">
                 <span className="font-medium">Observações adicionais: </span>
-                {ctx.cliente_alteracao.observacao}
+                {clienteAlteracaoPendente.observacao}
               </p>
             ) : null}
           </div>
@@ -1478,12 +1489,12 @@ export function PapelariaCorelPanel({
                   {formError ? (
                     <p className="mt-2 text-[11px] text-sagra-danger">{formError}</p>
                   ) : null}
-                  {contextQuery.data?.cliente_alteracao?.observacao ? (
+                  {clienteAlteracaoPendente?.observacao ? (
                     <div className="mt-3">
                       <label className="mb-0.5 block text-[11px] font-medium text-amber-800">
                         Observações do cliente (alteração solicitada
-                        {contextQuery.data.cliente_alteracao.versao
-                          ? ` — prova v${contextQuery.data.cliente_alteracao.versao}`
+                        {clienteAlteracaoPendente.versao
+                          ? ` — prova v${clienteAlteracaoPendente.versao}`
                           : ""}
                         )
                       </label>
@@ -1491,7 +1502,7 @@ export function PapelariaCorelPanel({
                         readOnly
                         disabled
                         rows={3}
-                        value={contextQuery.data.cliente_alteracao.observacao}
+                        value={clienteAlteracaoPendente.observacao}
                         className="w-full resize-none rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-950"
                       />
                     </div>

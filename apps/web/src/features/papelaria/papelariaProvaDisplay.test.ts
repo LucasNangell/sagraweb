@@ -64,4 +64,36 @@ describe("resolvePapelariaProvaDisplay", () => {
     expect(out?.provaLabel).toBe("Prova 3");
     expect(out?.pdfUrl).toContain("/papelaria/jobs/10/arquivo/pdf");
   });
+
+  it("adota Prova mais alta da pasta mesmo com job em versão menor", () => {
+    const out = resolvePapelariaProvaDisplay(
+      job({
+        arquivo_pdf: "05954-Nome-BaseSefoc.pdf",
+        tem_arquivo_pdf: true,
+        versao: 2,
+        dados: {
+          prova_web_pdf_name: "05954-Nome-Prova2.pdf",
+          prova_numero: 2,
+        },
+      }),
+      "05954-Nome-Prova3.pdf",
+    );
+    expect(out?.fileLabel).toBe("05954-Nome-Prova3.pdf");
+    expect(out?.provaLabel).toBe("Prova 3");
+    expect(out?.versao).toBe(3);
+    expect(out?.pdfUrl).toContain("05954-Nome-Prova3.pdf");
+  });
+
+  it("não regride para Prova menor sugerida na pasta", () => {
+    const out = resolvePapelariaProvaDisplay(
+      job({
+        arquivo_pdf: "05954-Nome-Prova3.pdf",
+        tem_arquivo_pdf: true,
+        versao: 3,
+      }),
+      "05954-Nome-Prova2.pdf",
+    );
+    expect(out?.fileLabel).toBe("05954-Nome-Prova3.pdf");
+    expect(out?.provaLabel).toBe("Prova 3");
+  });
 });

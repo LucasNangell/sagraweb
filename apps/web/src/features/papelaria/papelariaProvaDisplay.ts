@@ -1,6 +1,9 @@
 import { emailProofFileUrl } from "@/api/email";
 import { papelariaJobFileUrl } from "@/api/papelaria";
-import { extractProvaVersionFromFilename } from "@/features/email/utils/proofFilePicker";
+import {
+  extractProvaVersionFromFilename,
+  shouldAdoptSuggestedProof,
+} from "@/features/email/utils/proofFilePicker";
 
 import type { PapelariaJob } from "./types";
 
@@ -17,10 +20,29 @@ export type PapelariaProvaDisplay = {
   provaLabel: string | null;
 };
 
+function resolveVersao(
+  displayFile: string,
+  dados: Record<string, unknown>,
+  jobVersao: number | null | undefined,
+): number | null {
+  const fromName = extractProvaVersionFromFilename(displayFile);
+  const fromDados = Number(dados.prova_numero);
+  const fromJob = Number(jobVersao);
+  return (
+    fromName ??
+    (Number.isFinite(fromDados) && fromDados > 0 ? fromDados : null) ??
+    (Number.isFinite(fromJob) && fromJob > 0 && !BASE_SEFOC_RE.test(displayFile)
+      ? fromJob
+      : null) ??
+    (Number.isFinite(fromJob) && fromJob > 0 ? fromJob : null)
+  );
+}
+
 /**
  * PDF mostrado na visualização de prova.
  * Em prova web, preferir *-ProvaN.pdf (sem brancos) mesmo se o job ainda
- * apontar para BaseSefoc.pdf.
+ * apontar para BaseSefoc.pdf. Se a pasta Sefoc tiver uma Prova com número
+ * maior (suggested), adotar essa em vez do arquivo do job.
  */
 export function resolvePapelariaProvaDisplay(
   job: Pick<
@@ -32,34 +54,37 @@ export function resolvePapelariaProvaDisplay(
     | "versao"
     | "dados"
   > | null | undefined,
+  folderSuggested?: string | null,
 ): PapelariaProvaDisplay | null {
+  const suggested = (folderSuggested || "").trim();
   if (!job) return null;
   const arquivo = (job.arquivo_pdf || "").trim();
-  if (!arquivo) return null;
+  if (!arquivo && !suggested) return null;
 
-  const dados = job.dados ?? {};
+  const dados = (job.dados ?? {}) as Record<string, unknown>;
   const provaWebName = String(dados.prova_web_pdf_name ?? "").trim();
   const provaEmailName = String(dados.prova_email_pdf_name ?? "").trim();
   const prefersProvaFile =
-    BASE_SEFOC_RE.test(arquivo) && Boolean(provaWebName || provaEmailName);
-  const displayFile = prefersProvaFile
+    Boolean(arquivo) &&
+    BASE_SEFOC_RE.test(arquivo) &&
+    Boolean(provaWebName || provaEmailName);
+  let displayFile = prefersProvaFile
     ? provaWebName || provaEmailName
     : arquivo;
+  let fromFolder = false;
 
-  const pdfUrl = prefersProvaFile
-    ? emailProofFileUrl(job.ano_protocolo, job.nro_protocolo, displayFile)
-    : papelariaJobFileUrl(job.id, "pdf");
+  if (suggested && (!displayFile || shouldAdoptSuggestedProof(displayFile, suggested))) {
+    displayFile = suggested;
+    fromFolder = true;
+  }
+  if (!displayFile) return null;
 
-  const fromName = extractProvaVersionFromFilename(displayFile);
-  const fromDados = Number(dados.prova_numero);
-  const fromJob = Number(job.versao);
-  const versao =
-    fromName ??
-    (Number.isFinite(fromDados) && fromDados > 0 ? fromDados : null) ??
-    (Number.isFinite(fromJob) && fromJob > 0 && !BASE_SEFOC_RE.test(displayFile)
-      ? fromJob
-      : null) ??
-    (Number.isFinite(fromJob) && fromJob > 0 ? fromJob : null);
+  const pdfUrl =
+    fromFolder || prefersProvaFile
+      ? emailProofFileUrl(job.ano_protocolo, job.nro_protocolo, displayFile)
+      : papelariaJobFileUrl(job.id, "pdf");
+
+  const versao = resolveVersao(displayFile, dados, job.versao);
 
   return {
     pdfUrl,

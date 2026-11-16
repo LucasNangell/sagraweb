@@ -245,7 +245,7 @@ export function PapelariaProofPanel({
     [];
 
   const provaDisplay = showPdf
-    ? resolvePapelariaProvaDisplay(activeJob)
+    ? resolvePapelariaProvaDisplay(activeJob, folderProofLabel)
     : null;
   const jobPdfUrl = provaDisplay?.pdfUrl ?? "";
   const provaPdfUrl = showPdf ? jobPdfUrl : folderProofPdfUrl ?? "";

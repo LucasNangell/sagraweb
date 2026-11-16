@@ -343,7 +343,7 @@ export function PapelariaCorelPanel({
     }
   }, [activeJobId, activeJobQuery.data, jobsQuery.data, queryClient]);
 
-  /** Ao abrir/voltar para a SP, retoma job em fila/processamento ou aguardando Apogee. */
+  /** Ao abrir/voltar para a SP, retoma job em fila/processamento, Apogee ou última prova. */
   useEffect(() => {
     if (!hasOs || !jobsQuery.data?.length) return;
     const inFlight = [...jobsQuery.data]
@@ -354,7 +354,17 @@ export function PapelariaCorelPanel({
     const waitingApogee = [...jobsQuery.data]
       .filter((j) => isWaitingImposicaoApogee(j))
       .sort((a, b) => b.id - a.id)[0];
-    const target = inFlight ?? waitingApogee;
+    const latestCompletedProof = [...jobsQuery.data]
+      .filter(
+        (j) =>
+          j.status === "completed" &&
+          j.tipo_job !== "imposicao" &&
+          j.tipo_job !== "timbrado_a4_digital" &&
+          j.prova_revisao !== "discarded" &&
+          Boolean(j.tem_arquivo_pdf || j.arquivo_pdf),
+      )
+      .sort((a, b) => b.id - a.id)[0];
+    const target = inFlight ?? waitingApogee ?? latestCompletedProof;
     if (!target) return;
 
     setActiveJobId((prev) => {
@@ -369,11 +379,32 @@ export function PapelariaCorelPanel({
         ) {
           return prev;
         }
+        // Job antigo de prova: sobe para o completed mais recente.
+        if (
+          latestCompletedProof &&
+          current &&
+          current.status === "completed" &&
+          latestCompletedProof.id > current.id &&
+          target.id === latestCompletedProof.id
+        ) {
+          return latestCompletedProof.id;
+        }
+        if (current && !inFlight && !waitingApogee) {
+          // Mantém seleção explícita só se não houver prova mais nova.
+          if (!latestCompletedProof || latestCompletedProof.id <= current.id) {
+            return prev;
+          }
+        }
       }
       return target.id;
     });
-    setViewMode(inFlight ? "prova" : "imposicao");
-    setMobilePanel("preview");
+    if (inFlight) {
+      setViewMode("prova");
+      setMobilePanel("preview");
+    } else if (waitingApogee) {
+      setViewMode("imposicao");
+      setMobilePanel("preview");
+    }
   }, [hasOs, jobsQuery.data, anoNum, nroNum]);
 
   const createJobMutation = useMutation({

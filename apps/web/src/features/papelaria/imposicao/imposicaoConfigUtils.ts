@@ -197,6 +197,7 @@ function coerceRaw(data: Record<string, unknown>): Record<string, unknown> {
   if (out.sangria_mm == null) out.sangria_mm = 0;
   if (out.marcas_corte == null) out.marcas_corte = false;
   if (out.marcas_pdf_path === undefined) out.marcas_pdf_path = null;
+  if (out.imposicao_pdf_path === undefined) out.imposicao_pdf_path = null;
   if (out.centralizar_na_folha == null) out.centralizar_na_folha = true;
   if (out.work_style == null) out.work_style = "Simplex";
   if (out.usar_pre_impresso == null) out.usar_pre_impresso = false;
@@ -333,6 +334,18 @@ export function validateImposicaoConfigObject(
         throw new Error("jdf_import_root deve ser texto.");
       }
       const path = pathRaw.trim();
+      return path || null;
+    })(),
+    imposicao_pdf_path: (() => {
+      const pathRaw = raw.imposicao_pdf_path;
+      if (pathRaw == null || pathRaw === "") return null;
+      if (typeof pathRaw !== "string") {
+        throw new Error("imposicao_pdf_path deve ser texto.");
+      }
+      const path = pathRaw.trim();
+      if (path && !path.toLowerCase().endsWith(".pdf")) {
+        throw new Error("imposicao_pdf_path deve apontar para um arquivo .pdf.");
+      }
       return path || null;
     })(),
   };

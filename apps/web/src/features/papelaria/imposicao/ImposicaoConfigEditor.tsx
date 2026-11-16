@@ -1,4 +1,7 @@
-import { isPreImpressoImposicaoProduct } from "@/features/papelaria/papelariaSession";
+import {
+  isPastaAvulsoProduct,
+  isPreImpressoImposicaoProduct,
+} from "@/features/papelaria/papelariaSession";
 
 import type { PapelariaImposicaoConfig, PapelariaImposicaoPaginaOrigem } from "./types";
 import {
@@ -77,6 +80,7 @@ export function ImposicaoConfigEditor({
   produto?: string | null;
 }) {
   const preImpressoEligivel = isPreImpressoImposicaoProduct(produto);
+  const isPasta = isPastaAvulsoProduct(produto);
   const jdfPlaceholder = (produto || "")
     .trim()
     .toLowerCase()
@@ -305,6 +309,24 @@ export function ImposicaoConfigEditor({
             hint="PDF de imposição sem brasão (somente textos pretos). Padrão ligado para Timbrado/Pasta."
             onChange={(v) => patch("usar_pre_impresso", v)}
           />
+        ) : null}
+        {isPasta && config.usar_pre_impresso ? (
+          <label className="flex flex-col gap-1 text-xs text-slate-600">
+            PDF de imposição (template da folha)
+            <input
+              type="text"
+              className="rounded border border-slate-300 px-2 py-1.5 font-mono text-xs text-slate-800"
+              value={config.imposicao_pdf_path ?? config.marcas_pdf_path ?? ""}
+              placeholder="\\redecamara\dfsdata\...\ImposicaoPasta.pdf"
+              onChange={(e) =>
+                patch("imposicao_pdf_path", e.target.value.trim() || null)
+              }
+            />
+            <span className="text-[10px] text-slate-400">
+              Folha usada para montar as 2 artes (com duplicação se for 1 SP)
+              antes de enviar ao Apogee.
+            </span>
+          </label>
         ) : null}
         <label className="flex flex-col gap-1 text-xs text-slate-600">
           Pasta JDF (hotfolder Apogee)

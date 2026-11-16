@@ -647,27 +647,61 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 if not gang_path:
                     raise CorelGenerationError("gang_pdf_path ausente no job.")
                 os.makedirs(os.path.dirname(gang_path) or ".", exist_ok=True)
-                # Duplica páginas conforme slots (Pasta=2, Timbrado=4 sempre).
-                out = fitz.open()
-                try:
-                    total_pages = 0
-                    for item, src in zip(lote, pre_pdfs):
-                        copies = max(1, int(item.get("slots") or 1))
-                        with fitz.open(src) as doc:
-                            if doc.page_count < 1:
-                                raise CorelGenerationError(
-                                    f"PDF pré-impresso sem páginas: {src}"
-                                )
-                            for _ in range(copies):
+                # Expande artes por slot (Pasta=2, Timbrado=4).
+                art_by_slot: list[str] = []
+                for item, src in zip(lote, pre_pdfs):
+                    copies = max(1, int(item.get("slots") or 1))
+                    art_by_slot.extend([src] * copies)
+
+                if job.get("compose_com_template"):
+                    from imposicao_folha_compose import compose_folha_com_template
+
+                    template = str(
+                        job.get("imposicao_pdf_path")
+                        or (job.get("dados") or {}).get("imposicao_pdf_path")
+                        or ""
+                    ).strip()
+                    cfg_imp = (
+                        job.get("imposicao_config")
+                        or (job.get("dados") or {}).get("imposicao_config")
+                        or {}
+                    )
+                    if not isinstance(cfg_imp, dict):
+                        cfg_imp = {}
+                    api.append_log(
+                        job_id,
+                        f"Montando folha Pasta com PDF de imposição: "
+                        f"{os.path.basename(template) or '(vazio)'}",
+                        "info",
+                    )
+                    compose_logs = compose_folha_com_template(
+                        template_pdf_path=template,
+                        art_pdf_paths=art_by_slot,
+                        config=cfg_imp,
+                        output_pdf_path=gang_path,
+                    )
+                    pre_logs.extend(compose_logs)
+                    msg = compose_logs[-1] if compose_logs else (
+                        f"Folha Pasta montada: {os.path.basename(gang_path)}"
+                    )
+                else:
+                    # Timbrado: PDF multipágina com duplicatas.
+                    out = fitz.open()
+                    try:
+                        for src in art_by_slot:
+                            with fitz.open(src) as doc:
+                                if doc.page_count < 1:
+                                    raise CorelGenerationError(
+                                        f"PDF pré-impresso sem páginas: {src}"
+                                    )
                                 out.insert_pdf(doc, from_page=0, to_page=0)
-                                total_pages += 1
-                    out.save(gang_path)
-                finally:
-                    out.close()
-                msg = (
-                    f"PDF ganged pré-impresso: {os.path.basename(gang_path)} "
-                    f"({total_pages} página(s), duplicadas por slot)."
-                )
+                        out.save(gang_path)
+                    finally:
+                        out.close()
+                    msg = (
+                        f"PDF ganged pré-impresso: {os.path.basename(gang_path)} "
+                        f"({len(art_by_slot)} página(s), duplicadas por slot)."
+                    )
                 pre_logs.append(msg)
                 api.append_log(job_id, msg, "info")
                 result = GenerationResult(

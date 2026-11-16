@@ -270,6 +270,16 @@ def validate_imposicao_config_payload(
     else:
         jdf_import_root = jdf_raw.strip() or None
 
+    imp_pdf_raw = data.get("imposicao_pdf_path")
+    if imp_pdf_raw is None or imp_pdf_raw == "":
+        imposicao_pdf_path: str | None = None
+    elif not isinstance(imp_pdf_raw, str):
+        raise ValueError("imposicao_pdf_path deve ser texto (caminho do PDF).")
+    else:
+        imposicao_pdf_path = imp_pdf_raw.strip() or None
+        if imposicao_pdf_path and not imposicao_pdf_path.lower().endswith(".pdf"):
+            raise ValueError("imposicao_pdf_path deve apontar para um arquivo .pdf.")
+
     return {
         "folha_mm": folha_out,
         "pagina": pagina_out,
@@ -282,6 +292,7 @@ def validate_imposicao_config_payload(
         "work_style": work_style,
         "usar_pre_impresso": usar_pre_impresso,
         "jdf_import_root": jdf_import_root,
+        "imposicao_pdf_path": imposicao_pdf_path,
     }
 
 

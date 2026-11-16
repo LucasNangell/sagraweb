@@ -49,6 +49,11 @@ export interface PapelariaImposicaoConfig {
   marcas_corte: boolean;
   /** Caminho UNC/local do PDF de marcas (obrigatório se marcas_corte). */
   marcas_pdf_path: string | null;
+  /**
+   * PDF template da folha de imposição (Pasta Avulso pré-impresso).
+   * Se vazio, usa marcas_pdf_path quando disponível.
+   */
+  imposicao_pdf_path: string | null;
   /** Distribui sobra da folha igualmente (margens). */
   centralizar_na_folha: boolean;
   /** SourceWorkStyle do Sheet. */
@@ -73,6 +78,7 @@ export const DEFAULT_IMPOSICAO_CONFIG: PapelariaImposicaoConfig = {
   sangria_mm: 0,
   marcas_corte: false,
   marcas_pdf_path: null,
+  imposicao_pdf_path: null,
   centralizar_na_folha: true,
   work_style: "Simplex",
   usar_pre_impresso: false,

@@ -224,6 +224,18 @@ def grid_padrao_pre_impresso(produto: Optional[str]) -> dict[str, int]:
     return {"colunas": 1, "linhas": 1}
 
 
+def resolve_imposicao_template_pdf(config: Optional[dict[str, Any]]) -> str:
+    """
+    PDF template da folha (Pasta): imposicao_pdf_path, senão marcas_pdf_path.
+    """
+    cfg = config if isinstance(config, dict) else {}
+    for key in ("imposicao_pdf_path", "marcas_pdf_path"):
+        raw = str(cfg.get(key) or "").strip()
+        if raw:
+            return raw
+    return ""
+
+
 def format_juntada_descricao(
     ancora: dict[str, Any],
     membros: list[dict[str, Any]],

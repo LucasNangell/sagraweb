@@ -702,6 +702,17 @@ def create_imposicao_job(
     slots_info: Optional[dict[str, Any]] = None
     if usar_pre:
         slots_info = juntada_svc.alocar_slots(tiragens, produto=produto_job)
+        template_pdf = juntada_svc.resolve_imposicao_template_pdf(config)
+        if juntada_svc.is_pasta_avulso_familia(produto_job):
+            if not template_pdf:
+                raise ValueError(
+                    "Pasta Avulso pré-impresso exige o «PDF de imposição» "
+                    "nas configurações de imposição (template da folha)."
+                )
+            if not os.path.isfile(template_pdf):
+                raise FileNotFoundError(
+                    f"PDF de imposição não encontrado: {template_pdf}"
+                )
         # Apogee já tem o layout; SAGRA envia sempre 2 (Pasta) ou 4 (Timbrado) páginas.
         padrao = juntada_svc.grid_padrao_pre_impresso(produto_job)
         grid = dict(config.get("grid") or {})
@@ -789,6 +800,10 @@ def create_imposicao_job(
             "jdf_comment": comment,
             "jdf_import_root": juntada_svc.resolve_jdf_import_root(
                 config, produto=produto_job
+            ),
+            "imposicao_pdf_path": template_pdf or None,
+            "compose_com_template": juntada_svc.is_pasta_avulso_familia(
+                produto_job
             ),
         }
         insert_params = {
@@ -2198,6 +2213,12 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
                 "jdf_comment": dados_imp.get("jdf_comment") or "",
                 "jdf_import_root": resolve_jdf_import_root(
                     config, produto=str(job.get("produto") or "")
+                ),
+                "imposicao_pdf_path": str(
+                    dados_imp.get("imposicao_pdf_path") or ""
+                ),
+                "compose_com_template": bool(
+                    dados_imp.get("compose_com_template")
                 ),
             }
 

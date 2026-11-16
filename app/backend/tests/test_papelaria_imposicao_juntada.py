@@ -115,6 +115,19 @@ class TestImposicaoJuntada:
             {}, produto="Pasta Avulso c/ Bolso"
         ) == DEFAULT_JDF_IMPORT_ROOT_PASTA
 
+    def test_resolve_template_pdf(self):
+        from services.papelaria_imposicao_juntada_service import (
+            resolve_imposicao_template_pdf,
+        )
+
+        assert resolve_imposicao_template_pdf(
+            {"imposicao_pdf_path": r"\\x\a.pdf", "marcas_pdf_path": r"\\x\b.pdf"}
+        ) == r"\\x\a.pdf"
+        assert resolve_imposicao_template_pdf(
+            {"marcas_pdf_path": r"\\x\b.pdf"}
+        ) == r"\\x\b.pdf"
+        assert resolve_imposicao_template_pdf({}) == ""
+
     def test_descricao_juntada(self):
         from services.papelaria_imposicao_juntada_service import (
             format_juntada_descricao,

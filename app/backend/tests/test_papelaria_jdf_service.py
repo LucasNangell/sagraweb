@@ -329,6 +329,38 @@ def test_build_apogee_jdf_xml_marcas_sem_path_falha(tmp_path: Path):
         )
 
 
+def test_build_apogee_passthrough_jdf_xml(tmp_path: Path):
+    import fitz
+
+    from services.papelaria_jdf_service import build_apogee_passthrough_jdf_xml
+
+    pdf = tmp_path / "gang.pdf"
+    doc = fitz.open()
+    doc.new_page(width=220 * 72 / 25.4, height=320 * 72 / 25.4)
+    doc.new_page(width=220 * 72 / 25.4, height=320 * 72 / 25.4)
+    doc.save(pdf)
+    doc.close()
+
+    xml = build_apogee_passthrough_jdf_xml(
+        ano=2026,
+        nro=6220,
+        descriptive_name="JoaoCury-PastaAvulsocBolso",
+        comment="arte+branco",
+        export_folder=str(tmp_path),
+        export_filename="JoaoCury-PastaAvulsocBolso.pdf",
+        base_pdf_path=str(pdf),
+        base_pdf_user_name=pdf.stem,
+        page_w_mm=220,
+        page_h_mm=320,
+        n_pages=2,
+    )
+    assert 'NPage="2"' in xml
+    assert "ContentObject" not in xml
+    assert 'Automated="true"' in xml
+    assert "ExportFolder" in xml
+    assert "JobDescription" in xml
+
+
 def test_write_jdf_file(tmp_path: Path):
     from services.papelaria_jdf_service import write_jdf_file
 

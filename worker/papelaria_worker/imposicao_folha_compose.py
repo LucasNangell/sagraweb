@@ -1,4 +1,4 @@
-"""Monta folha de imposição a partir de PDF template + artes (Pasta Avulso)."""
+"""Montagem de PDFs de imposição Pasta Avulso (arte + página em branco)."""
 from __future__ import annotations
 
 import os
@@ -11,6 +11,47 @@ MM_TO_PT = 72.0 / 25.4
 
 def _mm_to_pt(mm: float) -> float:
     return float(mm) * MM_TO_PT
+
+
+def build_pasta_art_blank_gang(
+    *,
+    art_pdf_paths: list[str],
+    output_pdf_path: str,
+) -> list[str]:
+    """
+    Para cada arte 220×320: página da arte + página em branco (mesmo tamanho).
+    Posicionamento na folha fica a cargo do Apogee (sem compose/template).
+    """
+    if not art_pdf_paths:
+        raise ValueError("Nenhuma arte para montar o PDF da Pasta.")
+    logs: list[str] = []
+    out = fitz.open()
+    try:
+        n_pares = 0
+        for art_path in art_pdf_paths:
+            if not os.path.isfile(art_path):
+                raise FileNotFoundError(f"Arte ausente: {art_path}")
+            with fitz.open(art_path) as art:
+                if art.page_count < 1:
+                    raise ValueError(f"Arte sem páginas: {art_path}")
+                rect = art[0].rect
+                out.insert_pdf(art, from_page=0, to_page=0)
+            blank = fitz.open()
+            try:
+                blank.new_page(width=rect.width, height=rect.height)
+                out.insert_pdf(blank)
+            finally:
+                blank.close()
+            n_pares += 1
+        os.makedirs(os.path.dirname(output_pdf_path) or ".", exist_ok=True)
+        out.save(output_pdf_path)
+        logs.append(
+            f"PDF Pasta: {n_pares} arte(s) + {n_pares} página(s) em branco "
+            f"({out.page_count} pág.) → {os.path.basename(output_pdf_path)}"
+        )
+    finally:
+        out.close()
+    return logs
 
 
 def _fit_gap_mm(

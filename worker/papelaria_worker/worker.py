@@ -647,45 +647,31 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 if not gang_path:
                     raise CorelGenerationError("gang_pdf_path ausente no job.")
                 os.makedirs(os.path.dirname(gang_path) or ".", exist_ok=True)
-                # Expande artes por slot (Pasta=2, Timbrado=4).
-                art_by_slot: list[str] = []
-                for item, src in zip(lote, pre_pdfs):
-                    copies = max(1, int(item.get("slots") or 1))
-                    art_by_slot.extend([src] * copies)
+                if job.get("pasta_art_blank_pages"):
+                    # Pasta: 1 página arte 220×320 + 1 página em branco (por OS).
+                    # Posicionamento no Apogee — sem template/compose.
+                    from imposicao_folha_compose import build_pasta_art_blank_gang
 
-                if job.get("compose_com_template"):
-                    from imposicao_folha_compose import compose_folha_com_template
-
-                    template = str(
-                        job.get("imposicao_pdf_path")
-                        or (job.get("dados") or {}).get("imposicao_pdf_path")
-                        or ""
-                    ).strip()
-                    cfg_imp = (
-                        job.get("imposicao_config")
-                        or (job.get("dados") or {}).get("imposicao_config")
-                        or {}
-                    )
-                    if not isinstance(cfg_imp, dict):
-                        cfg_imp = {}
                     api.append_log(
                         job_id,
-                        f"Montando folha Pasta com PDF de imposição: "
-                        f"{os.path.basename(template) or '(vazio)'}",
+                        "Montando PDF Pasta: arte + página em branco "
+                        "(posição no Apogee).",
                         "info",
                     )
-                    compose_logs = compose_folha_com_template(
-                        template_pdf_path=template,
-                        art_pdf_paths=art_by_slot,
-                        config=cfg_imp,
+                    gang_logs = build_pasta_art_blank_gang(
+                        art_pdf_paths=pre_pdfs,
                         output_pdf_path=gang_path,
                     )
-                    pre_logs.extend(compose_logs)
-                    msg = compose_logs[-1] if compose_logs else (
-                        f"Folha Pasta montada: {os.path.basename(gang_path)}"
+                    pre_logs.extend(gang_logs)
+                    msg = gang_logs[-1] if gang_logs else (
+                        f"PDF Pasta montado: {os.path.basename(gang_path)}"
                     )
                 else:
-                    # Timbrado: PDF multipágina com duplicatas.
+                    # Timbrado: PDF multipágina com duplicatas por slot.
+                    art_by_slot: list[str] = []
+                    for item, src in zip(lote, pre_pdfs):
+                        copies = max(1, int(item.get("slots") or 1))
+                        art_by_slot.extend([src] * copies)
                     out = fitz.open()
                     try:
                         for src in art_by_slot:

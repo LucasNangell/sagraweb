@@ -473,6 +473,7 @@ def _build_imposicao_jdf_artifacts(
     comment: Optional[str] = None,
     descriptive_name: Optional[str] = None,
     jdf_dir: Optional[str] = None,
+    sem_imposicao: bool = False,
 ) -> dict[str, str]:
     """Monta XML/nome/pasta do JDF e grava no hotfolder Apogee (síncrono na API)."""
     from services import papelaria_jdf_service as jdf_svc
@@ -482,41 +483,57 @@ def _build_imposicao_jdf_artifacts(
     prefix = get_os_folder_basename(ano, nro)
     # Nome “humano” sem o Nr OS (já vai em JobPartID / nome do .jdf).
     label = jdf_svc.strip_leading_os_number(prefix, nro) or prefix
-    pagina = config.get("pagina") or {}
-    if pagina.get("origem") == "fixixa":
-        page_w_mm = float(pagina["largura_mm"])
-        page_h_mm = float(pagina["altura_mm"])
-    else:
-        page_w_mm, page_h_mm = jdf_svc.read_pdf_page_size_mm(base_pdf_path)
+    page_w_mm, page_h_mm = jdf_svc.read_pdf_page_size_mm(base_pdf_path)
+    if not sem_imposicao:
+        pagina = config.get("pagina") or {}
+        if pagina.get("origem") == "fixixa":
+            page_w_mm = float(pagina["largura_mm"])
+            page_h_mm = float(pagina["altura_mm"])
 
     grid = config.get("grid") or {}
     cols = int(grid.get("colunas") or 1)
     rows = int(grid.get("linhas") or 1)
+    jdf_suffix = "passthrough" if sem_imposicao else f"{cols}x{rows}"
     jdf_name = jdf_svc.build_jdf_filename(
         ano=ano,
         nro=nro,
-        folder_basename=f"{label}_{cols}x{rows}",
+        folder_basename=f"{label}_{jdf_suffix}",
     )
     # Sem Nr OS e sem "_Imposição": Job Name já é NNNNN; o sufixo
     # "Imposição" é acrescentado pelo próprio Apogee no export.
     export_pdf_name = f"{label}.pdf"
     desc = (descriptive_name or label).strip() or label
     cmt = (comment or "").strip() or (
-        f"imposição {cols}x{rows} ({produto or 'Papelaria'})"
+        f"imposição {jdf_suffix} ({produto or 'Papelaria'})"
     )
-    jdf_xml = jdf_svc.build_apogee_jdf_xml(
-        ano=ano,
-        nro=nro,
-        descriptive_name=desc,
-        comment=cmt,
-        export_folder=sefoc_dir,
-        export_filename=export_pdf_name,
-        base_pdf_path=base_pdf_path,
-        base_pdf_user_name=os.path.splitext(os.path.basename(base_pdf_path))[0],
-        config=config,
-        page_w_mm=page_w_mm,
-        page_h_mm=page_h_mm,
-    )
+    if sem_imposicao:
+        jdf_xml = jdf_svc.build_apogee_passthrough_jdf_xml(
+            ano=ano,
+            nro=nro,
+            descriptive_name=desc,
+            comment=cmt,
+            export_folder=sefoc_dir,
+            export_filename=export_pdf_name,
+            base_pdf_path=base_pdf_path,
+            base_pdf_user_name=os.path.splitext(os.path.basename(base_pdf_path))[0],
+            page_w_mm=page_w_mm,
+            page_h_mm=page_h_mm,
+            n_pages=jdf_svc.read_pdf_page_count(base_pdf_path),
+        )
+    else:
+        jdf_xml = jdf_svc.build_apogee_jdf_xml(
+            ano=ano,
+            nro=nro,
+            descriptive_name=desc,
+            comment=cmt,
+            export_folder=sefoc_dir,
+            export_filename=export_pdf_name,
+            base_pdf_path=base_pdf_path,
+            base_pdf_user_name=os.path.splitext(os.path.basename(base_pdf_path))[0],
+            config=config,
+            page_w_mm=page_w_mm,
+            page_h_mm=page_h_mm,
+        )
     resolved_jdf_dir = jdf_dir or jdf_svc.get_jdf_import_root(
         str(config.get("jdf_import_root") or "") or None,
         produto=produto,
@@ -715,43 +732,34 @@ def create_imposicao_job(
     lote = [{"ano": int(ano), "nro": int(nro)}, *membros]
     tiragens = [_load_os_tiragem(int(x["ano"]), int(x["nro"])) for x in lote]
     slots_info: Optional[dict[str, Any]] = None
+    is_pasta = juntada_svc.is_pasta_avulso_familia(produto_job)
     if usar_pre:
         slots_info = juntada_svc.alocar_slots(tiragens, produto=produto_job)
-        template_pdf = juntada_svc.resolve_imposicao_template_pdf(config)
-        if juntada_svc.is_pasta_avulso_familia(produto_job):
-            if not template_pdf:
+        # Timbrado: grade 2×2 no JDF. Pasta: páginas arte+branco; posição no Apogee.
+        if not is_pasta:
+            padrao = juntada_svc.grid_padrao_pre_impresso(produto_job)
+            grid = dict(config.get("grid") or {})
+            cols = int(padrao.get("colunas") or grid.get("colunas") or 1)
+            rows = int(padrao.get("linhas") or grid.get("linhas") or 1)
+            capacity = cols * rows
+            need = int(slots_info["total_slots"])
+            if need > capacity:
                 raise ValueError(
-                    "Pasta Avulso pré-impresso exige o «PDF de imposição» "
-                    "nas configurações de imposição (template da folha)."
+                    f"Slots da juntada ({need}) excedem a grade "
+                    f"{cols}×{rows} ({capacity})."
                 )
-            if not os.path.isfile(template_pdf):
-                raise FileNotFoundError(
-                    f"PDF de imposição não encontrado: {template_pdf}"
-                )
-        # Apogee já tem o layout; SAGRA envia sempre 2 (Pasta) ou 4 (Timbrado) páginas.
-        padrao = juntada_svc.grid_padrao_pre_impresso(produto_job)
-        grid = dict(config.get("grid") or {})
-        cols = int(padrao.get("colunas") or grid.get("colunas") or 1)
-        rows = int(padrao.get("linhas") or grid.get("linhas") or 1)
-        capacity = cols * rows
-        need = int(slots_info["total_slots"])
-        if need > capacity:
-            raise ValueError(
-                f"Slots da juntada ({need}) excedem a grade "
-                f"{cols}×{rows} ({capacity})."
+            ocupadas = juntada_svc.montar_ocupadas_por_slots(
+                colunas=cols,
+                linhas=rows,
+                slots_por_pagina=list(slots_info["slots"]),
             )
-        ocupadas = juntada_svc.montar_ocupadas_por_slots(
-            colunas=cols,
-            linhas=rows,
-            slots_por_pagina=list(slots_info["slots"]),
-        )
-        grid = {
-            **grid,
-            "colunas": cols,
-            "linhas": rows,
-            "ocupadas": ocupadas,
-        }
-        config = {**config, "grid": grid}
+            grid = {
+                **grid,
+                "colunas": cols,
+                "linhas": rows,
+                "ocupadas": ocupadas,
+            }
+            config = {**config, "grid": grid}
 
     sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
     removed_digital = clear_digital_imposicao_pdfs(sefoc_dir) if not usar_pre else []
@@ -816,10 +824,9 @@ def create_imposicao_job(
             "jdf_import_root": juntada_svc.resolve_jdf_import_root(
                 config, produto=produto_job
             ),
-            "imposicao_pdf_path": template_pdf or None,
-            "compose_com_template": juntada_svc.is_pasta_avulso_familia(
-                produto_job
-            ),
+            "compose_com_template": False,
+            "pasta_art_blank_pages": is_pasta,
+            "jdf_sem_imposicao": is_pasta,
         }
         insert_params = {
             "nro": nro,
@@ -2229,12 +2236,10 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
                 "jdf_import_root": resolve_jdf_import_root(
                     config, produto=str(job.get("produto") or "")
                 ),
-                "imposicao_pdf_path": str(
-                    dados_imp.get("imposicao_pdf_path") or ""
+                "pasta_art_blank_pages": bool(
+                    dados_imp.get("pasta_art_blank_pages")
                 ),
-                "compose_com_template": bool(
-                    dados_imp.get("compose_com_template")
-                ),
+                "compose_com_template": False,
             }
 
         base_pdf_path = resolve_base_sefoc_pdf_path(ano_imp, nro_imp)
@@ -3120,38 +3125,6 @@ def _complete_pre_impresso_imposicao_job(
         raise FileNotFoundError(
             "PDF ganged da imposição pré-impressa não encontrado."
         )
-    # Pasta: gang já é a folha montada no PDF de imposição → JDF 1-up.
-    jdf_config = config
-    if dados.get("compose_com_template"):
-        folha = config.get("folha_mm") or {}
-        try:
-            from services import papelaria_jdf_service as jdf_svc
-
-            gang_w, gang_h = jdf_svc.read_pdf_page_size_mm(gang_path)
-        except Exception:
-            gang_w = float(folha.get("largura") or 0)
-            gang_h = float(folha.get("altura") or 0)
-        jdf_config = {
-            **config,
-            "folha_mm": {
-                "largura": gang_w or float(folha.get("largura") or 0),
-                "altura": gang_h or float(folha.get("altura") or 0),
-            },
-            "pagina": {
-                "origem": "fixixa",
-                "largura_mm": gang_w or float(folha.get("largura") or 0),
-                "altura_mm": gang_h or float(folha.get("altura") or 0),
-            },
-            "grid": {
-                "colunas": 1,
-                "linhas": 1,
-                "ocupadas": [{"col": 0, "row": 0, "pagina": 1}],
-            },
-            "espacamento_mm": {"horizontal": 0.0, "vertical": 0.0},
-            "centralizar_na_folha": False,
-            "marcas_corte": False,
-            "marcas_pdf_path": None,
-        }
     ano = int(job["ano_protocolo"])
     nro = int(job["nro_protocolo"])
     produto = str(job.get("produto") or "Papelaria")
@@ -3160,11 +3133,14 @@ def _complete_pre_impresso_imposicao_job(
         ano=ano,
         nro=nro,
         produto=produto,
-        config=jdf_config,
+        config=config,
         base_pdf_path=gang_path,
         comment=comment,
         descriptive_name=str((dados.get("ancora") or {}).get("label") or "") or None,
         jdf_dir=str(dados.get("jdf_import_root") or "") or None,
+        sem_imposicao=bool(
+            dados.get("jdf_sem_imposicao") or dados.get("pasta_art_blank_pages")
+        ),
     )
     dados.update(
         {

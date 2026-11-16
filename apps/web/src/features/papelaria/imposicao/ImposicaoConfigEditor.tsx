@@ -311,22 +311,11 @@ export function ImposicaoConfigEditor({
           />
         ) : null}
         {isPasta && config.usar_pre_impresso ? (
-          <label className="flex flex-col gap-1 text-xs text-slate-600">
-            PDF de imposição (template da folha)
-            <input
-              type="text"
-              className="rounded border border-slate-300 px-2 py-1.5 font-mono text-xs text-slate-800"
-              value={config.imposicao_pdf_path ?? config.marcas_pdf_path ?? ""}
-              placeholder="\\redecamara\dfsdata\...\ImposicaoPasta.pdf"
-              onChange={(e) =>
-                patch("imposicao_pdf_path", e.target.value.trim() || null)
-              }
-            />
-            <span className="text-[10px] text-slate-400">
-              Folha 656×470 com pastas 440×320; arte 220×320 à direita
-              (esquerda em branco), antes de enviar ao Apogee.
-            </span>
-          </label>
+          <p className="text-[10px] text-slate-500">
+            Pasta pré-impresso: envia PDF com página da arte (220×320) + página
+            em branco (mesmo tamanho). O posicionamento na folha é feito no
+            Apogee (JDF sem layout de imposição).
+          </p>
         ) : null}
         <label className="flex flex-col gap-1 text-xs text-slate-600">
           Pasta JDF (hotfolder Apogee)

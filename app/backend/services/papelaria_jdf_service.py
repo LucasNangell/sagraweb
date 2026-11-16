@@ -625,6 +625,169 @@ def build_apogee_jdf_xml(
     return xml
 
 
+def read_pdf_page_count(pdf_path: str) -> int:
+    import fitz  # pymupdf
+
+    doc = fitz.open(pdf_path)
+    try:
+        return int(doc.page_count)
+    finally:
+        doc.close()
+
+
+def build_apogee_passthrough_jdf_xml(
+    *,
+    ano: int,
+    nro: int,
+    descriptive_name: str,
+    comment: str,
+    export_folder: str,
+    export_filename: str,
+    base_pdf_path: str,
+    base_pdf_user_name: str,
+    page_w_mm: float,
+    page_h_mm: float,
+    n_pages: int,
+    agent_version: str = "1.0",
+    timestamp: datetime | None = None,
+) -> str:
+    """
+    JDF de ticket Apogee sem Layout/ContentObjects de imposição.
+    O hotfolder/preset do Apogee posiciona as páginas (ex.: Pasta arte+branco).
+    """
+    nro5 = format_os_number(nro)
+    job_name = nro5
+    root_id = f"ROOT_{nro5}"
+    ts = timestamp or datetime.now(timezone(timedelta(hours=-3)))
+    ts_str = ts.strftime("%Y-%m-%dT%H:%M:%S%z")
+    if len(ts_str) >= 5 and ts_str[-5] in "+-":
+        ts_str = f"{ts_str[:-2]}:{ts_str[-2:]}"
+
+    page_w_pt = mm_to_pt(page_w_mm)
+    page_h_pt = mm_to_pt(page_h_mm)
+    n_page = max(1, int(n_pages))
+
+    file_url = escape(path_to_file_url(base_pdf_path))
+    export_folder_esc = escape(export_folder.replace("/", "\\"))
+    job_desc = strip_leading_os_number(descriptive_name, nro) or "Papelaria"
+    export_stem = strip_leading_os_number(
+        _export_filename_stem(export_filename),
+        nro,
+    ) or job_desc
+    export_stem = re.sub(
+        r"([_-]?Imposi[cç][aã]o)$",
+        "",
+        export_stem,
+        flags=re.IGNORECASE,
+    ).rstrip("_- ") or job_desc
+    comment_clean = strip_leading_os_number(comment, nro) or comment
+    job_desc_esc = escape(job_desc)
+    export_stem_esc = escape(export_stem)
+    comment_esc = escape(comment_clean)
+    user_name_esc = escape(
+        strip_leading_os_number(base_pdf_user_name, nro) or base_pdf_user_name
+    )
+    job_id = str(int(ano))
+    job_part = nro5
+    root_features = escape(_named_features(root=True))
+    imp_features = escape(_named_features(root=False))
+
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<JDF xmlns="http://www.CIP4.org/JDFSchema_1_1"
+     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     ID="{root_id}" Type="Product" Version="1.4" Status="Waiting"
+     JobID="{escape(job_id)}" JobPartID="{job_part}" DescriptiveName="{escape(job_name)}"
+     NamedFeatures="{root_features}">
+
+  <GeneralID DataType="string" IDUsage="JobDescription" IDValue="{job_desc_esc}"/>
+  <GeneralID DataType="string" IDUsage="ExportFolder"   IDValue="{export_folder_esc}"/>
+  <GeneralID DataType="string" IDUsage="ExportFileName" IDValue="{export_stem_esc}"/>
+
+  <Comment Name="JobDescription">{comment_esc}</Comment>
+
+  <AuditPool>
+    <Created Author="MIS" AgentName="SagraWEB" AgentVersion="{escape(agent_version)}" TimeStamp="{ts_str}"/>
+  </AuditPool>
+
+  <ResourcePool>
+    <ColorantControl Class="Parameter" ID="CC_{nro5}" Status="Available" ProcessColorModel="DeviceCMYK">
+      <ColorPool>
+        <Color Name="Cyan"    CMYK="1 0 0 0" ColorType="Normal"/>
+        <Color Name="Magenta" CMYK="0 1 0 0" ColorType="Normal"/>
+        <Color Name="Yellow"  CMYK="0 0 1 0" ColorType="Normal"/>
+        <Color Name="Black"   CMYK="0 0 0 1" ColorType="Normal"/>
+      </ColorPool>
+      <ColorantParams>
+        <SeparationSpec Name="Cyan"/>
+        <SeparationSpec Name="Magenta"/>
+        <SeparationSpec Name="Yellow"/>
+        <SeparationSpec Name="Black"/>
+      </ColorantParams>
+    </ColorantControl>
+
+    <Media Class="Consumable" ID="PAP_{nro5}" MediaType="Paper" Status="Available"
+           DescriptiveName="Pagina arte" Dimension="{page_w_pt:.3f} {page_h_pt:.3f}"/>
+
+    <Component ID="COMP_{nro5}" Class="Quantity" ComponentType="FinalProduct" Status="Unavailable"/>
+  </ResourcePool>
+
+  <ResourceLinkPool>
+    <ComponentLink rRef="COMP_{nro5}" Usage="Output"/>
+  </ResourceLinkPool>
+
+  <JDF ID="PRE_{nro5}" JobPartID="PRE_{nro5}" Type="ProcessGroup" Category="PrePress"
+       Status="Waiting" DescriptiveName="PrePress">
+
+    <ResourcePool>
+      <RunList Class="Parameter" ID="RL_{nro5}" Status="Available" NPage="{n_page}">
+        <LayoutElement>
+          <FileSpec URL="{file_url}"
+                    MimeType="application/pdf" FileVersion="1"
+                    UserFileName="{user_name_esc}"/>
+        </LayoutElement>
+      </RunList>
+      <RunList Class="Parameter" ID="RL_{nro5}_D" Status="Unavailable"/>
+      <Layout Class="Parameter" ID="LAY_{nro5}" Status="Available" Automated="true">
+        <Signature Name="SIG1">
+          <Sheet Name="SHT1" SourceWorkStyle="Simplex">
+            <MediaRef rRef="PAP_{nro5}"/>
+            <Surface Side="Front" SurfaceContentsBox="0 0 {page_w_pt:.3f} {page_h_pt:.3f}"/>
+          </Sheet>
+        </Signature>
+      </Layout>
+    </ResourcePool>
+
+    <JDF ID="PPP_{nro5}" JobPartID="PPP_{nro5}" Type="ProcessGroup" Types="PrePressPreparation"
+         Category="MISPRE.PrePressPreparation" Status="Waiting" DescriptiveName="GB PrePressPreparation">
+      <ResourceLinkPool>
+        <RunListLink rRef="RL_{nro5}"   ProcessUsage="Document" Usage="Input"/>
+        <RunListLink rRef="RL_{nro5}_D" ProcessUsage="Document" Usage="Output"/>
+      </ResourceLinkPool>
+    </JDF>
+
+    <JDF ID="STR_{nro5}" JobPartID="STR_{nro5}" Type="ProcessGroup" Types="ImpositionPreparation"
+         Category="MISPRE.ImpositionPreparation" Status="Waiting" DescriptiveName="GB ImpositionPreparation">
+      <ResourceLinkPool>
+        <LayoutLink rRef="LAY_{nro5}" Usage="Output"/>
+      </ResourceLinkPool>
+    </JDF>
+
+    <JDF ID="IMP_{nro5}" JobPartID="IMP_{nro5}" Type="ProcessGroup"
+         Types="Imposition DigitalDelivery ProofImaging"
+         Category="MISPRE.ImpositionProofing" Status="Waiting" DescriptiveName="GB Export PDF Imposto"
+         NamedFeatures="{imp_features}">
+      <ResourceLinkPool>
+        <RunListLink rRef="RL_{nro5}_D" ProcessUsage="Document" Usage="Input"/>
+        <LayoutLink rRef="LAY_{nro5}" Usage="Input"/>
+        <ColorantControlLink rRef="CC_{nro5}" Usage="Input"/>
+        <MediaLink rRef="PAP_{nro5}" Usage="Input"/>
+      </ResourceLinkPool>
+    </JDF>
+  </JDF>
+</JDF>
+"""
+
+
 def write_jdf_file(jdf_xml: str, output_dir: str, filename: str) -> str:
     os.makedirs(output_dir, exist_ok=True)
     path = os.path.normpath(os.path.join(output_dir, filename))

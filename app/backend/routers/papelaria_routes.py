@@ -51,6 +51,11 @@ class PapelariaExportExistingCdrPayload(BaseModel):
     arquivo_cdr: Optional[str] = Field(None, max_length=255)
 
 
+class PapelariaImposicaoJuntadaOs(BaseModel):
+    ano: int = Field(..., ge=2000, le=2100)
+    nro: int = Field(..., ge=1)
+
+
 class PapelariaImposicaoPayload(BaseModel):
     ano: int = Field(..., ge=2000, le=2100)
     nro: int = Field(..., ge=1)
@@ -58,6 +63,7 @@ class PapelariaImposicaoPayload(BaseModel):
     modelo_id: Optional[int] = Field(None, ge=1)
     variante: Optional[str] = Field(None, max_length=16)
     imposicao_config: Optional[Any] = None
+    juntada_os: Optional[list[PapelariaImposicaoJuntadaOs]] = None
 
 
 class PapelariaProdutoImposicaoPayload(BaseModel):
@@ -979,15 +985,29 @@ def listar_imposicao_opcoes_os(
     try:
         from services import papelaria_models_service as models_svc
         from services import papelaria_produto_imposicao_service as prod_imp_svc
+        from services import papelaria_imposicao_juntada_service as juntada_svc
 
         modelo = models_svc.get_modelo_by_id(int(modelo_id))
         if not modelo:
             raise LookupError("Modelo não encontrado ou inativo.")
         produto = (modelo.get("produto") or "").strip()
-        return prod_imp_svc.resolve_imposicao_opcoes(
+        opcoes = prod_imp_svc.resolve_imposicao_opcoes(
             produto=produto,
             modelo_imposicao_config_json=modelo.get("imposicao_config_json"),
         )
+        try:
+            juntada = juntada_svc.list_imposicao_candidatas(
+                ano=ano, nro=nro, produto=produto
+            )
+        except Exception:
+            juntada = {
+                "ancora": {"ano": ano, "nro": nro, "produto": produto},
+                "situacao": "",
+                "max_slots": juntada_svc.max_slots(produto),
+                "candidatas": [],
+            }
+        opcoes["juntada"] = juntada
+        return opcoes
     except LookupError as e:
         raise HTTPException(404, str(e))
     except ValueError as e:
@@ -1014,6 +1034,11 @@ def gerar_imposicao_os(
     try:
         from services import papelaria_jobs_service as jobs_svc
 
+        juntada_os = None
+        if payload.juntada_os:
+            juntada_os = [
+                {"ano": int(j.ano), "nro": int(j.nro)} for j in payload.juntada_os
+            ]
         return jobs_svc.create_imposicao_job(
             ano=payload.ano,
             nro=payload.nro,
@@ -1026,6 +1051,7 @@ def gerar_imposicao_os(
                 if isinstance(payload.imposicao_config, dict)
                 else None
             ),
+            juntada_os=juntada_os,
         )
     except LookupError as e:
         raise HTTPException(404, str(e))

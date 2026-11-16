@@ -2,13 +2,17 @@ import { cn } from "@sagra/ui";
 import { Loader2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import type { PapelariaImposicaoOpcoes } from "@/api/papelaria";
+import type {
+  PapelariaImposicaoCandidata,
+  PapelariaImposicaoOpcoes,
+} from "@/api/papelaria";
 import {
   ImposicaoConfigEditor,
   validateImposicaoConfigObject,
   type PapelariaImposicaoConfig,
   type PapelariaImposicaoVariante,
 } from "@/features/papelaria/imposicao";
+import { isPreImpressoImposicaoProduct } from "@/features/papelaria/papelariaSession";
 
 const TABS: { id: PapelariaImposicaoVariante; label: string }[] = [
   { id: "digital", label: "Digital" },
@@ -23,6 +27,64 @@ function asConfig(raw: unknown): PapelariaImposicaoConfig | null {
   } catch {
     return null;
   }
+}
+
+function gcd(a: number, b: number): number {
+  let x = Math.abs(a);
+  let y = Math.abs(b);
+  while (y) {
+    const t = y;
+    y = x % y;
+    x = t;
+  }
+  return x || 1;
+}
+
+function previewSlots(
+  produto: string,
+  tiragens: number[],
+  maxSlots: number,
+): { ok: boolean; slots: number[]; total: number; message?: string } {
+  if (!tiragens.length) {
+    return { ok: false, slots: [], total: 0, message: "Sem tiragens." };
+  }
+  const name = produto.trim().toLowerCase();
+  if (name.startsWith("pasta avulso")) {
+    if (new Set(tiragens).size !== 1) {
+      return {
+        ok: false,
+        slots: [],
+        total: 0,
+        message: "Pasta: tiragens devem ser iguais.",
+      };
+    }
+    const slots = tiragens.map(() => 1);
+    const total = slots.reduce((a, b) => a + b, 0);
+    if (total > maxSlots) {
+      return {
+        ok: false,
+        slots,
+        total,
+        message: `Pasta: máximo ${maxSlots} OS(s).`,
+      };
+    }
+    return { ok: true, slots, total };
+  }
+  if (name === "timbrado a4") {
+    const unit = tiragens.reduce((g, t) => gcd(g, t), tiragens[0] ?? 1);
+    const slots = tiragens.map((t) => Math.floor(t / unit));
+    const total = slots.reduce((a, b) => a + b, 0);
+    if (total > maxSlots) {
+      return {
+        ok: false,
+        slots,
+        total,
+        message: `Timbrado: slots ${slots.join("+")} = ${total} (máx. ${maxSlots}).`,
+      };
+    }
+    return { ok: true, slots, total };
+  }
+  return { ok: false, slots: [], total: 0, message: "Produto sem juntada." };
 }
 
 export function PapelariaImposicaoOsModal({
@@ -43,6 +105,7 @@ export function PapelariaImposicaoOsModal({
   onConfirm: (payload: {
     variante: PapelariaImposicaoVariante;
     imposicao_config: PapelariaImposicaoConfig;
+    juntada_os?: Array<{ ano: number; nro: number }>;
   }) => void;
 }) {
   const disponiveis = useMemo(() => {
@@ -57,6 +120,7 @@ export function PapelariaImposicaoOsModal({
     Record<PapelariaImposicaoVariante, PapelariaImposicaoConfig | null>
   >({ digital: null, offset: null });
   const [localError, setLocalError] = useState<string | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!open || !opcoes) return;
@@ -70,6 +134,7 @@ export function PapelariaImposicaoOsModal({
       ) || (digital ? "digital" : offset ? "offset" : "digital");
     setTab(first);
     setLocalError(null);
+    setSelectedKeys(new Set());
   }, [open, opcoes]);
 
   if (!open) return null;
@@ -77,6 +142,37 @@ export function PapelariaImposicaoOsModal({
   const current = drafts[tab];
   const fonte = opcoes?.fontes?.[tab];
   const tabsVisiveis = TABS.filter((t) => disponiveis.includes(t.id));
+  const produto = (opcoes?.produto || opcoes?.juntada?.ancora?.produto || "").trim();
+  const juntada = opcoes?.juntada;
+  const showJuntada =
+    Boolean(current?.usar_pre_impresso) &&
+    isPreImpressoImposicaoProduct(produto) &&
+    Boolean(juntada);
+  const candidatas: PapelariaImposicaoCandidata[] = juntada?.candidatas || [];
+  const ancoraTiragem = Number(juntada?.ancora?.tiragem || 0);
+  const maxSlots = Number(juntada?.max_slots || 1);
+
+  const selectedCands = candidatas.filter((c) =>
+    selectedKeys.has(`${c.ano}-${c.nro}`),
+  );
+  const tiragensPreview = [
+    ancoraTiragem,
+    ...selectedCands.map((c) => Number(c.tiragem) || 0),
+  ].filter((t) => t > 0);
+  const slotsPreview = showJuntada
+    ? previewSlots(produto, tiragensPreview, maxSlots)
+    : null;
+
+  const toggleCand = (c: PapelariaImposicaoCandidata) => {
+    const key = `${c.ano}-${c.nro}`;
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+    setLocalError(null);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -134,12 +230,73 @@ export function PapelariaImposicaoOsModal({
               Carregando configurações…
             </div>
           ) : current ? (
-            <ImposicaoConfigEditor
-              config={current}
-              onChange={(next) =>
-                setDrafts((prev) => ({ ...prev, [tab]: next }))
-              }
-            />
+            <div className="flex flex-col gap-4">
+              <ImposicaoConfigEditor
+                config={current}
+                produto={produto}
+                onChange={(next) =>
+                  setDrafts((prev) => ({ ...prev, [tab]: next }))
+                }
+              />
+              {showJuntada ? (
+                <section className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
+                  <h3 className="text-xs font-bold text-slate-800">
+                    Juntada (pré-impresso)
+                  </h3>
+                  <p className="mt-0.5 text-[11px] text-slate-500">
+                    Andamento: {juntada?.situacao || "—"}. Âncora tiragem{" "}
+                    {ancoraTiragem || "—"}. Máx. {maxSlots} slot(s) na folha.
+                  </p>
+                  {candidatas.length === 0 ? (
+                    <p className="mt-2 text-[11px] text-slate-500">
+                      Nenhuma OS compatível no mesmo status.
+                    </p>
+                  ) : (
+                    <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+                      {candidatas.map((c) => {
+                        const key = `${c.ano}-${c.nro}`;
+                        const checked = selectedKeys.has(key);
+                        return (
+                          <li key={key}>
+                            <label className="flex cursor-pointer items-start gap-2 rounded px-1 py-1 text-xs text-slate-700 hover:bg-white">
+                              <input
+                                type="checkbox"
+                                className="mt-0.5 size-3.5 rounded border-slate-300"
+                                checked={checked}
+                                onChange={() => toggleCand(c)}
+                              />
+                              <span>
+                                <span className="font-semibold">
+                                  {String(c.nro).padStart(5, "0")}
+                                </span>
+                                {" — "}
+                                {c.label || c.produto}
+                                <span className="text-slate-400">
+                                  {" "}
+                                  · tiragem {c.tiragem}
+                                </span>
+                              </span>
+                            </label>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  {slotsPreview ? (
+                    <p
+                      className={cn(
+                        "mt-2 text-[11px]",
+                        slotsPreview.ok ? "text-slate-600" : "text-amber-700",
+                      )}
+                    >
+                      {slotsPreview.ok
+                        ? `Slots: ${slotsPreview.slots.join(" + ")} = ${slotsPreview.total}`
+                        : slotsPreview.message}
+                    </p>
+                  ) : null}
+                </section>
+              ) : null}
+            </div>
           ) : (
             <p className="py-6 text-sm text-amber-700">
               Nenhuma configuração {tab} disponível. Configure o padrão do
@@ -174,7 +331,32 @@ export function PapelariaImposicaoOsModal({
                 const cfg = validateImposicaoConfigObject(current, {
                   requireMarcasPdf: true,
                 });
-                onConfirm({ variante: tab, imposicao_config: cfg });
+                if (
+                  cfg.usar_pre_impresso &&
+                  isPreImpressoImposicaoProduct(produto) &&
+                  selectedCands.length > 0
+                ) {
+                  const check = previewSlots(
+                    produto,
+                    [
+                      ancoraTiragem,
+                      ...selectedCands.map((c) => Number(c.tiragem) || 0),
+                    ],
+                    maxSlots,
+                  );
+                  if (!check.ok) {
+                    setLocalError(check.message || "Juntada incompatível.");
+                    return;
+                  }
+                }
+                onConfirm({
+                  variante: tab,
+                  imposicao_config: cfg,
+                  juntada_os: selectedCands.map((c) => ({
+                    ano: c.ano,
+                    nro: c.nro,
+                  })),
+                });
               } catch (e) {
                 setLocalError(
                   e instanceof Error ? e.message : "Configuração inválida.",

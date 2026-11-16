@@ -1,4 +1,10 @@
+import { isPreImpressoImposicaoProduct } from "@/features/papelaria/papelariaSession";
+
 import type { PapelariaImposicaoConfig, PapelariaImposicaoPaginaOrigem } from "./types";
+import {
+  DEFAULT_JDF_IMPORT_ROOT_PASTA,
+  DEFAULT_JDF_IMPORT_ROOT_TIMBRADO,
+} from "./types";
 import { clampOcupadasToGrid } from "./imposicaoConfigUtils";
 import { ImposicaoGridPreview } from "./ImposicaoGridPreview";
 
@@ -63,10 +69,22 @@ function CheckboxField({
 export function ImposicaoConfigEditor({
   config,
   onChange,
+  produto,
 }: {
   config: PapelariaImposicaoConfig;
   onChange: (next: PapelariaImposicaoConfig) => void;
+  /** Quando informado, habilita pré-impresso / sugestão de hotfolder. */
+  produto?: string | null;
 }) {
+  const preImpressoEligivel = isPreImpressoImposicaoProduct(produto);
+  const jdfPlaceholder = (produto || "")
+    .trim()
+    .toLowerCase()
+    .startsWith("pasta avulso")
+    ? DEFAULT_JDF_IMPORT_ROOT_PASTA
+    : (produto || "").trim().toLowerCase() === "timbrado a4"
+      ? DEFAULT_JDF_IMPORT_ROOT_TIMBRADO
+      : "\\\\apogee\\JDFImportRoot\\Papelaria";
   const patch = <K extends keyof PapelariaImposicaoConfig>(
     key: K,
     value: PapelariaImposicaoConfig[K],
@@ -280,6 +298,29 @@ export function ImposicaoConfigEditor({
           hint="Sobra de largura/altura vira margem igual dos dois lados"
           onChange={(v) => patch("centralizar_na_folha", v)}
         />
+        {preImpressoEligivel ? (
+          <CheckboxField
+            label="Usar pré-impresso"
+            checked={config.usar_pre_impresso}
+            hint="PDF de imposição sem brasão (somente textos pretos). Padrão ligado para Timbrado/Pasta."
+            onChange={(v) => patch("usar_pre_impresso", v)}
+          />
+        ) : null}
+        <label className="flex flex-col gap-1 text-xs text-slate-600">
+          Pasta JDF (hotfolder Apogee)
+          <input
+            type="text"
+            className="rounded border border-slate-300 px-2 py-1.5 font-mono text-xs text-slate-800"
+            value={config.jdf_import_root ?? ""}
+            placeholder={jdfPlaceholder}
+            onChange={(e) =>
+              patch("jdf_import_root", e.target.value.trim() || null)
+            }
+          />
+          <span className="text-[10px] text-slate-400">
+            Vazio = usar o padrão do produto ({jdfPlaceholder}).
+          </span>
+        </label>
         <CheckboxField
           label="Marcas de corte"
           checked={config.marcas_corte}

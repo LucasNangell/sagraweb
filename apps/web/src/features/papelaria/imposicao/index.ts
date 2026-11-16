@@ -1,5 +1,8 @@
 export {
   DEFAULT_IMPOSICAO_CONFIG,
+  DEFAULT_JDF_IMPORT_ROOT_PAPELARIA,
+  DEFAULT_JDF_IMPORT_ROOT_PASTA,
+  DEFAULT_JDF_IMPORT_ROOT_TIMBRADO,
   type PapelariaImposicaoConfig,
   type PapelariaImposicaoPaginaOrigem,
   type PapelariaImposicaoWorkStyle,
@@ -7,6 +10,7 @@ export {
 export {
   clampOcupadasToGrid,
   cloneDefaultImposicaoConfig,
+  cloneImposicaoConfigForProduto,
   configFromModeloOrDefault,
   fillGridOcupadas,
   fillGridWithPagina,

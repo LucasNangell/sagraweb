@@ -993,6 +993,7 @@ export function PapelariaCorelPanel({
   const runImposicao = (payload?: {
     variante: "digital" | "offset";
     imposicao_config: PapelariaImposicaoConfig;
+    juntada_os?: Array<{ ano: number; nro: number }>;
   }) => {
     if (!selectedModelId) {
       setFormError("Selecione o modelo com configuração de imposição.");
@@ -1010,6 +1011,7 @@ export function PapelariaCorelPanel({
         modelo_id: selectedModelId,
         variante: payload.variante,
         imposicao_config: payload.imposicao_config,
+        juntada_os: payload.juntada_os,
       },
       {
         onSuccess: () => {

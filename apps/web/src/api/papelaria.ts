@@ -154,6 +154,29 @@ export async function gerarProvaCdrExistentePapelariaOs(payload: {
   );
 }
 
+export type PapelariaImposicaoCandidata = {
+  ano: number;
+  nro: number;
+  produto: string;
+  tiragem: number;
+  label: string;
+  slots_com_ancora?: number[];
+  total_slots_com_ancora?: number;
+};
+
+export type PapelariaImposicaoJuntada = {
+  ancora: {
+    ano: number;
+    nro: number;
+    produto?: string;
+    tiragem?: number;
+    label?: string;
+  };
+  situacao: string;
+  max_slots: number;
+  candidatas: PapelariaImposicaoCandidata[];
+};
+
 export type PapelariaImposicaoOpcoes = {
   produto: string;
   digital: Record<string, unknown> | null;
@@ -163,6 +186,7 @@ export type PapelariaImposicaoOpcoes = {
     offset: "modelo" | "produto" | null;
   };
   variantes_disponiveis: Array<"digital" | "offset">;
+  juntada?: PapelariaImposicaoJuntada;
 };
 
 export async function fetchPapelariaImposicaoOpcoes(
@@ -183,6 +207,7 @@ export async function criarPapelariaImposicaoJob(payload: {
   modelo_id?: number | null;
   variante?: "digital" | "offset";
   imposicao_config?: Record<string, unknown>;
+  juntada_os?: Array<{ ano: number; nro: number }>;
 }): Promise<PapelariaJob> {
   return apiFetch<PapelariaJob>(
     `/papelaria/os/${payload.ano}/${payload.nro}/imposicao`,

@@ -470,9 +470,13 @@ def _build_imposicao_jdf_artifacts(
     produto: str,
     config: dict[str, Any],
     base_pdf_path: str,
+    comment: Optional[str] = None,
+    descriptive_name: Optional[str] = None,
+    jdf_dir: Optional[str] = None,
 ) -> dict[str, str]:
     """Monta XML/nome/pasta do JDF e grava no hotfolder Apogee (síncrono na API)."""
     from services import papelaria_jdf_service as jdf_svc
+    from services.papelaria_imposicao_juntada_service import resolve_jdf_import_root
 
     sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
     prefix = get_os_folder_basename(ano, nro)
@@ -496,11 +500,15 @@ def _build_imposicao_jdf_artifacts(
     # Sem Nr OS e sem "_Imposição": Job Name já é NNNNN; o sufixo
     # "Imposição" é acrescentado pelo próprio Apogee no export.
     export_pdf_name = f"{label}.pdf"
+    desc = (descriptive_name or label).strip() or label
+    cmt = (comment or "").strip() or (
+        f"imposição {cols}x{rows} ({produto or 'Papelaria'})"
+    )
     jdf_xml = jdf_svc.build_apogee_jdf_xml(
         ano=ano,
         nro=nro,
-        descriptive_name=label,
-        comment=f"imposição {cols}x{rows} ({produto or 'Papelaria'})",
+        descriptive_name=desc,
+        comment=cmt,
         export_folder=sefoc_dir,
         export_filename=export_pdf_name,
         base_pdf_path=base_pdf_path,
@@ -509,22 +517,94 @@ def _build_imposicao_jdf_artifacts(
         page_w_mm=page_w_mm,
         page_h_mm=page_h_mm,
     )
-    jdf_dir = jdf_svc.get_jdf_import_root()
+    resolved_jdf_dir = jdf_dir or jdf_svc.get_jdf_import_root(
+        str(config.get("jdf_import_root") or "") or None,
+        produto=produto,
+    )
+    # Fallback explícito por produto se get_jdf não usou override.
+    if not jdf_dir and not str(config.get("jdf_import_root") or "").strip():
+        resolved_jdf_dir = resolve_jdf_import_root(config, produto=produto)
     try:
-        jdf_path = jdf_svc.write_jdf_file(jdf_xml, jdf_dir, jdf_name)
+        jdf_path = jdf_svc.write_jdf_file(jdf_xml, resolved_jdf_dir, jdf_name)
     except OSError as exc:
         raise RuntimeError(
-            f"Não foi possível gravar o JDF em {jdf_dir}: {exc}"
+            f"Não foi possível gravar o JDF em {resolved_jdf_dir}: {exc}"
         ) from exc
     if not os.path.isfile(jdf_path):
         raise RuntimeError(f"JDF não persistiu no hotfolder: {jdf_path}")
     return {
         "jdf_name": jdf_name,
         "jdf_path": jdf_path,
-        "jdf_dir": jdf_dir,
+        "jdf_dir": resolved_jdf_dir,
         "jdf_xml": jdf_xml,
         "base_pdf_path": base_pdf_path,
     }
+
+
+def build_pre_impresso_pdf_name(ano: int, nro: int) -> str:
+    prefix = get_os_folder_basename(ano, nro)
+    return f"{prefix}-BaseSefoc-PreImpresso.pdf"
+
+
+def build_imposicao_gang_pdf_name(ano: int, nro: int) -> str:
+    prefix = get_os_folder_basename(ano, nro)
+    return f"{prefix}-ImposicaoGang.pdf"
+
+
+def build_imposicao_offset_pdf_name(
+    *,
+    ano: int,
+    nro: int,
+    config: dict[str, Any],
+) -> str:
+    """{NUMOS-NomePasta}_Offset_{N}Up_{TAMANHO-FOLHA}.pdf"""
+    prefix = get_os_folder_basename(ano, nro)
+    grid = config.get("grid") or {}
+    from services.papelaria_imposicao_config_service import resolve_grid_ocupadas
+
+    n_up = max(1, len(resolve_grid_ocupadas(grid if isinstance(grid, dict) else {})))
+    folha = format_folha_impressao_label(config.get("folha_mm") or {})
+    safe_folha = re.sub(r"[^\w.\-]+", "-", folha).strip("-") or "Folha"
+    return f"{prefix}_Offset_{n_up}Up_{safe_folha}.pdf"
+
+
+def merge_pdf_pages(sources: list[str], dest_path: str) -> str:
+    """Concatena a 1ª página de cada PDF fonte em um único arquivo."""
+    import fitz
+
+    if not sources:
+        raise ValueError("Nenhum PDF para juntar.")
+    os.makedirs(os.path.dirname(dest_path) or ".", exist_ok=True)
+    out = fitz.open()
+    try:
+        for src in sources:
+            if not os.path.isfile(src):
+                raise FileNotFoundError(f"PDF ausente para juntada: {src}")
+            with fitz.open(src) as doc:
+                if doc.page_count < 1:
+                    raise ValueError(f"PDF sem páginas: {os.path.basename(src)}")
+                out.insert_pdf(doc, from_page=0, to_page=0)
+        out.save(dest_path)
+    finally:
+        out.close()
+    return dest_path
+
+
+def _load_os_tiragem(ano: int, nro: int) -> int:
+    from services.papelaria_imposicao_juntada_service import _os_tiragem
+
+    rows = db.execute_query(
+        """
+        SELECT d.Tiragem AS tiragem, d.TiragemSolicitada AS tiragem_solicitada
+        FROM tabDetalhesServico d
+        WHERE d.NroProtocoloLinkDet = %(nro)s AND d.AnoProtocoloLinkDet = %(ano)s
+        LIMIT 1
+        """,
+        {"nro": int(nro), "ano": int(ano)},
+    )
+    if not rows:
+        raise ValueError(f"OS {nro}/{ano} sem detalhes de tiragem.")
+    return _os_tiragem(rows[0])
 
 
 def create_imposicao_job(
@@ -535,12 +615,14 @@ def create_imposicao_job(
     modelo_id: Optional[int] = None,
     variante: Optional[str] = None,
     imposicao_config: Optional[dict[str, Any]] = None,
+    juntada_os: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
-    """Gera e grava JDF Apogee imediatamente (sem fila Corel) a partir do BaseSefoc.pdf."""
+    """Gera JDF Apogee (sync) ou enfileira pipeline pré-impresso/juntada (worker)."""
     ensure_papelaria_jobs_tables()
     from services import papelaria_imposicao_config_service as imposicao_cfg_svc
     from services import papelaria_models_service as models_svc
     from services import papelaria_produto_imposicao_service as produto_imp_svc
+    from services import papelaria_imposicao_juntada_service as juntada_svc
 
     if not modelo_id:
         raise ValueError(
@@ -589,13 +671,171 @@ def create_imposicao_job(
             require_marcas_pdf=True,
         )
 
-    base_pdf_path = resolve_base_sefoc_pdf_path(ano, nro)
-    base_pdf_name = os.path.basename(base_pdf_path)
-    # arquivo_cdr ignorado no fluxo JDF (compat com payload antigo da API)
+    usar_pre = bool(config.get("usar_pre_impresso")) and juntada_svc.is_pre_impresso_produto(
+        produto_job
+    )
+
+    # arquivo_cdr ignorado no fluxo JDF clássico
     _ = arquivo_cdr
 
+    membros_raw = list(juntada_os or [])
+    membros: list[dict[str, Any]] = []
+    seen: set[tuple[int, int]] = {(int(ano), int(nro))}
+    for item in membros_raw:
+        m_ano = int(item.get("ano"))
+        m_nro = int(item.get("nro"))
+        key = (m_ano, m_nro)
+        if key in seen:
+            continue
+        seen.add(key)
+        _validate_os_exists(m_ano, m_nro)
+        membros.append({"ano": m_ano, "nro": m_nro})
+
+    if membros and not usar_pre:
+        raise ValueError(
+            "Juntada de OSs só é permitida com «Usar pré-impresso» "
+            "em Timbrado A4 / Pasta Avulso."
+        )
+
+    lote = [{"ano": int(ano), "nro": int(nro)}, *membros]
+    tiragens = [_load_os_tiragem(int(x["ano"]), int(x["nro"])) for x in lote]
+    slots_info: Optional[dict[str, Any]] = None
+    if usar_pre:
+        slots_info = juntada_svc.alocar_slots(tiragens, produto=produto_job)
+        grid = dict(config.get("grid") or {})
+        cols = int(grid.get("colunas") or 1)
+        rows = int(grid.get("linhas") or 1)
+        capacity = cols * rows
+        if int(slots_info["total_slots"]) > capacity:
+            raise ValueError(
+                f"Slots da juntada ({slots_info['total_slots']}) excedem a grade "
+                f"{cols}×{rows} ({capacity}). Ajuste a imposição ou a seleção."
+            )
+        ocupadas = juntada_svc.montar_ocupadas_por_slots(
+            colunas=cols,
+            linhas=rows,
+            slots_por_pagina=list(slots_info["slots"]),
+        )
+        grid["ocupadas"] = ocupadas
+        config = {**config, "grid": grid}
+
     sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
-    removed_digital = clear_digital_imposicao_pdfs(sefoc_dir)
+    removed_digital = clear_digital_imposicao_pdfs(sefoc_dir) if not usar_pre else []
+
+    ordem = next_queue_position()
+    ancora_label = get_os_folder_basename(ano, nro)
+    membros_meta: list[dict[str, Any]] = []
+    for m in membros:
+        try:
+            label = get_os_folder_basename(int(m["ano"]), int(m["nro"]))
+        except Exception:
+            label = f"{int(m['nro']):05d}"
+        membros_meta.append(
+            {
+                "ano": int(m["ano"]),
+                "nro": int(m["nro"]),
+                "label": label,
+                "tiragem": _load_os_tiragem(int(m["ano"]), int(m["nro"])),
+            }
+        )
+
+    if usar_pre:
+        # Pipeline worker: exporta PreImpresso (sem Brasao), junta PDFs e grava JDF.
+        lote_payload = []
+        for idx, item in enumerate(lote):
+            ia, ir = int(item["ano"]), int(item["nro"])
+            cdr_info = select_os_usable_cdr(ia, ir)
+            sefoc_m = resolve_os_papelaria_dir(ia, ir, create=True)
+            pre_name = build_pre_impresso_pdf_name(ia, ir)
+            lote_payload.append(
+                {
+                    "ano": ia,
+                    "nro": ir,
+                    "tiragem": tiragens[idx],
+                    "slots": int(slots_info["slots"][idx]) if slots_info else 1,
+                    "cdr_path": cdr_info["absolute_path"],
+                    "pre_pdf_name": pre_name,
+                    "pre_pdf_path": os.path.normpath(os.path.join(sefoc_m, pre_name)),
+                    "label": get_os_folder_basename(ia, ir),
+                }
+            )
+        gang_name = build_imposicao_gang_pdf_name(ano, nro)
+        gang_path = os.path.normpath(os.path.join(sefoc_dir, gang_name))
+        comment = juntada_svc.format_juntada_descricao(
+            {"ano": ano, "nro": nro, "label": ancora_label},
+            membros_meta,
+        )
+        dados_clean = {
+            "imposicao_config": config,
+            "imposicao_variante": var,
+            "usar_pre_impresso": True,
+            "imposicao_destino": "offset",
+            "aguardando_apogee": False,
+            "pre_impresso_pipeline": True,
+            "ancora": {"ano": ano, "nro": nro, "label": ancora_label},
+            "juntada_membros": membros_meta,
+            "juntada_lote": lote_payload,
+            "juntada_slots": slots_info,
+            "gang_pdf_name": gang_name,
+            "gang_pdf_path": gang_path,
+            "jdf_comment": comment,
+            "jdf_import_root": juntada_svc.resolve_jdf_import_root(
+                config, produto=produto_job
+            ),
+        }
+        insert_params = {
+            "nro": nro,
+            "ano": ano,
+            "tipo": TIPO_JOB_IMPOSICAO,
+            "produto": produto_job,
+            "modelo_id": int(modelo["id"]),
+            "arquivo": (modelo.get("arquivo_modelo") or "").strip(),
+            "dados": json.dumps(dados_clean, ensure_ascii=False),
+            "status": STATUS_PENDING,
+            "ordem": ordem,
+            "ponto": solicitado_por,
+            "job_pai": None,
+            "prova_revisao": PROVA_REVISAO_NA,
+            "concluido": None,
+        }
+
+        def _insert_pending(cursor) -> int:
+            cursor.execute(
+                """
+                INSERT INTO tabPapelariaJobs (
+                    NroProtocolo, AnoProtocolo, TipoJob, Produto, ModeloID, ArquivoModelo,
+                    DadosJson, Status, Prioridade, OrdemFila, SolicitadoPor, Versao, JobPaiID,
+                    ArquivoPdfGerado, ProvaRevisao, ConcluidoEm
+                ) VALUES (
+                    %(nro)s, %(ano)s, %(tipo)s, %(produto)s, %(modelo_id)s, %(arquivo)s,
+                    %(dados)s, %(status)s, 0, %(ordem)s, %(ponto)s, 1, %(job_pai)s,
+                    NULL, %(prova_revisao)s, %(concluido)s
+                )
+                """,
+                insert_params,
+            )
+            return int(cursor.lastrowid)
+
+        job_id = int(db.execute_transaction([_insert_pending])[0])
+        job = get_job(job_id)
+        if not job:
+            raise RuntimeError("Falha ao recuperar job criado.")
+        n_membros = len(membros_meta)
+        append_job_log(
+            job_id,
+            (
+                f"Imposição pré-impressa enfileirada "
+                f"(âncora {int(nro):05d}"
+                + (f" + {n_membros} OS juntada(s)" if n_membros else "")
+                + f"; slots={slots_info['slots'] if slots_info else [1]})."
+            ),
+            "info",
+        )
+        broadcast_job_update(job)
+        return job
+
+    base_pdf_path = resolve_base_sefoc_pdf_path(ano, nro)
+    base_pdf_name = os.path.basename(base_pdf_path)
 
     artifacts = _build_imposicao_jdf_artifacts(
         ano=ano,
@@ -605,11 +845,12 @@ def create_imposicao_job(
         base_pdf_path=base_pdf_path,
     )
 
-    ordem = next_queue_position()
     dados_clean = {
         "base_pdf": base_pdf_name,
         "imposicao_config": config,
         "imposicao_variante": var,
+        "usar_pre_impresso": False,
+        "imposicao_destino": "digital",
         "jdf_path": artifacts["jdf_path"],
         "jdf_dir": artifacts["jdf_dir"],
         "jdf_name": artifacts["jdf_name"],
@@ -1908,6 +2149,7 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
 
     if job["tipo_job"] == TIPO_JOB_IMPOSICAO:
         from services import papelaria_jdf_service as jdf_svc
+        from services.papelaria_imposicao_juntada_service import resolve_jdf_import_root
 
         dados_imp = dict(job.get("dados") or {})
         config = dados_imp.get("imposicao_config")
@@ -1916,11 +2158,42 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
 
         ano_imp = int(job["ano_protocolo"])
         nro_imp = int(job["nro_protocolo"])
-        base_pdf_path = resolve_base_sefoc_pdf_path(ano_imp, nro_imp)
         sefoc_dir = resolve_os_papelaria_dir(ano_imp, nro_imp, create=False)
         prefix = get_os_folder_basename(ano_imp, nro_imp)
         label = jdf_svc.strip_leading_os_number(prefix, nro_imp) or prefix
 
+        # Pipeline pré-impresso: worker exporta Brasao-off + junta PDFs; JDF depois.
+        if dados_imp.get("pre_impresso_pipeline"):
+            return {
+                "job_id": job["id"],
+                "ano": ano_imp,
+                "nro": nro_imp,
+                "tipo_job": job["tipo_job"],
+                "produto": job["produto"],
+                "modelo_id": job.get("modelo_id"),
+                "arquivo_modelo": (job.get("arquivo_modelo") or "").strip(),
+                "campos": {},
+                "dados": dados_imp,
+                "campos_dinamicos_layout": {},
+                "exclusoes": [],
+                "preview_config": None,
+                "frente_versao": None,
+                "cores": None,
+                "output_dir": sefoc_dir,
+                "output_cdr_name": "",
+                "output_pdf_name": str(dados_imp.get("gang_pdf_name") or ""),
+                "tentativas": job.get("tentativas") or 0,
+                "pre_impresso_pipeline": True,
+                "juntada_lote": dados_imp.get("juntada_lote") or [],
+                "gang_pdf_path": dados_imp.get("gang_pdf_path") or "",
+                "imposicao_config": config,
+                "jdf_comment": dados_imp.get("jdf_comment") or "",
+                "jdf_import_root": resolve_jdf_import_root(
+                    config, produto=str(job.get("produto") or "")
+                ),
+            }
+
+        base_pdf_path = resolve_base_sefoc_pdf_path(ano_imp, nro_imp)
         pagina = config.get("pagina") or {}
         if pagina.get("origem") == "fixixa":
             page_w_mm = float(pagina["largura_mm"])
@@ -1953,7 +2226,10 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
             page_w_mm=page_w_mm,
             page_h_mm=page_h_mm,
         )
-        jdf_dir = jdf_svc.get_jdf_import_root()
+        jdf_dir = jdf_svc.get_jdf_import_root(
+            str(config.get("jdf_import_root") or "") or None,
+            produto=str(job.get("produto") or ""),
+        )
         return {
             "job_id": job["id"],
             "ano": ano_imp,
@@ -2250,6 +2526,16 @@ def complete_job(
             log_resumo=log_resumo,
         )
 
+    dados_complete = dict(job.get("dados") or {})
+    tipo_job = job.get("tipo_job")
+    if tipo_job == TIPO_JOB_IMPOSICAO and dados_complete.get("pre_impresso_pipeline"):
+        # Worker terminou export/junta: grava JDF a partir do PDF ganged.
+        return _complete_pre_impresso_imposicao_job(
+            job,
+            worker_id=worker_id,
+            log_resumo=log_resumo or "",
+        )
+
     cdr_rel = _sanitize_relative_filename(arquivo_cdr) if arquivo_cdr else ""
     pdf_rel = _sanitize_relative_filename(arquivo_pdf)
 
@@ -2259,12 +2545,17 @@ def complete_job(
         create=False,
     )
     pdf_abs = os.path.normpath(os.path.join(output_dir, pdf_rel))
-
-    tipo_job = job.get("tipo_job")
     if tipo_job == TIPO_JOB_IMPOSICAO:
         from services import papelaria_jdf_service as jdf_svc
 
-        jdf_dir = jdf_svc.get_jdf_import_root()
+        jdf_dir = (
+            str(dados_complete.get("jdf_dir") or "").strip()
+            or jdf_svc.get_jdf_import_root(
+                str((dados_complete.get("imposicao_config") or {}).get("jdf_import_root") or "")
+                or None,
+                produto=str(job.get("produto") or ""),
+            )
+        )
         jdf_abs = os.path.normpath(os.path.join(jdf_dir, pdf_rel))
         if not pdf_rel.lower().endswith(".jdf"):
             raise ValueError("Imposição JDF exige arquivo .jdf.")
@@ -2768,6 +3059,80 @@ def clear_digital_imposicao_pdfs(sefoc_dir: str) -> list[str]:
     return removed
 
 
+def _complete_pre_impresso_imposicao_job(
+    job: dict[str, Any],
+    *,
+    worker_id: str,
+    log_resumo: str = "",
+) -> dict[str, Any]:
+    """Após worker gerar PreImpresso+gang: grava JDF e marca aguardando Apogee."""
+    job_id = int(job["id"])
+    dados = dict(job.get("dados") or {})
+    config = dados.get("imposicao_config")
+    if not isinstance(config, dict):
+        raise ValueError("Job pré-impresso sem imposicao_config.")
+    gang_path = str(dados.get("gang_pdf_path") or "").strip()
+    if not gang_path or not os.path.isfile(gang_path):
+        raise FileNotFoundError(
+            "PDF ganged da imposição pré-impressa não encontrado."
+        )
+    ano = int(job["ano_protocolo"])
+    nro = int(job["nro_protocolo"])
+    produto = str(job.get("produto") or "Papelaria")
+    comment = str(dados.get("jdf_comment") or "").strip() or None
+    artifacts = _build_imposicao_jdf_artifacts(
+        ano=ano,
+        nro=nro,
+        produto=produto,
+        config=config,
+        base_pdf_path=gang_path,
+        comment=comment,
+        descriptive_name=str((dados.get("ancora") or {}).get("label") or "") or None,
+        jdf_dir=str(dados.get("jdf_import_root") or "") or None,
+    )
+    dados.update(
+        {
+            "jdf_path": artifacts["jdf_path"],
+            "jdf_dir": artifacts["jdf_dir"],
+            "jdf_name": artifacts["jdf_name"],
+            "base_pdf": os.path.basename(gang_path),
+            "aguardando_apogee": True,
+            "pre_impresso_pipeline": False,
+        }
+    )
+    db.execute_query(
+        """
+        UPDATE tabPapelariaJobs
+        SET Status = %(status)s,
+            DadosJson = %(dados)s,
+            ArquivoCdrGerado = NULL,
+            ArquivoPdfGerado = NULL,
+            ProvaRevisao = %(prova_revisao)s,
+            ConcluidoEm = NOW(),
+            Erro = NULL
+        WHERE ID = %(id)s AND Status = %(processing)s AND WorkerID = %(worker_id)s
+        """,
+        {
+            "status": STATUS_COMPLETED,
+            "dados": json.dumps(dados, ensure_ascii=False),
+            "prova_revisao": PROVA_REVISAO_NA,
+            "id": job_id,
+            "processing": STATUS_PROCESSING,
+            "worker_id": (worker_id or "").strip(),
+        },
+    )
+    updated = get_job(job_id)
+    if not updated or updated["status"] != STATUS_COMPLETED:
+        raise ValueError("Job pré-impresso não pôde ser concluído (status alterado).")
+    msg = (log_resumo or "").strip() or (
+        f"JDF pré-impresso enviado: {artifacts['jdf_name']} "
+        f"({artifacts['jdf_dir']}) a partir de {os.path.basename(gang_path)}."
+    )
+    append_job_log(job_id, msg[:4000], "info")
+    broadcast_job_update(updated)
+    return updated
+
+
 def _finalize_imposicao_digital_pdf(
     *,
     job_id: int,
@@ -2821,6 +3186,89 @@ def _finalize_imposicao_digital_pdf(
     }
 
 
+def _finalize_imposicao_offset_pdf(
+    *,
+    job_id: int,
+    job: dict[str, Any],
+    src_path: str,
+    dest_abs: str,
+    dest_name: str,
+) -> dict[str, Any]:
+    """Move PDF para Offset da âncora e copia para Offset das OSs juntadas."""
+    dados = dict(job.get("dados") or {})
+    os.makedirs(os.path.dirname(dest_abs), exist_ok=True)
+    src_norm = os.path.normpath(src_path)
+    dest_norm = os.path.normpath(dest_abs)
+    if src_norm != dest_norm:
+        if os.path.isfile(dest_norm):
+            os.remove(dest_norm)
+        shutil.move(src_norm, dest_norm)
+    rel_pdf = f"Offset/{dest_name}"
+    origem_name = os.path.basename(src_norm)
+    config = dados.get("imposicao_config") if isinstance(dados.get("imposicao_config"), dict) else {}
+
+    membros = list(dados.get("juntada_membros") or [])
+    copias: list[str] = []
+    for m in membros:
+        try:
+            m_ano = int(m.get("ano"))
+            m_nro = int(m.get("nro"))
+        except (TypeError, ValueError):
+            continue
+        try:
+            m_sefoc = resolve_os_papelaria_dir(m_ano, m_nro, create=True)
+            m_offset = os.path.normpath(os.path.join(m_sefoc, "Offset"))
+            os.makedirs(m_offset, exist_ok=True)
+            m_name = build_imposicao_offset_pdf_name(
+                ano=m_ano, nro=m_nro, config=config
+            )
+            m_dest = os.path.normpath(os.path.join(m_offset, m_name))
+            if os.path.isfile(m_dest):
+                os.remove(m_dest)
+            shutil.copy2(dest_norm, m_dest)
+            copias.append(f"{m_nro:05d}/{m_name}")
+        except Exception as exc:
+            logger.warning(
+                "Falha ao copiar PDF Offset para OS %s/%s: %s",
+                m.get("nro"),
+                m.get("ano"),
+                exc,
+            )
+
+    dados["aguardando_apogee"] = False
+    dados["imposicao_pdf_origem"] = origem_name
+    dados["imposicao_pdf_offset"] = rel_pdf
+    if copias:
+        dados["imposicao_pdf_offset_copias"] = copias
+
+    db.execute_query(
+        """
+        UPDATE tabPapelariaJobs
+        SET ArquivoPdfGerado = %(pdf)s,
+            DadosJson = %(dados)s
+        WHERE ID = %(id)s
+        """,
+        {
+            "pdf": rel_pdf,
+            "dados": json.dumps(dados, ensure_ascii=False),
+            "id": job_id,
+        },
+    )
+    updated = get_job(job_id)
+    if not updated:
+        raise RuntimeError("Falha ao recuperar job após mover PDF Offset.")
+    log_msg = f"PDF Apogee movido para Offset: {dest_name}"
+    if copias:
+        log_msg += f" (cópias: {', '.join(copias)})"
+    append_job_log(job_id, log_msg, "info")
+    broadcast_job_update(updated)
+    return {
+        "status": "ready",
+        "message": "PDF de imposição (Offset) pronto.",
+        "job": updated,
+    }
+
+
 def poll_imposicao_apogee_result(job_id: int) -> dict[str, Any]:
     """
     Verifica Sefoc/Digital por PDF do Apogee; normaliza para Digital com
@@ -2870,6 +3318,41 @@ def poll_imposicao_apogee_result(job_id: int) -> dict[str, Any]:
     ano = int(job["ano_protocolo"])
     nro = int(job["nro_protocolo"])
     sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
+    destino_offset = (
+        str(dados.get("imposicao_destino") or "").strip().lower() == "offset"
+        or bool(dados.get("usar_pre_impresso"))
+    )
+
+    if destino_offset:
+        dest_name = build_imposicao_offset_pdf_name(ano=ano, nro=nro, config=config)
+        offset_dir = os.path.normpath(os.path.join(sefoc_dir, "Offset"))
+        dest_abs = os.path.normpath(os.path.join(offset_dir, dest_name))
+        found = None
+        if os.path.isdir(offset_dir):
+            found = find_imposicao_pdf_in_digital(
+                offset_dir,
+                preferred_name=dest_name,
+            )
+        if not found:
+            expected_stem = _imposicao_export_stem(ano, nro)
+            found = find_imposicao_pdf_in_sefoc(
+                sefoc_dir,
+                expected_stem=expected_stem,
+            )
+        if not found:
+            return {
+                "status": "waiting_apogee",
+                "message": _waiting_apogee_message(),
+                "job": job,
+            }
+        return _finalize_imposicao_offset_pdf(
+            job_id=job_id,
+            job=job,
+            src_path=found,
+            dest_abs=dest_abs,
+            dest_name=dest_name,
+        )
+
     dest_name = build_imposicao_digital_pdf_name(ano=ano, nro=nro, config=config)
     digital_dir = os.path.normpath(os.path.join(sefoc_dir, "Digital"))
     dest_abs = os.path.normpath(os.path.join(digital_dir, dest_name))

@@ -257,6 +257,19 @@ def validate_imposicao_config_payload(
     else:
         centralizar = True
 
+    if "usar_pre_impresso" in data:
+        usar_pre_impresso = _require_bool(data, "usar_pre_impresso")
+    else:
+        usar_pre_impresso = False
+
+    jdf_raw = data.get("jdf_import_root")
+    if jdf_raw is None or jdf_raw == "":
+        jdf_import_root: str | None = None
+    elif not isinstance(jdf_raw, str):
+        raise ValueError("jdf_import_root deve ser texto (caminho UNC).")
+    else:
+        jdf_import_root = jdf_raw.strip() or None
+
     return {
         "folha_mm": folha_out,
         "pagina": pagina_out,
@@ -267,6 +280,8 @@ def validate_imposicao_config_payload(
         "marcas_pdf_path": marcas_pdf_path,
         "centralizar_na_folha": centralizar,
         "work_style": work_style,
+        "usar_pre_impresso": usar_pre_impresso,
+        "jdf_import_root": jdf_import_root,
     }
 
 

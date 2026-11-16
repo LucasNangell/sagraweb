@@ -114,7 +114,25 @@ def upsert_produto_imposicao_config(
 
     nome = normalize_produto(produto)
     var = normalize_variante(variante)
-    normalized = cfg_svc.normalize_imposicao_config_json(imposicao_config_json)
+    parsed_in = cfg_svc.parse_imposicao_config_json(imposicao_config_json)
+    if parsed_in is None:
+        raise ValueError("Configuração de imposição vazia.")
+    # Seed: Timbrado A4 / Pasta Avulso → pré-impresso ligado por padrão se omitido.
+    from services.papelaria_imposicao_juntada_service import (
+        default_jdf_import_root,
+        is_pre_impresso_produto,
+    )
+
+    if is_pre_impresso_produto(nome) and "usar_pre_impresso" not in parsed_in:
+        parsed_in = {**parsed_in, "usar_pre_impresso": True}
+    if is_pre_impresso_produto(nome) and not str(
+        parsed_in.get("jdf_import_root") or ""
+    ).strip():
+        parsed_in = {
+            **parsed_in,
+            "jdf_import_root": default_jdf_import_root(nome),
+        }
+    normalized = cfg_svc.normalize_imposicao_config_json(parsed_in)
     if not normalized:
         raise ValueError("Configuração de imposição vazia.")
     pasta = normalize_pasta_imposicao(pasta_imposicao)

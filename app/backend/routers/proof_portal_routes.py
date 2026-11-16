@@ -919,6 +919,30 @@ def _register_proof_andamento(
     situacao = "Saída p/"
     if aprovado:
         obs = f"Prova v{versao} aprovada pelo cliente ({ident_cliente})"
+        # Timbrado A4 / Pasta Avulso: liberar imposição pré-impressa com juntada.
+        try:
+            from database import db as _db
+            from services.papelaria_imposicao_juntada_service import (
+                SITUACAO_AGUARD_JUNTADA,
+                is_pre_impresso_produto,
+            )
+
+            prod_rows = _db.execute_query(
+                """
+                SELECT TipoPublicacaoLink AS produto
+                FROM tabDetalhesServico
+                WHERE NroProtocoloLinkDet = %s AND AnoProtocoloLinkDet = %s
+                LIMIT 1
+                """,
+                (os_id, ano),
+            )
+            produto_os = (
+                str((prod_rows[0].get("produto") if prod_rows else "") or "").strip()
+            )
+            if is_pre_impresso_produto(produto_os):
+                situacao = SITUACAO_AGUARD_JUNTADA
+        except Exception:
+            pass
     elif papelaria_alteracao:
         ver = str(versao or "1").strip() or "1"
         obs = f"Alterar Prova {ver}"

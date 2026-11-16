@@ -79,6 +79,21 @@ export function isPastaAvulsoProduct(
   return product.trim().toLowerCase().startsWith("pasta avulso");
 }
 
+/** Timbrado A4 offset (não Digital) — elegível a pré-impresso/juntada. */
+export function isTimbradoA4Product(
+  product: string | null | undefined,
+): boolean {
+  if (!product) return false;
+  return product.trim().toLowerCase() === "timbrado a4";
+}
+
+/** Produtos com checkbox pré-impresso e juntada de imposição. */
+export function isPreImpressoImposicaoProduct(
+  product: string | null | undefined,
+): boolean {
+  return isPastaAvulsoProduct(product) || isTimbradoA4Product(product);
+}
+
 /**
  * Fragmento do visualizador PDF embutido:
  * pastas avulso → FitH (largura); demais → FitV (altura).

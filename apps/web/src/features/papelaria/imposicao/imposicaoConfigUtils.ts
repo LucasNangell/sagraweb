@@ -199,6 +199,8 @@ function coerceRaw(data: Record<string, unknown>): Record<string, unknown> {
   if (out.marcas_pdf_path === undefined) out.marcas_pdf_path = null;
   if (out.centralizar_na_folha == null) out.centralizar_na_folha = true;
   if (out.work_style == null) out.work_style = "Simplex";
+  if (out.usar_pre_impresso == null) out.usar_pre_impresso = false;
+  if (out.jdf_import_root === undefined) out.jdf_import_root = null;
 
   return out;
 }
@@ -320,6 +322,19 @@ export function validateImposicaoConfigObject(
     })(),
     centralizar_na_folha: requireBool(raw, "centralizar_na_folha"),
     work_style,
+    usar_pre_impresso:
+      raw.usar_pre_impresso == null
+        ? false
+        : requireBool(raw, "usar_pre_impresso"),
+    jdf_import_root: (() => {
+      const pathRaw = raw.jdf_import_root;
+      if (pathRaw == null || pathRaw === "") return null;
+      if (typeof pathRaw !== "string") {
+        throw new Error("jdf_import_root deve ser texto.");
+      }
+      const path = pathRaw.trim();
+      return path || null;
+    })(),
   };
 }
 
@@ -337,6 +352,24 @@ export function formatImposicaoConfigJson(config: PapelariaImposicaoConfig): str
 
 export function cloneDefaultImposicaoConfig(): PapelariaImposicaoConfig {
   return structuredClone(DEFAULT_IMPOSICAO_CONFIG);
+}
+
+/** Default com pré-impresso/hotfolder para Timbrado A4 e Pasta Avulso. */
+export function cloneImposicaoConfigForProduto(
+  produto?: string | null,
+): PapelariaImposicaoConfig {
+  const cfg = cloneDefaultImposicaoConfig();
+  const name = (produto || "").trim().toLowerCase();
+  if (name.startsWith("pasta avulso")) {
+    cfg.usar_pre_impresso = true;
+    cfg.jdf_import_root =
+      "\\\\apogee\\JDFImportRoot\\Papelaria_Pasta";
+  } else if (name === "timbrado a4") {
+    cfg.usar_pre_impresso = true;
+    cfg.jdf_import_root =
+      "\\\\apogee\\JDFImportRoot\\Papelaria_Timbrado";
+  }
+  return cfg;
 }
 
 export function configFromModeloOrDefault(

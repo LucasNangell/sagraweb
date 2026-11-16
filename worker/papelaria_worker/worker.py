@@ -367,25 +367,44 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
         return
 
     if tipo_job == TIPO_JOB_IMPOSICAO:
-        jdf_dir = str(job.get("jdf_output_dir") or output_dir or "").strip()
-        base_pdf = str(job.get("base_pdf_path") or "").strip()
-        missing_imp = []
-        if not job.get("jdf_xml"):
-            missing_imp.append("jdf_xml")
-        if not jdf_dir:
-            missing_imp.append("jdf_output_dir")
-        if not base_pdf or not os.path.isfile(base_pdf):
-            missing_imp.append(f"base_pdf={base_pdf or '(vazio)'}")
-        if missing_imp:
-            msg = "Pré-validação JDF falhou: " + "; ".join(missing_imp)
-            logging.error("Job #%s — %s", job_id, msg)
-            api.fail(job_id, msg, retryable=False)
-            return
-        try:
-            os.makedirs(jdf_dir, exist_ok=True)
-        except OSError as exc:
-            api.fail(job_id, f"Hotfolder JDF inacessível: {exc}", retryable=False)
-            return
+        if job.get("pre_impresso_pipeline"):
+            lote = job.get("juntada_lote") or []
+            if not lote:
+                api.fail(
+                    job_id,
+                    "Imposição pré-impressa sem juntada_lote.",
+                    retryable=False,
+                )
+                return
+            for item in lote:
+                cdr = str(item.get("cdr_path") or "").strip()
+                if not cdr or not os.path.isfile(cdr):
+                    api.fail(
+                        job_id,
+                        f"CDR ausente para pré-impresso: {cdr or '(vazio)'}",
+                        retryable=False,
+                    )
+                    return
+        else:
+            jdf_dir = str(job.get("jdf_output_dir") or output_dir or "").strip()
+            base_pdf = str(job.get("base_pdf_path") or "").strip()
+            missing_imp = []
+            if not job.get("jdf_xml"):
+                missing_imp.append("jdf_xml")
+            if not jdf_dir:
+                missing_imp.append("jdf_output_dir")
+            if not base_pdf or not os.path.isfile(base_pdf):
+                missing_imp.append(f"base_pdf={base_pdf or '(vazio)'}")
+            if missing_imp:
+                msg = "Pré-validação JDF falhou: " + "; ".join(missing_imp)
+                logging.error("Job #%s — %s", job_id, msg)
+                api.fail(job_id, msg, retryable=False)
+                return
+            try:
+                os.makedirs(jdf_dir, exist_ok=True)
+            except OSError as exc:
+                api.fail(job_id, f"Hotfolder JDF inacessível: {exc}", retryable=False)
+                return
     elif tipo_job == TIPO_JOB_EXPORT_EXISTING_CDR:
         input_cdr = (job.get("input_cdr_path") or "").strip()
         try:
@@ -595,31 +614,93 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                     result.logs.append(msg)
                     api.append_log(job_id, msg, "warning")
         elif tipo_job == TIPO_JOB_IMPOSICAO:
-            jdf_xml = str(job.get("jdf_xml") or "")
-            jdf_dir = str(job.get("jdf_output_dir") or job.get("output_dir") or "").strip()
-            jdf_name = str(job.get("jdf_filename") or pdf_name or "").strip()
-            if not jdf_xml or not jdf_dir or not jdf_name:
-                raise CorelGenerationError(
-                    "Job de imposição incompleto (jdf_xml / jdf_output_dir / jdf_filename)."
+            if job.get("pre_impresso_pipeline"):
+                from corel_generator import exportar_pdf_pre_impresso
+                import fitz
+
+                lote = list(job.get("juntada_lote") or [])
+                pre_logs: list[str] = []
+                pre_pdfs: list[str] = []
+                for item in lote:
+                    cdr = str(item.get("cdr_path") or "")
+                    pre_path = str(item.get("pre_pdf_path") or "")
+                    api.append_log(
+                        job_id,
+                        f"Pré-impresso — exportando sem Brasao: "
+                        f"{os.path.basename(pre_path)}",
+                        "info",
+                    )
+                    item_logs = exportar_pdf_pre_impresso(
+                        cdr,
+                        pre_path,
+                        temp_dir=cfg.temp_dir,
+                        corel_visible=cfg.corel_visible,
+                    )
+                    pre_logs.extend(item_logs)
+                    if not os.path.isfile(pre_path):
+                        raise CorelGenerationError(
+                            f"PDF pré-impresso não gerado: {pre_path}"
+                        )
+                    pre_pdfs.append(pre_path)
+
+                gang_path = str(job.get("gang_pdf_path") or "").strip()
+                if not gang_path:
+                    raise CorelGenerationError("gang_pdf_path ausente no job.")
+                os.makedirs(os.path.dirname(gang_path) or ".", exist_ok=True)
+                out = fitz.open()
+                try:
+                    for src in pre_pdfs:
+                        with fitz.open(src) as doc:
+                            if doc.page_count < 1:
+                                raise CorelGenerationError(
+                                    f"PDF pré-impresso sem páginas: {src}"
+                                )
+                            out.insert_pdf(doc, from_page=0, to_page=0)
+                    out.save(gang_path)
+                finally:
+                    out.close()
+                msg = (
+                    f"PDF ganged pré-impresso: {os.path.basename(gang_path)} "
+                    f"({len(pre_pdfs)} página(s))."
                 )
-            api.append_log(
-                job_id,
-                f"Gravando JDF Apogee — {jdf_name}",
-                "info",
-            )
-            os.makedirs(jdf_dir, exist_ok=True)
-            jdf_path = os.path.normpath(os.path.join(jdf_dir, jdf_name))
-            with open(jdf_path, "w", encoding="utf-8", newline="\n") as fh:
-                fh.write(jdf_xml)
-            if not os.path.isfile(jdf_path):
-                raise CorelGenerationError(f"Falha ao gravar JDF: {jdf_name}")
-            result = GenerationResult(
-                cdr_path="",
-                pdf_path=jdf_path,
-                logs=[f"JDF enviado ao Apogee: {jdf_name}"],
-            )
-            pdf_name = jdf_name
-            output_pdf = jdf_path
+                pre_logs.append(msg)
+                api.append_log(job_id, msg, "info")
+                result = GenerationResult(
+                    cdr_path="",
+                    pdf_path=gang_path,
+                    logs=pre_logs,
+                )
+                pdf_name = os.path.basename(gang_path)
+                output_pdf = gang_path
+            else:
+                jdf_xml = str(job.get("jdf_xml") or "")
+                jdf_dir = str(
+                    job.get("jdf_output_dir") or job.get("output_dir") or ""
+                ).strip()
+                jdf_name = str(job.get("jdf_filename") or pdf_name or "").strip()
+                if not jdf_xml or not jdf_dir or not jdf_name:
+                    raise CorelGenerationError(
+                        "Job de imposição incompleto "
+                        "(jdf_xml / jdf_output_dir / jdf_filename)."
+                    )
+                api.append_log(
+                    job_id,
+                    f"Gravando JDF Apogee — {jdf_name}",
+                    "info",
+                )
+                os.makedirs(jdf_dir, exist_ok=True)
+                jdf_path = os.path.normpath(os.path.join(jdf_dir, jdf_name))
+                with open(jdf_path, "w", encoding="utf-8", newline="\n") as fh:
+                    fh.write(jdf_xml)
+                if not os.path.isfile(jdf_path):
+                    raise CorelGenerationError(f"Falha ao gravar JDF: {jdf_name}")
+                result = GenerationResult(
+                    cdr_path="",
+                    pdf_path=jdf_path,
+                    logs=[f"JDF enviado ao Apogee: {jdf_name}"],
+                )
+                pdf_name = jdf_name
+                output_pdf = jdf_path
         elif tipo_job == TIPO_JOB_CREDENCIAIS_DEPOL:
             dados = job.get("dados") or {}
             n_itens = len(dados.get("itens") or [])
@@ -813,7 +894,12 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
         artefatos_complete = None
         if tipo_job == TIPO_JOB_IMPOSICAO:
             cdr_for_complete = ""
-            pdf_name = str(job.get("jdf_filename") or pdf_name or "")
+            if job.get("pre_impresso_pipeline"):
+                pdf_name = os.path.basename(
+                    str(job.get("gang_pdf_path") or pdf_name or "")
+                )
+            else:
+                pdf_name = str(job.get("jdf_filename") or pdf_name or "")
         elif tipo_job == TIPO_JOB_EXPORT_EXISTING_CDR:
             # Preferir BaseSefoc.cdr gerado na conversão BordaF; senão o CDR de origem.
             result_cdr = str(getattr(result, "cdr_path", "") or "").strip()

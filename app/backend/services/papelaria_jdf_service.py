@@ -21,9 +21,28 @@ def mm_to_pt(mm: float) -> float:
     return float(mm) * MM_TO_PT
 
 
-def get_jdf_import_root() -> str:
-    raw = (os.getenv("SAGRA_JDF_IMPORT_ROOT") or "").strip()
-    return os.path.normpath(raw or DEFAULT_JDF_IMPORT_ROOT)
+def get_jdf_import_root(
+    override: str | None = None,
+    *,
+    produto: str | None = None,
+) -> str:
+    """
+    Hotfolder Apogee.
+    Prioridade: override explícito → SAGRA_JDF_IMPORT_ROOT → default por produto.
+    """
+    explicit = (override or "").strip()
+    if explicit:
+        return os.path.normpath(explicit)
+    env = (os.getenv("SAGRA_JDF_IMPORT_ROOT") or "").strip()
+    if env:
+        return os.path.normpath(env)
+    if produto:
+        from services.papelaria_imposicao_juntada_service import (
+            default_jdf_import_root,
+        )
+
+        return os.path.normpath(default_jdf_import_root(produto))
+    return os.path.normpath(DEFAULT_JDF_IMPORT_ROOT)
 
 
 def _encode_file_url_path(posix_path: str) -> str:

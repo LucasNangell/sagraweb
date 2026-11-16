@@ -5,7 +5,9 @@ import {
   isPapelariaCorelOs,
   isPapelariaProduct,
   isPastaAvulsoProduct,
+  isPreImpressoImposicaoProduct,
   isTimbradoA4DigitalProduct,
+  isTimbradoA4Product,
   papelariaProofPdfViewerSrc,
   resolveInitialPapelariaTab,
   type PapelariaSessionContext,
@@ -61,6 +63,16 @@ describe("isTimbradoA4DigitalProduct", () => {
     expect(isTimbradoA4DigitalProduct("Timbrado A4")).toBe(false);
     expect(isTimbradoA4DigitalProduct("Bloco A5")).toBe(false);
     expect(isTimbradoA4DigitalProduct(null)).toBe(false);
+  });
+});
+
+describe("isTimbradoA4Product / isPreImpressoImposicaoProduct", () => {
+  it("distingue Timbrado offset e produtos pré-impresso", () => {
+    expect(isTimbradoA4Product("Timbrado A4")).toBe(true);
+    expect(isTimbradoA4Product("Timbrado A4 (Digital)")).toBe(false);
+    expect(isPreImpressoImposicaoProduct("Timbrado A4")).toBe(true);
+    expect(isPreImpressoImposicaoProduct("Pasta Avulso c/ Bolso")).toBe(true);
+    expect(isPreImpressoImposicaoProduct("Ct Visita")).toBe(false);
   });
 });
 

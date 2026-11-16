@@ -2163,6 +2163,104 @@ def _ativar_documento_para_exportacao(
     _ativar_pagina_principal(doc, logs)
 
 
+def _ocultar_shapes_brasao(doc: Any, logs: list[str]) -> int:
+    """Oculta shapes cujo nome normalizado é 'brasao' (pré-impresso)."""
+    ocultos = 0
+    for occ in encontrar_shapes_no_documento(doc, "Brasao"):
+        shape = occ.get("shape")
+        if shape is None:
+            continue
+        try:
+            shape.Visible = False
+            ocultos += 1
+        except Exception:
+            try:
+                shape.Delete()
+                ocultos += 1
+            except Exception:
+                continue
+    if ocultos:
+        logs.append(f"Pré-impresso: ocultou/removeu {ocultos} objeto(s) Brasao.")
+    else:
+        logs.append("Pré-impresso: nenhum objeto Brasao encontrado para ocultar.")
+    return ocultos
+
+
+def exportar_pdf_pre_impresso(
+    caminho_cdr: str,
+    output_pdf_path: str,
+    *,
+    temp_dir: str,
+    corel_visible: bool = False,
+    reuse_corel_session: bool = True,
+) -> list[str]:
+    """
+    Abre o CDR, oculta Brasao e exporta PDF (textos pretos / sem brasão).
+    Não altera o CDR original da OS.
+    """
+    logs: list[str] = []
+    if not os.path.isfile(caminho_cdr):
+        raise CorelGenerationError(f"CDR não encontrado: {caminho_cdr}")
+
+    os.makedirs(temp_dir, exist_ok=True)
+    temp_cdr = os.path.join(
+        temp_dir,
+        f"preimp_{os.path.splitext(os.path.basename(caminho_cdr))[0]}.cdr",
+    )
+    if os.path.exists(temp_cdr):
+        os.remove(temp_cdr)
+    shutil.copy2(caminho_cdr, temp_cdr)
+    logs.append(f"Cópia temp pré-impresso: {os.path.basename(temp_cdr)}")
+
+    _corel_session._ensure_com()
+    doc = None
+    try:
+        for attempt in range(2):
+            force_new = attempt > 0
+            try:
+                if reuse_corel_session:
+                    corel = _corel_session.get_application(
+                        corel_visible, force_new=force_new
+                    )
+                else:
+                    _ensure_com_in_current_thread()
+                    corel = dispatch_corel_application()
+                    corel.Visible = corel_visible
+                doc = corel.OpenDocument(os.path.abspath(temp_cdr))
+                _ocultar_shapes_brasao(doc, logs)
+                exportar_pdf(corel, doc, output_pdf_path, logs)
+                break
+            except Exception as exc:
+                if (
+                    attempt == 0
+                    and reuse_corel_session
+                    and _is_com_disconnect_error(exc)
+                ):
+                    logs.append("COM desconectou — reiniciando Corel (pré-impresso).")
+                    encerrar_corel_forcadamente(matar_processo=True)
+                    continue
+                raise
+            finally:
+                if doc is not None:
+                    try:
+                        doc.Close()
+                    except Exception:
+                        pass
+                    doc = None
+                if not reuse_corel_session:
+                    try:
+                        corel.Quit()
+                    except Exception:
+                        pass
+    finally:
+        try:
+            if os.path.isfile(temp_cdr):
+                os.remove(temp_cdr)
+        except OSError:
+            pass
+    return logs
+
+
 def exportar_pdf(corel, doc, caminho_pdf: str, logs: list[str]) -> None:
     caminho_pdf = os.path.abspath(caminho_pdf)
     os.makedirs(os.path.dirname(caminho_pdf), exist_ok=True)

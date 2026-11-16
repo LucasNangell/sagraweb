@@ -53,6 +53,15 @@ export interface PapelariaImposicaoConfig {
   centralizar_na_folha: boolean;
   /** SourceWorkStyle do Sheet. */
   work_style: PapelariaImposicaoWorkStyle;
+  /**
+   * Timbrado A4 / Pasta Avulso: PDF de imposição sem brasão (pré-impresso).
+   * Default false no schema genérico; produtos elegíveis usam true no seed.
+   */
+  usar_pre_impresso: boolean;
+  /**
+   * Hotfolder Apogee (UNC). Null/vazio = resolver por família de produto.
+   */
+  jdf_import_root: string | null;
 }
 
 /** Default alinhado ao exemplo JDF A5 2×1 em A4 paisagem, corte seco, sem marcas. */
@@ -66,4 +75,14 @@ export const DEFAULT_IMPOSICAO_CONFIG: PapelariaImposicaoConfig = {
   marcas_pdf_path: null,
   centralizar_na_folha: true,
   work_style: "Simplex",
+  usar_pre_impresso: false,
+  jdf_import_root: null,
 };
+
+/** Defaults de hotfolder Apogee por família (quando jdf_import_root vazio). */
+export const DEFAULT_JDF_IMPORT_ROOT_PAPELARIA =
+  "\\\\apogee\\JDFImportRoot\\Papelaria";
+export const DEFAULT_JDF_IMPORT_ROOT_PASTA =
+  "\\\\apogee\\JDFImportRoot\\Papelaria_Pasta";
+export const DEFAULT_JDF_IMPORT_ROOT_TIMBRADO =
+  "\\\\apogee\\JDFImportRoot\\Papelaria_Timbrado";

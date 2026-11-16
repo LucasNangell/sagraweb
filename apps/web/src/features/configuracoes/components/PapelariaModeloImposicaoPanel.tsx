@@ -11,6 +11,7 @@ import {
 import type { PapelariaAdminModelRecord } from "@/features/configuracoes/types";
 import {
   cloneDefaultImposicaoConfig,
+  cloneImposicaoConfigForProduto,
   formatImposicaoConfigJson,
   formatImposicaoVariantsJson,
   ImposicaoConfigEditor,
@@ -198,6 +199,7 @@ export function PapelariaModeloImposicaoPanel({
         {produtoConfig ? (
           <ImposicaoConfigEditor
             config={produtoConfig}
+            produto={produto}
             onChange={(next) =>
               setProdutoConfigs((prev) => ({ ...prev, [produtoTab]: next }))
             }
@@ -214,7 +216,8 @@ export function PapelariaModeloImposicaoPanel({
             disabled={!produto || busy}
             onClick={() => {
               const cfg =
-                produtoConfigs[produtoTab] ?? cloneDefaultImposicaoConfig();
+                produtoConfigs[produtoTab] ??
+                cloneImposicaoConfigForProduto(produto);
               setProdutoConfigs((prev) => ({ ...prev, [produtoTab]: cfg }));
               saveProdutoMutation.mutate({
                 variante: produtoTab,
@@ -236,7 +239,7 @@ export function PapelariaModeloImposicaoPanel({
             onClick={() =>
               setProdutoConfigs((prev) => ({
                 ...prev,
-                [produtoTab]: cloneDefaultImposicaoConfig(),
+                [produtoTab]: cloneImposicaoConfigForProduto(produto),
               }))
             }
           >
@@ -291,6 +294,7 @@ export function PapelariaModeloImposicaoPanel({
         {modeloConfig ? (
           <ImposicaoConfigEditor
             config={modeloConfig}
+            produto={produto}
             onChange={(next) =>
               setModeloVariants((prev) => ({ ...prev, [modeloTab]: next }))
             }

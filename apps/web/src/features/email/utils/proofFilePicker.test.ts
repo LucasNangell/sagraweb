@@ -33,6 +33,12 @@ describe("extractProvaVersionFromFilename", () => {
     expect(extractProvaVersionFromFilename("05024-Prova2_SEFOC.pdf")).toBe(2);
   });
 
+  it("extrai padrão curto *-ProvaN.pdf", () => {
+    expect(
+      extractProvaVersionFromFilename("06247-HildoRocha-CtVisita-Prova1.pdf"),
+    ).toBe(1);
+  });
+
   it("retorna null sem padrão", () => {
     expect(extractProvaVersionFromFilename("prova_livre.pdf")).toBeNull();
   });

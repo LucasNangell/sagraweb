@@ -43,6 +43,7 @@ _IMPOSICAO_JOB_TYPE = "imposicao"
 
 _PROVA_SEFOC_RE = re.compile(r"ProvaSefoc\s+(\d+)\.pdf$", re.IGNORECASE)
 _PROVA_LEGACY_RE = re.compile(r"Prova(\d+)_SEFOC\.pdf$", re.IGNORECASE)
+_PROVA_SHORT_RE = re.compile(r"(?:^|[-_])Prova(\d+)\.pdf$", re.IGNORECASE)
 
 _SITUACAO_AGUARD_APROVACAO = "Aguard. Aprovação"
 _SITUACAO_ENCAM_DOCUM = "Encam. de Docum."
@@ -96,7 +97,11 @@ def _extract_versao(*candidates: Any) -> Optional[int]:
         text = str(raw).strip()
         if not text:
             continue
-        match = _PROVA_SEFOC_RE.search(text) or _PROVA_LEGACY_RE.search(text)
+        match = (
+            _PROVA_SEFOC_RE.search(text)
+            or _PROVA_LEGACY_RE.search(text)
+            or _PROVA_SHORT_RE.search(text)
+        )
         if match:
             from_name = int(match.group(1))
             break

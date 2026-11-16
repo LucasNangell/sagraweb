@@ -141,6 +141,22 @@ class TestExtractProvaVersionFromFilename:
 
         assert extract_prova_version_from_filename("05024-Prova2_SEFOC.pdf") == 2
 
+    def test_short_access_pattern(self):
+        from services.proof_files_service import extract_prova_version_from_filename
+
+        assert (
+            extract_prova_version_from_filename(
+                "06247-HildoRocha-CtVisita-Prova1.pdf"
+            )
+            == 1
+        )
+        assert (
+            extract_prova_version_from_filename(
+                "06249-GilbertoAbramo-CtGabSimples(Cor)-Prova1.pdf"
+            )
+            == 1
+        )
+
     def test_no_pattern(self):
         from services.proof_files_service import extract_prova_version_from_filename
 

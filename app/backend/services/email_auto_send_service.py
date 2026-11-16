@@ -262,7 +262,7 @@ def maybe_auto_send_after_encam(
             # PDF pode chegar depois (Access) — liberar para retry do monitor.
             release_auto_send_claim(claim_code)
             logger.info(
-                "auto_send: retry later OS %s/%s — PDF ProvaSefoc %s não encontrado",
+                "auto_send: retry later OS %s/%s — PDF prova %s não encontrado",
                 os_num,
                 ano,
                 parsed.versao,

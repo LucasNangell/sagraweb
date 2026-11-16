@@ -15,16 +15,21 @@ _MAX_FILENAME_LEN = 512
 
 _PROVA_SEFOC_RE = re.compile(r"ProvaSefoc (\d+)\.pdf$", re.IGNORECASE)
 _PROVA_SEFOC_LEGACY_RE = re.compile(r"Prova(\d+)_SEFOC\.pdf$", re.IGNORECASE)
+# Access / fluxo antigo: 06247-Nome-Prova1.pdf (não confundir com ProvaSefoc)
+_PROVA_SHORT_RE = re.compile(r"(?:^|[-_])Prova(\d+)\.pdf$", re.IGNORECASE)
 _DIGIT_IMPOSICAO_RE = re.compile(r"_Digit_\d+Up_", re.IGNORECASE)
 
 
 def extract_prova_version_from_filename(filename: str) -> Optional[int]:
-    """Extrai o número x de *-ProvaSefoc {x}.pdf ou legado Prova{x}_SEFOC."""
+    """Extrai o número x de ProvaSefoc, legado ProvaN_SEFOC ou *-ProvaN.pdf."""
     base = os.path.basename((filename or "").strip())
     match = _PROVA_SEFOC_RE.search(base)
     if match:
         return int(match.group(1))
     match = _PROVA_SEFOC_LEGACY_RE.search(base)
+    if match:
+        return int(match.group(1))
+    match = _PROVA_SHORT_RE.search(base)
     if match:
         return int(match.group(1))
     return None

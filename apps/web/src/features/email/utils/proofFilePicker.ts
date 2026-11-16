@@ -16,6 +16,8 @@ export function osRelativePathToProofFilename(relative: string): string | null {
 
 const PROVA_SEFOC_RE = /ProvaSefoc (\d+)\.pdf$/i;
 const PROVA_SEFOC_LEGACY_RE = /Prova(\d+)_SEFOC\.pdf$/i;
+/** Access / fluxo antigo: 06247-Nome-Prova1.pdf */
+const PROVA_SHORT_RE = /(?:^|[-_])Prova(\d+)\.pdf$/i;
 
 /** Espelho de extract_prova_version_from_filename no backend. */
 export function extractProvaVersionFromFilename(
@@ -26,6 +28,8 @@ export function extractProvaVersionFromFilename(
   if (m1) return Number.parseInt(m1[1], 10);
   const m2 = PROVA_SEFOC_LEGACY_RE.exec(base);
   if (m2) return Number.parseInt(m2[1], 10);
+  const m3 = PROVA_SHORT_RE.exec(base);
+  if (m3) return Number.parseInt(m3[1], 10);
   return null;
 }
 

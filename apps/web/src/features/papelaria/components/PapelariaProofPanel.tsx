@@ -873,7 +873,7 @@ export function PapelariaProofPanel({
                 </div>
               ) : (
                 <p className="text-xs text-neutral-400">
-                  Preencha os campos e clique em Gerar arquivo.
+                  Preencha os campos e clique em Criar prova.
                 </p>
               )}
             </div>

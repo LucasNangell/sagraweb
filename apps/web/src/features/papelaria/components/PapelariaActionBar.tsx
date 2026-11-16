@@ -132,7 +132,7 @@ export function PapelariaActionBar({
         />
       ) : null}
       <ActionButton
-        label="Gerar arquivo"
+        label="Criar prova"
         tone="primary"
         pending={createJobPending}
         disabled={

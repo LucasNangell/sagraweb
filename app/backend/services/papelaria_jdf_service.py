@@ -825,6 +825,28 @@ def build_apogee_passthrough_jdf_xml(
 """
 
 
+def stage_pdf_in_hotfolder(pdf_path: str, hotfolder: str) -> str:
+    """
+    Copia o PDF para o hotfolder Apogee (mesmo diretório do .jdf).
+    Retorna o caminho absoluto do PDF no hotfolder.
+    """
+    import shutil
+
+    src = os.path.normpath((pdf_path or "").strip())
+    if not src or not os.path.isfile(src):
+        raise FileNotFoundError(f"PDF para hotfolder não encontrado: {src or '(vazio)'}")
+    dest_dir = os.path.normpath((hotfolder or "").strip())
+    if not dest_dir:
+        raise ValueError("Hotfolder Apogee vazio.")
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = os.path.normpath(os.path.join(dest_dir, os.path.basename(src)))
+    if dest.lower() != src.lower():
+        shutil.copy2(src, dest)
+    if not os.path.isfile(dest):
+        raise RuntimeError(f"PDF não persistiu no hotfolder: {dest}")
+    return dest
+
+
 def write_jdf_file(jdf_xml: str, output_dir: str, filename: str) -> str:
     os.makedirs(output_dir, exist_ok=True)
     path = os.path.normpath(os.path.join(output_dir, filename))

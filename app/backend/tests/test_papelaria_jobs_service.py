@@ -1942,6 +1942,68 @@ class TestImposicaoJob:
         assert dest.is_file()
         assert job_state["arquivo_pdf"] == "Digital/05954-Teste_Digit_10Up_A4.pdf"
 
+    def test_find_imposicao_ignora_imposicao_gang(self, tmp_path):
+        from services import papelaria_jobs_service as svc
+
+        sefoc = tmp_path / "Sefoc"
+        sefoc.mkdir()
+        (sefoc / "06220-X-ImposicaoGang.pdf").write_bytes(b"%PDF-gang")
+        (sefoc / "06220-X-BaseSefoc-PreImpresso.pdf").write_bytes(b"%PDF-pre")
+        assert svc.find_imposicao_pdf_in_sefoc(str(sefoc), expected_stem="X") is None
+
+        apogee = sefoc / "X_Imposição.pdf"
+        apogee.write_bytes(b"%PDF-apogee")
+        found = svc.find_imposicao_pdf_in_sefoc(str(sefoc), expected_stem="X")
+        assert found == str(apogee)
+
+    def test_poll_offset_nao_move_imposicao_gang(self, monkeypatch, tmp_path):
+        from services import papelaria_jobs_service as svc
+
+        sefoc = tmp_path / "Sefoc"
+        sefoc.mkdir()
+        (sefoc / "06220-Teste-ImposicaoGang.pdf").write_bytes(b"%PDF-gang")
+        config = {
+            "folha_mm": {"largura": 656, "altura": 470},
+            "pagina": {"origem": "fixixa", "largura_mm": 440, "altura_mm": 320},
+            "grid": {"colunas": 2, "linhas": 1},
+            "espacamento_mm": {"horizontal": 0, "vertical": 0},
+            "sangria_mm": 0,
+            "marcas_corte": False,
+            "centralizar_na_folha": True,
+            "work_style": "Simplex",
+        }
+        job_state = {
+            "id": 95,
+            "ano_protocolo": 2026,
+            "nro_protocolo": 6220,
+            "tipo_job": svc.TIPO_JOB_IMPOSICAO,
+            "status": svc.STATUS_COMPLETED,
+            "arquivo_pdf": None,
+            "tem_arquivo_pdf": False,
+            "dados": {
+                "imposicao_config": config,
+                "aguardando_apogee": True,
+                "usar_pre_impresso": True,
+                "imposicao_destino": "offset",
+                "gang_pdf_name": "06220-Teste-ImposicaoGang.pdf",
+            },
+            "prova_revisao": svc.PROVA_REVISAO_NA,
+        }
+        monkeypatch.setattr(svc, "get_job", lambda jid: dict(job_state) if jid == 95 else None)
+        monkeypatch.setattr(svc.db, "execute_query", lambda *a, **k: [])
+        monkeypatch.setattr(svc, "broadcast_job_update", lambda *a, **k: None)
+        monkeypatch.setattr(svc, "append_job_log", lambda *a, **k: None)
+        monkeypatch.setattr(
+            svc,
+            "resolve_os_papelaria_dir",
+            lambda ano, nro, create=False: str(sefoc),
+        )
+        monkeypatch.setattr(svc, "get_os_folder_basename", lambda ano, nro: "06220-Teste")
+
+        out = svc.poll_imposicao_apogee_result(95)
+        assert out["status"] == "waiting_apogee"
+        assert not (sefoc / "Offset").exists() or not any((sefoc / "Offset").glob("*.pdf"))
+
     def test_clear_digital_imposicao_pdfs(self, tmp_path):
         from services import papelaria_jobs_service as svc
 

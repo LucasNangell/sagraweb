@@ -483,12 +483,12 @@ def _build_imposicao_jdf_artifacts(
     prefix = get_os_folder_basename(ano, nro)
     # Nome “humano” sem o Nr OS (já vai em JobPartID / nome do .jdf).
     label = jdf_svc.strip_leading_os_number(prefix, nro) or prefix
-    page_w_mm, page_h_mm = jdf_svc.read_pdf_page_size_mm(base_pdf_path)
-    if not sem_imposicao:
-        pagina = config.get("pagina") or {}
-        if pagina.get("origem") == "fixixa":
-            page_w_mm = float(pagina["largura_mm"])
-            page_h_mm = float(pagina["altura_mm"])
+    pagina = config.get("pagina") or {}
+    if (not sem_imposicao) and pagina.get("origem") == "fixixa":
+        page_w_mm = float(pagina["largura_mm"])
+        page_h_mm = float(pagina["altura_mm"])
+    else:
+        page_w_mm, page_h_mm = jdf_svc.read_pdf_page_size_mm(base_pdf_path)
 
     grid = config.get("grid") or {}
     cols = int(grid.get("colunas") or 1)
@@ -506,6 +506,25 @@ def _build_imposicao_jdf_artifacts(
     cmt = (comment or "").strip() or (
         f"imposição {jdf_suffix} ({produto or 'Papelaria'})"
     )
+    # Prioridade: jdf_dir explícito → config.jdf_import_root → env → default produto.
+    resolved_jdf_dir = jdf_svc.get_jdf_import_root(
+        (jdf_dir or str(config.get("jdf_import_root") or "") or None),
+        produto=produto,
+    )
+
+    # PDF no hotfolder junto do .jdf (Apogee não busca UNC da Sefoc).
+    staged_pdf = base_pdf_path
+    if sem_imposicao:
+        try:
+            staged_pdf = jdf_svc.stage_pdf_in_hotfolder(
+                base_pdf_path, resolved_jdf_dir
+            )
+        except OSError as exc:
+            raise RuntimeError(
+                f"Não foi possível copiar o PDF para {resolved_jdf_dir}: {exc}"
+            ) from exc
+
+    pdf_for_jdf = staged_pdf if sem_imposicao else base_pdf_path
     if sem_imposicao:
         jdf_xml = jdf_svc.build_apogee_passthrough_jdf_xml(
             ano=ano,
@@ -514,11 +533,11 @@ def _build_imposicao_jdf_artifacts(
             comment=cmt,
             export_folder=sefoc_dir,
             export_filename=export_pdf_name,
-            base_pdf_path=base_pdf_path,
-            base_pdf_user_name=os.path.splitext(os.path.basename(base_pdf_path))[0],
+            base_pdf_path=pdf_for_jdf,
+            base_pdf_user_name=os.path.splitext(os.path.basename(pdf_for_jdf))[0],
             page_w_mm=page_w_mm,
             page_h_mm=page_h_mm,
-            n_pages=jdf_svc.read_pdf_page_count(base_pdf_path),
+            n_pages=jdf_svc.read_pdf_page_count(pdf_for_jdf),
         )
     else:
         jdf_xml = jdf_svc.build_apogee_jdf_xml(
@@ -528,19 +547,12 @@ def _build_imposicao_jdf_artifacts(
             comment=cmt,
             export_folder=sefoc_dir,
             export_filename=export_pdf_name,
-            base_pdf_path=base_pdf_path,
-            base_pdf_user_name=os.path.splitext(os.path.basename(base_pdf_path))[0],
+            base_pdf_path=pdf_for_jdf,
+            base_pdf_user_name=os.path.splitext(os.path.basename(pdf_for_jdf))[0],
             config=config,
             page_w_mm=page_w_mm,
             page_h_mm=page_h_mm,
         )
-    resolved_jdf_dir = jdf_dir or jdf_svc.get_jdf_import_root(
-        str(config.get("jdf_import_root") or "") or None,
-        produto=produto,
-    )
-    # Fallback explícito por produto se get_jdf não usou override.
-    if not jdf_dir and not str(config.get("jdf_import_root") or "").strip():
-        resolved_jdf_dir = resolve_jdf_import_root(config, produto=produto)
     try:
         jdf_path = jdf_svc.write_jdf_file(jdf_xml, resolved_jdf_dir, jdf_name)
     except OSError as exc:
@@ -554,7 +566,8 @@ def _build_imposicao_jdf_artifacts(
         "jdf_path": jdf_path,
         "jdf_dir": resolved_jdf_dir,
         "jdf_xml": jdf_xml,
-        "base_pdf_path": base_pdf_path,
+        "base_pdf_path": pdf_for_jdf,
+        "hotfolder_pdf_path": staged_pdf if sem_imposicao else "",
     }
 
 
@@ -730,10 +743,11 @@ def create_imposicao_job(
         )
 
     lote = [{"ano": int(ano), "nro": int(nro)}, *membros]
-    tiragens = [_load_os_tiragem(int(x["ano"]), int(x["nro"])) for x in lote]
+    tiragens: list[int] = []
     slots_info: Optional[dict[str, Any]] = None
     is_pasta = juntada_svc.is_pasta_avulso_familia(produto_job)
     if usar_pre:
+        tiragens = [_load_os_tiragem(int(x["ano"]), int(x["nro"])) for x in lote]
         slots_info = juntada_svc.alocar_slots(tiragens, produto=produto_job)
         # Timbrado: grade 2×2 no JDF. Pasta: páginas arte+branco; posição no Apogee.
         if not is_pasta:
@@ -826,7 +840,8 @@ def create_imposicao_job(
             ),
             "compose_com_template": False,
             "pasta_art_blank_pages": is_pasta,
-            "jdf_sem_imposicao": is_pasta,
+            # Pasta/Timbrado pré-impresso: JDF só ticket + PDF (posição no Apogee).
+            "jdf_sem_imposicao": True,
         }
         insert_params = {
             "nro": nro,
@@ -1000,7 +1015,16 @@ def resend_imposicao_jdf(
     ano = int(job["ano_protocolo"])
     nro = int(job["nro_protocolo"])
     produto = (job.get("produto") or "").strip() or "Papelaria"
-    base_pdf_path = resolve_base_sefoc_pdf_path(ano, nro)
+    gang_path = str(dados.get("gang_pdf_path") or "").strip()
+    sem_imposicao = bool(
+        dados.get("jdf_sem_imposicao")
+        or dados.get("usar_pre_impresso")
+        or dados.get("pasta_art_blank_pages")
+    )
+    if sem_imposicao and gang_path and os.path.isfile(gang_path):
+        base_pdf_path = gang_path
+    else:
+        base_pdf_path = resolve_base_sefoc_pdf_path(ano, nro)
     base_pdf_name = os.path.basename(base_pdf_path)
 
     artifacts = _build_imposicao_jdf_artifacts(
@@ -1009,6 +1033,8 @@ def resend_imposicao_jdf(
         produto=produto,
         config=config,
         base_pdf_path=base_pdf_path,
+        jdf_dir=str(dados.get("jdf_import_root") or "") or None,
+        sem_imposicao=sem_imposicao,
     )
 
     dados_next = dict(dados)
@@ -2982,10 +3008,15 @@ def build_imposicao_digital_pdf_name(
     return f"{prefix}_Digit_{n_up}Up_{safe_folha}.pdf"
 
 
-_IMPOSICAO_NAME_RE = re.compile(r"imposi[cç][aã]o", re.IGNORECASE)
+# Resultado do Apogee: sufixo «Imposição» no final do nome (não ImposicaoGang).
+_APOGEE_IMPOSICAO_EXPORT_RE = re.compile(
+    r"(?:^|[_\s-])Imposi[cç][aã]o\.pdf$",
+    re.IGNORECASE,
+)
 _DIGIT_IMPOSICAO_RE = re.compile(r"_Digit_\d+Up_", re.IGNORECASE)
 _EXCLUDE_SEFOC_PDF_RE = re.compile(
-    r"(ProvaSefoc|BaseSefoc|Prova\d+_SEFOC)",
+    r"(ProvaSefoc|BaseSefoc|Prova\d+_SEFOC|ImposicaoGang|PreImpresso|"
+    r"BaseSefoc-PreImpresso)",
     re.IGNORECASE,
 )
 
@@ -3030,37 +3061,43 @@ def find_imposicao_pdf_in_sefoc(
     """
     PDF de imposição do Apogee na raiz de Sefoc.
 
-    Preferência: nome com 'Imposição' → stem do export JDF → PDF recente
-    que não seja prova/base.
+    Só aceita export do Apogee (sufixo «Imposição»). Ignora artefatos internos
+    (ImposicaoGang, PreImpresso, BaseSefoc, provas).
     """
     pdfs = _list_pdfs_with_mtime(sefoc_dir)
     if not pdfs:
         return None
 
-    marked = [
+    candidates = [
         path
         for _mtime, path in pdfs
-        if _IMPOSICAO_NAME_RE.search(os.path.basename(path))
+        if not _EXCLUDE_SEFOC_PDF_RE.search(os.path.basename(path))
+    ]
+    if not candidates:
+        return None
+
+    # 1) Sufixo típico do Apogee: ..._Imposição.pdf / ... Imposição.pdf
+    marked = [
+        path
+        for path in candidates
+        if _APOGEE_IMPOSICAO_EXPORT_RE.search(os.path.basename(path))
     ]
     if marked:
         return marked[0]
 
+    # 2) Export com stem exato do JDF (ex.: Label.pdf) — sem artefatos internos.
     stem = (expected_stem or "").strip().lower()
     if stem:
-        for _mtime, path in pdfs:
-            base = os.path.basename(path)
-            name_l = base.lower()
-            if _EXCLUDE_SEFOC_PDF_RE.search(base):
-                continue
-            stem_file = os.path.splitext(base)[0].lower()
-            if stem_file == stem or stem_file.startswith(f"{stem}_"):
+        for path in candidates:
+            stem_file = os.path.splitext(os.path.basename(path))[0].lower()
+            if stem_file == stem:
                 return path
-            if stem in name_l and not _EXCLUDE_SEFOC_PDF_RE.search(base):
+            # Stem + sufixo Imposição (com ou sem acento), ex.: Label_Imposição.pdf
+            if stem_file.startswith(f"{stem}_") and re.search(
+                r"imposi[cç][aã]o", stem_file
+            ):
                 return path
 
-    for _mtime, path in pdfs:
-        if not _EXCLUDE_SEFOC_PDF_RE.search(os.path.basename(path)):
-            return path
     return None
 
 
@@ -3129,6 +3166,7 @@ def _complete_pre_impresso_imposicao_job(
     nro = int(job["nro_protocolo"])
     produto = str(job.get("produto") or "Papelaria")
     comment = str(dados.get("jdf_comment") or "").strip() or None
+    # Pasta e Timbrado pré-impresso: nunca envia layout de imposição no JDF.
     artifacts = _build_imposicao_jdf_artifacts(
         ano=ano,
         nro=nro,
@@ -3138,9 +3176,7 @@ def _complete_pre_impresso_imposicao_job(
         comment=comment,
         descriptive_name=str((dados.get("ancora") or {}).get("label") or "") or None,
         jdf_dir=str(dados.get("jdf_import_root") or "") or None,
-        sem_imposicao=bool(
-            dados.get("jdf_sem_imposicao") or dados.get("pasta_art_blank_pages")
-        ),
+        sem_imposicao=True,
     )
     dados.update(
         {
@@ -3148,8 +3184,12 @@ def _complete_pre_impresso_imposicao_job(
             "jdf_dir": artifacts["jdf_dir"],
             "jdf_name": artifacts["jdf_name"],
             "base_pdf": os.path.basename(gang_path),
+            "hotfolder_pdf": os.path.basename(
+                artifacts.get("hotfolder_pdf_path") or gang_path
+            ),
             "aguardando_apogee": True,
             "pre_impresso_pipeline": False,
+            "jdf_sem_imposicao": True,
         }
     )
     db.execute_query(
@@ -3380,11 +3420,9 @@ def poll_imposicao_apogee_result(job_id: int) -> dict[str, Any]:
         offset_dir = os.path.normpath(os.path.join(sefoc_dir, "Offset"))
         dest_abs = os.path.normpath(os.path.join(offset_dir, dest_name))
         found = None
-        if os.path.isdir(offset_dir):
-            found = find_imposicao_pdf_in_digital(
-                offset_dir,
-                preferred_name=dest_name,
-            )
+        # Idempotência: só o nome Offset canônico já finalizado.
+        if os.path.isfile(dest_abs):
+            found = dest_abs
         if not found:
             expected_stem = _imposicao_export_stem(ano, nro)
             found = find_imposicao_pdf_in_sefoc(

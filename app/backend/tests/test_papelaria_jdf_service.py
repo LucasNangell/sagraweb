@@ -374,6 +374,28 @@ def test_content_ctm_rotacao_90():
     assert th == 100
 
 
+def test_stage_pdf_in_hotfolder(tmp_path: Path):
+    import fitz
+
+    from services.papelaria_jdf_service import stage_pdf_in_hotfolder
+
+    src_dir = tmp_path / "sefoc"
+    hot = tmp_path / "hotfolder"
+    src_dir.mkdir()
+    hot.mkdir()
+    src = src_dir / "gang.pdf"
+    doc = fitz.open()
+    doc.new_page()
+    doc.save(src)
+    doc.close()
+
+    staged = stage_pdf_in_hotfolder(str(src), str(hot))
+    assert Path(staged).is_file()
+    assert Path(staged).parent == hot
+    assert Path(staged).name == "gang.pdf"
+    assert Path(staged).stat().st_size > 0
+
+
 def test_write_jdf_file(tmp_path: Path):
     from services.papelaria_jdf_service import write_jdf_file
 

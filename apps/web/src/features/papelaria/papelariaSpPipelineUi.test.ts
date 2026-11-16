@@ -21,6 +21,15 @@ describe("resolveSpProvaCell", () => {
     expect(cell.versao).toBe(3);
   });
 
+  it("waiting_client → N + clock", () => {
+    const cell = resolveSpProvaCell({ phase: "waiting_client", versao: 2 });
+    expect(cell).toMatchObject({
+      versao: 2,
+      icon: "clock",
+      label: "Aguardando aprovação do cliente (prova 2)",
+    });
+  });
+
   it("alteracao → N + clock", () => {
     const cell = resolveSpProvaCell({ phase: "alteracao", versao: 2 });
     expect(cell).toMatchObject({ versao: 2, icon: "clock" });

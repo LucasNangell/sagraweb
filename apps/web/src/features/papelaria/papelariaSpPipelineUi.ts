@@ -7,6 +7,7 @@ export type PapelariaSpProvaPhase =
   | "queued"
   | "processing"
   | "ready_send"
+  | "waiting_client"
   | "alteracao"
   | "approved";
 
@@ -108,6 +109,14 @@ export function resolveSpProvaCell(
         label: versao
           ? `Prova ${versao} pronta para envio`
           : "Prova pronta para envio",
+      };
+    case "waiting_client":
+      return {
+        versao,
+        icon: "clock",
+        label: versao
+          ? `Aguardando aprovação do cliente (prova ${versao})`
+          : "Aguardando aprovação do cliente",
       };
     case "alteracao":
       return {

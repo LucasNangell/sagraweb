@@ -1,6 +1,13 @@
 /** Config salva no modelo — campos suficientes para gerar JDF Apogee no futuro. */
 export type PapelariaImposicaoPaginaOrigem = "borda" | "fixixa";
-export type PapelariaImposicaoWorkStyle = "Simplex";
+export type PapelariaImposicaoWorkStyle = "Simplex" | "Duplex";
+
+export type PapelariaImposicaoOcupada = {
+  col: number;
+  row: number;
+  /** Número da página do PDF (1-based). Pode repetir em várias células. */
+  pagina: number;
+};
 
 export interface PapelariaImposicaoConfig {
   /** Media Dimension da folha (mm). Ex.: A4 paisagem 297×210. */
@@ -19,10 +26,14 @@ export interface PapelariaImposicaoConfig {
     colunas: number;
     linhas: number;
     /**
-     * Células com página (0-based). Omitido = grade cheia na ordem linha-major.
-     * `pagina` = número 1..N exibido e ordem no JDF.
+     * Células da frente com página (0-based). Omitido = grade cheia na ordem linha-major.
+     * `pagina` = número 1..N do PDF; pode repetir (ex.: todas as células = página 1).
      */
-    ocupadas?: Array<{ col: number; row: number; pagina: number }>;
+    ocupadas?: PapelariaImposicaoOcupada[];
+    /**
+     * Células do verso (só com work_style Duplex). Omitido = grade cheia sequencial.
+     */
+    ocupadas_verso?: PapelariaImposicaoOcupada[];
   };
   /** Gap entre páginas (mm). 0 = corte seco. */
   espacamento_mm: {

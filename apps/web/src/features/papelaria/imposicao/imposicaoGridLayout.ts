@@ -4,6 +4,8 @@ import {
   type ImposicaoOcupada,
 } from "./imposicaoConfigUtils";
 
+export type ImposicaoGridFace = "frente" | "verso";
+
 export type ImposicaoCellLayout = {
   col: number;
   row: number;
@@ -40,6 +42,7 @@ function pageSizeMm(config: PapelariaImposicaoConfig): {
 /** Layout visual (Y a partir do topo) espelhando compute_content_positions. */
 export function buildImposicaoGridLayout(
   config: PapelariaImposicaoConfig,
+  face: ImposicaoGridFace = "frente",
 ): {
   folhaW: number;
   folhaH: number;
@@ -62,7 +65,7 @@ export function buildImposicaoGridLayout(
     originYTop = Math.max(0, (folhaH - totalH) / 2);
   }
 
-  const ocupadas = resolveGridOcupadas(config.grid);
+  const ocupadas = resolveGridOcupadas(config.grid, face);
   const byCell = new Map<string, number>();
   for (const o of ocupadas) {
     byCell.set(`${o.col},${o.row}`, o.pagina);
@@ -93,6 +96,35 @@ export function nextPaginaNumber(ocupadas: ImposicaoOcupada[]): number {
   return Math.max(...ocupadas.map((o) => o.pagina)) + 1;
 }
 
+/**
+ * Clique na célula:
+ * - se já tem `pagina`, limpa;
+ * - senão, atribui `pagina` (permite repetir o mesmo número).
+ * Sem `pagina` explícita: comportamento legado (próximo número único / remoção com renumeração).
+ */
+export function paintCellOcupada(
+  ocupadas: ImposicaoOcupada[] | undefined,
+  cols: number,
+  rows: number,
+  col: number,
+  row: number,
+  pagina: number,
+): ImposicaoOcupada[] {
+  const page = Math.max(1, Math.floor(pagina) || 1);
+  const current =
+    ocupadas ??
+    resolveGridOcupadas({ colunas: cols, linhas: rows });
+  const idx = current.findIndex((o) => o.col === col && o.row === row);
+  if (idx >= 0 && current[idx].pagina === page) {
+    return current.filter((_, i) => i !== idx);
+  }
+  const without = current.filter((o) => !(o.col === col && o.row === row));
+  return [...without, { col, row, pagina: page }].sort(
+    (a, b) => a.pagina - b.pagina || a.row - b.row || a.col - b.col,
+  );
+}
+
+/** Legado: toggle com numeração sequencial exclusiva (testes / compat). */
 export function toggleCellOcupada(
   ocupadas: ImposicaoOcupada[] | undefined,
   cols: number,
@@ -107,12 +139,12 @@ export function toggleCellOcupada(
   if (idx >= 0) {
     const next = current
       .filter((_, i) => i !== idx)
-      .sort((a, b) => a.pagina - b.pagina)
+      .sort((a, b) => a.pagina - b.pagina || a.row - b.row || a.col - b.col)
       .map((o, i) => ({ ...o, pagina: i + 1 }));
     return next;
   }
   return [
     ...current,
     { col, row, pagina: nextPaginaNumber(current) },
-  ].sort((a, b) => a.pagina - b.pagina);
+  ].sort((a, b) => a.pagina - b.pagina || a.row - b.row || a.col - b.col);
 }

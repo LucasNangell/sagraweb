@@ -186,42 +186,88 @@ def compute_content_positions(
     gap_v_mm: float,
     centralizar: bool,
     ocupadas: list[dict[str, int]] | None = None,
-) -> list[tuple[float, float]]:
+) -> list[tuple[float, float, int]]:
     """
-    Retorna lista (x_mm, y_mm) canto inferior-esquerdo de cada conteúdo.
+    Retorna lista (x_mm, y_mm, pagina) canto inferior-esquerdo de cada conteúdo.
 
     Se ``ocupadas`` for None, preenche a grade inteira (linha-major).
     Caso contrário, emite só as células informadas, ordenadas por ``pagina``.
+    ``pagina`` é 1-based (índice da página no PDF).
     """
     if ocupadas is None:
         cells = [
-            {"col": col, "row": row, "pagina": row * cols + col + 1}
+            {"col": col, "row": row, "pagina": 1}
             for row in range(rows)
             for col in range(cols)
         ]
     else:
-        cells = sorted(ocupadas, key=lambda item: int(item.get("pagina") or 0))
+        cells = sorted(
+            ocupadas,
+            key=lambda item: (
+                int(item.get("pagina") or 0),
+                int(item.get("row") or 0),
+                int(item.get("col") or 0),
+            ),
+        )
 
-    positions: list[tuple[float, float]] = []
+    positions: list[tuple[float, float, int]] = []
     for cell in cells:
         col = int(cell["col"])
         row = int(cell["row"])
-        positions.append(
-            compute_cell_origin_mm(
-                folha_w_mm=folha_w_mm,
-                folha_h_mm=folha_h_mm,
-                page_w_mm=page_w_mm,
-                page_h_mm=page_h_mm,
-                cols=cols,
-                rows=rows,
-                gap_h_mm=gap_h_mm,
-                gap_v_mm=gap_v_mm,
-                centralizar=centralizar,
-                col=col,
-                row=row,
-            )
+        pagina = max(1, int(cell.get("pagina") or 1))
+        x_mm, y_mm = compute_cell_origin_mm(
+            folha_w_mm=folha_w_mm,
+            folha_h_mm=folha_h_mm,
+            page_w_mm=page_w_mm,
+            page_h_mm=page_h_mm,
+            cols=cols,
+            rows=rows,
+            gap_h_mm=gap_h_mm,
+            gap_v_mm=gap_v_mm,
+            centralizar=centralizar,
+            col=col,
+            row=row,
         )
+        positions.append((x_mm, y_mm, pagina))
     return positions
+
+
+def _content_objects_xml(
+    *,
+    positions: list[tuple[float, float, int]],
+    page_w_pt: float,
+    page_h_pt: float,
+    folha_w_pt: float,
+    folha_h_pt: float,
+    marcas_corte: bool,
+    marcas_pdf_path: str,
+    marcas_ord: int,
+) -> str:
+    """Monta ContentObject(s) de uma Surface; Ord = pagina-1 do PDF."""
+    parts: list[str] = []
+    for x_mm, y_mm, pagina in positions:
+        x_pt = mm_to_pt(x_mm)
+        y_pt = mm_to_pt(y_mm)
+        clip_x1 = x_pt + page_w_pt
+        clip_y1 = y_pt + page_h_pt
+        ord_idx = max(0, int(pagina) - 1)
+        parts.append(
+            f'              <ContentObject Ord="{ord_idx}"\n'
+            f'                             CTM="1 0 0 1 {x_pt:.3f} {y_pt:.3f}" '
+            f'TrimCTM="1 0 0 1 {x_pt:.3f} {y_pt:.3f}"\n'
+            f'                             TrimSize="{page_w_pt:.3f} {page_h_pt:.3f}"\n'
+            f'                             ClipBox="{x_pt:.3f} {y_pt:.3f} '
+            f'{clip_x1:.3f} {clip_y1:.3f}"/>'
+        )
+    if marcas_corte:
+        trim_x, trim_y = _marcas_trim_origin_pt(marcas_pdf_path)
+        parts.append(
+            f'              <ContentObject Ord="{marcas_ord}" '
+            'CTM="1 0 0 1 0 0" '
+            f'TrimCTM="1 0 0 1 {trim_x:.3f} {trim_y:.3f}"\n'
+            f'                             ClipBox="0 0 {folha_w_pt:.3f} {folha_h_pt:.3f}"/>'
+        )
+    return "\n".join(parts)
 
 
 def _export_filename_stem(export_filename: str) -> str:
@@ -311,8 +357,9 @@ def build_apogee_jdf_xml(
 
     from services.papelaria_imposicao_config_service import resolve_grid_ocupadas
 
-    ocupadas = resolve_grid_ocupadas(grid if isinstance(grid, dict) else {})
-    positions = compute_content_positions(
+    grid_dict = grid if isinstance(grid, dict) else {}
+    ocupadas_frente = resolve_grid_ocupadas(grid_dict, face="frente")
+    positions_frente = compute_content_positions(
         folha_w_mm=folha_w,
         folha_h_mm=folha_h,
         page_w_mm=page_w_mm,
@@ -322,34 +369,56 @@ def build_apogee_jdf_xml(
         gap_h_mm=gap_h,
         gap_v_mm=gap_v,
         centralizar=centralizar,
-        ocupadas=ocupadas,
+        ocupadas=ocupadas_frente,
     )
 
-    content_xml_parts: list[str] = []
-    for x_mm, y_mm in positions:
-        x_pt = mm_to_pt(x_mm)
-        y_pt = mm_to_pt(y_mm)
-        clip_x1 = x_pt + page_w_pt
-        clip_y1 = y_pt + page_h_pt
-        content_xml_parts.append(
-            "              <ContentObject Ord=\"0\"\n"
-            f"                             CTM=\"1 0 0 1 {x_pt:.3f} {y_pt:.3f}\" "
-            f"TrimCTM=\"1 0 0 1 {x_pt:.3f} {y_pt:.3f}\"\n"
-            f"                             TrimSize=\"{page_w_pt:.3f} {page_h_pt:.3f}\"\n"
-            f"                             ClipBox=\"{x_pt:.3f} {y_pt:.3f} "
-            f"{clip_x1:.3f} {clip_y1:.3f}\"/>"
+    is_duplex = work_style == "Duplex"
+    positions_verso: list[tuple[float, float, int]] = []
+    if is_duplex:
+        ocupadas_verso = resolve_grid_ocupadas(grid_dict, face="verso")
+        positions_verso = compute_content_positions(
+            folha_w_mm=folha_w,
+            folha_h_mm=folha_h,
+            page_w_mm=page_w_mm,
+            page_h_mm=page_h_mm,
+            cols=cols,
+            rows=rows,
+            gap_h_mm=gap_h,
+            gap_v_mm=gap_v,
+            centralizar=centralizar,
+            ocupadas=ocupadas_verso,
         )
-    if marcas_corte:
-        # PDF de marcas como conteúdo (Ord=1), por último (fica por cima).
-        # CTM = MediaBox em (0,0); TrimCTM = origem da TrimBox do arquivo.
-        trim_x, trim_y = _marcas_trim_origin_pt(marcas_pdf_path)
-        content_xml_parts.append(
-            "              <ContentObject Ord=\"1\" "
-            'CTM="1 0 0 1 0 0" '
-            f'TrimCTM="1 0 0 1 {trim_x:.3f} {trim_y:.3f}"\n'
-            f'                             ClipBox="0 0 {folha_w_pt:.3f} {folha_h_pt:.3f}"/>'
+
+    max_pagina = 1
+    for _x, _y, pagina in positions_frente + positions_verso:
+        if pagina > max_pagina:
+            max_pagina = pagina
+    # Ord das marcas vem depois das páginas do PDF base (0..max_pagina-1).
+    marcas_ord = max_pagina if marcas_corte else max_pagina
+
+    contents_front = _content_objects_xml(
+        positions=positions_frente,
+        page_w_pt=page_w_pt,
+        page_h_pt=page_h_pt,
+        folha_w_pt=folha_w_pt,
+        folha_h_pt=folha_h_pt,
+        marcas_corte=marcas_corte,
+        marcas_pdf_path=marcas_pdf_path,
+        marcas_ord=marcas_ord,
+    )
+    contents_back = ""
+    if is_duplex:
+        contents_back = _content_objects_xml(
+            positions=positions_verso,
+            page_w_pt=page_w_pt,
+            page_h_pt=page_h_pt,
+            folha_w_pt=folha_w_pt,
+            folha_h_pt=folha_h_pt,
+            # Marcas só na frente (mesmo PDF de marcas na folha).
+            marcas_corte=False,
+            marcas_pdf_path="",
+            marcas_ord=marcas_ord,
         )
-    contents = "\n".join(content_xml_parts)
 
     file_url = escape(path_to_file_url(base_pdf_path))
     export_folder_esc = escape(export_folder.replace("/", "\\"))
@@ -386,7 +455,9 @@ def build_apogee_jdf_xml(
         marcas_user = escape(
             os.path.splitext(os.path.basename(marcas_pdf_path.replace("/", "\\")))[0]
         )
-        document_runlist_xml = f"""      <RunList Class="Parameter" ID="RL_{nro5}" Status="Available" PartIDKeys="Run" NPage="2">
+        if max_pagina <= 1:
+            # Compat: 1 página de arte + marcas (Ord 0 / Ord 1).
+            document_runlist_xml = f"""      <RunList Class="Parameter" ID="RL_{nro5}" Status="Available" PartIDKeys="Run" NPage="2">
         <RunList Run="Arte" Pages="0">
           <LayoutElement>
             <FileSpec URL="{file_url}"
@@ -402,14 +473,45 @@ def build_apogee_jdf_xml(
           </LayoutElement>
         </RunList>
       </RunList>"""
+        else:
+            # Uma Run por página do PDF base (Pages=i) + Run de marcas.
+            arte_runs: list[str] = []
+            for page_idx in range(max_pagina):
+                arte_runs.append(
+                    f"""        <RunList Run="Arte{page_idx + 1}" Pages="{page_idx}">
+          <LayoutElement>
+            <FileSpec URL="{file_url}"
+                      MimeType="application/pdf" FileVersion="1"
+                      UserFileName="{user_name_esc}"/>
+          </LayoutElement>
+        </RunList>"""
+                )
+            n_page_total = max_pagina + 1
+            document_runlist_xml = f"""      <RunList Class="Parameter" ID="RL_{nro5}" Status="Available" PartIDKeys="Run" NPage="{n_page_total}">
+{chr(10).join(arte_runs)}
+        <RunList Run="Marcas" Pages="0">
+          <LayoutElement>
+            <FileSpec URL="{marcas_url}"
+                      MimeType="application/pdf" FileVersion="1"
+                      UserFileName="{marcas_user}"/>
+          </LayoutElement>
+        </RunList>
+      </RunList>"""
     else:
-        document_runlist_xml = f"""      <RunList Class="Parameter" ID="RL_{nro5}" Status="Available" NPage="1">
+        document_runlist_xml = f"""      <RunList Class="Parameter" ID="RL_{nro5}" Status="Available" NPage="{max_pagina}">
         <LayoutElement>
           <FileSpec URL="{file_url}"
                     MimeType="application/pdf" FileVersion="1"
                     UserFileName="{user_name_esc}"/>
         </LayoutElement>
       </RunList>"""
+
+    back_surface_xml = ""
+    if is_duplex:
+        back_surface_xml = f"""
+            <Surface Side="Back" SurfaceContentsBox="0 0 {folha_w_pt:.3f} {folha_h_pt:.3f}">
+{contents_back}
+            </Surface>"""
 
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <JDF xmlns="http://www.CIP4.org/JDFSchema_1_1"
@@ -465,8 +567,8 @@ def build_apogee_jdf_xml(
           <Sheet Name="SHT1" SourceWorkStyle="{escape(work_style)}">
             <MediaRef rRef="PAP_{nro5}"/>
             <Surface Side="Front" SurfaceContentsBox="0 0 {folha_w_pt:.3f} {folha_h_pt:.3f}">
-{contents}
-            </Surface>
+{contents_front}
+            </Surface>{back_surface_xml}
           </Sheet>
         </Signature>
       </Layout>

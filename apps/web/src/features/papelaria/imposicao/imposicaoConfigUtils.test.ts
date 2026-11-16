@@ -37,7 +37,7 @@ describe("imposicaoConfigUtils (JDF)", () => {
     ]);
   });
 
-  it("rejeita ocupadas inválidas", () => {
+  it("rejeita ocupadas fora da grade e aceita pagina repetida", () => {
     expect(() =>
       validateImposicaoConfigObject({
         ...DEFAULT_IMPOSICAO_CONFIG,
@@ -49,19 +49,45 @@ describe("imposicaoConfigUtils (JDF)", () => {
       }),
     ).toThrow(/fora da grade/);
 
-    expect(() =>
-      validateImposicaoConfigObject({
-        ...DEFAULT_IMPOSICAO_CONFIG,
-        grid: {
-          colunas: 2,
-          linhas: 1,
-          ocupadas: [
-            { col: 0, row: 0, pagina: 1 },
-            { col: 1, row: 0, pagina: 1 },
-          ],
-        },
-      }),
-    ).toThrow(/duplicada/);
+    const cfg = validateImposicaoConfigObject({
+      ...DEFAULT_IMPOSICAO_CONFIG,
+      grid: {
+        colunas: 2,
+        linhas: 1,
+        ocupadas: [
+          { col: 0, row: 0, pagina: 1 },
+          { col: 1, row: 0, pagina: 1 },
+        ],
+      },
+    });
+    expect(cfg.grid.ocupadas).toEqual([
+      { col: 0, row: 0, pagina: 1 },
+      { col: 1, row: 0, pagina: 1 },
+    ]);
+  });
+
+  it("aceita Duplex com ocupadas_verso", () => {
+    const cfg = validateImposicaoConfigObject({
+      ...DEFAULT_IMPOSICAO_CONFIG,
+      work_style: "Duplex",
+      grid: {
+        colunas: 2,
+        linhas: 1,
+        ocupadas: [
+          { col: 0, row: 0, pagina: 1 },
+          { col: 1, row: 0, pagina: 1 },
+        ],
+        ocupadas_verso: [
+          { col: 0, row: 0, pagina: 2 },
+          { col: 1, row: 0, pagina: 2 },
+        ],
+      },
+    });
+    expect(cfg.work_style).toBe("Duplex");
+    expect(cfg.grid.ocupadas_verso).toEqual([
+      { col: 0, row: 0, pagina: 2 },
+      { col: 1, row: 0, pagina: 2 },
+    ]);
   });
 
   it("exige PDF de marcas quando marcas_corte=true", () => {

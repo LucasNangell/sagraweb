@@ -5,7 +5,7 @@ import json
 from typing import Any
 
 _VALID_ORIGENS = {"borda", "fixixa"}
-_VALID_WORK_STYLES = {"Simplex"}
+_VALID_WORK_STYLES = {"Simplex", "Duplex"}
 
 
 def _is_number(value: Any) -> bool:
@@ -61,12 +61,13 @@ def _normalize_ocupadas(
     *,
     cols: int,
     rows: int,
+    field_label: str = "grid.ocupadas",
 ) -> list[dict[str, int]]:
-    """Valida lista de células ocupadas com número de página."""
+    """Valida lista de células ocupadas com número de página (permite repetir pagina)."""
     if not isinstance(raw, list):
-        raise ValueError("grid.ocupadas deve ser uma lista.")
+        raise ValueError(f"{field_label} deve ser uma lista.")
     if len(raw) < 1:
-        raise ValueError("grid.ocupadas deve ter ao menos uma célula.")
+        raise ValueError(f"{field_label} deve ter ao menos uma célula.")
 
     def _as_int(value: Any, field: str) -> int:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -77,10 +78,9 @@ def _normalize_ocupadas(
         return num
 
     seen_cells: set[tuple[int, int]] = set()
-    seen_paginas: set[int] = set()
     out: list[dict[str, int]] = []
     for idx, item in enumerate(raw):
-        label = f"grid.ocupadas[{idx}]"
+        label = f"{field_label}[{idx}]"
         if not isinstance(item, dict):
             raise ValueError(f"{label} deve ser um objeto.")
         col = _as_int(item.get("col"), f"{label}.col")
@@ -95,33 +95,36 @@ def _normalize_ocupadas(
         cell = (col, row)
         if cell in seen_cells:
             raise ValueError(f"{label}: célula ({col},{row}) duplicada.")
-        if pagina in seen_paginas:
-            raise ValueError(f"{label}: pagina {pagina} duplicada.")
         seen_cells.add(cell)
-        seen_paginas.add(pagina)
         out.append({"col": col, "row": row, "pagina": pagina})
 
-    out.sort(key=lambda item: item["pagina"])
+    out.sort(key=lambda item: (item["pagina"], item["row"], item["col"]))
     return out
 
 
-def resolve_grid_ocupadas(grid: dict[str, Any]) -> list[dict[str, int]]:
+def resolve_grid_ocupadas(
+    grid: dict[str, Any],
+    *,
+    face: str = "frente",
+) -> list[dict[str, int]]:
     """
     Lista efetiva de células ocupadas.
     Sem ocupadas no JSON → grade cheia (linha-major, pagina 1..N).
+    face=verso usa grid.ocupadas_verso.
     """
     cols = int(grid.get("colunas") or 1)
     rows = int(grid.get("linhas") or 1)
-    raw = grid.get("ocupadas")
+    field = "ocupadas_verso" if face == "verso" else "ocupadas"
+    raw = grid.get(field)
     if raw is None:
-        out: list[dict[str, int]] = []
-        n = 1
-        for row in range(rows):
-            for col in range(cols):
-                out.append({"col": col, "row": row, "pagina": n})
-                n += 1
-        return out
-    return _normalize_ocupadas(raw, cols=cols, rows=rows)
+        # Omitido = step & repeat da página 1 (não sequência 1..N).
+        return [
+            {"col": col, "row": row, "pagina": 1}
+            for row in range(rows)
+            for col in range(cols)
+        ]
+    label = f"grid.{field}"
+    return _normalize_ocupadas(raw, cols=cols, rows=rows, field_label=label)
 
 
 def validate_imposicao_config_payload(
@@ -191,6 +194,7 @@ def validate_imposicao_config_payload(
             ocupadas_raw,
             cols=cols,
             rows=rows,
+            field_label="grid.ocupadas",
         )
 
     espacamento = data.get("espacamento_mm")
@@ -215,6 +219,16 @@ def validate_imposicao_config_payload(
         raise ValueError(
             f"work_style inválido. Valores: {', '.join(sorted(_VALID_WORK_STYLES))}."
         )
+
+    if work_style == "Duplex":
+        ocupadas_verso_raw = grid.get("ocupadas_verso")
+        if ocupadas_verso_raw is not None:
+            grid_out["ocupadas_verso"] = _normalize_ocupadas(
+                ocupadas_verso_raw,
+                cols=cols,
+                rows=rows,
+                field_label="grid.ocupadas_verso",
+            )
 
     if "marcas_corte" in data:
         marcas = _require_bool(data, "marcas_corte")

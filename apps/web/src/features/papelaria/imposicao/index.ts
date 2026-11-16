@@ -9,6 +9,7 @@ export {
   cloneDefaultImposicaoConfig,
   configFromModeloOrDefault,
   fillGridOcupadas,
+  fillGridWithPagina,
   formatImposicaoConfigJson,
   formatImposicaoVariantsJson,
   parseImposicaoConfigJson,
@@ -24,5 +25,7 @@ export { ImposicaoConfigEditor } from "./ImposicaoConfigEditor";
 export { ImposicaoGridPreview } from "./ImposicaoGridPreview";
 export {
   buildImposicaoGridLayout,
+  paintCellOcupada,
   toggleCellOcupada,
+  type ImposicaoGridFace,
 } from "./imposicaoGridLayout";

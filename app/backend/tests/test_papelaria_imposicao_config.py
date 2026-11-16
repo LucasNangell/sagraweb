@@ -113,10 +113,43 @@ class TestImposicaoConfigService:
         resolved = resolve_grid_ocupadas({"colunas": 2, "linhas": 1})
         assert resolved == [
             {"col": 0, "row": 0, "pagina": 1},
-            {"col": 1, "row": 0, "pagina": 2},
+            {"col": 1, "row": 0, "pagina": 1},
         ]
 
-    def test_grid_ocupadas_invalida(self):
+    def test_grid_ocupadas_permite_pagina_repetida_e_duplex(self):
+        from services.papelaria_imposicao_config_service import (
+            resolve_grid_ocupadas,
+            validate_imposicao_config_payload,
+        )
+
+        payload = _valid_payload()
+        payload["work_style"] = "Duplex"
+        payload["grid"] = {
+            "colunas": 2,
+            "linhas": 1,
+            "ocupadas": [
+                {"col": 0, "row": 0, "pagina": 1},
+                {"col": 1, "row": 0, "pagina": 1},
+            ],
+            "ocupadas_verso": [
+                {"col": 0, "row": 0, "pagina": 2},
+                {"col": 1, "row": 0, "pagina": 2},
+            ],
+        }
+        out = validate_imposicao_config_payload(payload)
+        assert out["work_style"] == "Duplex"
+        assert out["grid"]["ocupadas"] == [
+            {"col": 0, "row": 0, "pagina": 1},
+            {"col": 1, "row": 0, "pagina": 1},
+        ]
+        assert out["grid"]["ocupadas_verso"] == [
+            {"col": 0, "row": 0, "pagina": 2},
+            {"col": 1, "row": 0, "pagina": 2},
+        ]
+        verso = resolve_grid_ocupadas(out["grid"], face="verso")
+        assert all(cell["pagina"] == 2 for cell in verso)
+
+    def test_grid_ocupadas_celula_duplicada(self):
         from services.papelaria_imposicao_config_service import (
             validate_imposicao_config_payload,
         )
@@ -125,7 +158,10 @@ class TestImposicaoConfigService:
         bad["grid"] = {
             "colunas": 2,
             "linhas": 1,
-            "ocupadas": [{"col": 0, "row": 0, "pagina": 1}, {"col": 1, "row": 0, "pagina": 1}],
+            "ocupadas": [
+                {"col": 0, "row": 0, "pagina": 1},
+                {"col": 0, "row": 0, "pagina": 2},
+            ],
         }
         with pytest.raises(ValueError, match="duplicada"):
             validate_imposicao_config_payload(bad)

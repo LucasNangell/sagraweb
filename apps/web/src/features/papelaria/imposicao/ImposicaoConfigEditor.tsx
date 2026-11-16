@@ -163,13 +163,19 @@ export function ImposicaoConfigEditor({
           hint="Step & repeat — ex.: 2×1"
           onChange={(n) => {
             const colunas = Math.max(1, Math.floor(n) || 1);
+            const linhas = config.grid.linhas;
             patch("grid", {
               ...config.grid,
               colunas,
               ocupadas: clampOcupadasToGrid(
                 config.grid.ocupadas,
                 colunas,
-                config.grid.linhas,
+                linhas,
+              ),
+              ocupadas_verso: clampOcupadasToGrid(
+                config.grid.ocupadas_verso,
+                colunas,
+                linhas,
               ),
             });
           }}
@@ -180,12 +186,18 @@ export function ImposicaoConfigEditor({
           min={1}
           onChange={(n) => {
             const linhas = Math.max(1, Math.floor(n) || 1);
+            const colunas = config.grid.colunas;
             patch("grid", {
               ...config.grid,
               linhas,
               ocupadas: clampOcupadasToGrid(
                 config.grid.ocupadas,
-                config.grid.colunas,
+                colunas,
+                linhas,
+              ),
+              ocupadas_verso: clampOcupadasToGrid(
+                config.grid.ocupadas_verso,
+                colunas,
                 linhas,
               ),
             });
@@ -237,15 +249,30 @@ export function ImposicaoConfigEditor({
           <select
             className="rounded border border-slate-300 px-2 py-1.5 text-xs text-slate-800"
             value={config.work_style}
-            onChange={(e) =>
-              patch(
-                "work_style",
-                e.target.value as PapelariaImposicaoConfig["work_style"],
-              )
-            }
+            onChange={(e) => {
+              const work_style = e.target
+                .value as PapelariaImposicaoConfig["work_style"];
+              if (work_style === "Simplex") {
+                onChange({
+                  ...config,
+                  work_style,
+                  grid: {
+                    colunas: config.grid.colunas,
+                    linhas: config.grid.linhas,
+                    ocupadas: config.grid.ocupadas,
+                  },
+                });
+                return;
+              }
+              onChange({ ...config, work_style });
+            }}
           >
-            <option value="Simplex">Simplex</option>
+            <option value="Simplex">Simplex (somente frente)</option>
+            <option value="Duplex">Duplex (frente e verso)</option>
           </select>
+          <span className="text-[10px] text-slate-400">
+            Em Duplex, a grade do verso aparece à direita no preview.
+          </span>
         </label>
         <CheckboxField
           label="Centralizar na folha"

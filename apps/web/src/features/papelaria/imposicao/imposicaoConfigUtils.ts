@@ -1,6 +1,7 @@
 import {
   DEFAULT_IMPOSICAO_CONFIG,
   type PapelariaImposicaoConfig,
+  type PapelariaImposicaoWorkStyle,
 } from "./types";
 
 function isNumber(value: unknown): value is number {
@@ -55,18 +56,18 @@ function normalizeOcupadas(
   raw: unknown,
   cols: number,
   rows: number,
+  fieldLabel = "grid.ocupadas",
 ): ImposicaoOcupada[] {
   if (!Array.isArray(raw)) {
-    throw new Error("grid.ocupadas deve ser uma lista.");
+    throw new Error(`${fieldLabel} deve ser uma lista.`);
   }
   if (raw.length < 1) {
-    throw new Error("grid.ocupadas deve ter ao menos uma célula.");
+    throw new Error(`${fieldLabel} deve ter ao menos uma célula.`);
   }
   const seenCells = new Set<string>();
-  const seenPaginas = new Set<number>();
   const out: ImposicaoOcupada[] = [];
   raw.forEach((item, idx) => {
-    const label = `grid.ocupadas[${idx}]`;
+    const label = `${fieldLabel}[${idx}]`;
     if (!item || typeof item !== "object" || Array.isArray(item)) {
       throw new Error(`${label} deve ser um objeto.`);
     }
@@ -92,38 +93,61 @@ function normalizeOcupadas(
     if (seenCells.has(cellKey)) {
       throw new Error(`${label}: célula (${col},${row}) duplicada.`);
     }
-    if (seenPaginas.has(pagina)) {
-      throw new Error(`${label}: pagina ${pagina} duplicada.`);
-    }
     seenCells.add(cellKey);
-    seenPaginas.add(pagina);
     out.push({ col, row, pagina });
   });
-  out.sort((a, b) => a.pagina - b.pagina);
+  out.sort(
+    (a, b) => a.pagina - b.pagina || a.row - b.row || a.col - b.col,
+  );
+  return out;
+}
+
+function fillSequentialOcupadas(cols: number, rows: number): ImposicaoOcupada[] {
+  const out: ImposicaoOcupada[] = [];
+  let n = 1;
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      out.push({ col, row, pagina: n });
+      n += 1;
+    }
+  }
+  return out;
+}
+
+/** Grade cheia com a mesma página (step & repeat padrão). */
+function fillSamePaginaOcupadas(
+  cols: number,
+  rows: number,
+  pagina = 1,
+): ImposicaoOcupada[] {
+  const page = Math.max(1, Math.floor(pagina) || 1);
+  const out: ImposicaoOcupada[] = [];
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      out.push({ col, row, pagina: page });
+    }
+  }
   return out;
 }
 
 /** Grade cheia (legado) ou ocupadas explícitas, ordenadas por pagina. */
 export function resolveGridOcupadas(
   grid: PapelariaImposicaoConfig["grid"],
+  face: "frente" | "verso" = "frente",
 ): ImposicaoOcupada[] {
   const cols = Math.max(1, Math.floor(grid.colunas) || 1);
   const rows = Math.max(1, Math.floor(grid.linhas) || 1);
-  if (grid.ocupadas == null) {
-    const out: ImposicaoOcupada[] = [];
-    let n = 1;
-    for (let row = 0; row < rows; row += 1) {
-      for (let col = 0; col < cols; col += 1) {
-        out.push({ col, row, pagina: n });
-        n += 1;
-      }
-    }
-    return out;
+  const raw = face === "verso" ? grid.ocupadas_verso : grid.ocupadas;
+  if (raw == null) {
+    // Omitido = step & repeat da página 1 (não sequência 1..N).
+    return fillSamePaginaOcupadas(cols, rows, 1);
   }
-  return normalizeOcupadas(grid.ocupadas, cols, rows);
+  const label =
+    face === "verso" ? "grid.ocupadas_verso" : "grid.ocupadas";
+  return normalizeOcupadas(raw, cols, rows, label);
 }
 
-/** Remove células fora da grade e renumerar gaps (1..N contínuo). */
+/** Remove células fora da grade; preserva números de página (repetições). */
 export function clampOcupadasToGrid(
   ocupadas: ImposicaoOcupada[] | undefined,
   cols: number,
@@ -132,16 +156,26 @@ export function clampOcupadasToGrid(
   if (ocupadas == null) return undefined;
   const kept = ocupadas
     .filter((o) => o.col >= 0 && o.col < cols && o.row >= 0 && o.row < rows)
-    .sort((a, b) => a.pagina - b.pagina);
+    .sort((a, b) => a.pagina - b.pagina || a.row - b.row || a.col - b.col);
   if (kept.length < 1) return undefined;
-  return kept.map((o, i) => ({ col: o.col, row: o.row, pagina: i + 1 }));
+  return kept;
 }
 
+/** Preenche a grade em sequência 1..N (páginas distintas do PDF). */
 export function fillGridOcupadas(
   cols: number,
   rows: number,
 ): ImposicaoOcupada[] {
-  return resolveGridOcupadas({ colunas: cols, linhas: rows });
+  return fillSequentialOcupadas(cols, rows);
+}
+
+/** Preenche toda a grade com o mesmo número de página (repetição). */
+export function fillGridWithPagina(
+  cols: number,
+  rows: number,
+  pagina: number,
+): ImposicaoOcupada[] {
+  return fillSamePaginaOcupadas(cols, rows, pagina);
 }
 
 /** Aceita schema novo e legado (folha/largura_mm, repeticoes, etc.). */
@@ -168,6 +202,8 @@ function coerceRaw(data: Record<string, unknown>): Record<string, unknown> {
 
   return out;
 }
+
+const VALID_WORK_STYLES: PapelariaImposicaoWorkStyle[] = ["Simplex", "Duplex"];
 
 export function validateImposicaoConfigObject(
   data: unknown,
@@ -212,9 +248,16 @@ export function validateImposicaoConfigObject(
     throw new Error("sangria_mm deve ser numérico >= 0.");
   }
 
-  if (raw.work_style !== "Simplex") {
-    throw new Error("work_style inválido. Valores: Simplex.");
+  const workStyle = raw.work_style;
+  if (
+    typeof workStyle !== "string" ||
+    !VALID_WORK_STYLES.includes(workStyle as PapelariaImposicaoWorkStyle)
+  ) {
+    throw new Error(
+      `work_style inválido. Valores: ${VALID_WORK_STYLES.join(", ")}.`,
+    );
   }
+  const work_style = workStyle as PapelariaImposicaoWorkStyle;
 
   const paginaOut: PapelariaImposicaoConfig["pagina"] = { origem };
   if (origem === "fixixa") {
@@ -229,7 +272,17 @@ export function validateImposicaoConfigObject(
     linhas: rows,
   };
   if (grid.ocupadas !== undefined && grid.ocupadas !== null) {
-    gridOut.ocupadas = normalizeOcupadas(grid.ocupadas, cols, rows);
+    gridOut.ocupadas = normalizeOcupadas(grid.ocupadas, cols, rows, "grid.ocupadas");
+  }
+  if (work_style === "Duplex") {
+    if (grid.ocupadas_verso !== undefined && grid.ocupadas_verso !== null) {
+      gridOut.ocupadas_verso = normalizeOcupadas(
+        grid.ocupadas_verso,
+        cols,
+        rows,
+        "grid.ocupadas_verso",
+      );
+    }
   }
 
   return {
@@ -266,7 +319,7 @@ export function validateImposicaoConfigObject(
       return marcas ? path : null;
     })(),
     centralizar_na_folha: requireBool(raw, "centralizar_na_folha"),
-    work_style: "Simplex",
+    work_style,
   };
 }
 

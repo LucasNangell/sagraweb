@@ -268,6 +268,46 @@ def test_build_apogee_jdf_xml_com_marcas_corte(tmp_path: Path):
     assert xml.count('ContentObject Ord="1"') == 1
 
 
+def test_build_apogee_jdf_xml_duplex_frente_verso(tmp_path: Path):
+    from services.papelaria_jdf_service import build_apogee_jdf_xml
+
+    pdf = tmp_path / "base.pdf"
+    pdf.write_bytes(b"%PDF")
+    xml = build_apogee_jdf_xml(
+        ano=2026,
+        nro=6227,
+        descriptive_name="CartaoFV",
+        comment="duplex 2x1",
+        export_folder=str(tmp_path),
+        export_filename="CartaoFV.pdf",
+        base_pdf_path=str(pdf),
+        base_pdf_user_name=pdf.stem,
+        config=_base_config(
+            work_style="Duplex",
+            grid={
+                "colunas": 2,
+                "linhas": 1,
+                "ocupadas": [
+                    {"col": 0, "row": 0, "pagina": 1},
+                    {"col": 1, "row": 0, "pagina": 1},
+                ],
+                "ocupadas_verso": [
+                    {"col": 0, "row": 0, "pagina": 2},
+                    {"col": 1, "row": 0, "pagina": 2},
+                ],
+            },
+        ),
+        page_w_mm=148,
+        page_h_mm=210,
+    )
+    assert 'SourceWorkStyle="Duplex"' in xml
+    assert 'Surface Side="Front"' in xml
+    assert 'Surface Side="Back"' in xml
+    assert 'NPage="2"' in xml
+    assert xml.count('ContentObject Ord="0"') == 2
+    assert xml.count('ContentObject Ord="1"') == 2
+
+
 def test_build_apogee_jdf_xml_marcas_sem_path_falha(tmp_path: Path):
     from services.papelaria_jdf_service import build_apogee_jdf_xml
 

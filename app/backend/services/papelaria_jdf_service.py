@@ -704,10 +704,11 @@ def build_apogee_passthrough_jdf_xml(
     timestamp: datetime | None = None,
 ) -> str:
     """
-    Ticket Apogee sem Layout/ImpositionPreparation/ContentObjects.
+    Ticket Apogee para Hot Ticket com «Apogee Impose».
 
-    Só o .jdf vai ao hotfolder; FileSpec aponta ao PDF na Sefoc (UNC).
-    Posição/template ficam no Hot Ticket do Apogee.
+    Declara NamedFeatures Imposition (evita imposição indefinida), mas não
+    envia Layout/ImpositionPreparation/ContentObjects — o template fica no
+    Hot Ticket. Só o .jdf vai ao hotfolder; FileSpec aponta o PDF na Sefoc.
     """
     nro5 = format_os_number(nro)
     job_name = nro5
@@ -743,9 +744,10 @@ def build_apogee_passthrough_jdf_xml(
     )
     job_id = str(int(ano))
     job_part = nro5
-    # Só export — sem «Imposition» (template fica no Hot Ticket do Apogee).
-    root_features = escape(_ROOT_EXPORT_FEATURE)
-    export_features = escape(_EXPORT_FEATURE)
+    # Declara Imposition para o Hot Ticket aplicar «Apogee Impose».
+    # Sem Layout/ImpositionPreparation no JDF (template fica no Hot Ticket).
+    root_features = escape(_named_features(root=True))
+    export_features = escape(_named_features(root=False))
 
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <JDF xmlns="http://www.CIP4.org/JDFSchema_1_1"
@@ -811,7 +813,7 @@ def build_apogee_passthrough_jdf_xml(
     </JDF>
 
     <JDF ID="EXP_{nro5}" JobPartID="EXP_{nro5}" Type="ProcessGroup"
-         Types="DigitalDelivery ProofImaging"
+         Types="Imposition DigitalDelivery ProofImaging"
          Category="MISPRE.ImpositionProofing" Status="Waiting" DescriptiveName="GB Export PDF"
          NamedFeatures="{export_features}">
       <ResourceLinkPool>

@@ -358,7 +358,8 @@ def test_build_apogee_passthrough_jdf_xml(tmp_path: Path):
     assert "ContentObject" not in xml
     assert "ImpositionPreparation" not in xml
     assert "<Layout " not in xml
-    assert 'NamedFeatures="Imposition' not in xml
+    assert 'NamedFeatures="Imposition JDFNoMarks resultexport ExportPDF_Sefoc' in xml
+    assert 'Types="Imposition DigitalDelivery ProofImaging"' in xml
     assert "ExportFolder" in xml
     assert "JobDescription" in xml
 

@@ -16,3 +16,10 @@ export function formatDimensionMm(value: number): string {
   const rounded = Math.round(value * 10) / 10;
   return Number.isInteger(rounded) ? String(rounded) : String(rounded);
 }
+
+export function formatProvaLabel(versao?: string | number | null): string | null {
+  if (versao == null) return null;
+  const raw = String(versao).trim();
+  if (!raw) return null;
+  return `Prova ${raw}`;
+}

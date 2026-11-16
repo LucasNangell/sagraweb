@@ -860,6 +860,7 @@ export function ClienteProofPage({
                 isLoading={previewQuery.isLoading}
                 isError={previewQuery.isError}
                 produtoFallback={data?.produto}
+                versao={data?.versao}
                 fillHeight={fillHeight}
               />
             </div>

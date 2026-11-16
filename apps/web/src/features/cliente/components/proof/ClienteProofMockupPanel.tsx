@@ -17,19 +17,23 @@ import { useMatchMedia } from "@/hooks/useMatchMedia";
 
 import {
   formatDimensionMm,
+  formatProvaLabel,
   resolveProductDimensionsMm,
 } from "./resolveProductDimensionsMm";
 
-/** Padding de .proof-mockup-root--portal-fit (1.25rem 1rem) + faixa das dimensões. */
+/** Padding de .proof-mockup-root--portal-fit + faixas topo (Prova N) e base (dimensões). */
 const MOCKUP_ROOT_PAD_X = 32;
 const MOCKUP_ROOT_PAD_Y = 40;
 const MOCKUP_DIMENSIONS_BAND_PX = 28;
+const MOCKUP_PROVA_BAND_PX = 28;
 
 interface ClienteProofMockupPanelProps {
   previewData: ProofPreviewPagesData | undefined;
   isLoading: boolean;
   isError: boolean;
   produtoFallback?: string;
+  /** Número/versão da prova (ex.: "1" → "Prova 1"). */
+  versao?: string | number | null;
   fillHeight?: boolean;
   className?: string;
 }
@@ -37,6 +41,7 @@ interface ClienteProofMockupPanelProps {
 type ReadyProps = {
   previewData: ProofPreviewPagesData;
   produtoFallback?: string;
+  versao?: string | number | null;
   fillHeight: boolean;
   className?: string;
 };
@@ -44,6 +49,7 @@ type ReadyProps = {
 function ClienteProofMockupPanelReady({
   previewData,
   produtoFallback,
+  versao,
   fillHeight,
   className,
 }: ReadyProps) {
@@ -64,6 +70,7 @@ function ClienteProofMockupPanelReady({
   const hasFold = configUsesFold(mockupResolved.config);
   const { widthMm, heightMm } = resolveProductDimensionsMm(mockupResolved.config);
   const dimensionsLabel = `${formatDimensionMm(widthMm)} × ${formatDimensionMm(heightMm)} mm`;
+  const provaLabel = formatProvaLabel(versao);
 
   useEffect(() => {
     if (!fillHeight) {
@@ -82,11 +89,15 @@ function ClienteProofMockupPanelReady({
 
     const updateSize = () => {
       const rect = stage.getBoundingClientRect();
+      const verticalBands =
+        MOCKUP_ROOT_PAD_Y +
+        MOCKUP_DIMENSIONS_BAND_PX +
+        (provaLabel ? MOCKUP_PROVA_BAND_PX : 0);
       const fitted = resolveSceneBasePx(
         mockupResolved.config,
         hasFold ? foldOpen : 0,
         rect.width - MOCKUP_ROOT_PAD_X,
-        rect.height - MOCKUP_ROOT_PAD_Y - MOCKUP_DIMENSIONS_BAND_PX,
+        rect.height - verticalBands,
         0.82,
       );
       setSceneBasePx(fitted);
@@ -96,7 +107,7 @@ function ClienteProofMockupPanelReady({
     const observer = new ResizeObserver(updateSize);
     observer.observe(stage);
     return () => observer.disconnect();
-  }, [fillHeight, mockupResolved.config, hasFold, foldOpen, isNarrowViewport]);
+  }, [fillHeight, mockupResolved.config, hasFold, foldOpen, isNarrowViewport, provaLabel]);
 
   return (
     <MockupPanelShell
@@ -104,6 +115,7 @@ function ClienteProofMockupPanelReady({
       className={className}
       stageRef={stageRef}
       dimensionsLabel={dimensionsLabel}
+      provaLabel={provaLabel}
     >
       <PapelariaProofMockup3D
         pages={pageUrls}
@@ -126,12 +138,14 @@ function MockupPanelShell({
   className,
   stageRef,
   dimensionsLabel,
+  provaLabel,
   children,
 }: {
   fillHeight: boolean;
   className?: string;
   stageRef: RefObject<HTMLDivElement | null>;
   dimensionsLabel?: string;
+  provaLabel?: string | null;
   children: ReactNode;
 }) {
   return (
@@ -154,6 +168,15 @@ function MockupPanelShell({
         )}
       >
         {children}
+        {provaLabel ? (
+          <p
+            data-tour="proof-mockup-prova"
+            className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-center px-3 pb-1 pt-2 text-center text-xs font-semibold tabular-nums tracking-wide text-secondary-blue"
+            aria-label={provaLabel}
+          >
+            {provaLabel}
+          </p>
+        ) : null}
         {dimensionsLabel ? (
           <p
             data-tour="proof-mockup-dimensions"
@@ -176,6 +199,7 @@ export function ClienteProofMockupPanel({
   isLoading,
   isError,
   produtoFallback,
+  versao,
   fillHeight = false,
   className,
 }: ClienteProofMockupPanelProps) {
@@ -213,6 +237,7 @@ export function ClienteProofMockupPanel({
     <ClienteProofMockupPanelReady
       previewData={previewData}
       produtoFallback={produtoFallback}
+      versao={versao}
       fillHeight={fillHeight}
       className={className}
     />

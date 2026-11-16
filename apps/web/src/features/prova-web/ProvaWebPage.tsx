@@ -522,6 +522,7 @@ export function ProvaWebPage({ ano, osId }: ProvaWebPageProps) {
                   osId={osId}
                   manifest={manifestQuery.data}
                   produtoFallback={info.produto}
+                  versao={info.record?.versao}
                 />
               ) : (
                 <ProvaWebViewerShell
@@ -554,11 +555,13 @@ function PapelariaMockupStage({
   osId,
   manifest,
   produtoFallback,
+  versao,
 }: {
   ano: number;
   osId: number;
   manifest: ProvaWebManifest;
   produtoFallback?: string;
+  versao?: string | number | null;
 }) {
   const previewData: ProofPreviewPagesData = {
     isPapelaria: true,
@@ -581,6 +584,7 @@ function PapelariaMockupStage({
         isLoading={false}
         isError={false}
         produtoFallback={produtoFallback}
+        versao={versao}
         fillHeight
         className="flex-1"
       />

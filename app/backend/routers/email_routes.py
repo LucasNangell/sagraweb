@@ -996,9 +996,8 @@ def save_email_as_mht(
         details = service.get_message_details(request.email_entry_id)
         html_bytes = build_email_archive_html_from_details(service, details)
 
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         subject_part = _safe_filename(details.get("subject", ""), fallback="email")
-        filename = f"{request.os:05d}_{request.ano}_{stamp}_{subject_part}.html"
+        filename = f"{subject_part}.html"
         output_path = os.path.join(sefoc_path, filename)
 
         with open(output_path, "wb") as f:

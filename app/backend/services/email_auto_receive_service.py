@@ -395,12 +395,11 @@ def _save_mht(
     os.makedirs(sefoc_path, exist_ok=True)
     resolved = details if details is not None else service.get_message_details(item_id)
     html_bytes = build_email_archive_html_from_details(service, resolved)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     subject_part = _safe_filename(
         subject or str(resolved.get("subject") or ""),
         fallback="email",
     )
-    filename = f"{os_num:05d}_{ano}_{stamp}_{subject_part}.html"
+    filename = f"{subject_part}.html"
     output_path = os.path.join(sefoc_path, filename)
     with open(output_path, "wb") as fh:
         fh.write(html_bytes)

@@ -4,6 +4,7 @@ import { cn } from "@sagra/ui";
 
 import { fetchPapelariaJob } from "@/api/papelaria";
 import { queryKeys } from "@/api/query-keys";
+import { OsFolderBrowserModal } from "@/features/os/components/OsFolderBrowserModal";
 import { OsHistoryPanel } from "@/features/os/components/OsHistoryPanel";
 import type { OsSearchRow } from "@/features/os/types";
 
@@ -30,6 +31,7 @@ export function PapelariaPage() {
   /** Só preenche histórico/formulário/visualização após clique na lista de SPs. */
   const [selected, setSelected] = useState<OsSearchRow | null>(null);
   const [mobilePane, setMobilePane] = useState<MobilePane>("lista");
+  const [folderBrowserOpen, setFolderBrowserOpen] = useState(false);
   const [provaOverlayBySp, setProvaOverlayBySp] = useState<
     Record<string, PapelariaSpLaneOverlay>
   >({});
@@ -41,6 +43,16 @@ export function PapelariaPage() {
     Record<string, TrackedLaneJob>
   >({});
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const onFolder = () => {
+      if (!selected) return;
+      setFolderBrowserOpen(true);
+    };
+    window.addEventListener("sagra:os-folder-browser", onFolder);
+    return () =>
+      window.removeEventListener("sagra:os-folder-browser", onFolder);
+  }, [selected]);
 
   const osId = selected ? String(selected.nr_os) : null;
   const osAno = selected ? String(selected.ano) : null;
@@ -288,6 +300,12 @@ export function PapelariaPage() {
           />
         </div>
       </div>
+
+      <OsFolderBrowserModal
+        row={selected}
+        open={folderBrowserOpen}
+        onClose={() => setFolderBrowserOpen(false)}
+      />
     </div>
   );
 }

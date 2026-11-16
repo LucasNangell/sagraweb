@@ -2,6 +2,7 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@sagra/ui";
 
 export type PapelariaActionBarProps = {
+  showAbrirPasta: boolean;
   showTimbradoA4Digital: boolean;
   showGerarProvaCdr: boolean;
   showFinalizar: boolean;
@@ -14,10 +15,13 @@ export type PapelariaActionBarProps = {
   exportCdrPending: boolean;
   imposicaoPending: boolean;
   abrirCorelPending: boolean;
+  abrirPastaPending: boolean;
   finalizeCorelPending: boolean;
+  hasOs: boolean;
   selectedModelId: number | null;
   cdrDisponivel: boolean;
   canImposicao: boolean;
+  onAbrirPasta: () => void;
   onGerarArquivo: () => void;
   onTimbradoA4Digital: () => void;
   onAbrirCorel: () => void;
@@ -67,6 +71,7 @@ function ActionButton({
 }
 
 export function PapelariaActionBar({
+  showAbrirPasta,
   showTimbradoA4Digital,
   showGerarProvaCdr,
   showFinalizar,
@@ -79,10 +84,13 @@ export function PapelariaActionBar({
   exportCdrPending,
   imposicaoPending,
   abrirCorelPending,
+  abrirPastaPending,
   finalizeCorelPending,
+  hasOs,
   selectedModelId,
   cdrDisponivel: _cdrDisponivel,
   canImposicao,
+  onAbrirPasta,
   onGerarArquivo,
   onTimbradoA4Digital,
   onAbrirCorel,
@@ -114,6 +122,15 @@ export function PapelariaActionBar({
       aria-label="Ações da papelaria"
       data-testid="papelaria-action-bar"
     >
+      {showAbrirPasta ? (
+        <ActionButton
+          label="Abrir pasta"
+          pending={abrirPastaPending}
+          disabled={!hasOs || abrirPastaPending}
+          title="Abrir pasta da SP selecionada"
+          onClick={onAbrirPasta}
+        />
+      ) : null}
       <ActionButton
         label="Gerar arquivo"
         tone="primary"

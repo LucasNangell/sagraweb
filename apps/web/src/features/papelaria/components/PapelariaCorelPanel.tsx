@@ -23,10 +23,13 @@ import {
 } from "@/api/papelaria";
 import { emailProofFileUrl } from "@/api/email";
 import { fetchOsFolderBrowse } from "@/api/os";
+import { useOsPathMutation } from "@/api/hooks/useOsPath";
 import { useEmailProofFiles } from "@/api/hooks/useEmailQueries";
 import { queryKeys } from "@/api/query-keys";
 import { useAuthStore } from "@/features/auth/authStore";
+import { useAccessControl } from "@/features/auth/useAccessControl";
 import { OsFolderRequiredGateModal } from "@/features/os/components/OsFolderRequiredGateModal";
+import { openNetworkFolder } from "@/features/os/osFolderActions";
 import { useSagraWebSocket } from "@/hooks/useSagraWebSocket";
 import { tryOpenFileLocally } from "@/lib/sagraLocalOpener";
 import { authenticatedWsPath } from "@/lib/websocket";
@@ -149,6 +152,10 @@ export function PapelariaCorelPanel({
 
   const queryClient = useQueryClient();
   const ponto = useAuthStore((s) => s.user?.ponto);
+  const { can } = useAccessControl();
+  const canOpenOsFolder = can("ctx_abrir_pasta");
+  const pathMutation = useOsPathMutation();
+  const [abrirPastaPending, setAbrirPastaPending] = useState(false);
   const [selectedModelId, setSelectedModelId] = useState<number | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [excludedFields, setExcludedFields] = useState<string[]>([]);
@@ -819,6 +826,14 @@ export function PapelariaCorelPanel({
     void ensureOsFolderThen("corel");
   };
 
+  const handleAbrirPasta = () => {
+    if (!hasOs || !canOpenOsFolder || abrirPastaPending) return;
+    setAbrirPastaPending(true);
+    void openNetworkFolder({ ano: anoNum, nr_os: nroNum }, (input) =>
+      pathMutation.mutateAsync(input),
+    ).finally(() => setAbrirPastaPending(false));
+  };
+
   const handleGerarProvaCdrExistente = () => {
     if (!selectedModelId) {
       setFormError("Selecione um modelo antes de gerar a prova.");
@@ -1412,6 +1427,7 @@ export function PapelariaCorelPanel({
 
         <PapelariaActionBar
           className="max-md:order-2 max-md:h-auto max-md:w-full max-md:flex-row max-md:overflow-x-auto"
+          showAbrirPasta={canOpenOsFolder}
           showTimbradoA4Digital={showTimbradoA4Digital}
           showGerarProvaCdr={cdrFiles.length > 0}
           showFinalizar={corelEditMode}
@@ -1430,7 +1446,9 @@ export function PapelariaCorelPanel({
           exportCdrPending={exportCdrMutation.isPending}
           imposicaoPending={imposicaoMutation.isPending}
           abrirCorelPending={abrirCorelMutation.isPending}
+          abrirPastaPending={abrirPastaPending}
           finalizeCorelPending={finalizeCorelMutation.isPending}
+          hasOs={hasOs}
           selectedModelId={selectedModelId}
           cdrDisponivel={cdrFiles.length > 0}
           canImposicao={Boolean(
@@ -1441,6 +1459,7 @@ export function PapelariaCorelPanel({
                 modelDetailQuery.data?.tem_imposicao_config
               ),
           )}
+          onAbrirPasta={handleAbrirPasta}
           onGerarArquivo={handleGerarArquivo}
           onTimbradoA4Digital={handleTimbradoA4Digital}
           onAbrirCorel={handleAbrirCorel}

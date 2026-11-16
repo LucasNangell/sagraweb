@@ -972,7 +972,9 @@ def save_email_as_mht(
     session: SessionData = Depends(require_session),
 ):
     """
-    Salva o e-mail completo no formato .mht dentro da subpasta Sefoc da OS.
+    Salva o e-mail completo no formato .eml (MIME RFC 822) dentro da subpasta Sefoc da OS.
+
+    O path /save-mht é mantido por compatibilidade com clientes existentes.
     """
     try:
         from services.os_protocolo_guard import OsProtocoloGuardError, require_protocolo_mysql
@@ -995,7 +997,7 @@ def save_email_as_mht(
 
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         subject_part = _safe_filename(details.get("subject", ""), fallback="email")
-        filename = f"{request.os:05d}_{request.ano}_{stamp}_{subject_part}.mht"
+        filename = f"{request.os:05d}_{request.ano}_{stamp}_{subject_part}.eml"
         output_path = os.path.join(sefoc_path, filename)
 
         with open(output_path, "wb") as f:
@@ -1009,7 +1011,7 @@ def save_email_as_mht(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Erro ao salvar email .mht: {e}")
+        logger.error(f"Erro ao salvar email .eml: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/download")

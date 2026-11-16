@@ -628,7 +628,7 @@ export function EmailTemplatesSection() {
       <ConfigSubsection title="Recebimento automático" tone="muted">
         <p className="mb-3 text-xs text-slate-600">
           Quando ativo, e-mails de Prova e Problemas técnicos que cumprirem os critérios são
-          processados automaticamente (andamento, .mht e marcação no Outlook). Demais mensagens
+          processados automaticamente (andamento, .eml e marcação no Outlook). Demais mensagens
           permanecem na caixa de entrada para tratamento manual.
         </p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

@@ -121,7 +121,7 @@ O frontend **não** monta nem insere o link.
 | POST | `/api/email/send-pt` | **Envio principal** PT ou prova |
 | POST | `/api/email/send` | Envio genérico (subject + html) — não usado pela UI de pendências |
 | POST | `/api/email/andamento` | Andamento manual a partir do inbox |
-| POST | `/api/email/save-mht` | Salva e-mail recebido como `.mht` em `Sefoc/` |
+| POST | `/api/email/save-mht` | Salva e-mail recebido como `.eml` em `Sefoc/` (path legado) |
 | GET | `/api/email/download` | Download de anexo EWS |
 
 Autenticação: sessão interna (`require_session`) em todas as rotas acima.
@@ -189,7 +189,7 @@ Glob `{id:05d}*` permite sufixo no nome da pasta (ex.: solicitante).
 
 **Fallback local (dev):** `storage_test/{ano}/{id}` se UNC indisponível.
 
-Subpastas padrão incluem **`Sefoc`** (PDFs de prova e `.mht` de e-mails salvos).
+Subpastas padrão incluem **`Sefoc`** (PDFs de prova e `.eml` de e-mails salvos).
 
 ### 4.2 Listagem de arquivos
 

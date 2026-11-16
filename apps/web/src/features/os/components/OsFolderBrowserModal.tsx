@@ -82,7 +82,7 @@ function fileIcon(name: string) {
   if (["xls", "xlsx", "csv"].includes(ext)) {
     return FileSpreadsheet;
   }
-  if (["doc", "docx", "txt", "rtf", "mht", "html", "htm"].includes(ext)) {
+  if (["doc", "docx", "txt", "rtf", "mht", "eml", "html", "htm"].includes(ext)) {
     return FileText;
   }
   return File;

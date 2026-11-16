@@ -392,7 +392,7 @@ def _save_mht(
     mime_content = service.get_message_mime_content(item_id)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     subject_part = _safe_filename(subject, fallback="email")
-    filename = f"{os_num:05d}_{ano}_{stamp}_{subject_part}.mht"
+    filename = f"{os_num:05d}_{ano}_{stamp}_{subject_part}.eml"
     output_path = os.path.join(sefoc_path, filename)
     with open(output_path, "wb") as fh:
         fh.write(mime_content)

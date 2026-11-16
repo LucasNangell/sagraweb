@@ -52,7 +52,7 @@ flowchart TB
 
     subgraph Storage["Persistência"]
         MySQL["tabEmailExchangeConfig"]
-        UNC["Pastas OS na rede\nSefoc/*.mht"]
+        UNC["Pastas OS na rede\nSefoc/*.eml"]
     end
 
     EmailPage --> Poll
@@ -315,7 +315,7 @@ O badge aparece quando `inbox_count + pendencias_count > 0`.
 | Marcar lido / desconsiderar | `POST /api/email/mark-read` | `UpdateItem`: `IsRead=true` + categoria Outlook |
 | Registrar andamento | `POST /api/email/andamento` | Idem + insert em `tabAndamento` |
 | Baixar anexo | `GET /api/email/download` | `GetAttachment` |
-| Salvar .mht na OS | `POST /api/email/save-mht` | `GetItem` com `IncludeMimeContent` → arquivo UNC |
+| Salvar .eml na OS | `POST /api/email/save-mht` | `GetItem` com `IncludeMimeContent` → arquivo `.eml` UNC (path legado `/save-mht`) |
 
 Categorias padrão aplicadas via EWS:
 
@@ -421,7 +421,7 @@ GET /api/email/pt-html/{ano}/{os}
 | POST | `/api/email/send-pt` | Envio PT / Prova |
 | POST | `/api/email/andamento` | Andamento + marcar lido no Exchange |
 | POST | `/api/email/mark-read` | Marcar lido + categoria |
-| POST | `/api/email/save-mht` | Salvar MIME na pasta Sefoc da OS |
+| POST | `/api/email/save-mht` | Salvar MIME `.eml` na pasta Sefoc da OS (path legado) |
 
 Todas as rotas (exceto `pt-html` e `pendencias`) exigem sessão autenticada.
 
@@ -528,7 +528,20 @@ Em `app/backend/scripts/`:
 
 ---
 
-## 14. Arquivos relacionados (mapa rápido)
+## 14. Arquivo `.eml` na pasta Sefoc
+
+O sistema grava o `MimeContent` do Exchange (MIME RFC 822) com extensão **`.eml`**, para abrir no Outlook em qualquer estação. O endpoint permanece `POST /api/email/save-mht` por compatibilidade.
+
+Arquivos antigos com extensão **`.mht`** já são o mesmo MIME: basta renomear para `.eml` (conteúdo idêntico). Exemplo no PowerShell, a partir da pasta da OS ou raiz Deputados:
+
+```powershell
+Get-ChildItem -Path "\\redecamara\DfsData\CGraf\Sefoc" -Recurse -Filter "*.mht" |
+  ForEach-Object { Rename-Item -LiteralPath $_.FullName -NewName ($_.BaseName + ".eml") }
+```
+
+Workaround sem rename: Abrir com → Outlook, ou Edge com IE Mode.
+
+## 15. Arquivos relacionados (mapa rápido)
 
 ```
 app/backend/

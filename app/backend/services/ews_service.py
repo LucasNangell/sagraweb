@@ -457,7 +457,7 @@ class EWSService:
 
     def get_message_mime_content(self, item_id: str) -> bytes:
         """
-        Retorna o conteúdo MIME bruto do e-mail (formato EML/MHT compatível).
+        Retorna o conteúdo MIME bruto do e-mail (formato .eml / RFC 822).
         """
         body = f"""
 <m:GetItem>

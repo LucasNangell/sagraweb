@@ -594,6 +594,9 @@ def create_imposicao_job(
     # arquivo_cdr ignorado no fluxo JDF (compat com payload antigo da API)
     _ = arquivo_cdr
 
+    sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
+    removed_digital = clear_digital_imposicao_pdfs(sefoc_dir)
+
     artifacts = _build_imposicao_jdf_artifacts(
         ano=ano,
         nro=nro,
@@ -612,6 +615,8 @@ def create_imposicao_job(
         "jdf_name": artifacts["jdf_name"],
         "aguardando_apogee": True,
     }
+    if removed_digital:
+        dados_clean["imposicao_pdfs_removidos"] = removed_digital
 
     insert_params = {
         "nro": nro,
@@ -651,11 +656,14 @@ def create_imposicao_job(
     if not job:
         raise RuntimeError("Falha ao recuperar job criado.")
 
+    extra = ""
+    if removed_digital:
+        extra = f" PDF(s) Digital anterior(es) removido(s): {', '.join(removed_digital)}."
     append_job_log(
         job_id,
         (
             f"JDF enviado ao Apogee: {artifacts['jdf_name']} "
-            f"({artifacts['jdf_dir']}) a partir de {base_pdf_name}."
+            f"({artifacts['jdf_dir']}) a partir de {base_pdf_name}.{extra}"
         ),
         "info",
     )
@@ -2563,82 +2571,154 @@ def build_imposicao_digital_pdf_name(
     return f"{prefix}_Digit_{n_up}Up_{safe_folha}.pdf"
 
 
-def find_imposicao_pdf_in_sefoc(sefoc_dir: str) -> Optional[str]:
-    """PDF mais recente em Sefoc cujo nome contém 'Imposição'."""
-    if not os.path.isdir(sefoc_dir):
-        return None
-    mark = re.compile(r"imposi[cç][aã]o", re.IGNORECASE)
+_IMPOSICAO_NAME_RE = re.compile(r"imposi[cç][aã]o", re.IGNORECASE)
+_DIGIT_IMPOSICAO_RE = re.compile(r"_Digit_\d+Up_", re.IGNORECASE)
+_EXCLUDE_SEFOC_PDF_RE = re.compile(
+    r"(ProvaSefoc|BaseSefoc|Prova\d+_SEFOC)",
+    re.IGNORECASE,
+)
+
+
+def _list_pdfs_with_mtime(directory: str) -> list[tuple[float, str]]:
+    """Lista (mtime, path) de PDFs diretos em um diretório."""
+    if not os.path.isdir(directory):
+        return []
     matches: list[tuple[float, str]] = []
-    for fname in os.listdir(sefoc_dir):
+    try:
+        names = os.listdir(directory)
+    except OSError:
+        return []
+    for fname in names:
         if not fname.lower().endswith(".pdf"):
             continue
-        if not mark.search(fname):
+        path = os.path.normpath(os.path.join(directory, fname))
+        if not os.path.isfile(path):
             continue
-        path = os.path.normpath(os.path.join(sefoc_dir, fname))
-        if os.path.isfile(path):
-            try:
-                matches.append((os.path.getmtime(path), path))
-            except OSError:
-                continue
-    if not matches:
-        return None
-    matches.sort(key=lambda item: item[0], reverse=True)
-    return matches[0][1]
-
-
-def poll_imposicao_apogee_result(job_id: int) -> dict[str, Any]:
-    """
-    Verifica Sefoc por PDF de Imposição do Apogee; move para Digital com
-    nomenclatura Digit_NUp e atualiza o job.
-    """
-    ensure_papelaria_jobs_tables()
-    job = get_job(job_id)
-    if not job:
-        raise LookupError("Job não encontrado.")
-    if job.get("tipo_job") != TIPO_JOB_IMPOSICAO:
-        raise ValueError("Job não é de imposição.")
-    if job.get("status") != STATUS_COMPLETED:
-        raise ValueError("Job de imposição ainda não está concluído.")
-
-    arquivo_atual = (job.get("arquivo_pdf") or "").strip()
-    if arquivo_atual and not arquivo_atual.lower().endswith(".jdf"):
         try:
-            resolve_job_file_path(job_id, "pdf")
-            return {
-                "status": "ready",
-                "message": "PDF de imposição pronto.",
-                "job": job,
-            }
-        except FileNotFoundError:
-            pass
+            matches.append((os.path.getmtime(path), path))
+        except OSError:
+            continue
+    matches.sort(key=lambda item: item[0], reverse=True)
+    return matches
 
-    dados = dict(job.get("dados") or {})
-    config = dados.get("imposicao_config")
-    if not isinstance(config, dict):
-        raise ValueError("Job de imposição sem ImposicaoConfigJson.")
 
-    ano = int(job["ano_protocolo"])
-    nro = int(job["nro_protocolo"])
-    sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
-    found = find_imposicao_pdf_in_sefoc(sefoc_dir)
-    if not found:
-        return {
-            "status": "waiting_apogee",
-            "message": _waiting_apogee_message(),
-            "job": job,
-        }
+def _imposicao_export_stem(ano: int, nro: int) -> str:
+    """Stem do PDF exportado pelo Apogee (label humano sem Nr OS)."""
+    from services import papelaria_jdf_service as jdf_svc
 
-    dest_name = build_imposicao_digital_pdf_name(ano=ano, nro=nro, config=config)
+    prefix = get_os_folder_basename(ano, nro)
+    label = jdf_svc.strip_leading_os_number(prefix, nro) or prefix
+    return os.path.splitext(label)[0]
+
+
+def find_imposicao_pdf_in_sefoc(
+    sefoc_dir: str,
+    *,
+    expected_stem: Optional[str] = None,
+) -> Optional[str]:
+    """
+    PDF de imposição do Apogee na raiz de Sefoc.
+
+    Preferência: nome com 'Imposição' → stem do export JDF → PDF recente
+    que não seja prova/base.
+    """
+    pdfs = _list_pdfs_with_mtime(sefoc_dir)
+    if not pdfs:
+        return None
+
+    marked = [
+        path
+        for _mtime, path in pdfs
+        if _IMPOSICAO_NAME_RE.search(os.path.basename(path))
+    ]
+    if marked:
+        return marked[0]
+
+    stem = (expected_stem or "").strip().lower()
+    if stem:
+        for _mtime, path in pdfs:
+            base = os.path.basename(path)
+            name_l = base.lower()
+            if _EXCLUDE_SEFOC_PDF_RE.search(base):
+                continue
+            stem_file = os.path.splitext(base)[0].lower()
+            if stem_file == stem or stem_file.startswith(f"{stem}_"):
+                return path
+            if stem in name_l and not _EXCLUDE_SEFOC_PDF_RE.search(base):
+                return path
+
+    for _mtime, path in pdfs:
+        if not _EXCLUDE_SEFOC_PDF_RE.search(os.path.basename(path)):
+            return path
+    return None
+
+
+def find_imposicao_pdf_in_digital(
+    digital_dir: str,
+    *,
+    preferred_name: Optional[str] = None,
+) -> Optional[str]:
+    """
+    PDF já presente em Sefoc/Digital.
+
+    Preferência: nome Digit_NUp esperado → qualquer *_Digit_*Up_ → PDF mais recente.
+    """
+    pdfs = _list_pdfs_with_mtime(digital_dir)
+    if not pdfs:
+        return None
+
+    preferred = (preferred_name or "").strip()
+    if preferred:
+        for _mtime, path in pdfs:
+            if os.path.basename(path).lower() == preferred.lower():
+                return path
+
+    digit_matches = [
+        path
+        for _mtime, path in pdfs
+        if _DIGIT_IMPOSICAO_RE.search(os.path.basename(path))
+    ]
+    if digit_matches:
+        return digit_matches[0]
+
+    return pdfs[0][1]
+
+
+def clear_digital_imposicao_pdfs(sefoc_dir: str) -> list[str]:
+    """Remove PDFs da pasta Digital (permite regenerar imposição)."""
     digital_dir = os.path.normpath(os.path.join(sefoc_dir, "Digital"))
-    os.makedirs(digital_dir, exist_ok=True)
-    dest_abs = os.path.normpath(os.path.join(digital_dir, dest_name))
-    if os.path.isfile(dest_abs):
-        os.remove(dest_abs)
-    shutil.move(found, dest_abs)
+    removed: list[str] = []
+    for _mtime, path in _list_pdfs_with_mtime(digital_dir):
+        try:
+            os.remove(path)
+            removed.append(os.path.basename(path))
+        except OSError as exc:
+            logger.warning("Falha ao remover PDF Digital %s: %s", path, exc)
+    return removed
+
+
+def _finalize_imposicao_digital_pdf(
+    *,
+    job_id: int,
+    job: dict[str, Any],
+    src_path: str,
+    dest_abs: str,
+    dest_name: str,
+) -> dict[str, Any]:
+    """Move/renomeia o PDF para Digital/{dest_name} e marca o job como pronto."""
+    dados = dict(job.get("dados") or {})
+    os.makedirs(os.path.dirname(dest_abs), exist_ok=True)
+    src_norm = os.path.normpath(src_path)
+    dest_norm = os.path.normpath(dest_abs)
+    if src_norm != dest_norm:
+        if os.path.isfile(dest_norm):
+            os.remove(dest_norm)
+        shutil.move(src_norm, dest_norm)
     rel_pdf = f"Digital/{dest_name}"
+    origem_name = os.path.basename(src_norm)
 
     dados["aguardando_apogee"] = False
-    dados["imposicao_pdf_origem"] = os.path.basename(found)
+    dados["imposicao_pdf_origem"] = origem_name
     dados["imposicao_pdf_digital"] = rel_pdf
 
     db.execute_query(
@@ -2657,17 +2737,96 @@ def poll_imposicao_apogee_result(job_id: int) -> dict[str, Any]:
     updated = get_job(job_id)
     if not updated:
         raise RuntimeError("Falha ao recuperar job após mover PDF de imposição.")
-    append_job_log(
-        job_id,
-        f"PDF Apogee movido para Digital: {dest_name}",
-        "info",
-    )
+    if src_norm == dest_norm:
+        log_msg = f"PDF Apogee já em Digital: {dest_name}"
+    else:
+        log_msg = f"PDF Apogee movido para Digital: {dest_name}"
+    append_job_log(job_id, log_msg, "info")
     broadcast_job_update(updated)
     return {
         "status": "ready",
         "message": "PDF de imposição pronto.",
         "job": updated,
     }
+
+
+def poll_imposicao_apogee_result(job_id: int) -> dict[str, Any]:
+    """
+    Verifica Sefoc/Digital por PDF do Apogee; normaliza para Digital com
+    nomenclatura Digit_NUp e atualiza o job.
+    """
+    ensure_papelaria_jobs_tables()
+    job = get_job(job_id)
+    if not job:
+        raise LookupError("Job não encontrado.")
+    if job.get("tipo_job") != TIPO_JOB_IMPOSICAO:
+        raise ValueError("Job não é de imposição.")
+    if job.get("status") != STATUS_COMPLETED:
+        raise ValueError("Job de imposição ainda não está concluído.")
+
+    arquivo_atual = (job.get("arquivo_pdf") or "").strip()
+    if arquivo_atual and not arquivo_atual.lower().endswith(".jdf"):
+        try:
+            resolve_job_file_path(job_id, "pdf")
+            dados_ready = dict(job.get("dados") or {})
+            if dados_ready.get("aguardando_apogee") is True:
+                dados_ready["aguardando_apogee"] = False
+                db.execute_query(
+                    """
+                    UPDATE tabPapelariaJobs
+                    SET DadosJson = %(dados)s
+                    WHERE ID = %(id)s
+                    """,
+                    {
+                        "dados": json.dumps(dados_ready, ensure_ascii=False),
+                        "id": job_id,
+                    },
+                )
+                job = get_job(job_id) or job
+            return {
+                "status": "ready",
+                "message": "PDF de imposição pronto.",
+                "job": job,
+            }
+        except FileNotFoundError:
+            pass
+
+    dados = dict(job.get("dados") or {})
+    config = dados.get("imposicao_config")
+    if not isinstance(config, dict):
+        raise ValueError("Job de imposição sem ImposicaoConfigJson.")
+
+    ano = int(job["ano_protocolo"])
+    nro = int(job["nro_protocolo"])
+    sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
+    dest_name = build_imposicao_digital_pdf_name(ano=ano, nro=nro, config=config)
+    digital_dir = os.path.normpath(os.path.join(sefoc_dir, "Digital"))
+    dest_abs = os.path.normpath(os.path.join(digital_dir, dest_name))
+
+    found = find_imposicao_pdf_in_digital(
+        digital_dir,
+        preferred_name=dest_name,
+    )
+    if not found:
+        expected_stem = _imposicao_export_stem(ano, nro)
+        found = find_imposicao_pdf_in_sefoc(
+            sefoc_dir,
+            expected_stem=expected_stem,
+        )
+    if not found:
+        return {
+            "status": "waiting_apogee",
+            "message": _waiting_apogee_message(),
+            "job": job,
+        }
+
+    return _finalize_imposicao_digital_pdf(
+        job_id=job_id,
+        job=job,
+        src_path=found,
+        dest_abs=dest_abs,
+        dest_name=dest_name,
+    )
 
 
 def resolve_job_file_path(job_id: int, tipo: str) -> tuple[str, str]:

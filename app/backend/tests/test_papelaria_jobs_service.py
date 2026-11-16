@@ -1724,6 +1724,144 @@ class TestImposicaoJob:
         assert dest.is_file()
         assert job_state["arquivo_pdf"] == "Digital/05954-Teste_Digit_2Up_A4-Paisagem.pdf"
 
+    def test_poll_imposicao_reconhece_pdf_ja_na_digital(self, monkeypatch, tmp_path):
+        from services import papelaria_jobs_service as svc
+
+        sefoc = tmp_path / "Sefoc"
+        digital = sefoc / "Digital"
+        digital.mkdir(parents=True)
+        existing = digital / "resultado-apogee.pdf"
+        existing.write_bytes(b"%PDF-digital")
+        config = {
+            "folha_mm": {"largura": 297, "altura": 210},
+            "pagina": {"origem": "fixixa", "largura_mm": 148, "altura_mm": 210},
+            "grid": {"colunas": 2, "linhas": 1},
+            "espacamento_mm": {"horizontal": 0, "vertical": 0},
+            "sangria_mm": 0,
+            "marcas_corte": False,
+            "centralizar_na_folha": True,
+            "work_style": "Simplex",
+        }
+        job_state = {
+            "id": 93,
+            "ano_protocolo": 2026,
+            "nro_protocolo": 5954,
+            "tipo_job": svc.TIPO_JOB_IMPOSICAO,
+            "status": svc.STATUS_COMPLETED,
+            "arquivo_pdf": None,
+            "tem_arquivo_pdf": False,
+            "dados": {"imposicao_config": config, "aguardando_apogee": True},
+            "prova_revisao": svc.PROVA_REVISAO_NA,
+        }
+
+        def fake_get(job_id):
+            return dict(job_state) if job_id == 93 else None
+
+        def fake_query(sql, params=None):
+            if "UPDATE tabPapelariaJobs" in sql and "ArquivoPdfGerado" in sql:
+                job_state["arquivo_pdf"] = params["pdf"]
+                job_state["tem_arquivo_pdf"] = True
+                job_state["dados"] = __import__("json").loads(params["dados"])
+                return []
+            return []
+
+        monkeypatch.setattr(svc, "get_job", fake_get)
+        monkeypatch.setattr(svc.db, "execute_query", fake_query)
+        monkeypatch.setattr(svc, "broadcast_job_update", lambda *a, **k: None)
+        monkeypatch.setattr(svc, "append_job_log", lambda *a, **k: None)
+        monkeypatch.setattr(
+            svc,
+            "resolve_os_papelaria_dir",
+            lambda ano, nro, create=False: str(sefoc),
+        )
+        monkeypatch.setattr(svc, "get_os_folder_basename", lambda ano, nro: "05954-Teste")
+
+        out = svc.poll_imposicao_apogee_result(93)
+        assert out["status"] == "ready"
+        assert not existing.exists()
+        dest = digital / "05954-Teste_Digit_2Up_A4-Paisagem.pdf"
+        assert dest.is_file()
+        assert job_state["arquivo_pdf"] == "Digital/05954-Teste_Digit_2Up_A4-Paisagem.pdf"
+        assert job_state["dados"]["aguardando_apogee"] is False
+
+    def test_poll_imposicao_reconhece_export_sem_sufixo_imposicao(
+        self, monkeypatch, tmp_path
+    ):
+        from services import papelaria_jobs_service as svc
+
+        sefoc = tmp_path / "Sefoc"
+        sefoc.mkdir()
+        src = sefoc / "Teste.pdf"
+        src.write_bytes(b"%PDF-export")
+        config = {
+            "folha_mm": {"largura": 210, "altura": 297},
+            "pagina": {"origem": "fixixa", "largura_mm": 90, "altura_mm": 50},
+            "grid": {"colunas": 2, "linhas": 5},
+            "espacamento_mm": {"horizontal": 0, "vertical": 0},
+            "sangria_mm": 0,
+            "marcas_corte": False,
+            "centralizar_na_folha": True,
+            "work_style": "Simplex",
+        }
+        job_state = {
+            "id": 94,
+            "ano_protocolo": 2026,
+            "nro_protocolo": 5954,
+            "tipo_job": svc.TIPO_JOB_IMPOSICAO,
+            "status": svc.STATUS_COMPLETED,
+            "arquivo_pdf": None,
+            "tem_arquivo_pdf": False,
+            "dados": {"imposicao_config": config, "aguardando_apogee": True},
+            "prova_revisao": svc.PROVA_REVISAO_NA,
+        }
+
+        def fake_get(job_id):
+            return dict(job_state) if job_id == 94 else None
+
+        def fake_query(sql, params=None):
+            if "UPDATE tabPapelariaJobs" in sql and "ArquivoPdfGerado" in sql:
+                job_state["arquivo_pdf"] = params["pdf"]
+                job_state["tem_arquivo_pdf"] = True
+                job_state["dados"] = __import__("json").loads(params["dados"])
+                return []
+            return []
+
+        monkeypatch.setattr(svc, "get_job", fake_get)
+        monkeypatch.setattr(svc.db, "execute_query", fake_query)
+        monkeypatch.setattr(svc, "broadcast_job_update", lambda *a, **k: None)
+        monkeypatch.setattr(svc, "append_job_log", lambda *a, **k: None)
+        monkeypatch.setattr(
+            svc,
+            "resolve_os_papelaria_dir",
+            lambda ano, nro, create=False: str(sefoc),
+        )
+        monkeypatch.setattr(svc, "get_os_folder_basename", lambda ano, nro: "05954-Teste")
+        monkeypatch.setattr(
+            "services.papelaria_jdf_service.strip_leading_os_number",
+            lambda text, nro: "Teste",
+        )
+
+        out = svc.poll_imposicao_apogee_result(94)
+        assert out["status"] == "ready"
+        assert not src.exists()
+        dest = sefoc / "Digital" / "05954-Teste_Digit_10Up_A4.pdf"
+        assert dest.is_file()
+        assert job_state["arquivo_pdf"] == "Digital/05954-Teste_Digit_10Up_A4.pdf"
+
+    def test_clear_digital_imposicao_pdfs(self, tmp_path):
+        from services import papelaria_jobs_service as svc
+
+        sefoc = tmp_path / "Sefoc"
+        digital = sefoc / "Digital"
+        digital.mkdir(parents=True)
+        pdf = digital / "x_Digit_2Up_A4.pdf"
+        pdf.write_bytes(b"%PDF")
+        (digital / "nota.txt").write_text("keep")
+        removed = svc.clear_digital_imposicao_pdfs(str(sefoc))
+        assert removed == ["x_Digit_2Up_A4.pdf"]
+        assert not pdf.exists()
+        assert (digital / "nota.txt").is_file()
+
     def test_output_dir_usa_pasta_imposicao_do_modelo(self, monkeypatch, tmp_path):
         from services import papelaria_jobs_service as svc
 

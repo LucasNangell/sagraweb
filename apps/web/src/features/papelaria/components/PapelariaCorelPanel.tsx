@@ -1017,8 +1017,11 @@ export function PapelariaCorelPanel({
         .sort((a, b) => b.id - a.id)[0] ?? null
     );
   }, [jobsQuery.data]);
-  const waitingApogee =
+  const waitingApogeeRaw =
     isWaitingImposicaoApogee(activeJob) || Boolean(listWaitingApogeeJob);
+  // PDF já na Digital encerra o loading visual / pipeline, mesmo se o job
+  // ainda não foi atualizado pelo poll.
+  const waitingApogee = waitingApogeeRaw && !hasFolderImposicao;
   const hasImposicaoPdf = hasJobImposicaoPdf || hasFolderImposicao;
   const folderProofPdfUrl =
     hasOs && folderProofName
@@ -1088,9 +1091,12 @@ export function PapelariaCorelPanel({
       (activeJob.status === "pending" || activeJob.status === "processing")
         ? activeJob
         : listInFlightJob;
-    const apogeeJob = isWaitingImposicaoApogee(activeJob)
-      ? activeJob
-      : listWaitingApogeeJob;
+    const apogeeJob =
+      waitingApogee
+        ? isWaitingImposicaoApogee(activeJob)
+          ? activeJob
+          : listWaitingApogeeJob
+        : null;
 
     if (pipelineJob?.status === "processing") {
       const lane: PapelariaSpPipelineLane =
@@ -1162,6 +1168,7 @@ export function PapelariaCorelPanel({
     activeJobId,
     listInFlightJob,
     listWaitingApogeeJob,
+    waitingApogee,
   ]);
 
   if (!hasOs) {

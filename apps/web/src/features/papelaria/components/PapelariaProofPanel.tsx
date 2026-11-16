@@ -133,6 +133,9 @@ export function PapelariaProofPanel({
   const isImposicaoJob = activeJob?.tipo_job === "imposicao";
   const waitingImposicaoApogee = isWaitingImposicaoApogee(activeJob);
   const readyImposicaoPdf = isReadyImposicaoPdf(activeJob);
+  // Se o PDF já está em Digital, exibe mesmo antes do poll atualizar o job.
+  const showApogeeWaitingUi =
+    waitingImposicaoApogee && !folderImposicaoPdfUrl;
   const [resendJdfMessage, setResendJdfMessage] = useState<string | null>(null);
   const [resendJdfError, setResendJdfError] = useState<string | null>(null);
 
@@ -206,6 +209,9 @@ export function PapelariaProofPanel({
             result.job.ano_protocolo,
             result.job.nro_protocolo,
           ),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: ["papelaria", "spStatusResumo"],
         });
       }
       return result;
@@ -326,7 +332,7 @@ export function PapelariaProofPanel({
     viewMode === "previa"
       ? "Prévia em tempo real dos campos do formulário."
       : viewMode === "imposicao"
-        ? waitingImposicaoApogee
+        ? showApogeeWaitingUi
           ? "Aguardando processamento pelo Apogee."
           : imposicaoPdfUrl
             ? "PDF de imposição (Digital) gerado pelo Apogee."
@@ -365,7 +371,7 @@ export function PapelariaProofPanel({
         <PapelariaViewModeToggle value={viewMode} onChange={onViewModeChange} />
       </div>
 
-      {viewMode === "imposicao" && waitingImposicaoApogee && activeJob ? (
+      {viewMode === "imposicao" && showApogeeWaitingUi && activeJob ? (
         <div
           className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center"
           data-testid="papelaria-imposicao-apogee-loading"
@@ -399,7 +405,7 @@ export function PapelariaProofPanel({
               </button>
             </div>
             <p className="mt-2 max-w-sm text-xs text-neutral-500">
-              O JDF foi enviado. Verificando a pasta Sefoc até surgir o PDF de
+              O JDF foi enviado. Verificando Sefoc/Digital até surgir o PDF de
               imposição…
             </p>
             <p className="mt-2 font-mono text-[10px] text-neutral-400">

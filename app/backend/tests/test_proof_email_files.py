@@ -86,8 +86,8 @@ class TestListProofPdfFiles:
         assert names == {
             "Digital/06225_Digit_10Up_A4.pdf",
             "Digital/06225_Digit_10Up_A3.pdf",
+            "Digital/outro.pdf",
         }
-        assert "Digital/outro.pdf" not in names
         assert result["imposicao_suggested"] == "Digital/06225_Digit_10Up_A3.pdf"
         assert {f["name"] for f in result["files"]} == {"prova.pdf"}
 

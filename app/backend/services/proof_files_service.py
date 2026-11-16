@@ -15,7 +15,6 @@ _MAX_FILENAME_LEN = 512
 
 _PROVA_SEFOC_RE = re.compile(r"ProvaSefoc (\d+)\.pdf$", re.IGNORECASE)
 _PROVA_SEFOC_LEGACY_RE = re.compile(r"Prova(\d+)_SEFOC\.pdf$", re.IGNORECASE)
-# PDF Digital gerado após Apogee: {prefix}_Digit_{N}Up_{folha}.pdf
 _DIGIT_IMPOSICAO_RE = re.compile(r"_Digit_\d+Up_", re.IGNORECASE)
 
 
@@ -126,7 +125,7 @@ def list_proof_pdf_files(ano: int, os_id: int) -> dict[str, Any]:
     """Lista metadados seguros dos PDFs em Sefoc/ (sem caminho UNC).
 
     ``suggested`` prefere o maior número ProvaSefoc N; sem padrão, usa mtime.
-    Também lista PDFs de imposição em ``Sefoc/Digital/*_Digit_*Up_*.pdf``.
+    Também lista PDFs de imposição em ``Sefoc/Digital/*.pdf``.
     """
     sefoc_path = _sefoc_dir(ano, os_id)
     files: list[dict[str, Any]] = []
@@ -136,6 +135,7 @@ def list_proof_pdf_files(ano: int, os_id: int) -> dict[str, Any]:
     imposicao_files: list[dict[str, Any]] = []
     imposicao_suggested: Optional[str] = None
     best_imposicao_mtime: Optional[tuple[float, str]] = None
+    best_digit_mtime: Optional[tuple[float, str]] = None
 
     if sefoc_path:
         pattern = os.path.join(sefoc_path, "*.pdf")
@@ -178,8 +178,8 @@ def list_proof_pdf_files(ano: int, os_id: int) -> dict[str, Any]:
                 if not os.path.isfile(pdf_path):
                     continue
                 name = os.path.basename(pdf_path)
-                if not _DIGIT_IMPOSICAO_RE.search(name):
-                    continue
+                # Qualquer PDF em Digital é tratado como imposição Apogee
+                # (DOCX Timbrado ficam de fora por extensão).
                 relative = f"Digital/{name}"
                 try:
                     stat = os.stat(pdf_path)
@@ -201,8 +201,13 @@ def list_proof_pdf_files(ano: int, os_id: int) -> dict[str, Any]:
                 )
                 if best_imposicao_mtime is None or mtime > best_imposicao_mtime[0]:
                     best_imposicao_mtime = (mtime, relative)
+                if _DIGIT_IMPOSICAO_RE.search(name):
+                    if best_digit_mtime is None or mtime > best_digit_mtime[0]:
+                        best_digit_mtime = (mtime, relative)
 
-        if best_imposicao_mtime is not None:
+        if best_digit_mtime is not None:
+            imposicao_suggested = best_digit_mtime[1]
+        elif best_imposicao_mtime is not None:
             imposicao_suggested = best_imposicao_mtime[1]
 
     files.sort(key=lambda item: item["name"].lower())

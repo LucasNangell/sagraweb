@@ -2026,7 +2026,11 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
             job["nro_protocolo"],
             input_cdr_rel,
         )
-        return {
+        export_cdr_name, export_pdf_name = build_output_filenames(
+            job["ano_protocolo"],
+            job["nro_protocolo"],
+        )
+        payload = {
             "job_id": job["id"],
             "ano": job["ano_protocolo"],
             "nro": job["nro_protocolo"],
@@ -2042,38 +2046,36 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
             "frente_versao": modelo.get("frente_versao"),
             "cores": modelo.get("cores"),
             "output_dir": output_dir,
-            "output_cdr_name": "",
-            "output_pdf_name": build_prova_email_pdf_name(
-                job["ano_protocolo"],
-                job["nro_protocolo"],
-            ),
+            # Destino do CDR normalizado se o worker detectar BordaF/BordaV.
+            "output_cdr_name": export_cdr_name,
+            "output_pdf_name": export_pdf_name,
             "tentativas": job.get("tentativas") or 0,
             "input_cdr_path": input_cdr_path,
         }
-
-    payload: dict[str, Any] = {
-        "job_id": job["id"],
-        "ano": job["ano_protocolo"],
-        "nro": job["nro_protocolo"],
-        "tipo_job": job["tipo_job"],
-        "produto": job["produto"],
-        "modelo_id": job["modelo_id"],
-        "arquivo_modelo": job["arquivo_modelo"],
-        "campos": overlay_campos_com_templates_preview(
-            modelo.get("campos") or {},
-            preview_config,
-        ),
-        "dados": dados,
-        "campos_dinamicos_layout": campos_dinamicos_layout,
-        "exclusoes": exclusoes,
-        "preview_config": preview_config,
-        "frente_versao": modelo.get("frente_versao"),
-        "cores": modelo.get("cores"),
-        "output_dir": output_dir,
-        "output_cdr_name": cdr_name,
-        "output_pdf_name": pdf_name,
-        "tentativas": job.get("tentativas") or 0,
-    }
+    else:
+        payload = {
+            "job_id": job["id"],
+            "ano": job["ano_protocolo"],
+            "nro": job["nro_protocolo"],
+            "tipo_job": job["tipo_job"],
+            "produto": job["produto"],
+            "modelo_id": job["modelo_id"],
+            "arquivo_modelo": job["arquivo_modelo"],
+            "campos": overlay_campos_com_templates_preview(
+                modelo.get("campos") or {},
+                preview_config,
+            ),
+            "dados": dados,
+            "campos_dinamicos_layout": campos_dinamicos_layout,
+            "exclusoes": exclusoes,
+            "preview_config": preview_config,
+            "frente_versao": modelo.get("frente_versao"),
+            "cores": modelo.get("cores"),
+            "output_dir": output_dir,
+            "output_cdr_name": cdr_name,
+            "output_pdf_name": pdf_name,
+            "tentativas": job.get("tentativas") or 0,
+        }
 
     if job["tipo_job"] == TIPO_JOB_TIMBRADO_A4_DIGITAL:
         payload["output_dir"] = resolve_os_timbrado_digital_dir(
@@ -2100,7 +2102,8 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
 
     modo = get_modo()
     payload["prova_modo"] = modo
-    if job["tipo_job"] == TIPO_JOB_CREATE and modo == MODO_PROVA_EMAIL:
+    prova_job_types = (TIPO_JOB_CREATE, TIPO_JOB_EXPORT_EXISTING_CDR)
+    if job["tipo_job"] in prova_job_types and modo == MODO_PROVA_EMAIL:
         prova_email_pdf = build_prova_email_pdf_name(
             job["ano_protocolo"],
             job["nro_protocolo"],
@@ -2117,7 +2120,7 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
         )
         if template_abs:
             payload["prova_email_template_pdf"] = template_abs
-    elif job["tipo_job"] == TIPO_JOB_CREATE and modo == MODO_PROVA_WEB:
+    elif job["tipo_job"] in prova_job_types and modo == MODO_PROVA_WEB:
         prova_web_pdf = build_prova_web_pdf_name(
             job["ano_protocolo"],
             job["nro_protocolo"],

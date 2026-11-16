@@ -500,10 +500,85 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 caminho_cdr=input_cdr,
                 temp_dir=cfg.temp_dir,
                 output_pdf_path=output_pdf,
+                output_cdr_path=output_cdr or None,
                 corel_visible=cfg.corel_visible,
                 job_timeout_sec=cfg.job_timeout_sec,
                 job_id=job_id,
             )
+            # Mesmo pós-processamento de create: Prova e-mail A4 ou ProvaN web.
+            prova_modo = str(job.get("prova_modo") or "").strip()
+            prova_email = prova_modo == "prova_email"
+            prova_web = prova_modo == "prova_web" or not prova_modo
+            if prova_email and not cancel_requested.is_set():
+                prova_name = str(job.get("prova_email_pdf_name") or "").strip()
+                if not prova_name:
+                    raise CorelGenerationError(
+                        "Modo Prova e-mail sem prova_email_pdf_name no payload."
+                    )
+                carimbo = montar_carimbo_prova_email(
+                    nro=int(job["nro"]),
+                    ano=int(job["ano"]),
+                    prova_numero=resolve_prova_numero(job),
+                    produto_nome=str(job.get("produto") or "").strip() or None,
+                )
+                prova_path = os.path.join(output_dir, prova_name)
+                api.append_log(
+                    job_id,
+                    (
+                        "Prova e-mail A4 — carimbo "
+                        f"{carimbo['TipoOSint']} {carimbo['OSint']} "
+                        f"prova {carimbo['ProvaNroInt']} em {carimbo['DataInt']}"
+                    ),
+                    "info",
+                )
+                template_pdf = str(job.get("prova_email_template_pdf") or "").strip()
+                if template_pdf:
+                    api.append_log(
+                        job_id,
+                        f"Prova e-mail — usando PDF padrão: {os.path.basename(template_pdf)}",
+                        "info",
+                    )
+                a4_logs = compose_prova_email_a4(
+                    base_pdf_path=output_pdf,
+                    output_pdf_path=prova_path,
+                    carimbo=carimbo,
+                    template_pdf_path=template_pdf or None,
+                )
+                result.logs.extend(a4_logs)
+                pdf_name = prova_name
+                result.pdf_path = prova_path
+            elif prova_web and not cancel_requested.is_set():
+                prova_web_name = str(job.get("prova_web_pdf_name") or "").strip()
+                if prova_web_name and os.path.isfile(output_pdf):
+                    prova_web_path = os.path.join(output_dir, prova_web_name)
+                    try:
+                        archive = copy_pdf_without_blank_pages(
+                            output_pdf,
+                            prova_web_path,
+                        )
+                        kept = summarize_kept_pages(
+                            archive.get("kept_pages") or []
+                        )
+                        src_pages = int(archive.get("source_pages") or 0)
+                        kept_count = int(archive.get("kept_count") or 0)
+                        msg = (
+                            f"Prova web arquivada: {prova_web_name} "
+                            f"({kept_count}/{src_pages} págs.; manteve {kept}; "
+                            "BaseSefoc com brancos intacto)"
+                        )
+                    except Exception as archive_exc:
+                        if os.path.isfile(prova_web_path):
+                            os.remove(prova_web_path)
+                        shutil.copy2(output_pdf, prova_web_path)
+                        msg = (
+                            f"Prova web arquivada (cópia integral — falha ao "
+                            f"filtrar brancos: {archive_exc}): {prova_web_name}"
+                        )
+                    result.logs.append(msg)
+                    api.append_log(job_id, msg, "info")
+                    if os.path.isfile(prova_web_path):
+                        pdf_name = prova_web_name
+                        result.pdf_path = prova_web_path
         elif tipo_job == TIPO_JOB_IMPOSICAO:
             jdf_xml = str(job.get("jdf_xml") or "")
             jdf_dir = str(job.get("jdf_output_dir") or job.get("output_dir") or "").strip()
@@ -711,9 +786,15 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
             cdr_for_complete = ""
             pdf_name = str(job.get("jdf_filename") or pdf_name or "")
         elif tipo_job == TIPO_JOB_EXPORT_EXISTING_CDR:
-            input_cdr = (job.get("input_cdr_path") or "").strip()
-            if input_cdr:
-                cdr_for_complete = os.path.basename(input_cdr)
+            # Preferir BaseSefoc.cdr gerado na conversão BordaF; senão o CDR de origem.
+            result_cdr = str(getattr(result, "cdr_path", "") or "").strip()
+            if result_cdr and os.path.isfile(result_cdr):
+                cdr_for_complete = os.path.basename(result_cdr)
+            else:
+                input_cdr = (job.get("input_cdr_path") or "").strip()
+                cdr_for_complete = (
+                    os.path.basename(input_cdr) if input_cdr else cdr_name
+                )
         elif tipo_job == TIPO_JOB_TIMBRADO_A4_DIGITAL:
             cdr_for_complete = ""
             pdf_name = ""

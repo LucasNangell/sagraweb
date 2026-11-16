@@ -1527,6 +1527,16 @@ class TestExportExistingCdrJob:
             "routers.os_routes._get_os_folder_path",
             lambda ano, nro: str(tmp_path),
         )
+        monkeypatch.setattr(
+            "services.papelaria_prova_modo.get_modo",
+            lambda: "prova_web",
+        )
+        monkeypatch.setattr(
+            svc,
+            "build_prova_web_pdf_name",
+            lambda ano, nro: "05024-Nome-Prova1.pdf",
+        )
+        monkeypatch.setattr(svc.db, "execute_query", lambda *a, **k: None)
         with patch(
             "services.papelaria_models_service.get_modelo_by_id",
             return_value=modelo,
@@ -1540,7 +1550,11 @@ class TestExportExistingCdrJob:
         assert payload["exclusoes"] == []
         assert payload["campos_dinamicos_layout"] == {}
         assert payload["preview_config"] is None
-        assert payload["output_cdr_name"] == ""
+        assert payload["output_cdr_name"] == "05024-Nome-BaseSefoc.cdr"
+        assert payload["output_pdf_name"] == "05024-Nome-BaseSefoc.pdf"
+        assert payload["prova_modo"] == "prova_web"
+        assert payload["prova_web_pdf_name"] == "05024-Nome-Prova1.pdf"
+        assert payload["prova_numero"] == 1
         assert svc.INPUT_CDR_DADOS_KEY not in payload["dados"]
         assert payload["output_pdf_name"].endswith(".pdf")
 

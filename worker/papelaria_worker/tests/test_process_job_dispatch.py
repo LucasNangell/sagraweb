@@ -160,22 +160,38 @@ class TestResolveWorkerTipoJob:
 
 
 class TestProcessJobDispatch:
-    def test_export_nao_chama_gerar_arquivo(self, patched_runtime):
+    def test_export_nao_chama_gerar_arquivo(self, patched_runtime, tmp_path):
         gerar, exportar, cfg = patched_runtime
         api = FakeApi()
+        out = tmp_path / "Sefoc"
+        out.mkdir()
+        base_pdf = out / "05024-Nome-BaseSefoc.pdf"
+        base_pdf.write_bytes(b"%PDF-1.4")
+        exportar.return_value = GenerationResult(
+            cdr_path=r"C:\os\Sefoc\pronto.cdr",
+            pdf_path=str(base_pdf),
+            logs=["ok"],
+        )
         worker_mod._process_job_body(
             api,
             cfg,
             _job(
                 tipo_job="export_existing_cdr",
                 input_cdr_path=r"C:\os\Sefoc\pronto.cdr",
-                output_cdr_name="",
+                output_dir=str(out),
+                output_cdr_name="05024-Nome-BaseSefoc.cdr",
+                output_pdf_name="05024-Nome-BaseSefoc.pdf",
+                prova_modo="prova_web",
+                prova_web_pdf_name="05024-Nome-Prova1.pdf",
             ),
         )
         exportar.assert_called_once()
+        kwargs = exportar.call_args.kwargs
+        assert kwargs.get("output_cdr_path") == str(out / "05024-Nome-BaseSefoc.cdr")
         gerar.assert_not_called()
         assert api.completed
         assert api.completed[0][1] == "pronto.cdr"
+        assert api.completed[0][2] == "05024-Nome-Prova1.pdf"
 
     def test_input_cdr_path_sozinho_exporta(self, patched_runtime):
         gerar, exportar, cfg = patched_runtime
@@ -190,6 +206,38 @@ class TestProcessJobDispatch:
         )
         exportar.assert_called_once()
         gerar.assert_not_called()
+
+    def test_export_completo_com_basesefoc_convertido(self, patched_runtime, tmp_path):
+        gerar, exportar, cfg = patched_runtime
+        api = FakeApi()
+        out = tmp_path / "Sefoc"
+        out.mkdir()
+        base_cdr = out / "05024-Nome-BaseSefoc.cdr"
+        base_cdr.write_bytes(b"CDR")
+        base_pdf = out / "05024-Nome-BaseSefoc.pdf"
+        base_pdf.write_bytes(b"%PDF-1.4")
+        exportar.return_value = GenerationResult(
+            cdr_path=str(base_cdr),
+            pdf_path=str(base_pdf),
+            logs=["convertido BordaF"],
+        )
+        worker_mod._process_job_body(
+            api,
+            cfg,
+            _job(
+                tipo_job="export_existing_cdr",
+                input_cdr_path=str(out / "legado.cdr"),
+                output_dir=str(out),
+                output_cdr_name="05024-Nome-BaseSefoc.cdr",
+                output_pdf_name="05024-Nome-BaseSefoc.pdf",
+                prova_modo="prova_web",
+                prova_web_pdf_name="05024-Nome-Prova2.pdf",
+            ),
+        )
+        assert api.completed
+        assert api.completed[0][1] == "05024-Nome-BaseSefoc.cdr"
+        assert api.completed[0][2] == "05024-Nome-Prova2.pdf"
+        assert (out / "05024-Nome-Prova2.pdf").is_file()
 
     def test_imposicao_grava_jdf(self, patched_runtime, tmp_path):
         gerar, exportar, cfg = patched_runtime

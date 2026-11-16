@@ -2726,6 +2726,14 @@ def gerar_arquivo_corel(
     )
 
 
+def documento_tem_borda_f(doc: Any) -> bool:
+    """True se o documento tem objeto BordaF (padrão antigo de arte)."""
+    try:
+        return bool(encontrar_shapes_no_documento(doc, "BordaF"))
+    except Exception:
+        return False
+
+
 def _exportar_prova_cdr_existente_impl(
     caminho_cdr: str,
     temp_cdr_path: str,
@@ -2733,10 +2741,13 @@ def _exportar_prova_cdr_existente_impl(
     corel_visible: bool,
     logs: list[str],
     *,
+    output_cdr_path: Optional[str] = None,
+    result_meta: Optional[dict[str, Any]] = None,
     reuse_corel_session: bool = True,
 ) -> None:
     t0 = time.perf_counter()
     _corel_session._ensure_com()
+    meta = result_meta if result_meta is not None else {}
 
     if not os.path.isfile(caminho_cdr):
         raise CorelGenerationError(f"Corel da OS não encontrado: {caminho_cdr}")
@@ -2780,10 +2791,56 @@ def _exportar_prova_cdr_existente_impl(
                 logs.append(f"Documento aberto — {doc.Pages.Count} página(s).")
                 _assert_documento_e_copia_temp(doc, temp_abs, caminho_cdr, logs)
 
-                temp_pdf_path = os.path.join(os.path.dirname(temp_cdr_path), "working.pdf")
-                exportar_pdf(corel, doc, temp_pdf_path, logs)
+                converted = False
+                if documento_tem_borda_f(doc):
+                    logs.append(
+                        "Padrão antigo detectado (BordaF) — convertendo arte "
+                        "para páginas Frente/Verso (BaseSefoc)."
+                    )
+                    _montar_imposicao_no_documento(corel, doc, logs)
+                    converted = True
+                    meta["converted_legacy"] = True
+                else:
+                    logs.append(
+                        "CDR sem BordaF — exportação direta (já no padrão de páginas)."
+                    )
+                    meta["converted_legacy"] = False
 
-                os.makedirs(os.path.dirname(output_pdf_path), exist_ok=True)
+                temp_pdf_path = os.path.join(os.path.dirname(temp_cdr_path), "working.pdf")
+
+                if converted and output_cdr_path:
+                    # Grava o novo CDR normalizado e só então exporta o PDF.
+                    _sincronizar_documento_corel(corel, doc, logs, antes_de_gravar=True)
+                    _garantir_camada_prova_sefoc_imprimivel(doc, logs)
+                    _ativar_pagina_principal(doc, logs)
+                    salvar_documento(doc, logs)
+                    _fechar_documento_corel(doc, logs)
+                    doc = None
+
+                    os.makedirs(os.path.dirname(output_cdr_path), exist_ok=True)
+                    os.makedirs(os.path.dirname(output_pdf_path), exist_ok=True)
+                    _copiar_arquivo_final(
+                        temp_cdr_path, output_cdr_path, logs, rotulo="CDR BaseSefoc"
+                    )
+                    meta["output_cdr_path"] = os.path.abspath(output_cdr_path)
+                    logs.append(
+                        f"Novo CDR no padrão prova web: {os.path.basename(output_cdr_path)}"
+                    )
+
+                    doc_pdf = corel.OpenDocument(os.path.abspath(temp_cdr_path))
+                    try:
+                        logs.append(
+                            f"Documento convertido reaberto para PDF — "
+                            f"{doc_pdf.Pages.Count} página(s)."
+                        )
+                        exportar_pdf(corel, doc_pdf, temp_pdf_path, logs)
+                    finally:
+                        _fechar_documento_corel(doc_pdf, logs)
+                        doc_pdf = None
+                else:
+                    exportar_pdf(corel, doc, temp_pdf_path, logs)
+                    os.makedirs(os.path.dirname(output_pdf_path), exist_ok=True)
+
                 _copiar_arquivo_final(
                     temp_pdf_path, output_pdf_path, logs, rotulo="PDF"
                 )
@@ -2843,22 +2900,32 @@ def exportar_prova_de_cdr_existente(
     temp_dir: str,
     output_pdf_path: str,
     *,
+    output_cdr_path: Optional[str] = None,
     corel_visible: bool = False,
     job_timeout_sec: int = 300,
     job_id: Optional[int] = None,
 ) -> GenerationResult:
     """
-    Exporta PDF de prova a partir do BaseSefoc.cdr já existente na pasta Sefoc.
-    Não altera o CDR original na pasta da OS.
+    Exporta PDF de prova a partir de um .cdr existente na pasta Sefoc.
+
+    Se o CDR tiver padrão antigo (BordaF/BordaV), converte a arte para páginas
+    Frente/Verso, grava ``output_cdr_path`` (BaseSefoc.cdr) e gera o PDF a partir
+    desse novo documento. O CDR de origem não é alterado.
     """
     logs: list[str] = []
     job_tag = f"job_{job_id}" if job_id else "job"
     temp_job_dir = os.path.join(temp_dir, job_tag)
     os.makedirs(temp_job_dir, exist_ok=True)
     temp_cdr_path = os.path.join(temp_job_dir, "working.cdr")
+    result_meta: dict[str, Any] = {
+        "converted_legacy": False,
+        "output_cdr_path": None,
+    }
 
     output_dir = os.path.dirname(output_pdf_path) or output_pdf_path
     validar_acesso_export_cdr(caminho_cdr, output_dir)
+    if output_cdr_path:
+        os.makedirs(os.path.dirname(output_cdr_path) or output_dir, exist_ok=True)
 
     with ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(
@@ -2868,6 +2935,8 @@ def exportar_prova_de_cdr_existente(
             output_pdf_path,
             corel_visible,
             logs,
+            output_cdr_path=output_cdr_path,
+            result_meta=result_meta,
             reuse_corel_session=True,
         )
         try:
@@ -2891,7 +2960,11 @@ def exportar_prova_de_cdr_existente(
     if not os.path.isfile(output_pdf_path):
         raise CorelGenerationError("PDF final não foi gerado.")
 
-    cdr_path = os.path.abspath(caminho_cdr)
+    written_cdr = result_meta.get("output_cdr_path")
+    if written_cdr and os.path.isfile(str(written_cdr)):
+        cdr_path = os.path.abspath(str(written_cdr))
+    else:
+        cdr_path = os.path.abspath(caminho_cdr)
     return GenerationResult(
         cdr_path=cdr_path,
         pdf_path=output_pdf_path,

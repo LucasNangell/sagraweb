@@ -245,7 +245,7 @@ describe("getGerenciaCotaPaginas", () => {
           calc_altura: "210",
           calc_largura: "297",
         }),
-        { techSpec: spec },
+        { techSpec: spec, updateCota: true },
       ).calc_cota_total,
     ).toBe("889");
   });
@@ -278,14 +278,19 @@ describe("formatCotaEstimada", () => {
 });
 
 describe("recalculateGerenciaCalcs", () => {
+  const recalcCota = (
+    form: Parameters<typeof recalculateGerenciaCalcs>[0],
+    options?: Parameters<typeof recalculateGerenciaCalcs>[1],
+  ) => recalculateGerenciaCalcs(form, { ...options, updateCota: true });
+
   it("cota estimada = páginas efetivas × tiragem / coef A4", () => {
-    const result = recalculateGerenciaCalcs(baseForm());
+    const result = recalcCota(baseForm());
     expect(result.calc_cota_total).toBe("445");
     expect(result.calc_total_paginas).toBe("1");
   });
 
   it("cota estimada arredonda para cima sem decimais", () => {
-    const result = recalculateGerenciaCalcs(
+    const result = recalcCota(
       baseForm({
         calc_tiragem: "100",
         calc_altura: "148",
@@ -296,7 +301,7 @@ describe("recalculateGerenciaCalcs", () => {
   });
 
   it("cota estimada usa coeficiente A4 arredondado (1 casa decimal)", () => {
-    const result = recalculateGerenciaCalcs(
+    const result = recalcCota(
       baseForm({
         req_categoria: "Orgao",
         val_cores: "P/B",
@@ -313,7 +318,7 @@ describe("recalculateGerenciaCalcs", () => {
 
   it("produto de papelaria usa coeficiente da tabela independente do nº da OS", () => {
     setGerenciaCoefA4PorProduto({ "Ct Visita": 10 });
-    const result = recalculateGerenciaCalcs(
+    const result = recalcCota(
       baseForm({
         op_os: "1234",
         val_produto: "Ct Visita",
@@ -330,7 +335,7 @@ describe("recalculateGerenciaCalcs", () => {
   });
 
   it("multiplica a tiragem pela quantidade de modelos na cota", () => {
-    const one = recalculateGerenciaCalcs(
+    const one = recalcCota(
       baseForm({
         req_categoria: "Orgao",
         val_cores: "P/B",
@@ -340,7 +345,7 @@ describe("recalculateGerenciaCalcs", () => {
         val_modelos: "1",
       }),
     );
-    const three = recalculateGerenciaCalcs(
+    const three = recalcCota(
       baseForm({
         req_categoria: "Orgao",
         val_cores: "P/B",
@@ -355,7 +360,7 @@ describe("recalculateGerenciaCalcs", () => {
   });
 
   it("trata modelos vazio ou 0 como 1 na cota", () => {
-    const empty = recalculateGerenciaCalcs(
+    const empty = recalcCota(
       baseForm({
         req_categoria: "Orgao",
         val_cores: "P/B",
@@ -365,7 +370,7 @@ describe("recalculateGerenciaCalcs", () => {
         val_modelos: "",
       }),
     );
-    const zero = recalculateGerenciaCalcs(
+    const zero = recalcCota(
       baseForm({
         req_categoria: "Orgao",
         val_cores: "P/B",
@@ -380,7 +385,7 @@ describe("recalculateGerenciaCalcs", () => {
   });
 
   it("meia folha só frente divide pelo coef (2 páginas → cota 1)", () => {
-    const result = recalculateGerenciaCalcs(
+    const result = recalcCota(
       baseForm({
         req_categoria: "Orgao",
         val_cores: "P/B",
@@ -397,7 +402,7 @@ describe("recalculateGerenciaCalcs", () => {
   });
 
   it("meia folha F/V conta cada face (2 páginas → cota 2) e mantém o coef exibido", () => {
-    const result = recalculateGerenciaCalcs(
+    const result = recalcCota(
       baseForm({
         req_categoria: "Orgao",
         val_cores: "P/B",
@@ -437,7 +442,7 @@ describe("recalculateGerenciaCalcs", () => {
         },
       ],
     };
-    const result = recalculateGerenciaCalcs(
+    const result = recalcCota(
       baseForm({
         req_categoria: "Orgao",
         val_cores: "P/B",
@@ -454,7 +459,7 @@ describe("recalculateGerenciaCalcs", () => {
   });
 
   it("7 modelos F/V coef 6,1 e tiragem 1 junta na folha (cota 4, não 14)", () => {
-    const result = recalculateGerenciaCalcs(
+    const result = recalcCota(
       baseForm({
         req_categoria: "Orgao",
         val_cores: "P/B",
@@ -483,14 +488,14 @@ describe("recalculateGerenciaCalcs", () => {
       calc_largura: "110",
       chk_fv: true,
     });
-    expect(recalculateGerenciaCalcs(form).calc_cota_total).toBe("4");
+    expect(recalcCota(form).calc_cota_total).toBe("4");
     expect(
-      recalculateGerenciaCalcs({ ...form, calc_coef_a4: "7,0" }).calc_cota_total,
+      recalcCota({ ...form, calc_coef_a4: "7,0" }).calc_cota_total,
     ).toBe("2");
   });
 
   it("7 modelos F/V coef 6,1 e tiragem 10 n-up por modelo", () => {
-    const result = recalculateGerenciaCalcs(
+    const result = recalcCota(
       baseForm({
         req_categoria: "Orgao",
         val_cores: "P/B",
@@ -507,7 +512,7 @@ describe("recalculateGerenciaCalcs", () => {
   });
 
   it("coef A4 digitado prevalece sobre o geométrico na cota", () => {
-    const stored = recalculateGerenciaCalcs(
+    const stored = recalcCota(
       baseForm({
         req_categoria: "Orgao",
         val_cores: "P/B",
@@ -523,7 +528,7 @@ describe("recalculateGerenciaCalcs", () => {
     );
     expect(stored.calc_coef_a4).toBe("4,0");
     expect(stored.calc_cota_total).toBe("6");
-    const refreshed = recalculateGerenciaCalcs(
+    const refreshed = recalcCota(
       baseForm({
         req_categoria: "Orgao",
         val_cores: "P/B",
@@ -544,7 +549,7 @@ describe("recalculateGerenciaCalcs", () => {
 
   it("produto de tabela F/V continua usando o coef da tabela na imposição", () => {
     setGerenciaCoefA4PorProduto({ "Ct Visita": 10 });
-    const result = recalculateGerenciaCalcs(
+    const result = recalcCota(
       baseForm({
         req_categoria: "Orgao",
         val_produto: "Ct Visita",
@@ -621,8 +626,8 @@ describe("recalculateGerenciaCalcs", () => {
       calc_largura: "297",
       chk_fv: false,
     });
-    const single = recalculateGerenciaCalcs(form, { techSpec: allA4 });
-    const mixedResult = recalculateGerenciaCalcs(form, { techSpec: mixed });
+    const single = recalcCota(form, { techSpec: allA4 });
+    const mixedResult = recalcCota(form, { techSpec: mixed });
     expect(single.calc_coef_a4).toBe("0,9");
     expect(mixedResult.calc_coef_a4).toBe("0,9");
     expect(mixedResult.calc_cota_total).not.toBe(single.calc_cota_total);
@@ -667,7 +672,7 @@ describe("recalculateGerenciaCalcs", () => {
         },
       ],
     };
-    const result = recalculateGerenciaCalcs(
+    const result = recalcCota(
       baseForm({
         req_categoria: "Orgao",
         val_cores: "P/B",
@@ -683,6 +688,17 @@ describe("recalculateGerenciaCalcs", () => {
     );
     expect(result.calc_coef_a4).toBe("2,0");
     expect(result.calc_cota_total).toBe("1.056");
+  });
+
+  it("sem updateCota não devolve calc_cota_total", () => {
+    const result = recalculateGerenciaCalcs(baseForm());
+    expect(result.calc_cota_total).toBeUndefined();
+    expect(result.calc_total_paginas).toBe("1");
+  });
+
+  it("preserva CotaRepro em detailsToForm", () => {
+    const form = detailsToForm({ CotaRepro: 1189 });
+    expect(form.calc_cota_total).toBe("1.189");
   });
 });
 

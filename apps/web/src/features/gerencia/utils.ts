@@ -428,6 +428,11 @@ export type GerenciaCalcOptions = {
   refreshCoef?: boolean;
   /** Catálogo de formatos (dimensões de override por lote). */
   formatos?: FormatoLookupItem[];
+  /**
+   * Quando true, recalcula e devolve `calc_cota_total`.
+   * Default false: preserva a cota persistida/editada (CotaRepro).
+   */
+  updateCota?: boolean;
 };
 
 function cotaPagesFromTechSpec(spec?: TechSpec): number | undefined {
@@ -746,16 +751,19 @@ export function patchTiragemMaximaFromCota(
 export function recalculateGerenciaCalcs(
   form: GerenciaCotaRecalcForm,
   options?: GerenciaCalcOptions,
-): Pick<GerenciaFormState, "calc_total_paginas" | "calc_coef_a4" | "calc_cota_total"> {
+): Pick<GerenciaFormState, "calc_total_paginas" | "calc_coef_a4"> &
+  Partial<Pick<GerenciaFormState, "calc_cota_total">> {
   const totalPaginas = getGerenciaTotalPaginas(form, options);
   const { coefField } = resolveEffectiveCoefA4(form, options);
-  const cota = computeGerenciaCotaRaw(form, options);
-
-  return {
+  const base: Pick<GerenciaFormState, "calc_total_paginas" | "calc_coef_a4"> &
+    Partial<Pick<GerenciaFormState, "calc_cota_total">> = {
     calc_total_paginas: String(totalPaginas),
     calc_coef_a4: coefField,
-    calc_cota_total: Number.isFinite(cota) ? formatCotaEstimada(cota) : "0",
   };
+  if (!options?.updateCota) return base;
+  const cota = computeGerenciaCotaRaw(form, options);
+  base.calc_cota_total = Number.isFinite(cota) ? formatCotaEstimada(cota) : "0";
+  return base;
 }
 
 export function detailsToForm(data: GerenciaOsDetails): Partial<GerenciaFormState> {

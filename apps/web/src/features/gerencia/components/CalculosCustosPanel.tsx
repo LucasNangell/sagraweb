@@ -8,7 +8,16 @@ import {
   getCalculosDisplayRows,
   type TechSpec,
 } from "../techSpec";
-import { patchTiragemMaximaFromCota, recalculateGerenciaCalcs, applyUsarTodaCota, computeTiragemMaximaFromForm, formatCoefA4Display, parseCoefA4Value } from "../utils";
+import {
+  applyUsarTodaCota,
+  computeTiragemMaximaFromForm,
+  formatCoefA4Display,
+  formatCotaEstimada,
+  parseCoefA4Value,
+  parseCotaEstimadaValue,
+  patchTiragemMaximaFromCota,
+  recalculateGerenciaCalcs,
+} from "../utils";
 import { Field, gerenciaInputClass } from "./gerenciaFormUi";
 
 const CALC_FIELD_BY_TIPO: Record<
@@ -265,16 +274,56 @@ export function CalculosCustosPanel({
               )}
             />
           </Field>
-          <Field label="Cota estimada" className="min-w-0">
+          <div className="min-w-0">
+            <div className="flex min-h-[1rem] items-center justify-between gap-1">
+              <label
+                htmlFor="gerencia-calc-cota-estimada"
+                className="text-xs font-semibold text-slate-600"
+              >
+                Cota estimada
+              </label>
+              {!readOnly ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    update((prev) => ({
+                      ...prev,
+                      ...recalculateGerenciaCalcs(prev, {
+                        ...calcOpts,
+                        updateCota: true,
+                      }),
+                    }))
+                  }
+                  className="shrink-0 text-[0.6rem] font-semibold leading-none text-secondary-blue underline-offset-2 hover:underline"
+                  title="Recalcula a cota estimada com a fórmula atual"
+                >
+                  Calcular
+                </button>
+              ) : null}
+            </div>
             <input
-              readOnly
+              id="gerencia-calc-cota-estimada"
+              readOnly={readOnly}
+              inputMode="numeric"
               value={form.calc_cota_total}
+              onChange={(e) => update({ calc_cota_total: e.target.value })}
+              onBlur={() => {
+                const raw = form.calc_cota_total.trim();
+                if (!raw) return;
+                const n = parseCotaEstimadaValue(raw);
+                if (!Number.isFinite(n) || n < 0) return;
+                const formatted = formatCotaEstimada(n);
+                if (formatted === form.calc_cota_total) return;
+                update({ calc_cota_total: formatted });
+              }}
+              title="Valor persistido (CotaRepro); use Calcular para substituir pela fórmula"
               className={cn(
                 gerenciaInputClass,
                 "min-w-0 border-emerald-200 bg-emerald-50 font-bold text-primary-green",
+                readOnly && "bg-emerald-50/80",
               )}
             />
-          </Field>
+          </div>
           <DebitarCgrafToggle
             checked={form.chk_debitar_cgraf}
             readOnly={readOnly}

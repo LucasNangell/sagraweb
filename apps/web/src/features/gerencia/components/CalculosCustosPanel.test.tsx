@@ -75,4 +75,70 @@ describe("CalculosCustosPanel", () => {
     });
     expect(update).toHaveBeenCalledWith({ calc_coef_a4: "7,0" });
   });
+
+  it("permite editar a cota estimada quando a OS não está só leitura", () => {
+    render(
+      <CalculosCustosPanel
+        form={{
+          ...createEmptyGerenciaForm(),
+          calc_cota_total: "1.189",
+        }}
+        update={vi.fn()}
+        techSpec={createEmptyTechSpec()}
+        readOnly={false}
+      />,
+    );
+    expect(screen.getByLabelText("Cota estimada")).not.toHaveAttribute(
+      "readonly",
+    );
+    expect(screen.getByRole("button", { name: "Calcular" })).toBeEnabled();
+  });
+
+  it("ao editar a cota estimada dispara update com o novo valor", () => {
+    const update = vi.fn();
+    render(
+      <CalculosCustosPanel
+        form={{
+          ...createEmptyGerenciaForm(),
+          calc_cota_total: "4",
+        }}
+        update={update}
+        techSpec={createEmptyTechSpec()}
+        readOnly={false}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Cota estimada"), {
+      target: { value: "500" },
+    });
+    expect(update).toHaveBeenCalledWith({ calc_cota_total: "500" });
+  });
+
+  it("botão Calcular dispara update com função que recalcula a cota", () => {
+    const update = vi.fn();
+    const form = {
+      ...createEmptyGerenciaForm(),
+      calc_miolo_pb: "1",
+      val_pgs: "1",
+      calc_tiragem: "400",
+      calc_altura: "210",
+      calc_largura: "297",
+      calc_coef_a4: "0,9",
+      calc_cota_total: "999",
+    };
+    render(
+      <CalculosCustosPanel
+        form={form}
+        update={update}
+        techSpec={createEmptyTechSpec()}
+        readOnly={false}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Calcular" }));
+    expect(update).toHaveBeenCalledTimes(1);
+    const updater = update.mock.calls[0][0];
+    expect(typeof updater).toBe("function");
+    const next = updater(form);
+    expect(next.calc_cota_total).not.toBe("999");
+    expect(next.calc_cota_total).toBeTruthy();
+  });
 });

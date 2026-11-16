@@ -382,7 +382,7 @@ class EWSService:
       <t:FieldURI FieldURI="item:Subject"/>
       <t:FieldURI FieldURI="item:DateTimeReceived"/>
       <t:FieldURI FieldURI="message:From"/>
-      <t:FieldURI FieldURI="message:DisplayTo"/>
+      <t:FieldURI FieldURI="item:DisplayTo"/>
       <t:FieldURI FieldURI="message:IsRead"/>
       <t:FieldURI FieldURI="item:Body"/>
       <t:FieldURI FieldURI="item:HasAttachments"/>
@@ -391,7 +391,7 @@ class EWSService:
     </t:AdditionalProperties>
   </m:ItemShape>
   <m:ItemIds>
-    <t:ItemId Id="{item_id}"/>
+    <t:ItemId Id="{_xml_escape(item_id)}"/>
   </m:ItemIds>
 </m:GetItem>
 """

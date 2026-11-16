@@ -117,6 +117,31 @@ describe("ClienteProofActions", () => {
     expect(onReject).toHaveBeenCalledTimes(1);
   });
 
+  it("no portal público usa Aprovar e Solicitar com quebra na mesma row", () => {
+    render(
+      <ClienteProofActions
+        nomeCliente="Maria"
+        ponto="918713"
+        observacao=""
+        onNomeChange={vi.fn()}
+        onPontoChange={vi.fn()}
+        onObservacaoChange={vi.fn()}
+        onApproveClick={vi.fn()}
+        onRejectClick={vi.fn()}
+        isPending={false}
+        errorMsg={null}
+        publicPortal
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /^aprovar$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /aprovar prova/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /solicitar\s+alterações/i })).toBeInTheDocument();
+    expect(document.querySelector("[data-tour='proof-actions-buttons']")?.className).toMatch(
+      /flex-row/,
+    );
+  });
+
   it("exibe prefixo P_ no campo ponto do portal público", () => {
     render(
       <ClienteProofActions

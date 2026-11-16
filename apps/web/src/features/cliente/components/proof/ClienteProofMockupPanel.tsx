@@ -15,9 +15,15 @@ import {
 } from "@/features/papelaria/mockup";
 import { useMatchMedia } from "@/hooks/useMatchMedia";
 
-/** Padding de .proof-mockup-root--portal-fit (1.25rem 1rem). */
+import {
+  formatDimensionMm,
+  resolveProductDimensionsMm,
+} from "./resolveProductDimensionsMm";
+
+/** Padding de .proof-mockup-root--portal-fit (1.25rem 1rem) + faixa das dimensões. */
 const MOCKUP_ROOT_PAD_X = 32;
 const MOCKUP_ROOT_PAD_Y = 40;
+const MOCKUP_DIMENSIONS_BAND_PX = 28;
 
 interface ClienteProofMockupPanelProps {
   previewData: ProofPreviewPagesData | undefined;
@@ -56,6 +62,8 @@ function ClienteProofMockupPanelReady({
 
   const foldOpen = mockupResolved.config.aberturaInicial ?? 0.35;
   const hasFold = configUsesFold(mockupResolved.config);
+  const { widthMm, heightMm } = resolveProductDimensionsMm(mockupResolved.config);
+  const dimensionsLabel = `${formatDimensionMm(widthMm)} × ${formatDimensionMm(heightMm)} mm`;
 
   useEffect(() => {
     if (!fillHeight) {
@@ -78,7 +86,7 @@ function ClienteProofMockupPanelReady({
         mockupResolved.config,
         hasFold ? foldOpen : 0,
         rect.width - MOCKUP_ROOT_PAD_X,
-        rect.height - MOCKUP_ROOT_PAD_Y,
+        rect.height - MOCKUP_ROOT_PAD_Y - MOCKUP_DIMENSIONS_BAND_PX,
         0.82,
       );
       setSceneBasePx(fitted);
@@ -91,7 +99,12 @@ function ClienteProofMockupPanelReady({
   }, [fillHeight, mockupResolved.config, hasFold, foldOpen, isNarrowViewport]);
 
   return (
-    <MockupPanelShell fillHeight={fillHeight} className={className} stageRef={stageRef}>
+    <MockupPanelShell
+      fillHeight={fillHeight}
+      className={className}
+      stageRef={stageRef}
+      dimensionsLabel={dimensionsLabel}
+    >
       <PapelariaProofMockup3D
         pages={pageUrls}
         config={mockupResolved.config}
@@ -100,7 +113,7 @@ function ClienteProofMockupPanelReady({
         className={cn("h-full", fillHeight && "proof-mockup-root--portal-fit")}
       />
       {mockupResolved.isInvalid && (
-        <p className="absolute bottom-3 left-3 right-3 rounded-lg bg-amber-50 px-3 py-2 text-center text-xs text-amber-800">
+        <p className="absolute bottom-10 left-3 right-3 z-20 rounded-lg bg-amber-50 px-3 py-2 text-center text-xs text-amber-800">
           Visualização genérica — configuração do produto indisponível.
         </p>
       )}
@@ -112,11 +125,13 @@ function MockupPanelShell({
   fillHeight,
   className,
   stageRef,
+  dimensionsLabel,
   children,
 }: {
   fillHeight: boolean;
   className?: string;
   stageRef: RefObject<HTMLDivElement | null>;
+  dimensionsLabel?: string;
   children: ReactNode;
 }) {
   return (
@@ -139,6 +154,18 @@ function MockupPanelShell({
         )}
       >
         {children}
+        {dimensionsLabel ? (
+          <p
+            data-tour="proof-mockup-dimensions"
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex items-center justify-center px-3 pb-2 pt-1 text-center text-xs font-medium tabular-nums text-neutral-600"
+            aria-label={`Largura por altura: ${dimensionsLabel}`}
+          >
+            <span>
+              Largura × Altura:{" "}
+              <span className="font-semibold text-neutral-800">{dimensionsLabel}</span>
+            </span>
+          </p>
+        ) : null}
       </div>
     </div>
   );

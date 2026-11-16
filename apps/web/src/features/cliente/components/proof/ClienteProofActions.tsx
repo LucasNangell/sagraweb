@@ -112,7 +112,7 @@ export function ClienteProofActions({
         data-tour="proof-actions-buttons"
         className={
           publicPortal
-            ? "mt-5 flex w-full min-w-0 flex-col gap-2"
+            ? "mt-5 flex w-full min-w-0 flex-row items-stretch gap-2"
             : "mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap"
         }
       >
@@ -129,12 +129,20 @@ export function ClienteProofActions({
           onClick={onRejectClick}
           className={
             publicPortal
-              ? "min-h-11 w-full min-w-0 sagra-btn sagra-btn--warning sagra-btn--md"
+              ? "min-h-11 min-w-0 flex-[1.35] whitespace-normal sagra-btn sagra-btn--warning sagra-btn--md"
               : "min-h-11 flex-1 sagra-btn sagra-btn--warning sagra-btn--md sm:flex-none"
           }
         >
           <MessageSquareWarning className="size-4 shrink-0" aria-hidden />
-          Solicitar alterações
+          {publicPortal ? (
+            <span className="text-center leading-tight">
+              Solicitar
+              <br />
+              alterações
+            </span>
+          ) : (
+            "Solicitar alterações"
+          )}
         </button>
         <button
           type="button"
@@ -143,7 +151,7 @@ export function ClienteProofActions({
           onClick={onApproveClick}
           className={
             publicPortal
-              ? "min-h-11 w-full min-w-0 sagra-btn sagra-btn--primary sagra-btn--md"
+              ? "min-h-11 min-w-0 flex-1 sagra-btn sagra-btn--primary sagra-btn--md"
               : "min-h-11 flex-1 sagra-btn sagra-btn--primary sagra-btn--md sm:flex-none"
           }
         >
@@ -152,7 +160,7 @@ export function ClienteProofActions({
           ) : (
             <CheckCircle2 className="size-4 shrink-0" aria-hidden />
           )}
-          Aprovar prova
+          {publicPortal ? "Aprovar" : "Aprovar prova"}
         </button>
       </div>
     </section>

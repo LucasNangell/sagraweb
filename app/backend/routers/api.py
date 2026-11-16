@@ -1005,6 +1005,11 @@ async def startup_bind_realtime_loop():
     )
 
     start_email_auto_receive_scheduler()
+    from services.email_auto_send_scheduler import (
+        start_email_auto_send_scheduler,
+    )
+
+    start_email_auto_send_scheduler()
     from routers.mdb_writer import start_mdb_access_probe_scheduler
 
     start_mdb_access_probe_scheduler()

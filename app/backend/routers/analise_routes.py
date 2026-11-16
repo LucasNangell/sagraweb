@@ -2508,6 +2508,7 @@ def register_ptv_dispatch(req: PtvDispatchRequest):
                 situacao="Encam. de Docum.",
                 setor="SEFOC",
                 observacao=custom_obs if custom_obs else f"Enviar {obs_ver}",
+                cod_status=str(result.get("cod_status") or "") or None,
             )
         except Exception as auto_exc:
             logger.warning(

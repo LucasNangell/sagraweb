@@ -73,28 +73,27 @@ class TestRecipientHelpers:
         assert extract_pontos_simple("P_918713 e p_12345") == ["P_918713", "P_12345"]
 
 
+def _mock_auto_send_claim(monkeypatch):
+    import services.email_auto_send_claim as claim
+
+    monkeypatch.setattr(claim, "find_current_encam_cod_status", lambda *_a, **_k: "001002026-01")
+    monkeypatch.setattr(claim, "try_claim_auto_send", lambda **_k: True)
+    monkeypatch.setattr(claim, "update_auto_send_claim", lambda *_a, **_k: None)
+    monkeypatch.setattr(claim, "release_auto_send_claim", lambda *_a, **_k: None)
+
+
 class TestMaybeAutoSendTypeGate:
     def test_ptv_requires_pt_dispatch(self, monkeypatch):
         from services import email_auto_send_service as svc
-
-        monkeypatch.setattr(
-            svc,
-            "get_auto_send_settings",
-            lambda: {"enabled_os": True, "enabled_sp": True, "ponto": "918713"},
-            raising=False,
-        )
-
-        # Patch via module used inside maybe_auto_send
         import services.email_template_service as tpl
+        import services.email_dispatch_type_service as dtype
 
+        _mock_auto_send_claim(monkeypatch)
         monkeypatch.setattr(
             tpl,
             "get_auto_send_settings",
             lambda: {"enabled_os": True, "enabled_sp": True, "ponto": "918713"},
         )
-
-        import services.email_dispatch_type_service as dtype
-
         monkeypatch.setattr(dtype, "resolve_email_dispatch_type", lambda *_a, **_k: "proof")
 
         result = svc.maybe_auto_send_after_encam(
@@ -103,6 +102,7 @@ class TestMaybeAutoSendTypeGate:
             situacao="Encam. de Docum.",
             setor="SEFOC",
             observacao="Enviar PTV2",
+            cod_status="001002026-01",
         )
         assert result is None
 
@@ -111,6 +111,7 @@ class TestMaybeAutoSendTypeGate:
         import services.email_template_service as tpl
         import services.email_dispatch_type_service as dtype
 
+        _mock_auto_send_claim(monkeypatch)
         monkeypatch.setattr(
             tpl,
             "get_auto_send_settings",
@@ -124,6 +125,7 @@ class TestMaybeAutoSendTypeGate:
             situacao="Encam. de Docum.",
             setor="SEFOC",
             observacao="Enviar Prova 2",
+            cod_status="001002026-01",
         )
         assert result is None
 
@@ -132,6 +134,7 @@ class TestMaybeAutoSendTypeGate:
         import services.email_template_service as tpl
         import services.email_dispatch_type_service as dtype
 
+        _mock_auto_send_claim(monkeypatch)
         monkeypatch.setattr(
             tpl,
             "get_auto_send_settings",
@@ -146,6 +149,7 @@ class TestMaybeAutoSendTypeGate:
             situacao="Encam. de Docum.",
             setor="SEFOC",
             observacao="Enviar Prova 1",
+            cod_status="001002026-01",
         )
         assert result is None
 
@@ -166,6 +170,80 @@ class TestMaybeAutoSendTypeGate:
             observacao="Enviar Prova 1",
         )
         assert result is None
+
+
+class TestMysqlMonitorCycle:
+    def test_monitor_attempts_unclaimed_encam(self, monkeypatch):
+        from services import email_auto_send_service as svc
+        import services.email_template_service as tpl
+        import services.email_auto_send_claim as claim
+
+        monkeypatch.setattr(
+            tpl,
+            "get_auto_send_settings",
+            lambda: {"enabled_os": True, "enabled_sp": True, "ponto": "918713"},
+        )
+        monkeypatch.setattr(
+            svc,
+            "list_mysql_encam_pendencias",
+            lambda **_k: [
+                {
+                    "cod_status": "001002026-09",
+                    "os": 100,
+                    "ano": 2026,
+                    "situacao": "Encam. de Docum.",
+                    "setor": "SEFOC",
+                    "observacao": "Enviar Prova 2",
+                }
+            ],
+        )
+        monkeypatch.setattr(claim, "is_auto_send_claimed", lambda *_a, **_k: False)
+        calls = []
+
+        def fake_maybe(**kwargs):
+            calls.append(kwargs)
+            return {"success": True}
+
+        monkeypatch.setattr(svc, "maybe_auto_send_after_encam", fake_maybe)
+        result = svc.run_auto_send_mysql_monitor_cycle()
+        assert result["attempted"] == 1
+        assert result["sent"] == 1
+        assert calls[0]["cod_status"] == "001002026-09"
+
+    def test_monitor_skips_already_claimed(self, monkeypatch):
+        from services import email_auto_send_service as svc
+        import services.email_template_service as tpl
+        import services.email_auto_send_claim as claim
+
+        monkeypatch.setattr(
+            tpl,
+            "get_auto_send_settings",
+            lambda: {"enabled_os": True, "enabled_sp": True, "ponto": "918713"},
+        )
+        monkeypatch.setattr(
+            svc,
+            "list_mysql_encam_pendencias",
+            lambda **_k: [
+                {
+                    "cod_status": "001002026-09",
+                    "os": 100,
+                    "ano": 2026,
+                    "situacao": "Encam. de Docum.",
+                    "setor": "SEFOC",
+                    "observacao": "Enviar Prova 2",
+                }
+            ],
+        )
+        monkeypatch.setattr(claim, "is_auto_send_claimed", lambda *_a, **_k: True)
+        called = {"n": 0}
+        monkeypatch.setattr(
+            svc,
+            "maybe_auto_send_after_encam",
+            lambda **_k: called.__setitem__("n", called["n"] + 1),
+        )
+        result = svc.run_auto_send_mysql_monitor_cycle()
+        assert result["attempted"] == 0
+        assert called["n"] == 0
 
 
 class TestAutoSendSettings:

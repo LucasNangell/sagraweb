@@ -161,11 +161,19 @@ def maybe_auto_send_after_encam(
     situacao: str,
     setor: str,
     observacao: str,
+    cod_status: str | None = None,
 ) -> Optional[dict]:
     """
     Tenta envio automático após Encam. de Docum.
     Retorna resultado do envio ou None se skip/fail-closed.
     """
+    from services.email_auto_send_claim import (
+        find_current_encam_cod_status,
+        release_auto_send_claim,
+        try_claim_auto_send,
+        update_auto_send_claim,
+    )
+
     if str(situacao or "").strip() != SITUACAO_ENCAM:
         return None
     if str(setor or "").strip().upper() != SETOR_SEFOC:
@@ -194,37 +202,46 @@ def maybe_auto_send_after_encam(
         )
         return None
 
+    claim_code = str(cod_status or "").strip() or find_current_encam_cod_status(
+        os_num, ano
+    )
+    if not claim_code:
+        logger.info(
+            "auto_send: skip OS %s/%s — CodStatus Encam. não encontrado",
+            os_num,
+            ano,
+        )
+        return None
+    if not try_claim_auto_send(cod_status=claim_code, os_num=os_num, ano=ano):
+        logger.info(
+            "auto_send: skip OS %s/%s — CodStatus %s já claimado",
+            os_num,
+            ano,
+            claim_code,
+        )
+        return None
+
+    def _skip(reason: str) -> None:
+        update_auto_send_claim(claim_code, status="skipped", detail=reason)
+        logger.info("auto_send: skip OS %s/%s — %s", os_num, ano, reason)
+
     from services.email_dispatch_type_service import resolve_email_dispatch_type
 
     dispatch_type = resolve_email_dispatch_type(os_num, ano)
     if parsed.kind == "pt":
         if dispatch_type != "pt":
-            logger.info(
-                "auto_send: skip OS %s/%s — obs PTV mas dispatch=%s",
-                os_num,
-                ano,
-                dispatch_type,
-            )
+            _skip(f"obs PTV mas dispatch={dispatch_type}")
             return None
         email_type = "pt"
     else:
         if dispatch_type != "proof":
-            logger.info(
-                "auto_send: skip OS %s/%s — obs Prova mas dispatch=%s",
-                os_num,
-                ano,
-                dispatch_type,
-            )
+            _skip(f"obs Prova mas dispatch={dispatch_type}")
             return None
         email_type = "proof"
 
     recipients = resolve_pendencia_recipients(os_num, ano, ponto_ews=ponto)
     if not recipients:
-        logger.info(
-            "auto_send: skip OS %s/%s — sem destinatários",
-            os_num,
-            ano,
-        )
+        _skip("sem destinatários")
         return None
 
     proof_filename = ""
@@ -242,8 +259,10 @@ def maybe_auto_send_after_encam(
         )
         # Modo anexo ou portal exige o PDF da versão; prova_web pode seguir sem ele.
         if not proof_filename and (use_attachment or not prefer_prova_web):
+            # PDF pode chegar depois (Access) — liberar para retry do monitor.
+            release_auto_send_claim(claim_code)
             logger.info(
-                "auto_send: skip OS %s/%s — PDF ProvaSefoc %s não encontrado",
+                "auto_send: retry later OS %s/%s — PDF ProvaSefoc %s não encontrado",
                 os_num,
                 ano,
                 parsed.versao,
@@ -266,23 +285,32 @@ def maybe_auto_send_after_encam(
             proof_filename=proof_filename,
             register_andamento=True,
         )
+        update_auto_send_claim(
+            claim_code,
+            status="sent",
+            detail=f"{email_type}:{','.join(recipients)[:200]}",
+        )
         logger.info(
-            "auto_send: enviado OS %s/%s type=%s to=%s",
+            "auto_send: enviado OS %s/%s type=%s to=%s cod=%s",
             os_num,
             ano,
             email_type,
             recipients,
+            claim_code,
         )
         return result
     except PendenciaDispatchError as exc:
+        # Falha de montagem/EWS — libera para o monitor tentar de novo.
+        release_auto_send_claim(claim_code)
         logger.info(
-            "auto_send: skip OS %s/%s — %s",
+            "auto_send: retry later OS %s/%s — %s",
             os_num,
             ano,
             exc,
         )
         return None
     except Exception as exc:
+        release_auto_send_claim(claim_code)
         logger.error(
             "auto_send: erro OS %s/%s: %s",
             os_num,
@@ -293,6 +321,90 @@ def maybe_auto_send_after_encam(
         return None
 
 
+def list_mysql_encam_pendencias(*, limit: int = 50) -> list[dict]:
+    """Encam. de Docum. atuais no MySQL (inclui origem Access via sync)."""
+    from database import db
+
+    rows = db.execute_query(
+        """
+        SELECT
+            a.CodStatus AS cod_status,
+            a.NroProtocoloLink AS os,
+            a.AnoProtocoloLink AS ano,
+            a.SituacaoLink AS situacao,
+            a.SetorLink AS setor,
+            a.`Observaçao` AS observacao,
+            a.`Data` AS data
+        FROM tabAndamento a
+        WHERE a.SituacaoLink = %(sit)s
+          AND a.UltimoStatus = 1
+          AND a.SetorLink = %(setor)s
+        ORDER BY a.`Data` ASC, a.CodStatus ASC
+        LIMIT %(limit)s
+        """,
+        {"sit": SITUACAO_ENCAM, "setor": SETOR_SEFOC, "limit": max(1, min(int(limit), 200))},
+    )
+    return rows or []
+
+
+def run_auto_send_mysql_monitor_cycle() -> dict:
+    """
+    Monitora MySQL por Encam. de Docum. elegíveis (Access→MySQL ou API).
+    Não altera a sincronia Access; só lê tabAndamento.
+    """
+    from services.email_auto_send_claim import is_auto_send_claimed
+    from services.email_template_service import get_auto_send_settings
+
+    result = {"seen": 0, "attempted": 0, "sent": 0, "skipped": 0}
+    settings = get_auto_send_settings()
+    if not settings.get("enabled_os") and not settings.get("enabled_sp"):
+        return result
+
+    rows = list_mysql_encam_pendencias(limit=50)
+    result["seen"] = len(rows)
+    for row in rows:
+        os_num = int(row.get("os") or 0)
+        ano = int(row.get("ano") or 0)
+        cod = str(row.get("cod_status") or "").strip()
+        obs = str(row.get("observacao") or "")
+        if not os_num or not ano or not cod:
+            continue
+        if not parse_encam_send_obs(obs):
+            continue
+        if not is_os_enabled_for_auto_send(
+            os_num,
+            enabled_os=bool(settings.get("enabled_os")),
+            enabled_sp=bool(settings.get("enabled_sp")),
+        ):
+            continue
+        if is_auto_send_claimed(cod):
+            continue
+
+        result["attempted"] += 1
+        sent = maybe_auto_send_after_encam(
+            os_num=os_num,
+            ano=ano,
+            situacao=str(row.get("situacao") or SITUACAO_ENCAM),
+            setor=str(row.get("setor") or SETOR_SEFOC),
+            observacao=obs,
+            cod_status=cod,
+        )
+        if sent:
+            result["sent"] += 1
+        else:
+            result["skipped"] += 1
+
+    if result["attempted"] or result["sent"]:
+        logger.info(
+            "auto_send monitor: seen=%s attempted=%s sent=%s skipped=%s",
+            result["seen"],
+            result["attempted"],
+            result["sent"],
+            result["skipped"],
+        )
+    return result
+
+
 def schedule_auto_send_after_encam(
     *,
     os_num: int,
@@ -300,6 +412,7 @@ def schedule_auto_send_after_encam(
     situacao: str,
     setor: str,
     observacao: str,
+    cod_status: str | None = None,
 ) -> None:
     """Dispara maybe_auto_send em thread daemon (não bloqueia a request)."""
     if str(situacao or "").strip() != SITUACAO_ENCAM:
@@ -313,6 +426,7 @@ def schedule_auto_send_after_encam(
                 situacao=situacao,
                 setor=setor,
                 observacao=observacao,
+                cod_status=cod_status,
             )
         except Exception as exc:
             logger.error(

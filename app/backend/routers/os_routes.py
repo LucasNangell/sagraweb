@@ -1932,6 +1932,7 @@ def add_os_history(ano: int, id: int, item: HistoryItem, request: Request):
                 situacao=str(item.situacao or ""),
                 setor=str(item.setor or ""),
                 observacao=str(item.obs or ""),
+                cod_status=str(getattr(response, "new_id", None) or "") or None,
             )
         except Exception as auto_exc:
             logger.warning(

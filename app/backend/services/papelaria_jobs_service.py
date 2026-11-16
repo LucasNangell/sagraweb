@@ -3044,6 +3044,7 @@ def approve_job_prova(job_id: int, aprovado_por: str) -> dict[str, Any]:
             situacao="Encam. de Docum.",
             setor="SEFOC",
             observacao=obs,
+            cod_status=str(cod_status or "") or None,
         )
     except Exception as auto_exc:
         logger.warning(

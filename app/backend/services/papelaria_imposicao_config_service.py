@@ -56,6 +56,74 @@ def _require_bool(obj: dict[str, Any], key: str) -> bool:
     return value
 
 
+def _normalize_ocupadas(
+    raw: Any,
+    *,
+    cols: int,
+    rows: int,
+) -> list[dict[str, int]]:
+    """Valida lista de células ocupadas com número de página."""
+    if not isinstance(raw, list):
+        raise ValueError("grid.ocupadas deve ser uma lista.")
+    if len(raw) < 1:
+        raise ValueError("grid.ocupadas deve ter ao menos uma célula.")
+
+    def _as_int(value: Any, field: str) -> int:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"{field} deve ser inteiro.")
+        num = int(value)
+        if num != value:
+            raise ValueError(f"{field} deve ser inteiro.")
+        return num
+
+    seen_cells: set[tuple[int, int]] = set()
+    seen_paginas: set[int] = set()
+    out: list[dict[str, int]] = []
+    for idx, item in enumerate(raw):
+        label = f"grid.ocupadas[{idx}]"
+        if not isinstance(item, dict):
+            raise ValueError(f"{label} deve ser um objeto.")
+        col = _as_int(item.get("col"), f"{label}.col")
+        row = _as_int(item.get("row"), f"{label}.row")
+        pagina = _as_int(item.get("pagina"), f"{label}.pagina")
+        if col < 0 or col >= cols:
+            raise ValueError(f"{label}.col fora da grade (0..{cols - 1}).")
+        if row < 0 or row >= rows:
+            raise ValueError(f"{label}.row fora da grade (0..{rows - 1}).")
+        if pagina < 1:
+            raise ValueError(f"{label}.pagina deve ser >= 1.")
+        cell = (col, row)
+        if cell in seen_cells:
+            raise ValueError(f"{label}: célula ({col},{row}) duplicada.")
+        if pagina in seen_paginas:
+            raise ValueError(f"{label}: pagina {pagina} duplicada.")
+        seen_cells.add(cell)
+        seen_paginas.add(pagina)
+        out.append({"col": col, "row": row, "pagina": pagina})
+
+    out.sort(key=lambda item: item["pagina"])
+    return out
+
+
+def resolve_grid_ocupadas(grid: dict[str, Any]) -> list[dict[str, int]]:
+    """
+    Lista efetiva de células ocupadas.
+    Sem ocupadas no JSON → grade cheia (linha-major, pagina 1..N).
+    """
+    cols = int(grid.get("colunas") or 1)
+    rows = int(grid.get("linhas") or 1)
+    raw = grid.get("ocupadas")
+    if raw is None:
+        out: list[dict[str, int]] = []
+        n = 1
+        for row in range(rows):
+            for col in range(cols):
+                out.append({"col": col, "row": row, "pagina": n})
+                n += 1
+        return out
+    return _normalize_ocupadas(raw, cols=cols, rows=rows)
+
+
 def validate_imposicao_config_payload(
     data: Any,
     *,
@@ -111,10 +179,19 @@ def validate_imposicao_config_payload(
     grid = data.get("grid")
     if not isinstance(grid, dict):
         raise ValueError("Campo obrigatório ausente: grid.")
-    grid_out = {
-        "colunas": _require_positive_int(grid, "colunas", label="grid.colunas"),
-        "linhas": _require_positive_int(grid, "linhas", label="grid.linhas"),
+    cols = _require_positive_int(grid, "colunas", label="grid.colunas")
+    rows = _require_positive_int(grid, "linhas", label="grid.linhas")
+    grid_out: dict[str, Any] = {
+        "colunas": cols,
+        "linhas": rows,
     }
+    ocupadas_raw = grid.get("ocupadas")
+    if ocupadas_raw is not None:
+        grid_out["ocupadas"] = _normalize_ocupadas(
+            ocupadas_raw,
+            cols=cols,
+            rows=rows,
+        )
 
     espacamento = data.get("espacamento_mm")
     if not isinstance(espacamento, dict):

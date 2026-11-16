@@ -92,6 +92,31 @@ def test_compute_positions_a5_2x1_centralizado():
     assert mm_to_pt(0.5) == pytest.approx(1.417, abs=0.01)
 
 
+def test_compute_positions_respeita_ocupadas_ordenadas():
+    from services.papelaria_jdf_service import compute_content_positions
+
+    positions = compute_content_positions(
+        folha_w_mm=297,
+        folha_h_mm=210,
+        page_w_mm=148,
+        page_h_mm=105,
+        cols=2,
+        rows=2,
+        gap_h_mm=0,
+        gap_v_mm=0,
+        centralizar=True,
+        ocupadas=[
+            {"col": 1, "row": 1, "pagina": 1},
+            {"col": 0, "row": 0, "pagina": 2},
+        ],
+    )
+    assert len(positions) == 2
+    # pagina 1 = célula (1,1) — canto inferior-esquerdo PDF
+    assert positions[0][0] == pytest.approx(148.5, abs=0.01)
+    # pagina 2 = célula (0,0)
+    assert positions[1][0] == pytest.approx(0.5, abs=0.01)
+
+
 def _base_config(**overrides):
     cfg = {
         "folha_mm": {"largura": 297, "altura": 210},

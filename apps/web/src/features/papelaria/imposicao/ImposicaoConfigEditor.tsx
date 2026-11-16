@@ -1,4 +1,6 @@
 import type { PapelariaImposicaoConfig, PapelariaImposicaoPaginaOrigem } from "./types";
+import { clampOcupadasToGrid } from "./imposicaoConfigUtils";
+import { ImposicaoGridPreview } from "./ImposicaoGridPreview";
 
 function NumberField({
   label,
@@ -159,15 +161,39 @@ export function ImposicaoConfigEditor({
           value={config.grid.colunas}
           min={1}
           hint="Step & repeat — ex.: 2×1"
-          onChange={(n) => patch("grid", { ...config.grid, colunas: n })}
+          onChange={(n) => {
+            const colunas = Math.max(1, Math.floor(n) || 1);
+            patch("grid", {
+              ...config.grid,
+              colunas,
+              ocupadas: clampOcupadasToGrid(
+                config.grid.ocupadas,
+                colunas,
+                config.grid.linhas,
+              ),
+            });
+          }}
         />
         <NumberField
           label="Linhas (M)"
           value={config.grid.linhas}
           min={1}
-          onChange={(n) => patch("grid", { ...config.grid, linhas: n })}
+          onChange={(n) => {
+            const linhas = Math.max(1, Math.floor(n) || 1);
+            patch("grid", {
+              ...config.grid,
+              linhas,
+              ocupadas: clampOcupadasToGrid(
+                config.grid.ocupadas,
+                config.grid.colunas,
+                linhas,
+              ),
+            });
+          }}
         />
       </section>
+
+      <ImposicaoGridPreview config={config} onChange={onChange} />
 
       <section className="grid max-w-3xl gap-3 sm:grid-cols-3">
         <NumberField

@@ -90,6 +90,46 @@ class TestImposicaoConfigService:
         with pytest.raises(ValueError, match="pagina.largura_mm"):
             validate_imposicao_config_payload(bad)
 
+    def test_grid_ocupadas_parcial_e_ordem(self):
+        from services.papelaria_imposicao_config_service import (
+            resolve_grid_ocupadas,
+            validate_imposicao_config_payload,
+        )
+
+        payload = _valid_payload()
+        payload["grid"] = {
+            "colunas": 2,
+            "linhas": 2,
+            "ocupadas": [
+                {"col": 0, "row": 0, "pagina": 2},
+                {"col": 1, "row": 1, "pagina": 1},
+            ],
+        }
+        out = validate_imposicao_config_payload(payload)
+        assert out["grid"]["ocupadas"] == [
+            {"col": 1, "row": 1, "pagina": 1},
+            {"col": 0, "row": 0, "pagina": 2},
+        ]
+        resolved = resolve_grid_ocupadas({"colunas": 2, "linhas": 1})
+        assert resolved == [
+            {"col": 0, "row": 0, "pagina": 1},
+            {"col": 1, "row": 0, "pagina": 2},
+        ]
+
+    def test_grid_ocupadas_invalida(self):
+        from services.papelaria_imposicao_config_service import (
+            validate_imposicao_config_payload,
+        )
+
+        bad = _valid_payload()
+        bad["grid"] = {
+            "colunas": 2,
+            "linhas": 1,
+            "ocupadas": [{"col": 0, "row": 0, "pagina": 1}, {"col": 1, "row": 0, "pagina": 1}],
+        }
+        with pytest.raises(ValueError, match="duplicada"):
+            validate_imposicao_config_payload(bad)
+
     def test_aceita_legado_folha_largura_mm(self):
         from services.papelaria_imposicao_config_service import (
             validate_imposicao_config_payload,

@@ -19,6 +19,51 @@ describe("imposicaoConfigUtils (JDF)", () => {
     expect(cfg.work_style).toBe("Simplex");
   });
 
+  it("aceita grid.ocupadas com espaços em branco", () => {
+    const cfg = validateImposicaoConfigObject({
+      ...DEFAULT_IMPOSICAO_CONFIG,
+      grid: {
+        colunas: 2,
+        linhas: 2,
+        ocupadas: [
+          { col: 0, row: 0, pagina: 2 },
+          { col: 1, row: 1, pagina: 1 },
+        ],
+      },
+    });
+    expect(cfg.grid.ocupadas).toEqual([
+      { col: 1, row: 1, pagina: 1 },
+      { col: 0, row: 0, pagina: 2 },
+    ]);
+  });
+
+  it("rejeita ocupadas inválidas", () => {
+    expect(() =>
+      validateImposicaoConfigObject({
+        ...DEFAULT_IMPOSICAO_CONFIG,
+        grid: {
+          colunas: 2,
+          linhas: 1,
+          ocupadas: [{ col: 2, row: 0, pagina: 1 }],
+        },
+      }),
+    ).toThrow(/fora da grade/);
+
+    expect(() =>
+      validateImposicaoConfigObject({
+        ...DEFAULT_IMPOSICAO_CONFIG,
+        grid: {
+          colunas: 2,
+          linhas: 1,
+          ocupadas: [
+            { col: 0, row: 0, pagina: 1 },
+            { col: 1, row: 0, pagina: 1 },
+          ],
+        },
+      }),
+    ).toThrow(/duplicada/);
+  });
+
   it("exige PDF de marcas quando marcas_corte=true", () => {
     const soft = validateImposicaoConfigObject(
       {

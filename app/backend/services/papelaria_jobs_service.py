@@ -2563,9 +2563,9 @@ def build_imposicao_digital_pdf_name(
     """
     prefix = get_os_folder_basename(ano, nro)
     grid = config.get("grid") or {}
-    cols = max(1, int(grid.get("colunas") or 1))
-    rows = max(1, int(grid.get("linhas") or 1))
-    n_up = cols * rows
+    from services.papelaria_imposicao_config_service import resolve_grid_ocupadas
+
+    n_up = max(1, len(resolve_grid_ocupadas(grid if isinstance(grid, dict) else {})))
     folha = format_folha_impressao_label(config.get("folha_mm") or {})
     safe_folha = re.sub(r"[^\w.\-]+", "-", folha).strip("-") or "Folha"
     return f"{prefix}_Digit_{n_up}Up_{safe_folha}.pdf"

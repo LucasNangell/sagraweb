@@ -18,6 +18,11 @@ export interface PapelariaImposicaoConfig {
   grid: {
     colunas: number;
     linhas: number;
+    /**
+     * Células com página (0-based). Omitido = grade cheia na ordem linha-major.
+     * `pagina` = número 1..N exibido e ordem no JDF.
+     */
+    ocupadas?: Array<{ col: number; row: number; pagina: number }>;
   };
   /** Gap entre páginas (mm). 0 = corte seco. */
   espacamento_mm: {

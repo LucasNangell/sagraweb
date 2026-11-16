@@ -45,6 +45,105 @@ function requireBool(obj: Record<string, unknown>, key: string): boolean {
   return value;
 }
 
+export type ImposicaoOcupada = {
+  col: number;
+  row: number;
+  pagina: number;
+};
+
+function normalizeOcupadas(
+  raw: unknown,
+  cols: number,
+  rows: number,
+): ImposicaoOcupada[] {
+  if (!Array.isArray(raw)) {
+    throw new Error("grid.ocupadas deve ser uma lista.");
+  }
+  if (raw.length < 1) {
+    throw new Error("grid.ocupadas deve ter ao menos uma célula.");
+  }
+  const seenCells = new Set<string>();
+  const seenPaginas = new Set<number>();
+  const out: ImposicaoOcupada[] = [];
+  raw.forEach((item, idx) => {
+    const label = `grid.ocupadas[${idx}]`;
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error(`${label} deve ser um objeto.`);
+    }
+    const rec = item as Record<string, unknown>;
+    for (const key of ["col", "row", "pagina"] as const) {
+      if (!isNumber(rec[key]) || !Number.isInteger(rec[key])) {
+        throw new Error(`${label}.${key} deve ser inteiro.`);
+      }
+    }
+    const col = rec.col as number;
+    const row = rec.row as number;
+    const pagina = rec.pagina as number;
+    if (col < 0 || col >= cols) {
+      throw new Error(`${label}.col fora da grade (0..${cols - 1}).`);
+    }
+    if (row < 0 || row >= rows) {
+      throw new Error(`${label}.row fora da grade (0..${rows - 1}).`);
+    }
+    if (pagina < 1) {
+      throw new Error(`${label}.pagina deve ser >= 1.`);
+    }
+    const cellKey = `${col},${row}`;
+    if (seenCells.has(cellKey)) {
+      throw new Error(`${label}: célula (${col},${row}) duplicada.`);
+    }
+    if (seenPaginas.has(pagina)) {
+      throw new Error(`${label}: pagina ${pagina} duplicada.`);
+    }
+    seenCells.add(cellKey);
+    seenPaginas.add(pagina);
+    out.push({ col, row, pagina });
+  });
+  out.sort((a, b) => a.pagina - b.pagina);
+  return out;
+}
+
+/** Grade cheia (legado) ou ocupadas explícitas, ordenadas por pagina. */
+export function resolveGridOcupadas(
+  grid: PapelariaImposicaoConfig["grid"],
+): ImposicaoOcupada[] {
+  const cols = Math.max(1, Math.floor(grid.colunas) || 1);
+  const rows = Math.max(1, Math.floor(grid.linhas) || 1);
+  if (grid.ocupadas == null) {
+    const out: ImposicaoOcupada[] = [];
+    let n = 1;
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < cols; col += 1) {
+        out.push({ col, row, pagina: n });
+        n += 1;
+      }
+    }
+    return out;
+  }
+  return normalizeOcupadas(grid.ocupadas, cols, rows);
+}
+
+/** Remove células fora da grade e renumerar gaps (1..N contínuo). */
+export function clampOcupadasToGrid(
+  ocupadas: ImposicaoOcupada[] | undefined,
+  cols: number,
+  rows: number,
+): ImposicaoOcupada[] | undefined {
+  if (ocupadas == null) return undefined;
+  const kept = ocupadas
+    .filter((o) => o.col >= 0 && o.col < cols && o.row >= 0 && o.row < rows)
+    .sort((a, b) => a.pagina - b.pagina);
+  if (kept.length < 1) return undefined;
+  return kept.map((o, i) => ({ col: o.col, row: o.row, pagina: i + 1 }));
+}
+
+export function fillGridOcupadas(
+  cols: number,
+  rows: number,
+): ImposicaoOcupada[] {
+  return resolveGridOcupadas({ colunas: cols, linhas: rows });
+}
+
 /** Aceita schema novo e legado (folha/largura_mm, repeticoes, etc.). */
 function coerceRaw(data: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = { ...data };
@@ -123,16 +222,23 @@ export function validateImposicaoConfigObject(
     paginaOut.altura_mm = requirePositive(pagina, "altura_mm", false, "pagina.altura_mm");
   }
 
+  const cols = requirePositiveInt(grid, "colunas", "grid.colunas");
+  const rows = requirePositiveInt(grid, "linhas", "grid.linhas");
+  const gridOut: PapelariaImposicaoConfig["grid"] = {
+    colunas: cols,
+    linhas: rows,
+  };
+  if (grid.ocupadas !== undefined && grid.ocupadas !== null) {
+    gridOut.ocupadas = normalizeOcupadas(grid.ocupadas, cols, rows);
+  }
+
   return {
     folha_mm: {
       largura: requirePositive(folha, "largura", false, "folha_mm.largura"),
       altura: requirePositive(folha, "altura", false, "folha_mm.altura"),
     },
     pagina: paginaOut,
-    grid: {
-      colunas: requirePositiveInt(grid, "colunas", "grid.colunas"),
-      linhas: requirePositiveInt(grid, "linhas", "grid.linhas"),
-    },
+    grid: gridOut,
     espacamento_mm: {
       horizontal: requirePositive(esp, "horizontal", true, "espacamento_mm.horizontal"),
       vertical: requirePositive(esp, "vertical", true, "espacamento_mm.vertical"),

@@ -145,6 +145,35 @@ def build_jdf_filename(*, ano: int, nro: int, folder_basename: str) -> str:
     return f"{int(ano)}_{num}.jdf"
 
 
+def compute_cell_origin_mm(
+    *,
+    folha_w_mm: float,
+    folha_h_mm: float,
+    page_w_mm: float,
+    page_h_mm: float,
+    cols: int,
+    rows: int,
+    gap_h_mm: float,
+    gap_v_mm: float,
+    centralizar: bool,
+    col: int,
+    row: int,
+) -> tuple[float, float]:
+    """Canto inferior-esquerdo (mm) de uma célula da grade (origem PDF)."""
+    total_w = cols * page_w_mm + max(0, cols - 1) * gap_h_mm
+    total_h = rows * page_h_mm + max(0, rows - 1) * gap_v_mm
+    if centralizar:
+        origin_x = max(0.0, (folha_w_mm - total_w) / 2.0)
+        origin_y = max(0.0, (folha_h_mm - total_h) / 2.0)
+    else:
+        origin_x = 0.0
+        origin_y = max(0.0, folha_h_mm - total_h)
+    x = origin_x + col * (page_w_mm + gap_h_mm)
+    # linhas de cima para baixo na folha (y cresce para cima no JDF)
+    y = origin_y + (rows - 1 - row) * (page_h_mm + gap_v_mm)
+    return (x, y)
+
+
 def compute_content_positions(
     *,
     folha_w_mm: float,
@@ -156,24 +185,42 @@ def compute_content_positions(
     gap_h_mm: float,
     gap_v_mm: float,
     centralizar: bool,
+    ocupadas: list[dict[str, int]] | None = None,
 ) -> list[tuple[float, float]]:
-    """Retorna lista (x_mm, y_mm) canto inferior-esquerdo de cada célula (origem PDF)."""
-    total_w = cols * page_w_mm + (cols - 1) * gap_h_mm
-    total_h = rows * page_h_mm + (rows - 1) * gap_v_mm
-    if centralizar:
-        origin_x = max(0.0, (folha_w_mm - total_w) / 2.0)
-        origin_y = max(0.0, (folha_h_mm - total_h) / 2.0)
+    """
+    Retorna lista (x_mm, y_mm) canto inferior-esquerdo de cada conteúdo.
+
+    Se ``ocupadas`` for None, preenche a grade inteira (linha-major).
+    Caso contrário, emite só as células informadas, ordenadas por ``pagina``.
+    """
+    if ocupadas is None:
+        cells = [
+            {"col": col, "row": row, "pagina": row * cols + col + 1}
+            for row in range(rows)
+            for col in range(cols)
+        ]
     else:
-        origin_x = 0.0
-        origin_y = max(0.0, folha_h_mm - total_h)
+        cells = sorted(ocupadas, key=lambda item: int(item.get("pagina") or 0))
 
     positions: list[tuple[float, float]] = []
-    for row in range(rows):
-        for col in range(cols):
-            x = origin_x + col * (page_w_mm + gap_h_mm)
-            # linhas de cima para baixo na folha (y cresce para cima no JDF)
-            y = origin_y + (rows - 1 - row) * (page_h_mm + gap_v_mm)
-            positions.append((x, y))
+    for cell in cells:
+        col = int(cell["col"])
+        row = int(cell["row"])
+        positions.append(
+            compute_cell_origin_mm(
+                folha_w_mm=folha_w_mm,
+                folha_h_mm=folha_h_mm,
+                page_w_mm=page_w_mm,
+                page_h_mm=page_h_mm,
+                cols=cols,
+                rows=rows,
+                gap_h_mm=gap_h_mm,
+                gap_v_mm=gap_v_mm,
+                centralizar=centralizar,
+                col=col,
+                row=row,
+            )
+        )
     return positions
 
 
@@ -262,6 +309,9 @@ def build_apogee_jdf_xml(
     page_w_pt = mm_to_pt(page_w_mm)
     page_h_pt = mm_to_pt(page_h_mm)
 
+    from services.papelaria_imposicao_config_service import resolve_grid_ocupadas
+
+    ocupadas = resolve_grid_ocupadas(grid if isinstance(grid, dict) else {})
     positions = compute_content_positions(
         folha_w_mm=folha_w,
         folha_h_mm=folha_h,
@@ -272,6 +322,7 @@ def build_apogee_jdf_xml(
         gap_h_mm=gap_h,
         gap_v_mm=gap_v,
         centralizar=centralizar,
+        ocupadas=ocupadas,
     )
 
     content_xml_parts: list[str] = []

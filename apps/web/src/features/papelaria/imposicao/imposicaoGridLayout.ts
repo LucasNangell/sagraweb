@@ -1,0 +1,118 @@
+import type { PapelariaImposicaoConfig } from "./types";
+import {
+  resolveGridOcupadas,
+  type ImposicaoOcupada,
+} from "./imposicaoConfigUtils";
+
+export type ImposicaoCellLayout = {
+  col: number;
+  row: number;
+  xMm: number;
+  yMmFromTop: number;
+  wMm: number;
+  hMm: number;
+  pagina: number | null;
+};
+
+function pageSizeMm(config: PapelariaImposicaoConfig): {
+  w: number;
+  h: number;
+} {
+  if (
+    config.pagina.origem === "fixixa" &&
+    config.pagina.largura_mm &&
+    config.pagina.altura_mm
+  ) {
+    return { w: config.pagina.largura_mm, h: config.pagina.altura_mm };
+  }
+  // Estimativa quando origem é borda: metade da folha ou 1/N da grade.
+  const cols = Math.max(1, config.grid.colunas);
+  const rows = Math.max(1, config.grid.linhas);
+  const gapH = config.espacamento_mm.horizontal;
+  const gapV = config.espacamento_mm.vertical;
+  const w =
+    (config.folha_mm.largura - Math.max(0, cols - 1) * gapH) / cols;
+  const h =
+    (config.folha_mm.altura - Math.max(0, rows - 1) * gapV) / rows;
+  return { w: Math.max(1, w), h: Math.max(1, h) };
+}
+
+/** Layout visual (Y a partir do topo) espelhando compute_content_positions. */
+export function buildImposicaoGridLayout(
+  config: PapelariaImposicaoConfig,
+): {
+  folhaW: number;
+  folhaH: number;
+  cells: ImposicaoCellLayout[];
+} {
+  const cols = Math.max(1, Math.floor(config.grid.colunas) || 1);
+  const rows = Math.max(1, Math.floor(config.grid.linhas) || 1);
+  const { w: pageW, h: pageH } = pageSizeMm(config);
+  const gapH = config.espacamento_mm.horizontal;
+  const gapV = config.espacamento_mm.vertical;
+  const folhaW = config.folha_mm.largura;
+  const folhaH = config.folha_mm.altura;
+
+  const totalW = cols * pageW + Math.max(0, cols - 1) * gapH;
+  const totalH = rows * pageH + Math.max(0, rows - 1) * gapV;
+  let originX = 0;
+  let originYTop = 0;
+  if (config.centralizar_na_folha) {
+    originX = Math.max(0, (folhaW - totalW) / 2);
+    originYTop = Math.max(0, (folhaH - totalH) / 2);
+  }
+
+  const ocupadas = resolveGridOcupadas(config.grid);
+  const byCell = new Map<string, number>();
+  for (const o of ocupadas) {
+    byCell.set(`${o.col},${o.row}`, o.pagina);
+  }
+
+  const cells: ImposicaoCellLayout[] = [];
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      const xMm = originX + col * (pageW + gapH);
+      const yMmFromTop = originYTop + row * (pageH + gapV);
+      cells.push({
+        col,
+        row,
+        xMm,
+        yMmFromTop,
+        wMm: pageW,
+        hMm: pageH,
+        pagina: byCell.get(`${col},${row}`) ?? null,
+      });
+    }
+  }
+
+  return { folhaW, folhaH, cells };
+}
+
+export function nextPaginaNumber(ocupadas: ImposicaoOcupada[]): number {
+  if (ocupadas.length < 1) return 1;
+  return Math.max(...ocupadas.map((o) => o.pagina)) + 1;
+}
+
+export function toggleCellOcupada(
+  ocupadas: ImposicaoOcupada[] | undefined,
+  cols: number,
+  rows: number,
+  col: number,
+  row: number,
+): ImposicaoOcupada[] {
+  const current =
+    ocupadas ??
+    resolveGridOcupadas({ colunas: cols, linhas: rows });
+  const idx = current.findIndex((o) => o.col === col && o.row === row);
+  if (idx >= 0) {
+    const next = current
+      .filter((_, i) => i !== idx)
+      .sort((a, b) => a.pagina - b.pagina)
+      .map((o, i) => ({ ...o, pagina: i + 1 }));
+    return next;
+  }
+  return [
+    ...current,
+    { col, row, pagina: nextPaginaNumber(current) },
+  ].sort((a, b) => a.pagina - b.pagina);
+}

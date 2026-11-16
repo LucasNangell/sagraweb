@@ -2129,6 +2129,23 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
             )
         payload["prova_web_pdf_name"] = prova_web_pdf
         payload["prova_numero"] = prova_numero
+        # Persiste no job para OK/descarte (ArquivoPdfGerado continua BaseSefoc).
+        dados_job = dict(job.get("dados") or {})
+        dados_job["prova_web_pdf_name"] = prova_web_pdf
+        dados_job["prova_numero"] = prova_numero
+        db.execute_query(
+            """
+            UPDATE tabPapelariaJobs
+            SET DadosJson = %(dados)s,
+                Versao = %(versao)s
+            WHERE ID = %(id)s
+            """,
+            {
+                "dados": json.dumps(dados_job, ensure_ascii=False),
+                "versao": prova_numero,
+                "id": int(job["id"]),
+            },
+        )
 
     return payload
 
@@ -2961,6 +2978,93 @@ def _cleanup_job_preview_cache(job: dict[str, Any]) -> None:
         )
 
 
+def _resolve_prova_version_and_arquivo(job: dict[str, Any]) -> tuple[int, str]:
+    """
+    Versão da prova + nome do PDF para token/andamento.
+
+    Em prova web o job aponta para BaseSefoc.pdf (sem N); a versão vem de
+    DadosJson (prova_numero / prova_web_pdf_name), Versao do job ou pasta.
+    """
+    pdf_name = str(job.get("arquivo_pdf") or "").strip()
+    dados = job.get("dados") if isinstance(job.get("dados"), dict) else {}
+    ano = int(job["ano_protocolo"])
+    nro = int(job["nro_protocolo"])
+
+    candidates: list[str] = []
+    if pdf_name:
+        candidates.append(pdf_name)
+    for key in ("prova_web_pdf_name", "prova_email_pdf_name"):
+        name = str(dados.get(key) or "").strip()
+        if name:
+            candidates.append(name)
+
+    prova_ver: Optional[int] = None
+    arquivo_from_name: Optional[str] = None
+    for name in candidates:
+        ver = extract_prova_version_from_filename(name)
+        if ver is not None:
+            prova_ver = ver
+            arquivo_from_name = os.path.basename(name)
+            break
+
+    if prova_ver is None:
+        raw_num = dados.get("prova_numero")
+        try:
+            if raw_num is not None and int(raw_num) > 0:
+                prova_ver = int(raw_num)
+        except (TypeError, ValueError):
+            pass
+
+    if prova_ver is None:
+        try:
+            sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
+            prefix = get_os_folder_basename(ano, nro)
+            max_ver = _max_prova_sefoc_version(sefoc_dir, prefix, nro)
+            if max_ver > 0:
+                prova_ver = max_ver
+        except Exception:
+            pass
+
+    if prova_ver is None:
+        raw_ver = job.get("versao")
+        try:
+            if raw_ver is not None and int(raw_ver) > 0:
+                prova_ver = int(raw_ver)
+        except (TypeError, ValueError):
+            pass
+
+    if prova_ver is None:
+        raise ValueError("Não foi possível identificar a versão da prova no arquivo.")
+
+    # Preferir PDF versionado na pasta (ProvaN / ProvaSefoc) para o token.
+    arquivo = pdf_name or arquivo_from_name or ""
+    try:
+        sefoc_dir = resolve_os_papelaria_dir(ano, nro, create=False)
+        prefix = get_os_folder_basename(ano, nro)
+        preferred = [
+            str(dados.get("prova_web_pdf_name") or "").strip(),
+            str(dados.get("prova_email_pdf_name") or "").strip(),
+            f"{prefix}-Prova{prova_ver}.pdf",
+            f"{prefix}-ProvaSefoc {prova_ver}.pdf",
+            arquivo_from_name or "",
+            pdf_name,
+        ]
+        for name in preferred:
+            if not name:
+                continue
+            path = os.path.normpath(os.path.join(sefoc_dir, os.path.basename(name)))
+            if os.path.isfile(path):
+                arquivo = os.path.basename(name)
+                break
+    except Exception:
+        if arquivo_from_name:
+            arquivo = arquivo_from_name
+
+    if not arquivo:
+        raise ValueError("Não foi possível identificar a versão da prova no arquivo.")
+    return prova_ver, arquivo
+
+
 def approve_job_prova(job_id: int, aprovado_por: str) -> dict[str, Any]:
     """Aprova PDF gerado: andamento SEFOC + token de prova para envio por e-mail."""
     ensure_papelaria_jobs_tables()
@@ -2969,10 +3073,7 @@ def approve_job_prova(job_id: int, aprovado_por: str) -> dict[str, Any]:
         raise LookupError("Job não encontrado.")
     _assert_job_pending_prova_review(job)
 
-    pdf_name = str(job["arquivo_pdf"])
-    prova_ver = extract_prova_version_from_filename(pdf_name)
-    if prova_ver is None:
-        raise ValueError("Não foi possível identificar a versão da prova no arquivo.")
+    prova_ver, pdf_name = _resolve_prova_version_and_arquivo(job)
 
     ano = int(job["ano_protocolo"])
     nro = int(job["nro_protocolo"])

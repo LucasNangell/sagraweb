@@ -1136,6 +1136,86 @@ class TestProvaReview:
         assert result["prova_versao"] == 2
         assert result["job"]["prova_revisao"] == svc.PROVA_REVISAO_APPROVED
 
+    def test_approve_prova_web_basesefoc_usa_provan(self, monkeypatch, tmp_path):
+        from services import papelaria_jobs_service as svc
+
+        sefoc = tmp_path / "Sefoc"
+        sefoc.mkdir()
+        (sefoc / "05954-Nome-BaseSefoc.pdf").write_bytes(b"%PDF-base")
+        (sefoc / "05954-Nome-Prova2.pdf").write_bytes(b"%PDF-prova")
+
+        job_state = self._job_dict(
+            arquivo_pdf="05954-Nome-BaseSefoc.pdf",
+            versao=2,
+            dados={
+                "prova_web_pdf_name": "05954-Nome-Prova2.pdf",
+                "prova_numero": 2,
+            },
+        )
+        calls: dict = {"movement": None, "token": None}
+
+        def fake_get(job_id, include_logs=False, recover_stale=True):
+            return dict(job_state) if int(job_id) == 99 else None
+
+        def fake_transaction(ops):
+            class _Cursor:
+                rowcount = 1
+
+                def execute(self, sql, params=None):
+                    if "UPDATE tabPapelariaJobs" in sql:
+                        job_state["prova_revisao"] = svc.PROVA_REVISAO_APPROVED
+
+            return [ops[0](_Cursor())]
+
+        monkeypatch.setattr(svc, "get_job", fake_get)
+        monkeypatch.setattr(svc.db, "execute_transaction", fake_transaction)
+        monkeypatch.setattr(svc, "append_job_log", lambda *_a, **_k: None)
+        monkeypatch.setattr(svc, "broadcast_job_update", lambda *_a, **_k: None)
+        monkeypatch.setattr(
+            svc,
+            "resolve_job_file_path",
+            lambda *_a, **_k: (str(sefoc / "05954-Nome-BaseSefoc.pdf"), "05954-Nome-BaseSefoc.pdf"),
+        )
+        monkeypatch.setattr(svc.db, "execute_query", lambda *_a, **_k: [{"ID": 7}])
+        monkeypatch.setattr(
+            svc,
+            "resolve_os_papelaria_dir",
+            lambda *_a, **_k: str(sefoc),
+        )
+        monkeypatch.setattr(svc, "get_os_folder_basename", lambda *_a, **_k: "05954-Nome")
+        monkeypatch.setattr(
+            "routers.analise_routes.add_movement_internal",
+            lambda *_a, **_k: "x",
+        )
+        def fake_ensure_token(os_id, ano, versao, arquivo, ponto_envio=None):
+            calls["token"] = (versao, arquivo, ponto_envio)
+            return "tok"
+
+        monkeypatch.setattr(
+            "routers.proof_portal_routes.ensure_proof_token",
+            fake_ensure_token,
+        )
+        monkeypatch.setattr(
+            "routers.mdb_writer.push_andamento_to_mdb_after_mysql",
+            lambda *_a, **_k: None,
+        )
+        monkeypatch.setattr(
+            "routers.realtime.broadcast_os_system_update",
+            lambda *_a, **_k: None,
+        )
+        monkeypatch.setattr(
+            "services.papelaria_preview_service.ensure_proof_preview_pages",
+            lambda *_a, **_k: None,
+        )
+        monkeypatch.setattr(
+            "services.email_auto_send_service.schedule_auto_send_after_encam",
+            lambda *_a, **_k: None,
+        )
+
+        result = svc.approve_job_prova(99, "918.713")
+        assert result["prova_versao"] == 2
+        assert calls["token"] == ("2", "05954-Nome-Prova2.pdf", "918.713")
+
 
 class TestExportExistingCdrJob:
     def test_falha_sem_cdr_na_pasta(self, monkeypatch):

@@ -231,9 +231,9 @@ export function EmailInboxDetail({
         ano: osAnoPair.ano,
         email_entry_id: email.real_id,
       });
-      onToast("E-mail salvo em .eml na pasta Sefoc da OS.");
+      onToast("E-mail salvo em .html na pasta Sefoc da OS.");
     } catch (e) {
-      toast.error(`Erro ao salvar e-mail (.eml): ${e instanceof Error ? e.message : String(e)}`,);
+      toast.error(`Erro ao salvar e-mail (.html): ${e instanceof Error ? e.message : String(e)}`,);
     }
   };
 
@@ -516,7 +516,7 @@ export function EmailInboxDetail({
             ) : (
               <Save className="size-3.5" aria-hidden />
             )}
-            Salvar e-mail (.eml)
+            Salvar e-mail (.html)
           </button>
           <p className="text-center text-[0.65rem] text-slate-400">
             Operador: ponto {ponto || "—"}

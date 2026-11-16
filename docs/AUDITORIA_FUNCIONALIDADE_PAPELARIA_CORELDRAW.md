@@ -469,7 +469,7 @@ Estrutura criada por `os_folder_structure.py`:
 ### 5.10 Pasta `Sefoc`
 
 - Provas PDF: `proof_files_service._sefoc_dir()`.
-- E-mail: salva `.eml` em `Sefoc/` (`POST /api/email/save-mht`).
+- E-mail: salva `.html` autocontido em `Sefoc/` (`POST /api/email/save-mht`).
 - **Proposta:** subpasta `Sefoc/Papelaria/` para artefatos Corel gerados.
 
 ### 5.11 Autenticação e permissões

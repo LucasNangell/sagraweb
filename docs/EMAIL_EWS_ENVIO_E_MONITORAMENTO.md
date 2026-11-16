@@ -52,7 +52,7 @@ flowchart TB
 
     subgraph Storage["Persistência"]
         MySQL["tabEmailExchangeConfig"]
-        UNC["Pastas OS na rede\nSefoc/*.eml"]
+        UNC["Pastas OS na rede\nSefoc/*.html"]
     end
 
     EmailPage --> Poll
@@ -315,7 +315,7 @@ O badge aparece quando `inbox_count + pendencias_count > 0`.
 | Marcar lido / desconsiderar | `POST /api/email/mark-read` | `UpdateItem`: `IsRead=true` + categoria Outlook |
 | Registrar andamento | `POST /api/email/andamento` | Idem + insert em `tabAndamento` |
 | Baixar anexo | `GET /api/email/download` | `GetAttachment` |
-| Salvar .eml na OS | `POST /api/email/save-mht` | `GetItem` com `IncludeMimeContent` → arquivo `.eml` UNC (path legado `/save-mht`) |
+| Salvar .html na OS | `POST /api/email/save-mht` | HTML autocontido (corpo + imagens cid:) em `Sefoc/*.html` (path legado `/save-mht`) |
 
 Categorias padrão aplicadas via EWS:
 
@@ -421,7 +421,7 @@ GET /api/email/pt-html/{ano}/{os}
 | POST | `/api/email/send-pt` | Envio PT / Prova |
 | POST | `/api/email/andamento` | Andamento + marcar lido no Exchange |
 | POST | `/api/email/mark-read` | Marcar lido + categoria |
-| POST | `/api/email/save-mht` | Salvar MIME `.eml` na pasta Sefoc da OS (path legado) |
+| POST | `/api/email/save-mht` | Salvar HTML autocontido `.html` na pasta Sefoc (path legado) |
 
 Todas as rotas (exceto `pt-html` e `pendencias`) exigem sessão autenticada.
 
@@ -528,24 +528,18 @@ Em `app/backend/scripts/`:
 
 ---
 
-## 14. Arquivo `.eml` na pasta Sefoc
+## 14. Arquivo `.html` na pasta Sefoc
 
-O sistema grava o `MimeContent` do Exchange (MIME RFC 822) com extensão **`.eml`**, para abrir no Outlook em qualquer estação. O endpoint permanece `POST /api/email/save-mht` por compatibilidade.
+O sistema grava um **snapshot HTML autocontido** (cabeçalho De/Para/Assunto/Data, corpo HTML e imagens `cid:` embutidas como `data:` URIs). Abre no Chrome/Edge sem Outlook e sem IE Mode. O endpoint permanece `POST /api/email/save-mht` por compatibilidade; implementação em `services/email_archive_html.py`.
 
-Arquivos antigos com extensão **`.mht`** já são o mesmo MIME: basta renomear para `.eml` (conteúdo idêntico). Exemplo no PowerShell, a partir da pasta da OS ou raiz Deputados:
-
-```powershell
-Get-ChildItem -Path "\\redecamara\DfsData\CGraf\Sefoc" -Recurse -Filter "*.mht" |
-  ForEach-Object { Rename-Item -LiteralPath $_.FullName -NewName ($_.BaseName + ".eml") }
-```
-
-Workaround sem rename: Abrir com → Outlook, ou Edge com IE Mode.
+Arquivos legados **`.mht` / `.eml`** são MIME bruto do Exchange: no Chrome ficam ilegíveis; no Edge podem exigir IE Mode; no Outlook pedem perfil. Não viram HTML automaticamente — regrave pela UI se o e-mail ainda estiver na caixa, ou abra legados com Edge IE Mode / Outlook.
 
 ## 15. Arquivos relacionados (mapa rápido)
 
 ```
 app/backend/
   services/ews_service.py              # Cliente SOAP EWS
+  services/email_archive_html.py       # Snapshot HTML autocontido (Sefoc)
   services/email_config_service.py     # Config por ponto + defaults
   services/email_template_service.py   # Templates e remetentes globais
   services/activation_email_service.py

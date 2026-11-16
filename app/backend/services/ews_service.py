@@ -382,6 +382,7 @@ class EWSService:
       <t:FieldURI FieldURI="item:Subject"/>
       <t:FieldURI FieldURI="item:DateTimeReceived"/>
       <t:FieldURI FieldURI="message:From"/>
+      <t:FieldURI FieldURI="message:DisplayTo"/>
       <t:FieldURI FieldURI="message:IsRead"/>
       <t:FieldURI FieldURI="item:Body"/>
       <t:FieldURI FieldURI="item:HasAttachments"/>
@@ -407,6 +408,7 @@ class EWSService:
 
         subject = (msg.findtext("./t:Subject", namespaces=ns) or "").strip()
         dt_received = (msg.findtext("./t:DateTimeReceived", namespaces=ns) or "").strip()
+        display_to = (msg.findtext("./t:DisplayTo", namespaces=ns) or "").strip()
 
         from_name = ""
         from_email = ""
@@ -449,6 +451,7 @@ class EWSService:
             "date": dt_received,
             "sender_name": from_name,
             "sender_email": from_email,
+            "display_to": display_to,
             "is_read": is_read,
             "has_attachments": has_att,
             "body": body_text,

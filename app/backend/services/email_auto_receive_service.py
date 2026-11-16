@@ -386,16 +386,24 @@ def _save_mht(
     os_num: int,
     ano: int,
     subject: str,
+    details: Optional[Dict[str, Any]] = None,
 ) -> str:
+    """Salva snapshot HTML autocontido (.html). Nome legado _save_mht mantido."""
+    from services.email_archive_html import build_email_archive_html_from_details
+
     sefoc_path = os.path.join(os_path, "Sefoc")
     os.makedirs(sefoc_path, exist_ok=True)
-    mime_content = service.get_message_mime_content(item_id)
+    resolved = details if details is not None else service.get_message_details(item_id)
+    html_bytes = build_email_archive_html_from_details(service, resolved)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    subject_part = _safe_filename(subject, fallback="email")
-    filename = f"{os_num:05d}_{ano}_{stamp}_{subject_part}.eml"
+    subject_part = _safe_filename(
+        subject or str(resolved.get("subject") or ""),
+        fallback="email",
+    )
+    filename = f"{os_num:05d}_{ano}_{stamp}_{subject_part}.html"
     output_path = os.path.join(sefoc_path, filename)
     with open(output_path, "wb") as fh:
-        fh.write(mime_content)
+        fh.write(html_bytes)
     return output_path
 
 
@@ -550,6 +558,7 @@ def _process_one_email(
         os_num=os_num,
         ano=ano,
         subject=subject,
+        details=details,
     )
 
     cod_status = _insert_andamento(

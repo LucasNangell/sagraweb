@@ -972,11 +972,12 @@ def save_email_as_mht(
     session: SessionData = Depends(require_session),
 ):
     """
-    Salva o e-mail completo no formato .eml (MIME RFC 822) dentro da subpasta Sefoc da OS.
+    Salva o e-mail como HTML autocontido (.html) na subpasta Sefoc da OS.
 
     O path /save-mht é mantido por compatibilidade com clientes existentes.
     """
     try:
+        from services.email_archive_html import build_email_archive_html_from_details
         from services.os_protocolo_guard import OsProtocoloGuardError, require_protocolo_mysql
 
         try:
@@ -993,15 +994,15 @@ def save_email_as_mht(
 
         service, _cfg = _resolve_ews_for_ponto(str(session.ponto))
         details = service.get_message_details(request.email_entry_id)
-        mime_content = service.get_message_mime_content(request.email_entry_id)
+        html_bytes = build_email_archive_html_from_details(service, details)
 
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         subject_part = _safe_filename(details.get("subject", ""), fallback="email")
-        filename = f"{request.os:05d}_{request.ano}_{stamp}_{subject_part}.eml"
+        filename = f"{request.os:05d}_{request.ano}_{stamp}_{subject_part}.html"
         output_path = os.path.join(sefoc_path, filename)
 
         with open(output_path, "wb") as f:
-            f.write(mime_content)
+            f.write(html_bytes)
 
         return {
             "success": True,
@@ -1011,7 +1012,7 @@ def save_email_as_mht(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Erro ao salvar email .eml: {e}")
+        logger.error(f"Erro ao salvar email .html: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/download")

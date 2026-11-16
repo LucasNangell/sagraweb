@@ -2,11 +2,16 @@
 export type PapelariaImposicaoPaginaOrigem = "borda" | "fixixa";
 export type PapelariaImposicaoWorkStyle = "Simplex" | "Duplex";
 
+/** Rotação da página na célula (graus, sentido anti-horário). */
+export type PapelariaImposicaoRotacao = 0 | 90 | 180 | 270;
+
 export type PapelariaImposicaoOcupada = {
   col: number;
   row: number;
   /** Número da página do PDF (1-based). Pode repetir em várias células. */
   pagina: number;
+  /** Rotação na célula; omitido = 0. */
+  rotacao?: PapelariaImposicaoRotacao;
 };
 
 export interface PapelariaImposicaoConfig {

@@ -79,6 +79,7 @@ def _normalize_ocupadas(
 
     seen_cells: set[tuple[int, int]] = set()
     out: list[dict[str, int]] = []
+    valid_rot = {0, 90, 180, 270}
     for idx, item in enumerate(raw):
         label = f"{field_label}[{idx}]"
         if not isinstance(item, dict):
@@ -92,11 +93,24 @@ def _normalize_ocupadas(
             raise ValueError(f"{label}.row fora da grade (0..{rows - 1}).")
         if pagina < 1:
             raise ValueError(f"{label}.pagina deve ser >= 1.")
+        rot_raw = item.get("rotacao", 0)
+        if rot_raw is None or rot_raw == "":
+            rotacao = 0
+        else:
+            rotacao = _as_int(rot_raw, f"{label}.rotacao")
+            rotacao = ((rotacao % 360) + 360) % 360
+            if rotacao not in valid_rot:
+                raise ValueError(
+                    f"{label}.rotacao deve ser 0, 90, 180 ou 270."
+                )
         cell = (col, row)
         if cell in seen_cells:
             raise ValueError(f"{label}: célula ({col},{row}) duplicada.")
         seen_cells.add(cell)
-        out.append({"col": col, "row": row, "pagina": pagina})
+        entry: dict[str, int] = {"col": col, "row": row, "pagina": pagina}
+        if rotacao:
+            entry["rotacao"] = rotacao
+        out.append(entry)
 
     out.sort(key=lambda item: (item["pagina"], item["row"], item["col"]))
     return out

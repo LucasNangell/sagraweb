@@ -9,6 +9,7 @@ import {
 import {
   buildImposicaoGridLayout,
   paintCellOcupada,
+  rotateCellOcupada,
   type ImposicaoGridFace,
 } from "./imposicaoGridLayout";
 
@@ -22,12 +23,14 @@ function FaceSvg({
   face,
   paintPagina,
   onCellClick,
+  onCellRotate,
   label,
 }: {
   config: PapelariaImposicaoConfig;
   face: ImposicaoGridFace;
   paintPagina: number;
   onCellClick: (col: number, row: number) => void;
+  onCellRotate: (col: number, row: number) => void;
   label: string;
 }) {
   const { folhaW, folhaH, cells } = buildImposicaoGridLayout(config, face);
@@ -63,7 +66,10 @@ function FaceSvg({
           />
           {cells.map((cell) => {
             const occupied = cell.pagina != null;
-            const fontSize = Math.min(cell.wMm, cell.hMm) * 0.35;
+            const fontSize = Math.min(cell.wMm, cell.hMm) * 0.28;
+            const cx = cell.xMm + cell.wMm / 2;
+            const cy = cell.yMmFromTop + cell.hMm / 2;
+            const rot = cell.rotacao || 0;
             return (
               <g key={`${face}-${cell.col}-${cell.row}`}>
                 <rect
@@ -78,34 +84,53 @@ function FaceSvg({
                   strokeDasharray={occupied ? undefined : `${maxSide * 0.01}`}
                   className="cursor-pointer"
                   onClick={() => onCellClick(cell.col, cell.row)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    if (occupied) onCellRotate(cell.col, cell.row);
+                  }}
+                  onDoubleClick={(e) => {
+                    e.preventDefault();
+                    if (occupied) onCellRotate(cell.col, cell.row);
+                  }}
                 >
                   <title>
                     {occupied
-                      ? `Página ${cell.pagina} — clique para ${
-                          cell.pagina === paintPagina
-                            ? "limpar"
-                            : `trocar para ${paintPagina}`
-                        }`
+                      ? `Pág. ${cell.pagina}${rot ? ` · ${rot}°` : ""} — clique: pintar/limpar; duplo clique / botão direito: girar`
                       : `Em branco — clique para página ${paintPagina}`}
                   </title>
                 </rect>
                 {occupied ? (
-                  <text
-                    x={cell.xMm + cell.wMm / 2}
-                    y={cell.yMmFromTop + cell.hMm / 2}
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    fontSize={fontSize}
-                    fontWeight={700}
-                    fill={textOcc}
-                    className="pointer-events-none select-none"
-                  >
-                    {cell.pagina}
-                  </text>
+                  <g transform={`rotate(${rot} ${cx} ${cy})`}>
+                    <text
+                      x={cx}
+                      y={cy}
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      fontSize={fontSize}
+                      fontWeight={700}
+                      fill={textOcc}
+                      className="pointer-events-none select-none"
+                    >
+                      {cell.pagina}
+                    </text>
+                    {rot ? (
+                      <text
+                        x={cx}
+                        y={cy + fontSize * 0.85}
+                        textAnchor="middle"
+                        dominantBaseline="central"
+                        fontSize={Math.min(fontSize * 0.45, 7)}
+                        fill={textOcc}
+                        className="pointer-events-none select-none"
+                      >
+                        {rot}°
+                      </text>
+                    ) : null}
+                  </g>
                 ) : (
                   <text
-                    x={cell.xMm + cell.wMm / 2}
-                    y={cell.yMmFromTop + cell.hMm / 2}
+                    x={cx}
+                    y={cy}
                     textAnchor="middle"
                     dominantBaseline="central"
                     fontSize={Math.min(fontSize * 0.45, 8)}
@@ -168,6 +193,17 @@ export function ImposicaoGridPreview({ config, onChange }: Props) {
     setFaceOcupadas(face, next);
   };
 
+  const handleCellRotate = (
+    face: ImposicaoGridFace,
+    col: number,
+    row: number,
+  ) => {
+    setActiveFace(face);
+    const current =
+      face === "verso" ? config.grid.ocupadas_verso : config.grid.ocupadas;
+    setFaceOcupadas(face, rotateCellOcupada(current, cols, rows, col, row));
+  };
+
   const fillSequential = (face: ImposicaoGridFace) => {
     setFaceOcupadas(face, fillGridOcupadas(cols, rows));
   };
@@ -191,8 +227,7 @@ export function ImposicaoGridPreview({ config, onChange }: Props) {
             Preview da grade
           </h3>
           <p className="text-[10px] text-slate-400">
-            Clique para pintar a página selecionada (pode repetir). Clique de novo
-            na mesma página para limpar.
+            Clique: pintar página. Duplo clique ou botão direito: girar 90°.
             {duplex
               ? ` Frente: ${ocupadasFrenteCount} · Verso: ${ocupadasVersoCount}.`
               : ` ${ocupadasFrenteCount} página${ocupadasFrenteCount === 1 ? "" : "s"} na folha.`}
@@ -265,6 +300,7 @@ export function ImposicaoGridPreview({ config, onChange }: Props) {
           paintPagina={paintPagina}
           label={duplex ? "Frente" : "Folha"}
           onCellClick={(col, row) => handleCellClick("frente", col, row)}
+          onCellRotate={(col, row) => handleCellRotate("frente", col, row)}
         />
         {duplex ? (
           <FaceSvg
@@ -273,6 +309,7 @@ export function ImposicaoGridPreview({ config, onChange }: Props) {
             paintPagina={paintPagina}
             label="Verso"
             onCellClick={(col, row) => handleCellClick("verso", col, row)}
+            onCellRotate={(col, row) => handleCellRotate("verso", col, row)}
           />
         ) : null}
       </div>

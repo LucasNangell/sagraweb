@@ -356,9 +356,22 @@ def test_build_apogee_passthrough_jdf_xml(tmp_path: Path):
     )
     assert 'NPage="2"' in xml
     assert "ContentObject" not in xml
-    assert 'Automated="true"' in xml
+    assert "ImpositionPreparation" not in xml
+    assert "<Layout " not in xml
+    assert 'NamedFeatures="Imposition' not in xml
     assert "ExportFolder" in xml
     assert "JobDescription" in xml
+
+
+def test_content_ctm_rotacao_90():
+    from services.papelaria_jdf_service import content_ctm_and_trim
+
+    ctm, tw, th = content_ctm_and_trim(
+        x_pt=10, y_pt=20, page_w_pt=100, page_h_pt=200, rotacao=90
+    )
+    assert ctm.startswith("0 1 -1 0")
+    assert tw == 200
+    assert th == 100
 
 
 def test_write_jdf_file(tmp_path: Path):

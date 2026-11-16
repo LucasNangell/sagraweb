@@ -205,17 +205,18 @@ def compute_content_positions(
     gap_v_mm: float,
     centralizar: bool,
     ocupadas: list[dict[str, int]] | None = None,
-) -> list[tuple[float, float, int]]:
+) -> list[tuple[float, float, int, int]]:
     """
-    Retorna lista (x_mm, y_mm, pagina) canto inferior-esquerdo de cada conteúdo.
+    Retorna lista (x_mm, y_mm, pagina, rotacao) canto inferior-esquerdo.
 
     Se ``ocupadas`` for None, preenche a grade inteira (linha-major).
     Caso contrário, emite só as células informadas, ordenadas por ``pagina``.
     ``pagina`` é 1-based (índice da página no PDF).
+    ``rotacao`` em graus (0/90/180/270, anti-horário).
     """
     if ocupadas is None:
         cells = [
-            {"col": col, "row": row, "pagina": 1}
+            {"col": col, "row": row, "pagina": 1, "rotacao": 0}
             for row in range(rows)
             for col in range(cols)
         ]
@@ -229,11 +230,14 @@ def compute_content_positions(
             ),
         )
 
-    positions: list[tuple[float, float, int]] = []
+    positions: list[tuple[float, float, int, int]] = []
     for cell in cells:
         col = int(cell["col"])
         row = int(cell["row"])
         pagina = max(1, int(cell.get("pagina") or 1))
+        rotacao = int(cell.get("rotacao") or 0) % 360
+        if rotacao not in (0, 90, 180, 270):
+            rotacao = 0
         x_mm, y_mm = compute_cell_origin_mm(
             folha_w_mm=folha_w_mm,
             folha_h_mm=folha_h_mm,
@@ -247,13 +251,48 @@ def compute_content_positions(
             col=col,
             row=row,
         )
-        positions.append((x_mm, y_mm, pagina))
+        positions.append((x_mm, y_mm, pagina, rotacao))
     return positions
+
+
+def content_ctm_and_trim(
+    *,
+    x_pt: float,
+    y_pt: float,
+    page_w_pt: float,
+    page_h_pt: float,
+    rotacao: int,
+) -> tuple[str, float, float]:
+    """
+    CTM + TrimSize para ContentObject com rotação anti-horária.
+    Retorna (ctm_str, trim_w, trim_h).
+    """
+    rot = int(rotacao) % 360
+    if rot == 90:
+        # 0 1 -1 0 ; origem (x+h, y)
+        return (
+            f"0 1 -1 0 {x_pt + page_h_pt:.3f} {y_pt:.3f}",
+            page_h_pt,
+            page_w_pt,
+        )
+    if rot == 180:
+        return (
+            f"-1 0 0 -1 {x_pt + page_w_pt:.3f} {y_pt + page_h_pt:.3f}",
+            page_w_pt,
+            page_h_pt,
+        )
+    if rot == 270:
+        return (
+            f"0 -1 1 0 {x_pt:.3f} {y_pt + page_w_pt:.3f}",
+            page_h_pt,
+            page_w_pt,
+        )
+    return f"1 0 0 1 {x_pt:.3f} {y_pt:.3f}", page_w_pt, page_h_pt
 
 
 def _content_objects_xml(
     *,
-    positions: list[tuple[float, float, int]],
+    positions: list[tuple[float, float, int, int]] | list[tuple[float, float, int]],
     page_w_pt: float,
     page_h_pt: float,
     folha_w_pt: float,
@@ -264,17 +303,29 @@ def _content_objects_xml(
 ) -> str:
     """Monta ContentObject(s) de uma Surface; Ord = pagina-1 do PDF."""
     parts: list[str] = []
-    for x_mm, y_mm, pagina in positions:
+    for pos in positions:
+        if len(pos) >= 4:
+            x_mm, y_mm, pagina, rotacao = pos[0], pos[1], pos[2], pos[3]
+        else:
+            x_mm, y_mm, pagina = pos[0], pos[1], pos[2]
+            rotacao = 0
         x_pt = mm_to_pt(x_mm)
         y_pt = mm_to_pt(y_mm)
         clip_x1 = x_pt + page_w_pt
         clip_y1 = y_pt + page_h_pt
         ord_idx = max(0, int(pagina) - 1)
+        ctm, trim_w, trim_h = content_ctm_and_trim(
+            x_pt=x_pt,
+            y_pt=y_pt,
+            page_w_pt=page_w_pt,
+            page_h_pt=page_h_pt,
+            rotacao=int(rotacao or 0),
+        )
         parts.append(
             f'              <ContentObject Ord="{ord_idx}"\n'
-            f'                             CTM="1 0 0 1 {x_pt:.3f} {y_pt:.3f}" '
-            f'TrimCTM="1 0 0 1 {x_pt:.3f} {y_pt:.3f}"\n'
-            f'                             TrimSize="{page_w_pt:.3f} {page_h_pt:.3f}"\n'
+            f'                             CTM="{ctm}" '
+            f'TrimCTM="{ctm}"\n'
+            f'                             TrimSize="{trim_w:.3f} {trim_h:.3f}"\n'
             f'                             ClipBox="{x_pt:.3f} {y_pt:.3f} '
             f'{clip_x1:.3f} {clip_y1:.3f}"/>'
         )
@@ -409,7 +460,8 @@ def build_apogee_jdf_xml(
         )
 
     max_pagina = 1
-    for _x, _y, pagina in positions_frente + positions_verso:
+    for pos in positions_frente + positions_verso:
+        pagina = int(pos[2])
         if pagina > max_pagina:
             max_pagina = pagina
     # Ord das marcas vem depois das páginas do PDF base (0..max_pagina-1).
@@ -652,8 +704,10 @@ def build_apogee_passthrough_jdf_xml(
     timestamp: datetime | None = None,
 ) -> str:
     """
-    JDF de ticket Apogee sem Layout/ContentObjects de imposição.
-    O hotfolder/preset do Apogee posiciona as páginas (ex.: Pasta arte+branco).
+    Ticket Apogee sem Layout/ImpositionPreparation/ContentObjects.
+
+    O hotfolder Papelaria_Pasta aplica o Hot Ticket (posição no Apogee).
+    Layout vazio + NamedFeatures «Imposition» gerava «Unknown template».
     """
     nro5 = format_os_number(nro)
     job_name = nro5
@@ -689,8 +743,9 @@ def build_apogee_passthrough_jdf_xml(
     )
     job_id = str(int(ano))
     job_part = nro5
-    root_features = escape(_named_features(root=True))
-    imp_features = escape(_named_features(root=False))
+    # Só export — sem «Imposition» (template fica no Hot Ticket do Apogee).
+    root_features = escape(_ROOT_EXPORT_FEATURE)
+    export_features = escape(_EXPORT_FEATURE)
 
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <JDF xmlns="http://www.CIP4.org/JDFSchema_1_1"
@@ -729,6 +784,15 @@ def build_apogee_passthrough_jdf_xml(
            DescriptiveName="Pagina arte" Dimension="{page_w_pt:.3f} {page_h_pt:.3f}"/>
 
     <Component ID="COMP_{nro5}" Class="Quantity" ComponentType="FinalProduct" Status="Unavailable"/>
+
+    <RunList Class="Parameter" ID="RL_{nro5}" Status="Available" NPage="{n_page}">
+      <LayoutElement>
+        <FileSpec URL="{file_url}"
+                  MimeType="application/pdf" FileVersion="1"
+                  UserFileName="{user_name_esc}"/>
+      </LayoutElement>
+    </RunList>
+    <RunList Class="Parameter" ID="RL_{nro5}_D" Status="Unavailable"/>
   </ResourcePool>
 
   <ResourceLinkPool>
@@ -738,25 +802,6 @@ def build_apogee_passthrough_jdf_xml(
   <JDF ID="PRE_{nro5}" JobPartID="PRE_{nro5}" Type="ProcessGroup" Category="PrePress"
        Status="Waiting" DescriptiveName="PrePress">
 
-    <ResourcePool>
-      <RunList Class="Parameter" ID="RL_{nro5}" Status="Available" NPage="{n_page}">
-        <LayoutElement>
-          <FileSpec URL="{file_url}"
-                    MimeType="application/pdf" FileVersion="1"
-                    UserFileName="{user_name_esc}"/>
-        </LayoutElement>
-      </RunList>
-      <RunList Class="Parameter" ID="RL_{nro5}_D" Status="Unavailable"/>
-      <Layout Class="Parameter" ID="LAY_{nro5}" Status="Available" Automated="true">
-        <Signature Name="SIG1">
-          <Sheet Name="SHT1" SourceWorkStyle="Simplex">
-            <MediaRef rRef="PAP_{nro5}"/>
-            <Surface Side="Front" SurfaceContentsBox="0 0 {page_w_pt:.3f} {page_h_pt:.3f}"/>
-          </Sheet>
-        </Signature>
-      </Layout>
-    </ResourcePool>
-
     <JDF ID="PPP_{nro5}" JobPartID="PPP_{nro5}" Type="ProcessGroup" Types="PrePressPreparation"
          Category="MISPRE.PrePressPreparation" Status="Waiting" DescriptiveName="GB PrePressPreparation">
       <ResourceLinkPool>
@@ -765,20 +810,12 @@ def build_apogee_passthrough_jdf_xml(
       </ResourceLinkPool>
     </JDF>
 
-    <JDF ID="STR_{nro5}" JobPartID="STR_{nro5}" Type="ProcessGroup" Types="ImpositionPreparation"
-         Category="MISPRE.ImpositionPreparation" Status="Waiting" DescriptiveName="GB ImpositionPreparation">
-      <ResourceLinkPool>
-        <LayoutLink rRef="LAY_{nro5}" Usage="Output"/>
-      </ResourceLinkPool>
-    </JDF>
-
-    <JDF ID="IMP_{nro5}" JobPartID="IMP_{nro5}" Type="ProcessGroup"
-         Types="Imposition DigitalDelivery ProofImaging"
-         Category="MISPRE.ImpositionProofing" Status="Waiting" DescriptiveName="GB Export PDF Imposto"
-         NamedFeatures="{imp_features}">
+    <JDF ID="EXP_{nro5}" JobPartID="EXP_{nro5}" Type="ProcessGroup"
+         Types="DigitalDelivery ProofImaging"
+         Category="MISPRE.ImpositionProofing" Status="Waiting" DescriptiveName="GB Export PDF"
+         NamedFeatures="{export_features}">
       <ResourceLinkPool>
         <RunListLink rRef="RL_{nro5}_D" ProcessUsage="Document" Usage="Input"/>
-        <LayoutLink rRef="LAY_{nro5}" Usage="Input"/>
         <ColorantControlLink rRef="CC_{nro5}" Usage="Input"/>
         <MediaLink rRef="PAP_{nro5}" Usage="Input"/>
       </ResourceLinkPool>

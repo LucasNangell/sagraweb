@@ -50,7 +50,22 @@ export type ImposicaoOcupada = {
   col: number;
   row: number;
   pagina: number;
+  rotacao?: 0 | 90 | 180 | 270;
 };
+
+const VALID_ROTACOES = new Set([0, 90, 180, 270]);
+
+function normalizeRotacao(raw: unknown, label: string): 0 | 90 | 180 | 270 {
+  if (raw == null || raw === "") return 0;
+  if (!isNumber(raw) || !Number.isInteger(raw)) {
+    throw new Error(`${label}.rotacao deve ser 0, 90, 180 ou 270.`);
+  }
+  const deg = ((raw % 360) + 360) % 360;
+  if (!VALID_ROTACOES.has(deg)) {
+    throw new Error(`${label}.rotacao deve ser 0, 90, 180 ou 270.`);
+  }
+  return deg as 0 | 90 | 180 | 270;
+}
 
 function normalizeOcupadas(
   raw: unknown,
@@ -94,7 +109,12 @@ function normalizeOcupadas(
       throw new Error(`${label}: célula (${col},${row}) duplicada.`);
     }
     seenCells.add(cellKey);
-    out.push({ col, row, pagina });
+    const rotacao = normalizeRotacao(rec.rotacao, label);
+    out.push(
+      rotacao === 0
+        ? { col, row, pagina }
+        : { col, row, pagina, rotacao },
+    );
   });
   out.sort(
     (a, b) => a.pagina - b.pagina || a.row - b.row || a.col - b.col,

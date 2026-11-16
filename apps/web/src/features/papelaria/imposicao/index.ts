@@ -30,6 +30,7 @@ export { ImposicaoGridPreview } from "./ImposicaoGridPreview";
 export {
   buildImposicaoGridLayout,
   paintCellOcupada,
+  rotateCellOcupada,
   toggleCellOcupada,
   type ImposicaoGridFace,
 } from "./imposicaoGridLayout";

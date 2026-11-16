@@ -14,6 +14,7 @@ export type ImposicaoCellLayout = {
   wMm: number;
   hMm: number;
   pagina: number | null;
+  rotacao: 0 | 90 | 180 | 270;
 };
 
 function pageSizeMm(config: PapelariaImposicaoConfig): {
@@ -66,9 +67,12 @@ export function buildImposicaoGridLayout(
   }
 
   const ocupadas = resolveGridOcupadas(config.grid, face);
-  const byCell = new Map<string, number>();
+  const byCell = new Map<string, { pagina: number; rotacao: 0 | 90 | 180 | 270 }>();
   for (const o of ocupadas) {
-    byCell.set(`${o.col},${o.row}`, o.pagina);
+    byCell.set(`${o.col},${o.row}`, {
+      pagina: o.pagina,
+      rotacao: o.rotacao ?? 0,
+    });
   }
 
   const cells: ImposicaoCellLayout[] = [];
@@ -76,6 +80,7 @@ export function buildImposicaoGridLayout(
     for (let col = 0; col < cols; col += 1) {
       const xMm = originX + col * (pageW + gapH);
       const yMmFromTop = originYTop + row * (pageH + gapV);
+      const occ = byCell.get(`${col},${row}`);
       cells.push({
         col,
         row,
@@ -83,7 +88,8 @@ export function buildImposicaoGridLayout(
         yMmFromTop,
         wMm: pageW,
         hMm: pageH,
-        pagina: byCell.get(`${col},${row}`) ?? null,
+        pagina: occ?.pagina ?? null,
+        rotacao: occ?.rotacao ?? 0,
       });
     }
   }
@@ -119,9 +125,41 @@ export function paintCellOcupada(
     return current.filter((_, i) => i !== idx);
   }
   const without = current.filter((o) => !(o.col === col && o.row === row));
-  return [...without, { col, row, pagina: page }].sort(
+  const prev = idx >= 0 ? current[idx] : undefined;
+  const nextCell: ImposicaoOcupada = {
+    col,
+    row,
+    pagina: page,
+    ...(prev?.rotacao ? { rotacao: prev.rotacao } : {}),
+  };
+  return [...without, nextCell].sort(
     (a, b) => a.pagina - b.pagina || a.row - b.row || a.col - b.col,
   );
+}
+
+/** Cicla rotação da célula: 0 → 90 → 180 → 270 → 0. */
+export function rotateCellOcupada(
+  ocupadas: ImposicaoOcupada[] | undefined,
+  cols: number,
+  rows: number,
+  col: number,
+  row: number,
+): ImposicaoOcupada[] {
+  const current =
+    ocupadas ??
+    resolveGridOcupadas({ colunas: cols, linhas: rows });
+  const idx = current.findIndex((o) => o.col === col && o.row === row);
+  if (idx < 0) return current;
+  const prev = current[idx];
+  const nextRot = (((prev.rotacao ?? 0) + 90) % 360) as 0 | 90 | 180 | 270;
+  const next = current.map((o, i) =>
+    i === idx
+      ? nextRot === 0
+        ? { col: o.col, row: o.row, pagina: o.pagina }
+        : { col: o.col, row: o.row, pagina: o.pagina, rotacao: nextRot }
+      : o,
+  );
+  return next;
 }
 
 /** Legado: toggle com numeração sequencial exclusiva (testes / compat). */

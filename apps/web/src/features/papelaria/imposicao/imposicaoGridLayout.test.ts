@@ -4,6 +4,7 @@ import { DEFAULT_IMPOSICAO_CONFIG } from "./types";
 import {
   buildImposicaoGridLayout,
   paintCellOcupada,
+  rotateCellOcupada,
   toggleCellOcupada,
 } from "./imposicaoGridLayout";
 
@@ -67,6 +68,25 @@ describe("imposicaoGridLayout", () => {
       { col: 1, row: 0, pagina: 1 },
       { col: 0, row: 0, pagina: 2 },
     ]);
+  });
+
+  it("rotateCellOcupada cicla 0→90→180→270→0", () => {
+    let cells = [
+      { col: 0, row: 0, pagina: 1 },
+      { col: 1, row: 0, pagina: 2 },
+    ];
+    cells = rotateCellOcupada(cells, 2, 1, 0, 0);
+    expect(cells.find((c) => c.col === 0)?.rotacao).toBe(90);
+    cells = rotateCellOcupada(cells, 2, 1, 0, 0);
+    expect(cells.find((c) => c.col === 0)?.rotacao).toBe(180);
+    cells = rotateCellOcupada(cells, 2, 1, 0, 0);
+    expect(cells.find((c) => c.col === 0)?.rotacao).toBe(270);
+    cells = rotateCellOcupada(cells, 2, 1, 0, 0);
+    expect(cells.find((c) => c.col === 0)?.rotacao).toBeUndefined();
+    expect(buildImposicaoGridLayout({
+      ...DEFAULT_IMPOSICAO_CONFIG,
+      grid: { colunas: 2, linhas: 1, ocupadas: cells },
+    }).cells[0].rotacao).toBe(0);
   });
 
   it("paint permite repetir a mesma página", () => {

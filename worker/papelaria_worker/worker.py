@@ -549,7 +549,15 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 result.pdf_path = prova_path
             elif prova_web and not cancel_requested.is_set():
                 prova_web_name = str(job.get("prova_web_pdf_name") or "").strip()
-                if prova_web_name and os.path.isfile(output_pdf):
+                # DFS pode atrasar a visibilidade do BaseSefoc.pdf recém-gravado.
+                base_pdf_ok = os.path.isfile(output_pdf)
+                if not base_pdf_ok:
+                    for _ in range(5):
+                        time.sleep(0.4)
+                        if os.path.isfile(output_pdf):
+                            base_pdf_ok = True
+                            break
+                if prova_web_name and base_pdf_ok:
                     prova_web_path = os.path.join(output_dir, prova_web_name)
                     try:
                         archive = copy_pdf_without_blank_pages(
@@ -579,6 +587,13 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                     if os.path.isfile(prova_web_path):
                         pdf_name = prova_web_name
                         result.pdf_path = prova_web_path
+                elif prova_web_name and not base_pdf_ok:
+                    msg = (
+                        f"Prova web não arquivada: BaseSefoc.pdf ausente em "
+                        f"{output_dir} (esperado {os.path.basename(output_pdf)})."
+                    )
+                    result.logs.append(msg)
+                    api.append_log(job_id, msg, "warning")
         elif tipo_job == TIPO_JOB_IMPOSICAO:
             jdf_xml = str(job.get("jdf_xml") or "")
             jdf_dir = str(job.get("jdf_output_dir") or job.get("output_dir") or "").strip()
@@ -733,7 +748,14 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                 # Arquiva ProvaN sem brancos; BaseSefoc permanece no disco.
                 # A visualização / ArquivoPdfGerado passa a apontar para ProvaN.
                 prova_web_name = str(job.get("prova_web_pdf_name") or "").strip()
-                if prova_web_name and os.path.isfile(output_pdf):
+                base_pdf_ok = os.path.isfile(output_pdf)
+                if not base_pdf_ok:
+                    for _ in range(5):
+                        time.sleep(0.4)
+                        if os.path.isfile(output_pdf):
+                            base_pdf_ok = True
+                            break
+                if prova_web_name and base_pdf_ok:
                     prova_web_path = os.path.join(output_dir, prova_web_name)
                     try:
                         archive = copy_pdf_without_blank_pages(
@@ -763,6 +785,13 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                     if os.path.isfile(prova_web_path):
                         pdf_name = prova_web_name
                         result.pdf_path = prova_web_path
+                elif prova_web_name and not base_pdf_ok:
+                    msg = (
+                        f"Prova web não arquivada: BaseSefoc.pdf ausente em "
+                        f"{output_dir} (esperado {os.path.basename(output_pdf)})."
+                    )
+                    result.logs.append(msg)
+                    api.append_log(job_id, msg, "warning")
         else:
             raise CorelGenerationError(f"Tipo de job não suportado: {tipo_job}")
         if cancel_requested.is_set():

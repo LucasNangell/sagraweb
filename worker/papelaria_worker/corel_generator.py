@@ -387,10 +387,16 @@ def dividir_frente_verso(texto: Optional[str]) -> Optional[dict[int, str]]:
     }
 
 
+def _normalizar_nome_shape(nome: str) -> str:
+    """Normaliza nome de objeto Corel para comparação (case/espaços)."""
+    return re.sub(r"\s+", "", (nome or "").strip().lower())
+
+
 def encontrar_shapes_por_nome(shapes, nome_procurado: str, encontrados: Optional[list] = None) -> list:
     if encontrados is None:
         encontrados = []
 
+    alvo = _normalizar_nome_shape(nome_procurado)
     for i in range(1, shapes.Count + 1):
         shape = shapes.Item(i)
         try:
@@ -398,7 +404,7 @@ def encontrar_shapes_por_nome(shapes, nome_procurado: str, encontrados: Optional
         except Exception:
             nome_shape = ""
 
-        if nome_shape == nome_procurado:
+        if nome_shape and _normalizar_nome_shape(nome_shape) == alvo:
             encontrados.append(shape)
 
         try:
@@ -471,7 +477,16 @@ def encontrar_shapes_no_documento(
 ) -> list[dict[str, Any]]:
     chave = (nome_procurado or "").strip()
     if indice is not None:
-        return list(indice.get(chave, []))
+        if chave in indice:
+            return list(indice.get(chave, []))
+        alvo = _normalizar_nome_shape(chave)
+        if not alvo:
+            return []
+        encontrados_idx: list[dict[str, Any]] = []
+        for nome_idx, occs in indice.items():
+            if _normalizar_nome_shape(str(nome_idx)) == alvo:
+                encontrados_idx.extend(occs)
+        return encontrados_idx
 
     encontrados = []
     for p in range(1, doc.Pages.Count + 1):
@@ -2734,6 +2749,31 @@ def documento_tem_borda_f(doc: Any) -> bool:
         return False
 
 
+def _amostrar_nomes_com_borda(doc: Any, *, max_paginas: int = 3) -> list[str]:
+    """Lista 'camada/nome' de shapes cujo nome contém 'borda' (diagnóstico)."""
+    amostra: list[str] = []
+
+    def _coletar(shapes_coll: Any, camada: str) -> None:
+        for shape in _shapes_from_collection(shapes_coll):
+            sname = str(getattr(shape, "Name", "") or "")
+            if sname and "borda" in sname.lower():
+                amostra.append(f"{camada}/{sname}" if camada else sname)
+            try:
+                nested = getattr(shape, "Shapes", None)
+                if nested is not None and int(getattr(nested, "Count", 0) or 0) > 0:
+                    _coletar(nested, camada)
+            except Exception:
+                pass
+
+    total = int(doc.Pages.Count)
+    for p in range(1, min(total, max_paginas) + 1):
+        page = doc.Pages.Item(p)
+        for layer in _shapes_from_collection(getattr(page, "Layers", None)):
+            lname = str(getattr(layer, "Name", "") or "")
+            _coletar(getattr(layer, "Shapes", None), lname)
+    return amostra
+
+
 def _exportar_prova_cdr_existente_impl(
     caminho_cdr: str,
     temp_cdr_path: str,
@@ -2801,9 +2841,24 @@ def _exportar_prova_cdr_existente_impl(
                     converted = True
                     meta["converted_legacy"] = True
                 else:
-                    logs.append(
-                        "CDR sem BordaF — exportação direta (já no padrão de páginas)."
-                    )
+                    # Ajuda diagnóstico quando BordaF existe com nome/camada atípicos.
+                    try:
+                        amostra = _amostrar_nomes_com_borda(doc, max_paginas=3)
+                        if amostra:
+                            logs.append(
+                                "CDR sem BordaF reconhecido — objetos com 'borda' "
+                                f"vistos: {', '.join(amostra[:12])}."
+                            )
+                        else:
+                            logs.append(
+                                "CDR sem BordaF — exportação direta "
+                                "(já no padrão de páginas)."
+                            )
+                    except Exception:
+                        logs.append(
+                            "CDR sem BordaF — exportação direta "
+                            "(já no padrão de páginas)."
+                        )
                     meta["converted_legacy"] = False
 
                 temp_pdf_path = os.path.join(os.path.dirname(temp_cdr_path), "working.pdf")
@@ -2983,7 +3038,7 @@ def offset_relativo_borda(
 
 
 def _nome_igual(a: str, b: str) -> bool:
-    return (a or "").strip().lower() == (b or "").strip().lower()
+    return _normalizar_nome_shape(a) == _normalizar_nome_shape(b)
 
 
 def _shapes_from_collection(shapes_coll: Any) -> list[Any]:
@@ -3046,6 +3101,49 @@ def _listar_shapes_camada_arte_na_pagina(page: Any, logs: list[str]) -> list[Any
     return arte_shapes
 
 
+def _listar_shapes_conteudo_na_pagina(page: Any, logs: list[str]) -> list[Any]:
+    """
+    Conteúdo candidata à prova/imposição: preferir camada 'arte';
+    se vazia, usar todas as camadas (ex.: arte fora de 'arte' com BordaF em 'linhas'),
+    sempre excluindo BordaF/BordaV.
+    """
+    arte = _listar_shapes_camada_arte_na_pagina(page, logs)
+    if arte:
+        return arte
+
+    camadas: list[str] = []
+    outros: list[Any] = []
+    try:
+        layers = getattr(page, "Layers", None)
+    except Exception:
+        layers = None
+    for layer in _shapes_from_collection(layers):
+        lname = str(getattr(layer, "Name", "") or "")
+        if lname:
+            camadas.append(lname)
+        for shape in _shapes_from_collection(getattr(layer, "Shapes", None)):
+            if _eh_shape_borda_referencia(shape):
+                continue
+            # Descer um nível em grupos/PowerClip
+            try:
+                nested = int(getattr(getattr(shape, "Shapes", None), "Count", 0) or 0)
+            except Exception:
+                nested = 0
+            if nested > 0:
+                for child in _shapes_from_collection(getattr(shape, "Shapes", None)):
+                    if not _eh_shape_borda_referencia(child):
+                        outros.append(child)
+            else:
+                outros.append(shape)
+
+    if outros:
+        logs.append(
+            "Usando conteúdo de todas as camadas "
+            f"(sem BordaF/BordaV; camadas: {', '.join(camadas) or 'nenhuma'})."
+        )
+    return outros
+
+
 def _coletar_arte_na_area_borda(
     doc: Any,
     borda_shape: Any,
@@ -3053,7 +3151,7 @@ def _coletar_arte_na_area_borda(
     logs: list[str],
 ) -> list[Any]:
     """
-    Usa BordaF/BordaV só como área/tamanho: pega objetos da camada 'arte'
+    Usa BordaF/BordaV só como área/tamanho: pega objetos de conteúdo
     cujo centro está dentro da borda. Não copia a própria borda.
     """
     nome_borda = str(getattr(borda_shape, "Name", "") or "borda")
@@ -3070,7 +3168,7 @@ def _coletar_arte_na_area_borda(
             f"Página {pagina_num} de '{nome_borda}' inacessível: {exc}"
         ) from exc
 
-    arte_na_pagina = _listar_shapes_camada_arte_na_pagina(page, logs)
+    arte_na_pagina = _listar_shapes_conteudo_na_pagina(page, logs)
     if not arte_na_pagina:
         # Algumas artes ficam em outra página do mesmo doc — varre todas
         for p in range(1, int(doc.Pages.Count) + 1):
@@ -3078,14 +3176,14 @@ def _coletar_arte_na_area_borda(
                 continue
             try:
                 arte_na_pagina.extend(
-                    _listar_shapes_camada_arte_na_pagina(doc.Pages.Item(p), logs)
+                    _listar_shapes_conteudo_na_pagina(doc.Pages.Item(p), logs)
                 )
             except Exception:
                 continue
 
     if not arte_na_pagina:
         logs.append(
-            f"Camada 'arte' sem objetos — '{nome_borda}' gera página em branco."
+            f"Sem objetos de conteúdo — '{nome_borda}' gera página em branco."
         )
         return []
 
@@ -3102,13 +3200,13 @@ def _coletar_arte_na_area_borda(
     if not dentro:
         # Verso (ou face) sem arte na área da borda = página em branco, não é erro
         logs.append(
-            f"Nenhum objeto da camada 'arte' dentro de '{nome_borda}' — página em branco."
+            f"Nenhum objeto de conteúdo dentro de '{nome_borda}' — página em branco."
         )
         return []
 
     logs.append(
-        f"Camada 'arte' dentro de '{nome_borda}': {len(dentro)} objeto(s) "
-        f"(de {len(arte_na_pagina)} na camada)."
+        f"Conteúdo dentro de '{nome_borda}': {len(dentro)} objeto(s) "
+        f"(de {len(arte_na_pagina)} candidatos)."
     )
     return dentro
 

@@ -2276,13 +2276,28 @@ def complete_job(
         paths_to_check: tuple[str, ...] = ()
     elif tipo_job == TIPO_JOB_EXPORT_EXISTING_CDR:
         dados_job = job.get("dados") or {}
-        cdr_abs = resolve_export_input_cdr_path(
+        input_cdr_abs = resolve_export_input_cdr_path(
             job["ano_protocolo"],
             job["nro_protocolo"],
             dados_job.get(INPUT_CDR_DADOS_KEY) if isinstance(dados_job, dict) else None,
         )
-        cdr_rel = os.path.basename(cdr_abs)
-        paths_to_check = (pdf_abs,)
+        # Preferir BaseSefoc.cdr gerado na conversão BordaF quando o worker enviou
+        # e o arquivo existe; senão manter o CDR de origem.
+        generated_cdr_abs = (
+            os.path.normpath(os.path.join(output_dir, cdr_rel)) if cdr_rel else ""
+        )
+        if (
+            cdr_rel
+            and generated_cdr_abs
+            and os.path.isfile(generated_cdr_abs)
+            and os.path.realpath(generated_cdr_abs) != os.path.realpath(input_cdr_abs)
+        ):
+            cdr_abs = generated_cdr_abs
+            paths_to_check = (generated_cdr_abs, pdf_abs)
+        else:
+            cdr_abs = input_cdr_abs
+            cdr_rel = os.path.basename(cdr_abs)
+            paths_to_check = (pdf_abs,)
     else:
         cdr_abs = os.path.normpath(os.path.join(output_dir, cdr_rel))
         paths_to_check = (cdr_abs, pdf_abs)

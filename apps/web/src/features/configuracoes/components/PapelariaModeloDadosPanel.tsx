@@ -1,12 +1,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@sagra/ui";
-import { Loader2, Save, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Loader2, Save, Trash2, Upload } from "lucide-react";
+import { useRef, useState } from "react";
 
 import {
+  clearPapelariaProvaEmailTemplate,
   deletePapelariaAdminModelo,
   savePapelariaAdminNomeExibicao,
   savePapelariaAdminPastaImposicao,
+  uploadPapelariaProvaEmailTemplate,
 } from "@/api/adminSystem";
 import type { PapelariaAdminModelRecord } from "@/features/configuracoes/types";
 
@@ -18,9 +20,13 @@ export function PapelariaModeloDadosPanel({
   onDeleted?: (modeloId: number) => void;
 }) {
   const qc = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [nome, setNome] = useState(modelo.nome_exibicao);
   const [pastaImposicao, setPastaImposicao] = useState(
     modelo.pasta_imposicao ?? "",
+  );
+  const [templatePath, setTemplatePath] = useState(
+    modelo.prova_email_template_pdf ?? "",
   );
   const [localMsg, setLocalMsg] = useState<string | null>(null);
 
@@ -50,12 +56,34 @@ export function PapelariaModeloDadosPanel({
     onError: (err: Error) => setLocalMsg(err.message),
   });
 
+  const uploadTemplateMutation = useMutation({
+    mutationFn: (file: File) => uploadPapelariaProvaEmailTemplate(modelo.id, file),
+    onSuccess: (data) => {
+      setLocalMsg("PDF padrão de prova salvo.");
+      setTemplatePath(data.prova_email_template_pdf ?? "");
+      void qc.invalidateQueries({ queryKey: ["admin", "papelaria-modelos"] });
+    },
+    onError: (err: Error) => setLocalMsg(err.message),
+  });
+
+  const clearTemplateMutation = useMutation({
+    mutationFn: () => clearPapelariaProvaEmailTemplate(modelo.id),
+    onSuccess: () => {
+      setLocalMsg("PDF padrão de prova removido.");
+      setTemplatePath("");
+      void qc.invalidateQueries({ queryKey: ["admin", "papelaria-modelos"] });
+    },
+    onError: (err: Error) => setLocalMsg(err.message),
+  });
+
   const dirtyNome = nome.trim() !== modelo.nome_exibicao.trim();
   const dirtyPasta =
     pastaImposicao.trim() !== (modelo.pasta_imposicao ?? "").trim();
   const saving =
     saveNomeMutation.isPending ||
-    savePastaMutation.isPending;
+    savePastaMutation.isPending ||
+    uploadTemplateMutation.isPending ||
+    clearTemplateMutation.isPending;
 
   const deleteMutation = useMutation({
     mutationFn: () => deletePapelariaAdminModelo(modelo.id),
@@ -81,7 +109,13 @@ export function PapelariaModeloDadosPanel({
   const msgIsError =
     saveNomeMutation.isError ||
     savePastaMutation.isError ||
+    uploadTemplateMutation.isError ||
+    clearTemplateMutation.isError ||
     deleteMutation.isError;
+
+  const templateFileName = templatePath
+    ? templatePath.replace(/\\/g, "/").split("/").pop() || templatePath
+    : null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
@@ -192,6 +226,73 @@ export function PapelariaModeloDadosPanel({
           )}
           Salvar pasta
         </button>
+      </div>
+
+      <div className="max-w-xl rounded border border-slate-200 bg-slate-50 px-3 py-3">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          PDF padrão de prova (modo e-mail)
+        </p>
+        <p className="mt-1 text-[10px] text-slate-500">
+          Opcional. Quando cadastrado e o modo Prova e-mail estiver ativo, a prova
+          usa este PDF: a página 1 do BaseSefoc entra na área BordaF e o carimbo
+          recebe os dados da OS.
+        </p>
+        <p className="mt-2 font-mono text-[11px] text-slate-700">
+          {templateFileName ? `Atual: ${templateFileName}` : "Nenhum PDF cadastrado."}
+        </p>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/pdf,.pdf"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (!file) return;
+            setLocalMsg(null);
+            uploadTemplateMutation.mutate(file);
+          }}
+        />
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="inline-flex items-center justify-center gap-1 rounded bg-secondary-blue px-3 py-1.5 text-xs font-semibold text-white hover:bg-secondary-blue/90 disabled:opacity-60"
+            disabled={saving}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {uploadTemplateMutation.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+            ) : (
+              <Upload className="size-3.5" aria-hidden />
+            )}
+            {templateFileName ? "Substituir PDF" : "Enviar PDF"}
+          </button>
+          {templateFileName ? (
+            <button
+              type="button"
+              className="inline-flex items-center justify-center gap-1 rounded border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
+              disabled={saving}
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    "Remover o PDF padrão de prova deste modelo?",
+                  )
+                ) {
+                  return;
+                }
+                setLocalMsg(null);
+                clearTemplateMutation.mutate();
+              }}
+            >
+              {clearTemplateMutation.isPending ? (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              ) : (
+                <Trash2 className="size-3.5" aria-hidden />
+              )}
+              Remover
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {localMsg ? (

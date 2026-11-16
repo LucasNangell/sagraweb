@@ -366,6 +366,7 @@ def ensure_papelaria_modelos_table() -> None:
         ("ArquivoModelo", "VARCHAR(255) NULL"),
         ("NomeExibicao", "VARCHAR(255) NULL"),
         ("PastaImposicao", "VARCHAR(512) NULL"),
+        ("ProvaEmailTemplatePdf", "VARCHAR(512) NULL"),
         ("ImposicaoConfigJson", "JSON NULL"),
         ("CamposJson", "JSON NULL"),
         ("VariaveisJson", "JSON NULL"),
@@ -662,6 +663,8 @@ def _models_select_columns() -> str:
         cols.append("NomeExibicao")
     if _table_has_column("PastaImposicao"):
         cols.append("PastaImposicao")
+    if _table_has_column("ProvaEmailTemplatePdf"):
+        cols.append("ProvaEmailTemplatePdf")
     if _table_has_column("ImposicaoConfigJson"):
         cols.append("ImposicaoConfigJson")
     return ", ".join(cols)
@@ -746,6 +749,11 @@ def _row_to_modelo(row: dict[str, Any], include_campos: bool = False) -> dict[st
         pasta_raw = _as_str(row.get("PastaImposicao"))
         pasta_imposicao = pasta_raw or None
 
+    prova_email_template_pdf = None
+    if _table_has_column("ProvaEmailTemplatePdf"):
+        tmpl_raw = _as_str(row.get("ProvaEmailTemplatePdf"))
+        prova_email_template_pdf = tmpl_raw or None
+
     out: dict[str, Any] = {
         "id": row["ID"],
         "produto": produto,
@@ -755,6 +763,7 @@ def _row_to_modelo(row: dict[str, Any], include_campos: bool = False) -> dict[st
         "variaveis": variaveis,
         "nome_exibicao": nome_exibicao,
         "pasta_imposicao": pasta_imposicao,
+        "prova_email_template_pdf": prova_email_template_pdf,
         "ordem": row.get("Ordem") or 0,
         "mockup_config_json": mockup_json,
         "tem_mockup_config": bool(mockup_json),
@@ -992,6 +1001,107 @@ def update_modelo_pasta_imposicao(
     updated = get_modelo_admin_by_id(modelo_id)
     if not updated:
         raise LookupError("Modelo não encontrado após atualização.")
+    return updated
+
+
+PROVA_EMAIL_TEMPLATE_ROOT = (
+    PROJECT_ROOT / "Modelos" / "papelaria" / "prova_email_templates"
+)
+
+
+def prova_email_template_relpath(modelo_id: int) -> str:
+    return f"Modelos/papelaria/prova_email_templates/{int(modelo_id)}/template.pdf"
+
+
+def resolve_prova_email_template_abs(rel_or_abs: str | None) -> Optional[str]:
+    """Resolve caminho absoluto do PDF template; None se ausente/inexistente."""
+    raw = (rel_or_abs or "").strip()
+    if not raw:
+        return None
+    path = Path(raw)
+    if not path.is_absolute():
+        path = PROJECT_ROOT / raw.replace("\\", "/")
+    if path.is_file():
+        return str(path.resolve())
+    return None
+
+
+def save_prova_email_template_upload(
+    modelo_id: int,
+    *,
+    filename: str,
+    content: bytes,
+) -> dict[str, Any]:
+    """Grava PDF padrão de prova e-mail e persiste o caminho relativo no modelo."""
+    ensure_papelaria_modelos_table()
+    if not _table_has_column("ProvaEmailTemplatePdf"):
+        raise RuntimeError("Coluna ProvaEmailTemplatePdf não disponível no banco.")
+    if not content:
+        raise ValueError("Arquivo vazio.")
+    name = (filename or "").strip().lower()
+    if not name.endswith(".pdf"):
+        raise ValueError("O template de prova deve ser um arquivo PDF.")
+
+    existing = db.execute_query(
+        "SELECT ID FROM tabPapelariaModelos WHERE ID = %(id)s AND Ativo = 1 LIMIT 1",
+        {"id": modelo_id},
+    )
+    if not existing:
+        raise LookupError("Modelo não encontrado.")
+
+    rel = prova_email_template_relpath(modelo_id)
+    dest = PROJECT_ROOT / rel.replace("\\", "/")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(content)
+
+    db.execute_query(
+        """
+        UPDATE tabPapelariaModelos
+        SET ProvaEmailTemplatePdf = %(path)s
+        WHERE ID = %(id)s
+        """,
+        {"id": modelo_id, "path": rel},
+    )
+    updated = get_modelo_admin_by_id(modelo_id)
+    if not updated:
+        raise LookupError("Modelo não encontrado após upload.")
+    return updated
+
+
+def clear_prova_email_template(modelo_id: int) -> dict[str, Any]:
+    """Remove o PDF padrão de prova e-mail do modelo."""
+    ensure_papelaria_modelos_table()
+    if not _table_has_column("ProvaEmailTemplatePdf"):
+        raise RuntimeError("Coluna ProvaEmailTemplatePdf não disponível no banco.")
+
+    existing = db.execute_query(
+        "SELECT ID, ProvaEmailTemplatePdf FROM tabPapelariaModelos "
+        "WHERE ID = %(id)s AND Ativo = 1 LIMIT 1",
+        {"id": modelo_id},
+    )
+    if not existing:
+        raise LookupError("Modelo não encontrado.")
+
+    rel = _as_str(existing[0].get("ProvaEmailTemplatePdf"))
+    if rel:
+        abs_path = resolve_prova_email_template_abs(rel)
+        if abs_path:
+            try:
+                Path(abs_path).unlink(missing_ok=True)
+            except OSError as exc:
+                logger.warning("Falha ao apagar template prova e-mail %s: %s", abs_path, exc)
+
+    db.execute_query(
+        """
+        UPDATE tabPapelariaModelos
+        SET ProvaEmailTemplatePdf = NULL
+        WHERE ID = %(id)s
+        """,
+        {"id": modelo_id},
+    )
+    updated = get_modelo_admin_by_id(modelo_id)
+    if not updated:
+        raise LookupError("Modelo não encontrado após limpeza.")
     return updated
 
 

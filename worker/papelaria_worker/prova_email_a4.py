@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,26 @@ LABEL_FONT_SIZE = 8.0
 _WIN_FONTS = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
 _FONT_SANS = _WIN_FONTS / "arial.ttf"
 _FONT_SERIF = _WIN_FONTS / "times.ttf"
+
+_DIM_RE = re.compile(
+    r"\d+\s*mm\s*\((?:Larg|Alt)\)\s*x\s*\d+\s*mm\s*\((?:Larg|Alt)\)",
+    re.IGNORECASE,
+)
+_CARIMBO_FIXED_TEXTS = frozenset(
+    {
+        "prova sefoc",
+        "não vale como prova fiel de cor",
+        "nao vale como prova fiel de cor",
+        "sp nº",
+        "sp n°",
+        "os nº",
+        "os n°",
+        "data:",
+        "prova nº",
+        "prova n°",
+        "#",
+    }
+)
 
 
 def _pt_to_mm(pt: float) -> float:
@@ -216,18 +237,205 @@ def _draw_carimbo(page: fitz.Page, carimbo: dict[str, str], dimensoes: str) -> N
     )
 
 
+def find_borda_f_rect(page: fitz.Page) -> fitz.Rect | None:
+    """
+    Localiza o retângulo do objeto BordaF no PDF template.
+
+    Nomes Corel não sobrevivem à exportação PDF; nos templates SEFOC a moldura
+    da arte costuma ser o maior contorno vermelho (relevo seco).
+    """
+    best: fitz.Rect | None = None
+    best_area = 0.0
+    for drawing in page.get_drawings():
+        color = drawing.get("color")
+        rect = drawing.get("rect")
+        if not rect or not color or len(color) < 3:
+            continue
+        # Contorno vermelho típico do template ("relevo seco").
+        if not (color[0] > 0.5 and color[1] < 0.45 and color[2] < 0.45):
+            continue
+        area = float(rect.width) * float(rect.height)
+        if area < 20_000:
+            continue
+        if area > best_area:
+            best_area = area
+            best = fitz.Rect(rect)
+    return best
+
+
+def _format_dimensoes_template_mm(width_pt: float, height_pt: float) -> str:
+    """Formato dos templates cadastrados: 210mm (Larg) x 148mm (Alt)."""
+    larg = round(_pt_to_mm(width_pt))
+    alt = round(_pt_to_mm(height_pt))
+    return f"{larg}mm (Larg) x {alt}mm (Alt)"
+
+
+def _update_template_carimbo(
+    page: fitz.Page,
+    carimbo: dict[str, str],
+    dimensoes: str,
+) -> list[str]:
+    """Atualiza placeholders # e textos de produto/dimensão no carimbo do template."""
+    logs: list[str] = []
+    os_nro = str(carimbo.get("OSint") or "").strip()
+    data = str(carimbo.get("DataInt") or "").strip()
+    prova = str(carimbo.get("ProvaNroInt") or "").strip()
+    produto = str(carimbo.get("ProdutoNome") or "").strip() or "—"
+
+    writes: list[tuple[fitz.Rect, str, float]] = []
+
+    hashes = sorted(page.search_for("#"), key=lambda r: (r.y0, r.x0))
+    values = [os_nro, data, prova]
+    for idx, value in enumerate(values):
+        if idx >= len(hashes) or not value:
+            continue
+        rect = hashes[idx]
+        pad = fitz.Rect(rect.x0 - 1, rect.y0 - 1, rect.x1 + 28, rect.y1 + 1)
+        writes.append((pad, value, 9.0))
+    if hashes:
+        logs.append(f"Carimbo template: {min(len(hashes), 3)} campo(s) # atualizado(s).")
+
+    bottom_y = page.rect.y0 + page.rect.height * 0.72
+    td = page.get_text("dict")
+    product_rect: fitz.Rect | None = None
+    dims_rect: fitz.Rect | None = None
+    for block in td.get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        bbox = block.get("bbox")
+        if not bbox or bbox[1] < bottom_y:
+            continue
+        parts: list[str] = []
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                parts.append(str(span.get("text") or ""))
+        text = " ".join(parts).strip()
+        if not text:
+            continue
+        key = text.casefold()
+        if key in _CARIMBO_FIXED_TEXTS:
+            continue
+        if any(key.startswith(fixed) for fixed in ("sp nº", "os nº", "data:", "prova nº")):
+            continue
+        rect = fitz.Rect(bbox)
+        if _DIM_RE.search(text):
+            dims_rect = rect
+        elif product_rect is None:
+            product_rect = rect
+
+    if product_rect is not None and produto:
+        writes.append((product_rect, produto, 11.0))
+        logs.append("Carimbo template: produto atualizado.")
+    if dims_rect is not None:
+        writes.append((dims_rect, dimensoes, 10.0))
+        logs.append("Carimbo template: dimensões atualizadas.")
+
+    for rect, _text, _fs in writes:
+        page.add_redact_annot(rect, fill=(1, 1, 1))
+    if writes:
+        page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
+    for rect, text, fontsize in writes:
+        _insert_text_unicode(
+            page,
+            (rect.x0 + 1.0, min(rect.y1 - 2.0, rect.y0 + fontsize + 1.0)),
+            text,
+            fontsize=fontsize,
+            color=(0, 0, 0),
+        )
+    return logs
+
+
+def _compose_from_template(
+    *,
+    base_pdf_path: str,
+    template_pdf_path: str,
+    output_pdf_path: str,
+    carimbo: dict[str, str],
+) -> list[str]:
+    """
+    Usa PDF cadastrado como base: coloca a página 1 do BaseSefoc na área BordaF
+    e atualiza textos do carimbo com dados da OS.
+    """
+    logs: list[str] = []
+    if not os.path.isfile(template_pdf_path):
+        raise FileNotFoundError(
+            f"PDF template de prova e-mail não encontrado: {template_pdf_path}"
+        )
+    if not os.path.isfile(base_pdf_path):
+        raise FileNotFoundError(f"BaseSefoc PDF não encontrado: {base_pdf_path}")
+
+    tmpl = fitz.open(template_pdf_path)
+    src = fitz.open(base_pdf_path)
+    try:
+        if tmpl.page_count < 1:
+            raise ValueError("PDF template de prova sem páginas.")
+        if src.page_count < 1:
+            raise ValueError("BaseSefoc.pdf sem páginas.")
+
+        out = fitz.open()
+        try:
+            out.insert_pdf(tmpl, from_page=0, to_page=0)
+            page = out[0]
+            borda = find_borda_f_rect(page)
+            if borda is None:
+                raise ValueError(
+                    "Não foi possível localizar a área BordaF (contorno vermelho) "
+                    "no PDF padrão de prova."
+                )
+
+            # Limpa o miolo da moldura antes de inserir a arte.
+            inset = fitz.Rect(
+                borda.x0 + 1.0,
+                borda.y0 + 1.0,
+                borda.x1 - 1.0,
+                borda.y1 - 1.0,
+            )
+            page.draw_rect(inset, color=None, fill=(1, 1, 1), width=0)
+            page.show_pdf_page(borda, src, 0, keep_proportion=True)
+            # Recoloca o contorno vermelho por cima da arte.
+            page.draw_rect(borda, color=(0.65, 0.17, 0.29), width=1.2, fill=None)
+
+            src0 = src[0].rect
+            dimensoes = _format_dimensoes_template_mm(src0.width, src0.height)
+            logs.extend(_update_template_carimbo(page, carimbo, dimensoes))
+            logs.append(
+                "Prova e-mail gerada a partir do PDF padrão "
+                f"({os.path.basename(template_pdf_path)}); "
+                f"BordaF={borda.width:.1f}×{borda.height:.1f} pt."
+            )
+
+            os.makedirs(os.path.dirname(output_pdf_path) or ".", exist_ok=True)
+            out.save(output_pdf_path)
+            logs.append(f"Prova e-mail gerada: {os.path.basename(output_pdf_path)}")
+        finally:
+            out.close()
+    finally:
+        src.close()
+        tmpl.close()
+    return logs
+
+
 def compose_prova_email_a4(
     *,
     base_pdf_path: str,
     output_pdf_path: str,
     carimbo: dict[str, str],
+    template_pdf_path: str | None = None,
 ) -> list[str]:
     """
-    Cria A4 com a arte BaseSefoc em tamanho real (1:1 quando couber):
-    - centralizada horizontalmente, 20 mm do topo;
-    - se houver 2+ páginas, empilha Frente / Verso na mesma folha;
-    - carimbo SEFOC no canto inferior esquerdo.
+    Cria a prova e-mail:
+    - com template cadastrado: página 1 do BaseSefoc em BordaF + carimbo do template;
+    - sem template: A4 em branco, arte em tamanho real + carimbo desenhado.
     """
+    tmpl = (template_pdf_path or "").strip()
+    if tmpl:
+        return _compose_from_template(
+            base_pdf_path=base_pdf_path,
+            template_pdf_path=tmpl,
+            output_pdf_path=output_pdf_path,
+            carimbo=carimbo,
+        )
+
     logs: list[str] = []
     if not os.path.isfile(base_pdf_path):
         raise FileNotFoundError(f"BaseSefoc PDF não encontrado: {base_pdf_path}")
@@ -304,4 +512,5 @@ def compose_from_job_dict(job: dict[str, Any], base_pdf_path: str, output_pdf_pa
         base_pdf_path=base_pdf_path,
         output_pdf_path=output_pdf_path,
         carimbo=carimbo,
+        template_pdf_path=str(job.get("prova_email_template_pdf") or "").strip() or None,
     )

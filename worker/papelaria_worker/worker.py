@@ -633,10 +633,18 @@ def _process_job_body(api: PapelariaWorkerApiClient, cfg: WorkerConfig, job: dic
                     ),
                     "info",
                 )
+                template_pdf = str(job.get("prova_email_template_pdf") or "").strip()
+                if template_pdf:
+                    api.append_log(
+                        job_id,
+                        f"Prova e-mail — usando PDF padrão: {os.path.basename(template_pdf)}",
+                        "info",
+                    )
                 a4_logs = compose_prova_email_a4(
                     base_pdf_path=output_pdf,
                     output_pdf_path=prova_path,
                     carimbo=carimbo,
+                    template_pdf_path=template_pdf or None,
                 )
                 result.logs.extend(a4_logs)
                 # UI / e-mail / portal usam o A4 carimbado; BaseSefoc.pdf permanece no disco.

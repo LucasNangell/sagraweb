@@ -295,6 +295,54 @@ def salvar_pasta_imposicao_modelo(
         raise HTTPException(500, "Erro ao salvar pasta de imposição.")
 
 
+@router.post("/admin/modelos/{modelo_id}/prova-email-template")
+async def upload_prova_email_template(
+    modelo_id: int,
+    file: UploadFile = File(...),
+    _session: SessionData = Depends(_require_import_access),
+):
+    try:
+        from services import papelaria_models_service as models_svc
+
+        content = await file.read()
+        return models_svc.save_prova_email_template_upload(
+            modelo_id,
+            filename=file.filename or "template.pdf",
+            content=content,
+        )
+    except LookupError:
+        raise HTTPException(404, "Modelo não encontrado.")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        raise HTTPException(500, str(e))
+    except Exception as e:
+        logger.exception(
+            "Erro upload template prova e-mail modelo %s: %s", modelo_id, e
+        )
+        raise HTTPException(500, "Erro ao salvar PDF padrão de prova.")
+
+
+@router.delete("/admin/modelos/{modelo_id}/prova-email-template")
+def remover_prova_email_template(
+    modelo_id: int,
+    _session: SessionData = Depends(_require_import_access),
+):
+    try:
+        from services import papelaria_models_service as models_svc
+
+        return models_svc.clear_prova_email_template(modelo_id)
+    except LookupError:
+        raise HTTPException(404, "Modelo não encontrado.")
+    except RuntimeError as e:
+        raise HTTPException(500, str(e))
+    except Exception as e:
+        logger.exception(
+            "Erro ao remover template prova e-mail modelo %s: %s", modelo_id, e
+        )
+        raise HTTPException(500, "Erro ao remover PDF padrão de prova.")
+
+
 @router.delete("/admin/modelos/{modelo_id}")
 @router.post("/admin/modelos/{modelo_id}/delete")
 def excluir_modelo_admin(

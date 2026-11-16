@@ -84,6 +84,8 @@ export interface PapelariaAdminModelRecord {
   arquivo_modelo: string;
   nome_exibicao: string;
   pasta_imposicao?: string | null;
+  /** Caminho relativo do PDF padrão de prova (modo e-mail), se cadastrado. */
+  prova_email_template_pdf?: string | null;
   ordem?: number;
   mockup_config_json?: string | null;
   tem_mockup_config?: boolean;

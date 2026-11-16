@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS tabPapelariaModelos (
     FrenteVerso VARCHAR(32) NULL,
     Cores VARCHAR(64) NULL,
     ArquivoModelo VARCHAR(255) NULL,
+    ProvaEmailTemplatePdf VARCHAR(512) NULL,
     CamposJson JSON NULL,
     VariaveisJson JSON NULL,
     MockupConfigJson JSON NULL,

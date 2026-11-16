@@ -2093,6 +2093,11 @@ def build_worker_job_payload(job_id: int) -> dict[str, Any]:
             )
         payload["prova_email_pdf_name"] = prova_email_pdf
         payload["prova_numero"] = prova_numero
+        template_abs = models_svc.resolve_prova_email_template_abs(
+            modelo.get("prova_email_template_pdf")
+        )
+        if template_abs:
+            payload["prova_email_template_pdf"] = template_abs
 
     return payload
 

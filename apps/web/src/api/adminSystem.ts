@@ -491,6 +491,36 @@ export async function savePapelariaAdminPastaImposicao(
   );
 }
 
+export async function uploadPapelariaProvaEmailTemplate(
+  modeloId: number,
+  file: File,
+): Promise<PapelariaAdminModelRecord> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(
+    apiUrl(`/papelaria/admin/modelos/${modeloId}/prova-email-template`),
+    {
+      method: "POST",
+      body: form,
+      credentials: "include",
+    },
+  );
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(text || `Upload falhou (${res.status})`);
+  }
+  return res.json() as Promise<PapelariaAdminModelRecord>;
+}
+
+export async function clearPapelariaProvaEmailTemplate(
+  modeloId: number,
+): Promise<PapelariaAdminModelRecord> {
+  return apiFetch<PapelariaAdminModelRecord>(
+    `/papelaria/admin/modelos/${modeloId}/prova-email-template`,
+    { method: "DELETE" },
+  );
+}
+
 export async function savePapelariaAdminImposicaoConfig(
   modeloId: number,
   imposicaoConfigJson: string | null,
